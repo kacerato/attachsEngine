@@ -36,6 +36,29 @@ public struct NativeShapeDesc
     public float CapsuleHalfHeight;  // usado quando Kind == Capsule — altura do cilindro, sem as tampas
 }
 
+/// <summary>Mesmo layout de <c>AetherAllowedDOFs</c> (item 4.1.6, física 2D). AVISO DE
+/// CONVENÇÃO: <see cref="All"/> == 0 aqui (não <c>0b111111</c> como <c>JPH::EAllowedDOFs::All</c>)
+/// — um <see cref="NativeBodyDesc"/> <c>default</c>/zero-inicializado precisa continuar sendo
+/// "corpo 3D normal, sem restrição", não "todos os eixos travados" (inválido no Jolt para
+/// corpo Dynamic). A conversão para o Jolt do lado nativo inverte isso explicitamente — ver
+/// comentário completo em jolt_bridge.h.</summary>
+[Flags]
+public enum NativeAllowedDOFs : uint
+{
+    All = 0,
+    TranslationX = 1u << 0,
+    TranslationY = 1u << 1,
+    TranslationZ = 1u << 2,
+    RotationX = 1u << 3,
+    RotationY = 1u << 4,
+    RotationZ = 1u << 5,
+    /// <summary>Plano XY (mão-esquerda, Y-para-cima — ver CONVENCOES.md §5): trava
+    /// profundidade (Z) e as rotações que tirariam o corpo do plano da tela, deixando livre
+    /// translação em X/Y e giro em torno de Z. Caso de uso mais comum de física 2D
+    /// (plataforma vista de lado/de frente).</summary>
+    Plane2D = TranslationX | TranslationY | RotationZ,
+}
+
 /// <summary>Mesmo layout de <c>AetherBodyDesc</c>.</summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct NativeBodyDesc
@@ -46,6 +69,7 @@ public struct NativeBodyDesc
     public NativeMotionType MotionType;
     public float Friction;
     public float Restitution;
+    public NativeAllowedDOFs AllowedDOFs;
 }
 
 /// <summary>Mesmo layout de <c>AetherJointKind</c> (item 4.1.3).</summary>

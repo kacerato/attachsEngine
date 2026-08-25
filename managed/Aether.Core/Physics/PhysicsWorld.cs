@@ -193,6 +193,29 @@ public readonly struct PhysicsShape
     };
 }
 
+/// <summary>Graus de liberdade permitidos a um corpo dinâmico/cinemático (item 4.1.6, física
+/// 2D). Espelha <see cref="NativeAllowedDOFs"/> — ver o aviso de convenção lá (<see cref="All"/>
+/// == 0, não os 6 bits do Jolt) e o comentário completo em jolt_bridge.h. Um corpo
+/// <see cref="NativeMotionType.Dynamic"/> com nenhum eixo de translação livre (ex.: só
+/// <see cref="RotationZ"/> sozinho) é recusado por <see cref="PhysicsWorld.CreateBody"/>
+/// (devolve <see cref="PhysicsBodyHandle.Invalid"/>) — o Jolt trata essa combinação como
+/// inválida (crasha por divisão por zero em corpo Dynamic; um corpo totalmente travado deveria
+/// ser <see cref="NativeMotionType.Static"/>).</summary>
+[Flags]
+public enum AllowedDOFs : uint
+{
+    All = NativeAllowedDOFs.All,
+    TranslationX = NativeAllowedDOFs.TranslationX,
+    TranslationY = NativeAllowedDOFs.TranslationY,
+    TranslationZ = NativeAllowedDOFs.TranslationZ,
+    RotationX = NativeAllowedDOFs.RotationX,
+    RotationY = NativeAllowedDOFs.RotationY,
+    RotationZ = NativeAllowedDOFs.RotationZ,
+    /// <summary>Plano XY: corpo 2D andando/caindo "na tela" (plataforma vista de lado/de
+    /// frente) — trava profundidade e as rotações que tirariam o corpo do plano.</summary>
+    Plane2D = NativeAllowedDOFs.Plane2D,
+}
+
 /// <summary>
 /// Wrapper gerenciado de um <c>AetherPhysicsWorld*</c> nativo. Dono do ponteiro nativo — chamar
 /// <see cref="Dispose"/> (ou deixar o finalizador rodar, como rede de segurança) libera o mundo e
@@ -219,8 +242,14 @@ public sealed class PhysicsWorld : IDisposable
 
     internal nint Handle => _disposed ? throw new ObjectDisposedException(nameof(PhysicsWorld)) : _handle;
 
+    /// <summary>Cria um corpo. <paramref name="allowedDOFs"/> default (<see cref="AllowedDOFs.All"/>)
+    /// é um corpo 3D normal, sem restrição — passe <see cref="AllowedDOFs.Plane2D"/> (ou uma
+    /// combinação customizada) para um corpo de física 2D (item 4.1.6). Devolve
+    /// <see cref="PhysicsBodyHandle.Invalid"/> também se <paramref name="motionType"/> for
+    /// <see cref="NativeMotionType.Dynamic"/> e <paramref name="allowedDOFs"/> não deixar
+    /// nenhum eixo de translação livre — ver <see cref="AllowedDOFs"/>.</summary>
     public PhysicsBodyHandle CreateBody(in PhysicsShape shape, float3 position, quaternion rotation,
-        NativeMotionType motionType, float friction = 0.5f, float restitution = 0.0f)
+        NativeMotionType motionType, float friction = 0.5f, float restitution = 0.0f, AllowedDOFs allowedDOFs = AllowedDOFs.All)
     {
         var desc = new NativeBodyDesc
         {
@@ -230,6 +259,7 @@ public sealed class PhysicsWorld : IDisposable
             MotionType = motionType,
             Friction = friction,
             Restitution = restitution,
+            AllowedDOFs = (NativeAllowedDOFs)allowedDOFs,
         };
         uint raw = NativePhysics.AetherPhysics_CreateBody(Handle, in desc);
         return new PhysicsBodyHandle(raw);

@@ -65,6 +65,31 @@ struct AetherShapeDesc {
   float capsuleHalfHeight;   // usado quando kind == Capsule — altura do CILINDRO (sem as tampas); altura total = 2*(capsuleHalfHeight+sphereRadius)
 };
 
+// Graus de liberdade permitidos a um corpo dinâmico/cinemático — espelha JPH::EAllowedDOFs
+// (item 4.1.6, física 2D). AVISO DE CONVENÇÃO: aqui All = 0 (não 0b111111 como no Jolt) de
+// propósito — um AetherBodyDesc{} zero-inicializado (padrão comum nos testes e em qualquer
+// struct C# default) precisa continuar significando "corpo 3D normal, sem restrição", não
+// "todos os eixos travados" (que o próprio Jolt documenta como inválido — crasha por divisão
+// por zero num corpo Dynamic, ver MotionProperties::SetMassProperties). A conversão para
+// JPH::EAllowedDOFs na implementação inverte isso: All aqui (0) -> All do Jolt (0b111111).
+enum class AetherAllowedDOFs : ae::u32 {
+  All = 0,
+  TranslationX = 1u << 0,
+  TranslationY = 1u << 1,
+  TranslationZ = 1u << 2,
+  RotationX = 1u << 3,
+  RotationY = 1u << 4,
+  RotationZ = 1u << 5,
+  // Plano XY do Jolt (mão-esquerda, Y-para-cima na convenção da engine — ver
+  // CONVENCOES.md §5): trava profundidade (Z) e as duas rotações que tirariam o corpo do
+  // plano da tela (X, Y), deixando livre translação em X/Y e giro em torno de Z (rotação "na
+  // tela"). É o caso de uso mais comum de física 2D (plataforma 2D vista de lado/de frente).
+  // Para "visto de cima" (top-down), monte a combinação manualmente
+  // (TranslationX|TranslationZ|RotationY) — não há constante pronta para isso, mesma
+  // limitação do próprio JPH::EAllowedDOFs::Plane2D, que também só cobre o caso lateral.
+  Plane2D = TranslationX | TranslationY | RotationZ,
+};
+
 struct AetherBodyDesc {
   AetherShapeDesc shape;
   AetherVec3 position;
@@ -72,6 +97,7 @@ struct AetherBodyDesc {
   AetherMotionType motionType;
   float friction;    // [0,1], padrão razoável: 0.5
   float restitution; // [0,1], padrão razoável: 0.0 (sem quique)
+  AetherAllowedDOFs allowedDOFs; // AetherAllowedDOFs::All (== 0) por padrão — ver comentário acima
 };
 
 // Opaco de propósito — o layout real (PhysicsSystem, alocador temporário, job
@@ -96,7 +122,11 @@ AetherPhysicsWorld *AetherPhysics_CreateWorld(AetherVec3 gravity, ae::u32 maxBod
 void AetherPhysics_DestroyWorld(AetherPhysicsWorld *world);
 
 /// Cria um corpo e já o adiciona ao mundo (ativo, se dinâmico). Devolve
-/// AetherBodyHandle_Invalid se o mundo já está no teto de `maxBodies`.
+/// AetherBodyHandle_Invalid se o mundo já está no teto de `maxBodies`, OU (item 4.1.6) se
+/// `motionType == Dynamic` e `allowedDOFs` não deixa nenhum eixo de translação livre — essa
+/// combinação é inválida no Jolt (crasha por divisão por zero em MotionProperties::
+/// SetMassProperties; um corpo totalmente travado deveria ser Static, não Dynamic com todos
+/// os DOFs travados) e esta fronteira recusa a criação em vez de deixar o processo abortar.
 AetherBodyHandle AetherPhysics_CreateBody(AetherPhysicsWorld *world, const AetherBodyDesc *desc);
 
 /// Remove e destrói um corpo. Handle passa a ser inválido depois desta chamada.

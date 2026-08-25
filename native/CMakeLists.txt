@@ -166,7 +166,19 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_joint_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_query_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_character_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_physics2d_bridge.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_rhi aether_physics)
+
+  # --- benchmark_physics2d: evidência de throughput para a decisão do item 4.1.6 (não é um
+  # AE_TEST de correção — imprime uma tabela de corpos/step-time e sai, não faz parte da
+  # suíte de "compila e passa em teste" que aether_tests roda). -O2 explícito: sem otimização
+  # (o Debug default do projeto) o número medido não reflete o custo real em produção.
+  add_executable(benchmark_physics2d
+    ${CMAKE_SOURCE_DIR}/../tests/native/benchmark_physics2d.cpp
+  )
+  target_include_directories(benchmark_physics2d PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(benchmark_physics2d PRIVATE aether_core aether_physics)
+  target_compile_options(benchmark_physics2d PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-O2>)
 endif()

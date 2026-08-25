@@ -114,6 +114,16 @@ JPH::ObjectLayer ToObjectLayer(AetherMotionType type) {
   return type == AetherMotionType::Static ? Layers::NonMoving : Layers::Moving;
 }
 
+/// Item 4.1.6 (física 2D): converte AetherAllowedDOFs para JPH::EAllowedDOFs. Nota de
+/// convenção: AetherAllowedDOFs::All == 0 na fronteira (ver comentário completo em
+/// jolt_bridge.h), mas JPH::EAllowedDOFs::All == 0b111111 — a tradução abaixo faz essa
+/// inversão explicitamente, não é um cast direto de bits (os dois enums NÃO compartilham
+/// layout, só os bits de 1 a 5 coincidem por termos escolhido os mesmos valores de propósito).
+JPH::EAllowedDOFs ToJoltAllowedDOFs(AetherAllowedDOFs dofs) {
+  if (dofs == AetherAllowedDOFs::All) return JPH::EAllowedDOFs::All;
+  return static_cast<JPH::EAllowedDOFs>(static_cast<ae::u8>(dofs));
+}
+
 JPH::Vec3 ToJolt(AetherVec3 v) { return JPH::Vec3(v.x, v.y, v.z); }
 AetherVec3 FromJolt(JPH::Vec3 v) { return {v.GetX(), v.GetY(), v.GetZ()}; }
 // Sem overload separado para JPH::RVec3: com DOUBLE_PRECISION=OFF (nossa
@@ -373,11 +383,25 @@ AetherBodyHandle AetherPhysics_CreateBody(AetherPhysicsWorld *world, const Aethe
   JPH::RefConst<JPH::Shape> shape = ToJoltShape(desc->shape);
   if (shape == nullptr) return AetherBodyHandle_Invalid;
 
+  // JPH::EAllowedDOFs::None (nenhum eixo de translação livre) é inválido para um corpo
+  // Dynamic — o próprio Jolt documenta isso como "crasha com divisão por zero" em
+  // MotionProperties::SetMassProperties (ver comentário de AetherAllowedDOFs em
+  // jolt_bridge.h). Corpo estático/cinemático não usa massa/inércia da mesma forma
+  // (mInvMass fica 0 de qualquer forma para Static, e Kinematic não integra força), então só
+  // corpos Dynamic precisam dessa checagem defensiva — mesma disciplina "nunca crasha por
+  // input ruim" do resto da fronteira, em vez de deixar o Jolt abortar o processo.
+  JPH::EAllowedDOFs allowedDOFs = ToJoltAllowedDOFs(desc->allowedDOFs);
+  if (desc->motionType == AetherMotionType::Dynamic &&
+      (static_cast<ae::u8>(allowedDOFs) & 0b111) == 0) {
+    return AetherBodyHandle_Invalid;
+  }
+
   JPH::BodyCreationSettings bodySettings(
       shape, JPH::RVec3(desc->position.x, desc->position.y, desc->position.z), ToJolt(desc->rotation),
       ToJoltMotionType(desc->motionType), ToObjectLayer(desc->motionType));
   bodySettings.mFriction = desc->friction;
   bodySettings.mRestitution = desc->restitution;
+  bodySettings.mAllowedDOFs = allowedDOFs;
 
   JPH::BodyInterface &bodyInterface = world->physicsSystem.GetBodyInterface();
   JPH::BodyID id = bodyInterface.CreateAndAddBody(
