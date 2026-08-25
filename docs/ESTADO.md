@@ -3,6 +3,10 @@
 Instantâneo do repositório contra o roadmap de `PLANO-ENGINE-MOBILE.md`.
 Regra: só entra nesta tabela o que **compila e passa em teste**.
 
+O plano de resolução das lacunas deste instantâneo está em
+`PLANO-FECHAMENTO-LACUNAS.md`. Ele define prioridades, dependências, migrações,
+testes em hardware e critérios de aceite sem substituir o roadmap principal.
+
 ## Resumo
 
 | | |
@@ -18,7 +22,7 @@ Regra: só entra nesta tabela o que **compila e passa em teste**.
 | Fase | Item | Estado |
 |---|---|---|
 | **0.1** | Monorepo, build C# + CMake/Ninja, runner de testes próprio | ✅ |
-| **0.1.3** | Shell Android ARM64: NativeActivity, Gradle/NDK, landscape imersivo, lifecycle e surface Vulkan | ⚠️ APK debug/release compilam e lint passa; execução em aparelho físico pendente |
+| **0.1.3** | Shell Android ARM64: NativeActivity, Gradle/NDK, landscape imersivo, lifecycle e surface Vulkan | ⚠️ Validado em 1 aparelho físico real (Xiaomi SM8735/Adreno, Android 16) — instala, abre, cria e recria `VkSurfaceKHR` de verdade, sobrevive a background/foreground e memória baixa simulada. Ainda ⚠️ (não ✅) porque a matriz mínima de dispositivos do plano de lacunas pede ao menos 6 aparelhos (2 Adreno, 2 Mali, 1 perfil C fraco, 1 S/A) e este é o único testado até agora — ver tabela abaixo |
 | **0.3.2** | Protótipo de interação: câmera, gizmos, menu radial, inspector | ✅ `prototype/editor.html` |
 | **1.5** | Matemática: float2/3/4, quaternion, float4x4, Transform, Bounds, Ray, Plane, Frustum | ✅ 25 testes |
 | **1.2** | Memória: FrameArena, PoolAllocator, NativeList/Array, MemoryBudget | ✅ 22 testes |
@@ -42,7 +46,7 @@ Regra: só entra nesta tabela o que **compila e passa em teste**.
 
 ## O que ainda não existe
 
-- **Nada ainda foi validado numa GPU física.** O shell Android cria instance, device, fila de apresentação e `VkSurfaceKHR`, mas não havia aparelho conectado durante a validação. A lógica portátil de lifecycle tem testes; a criação Vulkan precisa de teste de dispositivo.
+- **Validado em uma GPU física, ainda não numa matriz representativa.** O shell Android cria instance, device, fila de apresentação e `VkSurfaceKHR` de verdade contra um driver Adreno real (ver "Shell Android — validação atual" abaixo) — mas isso cobre só 1 dos ~6 aparelhos que o plano de lacunas pede antes de considerar M0 representativo (falta GPU Mali, falta perfil C fraco). Também confirma só criação/recriação de surface, não ainda desenho de frame (sem swapchain de apresentação/comandos de draw — isso é o "shell gráfico mínimo" do plano de lacunas, ainda não implementado).
 - Existe app Android empacotável, mas ainda não existe app iOS, swapchain concreto, command loop de renderização ou shaders compilados.
 - O protótipo do editor é HTML/Canvas, não a engine — valida **interação**, não desempenho gráfico. Usa as mesmas convenções de espaço do núcleo em C# de propósito, para que o que se aprende ali transfira.
 - Animação, áudio, assets, build: Fases 6 e 8, não iniciadas.
@@ -51,14 +55,29 @@ Regra: só entra nesta tabela o que **compila e passa em teste**.
 
 ## Shell Android — validação atual
 
+**Aparelho de referência (primeira entrada do laboratório de dispositivos, §5.1 de
+`PLANO-FECHAMENTO-LACUNAS.md`):** Xiaomi 25053PC47G (codename `sun`), SoC Snapdragon
+SM8735, arm64-v8a, 11.5 GB RAM, Android 16 (API 36), Vulkan 1.3 com
+`android.hardware.vulkan.compute` e deqp level 132645633 — conectado via ADB-over-WiFi.
+Cobre o perfil S/A do laboratório; falta ainda um aparelho Mali e um perfil C (fraco)
+para a matriz mínima de 6 aparelhos que o plano pede antes de considerar M0 representativo.
+
 | Verificação | Resultado |
 |---|---|
 | APK debug ARM64 | ✅ gerado e assinado com certificado de desenvolvimento |
 | APK release ARM64 | ✅ gerado sem assinatura de publicação |
 | Android Lint debug/release | ✅ sem erros |
 | Lifecycle portátil | ✅ 4 testes: ativação, pausa/retomada, perda de janela e encerramento |
-| Instalação e abertura em aparelho físico | ⏳ nenhum aparelho ADB conectado |
-| Criação real de surface Vulkan | ⏳ depende da execução em aparelho físico |
+| Instalação em aparelho físico | ✅ `adb install -r` — sucesso, sem erro de assinatura/ABI |
+| Carregamento da lib nativa | ✅ confirmado via logcat (`nativeloader: Load .../libaether_android.so ... ok`) — `android_main` executa (`Aether.Android: Shell nativo iniciado.`) |
+| Abertura em aparelho físico | ✅ `NativeActivity` inicia, fica em foreground (`mFocusedApp` confirmado via `dumpsys activity`), sem `FATAL EXCEPTION`/crash no logcat |
+| **Criação real de surface Vulkan** | ✅ **confirmado em hardware físico** — log `Aether.Android: Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.` contra o driver Adreno real (`AdrenoVK-0`, `vulkan.adreno.so` versão 0800.71, Qualcomm build `208ca19915`) |
+| Ciclo background→foreground | ✅ `KEYCODE_HOME` seguido de reabertura: mesmo PID sobrevive (processo não foi morto pelo sistema), sem ANR, sem crash |
+| **Perda e recriação de surface** | ✅ confirmado pelo mesmo ciclo — `APP_CMD_TERM_WINDOW` implícito ao suspender (log `Aplicativo suspenso.`) seguido de `Surface Vulkan pronta` de novo ao retomar (recriação real, não cache) |
+| Memória baixa simulada | ✅ `am send-trim-memory RUNNING_CRITICAL` — processo sobrevive, sem crash (não dispara `APP_CMD_LOW_MEMORY` de verdade, é um proxy do ADB, não o teste completo do plano) |
+| Tela em landscape imersivo | ✅ confirmado por screenshot (`screencap`) — 2772×1280, sem barras de sistema visíveis |
+| Tela preta apesar da surface criada | ✅ **esperado, não é falha** — o shell cria a surface mas deliberadamente não grava nenhum comando de desenho nela ainda (sem swapchain de apresentação/triângulo — isso é o item 5.2 "Shell gráfico mínimo" do plano de lacunas, ainda não implementado); ver nota abaixo |
+| Rotação para além de landscape, matriz de múltiplos aparelhos | ⏳ não exercitado nesta rodada — `screenOrientation="sensorLandscape"` trava a orientação por design; só há um aparelho no laboratório até agora (falta Mali e perfil C) |
 
 O APK é um **shell de fundação**, não um editor demonstrativo: por decisão de
 escopo ele não desenha triângulo, não cria swapchain e bloqueia o loop quando

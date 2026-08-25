@@ -4,6 +4,8 @@ Editor **landscape fullscreen** que roda no próprio dispositivo. Vulkan 1.3, C#
 de um núcleo C++20, no-code (AetherFlow) com round-trip para C#.
 
 Ver `docs/PLANO-ENGINE-MOBILE.md` para o plano completo.
+Ver `docs/PLANO-FECHAMENTO-LACUNAS.md` para a ordem executável de fechamento
+dos itens parciais, limitações conhecidas e critérios de validação M0–M9.
 
 ## Estado atual: Fase 1 (Núcleo) em execução
 
