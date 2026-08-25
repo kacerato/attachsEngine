@@ -29,6 +29,33 @@ set(DEBUG_RENDERER_IN_DISTRIBUTION OFF CACHE BOOL "" FORCE)
 set(JPH_USE_DX12 OFF CACHE BOOL "" FORCE)
 set(JPH_USE_VK OFF CACHE BOOL "" FORCE)
 set(JPH_USE_MTL OFF CACHE BOOL "" FORCE)
+
+# Item 4.1.8 do plano ("determinismo em ponto fixo, modo opcional"): o Jolt não tem um modo
+# fixed-point — reescrever seu solver/matemática inteiros para ponto fixo seria uma reescrita
+# profunda de código de terceiros vendorizado, não uma configuração (ver docs/ESTADO.md para a
+# investigação completa). O que o PRÓPRIO Jolt oferece nativamente, sem tocar em uma linha do
+# código dele, é CROSS_PLATFORM_DETERMINISTIC: desliga a fusão multiplicação-adição (FMA) — que
+# o próprio comentário do Jolt (Build/CMakeLists.txt) documenta como incompatível com
+# determinismo cross-platform — e usa /fp:precise (MSVC) ou -ffp-contract=off (Clang/GCC) em vez
+# de fast-math. Também travamos aqui o nível de instrução SIMD em SSE4 (desligando
+# AVX/AVX2/FMADD/F16C) quando este modo está ligado: resultados de FMA/AVX podem diferir de
+# SSE4 em CPUs diferentes mesmo com fp:precise, e o objetivo do modo é "mesmo resultado em
+# qualquer dispositivo Android/iOS", não só "sem FMA". Trade-off aceito: perde parte do ganho de
+# performance de AVX2/FMA — mesmo trade-off que o próprio Jolt documenta e aceita para quem liga
+# a flag. Modo OPCIONAL de verdade: alterna entre duas configurações de build da MESMA lib
+# (como DOUBLE_PRECISION já funciona neste arquivo), não dois binários coexistindo — escolha em
+# tempo de configuração do CMake (-DAETHER_PHYSICS_DETERMINISTIC=ON), não em runtime.
+option(AETHER_PHYSICS_DETERMINISTIC "Compila o Jolt com CROSS_PLATFORM_DETERMINISTIC + SIMD travado em SSE4 (item 4.1.8) — troca parte do desempenho de AVX2/FMA por reprodutibilidade bit-exata entre plataformas" OFF)
+set(CROSS_PLATFORM_DETERMINISTIC ${AETHER_PHYSICS_DETERMINISTIC} CACHE BOOL "" FORCE)
+if(AETHER_PHYSICS_DETERMINISTIC)
+  set(USE_AVX OFF CACHE BOOL "" FORCE)
+  set(USE_AVX2 OFF CACHE BOOL "" FORCE)
+  set(USE_FMADD OFF CACHE BOOL "" FORCE)
+  set(USE_F16C OFF CACHE BOOL "" FORCE)
+  # SSE4.1/SSE4.2/LZCNT/TZCNT permanecem ligados: são baseline em qualquer x86-64 relevante
+  # (não introduzem a mesma divergência de resultado que FMA/AVX2 introduzem) e o Jolt não
+  # documenta incompatibilidade deles com CROSS_PLATFORM_DETERMINISTIC.
+endif()
 add_subdirectory(third_party/JoltPhysics/Build EXCLUDE_FROM_ALL)
 
 # Engine mobile: sem RTTI, sem exceções, warnings tratados como erro nos alvos de runtime.
@@ -167,6 +194,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_query_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_character_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_physics2d_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_determinism.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_rhi aether_physics)
