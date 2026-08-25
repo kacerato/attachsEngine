@@ -19,6 +19,11 @@
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
+#include <Jolt/Physics/Collision/ShapeCast.h>
+#include <Jolt/Physics/Collision/CollideShape.h>
+#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
+#include <Jolt/Physics/Body/BodyFilter.h>
+#include <Jolt/Physics/Collision/ObjectLayer.h>
 #include <Jolt/Physics/Constraints/PointConstraint.h>
 #include <Jolt/Physics/Constraints/HingeConstraint.h>
 #include <Jolt/Physics/Constraints/SliderConstraint.h>
@@ -115,6 +120,70 @@ AetherVec3 FromJolt(JPH::Vec3 v) { return {v.GetX(), v.GetY(), v.GetZ()}; }
 // redefinição da mesma função, não uma sobrecarga real.
 JPH::Quat ToJolt(AetherQuat q) { return JPH::Quat(q.x, q.y, q.z, q.w); }
 AetherQuat FromJolt(JPH::Quat q) { return {q.GetX(), q.GetY(), q.GetZ(), q.GetW()}; }
+
+/// Extraído de AetherPhysics_CreateBody (item 4.1.1) para ser reusado pelas queries de
+/// shapecast/overlap (item 4.1.4), que precisam da mesma conversão AetherShapeDesc->JPH::Shape
+/// sem criar um corpo. Devolve shape nulo (RefConst vazio) em erro de criação — mesma
+/// disciplina do resto da fronteira, chamador confere antes de usar.
+JPH::RefConst<JPH::Shape> ToJoltShape(const AetherShapeDesc &desc) {
+  if (desc.kind == AetherShapeKind::Box) {
+    JPH::BoxShapeSettings settings(ToJolt(desc.boxHalfExtent));
+    auto result = settings.Create();
+    return result.HasError() ? nullptr : result.Get();
+  }
+  JPH::SphereShapeSettings settings(desc.sphereRadius);
+  auto result = settings.Create();
+  return result.HasError() ? nullptr : result.Get();
+}
+
+/// Filtro de ObjectLayer para queries (item 4.1.4) a partir da máscara AetherQueryLayerMask.
+/// ShouldCollide(ObjectLayer) simplesmente confere se o bit correspondente está ligado —
+/// mapeamento direto porque hoje só existem as 2 camadas fixas Layers::NonMoving/Moving (ver
+/// comentário em AetherQueryLayerMask, jolt_bridge.h). Sem herdar de JPH::ObjectLayerFilter
+/// diretamente teria que reimplementar essa checagem em cada chamador — centralizado aqui.
+class QueryLayerFilter final : public JPH::ObjectLayerFilter {
+public:
+  explicit QueryLayerFilter(AetherQueryLayerMask mask) : mMask(mask) {}
+  bool ShouldCollide(JPH::ObjectLayer inLayer) const override {
+    ae::u32 bit = inLayer == Layers::NonMoving ? static_cast<ae::u32>(AetherQueryLayerMask::Static)
+                                                : static_cast<ae::u32>(AetherQueryLayerMask::Dynamic);
+    return (static_cast<ae::u32>(mMask) & bit) != 0;
+  }
+
+private:
+  AetherQueryLayerMask mMask;
+};
+
+/// Espelha exatamente JPH::IgnoreSingleBodyFilter (Jolt/Physics/Body/BodyFilter.h) — não
+/// reusamos a classe do Jolt diretamente porque ela guarda um JPH::BodyID, e aqui só temos o
+/// AetherBodyHandle antes de decidir se é válido; um wrapper fino evita expor o tipo do Jolt
+/// na assinatura de uma função auxiliar nossa.
+class QueryBodyFilter final : public JPH::BodyFilter {
+public:
+  explicit QueryBodyFilter(AetherBodyHandle ignoreBody)
+      : mIgnore(ignoreBody == AetherBodyHandle_Invalid ? JPH::BodyID() : JPH::BodyID(ignoreBody)) {}
+  bool ShouldCollide(const JPH::BodyID &inBodyID) const override { return mIgnore != inBodyID; }
+
+private:
+  JPH::BodyID mIgnore;
+};
+
+/// Copia um CollideShapeResult/ShapeCastResult (ambos têm os mesmos 3 campos de contato,
+/// ShapeCastResult herda de CollideShapeResult) para o AetherShapeQueryHit da fronteira.
+/// Template sobre o tipo de resultado porque as duas structs do Jolt não compartilham uma
+/// base pública com esses campos além da herança direta — evita duplicar o corpo da função
+/// para CollideShapeResult (usado por OverlapShape) e ShapeCastResult (usado por
+/// ShapeCastClosest).
+template <typename JoltResult>
+AetherShapeQueryHit ToShapeQueryHit(const JoltResult &hit, float fraction) {
+  AetherShapeQueryHit out{};
+  out.body = hit.mBodyID2.GetIndexAndSequenceNumber();
+  out.fraction = fraction;
+  out.contactPointOnQuery = FromJolt(hit.mContactPointOn1);
+  out.contactPointOnHit = FromJolt(hit.mContactPointOn2);
+  out.penetrationAxis = FromJolt(hit.mPenetrationAxis);
+  return out;
+}
 
 // ------------------------------------------------------------ juntas: handle denso próprio
 //
@@ -264,18 +333,8 @@ void AetherPhysics_DestroyWorld(AetherPhysicsWorld *world) {
 AetherBodyHandle AetherPhysics_CreateBody(AetherPhysicsWorld *world, const AetherBodyDesc *desc) {
   if (world == nullptr || desc == nullptr) return AetherBodyHandle_Invalid;
 
-  JPH::RefConst<JPH::Shape> shape;
-  if (desc->shape.kind == AetherShapeKind::Box) {
-    JPH::BoxShapeSettings settings(ToJolt(desc->shape.boxHalfExtent));
-    auto result = settings.Create();
-    if (result.HasError()) return AetherBodyHandle_Invalid;
-    shape = result.Get();
-  } else {
-    JPH::SphereShapeSettings settings(desc->shape.sphereRadius);
-    auto result = settings.Create();
-    if (result.HasError()) return AetherBodyHandle_Invalid;
-    shape = result.Get();
-  }
+  JPH::RefConst<JPH::Shape> shape = ToJoltShape(desc->shape);
+  if (shape == nullptr) return AetherBodyHandle_Invalid;
 
   JPH::BodyCreationSettings bodySettings(
       shape, JPH::RVec3(desc->position.x, desc->position.y, desc->position.z), ToJolt(desc->rotation),
@@ -340,6 +399,77 @@ ae::i32 AetherPhysics_RayCastClosest(AetherPhysicsWorld *world, AetherVec3 origi
   if (outBody != nullptr) *outBody = hit.mBodyID.GetIndexAndSequenceNumber();
   if (outHitFraction != nullptr) *outHitFraction = hit.mFraction;
   return 1;
+}
+
+// ---------------------------------------------------------------- queries (4.1.4)
+
+ae::i32 AetherPhysics_RayCastAll(AetherPhysicsWorld *world, AetherVec3 origin, AetherVec3 direction,
+                                  AetherQueryLayerMask layerMask, AetherBodyHandle ignoreBody,
+                                  AetherBodyHandle *outBodies, float *outFractions, ae::i32 maxResults) {
+  if (world == nullptr) return 0;
+
+  JPH::RRayCast ray(JPH::RVec3(origin.x, origin.y, origin.z), ToJolt(direction));
+  JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
+  QueryLayerFilter layerFilter(layerMask);
+  QueryBodyFilter bodyFilter(ignoreBody);
+  world->physicsSystem.GetNarrowPhaseQuery().CastRay(ray, {}, collector, {}, layerFilter, bodyFilter);
+
+  // AllHitCollisionCollector não ordena por padrão (ver CollisionCollectorImpl.h) — ordenar
+  // por fração aqui é o que faz "todos os hits ao longo do raio" ter uma ordem previsível
+  // (mais perto primeiro), em vez da ordem arbitrária de travessia da broadphase.
+  collector.Sort();
+
+  ae::i32 count = static_cast<ae::i32>(collector.mHits.size());
+  ae::i32 toCopy = maxResults > 0 ? std::min(count, maxResults) : 0;
+  for (ae::i32 i = 0; i < toCopy; ++i) {
+    if (outBodies != nullptr) outBodies[i] = collector.mHits[i].mBodyID.GetIndexAndSequenceNumber();
+    if (outFractions != nullptr) outFractions[i] = collector.mHits[i].mFraction;
+  }
+  return count;
+}
+
+ae::i32 AetherPhysics_ShapeCastClosest(AetherPhysicsWorld *world, const AetherShapeDesc *shape,
+                                        AetherVec3 origin, AetherQuat rotation, AetherVec3 direction,
+                                        AetherQueryLayerMask layerMask, AetherBodyHandle ignoreBody,
+                                        AetherShapeQueryHit *outHit) {
+  if (world == nullptr || shape == nullptr) return 0;
+  JPH::RefConst<JPH::Shape> joltShape = ToJoltShape(*shape);
+  if (joltShape == nullptr) return 0;
+
+  JPH::RMat44 startTransform = JPH::RMat44::sRotationTranslation(ToJolt(rotation), JPH::RVec3(origin.x, origin.y, origin.z));
+  JPH::RShapeCast cast = JPH::RShapeCast::sFromWorldTransform(joltShape, JPH::Vec3::sReplicate(1.0f), startTransform, ToJolt(direction));
+
+  JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> collector;
+  QueryLayerFilter layerFilter(layerMask);
+  QueryBodyFilter bodyFilter(ignoreBody);
+  world->physicsSystem.GetNarrowPhaseQuery().CastShape(cast, {}, JPH::RVec3::sZero(), collector, {}, layerFilter, bodyFilter);
+
+  if (!collector.HadHit()) return 0;
+  if (outHit != nullptr) *outHit = ToShapeQueryHit(collector.mHit, collector.mHit.mFraction);
+  return 1;
+}
+
+ae::i32 AetherPhysics_OverlapShape(AetherPhysicsWorld *world, const AetherShapeDesc *shape,
+                                    AetherVec3 origin, AetherQuat rotation,
+                                    AetherQueryLayerMask layerMask, AetherBodyHandle ignoreBody,
+                                    AetherShapeQueryHit *outHits, ae::i32 maxResults) {
+  if (world == nullptr || shape == nullptr) return 0;
+  JPH::RefConst<JPH::Shape> joltShape = ToJoltShape(*shape);
+  if (joltShape == nullptr) return 0;
+
+  JPH::RMat44 transform = JPH::RMat44::sRotationTranslation(ToJolt(rotation), JPH::RVec3(origin.x, origin.y, origin.z));
+  JPH::AllHitCollisionCollector<JPH::CollideShapeCollector> collector;
+  QueryLayerFilter layerFilter(layerMask);
+  QueryBodyFilter bodyFilter(ignoreBody);
+  world->physicsSystem.GetNarrowPhaseQuery().CollideShape(joltShape, JPH::Vec3::sReplicate(1.0f), transform, {},
+                                                            JPH::RVec3::sZero(), collector, {}, layerFilter, bodyFilter);
+
+  ae::i32 count = static_cast<ae::i32>(collector.mHits.size());
+  ae::i32 toCopy = maxResults > 0 ? std::min(count, maxResults) : 0;
+  for (ae::i32 i = 0; i < toCopy; ++i) {
+    if (outHits != nullptr) outHits[i] = ToShapeQueryHit(collector.mHits[i], 0.0f);
+  }
+  return count;
 }
 
 // ---------------------------------------------------------------- juntas e motores (4.1.3)

@@ -90,6 +90,28 @@ public struct NativeJointDesc
     public NativeJointMotorDesc Motor;
 }
 
+/// <summary>Mesmo layout de <c>AetherQueryLayerMask</c> (item 4.1.4) — combinável com OR bit a
+/// bit, mesma disciplina de qualquer flags enum em .NET (<c>[Flags]</c>).</summary>
+[Flags]
+public enum NativeQueryLayerMask : uint
+{
+    None = 0,
+    Static = 1u << 0,
+    Dynamic = 1u << 1,
+    All = Static | Dynamic,
+}
+
+/// <summary>Mesmo layout de <c>AetherShapeQueryHit</c>.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct NativeShapeQueryHit
+{
+    public uint Body;
+    public float Fraction;
+    public float3 ContactPointOnQuery;
+    public float3 ContactPointOnHit;
+    public float3 PenetrationAxis;
+}
+
 /// <summary>
 /// Bindings P/Invoke cruas sobre <c>native/physics/jolt_bridge.h</c> (itens 4.1.1 e 4.1.3, juntas
 /// e motores). Espelha a
@@ -160,4 +182,20 @@ internal static partial class NativePhysics
 
     [LibraryImport(LibraryName)]
     internal static partial float AetherPhysics_GetJointPosition(nint world, uint handle);
+
+    // ---------------------------------------------------------------- queries (4.1.4)
+
+    [LibraryImport(LibraryName)]
+    internal static unsafe partial int AetherPhysics_RayCastAll(nint world, float3 origin, float3 direction,
+        NativeQueryLayerMask layerMask, uint ignoreBody, uint* outBodies, float* outFractions, int maxResults);
+
+    [LibraryImport(LibraryName)]
+    internal static unsafe partial int AetherPhysics_ShapeCastClosest(nint world, in NativeShapeDesc shape,
+        float3 origin, quaternion rotation, float3 direction, NativeQueryLayerMask layerMask, uint ignoreBody,
+        NativeShapeQueryHit* outHit);
+
+    [LibraryImport(LibraryName)]
+    internal static unsafe partial int AetherPhysics_OverlapShape(nint world, in NativeShapeDesc shape,
+        float3 origin, quaternion rotation, NativeQueryLayerMask layerMask, uint ignoreBody,
+        NativeShapeQueryHit* outHits, int maxResults);
 }

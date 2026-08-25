@@ -112,6 +112,72 @@ ae::i32 AetherPhysics_IsActive(AetherPhysicsWorld *world, AetherBodyHandle handl
 ae::i32 AetherPhysics_RayCastClosest(AetherPhysicsWorld *world, AetherVec3 origin, AetherVec3 direction,
                                       AetherBodyHandle *outBody, float *outHitFraction);
 
+// ---------------------------------------------------------------- queries (4.1.4)
+//
+// Multi-hit (RayCastAll), shapecast (ShapeCastClosest) e overlap parado (OverlapShape) —
+// as três formas de query que RayCastClosest sozinho não cobre. O Jolt entrega múltiplos
+// hits via um "collector" (padrão callback/visitor, ver JPH::CollisionCollector); a
+// fronteira C ABI não pode devolver um std::vector, então o chamador fornece um buffer
+// (outBodies/outFractions, tamanho maxResults) e recebe de volta quantos hits couberam —
+// mesmo padrão de "buffer do chamador" que qualquer API C nativa usa para evitar alocação
+// do lado nativo que o C# teria que liberar depois.
+//
+// AetherQueryLayerMask filtra por camada de colisão: hoje o mundo só tem duas camadas
+// (estático/dinâmico-cinemático, ver Layers::NonMoving/Moving em jolt_bridge.cpp) — os bits
+// abaixo mapeiam 1:1 para essas duas, combináveis com OR bit a bit. Um esquema de N camadas
+// nomeadas (o que o plano pede no plural, "camadas de colisão", item 4.1.1) continua sendo
+// trabalho futuro; isto é o filtro simples que o esquema atual de 2 camadas já suporta sem
+// mudança de ABI dos corpos existentes.
+enum class AetherQueryLayerMask : ae::u32 {
+  None = 0,
+  Static = 1u << 0,
+  Dynamic = 1u << 1,
+  All = Static | Dynamic,
+};
+
+/// Resultado rico de uma query de shapecast/overlap — RayCastAll usa só body+fraction (não
+/// tem ponto/normal de contato disponível no Jolt sem uma segunda chamada, ver
+/// Body::GetWorldSpaceSurfaceNormal — fora do escopo desta fatia), mas ShapeCast/Overlap
+/// devolvem contato de verdade (JPH::CollideShapeResult), então valem uma struct própria.
+struct AetherShapeQueryHit {
+  AetherBodyHandle body;
+  float fraction;              // só significativo em ShapeCastClosest (0 em OverlapShape — não há "ao longo de quê")
+  AetherVec3 contactPointOnQuery;   // ponto de contato no shape de CONSULTA (o que você está varrendo/sobrepondo)
+  AetherVec3 contactPointOnHit;     // ponto de contato no corpo ACERTADO
+  AetherVec3 penetrationAxis;       // direção de menor penetração/separação — não normalizada (convenção do Jolt)
+};
+
+/// Raycast que acerta TODOS os corpos ao longo do segmento, não só o mais próximo.
+/// outBodies/outFractions são paralelos (mesmo índice = mesmo hit), tamanho maxResults cada
+/// (buffer do CHAMADOR — esta função nunca aloca do lado nativo). Devolve a contagem real de
+/// hits encontrados, que pode ser MAIOR que maxResults (o excesso é descartado, não é erro —
+/// mesma convenção de `snprintf`: o chamador decide se quer chamar de novo com buffer maior
+/// olhando o valor de retorno). layerMask filtra por camada antes mesmo de testar contra
+/// cada corpo — corpos fora da máscara nunca entram no resultado nem contam para a
+/// contagem devolvida.
+ae::i32 AetherPhysics_RayCastAll(AetherPhysicsWorld *world, AetherVec3 origin, AetherVec3 direction,
+                                  AetherQueryLayerMask layerMask, AetherBodyHandle ignoreBody,
+                                  AetherBodyHandle *outBodies, float *outFractions, ae::i32 maxResults);
+
+/// Varre uma forma (a mesma AetherShapeDesc usada para criar corpos — Box ou Sphere) do
+/// ponto `origin` ao longo de `direction` (comprimento = alcance, mesma convenção de
+/// RayCastClosest) e devolve o hit MAIS PRÓXIMO ao longo do caminho. `rotation` é a
+/// orientação da forma de consulta (não muda durante a varredura — o Jolt não modela rotação
+/// progressiva num shapecast). Devolve 1 se algo foi acertado.
+ae::i32 AetherPhysics_ShapeCastClosest(AetherPhysicsWorld *world, const AetherShapeDesc *shape,
+                                        AetherVec3 origin, AetherQuat rotation, AetherVec3 direction,
+                                        AetherQueryLayerMask layerMask, AetherBodyHandle ignoreBody,
+                                        AetherShapeQueryHit *outHit);
+
+/// Quais corpos sobrepõem uma forma PARADA (sem movimento) numa posição/rotação dadas — o
+/// "trigger volume" mais comum em jogos (ex.: zona de detecção). outHits/maxResults segue o
+/// mesmo padrão de buffer do chamador de RayCastAll. Devolve a contagem real de hits (pode
+/// exceder maxResults, mesma convenção).
+ae::i32 AetherPhysics_OverlapShape(AetherPhysicsWorld *world, const AetherShapeDesc *shape,
+                                    AetherVec3 origin, AetherQuat rotation,
+                                    AetherQueryLayerMask layerMask, AetherBodyHandle ignoreBody,
+                                    AetherShapeQueryHit *outHits, ae::i32 maxResults);
+
 // ---------------------------------------------------------------- juntas e motores (4.1.3)
 
 enum class AetherJointKind : ae::u32 {
