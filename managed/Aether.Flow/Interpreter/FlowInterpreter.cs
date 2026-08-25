@@ -96,7 +96,7 @@ public sealed class FlowInterpreter
             {
                 bool cond = Evaluate(node, "condicao").BoolValue;
                 ExecuteChain(NextOf(node.Id, cond ? "entao" : "senao"));
-                return null; // este subconjunto não encadeia nada depois de um "Se" (ver CSharpToFlow)
+                return NextOf(node.Id, "depois"); // os dois ramos convergem aqui, exista "senão" ou não
             }
             case NodeTypes.FlowWhile:
             {

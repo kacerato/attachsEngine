@@ -218,17 +218,6 @@ public static class CSharpToFlow
                 });
                 curNode = nodeId;
                 curPin = outPin;
-
-                // Limitação documentada do subconjunto: um "Se" só é suportado como a última
-                // instrução do bloco que o contém. Isso evita a ambiguidade de "para onde volta
-                // a execução depois de um Se" quando os dois ramos precisariam convergir de novo
-                // no mesmo próximo nó — o gerador de C# também nunca produz esse padrão.
-                if (_graph.FindNode(nodeId)!.NodeType == NodeTypes.FlowIf && !IsSymbol("}"))
-                {
-                    throw new FormatException(
-                        "Neste subconjunto, um bloco \"Se\" só é suportado como a última instrução " +
-                        "do bloco que o contém (sem código depois dele no mesmo nível).");
-                }
             }
         }
 
@@ -285,7 +274,10 @@ public static class CSharpToFlow
                 ParseStatementsInto(id, "senao");
                 Expect(TokKind.Symbol, "}");
             }
-            return (id, "senao"); // se não houver "else", o pino simplesmente fica sem conexão de saída
+            // "depois" é o pino de convergência dos dois ramos (existindo "else" ou não) — é
+            // ele que a próxima instrução do bloco recebe, nunca "entao"/"senao" diretamente,
+            // que são só os pontos de ENTRADA de cada ramo. Mesmo padrão de "fim" em ParseWhile.
+            return (id, "depois");
         }
 
         private (string, string) ParseWhile()

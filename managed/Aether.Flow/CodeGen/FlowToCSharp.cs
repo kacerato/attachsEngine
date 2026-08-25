@@ -97,6 +97,7 @@ public static class FlowToCSharp
                     EmitExecChain(graph, nodeId, "senao", indent + 1, sb);
                     sb.Append(pad).Append("}\n");
                 }
+                EmitExecChain(graph, nodeId, "depois", indent, sb);
                 break;
             }
             case NodeTypes.FlowWhile:

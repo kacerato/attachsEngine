@@ -239,6 +239,42 @@ public sealed class World
         MoveEntity(id, ref slot, oldArchetype, newArchetype);
     }
 
+    /// <summary>
+    /// Adiciona um componente a uma entidade a partir do <see cref="ComponentType"/> de tempo de
+    /// execução e dos bytes crus do valor, sem T genérico no ponto de chamada. Único motivo de existir:
+    /// <c>Aether.Serialization</c> reconstrói entidades a partir de metadados descobertos em tempo de
+    /// execução (o nome do componente lido de um arquivo) — não há T disponível ali para chamar o
+    /// <see cref="AddComponent{T}"/> público. Fica <c>internal</c> de propósito: não é parte da API segura em
+    /// tipos que o resto da engine deve usar; espelha exatamente a lógica de <see cref="AddComponent{T}"/>,
+    /// só trocando a escrita tipada final por uma cópia de bytes crus na coluna do novo chunk.
+    /// </summary>
+    internal void AddComponentRaw(EntityId id, ComponentType type, ReadOnlySpan<byte> rawValue)
+    {
+        ref var slot = ref RequireAlive(id);
+        var oldArchetype = slot.Archetype!;
+        if (oldArchetype.IndexOf(type) >= 0)
+            throw new InvalidOperationException($"A entidade {id} já possui o componente #{type.Id}.");
+        if (rawValue.Length != type.Size)
+            throw new ArgumentException(
+                $"Bytes crus de tamanho {rawValue.Length} não batem com o tamanho do componente #{type.Id} ({type.Size}).",
+                nameof(rawValue));
+
+        var newTypes = new ComponentType[oldArchetype.Types.Length + 1];
+        Array.Copy(oldArchetype.Types, newTypes, oldArchetype.Types.Length);
+        newTypes[^1] = type;
+        var newSignature = oldArchetype.Signature;
+        newSignature.Add(type);
+        var newArchetype = GetOrCreateArchetype(newSignature, newTypes);
+
+        MoveEntity(id, ref slot, oldArchetype, newArchetype);
+
+        var chunk = newArchetype.Chunks[slot.ChunkIndex];
+        int typeIndex = newArchetype.IndexOf(type);
+        int offset = newArchetype.ColumnOffset(typeIndex) + slot.Row * type.Size;
+        rawValue.CopyTo(chunk.Buffer.AsSpan(offset, type.Size));
+        chunk.MarkChanged(typeIndex);
+    }
+
     /// <summary>Move uma entidade de um arquétipo para outro, copiando (byte a byte) os
     /// componentes que existem em ambos e descartando o resto. Usado por Add/RemoveComponent.</summary>
     private void MoveEntity(EntityId id, ref EntitySlot slot, Archetype oldArchetype, Archetype newArchetype)

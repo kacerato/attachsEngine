@@ -63,7 +63,7 @@ public static class NodeLibrary
         Id = id,
         NodeType = NodeTypes.FlowIf,
         Inputs = { Exec("entrada", PinDirection.Input), Data("condicao", FlowType.Bool, PinDirection.Input) },
-        Outputs = { Exec("entao"), Exec("senao") },
+        Outputs = { Exec("entao"), Exec("senao"), Exec("depois") },
     };
 
     public static FlowNode FlowWhile(string id) => new()

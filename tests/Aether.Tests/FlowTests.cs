@@ -81,6 +81,32 @@ public static class FlowTests
         return graph;
     }
 
+    /// <summary>"Quando começar, se (condicao) então a = 1; depois b = b + 1" — sem "senão".
+    /// Prova que o pino "depois" recebe a continuação mesmo quando não há ramo "senão".</summary>
+    private static FlowGraph GrafoIfSemElseSeguidoDeInstrucao(bool condicaoInicial)
+    {
+        var graph = new FlowGraph { Name = "SemElse" };
+        graph.Variables.Add(new FlowVariable { Name = "cond", Type = FlowType.Bool, Initial = FlowValue.OfBool(condicaoInicial), Scope = VarScope.Object });
+        graph.Variables.Add(new FlowVariable { Name = "a", Type = FlowType.Int, Initial = FlowValue.OfInt(0), Scope = VarScope.Object });
+        graph.Variables.Add(new FlowVariable { Name = "marcador", Type = FlowType.Int, Initial = FlowValue.OfInt(0), Scope = VarScope.Object });
+
+        var start = NodeLibrary.EventStart("evt");
+        var iff = NodeLibrary.FlowIf("if");
+        var getCond = NodeLibrary.GetVariable("getCond", "cond", FlowType.Bool);
+        var setA = NodeLibrary.SetVariable("setA", "a", FlowType.Int);
+        setA.Literals["valor"] = FlowValue.OfInt(1);
+        var setMarcador = NodeLibrary.SetVariable("setMarcador", "marcador", FlowType.Int);
+        setMarcador.Literals["valor"] = FlowValue.OfInt(9);
+
+        graph.Nodes.AddRange(new[] { start, iff, getCond, setA, setMarcador });
+        graph.Connections.Add(new FlowConnection { From = new("evt", "corpo"), To = new("if", "entrada") });
+        graph.Connections.Add(new FlowConnection { From = new("getCond", "valor"), To = new("if", "condicao") });
+        graph.Connections.Add(new FlowConnection { From = new("if", "entao"), To = new("setA", "entrada") });
+        // sem ramo "senao" — o pino "senao" nunca aparece numa conexão de saída.
+        graph.Connections.Add(new FlowConnection { From = new("if", "depois"), To = new("setMarcador", "entrada") });
+        return graph;
+    }
+
     // ---------------- interpretador ----------------
 
     [Test] public static void Interpretador_DefinirVariavelNoInicio()
@@ -176,6 +202,137 @@ public static class FlowTests
         var interp = new FlowInterpreter(graph);
         interp.RunEvent(NodeTypes.EventStart);
         Assert.Equal(7L, interp.Variables["vida"].IntValue, "um nó desconectado não deve afetar o restante do grafo");
+    }
+
+    [Test] public static void Interpretador_SeSemSenaoAindaAssimEncadeiaDepois()
+    {
+        var graphVerdadeiro = GrafoIfSemElseSeguidoDeInstrucao(condicaoInicial: true);
+        var interpV = new FlowInterpreter(graphVerdadeiro);
+        interpV.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(1L, interpV.Variables["a"].IntValue, "ramo 'então' deveria ter rodado");
+        Assert.Equal(9L, interpV.Variables["marcador"].IntValue, "instrução depois do 'se' sem 'senão' deveria rodar mesmo assim");
+
+        var graphFalso = GrafoIfSemElseSeguidoDeInstrucao(condicaoInicial: false);
+        var interpF = new FlowInterpreter(graphFalso);
+        interpF.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(0L, interpF.Variables["a"].IntValue, "ramo 'então' não deveria ter rodado com condição falsa");
+        Assert.Equal(9L, interpF.Variables["marcador"].IntValue, "instrução depois do 'se' sem 'senão' deveria rodar mesmo quando o 'se' não entrou em nenhum ramo 'então'");
+    }
+
+    [Test] public static void Interpretador_SeComSenaoOsDoisRamosConvergemParaDepois()
+    {
+        // Reaproveita GrafoIfElse (se estaVivo então resultado=1 senão resultado=0) e encadeia
+        // mais uma instrução no pino "depois", que precisa rodar independente do ramo escolhido.
+        void RodarComCondicao(bool valor, long resultadoEsperado)
+        {
+            var g = GrafoIfElse();
+            g.Variables.Remove(g.Variables.First(v => v.Name == "estaVivo"));
+            g.Variables.Add(new FlowVariable { Name = "estaVivo", Type = FlowType.Bool, Initial = FlowValue.OfBool(valor), Scope = VarScope.Object });
+            g.Variables.Add(new FlowVariable { Name = "marcador", Type = FlowType.Int, Initial = FlowValue.OfInt(0), Scope = VarScope.Object });
+            var set = NodeLibrary.SetVariable("setMarcador", "marcador", FlowType.Int);
+            set.Literals["valor"] = FlowValue.OfInt(5);
+            g.Nodes.Add(set);
+            g.Connections.Add(new FlowConnection { From = new("if", "depois"), To = new("setMarcador", "entrada") });
+
+            var interp = new FlowInterpreter(g);
+            interp.RunEvent(NodeTypes.EventStart);
+            Assert.Equal(resultadoEsperado, interp.Variables["resultado"].IntValue, "ramo escolhido deveria ter rodado normalmente");
+            Assert.Equal(5L, interp.Variables["marcador"].IntValue, "instrução depois do 'se/senão' deveria rodar não importa qual ramo foi tomado");
+        }
+
+        RodarComCondicao(true, 1L);
+        RodarComCondicao(false, 0L);
+    }
+
+    [Test] public static void Interpretador_SeDentroDeEnquantoContinuaOCorpoDoLaco()
+    {
+        // "enquanto contador < alvo: se verdadeiro então vezes+=1; depois contador+=1" — o "se"
+        // fica NO MEIO do corpo do laço, não no fim; prova que "depois" encadeia mesmo aninhado
+        // dentro de um "Enquanto" (e não só no nível do evento).
+        int alvo = 5;
+        var graph = new FlowGraph { Name = "SeDentroDeLaco" };
+        graph.Variables.Add(new FlowVariable { Name = "contador", Type = FlowType.Int, Initial = FlowValue.OfInt(0), Scope = VarScope.Object });
+        graph.Variables.Add(new FlowVariable { Name = "alvo", Type = FlowType.Int, Initial = FlowValue.OfInt(alvo), Scope = VarScope.Object });
+        graph.Variables.Add(new FlowVariable { Name = "vezes", Type = FlowType.Int, Initial = FlowValue.OfInt(0), Scope = VarScope.Object });
+
+        var start = NodeLibrary.EventStart("evt");
+        var whileNode = NodeLibrary.FlowWhile("while");
+        var cmp = NodeLibrary.MathCompare("cmp", "<", FlowType.Int);
+        var getContador = NodeLibrary.GetVariable("getContador", "contador", FlowType.Int);
+        var getAlvo = NodeLibrary.GetVariable("getAlvo", "alvo", FlowType.Int);
+
+        var iff = NodeLibrary.FlowIf("if");
+        // condição sempre verdadeira: o que importa aqui é que TANTO o ramo "então" quanto o
+        // que vem "depois" dele rodem em toda iteração.
+        iff.Literals["condicao"] = FlowValue.OfBool(true);
+
+        var addVezes = NodeLibrary.MathBinary("addVezes", NodeTypes.MathAdd, FlowType.Int);
+        var getVezes = NodeLibrary.GetVariable("getVezes", "vezes", FlowType.Int);
+        addVezes.Literals["b"] = FlowValue.OfInt(1);
+        var setVezes = NodeLibrary.SetVariable("setVezes", "vezes", FlowType.Int);
+
+        var addContador = NodeLibrary.MathBinary("addContador", NodeTypes.MathAdd, FlowType.Int);
+        addContador.Literals["b"] = FlowValue.OfInt(1);
+        var setContador = NodeLibrary.SetVariable("setContador", "contador", FlowType.Int);
+
+        graph.Nodes.AddRange(new[] { start, whileNode, cmp, getContador, getAlvo, iff, addVezes, getVezes, setVezes, addContador, setContador });
+
+        graph.Connections.Add(new FlowConnection { From = new("evt", "corpo"), To = new("while", "entrada") });
+        graph.Connections.Add(new FlowConnection { From = new("cmp", "resultado"), To = new("while", "condicao") });
+        graph.Connections.Add(new FlowConnection { From = new("getContador", "valor"), To = new("cmp", "a") });
+        graph.Connections.Add(new FlowConnection { From = new("getAlvo", "valor"), To = new("cmp", "b") });
+
+        graph.Connections.Add(new FlowConnection { From = new("while", "corpo"), To = new("if", "entrada") });
+
+        graph.Connections.Add(new FlowConnection { From = new("if", "entao"), To = new("setVezes", "entrada") });
+        graph.Connections.Add(new FlowConnection { From = new("getVezes", "valor"), To = new("addVezes", "a") });
+        graph.Connections.Add(new FlowConnection { From = new("addVezes", "resultado"), To = new("setVezes", "valor") });
+
+        // depois do "se" (independente do ramo), continua o corpo do laço incrementando o contador.
+        graph.Connections.Add(new FlowConnection { From = new("if", "depois"), To = new("setContador", "entrada") });
+        graph.Connections.Add(new FlowConnection { From = new("getContador", "valor"), To = new("addContador", "a") });
+        graph.Connections.Add(new FlowConnection { From = new("addContador", "resultado"), To = new("setContador", "valor") });
+
+        var interp = new FlowInterpreter(graph, maxSteps: 1000);
+        interp.RunEvent(NodeTypes.EventStart);
+        Assert.Equal((long)alvo, interp.Variables["contador"].IntValue, "o incremento depois do 'se' precisa continuar o corpo do laço em toda iteração, senão o laço nunca converge");
+        Assert.Equal((long)alvo, interp.Variables["vezes"].IntValue, "o ramo 'então' do 'se' também deveria ter rodado em toda iteração");
+    }
+
+    [Test] public static void Interpretador_SeAninhadoDentroDoRamoEntaoDeOutroSeComInstrucoesDepoisDosDois()
+    {
+        // se (verdadeiro) então { se (verdadeiro) então { a = 1 } depois { b = 1 } } depois { c = 1 }
+        // Prova que o pino "depois" funciona em qualquer profundidade de aninhamento de "se".
+        var graph = new FlowGraph { Name = "SeAninhado" };
+        graph.Variables.Add(new FlowVariable { Name = "a", Type = FlowType.Int, Initial = FlowValue.OfInt(0), Scope = VarScope.Object });
+        graph.Variables.Add(new FlowVariable { Name = "b", Type = FlowType.Int, Initial = FlowValue.OfInt(0), Scope = VarScope.Object });
+        graph.Variables.Add(new FlowVariable { Name = "c", Type = FlowType.Int, Initial = FlowValue.OfInt(0), Scope = VarScope.Object });
+
+        var start = NodeLibrary.EventStart("evt");
+        var outerIf = NodeLibrary.FlowIf("outer");
+        outerIf.Literals["condicao"] = FlowValue.OfBool(true);
+        var innerIf = NodeLibrary.FlowIf("inner");
+        innerIf.Literals["condicao"] = FlowValue.OfBool(true);
+
+        var setA = NodeLibrary.SetVariable("setA", "a", FlowType.Int);
+        setA.Literals["valor"] = FlowValue.OfInt(1);
+        var setB = NodeLibrary.SetVariable("setB", "b", FlowType.Int);
+        setB.Literals["valor"] = FlowValue.OfInt(1);
+        var setC = NodeLibrary.SetVariable("setC", "c", FlowType.Int);
+        setC.Literals["valor"] = FlowValue.OfInt(1);
+
+        graph.Nodes.AddRange(new[] { start, outerIf, innerIf, setA, setB, setC });
+        graph.Connections.Add(new FlowConnection { From = new("evt", "corpo"), To = new("outer", "entrada") });
+        graph.Connections.Add(new FlowConnection { From = new("outer", "entao"), To = new("inner", "entrada") });
+        graph.Connections.Add(new FlowConnection { From = new("inner", "entao"), To = new("setA", "entrada") });
+        graph.Connections.Add(new FlowConnection { From = new("inner", "depois"), To = new("setB", "entrada") });
+        graph.Connections.Add(new FlowConnection { From = new("outer", "depois"), To = new("setC", "entrada") });
+
+        var interp = new FlowInterpreter(graph);
+        interp.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(1L, interp.Variables["a"].IntValue, "ramo 'então' do 'se' interno deveria ter rodado");
+        Assert.Equal(1L, interp.Variables["b"].IntValue, "instrução depois do 'se' interno deveria ter rodado");
+        Assert.Equal(1L, interp.Variables["c"].IntValue, "instrução depois do 'se' externo deveria ter rodado");
     }
 
     // ---------------- validador ----------------
@@ -360,6 +517,53 @@ public static class FlowTests
             $"esperava parênteses em volta da soma por causa da precedência de '*'; obtido:\n{code}");
     }
 
+    [Test] public static void CodeGen_SeSemSenaoSeguidoDeInstrucaoApareceDepoisDoBlocoFechado()
+    {
+        var graph = GrafoIfSemElseSeguidoDeInstrucao(condicaoInicial: true);
+        string code = FlowToCSharp.Generate(graph);
+
+        string esperado =
+            "public class SemElse\n" +
+            "{\n" +
+            "    public bool cond = true;\n" +
+            "    public int a = 0;\n" +
+            "    public int marcador = 0;\n" +
+            "\n" +
+            "    public void Start()\n" +
+            "    {\n" +
+            "        if (cond)\n" +
+            "        {\n" +
+            "            a = 1;\n" +
+            "        }\n" +
+            "        marcador = 9;\n" +
+            "    }\n" +
+            "}\n";
+
+        Assert.Equal(NormalizarFimDeLinha(esperado), NormalizarFimDeLinha(code));
+    }
+
+    [Test] public static void CodeGen_SeComSenaoSeguidoDeInstrucaoNaoDuplicaNemPerdeAInstrucaoSeguinte()
+    {
+        var graph = GrafoIfElse();
+        var marcador = new FlowVariable { Name = "marcador", Type = FlowType.Int, Initial = FlowValue.OfInt(0), Scope = VarScope.Object };
+        graph.Variables.Add(marcador);
+        var setMarcador = NodeLibrary.SetVariable("setMarcador", "marcador", FlowType.Int);
+        setMarcador.Literals["valor"] = FlowValue.OfInt(5);
+        graph.Nodes.Add(setMarcador);
+        graph.Connections.Add(new FlowConnection { From = new("if", "depois"), To = new("setMarcador", "entrada") });
+
+        string code = FlowToCSharp.Generate(graph);
+
+        int posFechaBloco = code.IndexOf("        }\n", StringComparison.Ordinal); // fecha o "else"
+        int posMarcador = code.IndexOf("marcador = 5;", StringComparison.Ordinal);
+        Assert.True(posFechaBloco >= 0, "esperava encontrar o fechamento do bloco 'if/else' no código gerado");
+        Assert.True(posMarcador >= 0, "a instrução 'depois' do if/else deveria aparecer no código gerado");
+        Assert.True(posMarcador > posFechaBloco, "a instrução depois do if/else deveria vir DEPOIS do bloco fechado, não dentro dele");
+
+        int quantasVezesAparece = System.Text.RegularExpressions.Regex.Matches(code, "marcador = 5;").Count;
+        Assert.Equal(1, quantasVezesAparece, "a instrução depois do if/else não deveria ser duplicada");
+    }
+
     // ---------------- round-trip C# ----------------
 
     [Test] public static void RoundTrip_AstParaCSharpParaAstEhEquivalente()
@@ -409,6 +613,100 @@ public static class FlowTests
         Assert.True(rawNode is not null, "uma chamada de método fora do subconjunto deveria virar um nó code.raw");
         Assert.True(rawNode!.Properties["RawCode"].Contains("Console.WriteLine(\"oi\")"),
             "o nó code.raw deveria preservar o texto original da instrução não suportada");
+    }
+
+    [Test] public static void RoundTrip_ParserLeIfNaoUltimoEReconstroiOGrafoCorretamente()
+    {
+        // C# escrito exatamente na convenção de formatação de FlowToCSharp.Generate: um "if/else"
+        // que NÃO é a última instrução do bloco, seguido de mais uma atribuição. Isso já lançava
+        // FormatException antes desta mudança; agora precisa ser lido normalmente.
+        string original =
+            "public class Cond\n" +
+            "{\n" +
+            "    public int a = 0;\n" +
+            "    public int b = 0;\n" +
+            "\n" +
+            "    public void Start()\n" +
+            "    {\n" +
+            "        if (a > 0)\n" +
+            "        {\n" +
+            "            b = 1;\n" +
+            "        }\n" +
+            "        else\n" +
+            "        {\n" +
+            "            b = 2;\n" +
+            "        }\n" +
+            "        b = b + 10;\n" +
+            "    }\n" +
+            "}\n";
+
+        var graph1 = CSharpToFlow.Parse(original);
+
+        // Critério de equivalência nº 1: gerar C# de volta a partir do grafo reconstruído produz
+        // TEXTO IDÊNTICO ao original — o gerador é a forma canônica deste subconjunto, então
+        // parse -> generate é um ponto fixo quando a entrada já estava nessa forma canônica.
+        string code1 = FlowToCSharp.Generate(graph1);
+        Assert.Equal(NormalizarFimDeLinha(original), NormalizarFimDeLinha(code1),
+            "gerar C# a partir do grafo reconstruído deveria reproduzir o texto original byte a byte");
+
+        // Critério de equivalência nº 2: parse -> generate -> parse -> generate converge (é
+        // realmente um round-trip estável, não um acidente da primeira rodada).
+        var graph2 = CSharpToFlow.Parse(code1);
+        string code2 = FlowToCSharp.Generate(graph2);
+        Assert.Equal(code1, code2, "uma segunda rodada de parse/generate deveria produzir exatamente o mesmo texto");
+
+        // Critério de equivalência nº 3 (comportamental): os dois ramos do "if" convergem para a
+        // mesma instrução seguinte, e ela roda não importa qual ramo foi tomado.
+        var g1 = CSharpToFlow.Parse(original);
+        DefinirValorInicial(g1, "a", FlowValue.OfInt(1)); // a > 0: ramo "então"
+        var interp1 = new FlowInterpreter(g1);
+        interp1.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(11L, interp1.Variables["b"].IntValue, "ramo 'então' (b=1) mais a instrução seguinte (b+=10) deveria dar 11");
+
+        var g2 = CSharpToFlow.Parse(original);
+        DefinirValorInicial(g2, "a", FlowValue.OfInt(-1)); // a <= 0: ramo "senão"
+        var interp2 = new FlowInterpreter(g2);
+        interp2.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(12L, interp2.Variables["b"].IntValue, "ramo 'senão' (b=2) mais a instrução seguinte (b+=10) deveria dar 12");
+    }
+
+    /// <summary>"Initial" de <see cref="FlowVariable"/> é <c>init</c>-only; para reutilizar um
+    /// grafo já montado com outro valor inicial, troca a variável inteira preservando tipo/escopo.</summary>
+    private static void DefinirValorInicial(FlowGraph graph, string nome, FlowValue novoValor)
+    {
+        var antiga = graph.Variables.First(v => v.Name == nome);
+        graph.Variables.Remove(antiga);
+        graph.Variables.Add(new FlowVariable { Name = antiga.Name, Type = antiga.Type, Initial = novoValor, Scope = antiga.Scope });
+    }
+
+    [Test] public static void RoundTrip_ParserLeIfSemSenaoSeguidoDeInstrucao()
+    {
+        string original =
+            "public class SoEntao\n" +
+            "{\n" +
+            "    public int a = 0;\n" +
+            "    public int b = 0;\n" +
+            "\n" +
+            "    public void Start()\n" +
+            "    {\n" +
+            "        if (a > 0)\n" +
+            "        {\n" +
+            "            b = 1;\n" +
+            "        }\n" +
+            "        b = b + 10;\n" +
+            "    }\n" +
+            "}\n";
+
+        var graph = CSharpToFlow.Parse(original);
+        string regenerado = FlowToCSharp.Generate(graph);
+        Assert.Equal(NormalizarFimDeLinha(original), NormalizarFimDeLinha(regenerado),
+            "'if' sem 'else' seguido de instrução deveria reconstruir e regerar o mesmo texto");
+
+        // condição falsa: o "então" não roda, mas a instrução seguinte (b += 10) precisa rodar de qualquer jeito.
+        DefinirValorInicial(graph, "a", FlowValue.OfInt(-1));
+        var interp = new FlowInterpreter(graph);
+        interp.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(10L, interp.Variables["b"].IntValue, "sem 'else', a instrução depois do 'if' ainda precisa rodar quando a condição é falsa");
     }
 
     [Test] public static void RoundTrip_SerializacaoIdaEVoltaPreservaOGrafo()
