@@ -130,6 +130,28 @@ target_link_libraries(aether_physics PUBLIC aether_core PRIVATE Jolt)
 # O Jolt foi compilado com CPP_RTTI_ENABLED/CPP_EXCEPTIONS_ENABLED=OFF (ver acima), então o
 # link é consistente com -fno-rtti -fno-exceptions do resto do nosso código nativo.
 
+# --- aether_physics_shared: mesmo código de aether_physics, mas como biblioteca dinâmica —
+# item 4.1.2 do plano (fachada C# via P/Invoke) precisa de um .dll/.so carregável em runtime;
+# uma lib estática não pode ser carregada por [LibraryImport]/[DllImport]. Alvo SEPARADO de
+# aether_physics (não SHARED_LIBS global) porque aether_tests (abaixo) já linka a versão
+# estática direto no executável nativo — mantendo os dois evita compilar jolt_bridge.cpp
+# duas vezes com flags divergentes por engano.
+if(NOT ANDROID)
+  add_library(aether_physics_shared SHARED
+    physics/jolt_bridge.cpp
+  )
+  # .NET resolve [LibraryImport("aether_physics")] para "aether_physics.dll" no Windows
+  # (sem prefixo) e "libaether_physics.so" no Linux (com prefixo) — são convenções de
+  # plataforma DIFERENTES, então PREFIX precisa ser desligado só no Windows/MinGW; no
+  # Linux o prefixo "lib" default do CMake já é o que o runtime espera.
+  set_target_properties(aether_physics_shared PROPERTIES OUTPUT_NAME "aether_physics")
+  if(WIN32)
+    set_target_properties(aether_physics_shared PROPERTIES PREFIX "")
+  endif()
+  target_include_directories(aether_physics_shared PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(aether_physics_shared PUBLIC aether_core PRIVATE Jolt)
+endif()
+
 # --- aether_tests: runner próprio, sem dependência externa ------------------
 if(NOT ANDROID)
   add_executable(aether_tests

@@ -7,9 +7,9 @@ Regra: só entra nesta tabela o que **compila e passa em teste**.
 
 | | |
 |---|---|
-| Testes C# | **180 passando**, 0 falhando |
+| Testes C# | **186 passando**, 0 falhando |
 | Testes C++ | **52 passando**, 0 falhando (41 do núcleo + 4 de lifecycle + 7 de física) |
-| Linhas C# | ~8.800 |
+| Linhas C# | ~9.100 |
 | Linhas C++ (próprias, sem código vendorizado) | ~3.400 |
 | Dependências externas | **nenhuma** — build e testes rodam offline, de propósito (Jolt Physics é vendorizado em `native/third_party/`, não baixado no build — ver `VENDORED_COMMIT.txt`) |
 
@@ -33,6 +33,7 @@ Regra: só entra nesta tabela o que **compila e passa em teste**.
 | **2.1** | RHI Vulkan: cache de descritores, perfis de dispositivo S/A/B/C | ✅ lógica testada |
 | **2.3** | **Render graph**: topológico, poda, aliasing, barreiras, load/store ops, memoryless, fusão de subpasses | ✅ 41 testes |
 | **4.1.1** | Física: Jolt Physics vendorizado (`native/third_party/JoltPhysics`), fronteira C ABI blittable (`jolt_bridge.h/.cpp`) — mundo, corpos estático/cinemático/dinâmico, formas caixa/esfera, `Step`, leitura de transform/velocidade, `IsActive`, raycast contra o mundo | ✅ 7 testes (queda livre bate cinemática, corpo assenta sobre piso na altura esperada, corpo estático não se move, raycast acerta/erra pelo alcance, round-trip de velocidade, handles inválidos não crasham) |
+| **4.1.2** | Fachada C# de física: componentes ECS `RigidBody`/`Collider` (`managed/Aether.Core/Physics/PhysicsComponents.cs`), bindings `[LibraryImport]` sobre `jolt_bridge.h` (`NativePhysics.cs`), wrapper `PhysicsWorld` dono do ponteiro nativo, e `PhysicsSyncSystem` (mesmo padrão de `TransformSystem`) que cria corpo nativo na primeira aparição de `RigidBody`+`Collider`, avança a simulação e sincroniza `WorldTransform` de volta para corpos dinâmicos. Alvo CMake novo `aether_physics_shared` (`.dll`/`.so`) — primeiro P/Invoke real do repositório | ✅ 6 testes (criação de corpo, corpo não é recriado em Steps seguintes, queda livre sincroniza `WorldTransform`, corpo estático não é sobrescrito pela simulação, `DestroyBody` idempotente, raycast acerta corpo criado pela fachada) |
 
 ## O que ainda não existe
 
@@ -40,7 +41,7 @@ Regra: só entra nesta tabela o que **compila e passa em teste**.
 - Existe app Android empacotável, mas ainda não existe app iOS, swapchain concreto, command loop de renderização ou shaders compilados.
 - O protótipo do editor é HTML/Canvas, não a engine — valida **interação**, não desempenho gráfico. Usa as mesmas convenções de espaço do núcleo em C# de propósito, para que o que se aprende ali transfira.
 - Animação, áudio, assets, build: Fases 6 e 8, não iniciadas.
-- **Física (Fase 4): só o item 4.1.1 (fatia vertical mundo/corpo/forma/step/raycast) está pronto.** Deliberadamente ainda não implementados, para não fingir que um item complexo foi "riscado" com uma versão capenga: 4.1.2 (facade C# de `RigidBody`/`Collider` como componentes de ECS com sincronização bidirecional Jolt↔ECS — hoje só existe a API C++/P-Invoke crua), 4.1.3 (juntas e motores), 4.1.5 (character controller), 4.1.6 (física 2D dedicada/benchmark), 4.1.7 (decomposição convexa de malhas), 4.1.8 (determinismo em ponto fixo — a fatia atual usa o float padrão do Jolt, que não é bit-determinístico entre plataformas), 4.1.9 (sub-stepping adaptativo ligado ao PowerGovernor térmico).
+- **Física (Fase 4): 4.1.1 e 4.1.2 estão prontos.** Deliberadamente ainda não implementados, para não fingir que um item complexo foi "riscado" com uma versão capenga: 4.1.3 (juntas e motores), 4.1.4 (queries — raycast/shapecast/overlap — expostas a script e a nós; hoje `PhysicsWorld.RayCastClosest` existe só como API C# direta, não como nó/binding de script), 4.1.5 (character controller), 4.1.6 (física 2D dedicada/benchmark), 4.1.7 (decomposição convexa de malhas), 4.1.8 (determinismo em ponto fixo — a fatia atual usa o float padrão do Jolt, que não é bit-determinístico entre plataformas), 4.1.9 (sub-stepping adaptativo ligado ao PowerGovernor térmico).
 - **1.4.5 (índice de dependências em SQLite) deliberadamente não implementado ainda.** Não existe um SQLite de verdade vendorizado no repositório; implementar uma versão simplificada só para "riscar o item" seria a gambiarra que este projeto se recusa a fazer. Quando entrar, será o amálgama C `sqlite3.c` vendorizado em `native/` (não um pacote NuGet — mantém a política de zero dependência externa) exposto por P/Invoke.
 
 ## Shell Android — validação atual
@@ -77,6 +78,9 @@ não há evento, evitando consumo térmico artificial.
 | `JobSystem` | Detecção de ciclo cobre só auto-espera na mesma thread; outros travamentos caem num timeout de 3 s | Um timeout como rede de proteção é remendo, não solução. Precisa de grafo de dependências explícito |
 | `prototype/editor.html` | Rasterização por painter's algorithm em Canvas 2D | Artefatos de ordenação entre objetos grandes que se interpenetram. Irrelevante para o que o protótipo testa |
 | `TextSerializer` | Migração de esquema por nome/valor de campo lido no esquema ATUAL, não por bytes crus como o binário | Um campo renomeado entre versões perde o valor num arquivo texto antigo; a migração de verdade só é garantida no formato binário. Intencional (o plano só pede migração para o binário), documentado no cabeçalho de `TextSerializer.cs` |
+| `PhysicsSyncSystem` | Corpo `Kinematic` só recebe a transform do ECS uma vez, na criação — não é resincronizado ECS→Jolt em frames seguintes | Mover um corpo cinemático depois de criado (ex.: plataforma animada) não empurra a posição nova para o Jolt. Falta `JPH::BodyInterface::MoveKinematic` (ou um setter de transform) na fronteira C ABI (`jolt_bridge.h`) — mudança de ABI nativo, fora do escopo de "fachada C#" de 4.1.2. Documentado no comentário de `SyncDynamicJoltToEcs` |
+| `Aether.Physics` | `Collider`/`RigidBody` não têm um componente `Trigger` (citado no plano junto dos outros dois) | Sem volume de detecção de overlap sem resposta física. Precisa de `mIsSensor` na fronteira nativa (não exposto hoje) e de eventos de entrada/saída de overlap (item 4.1.4, não implementado) — nenhum dos dois pré-requisitos existe ainda, então não há como o componente ser útil mesmo se declarado |
+| `Aether.Physics` | Cada `CreateBody`/`DestroyBody` é uma chamada P/Invoke individual (não em lote) | Dentro do orçamento de 200 chamadas nativas/frame (`docs/CONVENCOES.md` §2) para criação/destruição normal (evento raro), mas um spawn de centenas de corpos no mesmo frame estouraria o orçamento sem alguém perceber — não há guarda automática contra isso ainda |
 
 ## Correções desta revisão (não são limitações — já resolvidas)
 
@@ -113,3 +117,18 @@ não há evento, evitando consumo térmico artificial.
   Jolt (0.05, `dv/dt = -c*v`, ligado por padrão em todo corpo dinâmico) desvia a velocidade real da fórmula
   ideal `v = -g*t` em ~0.06 m/s mesmo em queda livre "pura" — não é imprecisão do teste, é o Jolt simulando
   um amortecimento real que a fórmula ideal não modela.
+- **Fachada C# de física (4.1.2): primeiro P/Invoke real do repositório — não havia nenhum precedente**
+  (`[DllImport]`/`[LibraryImport]`) em `managed/`. Duas decisões de fronteira que valem registrar: (1) o
+  CMake só produzia `aether_physics` como biblioteca ESTÁTICA (`native/CMakeLists.txt`); P/Invoke exige uma
+  biblioteca dinâmica carregável em runtime, então foi adicionado um alvo irmão `aether_physics_shared`
+  (`SHARED`) compilando o mesmo `jolt_bridge.cpp` — os dois alvos coexistem (o estático continua linkado
+  direto no executável de teste nativo `aether_tests`, sem carregamento em runtime). (2) O nome do artefato
+  gerado por padrão diverge da convenção de resolução do .NET: MinGW/CMake no Windows prefixam `lib` por
+  padrão (`libaether_physics.dll`), mas `[LibraryImport("aether_physics")]` resolve para
+  `aether_physics.dll` (sem prefixo) no Windows e `libaether_physics.so` (com prefixo) no Linux — são
+  convenções de plataforma DIFERENTES. Corrigido com `set_target_properties(... PROPERTIES OUTPUT_NAME
+  "aether_physics")` mais `PREFIX ""` condicionado a `WIN32` (o Linux já usa o prefixo default do CMake, que
+  bate com o que o runtime espera). Sem isso, `DllNotFoundException` em runtime — nenhum erro de compilação
+  denunciaria o problema. `float3`/`quaternion` (item 1.5) são reusados diretamente como parâmetros
+  blittable dos bindings — têm o mesmo layout de `AetherVec3`/`AetherQuat`, evitando duplicar um par de
+  structs só para a fronteira P/Invoke.

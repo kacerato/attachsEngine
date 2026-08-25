@@ -9,4 +9,18 @@
     <ProjectReference Include="../../managed/Aether.Flow/Aether.Flow.csproj" />
     <ProjectReference Include="../../managed/Aether.Scene/Aether.Scene.csproj" />
   </ItemGroup>
+
+  <!--
+    Testes de Aether.Physics carregam a biblioteca nativa "aether_physics" via [LibraryImport]
+    em runtime — precisa estar ao lado do executável de teste. Não há build nativo automático
+    aqui de propósito (dotnet build não deveria depender de ter cmake/ninja disponível para
+    compilar C#): o binário é procurado só se já existir, no diretório de build nativo padrão do
+    projeto (ver "cmake -S native -B build/native ..." em docs/CONVENCOES.md — alvo
+    aether_physics_shared). Ausente, os testes de física retornam cedo e passam vazios (ver
+    NativeLibraryAvailable() em PhysicsTests.cs) em vez de falhar.
+  -->
+  <ItemGroup>
+    <None Include="../../build/native/aether_physics.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../build/native/aether_physics.dll')" />
+    <None Include="../../build/native/libaether_physics.so" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../build/native/libaether_physics.so')" />
+  </ItemGroup>
 </Project>
