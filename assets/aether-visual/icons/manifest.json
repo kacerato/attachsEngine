@@ -1,0 +1,2351 @@
+{
+  "version": 1,
+  "icons": [
+    {
+      "id": "transport-play",
+      "category": "transport",
+      "name": "play",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "transport-pause",
+      "category": "transport",
+      "name": "pause",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "transport-stop",
+      "category": "transport",
+      "name": "stop",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "transport-step",
+      "category": "transport",
+      "name": "step",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "transport-restart",
+      "category": "transport",
+      "name": "restart",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "transport-record",
+      "category": "transport",
+      "name": "record",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-undo",
+      "category": "actions",
+      "name": "undo",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-redo",
+      "category": "actions",
+      "name": "redo",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-save",
+      "category": "actions",
+      "name": "save",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-add",
+      "category": "actions",
+      "name": "add",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-remove",
+      "category": "actions",
+      "name": "remove",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-close",
+      "category": "actions",
+      "name": "close",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-confirm",
+      "category": "actions",
+      "name": "confirm",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-duplicate",
+      "category": "actions",
+      "name": "duplicate",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-copy",
+      "category": "actions",
+      "name": "copy",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-paste",
+      "category": "actions",
+      "name": "paste",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-delete",
+      "category": "actions",
+      "name": "delete",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-search",
+      "category": "actions",
+      "name": "search",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-filter",
+      "category": "actions",
+      "name": "filter",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-settings",
+      "category": "actions",
+      "name": "settings",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-refresh",
+      "category": "actions",
+      "name": "refresh",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-more",
+      "category": "actions",
+      "name": "more",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-download",
+      "category": "actions",
+      "name": "download",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "actions-upload",
+      "category": "actions",
+      "name": "upload",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-select",
+      "category": "modes",
+      "name": "select",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-move",
+      "category": "modes",
+      "name": "move",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-rotate",
+      "category": "modes",
+      "name": "rotate",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-scale",
+      "category": "modes",
+      "name": "scale",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-edit",
+      "category": "modes",
+      "name": "edit",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-sculpt",
+      "category": "modes",
+      "name": "sculpt",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-paint",
+      "category": "modes",
+      "name": "paint",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-uv",
+      "category": "modes",
+      "name": "uv",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-rig",
+      "category": "modes",
+      "name": "rig",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-animate",
+      "category": "modes",
+      "name": "animate",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-terrain",
+      "category": "modes",
+      "name": "terrain",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-flow",
+      "category": "modes",
+      "name": "flow",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-cinema",
+      "category": "modes",
+      "name": "cinema",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "modes-joint",
+      "category": "modes",
+      "name": "joint",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-camera",
+      "category": "viewport",
+      "name": "camera",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-perspective",
+      "category": "viewport",
+      "name": "perspective",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-orthographic",
+      "category": "viewport",
+      "name": "orthographic",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-front",
+      "category": "viewport",
+      "name": "front",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-side",
+      "category": "viewport",
+      "name": "side",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-top",
+      "category": "viewport",
+      "name": "top",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-grid",
+      "category": "viewport",
+      "name": "grid",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-snap",
+      "category": "viewport",
+      "name": "snap",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-local",
+      "category": "viewport",
+      "name": "local",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-global",
+      "category": "viewport",
+      "name": "global",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-pivot",
+      "category": "viewport",
+      "name": "pivot",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-center",
+      "category": "viewport",
+      "name": "center",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-focus",
+      "category": "viewport",
+      "name": "focus",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-frame-all",
+      "category": "viewport",
+      "name": "frameAll",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-wireframe",
+      "category": "viewport",
+      "name": "wireframe",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-lighting",
+      "category": "viewport",
+      "name": "lighting",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-visible",
+      "category": "viewport",
+      "name": "visible",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-hidden",
+      "category": "viewport",
+      "name": "hidden",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-lock",
+      "category": "viewport",
+      "name": "lock",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "viewport-unlock",
+      "category": "viewport",
+      "name": "unlock",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-scene",
+      "category": "scene",
+      "name": "scene",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-object",
+      "category": "scene",
+      "name": "object",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-child",
+      "category": "scene",
+      "name": "child",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-expand",
+      "category": "scene",
+      "name": "expand",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-collapse",
+      "category": "scene",
+      "name": "collapse",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-hierarchy",
+      "category": "scene",
+      "name": "hierarchy",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-prefab",
+      "category": "scene",
+      "name": "prefab",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-component",
+      "category": "scene",
+      "name": "component",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-tag",
+      "category": "scene",
+      "name": "tag",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-layer",
+      "category": "scene",
+      "name": "layer",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-favorite",
+      "category": "scene",
+      "name": "favorite",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-pin",
+      "category": "scene",
+      "name": "pin",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "scene-rename",
+      "category": "scene",
+      "name": "rename",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-folder",
+      "category": "assets",
+      "name": "folder",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-image",
+      "category": "assets",
+      "name": "image",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-mesh",
+      "category": "assets",
+      "name": "mesh",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-material",
+      "category": "assets",
+      "name": "material",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-shader",
+      "category": "assets",
+      "name": "shader",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-audio",
+      "category": "assets",
+      "name": "audio",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-animation",
+      "category": "assets",
+      "name": "animation",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-script",
+      "category": "assets",
+      "name": "script",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-font",
+      "category": "assets",
+      "name": "font",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-scene-asset",
+      "category": "assets",
+      "name": "sceneAsset",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-prefab-asset",
+      "category": "assets",
+      "name": "prefabAsset",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-import",
+      "category": "assets",
+      "name": "import",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-grid-view",
+      "category": "assets",
+      "name": "gridView",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-list-view",
+      "category": "assets",
+      "name": "listView",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "assets-preview",
+      "category": "assets",
+      "name": "preview",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "physics-rigidbody",
+      "category": "physics",
+      "name": "rigidbody",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "physics-collider-box",
+      "category": "physics",
+      "name": "colliderBox",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "physics-collider-sphere",
+      "category": "physics",
+      "name": "colliderSphere",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "physics-collider-capsule",
+      "category": "physics",
+      "name": "colliderCapsule",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "physics-collider-mesh",
+      "category": "physics",
+      "name": "colliderMesh",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "physics-trigger",
+      "category": "physics",
+      "name": "trigger",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "physics-joint-point",
+      "category": "physics",
+      "name": "jointPoint",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "physics-joint-hinge",
+      "category": "physics",
+      "name": "jointHinge",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "physics-joint-slider",
+      "category": "physics",
+      "name": "jointSlider",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "physics-joint-distance",
+      "category": "physics",
+      "name": "jointDistance",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "physics-raycast",
+      "category": "physics",
+      "name": "raycast",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "physics-gravity",
+      "category": "physics",
+      "name": "gravity",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "flow-event",
+      "category": "flow",
+      "name": "event",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "flow-action",
+      "category": "flow",
+      "name": "action",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "flow-data",
+      "category": "flow",
+      "name": "data",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "flow-variable",
+      "category": "flow",
+      "name": "variable",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "flow-node",
+      "category": "flow",
+      "name": "node",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "flow-connect",
+      "category": "flow",
+      "name": "connect",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "flow-disconnect",
+      "category": "flow",
+      "name": "disconnect",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "flow-macro",
+      "category": "flow",
+      "name": "macro",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "flow-breakpoint",
+      "category": "flow",
+      "name": "breakpoint",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "flow-watch",
+      "category": "flow",
+      "name": "watch",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "flow-validate",
+      "category": "flow",
+      "name": "validate",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "flow-error",
+      "category": "flow",
+      "name": "error",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "console-trace",
+      "category": "console",
+      "name": "trace",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "console-debug",
+      "category": "console",
+      "name": "debug",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "console-info",
+      "category": "console",
+      "name": "info",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "console-warning",
+      "category": "console",
+      "name": "warning",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "console-error",
+      "category": "console",
+      "name": "error",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "console-fatal",
+      "category": "console",
+      "name": "fatal",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "console-clear",
+      "category": "console",
+      "name": "clear",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "console-collapse-all",
+      "category": "console",
+      "name": "collapseAll",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "console-expand-all",
+      "category": "console",
+      "name": "expandAll",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "panels-assets",
+      "category": "panels",
+      "name": "assets",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "panels-console",
+      "category": "panels",
+      "name": "console",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "panels-flow",
+      "category": "panels",
+      "name": "flow",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "panels-timeline",
+      "category": "panels",
+      "name": "timeline",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "panels-inspector",
+      "category": "panels",
+      "name": "inspector",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "panels-profiler",
+      "category": "panels",
+      "name": "profiler",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "panels-build",
+      "category": "panels",
+      "name": "build",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "system-thermal",
+      "category": "system",
+      "name": "thermal",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "system-battery",
+      "category": "system",
+      "name": "battery",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "system-memory",
+      "category": "system",
+      "name": "memory",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "system-fps",
+      "category": "system",
+      "name": "fps",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "system-power",
+      "category": "system",
+      "name": "power",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "system-android",
+      "category": "system",
+      "name": "android",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "system-package",
+      "category": "system",
+      "name": "package",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "system-cloud",
+      "category": "system",
+      "name": "cloud",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "system-plugin",
+      "category": "system",
+      "name": "plugin",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "system-help",
+      "category": "system",
+      "name": "help",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "system-menu",
+      "category": "system",
+      "name": "menu",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    },
+    {
+      "id": "system-safe-area",
+      "category": "system",
+      "name": "safeArea",
+      "format": "png",
+      "sizes": [
+        24,
+        32,
+        48,
+        64
+      ],
+      "states": [
+        "neutral",
+        "active"
+      ],
+      "transparent": true
+    }
+  ]
+}

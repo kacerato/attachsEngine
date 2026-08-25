@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "color": {
+    "canvas": "#0A0710",
+    "surface": "#14101D",
+    "surfaceRaised": "#1D1729",
+    "surfaceOverlay": "#261E35",
+    "border": "#3A2D50",
+    "text": "#F6F2FC",
+    "textMuted": "#A89DB8",
+    "primary": "#A94DFF",
+    "primaryStrong": "#7C24E8",
+    "primarySoft": "#D9B5FF",
+    "focus": "#64E7F0",
+    "success": "#4DDAA4",
+    "warning": "#F3B84C",
+    "danger": "#FF617D",
+    "axisX": "#F05B78",
+    "axisY": "#65D47A",
+    "axisZ": "#5B9CFF"
+  },
+  "typography": {
+    "ui": {
+      "family": "Inter, Roboto, system-ui, sans-serif",
+      "weights": [
+        400,
+        500,
+        600,
+        700
+      ]
+    },
+    "mono": {
+      "family": "JetBrains Mono, Roboto Mono, monospace",
+      "weights": [
+        400,
+        500,
+        600
+      ]
+    }
+  },
+  "spacingDp": [
+    0,
+    4,
+    8,
+    12,
+    16,
+    20,
+    24,
+    32,
+    40,
+    48
+  ],
+  "radiusDp": {
+    "xs": 4,
+    "sm": 6,
+    "md": 10,
+    "lg": 16,
+    "pill": 999
+  },
+  "touchTargetDp": {
+    "minimum": 44,
+    "android": 48,
+    "modeDock": 64
+  },
+  "iconDp": {
+    "compact": 18,
+    "standard": 24,
+    "prominent": 32,
+    "touch": 48
+  },
+  "stroke": {
+    "icon": 1.75,
+    "divider": 1,
+    "focus": 2
+  },
+  "motionMs": {
+    "instant": 80,
+    "fast": 150,
+    "panel": 240,
+    "deliberate": 320
+  },
+  "elevation": {
+    "panel": 1,
+    "overlay": 2,
+    "radial": 3
+  }
+}
