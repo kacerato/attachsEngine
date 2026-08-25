@@ -9,7 +9,30 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)
 endif()
 
+# --- Jolt Physics (vendorizado em third_party/, não um pacote externo baixado no
+# build — ver native/third_party/JoltPhysics/VENDORED_COMMIT.txt) ----------------
+# Precisa entrar ANTES do add_compile_options(-Werror ...) abaixo: propriedades de
+# diretório do CMake (compile options incluídas) são herdadas por um add_subdirectory()
+# no estado em que estavam NO MOMENTO da chamada — entrando aqui, o subdiretório do
+# Jolt nunca vê nossas flags -Werror/-fno-rtti/-fno-exceptions, então um warning no
+# CÓDIGO DE TERCEIROS nunca quebra nosso build (não é responsabilidade nossa arrumar
+# warning de upstream, e -Werror em código que não escrevemos é frágil por natureza).
+set(USE_ASSERTS ON CACHE BOOL "" FORCE)
+set(DOUBLE_PRECISION OFF CACHE BOOL "" FORCE) # engine usa float em toda a matemática (ver CONVENCOES.md)
+set(CPP_EXCEPTIONS_ENABLED OFF CACHE BOOL "" FORCE)
+set(CPP_RTTI_ENABLED OFF CACHE BOOL "" FORCE)
+set(OVERRIDE_CXX_FLAGS OFF CACHE BOOL "" FORCE) # não deixa o Jolt decidir CMAKE_CXX_FLAGS_* do projeto inteiro
+set(ENABLE_OBJECT_STREAM OFF CACHE BOOL "" FORCE) # serialização é a nossa (Aether.Core.Serialization), não a do Jolt
+set(ENABLE_INSTALL OFF CACHE BOOL "" FORCE) # link estático interno, nunca instalado como pacote do sistema
+set(DEBUG_RENDERER_IN_DEBUG_AND_RELEASE OFF CACHE BOOL "" FORCE) # o Jolt tem seu próprio debug renderer via DX12/VK/Metal — não queremos essa dependência; a engine tem o próprio render graph
+set(DEBUG_RENDERER_IN_DISTRIBUTION OFF CACHE BOOL "" FORCE)
+set(JPH_USE_DX12 OFF CACHE BOOL "" FORCE)
+set(JPH_USE_VK OFF CACHE BOOL "" FORCE)
+set(JPH_USE_MTL OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/JoltPhysics/Build EXCLUDE_FROM_ALL)
+
 # Engine mobile: sem RTTI, sem exceções, warnings tratados como erro nos alvos de runtime.
+# (só para o NOSSO código — ver a nota acima sobre por que o Jolt entra antes desta linha.)
 add_compile_options(
   $<$<COMPILE_LANGUAGE:CXX>:-Wall>
   $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
@@ -94,6 +117,19 @@ if(ANDROID)
   )
 endif()
 
+# --- aether_physics: fronteira C ABI blittable sobre o Jolt Physics (item 4.1.1) --
+# Só transporta tipos blittable pela fronteira (mesma regra de C#<->C++ do CONVENCOES.md,
+# aplicada aqui entre nosso C++ e a API C++ do Jolt): todo tipo cruzando jolt_bridge.h é
+# POD simples (float, uint32_t, ponteiro opaco), nunca um tipo do Jolt exposto diretamente —
+# isso mantém o C# livre de conhecer qualquer detalhe interno do Jolt.
+add_library(aether_physics STATIC
+  physics/jolt_bridge.cpp
+)
+target_include_directories(aether_physics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(aether_physics PUBLIC aether_core PRIVATE Jolt)
+# O Jolt foi compilado com CPP_RTTI_ENABLED/CPP_EXCEPTIONS_ENABLED=OFF (ver acima), então o
+# link é consistente com -fno-rtti -fno-exceptions do resto do nosso código nativo.
+
 # --- aether_tests: runner próprio, sem dependência externa ------------------
 if(NOT ANDROID)
   add_executable(aether_tests
@@ -104,7 +140,8 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_device_profile.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_jolt_bridge.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
-  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_rhi)
+  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_rhi aether_physics)
 endif()

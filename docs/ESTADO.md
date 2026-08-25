@@ -8,10 +8,10 @@ Regra: só entra nesta tabela o que **compila e passa em teste**.
 | | |
 |---|---|
 | Testes C# | **180 passando**, 0 falhando |
-| Testes C++ | **45 passando**, 0 falhando (41 do núcleo + 4 de lifecycle) |
+| Testes C++ | **52 passando**, 0 falhando (41 do núcleo + 4 de lifecycle + 7 de física) |
 | Linhas C# | ~8.800 |
-| Linhas C++ | ~2.300 |
-| Dependências externas | **nenhuma** — build e testes rodam offline, de propósito |
+| Linhas C++ (próprias, sem código vendorizado) | ~3.400 |
+| Dependências externas | **nenhuma** — build e testes rodam offline, de propósito (Jolt Physics é vendorizado em `native/third_party/`, não baixado no build — ver `VENDORED_COMMIT.txt`) |
 
 ## Por fase
 
@@ -32,13 +32,15 @@ Regra: só entra nesta tabela o que **compila e passa em teste**.
 | **5.1–5.6** | AetherFlow: AST, validador, gerador de C#, parser de volta, interpretador, serializador | ✅ 34 testes |
 | **2.1** | RHI Vulkan: cache de descritores, perfis de dispositivo S/A/B/C | ✅ lógica testada |
 | **2.3** | **Render graph**: topológico, poda, aliasing, barreiras, load/store ops, memoryless, fusão de subpasses | ✅ 41 testes |
+| **4.1.1** | Física: Jolt Physics vendorizado (`native/third_party/JoltPhysics`), fronteira C ABI blittable (`jolt_bridge.h/.cpp`) — mundo, corpos estático/cinemático/dinâmico, formas caixa/esfera, `Step`, leitura de transform/velocidade, `IsActive`, raycast contra o mundo | ✅ 7 testes (queda livre bate cinemática, corpo assenta sobre piso na altura esperada, corpo estático não se move, raycast acerta/erra pelo alcance, round-trip de velocidade, handles inválidos não crasham) |
 
 ## O que ainda não existe
 
 - **Nada ainda foi validado numa GPU física.** O shell Android cria instance, device, fila de apresentação e `VkSurfaceKHR`, mas não havia aparelho conectado durante a validação. A lógica portátil de lifecycle tem testes; a criação Vulkan precisa de teste de dispositivo.
 - Existe app Android empacotável, mas ainda não existe app iOS, swapchain concreto, command loop de renderização ou shaders compilados.
 - O protótipo do editor é HTML/Canvas, não a engine — valida **interação**, não desempenho gráfico. Usa as mesmas convenções de espaço do núcleo em C# de propósito, para que o que se aprende ali transfira.
-- Física, animação, áudio, assets, build: Fases 4, 6 e 8, não iniciadas.
+- Animação, áudio, assets, build: Fases 6 e 8, não iniciadas.
+- **Física (Fase 4): só o item 4.1.1 (fatia vertical mundo/corpo/forma/step/raycast) está pronto.** Deliberadamente ainda não implementados, para não fingir que um item complexo foi "riscado" com uma versão capenga: 4.1.2 (facade C# de `RigidBody`/`Collider` como componentes de ECS com sincronização bidirecional Jolt↔ECS — hoje só existe a API C++/P-Invoke crua), 4.1.3 (juntas e motores), 4.1.5 (character controller), 4.1.6 (física 2D dedicada/benchmark), 4.1.7 (decomposição convexa de malhas), 4.1.8 (determinismo em ponto fixo — a fatia atual usa o float padrão do Jolt, que não é bit-determinístico entre plataformas), 4.1.9 (sub-stepping adaptativo ligado ao PowerGovernor térmico).
 - **1.4.5 (índice de dependências em SQLite) deliberadamente não implementado ainda.** Não existe um SQLite de verdade vendorizado no repositório; implementar uma versão simplificada só para "riscar o item" seria a gambiarra que este projeto se recusa a fazer. Quando entrar, será o amálgama C `sqlite3.c` vendorizado em `native/` (não um pacote NuGet — mantém a política de zero dependência externa) exposto por P/Invoke.
 
 ## Shell Android — validação atual
@@ -94,3 +96,20 @@ não há evento, evitando consumo térmico artificial.
   genéricos sobre pinos e não precisaram mudar. Corrige também um bug latente (nunca exercitado, porque a
   checagem antiga sempre lançava antes): `CSharpToFlow.ParseIf` devolvia `"senao"` como o pino de
   continuação, quando esse pino é a ENTRADA do ramo else, não uma saída de convergência.
+- **Integração do Jolt (4.1.1): três bugs reais pegos só ao compilar/testar de verdade, não por inspeção.**
+  (1) `JPH::RVec3` é um `using RVec3 = Vec3` (não um tipo distinto) quando `DOUBLE_PRECISION=OFF` — a
+  configuração que escolhemos, porque a engine usa float em toda a matemática — então um segundo overload
+  `FromJolt(JPH::RVec3)` ao lado de `FromJolt(JPH::Vec3)` era uma redefinição da mesma função, não uma
+  sobrecarga; o compilador acusou. (2) `BroadPhaseLayerInterface::GetBroadPhaseLayerName` é puro quando
+  `JPH_PROFILE_ENABLED` está definido (ligado por padrão no build Debug do Jolt) — `BroadPhaseLayerInterfaceImpl`
+  não a implementava, então a classe ficava abstrata e nem podia ser instanciada como campo de
+  `AetherPhysicsWorld`; corrigido implementando-a (só usada para rotular camadas em captura de profile, não
+  afeta simulação). (3) Os handlers padrão do Jolt para `Trace`/`AssertFailed` (`DummyTrace`/`DummyAssertFailed`,
+  ver `Jolt/Core/IssueReporting.cpp`) descartam a mensagem e o assert simplesmente devolve `true` — dispara
+  um trap sem nenhum diagnóstico legível. Instalados handlers reais em `jolt_bridge.cpp`
+  (`TraceImpl`/`AssertFailedImpl`), no mesmo estilo stderr de `core/assert.cpp` (`AE_CHECK`), antes de
+  qualquer uso do Jolt (`EnsureGlobalTypesRegistered`). Além disso, o teste de queda livre precisou de uma
+  tolerância maior para a velocidade (0.15 m/s, não 0.05) depois de medir que o `mLinearDamping` padrão do
+  Jolt (0.05, `dv/dt = -c*v`, ligado por padrão em todo corpo dinâmico) desvia a velocidade real da fórmula
+  ideal `v = -g*t` em ~0.06 m/s mesmo em queda livre "pura" — não é imprecisão do teste, é o Jolt simulando
+  um amortecimento real que a fórmula ideal não modela.
