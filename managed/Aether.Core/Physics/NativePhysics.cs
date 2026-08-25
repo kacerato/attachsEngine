@@ -45,8 +45,54 @@ public struct NativeBodyDesc
     public float Restitution;
 }
 
+/// <summary>Mesmo layout de <c>AetherJointKind</c> (item 4.1.3).</summary>
+public enum NativeJointKind : uint
+{
+    Point = 0,
+    Hinge = 1,
+    Slider = 2,
+    Distance = 3,
+}
+
+/// <summary>Mesmo layout de <c>AetherMotorState</c>. Só Hinge e Slider usam motor de verdade
+/// (Point/Distance não têm <c>JPH::MotorSettings</c> — ver comentário em jolt_bridge.h).</summary>
+public enum NativeMotorState : uint
+{
+    Off = 0,
+    Velocity = 1,
+    Position = 2,
+    PositionAndVelocity = 3,
+}
+
+/// <summary>Mesmo layout de <c>AetherJointMotorDesc</c>.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct NativeJointMotorDesc
+{
+    public NativeMotorState State;
+    public float TargetVelocity;
+    public float TargetPosition;
+    public float MaxForceOrTorque;
+    public float SpringFrequency;
+    public float SpringDamping;
+}
+
+/// <summary>Mesmo layout de <c>AetherJointDesc</c>.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct NativeJointDesc
+{
+    public NativeJointKind Kind;
+    public float3 Point1;
+    public float3 Point2;
+    public float3 Axis1;
+    public float3 Axis2;
+    public float LimitsMin;
+    public float LimitsMax;
+    public NativeJointMotorDesc Motor;
+}
+
 /// <summary>
-/// Bindings P/Invoke cruas sobre <c>native/physics/jolt_bridge.h</c> (item 4.1.1). Espelha a
+/// Bindings P/Invoke cruas sobre <c>native/physics/jolt_bridge.h</c> (itens 4.1.1 e 4.1.3, juntas
+/// e motores). Espelha a
 /// fronteira C ABI 1:1 — nenhuma lógica aqui, só a declaração de cada função exportada. Não use
 /// esta classe diretamente fora de <see cref="Aether.Physics"/>; <see cref="PhysicsWorld"/> e
 /// <see cref="PhysicsSyncSystem"/> são a API que o resto da engine deve chamar.
@@ -100,4 +146,18 @@ internal static partial class NativePhysics
 
     [LibraryImport(LibraryName)]
     internal static unsafe partial int AetherPhysics_RayCastClosest(nint world, float3 origin, float3 direction, uint* outBody, float* outHitFraction);
+
+    // ---------------------------------------------------------------- juntas e motores (4.1.3)
+
+    [LibraryImport(LibraryName)]
+    internal static partial uint AetherPhysics_CreateJoint(nint world, uint body1, uint body2, in NativeJointDesc desc);
+
+    [LibraryImport(LibraryName)]
+    internal static partial void AetherPhysics_DestroyJoint(nint world, uint handle);
+
+    [LibraryImport(LibraryName)]
+    internal static partial void AetherPhysics_SetJointMotor(nint world, uint handle, in NativeJointMotorDesc motor);
+
+    [LibraryImport(LibraryName)]
+    internal static partial float AetherPhysics_GetJointPosition(nint world, uint handle);
 }

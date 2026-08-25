@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Aether Editor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -340,6 +341,13 @@ body {
 }
 .swatch.on { box-shadow: 0 0 0 2px var(--accent); }
 .swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.motorstate {
+  font-family: var(--mono); font-size: 12px; color: var(--text);
+  background: var(--ground); border: 1px solid var(--line); border-radius: 4px;
+  padding: 3px 6px; cursor: pointer;
+}
+.motorstate:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ── Trilho inferior ────────────────────────────────────────────────── */
 .rail {
@@ -699,9 +707,23 @@ function buildScene(){
     mk("Caixa B",   meshBox(0.9,0.9,0.9),    [-2.6,1.35,1.8],"#7BD16A", {metallic:0.0, roughness:0.6}),
     mk("Coletável", meshSphere(0.28,12,8),   [3.4,1.9,1.2], "#E0576B", {metallic:0.9, roughness:0.15}),
     mk("Pilar",     meshCylinder(0.35,3,14), [-4.5,1.5,-3],  "#9B87E0", {metallic:0.0, roughness:0.5}),
+    mk("Suporte",   meshBox(0.5,0.5,0.5),    [4.6,3.0,-2.2], "#C8CED8", {metallic:0.2, roughness:0.4, rigidBody:"static"}),
+    mk("Braço",     meshBox(1.6,0.25,0.25),  [5.9,3.0,-2.2], "#E0A24C", {metallic:0.1, roughness:0.4, rigidBody:"dynamic"}),
   ];
   // "Cabeça" é filha de "Player": mover o pai move a filha.
   scene[2].parent = scene[1].id;
+  // "Braço" pende de "Suporte" por uma junta dobradiça (item 4.1.3) — não é hierarquia de
+  // cena (scene[9].parent continua null: mover o Suporte não deveria arrastar o Braço junto
+  // por parentesco, é a JUNTA que os conecta fisicamente). point1/point2 no referencial
+  // mundial, mesma convenção de AetherJointDesc (ver native/physics/jolt_bridge.h) — aqui
+  // coincidem com a face esquerda do braço, onde ele encontra o suporte.
+  scene[9].joint = {
+    kind:"hinge", bodyId: scene[8].id,
+    point1:[4.6,3.0,-2.2], point2:[4.6,3.0,-2.2],
+    axis1:[0,0,1], axis2:[0,0,1],
+    limitsMin:-1.2, limitsMax:1.2,
+    motor:{state:"off", targetVelocity:0, targetPosition:0, maxForceOrTorque:200, springFrequency:4, springDamping:1},
+  };
   selected = scene[1].id;
 }
 function byId(id){ return scene.find(o=>o.id===id) || null; }
@@ -941,6 +963,35 @@ function gizmoHandles(vp){
       if(pts.length>8) out.push({type:"ring", axis:ax, pts, origin, dir:ax.dir, color:cssVar(ax.color)});
     }
   }
+  if(mode==="joint" && o.joint){
+    out.push(...jointHandles(vp, o));
+  }
+  return out;
+}
+
+/* ── Gizmo de junta (item 4.1.3) ───────────────────────────────────────
+   Reusa a mesma infraestrutura de projeção/hit-test/arrasto do gizmo de
+   transform (project, distToSegment, closestOnAxis) em vez de inventar uma
+   segunda. Um handle "jointPoint" arrasta point1 (a âncora no PRÓPRIO objeto
+   selecionado — point2, no corpo do outro lado da junta, não é editável por
+   este objeto, é editável selecionando o outro objeto); um "jointAxis"
+   arrasta a direção do eixo (Hinge/Slider) girando ao redor do ponto. Point/
+   Distance não têm eixo — só o ponto aparece, mesma condicional que o lado
+   nativo usa para decidir se "axis" é relevante (ver AetherJointKind em
+   jolt_bridge.h). */
+function jointHandles(vp, o){
+  const j = o.joint;
+  const s = gizmoScale(vp, worldPos(o)) * 0.8;
+  const p1 = project(j.point1, vp);
+  if(!p1) return [];
+  const out = [{type:"jointPoint", obj:o, p:p1, world:j.point1, color:cssVar("--accent")}];
+
+  if(j.kind==="hinge" || j.kind==="slider"){
+    const axisDir = V.norm(j.axis1);
+    const tip = V.add(j.point1, V.mul(axisDir, s));
+    const a = project(j.point1, vp), b = project(tip, vp);
+    if(a && b) out.push({type:"jointAxis", obj:o, a, b, origin:j.point1, dir:axisDir, color:cssVar("--axis-y")});
+  }
   return out;
 }
 
@@ -957,11 +1008,12 @@ function pickHandle(x,y,handles){
   let best=null, bestD=HIT_PX;
   for(const h of handles){
     let d=1e9;
-    if(h.type==="axis") d=distToSegment(x,y,h.a,h.b);
+    if(h.type==="axis" || h.type==="jointAxis") d=distToSegment(x,y,h.a,h.b);
     else if(h.type==="plane") d=Math.hypot(x-h.p.x,y-h.p.y) - 9;
     else if(h.type==="ring"){
       for(let i=1;i<h.pts.length;i++) d=Math.min(d, distToSegment(x,y,h.pts[i-1],h.pts[i]));
     }
+    else if(h.type==="jointPoint") d=Math.hypot(x-h.p.x,y-h.p.y);
     if(d<bestD){ bestD=d; best=h; }
   }
   return best;
@@ -997,6 +1049,28 @@ function drawGizmo(vp, handles){
       ctx.moveTo(h.pts[0].x,h.pts[0].y);
       for(let i=1;i<h.pts.length;i++) ctx.lineTo(h.pts[i].x,h.pts[i].y);
       ctx.stroke();
+    } else if(h.type==="jointAxis"){
+      // Eixo da dobradiça/slider: haste + cone (não bolinha/quadrado, para não ser confundido
+      // com um handle de translação/escala — é uma DIREÇÃO, não um ponto de arrasto livre).
+      ctx.strokeStyle=h.color; ctx.lineWidth = active?4:3;
+      ctx.beginPath(); ctx.moveTo(h.a.x,h.a.y); ctx.lineTo(h.b.x,h.b.y); ctx.stroke();
+      const ang = Math.atan2(h.b.y-h.a.y, h.b.x-h.a.x);
+      const cr = active?8:6;
+      ctx.fillStyle=h.color;
+      ctx.beginPath();
+      ctx.moveTo(h.b.x, h.b.y);
+      ctx.lineTo(h.b.x-Math.cos(ang-0.4)*cr, h.b.y-Math.sin(ang-0.4)*cr);
+      ctx.lineTo(h.b.x-Math.cos(ang+0.4)*cr, h.b.y-Math.sin(ang+0.4)*cr);
+      ctx.closePath(); ctx.fill();
+    } else if(h.type==="jointPoint"){
+      // Ponto de ancoragem: anel duplo (miolo vazado) — visualmente distinto do bullet cheio
+      // do gizmo de eixo, para não competir por atenção quando os dois aparecem juntos
+      // (arrastar um objeto com junta selecionada em modo "joint" mostra só o ponto, mas o
+      // usuário pode alternar para "move" no mesmo objeto e ver os dois tipos de handle).
+      ctx.strokeStyle=h.color; ctx.lineWidth = active?3:2;
+      ctx.beginPath(); ctx.arc(h.p.x,h.p.y, active?9:7, 0, Math.PI*2); ctx.stroke();
+      ctx.fillStyle=h.color; ctx.globalAlpha = active?0.9:0.6;
+      ctx.beginPath(); ctx.arc(h.p.x,h.p.y, 2.5, 0, Math.PI*2); ctx.fill();
     }
   }
   ctx.globalAlpha=1;
@@ -1088,10 +1162,22 @@ function pushCommand(label, before, after){
   history.future.length = 0;
   refreshHistoryButtons();
 }
-function snapshotOf(o){ return {id:o.id, pos:o.pos.slice(), rot:o.rot.slice(), scl:o.scl.slice(), color:o.color, visible:o.visible}; }
+function snapshotOf(o){
+  return {
+    id:o.id, pos:o.pos.slice(), rot:o.rot.slice(), scl:o.scl.slice(), color:o.color, visible:o.visible,
+    // Cópia profunda de joint (não é undefined em objetos sem junta — applySnapshot precisa
+    // distinguir "sem junta" de "esqueci de copiar", ou um undo depois de editar um objeto
+    // SEM junta restauraria um joint de um snapshot antigo por engano).
+    joint: o.joint ? {...o.joint, point1:o.joint.point1.slice(), point2:o.joint.point2.slice(),
+                       axis1:o.joint.axis1.slice(), axis2:o.joint.axis2.slice(), motor:{...o.joint.motor}} : null,
+  };
+}
 function applySnapshot(s){
   const o=byId(s.id); if(!o) return;
   o.pos=s.pos.slice(); o.rot=s.rot.slice(); o.scl=s.scl.slice(); o.color=s.color; o.visible=s.visible;
+  if(s.joint) o.joint = {...s.joint, point1:s.joint.point1.slice(), point2:s.joint.point2.slice(),
+                          axis1:s.joint.axis1.slice(), axis2:s.joint.axis2.slice(), motor:{...s.joint.motor}};
+  else delete o.joint;
 }
 function undo(){
   const c=history.past.pop(); if(!c) return;
@@ -1192,6 +1278,26 @@ function beginHandleDrag(h, p, vp){
     drag.startAngle = Math.atan2(p.y-c.y, p.x-c.x);
     drag.center = c;
     drag.baseRot = o.rot.slice();
+  } else if(h.type==="jointPoint"){
+    // Arrasta point1 num plano perpendicular à câmera passando pelo ponto atual — mesma
+    // técnica de rayPlane que "move-plane" já usa, só que a normal é a direção da câmera
+    // (não um dos eixos do mundo): o ponto de ancoragem de uma junta não tem um plano
+    // "natural" como a caixa/plataforma tem, então travar num eixo específico seria
+    // arbitrário; perpendicular à câmera é o comportamento mais previsível ao arrastar.
+    drag.kind = "move-jointPoint";
+    drag.handle = "jointPoint";
+    const camDir = V.norm(V.sub(cam.target, camEye()));
+    const hit = rayPlane(ray.origin, ray.dir, h.world, camDir);
+    drag.planeHit = hit || h.world;
+    drag.basePoint = h.world.slice();
+    drag.jointCamNormal = camDir;
+  } else if(h.type==="jointAxis"){
+    drag.kind = "rotate-jointAxis";
+    drag.handle = "jointAxis";
+    const c = project(h.origin, vp);
+    drag.startAngle = Math.atan2(p.y-c.y, p.x-c.x);
+    drag.center = c;
+    drag.baseAxis = h.dir.slice();
   }
 }
 
@@ -1269,6 +1375,33 @@ canvas.addEventListener("pointermove", e=>{
     o.rot = drag.baseRot.slice();
     o.rot[i] = snapTo(drag.baseRot[i] + d, snapRad);
     showHud(p, `${drag.axis.k.toUpperCase()}: ${(o.rot[i]*180/Math.PI).toFixed(1)}°`);
+  } else if(drag.kind==="move-jointPoint"){
+    const hit = rayPlane(ray.origin, ray.dir, drag.basePoint, drag.jointCamNormal);
+    if(hit){
+      const np = [snapTo(hit[0],snapStep), snapTo(hit[1],snapStep), snapTo(hit[2],snapStep)];
+      o.joint.point1 = np;
+      showHud(p, `âncora: ${fmt(np[0])}  ${fmt(np[1])}  ${fmt(np[2])}`);
+    }
+  } else if(drag.kind==="rotate-jointAxis"){
+    // Gira o eixo (um vetor livre, não a orientação do objeto) em torno da direção da
+    // câmera — mesma lógica angular do gizmo "rotate" de objeto, mas aplicada a
+    // joint.axis1 em vez de o.rot; snapRad reaproveita o mesmo passo de 15° do rotate
+    // normal, consistência de UX entre os dois gizmos de rotação.
+    const ang = Math.atan2(p.y-drag.center.y, p.x-drag.center.x);
+    const d = ang - drag.startAngle;
+    const snapRad = snapStep>0 ? 15*Math.PI/180 : 0;
+    const theta = snapTo(d, snapRad);
+    // Rotaciona baseAxis pelo ângulo `theta` em torno do eixo de visão da câmera (right/up
+    // do view, mesma base ortonormal que o pan de dois dedos já usa) — projeta o eixo 3D
+    // num giro que corresponde ao arrasto 2D na tela.
+    const view=matLookAt(camEye(),cam.target,[0,1,0]);
+    const right=[view[0],view[4],view[8]], up=[view[1],view[5],view[9]], fwd=[-view[2],-view[6],-view[10]];
+    const c=Math.cos(theta), s=Math.sin(theta);
+    const rr=V.add(V.mul(right,c), V.mul(up,s)), ru=V.add(V.mul(right,-s), V.mul(up,c));
+    const local = [V.dot(drag.baseAxis,right), V.dot(drag.baseAxis,up), V.dot(drag.baseAxis,fwd)];
+    o.joint.axis1 = V.norm(V.add(V.add(V.mul(rr,local[0]), V.mul(ru,local[1])), V.mul(fwd,local[2])));
+    o.joint.axis2 = o.joint.axis1.slice();
+    showHud(p, `eixo: ${(theta*180/Math.PI).toFixed(0)}°`);
   }
   buildInspector();
 });
@@ -1448,6 +1581,7 @@ const MODES = [
   {k:"move",   glyph:"✥", label:"Mover"},
   {k:"rotate", glyph:"⟳", label:"Girar"},
   {k:"scale",  glyph:"⤢", label:"Escala"},
+  {k:"joint",  glyph:"⚭", label:"Junta"},
   {k:"edit",   glyph:"✎", label:"Edit"},
   {k:"more",   glyph:"⋯", label:"Mais"},
 ];
@@ -1572,6 +1706,95 @@ function buildInspector(){
     const r=document.createElement("div"); r.className="row";
     r.innerHTML=`<span class="k">${k}</span><span class="v">${v}</span>`;
     mesh.appendChild(r);
+  }
+
+  if(o.joint) buildJointSection(o);
+}
+
+/* Seção "Junta" do Inspector (item 4.1.3) — só aparece em objetos com o.joint (ver buildScene,
+   "Braço" conectado a "Suporte"). Campos espelham AetherJointDesc 1:1 (jolt_bridge.h): tipo,
+   ponto de ancoragem, eixo (Hinge/Slider), limites, e o motor (estado + alvo + torque/força
+   máxima) quando o tipo suporta motor. */
+function buildJointSection(o){
+  const nameEl=document.getElementById("inspName");
+  const body=document.getElementById("inspBody");
+  const j=o.joint;
+  const other=byId(j.bodyId);
+  const hasMotor = j.kind==="hinge" || j.kind==="slider";
+
+  const mkComp=(title, open=true)=>{
+    const d=document.createElement("details");
+    d.className="comp"; d.open=open;
+    d.innerHTML=`<summary>${title}</summary>`;
+    const f=document.createElement("div"); f.className="fields";
+    d.appendChild(f); body.appendChild(d);
+    return f;
+  };
+
+  const jf=mkComp(`Junta — ${j.kind==="hinge"?"Dobradiça":j.kind==="slider"?"Pistão":j.kind==="distance"?"Distância":"Ponto"}`);
+  const info=document.createElement("div"); info.className="row";
+  info.innerHTML=`<span class="k">Conectado a</span><span class="v">${other?other.name:"— (corpo removido)"}</span>`;
+  jf.appendChild(info);
+
+  const pAxes=["x","y","z"];
+  for(let i=0;i<3;i++){
+    const f=numField("Âncora "+pAxes[i].toUpperCase(), null, ()=>j.point1[i], v=>{
+      j.point1[i]=v; j.point2[i]=v; // esta cena de exemplo nasce com point1==point2 (mesma
+                                      // convenção do teste nativo/C#: os dois corpos coincidem
+                                      // no ponto de ancoragem no repouso) — arrastar um ponto
+                                      // no Inspector mantém essa igualdade por simplicidade
+                                      // didática; um editor de verdade deixaria os dois
+                                      // independentes (corpos que já nascem afastados).
+    }, 0.02);
+    jf.appendChild(f); inspectorFields.push(f);
+  }
+
+  if(hasMotor){
+    const aAxes=["x","y","z"];
+    for(let i=0;i<3;i++){
+      const f=numField("Eixo "+aAxes[i].toUpperCase(), null, ()=>j.axis1[i], v=>{
+        j.axis1[i]=v; j.axis1=V.norm(j.axis1); j.axis2=j.axis1.slice();
+      }, 0.02);
+      jf.appendChild(f); inspectorFields.push(f);
+    }
+    const limLabel = j.kind==="hinge" ? "Limite °" : "Limite m";
+    const limScale = j.kind==="hinge" ? 180/Math.PI : 1;
+    const lminf=numField(limLabel+" min", null, ()=>j.limitsMin*limScale, v=>{j.limitsMin=v/limScale;}, j.kind==="hinge"?1:0.05);
+    jf.appendChild(lminf); inspectorFields.push(lminf);
+    const lmaxf=numField(limLabel+" max", null, ()=>j.limitsMax*limScale, v=>{j.limitsMax=v/limScale;}, j.kind==="hinge"?1:0.05);
+    jf.appendChild(lmaxf); inspectorFields.push(lmaxf);
+
+    const mf=mkComp("Motor", false);
+    const stateRow=document.createElement("div"); stateRow.className="row";
+    const sel=document.createElement("select"); sel.className="motorstate";
+    for(const st of ["off","velocity","position"]){
+      const opt=document.createElement("option"); opt.value=st;
+      opt.textContent = st==="off"?"Desligado":st==="velocity"?"Velocidade":"Posição";
+      opt.selected = j.motor.state===st;
+      sel.appendChild(opt);
+    }
+    sel.addEventListener("change", ()=>{ j.motor.state=sel.value; buildInspector(); });
+    stateRow.innerHTML=`<span class="k">Estado</span>`;
+    stateRow.appendChild(sel);
+    mf.appendChild(stateRow);
+
+    if(j.motor.state!=="off"){
+      if(j.motor.state==="velocity" || j.motor.state==="position"){
+        const label = j.kind==="hinge" ? "Vel. alvo °/s" : "Vel. alvo m/s";
+        const scale = j.kind==="hinge" ? 180/Math.PI : 1;
+        const vf=numField(label, null, ()=>j.motor.targetVelocity*scale, v=>{j.motor.targetVelocity=v/scale;}, 1);
+        mf.appendChild(vf); inspectorFields.push(vf);
+      }
+      if(j.motor.state==="position"){
+        const label = j.kind==="hinge" ? "Pos. alvo °" : "Pos. alvo m";
+        const scale = j.kind==="hinge" ? 180/Math.PI : 1;
+        const pf=numField(label, null, ()=>j.motor.targetPosition*scale, v=>{j.motor.targetPosition=v/scale;}, 1);
+        mf.appendChild(pf); inspectorFields.push(pf);
+      }
+      const forceLabel = j.kind==="hinge" ? "Torque máx N·m" : "Força máx N";
+      const ff=numField(forceLabel, null, ()=>j.motor.maxForceOrTorque, v=>{j.motor.maxForceOrTorque=Math.max(0,v);}, 5);
+      mf.appendChild(ff); inspectorFields.push(ff);
+    }
   }
 }
 function buildInspectorValuesOnly(){ for(const f of inspectorFields) f._paint(); }

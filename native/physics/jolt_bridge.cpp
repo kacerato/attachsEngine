@@ -14,14 +14,21 @@
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
+#include <Jolt/Physics/Body/BodyLock.h>
+#include <Jolt/Physics/Body/BodyLockMulti.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
+#include <Jolt/Physics/Constraints/PointConstraint.h>
+#include <Jolt/Physics/Constraints/HingeConstraint.h>
+#include <Jolt/Physics/Constraints/SliderConstraint.h>
+#include <Jolt/Physics/Constraints/DistanceConstraint.h>
 
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -109,6 +116,49 @@ AetherVec3 FromJolt(JPH::Vec3 v) { return {v.GetX(), v.GetY(), v.GetZ()}; }
 JPH::Quat ToJolt(AetherQuat q) { return JPH::Quat(q.x, q.y, q.z, q.w); }
 AetherQuat FromJolt(JPH::Quat q) { return {q.GetX(), q.GetY(), q.GetZ(), q.GetW()}; }
 
+// ------------------------------------------------------------ juntas: handle denso próprio
+//
+// Diferente de AetherBodyHandle (que É o JPH::BodyID, sem tabela nossa — o Jolt já resolve
+// reciclagem de índice sozinho), uma JPH::Constraint não carrega um índice denso reciclável
+// embutido. Handle = (índice na tabela << 16) | (geração & 0xFFFF), mesmo esquema de detecção
+// de use-after-free que EntitySlot.Version faz no lado C# (World.cs): destruir uma junta
+// incrementa a geração do slot, então um AetherJointHandle antigo nunca combina por acidente
+// com o slot reciclado por uma junta nova.
+struct JointSlot {
+  JPH::Ref<JPH::Constraint> constraint; // null = slot livre
+  JPH::BodyID body1;
+  JPH::BodyID body2;
+  ae::u32 generation = 0;
+};
+
+constexpr ae::u32 kJointGenerationBits = 16;
+constexpr ae::u32 kJointGenerationMask = (1u << kJointGenerationBits) - 1u;
+
+AetherJointHandle PackJointHandle(ae::u32 index, ae::u32 generation) {
+  return (index << kJointGenerationBits) | (generation & kJointGenerationMask);
+}
+ae::u32 JointHandleIndex(AetherJointHandle h) { return h >> kJointGenerationBits; }
+ae::u32 JointHandleGeneration(AetherJointHandle h) { return h & kJointGenerationMask; }
+
+JPH::MotorSettings ToJoltMotorSettings(const AetherJointMotorDesc &desc, bool isAngular) {
+  JPH::MotorSettings settings;
+  settings.mSpringSettings.mMode = JPH::ESpringMode::FrequencyAndDamping;
+  settings.mSpringSettings.mFrequency = desc.springFrequency;
+  settings.mSpringSettings.mDamping = desc.springDamping;
+  if (isAngular) settings.SetTorqueLimit(desc.maxForceOrTorque);
+  else settings.SetForceLimit(desc.maxForceOrTorque);
+  return settings;
+}
+
+JPH::EMotorState ToJoltMotorState(AetherMotorState state) {
+  switch (state) {
+    case AetherMotorState::Velocity: return JPH::EMotorState::Velocity;
+    case AetherMotorState::Position: return JPH::EMotorState::Position;
+    case AetherMotorState::PositionAndVelocity: return JPH::EMotorState::PositionAndVelocity;
+    default: return JPH::EMotorState::Off;
+  }
+}
+
 // ------------------------------------------------------------ Trace/AssertFailed
 //
 // Os handlers padrão do Jolt (DummyTrace/DummyAssertFailed, ver
@@ -174,6 +224,12 @@ struct AetherPhysicsWorld {
   JPH::PhysicsSystem physicsSystem;
   JPH::TempAllocatorImpl tempAllocator;
   JPH::JobSystemThreadPool jobSystem;
+
+  // Tabela de juntas deste mundo — ver comentário de JointSlot acima. Slots livres formam
+  // uma lista encadeada através de `freeList` (índice do próximo livre, ou -1); mesma
+  // estratégia de reciclagem de índice que World.cs usa para EntitySlot (_freeIndices).
+  std::vector<JointSlot> jointSlots;
+  std::vector<ae::u32> freeJointSlots;
 
   explicit AetherPhysicsWorld(ae::u32 maxBodies)
       : tempAllocator(8 * 1024 * 1024),
@@ -284,6 +340,192 @@ ae::i32 AetherPhysics_RayCastClosest(AetherPhysicsWorld *world, AetherVec3 origi
   if (outBody != nullptr) *outBody = hit.mBodyID.GetIndexAndSequenceNumber();
   if (outHitFraction != nullptr) *outHitFraction = hit.mFraction;
   return 1;
+}
+
+// ---------------------------------------------------------------- juntas e motores (4.1.3)
+
+AetherJointHandle AetherPhysics_CreateJoint(AetherPhysicsWorld *world, AetherBodyHandle body1,
+                                             AetherBodyHandle body2, const AetherJointDesc *desc) {
+  if (world == nullptr || desc == nullptr) return AetherJointHandle_Invalid;
+  if (body1 == AetherBodyHandle_Invalid || body2 == AetherBodyHandle_Invalid) return AetherJointHandle_Invalid;
+
+  // Constraint::Create(Body&, Body&) precisa de referências reais, não de BodyID — diferente
+  // do resto desta fronteira (que opera inteiramente via BodyInterface, por BodyID). Um lock
+  // de escrita é o padrão idiomático do próprio Jolt para isso (ver BodyLockWrite em
+  // Jolt/Physics/Body/BodyLock.h); write, não read, porque adicionar uma constraint deixa o
+  // corpo referenciado por ela (mConstraints, contabilidade interna do Jolt).
+  //
+  // BodyLockMultiWrite (não dois BodyLockWrite sequenciais): travar dois BodyLockWrite um
+  // após o outro dispara o assert de ordem de PhysicsLock.h ("A lock of same or higher
+  // priority was already taken") — o segundo lock pega a MESMA categoria PerBody que o
+  // primeiro já detém, o que o Jolt trata como possível deadlock e recusa (pego só ao
+  // rodar o teste real, não por inspeção — ver docs/ESTADO.md). BodyLockMultiWrite existe
+  // exatamente para travar N corpos de uma vez, resolvendo a ordem de mutex internamente.
+  JPH::BodyLockInterfaceLocking const &lockInterface = world->physicsSystem.GetBodyLockInterface();
+  JPH::BodyID bodyIds[2] = {JPH::BodyID(body1), JPH::BodyID(body2)};
+  JPH::Ref<JPH::Constraint> constraint;
+  {
+    // Escopo próprio: BodyLockMultiWrite precisa liberar os dois locks ANTES de chamarmos
+    // ActivateBody abaixo — ActivateBody pega o lock PerBody internamente, e um segundo lock
+    // da mesma categoria enquanto BodyLockMultiWrite ainda está vivo dispara o mesmo assert
+    // de possível deadlock que a criação da constraint já pegou (ver comentário abaixo sobre
+    // BodyLockMultiWrite) — aqui é o MESMO tipo de bug, só que entre o lock de criação da
+    // constraint e o ActivateBody que vem depois, não entre dois locks de corpo individuais.
+    JPH::BodyLockMultiWrite lock(lockInterface, bodyIds, 2);
+    JPH::Body *jphBody1 = lock.GetBody(0);
+    JPH::Body *jphBody2 = lock.GetBody(1);
+    if (jphBody1 == nullptr || jphBody2 == nullptr) return AetherJointHandle_Invalid;
+
+    switch (desc->kind) {
+      case AetherJointKind::Point: {
+        JPH::PointConstraintSettings settings;
+        settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+        settings.mPoint1 = JPH::RVec3(desc->point1.x, desc->point1.y, desc->point1.z);
+        settings.mPoint2 = JPH::RVec3(desc->point2.x, desc->point2.y, desc->point2.z);
+        constraint = settings.Create(*jphBody1, *jphBody2);
+        break;
+      }
+      case AetherJointKind::Hinge: {
+        JPH::HingeConstraintSettings settings;
+        settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+        settings.mPoint1 = JPH::RVec3(desc->point1.x, desc->point1.y, desc->point1.z);
+        settings.mPoint2 = JPH::RVec3(desc->point2.x, desc->point2.y, desc->point2.z);
+        settings.mHingeAxis1 = ToJolt(desc->axis1).Normalized();
+        settings.mHingeAxis2 = ToJolt(desc->axis2).Normalized();
+        // Normal perpendicular ao eixo, gerada automaticamente — a fronteira não pede uma
+        // normal explícita do chamador (só usada por Jolt para desenhar/definir ângulo zero;
+        // GetNormalizedPerpendicular() é o mesmo helper que o próprio Jolt usa internamente
+        // quando o eixo muda sem normal fornecida).
+        settings.mNormalAxis1 = settings.mHingeAxis1.GetNormalizedPerpendicular();
+        settings.mNormalAxis2 = settings.mHingeAxis2.GetNormalizedPerpendicular();
+        settings.mLimitsMin = desc->limitsMin;
+        settings.mLimitsMax = desc->limitsMax;
+        settings.mMotorSettings = ToJoltMotorSettings(desc->motor, /*isAngular*/ true);
+        auto *hinge = static_cast<JPH::HingeConstraint *>(settings.Create(*jphBody1, *jphBody2));
+        hinge->SetMotorState(ToJoltMotorState(desc->motor.state));
+        hinge->SetTargetAngularVelocity(desc->motor.targetVelocity);
+        hinge->SetTargetAngle(desc->motor.targetPosition);
+        constraint = hinge;
+        break;
+      }
+      case AetherJointKind::Slider: {
+        JPH::SliderConstraintSettings settings;
+        settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+        settings.mPoint1 = JPH::RVec3(desc->point1.x, desc->point1.y, desc->point1.z);
+        settings.mPoint2 = JPH::RVec3(desc->point2.x, desc->point2.y, desc->point2.z);
+        settings.mSliderAxis1 = ToJolt(desc->axis1).Normalized();
+        settings.mSliderAxis2 = ToJolt(desc->axis2).Normalized();
+        settings.mNormalAxis1 = settings.mSliderAxis1.GetNormalizedPerpendicular();
+        settings.mNormalAxis2 = settings.mSliderAxis2.GetNormalizedPerpendicular();
+        settings.mLimitsMin = desc->limitsMin;
+        settings.mLimitsMax = desc->limitsMax;
+        settings.mMotorSettings = ToJoltMotorSettings(desc->motor, /*isAngular*/ false);
+        auto *slider = static_cast<JPH::SliderConstraint *>(settings.Create(*jphBody1, *jphBody2));
+        slider->SetMotorState(ToJoltMotorState(desc->motor.state));
+        slider->SetTargetVelocity(desc->motor.targetVelocity);
+        slider->SetTargetPosition(desc->motor.targetPosition);
+        constraint = slider;
+        break;
+      }
+      case AetherJointKind::Distance: {
+        JPH::DistanceConstraintSettings settings;
+        settings.mSpace = JPH::EConstraintSpace::WorldSpace;
+        settings.mPoint1 = JPH::RVec3(desc->point1.x, desc->point1.y, desc->point1.z);
+        settings.mPoint2 = JPH::RVec3(desc->point2.x, desc->point2.y, desc->point2.z);
+        settings.mMinDistance = desc->limitsMin;
+        settings.mMaxDistance = desc->limitsMax;
+        constraint = settings.Create(*jphBody1, *jphBody2);
+        break;
+      }
+      default:
+        return AetherJointHandle_Invalid;
+    }
+  } // fim do escopo de `lock` — libera os dois BodyLockWrite antes de ActivateBody abaixo
+
+  if (constraint == nullptr) return AetherJointHandle_Invalid;
+  world->physicsSystem.AddConstraint(constraint);
+
+  // Criar uma junta sobre um corpo dormindo (ex.: preso por outra junta, já assentado) não
+  // acorda os corpos sozinho — o Jolt só recalcula o solver de contato/constraint para
+  // corpos ativos. Sem isso a nova junta fica "presa" num corpo adormecido e só passa a
+  // fazer efeito quando algo mais o acordar por acidente.
+  world->physicsSystem.GetBodyInterface().ActivateBody(bodyIds[0]);
+  world->physicsSystem.GetBodyInterface().ActivateBody(bodyIds[1]);
+
+  if (!world->freeJointSlots.empty()) {
+    ae::u32 index = world->freeJointSlots.back();
+    world->freeJointSlots.pop_back();
+    world->jointSlots[index] = JointSlot{constraint, bodyIds[0], bodyIds[1], world->jointSlots[index].generation};
+    return PackJointHandle(index, world->jointSlots[index].generation);
+  }
+  ae::u32 index = static_cast<ae::u32>(world->jointSlots.size());
+  world->jointSlots.push_back(JointSlot{constraint, bodyIds[0], bodyIds[1], 0});
+  return PackJointHandle(index, 0);
+}
+
+namespace {
+// Resolve um AetherJointHandle para o slot correspondente, ou nullptr se o handle é
+// inválido, de outro mundo, ou aponta para uma junta já destruída (geração não bate — mesma
+// checagem que World.Exists faz em EntitySlot.Version do lado C#).
+JointSlot *ResolveJointSlot(AetherPhysicsWorld *world, AetherJointHandle handle) {
+  if (world == nullptr || handle == AetherJointHandle_Invalid) return nullptr;
+  ae::u32 index = JointHandleIndex(handle);
+  if (index >= world->jointSlots.size()) return nullptr;
+  JointSlot &slot = world->jointSlots[index];
+  if (slot.constraint == nullptr || slot.generation != JointHandleGeneration(handle)) return nullptr;
+  return &slot;
+}
+} // namespace
+
+void AetherPhysics_DestroyJoint(AetherPhysicsWorld *world, AetherJointHandle handle) {
+  JointSlot *slot = ResolveJointSlot(world, handle);
+  if (slot == nullptr) return;
+  world->physicsSystem.RemoveConstraint(slot->constraint);
+  // Espelha o ActivateBody de AetherPhysics_CreateJoint: um corpo que a junta mantinha em
+  // equilíbrio (ex.: pêndulo parado, preso e adormecido) não tem motivo físico para
+  // continuar dormindo depois que a força que o segurava desaparece — sem isso ele fica
+  // "congelado" no ar até algo mais acordá-lo por acidente (pego só ao rodar o teste real:
+  // corpo preso e destravado não voltava a cair — ver docs/ESTADO.md).
+  JPH::BodyInterface &bodyInterface = world->physicsSystem.GetBodyInterface();
+  bodyInterface.ActivateBody(slot->body1);
+  bodyInterface.ActivateBody(slot->body2);
+  slot->constraint = nullptr;
+  slot->generation = (slot->generation + 1) & kJointGenerationMask;
+  world->freeJointSlots.push_back(JointHandleIndex(handle));
+}
+
+void AetherPhysics_SetJointMotor(AetherPhysicsWorld *world, AetherJointHandle handle, const AetherJointMotorDesc *motor) {
+  JointSlot *slot = ResolveJointSlot(world, handle);
+  if (slot == nullptr || motor == nullptr) return;
+
+  JPH::EConstraintSubType subType = slot->constraint->GetSubType();
+  if (subType == JPH::EConstraintSubType::Hinge) {
+    auto *hinge = static_cast<JPH::HingeConstraint *>(slot->constraint.GetPtr());
+    hinge->GetMotorSettings() = ToJoltMotorSettings(*motor, /*isAngular*/ true);
+    hinge->SetMotorState(ToJoltMotorState(motor->state));
+    hinge->SetTargetAngularVelocity(motor->targetVelocity);
+    hinge->SetTargetAngle(motor->targetPosition);
+  } else if (subType == JPH::EConstraintSubType::Slider) {
+    auto *slider = static_cast<JPH::SliderConstraint *>(slot->constraint.GetPtr());
+    slider->GetMotorSettings() = ToJoltMotorSettings(*motor, /*isAngular*/ false);
+    slider->SetMotorState(ToJoltMotorState(motor->state));
+    slider->SetTargetVelocity(motor->targetVelocity);
+    slider->SetTargetPosition(motor->targetPosition);
+  }
+  // Point/Distance: sem motor no Jolt, chamada é um no-op silencioso (ver comentário em
+  // jolt_bridge.h sobre AetherMotorState) — não é erro do chamador, é a API real do Jolt.
+}
+
+float AetherPhysics_GetJointPosition(AetherPhysicsWorld *world, AetherJointHandle handle) {
+  JointSlot *slot = ResolveJointSlot(world, handle);
+  if (slot == nullptr) return 0.0f;
+
+  JPH::EConstraintSubType subType = slot->constraint->GetSubType();
+  if (subType == JPH::EConstraintSubType::Hinge)
+    return static_cast<JPH::HingeConstraint *>(slot->constraint.GetPtr())->GetCurrentAngle();
+  if (subType == JPH::EConstraintSubType::Slider)
+    return static_cast<JPH::SliderConstraint *>(slot->constraint.GetPtr())->GetCurrentPosition();
+  return 0.0f;
 }
 
 } // extern "C"

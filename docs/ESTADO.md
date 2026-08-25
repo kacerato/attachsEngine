@@ -7,9 +7,9 @@ Regra: só entra nesta tabela o que **compila e passa em teste**.
 
 | | |
 |---|---|
-| Testes C# | **186 passando**, 0 falhando |
-| Testes C++ | **52 passando**, 0 falhando (41 do núcleo + 4 de lifecycle + 7 de física) |
-| Linhas C# | ~9.100 |
+| Testes C# | **194 passando**, 0 falhando |
+| Testes C++ | **60 passando**, 0 falhando (41 do núcleo + 4 de lifecycle + 7 de física + 8 de juntas) |
+| Linhas C# | ~9.500 |
 | Linhas C++ (próprias, sem código vendorizado) | ~3.400 |
 | Dependências externas | **nenhuma** — build e testes rodam offline, de propósito (Jolt Physics é vendorizado em `native/third_party/`, não baixado no build — ver `VENDORED_COMMIT.txt`) |
 
@@ -34,6 +34,7 @@ Regra: só entra nesta tabela o que **compila e passa em teste**.
 | **2.3** | **Render graph**: topológico, poda, aliasing, barreiras, load/store ops, memoryless, fusão de subpasses | ✅ 41 testes |
 | **4.1.1** | Física: Jolt Physics vendorizado (`native/third_party/JoltPhysics`), fronteira C ABI blittable (`jolt_bridge.h/.cpp`) — mundo, corpos estático/cinemático/dinâmico, formas caixa/esfera, `Step`, leitura de transform/velocidade, `IsActive`, raycast contra o mundo | ✅ 7 testes (queda livre bate cinemática, corpo assenta sobre piso na altura esperada, corpo estático não se move, raycast acerta/erra pelo alcance, round-trip de velocidade, handles inválidos não crasham) |
 | **4.1.2** | Fachada C# de física: componentes ECS `RigidBody`/`Collider` (`managed/Aether.Core/Physics/PhysicsComponents.cs`), bindings `[LibraryImport]` sobre `jolt_bridge.h` (`NativePhysics.cs`), wrapper `PhysicsWorld` dono do ponteiro nativo, e `PhysicsSyncSystem` (mesmo padrão de `TransformSystem`) que cria corpo nativo na primeira aparição de `RigidBody`+`Collider`, avança a simulação e sincroniza `WorldTransform` de volta para corpos dinâmicos. Alvo CMake novo `aether_physics_shared` (`.dll`/`.so`) — primeiro P/Invoke real do repositório | ✅ 6 testes (criação de corpo, corpo não é recriado em Steps seguintes, queda livre sincroniza `WorldTransform`, corpo estático não é sobrescrito pela simulação, `DestroyBody` idempotente, raycast acerta corpo criado pela fachada) |
+| **4.1.3** | Juntas e motores: extensão de `jolt_bridge.h/.cpp` com `AetherPhysics_CreateJoint/DestroyJoint/SetJointMotor/GetJointPosition` sobre as 4 juntas mais comuns do Jolt (Point, Hinge, Slider, Distance — `JPH::PointConstraint`/`HingeConstraint`/`SliderConstraint`/`DistanceConstraint`), com motor real (`JPH::MotorSettings`/`EMotorState`) em Hinge/Slider. Tabela de handles índice+geração própria em `AetherPhysicsWorld` (constraint não tem um `BodyID`-like embutido, diferente de corpo). Fachada C# em `PhysicsWorld.CreateJoint/DestroyJoint/SetJointMotor/GetJointPosition` + `JointDesc`/`JointMotor`/`PhysicsJointHandle`. Gizmo de edição no protótipo do editor (`prototype/editor.html`): novo modo "Junta" no dock, handles `jointPoint` (arrasta a âncora) e `jointAxis` (gira o eixo da dobradiça/slider), reusando `project`/`distToSegment`/`rayPlane` já existentes; seção "Junta" no Inspector com ponto, eixo, limites e motor editáveis | ✅ 8 testes C++ (`test_joint_bridge.cpp`) + 8 testes C# (`PhysicsJointTests.cs`) — corpo preso por Point não cai, Hinge respeita limites configurados, motor de Hinge mantém velocidade angular alvo, motor de Slider converge para posição alvo, Distance limita afastamento, `DestroyJoint` reativa e libera os corpos, handles inválidos/reciclados não crasham |
 
 ## O que ainda não existe
 
@@ -41,7 +42,7 @@ Regra: só entra nesta tabela o que **compila e passa em teste**.
 - Existe app Android empacotável, mas ainda não existe app iOS, swapchain concreto, command loop de renderização ou shaders compilados.
 - O protótipo do editor é HTML/Canvas, não a engine — valida **interação**, não desempenho gráfico. Usa as mesmas convenções de espaço do núcleo em C# de propósito, para que o que se aprende ali transfira.
 - Animação, áudio, assets, build: Fases 6 e 8, não iniciadas.
-- **Física (Fase 4): 4.1.1 e 4.1.2 estão prontos.** Deliberadamente ainda não implementados, para não fingir que um item complexo foi "riscado" com uma versão capenga: 4.1.3 (juntas e motores), 4.1.4 (queries — raycast/shapecast/overlap — expostas a script e a nós; hoje `PhysicsWorld.RayCastClosest` existe só como API C# direta, não como nó/binding de script), 4.1.5 (character controller), 4.1.6 (física 2D dedicada/benchmark), 4.1.7 (decomposição convexa de malhas), 4.1.8 (determinismo em ponto fixo — a fatia atual usa o float padrão do Jolt, que não é bit-determinístico entre plataformas), 4.1.9 (sub-stepping adaptativo ligado ao PowerGovernor térmico).
+- **Física (Fase 4): 4.1.1, 4.1.2 e 4.1.3 estão prontos.** Deliberadamente ainda não implementados, para não fingir que um item complexo foi "riscado" com uma versão capenga: 4.1.4 (queries — raycast/shapecast/overlap — expostas a script e a nós; hoje `PhysicsWorld.RayCastClosest` existe só como API C# direta, não como nó/binding de script), 4.1.5 (character controller), 4.1.6 (física 2D dedicada/benchmark), 4.1.7 (decomposição convexa de malhas), 4.1.8 (determinismo em ponto fixo — a fatia atual usa o float padrão do Jolt, que não é bit-determinístico entre plataformas), 4.1.9 (sub-stepping adaptativo ligado ao PowerGovernor térmico). Dentro do próprio 4.1.3: `SixDOFConstraint` (genérica, 6 eixos independentes) e as juntas de veículo/engrenagem/polia/path do Jolt ficam de fora — só Point/Hinge/Slider/Distance, as 4 mais comuns em jogos; cada uma das demais merece sua própria fatia testada, não um apêndice apressado.
 - **1.4.5 (índice de dependências em SQLite) deliberadamente não implementado ainda.** Não existe um SQLite de verdade vendorizado no repositório; implementar uma versão simplificada só para "riscar o item" seria a gambiarra que este projeto se recusa a fazer. Quando entrar, será o amálgama C `sqlite3.c` vendorizado em `native/` (não um pacote NuGet — mantém a política de zero dependência externa) exposto por P/Invoke.
 
 ## Shell Android — validação atual
@@ -81,6 +82,9 @@ não há evento, evitando consumo térmico artificial.
 | `PhysicsSyncSystem` | Corpo `Kinematic` só recebe a transform do ECS uma vez, na criação — não é resincronizado ECS→Jolt em frames seguintes | Mover um corpo cinemático depois de criado (ex.: plataforma animada) não empurra a posição nova para o Jolt. Falta `JPH::BodyInterface::MoveKinematic` (ou um setter de transform) na fronteira C ABI (`jolt_bridge.h`) — mudança de ABI nativo, fora do escopo de "fachada C#" de 4.1.2. Documentado no comentário de `SyncDynamicJoltToEcs` |
 | `Aether.Physics` | `Collider`/`RigidBody` não têm um componente `Trigger` (citado no plano junto dos outros dois) | Sem volume de detecção de overlap sem resposta física. Precisa de `mIsSensor` na fronteira nativa (não exposto hoje) e de eventos de entrada/saída de overlap (item 4.1.4, não implementado) — nenhum dos dois pré-requisitos existe ainda, então não há como o componente ser útil mesmo se declarado |
 | `Aether.Physics` | Cada `CreateBody`/`DestroyBody` é uma chamada P/Invoke individual (não em lote) | Dentro do orçamento de 200 chamadas nativas/frame (`docs/CONVENCOES.md` §2) para criação/destruição normal (evento raro), mas um spawn de centenas de corpos no mesmo frame estouraria o orçamento sem alguém perceber — não há guarda automática contra isso ainda |
+| `jolt_bridge.h` (juntas) | `AetherJointDesc` só expõe `EConstraintSpace::WorldSpace` — não há como descrever uma junta no referencial local de um corpo | Criar uma junta antes de posicionar os corpos no lugar final não funciona direito (os pontos são absolutos, não relativos); é preciso posicionar os corpos primeiro, depois criar a junta com coordenadas mundiais. Espaço local é um incremento futuro, documentado no comentário de `AetherJointDesc` |
+| `HingeConstraint` do Jolt | `mLimitsMin`/`mLimitsMax` são exigidos em `[-pi,0]`/`[0,pi]` — não existe "sem limite" fora dessa faixa como em Slider (`FLT_MAX`) | Uma dobradiça de rotação livre contínua (ex.: roda motorizada) precisa usar exatamente `-pi`/`+pi`, não um valor "bem grande" qualquer — é o ponto exato em que o Jolt desliga a checagem de limite internamente (`HingeConstraint::SetLimits`). Documentado em `jolt_bridge.h`, `PhysicsWorld.cs` (`JointDesc`) e nos testes |
+| `PhysicsSyncSystem`/fachada de juntas | Nenhuma sincronização automática entre `RigidBody`/componente ECS de junta — `PhysicsWorld.CreateJoint` é chamado direto pelo código do usuário, não por um `JointSyncSystem` análogo ao `PhysicsSyncSystem` de corpos | Não existe hoje um componente ECS `Joint`/`HingeJoint` que o `PhysicsSyncSystem` resolva automaticamente a partir de duas entidades — a fachada 4.1.3 é a API C# (`PhysicsWorld.CreateJoint`), não um componente declarativo. Adicionar isso é extensão natural, não escopo deste item (que era "juntas e motores" na física, não "juntas no ECS") |
 
 ## Correções desta revisão (não são limitações — já resolvidas)
 
@@ -132,3 +136,31 @@ não há evento, evitando consumo térmico artificial.
   denunciaria o problema. `float3`/`quaternion` (item 1.5) são reusados diretamente como parâmetros
   blittable dos bindings — têm o mesmo layout de `AetherVec3`/`AetherQuat`, evitando duplicar um par de
   structs só para a fronteira P/Invoke.
+- **Juntas e motores (4.1.3): três bugs reais pegos só ao rodar o teste real contra o Jolt, não por
+  inspeção.** (1) Criar uma junta trava os dois corpos com `JPH::BodyLockWrite` (necessário porque
+  `Constraint::Create` pede `Body&`, não `BodyID` — diferente do resto da fronteira, que só usa
+  `BodyInterface`); dois `BodyLockWrite` sequenciais disparam o assert de possível deadlock do Jolt
+  (`PhysicsLock.h`: "A lock of same or higher priority was already taken") porque o segundo pega a
+  MESMA categoria de mutex (`PerBody`) que o primeiro já detém. Corrigido trocando por
+  `JPH::BodyLockMultiWrite`, que trava N corpos de uma vez resolvendo a ordem de mutex internamente —
+  e o mesmo problema reapareceu entre o escopo desse lock e a chamada de `ActivateBody` logo depois
+  (ver item 3), corrigido isolando a criação da constraint num bloco `{}` próprio para o lock ser
+  liberado antes do `ActivateBody`. (2) Um corpo mantido parado por uma junta (ex.: pêndulo em
+  repouso) é colocado para dormir pelo Jolt como qualquer corpo dinâmico inativo — e destruir a junta
+  NÃO o acorda sozinho: ficava "congelado" no ar indefinidamente até algo mais o acordar por acidente.
+  Corrigido chamando `JPH::BodyInterface::ActivateBody` nos dois corpos tanto em `CreateJoint`
+  (senão a junta nova "não pega" num corpo já dormindo) quanto em `DestroyJoint` (senão o corpo solto
+  não recomeça a cair). (3) Os testes de motor (Hinge velocidade, Slider posição) inicialmente
+  "falhavam" com o motor girando/convergindo bem mais devagar/menos que o esperado — não era bug de
+  sinal ou eixo, era `maxForceOrTorque`/limite de força do motor de teste baixo demais para a
+  inércia/massa do corpo (mesma classe de pegadinha do `mLinearDamping` documentada para 4.1.1): com
+  torque/força uma ou duas ordens de grandeza maiores, ambos os motores convergem corretamente para o
+  alvo. Documentado nos comentários dos testes (`test_joint_bridge.cpp`, `PhysicsJointTests.cs`) para
+  não ser "corrigido" de volta por engano numa revisão futura achando que é imprecisão de teste.
+- **`prototype/editor.html` não tinha `<meta charset="utf-8">`** (é um fragmento HTML solto, sem
+  `<head>`). Servido por um servidor HTTP que não declara `charset=utf-8` no header
+  `Content-Type` (ex.: `python -m http.server` puro), o navegador cai para Latin-1 por padrão e
+  corrompe todo texto acentuado do editor ("Chão" vira "ChÃ£o") — bug pré-existente, não introduzido
+  nesta revisão, mas só descoberto ao validar o gizmo de junta num servidor local de teste (abrir o
+  arquivo direto via `file://` não expõe o problema, porque não há header HTTP envolvido). Corrigido
+  adicionando a meta tag.

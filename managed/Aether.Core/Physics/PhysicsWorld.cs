@@ -17,6 +17,115 @@ public readonly struct PhysicsBodyHandle : IEquatable<PhysicsBodyHandle>
     public static bool operator !=(PhysicsBodyHandle a, PhysicsBodyHandle b) => !a.Equals(b);
 }
 
+/// <summary>Handle para uma junta (item 4.1.3) — índice + geração numa tabela mantida pelo lado
+/// nativo (ver comentário de <c>JointSlot</c> em jolt_bridge.cpp), não um <c>JPH::BodyID</c> como
+/// <see cref="PhysicsBodyHandle"/>: uma <c>JPH::Constraint</c> não carrega um índice denso
+/// reciclável embutido, diferente de corpo.</summary>
+public readonly struct PhysicsJointHandle : IEquatable<PhysicsJointHandle>
+{
+    internal readonly uint Value;
+    internal PhysicsJointHandle(uint value) => Value = value;
+
+    public static readonly PhysicsJointHandle Invalid = new(0xFFFFFFFFu);
+    public bool IsValid => Value != Invalid.Value;
+
+    public bool Equals(PhysicsJointHandle o) => Value == o.Value;
+    public override bool Equals(object? o) => o is PhysicsJointHandle h && Equals(h);
+    public override int GetHashCode() => (int)Value;
+    public static bool operator ==(PhysicsJointHandle a, PhysicsJointHandle b) => a.Equals(b);
+    public static bool operator !=(PhysicsJointHandle a, PhysicsJointHandle b) => !a.Equals(b);
+}
+
+/// <summary>Estado e alvo de um motor de junta — só tem efeito em <see cref="JointKind.Hinge"/>
+/// e <see cref="JointKind.Slider"/> (Point/Distance não têm motor no Jolt, ver jolt_bridge.h).
+/// <see cref="TargetVelocity"/> é rad/s (Hinge) ou m/s (Slider); <see cref="TargetPosition"/> é
+/// rad (Hinge) ou m (Slider), usado só quando <see cref="State"/> inclui Position.
+/// <see cref="SpringFrequency"/>/<see cref="SpringDamping"/> alimentam o modo
+/// FrequencyAndDamping da mola do Jolt que dirige o motor de posição — ignorados em modo
+/// Velocity puro.</summary>
+public struct JointMotor
+{
+    public NativeMotorState State;
+    public float TargetVelocity;
+    public float TargetPosition;
+    public float MaxForceOrTorque;
+    public float SpringFrequency;
+    public float SpringDamping;
+
+    public static readonly JointMotor Off = default;
+
+    public static JointMotor Velocity(float targetVelocity, float maxForceOrTorque) => new()
+    {
+        State = NativeMotorState.Velocity,
+        TargetVelocity = targetVelocity,
+        MaxForceOrTorque = maxForceOrTorque,
+    };
+
+    public static JointMotor Position(float targetPosition, float maxForceOrTorque, float springFrequency = 4f, float springDamping = 1f) => new()
+    {
+        State = NativeMotorState.Position,
+        TargetPosition = targetPosition,
+        MaxForceOrTorque = maxForceOrTorque,
+        SpringFrequency = springFrequency,
+        SpringDamping = springDamping,
+    };
+
+    internal NativeJointMotorDesc ToNative() => new()
+    {
+        State = State,
+        TargetVelocity = TargetVelocity,
+        TargetPosition = TargetPosition,
+        MaxForceOrTorque = MaxForceOrTorque,
+        SpringFrequency = SpringFrequency,
+        SpringDamping = SpringDamping,
+    };
+}
+
+/// <summary>Tipo de junta — as 4 mais comuns em jogos (ver jolt_bridge.h para por que SixDOF e
+/// as demais ficam fora desta fatia).</summary>
+public enum JointKind : uint
+{
+    Point = NativeJointKind.Point,
+    Hinge = NativeJointKind.Hinge,
+    Slider = NativeJointKind.Slider,
+    Distance = NativeJointKind.Distance,
+}
+
+/// <summary>Descreve uma junta a criar entre dois corpos do mesmo <see cref="PhysicsWorld"/>.
+/// Espelha <see cref="NativeJointDesc"/> — ver o comentário completo em jolt_bridge.h para a
+/// convenção de cada campo por tipo de junta (o que é ignorado, unidades, espaço mundial).
+/// <para>
+/// AVISO específico de <see cref="JointKind.Hinge"/>: o Jolt exige <see cref="LimitsMin"/> em
+/// [-pi,0] e <see cref="LimitsMax"/> em [0,pi] (não é validação desta fachada — é a API real,
+/// ver <c>HingeConstraint::SetLimits</c>). Para uma dobradiça sem limite físico (gira livre
+/// como uma roda), use exatamente <c>-MathF.PI</c>/<c>MathF.PI</c> — é o valor exato em que o
+/// Jolt desliga a checagem de limite internamente, não um "limite muito largo" qualquer.
+/// </para>
+/// </summary>
+public struct JointDesc
+{
+    public JointKind Kind;
+    public float3 Point1;
+    public float3 Point2;
+    public float3 Axis1;
+    public float3 Axis2;
+    public float LimitsMin;
+    public float LimitsMax;
+    public JointMotor Motor;
+
+    internal NativeJointDesc ToNative() => new()
+    {
+        Kind = (NativeJointKind)Kind,
+        Point1 = Point1,
+        Point2 = Point2,
+        Axis1 = Axis1,
+        Axis2 = Axis2,
+        LimitsMin = LimitsMin,
+        LimitsMax = LimitsMax,
+        Motor = Motor.ToNative(),
+    };
+}
+
 /// <summary>Descreve a forma de colisão de um corpo. Espelha <see cref="NativeShapeDesc"/> num
 /// formato mais confortável para código gerenciado (union manual via dois construtores nomeados
 /// em vez de dois campos que o chamador precisa preencher certo na mão).</summary>
@@ -124,6 +233,39 @@ public sealed class PhysicsWorld : IDisposable
         hitFraction = fraction;
         return hit != 0;
     }
+
+    // ---------------------------------------------------------------- juntas e motores (4.1.3)
+
+    /// <summary>Cria uma junta entre dois corpos deste mundo. Devolve <see cref="PhysicsJointHandle.Invalid"/>
+    /// se algum dos dois handles de corpo for inválido — mesma disciplina defensiva do resto
+    /// desta fachada (nunca lança por handle ruim, só devolve inválido).</summary>
+    public PhysicsJointHandle CreateJoint(PhysicsBodyHandle body1, PhysicsBodyHandle body2, in JointDesc desc)
+    {
+        if (!body1.IsValid || !body2.IsValid) return PhysicsJointHandle.Invalid;
+        NativeJointDesc native = desc.ToNative();
+        uint raw = NativePhysics.AetherPhysics_CreateJoint(Handle, body1.Value, body2.Value, in native);
+        return new PhysicsJointHandle(raw);
+    }
+
+    public void DestroyJoint(PhysicsJointHandle handle)
+    {
+        if (!handle.IsValid) return;
+        NativePhysics.AetherPhysics_DestroyJoint(Handle, handle.Value);
+    }
+
+    /// <summary>Atualiza o motor de uma junta Hinge/Slider já criada. Sem efeito em Point/Distance
+    /// (não têm motor) ou handle inválido — não é erro do chamador, ver jolt_bridge.h.</summary>
+    public void SetJointMotor(PhysicsJointHandle handle, in JointMotor motor)
+    {
+        if (!handle.IsValid) return;
+        NativeJointMotorDesc native = motor.ToNative();
+        NativePhysics.AetherPhysics_SetJointMotor(Handle, handle.Value, in native);
+    }
+
+    /// <summary>Ângulo atual em radianos (Hinge) ou posição atual em metros (Slider) ao longo do
+    /// eixo da junta. 0 para Point/Distance/handle inválido — ver jolt_bridge.h.</summary>
+    public float GetJointPosition(PhysicsJointHandle handle) =>
+        handle.IsValid ? NativePhysics.AetherPhysics_GetJointPosition(Handle, handle.Value) : 0f;
 
     public void Dispose()
     {
