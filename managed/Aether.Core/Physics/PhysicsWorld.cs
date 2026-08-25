@@ -172,18 +172,24 @@ public readonly struct PhysicsShape
     public readonly NativeShapeKind Kind;
     public readonly float3 BoxHalfExtent;
     public readonly float SphereRadius;
+    public readonly float CapsuleHalfHeight;
 
-    private PhysicsShape(NativeShapeKind kind, float3 boxHalfExtent, float sphereRadius)
-    { Kind = kind; BoxHalfExtent = boxHalfExtent; SphereRadius = sphereRadius; }
+    private PhysicsShape(NativeShapeKind kind, float3 boxHalfExtent, float radius, float capsuleHalfHeight)
+    { Kind = kind; BoxHalfExtent = boxHalfExtent; SphereRadius = radius; CapsuleHalfHeight = capsuleHalfHeight; }
 
-    public static PhysicsShape Box(float3 halfExtent) => new(NativeShapeKind.Box, halfExtent, 0f);
-    public static PhysicsShape Sphere(float radius) => new(NativeShapeKind.Sphere, default, radius);
+    public static PhysicsShape Box(float3 halfExtent) => new(NativeShapeKind.Box, halfExtent, 0f, 0f);
+    public static PhysicsShape Sphere(float radius) => new(NativeShapeKind.Sphere, default, radius, 0f);
+    /// <summary>Item 4.1.5 — cápsula (cilindro com tampas esféricas), a forma padrão de
+    /// character controller. <paramref name="halfHeight"/> é a meia-altura do CILINDRO (sem as
+    /// tampas); altura total = 2*(halfHeight+radius).</summary>
+    public static PhysicsShape Capsule(float radius, float halfHeight) => new(NativeShapeKind.Capsule, default, radius, halfHeight);
 
     internal NativeShapeDesc ToNative() => new()
     {
         Kind = Kind,
         BoxHalfExtent = BoxHalfExtent,
         SphereRadius = SphereRadius,
+        CapsuleHalfHeight = CapsuleHalfHeight,
     };
 }
 
@@ -395,5 +401,87 @@ public sealed class PhysicsWorld : IDisposable
         // Rede de segurança: um mundo de física esquecido sem Dispose ainda libera o recurso
         // nativo, embora mais tarde (não confiar nisso como caminho normal — ver Dispose acima).
         if (!_disposed && _handle != nint.Zero) NativePhysics.AetherPhysics_DestroyWorld(_handle);
+    }
+
+    // ---------------------------------------------------------------- character controller (4.1.5)
+
+    /// <summary>Cria um character controller, SEMPRE em pé (StandingHalfHeight) — não há como
+    /// nascer já agachado, chame <see cref="SetCharacterCrouching"/> depois se necessário.
+    /// AVISO: nascer num espaço apertado demais para a forma de pé faz a resolução de
+    /// penetração da criação empurrar o personagem para uma posição inesperada — ver o
+    /// comentário completo em jolt_bridge.h (mesmo aviso, mesma causa).</summary>
+    public PhysicsCharacterHandle CreateCharacter(in CharacterDesc desc, float3 position, quaternion rotation)
+    {
+        NativeCharacterDesc native = desc.ToNative();
+        uint raw = NativePhysics.AetherPhysics_CreateCharacter(Handle, in native, position, rotation);
+        return new PhysicsCharacterHandle(raw);
+    }
+
+    public void DestroyCharacter(PhysicsCharacterHandle handle)
+    {
+        if (!handle.IsValid) return;
+        NativePhysics.AetherPhysics_DestroyCharacter(Handle, handle.Value);
+    }
+
+    /// <summary>Define a velocidade linear ANTES de chamar <see cref="UpdateCharacter"/> — é o
+    /// único jeito de mover o personagem (não existe "aplicar força"; CharacterVirtual não é
+    /// dinâmico). Monte esta velocidade somando input do jogador + <see cref="GetCharacterGroundVelocity"/>
+    /// (se apoiado numa plataforma) + gravidade acumulada manualmente.</summary>
+    public void SetCharacterVelocity(PhysicsCharacterHandle handle, float3 velocity)
+    {
+        if (!handle.IsValid) return;
+        NativePhysics.AetherPhysics_SetCharacterVelocity(Handle, handle.Value, velocity);
+    }
+
+    public float3 GetCharacterVelocity(PhysicsCharacterHandle handle) =>
+        handle.IsValid ? NativePhysics.AetherPhysics_GetCharacterVelocity(Handle, handle.Value) : float3.Zero;
+
+    /// <summary>Avança a simulação do personagem em <paramref name="deltaTime"/>, com suporte a
+    /// degraus (<c>JPH::CharacterVirtual::ExtendedUpdate</c>). <paramref name="gravity"/> é usada
+    /// só internamente pelo Jolt para empurrar objetos abaixo do personagem — NÃO integra a
+    /// velocidade vertical do próprio personagem (já deveria ter sido somada antes de
+    /// <see cref="SetCharacterVelocity"/>).</summary>
+    public void UpdateCharacter(PhysicsCharacterHandle handle, float deltaTime, float3 gravity,
+        QueryLayerMask layerMask = QueryLayerMask.All, PhysicsBodyHandle? ignoreBody = null)
+    {
+        if (!handle.IsValid) return;
+        uint ignoreRaw = ignoreBody?.Value ?? PhysicsBodyHandle.Invalid.Value;
+        NativePhysics.AetherPhysics_UpdateCharacter(Handle, handle.Value, deltaTime, gravity, (NativeQueryLayerMask)layerMask, ignoreRaw);
+    }
+
+    public unsafe void GetCharacterTransform(PhysicsCharacterHandle handle, out float3 position, out quaternion rotation)
+    {
+        position = default;
+        rotation = quaternion.Identity;
+        if (!handle.IsValid) return;
+        fixed (float3* p = &position)
+        fixed (quaternion* r = &rotation)
+        {
+            NativePhysics.AetherPhysics_GetCharacterTransform(Handle, handle.Value, p, r);
+        }
+    }
+
+    public CharacterGroundState GetCharacterGroundState(PhysicsCharacterHandle handle) =>
+        handle.IsValid ? (CharacterGroundState)NativePhysics.AetherPhysics_GetCharacterGroundState(Handle, handle.Value) : CharacterGroundState.InAir;
+
+    /// <summary>Velocidade do corpo/superfície sob o personagem (0 se InAir ou handle inválido)
+    /// — já inclui rotação do corpo de suporte. Some isto à velocidade desejada antes de
+    /// <see cref="SetCharacterVelocity"/> para "grudar" em plataformas móveis — não é automático.</summary>
+    public float3 GetCharacterGroundVelocity(PhysicsCharacterHandle handle) =>
+        handle.IsValid ? NativePhysics.AetherPhysics_GetCharacterGroundVelocity(Handle, handle.Value) : float3.Zero;
+
+    /// <summary>Normal da superfície de contato (chão ou rampa) — útil para decidir a direção
+    /// de deslizamento quando <see cref="GetCharacterGroundState"/> é <see cref="CharacterGroundState.OnSteepGround"/>.</summary>
+    public float3 GetCharacterGroundNormal(PhysicsCharacterHandle handle) =>
+        handle.IsValid ? NativePhysics.AetherPhysics_GetCharacterGroundNormal(Handle, handle.Value) : float3.Zero;
+
+    /// <summary>Troca entre a cápsula de pé/agachada de <see cref="CharacterDesc"/>, checando
+    /// primeiro se há espaço livre para a forma nova. Devolve <c>false</c> se não havia espaço
+    /// (ex.: tentando ficar de pé debaixo de algo baixo) — nesse caso a forma permanece a
+    /// anterior, sem efeito colateral.</summary>
+    public bool SetCharacterCrouching(PhysicsCharacterHandle handle, bool crouching)
+    {
+        if (!handle.IsValid) return false;
+        return NativePhysics.AetherPhysics_SetCharacterCrouching(Handle, handle.Value, crouching ? 1 : 0) != 0;
     }
 }

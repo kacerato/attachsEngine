@@ -9,9 +9,18 @@
 // pontos, sem motor) — as 4 juntas de 2 corpos mais comuns em jogos. SixDOF
 // (genérica, 6 eixos independentes) e as juntas de veículo/engrenagem/polia do
 // Jolt ficam de fora desta fatia: cobrem casos bem mais raros e cada uma merece
-// sua própria fatia testada, não um apêndice apressado aqui. Character
-// controller, decomposição convexa e determinismo em ponto fixo (itens 4.1.5,
-// 4.1.7, 4.1.8) também ficam para incrementos futuros — ver docs/ESTADO.md.
+// sua própria fatia testada, não um apêndice apressado aqui. E o item 4.1.4
+// ("Queries"): RayCastAll (multi-hit), ShapeCastClosest (varredura), OverlapShape
+// (overlap parado) — complementam o raycast simples de 4.1.1. E o item 4.1.5
+// ("Character controller"): sobre JPH::CharacterVirtual — mover, detecção de
+// chão/rampa/parede, degraus (ExtendedUpdate/WalkStairs), deslizar em rampa
+// íngreme, agachar (SetShape com checagem de espaço), e o dado necessário para o
+// chamador "grudar" numa plataforma móvel (GetGroundVelocity/GetGroundBodyID).
+// Escalar (subir paredes) e nadar (buoyancy) ficam de fora desta fatia — o Jolt
+// não tem NENHUM suporte nativo para nenhum dos dois; cada um seria um subsistema
+// próprio construído do zero sobre queries manuais, não uma extensão natural desta
+// fatia — ver docs/ESTADO.md. Decomposição convexa e determinismo em ponto fixo
+// (itens 4.1.7, 4.1.8) também ficam para incrementos futuros.
 //
 // Regra de fronteira (a mesma do CONVENCOES.md §2, aplicada aqui entre C++ nosso
 // e C++ do Jolt): só tipos POD cruzam esta fronteira. Nenhum tipo do Jolt
@@ -41,12 +50,19 @@ enum class AetherMotionType : ae::u32 {
 enum class AetherShapeKind : ae::u32 {
   Box = 0,
   Sphere = 1,
+  // Capsule (item 4.1.5): a forma padrão de character controller — cilindro com
+  // tampas esféricas, sem quinas para travar em degraus/rampas. Adicionada aqui
+  // (não como um enum de forma separado só para personagem) porque AetherShapeDesc
+  // já é genérico o bastante e ShapeCastClosest/OverlapShape (4.1.4) também passam
+  // a poder variar cápsulas de graça, sem mudança de ABI adicional.
+  Capsule = 2,
 };
 
 struct AetherShapeDesc {
   AetherShapeKind kind;
-  AetherVec3 boxHalfExtent; // usado quando kind == Box
-  float sphereRadius;       // usado quando kind == Sphere
+  AetherVec3 boxHalfExtent;  // usado quando kind == Box
+  float sphereRadius;        // usado quando kind == Sphere ou Capsule (raio da cápsula)
+  float capsuleHalfHeight;   // usado quando kind == Capsule — altura do CILINDRO (sem as tampas); altura total = 2*(capsuleHalfHeight+sphereRadius)
 };
 
 struct AetherBodyDesc {
@@ -275,5 +291,105 @@ void AetherPhysics_SetJointMotor(AetherPhysicsWorld *world, AetherJointHandle ha
 /// — Point não tem graus de liberdade livres, Distance é medido por AetherPhysics_GetTransform
 /// dos dois corpos, não por um único escalar).
 float AetherPhysics_GetJointPosition(AetherPhysicsWorld *world, AetherJointHandle handle);
+
+// ---------------------------------------------------------------- character controller (4.1.5)
+//
+// Sobre JPH::CharacterVirtual — não JPH::Character (corpo rígido de verdade): CharacterVirtual
+// é a classe que o próprio Jolt desenha para personagem jogável (degraus, deslizar em rampa,
+// trocar de forma ao agachar são exclusivos dela; Character não tem nenhum desses métodos).
+// CharacterVirtual não é adicionado à broadphase — não aparece em raycast/overlap de outros
+// corpos a menos que o jogo queira isso (fora do escopo desta fatia).
+//
+// O padrão de uso, documentado no próprio comentário de ExtendedUpdate do Jolt (não é decisão
+// nossa, é a API pretendida pelo autor): a cada frame, o CHAMADOR monta a velocidade desejada
+// somando (a) a velocidade horizontal do input do jogador, (b) GetGroundVelocity() se estiver
+// apoiado num corpo que se move (plataforma), e (c) a integração manual de gravidade — o Jolt
+// não aplica gravidade à velocidade do personagem sozinho, só a usa internamente para empurrar
+// objetos abaixo dele. Ver AetherCharacter_GetGroundVelocity/GetGroundState abaixo.
+
+enum class AetherCharacterGroundState : ae::u32 {
+  OnGround = 0,      // apoiado, chão andável (dentro de maxSlopeAngle)
+  OnSteepGround = 1,  // toca uma rampa/parede íngreme demais para subir — desliza
+  NotSupported = 2,   // toca algo, mas não o sustenta (ex.: parede vertical pura)
+  InAir = 3,          // sem contato nenhum
+};
+
+/// Descreve a cápsula do personagem e os parâmetros de JPH::CharacterVirtualSettings mais
+/// relevantes para um jogo (o resto fica nos defaults do Jolt — ver jolt_bridge.cpp). radius/
+/// halfHeight seguem a mesma convenção de AetherShapeDesc::Capsule. maxSlopeAngle em radianos —
+/// setar exatamente 0.9999 (cos) internamente desliga a checagem, mas na fronteira você passa o
+/// ÂNGULO (radianos), não o cosseno; um ângulo de pi/2 (90°) já cobre "qualquer rampa é andável"
+/// na prática, sem precisar do valor mágico de desligar que o Jolt usa internamente.
+struct AetherCharacterDesc {
+  float radius;
+  float standingHalfHeight;   // metade da altura do CILINDRO em pé (sem as tampas)
+  float crouchingHalfHeight;  // idem, agachado — usado só por AetherCharacter_SetCrouching
+  float maxSlopeAngle;        // radianos; rampas mais íngremes que isso viram OnSteepGround
+  float mass;                 // kg, usado para empurrar objetos ao ficar em cima deles
+  float maxStrength;          // N, força máxima com que o personagem empurra outros corpos
+};
+
+using AetherCharacterHandle = ae::u32;
+constexpr AetherCharacterHandle AetherCharacterHandle_Invalid = 0xFFFFFFFFu;
+
+/// Cria um character controller na posição/rotação dadas, SEMPRE em pé (standingHalfHeight) —
+/// não há como nascer já agachado; chame AetherPhysics_SetCharacterCrouching depois se
+/// necessário. Devolve AetherCharacterHandle_Invalid se `desc` for nulo ou se a criação da
+/// cápsula falhar. Mesma tabela índice+geração de AetherJointHandle — CharacterVirtual não tem
+/// índice denso embutido.
+/// AVISO: como a criação sempre usa a forma DE PÉ, nascer num espaço apertado demais para essa
+/// forma (ex.: debaixo de um vão baixo) faz a resolução de penetração da CRIAÇÃO empurrar o
+/// personagem para uma posição inesperada (ex.: para cima de um teto fino) antes mesmo de um
+/// SetCharacterCrouching(1) subsequente ter qualquer efeito — não há uma "criação já agachada".
+/// Para entrar num vão baixo, crie o personagem num espaço livre, agache, e então mova-o até
+/// o vão (mesmo padrão de como um jogador entraria de verdade: agachar antes de entrar, não
+/// depois).
+AetherCharacterHandle AetherPhysics_CreateCharacter(AetherPhysicsWorld *world, const AetherCharacterDesc *desc,
+                                                      AetherVec3 position, AetherQuat rotation);
+
+void AetherPhysics_DestroyCharacter(AetherPhysicsWorld *world, AetherCharacterHandle handle);
+
+/// Define a velocidade linear ANTES de chamar Update — é o único jeito de mover o personagem
+/// (não existe "aplicar força"; CharacterVirtual não é dinâmico). Monte esta velocidade somando
+/// input do jogador + GetGroundVelocity() (se apoiado numa plataforma) + gravidade acumulada
+/// manualmente — mesma responsabilidade que o comentário do Jolt atribui ao chamador.
+void AetherPhysics_SetCharacterVelocity(AetherPhysicsWorld *world, AetherCharacterHandle handle, AetherVec3 velocity);
+AetherVec3 AetherPhysics_GetCharacterVelocity(AetherPhysicsWorld *world, AetherCharacterHandle handle);
+
+/// Avança a simulação do personagem em deltaTime, com suporte a degraus (JPH::CharacterVirtual::
+/// ExtendedUpdate — WalkStairs/StickToFloor, usando os defaults do Jolt para os campos de
+/// ExtendedUpdateSettings: 40cm de step-up, 50cm de stick-to-floor, ver jolt_bridge.cpp).
+/// gravity é usada só internamente pelo Jolt para empurrar objetos abaixo do personagem — NÃO
+/// integra a velocidade vertical do próprio personagem (mesma disciplina "sem mágica escondida"
+/// do resto da fronteira; o chamador já deveria ter somado gravidade à velocidade antes de
+/// SetCharacterVelocity). Filtra por camada/corpo com a mesma AetherQueryLayerMask/ignoreBody
+/// das queries (4.1.4) — útil para o personagem não colidir consigo mesmo caso tenha um corpo
+/// rígido próprio, ou para ignorar objetos "fantasma".
+void AetherPhysics_UpdateCharacter(AetherPhysicsWorld *world, AetherCharacterHandle handle, float deltaTime,
+                                    AetherVec3 gravity, AetherQueryLayerMask layerMask, AetherBodyHandle ignoreBody);
+
+void AetherPhysics_GetCharacterTransform(AetherPhysicsWorld *world, AetherCharacterHandle handle,
+                                          AetherVec3 *outPosition, AetherQuat *outRotation);
+
+AetherCharacterGroundState AetherPhysics_GetCharacterGroundState(AetherPhysicsWorld *world, AetherCharacterHandle handle);
+
+/// Velocidade do corpo/superfície sob o personagem (0 se InAir ou handle inválido) — já inclui
+/// rotação do corpo de suporte (não é só `linear_velocity`, o Jolt calcula a velocidade do PONTO
+/// de contato num corpo que gira, ver CalculateCharacterGroundVelocity). Some isto à velocidade
+/// desejada antes de AetherPhysics_SetCharacterVelocity para "grudar" em plataformas móveis —
+/// não é automático, é a responsabilidade do chamador descrita no comentário desta seção.
+AetherVec3 AetherPhysics_GetCharacterGroundVelocity(AetherPhysicsWorld *world, AetherCharacterHandle handle);
+
+/// Normal da superfície de contato (chão ou rampa) — {0,0,0} se InAir ou handle inválido. Útil
+/// para decidir a direção de deslizamento quando GroundState é OnSteepGround.
+AetherVec3 AetherPhysics_GetCharacterGroundNormal(AetherPhysicsWorld *world, AetherCharacterHandle handle);
+
+/// Troca entre a cápsula standingHalfHeight/crouchingHalfHeight de AetherCharacterDesc,
+/// checando primeiro se há espaço livre para a forma nova (JPH::CharacterVirtual::SetShape com
+/// maxPenetrationDepth pequeno — não zero, para tolerar o padding padrão do personagem, mas
+/// pequeno o bastante para recusar levantar debaixo de algo baixo). Devolve 1 se a troca teve
+/// sucesso, 0 se não havia espaço (ex.: tentando ficar de pé debaixo de algo baixo) — nesse caso
+/// a forma permanece a anterior, sem efeito colateral.
+ae::i32 AetherPhysics_SetCharacterCrouching(AetherPhysicsWorld *world, AetherCharacterHandle handle, ae::i32 crouching);
 
 } // extern "C"

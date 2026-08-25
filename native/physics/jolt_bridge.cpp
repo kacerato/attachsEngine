@@ -13,6 +13,9 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Body/BodyLockMulti.h>
@@ -131,6 +134,11 @@ JPH::RefConst<JPH::Shape> ToJoltShape(const AetherShapeDesc &desc) {
     auto result = settings.Create();
     return result.HasError() ? nullptr : result.Get();
   }
+  if (desc.kind == AetherShapeKind::Capsule) {
+    JPH::CapsuleShapeSettings settings(desc.capsuleHalfHeight, desc.sphereRadius);
+    auto result = settings.Create();
+    return result.HasError() ? nullptr : result.Get();
+  }
   JPH::SphereShapeSettings settings(desc.sphereRadius);
   auto result = settings.Create();
   return result.HasError() ? nullptr : result.Get();
@@ -185,29 +193,30 @@ AetherShapeQueryHit ToShapeQueryHit(const JoltResult &hit, float fraction) {
   return out;
 }
 
-// ------------------------------------------------------------ juntas: handle denso próprio
+// ------------------------------------------------------------ handles índice+geração
 //
 // Diferente de AetherBodyHandle (que É o JPH::BodyID, sem tabela nossa — o Jolt já resolve
-// reciclagem de índice sozinho), uma JPH::Constraint não carrega um índice denso reciclável
-// embutido. Handle = (índice na tabela << 16) | (geração & 0xFFFF), mesmo esquema de detecção
-// de use-after-free que EntitySlot.Version faz no lado C# (World.cs): destruir uma junta
-// incrementa a geração do slot, então um AetherJointHandle antigo nunca combina por acidente
-// com o slot reciclado por uma junta nova.
+// reciclagem de índice sozinho), nem JPH::Constraint nem JPH::CharacterVirtual carregam um
+// índice denso reciclável embutido (ao contrário de corpo). Handle = (índice na tabela << 16) |
+// (geração & 0xFFFF), mesmo esquema de detecção de use-after-free que EntitySlot.Version faz no
+// lado C# (World.cs): destruir o recurso incrementa a geração do slot, então um handle antigo
+// nunca combina por acidente com o slot reciclado por um recurso novo. Compartilhado entre
+// juntas (4.1.3) e character controllers (4.1.5) — mesma disciplina, tipo de recurso diferente.
+constexpr ae::u32 kGenerationalHandleBits = 16;
+constexpr ae::u32 kGenerationalHandleMask = (1u << kGenerationalHandleBits) - 1u;
+
+ae::u32 PackGenerationalHandle(ae::u32 index, ae::u32 generation) {
+  return (index << kGenerationalHandleBits) | (generation & kGenerationalHandleMask);
+}
+ae::u32 GenerationalHandleIndex(ae::u32 h) { return h >> kGenerationalHandleBits; }
+ae::u32 GenerationalHandleGeneration(ae::u32 h) { return h & kGenerationalHandleMask; }
+
 struct JointSlot {
   JPH::Ref<JPH::Constraint> constraint; // null = slot livre
   JPH::BodyID body1;
   JPH::BodyID body2;
   ae::u32 generation = 0;
 };
-
-constexpr ae::u32 kJointGenerationBits = 16;
-constexpr ae::u32 kJointGenerationMask = (1u << kJointGenerationBits) - 1u;
-
-AetherJointHandle PackJointHandle(ae::u32 index, ae::u32 generation) {
-  return (index << kJointGenerationBits) | (generation & kJointGenerationMask);
-}
-ae::u32 JointHandleIndex(AetherJointHandle h) { return h >> kJointGenerationBits; }
-ae::u32 JointHandleGeneration(AetherJointHandle h) { return h & kJointGenerationMask; }
 
 JPH::MotorSettings ToJoltMotorSettings(const AetherJointMotorDesc &desc, bool isAngular) {
   JPH::MotorSettings settings;
@@ -225,6 +234,30 @@ JPH::EMotorState ToJoltMotorState(AetherMotorState state) {
     case AetherMotorState::Position: return JPH::EMotorState::Position;
     case AetherMotorState::PositionAndVelocity: return JPH::EMotorState::PositionAndVelocity;
     default: return JPH::EMotorState::Off;
+  }
+}
+
+// ------------------------------------------------------------ character controller (4.1.5)
+
+// Mesmo esquema índice+geração de JointSlot — JPH::CharacterVirtual não é adicionado à
+// broadphase (não tem BodyID) e não carrega índice denso reciclável. Guardamos as duas
+// cápsulas (de pé / agachada) já convertidas para não reconstruir a forma toda vez que o
+// jogo alterna estado — troca de shape (AetherPhysics_SetCharacterCrouching) é evento raro,
+// mas reconstruir uma CapsuleShape do zero a cada chamada seria desperdício desnecessário.
+struct CharacterSlot {
+  JPH::Ref<JPH::CharacterVirtual> character; // null = slot livre
+  JPH::RefConst<JPH::Shape> standingShape;
+  JPH::RefConst<JPH::Shape> crouchingShape;
+  bool isCrouching = false;
+  ae::u32 generation = 0;
+};
+
+AetherCharacterGroundState FromJoltGroundState(JPH::CharacterBase::EGroundState state) {
+  switch (state) {
+    case JPH::CharacterBase::EGroundState::OnGround: return AetherCharacterGroundState::OnGround;
+    case JPH::CharacterBase::EGroundState::OnSteepGround: return AetherCharacterGroundState::OnSteepGround;
+    case JPH::CharacterBase::EGroundState::NotSupported: return AetherCharacterGroundState::NotSupported;
+    default: return AetherCharacterGroundState::InAir;
   }
 }
 
@@ -299,6 +332,10 @@ struct AetherPhysicsWorld {
   // estratégia de reciclagem de índice que World.cs usa para EntitySlot (_freeIndices).
   std::vector<JointSlot> jointSlots;
   std::vector<ae::u32> freeJointSlots;
+
+  // Tabela de character controllers deste mundo — ver comentário de CharacterSlot acima.
+  std::vector<CharacterSlot> characterSlots;
+  std::vector<ae::u32> freeCharacterSlots;
 
   explicit AetherPhysicsWorld(ae::u32 maxBodies)
       : tempAllocator(8 * 1024 * 1024),
@@ -586,11 +623,11 @@ AetherJointHandle AetherPhysics_CreateJoint(AetherPhysicsWorld *world, AetherBod
     ae::u32 index = world->freeJointSlots.back();
     world->freeJointSlots.pop_back();
     world->jointSlots[index] = JointSlot{constraint, bodyIds[0], bodyIds[1], world->jointSlots[index].generation};
-    return PackJointHandle(index, world->jointSlots[index].generation);
+    return PackGenerationalHandle(index, world->jointSlots[index].generation);
   }
   ae::u32 index = static_cast<ae::u32>(world->jointSlots.size());
   world->jointSlots.push_back(JointSlot{constraint, bodyIds[0], bodyIds[1], 0});
-  return PackJointHandle(index, 0);
+  return PackGenerationalHandle(index, 0);
 }
 
 namespace {
@@ -599,10 +636,10 @@ namespace {
 // checagem que World.Exists faz em EntitySlot.Version do lado C#).
 JointSlot *ResolveJointSlot(AetherPhysicsWorld *world, AetherJointHandle handle) {
   if (world == nullptr || handle == AetherJointHandle_Invalid) return nullptr;
-  ae::u32 index = JointHandleIndex(handle);
+  ae::u32 index = GenerationalHandleIndex(handle);
   if (index >= world->jointSlots.size()) return nullptr;
   JointSlot &slot = world->jointSlots[index];
-  if (slot.constraint == nullptr || slot.generation != JointHandleGeneration(handle)) return nullptr;
+  if (slot.constraint == nullptr || slot.generation != GenerationalHandleGeneration(handle)) return nullptr;
   return &slot;
 }
 } // namespace
@@ -620,8 +657,8 @@ void AetherPhysics_DestroyJoint(AetherPhysicsWorld *world, AetherJointHandle han
   bodyInterface.ActivateBody(slot->body1);
   bodyInterface.ActivateBody(slot->body2);
   slot->constraint = nullptr;
-  slot->generation = (slot->generation + 1) & kJointGenerationMask;
-  world->freeJointSlots.push_back(JointHandleIndex(handle));
+  slot->generation = (slot->generation + 1) & kGenerationalHandleMask;
+  world->freeJointSlots.push_back(GenerationalHandleIndex(handle));
 }
 
 void AetherPhysics_SetJointMotor(AetherPhysicsWorld *world, AetherJointHandle handle, const AetherJointMotorDesc *motor) {
@@ -656,6 +693,157 @@ float AetherPhysics_GetJointPosition(AetherPhysicsWorld *world, AetherJointHandl
   if (subType == JPH::EConstraintSubType::Slider)
     return static_cast<JPH::SliderConstraint *>(slot->constraint.GetPtr())->GetCurrentPosition();
   return 0.0f;
+}
+
+// ---------------------------------------------------------------- character controller (4.1.5)
+
+namespace {
+CharacterSlot *ResolveCharacterSlot(AetherPhysicsWorld *world, AetherCharacterHandle handle) {
+  if (world == nullptr || handle == AetherCharacterHandle_Invalid) return nullptr;
+  ae::u32 index = GenerationalHandleIndex(handle);
+  if (index >= world->characterSlots.size()) return nullptr;
+  CharacterSlot &slot = world->characterSlots[index];
+  if (slot.character == nullptr || slot.generation != GenerationalHandleGeneration(handle)) return nullptr;
+  return &slot;
+}
+} // namespace
+
+AetherCharacterHandle AetherPhysics_CreateCharacter(AetherPhysicsWorld *world, const AetherCharacterDesc *desc,
+                                                      AetherVec3 position, AetherQuat rotation) {
+  if (world == nullptr || desc == nullptr) return AetherCharacterHandle_Invalid;
+
+  // Base da cápsula em (0,0,0), mesma exigência documentada em CharacterBaseSettings::mShape
+  // ("make sure the shape is made so that the bottom of the shape is at (0, 0, 0)") — por isso
+  // o offset RotatedTranslatedShape empurra o CENTRO da cápsula para cima em
+  // (halfHeight+radius), não a origem crua da CapsuleShapeSettings (que já é centrada na
+  // origem por padrão do Jolt).
+  auto makeCapsuleAtOrigin = [](float radius, float halfHeight) -> JPH::RefConst<JPH::Shape> {
+    JPH::CapsuleShapeSettings capsule(halfHeight, radius);
+    auto capsuleResult = capsule.Create();
+    if (capsuleResult.HasError()) return nullptr;
+    JPH::RotatedTranslatedShapeSettings offset(JPH::Vec3(0, halfHeight + radius, 0), JPH::Quat::sIdentity(), capsuleResult.Get());
+    auto offsetResult = offset.Create();
+    return offsetResult.HasError() ? nullptr : offsetResult.Get();
+  };
+
+  JPH::RefConst<JPH::Shape> standingShape = makeCapsuleAtOrigin(desc->radius, desc->standingHalfHeight);
+  if (standingShape == nullptr) return AetherCharacterHandle_Invalid;
+  JPH::RefConst<JPH::Shape> crouchingShape = makeCapsuleAtOrigin(desc->radius, desc->crouchingHalfHeight);
+  if (crouchingShape == nullptr) return AetherCharacterHandle_Invalid;
+
+  JPH::CharacterVirtualSettings settings;
+  settings.mShape = standingShape;
+  settings.mMaxSlopeAngle = desc->maxSlopeAngle;
+  settings.mMass = desc->mass;
+  settings.mMaxStrength = desc->maxStrength;
+  // mUp/mSupportingVolume ficam nos defaults do Jolt (Y-up, aceita qualquer contato) — a
+  // engine usa Y-para-cima em toda a matemática (ver CONVENCOES.md), consistente com o
+  // resto desta fronteira (Layers, gravidade em -Y nos testes, etc).
+
+  JPH::Ref<JPH::CharacterVirtual> character = new JPH::CharacterVirtual(
+      &settings, JPH::RVec3(position.x, position.y, position.z), ToJolt(rotation), &world->physicsSystem);
+
+  if (!world->freeCharacterSlots.empty()) {
+    ae::u32 index = world->freeCharacterSlots.back();
+    world->freeCharacterSlots.pop_back();
+    world->characterSlots[index] = CharacterSlot{character, standingShape, crouchingShape, false, world->characterSlots[index].generation};
+    return PackGenerationalHandle(index, world->characterSlots[index].generation);
+  }
+  ae::u32 index = static_cast<ae::u32>(world->characterSlots.size());
+  world->characterSlots.push_back(CharacterSlot{character, standingShape, crouchingShape, false, 0});
+  return PackGenerationalHandle(index, 0);
+}
+
+void AetherPhysics_DestroyCharacter(AetherPhysicsWorld *world, AetherCharacterHandle handle) {
+  CharacterSlot *slot = ResolveCharacterSlot(world, handle);
+  if (slot == nullptr) return;
+  slot->character = nullptr;
+  slot->standingShape = nullptr;
+  slot->crouchingShape = nullptr;
+  slot->generation = (slot->generation + 1) & kGenerationalHandleMask;
+  world->freeCharacterSlots.push_back(GenerationalHandleIndex(handle));
+}
+
+void AetherPhysics_SetCharacterVelocity(AetherPhysicsWorld *world, AetherCharacterHandle handle, AetherVec3 velocity) {
+  CharacterSlot *slot = ResolveCharacterSlot(world, handle);
+  if (slot == nullptr) return;
+  slot->character->SetLinearVelocity(ToJolt(velocity));
+}
+
+AetherVec3 AetherPhysics_GetCharacterVelocity(AetherPhysicsWorld *world, AetherCharacterHandle handle) {
+  CharacterSlot *slot = ResolveCharacterSlot(world, handle);
+  if (slot == nullptr) return {0.0f, 0.0f, 0.0f};
+  return FromJolt(slot->character->GetLinearVelocity());
+}
+
+void AetherPhysics_UpdateCharacter(AetherPhysicsWorld *world, AetherCharacterHandle handle, float deltaTime,
+                                    AetherVec3 gravity, AetherQueryLayerMask layerMask, AetherBodyHandle ignoreBody) {
+  CharacterSlot *slot = ResolveCharacterSlot(world, handle);
+  if (slot == nullptr) return;
+
+  // Defaults do próprio Jolt para ExtendedUpdateSettings (ver CharacterVirtual.h) — 40cm de
+  // step-up para degraus, 50cm de stick-to-floor. Não expostos como parâmetro nesta fatia: são
+  // valores razoáveis para um personagem humano padrão: expor tudo criaria uma assinatura de
+  // função gigante para um caso de uso ainda hipotético (personagem não-humano com proporções
+  // muito diferentes) — ajustável depois se for preciso, sem quebrar ABI (adicionar um segundo
+  // AetherPhysics_UpdateCharacterEx com settings explícitos).
+  JPH::CharacterVirtual::ExtendedUpdateSettings updateSettings;
+
+  QueryLayerFilter layerFilter(layerMask);
+  QueryBodyFilter bodyFilter(ignoreBody);
+  slot->character->ExtendedUpdate(deltaTime, ToJolt(gravity), updateSettings,
+                                   world->physicsSystem.GetDefaultBroadPhaseLayerFilter(Layers::Moving),
+                                   layerFilter, bodyFilter, {}, world->tempAllocator);
+}
+
+void AetherPhysics_GetCharacterTransform(AetherPhysicsWorld *world, AetherCharacterHandle handle,
+                                          AetherVec3 *outPosition, AetherQuat *outRotation) {
+  CharacterSlot *slot = ResolveCharacterSlot(world, handle);
+  if (slot == nullptr) return;
+  if (outPosition != nullptr) {
+    JPH::RVec3 pos = slot->character->GetPosition();
+    *outPosition = {pos.GetX(), pos.GetY(), pos.GetZ()};
+  }
+  if (outRotation != nullptr) *outRotation = FromJolt(slot->character->GetRotation());
+}
+
+AetherCharacterGroundState AetherPhysics_GetCharacterGroundState(AetherPhysicsWorld *world, AetherCharacterHandle handle) {
+  CharacterSlot *slot = ResolveCharacterSlot(world, handle);
+  if (slot == nullptr) return AetherCharacterGroundState::InAir;
+  return FromJoltGroundState(slot->character->GetGroundState());
+}
+
+AetherVec3 AetherPhysics_GetCharacterGroundVelocity(AetherPhysicsWorld *world, AetherCharacterHandle handle) {
+  CharacterSlot *slot = ResolveCharacterSlot(world, handle);
+  if (slot == nullptr) return {0.0f, 0.0f, 0.0f};
+  return FromJolt(slot->character->GetGroundVelocity());
+}
+
+AetherVec3 AetherPhysics_GetCharacterGroundNormal(AetherPhysicsWorld *world, AetherCharacterHandle handle) {
+  CharacterSlot *slot = ResolveCharacterSlot(world, handle);
+  if (slot == nullptr) return {0.0f, 0.0f, 0.0f};
+  return FromJolt(slot->character->GetGroundNormal());
+}
+
+ae::i32 AetherPhysics_SetCharacterCrouching(AetherPhysicsWorld *world, AetherCharacterHandle handle, ae::i32 crouching) {
+  CharacterSlot *slot = ResolveCharacterSlot(world, handle);
+  if (slot == nullptr) return 0;
+
+  bool wantCrouching = crouching != 0;
+  if (wantCrouching == slot->isCrouching) return 1; // já está no estado pedido — no-op bem-sucedido
+
+  JPH::RefConst<JPH::Shape> targetShape = wantCrouching ? slot->crouchingShape : slot->standingShape;
+  // maxPenetrationDepth pequeno (não 0, não FLT_MAX): 0 recusaria mesmo o padding normal do
+  // personagem (mCharacterPadding = 2cm, ver CharacterVirtualSettings), FLT_MAX aceitaria
+  // qualquer penetração e nunca recusaria ficar de pé debaixo de algo baixo — o comportamento
+  // que agachar/levantar deveria ter. 5cm é generoso o bastante para o padding normal sem
+  // deixar o personagem atravessar objetos de verdade.
+  bool success = slot->character->SetShape(targetShape, 0.05f,
+                                            world->physicsSystem.GetDefaultBroadPhaseLayerFilter(Layers::Moving),
+                                            world->physicsSystem.GetDefaultLayerFilter(Layers::Moving), {}, {},
+                                            world->tempAllocator);
+  if (success) slot->isCrouching = wantCrouching;
+  return success ? 1 : 0;
 }
 
 } // extern "C"

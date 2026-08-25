@@ -17,20 +17,23 @@ public enum NativeShapeKind : uint
 {
     Box = 0,
     Sphere = 1,
+    /// <summary>Item 4.1.5 — forma padrão de character controller. Ver <see cref="NativeShapeDesc.CapsuleHalfHeight"/>.</summary>
+    Capsule = 2,
 }
 
 /// <summary>
-/// Mesmo layout de <c>AetherShapeDesc</c>: <c>boxHalfExtent</c> e <c>sphereRadius</c> ocupam
-/// campos separados (não uma union) porque o C ABI do lado nativo também não usa union — mais
-/// simples e o desperdício de 12 bytes não pesa (descritor é só usado na criação do corpo,
-/// nunca no caminho quente de frame).
+/// Mesmo layout de <c>AetherShapeDesc</c>: <c>boxHalfExtent</c>/<c>sphereRadius</c>/
+/// <c>capsuleHalfHeight</c> ocupam campos separados (não uma union) porque o C ABI do lado
+/// nativo também não usa union — mais simples e o desperdício de bytes não pesa (descritor é só
+/// usado na criação do corpo/query, nunca no caminho quente de frame).
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct NativeShapeDesc
 {
     public NativeShapeKind Kind;
     public float3 BoxHalfExtent;
-    public float SphereRadius;
+    public float SphereRadius;       // usado quando Kind == Sphere ou Capsule (raio da cápsula)
+    public float CapsuleHalfHeight;  // usado quando Kind == Capsule — altura do cilindro, sem as tampas
 }
 
 /// <summary>Mesmo layout de <c>AetherBodyDesc</c>.</summary>
@@ -110,6 +113,27 @@ public struct NativeShapeQueryHit
     public float3 ContactPointOnQuery;
     public float3 ContactPointOnHit;
     public float3 PenetrationAxis;
+}
+
+/// <summary>Mesmo layout de <c>AetherCharacterGroundState</c> (item 4.1.5).</summary>
+public enum NativeCharacterGroundState : uint
+{
+    OnGround = 0,
+    OnSteepGround = 1,
+    NotSupported = 2,
+    InAir = 3,
+}
+
+/// <summary>Mesmo layout de <c>AetherCharacterDesc</c>.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct NativeCharacterDesc
+{
+    public float Radius;
+    public float StandingHalfHeight;
+    public float CrouchingHalfHeight;
+    public float MaxSlopeAngle;
+    public float Mass;
+    public float MaxStrength;
 }
 
 /// <summary>
@@ -198,4 +222,37 @@ internal static partial class NativePhysics
     internal static unsafe partial int AetherPhysics_OverlapShape(nint world, in NativeShapeDesc shape,
         float3 origin, quaternion rotation, NativeQueryLayerMask layerMask, uint ignoreBody,
         NativeShapeQueryHit* outHits, int maxResults);
+
+    // ---------------------------------------------------------------- character controller (4.1.5)
+
+    [LibraryImport(LibraryName)]
+    internal static partial uint AetherPhysics_CreateCharacter(nint world, in NativeCharacterDesc desc, float3 position, quaternion rotation);
+
+    [LibraryImport(LibraryName)]
+    internal static partial void AetherPhysics_DestroyCharacter(nint world, uint handle);
+
+    [LibraryImport(LibraryName)]
+    internal static partial void AetherPhysics_SetCharacterVelocity(nint world, uint handle, float3 velocity);
+
+    [LibraryImport(LibraryName)]
+    internal static partial float3 AetherPhysics_GetCharacterVelocity(nint world, uint handle);
+
+    [LibraryImport(LibraryName)]
+    internal static partial void AetherPhysics_UpdateCharacter(nint world, uint handle, float deltaTime,
+        float3 gravity, NativeQueryLayerMask layerMask, uint ignoreBody);
+
+    [LibraryImport(LibraryName)]
+    internal static unsafe partial void AetherPhysics_GetCharacterTransform(nint world, uint handle, float3* outPosition, quaternion* outRotation);
+
+    [LibraryImport(LibraryName)]
+    internal static partial NativeCharacterGroundState AetherPhysics_GetCharacterGroundState(nint world, uint handle);
+
+    [LibraryImport(LibraryName)]
+    internal static partial float3 AetherPhysics_GetCharacterGroundVelocity(nint world, uint handle);
+
+    [LibraryImport(LibraryName)]
+    internal static partial float3 AetherPhysics_GetCharacterGroundNormal(nint world, uint handle);
+
+    [LibraryImport(LibraryName)]
+    internal static partial int AetherPhysics_SetCharacterCrouching(nint world, uint handle, int crouching);
 }

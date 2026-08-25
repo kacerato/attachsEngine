@@ -165,6 +165,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_jolt_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_joint_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_query_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_character_bridge.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_rhi aether_physics)
