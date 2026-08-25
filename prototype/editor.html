@@ -1,0 +1,1809 @@
+<title>Aether Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root {
+  /* Grafite com viés azul: um cinza neutro puro leria como não-escolhido. */
+  --ground:      #12151A;
+  --panel:       #191D24;
+  --panel-high:  #1F242D;
+  --line:        #252B34;
+  --line-soft:   #1D222A;
+  --text:        #D6DDE6;
+  --text-dim:    #8A94A3;
+  --text-faint:  #5C6675;
+  --accent:      #4CC9E0;
+  --accent-dim:  #2A7A8A;
+  --accent-ink:  #07222A;
+  --warn:        #E0A24C;
+  --crit:        #E0576B;
+  --ok:          #7BD16A;
+  /* Eixos: convenção universal de DCC, semântica e não decorativa. */
+  --axis-x:      #E0576B;
+  --axis-y:      #7BD16A;
+  --axis-z:      #5B8FE0;
+
+  --rail:   44px;
+  --dock:   64px;
+  --topbar: 40px;
+
+  --ui: "Barlow Semi Condensed", "Roboto Condensed", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+:root:not([data-theme="dark"]) {
+  color-scheme: light dark;
+}
+
+/* Tema claro: para uso sob sol, como o plano exige. Escuro é o padrão. */
+:root[data-theme="light"] {
+  --ground:     #E8EBEF;
+  --panel:      #F4F6F8;
+  --panel-high: #FFFFFF;
+  --line:       #CBD2DA;
+  --line-soft:  #DDE2E8;
+  --text:       #1A1F26;
+  --text-dim:   #5C6675;
+  --text-faint: #949DA9;
+  --accent:     #0E7C92;
+  --accent-dim: #6FBCCB;
+  --accent-ink: #FFFFFF;
+  --warn:       #A66A12;
+  --crit:       #B3273C;
+  --ok:         #2F7A22;
+  --axis-x:     #C22A40;
+  --axis-y:     #3D8C2E;
+  --axis-z:     #2A5FB3;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--ui);
+  font-size: 14px;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+}
+
+/* ── Moldura do aparelho ─────────────────────────────────────────────── */
+.stage {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 18px;
+}
+
+.intro {
+  max-width: 62ch;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.intro h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-wrap: balance;
+}
+.intro p { margin: 0; color: var(--text-dim); font-size: 14px; line-height: 1.5; }
+.intro .hint { color: var(--text-faint); font-size: 12.5px; }
+
+.device {
+  width: min(100%, 1180px);
+  aspect-ratio: 20 / 9;
+  min-height: 380px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: var(--topbar) 1fr var(--rail);
+  position: relative;
+  box-shadow: 0 18px 50px -20px rgb(0 0 0 / 0.55);
+  touch-action: none;
+}
+
+/* ── Barra superior ─────────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.topbar .project {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0 8px 0 2px;
+  color: var(--text);
+}
+.topbar .spacer { flex: 1; }
+
+.tbtn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-family: var(--ui);
+  font-size: 13px;
+  height: 28px;
+  min-width: 30px;
+  padding: 0 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.tbtn:hover { background: var(--panel-high); color: var(--text); }
+.tbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tbtn[disabled] { opacity: .35; cursor: default; }
+.tbtn[disabled]:hover { background: transparent; color: var(--text-dim); }
+.tbtn.play.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+/* Telemetria: sempre visível. O criador precisa sentir o custo do que constrói. */
+.telemetry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  padding-right: 4px;
+}
+.telemetry b { font-weight: 500; color: var(--text); }
+.telemetry .unit { color: var(--text-faint); }
+.telemetry .thermal { display: inline-flex; align-items: center; gap: 5px; }
+.thermdot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.thermdot[data-s="fair"] { background: var(--ok); }
+.thermdot[data-s="moderate"] { background: var(--warn); }
+.thermdot[data-s="severe"] { background: var(--warn); }
+.thermdot[data-s="critical"] { background: var(--crit); }
+
+/* ── Corpo: doca | viewport | inspector ─────────────────────────────── */
+.body {
+  display: grid;
+  grid-template-columns: var(--dock) 1fr auto;
+  min-height: 0;
+  position: relative;
+}
+
+.dock {
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  gap: 2px;
+}
+.mode {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  color: var(--text-dim);
+  font-family: var(--ui);
+  cursor: pointer;
+  padding: 7px 0 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: background .12s, color .12s;
+}
+.mode:hover { background: var(--panel-high); color: var(--text); }
+.mode:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.mode .glyph { font-size: 17px; line-height: 1; }
+.mode .label { font-size: 10.5px; letter-spacing: .03em; text-transform: uppercase; }
+.mode.on { color: var(--accent); border-left-color: var(--accent); background: var(--panel-high); }
+
+.viewwrap { position: relative; min-width: 0; background: #0B0D11; }
+:root[data-theme="light"] .viewwrap { background: #C9CFD7; }
+#view { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+
+/* HUD numérico durante arrasto — sempre do lado oposto ao dedo. */
+.hud {
+  position: absolute;
+  pointer-events: none;
+  background: var(--panel-high);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+  opacity: 0;
+  transition: opacity .1s;
+  box-shadow: 0 6px 18px -8px rgb(0 0 0 / .6);
+}
+.hud.on { opacity: 1; }
+
+.viewhint {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  pointer-events: none;
+  font-family: var(--mono);
+}
+
+/* Perfil gráfico ativo — o governador térmico é cidadão de primeira classe. */
+.profilechip {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 3px 7px;
+  pointer-events: none;
+}
+
+/* ── Inspector ──────────────────────────────────────────────────────── */
+.inspector {
+  width: 268px;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  transition: width .18s ease;
+}
+.inspector[data-state="hidden"] { width: 0; border-left-width: 0; overflow: hidden; }
+
+.insp-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+  font-size: 14px;
+}
+.insp-head .sw { width: 9px; height: 9px; border-radius: 2px; background: var(--accent); }
+.insp-body { overflow-y: auto; flex: 1; padding-bottom: 10px; }
+
+.comp { border-bottom: 1px solid var(--line-soft); }
+.comp > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 7px 10px;
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.comp > summary::-webkit-details-marker { display: none; }
+.comp > summary::before { content: "▸"; font-size: 9px; color: var(--text-faint); transition: transform .12s; }
+.comp[open] > summary::before { transform: rotate(90deg); }
+.comp > summary:hover { color: var(--text); }
+.comp .fields { padding: 2px 10px 9px; display: flex; flex-direction: column; gap: 1px; }
+
+/* Campo numérico com arrasto na própria linha — o widget-chave do inspector touch. */
+.num {
+  display: grid;
+  grid-template-columns: minmax(16px, auto) 1fr;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 5px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.num:hover { background: var(--panel-high); }
+.num.dragging { background: var(--panel-high); box-shadow: inset 0 0 0 1px var(--accent-dim); }
+.num .k { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+.num .k[data-axis="x"] { color: var(--axis-x); }
+.num .k[data-axis="y"] { color: var(--axis-y); }
+.num .k[data-axis="z"] { color: var(--axis-z); }
+.num .v {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text);
+}
+
+.row { display: flex; align-items: center; justify-content: space-between; height: 26px; padding: 0 6px; }
+.row .k { font-size: 12.5px; color: var(--text-dim); }
+.row .v { font-family: var(--mono); font-size: 12px; color: var(--text); }
+
+.swatchrow { display: flex; gap: 5px; padding: 3px 6px 1px; }
+.swatch {
+  width: 22px; height: 22px; border-radius: 4px;
+  border: 1px solid var(--line);
+  cursor: pointer; padding: 0; appearance: none;
+}
+.swatch.on { box-shadow: 0 0 0 2px var(--accent); }
+.swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Trilho inferior ────────────────────────────────────────────────── */
+.rail {
+  display: flex;
+  align-items: stretch;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  min-width: 0;
+}
+.crumbs { display: flex; align-items: center; gap: 2px; padding: 0 8px; overflow-x: auto; flex: 1; min-width: 0; }
+.crumb {
+  appearance: none; background: transparent; border: 0;
+  color: var(--text-dim); font-family: var(--ui); font-size: 12.5px;
+  padding: 3px 7px; border-radius: 5px; cursor: pointer; white-space: nowrap;
+}
+.crumb:hover { background: var(--panel-high); color: var(--text); }
+.crumb:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.crumb.on { color: var(--accent); background: var(--panel-high); }
+.crumb .depth { color: var(--text-faint); margin-right: 4px; }
+
+.tabs { display: flex; border-left: 1px solid var(--line); }
+.tab {
+  appearance: none; background: transparent; border: 0;
+  border-top: 2px solid transparent;
+  color: var(--text-dim); font-family: var(--ui); font-size: 12.5px;
+  padding: 0 12px; cursor: pointer; white-space: nowrap;
+}
+.tab:hover { color: var(--text); background: var(--panel-high); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tab.on { color: var(--accent); border-top-color: var(--accent); background: var(--panel-high); }
+
+/* ── Menu radial ────────────────────────────────────────────────────── */
+.radial { position: absolute; inset: 0; pointer-events: none; z-index: 40; display: none; }
+.radial.on { display: block; }
+.radial svg { position: absolute; overflow: visible; }
+
+/* ── Painel deslizante (Flow / Console) ─────────────────────────────── */
+.sheet {
+  position: absolute;
+  left: var(--dock);
+  right: 0;
+  bottom: 0;
+  height: 0;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  z-index: 30;
+  overflow: hidden;
+  transition: height .2s ease;
+  display: flex;
+  flex-direction: column;
+}
+.sheet.on { height: 58%; }
+.sheet-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-bottom: 1px solid var(--line);
+  font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim);
+}
+.sheet-head .spacer { flex: 1; }
+.sheet-body { flex: 1; overflow: auto; padding: 10px 12px; }
+
+/* Modo Lista do AetherFlow — a representação linear que funciona em tela pequena. */
+.flowlist { font-family: var(--mono); font-size: 12.5px; line-height: 1.85; }
+.flowlist .ev { color: var(--accent); }
+.flowlist .kw { color: var(--warn); }
+.flowlist .var { color: var(--text); }
+.flowlist .lit { color: var(--ok); }
+.flowlist .tree { color: var(--text-faint); }
+.flowlist .cm { color: var(--text-faint); font-style: italic; }
+
+.console { font-family: var(--mono); font-size: 12px; line-height: 1.8; color: var(--text-dim); }
+.console .t { color: var(--text-faint); }
+.console .warnline { color: var(--warn); }
+
+/* ── Controles fora do aparelho ─────────────────────────────────────── */
+.tray {
+  width: min(100%, 1180px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.tray .grp { display: flex; align-items: center; gap: 8px; }
+.tray label { color: var(--text-dim); font-size: 12.5px; }
+.tray select, .tray button {
+  appearance: none;
+  background: var(--panel-high);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: var(--ui);
+  font-size: 13px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.tray select:focus-visible, .tray button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tray .note { color: var(--text-faint); font-size: 12px; flex: 1; min-width: 220px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+
+@media (max-width: 720px) {
+  .device { aspect-ratio: auto; height: 62dvh; }
+  .inspector { width: 210px; }
+  .intro h1 { font-size: 17px; }
+}
+</style>
+
+<div class="stage">
+  <div class="intro">
+    <h1>Editor Aether — protótipo de interação</h1>
+    <p>O editor é <strong>landscape e fullscreen</strong>. Isto é a Etapa 0.3.2 do plano: validar que
+      editar uma cena com o dedo é bom, não apenas possível.</p>
+    <p class="hint">Arraste no vazio para orbitar · toque num objeto para selecionar · arraste as setas do gizmo
+      · <strong>toque e segure</strong> para o menu radial · arraste os números do inspector</p>
+  </div>
+
+  <div class="device" id="device">
+    <!-- Barra superior -->
+    <div class="topbar">
+      <span class="project">MeuJogo</span>
+      <button class="tbtn play" id="btnPlay" title="Rodar o jogo">▶ Play</button>
+      <button class="tbtn" id="btnStop" title="Parar" disabled>■</button>
+      <span style="width:10px"></span>
+      <button class="tbtn" id="btnUndo" title="Desfazer" disabled>⟲</button>
+      <button class="tbtn" id="btnRedo" title="Refazer" disabled>⟳</button>
+      <span class="spacer"></span>
+      <div class="telemetry">
+        <span><b id="tFps">60</b><span class="unit"> fps</span></span>
+        <span><b id="tWatt">3.2</b><span class="unit"> W</span></span>
+        <span><b id="tTri">0</b><span class="unit"> tri</span></span>
+        <span class="thermal"><span class="thermdot" id="tDot"></span><span id="tTherm">Nominal</span></span>
+      </div>
+      <button class="tbtn" id="btnTheme" title="Alternar tema">◐</button>
+    </div>
+
+    <!-- Corpo -->
+    <div class="body">
+      <nav class="dock" id="dock" aria-label="Modos"></nav>
+
+      <div class="viewwrap" id="viewwrap">
+        <canvas id="view"></canvas>
+        <div class="hud" id="hud"></div>
+        <div class="viewhint" id="viewhint"></div>
+        <div class="profilechip" id="profilechip">Perfil A · escala 1.00</div>
+        <div class="radial" id="radial" aria-hidden="true"><svg id="radialSvg"></svg></div>
+      </div>
+
+      <aside class="inspector" id="inspector" data-state="work">
+        <div class="insp-head"><span class="sw" id="inspSw"></span><span id="inspName">—</span></div>
+        <div class="insp-body" id="inspBody"></div>
+      </aside>
+
+      <div class="sheet" id="sheet">
+        <div class="sheet-head"><span id="sheetTitle">Flow</span><span class="spacer"></span>
+          <button class="tbtn" id="sheetClose">✕</button></div>
+        <div class="sheet-body" id="sheetBody"></div>
+      </div>
+    </div>
+
+    <!-- Trilho inferior -->
+    <div class="rail">
+      <div class="crumbs" id="crumbs"></div>
+      <div class="tabs" id="tabs"></div>
+    </div>
+  </div>
+
+  <div class="tray">
+    <div class="grp">
+      <label for="thermSel">Estado térmico</label>
+      <select id="thermSel">
+        <option value="nominal">Nominal</option>
+        <option value="fair">Leve</option>
+        <option value="moderate">Moderado</option>
+        <option value="severe">Severo</option>
+        <option value="critical">Crítico</option>
+      </select>
+    </div>
+    <div class="grp">
+      <label for="snapSel">Snap</label>
+      <select id="snapSel">
+        <option value="0">Desligado</option>
+        <option value="0.25">0,25 m</option>
+        <option value="0.5">0,5 m</option>
+        <option value="1" selected>1 m</option>
+      </select>
+    </div>
+    <div class="grp">
+      <button id="btnReset">Recarregar cena</button>
+    </div>
+    <p class="note">O seletor térmico exercita o <strong>PowerGovernor</strong> de verdade: mude para Severo e
+      veja o teto de fps, a escala de resolução e a qualidade das sombras caírem — com histerese na volta.</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ════════════════════════════════════════════════════════════════════════
+   Aether — protótipo de interação do editor (landscape, fullscreen)
+
+   As convenções aqui são deliberadamente as MESMAS do núcleo em C#
+   (managed/Aether.Core/Math): mão-esquerda, X direita, Y cima, Z frente;
+   matrizes column-major; projeção com Y invertido e w = +z. Assim o que se
+   valida aqui de sensação de manipulação transfere direto para a engine.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Matemática ─────────────────────────────────────────────────────── */
+const V = {
+  add:(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],
+  sub:(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],
+  mul:(a,s)=>[a[0]*s,a[1]*s,a[2]*s],
+  dot:(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],
+  cross:(a,b)=>[a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]],
+  len:a=>Math.hypot(a[0],a[1],a[2]),
+  norm:a=>{const l=Math.hypot(a[0],a[1],a[2]); return l>1e-9?[a[0]/l,a[1]/l,a[2]/l]:[0,0,0];},
+};
+
+// Column-major: m[col*4+row]. Igual ao float4x4 do C#.
+function matId(){ const m=new Float32Array(16); m[0]=m[5]=m[10]=m[15]=1; return m; }
+function matMul(a,b){
+  const r=new Float32Array(16);
+  for(let c=0;c<4;c++) for(let i=0;i<4;i++){
+    r[c*4+i]=a[0*4+i]*b[c*4+0]+a[1*4+i]*b[c*4+1]+a[2*4+i]*b[c*4+2]+a[3*4+i]*b[c*4+3];
+  }
+  return r;
+}
+function matTRS(t, rotEuler, s){
+  const [rx,ry,rz]=rotEuler;
+  const cx=Math.cos(rx),sx=Math.sin(rx),cy=Math.cos(ry),sy=Math.sin(ry),cz=Math.cos(rz),sz=Math.sin(rz);
+  // Ordem Z → X → Y, a mesma de quaternion.Euler no C#.
+  const r=[
+    cy*cz+sy*sx*sz,  cx*sz,  -sy*cz+cy*sx*sz,
+    -cy*sz+sy*sx*cz, cx*cz,  sy*sz+cy*sx*cz,
+    sy*cx,           -sx,    cy*cx
+  ];
+  const m=matId();
+  m[0]=r[0]*s[0]; m[1]=r[3]*s[0]; m[2]=r[6]*s[0];
+  m[4]=r[1]*s[1]; m[5]=r[4]*s[1]; m[6]=r[7]*s[1];
+  m[8]=r[2]*s[2]; m[9]=r[5]*s[2]; m[10]=r[8]*s[2];
+  m[12]=t[0]; m[13]=t[1]; m[14]=t[2];
+  return m;
+}
+function xformPoint(m,p){
+  return [ m[0]*p[0]+m[4]*p[1]+m[8]*p[2]+m[12],
+           m[1]*p[0]+m[5]*p[1]+m[9]*p[2]+m[13],
+           m[2]*p[0]+m[6]*p[1]+m[10]*p[2]+m[14] ];
+}
+function xformDir(m,d){
+  return [ m[0]*d[0]+m[4]*d[1]+m[8]*d[2],
+           m[1]*d[0]+m[5]*d[1]+m[9]*d[2],
+           m[2]*d[0]+m[6]*d[1]+m[10]*d[2] ];
+}
+// Igual a float4x4.LookAt do C#: mundo → câmera, mão-esquerda.
+function matLookAt(eye,target,up){
+  const f=V.norm(V.sub(target,eye));
+  const r=V.norm(V.cross(up,f));
+  const u=V.cross(f,r);
+  const m=matId();
+  m[0]=r[0]; m[4]=r[1]; m[8]=r[2];  m[12]=-V.dot(r,eye);
+  m[1]=u[0]; m[5]=u[1]; m[9]=u[2];  m[13]=-V.dot(u,eye);
+  m[2]=f[0]; m[6]=f[1]; m[10]=f[2]; m[14]=-V.dot(f,eye);
+  return m;
+}
+// Igual a float4x4.PerspectiveVulkan: profundidade [0,1], Y invertido, w = +z.
+// O Y invertido do Vulkan coincide com o Y-para-baixo do canvas — nada a corrigir depois.
+function matPersp(fovY,aspect,near,far){
+  const t=1/Math.tan(fovY*0.5), range=far-near;
+  const m=new Float32Array(16);
+  m[0]=t/aspect; m[5]=-t; m[10]=far/range; m[11]=1; m[14]=-(near*far)/range;
+  return m;
+}
+// Ponto do raio mais próximo de um eixo. É a matemática do gizmo travado em eixo,
+// portada de Ray.ClosestPointOnAxis (Aether.Core/Math/Geometry.cs).
+function closestOnAxis(rayOrigin, rayDir, axisOrigin, axisDir){
+  const w0=V.sub(axisOrigin,rayOrigin);
+  const a=V.dot(axisDir,axisDir), b=V.dot(axisDir,rayDir), c=V.dot(rayDir,rayDir);
+  const d=V.dot(axisDir,w0), e=V.dot(rayDir,w0);
+  const den=a*c-b*b;
+  if(Math.abs(den)<1e-9) return 0;
+  return (b*e-c*d)/den;
+}
+function rayPlane(rayOrigin, rayDir, planePoint, planeNormal){
+  const den=V.dot(planeNormal,rayDir);
+  if(Math.abs(den)<1e-9) return null;
+  const t=V.dot(V.sub(planePoint,rayOrigin),planeNormal)/den;
+  return t>0 ? V.add(rayOrigin,V.mul(rayDir,t)) : null;
+}
+const snapTo=(v,step)=> step<=0 ? v : Math.round(v/step)*step;
+const clamp=(v,a,b)=> v<a?a:(v>b?b:v);
+
+/* ── Malhas ─────────────────────────────────────────────────────────── */
+function meshBox(w=1,h=1,d=1){
+  const x=w/2,y=h/2,z=d/2;
+  const v=[[-x,-y,-z],[x,-y,-z],[x,y,-z],[-x,y,-z],[-x,-y,z],[x,-y,z],[x,y,z],[-x,y,z]];
+  const f=[[0,3,2,1],[4,5,6,7],[0,1,5,4],[2,3,7,6],[1,2,6,5],[0,4,7,3]];
+  return {v, f};
+}
+function meshSphere(r=0.5, seg=14, ring=9){
+  const v=[], f=[];
+  for(let i=0;i<=ring;i++){
+    const phi=Math.PI*i/ring, sp=Math.sin(phi), cp=Math.cos(phi);
+    for(let j=0;j<=seg;j++){
+      const th=2*Math.PI*j/seg;
+      v.push([r*sp*Math.cos(th), r*cp, r*sp*Math.sin(th)]);
+    }
+  }
+  for(let i=0;i<ring;i++) for(let j=0;j<seg;j++){
+    const a=i*(seg+1)+j, b=a+seg+1;
+    f.push([a,b,b+1,a+1]);
+  }
+  return {v,f};
+}
+function meshCylinder(r=0.5,h=1,seg=16){
+  const v=[], f=[], y=h/2;
+  for(let j=0;j<seg;j++){
+    const th=2*Math.PI*j/seg;
+    v.push([r*Math.cos(th),-y,r*Math.sin(th)]);
+    v.push([r*Math.cos(th), y, r*Math.sin(th)]);
+  }
+  for(let j=0;j<seg;j++){
+    const a=j*2, b=((j+1)%seg)*2;
+    f.push([a,a+1,b+1,b]);
+  }
+  const top=[], bot=[];
+  for(let j=0;j<seg;j++){ top.push(j*2+1); bot.push((seg-1-j)*2); }
+  f.push(top); f.push(bot);
+  return {v,f};
+}
+function meshPlane(w=10,d=10){
+  const x=w/2,z=d/2;
+  return {v:[[-x,0,-z],[x,0,-z],[x,0,z],[-x,0,z]], f:[[0,1,2,3]]};
+}
+
+/* ── Cena ───────────────────────────────────────────────────────────── */
+const PALETTE = ["#4CC9E0","#E0A24C","#7BD16A","#E0576B","#9B87E0","#C8CED8"];
+let scene, nextId;
+
+function buildScene(){
+  nextId = 1;
+  const mk = (name, mesh, pos, color, extra={}) => ({
+    id: nextId++, name, mesh,
+    pos: pos.slice(), rot: [0,0,0], scl: [1,1,1],
+    color, parent: null, visible: true, ...extra
+  });
+  scene = [
+    mk("Chão",      meshPlane(16,16),        [0,0,0],       "#39414E", {isGround:true, doubleSided:true, metallic:0.0, roughness:0.9}),
+    mk("Player",    meshCylinder(0.4,1.6,18),[0,0.8,0],     "#4CC9E0", {metallic:0.1, roughness:0.35}),
+    mk("Cabeça",    meshSphere(0.32,16,10),  [0,0.95,0],    "#4CC9E0", {metallic:0.1, roughness:0.35}),
+    mk("Plataforma",meshBox(3,0.4,1.6),      [3.4,1.2,1.2], "#E0A24C", {metallic:0.0, roughness:0.7}),
+    mk("Caixa A",   meshBox(0.9,0.9,0.9),    [-2.6,0.45,1.8],"#7BD16A", {metallic:0.0, roughness:0.6}),
+    mk("Caixa B",   meshBox(0.9,0.9,0.9),    [-2.6,1.35,1.8],"#7BD16A", {metallic:0.0, roughness:0.6}),
+    mk("Coletável", meshSphere(0.28,12,8),   [3.4,1.9,1.2], "#E0576B", {metallic:0.9, roughness:0.15}),
+    mk("Pilar",     meshCylinder(0.35,3,14), [-4.5,1.5,-3],  "#9B87E0", {metallic:0.0, roughness:0.5}),
+  ];
+  // "Cabeça" é filha de "Player": mover o pai move a filha.
+  scene[2].parent = scene[1].id;
+  selected = scene[1].id;
+}
+function byId(id){ return scene.find(o=>o.id===id) || null; }
+function childrenOf(id){ return scene.filter(o=>o.parent===id); }
+function worldMatrix(o){
+  const local = matTRS(o.pos, o.rot, o.scl);
+  if(o.parent==null) return local;
+  const p = byId(o.parent);
+  return p ? matMul(worldMatrix(p), local) : local;
+}
+function worldPos(o){ const m=worldMatrix(o); return [m[12],m[13],m[14]]; }
+
+/* ── Câmera ─────────────────────────────────────────────────────────── */
+const cam = { target:[0,1,0], yaw:0.72, pitch:0.42, dist:11, fov:52*Math.PI/180 };
+function camEye(){
+  const cp=Math.cos(cam.pitch);
+  return V.add(cam.target,[
+    -Math.sin(cam.yaw)*cp*cam.dist,
+     Math.sin(cam.pitch)*cam.dist,
+    -Math.cos(cam.yaw)*cp*cam.dist ]);
+}
+
+/* ── Governador térmico ─────────────────────────────────────────────
+   Porte fiel do PowerGovernor (managed/Aether.Core/Power). A tabela é a da
+   Parte 3.4 do plano. Piorar é imediato (proteção não espera); melhorar exige
+   amostras sustentadas — é a histerese que impede a imagem de oscilar. */
+const THERMAL_TABLE = {
+  nominal:  {label:"Nominal",  fpsCap:60, resScale:1.00, shadow:1.00, ssr:true,  redraw:"contínuo", profile:"A"},
+  fair:     {label:"Leve",     fpsCap:60, resScale:0.85, shadow:0.85, ssr:true,  redraw:"contínuo", profile:"A"},
+  moderate: {label:"Moderado", fpsCap:45, resScale:0.70, shadow:0.50, ssr:false, redraw:"contínuo", profile:"B"},
+  severe:   {label:"Severo",   fpsCap:30, resScale:0.60, shadow:0.35, ssr:false, redraw:"sob demanda", profile:"B"},
+  critical: {label:"Crítico",  fpsCap:20, resScale:0.50, shadow:0.00, ssr:false, redraw:"estático", profile:"C"},
+};
+const ORDER = ["nominal","fair","moderate","severe","critical"];
+const governor = {
+  requested:"nominal", applied:"nominal", goodSamples:0,
+  SAMPLES_TO_IMPROVE: 24,
+  tick(){
+    const ri=ORDER.indexOf(this.requested), ai=ORDER.indexOf(this.applied);
+    if(ri>ai){ this.applied=this.requested; this.goodSamples=0; return; }  // piorou: adota já
+    if(ri<ai){
+      if(++this.goodSamples>=this.SAMPLES_TO_IMPROVE){ this.applied=ORDER[ai-1]; this.goodSamples=0; }
+    } else this.goodSamples=0;
+  },
+  get profile(){ return THERMAL_TABLE[this.applied]; }
+};
+
+/* ── Renderizador ───────────────────────────────────────────────────── */
+const canvas = document.getElementById("view");
+const ctx = canvas.getContext("2d");
+let cw=0, ch=0, dpr=1, renderScale=1;
+const LIGHT = V.norm([-0.45, 0.82, -0.36]);
+
+function resize(){
+  const r = canvas.getBoundingClientRect();
+  dpr = Math.min(window.devicePixelRatio||1, 2);
+  renderScale = governor.profile.resScale;
+  cw = Math.max(1, Math.round(r.width));
+  ch = Math.max(1, Math.round(r.height));
+  canvas.width  = Math.max(1, Math.round(cw*dpr*renderScale));
+  canvas.height = Math.max(1, Math.round(ch*dpr*renderScale));
+}
+
+function project(p, vp){
+  const x=vp[0]*p[0]+vp[4]*p[1]+vp[8]*p[2]+vp[12];
+  const y=vp[1]*p[0]+vp[5]*p[1]+vp[9]*p[2]+vp[13];
+  const z=vp[2]*p[0]+vp[6]*p[1]+vp[10]*p[2]+vp[14];
+  const w=vp[3]*p[0]+vp[7]*p[1]+vp[11]*p[2]+vp[15];
+  if(w<=0.001) return null;
+  return { x:(x/w*0.5+0.5)*cw, y:(y/w*0.5+0.5)*ch, z:z/w, w };
+}
+
+function shade(hex, n, mat){
+  const nl = Math.max(0, V.dot(n, LIGHT));
+  // Hemisfério: céu por cima, bounce do chão por baixo. Barato e evita sombra chapada.
+  const sky = 0.5 + 0.5*n[1];
+  const amb = 0.20 + 0.16*sky;
+  const rough = mat?.roughness ?? 0.6;
+  const spec = Math.pow(nl, 4 + (1-rough)*80) * (1-rough) * 0.9;
+  const k = clamp(amb + nl*0.82 + spec, 0, 1.25);
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  const f=v=>Math.round(clamp(v*k,0,255));
+  return `rgb(${f(r)},${f(g)},${f(b)})`;
+}
+
+let triCount = 0;
+let sceneTris = 0;
+
+function drawGrid(vp){
+  const N=8, step=1;
+  ctx.lineWidth = 1;
+  for(let i=-N;i<=N;i++){
+    for(const [a,b] of [[[i*step,0,-N],[i*step,0,N]],[[-N,0,i*step],[N,0,i*step]]]){
+      const p1=project(a,vp), p2=project(b,vp);
+      if(!p1||!p2) continue;
+      const axis = (i===0);
+      ctx.strokeStyle = axis ? "rgba(140,152,170,0.32)" : "rgba(140,152,170,0.11)";
+      ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+    }
+  }
+}
+
+function collectTris(vp, filter){
+  const tris=[];
+  for(const o of scene){
+    if(!o.visible) continue;
+    if(filter && !filter(o)) continue;
+    const m = worldMatrix(o);
+    const vw = o.mesh.v.map(p=>xformPoint(m,p));
+    const vs = vw.map(p=>project(p,vp));
+    for(const face of o.mesh.f){
+      for(let i=1;i<face.length-1;i++){
+        const idx=[face[0],face[i],face[i+1]];
+        const s=[vs[idx[0]],vs[idx[1]],vs[idx[2]]];
+        if(!s[0]||!s[1]||!s[2]) continue;
+        // Backface cull em espaço de tela (área com sinal).
+        const area=(s[1].x-s[0].x)*(s[2].y-s[0].y)-(s[2].x-s[0].x)*(s[1].y-s[0].y);
+        if(area<=0 && !o.doubleSided) continue;
+        const w=[vw[idx[0]],vw[idx[1]],vw[idx[2]]];
+        let n=V.norm(V.cross(V.sub(w[1],w[0]),V.sub(w[2],w[0])));
+        // Face dupla: a normal sempre olha para a câmera, senão o chão fica preto.
+        if(o.doubleSided && n[1]<0) n=V.mul(n,-1);
+        tris.push({s, depth:(s[0].w+s[1].w+s[2].w)/3, color:shade(o.color,n,o), owner:o.id});
+      }
+    }
+  }
+  triCount = tris.length;
+  tris.sort((a,b)=>b.depth-a.depth);   // painter's algorithm
+  return tris;
+}
+
+/* Contagem total de triângulos do frame, para a telemetria. */
+function totalTris(vp){
+  let n=0;
+  for(const o of scene){ if(!o.visible) continue; for(const f of o.mesh.f) n += f.length-2; }
+  return n;
+}
+
+function drawContactShadows(vp){
+  const q = governor.profile.shadow;
+  if(q<=0) return;
+  for(const o of scene){
+    if(o.isGround || !o.visible) continue;
+    const p = worldPos(o);
+    const r = 0.55 * Math.max(o.scl[0],o.scl[2]);
+    const c = project([p[0],0.005,p[2]],vp);
+    if(!c) return;
+    const e1 = project([p[0]+r,0.005,p[2]],vp);
+    if(!e1) continue;
+    const rad = Math.abs(e1.x-c.x);
+    const fade = clamp(1 - p[1]/6, 0.12, 1) * q;
+    const g = ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,Math.max(rad,1));
+    g.addColorStop(0, `rgba(0,0,0,${0.42*fade})`);
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.ellipse(c.x,c.y,Math.max(rad,1),Math.max(rad,1)*0.42,0,0,Math.PI*2); ctx.fill();
+  }
+}
+
+function drawOutline(vp, id){
+  const o=byId(id); if(!o) return;
+  const m=worldMatrix(o);
+  const pts=o.mesh.v.map(p=>project(xformPoint(m,p),vp)).filter(Boolean);
+  if(pts.length<2) return;
+  let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+  for(const p of pts){ minx=Math.min(minx,p.x); miny=Math.min(miny,p.y); maxx=Math.max(maxx,p.x); maxy=Math.max(maxy,p.y); }
+  const pad=5;
+  ctx.strokeStyle = cssVar("--accent");
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6,4]);
+  ctx.strokeRect(minx-pad, miny-pad, (maxx-minx)+pad*2, (maxy-miny)+pad*2);
+  ctx.setLineDash([]);
+}
+
+/* ── Gizmos ─────────────────────────────────────────────────────────────
+   Redesenhados para o dedo: hastes com área de toque de ~22 px (o
+   equivalente a 44 dp), ponta grande, HUD numérico do lado oposto ao dedo,
+   e o gizmo afasta-se enquanto você arrasta para não ficar encoberto. */
+const AXES = [
+  {k:"x", dir:[1,0,0], color:"--axis-x"},
+  {k:"y", dir:[0,1,0], color:"--axis-y"},
+  {k:"z", dir:[0,0,1], color:"--axis-z"},
+];
+const GIZMO_PX = 96;          // tamanho de tela constante, independente da distância
+const HIT_PX = 22;            // metade de 44 dp: o alvo mínimo tocável
+
+let selected = null;
+let mode = "move";            // select | move | rotate | scale
+let snapStep = 1;
+let hover = null;             // handle sob o dedo
+
+function gizmoScale(vp, origin){
+  // Tamanho de tela constante: quantas unidades de mundo valem GIZMO_PX na
+  // profundidade do objeto. Deriva direto da perspectiva em vez de medir a
+  // projeção de um eixo — medir um eixo colapsa quando a câmera olha ao longo
+  // dele (a projeção tende a zero e a escala explodiria).
+  const p = project(origin, vp);
+  if(!p || p.w <= 0.05) return 1;
+  const worldPerPixel = (2 * Math.tan(cam.fov * 0.5) * p.w) / ch;
+  return clamp(GIZMO_PX * worldPerPixel, 0.05, 40);
+}
+
+function gizmoHandles(vp){
+  const o = byId(selected);
+  if(!o || mode==="select") return [];
+  const origin = worldPos(o);
+  const s = gizmoScale(vp, origin);
+  const out = [];
+
+  if(mode==="move" || mode==="scale"){
+    for(const ax of AXES){
+      const tip = V.add(origin, V.mul(ax.dir, s));
+      const a = project(origin, vp), b = project(tip, vp);
+      if(!a||!b) continue;
+      out.push({type:"axis", axis:ax, a, b, origin, dir:ax.dir, color:cssVar(ax.color)});
+    }
+    if(mode==="move"){
+      // Quadrados de plano nos quadrantes — arrasto travado em dois eixos.
+      const planes = [["xy",[1,0,0],[0,1,0],"--axis-z"],["xz",[1,0,0],[0,0,1],"--axis-y"],["yz",[0,1,0],[0,0,1],"--axis-x"]];
+      for(const [k,u,v,col] of planes){
+        const c = V.add(origin, V.add(V.mul(u,s*0.38), V.mul(v,s*0.38)));
+        const p = project(c, vp);
+        if(!p) continue;
+        out.push({type:"plane", k, u, v, normal:V.cross(u,v), origin, p, color:cssVar(col)});
+      }
+    }
+  }
+  if(mode==="rotate"){
+    for(const ax of AXES){
+      const pts=[];
+      for(let i=0;i<=48;i++){
+        const t=i/48*Math.PI*2;
+        const u = ax.k==="x" ? [0,Math.cos(t),Math.sin(t)] : ax.k==="y" ? [Math.cos(t),0,Math.sin(t)] : [Math.cos(t),Math.sin(t),0];
+        const p = project(V.add(origin, V.mul(u, s*0.85)), vp);
+        if(p) pts.push(p);
+      }
+      if(pts.length>8) out.push({type:"ring", axis:ax, pts, origin, dir:ax.dir, color:cssVar(ax.color)});
+    }
+  }
+  return out;
+}
+
+function distToSegment(px,py,a,b){
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const l2=dx*dx+dy*dy;
+  if(l2<1e-6) return Math.hypot(px-a.x,py-a.y);
+  let t=((px-a.x)*dx+(py-a.y)*dy)/l2;
+  t=clamp(t,0,1);
+  return Math.hypot(px-(a.x+dx*t), py-(a.y+dy*t));
+}
+
+function pickHandle(x,y,handles){
+  let best=null, bestD=HIT_PX;
+  for(const h of handles){
+    let d=1e9;
+    if(h.type==="axis") d=distToSegment(x,y,h.a,h.b);
+    else if(h.type==="plane") d=Math.hypot(x-h.p.x,y-h.p.y) - 9;
+    else if(h.type==="ring"){
+      for(let i=1;i<h.pts.length;i++) d=Math.min(d, distToSegment(x,y,h.pts[i-1],h.pts[i]));
+    }
+    if(d<bestD){ bestD=d; best=h; }
+  }
+  return best;
+}
+
+function drawGizmo(vp, handles){
+  if(!handles.length) return;
+  ctx.lineCap="round";
+  for(const h of handles){
+    const active = drag.handle===h.type+(h.axis?h.axis.k:h.k) || (hover===h && !drag.handle);
+    ctx.globalAlpha = active ? 1 : 0.9;
+    if(h.type==="axis"){
+      ctx.strokeStyle=h.color; ctx.lineWidth = active?4:3;
+      ctx.beginPath(); ctx.moveTo(h.a.x,h.a.y); ctx.lineTo(h.b.x,h.b.y); ctx.stroke();
+      ctx.fillStyle=h.color;
+      ctx.beginPath();
+      if(mode==="scale"){
+        const r=active?7:6;
+        ctx.rect(h.b.x-r,h.b.y-r,r*2,r*2);
+      } else {
+        ctx.arc(h.b.x,h.b.y,active?7:5.5,0,Math.PI*2);
+      }
+      ctx.fill();
+    } else if(h.type==="plane"){
+      ctx.fillStyle=h.color; ctx.globalAlpha = active?0.55:0.28;
+      ctx.fillRect(h.p.x-9,h.p.y-9,18,18);
+      ctx.globalAlpha = active?1:0.75;
+      ctx.strokeStyle=h.color; ctx.lineWidth=1.5;
+      ctx.strokeRect(h.p.x-9,h.p.y-9,18,18);
+    } else if(h.type==="ring"){
+      ctx.strokeStyle=h.color; ctx.lineWidth = active?4:2.5;
+      ctx.beginPath();
+      ctx.moveTo(h.pts[0].x,h.pts[0].y);
+      for(let i=1;i<h.pts.length;i++) ctx.lineTo(h.pts[i].x,h.pts[i].y);
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha=1;
+}
+
+/* ── Gimbal de eixos (canto superior direito do viewport) ───────────── */
+function drawGimbal(){
+  const cx=cw-46, cy=42, R=26;
+  ctx.save();
+  ctx.globalAlpha=0.9;
+  ctx.fillStyle = cssVar("--panel");
+  ctx.strokeStyle = cssVar("--line");
+  ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,R+7,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  const eye=camEye();
+  const view=matLookAt(eye,cam.target,[0,1,0]);
+  const items=[];
+  for(const ax of AXES){
+    for(const sgn of [1,-1]){
+      const d=xformDir(view, V.mul(ax.dir,sgn));
+      items.push({x:cx+d[0]*R, y:cy+d[1]*R, z:d[2], color:cssVar(ax.color), label:(sgn>0?"":"-")+ax.k.toUpperCase(), pos:sgn>0});
+    }
+  }
+  items.sort((a,b)=>b.z-a.z);
+  for(const it of items){
+    ctx.globalAlpha = it.pos ? 1 : 0.42;
+    ctx.strokeStyle=it.color; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(it.x,it.y); ctx.stroke();
+    ctx.fillStyle=it.color;
+    ctx.beginPath(); ctx.arc(it.x,it.y,it.pos?7:5,0,Math.PI*2); ctx.fill();
+    if(it.pos){
+      ctx.fillStyle = cssVar("--ground");
+      ctx.font='600 9px "Barlow Semi Condensed", sans-serif';
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(it.label, it.x, it.y+0.5);
+    }
+  }
+  ctx.restore();
+}
+
+function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+/* ── Picking de objeto ──────────────────────────────────────────────── */
+function pickObject(x,y,vp){
+  const tris = collectTris(vp);
+  // Da frente para trás: o primeiro triângulo que contém o ponto vence.
+  for(let i=tris.length-1;i>=0;i--){
+    const t=tris[i].s;
+    const d1=(x-t[1].x)*(t[0].y-t[1].y)-(t[0].x-t[1].x)*(y-t[1].y);
+    const d2=(x-t[2].x)*(t[1].y-t[2].y)-(t[1].x-t[2].x)*(y-t[2].y);
+    const d3=(x-t[0].x)*(t[2].y-t[0].y)-(t[2].x-t[0].x)*(y-t[0].y);
+    const neg=(d1<0)||(d2<0)||(d3<0), pos=(d1>0)||(d2>0)||(d3>0);
+    if(!(neg&&pos)){
+      const o=byId(tris[i].owner);
+      return o ? o.id : null;
+    }
+  }
+  return null;
+}
+
+function screenRay(x,y,vp){
+  const eye=camEye();
+  // Desprojeta invertendo a projeção de forma barata: reconstrói a direção
+  // a partir do FOV e da proporção, no espaço da câmera, e leva ao mundo.
+  const aspect=cw/ch;
+  const t=Math.tan(cam.fov*0.5);
+  const ndcX=(x/cw)*2-1;
+  const ndcY=(y/ch)*2-1;
+  const dirCam=[ndcX*t*aspect, -ndcY*t, 1];
+  const view=matLookAt(eye,cam.target,[0,1,0]);
+  // A rotação da view é ortonormal, então câmera→mundo é a transposta.
+  // As linhas da rotação são os eixos r/u/f da câmera: r=(m0,m4,m8), u=(m1,m5,m9), f=(m2,m6,m10).
+  const dir=V.norm([
+    view[0]*dirCam[0]+view[1]*dirCam[1]+view[2]*dirCam[2],
+    view[4]*dirCam[0]+view[5]*dirCam[1]+view[6]*dirCam[2],
+    view[8]*dirCam[0]+view[9]*dirCam[1]+view[10]*dirCam[2],
+  ]);
+  return {origin:eye, dir};
+}
+
+/* ── Histórico de edição ────────────────────────────────────────────────
+   Todo comando de mutação passa por aqui. É o mesmo modelo do
+   IEditCommand do plano (Parte 4.4): um arrasto de gizmo gera UM comando,
+   não trezentos — a coalescência acontece no fim do gesto. */
+const history = { past:[], future:[] };
+function pushCommand(label, before, after){
+  history.past.push({label, before, after});
+  if(history.past.length>200) history.past.shift();
+  history.future.length = 0;
+  refreshHistoryButtons();
+}
+function snapshotOf(o){ return {id:o.id, pos:o.pos.slice(), rot:o.rot.slice(), scl:o.scl.slice(), color:o.color, visible:o.visible}; }
+function applySnapshot(s){
+  const o=byId(s.id); if(!o) return;
+  o.pos=s.pos.slice(); o.rot=s.rot.slice(); o.scl=s.scl.slice(); o.color=s.color; o.visible=s.visible;
+}
+function undo(){
+  const c=history.past.pop(); if(!c) return;
+  applySnapshot(c.before); history.future.push(c);
+  selected=c.before.id; refreshHistoryButtons(); buildInspector(); buildCrumbs(); log(`Desfeito: ${c.label}`);
+}
+function redo(){
+  const c=history.future.pop(); if(!c) return;
+  applySnapshot(c.after); history.past.push(c);
+  selected=c.after.id; refreshHistoryButtons(); buildInspector(); buildCrumbs(); log(`Refeito: ${c.label}`);
+}
+function refreshHistoryButtons(){
+  document.getElementById("btnUndo").disabled = history.past.length===0;
+  document.getElementById("btnRedo").disabled = history.future.length===0;
+}
+
+/* ── Entrada: a máquina de estados de gestos ────────────────────────────
+   O conflito mais subestimado do editor touch é distinguir "orbitar" de
+   "arrastar objeto" de "menu radial". A regra: o hit-test acontece no
+   pointerdown; se pegou um handle, é manipulação; se pegou o vazio, é
+   câmera; se ficou parado 320 ms, é radial. */
+const LONGPRESS_MS = 320;
+const MOVE_TOLERANCE = 9;
+
+const pointers = new Map();
+const drag = { kind:null, handle:null, start:null, before:null, obj:null, t0:0, axis:null, plane:null, startAngle:0 };
+let longPressTimer = null;
+let pinchStart = null;
+
+const viewwrap = document.getElementById("viewwrap");
+const hudEl = document.getElementById("hud");
+
+function localXY(e){
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function currentVP(){
+  const eye=camEye();
+  return matMul(matPersp(cam.fov, cw/ch, 0.05, 200), matLookAt(eye,cam.target,[0,1,0]));
+}
+
+canvas.addEventListener("pointerdown", e=>{
+  canvas.setPointerCapture(e.pointerId);
+  const p = localXY(e);
+  pointers.set(e.pointerId, {...p, startX:p.x, startY:p.y, moved:false});
+
+  if(pointers.size===2){
+    cancelLongPress();
+    const [a,b]=[...pointers.values()];
+    pinchStart = { dist:Math.hypot(a.x-b.x,a.y-b.y), cx:(a.x+b.x)/2, cy:(a.y+b.y)/2, camDist:cam.dist, target:cam.target.slice() };
+    drag.kind=null;
+    return;
+  }
+  if(pointers.size>2) return;
+
+  const vp = currentVP();
+  const h = pickHandle(p.x, p.y, gizmoHandles(vp));
+
+  if(h){
+    beginHandleDrag(h, p, vp);
+    return;
+  }
+
+  // Nada de gizmo sob o dedo: pode virar seleção, órbita ou radial.
+  drag.kind = "camera";
+  drag.start = {...p, yaw:cam.yaw, pitch:cam.pitch};
+  longPressTimer = setTimeout(()=>{ openRadial(p.x, p.y); drag.kind=null; }, LONGPRESS_MS);
+});
+
+function beginHandleDrag(h, p, vp){
+  cancelLongPress();
+  const o = byId(selected);
+  drag.obj = o;
+  drag.before = snapshotOf(o);
+  drag.start = {...p};
+  const ray = screenRay(p.x, p.y, vp);
+  const origin = worldPos(o);
+
+  if(h.type==="axis"){
+    drag.kind = mode==="scale" ? "scale" : "move-axis";
+    drag.handle = "axis"+h.axis.k;
+    drag.axis = h.axis;
+    drag.t0 = closestOnAxis(ray.origin, ray.dir, origin, h.dir);
+    drag.basePos = o.pos.slice();
+    drag.baseScl = o.scl.slice();
+  } else if(h.type==="plane"){
+    drag.kind = "move-plane";
+    drag.handle = "plane"+h.k;
+    drag.plane = h;
+    const hit = rayPlane(ray.origin, ray.dir, origin, V.norm(h.normal));
+    drag.planeHit = hit || origin;
+    drag.basePos = o.pos.slice();
+  } else if(h.type==="ring"){
+    drag.kind = "rotate";
+    drag.handle = "ring"+h.axis.k;
+    drag.axis = h.axis;
+    const c = project(origin, vp);
+    drag.startAngle = Math.atan2(p.y-c.y, p.x-c.x);
+    drag.center = c;
+    drag.baseRot = o.rot.slice();
+  }
+}
+
+canvas.addEventListener("pointermove", e=>{
+  const rec = pointers.get(e.pointerId);
+  const p = localXY(e);
+  if(rec){
+    if(Math.hypot(p.x-rec.startX, p.y-rec.startY) > MOVE_TOLERANCE){ rec.moved = true; cancelLongPress(); }
+    rec.x=p.x; rec.y=p.y;
+  }
+
+  if(radialOpen){ updateRadial(p.x,p.y); return; }
+
+  if(pointers.size===2 && pinchStart){
+    const [a,b]=[...pointers.values()];
+    const d=Math.hypot(a.x-b.x,a.y-b.y);
+    cam.dist = clamp(pinchStart.camDist * (pinchStart.dist/Math.max(d,1)), 1.5, 60);
+    // Pan: o movimento do centro dos dois dedos desloca o alvo no plano da câmera.
+    const cx=(a.x+b.x)/2, cy=(a.y+b.y)/2;
+    const dx=(cx-pinchStart.cx), dy=(cy-pinchStart.cy);
+    const view=matLookAt(camEye(),cam.target,[0,1,0]);
+    const right=[view[0],view[4],view[8]], up=[view[1],view[5],view[9]];
+    const k = cam.dist*0.0022;
+    cam.target = V.add(pinchStart.target, V.add(V.mul(right,-dx*k), V.mul(up,dy*k)));
+    return;
+  }
+
+  if(!drag.kind){
+    // Hover: realça o handle sob o cursor (relevante para caneta e mouse).
+    hover = pickHandle(p.x, p.y, gizmoHandles(currentVP()));
+    canvas.style.cursor = hover ? "grab" : "crosshair";
+    return;
+  }
+
+  if(drag.kind==="camera"){
+    if(!rec || !rec.moved) return;
+    cam.yaw   = drag.start.yaw   - (p.x-drag.start.x)*0.008;
+    cam.pitch = clamp(drag.start.pitch + (p.y-drag.start.y)*0.008, -1.45, 1.45);
+    return;
+  }
+
+  const o = drag.obj; if(!o) return;
+  const vp = currentVP();
+  const ray = screenRay(p.x, p.y, vp);
+  const origin = worldPos(o);
+
+  if(drag.kind==="move-axis"){
+    const t = closestOnAxis(ray.origin, ray.dir, origin, drag.axis.dir);
+    const delta = t - drag.t0;
+    const np = V.add(drag.basePos, V.mul(drag.axis.dir, delta));
+    const i = drag.axis.k==="x"?0:drag.axis.k==="y"?1:2;
+    np[i] = snapTo(np[i], snapStep);
+    o.pos = np;
+    showHud(p, `${drag.axis.k.toUpperCase()}: ${fmt(o.pos[i])} m`);
+  } else if(drag.kind==="move-plane"){
+    const hit = rayPlane(ray.origin, ray.dir, origin, V.norm(drag.plane.normal));
+    if(hit){
+      const d = V.sub(hit, drag.planeHit);
+      const np = V.add(drag.basePos, d);
+      o.pos = [snapTo(np[0],snapStep), snapTo(np[1],snapStep), snapTo(np[2],snapStep)];
+      showHud(p, `${fmt(o.pos[0])}  ${fmt(o.pos[1])}  ${fmt(o.pos[2])}`);
+    }
+  } else if(drag.kind==="scale"){
+    const t = closestOnAxis(ray.origin, ray.dir, origin, drag.axis.dir);
+    const i = drag.axis.k==="x"?0:drag.axis.k==="y"?1:2;
+    const f = clamp(1 + (t - drag.t0)*0.7, 0.05, 12);
+    o.scl = drag.baseScl.slice();
+    o.scl[i] = Math.round(drag.baseScl[i]*f*100)/100;
+    showHud(p, `escala ${drag.axis.k.toUpperCase()}: ${fmt(o.scl[i])}×`);
+  } else if(drag.kind==="rotate"){
+    const ang = Math.atan2(p.y-drag.center.y, p.x-drag.center.x);
+    let d = ang - drag.startAngle;
+    const i = drag.axis.k==="x"?0:drag.axis.k==="y"?1:2;
+    const snapRad = snapStep>0 ? 15*Math.PI/180 : 0;
+    o.rot = drag.baseRot.slice();
+    o.rot[i] = snapTo(drag.baseRot[i] + d, snapRad);
+    showHud(p, `${drag.axis.k.toUpperCase()}: ${(o.rot[i]*180/Math.PI).toFixed(1)}°`);
+  }
+  buildInspector();
+});
+
+function endPointer(e){
+  const rec = pointers.get(e.pointerId);
+  pointers.delete(e.pointerId);
+  cancelLongPress();
+
+  if(radialOpen){ commitRadial(); return; }
+
+  if(pointers.size<2) pinchStart=null;
+
+  if(drag.kind==="camera" && rec && !rec.moved){
+    // Toque limpo no vazio = seleção (ou desseleção).
+    const vp=currentVP();
+    const id = pickObject(rec.x, rec.y, vp);
+    if(id !== selected){
+      selected = id;
+      buildInspector(); buildCrumbs();
+      log(id ? `Selecionado: ${byId(id).name}` : "Seleção limpa");
+    }
+  }
+
+  if(drag.before && drag.obj){
+    const after = snapshotOf(drag.obj);
+    const changed = JSON.stringify(after) !== JSON.stringify(drag.before);
+    if(changed) pushCommand(`${modeLabel()} ${drag.obj.name}`, drag.before, after);
+  }
+  drag.kind=null; drag.handle=null; drag.before=null; drag.obj=null;
+  hideHud();
+}
+canvas.addEventListener("pointerup", endPointer);
+canvas.addEventListener("pointercancel", endPointer);
+
+canvas.addEventListener("wheel", e=>{
+  e.preventDefault();
+  cam.dist = clamp(cam.dist * (1 + Math.sign(e.deltaY)*0.11), 1.5, 60);
+}, {passive:false});
+
+function cancelLongPress(){ if(longPressTimer){ clearTimeout(longPressTimer); longPressTimer=null; } }
+function fmt(v){ return (v>=0?"+":"") + v.toFixed(2); }
+function modeLabel(){ return {select:"Selecionar", move:"Mover", rotate:"Girar", scale:"Escalar"}[mode] || mode; }
+
+function showHud(p, text){
+  hudEl.textContent = text;
+  hudEl.classList.add("on");
+  // Sempre do lado oposto ao dedo, e acima dele — o dedo cobre o que edita.
+  const w = hudEl.offsetWidth || 90;
+  const left = p.x > cw/2 ? p.x - w - 26 : p.x + 26;
+  hudEl.style.left = clamp(left, 6, cw-w-6) + "px";
+  hudEl.style.top  = clamp(p.y - 44, 6, ch-40) + "px";
+}
+function hideHud(){ hudEl.classList.remove("on"); }
+
+/* ── Menu radial ────────────────────────────────────────────────────────
+   O elemento de UI mais importante do editor. A seleção é por DIREÇÃO, não
+   por posição: depois de dois dias o usuário faz "segurar + flick para cima"
+   sem olhar. É isso que substitui os atalhos de teclado do desktop. */
+const RADIAL_ITEMS = [
+  {label:"Duplicar",  act:duplicateSelected},
+  {label:"Focar",     act:focusSelected},
+  {label:"Ocultar",   act:hideSelected},
+  {label:"Excluir",   act:deleteSelected},
+  {label:"Ao chão",   act:dropToGround},
+  {label:"Cor",       act:cycleColor},
+];
+const radialEl = document.getElementById("radial");
+const radialSvg = document.getElementById("radialSvg");
+let radialOpen=false, radialCenter=null, radialPick=-1;
+
+function openRadial(x,y){
+  if(!byId(selected)) { log("Selecione um objeto antes de abrir o menu."); return; }
+  radialOpen=true; radialCenter={x,y}; radialPick=-1;
+  radialEl.classList.add("on");
+  radialEl.setAttribute("aria-hidden","false");
+  drawRadial();
+  if(navigator.vibrate) navigator.vibrate(8);
+}
+function drawRadial(){
+  const R=78, r=30, n=RADIAL_ITEMS.length;
+  const size=R*2+60;
+  radialSvg.setAttribute("width",size);
+  radialSvg.setAttribute("height",size);
+  radialSvg.style.left=(radialCenter.x-size/2)+"px";
+  radialSvg.style.top =(radialCenter.y-size/2)+"px";
+  const cx=size/2, cy=size/2;
+  let html=`<circle cx="${cx}" cy="${cy}" r="${r-6}" fill="${cssVar('--panel')}" stroke="${cssVar('--line')}"/>`;
+  for(let i=0;i<n;i++){
+    const a0=(i/n)*Math.PI*2 - Math.PI/2 - Math.PI/n;
+    const a1=a0 + (Math.PI*2/n);
+    const on = i===radialPick;
+    const p = (ang,rad)=>`${cx+Math.cos(ang)*rad},${cy+Math.sin(ang)*rad}`;
+    const large = (a1-a0)>Math.PI ? 1 : 0;
+    html += `<path d="M ${p(a0,r)} L ${p(a0,R)} A ${R} ${R} 0 ${large} 1 ${p(a1,R)} L ${p(a1,r)} A ${r} ${r} 0 ${large} 0 ${p(a0,r)} Z"
+      fill="${on?cssVar('--accent'):cssVar('--panel')}" fill-opacity="${on?0.95:0.92}"
+      stroke="${on?cssVar('--accent'):cssVar('--line')}" stroke-width="1"/>`;
+    const am=(a0+a1)/2, tr=(R+r)/2;
+    html += `<text x="${cx+Math.cos(am)*tr}" y="${cy+Math.sin(am)*tr}" text-anchor="middle" dominant-baseline="middle"
+      font-family='Barlow Semi Condensed, sans-serif' font-size="13" font-weight="${on?600:400}"
+      fill="${on?cssVar('--accent-ink'):cssVar('--text-dim')}">${RADIAL_ITEMS[i].label}</text>`;
+  }
+  radialSvg.innerHTML = html;
+}
+function updateRadial(x,y){
+  const dx=x-radialCenter.x, dy=y-radialCenter.y;
+  const dist=Math.hypot(dx,dy);
+  const n=RADIAL_ITEMS.length;
+  let pick=-1;
+  if(dist>26){
+    let a=Math.atan2(dy,dx) + Math.PI/2 + Math.PI/n;
+    a=(a+Math.PI*4)%(Math.PI*2);
+    pick=Math.floor(a/(Math.PI*2/n))%n;
+  }
+  if(pick!==radialPick){
+    radialPick=pick;
+    if(navigator.vibrate && pick>=0) navigator.vibrate(5);
+    drawRadial();
+  }
+}
+function commitRadial(){
+  radialOpen=false;
+  radialEl.classList.remove("on");
+  radialEl.setAttribute("aria-hidden","true");
+  if(radialPick>=0) RADIAL_ITEMS[radialPick].act();
+  radialPick=-1;
+}
+
+/* ── Ações ──────────────────────────────────────────────────────────── */
+function withCommand(label, fn){
+  const o=byId(selected); if(!o) return;
+  const before=snapshotOf(o);
+  fn(o);
+  pushCommand(`${label} ${o.name}`, before, snapshotOf(o));
+  buildInspector(); buildCrumbs();
+}
+function duplicateSelected(){
+  const o=byId(selected); if(!o) return;
+  const c={...o, id:nextId++, name:o.name+" cópia", pos:[o.pos[0]+1,o.pos[1],o.pos[2]], parent:null};
+  scene.push(c); selected=c.id;
+  pushCommand(`Duplicar ${o.name}`, snapshotOf(c), snapshotOf(c));
+  buildInspector(); buildCrumbs(); log(`Duplicado: ${c.name}`);
+}
+function focusSelected(){
+  const o=byId(selected); if(!o) return;
+  cam.target = worldPos(o);
+  cam.dist = Math.max(3, cam.dist*0.72);
+  log(`Enquadrado: ${o.name}`);
+}
+function hideSelected(){ withCommand("Ocultar", o=>{ o.visible=!o.visible; }); }
+function deleteSelected(){
+  const o=byId(selected); if(!o) return;
+  const before=snapshotOf(o);
+  o.visible=false;
+  pushCommand(`Excluir ${o.name}`, before, snapshotOf(o));
+  log(`Excluído: ${o.name} (desfazer restaura)`);
+  buildInspector();
+}
+function dropToGround(){
+  withCommand("Assentar", o=>{
+    let minY=1e9;
+    for(const v of o.mesh.v) minY=Math.min(minY, v[1]*o.scl[1]);
+    o.pos=[o.pos[0], -minY, o.pos[2]];
+  });
+  log("Objeto assentado no chão");
+}
+function cycleColor(){
+  withCommand("Cor de", o=>{
+    const i=PALETTE.indexOf(o.color);
+    o.color = PALETTE[(i+1)%PALETTE.length];
+  });
+}
+
+/* ── UI: doca de modos ──────────────────────────────────────────────── */
+const MODES = [
+  {k:"select", glyph:"⬚", label:"Sel"},
+  {k:"move",   glyph:"✥", label:"Mover"},
+  {k:"rotate", glyph:"⟳", label:"Girar"},
+  {k:"scale",  glyph:"⤢", label:"Escala"},
+  {k:"edit",   glyph:"✎", label:"Edit"},
+  {k:"more",   glyph:"⋯", label:"Mais"},
+];
+function buildDock(){
+  const el=document.getElementById("dock");
+  el.innerHTML="";
+  for(const m of MODES){
+    const b=document.createElement("button");
+    b.className="mode"+(m.k===mode?" on":"");
+    b.type="button";
+    b.innerHTML=`<span class="glyph">${m.glyph}</span><span class="label">${m.label}</span>`;
+    b.setAttribute("aria-pressed", String(m.k===mode));
+    b.addEventListener("click", ()=>{
+      if(m.k==="edit" || m.k==="more"){ log(`Modo "${m.label}" chega na Fase 6 (ferramentas de criação).`); return; }
+      mode=m.k; buildDock(); updateHint();
+    });
+    el.appendChild(b);
+  }
+}
+
+/* ── UI: inspector com campos de arrasto ────────────────────────────── */
+function numField(key, axis, get, set, step){
+  const row=document.createElement("div");
+  row.className="num";
+  row.innerHTML=`<span class="k" ${axis?`data-axis="${axis}"`:""}>${key}</span><span class="v"></span>`;
+  const vEl=row.querySelector(".v");
+  const paint=()=>{ vEl.textContent = get().toFixed(2); };
+  paint();
+  let startX=0, startV=0, dragging=false, before=null;
+  row.addEventListener("pointerdown", e=>{
+    row.setPointerCapture(e.pointerId);
+    dragging=true; startX=e.clientX; startV=get();
+    const o=byId(selected); before = o?snapshotOf(o):null;
+    row.classList.add("dragging");
+  });
+  row.addEventListener("pointermove", e=>{
+    if(!dragging) return;
+    // Aceleração não-linear: devagar perto, rápido longe. É o que permite
+    // precisão e alcance no mesmo gesto sem um segundo controle.
+    const dx=e.clientX-startX;
+    const accel = Math.sign(dx)*Math.pow(Math.abs(dx)/60, 1.6)*60;
+    set(startV + accel*step);
+    paint(); buildInspectorValuesOnly();
+  });
+  const stop=e=>{
+    if(!dragging) return;
+    dragging=false; row.classList.remove("dragging");
+    const o=byId(selected);
+    if(o && before && JSON.stringify(snapshotOf(o))!==JSON.stringify(before))
+      pushCommand(`Ajustar ${key} de ${o.name}`, before, snapshotOf(o));
+  };
+  row.addEventListener("pointerup", stop);
+  row.addEventListener("pointercancel", stop);
+  row._paint = paint;
+  return row;
+}
+
+let inspectorFields = [];
+function buildInspector(){
+  const o=byId(selected);
+  const nameEl=document.getElementById("inspName");
+  const swEl=document.getElementById("inspSw");
+  const body=document.getElementById("inspBody");
+  inspectorFields=[];
+  body.innerHTML="";
+  if(!o){
+    nameEl.textContent="Nada selecionado";
+    swEl.style.background="var(--text-faint)";
+    const p=document.createElement("div");
+    p.className="row"; p.style.padding="14px 12px"; p.style.height="auto";
+    p.innerHTML=`<span class="k" style="line-height:1.5">Toque num objeto do viewport para editá-lo.</span>`;
+    body.appendChild(p);
+    return;
+  }
+  nameEl.textContent=o.name + (o.visible?"":"  (oculto)");
+  swEl.style.background=o.color;
+
+  const mkComp=(title, open=true)=>{
+    const d=document.createElement("details");
+    d.className="comp"; d.open=open;
+    d.innerHTML=`<summary>${title}</summary>`;
+    const f=document.createElement("div"); f.className="fields";
+    d.appendChild(f); body.appendChild(d);
+    return f;
+  };
+
+  const tf=mkComp("Transform");
+  const axes=["x","y","z"];
+  for(let i=0;i<3;i++){
+    const f=numField(axes[i].toUpperCase(), axes[i], ()=>o.pos[i], v=>{o.pos[i]=snapTo(v,snapStep>0?0.01:0);}, 0.02);
+    tf.appendChild(f); inspectorFields.push(f);
+  }
+  const rf=numField("Rot Y °", null, ()=>o.rot[1]*180/Math.PI, v=>{o.rot[1]=v*Math.PI/180;}, 0.6);
+  tf.appendChild(rf); inspectorFields.push(rf);
+  const sf=numField("Escala", null, ()=>o.scl[0], v=>{const s=clamp(v,0.05,12); o.scl=[s,s,s];}, 0.01);
+  tf.appendChild(sf); inspectorFields.push(sf);
+
+  const mat=mkComp("Material");
+  const sr=document.createElement("div"); sr.className="swatchrow";
+  for(const c of PALETTE){
+    const b=document.createElement("button");
+    b.className="swatch"+(c===o.color?" on":"");
+    b.type="button"; b.style.background=c;
+    b.setAttribute("aria-label","Cor "+c);
+    b.addEventListener("click",()=>{
+      const before=snapshotOf(o); o.color=c;
+      pushCommand(`Cor de ${o.name}`, before, snapshotOf(o));
+      buildInspector();
+    });
+    sr.appendChild(b);
+  }
+  mat.appendChild(sr);
+  const mf=numField("Metálico", null, ()=>o.metallic??0, v=>{o.metallic=clamp(v,0,1);}, 0.01);
+  mat.appendChild(mf); inspectorFields.push(mf);
+  const rgf=numField("Rugosidade", null, ()=>o.roughness??0.6, v=>{o.roughness=clamp(v,0.02,1);}, 0.01);
+  mat.appendChild(rgf); inspectorFields.push(rgf);
+
+  const mesh=mkComp("Mesh", false);
+  const rows=[["Vértices", o.mesh.v.length],["Faces", o.mesh.f.length],
+              ["Filhos", childrenOf(o.id).length],["Pai", o.parent?byId(o.parent)?.name??"—":"— (raiz)"]];
+  for(const [k,v] of rows){
+    const r=document.createElement("div"); r.className="row";
+    r.innerHTML=`<span class="k">${k}</span><span class="v">${v}</span>`;
+    mesh.appendChild(r);
+  }
+}
+function buildInspectorValuesOnly(){ for(const f of inspectorFields) f._paint(); }
+
+/* ── UI: trilho inferior ────────────────────────────────────────────── */
+function buildCrumbs(){
+  const el=document.getElementById("crumbs");
+  el.innerHTML="";
+  const add=(label, id, depth)=>{
+    const b=document.createElement("button");
+    b.className="crumb"+(id===selected?" on":"");
+    b.type="button";
+    b.innerHTML = (depth?`<span class="depth">${"·".repeat(depth)}</span>`:"") + label;
+    if(id!=null) b.addEventListener("click",()=>{ selected=id; buildInspector(); buildCrumbs(); });
+    el.appendChild(b);
+  };
+  add("▾ Cena", null, 0);
+  for(const o of scene){
+    if(o.parent!=null) continue;
+    add(o.name + (o.visible?"":" ✕"), o.id, 0);
+    for(const c of childrenOf(o.id)) add(c.name, c.id, 1);
+  }
+}
+
+const TABS=[{k:"flow",label:"Flow"},{k:"console",label:"Console"},{k:"assets",label:"Assets"},{k:"timeline",label:"Timeline"}];
+let openTab=null;
+function buildTabs(){
+  const el=document.getElementById("tabs");
+  el.innerHTML="";
+  for(const t of TABS){
+    const b=document.createElement("button");
+    b.className="tab"+(t.k===openTab?" on":"");
+    b.type="button"; b.textContent=t.label;
+    b.setAttribute("aria-pressed", String(t.k===openTab));
+    b.addEventListener("click",()=>{ openTab = openTab===t.k ? null : t.k; buildTabs(); renderSheet(); });
+    el.appendChild(b);
+  }
+}
+
+const consoleLines=[];
+function log(msg){
+  const t=new Date().toLocaleTimeString("pt-BR",{hour12:false});
+  consoleLines.push({t,msg});
+  if(consoleLines.length>60) consoleLines.shift();
+  if(openTab==="console") renderSheet();
+}
+
+const FLOW_DEMO = `<span class="cm">// Modo Lista: a mesma lógica do grafo, legível em tela pequena.</span>
+<span class="ev">⚡ Quando o jogo começar</span>
+<span class="tree"> ├─</span> ▸ Definir <span class="var">velocidade</span> = <span class="lit">5.0</span>
+<span class="tree"> └─</span> ▸ Definir <span class="var">vida</span> = <span class="lit">100</span>
+
+<span class="ev">⚡ A cada quadro</span>
+<span class="tree"> ├─</span> ◆ <span class="kw">Se</span> [ está no chão? ]
+<span class="tree"> │   ├─</span> Sim ─┬ ▸ Mover ( entrada × <span class="var">velocidade</span> )
+<span class="tree"> │   │        └</span> ▸ Animar <span class="lit">"correr"</span>
+<span class="tree"> │   └─</span> Não ── ▸ Aplicar gravidade
+<span class="tree"> └─</span> ▸ Girar câmera ( olhar )
+
+<span class="ev">⚡ Quando colidir com [ Coletável ]</span>
+<span class="tree"> ├─</span> ▸ Somar <span class="var">pontos</span> += <span class="lit">10</span>
+<span class="tree"> ├─</span> ▸ Tocar som <span class="lit">"moeda"</span>
+<span class="tree"> └─</span> ▸ Destruir ( outro )`;
+
+function renderSheet(){
+  const sheet=document.getElementById("sheet");
+  const title=document.getElementById("sheetTitle");
+  const body=document.getElementById("sheetBody");
+  if(!openTab){ sheet.classList.remove("on"); return; }
+  sheet.classList.add("on");
+  const t=TABS.find(x=>x.k===openTab);
+  title.textContent=t.label;
+  if(openTab==="flow"){
+    body.innerHTML=`<div class="flowlist">${FLOW_DEMO}</div>`;
+  } else if(openTab==="console"){
+    body.innerHTML=`<div class="console">` +
+      (consoleLines.length ? consoleLines.map(l=>`<div><span class="t">${l.t}</span>  ${l.msg}</div>`).join("")
+                           : `<div class="t">Sem mensagens ainda.</div>`) + `</div>`;
+    body.scrollTop = body.scrollHeight;
+  } else {
+    body.innerHTML=`<div class="console"><div class="warnline">O painel ${t.label} chega na Fase ${openTab==="assets"?"6":"4"} do roadmap.</div>
+      <div class="t">Este protótipo cobre a Fase 0.3 — navegação de câmera, gizmos, menu radial e inspector.</div></div>`;
+  }
+}
+document.getElementById("sheetClose").addEventListener("click",()=>{ openTab=null; buildTabs(); renderSheet(); });
+
+/* ── Telemetria e laço principal ────────────────────────────────────── */
+let playing=false;
+let frameTimes=[], lastT=performance.now(), fpsShown=60, wattShown=3.2;
+let playClock=0;
+
+function updateHint(){
+  const hints={
+    select:"seleção · arraste no vazio para orbitar",
+    move:"mover · arraste a seta para travar no eixo",
+    rotate:"girar · arraste o anel do eixo",
+    scale:"escalar · arraste o cubo do eixo",
+  };
+  document.getElementById("viewhint").textContent = hints[mode] || "";
+}
+
+function tickTelemetry(dt){
+  governor.tick();
+  const prof = governor.profile;
+
+  frameTimes.push(dt);
+  if(frameTimes.length>30) frameTimes.shift();
+  const avg = frameTimes.reduce((a,b)=>a+b,0)/frameTimes.length;
+  const raw = 1000/Math.max(avg,0.5);
+  fpsShown += (Math.min(raw, prof.fpsCap) - fpsShown)*0.12;
+
+  // Modelo simples de potência: base + custo de geometria + custo de sombra,
+  // escalado pela resolução. Serve para o criador SENTIR o custo, não para medir.
+  const target = 1.5 + (sceneTris/1400) + prof.shadow*0.8 + (playing?0.7:0);
+  wattShown += (target*prof.resScale*1.25 - wattShown)*0.05;
+
+  document.getElementById("tFps").textContent = Math.round(fpsShown);
+  document.getElementById("tWatt").textContent = wattShown.toFixed(1);
+  document.getElementById("tTri").textContent = sceneTris.toLocaleString("pt-BR");
+  document.getElementById("tTherm").textContent = prof.label;
+  document.getElementById("tDot").dataset.s = governor.applied;
+  document.getElementById("profilechip").textContent =
+    `Perfil ${prof.profile} · escala ${prof.resScale.toFixed(2)} · sombras ${(prof.shadow*100).toFixed(0)}% · ${prof.redraw}`;
+}
+
+let lastResScale = -1;
+function frame(now){
+  const dt = now - lastT; lastT = now;
+  tickTelemetry(dt);
+
+  if(governor.profile.resScale !== lastResScale){ lastResScale = governor.profile.resScale; resize(); }
+  const r = canvas.getBoundingClientRect();
+  if(Math.round(r.width)!==cw || Math.round(r.height)!==ch) resize();
+
+  if(playing){
+    playClock += dt/1000;
+    const p=byId(scene[1]?.id);
+    if(p){ p.pos[1] = 0.8 + Math.abs(Math.sin(playClock*2.2))*0.55; }
+    const coin=scene.find(o=>o.name==="Coletável");
+    if(coin) coin.rot[1] += dt*0.003;
+  }
+
+  ctx.save();
+  ctx.scale(canvas.width/cw, canvas.height/ch);
+  ctx.clearRect(0,0,cw,ch);
+
+  const vp = currentVP();
+  sceneTris = totalTris(vp);
+
+  const paint = list => {
+    for(const t of list){
+      ctx.fillStyle=t.color;
+      ctx.beginPath();
+      ctx.moveTo(t.s[0].x,t.s[0].y); ctx.lineTo(t.s[1].x,t.s[1].y); ctx.lineTo(t.s[2].x,t.s[2].y);
+      ctx.closePath(); ctx.fill();
+    }
+  };
+
+  // O chão vai primeiro para que a grade caia SOBRE ele — a grade pertence ao piso,
+  // não flutua no ar. Depois as sombras de contato, depois o resto da cena.
+  paint(collectTris(vp, o=>o.isGround));
+  drawGrid(vp);
+  drawContactShadows(vp);
+  const tris = collectTris(vp, o=>!o.isGround);
+  paint(tris);
+
+  if(selected!=null && !playing) drawOutline(vp, selected);
+  if(!playing) drawGizmo(vp, gizmoHandles(vp));
+  drawGimbal();
+
+  ctx.restore();
+  requestAnimationFrame(frame);
+}
+
+/* ── Ligações da interface ──────────────────────────────────────────── */
+document.getElementById("btnPlay").addEventListener("click", ()=>{
+  playing=!playing;
+  document.getElementById("btnPlay").classList.toggle("on", playing);
+  document.getElementById("btnPlay").textContent = playing ? "▶ Rodando" : "▶ Play";
+  document.getElementById("btnStop").disabled = !playing;
+  log(playing ? "Play: o jogo roda em processo separado — um crash aqui não derruba o editor."
+              : "Play encerrado.");
+});
+document.getElementById("btnStop").addEventListener("click", ()=>{
+  playing=false; playClock=0;
+  document.getElementById("btnPlay").classList.remove("on");
+  document.getElementById("btnPlay").textContent="▶ Play";
+  document.getElementById("btnStop").disabled=true;
+  buildScene(); buildInspector(); buildCrumbs();
+  log("Estado restaurado ao de antes do Play.");
+});
+document.getElementById("btnUndo").addEventListener("click", undo);
+document.getElementById("btnRedo").addEventListener("click", redo);
+document.getElementById("btnTheme").addEventListener("click", ()=>{
+  const cur=document.documentElement.getAttribute("data-theme");
+  document.documentElement.setAttribute("data-theme", cur==="light" ? "dark" : "light");
+});
+document.getElementById("thermSel").addEventListener("change", e=>{
+  governor.requested = e.target.value;
+  log(`Estado térmico → ${THERMAL_TABLE[e.target.value].label}. Piorar é imediato; melhorar tem histerese.`);
+});
+document.getElementById("snapSel").addEventListener("change", e=>{ snapStep = parseFloat(e.target.value); });
+document.getElementById("btnReset").addEventListener("click", ()=>{
+  buildScene(); history.past.length=0; history.future.length=0;
+  refreshHistoryButtons(); buildInspector(); buildCrumbs(); log("Cena recarregada.");
+});
+
+// Teclado externo: quem tem um teclado Bluetooth ganha os atalhos de desktop.
+window.addEventListener("keydown", e=>{
+  if(e.target.tagName==="SELECT" || e.target.tagName==="INPUT") return;
+  const k=e.key.toLowerCase();
+  if(k==="q"){ mode="select"; buildDock(); updateHint(); }
+  else if(k==="w"){ mode="move"; buildDock(); updateHint(); }
+  else if(k==="e"){ mode="rotate"; buildDock(); updateHint(); }
+  else if(k==="r"){ mode="scale"; buildDock(); updateHint(); }
+  else if(k==="f"){ focusSelected(); }
+  else if(k==="d" && (e.ctrlKey||e.metaKey)){ e.preventDefault(); duplicateSelected(); }
+  else if(k==="z" && (e.ctrlKey||e.metaKey)){ e.preventDefault(); e.shiftKey?redo():undo(); }
+  else return;
+});
+
+window.addEventListener("resize", resize);
+
+/* ── Início ─────────────────────────────────────────────────────────── */
+buildScene();
+buildDock();
+buildTabs();
+buildCrumbs();
+buildInspector();
+updateHint();
+refreshHistoryButtons();
+resize();
+log("Editor pronto. Landscape, fullscreen, 60 fps de alvo.");
+requestAnimationFrame(t=>{ lastT=t; frame(t); });
+</script>

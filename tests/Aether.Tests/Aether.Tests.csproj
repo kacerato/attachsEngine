@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Aether.Tests</AssemblyName>
+    <RootNamespace>Aether.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../managed/Aether.Core/Aether.Core.csproj" />
+    <ProjectReference Include="../../managed/Aether.Flow/Aether.Flow.csproj" />
+    <ProjectReference Include="../../managed/Aether.Scene/Aether.Scene.csproj" />
+  </ItemGroup>
+</Project>

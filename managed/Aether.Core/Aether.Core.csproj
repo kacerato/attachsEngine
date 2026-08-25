@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Aether.Core</RootNamespace>
+    <AssemblyName>Aether.Core</AssemblyName>
+  </PropertyGroup>
+</Project>

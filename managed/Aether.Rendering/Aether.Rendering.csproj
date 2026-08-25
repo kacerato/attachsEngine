@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Aether.Rendering</RootNamespace>
+    <AssemblyName>Aether.Rendering</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Aether.Core/Aether.Core.csproj" />
+    <ProjectReference Include="../Aether.Scene/Aether.Scene.csproj" />
+  </ItemGroup>
+</Project>
