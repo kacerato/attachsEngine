@@ -37,16 +37,6 @@ public struct RigidBody
 /// <summary>
 /// Forma de colisão de uma entidade com <see cref="RigidBody"/>. Componente separado (não
 /// embutido em <see cref="RigidBody"/>) espelhando a separação corpo/forma do próprio Jolt.
-/// <para>
-/// <c>Trigger</c> (volume de overlap sem resposta física, citado no plano junto com
-/// RigidBody/Collider) NÃO está implementado nesta fatia — deliberadamente, não por descuido: um
-/// trigger de verdade exige que o corpo nativo seja criado como "sensor"
-/// (<c>JPH::BodyCreationSettings::mIsSensor</c>), flag que a fronteira C ABI atual
-/// (<c>native/physics/jolt_bridge.h</c>, item 4.1.1) não expõe — adicioná-la seria estender o
-/// lado nativo, fora do escopo de "fachada C#" deste item. E mesmo com a flag, não haveria como
-/// consumir o resultado: eventos de entrada/saída de overlap são o item 4.1.4 ("queries expostas
-/// a script/nós"), ainda não implementado. Ver <c>docs/ESTADO.md</c>.
-/// </para>
 /// </summary>
 public struct Collider
 {
@@ -61,4 +51,153 @@ public struct Collider
     public static Collider Sphere(float radius) => new(NativeShapeKind.Sphere, default, radius);
 
     internal PhysicsShape ToShape() => Kind == NativeShapeKind.Box ? PhysicsShape.Box(BoxHalfExtent) : PhysicsShape.Sphere(SphereRadius);
+}
+
+/// <summary>Transforma o <see cref="Collider"/> da entidade num sensor persistente: participa
+/// da broad/narrow phase, mas não produz resposta física. O filtro escolhe quais categorias do
+/// outro corpo geram eventos; ele não desliga a detecção interna do Jolt.</summary>
+/// <remarks>O componente deve estar presente antes da primeira chamada a
+/// <see cref="PhysicsSyncSystem.Step"/>. Para mudar sensor/filtro em runtime, destrua e recrie o
+/// corpo via <see cref="PhysicsSyncSystem.DestroyBody"/>; a próxima sincronização aplica os novos
+/// dados sem conservar estado nativo incompatível.</remarks>
+public struct Trigger
+{
+    public bool Enabled;
+
+    // uint, e não enum, mantém o componente serializável pelo metadata registry atual.
+    // A propriedade tipada abaixo é a API de uso; o campo é o formato persistido estável.
+    public uint EventLayerMaskBits;
+
+    public QueryLayerMask EventLayerMask
+    {
+        readonly get => (QueryLayerMask)EventLayerMaskBits;
+        set => EventLayerMaskBits = (uint)value;
+    }
+
+    public Trigger(QueryLayerMask eventLayerMask = QueryLayerMask.All, bool enabled = true)
+    {
+        if ((eventLayerMask & ~QueryLayerMask.All) != 0)
+            throw new ArgumentOutOfRangeException(nameof(eventLayerMask));
+        Enabled = enabled;
+        EventLayerMaskBits = (uint)eventLayerMask;
+    }
+}
+
+/// <summary>Descrição declarativa de uma junta entre duas entidades que possuem
+/// <see cref="RigidBody"/>. O componente não guarda handle nativo: esse estado transitório
+/// pertence ao <see cref="JointSyncSystem"/> e portanto nunca é persistido em cena.
+/// Referências ausentes são aceitas como estado de autoria e resolvidas tardiamente quando os
+/// dois corpos passam a existir.</summary>
+public struct Joint : IEquatable<Joint>
+{
+    public EntityId Body1;
+    public EntityId Body2;
+
+    // Bits primitivos mantêm o componente compatível com o metadata registry atual, que ainda
+    // não serializa enums diretamente. As propriedades tipadas são a API pública de uso.
+    public uint KindBits;
+    public uint SpaceBits;
+    public float3 Point1;
+    public float3 Point2;
+    public float3 Axis1;
+    public float3 Axis2;
+    public float LimitsMin;
+    public float LimitsMax;
+    public uint MotorStateBits;
+    public float MotorTargetVelocity;
+    public float MotorTargetPosition;
+    public float MotorMaxForceOrTorque;
+    public float MotorSpringFrequency;
+    public float MotorSpringDamping;
+
+    public JointKind Kind
+    {
+        readonly get => (JointKind)KindBits;
+        set
+        {
+            if (value is < JointKind.Point or > JointKind.Distance)
+                throw new ArgumentOutOfRangeException(nameof(value));
+            KindBits = (uint)value;
+        }
+    }
+
+    public JointSpace Space
+    {
+        readonly get => (JointSpace)SpaceBits;
+        set
+        {
+            if (value is < JointSpace.World or > JointSpace.LocalToBody2)
+                throw new ArgumentOutOfRangeException(nameof(value));
+            SpaceBits = (uint)value;
+        }
+    }
+
+    public JointMotor Motor
+    {
+        readonly get => new()
+        {
+            State = (NativeMotorState)MotorStateBits,
+            TargetVelocity = MotorTargetVelocity,
+            TargetPosition = MotorTargetPosition,
+            MaxForceOrTorque = MotorMaxForceOrTorque,
+            SpringFrequency = MotorSpringFrequency,
+            SpringDamping = MotorSpringDamping,
+        };
+        set
+        {
+            if (value.State is < NativeMotorState.Off or > NativeMotorState.PositionAndVelocity)
+                throw new ArgumentOutOfRangeException(nameof(value));
+            MotorStateBits = (uint)value.State;
+            MotorTargetVelocity = value.TargetVelocity;
+            MotorTargetPosition = value.TargetPosition;
+            MotorMaxForceOrTorque = value.MaxForceOrTorque;
+            MotorSpringFrequency = value.SpringFrequency;
+            MotorSpringDamping = value.SpringDamping;
+        }
+    }
+
+    public Joint(EntityId body1, EntityId body2, JointKind kind = JointKind.Point,
+        JointSpace space = JointSpace.World)
+    {
+        this = default;
+        Body1 = body1;
+        Body2 = body2;
+        Kind = kind;
+        Space = space;
+    }
+
+    internal readonly bool TryGetDescription(out JointDesc description)
+    {
+        description = new JointDesc
+        {
+            Kind = (JointKind)KindBits,
+            Space = (JointSpace)SpaceBits,
+            Point1 = Point1,
+            Point2 = Point2,
+            Axis1 = Axis1,
+            Axis2 = Axis2,
+            LimitsMin = LimitsMin,
+            LimitsMax = LimitsMax,
+            Motor = Motor,
+        };
+        return description.IsValid();
+    }
+
+    public readonly bool Equals(Joint other) =>
+        Body1 == other.Body1 && Body2 == other.Body2 &&
+        KindBits == other.KindBits && SpaceBits == other.SpaceBits &&
+        Point1.Equals(other.Point1) && Point2.Equals(other.Point2) &&
+        Axis1.Equals(other.Axis1) && Axis2.Equals(other.Axis2) &&
+        LimitsMin.Equals(other.LimitsMin) && LimitsMax.Equals(other.LimitsMax) &&
+        MotorStateBits == other.MotorStateBits &&
+        MotorTargetVelocity.Equals(other.MotorTargetVelocity) &&
+        MotorTargetPosition.Equals(other.MotorTargetPosition) &&
+        MotorMaxForceOrTorque.Equals(other.MotorMaxForceOrTorque) &&
+        MotorSpringFrequency.Equals(other.MotorSpringFrequency) &&
+        MotorSpringDamping.Equals(other.MotorSpringDamping);
+
+    public override readonly bool Equals(object? obj) => obj is Joint other && Equals(other);
+    public override readonly int GetHashCode() => HashCode.Combine(Body1, Body2, KindBits, SpaceBits);
+    public static bool operator ==(Joint left, Joint right) => left.Equals(right);
+    public static bool operator !=(Joint left, Joint right) => !left.Equals(right);
 }

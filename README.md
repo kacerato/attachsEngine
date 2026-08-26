@@ -9,7 +9,7 @@ dos itens parciais, limitações conhecidas e critérios de validação M0–M9.
 
 ## Estado atual: Fase 1 (Núcleo) em execução
 
-A implementação local da Onda 0 do plano de fechamento está concluída. Isso não
+A implementação local da verdade operacional (§4 do plano de fechamento) está concluída. Isso não
 fecha o gate M0: a primeira execução dos workflows no GitHub, o runner Android
 físico e as medições sustentadas de hardware ainda precisam produzir evidência.
 

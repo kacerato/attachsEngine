@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Aether.Flow.Ast;
 using Aether.Flow.CodeGen;
 using Aether.Flow.Interpreter;
+using Aether.Flow.Runtime;
 using Aether.Flow.Serialization;
 using Aether.Flow.Validation;
 
@@ -1050,6 +1051,123 @@ public static class FlowTests
         Assert.Equal(0, reconstruido.Nodes.Count);
     }
 
+    [Test] public static void Servicos_ContextoExpoeSomenteCapabilitiesInjetadas()
+    {
+        var logger = new RecordingLogSink();
+        var context = new FlowExecutionContext(world: new World(), logger: logger);
+
+        Assert.True(context.Supports(FlowCapability.World | FlowCapability.Logging));
+        Assert.False(context.Supports(FlowCapability.Physics));
+        Assert.Equal(FlowCapability.Physics | FlowCapability.Input,
+            context.Missing(FlowCapability.World | FlowCapability.Physics | FlowCapability.Input));
+    }
+
+    [Test] public static void Servicos_ValidadorRecusaContextoIncompativel()
+    {
+        var graph = GrafoComLog("runtime pronto");
+
+        var missing = FlowValidator.Validate(graph, new FlowExecutionContext());
+        Assert.True(missing.Any(d => d.NodeId == "log" && d.Message.Contains("Logging", StringComparison.Ordinal)),
+            "o diagnóstico deve apontar o nó e a capability ausente");
+
+        var compatible = FlowValidator.Validate(graph,
+            new FlowExecutionContext(logger: new RecordingLogSink()));
+        Assert.False(compatible.Any(d => d.Severity == Severity.Erro),
+            "um logger explicitamente injetado deve satisfazer o contrato");
+    }
+
+    [Test] public static void Servicos_InterpretadorFalhaSemServicoEUsaOInjetado()
+    {
+        var graph = GrafoComLog("sem singleton");
+        var withoutServices = new FlowInterpreter(graph);
+        Assert.Throws<FlowCapabilityException>(() => withoutServices.RunEvent(NodeTypes.EventStart));
+
+        var logger = new RecordingLogSink();
+        var interpreter = new FlowInterpreter(graph,
+            context: new FlowExecutionContext(logger: logger));
+        interpreter.RunEvent(NodeTypes.EventStart);
+
+        Assert.Equal(1, logger.Entries.Count);
+        Assert.Equal((FlowLogLevel.Warning, "sem singleton", "log"), logger.Entries[0]);
+    }
+
+    [Test] public static void Servicos_CapabilitySobreviveAflowRoundTrip()
+    {
+        var graph = GrafoComLog("persistente");
+        string serialized = FlowSerializer.Serialize(graph);
+        Assert.True(serialized.Contains("  capacidades Logging\n", StringComparison.Ordinal));
+
+        var reconstructed = FlowSerializer.Deserialize(serialized);
+        Assert.Equal(FlowCapability.Logging, reconstructed.FindNode("log")!.RequiredCapabilities);
+        Assert.Equal(serialized, FlowSerializer.Serialize(reconstructed));
+
+        var external = new FlowNode
+        {
+            Id = "externo",
+            NodeType = "plugin.external",
+            RequiredCapabilities = FlowCapability.World | FlowCapability.Physics | FlowCapability.Input,
+        };
+        graph.Nodes.Add(external);
+        string combined = FlowSerializer.Serialize(graph);
+        Assert.True(combined.Contains("capacidades World|Physics|Input", StringComparison.Ordinal));
+        Assert.Equal(external.RequiredCapabilities,
+            FlowSerializer.Deserialize(combined).FindNode("externo")!.RequiredCapabilities);
+    }
+
+    [Test] public static void Servicos_GeradorRecebeContextoPorParametro()
+    {
+        string code = FlowToCSharp.Generate(GrafoComLog("gerado"));
+
+        Assert.True(code.Contains(
+            "public void Start(global::Aether.Flow.Runtime.FlowExecutionContext flowContext)",
+            StringComparison.Ordinal));
+        Assert.True(code.Contains(
+            "flowContext.Logger!.Write(global::Aether.Flow.Runtime.FlowLogLevel.Warning, \"gerado\", \"log\");",
+            StringComparison.Ordinal));
+        Assert.True(code.Contains(
+            "flowContext.Require(global::Aether.Flow.Runtime.FlowCapability.Logging, \"log\");",
+            StringComparison.Ordinal));
+        Assert.False(code.Contains(".Current", StringComparison.Ordinal),
+            "o código gerado não pode recorrer a service locator/singleton estático");
+
+        string executable = code +
+            "public sealed class Sink : global::Aether.Flow.Runtime.IFlowLogSink\n" +
+            "{\n" +
+            "    public void Write(global::Aether.Flow.Runtime.FlowLogLevel level, string message, string nodeId)\n" +
+            "    { global::System.Console.Write($\"{level}|{message}|{nodeId}\"); }\n" +
+            "}\n" +
+            "public static class Program\n" +
+            "{\n" +
+            "    public static void Main() => new ComServico().Start(new global::Aether.Flow.Runtime.FlowExecutionContext(logger: new Sink()));\n" +
+            "}\n";
+        string output = CompileAndRunCSharp(executable,
+            typeof(FlowExecutionContext), typeof(World));
+        Assert.Equal("Warning|gerado|log", output.Trim());
+    }
+
+    private static FlowGraph GrafoComLog(string message)
+    {
+        var graph = new FlowGraph { Name = "ComServico" };
+        var start = NodeLibrary.EventStart("evt");
+        var log = NodeLibrary.LogMessage("log", FlowLogLevel.Warning);
+        log.Literals["mensagem"] = FlowValue.OfString(message);
+        graph.Nodes.AddRange(new[] { start, log });
+        graph.Connections.Add(new FlowConnection
+        {
+            From = new FlowEndpoint("evt", "corpo"),
+            To = new FlowEndpoint("log", "entrada"),
+        });
+        return graph;
+    }
+
+    private sealed class RecordingLogSink : IFlowLogSink
+    {
+        public List<(FlowLogLevel Level, string Message, string NodeId)> Entries { get; } = new();
+
+        public void Write(FlowLogLevel level, string message, string nodeId) =>
+            Entries.Add((level, message, nodeId));
+    }
+
     private static List<FlowPin> ExecPins() => new()
     {
         new FlowPin { Name = "entrada", Type = FlowType.Exec, Direction = PinDirection.Input },
@@ -1059,18 +1177,25 @@ public static class FlowTests
     private static string NormalizarFimDeLinha(string s) =>
         string.Join('\n', s.Replace("\r\n", "\n").Split('\n').Select(l => l.TrimEnd()));
 
-    private static string CompileAndRunCSharp(string source)
+    private static string CompileAndRunCSharp(string source, params Type[] assemblyReferenceTypes)
     {
         string directory = Path.Combine(Path.GetTempPath(), $"aether-flow-differential-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         try
         {
             string projectPath = Path.Combine(directory, "Differential.csproj");
+            string references = string.Concat(assemblyReferenceTypes
+                .Select(type => type.Assembly)
+                .Distinct()
+                .Select(assembly =>
+                    $"<Reference Include=\"{assembly.GetName().Name}\"><HintPath>" +
+                    $"{System.Security.SecurityElement.Escape(assembly.Location)}</HintPath></Reference>"));
             File.WriteAllText(projectPath,
                 "<Project Sdk=\"Microsoft.NET.Sdk\">" +
                 "<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>" +
                 "<ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>" +
-                "<RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources></PropertyGroup></Project>");
+                "<RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources></PropertyGroup>" +
+                $"<ItemGroup>{references}</ItemGroup></Project>");
             File.WriteAllText(Path.Combine(directory, "NuGet.config"),
                 "<?xml version=\"1.0\" encoding=\"utf-8\"?><configuration><packageSources><clear /></packageSources></configuration>");
             File.WriteAllText(Path.Combine(directory, "Program.cs"), source);

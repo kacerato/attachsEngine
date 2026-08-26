@@ -26,6 +26,30 @@ public static class MathTests
         Assert.Close(float3.Up, q * float3.Up, 1e-5f, "o eixo de rotação não se move");
     }
 
+    [Test] public static void Quaternion_NormalizedPreservaUnitarioECorrigeMagnitude()
+    {
+        var unit = quaternion.AxisAngle(float3.Up, 0.75f);
+        Assert.Equal(unit, unit.Normalized, "quaternion já unitário usa o caminho exato sem sqrt");
+
+        var scaled = new quaternion(unit.X * 3f, unit.Y * 3f, unit.Z * 3f, unit.W * 3f);
+        var normalized = scaled.Normalized;
+        float norm = MathF.Sqrt(normalized.X * normalized.X + normalized.Y * normalized.Y +
+                                normalized.Z * normalized.Z + normalized.W * normalized.W);
+        Assert.Close(1f, norm, 1e-5f, "magnitude fora da tolerância continua sendo corrigida");
+    }
+
+    [Test] public static void TransformChild_CaminhoIdentidadeMantemContratoGeral()
+    {
+        var parent = Transform.FromPosition(new float3(10, 2, -3));
+        var childRotation = quaternion.AxisAngle(float3.Up, 0.5f);
+        var child = new Transform(new float3(1, 4, 2), childRotation, new float3(2, 3, 4));
+
+        var result = parent.TransformChild(child);
+        Assert.Close(new float3(11, 6, -1), result.Position);
+        Assert.Close(childRotation, result.Rotation);
+        Assert.Close(child.Scale, result.Scale);
+    }
+
     [Test] public static void Quaternion_InversoDesfazRotacao()
     {
         var q = quaternion.Euler(0.3f, -1.1f, 0.7f);

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Aether.Flow.Ast;
+using Aether.Flow.Runtime;
 
 namespace Aether.Flow.Serialization;
 
@@ -33,6 +34,11 @@ public static class FlowSerializer
         {
             sb.Append("no ").Append(Quote(node.Id)).Append(' ').Append(Quote(node.NodeType)).Append(' ')
               .Append(F(node.CanvasX)).Append(' ').Append(F(node.CanvasY)).Append('\n');
+
+            if (node.RequiredCapabilities != FlowCapability.None)
+                sb.Append("  capacidades ")
+                  .Append(node.RequiredCapabilities.ToString().Replace(", ", "|", StringComparison.Ordinal))
+                  .Append('\n');
 
             foreach (var pin in node.Inputs)
                 sb.Append("  entrada ").Append(Quote(pin.Name)).Append(' ').Append(pin.Type).Append('\n');
@@ -113,6 +119,10 @@ public static class FlowSerializer
                 if (current is null) throw new FormatException($"linha indentada fora de um nó: {rawLine}");
                 switch (toks[0])
                 {
+                    case "capacidades":
+                        current.RequiredCapabilities = Enum.Parse<FlowCapability>(
+                            toks[1].Replace('|', ','));
+                        break;
                     case "entrada":
                         current.Inputs.Add(new FlowPin { Name = toks[1], Type = Enum.Parse<FlowType>(toks[2]), Direction = PinDirection.Input });
                         break;

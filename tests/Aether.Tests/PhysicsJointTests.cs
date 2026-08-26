@@ -222,4 +222,143 @@ public static class PhysicsJointTests
         Assert.True(second.IsValid, "segunda junta (reciclando o slot) deveria ser criada");
         Assert.NotEqual(first, second, "handle reciclado deveria ter geração diferente do handle antigo");
     }
+
+    [Test] public static void CreateJointV2_EspacoLocalAoCorpo1_ConverteAncora()
+    {
+        if (!NativeLibraryAvailable()) return;
+        using var physics = new PhysicsWorld(new float3(0f, -9.81f, 0f), 16);
+        var anchor = MakeSphere(physics, new float3(10f, 5f, 0f), NativeMotionType.Static);
+        var bob = MakeSphere(physics, new float3(12f, 5f, 0f), NativeMotionType.Dynamic);
+        var desc = new JointDesc
+        {
+            Kind = JointKind.Point,
+            Space = JointSpace.LocalToBody1,
+            Point1 = new float3(2f, 0f, 0f),
+            Point2 = new float3(2f, 0f, 0f),
+        };
+
+        var joint = physics.CreateJoint(anchor, bob, in desc);
+        Assert.True(joint.IsValid);
+        for (int i = 0; i < 120; i++) physics.Step(1f / 60f);
+        physics.GetTransform(bob, out var position, out _);
+        Assert.Close(new float3(12f, 5f, 0f), position, eps: 0.05f,
+            what: "a fachada V2 deve preservar a conversão local do ABI");
+    }
+
+    [Test] public static void CreateJointV2_RecusaLimiteHingeForaDoContrato()
+    {
+        if (!NativeLibraryAvailable()) return;
+        using var physics = new PhysicsWorld(float3.Zero, 16);
+        var anchor = MakeSphere(physics, float3.Zero, NativeMotionType.Static);
+        var arm = MakeSphere(physics, new float3(1f, 0f, 0f), NativeMotionType.Dynamic);
+        var invalid = new JointDesc
+        {
+            Kind = JointKind.Hinge,
+            Axis1 = new float3(0f, 0f, 1f),
+            Axis2 = new float3(0f, 0f, 1f),
+            LimitsMin = -MathF.PI,
+            LimitsMax = MathF.PI + 0.01f,
+        };
+        Assert.False(physics.CreateJoint(anchor, arm, in invalid).IsValid,
+            "valor fora do contrato deve retornar Invalid sem atravessar um assert do Jolt");
+
+        invalid.LimitsMax = MathF.PI;
+        Assert.True(physics.CreateJoint(anchor, arm, in invalid).IsValid,
+            "[-pi,+pi] exatos devem continuar aceitos como hinge contínua");
+    }
+
+    [Test] public static void JointSyncSystem_EIdempotenteERecriaSomenteQuandoDescritorMuda()
+    {
+        if (!NativeLibraryAvailable()) return;
+        var world = new World();
+        using var physics = new PhysicsWorld(new float3(0f, -9.81f, 0f), 16);
+        var anchor = world.CreateEntity(
+            new WorldTransform(Transform.FromPosition(new float3(0f, 10f, 0f))), RigidBody.Static());
+        world.AddComponent(anchor, Collider.Sphere(0.5f));
+        var bob = world.CreateEntity(
+            new WorldTransform(Transform.FromPosition(new float3(0f, 8f, 0f))), RigidBody.Dynamic());
+        world.AddComponent(bob, Collider.Sphere(0.5f));
+        var jointEntity = world.CreateEntity(new Joint(anchor, bob)
+        {
+            Point1 = new float3(0f, 8f, 0f),
+            Point2 = new float3(0f, 8f, 0f),
+        });
+
+        PhysicsSyncSystem.Step(world, physics, 1f / 60f);
+        Assert.True(JointSyncSystem.TryGetHandle(physics, jointEntity, out var first));
+        PhysicsSyncSystem.Step(world, physics, 1f / 60f);
+        Assert.True(JointSyncSystem.TryGetHandle(physics, jointEntity, out var stable));
+        Assert.Equal(first, stable, "descritor estável deve preservar o handle");
+
+        physics.DestroyJoint(stable);
+        PhysicsSyncSystem.Step(world, physics, 1f / 60f);
+        Assert.True(JointSyncSystem.TryGetHandle(physics, jointEntity, out var recovered));
+        Assert.NotEqual(stable, recovered,
+            "destruição imperativa de handle emprestado deve ser detectada e refeita pelo componente");
+
+        ref var edited = ref world.Write<Joint>(jointEntity);
+        edited.Point1 = new float3(0f, 8.25f, 0f);
+        edited.Point2 = edited.Point1;
+        PhysicsSyncSystem.Step(world, physics, 1f / 60f);
+        Assert.True(JointSyncSystem.TryGetHandle(physics, jointEntity, out var recreated));
+        Assert.NotEqual(recovered, recreated, "hot-edit deve destruir e recriar com nova geração");
+
+        world.RemoveComponent<Joint>(jointEntity);
+        PhysicsSyncSystem.Step(world, physics, 1f / 60f);
+        Assert.False(JointSyncSystem.TryGetHandle(physics, jointEntity, out _),
+            "remover o componente deve limpar a constraint nativa");
+    }
+
+    [Test] public static void JointSyncSystem_ResolveTardioELimpaEntidadeDestruida()
+    {
+        if (!NativeLibraryAvailable()) return;
+        var world = new World();
+        using var physics = new PhysicsWorld(float3.Zero, 16);
+        var body1 = world.CreateEntity();
+        var body2 = world.CreateEntity();
+        var jointEntity = world.CreateEntity(new Joint(body1, body2));
+
+        PhysicsSyncSystem.Step(world, physics, 1f / 60f);
+        Assert.False(JointSyncSystem.TryGetHandle(physics, jointEntity, out _),
+            "referências ainda sem corpos devem permanecer pendentes");
+
+        world.AddComponent(body1, new WorldTransform(Transform.FromPosition(float3.Zero)));
+        world.AddComponent(body1, RigidBody.Static());
+        world.AddComponent(body1, Collider.Sphere(0.5f));
+        world.AddComponent(body2, new WorldTransform(Transform.FromPosition(float3.Zero)));
+        world.AddComponent(body2, RigidBody.Dynamic());
+        world.AddComponent(body2, Collider.Sphere(0.5f));
+        PhysicsSyncSystem.Step(world, physics, 1f / 60f);
+        Assert.True(JointSyncSystem.TryGetHandle(physics, jointEntity, out _),
+            "quando os corpos surgem, a referência deve resolver sem editar a junta");
+
+        world.DestroyEntity(jointEntity);
+        JointSyncSystem.Sync(world, physics);
+        Assert.False(JointSyncSystem.TryGetHandle(physics, jointEntity, out _),
+            "sweep deve destruir a constraint de uma entidade que já saiu do ECS");
+    }
+
+    [Test] public static void DestroyBodyEcs_RemoveAntesAsJuntasQueReferenciamOCorpo()
+    {
+        if (!NativeLibraryAvailable()) return;
+        var world = new World();
+        using var physics = new PhysicsWorld(float3.Zero, 16);
+        var body1 = world.CreateEntity(new WorldTransform(Transform.Identity), RigidBody.Static());
+        world.AddComponent(body1, Collider.Sphere(0.5f));
+        var body2 = world.CreateEntity(new WorldTransform(Transform.Identity), RigidBody.Dynamic());
+        world.AddComponent(body2, Collider.Sphere(0.5f));
+        var jointEntity = world.CreateEntity(new Joint(body1, body2));
+
+        PhysicsSyncSystem.Step(world, physics, 1f / 60f);
+        Assert.True(JointSyncSystem.TryGetHandle(physics, jointEntity, out _));
+
+        PhysicsSyncSystem.DestroyBody(world, physics, body2);
+        Assert.False(JointSyncSystem.TryGetHandle(physics, jointEntity, out _),
+            "constraint deve sair antes do BodyID que ela referencia");
+        Assert.False(world.Read<RigidBody>(body2).Handle.IsValid);
+
+        JointSyncSystem.Sync(world, physics);
+        Assert.False(JointSyncSystem.TryGetHandle(physics, jointEntity, out _),
+            "junta deve permanecer pendente enquanto o corpo não for recriado");
+    }
 }

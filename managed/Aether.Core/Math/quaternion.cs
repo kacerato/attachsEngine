@@ -72,9 +72,13 @@ public struct quaternion : IEquatable<quaternion>
 
     public readonly quaternion Normalized
     {
-        get { float n = MathF.Sqrt(X * X + Y * Y + Z * Z + W * W);
-              if (n < 1e-12f) return Identity;
-              float inv = 1f / n;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get { float n2 = X * X + Y * Y + Z * Z + W * W;
+              if (n2 < 1e-24f) return Identity;
+              // Quaternions produzidos pela API já são unitários. Evitar sqrt/divisão neste caso
+              // é seguro dentro da tolerância numérica e crítico para milhares de composições.
+              if (MathF.Abs(n2 - 1f) <= 1e-6f) return this;
+              float inv = 1f / MathF.Sqrt(n2);
               return new quaternion(X * inv, Y * inv, Z * inv, W * inv); }
     }
 

@@ -1,14 +1,37 @@
 # Plano de fechamento de lacunas e convergência dos marcos
 
-> **Estado vivo em 26/08/2026:** 5 das 18 lacunas registradas estão integralmente
-> fechadas (`GAP-FLOW-01`, `GAP-PHY-01`, `GAP-PHY-02`, `GAP-JOB-01` e
-> `GAP-ECS-01`). Os gates M0–M9 permanecem 0/10;
+> **Estado vivo em 26/08/2026:** 11 das 13 lacunas reais estão integralmente
+> fechadas (`GAP-FLOW-01`, `GAP-PHY-01`, `GAP-PHY-02`, `GAP-PHY-03`,
+> `GAP-PHY-04`, `GAP-JOINT-01`, `GAP-JOB-01`, `GAP-ECS-01` e `GAP-SER-01`).
+> `GAP-FLOW-02` também foi fechada com contexto de execução injetado e
+> capabilities validadas; `GAP-CHAR-01`, com composição de movimento centralizada.
+> Cinco registros anteriores foram removidos porque
+> eram entregas futuras do roadmap, não lacunas de fases já executadas.
+> Os gates M0–M9 permanecem 0/10;
 > avanços parciais de hardware/shell não encerram M0. Evidências e contagens
 > detalhadas ficam em `ESTADO.md`.
 
 ## 1. Propósito e autoridade
 
-Este documento é o plano de execução para transformar o estado atual da Aether nos marcos demonstráveis definidos em `PLANO-ENGINE-MOBILE.md`. Ele não substitui o plano principal. O plano principal continua sendo a fonte de verdade para produto, arquitetura e critérios M0–M9; este documento define ordem, dependências, correções, testes e regras de aceite para fechar o que está parcial ou ausente em `ESTADO.md`.
+Este documento **fecha lacunas deixadas abertas por fases já executadas** do
+`PLANO-ENGINE-MOBILE.md`. Ele não é um roadmap e não descreve o que a engine
+ainda vai construir — isso é atribuição exclusiva do plano principal, que
+detalha todos os ~330 itens de 0.1.1 a 9.6.7 com critérios de sucesso próprios.
+
+**Regra de escopo (o que este documento pode e não pode conter):**
+
+| Pode | Não pode |
+|---|---|
+| Registrar uma lacuna concreta observada no código que já existe | Descrever trabalho futuro que o plano principal já especifica |
+| Definir o critério objetivo que fecha essa lacuna | Reescrever, resumir ou parafrasear itens do plano principal |
+| Documentar como uma lacuna foi fechada, com evidência | Definir gates ou marcos — os gates M0–M9 são do plano principal |
+| Ordenar as lacunas entre si por dependência e risco | Ordenar o roadmap do produto |
+
+Um item do plano principal que simplesmente **ainda não foi iniciado não é uma
+lacuna** — é trabalho futuro normal, e pertence só ao plano principal. Lacuna é
+o que ficou *para trás*: divergência silenciosa, ABI incorreta, estado não
+sincronizado, teste que mascara ausência de dependência, item marcado como
+pronto sem evidência que sustente.
 
 As decisões deste plano seguem cinco regras:
 
@@ -53,14 +76,12 @@ M6–M9: conteúdo, gráficos, publicação e ecossistema
 | **B2 — Fundação** | API ou infraestrutura necessária a várias fases | Resolver antes da primeira consumidora de produto |
 | **B3 — Integração** | Peça existe isolada, mas não participa do fluxo editor/runtime | Fechar como vertical slice |
 | **B4 — Escala/qualidade** | Funciona no caso comum, mas não atende orçamento, volume ou UX | Medir, definir limite e otimizar |
-| **B5 — Escopo futuro** | Item de fase ainda não iniciada | Executar somente após o gate anterior |
 
 ### 2.3 Lacunas registradas
 
 | ID | Classe | Lacuna | Critério objetivo de fechamento |
 |---|---|---|---|
 | GAP-HW-01 | B0 | Vulkan e lifecycle não validados em GPU física | Matriz mínima de aparelhos verde, incluindo perda/recriação de surface e background/foreground |
-| GAP-M0-02 | B0 | PoCs A–E e critério M0 incompletos | Cinco relatórios reproduzíveis e demonstração integral de M0 |
 | GAP-FLOW-01 | B1 | `return`/`break` em ramos podem divergir do C# | Testes diferenciais provam equivalência entre C#, AST, interpretador e C# regenerado |
 | GAP-PHY-01 | B1 | Capacidade de pares/contatos derivada incorretamente de `maxBodies` | ABI versionada com limites separados e nenhum descarte silencioso |
 | GAP-PHY-02 | B1 | Cinemáticos não resincronizam ECS→Jolt | Plataforma movida pelo ECS atualiza o Jolt e transporta personagem/corpos corretamente |
@@ -72,17 +93,20 @@ M6–M9: conteúdo, gráficos, publicação e ecossistema
 | GAP-JOINT-01 | B3 | Juntas só em world space e fora do ECS | Espaço local/world, componentes declarativos e sincronização por entidades |
 | GAP-FLOW-02 | B3 | Flow não acessa serviços externos, inclusive física | `ExecutionServices` explícito, testável e sem singleton global |
 | GAP-CHAR-01 | B3 | Gravidade/composição de movimento depende de disciplina do chamador | `CharacterMotorSystem` com contrato e modos testados |
-| GAP-CHAR-02 | B5 | Criar agachado, escalar e nadar ausentes | Stance inicial e capacidades independentes de escalada/natação |
-| GAP-2D-01 | B0/B4 | Não houve comparação real Jolt restrito × Box2D v3 | Benchmark equivalente em hardware e ADR com decisão mensurável |
-| GAP-CORE-01 | B2 | Source generator, SQLite, Node, tempo/eventos/configuração e benchmark M1 incompletos | Todos os itens 1.1–1.5 integrados e gate M1 verde |
-| GAP-RHI-01 | B0/B3 | Render Graph não executa em GPU; não há swapchain/present | Frame real apresentado, capturável e validado nos perfis |
-| GAP-EDITOR-01 | B0/B3 | Editor é protótipo HTML, não produto integrado | Editor nativo usa renderer/runtime reais e cumpre teste M3 |
+| GAP-2D-01 | B0/B4 | Decisão Jolt restrito × Box2D sem evidência móvel completa | Benchmark equivalente em hardware e ADR com decisão mensurável |
+
+Os registros removidos foram `GAP-M0-02`, `GAP-CORE-01`, `GAP-RHI-01`,
+`GAP-EDITOR-01` e `GAP-CHAR-02`. PoCs de M0, conclusão do Core, renderer real,
+editor integrado e recursos futuros do character são itens ainda não iniciados
+ou parciais do plano principal. Eles continuam visíveis item a item em
+`MATRIZ-MARCOS.md`, sem inflar artificialmente este plano temporário.
 
 ## 3. Modelo de execução
 
 ### 3.1 Trilhas permanentes
 
-Cada onda terá quatro trilhas. Nenhuma pode ser deixada para o fim:
+Fechar uma lacuna costuma exigir trabalho em mais de uma trilha ao mesmo tempo.
+Nenhuma delas pode ser deixada para o fim de um fechamento:
 
 | Trilha | Responsabilidade |
 |---|---|
@@ -112,9 +136,14 @@ Toda evolução da fronteira C#↔C++ deve usar descritores com `structSize` e `
 
 Arquivos persistentes usam `formatVersion`, IDs estáveis de tipo/campo e migradores em cadeia. Testes guardam fixtures de pelo menos duas versões anteriores. Cache pode ser descartado; projeto, cena e assets importados não.
 
-## 4. Onda 0 — verdade operacional e correções de segurança
+## 4. Verdade operacional e correções de segurança
 
 **Objetivo:** impedir que o projeto expanda sobre estado incorreto ou documentação ambígua.
+
+Esta seção é um pré-requisito de todas as lacunas de §5: enquanto o estado
+registrado não for confiável e o CI puder reportar verde sem ter rodado, nenhum
+fechamento de lacuna pode ser verificado. **Estado: concluída** — §4.1 e §4.3/§4.4
+fechados, §4.2 fechado exceto o orçamento de métricas versionadas (ver `ESTADO.md`).
 
 ### 4.1 Inventário executável
 
@@ -142,14 +171,15 @@ silenciosos na pipeline.
 3. ✅ APK, logs/resultados, executáveis, budgets e versões do NDK/JDK são publicados
    como artefatos dos jobs aplicáveis.
 4. ✅ O clean build diário usa árvore nova, compila o nativo antes do gerenciado,
-   instala headers Vulkan isolados do NDK e executa 242 testes C# + 96 nativos.
+   instala headers Vulkan isolados do NDK e executa a suíte corrente (263 testes C# + 108 nativos).
 5. ✅ `metrics/budgets.v1.json` versiona budgets de P/Invoke, alocação, CPU, GPU,
    memória e energia. `tools/validate-metrics-budget.ps1` valida o contrato e quebra
    o gate ao ultrapassar limites; coletores que exigem dispositivo permanecem
    declarados como `device-required`, sem fabricar medições em runner hospedado.
 
-**Aceite:** o caminho limpo foi reproduzido localmente com 242/242 testes C# e
-96/96 nativos; a fixture negativa de 301 chamadas nativas/frame quebra o gate.
+**Aceite:** o caminho limpo foi reproduzido localmente; a regressão corrente passa
+com 274/274 testes C# e 108/108 nativos, e a fixture negativa de 301 chamadas
+nativas/frame quebra o gate.
 Falhas de dependência não se transformam em falsos verdes. A primeira execução no
 GitHub e as séries CPU/GPU/memória/energia em hardware continuam como evidências
 necessárias para M0/M1, sem reabrir a implementação desta seção.
@@ -174,239 +204,78 @@ necessárias para M0/M1, sem reabrir a implementação desta seção.
 
 **Aceite:** nenhum teste usa `maxBodies × 4` como workaround; o limite necessário é medido e configurado pelo conceito correto.
 
-## 5. Onda 1 — fechar M0 em hardware real
-
-**Objetivo:** responder os riscos fatais antes de continuar o produto.
-
-### 5.1 Laboratório de dispositivos
-
-1. Adquirir ou disponibilizar inicialmente seis aparelhos: ao menos dois Adreno, dois Mali, um aparelho fraco perfil C e um perfil S/A recente. Expandir para os 12 previstos antes de M2.
-2. Registrar modelo, SoC, GPU, RAM, Android, driver Vulkan, extensões, taxa de atualização, página de 16 KB e estado térmico.
-3. Criar runner ADB que instala, limpa dados, abre, coleta Logcat, alterna background/foreground, gira/configura e encerra.
-4. Executar perda/recriação da janela, screen off/on, interrupção por Activity, memória baixa simulada e retomada.
-5. Definir quarentena documentada para defeito específico de driver, com fallback e prazo; nunca ignorar aparelho silenciosamente.
-
-**Aceite:** `Surface Vulkan pronta` e lifecycle completo verdes na matriz mínima; crashes incluem stack e capabilities.
-
-### 5.2 Shell gráfico mínimo
-
-1. Implementar swapchain com seleção de formato, present mode e extensão, sem API Android vazando para o RHI.
-2. Criar command pool/buffers, sincronização de frames, acquire/present e recriação após `OUT_OF_DATE`/`SUBOPTIMAL`.
-3. Renderizar primeiro triângulo e depois cubo texturizado com depth.
-4. Suspender submit quando não houver surface ou quando o app estiver inativo.
-5. Garantir destruição ordenada e recuperação após background/foreground repetido 100 vezes.
-
-**Aceite:** nenhuma validation error; captura AGI/RenderDoc legível; 1.000 ciclos de frame e 100 retomadas sem leak ou crash.
-
-### 5.3 PoC-A — Vulkan + .NET
-
-1. Finalizar IDL gerado para lotes blittable, IDs e spans; proibir strings/objetos gerenciados no caminho quente.
-2. Montar lista de render em C# e enviar em poucos lotes ao nativo.
-3. Instrumentar quantidade e tempo de crossings por frame.
-4. Renderizar 5.000 objetos com culling mínimo e material simples.
-5. Testar comparação A/B entre composição em C#, composição nativa e tamanhos de lote.
-
-**Aceite:** 60 fps e < 3 ms de CPU no aparelho de referência, sem GC/frame e dentro do orçamento de crossings.
-
-### 5.4 PoC-B — gestos
-
-1. Converter o protótipo existente em especificação de comportamento: coordenadas, conflitos de gesto, tolerâncias, inércia, snap e tamanhos de alvo.
-2. Testar mover, girar e escalar com 10 usuários reais; registrar erros, tempo e tentativas.
-3. Testar telas pequenas, tablet, mão dominante, caneta e acessibilidade motora básica.
-4. Ajustar gesto até a mediana ficar abaixo de 30 s sem ocultar taxa de erro.
-
-**Aceite:** tarefa concluída por todos os participantes dentro do critério e sem regressão grave de precisão.
-
-### 5.5 PoC-C — térmica
-
-1. Integrar leitura Android ao `PowerGovernor`, com estados normal, aquecendo, limitado e crítico.
-2. Registrar CPU/GPU frame, watts estimados, temperatura, clocks e decisão de qualidade.
-3. Fazer o viewport renderizar sob demanda quando ocioso e reduzir resolução/efeitos com histerese.
-4. Rodar 30 minutos em pelo menos três perfis e em condição carregando/não carregando.
-
-**Aceite:** < 4 W sustentados e sem queda abaixo de 55 fps no perfil-alvo; mudanças de qualidade não oscilam.
-
-### 5.6 PoC-D — hot reload C#
-
-1. Carregar runtime .NET no processo com lifecycle explícito e fronteira isolada.
-2. Compilar uma alteração incremental, validar assembly e aplicar em contexto recarregável.
-3. Migrar estado serializável ou informar incompatibilidade com diagnóstico.
-4. Medir do último toque de edição até a mudança visível no frame.
-5. Para iOS, realizar spike jurídico/técnico separado e registrar ADR; não prometer execução proibida pela plataforma.
-
-**Aceite:** < 2 s no Android de referência; decisão de iOS registrada com protótipo permitido ou escopo Android-first formalizado.
-
-### 5.7 PoC-E — ASTC em GPU
-
-1. Implementar caminho de compressão isolado e cancelável, fora do frame.
-2. Validar qualidade, alinhamento de blocos, mipmaps e fallback ETC2/Basis.
-3. Medir textura 4096×4096 em aparelhos A/S e memória de pico.
-
-**Aceite:** < 300 ms no perfil definido pelo plano ou mitigação formal aprovada antes de M0.
-
-### 5.8 Gate M0
-
-M0 fecha somente com cubo texturizado controlado por toque, shader C# atualizado em menos de dois segundos, soak térmico de 30 minutos e cinco PoCs verdes ou com mitigação aprovada. A demonstração usa APK produzido pelo CI em aparelho catalogado.
-
-## 6. Onda 2 — fechar M1 e estabilizar o núcleo
-
-### 6.1 Plataforma 1.1
-
-1. Criar interfaces de filesystem, display, input, clipboard, file picker, lifecycle e device capabilities no módulo de plataforma.
-2. Implementar Android Storage Access Framework sem expor paths desktop ao Core.
-3. Modelar toque com ID, histórico, pressão, previsão e cancelamento; mapear mouse, teclado, gamepad e sensores para ações.
-4. Tratar safe area, notch, taxa variável, display externo, multi-window e memória baixa.
-5. Mover a leitura térmica para serviço de plataforma consumido pelo `PowerGovernor`.
-
-**Aceite:** testes portáteis das máquinas de estado e testes de dispositivo para cada callback Android; Core não depende de Android.
-
-### 6.2 Memória e concorrência 1.2
-
-**Estado parcial:** `GAP-JOB-01` fechado; filas SPSC/MPMC, profiling de
-alocação, analisador NoAlloc e sanitizers continuam abertos.
-
-1. Finalizar primitivas SPSC/MPMC e contadores com testes de stress e sanitizers.
-2. ✅ O JobSystem registra pré-requisitos e esperas runtime em grafo explícito e
-   detecta ciclos antes do bloqueio, incluindo arestas publicadas concorrentemente.
-3. ✅ O timeout permanece apenas como watchdog de trabalho externo não observável
-   pelo grafo, não como mecanismo primário de detecção de ciclo.
-4. Implementar rastreamento de alocações por subsistema e visualizador de jobs.
-5. Criar analisador `[NoAlloc]` e permitir exceções somente com justificativa versionada.
-6. Rodar TSAN/ASAN/UBSAN onde a toolchain suportar, além de stress de shutdown e cancelamento.
-
-**Aceite parcial:** ciclos de 2–N jobs são rejeitados com caminho do ciclo
-(`GAP-JOB-01` verde). A parte de alocação depende do analisador `[NoAlloc]` ainda
-aberto nesta seção.
-
-### 6.3 ECS 1.3
-
-**Estado parcial:** `GAP-ECS-01` fechado; fachada `Node`, filtros avançados e
-benchmark hierárquico em aparelho ainda estão abertos.
-
-1. ✅ `World.Read<T>`/`Write<T>` e
-   `Chunk.GetReadOnlySpan<T>`/`GetWritableSpan<T>` separam intenção. Somente o
-   acesso mutável incrementa a versão, uma vez por referência/span obtido.
-2. ✅ Hierarquia, propagação de transforms e sincronização física usam os novos
-   acessores. `GetComponent<T>`/`GetSpan<T>` permanecem temporariamente como APIs
-   deprecated conservadoras para compatibilidade.
-3. ✅ `Node` é uma fachada `readonly struct` sobre `World`+`EntityId`, sem estado
-   ou ownership duplicado. Expõe componentes, parent/children sem alocação e
-   invalida com a geração da entidade; reparent entre mundos é recusado.
-4. Completar filtros/cache de consultas e benchmark de mudanças estruturais.
-5. Medir 100 mil entidades hierarquizadas com profundidades realistas e casos patológicos.
-
-**Aceite parcial:** duas regressões provam que leitura não marca mudança e escrita
-marca exatamente o chunk/componente correto (`GAP-ECS-01` verde). O teste flat de
-100 mil entidades mantém zero GC/frame e mediu 4 ms nesta máquina; o aceite M1
-continua aberto até medir hierarquia real a < 6 ms em aparelho classe A.
-
-### 6.4 Reflexão, serialização e recursos 1.4
-
-1. Criar source generator de descriptors, propriedades, métodos, IDs estáveis e bindings básicos.
-2. Preservar registro runtime como fallback para plugin/diagnóstico, não como fonte duplicada.
-3. Adicionar `FormerlySerializedAs`/aliases ou IDs de campo explícitos ao serializer texto.
-4. Testar rename, remoção, adição, mudança compatível/incompatível e cadeia v1→v2→v3 nos formatos texto/binário.
-5. Vendorizar o amálgama SQLite com licença registrada, wrapper C mínimo e P/Invoke versionado.
-6. Implementar índice de dependências transacional, rebuildable e nunca fonte de verdade.
-7. Integrar ResourceId, dependências, import metadata e invalidation sem path espalhado.
-
-**Aceite:** fixture antiga sobrevive a rename; índice SQLite pode ser apagado e reconstruído; Inspector/Flow/serializer consomem o mesmo metadata descriptor.
-
-### 6.5 Matemática, tempo e serviços 1.5
-
-1. Validar SIMD NEON contra implementação escalar e tolerâncias por operação.
-2. Implementar relógios monotônicos, fixed step, acumulador limitado, interpolação, time scale e pausa.
-3. Criar sinais/eventos tipados com ownership de inscrição e remoção segura.
-4. Criar configuração versionada por categorias, com defaults e override por projeto/dispositivo.
-5. Adicionar testes de precision drift, spiral of death, pausa/retomada e serialização de settings.
-
-### 6.6 Gate M1
-
-Salvar/recarregar precisa ser bit-exato. O benchmark de 100 mil entidades deve rodar em aparelho classe A a 60 fps, < 6 ms de CPU e zero GC/frame. O relatório inclui modelo, build, temperatura, distribuição p50/p95/p99 e memória, não apenas média.
-
-## 7. Onda 3 — fechar M2: renderer Vulkan real
-
-### 7.1 RHI 2.1
-
-1. Evoluir o shell M0 para RHI completo: buffers, imagens, samplers, pipelines e handles opacos.
-2. Integrar VMA ou alternativa aprovada por ADR, com budget e telemetria por categoria.
-3. Implementar bindless com detecção de feature e fallback não-bindless.
-4. Gravar command buffers em jobs e sincronizar com timeline semaphores quando suportadas.
-5. Integrar validation layers, nomes de objeto, captura e device fault quando disponível.
-
-### 7.2 Shaders 2.2
-
-1. Definir linguagem fonte e toolchain reprodutível para SPIR-V.
-2. Gerar reflexão de bindings e validar contra metadata de material.
-3. Controlar variantes por orçamento; persistir cache por GPU/driver.
-4. Compilar em background e usar material rosa de fallback com erro legível.
-5. Implementar hot reload usando o caminho validado em M0.
-
-### 7.3 Render Graph 2.3
-
-1. Conectar a implementação headless ao RHI sem introduzir dependência reversa.
-2. Materializar recursos transitórios, barreiras e load/store reais.
-3. Validar aliasing com camadas de validação e testes de vida útil.
-4. Medir fusão de subpasses/memoryless em tile-based GPUs.
-5. Criar visualizador consumível pelo editor posterior.
-
-### 7.4 Pipeline, culling e 2D 2.4–2.6
-
-1. Entregar depth prepass, Forward+, PBR, sombras, IBL, transparência e pós em slices completos.
-2. Implementar BVH incremental, frustum/HZB, instancing, LOD e ordenação por PSO/profundidade.
-3. Criar renderer 2D com sprite batcher, atlas, tilemap e luzes 2D.
-4. Cada efeito possui feature detection, preset e fallback antes de entrar no perfil C.
-5. Capturas douradas usam tolerância perceptual e aparelhos de fabricantes diferentes.
-
-### 7.5 Gate M2
-
-Executar cena equivalente a Sponza com 500 mil triângulos, 30 luzes, PBR e sombras. Perfil A: 60 fps estáveis e < 3,5 W. Perfil C: 30 fps com degradação automática. O Render Graph precisa provar, por captura e métricas, que suas decisões são executadas na GPU.
-
-## 8. Onda 4 — fechar M3: editor mobile integrado
-
-### 8.1 Substituição controlada do protótipo
-
-O HTML/Canvas permanece como referência de UX até os testes M0, mas não entra no runtime. Cada comportamento validado vira especificação e teste de interação. Painter's algorithm não será “corrigido” no protótipo; a solução definitiva é o viewport Vulkan do M2.
-
-### 8.2 UI e gestos 3.1–3.2
-
-1. Implementar UI retida com layout, listas virtualizadas, texto/ícones SDF e tokens existentes.
-2. Criar resolver de conflitos de gestos com captura, prioridade, cancelamento e visualização de estado.
-3. Garantir alvos mínimos, hápticos, escalabilidade, leitor de tela e alto contraste.
-4. Implementar bottom sheets/drawers sem reduzir o viewport abaixo do limite do plano.
-5. Automatizar testes de gesto por sequência de ponteiros e validar em touchscreen real.
-
-### 8.3 Viewport e ferramentas 3.3
-
-1. Integrar câmera, picking, gizmos, snap, overlays e debug draw ao renderer real.
-2. Usar Command para toda manipulação e agrupar um gesto inteiro em uma operação undoável.
-3. Separar gizmos/editor overlays do Game Runtime.
-4. Instrumentar precisão, latência de toque e custo de picking.
-
-### 8.4 Painéis e fluxo de projeto 3.4–3.5
-
-1. Gerar Inspector pelo source metadata, com factories extensíveis e edição múltipla.
-2. Hierarquia opera sobre EntityId/Node e usa comandos para reparent/reorder/delete.
-3. Asset Browser usa banco de assets, previews, filtros e operações transacionais.
-4. Console inclui origem, categoria, severidade, stack e agrupamento.
-5. Implementar prefabs, autosave temporário→validação→replace atômico e recovery por WAL.
-
-### 8.5 Play Mode e onboarding 3.6–3.7
-
-1. Separar Edit World e Play World; nunca executar diretamente sobre o estado autoral.
-2. Isolar processo quando o compartilhamento AHardwareBuffer estiver validado; usar fallback seguro até lá.
-3. Permitir pausa, step, inspeção e retorno sem corromper a cena.
-4. Criar onboarding interativo e níveis Essencial/Padrão/Completo.
-
-### 8.6 Gate M3
-
-Usuário novo monta cena de 20 objetos com luz, material e prefab em menos de 15 minutos usando apenas os dedos e entra em Play. Quinze usuários externos fazem o teste; SUS precisa ser ≥ 72. Abaixo disso, UX volta para projeto e M4 não recebe prioridade de produto.
-
-## 9. Onda 5 — fechar M4 e eliminar as lacunas da física
-
-### 9.1 Física 4.1 — estabilização da base existente
-
-#### 9.1.1 Cinemáticos e sincronização
+## 5. Sequenciamento das lacunas
+
+As lacunas abertas não são executadas em ordem numérica de `GAP-*`, e sim por
+**classe de risco e dependência real** (§2.2). A tabela abaixo é a única ordem
+que este documento define. Ela ordena *lacunas*, não o roadmap: o que construir
+depois de cada marco continua sendo respondido exclusivamente pelo
+`PLANO-ENGINE-MOBILE.md`.
+
+| Ordem | Lacuna | Classe | Bloqueia | Estado |
+|---|---|---|---|---|
+| 1 | `GAP-FLOW-01` — controle de fluxo divergente | B1 | Qualquer expansão do AetherFlow | ✅ fechada |
+| 2 | `GAP-PHY-01` — capacidade derivada de `maxBodies` | B1 | Qualquer cena densa | ✅ fechada |
+| 3 | `GAP-PHY-02` — cinemáticos sem resync ECS→Jolt | B1 | Plataformas móveis, animação | ✅ fechada |
+| 4 | `GAP-JOB-01` — ciclos de job só por timeout | B1 | Paralelismo confiável | ✅ fechada |
+| 5 | `GAP-ECS-01` — leitura marca escrita | B2 | Change detection exata, 1.3.x | ✅ fechada |
+| 6 | `GAP-SER-01` — rename perde valor no texto | B2 | Formato de projeto estável, 1.4.x | ✅ fechada |
+| 7 | `GAP-PHY-03` — sem Trigger/sensor persistente | B2 | Gameplay orientado a evento | ✅ fechada |
+| 8 | `GAP-PHY-04` — P/Invoke individual | B4 | Orçamento de interop, spawn massivo | ✅ fechada |
+| 9 | `GAP-JOINT-01` — juntas fora do ECS | B3 | Autoria de juntas no editor | ✅ fechada |
+| 10 | `GAP-HW-01` — Vulkan/lifecycle sem matriz de GPU | B0 | **Todo o restante** — risco existencial | ⏳ parcial (1 aparelho) |
+| 11 | `GAP-2D-01` — decisão Jolt × Box2D sem B/C | B0/B4 | Decisão já declarada no item 4.1.6 | 🟡 harness/host/A prontos; B/C pendentes |
+| 12 | `GAP-FLOW-02` — Flow sem serviços externos | B3 | Nós externos sem singleton | ✅ fechada |
+| 13 | `GAP-CHAR-01` — composição de movimento manual | B3 | Character já existente | ✅ fechada |
+
+**Como ler esta tabela:** "Bloqueia" indica o que fica comprometido enquanto a
+lacuna existir — não é uma lista de trabalho a fazer. Uma lacuna B0 aberta
+significa que expandir o subsistema afetado constrói sobre fundação não
+verificada. Itens de escopo futuro não entram mais nesta tabela.
+
+As duas lacunas ainda abertas recebem detalhe apenas quando isso corrige código
+ou método já entregue. O restante da engine continua especificado item a item no
+plano principal; reescrevê-lo aqui produziria uma segunda fonte de verdade mais
+pobre e desatualizada.
+
+## 6. Detalhe de fechamento das lacunas que tocam código existente
+
+Esta seção existe só para lacunas cujo fechamento **altera código já escrito** —
+ABI, contrato, autoridade de dados, formato persistido. Nesses casos o "como"
+não está no plano principal (que descreve o que construir, não como consertar o
+que já existe), então precisa ser registrado aqui.
+
+Itens que se resolvem simplesmente executando trabalho futuro do plano principal
+**não são lacunas e não têm seção aqui de propósito**.
+
+### 6.1 Laboratório de dispositivos (`GAP-HW-01`)
+
+O plano principal pede o farm de aparelhos no item 0.1.2, mas não define o
+procedimento de validação nem o que constitui evidência aceitável. Isso é
+lacuna de método, não de escopo:
+
+1. Disponibilizar inicialmente seis aparelhos: ao menos dois Adreno, dois Mali, um perfil C fraco e um S/A recente. Expandir para os 12 do item 0.1.2 antes de M2.
+2. Registrar por aparelho: modelo, SoC, GPU, RAM, versão do Android, driver Vulkan, extensões, taxa de atualização, suporte a página de 16 KB e estado térmico.
+3. Runner ADB reproduzível que instala, limpa dados, abre, coleta Logcat, alterna background/foreground, exercita configuração e encerra restaurando o estado do aparelho.
+4. Exercitar perda/recriação de janela, screen off/on, interrupção por Activity, memória baixa e retomada.
+5. Quarentena documentada para defeito específico de driver, com fallback e prazo; nunca ignorar um aparelho silenciosamente.
+
+**Critério de fechamento:** `Surface Vulkan pronta` e lifecycle completo verdes
+na matriz mínima de seis aparelhos; todo crash traz stack e capabilities.
+
+**Estado:** parcial — `tools/validate-android-shell.ps1` implementa os itens 3 e
+4 e roda verde em 1 aparelho (Xiaomi SM8735/Adreno). Faltam Mali, perfil C e a
+política de quarentena. Evidência em `ESTADO.md`, seção "Shell Android".
+
+### 6.2 Física — estabilização da base existente
+
+Todo o conteúdo abaixo trata de código de física **já escrito** cuja ABI,
+autoridade ou contrato precisou mudar. Os itens 4.1.x do plano principal
+descrevem o que a física deve fazer; esta seção registra o que estava errado no
+que já existia e como foi corrigido.
+
+
+#### 6.2.1 Cinemáticos e sincronização
 
 **Estado: fechado (`GAP-PHY-02`).**
 
@@ -422,151 +291,124 @@ Usuário novo monta cena de 20 objetos com luz, material e prefab em menos de 15
 5. Regressões cobrem plataforma transladando e girando com character e corpo
    dinâmico apoiado, além de validar que frames estáveis não cruzam a ABI.
 
-#### 9.1.2 Triggers e eventos
+#### 6.2.2 Triggers e eventos
 
-1. Adicionar shape/body sensor na fronteira nativa.
-2. Coletar contatos em buffer lock-free do callback de física e publicar após o step.
-3. Emitir Enter/Stay/Exit com IDs estáveis, camada, ponto/normal quando disponível.
-4. Criar `TriggerComponent`, metadata, serialização, Inspector, script e Flow.
-5. Definir comportamento em destroy, disable, reparent e scene unload.
+**Estado: fechado para o critério de `GAP-PHY-03`; extensões de editor/Flow seguem
+nos gaps próprios.**
 
-#### 9.1.3 Batching e orçamento de interop
+1. `AetherBodyDescV2`/`AetherPhysics_CreateBodyV2` expõem sensor e filtro sem
+   alterar `AetherBodyDesc` V1.
+2. `TriggerContactListener` agrega callbacks concorrentes por subshape/par sob
+   sincronização explícita, deduplica e só publica uma fotografia ordenada após o
+   step. A alternativa lock-free permanece otimização mensurável de `GAP-PHY-04`,
+   não condição de correção sacrificada antecipadamente.
+3. Enter/Stay/Exit usam `JPH::BodyID` estável; filtros Static/Dynamic, buffer do
+   chamador e contagem real são cobertos. Corpos sobrepostos são mantidos acordados
+   para impedir Exit falso por sleep; destruir encerra o par no step seguinte.
+4. `Trigger` é componente ECS, possui metadata/serialização binária e texto, API C#
+   em `PhysicsWorld` e resolução handle→`EntityId`. Inspector e nós Flow dependem,
+   respectivamente, do editor real (itens 3.x do plano principal) e de `ExecutionServices`
+   (`GAP-FLOW-02`), sem singleton temporário.
+5. Disable/hot-edit usa contrato explícito destroy→recreate; reparent segue a
+   autoridade de transform já definida. Scene unload continua usando a disciplina
+   de `PhysicsSyncSystem.DestroyBody` existente para todos os corpos, não um caminho
+   especial de trigger.
 
-1. Criar `CreateBodies(ReadOnlySpan<BodyDesc>, Span<Handle>)` e `DestroyBodies(ReadOnlySpan<Handle>)`.
-2. Manter chamadas unitárias como wrappers de conveniência fora do caminho massivo.
-3. Instrumentar crossings/frame e bytes transferidos.
-4. Testar spawn/despawn de 100, 1.000 e 10.000 corpos sem alocação por corpo no frame.
+#### 6.2.3 Batching e orçamento de interop
 
-#### 9.1.4 Juntas completas e ECS
+**Estado: fechado (`GAP-PHY-04`).**
 
-1. Adicionar espaço `World`, `LocalToBody1`, `LocalToBody2` com conversões testadas.
-2. Criar componentes de junta com referências por EntityId/UUID, resolução tardia e handles geracionais.
-3. Implementar `JointSyncSystem` com lifecycle idempotente e recriação somente quando descriptor muda.
-4. Validar Hinge na API pública: rotação contínua é normalizada para `-pi/+pi`; valores fora do contrato do Jolt retornam erro, não são truncados silenciosamente.
-5. Entregar SixDOF como recurso separado; veículo, gear, pulley e path entram conforme consumidor real e cada um recebe slice/testes próprios.
-6. Serializar limites/motor e expor via Inspector/Flow.
+1. `CreateBodies(ReadOnlySpan<PhysicsBodyDescription>, Span<PhysicsBodyHandle>)`
+   e `DestroyBodies(ReadOnlySpan<PhysicsBodyHandle>)` atravessam a ABI uma vez.
+2. Criação nativa é all-or-none: cria IDs fora da broadphase, desfaz o prefixo
+   inteiro em falha e usa `AddBodiesPrepare/Finalize`; destroy usa `RemoveBodies`.
+3. Chamadas unitárias C# são wrappers de lote de tamanho 1. `PhysicsSyncSystem`
+   agrega todos os corpos novos do Step com buffers de `ArrayPool`, em vez de
+   fazer crossing por entidade.
+4. `PhysicsBodyInteropStatistics` contabiliza crossings, bytes enviados/recebidos
+   e corpos criados/destruídos. A telemetria é deliberadamente deste domínio; o
+   contador global multissubsistema continua parte do gate device-required da PoC-A.
+5. Regressões 100/1.000/10.000 comprovam 1 crossing create + 1 destroy, handles
+   íntegros e zero alocação gerenciada dentro do crossing; testes C++ cobrem
+   rollback por capacidade, ordem descriptor→handle e devolução de capacidade.
 
-#### 9.1.5 Contexto de física no Flow
+#### 6.2.4 Juntas completas e ECS
 
-1. Introduzir `FlowExecutionContext` com `World`, `PhysicsWorld`, tempo, input, logger e serviços permitidos.
-2. Nós declaram capability necessária; validador rejeita grafo usado em contexto incompatível.
-3. Gerador C# recebe serviços por parâmetro/Behavior, nunca por `PhysicsContext.Current` estático.
-4. Implementar raycast, raycast all, shapecast, overlap, trigger events e operações seguras.
-5. Testar interpretador e C# gerado contra o mesmo mundo físico determinístico.
+**Estado: fechado para o critério de `GAP-JOINT-01`; extensões de tipos,
+Inspector e Flow permanecem nos marcos/gaps consumidores próprios.**
 
-#### 9.1.6 Character Controller
+1. `AetherJointDescV2` preserva o símbolo/layout V1 e adiciona `World`,
+   `LocalToBody1` e `LocalToBody2`. Pontos usam posição+rotação do corpo de
+   referência; eixos usam somente rotação. Testes físicos cobrem ponto local e
+   eixo local rotacionado, não apenas conversão matemática isolada.
+2. `Joint` é componente declarativo serializável, referencia os dois corpos por
+   `EntityId` geracional e mantém o `PhysicsJointHandle` fora da cena. Referências
+   ausentes ficam pendentes e resolvem automaticamente quando os corpos surgem.
+3. `JointSyncSystem` integra o `PhysicsSyncSystem`: preserva o handle quando
+   descriptor/corpos não mudam, usa destroy→recreate em hot-edit e faz sweep de
+   componente removido ou entidade destruída. Destruir corpo pelo lifecycle ECS
+   remove antes todas as juntas sincronizadas que o referenciam.
+4. Validação equivalente existe nos dois lados da ABI: tipo/espaço/motor,
+   finitude, eixos não degenerados e contrato Hinge. `-pi/+pi` exatos são
+   aceitos como rotação contínua; valor fora do intervalo retorna handle inválido
+   antes de tocar nos asserts do Jolt, sem clamp silencioso.
+5. Limites, motor, espaços e referências sobrevivem a round-trip binário/texto
+   com remapeamento de entidades. A metadata registrada permite ao futuro
+   Inspector consumir os campos; UI de produto depende dos itens 3.x e nós
+   dependem de `GAP-FLOW-02`, sem criar integração temporária duplicada.
+6. SixDOF permanece recurso separado; veículo, gear, pulley e path entram somente
+   com consumidor real e slices/testes próprios, portanto não fazem parte do
+   critério objetivo de `GAP-JOINT-01`.
 
-1. Criar `CharacterMotorComponent/System` que compõe gravidade, velocidade desejada, plataforma, step e stick-to-floor.
-2. Separar estados `Grounded`, `Falling`, `Rising`, `Sliding`, `Climbing`, `Swimming` e stance.
-3. Permitir descriptor inicial em pé/agachado; validar forma antes da criação e retornar erro contextual.
-4. Implementar escalada como capability: detecção de superfície, ângulo/tag/layer, aquisição/perda, velocidade e transição.
-5. Implementar natação sobre `WaterVolume/FluidVolume`: overlap, profundidade, buoyancy/drag e controle configurável.
-6. Não colocar gameplay específico no Core; motor e capabilities são componentes reutilizáveis.
-7. Testar quinas, tetos finos, rampas, degraus, plataformas e mudança de stance com folgas válidas.
+#### 6.2.5 Contexto de física no Flow (`GAP-FLOW-02`)
 
-#### 9.1.7 Física 2D
+**Estado: fechada.** A lacuna não era "faltam nós de física" (isso é o item 4.1.4
+do plano principal) — é que o AetherFlow **já executa** e não tem nenhuma forma
+de alcançar um serviço externo, o que forçaria um singleton global se um nó de
+física fosse escrito hoje. O critério abaixo existe para impedir esse atalho.
 
-1. Vendorizar Box2D v3 em módulo isolado após revisão de licença/tamanho.
-2. Criar harness equivalente: mesmas formas, contagem, densidade, steps, warm-up e dispositivos.
-3. Medir CPU p50/p95, memória, tamanho binário, estabilidade e recursos necessários.
-4. Decisão recomendada: escolher Box2D como backend 2D somente se entregar ganho sustentado relevante (meta inicial ≥ 30% de CPU ou memória no perfil B/C) que compense segunda biblioteca e manutenção. Caso contrário, manter Jolt restrito e registrar que a escolha é por simplicidade, não por desempenho.
-5. Não criar API pública amarrada ao backend; componentes 2D usam interface própria e handles opacos.
+1. ✅ `FlowExecutionContext` injeta `World`, `PhysicsWorld`, tempo, input e logger.
+2. ✅ Nós persistem `RequiredCapabilities`; o validador rejeita contexto incompatível e o interpretador falha com diagnóstico do nó/capability.
+3. ✅ O gerador recebe o contexto por parâmetro e valida a capability antes do uso; não existe `Current`/singleton.
+4. ✅ `log.message` fecha um slice vertical real pelo validador, `.aflow`, interpretador e C# gerado/compilado.
+5. Nós concretos de física permanecem exclusivamente nos itens 4.1.4/5.5 do plano principal; sua ausência não reabre esta lacuna arquitetural.
 
-#### 9.1.8 Itens 4.1.7–4.1.9
+#### 6.2.6 Character Controller (`GAP-CHAR-01`)
 
-1. Decomposição convexa entra no import pipeline, assíncrona, cacheada e com preview/limite de custo.
-2. Determinismo em ponto fixo começa por spike e ADR. Como Jolt float não é bit-determinístico, a solução pode ser backend/modo restrito separado; não prometer determinismo total sem prova multiplataforma.
-3. Sub-stepping adaptativo recebe limites configuráveis, métricas de erro e integração com PowerGovernor. Redução térmica não pode alterar gameplay de forma imprevisível sem modo declarado.
+**Estado: fechada.** A lacuna era de contrato, não de feature: o character que já
+existe funciona, mas exige que o chamador componha gravidade, plataforma e
+stick-to-floor manualmente, na ordem certa — disciplina não verificável que já
+produziu dois cenários de teste sutilmente errados (documentado em `ESTADO.md`).
+Escalar e nadar são escopo futuro do plano principal e não fazem parte deste critério.
 
-### 9.2 Animação, áudio, VFX, IA e UI 4.2–4.6
+1. ✅ `CharacterMotorSystem.UpdateBeforePhysics` compõe velocidade desejada, gravidade limitada, plataforma e o ExtendedUpdate de degraus/stick-to-floor numa ordem única.
+2. ✅ `CharacterMotorState` separa `Grounded`, `Falling`, `Rising`, `Sliding` e stance.
+3. ✅ `TrySetStance` só altera o estado quando o Jolt aceita a nova forma; nascer agachado continua sendo item futuro, não parte desta correção.
+4. ✅ O Core recebe velocidade desejada, não conhece input, câmera, regra de pulo, escalada ou natação; estado/settings são structs sem referência gerenciada.
+5. ✅ Os 17 testes de character cobrem piso, teto baixo, rampas, degrau, plataforma, subida/queda, stance, lifecycle e zero GC no fixed step estável.
 
-1. Executar as etapas na ordem de dependência do plano: skeleton/clip→grafo→IK/retarget; backend áudio→grafo→efeitos; pools de partículas→VFX nodes; navmesh→agent→behavior; canvas UI→widgets→binding.
-2. Usar o canvas comum somente após existir uma infraestrutura estável de nós; editores de animação/VFX não duplicam pan, zoom, pins e undo.
-3. Toda propriedade exposta usa metadata comum para Inspector, serialização, Flow e animação.
-4. Criar vertical slices: personagem animado; fonte espacial; efeito de partícula; agente navegando; HUD ligado a variável.
+#### 6.2.7 Física 2D (`GAP-2D-01`)
 
-### 9.3 Gate M4
+**Estado: parcial, não fechada.** A lacuna surgiu porque o item 4.1.6 do plano
+principal pedia uma *decisão por benchmark* entre Jolt-2D e Box2D v3, mas a
+entrega anterior media Jolt restrito contra si mesmo. O segundo termo e o
+harness equivalente agora existem; o critério continua incompleto enquanto
+faltarem os perfis móveis B/C e a decisão mensurável da ADR-013.
 
-Construir um platformer 3D inteiramente no editor com animação, física, inimigos/navmesh, áudio, partículas, HUD e menu. Rodar a 60 fps no perfil A e 30 fps no C, incluindo soak e recovery.
+1. ✅ Box2D v3.1.1 foi vendorizado em módulo isolado, com commit e MIT registrados; só os alvos de benchmark o ligam.
+2. ✅ O harness usa as mesmas formas, posições, materiais, `dt`, step, warm-up e excitação para impedir que diferenças de sleep falseiem o custo ativo. Três binários separam comparação de CPU e RSS por processo.
+3. 🟡 Host e Android perfil A concluídos com p50/p95/p99, RSS, tamanho, temperatura, estabilidade, equivalência geométrica e saída versionada. As execuções integrais ficaram verdes de 50 a 5.000 corpos, mas faltam os mesmos relatórios nos perfis móveis B e C.
+4. 🟡 `docs/adr/ADR-013-PHYSICS-2D-BACKEND.md` registra alternativas, evidência host e gate exato. Continua `proposto`; não há decisão definitiva sem B/C.
+5. ✅ Nenhuma API pública/runtime foi amarrada ao Box2D. Se o gate móvel aprovar um segundo backend, a interface neutra continua no item 4.1.6 do plano principal.
 
-## 10. Onda 6 — fechar M5: AetherFlow e scripting C# de produto
+> **Itens 4.1.7 (decomposição convexa) e 4.1.9 (sub-stepping térmico) não
+> aparecem aqui de propósito.** Nunca foram iniciados e o plano principal já os
+> especifica — são trabalho futuro normal, não lacuna (§1). O 4.1.8 está
+> registrado em `ESTADO.md` como divergência de escopo aceita, também fora deste
+> documento.
 
-### 10.1 Linguagem e round-trip 5.1–5.2
 
-1. Congelar a AST versionada somente após corrigir controle de fluxo e definir tipos/coerções.
-2. Preservar comentários, nomes e regiões não representáveis via nós `code.raw` com contrato de efeitos.
-3. Usar testes property-based e corpus de C# real; comparar AST normalizada e comportamento, não apenas texto.
-4. Definir claramente o subconjunto suportado; rejeitar ambiguidade com diagnóstico acionável.
-
-### 10.2 Canvas e representações 5.3–5.4
-
-1. Construir o canvas sobre o framework M3 e o Command/Undo existentes.
-2. Virtualizar 1.000+ nós; medir pan/zoom e hit-testing em aparelhos B/C.
-3. Fazer Grafo, Lista e Blocos serem views da mesma AST, sem conversão destrutiva.
-4. Testar transformação entre views com grafos aleatórios e assets reais.
-
-### 10.3 Biblioteca, reflexão e depuração 5.5–5.6
-
-1. Gerar nós a partir do source metadata usado pelo Inspector e binding C#.
-2. Organizar o catálogo por capability e módulos; carregamento sob demanda evita 400 tipos sempre residentes.
-3. Cada nó possui testes, documentação, erro, custo e disponibilidade editor/runtime.
-4. Implementar breakpoints, step, watch e mapa de custo antes de time-travel completo.
-5. Time-travel usa buffer circular com orçamento e snapshots/deltas do ECS; nunca cresce sem limite.
-
-### 10.4 C# e IA 5.7–5.8
-
-1. Integrar compilação incremental, hot reload e migração de estado provados em M0.
-2. Implementar API em três níveis com capabilities e sandbox.
-3. Editor de código touch compartilha diagnósticos e símbolos do compilador.
-4. IA é opcional, opt-in e só produz diff revisável; o produto funciona integralmente offline sem ela.
-
-### 10.5 Gate M5
-
-Usuário sem programação cria jogo completo em duas horas apenas com Flow. Desenvolvedor converte grafo para C#, otimiza e volta sem perda semântica. O teste inclui retorno antecipado, loops, eventos de física e persistência.
-
-## 11. Ondas 7–10 — fases 6 a 9
-
-Estas ondas seguem os itens do plano principal, mas só iniciam após o marco precedente. A ordem interna abaixo evita construir ferramentas sobre assets, renderer ou metadata instáveis.
-
-### 11.1 M6 — criação de conteúdo
-
-1. **6.1 Assets primeiro:** Asset Database, importadores, cache por hash, dependências SQLite, compressão e streaming.
-2. **6.2–6.4 Geometria/autoria:** half-edge e histórico antes de modelagem, escultura e UV; operações sempre canceláveis e undoáveis.
-3. **6.5 Materiais:** Shader Graph usa toolchain M2 e canvas M5.
-4. **6.6–6.7 Mundo/Geometry Nodes:** streaming e jobs precisam respeitar budgets M1/M2.
-5. **6.8 Captura:** fotogrametria/LiDAR/ML são opcionais por capability, com fallback e consentimento.
-
-**Gate:** personagem criado integralmente no celular e objeto escaneado convertido em asset PBR em menos de cinco minutos.
-
-### 11.2 M7 — gráficos avançados
-
-1. GPU-driven/MicroMesh vem antes de GI e sombras virtuais porque define representação e culling.
-2. Cada recurso possui fallback completo B/C e limite térmico.
-3. GI, sombras, volumétricos e upscaling entram individualmente com captura dourada, orçamento e feature flag.
-4. Integrar perfis, banco de dispositivos, calibração e PowerGovernor antes de declarar beta.
-
-**Gate:** cena-alvo a 60 fps no perfil A, < 4,5 W, com comparador visual e fallbacks comprovados.
-
-### 11.3 M8 — build e publicação
-
-1. Aether Player e `.aetherpack` versionado precedem serviços de nuvem.
-2. Pipeline validate→collect→strip→compile→package→sign deve ser reproduzível e produzir SBOM/licenças.
-3. Chaves nunca saem do hardware seguro; logs não contêm segredo.
-4. Multiplayer e serviços usam interfaces locais/fakes para desenvolvimento offline.
-5. Profiler fecha CPU/GPU/memória/térmica antes da publicação real.
-
-**Gate:** jogo publicado na Google Play somente pelo celular e projeto compartilhado para 100 execuções via Player.
-
-### 11.4 M9 — colaboração e lançamento
-
-1. Git visual/diff de cena precede CRDT; formatos e UUIDs precisam estar maduros.
-2. Plugins usam API versionada, capabilities e sandbox; nunca acessam internals por conveniência.
-3. Asset Store exige scanning, moderação, licença e rollback antes de pagamentos.
-4. Matriz de 100+ dispositivos, auditoria LGPD/GDPR, localização e crash-free rate são gates, não ações pós-lançamento.
-
-**Gate 1.0:** métricas do plano principal atendidas e três jogos comerciais publicados com a Aether.
-
-## 12. Estratégia de testes e evidências
+## 7. Estratégia de testes e evidências
 
 | Nível | Finalidade | Exemplos |
 |---|---|---|
@@ -581,7 +423,7 @@ Estas ondas seguem os itens do plano principal, mas só iniciam após o marco pr
 
 Toda métrica deve registrar build, commit, aparelho, temperatura inicial/final e distribuição p50/p95/p99. Benchmarks não rodam misturados a testes de correção e não podem usar workaround oculto.
 
-## 13. Riscos e decisões recomendadas
+## 8. Riscos e decisões recomendadas
 
 | Risco | Decisão recomendada | Sinal de reavaliação |
 |---|---|---|
@@ -594,48 +436,28 @@ Toda métrica deve registrar build, commit, aparelho, temperatura inicial/final 
 | Escopo excede capacidade | Gates rígidos e itens opcionais atrás de flag | Marco falha duas revisões consecutivas sem reduzir risco |
 | Abstração precoce | Vertical slices e metadata única | Interface sem dois consumidores reais |
 
-## 14. Sequência inicial recomendada
+## 9. Próximo passo
 
-### Sprint 1 — estado e riscos de correção
+Este documento não define sprints de produto — o que construir e em que ordem
+está no `PLANO-ENGINE-MOBILE.md`. O que segue é apenas **qual lacuna atacar em
+seguida**, derivado da tabela de §5.
 
-- matriz de marcos e alinhamento documental;
-- suites CI sem skip silencioso;
-- Flow `return`/`break`/`continue`;
-- descriptor V2 do mundo físico e retorno de erros do `Step`.
+Com onze lacunas fechadas e a verdade operacional (§4) concluída, a próxima
+lacuna na ordem de risco é **`GAP-HW-01` (B0)**: a matriz mínima de aparelhos.
+Enquanto ela existir, todo trabalho de renderer, editor e simulação é
+construído sobre uma fundação verificada em um único driver Adreno.
 
-### Sprint 2 — primeiro hardware
+Fechar `GAP-HW-01` não exige escrever engine nova — exige aparelhos (Mali,
+perfil C) e rodar o runner que já existe. Se o hardware não estiver disponível,
+lacunas corretivas portáteis podem avançar sem alterar a ordem de risco, desde
+que não sejam usadas para declarar M0 verde nem para antecipar entregas do
+roadmap. Foi assim que `GAP-FLOW-02` e `GAP-CHAR-01` foram fechadas enquanto a
+evidência externa aguarda aparelhos. O harness reproduzível de `GAP-2D-01`
+também está pronto e verde no host; seu fechamento exige somente executar os
+runners isolados nos perfis B/C e aplicar o gate da ADR-013. Isso não autoriza
+implementar um backend de produto antes da decisão nem duplica o roadmap principal.
 
-- runner ADB e inventário de aparelhos;
-- instalar/abrir APK e validar lifecycle;
-- logs/telemetria categorizados;
-- swapchain e triângulo.
-
-### Sprint 3 — M0 gráfico
-
-- cubo texturizado;
-- batching C#↔Vulkan e contador de interop;
-- shader reload;
-- captura e testes de surface loss.
-
-### Sprint 4 — M0 humano e térmico
-
-- testes PoC-B;
-- soak PoC-C;
-- compressão PoC-E;
-- relatório e gate M0.
-
-### Sprints 5–7 — núcleo M1
-
-- Job graph, acesso ECS read/write, Node;
-- source generator e serializer aliases;
-- SQLite e Asset Dependency Index;
-- tempo/eventos/configuração e benchmark 100k.
-
-### Sprints seguintes
-
-M2 passa a ser o caminho crítico. Correções de cinemáticos, triggers e batching de física podem ocorrer em paralelo, mas nenhuma fase de produto avança para M3 antes de M2 verde.
-
-## 15. Definition of Done por item
+## 10. Definition of Done por item
 
 Cada subetapa só pode ser marcada como concluída quando contém, conforme aplicável:
 
@@ -655,8 +477,15 @@ Cada subetapa só pode ser marcada como concluída quando contém, conforme apli
 - clean build C#, C++, Android debug/release e lint quando afetados;
 - validação em aparelho quando a hipótese não for puramente portátil.
 
-## 16. Resultado esperado
+## 11. Resultado esperado
 
-Este plano evita dois erros: declarar fases concluídas por causa de PoCs isoladas e reescrever fundações que já têm testes. A execução preserva as peças válidas, corrige primeiro as divergências silenciosas, fecha os marcos na ordem de dependência e exige evidência objetiva para cada avanço.
+Este documento evita dois erros: declarar uma fase concluída por causa de uma
+fatia isolada, e reescrever fundação que já tem teste. Ele preserva as peças
+válidas, corrige primeiro as divergências silenciosas e exige evidência objetiva
+para cada lacuna dada como fechada.
 
-O próximo estado correto do projeto não é “mais features”. É **M0 comprovado em hardware, correções B1 encerradas e M1 mensurável**. Depois disso, renderer, editor, simulação, Flow e ferramentas podem crescer sobre uma base cuja arquitetura e limites já foram testados no ambiente real do produto.
+Quando as 13 lacunas estiverem fechadas, **este documento deixa de existir** —
+não vira um segundo roadmap. O que a engine ainda vai construir está inteiramente
+no `PLANO-ENGINE-MOBILE.md`, e o estado real de cada item está em
+`ESTADO.md`/`MATRIZ-MARCOS.md`. O papel deste plano é ser temporário: garantir
+que o que já foi construído sustenta o que virá depois.

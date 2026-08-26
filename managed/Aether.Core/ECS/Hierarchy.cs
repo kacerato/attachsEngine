@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Aether;
 
 /// <summary>Referência ao pai na hierarquia de cena. Ausência do componente = raiz.</summary>
@@ -54,10 +52,8 @@ public static class Hierarchy
             throw new ArgumentException($"A entidade pai {parent} não existe mais.", nameof(parent));
         if (child == parent)
             throw new ArgumentException("Uma entidade não pode ser pai de si mesma.", nameof(parent));
-        if (parent != EntityId.Null && IsDescendantOf(world, parent, child))
-            throw new ArgumentException(
-                "Não dá para prender uma entidade a um descendente dela mesma — isso criaria um ciclo na hierarquia.",
-                nameof(parent));
+        if (parent != EntityId.Null)
+            ValidateParentChain(world, child, parent);
 
         Detach(world, child);
 
@@ -129,6 +125,29 @@ public static class Hierarchy
         return false;
     }
 
+    /// <summary>Valida ciclo e profundidade antes de alterar qualquer componente. O limite torna
+    /// o custo de propagação previsível no mobile e impede que uma cadeia corrompida esconda um
+    /// ciclo além do guard de <see cref="IsDescendantOf"/>.</summary>
+    private static void ValidateParentChain(World world, EntityId child, EntityId parent)
+    {
+        EntityId cursor = parent;
+        int resultingDepth = 1; // primeira aresta: child -> parent
+        while (cursor != EntityId.Null)
+        {
+            if (cursor == child)
+                throw new ArgumentException(
+                    "Não dá para prender uma entidade a um descendente dela mesma — isso criaria um ciclo na hierarquia.",
+                    nameof(parent));
+            if (!world.HasComponent<Parent>(cursor)) return;
+            if (resultingDepth >= MaxDepth)
+                throw new ArgumentException(
+                    $"A hierarquia aceita no máximo {MaxDepth} níveis; este reparent excederia o limite.",
+                    nameof(parent));
+            cursor = world.Read<Parent>(cursor).Value;
+            resultingDepth++;
+        }
+    }
+
     /// <summary>Itera os filhos diretos sem alocar (enumerador struct).</summary>
     public static ChildEnumerable EnumerateChildren(World world, EntityId parent) => new(world, parent);
 
@@ -138,7 +157,9 @@ public static class Hierarchy
         else world.AddComponent(e, value);
     }
 
-    internal const int MaxDepth = 64;
+    /// <summary>Profundidade máxima suportada. É pública para importadores e ferramentas poderem
+    /// validar conteúdo antes de tentar alterar a cena.</summary>
+    public const int MaxDepth = 64;
 }
 
 /// <summary>Enumerável struct sobre os filhos diretos — não aloca.</summary>
@@ -207,77 +228,18 @@ public struct WorldTransform
 
 /// <summary>
 /// Propaga <see cref="LocalTransform"/> para <see cref="WorldTransform"/> respeitando a hierarquia
-/// de <see cref="Parent"/>. A propagação é por níveis (raízes primeiro, depois quem tem pai já
-/// resolvido, e assim por diante) em vez de recursiva por entidade — cada nível processa todas as
-/// entidades daquele nível varrendo chunks inteiros, o que pode ser paralelizado por chunk mais
-/// tarde sem mudar o algoritmo.
+/// de <see cref="Parent"/>. Um plano topológico é recompilado somente após mudanças estruturais ou
+/// de parentesco. Em frames estáveis, locais são reunidos em um lote denso, compostos por um único
+/// kernel nativo quando disponível e gravados de volta nas colunas ECS; o fallback gerenciado tem
+/// exatamente a mesma ordem e semântica.
 /// </summary>
 public static class TransformSystem
 {
-    // Limite de níveis de hierarquia processados por chamada: corta um ciclo pai/filho acidental
-    // (que nunca deveria existir, mas não pode travar o editor num loop infinito).
-    private const int MaxDepth = 64;
+    /// <summary>Backend usado na última propagação, disponível para profiler e diagnóstico.</summary>
+    public static TransformPropagationBackend ActiveBackend => NativeTransformKernel.ActiveBackend;
 
     public static void Propagate(World world)
     {
-        int capacity = world.Capacity;
-        if (capacity == 0) return;
-
-        var ready = ArrayPool<bool>.Shared.Rent(capacity);
-        Array.Clear(ready, 0, capacity);
-        try
-        {
-            foreach (var chunk in world.Query().With<LocalTransform>().With<WorldTransform>().Without<Parent>())
-            {
-                var local = chunk.GetReadOnlySpan<LocalTransform>();
-                var world_ = chunk.GetWritableSpan<WorldTransform>();
-                var entities = chunk.Entities;
-                for (int i = 0; i < chunk.Count; i++)
-                {
-                    world_[i].Value = local[i].Value;
-                    ready[entities[i].Index] = true;
-                }
-            }
-
-            bool progressed = true;
-            for (int pass = 0; pass < MaxDepth && progressed; pass++)
-            {
-                progressed = false;
-                foreach (var chunk in world.Query().With<Parent>().With<LocalTransform>().With<WorldTransform>())
-                {
-                    var parents = chunk.GetReadOnlySpan<Parent>();
-                    var local = chunk.GetReadOnlySpan<LocalTransform>();
-                    var world_ = chunk.GetWritableSpan<WorldTransform>();
-                    var entities = chunk.Entities;
-
-                    for (int i = 0; i < chunk.Count; i++)
-                    {
-                        int selfIndex = entities[i].Index;
-                        if (ready[selfIndex]) continue;
-
-                        var parentId = parents[i].Value;
-                        if (!world.Exists(parentId))
-                        {
-                            // Pai destruído (ou nunca existiu): trata como raiz em vez de travar a propagação.
-                            world_[i].Value = local[i].Value;
-                            ready[selfIndex] = true;
-                            progressed = true;
-                            continue;
-                        }
-
-                        if (!ready[parentId.Index]) continue;   // pai ainda não resolvido nesta passada
-
-                        var parentWorld = world.Read<WorldTransform>(parentId);
-                        world_[i].Value = parentWorld.Value.TransformChild(local[i].Value);
-                        ready[selfIndex] = true;
-                        progressed = true;
-                    }
-                }
-            }
-        }
-        finally
-        {
-            ArrayPool<bool>.Shared.Return(ready);
-        }
+        TransformPropagationPlanCache.Propagate(world);
     }
 }

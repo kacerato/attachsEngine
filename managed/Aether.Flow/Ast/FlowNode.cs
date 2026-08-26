@@ -1,3 +1,5 @@
+using Aether.Flow.Runtime;
+
 namespace Aether.Flow.Ast;
 
 /// <summary>
@@ -15,6 +17,11 @@ public sealed class FlowNode
 
     /// <summary>Tipo do nó, ex. "flow.if", "math.add", "transform.move".</summary>
     public required string NodeType { get; set; }
+
+    /// <summary>Serviços externos exigidos por este nó. Faz parte da AST e do
+    /// formato .aflow para que validação, interpretador e código gerado usem o
+    /// mesmo contrato, inclusive para nós registrados futuramente por plugins.</summary>
+    public FlowCapability RequiredCapabilities { get; set; }
 
     public List<FlowPin> Inputs { get; init; } = new();
     public List<FlowPin> Outputs { get; init; } = new();

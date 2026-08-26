@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Aether;
 
 /// <summary>
@@ -24,10 +26,28 @@ public struct Transform : IEquatable<Transform>
     public readonly float3 Forward => Rotation * float3.Forward;
 
     /// <summary>Compõe: aplica este transform sobre <paramref name="child"/> (pai * filho).</summary>
-    public readonly Transform TransformChild(in Transform child) => new(
-        Position + Rotation * (Scale * child.Position),
-        (Rotation * child.Rotation).Normalized,
-        Scale * child.Scale);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Transform TransformChild(in Transform child)
+    {
+        // Translação pura é extremamente comum em hierarquias de cena e animação. Além de evitar
+        // multiplicações inúteis, este caminho impede que o JIT ARM64 materialize toda a álgebra
+        // escalar de quaternion para uma identidade conhecida. Normalized preserva o contrato para
+        // dados externos que tenham escrito um quaternion não unitário no filho.
+        if (Rotation == quaternion.Identity)
+        {
+            if (Scale == float3.One)
+                return new Transform(Position + child.Position, child.Rotation.Normalized, child.Scale);
+            return new Transform(
+                Position + Scale * child.Position,
+                child.Rotation.Normalized,
+                Scale * child.Scale);
+        }
+
+        return new Transform(
+            Position + Rotation * (Scale * child.Position),
+            (Rotation * child.Rotation).Normalized,
+            Scale * child.Scale);
+    }
 
     /// <summary>Inverso. Exato apenas para escala uniforme; para escala não-uniforme use a matriz.</summary>
     public readonly Transform Inverse()

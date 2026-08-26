@@ -66,6 +66,173 @@ public static class PhysicsCharacterTests
         Assert.True(position.Y < 50f, "character em queda livre deveria ter descido");
     }
 
+    [Test] public static void Motor_CompõeGravidadeEAssentaSemSequenciamentoManual()
+    {
+        if (!NativeLibraryAvailable()) return;
+        using var physics = new PhysicsWorld(new float3(0f, -9.81f, 0f), 16);
+        MakeBox(physics, new float3(10f, 0.5f, 10f), float3.Zero,
+            quaternion.Identity, NativeMotionType.Static);
+        var character = physics.CreateCharacter(CharacterDesc.Default,
+            new float3(0f, 5f, 0f), quaternion.Identity);
+        var state = CharacterMotorState.Initial;
+        var settings = CharacterMotorSettings.Default;
+        var input = new CharacterMotorInput(float3.Zero);
+        const float dt = 1f / 60f;
+
+        for (int i = 0; i < 300; i++)
+        {
+            CharacterMotorSystem.UpdateBeforePhysics(
+                physics, character, ref state, in settings, in input, dt);
+            physics.Step(dt);
+        }
+
+        physics.GetCharacterTransform(character, out var position, out _);
+        Assert.Close(0.5f, position.Y, eps: 0.05f,
+            what: "motor deveria integrar gravidade e assentar sobre o piso");
+        Assert.Equal(CharacterMotionState.Grounded, state.MotionState);
+        Assert.True(state.GravityVelocity.Length <= settings.GroundStickSpeed + 1e-4f,
+            "no chão, gravidade acumulada deve virar apenas a velocidade de aderência");
+    }
+
+    [Test] public static void Motor_HerdaPlataformaSemComposicaoDoChamador()
+    {
+        if (!NativeLibraryAvailable()) return;
+        using var physics = new PhysicsWorld(new float3(0f, -9.81f, 0f), 16);
+        var platform = MakeBox(physics, new float3(5f, 0.5f, 5f), float3.Zero,
+            quaternion.Identity, NativeMotionType.Kinematic);
+        physics.SetLinearVelocity(platform, new float3(2f, 0f, 0f));
+        var character = physics.CreateCharacter(CharacterDesc.Default,
+            new float3(0f, 3f, 0f), quaternion.Identity);
+        var state = CharacterMotorState.Initial;
+        var settings = CharacterMotorSettings.Default;
+        var input = new CharacterMotorInput(float3.Zero);
+        const float dt = 1f / 60f;
+
+        for (int i = 0; i < 120; i++)
+        {
+            CharacterMotorSystem.UpdateBeforePhysics(
+                physics, character, ref state, in settings, in input, dt);
+            physics.Step(dt);
+        }
+        physics.GetCharacterTransform(character, out var before, out _);
+
+        for (int i = 0; i < 60; i++)
+        {
+            CharacterMotorSystem.UpdateBeforePhysics(
+                physics, character, ref state, in settings, in input, dt);
+            physics.Step(dt);
+        }
+        physics.GetCharacterTransform(character, out var after, out _);
+
+        Assert.Equal(CharacterMotionState.Grounded, state.MotionState);
+        Assert.True(after.X - before.X > 1f,
+            "motor deveria herdar automaticamente a velocidade da plataforma");
+    }
+
+    [Test] public static void Motor_DistingueRisingEFalling()
+    {
+        if (!NativeLibraryAvailable()) return;
+        using var physics = new PhysicsWorld(new float3(0f, -9.81f, 0f), 16);
+        var character = physics.CreateCharacter(CharacterDesc.Default,
+            new float3(0f, 20f, 0f), quaternion.Identity);
+        var state = CharacterMotorState.Initial;
+        var settings = CharacterMotorSettings.Default;
+        settings.MaxFallSpeed = 2f;
+        var input = new CharacterMotorInput(float3.Zero);
+        const float dt = 1f / 60f;
+
+        CharacterMotorSystem.SetVerticalSpeed(ref state, in settings, 5f);
+        CharacterMotorSystem.UpdateBeforePhysics(
+            physics, character, ref state, in settings, in input, dt);
+        physics.Step(dt);
+        Assert.Equal(CharacterMotionState.Rising, state.MotionState);
+        Assert.True(state.GravityVelocity.Y > settings.MaxFallSpeed,
+            "limite de queda não deve cortar velocidade ascendente");
+
+        for (int i = 0; i < 90 && state.MotionState != CharacterMotionState.Falling; i++)
+        {
+            CharacterMotorSystem.UpdateBeforePhysics(
+                physics, character, ref state, in settings, in input, dt);
+            physics.Step(dt);
+        }
+        Assert.Equal(CharacterMotionState.Falling, state.MotionState);
+
+        for (int i = 0; i < 120; i++)
+        {
+            CharacterMotorSystem.UpdateBeforePhysics(
+                physics, character, ref state, in settings, in input, dt);
+            physics.Step(dt);
+        }
+        Assert.True(-state.GravityVelocity.Y <= settings.MaxFallSpeed + 1e-4f,
+            "velocidade de queda deveria respeitar o limite configurado");
+    }
+
+    [Test] public static void Motor_StanceSoMudaQuandoFormaEhAceita()
+    {
+        if (!NativeLibraryAvailable()) return;
+        using var physics = new PhysicsWorld(new float3(0f, -9.81f, 0f), 16);
+        var character = physics.CreateCharacter(CharacterDesc.Default,
+            new float3(0f, 5f, 0f), quaternion.Identity);
+        var state = CharacterMotorState.Initial;
+
+        Assert.True(CharacterMotorSystem.TrySetStance(
+            physics, character, ref state, CharacterStance.Crouching));
+        Assert.Equal(CharacterStance.Crouching, state.Stance);
+        Assert.True(CharacterMotorSystem.TrySetStance(
+            physics, character, ref state, CharacterStance.Standing));
+        Assert.Equal(CharacterStance.Standing, state.Stance);
+    }
+
+    [Test] public static void Motor_ClassificaContatoIngremeComoSliding()
+    {
+        if (!NativeLibraryAvailable()) return;
+        using var physics = new PhysicsWorld(new float3(0f, -9.81f, 0f), 16);
+        const float rampAngle = 80f * MathF.PI / 180f;
+        var rampRotation = new quaternion(0f, 0f, -MathF.Sin(rampAngle * 0.5f),
+            MathF.Cos(rampAngle * 0.5f));
+        MakeBox(physics, new float3(10f, 0.3f, 10f), float3.Zero,
+            rampRotation, NativeMotionType.Static);
+        var character = physics.CreateCharacter(CharacterDesc.Default,
+            new float3(0.3f, 3f, 0f), quaternion.Identity);
+        var state = CharacterMotorState.Initial;
+        var settings = CharacterMotorSettings.Default;
+        var input = new CharacterMotorInput(float3.Zero);
+        const float dt = 1f / 60f;
+
+        bool sawSliding = false;
+        for (int i = 0; i < 120 && !sawSliding; i++)
+        {
+            CharacterMotorSystem.UpdateBeforePhysics(
+                physics, character, ref state, in settings, in input, dt);
+            physics.Step(dt);
+            sawSliding = state.MotionState == CharacterMotionState.Sliding;
+        }
+
+        Assert.True(sawSliding,
+            "motor deveria distinguir contato não caminhável de queda livre");
+    }
+
+    [Test] public static void Motor_UpdateEstavelNaoAlocaHeapGerenciada()
+    {
+        if (!NativeLibraryAvailable()) return;
+        using var physics = new PhysicsWorld(new float3(0f, -9.81f, 0f), 16);
+        MakeBox(physics, new float3(10f, 0.5f, 10f), float3.Zero,
+            quaternion.Identity, NativeMotionType.Static);
+        var character = physics.CreateCharacter(CharacterDesc.Default,
+            new float3(0f, 0.5f, 0f), quaternion.Identity);
+        var state = CharacterMotorState.Initial;
+        var settings = CharacterMotorSettings.Default;
+        var input = new CharacterMotorInput(new float3(1f, 0f, 0f));
+        const float dt = 1f / 60f;
+
+        Assert.NoAlloc(() =>
+        {
+            CharacterMotorSystem.UpdateBeforePhysics(
+                physics, character, ref state, in settings, in input, dt);
+            physics.Step(dt);
+        }, "composição do motor em fixed step estável");
+    }
+
     [Test] public static void Character_AndaSobreRampaAndavel_SemFicarPreso()
     {
         if (!NativeLibraryAvailable()) return;

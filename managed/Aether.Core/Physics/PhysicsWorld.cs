@@ -2,6 +2,7 @@ namespace Aether.Physics;
 
 /// <summary>Handle denso para um corpo físico — o mesmo <c>JPH::BodyID</c> empacotado, visto do
 /// lado gerenciado. <see cref="Invalid"/> nunca é devolvido por uma criação bem-sucedida.</summary>
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
 public readonly struct PhysicsBodyHandle : IEquatable<PhysicsBodyHandle>
 {
     internal readonly uint Value;
@@ -29,6 +30,28 @@ public enum QueryLayerMask : uint
     Static = NativeQueryLayerMask.Static,
     Dynamic = NativeQueryLayerMask.Dynamic,
     All = NativeQueryLayerMask.All,
+}
+
+/// <summary>Fase do overlap persistente de um <see cref="Trigger"/>. Enter aparece
+/// no primeiro passo em contato, Stay nos passos seguintes e Exit no primeiro
+/// passo em que o último subcontato entre os dois corpos desaparece.</summary>
+public enum TriggerEventType : uint
+{
+    Enter = 0,
+    Stay = 1,
+    Exit = 2,
+}
+
+/// <summary>Evento determinístico publicado por <see cref="PhysicsWorld.GetTriggerEvents"/>.
+/// Os handles são os mesmos gravados em <see cref="RigidBody.Handle"/>; um sensor-sensor
+/// gera um evento dirigido para cada sensor cujo filtro aceite o outro.</summary>
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct PhysicsTriggerEvent
+{
+    public PhysicsBodyHandle Sensor;
+    public PhysicsBodyHandle Other;
+    public TriggerEventType Type;
+    private uint _reserved;
 }
 
 /// <summary>Um hit de <see cref="PhysicsWorld.ShapeCastClosest"/> ou <see cref="PhysicsWorld.OverlapShape"/>
@@ -129,9 +152,19 @@ public enum JointKind : uint
     Distance = NativeJointKind.Distance,
 }
 
+/// <summary>Referencial de autoria dos pontos/eixos de uma junta. Em modos locais, todos os
+/// pontos são transformados por posição+rotação do corpo indicado e todos os eixos somente por
+/// sua rotação no instante da criação.</summary>
+public enum JointSpace : uint
+{
+    World = NativeJointSpace.World,
+    LocalToBody1 = NativeJointSpace.LocalToBody1,
+    LocalToBody2 = NativeJointSpace.LocalToBody2,
+}
+
 /// <summary>Descreve uma junta a criar entre dois corpos do mesmo <see cref="PhysicsWorld"/>.
-/// Espelha <see cref="NativeJointDesc"/> — ver o comentário completo em jolt_bridge.h para a
-/// convenção de cada campo por tipo de junta (o que é ignorado, unidades, espaço mundial).
+/// Espelha <see cref="NativeJointDescV2"/> — ver o comentário completo em jolt_bridge.h para a
+/// convenção de cada campo por tipo de junta (o que é ignorado, unidades e referencial).
 /// <para>
 /// AVISO específico de <see cref="JointKind.Hinge"/>: o Jolt exige <see cref="LimitsMin"/> em
 /// [-pi,0] e <see cref="LimitsMax"/> em [0,pi] (não é validação desta fachada — é a API real,
@@ -143,6 +176,7 @@ public enum JointKind : uint
 public struct JointDesc
 {
     public JointKind Kind;
+    public JointSpace Space;
     public float3 Point1;
     public float3 Point2;
     public float3 Axis1;
@@ -151,9 +185,12 @@ public struct JointDesc
     public float LimitsMax;
     public JointMotor Motor;
 
-    internal NativeJointDesc ToNative() => new()
+    internal NativeJointDescV2 ToNativeV2() => new()
     {
+        StructSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeJointDescV2>(),
+        ApiVersion = 2,
         Kind = (NativeJointKind)Kind,
+        Space = (NativeJointSpace)Space,
         Point1 = Point1,
         Point2 = Point2,
         Axis1 = Axis1,
@@ -162,6 +199,36 @@ public struct JointDesc
         LimitsMax = LimitsMax,
         Motor = Motor.ToNative(),
     };
+
+    internal readonly bool IsValid()
+    {
+        if (Kind is < JointKind.Point or > JointKind.Distance ||
+            Space is < JointSpace.World or > JointSpace.LocalToBody2 ||
+            !Finite(Point1) || !Finite(Point2) || !Finite(Axis1) || !Finite(Axis2) ||
+            !float.IsFinite(LimitsMin) || !float.IsFinite(LimitsMax) ||
+            Motor.State is < NativeMotorState.Off or > NativeMotorState.PositionAndVelocity ||
+            !float.IsFinite(Motor.TargetVelocity) || !float.IsFinite(Motor.TargetPosition) ||
+            !float.IsFinite(Motor.MaxForceOrTorque) || Motor.MaxForceOrTorque < 0f ||
+            !float.IsFinite(Motor.SpringFrequency) || Motor.SpringFrequency < 0f ||
+            !float.IsFinite(Motor.SpringDamping) || Motor.SpringDamping < 0f)
+            return false;
+
+        if (Kind is JointKind.Hinge or JointKind.Slider)
+        {
+            if (LengthSquared(Axis1) <= 1e-12f || LengthSquared(Axis2) <= 1e-12f ||
+                LimitsMin > LimitsMax)
+                return false;
+        }
+        return Kind != JointKind.Hinge ||
+               (LimitsMin >= -MathF.PI && LimitsMin <= 0f &&
+                LimitsMax >= 0f && LimitsMax <= MathF.PI);
+    }
+
+    private static bool Finite(float3 value) =>
+        float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
+
+    private static float LengthSquared(float3 value) =>
+        value.X * value.X + value.Y * value.Y + value.Z * value.Z;
 }
 
 /// <summary>Descreve a forma de colisão de um corpo. Espelha <see cref="NativeShapeDesc"/> num
@@ -191,6 +258,62 @@ public readonly struct PhysicsShape
         SphereRadius = SphereRadius,
         CapsuleHalfHeight = CapsuleHalfHeight,
     };
+}
+
+/// <summary>Descritor blittable para criação unitária ou em lote. O layout espelha
+/// <c>AetherBodyDescV2</c>, mas os campos de versão ficam encapsulados para que todo
+/// descritor construído por esta API atravesse a ABI com um contrato válido.</summary>
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct PhysicsBodyDescription
+{
+    private uint _structSize;
+    private uint _apiVersion;
+    private NativeShapeDesc _shape;
+    public float3 Position;
+    public quaternion Rotation;
+    public NativeMotionType MotionType;
+    public float Friction;
+    public float Restitution;
+    public AllowedDOFs AllowedDOFs;
+    private uint _isSensor;
+    private QueryLayerMask _eventLayerMask;
+
+    public readonly PhysicsShape Shape => _shape.Kind switch
+    {
+        NativeShapeKind.Box => PhysicsShape.Box(_shape.BoxHalfExtent),
+        NativeShapeKind.Capsule => PhysicsShape.Capsule(_shape.SphereRadius, _shape.CapsuleHalfHeight),
+        _ => PhysicsShape.Sphere(_shape.SphereRadius),
+    };
+    public bool IsSensor { readonly get => _isSensor != 0; set => _isSensor = value ? 1u : 0u; }
+    public QueryLayerMask EventLayerMask
+    {
+        readonly get => _eventLayerMask;
+        set
+        {
+            if ((value & ~QueryLayerMask.All) != 0) throw new ArgumentOutOfRangeException(nameof(value));
+            _eventLayerMask = value;
+        }
+    }
+
+    public PhysicsBodyDescription(in PhysicsShape shape, float3 position, quaternion rotation,
+        NativeMotionType motionType, float friction = 0.5f, float restitution = 0f,
+        AllowedDOFs allowedDOFs = AllowedDOFs.All, bool isSensor = false,
+        QueryLayerMask eventLayerMask = QueryLayerMask.All)
+    {
+        if ((eventLayerMask & ~QueryLayerMask.All) != 0)
+            throw new ArgumentOutOfRangeException(nameof(eventLayerMask));
+        _structSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<PhysicsBodyDescription>();
+        _apiVersion = 2;
+        _shape = shape.ToNative();
+        Position = position;
+        Rotation = rotation;
+        MotionType = motionType;
+        Friction = friction;
+        Restitution = restitution;
+        AllowedDOFs = allowedDOFs;
+        _isSensor = isSensor ? 1u : 0u;
+        _eventLayerMask = eventLayerMask;
+    }
 }
 
 /// <summary>Graus de liberdade permitidos a um corpo dinâmico/cinemático (item 4.1.6, física
@@ -301,16 +424,25 @@ public readonly record struct PhysicsStepStatistics(
     ulong ContactConstraintsFullCount,
     PhysicsUpdateError LastErrorFlags);
 
+/// <summary>Telemetria cumulativa apenas da fronteira de criação/destruição de corpos.
+/// Um lote de 10.000 descritores conta como um crossing, com os bytes do lote inteiro.</summary>
+public readonly record struct PhysicsBodyInteropStatistics(
+    ulong NativeCrossings,
+    ulong BytesSent,
+    ulong BytesReceived,
+    ulong BodiesCreated,
+    ulong BodiesDestroyed);
+
 /// <summary>
 /// Wrapper gerenciado de um <c>AetherPhysicsWorld*</c> nativo. Dono do ponteiro nativo — chamar
 /// <see cref="Dispose"/> (ou deixar o finalizador rodar, como rede de segurança) libera o mundo e
 /// invalida todo <see cref="PhysicsBodyHandle"/> emitido por ele, na mesma disciplina do lado C++
 /// (ver comentário de <c>AetherPhysics_DestroyWorld</c> em <c>jolt_bridge.h</c>).
 /// <para>
-/// Cada chamada nativa aqui é uma chamada P/Invoke individual — aceitável para criação/destruição
-/// de corpo (evento raro, não roda every frame), mas <see cref="PhysicsSyncSystem"/> agrupa os
-/// <c>Step</c>+<c>GetTransform</c> do caminho quente para respeitar o orçamento de 200 chamadas
-/// nativas por frame (<c>docs/CONVENCOES.md</c> §2).
+/// Criação/destruição massiva usa <see cref="CreateBodies"/>/<see cref="DestroyBodies"/> e
+/// atravessa a ABI uma vez por lote; as APIs unitárias são wrappers de conveniência sobre esse
+/// caminho. As demais operações mantêm granularidade própria e serão agregadas pelo profiler
+/// global da PoC-A.
 /// </para>
 /// </summary>
 public sealed class PhysicsWorld : IDisposable
@@ -325,6 +457,11 @@ public sealed class PhysicsWorld : IDisposable
     private nint _handle;
     private bool _disposed;
     private readonly Dictionary<uint, KinematicSyncState> _kinematicSync = new();
+    private ulong _bodyInteropCrossings;
+    private ulong _bodyInteropBytesSent;
+    private ulong _bodyInteropBytesReceived;
+    private ulong _bodiesCreated;
+    private ulong _bodiesDestroyed;
 
     /// <summary>Quantidade de crossings nativos realmente emitidos por
     /// <see cref="MoveKinematic"/>. Útil para profiling e regressões de dirty sync.</summary>
@@ -362,39 +499,99 @@ public sealed class PhysicsWorld : IDisposable
     /// <see cref="NativeMotionType.Dynamic"/> e <paramref name="allowedDOFs"/> não deixar
     /// nenhum eixo de translação livre — ver <see cref="AllowedDOFs"/>.</summary>
     public PhysicsBodyHandle CreateBody(in PhysicsShape shape, float3 position, quaternion rotation,
-        NativeMotionType motionType, float friction = 0.5f, float restitution = 0.0f, AllowedDOFs allowedDOFs = AllowedDOFs.All)
+        NativeMotionType motionType, float friction = 0.5f, float restitution = 0.0f,
+        AllowedDOFs allowedDOFs = AllowedDOFs.All, bool isSensor = false,
+        QueryLayerMask eventLayerMask = QueryLayerMask.All)
     {
-        var desc = new NativeBodyDesc
-        {
-            Shape = shape.ToNative(),
-            Position = position,
-            Rotation = rotation,
-            MotionType = motionType,
-            Friction = friction,
-            Restitution = restitution,
-            AllowedDOFs = (NativeAllowedDOFs)allowedDOFs,
-        };
-        uint raw = NativePhysics.AetherPhysics_CreateBody(Handle, in desc);
-        if (raw != PhysicsBodyHandle.Invalid.Value && motionType == NativeMotionType.Kinematic)
-        {
-            _kinematicSync[raw] = new KinematicSyncState
-            {
-                TargetPosition = position,
-                TargetRotation = rotation,
-            };
-        }
-        return new PhysicsBodyHandle(raw);
+        var desc = new PhysicsBodyDescription(shape, position, rotation, motionType, friction,
+            restitution, allowedDOFs, isSensor, eventLayerMask);
+        Span<PhysicsBodyHandle> result = stackalloc PhysicsBodyHandle[1];
+        return CreateBodies(new ReadOnlySpan<PhysicsBodyDescription>(in desc), result) == 1
+            ? result[0]
+            : PhysicsBodyHandle.Invalid;
     }
 
     public void DestroyBody(PhysicsBodyHandle handle)
     {
         if (!handle.IsValid) return;
-        NativePhysics.AetherPhysics_DestroyBody(Handle, handle.Value);
-        _kinematicSync.Remove(handle.Value);
+        ReadOnlySpan<PhysicsBodyHandle> one = new(in handle);
+        DestroyBodies(one);
+    }
+
+    /// <summary>Cria todos os descritores com um único crossing. A operação nativa é
+    /// transacional: sucesso devolve <c>descriptions.Length</c>; falha devolve zero e preenche
+    /// todo o prefixo correspondente com <see cref="PhysicsBodyHandle.Invalid"/>.</summary>
+    public unsafe int CreateBodies(ReadOnlySpan<PhysicsBodyDescription> descriptions,
+        Span<PhysicsBodyHandle> results)
+    {
+        if (results.Length < descriptions.Length)
+            throw new ArgumentException("O buffer de handles precisa comportar todos os descritores.", nameof(results));
+        if (descriptions.IsEmpty) return 0;
+
+        int created;
+        fixed (PhysicsBodyDescription* descPtr = descriptions)
+        fixed (PhysicsBodyHandle* resultPtr = results)
+            created = NativePhysics.AetherPhysics_CreateBodiesV2(Handle, descPtr, resultPtr,
+                descriptions.Length);
+
+        _bodyInteropCrossings++;
+        _bodyInteropBytesSent += (ulong)descriptions.Length * (uint)sizeof(PhysicsBodyDescription);
+        _bodyInteropBytesReceived += (ulong)descriptions.Length * (uint)sizeof(PhysicsBodyHandle);
+        _bodiesCreated += (ulong)created;
+
+        if (created == descriptions.Length)
+            for (int i = 0; i < created; i++)
+                if (descriptions[i].MotionType == NativeMotionType.Kinematic)
+                    _kinematicSync[results[i].Value] = new KinematicSyncState
+                    {
+                        TargetPosition = descriptions[i].Position,
+                        TargetRotation = descriptions[i].Rotation,
+                    };
+        return created;
+    }
+
+    /// <summary>Remove todos os handles com um único crossing. Handles inválidos são aceitos e
+    /// ignorados, permitindo destruir diretamente buffers parcialmente preenchidos.</summary>
+    public unsafe void DestroyBodies(ReadOnlySpan<PhysicsBodyHandle> handles)
+    {
+        if (handles.IsEmpty) return;
+        fixed (PhysicsBodyHandle* p = handles)
+            NativePhysics.AetherPhysics_DestroyBodies(Handle, p, handles.Length);
+        _bodyInteropCrossings++;
+        _bodyInteropBytesSent += (ulong)handles.Length * (uint)sizeof(PhysicsBodyHandle);
+        for (int i = 0; i < handles.Length; i++)
+            if (handles[i].IsValid)
+            {
+                _kinematicSync.Remove(handles[i].Value);
+                _bodiesDestroyed++;
+            }
+    }
+
+    public PhysicsBodyInteropStatistics GetBodyInteropStatistics() => new(
+        _bodyInteropCrossings, _bodyInteropBytesSent, _bodyInteropBytesReceived,
+        _bodiesCreated, _bodiesDestroyed);
+
+    public void ResetBodyInteropStatistics()
+    {
+        _bodyInteropCrossings = 0;
+        _bodyInteropBytesSent = 0;
+        _bodyInteropBytesReceived = 0;
+        _bodiesCreated = 0;
+        _bodiesDestroyed = 0;
     }
 
     public PhysicsUpdateError Step(float deltaTime, int collisionSteps = 1) =>
         (PhysicsUpdateError)NativePhysics.AetherPhysics_StepV2(Handle, deltaTime, collisionSteps);
+
+    /// <summary>Copia a fotografia ordenada dos eventos produzidos pelo último <see cref="Step"/>.
+    /// Devolve a contagem real: se for maior que <paramref name="events"/>.Length, o prefixo
+    /// coube no buffer e o chamador pode repetir com capacidade suficiente. Ler não consome a
+    /// fotografia; o próximo Step a substitui.</summary>
+    public unsafe int GetTriggerEvents(Span<PhysicsTriggerEvent> events)
+    {
+        fixed (PhysicsTriggerEvent* p = events)
+            return NativePhysics.AetherPhysics_GetTriggerEvents(Handle, p, events.Length);
+    }
 
     public PhysicsStepStatistics GetStepStatistics()
     {
@@ -550,17 +747,26 @@ public sealed class PhysicsWorld : IDisposable
     // ---------------------------------------------------------------- juntas e motores (4.1.3)
 
     /// <summary>Cria uma junta entre dois corpos deste mundo. Devolve <see cref="PhysicsJointHandle.Invalid"/>
-    /// se algum dos dois handles de corpo for inválido — mesma disciplina defensiva do resto
-    /// desta fachada (nunca lança por handle ruim, só devolve inválido).</summary>
+    /// se algum handle, enum, eixo, valor finito ou limite for inválido — mesma disciplina
+    /// defensiva do ABI (nunca deixa um descriptor ruim alcançar um assert do Jolt).</summary>
     public PhysicsJointHandle CreateJoint(PhysicsBodyHandle body1, PhysicsBodyHandle body2, in JointDesc desc)
     {
-        if (!body1.IsValid || !body2.IsValid) return PhysicsJointHandle.Invalid;
-        NativeJointDesc native = desc.ToNative();
-        uint raw = NativePhysics.AetherPhysics_CreateJoint(Handle, body1.Value, body2.Value, in native);
+        if (!body1.IsValid || !body2.IsValid || !desc.IsValid()) return PhysicsJointHandle.Invalid;
+        NativeJointDescV2 native = desc.ToNativeV2();
+        uint raw = NativePhysics.AetherPhysics_CreateJointV2(Handle, body1.Value, body2.Value, in native);
         return new PhysicsJointHandle(raw);
     }
 
     public void DestroyJoint(PhysicsJointHandle handle)
+    {
+        if (!handle.IsValid) return;
+        DestroySynchronizedJoint(handle);
+        JointSyncSystem.NotifyJointDestroyed(this, handle);
+    }
+
+    /// <summary>Caminho do owner declarativo: o <see cref="JointSyncSystem"/> já atualiza seu
+    /// mapa antes/depois da chamada, portanto não deve receber uma notificação reentrante.</summary>
+    internal void DestroySynchronizedJoint(PhysicsJointHandle handle)
     {
         if (!handle.IsValid) return;
         NativePhysics.AetherPhysics_DestroyJoint(Handle, handle.Value);
@@ -583,6 +789,7 @@ public sealed class PhysicsWorld : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
+        JointSyncSystem.ForgetWorld(this);
         NativePhysics.AetherPhysics_DestroyWorld(_handle);
         _kinematicSync.Clear();
         _handle = nint.Zero;
@@ -617,10 +824,10 @@ public sealed class PhysicsWorld : IDisposable
         NativePhysics.AetherPhysics_DestroyCharacter(Handle, handle.Value);
     }
 
-    /// <summary>Define a velocidade linear ANTES de chamar <see cref="UpdateCharacter"/> — é o
-    /// único jeito de mover o personagem (não existe "aplicar força"; CharacterVirtual não é
-    /// dinâmico). Monte esta velocidade somando input do jogador + <see cref="GetCharacterGroundVelocity"/>
-    /// (se apoiado numa plataforma) + gravidade acumulada manualmente.</summary>
+    /// <summary>API de baixo nível que define a velocidade linear antes de
+    /// <see cref="UpdateCharacter"/>. Runtime comum deve preferir
+    /// <see cref="CharacterMotorSystem"/>, que compõe gravidade e plataforma uma
+    /// única vez; use este método diretamente apenas para controle especializado.</summary>
     public void SetCharacterVelocity(PhysicsCharacterHandle handle, float3 velocity)
     {
         if (!handle.IsValid) return;
@@ -659,8 +866,8 @@ public sealed class PhysicsWorld : IDisposable
         handle.IsValid ? (CharacterGroundState)NativePhysics.AetherPhysics_GetCharacterGroundState(Handle, handle.Value) : CharacterGroundState.InAir;
 
     /// <summary>Velocidade do corpo/superfície sob o personagem (0 se InAir ou handle inválido)
-    /// — já inclui rotação do corpo de suporte. Some isto à velocidade desejada antes de
-    /// <see cref="SetCharacterVelocity"/> para "grudar" em plataformas móveis — não é automático.</summary>
+    /// — já inclui rotação do corpo de suporte. <see cref="CharacterMotorSystem"/>
+    /// a herda automaticamente; consumidores de baixo nível podem compor manualmente.</summary>
     public float3 GetCharacterGroundVelocity(PhysicsCharacterHandle handle) =>
         handle.IsValid ? NativePhysics.AetherPhysics_GetCharacterGroundVelocity(Handle, handle.Value) : float3.Zero;
 

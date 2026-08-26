@@ -1,4 +1,5 @@
 using Aether.Flow.Ast;
+using Aether.Flow.Runtime;
 
 namespace Aether.Flow.Validation;
 
@@ -9,7 +10,7 @@ namespace Aether.Flow.Validation;
 /// </summary>
 public static class FlowValidator
 {
-    public static List<FlowDiagnostic> Validate(FlowGraph graph)
+    public static List<FlowDiagnostic> Validate(FlowGraph graph, FlowExecutionContext? context = null)
     {
         var diagnostics = new List<FlowDiagnostic>();
 
@@ -21,8 +22,25 @@ public static class FlowValidator
         CheckVariaveisReferenciadas(graph, diagnostics);
         CheckEventosDuplicados(graph, diagnostics);
         CheckNosOrfaos(graph, diagnostics);
+        if (context is not null)
+            CheckCapabilities(graph, context, diagnostics);
 
         return diagnostics;
+    }
+
+    private static void CheckCapabilities(
+        FlowGraph graph, FlowExecutionContext context, List<FlowDiagnostic> diagnostics)
+    {
+        foreach (var node in graph.Nodes)
+        {
+            FlowCapability missing = context.Missing(node.RequiredCapabilities);
+            if (missing == FlowCapability.None) continue;
+
+            diagnostics.Add(new FlowDiagnostic(Severity.Erro,
+                $"O bloco {FriendlyName(node)} precisa de serviços que este contexto não oferece: {missing}. " +
+                "Conecte o Behavior ao runtime correto ou remova o bloco.",
+                node.Id));
+        }
     }
 
     private static void CheckPinosObrigatorios(FlowGraph graph, List<FlowDiagnostic> diagnostics)
@@ -350,6 +368,7 @@ public static class FlowValidator
         NodeTypes.MathDivide => "Dividir",
         NodeTypes.MathCompare => "Comparar",
         NodeTypes.CodeRaw => "Código",
+        NodeTypes.LogMessage => "Registrar mensagem",
         _ => node.NodeType,
     };
 

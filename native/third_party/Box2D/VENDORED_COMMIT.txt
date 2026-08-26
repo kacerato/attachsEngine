@@ -1,0 +1,9 @@
+Repository: https://github.com/erincatto/box2d.git
+Release: v3.1.1
+Commit: 8c661469c9507d3ad6fbd2fea3f1aa71669c2fe3
+License: MIT (see LICENSE)
+Vendored: 2026-08-26
+
+Only CMakeLists.txt, include/, src/, LICENSE, and README.md are vendored.
+Samples, tests, benchmarks, documentation, CI files, and git metadata are intentionally excluded.
+Box2D is linked only by benchmark_physics2d and benchmark_physics2d_box2d; it is not a runtime backend.

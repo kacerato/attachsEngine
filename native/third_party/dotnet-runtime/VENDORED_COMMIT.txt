@@ -1,0 +1,14 @@
+Origem: NuGet.org, pacotes oficiais da Microsoft (.NET 8, runtime bionic para Android)
+  Microsoft.NETCore.App.Runtime.linux-bionic-arm64 8.0.27
+  Microsoft.NETCore.App.Host.linux-bionic-arm64 8.0.27 (só headers hostfxr.h/coreclr_delegates.h)
+Vendorizado em: 2026-08-26
+Item do plano: 0.1.4 (integração .NET no processo nativo)
+
+Não é um vendoring de código-fonte compilado aqui (diferente de JoltPhysics/Box2D) — são
+binários pré-compilados e assinados pela Microsoft, distribuídos via NuGet, sem alternativa de
+build local (o .NET SDK não compila seu próprio runtime a partir deste repositório). Vendorizados
+por decisão explícita para manter o build offline depois da primeira vendorização — ver
+ESTADO.md, item 0.1.4, para o registro completo da decisão.
+
+Para atualizar: baixar os mesmos pacotes NuGet numa versão mais nova e substituir os arquivos em
+android-arm64/native/ e include/, atualizando os números de versão acima.

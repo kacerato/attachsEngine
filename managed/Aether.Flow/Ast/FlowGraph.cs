@@ -1,3 +1,5 @@
+using Aether.Flow.Runtime;
+
 namespace Aether.Flow.Ast;
 
 /// <summary>
@@ -26,6 +28,9 @@ public sealed class FlowGraph
         Connections.Where(c => c.From.NodeId == nodeId && c.From.PinName == pinName);
 
     public IEnumerable<FlowNode> EventNodes => Nodes.Where(n => n.NodeType.StartsWith("event.", StringComparison.Ordinal));
+
+    public FlowCapability RequiredCapabilities => Nodes.Aggregate(
+        FlowCapability.None, static (all, node) => all | node.RequiredCapabilities);
 
     public string NewNodeId(string hint)
     {

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using Aether.Physics;
 using Aether.Serialization;
 
 namespace Aether.Tests;
@@ -41,6 +42,21 @@ public static class SerializationTests
     // primeiro que tivesse.
     private struct SinalizadorSeguidoDeByte { public bool Ligado; public byte Extra; }
 
+    // Schema textual atual (v3). V1 chamava o componente/field de OldTextSchema/OldValue;
+    // v2 já persistia o id "value.primary". Added não existia e RemovedValue deixou de existir.
+    private struct TextSchemaV3
+    {
+        public int CurrentValue;
+        public int Added;
+        public float Ratio;
+    }
+
+    private struct BinarySchemaV3
+    {
+        public int Value;
+        public int Added;
+    }
+
 #pragma warning restore CS0649
 
     private static World NovoMundo() => new();
@@ -49,6 +65,39 @@ public static class SerializationTests
     {
         ComponentRegistryBootstrap.RegisterBuiltins();
         return NovoMundo();
+    }
+
+    private static void RegisterTextSchemaV3()
+    {
+        if (ComponentRegistry.TryGetByType(ComponentType.Of<TextSchemaV3>(), out _)) return;
+        ComponentRegistry.Register<TextSchemaV3>("Aether.Tests.TextSchema", schemaVersion: 3, registration =>
+        {
+            registration.FormerlyNamed("Aether.Tests.OldTextSchema", "Aether.Tests.MiddleTextSchema");
+            registration.Field(nameof(TextSchemaV3.CurrentValue), "value.primary", "OldValue", "MiddleValue");
+            registration.Field(nameof(TextSchemaV3.Added), "value.added");
+            registration.Field(nameof(TextSchemaV3.Ratio), "value.ratio", "OldRatio");
+        });
+    }
+
+    private static void RegisterBinarySchemaV3()
+    {
+        if (ComponentRegistry.TryGetByType(ComponentType.Of<BinarySchemaV3>(), out _)) return;
+        ComponentRegistry.Register<BinarySchemaV3>("Aether.Tests.BinarySchema", schemaVersion: 3,
+            registration => registration.FormerlyNamed("Aether.Tests.OldBinarySchema"));
+        ComponentRegistry.RegisterMigration<BinarySchemaV3>(1, v1 =>
+        {
+            var v2 = new byte[8];
+            v1.AsSpan(0, 4).CopyTo(v2.AsSpan(0, 4));
+            BitConverter.TryWriteBytes(v2.AsSpan(4, 4), 999); // campo transitório removido em v3
+            return v2;
+        });
+        ComponentRegistry.RegisterMigration<BinarySchemaV3>(2, v2 =>
+        {
+            var v3 = new byte[8];
+            v2.AsSpan(0, 4).CopyTo(v3.AsSpan(0, 4));
+            // Added não existia: bytes zero/default no offset 4.
+            return v3;
+        });
     }
 
     // ------------------------------------------------------------ registro de metadados
@@ -74,6 +123,71 @@ public static class SerializationTests
         ComponentRegistryBootstrap.RegisterBuiltins();
         ComponentRegistryBootstrap.RegisterBuiltins(); // não deve lançar na segunda chamada
         Assert.True(ComponentRegistry.TryGetByName("Aether.LocalTransform", out _));
+        Assert.True(ComponentRegistry.TryGetByName("Aether.Physics.Trigger", out _));
+    }
+
+    [Test] public static void Trigger_SobreviveRoundTripBinarioETextoComFiltro()
+    {
+        var source = MundoComRegistro();
+        source.CreateEntity(new Trigger(QueryLayerMask.Static, enabled: true));
+
+        var binary = new MemoryStream();
+        BinarySerializer.Write(source, binary);
+        binary.Position = 0;
+        var fromBinary = NovoMundo();
+        BinarySerializer.Read(fromBinary, binary);
+        var binaryTrigger = fromBinary.Read<Trigger>(new EntityId(0, 0));
+        Assert.True(binaryTrigger.Enabled);
+        Assert.Equal(QueryLayerMask.Static, binaryTrigger.EventLayerMask);
+
+        string text = TextSerializer.Serialize(source);
+        Assert.True(text.Contains("Aether.Physics.Trigger", StringComparison.Ordinal),
+            "formato texto precisa persistir o nome estável do componente");
+        var fromText = NovoMundo();
+        TextSerializer.Deserialize(fromText, text);
+        var textTrigger = fromText.Read<Trigger>(new EntityId(0, 0));
+        Assert.True(textTrigger.Enabled);
+        Assert.Equal(QueryLayerMask.Static, textTrigger.EventLayerMask);
+    }
+
+    [Test] public static void JointDeclarativa_SobreviveRoundTripBinarioETextoComReferencias()
+    {
+        var source = MundoComRegistro();
+        var body1 = source.CreateEntity();
+        var body2 = source.CreateEntity();
+        source.CreateEntity(new Joint(body1, body2, JointKind.Hinge, JointSpace.LocalToBody1)
+        {
+            Point1 = new float3(1f, 2f, 3f),
+            Point2 = new float3(4f, 5f, 6f),
+            Axis1 = new float3(0f, 0f, 1f),
+            Axis2 = new float3(0f, 0f, 1f),
+            LimitsMin = -1.25f,
+            LimitsMax = 1.5f,
+            Motor = JointMotor.Position(0.5f, 20f, 3f, 0.75f),
+        });
+
+        var binary = new MemoryStream();
+        BinarySerializer.Write(source, binary);
+        binary.Position = 0;
+        var fromBinary = NovoMundo();
+        BinarySerializer.Read(fromBinary, binary);
+        var binaryJoint = fromBinary.Read<Joint>(new EntityId(2, 0));
+        Assert.Equal(new EntityId(0, 0), binaryJoint.Body1);
+        Assert.Equal(new EntityId(1, 0), binaryJoint.Body2);
+        Assert.Equal(JointKind.Hinge, binaryJoint.Kind);
+        Assert.Equal(JointSpace.LocalToBody1, binaryJoint.Space);
+        Assert.Close(0.5f, binaryJoint.Motor.TargetPosition);
+
+        string text = TextSerializer.Serialize(source);
+        Assert.True(text.Contains("Aether.Physics.Joint", StringComparison.Ordinal));
+        var fromText = NovoMundo();
+        TextSerializer.Deserialize(fromText, text);
+        var textJoint = fromText.Read<Joint>(new EntityId(2, 0));
+        Assert.Equal(new EntityId(0, 0), textJoint.Body1);
+        Assert.Equal(new EntityId(1, 0), textJoint.Body2);
+        Assert.Equal(JointSpace.LocalToBody1, textJoint.Space);
+        Assert.Close(1.5f, textJoint.LimitsMax);
+        Assert.Close(0.75f, textJoint.Motor.SpringDamping);
     }
 
     // ------------------------------------------------------------ binário: round-trip e hierarquia
@@ -255,6 +369,75 @@ public static class SerializationTests
         Assert.Throws<InvalidOperationException>(() => TextSerializer.Deserialize(destino, text));
     }
 
+    [Test] public static void TextoV1ParaV3_PreservaRenameAdicaoRemocaoETipoCompativel()
+    {
+        RegisterTextSchemaV3();
+        const string fixtureV1 =
+            "mundo 1\n" +
+            "entidade 0\n" +
+            "  componente \"Aether.Tests.OldTextSchema\" 1\n" +
+            "    campo \"OldValue\" 123\n" +
+            "    campo \"OldRatio\" 2\n" +
+            "    campo \"RemovedValue\" 999\n";
+
+        var world = NovoMundo();
+        TextSerializer.Deserialize(world, fixtureV1);
+        var value = world.Read<TextSchemaV3>(new EntityId(0, 0));
+        Assert.Equal(123, value.CurrentValue, "alias v1 preserva o valor após rename");
+        Assert.Equal(0, value.Added, "campo adicionado em v3 recebe default");
+        Assert.Close(2f, value.Ratio, what: "número inteiro textual é compatível com float atual");
+
+        string v3 = TextSerializer.Serialize(world);
+        Assert.True(v3.StartsWith("mundo 2\n", StringComparison.Ordinal));
+        Assert.True(v3.Contains("componente \"Aether.Tests.TextSchema\" 3", StringComparison.Ordinal));
+        Assert.True(v3.Contains("campo \"value.primary\" 123", StringComparison.Ordinal));
+        Assert.False(v3.Contains("OldValue", StringComparison.Ordinal));
+        Assert.False(v3.Contains("RemovedValue", StringComparison.Ordinal));
+    }
+
+    [Test] public static void TextoV2ParaV3_IdEstavelSobreviveASegundoRename()
+    {
+        RegisterTextSchemaV3();
+        const string fixtureV2 =
+            "mundo 2\n" +
+            "entidade 0\n" +
+            "  componente \"Aether.Tests.MiddleTextSchema\" 2\n" +
+            "    campo \"value.primary\" 456\n" +
+            "    campo \"value.ratio\" 1.5\n";
+
+        var world = NovoMundo();
+        TextSerializer.Deserialize(world, fixtureV2);
+        var value = world.Read<TextSchemaV3>(new EntityId(0, 0));
+        Assert.Equal(456, value.CurrentValue);
+        Assert.Close(1.5f, value.Ratio);
+        Assert.Equal(0, value.Added);
+    }
+
+    [Test] public static void Texto_MudancaIncompativelEFuturoFalhamComContexto()
+    {
+        RegisterTextSchemaV3();
+        const string incompatible =
+            "mundo 2\nentidade 0\n  componente \"Aether.Tests.TextSchema\" 3\n" +
+            "    campo \"value.primary\" nao-e-int\n";
+        const string future =
+            "mundo 2\nentidade 0\n  componente \"Aether.Tests.TextSchema\" 4\n";
+
+        Assert.Throws<FormatException>(() => TextSerializer.Deserialize(NovoMundo(), incompatible),
+            "mudança incompatível não pode virar zero silenciosamente");
+        Assert.Throws<FormatException>(() => TextSerializer.Deserialize(NovoMundo(), future),
+            "schema de versão futura não pode ser interpretado como o atual");
+    }
+
+    [Test] public static void Texto_CampoDuplicadoPorAliasEhRecusado()
+    {
+        RegisterTextSchemaV3();
+        const string duplicate =
+            "mundo 1\nentidade 0\n  componente \"Aether.Tests.OldTextSchema\" 1\n" +
+            "    campo \"OldValue\" 1\n    campo \"value.primary\" 2\n";
+        Assert.Throws<FormatException>(() => TextSerializer.Deserialize(NovoMundo(), duplicate),
+            "alias e id apontando para o mesmo campo não podem sobrescrever um ao outro por ordem");
+    }
+
     // ------------------------------------------------------------ migração de esquema (binário)
 
     [Test] public static void MigracaoDeEsquema_AplicaCadeiaAoLerUmBlobVersao1()
@@ -297,6 +480,33 @@ public static class SerializationTests
         var migrado = world.Read<FakeComponentV2>(id);
         Assert.Equal(111, migrado.A, "campo A preserva o valor através da migração, mesmo mudando de offset");
         Assert.Equal(222, migrado.B, "campo B preserva o valor através da migração, mesmo mudando de offset");
+    }
+
+    [Test] public static void MigracaoBinariaV1ParaV3_AplicaDoisElosEAliasDeComponente()
+    {
+        RegisterBinarySchemaV3();
+        var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(new byte[] { (byte)'A', (byte)'E', (byte)'B', (byte)'F' });
+            writer.Write(1); // container
+            writer.Write(1); // entidades
+            writer.Write(1); // tipos
+            writer.Write("Aether.Tests.OldBinarySchema");
+            writer.Write(1); // schema v1
+            writer.Write(0); // entidade 0
+            writer.Write(1); // componentes
+            writer.Write(0); // tipo 0
+            writer.Write(4); // v1 tinha somente Value
+            writer.Write(321);
+        }
+        stream.Position = 0;
+
+        var world = NovoMundo();
+        BinarySerializer.Read(world, stream);
+        var migrated = world.Read<BinarySchemaV3>(new EntityId(0, 0));
+        Assert.Equal(321, migrated.Value, "v1→v2→v3 preserva Value");
+        Assert.Equal(0, migrated.Added, "campo adicionado em v3 recebe default");
     }
 
     [Test] public static void RegisterMigration_RecusaVersaoInvalida()

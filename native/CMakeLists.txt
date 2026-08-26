@@ -72,6 +72,17 @@ if(AETHER_PHYSICS_DETERMINISTIC)
 endif()
 add_subdirectory(third_party/JoltPhysics/Build EXCLUDE_FROM_ALL)
 
+# --- Box2D v3.1.1 (somente benchmark comparativo do item 4.1.6) -----------
+# Entra antes das flags estritas da engine pelo mesmo motivo do Jolt: warnings
+# de código de terceiros não podem quebrar nossos alvos. A biblioteca NÃO é
+# ligada a aether_physics nem ao runtime; existe apenas nos três executáveis de
+# benchmark abaixo para tornar a decisão Jolt-restrito x Box2D mensurável.
+set(BOX2D_DISABLE_SIMD OFF CACHE BOOL "" FORCE)
+set(BOX2D_COMPILE_WARNING_AS_ERROR OFF CACHE BOOL "" FORCE)
+set(BOX2D_PROFILE OFF CACHE BOOL "" FORCE)
+set(BOX2D_VALIDATE OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/Box2D EXCLUDE_FROM_ALL)
+
 # Engine mobile: sem RTTI, sem exceções, warnings tratados como erro nos alvos de runtime.
 # (só para o NOSSO código — ver a nota acima sobre por que o Jolt entra antes desta linha.)
 add_compile_options(
@@ -103,6 +114,21 @@ elseif(NOT ANDROID)
 endif()
 
 find_package(Threads REQUIRED)
+
+# --- aether_transform: composição topológica em um único lote blittable -----
+# O ECS e a compilação da hierarquia permanecem no C#. Esta biblioteca recebe
+# somente um plano blittable de endereços estáveis por frame, evitando uma travessia
+# P/Invoke/JNI e cópias por entidade, com fallback gerenciado quando o binário não existir.
+add_library(aether_transform SHARED
+  transform/transform_bridge.cpp
+)
+target_include_directories(aether_transform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+  set_target_properties(aether_transform PROPERTIES PREFIX "")
+endif()
+if(ANDROID)
+  target_link_options(aether_transform PRIVATE "-Wl,-z,max-page-size=16384")
+endif()
 
 # --- aether_core: tipos base, alocadores, job system -----------------------
 add_library(aether_core STATIC
@@ -147,10 +173,17 @@ if(ANDROID)
   add_library(aether_android SHARED
     platform/android/android_main.cpp
     platform/android/android_window.cpp
+    platform/android/android_paths.cpp
     platform/android/android_vulkan_surface.cpp
     platform/android/android_triangle_renderer.cpp
+    platform/android/instanced_renderer.cpp
+    platform/android/dotnet_host.cpp
+    platform/android/dotnet_assets.cpp
   )
-  target_include_directories(aether_android PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_include_directories(aether_android PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dotnet-runtime/include
+  )
   target_link_libraries(aether_android PRIVATE
     aether_core
     aether_platform
@@ -159,6 +192,7 @@ if(ANDROID)
     android
     log
     vulkan
+    dl
   )
   # NativeActivity localiza esta função por dlsym; sem a referência explícita
   # o linker pode removê-la por parecer não utilizada.
@@ -214,26 +248,18 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_jolt_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_trigger_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_body_batch_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_joint_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_query_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_character_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_physics2d_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_physics_capacity.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_determinism.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_transform_bridge.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
-  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_rhi aether_physics)
-
-  # --- benchmark_physics2d: evidência de throughput para a decisão do item 4.1.6 (não é um
-  # AE_TEST de correção — imprime uma tabela de corpos/step-time e sai, não faz parte da
-  # suíte de "compila e passa em teste" que aether_tests roda). -O2 explícito: sem otimização
-  # (o Debug default do projeto) o número medido não reflete o custo real em produção.
-  add_executable(benchmark_physics2d
-    ${CMAKE_SOURCE_DIR}/../tests/native/benchmark_physics2d.cpp
-  )
-  target_include_directories(benchmark_physics2d PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
-  target_link_libraries(benchmark_physics2d PRIVATE aether_core aether_physics)
-  target_compile_options(benchmark_physics2d PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-O2>)
+  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_rhi aether_physics aether_transform)
 
   # Probe separado porque induzir overflow em Debug dispara corretamente o
   # assert fail-fast do próprio Jolt. Em Release este binário valida a outra
@@ -243,4 +269,36 @@ if(NOT ANDROID)
   )
   target_include_directories(physics_overflow_probe PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(physics_overflow_probe PRIVATE aether_core aether_physics)
+endif()
+
+# --- benchmark_physics2d*: harness A/B reproduzível do item 4.1.6 ---------
+# Estes alvos ficam fora de NOT ANDROID para que os dois runners isolados
+# também possam ser cross-compilados pelo NDK, enviados por ADB e medidos nos
+# perfis móveis B/C. Não fazem parte da suíte de correção `aether_tests`.
+set(AETHER_PHYSICS2D_BENCHMARK_SOURCE
+  ${CMAKE_SOURCE_DIR}/../tests/native/benchmark_physics2d.cpp
+)
+
+add_executable(benchmark_physics2d ${AETHER_PHYSICS2D_BENCHMARK_SOURCE})
+target_link_libraries(benchmark_physics2d PRIVATE aether_core aether_physics box2d::box2d)
+
+add_executable(benchmark_physics2d_jolt ${AETHER_PHYSICS2D_BENCHMARK_SOURCE})
+target_compile_definitions(benchmark_physics2d_jolt PRIVATE AETHER_BENCHMARK_JOLT_ONLY=1)
+target_link_libraries(benchmark_physics2d_jolt PRIVATE aether_core aether_physics)
+
+add_executable(benchmark_physics2d_box2d ${AETHER_PHYSICS2D_BENCHMARK_SOURCE})
+target_compile_definitions(benchmark_physics2d_box2d PRIVATE AETHER_BENCHMARK_BOX2D_ONLY=1)
+target_link_libraries(benchmark_physics2d_box2d PRIVATE box2d::box2d)
+
+foreach(benchmark_target IN ITEMS
+    benchmark_physics2d
+    benchmark_physics2d_jolt
+    benchmark_physics2d_box2d)
+  target_compile_options(${benchmark_target} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-O2>)
+endforeach()
+
+if(WIN32)
+  target_link_libraries(benchmark_physics2d PRIVATE psapi)
+  target_link_libraries(benchmark_physics2d_jolt PRIVATE psapi)
+  target_link_libraries(benchmark_physics2d_box2d PRIVATE psapi)
 endif()

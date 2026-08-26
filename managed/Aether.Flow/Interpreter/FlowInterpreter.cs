@@ -1,4 +1,5 @@
 using Aether.Flow.Ast;
+using Aether.Flow.Runtime;
 
 namespace Aether.Flow.Interpreter;
 
@@ -43,15 +44,21 @@ public sealed class FlowInterpreter
     private readonly Dictionary<string, FlowValue> _variables = new();
     private readonly int _maxSteps;
     private readonly Action<string>? _onNodeExecuted;
+    private readonly FlowExecutionContext _context;
     private int _steps;
 
     public IReadOnlyDictionary<string, FlowValue> Variables => _variables;
 
-    public FlowInterpreter(FlowGraph graph, int maxSteps = 100_000, Action<string>? onNodeExecuted = null)
+    public FlowInterpreter(
+        FlowGraph graph,
+        int maxSteps = 100_000,
+        Action<string>? onNodeExecuted = null,
+        FlowExecutionContext? context = null)
     {
         _graph = graph;
         _maxSteps = maxSteps;
         _onNodeExecuted = onNodeExecuted;
+        _context = context ?? new FlowExecutionContext();
         foreach (var v in graph.Variables)
             _variables[v.Name] = v.Initial;
     }
@@ -103,6 +110,8 @@ public sealed class FlowInterpreter
     /// recursão internamente e devolvem apenas o que vem DEPOIS deles.</summary>
     private ExecutionStep ExecuteOne(FlowNode node)
     {
+        _context.Require(node.RequiredCapabilities, node.Id);
+
         switch (node.NodeType)
         {
             case NodeTypes.SetVariable:
@@ -140,6 +149,14 @@ public sealed class FlowInterpreter
                 // Nó opaco: o interpretador de edição não tenta rodar C# arbitrário.
                 // No modo build ele já foi compilado para IL como qualquer outro código.
                 return ExecutionStep.Next(NextOf(node.Id, "saida"));
+            case NodeTypes.LogMessage:
+            {
+                var level = Enum.Parse<FlowLogLevel>(
+                    node.Properties.GetValueOrDefault("Level", nameof(FlowLogLevel.Info)));
+                string message = Evaluate(node, "mensagem").StringValue;
+                _context.Logger!.Write(level, message, node.Id);
+                return ExecutionStep.Next(NextOf(node.Id, "saida"));
+            }
             default:
                 return ExecutionStep.Next(NextOf(node.Id, "saida"));
         }

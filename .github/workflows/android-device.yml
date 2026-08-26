@@ -3,7 +3,7 @@
 #
 # GitHub-hosted runners não têm um celular Android conectado. Este workflow só faz
 # sentido rodando num self-hosted runner com o laboratório de dispositivos do plano
-# (§5.1: mínimo 6 aparelhos — hoje o repositório tem 1, Xiaomi SM8735/Adreno, ver
+# (§6.1: mínimo 6 aparelhos — hoje o repositório tem 1, Xiaomi SM8735/Adreno, ver
 # docs/ESTADO.md "Shell Android — validação atual"). Até esse runner existir,
 # workflow_dispatch é o único gatilho: nada roda sozinho, nada finge cobertura que
 # não existe. Rodar localmente sem GitHub Actions, com o mesmo comando que este job
@@ -24,6 +24,14 @@ on:
         description: "Rodar o soak térmico de 30 min (PoC-C) além do ciclo de lifecycle"
         default: false
         type: boolean
+      deviceProfile:
+        description: "Perfil da matriz física 2D (B=intermediário, C=fraco)"
+        default: "unclassified"
+        type: choice
+        options:
+          - unclassified
+          - B
+          - C
 
 jobs:
   android-device:
@@ -54,6 +62,15 @@ jobs:
             -LifecycleCycles 1 `
             -SoakMinutes 30 `
             -OutputDirectory android-device-report-soak
+      - name: Benchmark A/B de física 2D no aparelho
+        shell: pwsh
+        run: |
+          tools/run-physics2d-ab.ps1 `
+            -Platform Android `
+            -NdkRoot "$env:ANDROID_HOME/ndk/27.1.12297006" `
+            -DeviceProfile "${{ inputs.deviceProfile }}" `
+            -BuildDirectory build/physics2d-android `
+            -OutputDirectory android-device-report/physics2d
       - name: Anexar a revisão dos orçamentos ao relatório
         shell: pwsh
         run: tools/validate-metrics-budget.ps1 -OutputPath android-device-report/metrics-budget-schema.json

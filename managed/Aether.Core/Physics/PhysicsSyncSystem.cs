@@ -25,15 +25,17 @@ public static class PhysicsSyncSystem
     /// <summary>
     /// Cria corpos nativos para entidades novas, avança a simulação em <paramref name="deltaTime"/>,
     /// e copia a transform resultante de corpos dinâmicos de volta para o ECS. Não aloca no
-    /// caminho quente (corpos já existentes) — a única alocação é para o corpo novo (evento raro,
-    /// não every-frame), e mesmo essa não usa <see cref="EntityCommandBuffer"/> porque escrever
-    /// <see cref="RigidBody.Handle"/> num componente já existente não é mudança estrutural.
+    /// caminho quente. O spawn usa buffers de <see cref="System.Buffers.ArrayPool{T}"/> e um único
+    /// crossing em lote para todas as entidades novas daquele Step; não cria um objeto gerenciado
+    /// nem faz um P/Invoke por corpo.
     /// </summary>
     public static void Step(World world, PhysicsWorld physicsWorld, float deltaTime, int collisionSteps = 1)
     {
         SyncNewBodies(world, physicsWorld);
 
         SyncKinematicEcsToJolt(world, physicsWorld, deltaTime);
+
+        JointSyncSystem.Sync(world, physicsWorld);
 
         physicsWorld.Step(deltaTime, collisionSteps);
 
@@ -62,28 +64,63 @@ public static class PhysicsSyncSystem
     /// no repo ainda, ver <c>EntityCommandBuffer.cs</c>).</summary>
     private static void SyncNewBodies(World world, PhysicsWorld physicsWorld)
     {
+        int missingCount = 0;
         foreach (var chunk in world.Query().With<RigidBody>().With<Collider>().With<WorldTransform>())
         {
             var bodies = chunk.GetReadOnlySpan<RigidBody>();
-            var colliders = chunk.GetReadOnlySpan<Collider>();
-            var transforms = chunk.GetReadOnlySpan<WorldTransform>();
-
-            bool needsCreation = false;
             for (int i = 0; i < chunk.Count; i++)
-                if (!bodies[i].Handle.IsValid) { needsCreation = true; break; }
-            if (!needsCreation) continue;
+                if (!bodies[i].Handle.IsValid) missingCount++;
+        }
+        if (missingCount == 0) return;
 
-            var writableBodies = chunk.GetWritableSpan<RigidBody>();
-
-            for (int i = 0; i < chunk.Count; i++)
+        var descriptionArray = System.Buffers.ArrayPool<PhysicsBodyDescription>.Shared.Rent(missingCount);
+        var handleArray = System.Buffers.ArrayPool<PhysicsBodyHandle>.Shared.Rent(missingCount);
+        try
+        {
+            int write = 0;
+            foreach (var chunk in world.Query().With<RigidBody>().With<Collider>().With<WorldTransform>())
             {
-                if (writableBodies[i].Handle.IsValid) continue;
-
-                var t = transforms[i].Value;
-                var handle = physicsWorld.CreateBody(colliders[i].ToShape(), t.Position, t.Rotation,
-                    writableBodies[i].MotionType, writableBodies[i].Friction, writableBodies[i].Restitution);
-                writableBodies[i].Handle = handle;
+                var bodies = chunk.GetReadOnlySpan<RigidBody>();
+                var colliders = chunk.GetReadOnlySpan<Collider>();
+                var transforms = chunk.GetReadOnlySpan<WorldTransform>();
+                for (int i = 0; i < chunk.Count; i++)
+                {
+                    if (bodies[i].Handle.IsValid) continue;
+                    var t = transforms[i].Value;
+                    bool isSensor = false;
+                    QueryLayerMask eventMask = QueryLayerMask.All;
+                    if (world.TryGetComponent<Trigger>(chunk.Entities[i], out var trigger) && trigger.Enabled)
+                    {
+                        isSensor = true;
+                        eventMask = trigger.EventLayerMask;
+                    }
+                    descriptionArray[write++] = new PhysicsBodyDescription(colliders[i].ToShape(),
+                        t.Position, t.Rotation, bodies[i].MotionType, bodies[i].Friction,
+                        bodies[i].Restitution, isSensor: isSensor, eventLayerMask: eventMask);
+                }
             }
+
+            physicsWorld.CreateBodies(descriptionArray.AsSpan(0, missingCount),
+                handleArray.AsSpan(0, missingCount));
+
+            int read = 0;
+            foreach (var chunk in world.Query().With<RigidBody>().With<Collider>().With<WorldTransform>())
+            {
+                var current = chunk.GetReadOnlySpan<RigidBody>();
+                bool hasMissing = false;
+                for (int i = 0; i < chunk.Count; i++)
+                    if (!current[i].Handle.IsValid) { hasMissing = true; break; }
+                if (!hasMissing) continue;
+
+                var writable = chunk.GetWritableSpan<RigidBody>();
+                for (int i = 0; i < chunk.Count; i++)
+                    if (!writable[i].Handle.IsValid) writable[i].Handle = handleArray[read++];
+            }
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<PhysicsBodyDescription>.Shared.Return(descriptionArray);
+            System.Buffers.ArrayPool<PhysicsBodyHandle>.Shared.Return(handleArray);
         }
     }
 
@@ -124,7 +161,31 @@ public static class PhysicsSyncSystem
         if (!world.HasComponent<RigidBody>(entity)) return;
         ref var body = ref world.Write<RigidBody>(entity);
         if (!body.Handle.IsValid) return;
+        JointSyncSystem.DestroyReferencingBody(physicsWorld, body.Handle);
         physicsWorld.DestroyBody(body.Handle);
         body.Handle = PhysicsBodyHandle.Invalid;
+    }
+
+    /// <summary>Resolve os dois handles de um evento para as entidades ECS que possuem os
+    /// respectivos <see cref="RigidBody"/>. Não aloca e nunca confunde um handle reciclado,
+    /// pois o valor inclui a sequência do <c>JPH::BodyID</c>. Retorna false se algum corpo já
+    /// tiver sido removido do ECS.</summary>
+    public static bool TryResolveTriggerEvent(World world, in PhysicsTriggerEvent triggerEvent,
+        out EntityId sensor, out EntityId other)
+    {
+        sensor = EntityId.Null;
+        other = EntityId.Null;
+        foreach (var chunk in world.Query().With<RigidBody>())
+        {
+            var entities = chunk.Entities;
+            var bodies = chunk.GetReadOnlySpan<RigidBody>();
+            for (int i = 0; i < chunk.Count; i++)
+            {
+                if (bodies[i].Handle == triggerEvent.Sensor) sensor = entities[i];
+                if (bodies[i].Handle == triggerEvent.Other) other = entities[i];
+                if (!sensor.IsNull && !other.IsNull) return true;
+            }
+        }
+        return false;
     }
 }

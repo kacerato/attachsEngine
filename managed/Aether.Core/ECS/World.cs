@@ -29,6 +29,13 @@ public sealed class World
     // arquétipo novo — arquétipos nunca são removidos, então essa contagem só cresce.
     private readonly Dictionary<(ArchetypeSignature With, ArchetypeSignature Without), (int Version, List<Archetype> Archetypes)> _queryCache = new();
 
+    // Sistemas que compilam planos sobre a disposição física do ECS usam estas versões para
+    // invalidar somente quando seus ponteiros lógicos deixam de ser válidos. StructureVersion
+    // cobre criação/destruição e migração de arquétipo; HierarchyVersion cobre alterações de
+    // Parent/FirstChild/NextSibling que não necessariamente movem a entidade.
+    private long _structureVersion;
+    private long _hierarchyVersion;
+
     public int EntityCount { get; private set; }
 
     public World()
@@ -46,6 +53,9 @@ public sealed class World
     /// <summary>Um índice de slot maior que qualquer índice de entidade viva ou já usada — limite
     /// superior seguro para varreduras externas indexadas por <c>EntityId.Index</c> (ex.: <see cref="TransformSystem"/>).</summary>
     public int Capacity => _slotCount;
+
+    internal long StructureVersion => _structureVersion;
+    internal long HierarchyVersion => _hierarchyVersion;
 
     // ---------------------------------------------------------------- criação / destruição
 
@@ -132,6 +142,7 @@ public sealed class World
 
         _slots[index] = new EntitySlot { Version = version, Archetype = archetype, ChunkIndex = archetype.Chunks.IndexOf(chunk), Row = row };
         EntityCount++;
+        _structureVersion++;
         return id;
     }
 
@@ -146,6 +157,7 @@ public sealed class World
         slot.Version++;         // qualquer EntityId antigo com a versão anterior passa a falhar em Exists/RequireAlive
         _freeIndices.Push(id.Index);
         EntityCount--;
+        _structureVersion++;
     }
 
     /// <summary>Remove a entidade do slot que ocupa em seu chunk atual, com swap-back: a última
@@ -200,6 +212,7 @@ public sealed class World
         int typeIndex = archetype.IndexOf(ComponentType.Of<T>());
         if (typeIndex < 0)
             throw new InvalidOperationException($"A entidade {id} não possui o componente {typeof(T).Name}.");
+        if (HierarchyTopologyComponent<T>.Value) _hierarchyVersion++;
         var chunk = archetype.Chunks[slot.ChunkIndex];
         return ref chunk.GetWritableSpan<T>(typeIndex)[slot.Row];
     }
@@ -337,6 +350,15 @@ public sealed class World
         slot.Archetype = newArchetype;
         slot.ChunkIndex = newArchetype.Chunks.IndexOf(newChunk);
         slot.Row = newRow;
+        _structureVersion++;
+    }
+
+    private static class HierarchyTopologyComponent<T> where T : unmanaged
+    {
+        internal static readonly bool Value =
+            typeof(T) == typeof(Parent) ||
+            typeof(T) == typeof(FirstChild) ||
+            typeof(T) == typeof(NextSibling);
     }
 
     // ---------------------------------------------------------------- arquétipos
@@ -412,6 +434,13 @@ public sealed class World
         }
 
         public QueryEnumerable Chunks() => _world.QueryChunks(_with, _without);
+        public CompiledQuery Compile() => new(_world, _with, _without);
+
+        /// <summary>Atalho para compilar e aplicar um filtro de mudança. O tipo observado é
+        /// incluído automaticamente na assinatura exigida.</summary>
+        public ChangedQueryEnumerable<T> Changed<T>(ComponentChangeFilter<T> filter) where T : unmanaged =>
+            Compile().Changed(filter);
+
         public QueryEnumerator GetEnumerator() => Chunks().GetEnumerator();
     }
 

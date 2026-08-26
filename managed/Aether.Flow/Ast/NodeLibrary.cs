@@ -1,3 +1,5 @@
+using Aether.Flow.Runtime;
+
 namespace Aether.Flow.Ast;
 
 /// <summary>
@@ -31,6 +33,7 @@ public static class NodeTypes
     /// <summary>Nó opaco "caixa de código" — a escotilha de escape para C# fora
     /// do subconjunto que o gerador/parser suportam (Parte 9.2 do plano).</summary>
     public const string CodeRaw = "code.raw";
+    public const string LogMessage = "log.message";
 
     /// <summary>Tipos de nó que estruturam um laço. Um ciclo no grafo de EXECUÇÃO
     /// que passa por um destes é o "laço legítimo" citado no validador — diferente
@@ -134,6 +137,23 @@ public static class NodeLibrary
         }
         return node;
     }
+
+    /// <summary>Primeiro slice vertical de serviço externo: prova que a mesma
+    /// capability é validada, interpretada, serializada e recebida pelo C#
+    /// gerado sem introduzir um logger global.</summary>
+    public static FlowNode LogMessage(string id, FlowLogLevel level = FlowLogLevel.Info) => new()
+    {
+        Id = id,
+        NodeType = NodeTypes.LogMessage,
+        RequiredCapabilities = FlowCapability.Logging,
+        Inputs =
+        {
+            Exec("entrada", PinDirection.Input),
+            Data("mensagem", FlowType.String, PinDirection.Input),
+        },
+        Outputs = { Exec("saida") },
+        Properties = { ["Level"] = level.ToString() },
+    };
 
     private static FlowPin Exec(string name, PinDirection dir = PinDirection.Output) => new() { Name = name, Type = FlowType.Exec, Direction = dir };
     private static FlowPin Data(string name, FlowType type, PinDirection dir) => new() { Name = name, Type = type, Direction = dir };

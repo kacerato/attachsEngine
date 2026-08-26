@@ -1,60 +1,129 @@
-#include "platform/android/android_triangle_renderer.h"
+#include "platform/android/android_paths.h"
 #include "platform/android/android_vulkan_surface.h"
 #include "platform/android/android_window.h"
+#include "platform/android/dotnet_assets.h"
+#include "platform/android/dotnet_host.h"
+#include "platform/android/instanced_renderer.h"
 #include "platform/app_lifecycle.h"
 
 #include <android/log.h>
 #include <android_native_app_glue.h>
+#include <chrono>
+#include <cstdio>
 
 namespace {
 
 constexpr const char *LogTag = "Aether.Android";
 constexpr ae::u64 ValidationFrameMilestone = 1000;
+// PoC-A (item 0.2 do plano): 5.000 objetos é o número que o critério de
+// sucesso pede ("5.000 objetos renderizados a 60 fps com < 3 ms de CPU").
+constexpr ae::u32 PocAInstanceCount = 5000;
+constexpr ae::u64 PocAReportIntervalFrames = 300; // ~5s a 60fps — log periódico, não por frame
 
 struct AndroidShell final {
   android_app *app = nullptr;
   ae::platform::AppLifecycle lifecycle;
   ae::platform::android::AndroidVulkanSurface vulkanSurface;
-  ae::platform::android::TriangleRenderer triangleRenderer;
-  bool triangleRendererReady = false;
+  ae::platform::android::InstancedRenderer instancedRenderer;
+  bool instancedRendererReady = false;
   ae::u64 presentedFrameCount = 0;
   ae::u64 activationCount = 0;
   bool firstFrameAfterActivationPending = false;
   bool validationFrameMilestoneLogged = false;
+  ae::platform::android::DotNetHost dotNetHost;
+  std::chrono::steady_clock::time_point shellStartTime = std::chrono::steady_clock::now();
+  double pocAMaxFillMicroseconds = 0.0;
 };
 
-// Reconstrói o renderer do triângulo depois que a surface/swapchain existem
+// Extrai o runtime .NET vendorizado (se ainda não extraído) e hospeda o
+// CoreCLR — item 0.1.4 do plano. Chamado uma vez na criação do shell, não a
+// cada frame: hostfxr não tem (nem precisa de) um caminho de "reinicializar",
+// o contexto vive pelo tempo de vida do processo (ver DotNetHost::shutdown).
+// Falha aqui não é fatal para o shell gráfico — o app continua rodando sem
+// CoreCLR (mesma disciplina de "continuar sem GPU" já usada para Vulkan),
+// só o caminho gerenciado fica indisponível.
+void initializeDotNetHost(AndroidShell &shell) {
+  char dotnetRoot[512];
+  if (!ae::platform::android::ensureDotNetAssetsExtracted(shell.app->activity, dotnetRoot,
+                                                          sizeof(dotnetRoot))) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag,
+                        "Falha ao extrair os assets do runtime .NET — CoreCLR não será hospedado.");
+    return;
+  }
+
+  char nativeLibraryDir[512];
+  if (!ae::platform::android::getNativeLibraryDir(shell.app->activity, nativeLibraryDir,
+                                                  sizeof(nativeLibraryDir))) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag,
+                        "Falha ao resolver nativeLibraryDir — CoreCLR não será hospedado.");
+    return;
+  }
+
+  char runtimeConfigPath[600];
+  char managedAssemblyPath[600];
+  std::snprintf(runtimeConfigPath, sizeof(runtimeConfigPath), "%s/Aether.Core.runtimeconfig.json",
+               dotnetRoot);
+  std::snprintf(managedAssemblyPath, sizeof(managedAssemblyPath), "%s/Aether.Core.dll", dotnetRoot);
+
+  if (!shell.dotNetHost.initialize(nativeLibraryDir, dotnetRoot, runtimeConfigPath,
+                                   managedAssemblyPath)) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "DotNetHost::initialize falhou.");
+    return;
+  }
+
+  // Prova de vida mínima (mesmo teste validado manualmente antes de integrar
+  // aqui — ver docs/ESTADO.md item 0.1.4): resolve e chama um método
+  // gerenciado real, confirmando que a fronteira C++→C# funciona dentro do
+  // processo do NativeActivity, não só num executável standalone via shell.
+  using PingFn = int (*)(int, int);
+  auto ping = reinterpret_cast<PingFn>(shell.dotNetHost.getManagedFunctionPointer(
+      "Aether.Interop.NativeEntryPoints, Aether.Core", "Ping"));
+  if (ping != nullptr) {
+    __android_log_print(ANDROID_LOG_INFO, LogTag, "CoreCLR hospedado no shell: Ping(2,3)=%d.",
+                        ping(2, 3));
+  }
+}
+
+// Reconstrói o renderer instanciado depois que a surface/swapchain existem
 // (na criação) ou depois que a swapchain foi recriada (resize/rotação) —
 // framebuffers referenciam VkImageView específicos da swapchain anterior,
 // então não sobrevivem a uma recriação, mesmo que o renderer em si pudesse.
-bool rebuildTriangleRenderer(AndroidShell &shell) {
-  shell.triangleRenderer.shutdown();
-  shell.triangleRendererReady = shell.triangleRenderer.initialize(
-      shell.vulkanSurface.device(), shell.vulkanSurface.swapchain());
-  if (!shell.triangleRendererReady) shell.triangleRenderer.shutdown();
-  return shell.triangleRendererReady;
+// Sem CoreCLR pronto (dotNetHost.isReady() falso), a PoC-A simplesmente não
+// roda nesta sessão — degradação silenciosa, mesma disciplina de "continuar
+// sem GPU" já usada para Vulkan.
+bool rebuildInstancedRenderer(AndroidShell &shell) {
+  shell.instancedRenderer.shutdown();
+  if (!shell.dotNetHost.isReady()) {
+    shell.instancedRendererReady = false;
+    return false;
+  }
+  shell.instancedRendererReady = shell.instancedRenderer.initialize(
+      shell.vulkanSurface.device(), shell.vulkanSurface.swapchain(), shell.dotNetHost,
+      PocAInstanceCount);
+  if (!shell.instancedRendererReady) shell.instancedRenderer.shutdown();
+  return shell.instancedRendererReady;
 }
 
 bool recreateSwapchainAndRenderer(AndroidShell &shell) {
   // Framebuffers precisam morrer ANTES das image views da swapchain antiga.
   // Inverter esta ordem viola o lifetime Vulkan mesmo depois de wait-idle.
-  shell.triangleRenderer.shutdown();
-  shell.triangleRendererReady = false;
+  shell.instancedRenderer.shutdown();
+  shell.instancedRendererReady = false;
   if (shell.app->window == nullptr ||
       !shell.vulkanSurface.recreateSwapchain(shell.app->window)) {
     return false;
   }
-  return rebuildTriangleRenderer(shell);
+  return rebuildInstancedRenderer(shell);
 }
 
 bool recreateSurfaceAndRenderer(AndroidShell &shell) {
-  shell.triangleRenderer.shutdown();
-  shell.triangleRendererReady = false;
+  shell.instancedRenderer.shutdown();
+  shell.instancedRendererReady = false;
   shell.vulkanSurface.shutdown();
   if (shell.app->window == nullptr || !shell.vulkanSurface.initialize(shell.app->window)) {
     return false;
   }
-  return rebuildTriangleRenderer(shell);
+  return rebuildInstancedRenderer(shell);
 }
 
 void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
@@ -63,14 +132,14 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     if (!shell.vulkanSurface.initialize(shell.app->window)) {
       __android_log_print(ANDROID_LOG_ERROR, LogTag,
                           "O shell continuará ativo sem GPU; uma nova janela tentará novamente.");
-    } else if (!rebuildTriangleRenderer(shell)) {
+    } else if (!rebuildInstancedRenderer(shell)) {
       __android_log_print(ANDROID_LOG_ERROR, LogTag,
                           "Surface pronta, mas o pipeline de desenho falhou ao inicializar.");
     }
   }
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::DestroySurface)) {
-    shell.triangleRenderer.shutdown();
-    shell.triangleRendererReady = false;
+    shell.instancedRenderer.shutdown();
+    shell.instancedRendererReady = false;
     shell.vulkanSurface.shutdown();
   }
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::BecameActive)) {
@@ -141,13 +210,15 @@ void android_main(android_app *app) {
 
   __android_log_print(ANDROID_LOG_INFO, LogTag, "Shell nativo iniciado.");
 
+  initializeDotNetHost(shell);
+
   while (!shell.lifecycle.isDestroyed()) {
     // Item 5.2 do plano de lacunas: só sai do poll bloqueante (-1, custo
     // térmico zero em repouso — comportamento original preservado) quando
     // há de fato um frame para desenhar. Sem surface pronta ou app
     // suspenso, o loop continua bloqueando sem evento, exatamente como
     // antes deste item existir.
-    const bool shouldDraw = shell.lifecycle.isActive() && shell.triangleRendererReady;
+    const bool shouldDraw = shell.lifecycle.isActive() && shell.instancedRendererReady;
     android_poll_source *source = nullptr;
     int events = 0;
     const int result = ALooper_pollOnce(shouldDraw ? 0 : -1, nullptr, &events,
@@ -160,10 +231,16 @@ void android_main(android_app *app) {
     }
 
     if (shouldDraw) {
-      const ae::rhi::SwapchainStatus frameStatus = shell.triangleRenderer.drawFrame();
+      const float timeSeconds = std::chrono::duration<float>(
+                                    std::chrono::steady_clock::now() - shell.shellStartTime)
+                                    .count();
+      const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(timeSeconds);
       if (frameStatus == ae::rhi::SwapchainStatus::Ok ||
           frameStatus == ae::rhi::SwapchainStatus::SuboptimalNeedsRecreate) {
         ++shell.presentedFrameCount;
+        if (shell.instancedRenderer.lastFillMicroseconds() > shell.pocAMaxFillMicroseconds) {
+          shell.pocAMaxFillMicroseconds = shell.instancedRenderer.lastFillMicroseconds();
+        }
         if (shell.firstFrameAfterActivationPending) {
           shell.firstFrameAfterActivationPending = false;
           __android_log_print(ANDROID_LOG_INFO, LogTag,
@@ -176,6 +253,17 @@ void android_main(android_app *app) {
           __android_log_print(ANDROID_LOG_INFO, LogTag,
                               "Marco de renderização atingido: %llu frames apresentados.",
                               static_cast<unsigned long long>(shell.presentedFrameCount));
+        }
+        // PoC-A (item 0.2): reporta o pico de custo do crossing C++→C# a
+        // cada ~5s, não a cada frame — o objetivo é ter evidência legível
+        // no log contra o critério de < 3 ms de CPU, sem inundar o logcat.
+        if (shell.presentedFrameCount % PocAReportIntervalFrames == 0) {
+          __android_log_print(
+              ANDROID_LOG_INFO, LogTag,
+              "PoC-A: %u instâncias, crossing C++<->C# pico=%.1f us (orçamento: 3000 us) — %s.",
+              PocAInstanceCount, shell.pocAMaxFillMicroseconds,
+              shell.pocAMaxFillMicroseconds < 3000.0 ? "dentro do orçamento" : "ACIMA do orçamento");
+          shell.pocAMaxFillMicroseconds = 0.0;
         }
       }
       if (frameStatus == ae::rhi::SwapchainStatus::SuboptimalNeedsRecreate ||
@@ -192,8 +280,8 @@ void android_main(android_app *app) {
       } else if (frameStatus == ae::rhi::SwapchainStatus::FatalError) {
         __android_log_print(ANDROID_LOG_ERROR, LogTag,
                             "Erro Vulkan fatal no frame; recursos gráficos serão encerrados.");
-        shell.triangleRenderer.shutdown();
-        shell.triangleRendererReady = false;
+        shell.instancedRenderer.shutdown();
+        shell.instancedRendererReady = false;
         shell.vulkanSurface.shutdown();
       }
     }

@@ -224,4 +224,148 @@ public static class PhysicsTests
         Assert.Equal(world.Read<RigidBody>(chao).Handle, hitBody, "corpo acertado deveria ser o handle do piso");
         Assert.Close(0.475f, fraction, eps: 0.01f, what: "fração do impacto deveria corresponder ao topo do piso (y=0.5)");
     }
+
+    [Test] public static void TriggerEcs_PublicaEnterStayExitEResolveEntidades()
+    {
+        if (!NativeLibraryAvailable()) return;
+        var world = new World();
+        using var physics = new PhysicsWorld(float3.Zero, 16);
+        var sensorEntity = world.CreateEntity(
+            new WorldTransform(Transform.FromPosition(float3.Zero)), RigidBody.Kinematic());
+        world.AddComponent(sensorEntity, Collider.Box(new float3(1f)));
+        world.AddComponent(sensorEntity, new Trigger(QueryLayerMask.Static));
+        var otherEntity = world.CreateEntity(
+            new WorldTransform(Transform.FromPosition(float3.Zero)), RigidBody.Static());
+        world.AddComponent(otherEntity, Collider.Sphere(0.25f));
+
+        Span<PhysicsTriggerEvent> events = stackalloc PhysicsTriggerEvent[4];
+        PhysicsSyncSystem.Step(world, physics, 1f / 60f);
+        int count = physics.GetTriggerEvents(events);
+        Assert.True(Contains(events, count, TriggerEventType.Enter, out var enter),
+            "primeiro overlap ECS deveria produzir Enter");
+        Assert.True(PhysicsSyncSystem.TryResolveTriggerEvent(world, in enter, out var resolvedSensor, out var resolvedOther),
+            "handles nativos do evento deveriam resolver de volta para o ECS");
+        Assert.Equal(sensorEntity, resolvedSensor);
+        Assert.Equal(otherEntity, resolvedOther);
+
+        PhysicsSyncSystem.Step(world, physics, 1f / 60f);
+        count = physics.GetTriggerEvents(events);
+        Assert.True(Contains(events, count, TriggerEventType.Stay, out _),
+            "overlap preservado deveria produzir Stay");
+
+        world.SetComponent(sensorEntity,
+            new WorldTransform(Transform.FromPosition(new float3(10f, 0f, 0f))));
+        bool exited = false;
+        for (int i = 0; i < 3 && !exited; i++)
+        {
+            PhysicsSyncSystem.Step(world, physics, 1f / 60f);
+            count = physics.GetTriggerEvents(events);
+            exited = Contains(events, count, TriggerEventType.Exit, out _);
+        }
+        Assert.True(exited, "separar o sensor pelo fluxo ECS deveria produzir Exit");
+    }
+
+    [Test] public static void TriggerFiltroEBuffer_ExcluemDynamicEInformamContagemReal()
+    {
+        if (!NativeLibraryAvailable()) return;
+        using var physics = new PhysicsWorld(float3.Zero, 16);
+        var sensor = physics.CreateBody(PhysicsShape.Box(new float3(2f)), float3.Zero,
+            quaternion.Identity, NativeMotionType.Kinematic, isSensor: true,
+            eventLayerMask: QueryLayerMask.Static);
+        var accepted = physics.CreateBody(PhysicsShape.Sphere(0.25f), new float3(-0.5f, 0f, 0f),
+            quaternion.Identity, NativeMotionType.Static);
+        _ = physics.CreateBody(PhysicsShape.Sphere(0.25f), new float3(0.5f, 0f, 0f),
+            quaternion.Identity, NativeMotionType.Dynamic);
+
+        physics.Step(1f / 60f);
+        Assert.Equal(1, physics.GetTriggerEvents(Span<PhysicsTriggerEvent>.Empty),
+            "consulta sem buffer deve informar a capacidade necessária");
+        Span<PhysicsTriggerEvent> one = stackalloc PhysicsTriggerEvent[1];
+        Assert.Equal(1, physics.GetTriggerEvents(one));
+        Assert.Equal(sensor, one[0].Sensor);
+        Assert.Equal(accepted, one[0].Other, "filtro Static deve excluir corpo Dynamic");
+        Assert.Equal(TriggerEventType.Enter, one[0].Type);
+    }
+
+    [Test] public static void BodyBatch_100_1000_10000_UsaUmCrossingESemGcNoCrossing()
+    {
+        if (!NativeLibraryAvailable()) return;
+        foreach (int count in new[] { 100, 1_000, 10_000 })
+        {
+            var config = PhysicsWorldConfiguration.ForBodyCapacity(float3.Zero, (uint)(count + 1));
+            using var physics = new PhysicsWorld(in config);
+            var descriptions = new PhysicsBodyDescription[count];
+            var handles = new PhysicsBodyHandle[count];
+            var shape = PhysicsShape.Sphere(0.1f);
+            for (int i = 0; i < count; i++)
+                descriptions[i] = new PhysicsBodyDescription(shape,
+                    new float3((i % 100) * 0.4f, i / 100 * 0.4f, 0f),
+                    quaternion.Identity, NativeMotionType.Static);
+
+            // Aquece o stub LibraryImport e o caminho nativo antes da região medida.
+            var warmup = physics.CreateBody(shape, new float3(-10f, 0f, 0f),
+                quaternion.Identity, NativeMotionType.Static);
+            physics.DestroyBody(warmup);
+            physics.ResetBodyInteropStatistics();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            int created = physics.CreateBodies(descriptions, handles);
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.Equal(count, created, $"lote de {count} corpos deve ser integral");
+            Assert.Equal(0L, allocated, $"crossing de {count} corpos não deve alocar heap gerenciado");
+            var afterCreate = physics.GetBodyInteropStatistics();
+            Assert.Equal(1ul, afterCreate.NativeCrossings, "N corpos precisam cruzar a ABI uma vez");
+            Assert.Equal((ulong)count, afterCreate.BodiesCreated);
+            Assert.Equal((ulong)(count * 4), afterCreate.BytesReceived,
+                "retorno transfere exatamente um uint por handle");
+            for (int i = 0; i < count; i++)
+                Assert.True(handles[i].IsValid, "todo descritor deve produzir handle válido");
+
+            physics.DestroyBodies(handles);
+            var afterDestroy = physics.GetBodyInteropStatistics();
+            Assert.Equal(2ul, afterDestroy.NativeCrossings,
+                "create e destroy em massa devem somar somente dois crossings");
+            Assert.Equal((ulong)count, afterDestroy.BodiesDestroyed);
+        }
+    }
+
+    [Test] public static void PhysicsSyncSystem_SpawnDeMilEstaticosUsaUmUnicoCrossingDeCriacao()
+    {
+        if (!NativeLibraryAvailable()) return;
+        const int count = 1_000;
+        var world = new World();
+        using var physics = new PhysicsWorld(float3.Zero, count);
+        for (int i = 0; i < count; i++)
+        {
+            var entity = world.CreateEntity(
+                new WorldTransform(Transform.FromPosition(new float3(i * 0.25f, 0f, 0f))),
+                RigidBody.Static());
+            world.AddComponent(entity, Collider.Sphere(0.1f));
+        }
+        physics.ResetBodyInteropStatistics();
+
+        PhysicsSyncSystem.Step(world, physics, 1f / 60f);
+
+        var stats = physics.GetBodyInteropStatistics();
+        Assert.Equal(1ul, stats.NativeCrossings,
+            "todas as entidades novas do Step devem compartilhar o mesmo CreateBodiesV2");
+        Assert.Equal((ulong)count, stats.BodiesCreated);
+        foreach (var chunk in world.Query().With<RigidBody>())
+            foreach (var body in chunk.GetReadOnlySpan<RigidBody>())
+                Assert.True(body.Handle.IsValid, "spawn em lote precisa escrever cada handle no ECS");
+    }
+
+    private static bool Contains(Span<PhysicsTriggerEvent> events, int realCount,
+        TriggerEventType type, out PhysicsTriggerEvent found)
+    {
+        int copied = Math.Min(realCount, events.Length);
+        for (int i = 0; i < copied; i++)
+            if (events[i].Type == type) { found = events[i]; return true; }
+        found = default;
+        return false;
+    }
 }

@@ -28,9 +28,16 @@ public enum ComponentFieldKind
 /// </summary>
 public readonly struct ComponentField
 {
+    /// <summary>Identidade persistente do campo. Diferente de <see cref="Path"/>, não muda quando
+    /// o nome CLR muda; pode ser configurada explicitamente no registro.</summary>
+    public readonly string Id;
+
     /// <summary>Caminho pontilhado da raiz do componente até esta folha, ex.: <c>"Value.Position.X"</c>.</summary>
     public readonly string Path;
     public readonly ComponentFieldKind Kind;
+
+    /// <summary>Nomes/caminhos usados por versões antigas do formato texto.</summary>
+    public readonly string[] Aliases;
 
     /// <summary>Offset em bytes desta folha dentro do layout cru do componente (não do tipo aninhado
     /// que a contém diretamente) — soma dos offsets de cada nível do caminho.</summary>
@@ -40,8 +47,43 @@ public readonly struct ComponentField
     /// <see cref="ComponentFieldKind.EntityId"/>, que é <c>{int Index; int Version;}</c>).</summary>
     internal readonly int Size;
 
-    internal ComponentField(string path, ComponentFieldKind kind, int offset, int size)
-    { Path = path; Kind = kind; Offset = offset; Size = size; }
+    internal ComponentField(string id, string path, ComponentFieldKind kind, int offset, int size, string[] aliases)
+    { Id = id; Path = path; Kind = kind; Offset = offset; Size = size; Aliases = aliases; }
+}
+
+/// <summary>Configuração explícita de identidades persistentes e aliases usada durante o registro
+/// de um componente. É consumida imediatamente; não permanece mutável no descriptor.</summary>
+public sealed class ComponentRegistration
+{
+    internal readonly List<string> ComponentAliases = new();
+    internal readonly Dictionary<string, FieldRule> FieldRules = new(StringComparer.Ordinal);
+
+    internal readonly record struct FieldRule(string Id, string[] Aliases);
+
+    public void FormerlyNamed(params string[] aliases)
+    {
+        ArgumentNullException.ThrowIfNull(aliases);
+        foreach (string alias in aliases)
+        {
+            if (string.IsNullOrWhiteSpace(alias))
+                throw new ArgumentException("Alias de componente não pode ser vazio.", nameof(aliases));
+            if (ComponentAliases.Contains(alias, StringComparer.Ordinal))
+                throw new InvalidOperationException($"Alias de componente duplicado: \"{alias}\".");
+            ComponentAliases.Add(alias);
+        }
+    }
+
+    /// <summary>Associa o caminho CLR atual a um id persistente e, opcionalmente, aos caminhos
+    /// usados antes do rename.</summary>
+    public void Field(string currentPath, string stableId, params string[] formerlySerializedAs)
+    {
+        if (string.IsNullOrWhiteSpace(currentPath)) throw new ArgumentException("Caminho atual não pode ser vazio.", nameof(currentPath));
+        if (string.IsNullOrWhiteSpace(stableId)) throw new ArgumentException("Id estável não pode ser vazio.", nameof(stableId));
+        ArgumentNullException.ThrowIfNull(formerlySerializedAs);
+        if (!FieldRules.TryAdd(currentPath,
+                new FieldRule(stableId, formerlySerializedAs.ToArray())))
+            throw new InvalidOperationException($"O campo \"{currentPath}\" já foi configurado.");
+    }
 }
 
 /// <summary>
@@ -76,14 +118,29 @@ public readonly struct ComponentDescriptor
 
     public readonly Type ClrType;
 
+    /// <summary>Nomes estáveis anteriores aceitos na leitura. A gravação sempre usa <see cref="Name"/>.</summary>
+    public readonly string[] Aliases;
+
     /// <summary>Campos folha, achatados e em ordem alfabética de <see cref="ComponentField.Path"/> —
     /// a ordem alfabética (não a ordem de declaração) é o que torna o formato texto determinístico
     /// independente da ordem em que <see cref="System.Type.GetFields()"/> devolve os campos (a
     /// especificação do CLR não garante essa ordem).</summary>
     public readonly ComponentField[] Fields;
 
-    internal ComponentDescriptor(string name, ComponentType type, int schemaVersion, Type clrType, ComponentField[] fields)
-    { Name = name; Type = type; SchemaVersion = schemaVersion; ClrType = clrType; Fields = fields; }
+    internal ComponentDescriptor(string name, ComponentType type, int schemaVersion, Type clrType,
+        string[] aliases, ComponentField[] fields)
+    { Name = name; Type = type; SchemaVersion = schemaVersion; ClrType = clrType; Aliases = aliases; Fields = fields; }
+
+    internal ComponentField? FindField(string persistedIdOrAlias)
+    {
+        foreach (var field in Fields)
+        {
+            if (field.Id == persistedIdOrAlias || field.Path == persistedIdOrAlias) return field;
+            foreach (string alias in field.Aliases)
+                if (alias == persistedIdOrAlias) return field;
+        }
+        return null;
+    }
 }
 
 /// <summary>
@@ -109,7 +166,15 @@ public static class ComponentRegistry
     /// escrever esse componente nunca mais precisa de reflexão (só dos offsets já calculados).
     /// </summary>
     public static void Register<T>(string name, int schemaVersion) where T : unmanaged
+        => Register<T>(name, schemaVersion, configure: null);
+
+    /// <summary>Registra um componente com ids/aliases persistentes explícitos. Paths sem regra
+    /// usam o próprio caminho como id por compatibilidade.</summary>
+    public static void Register<T>(string name, int schemaVersion, Action<ComponentRegistration>? configure)
+        where T : unmanaged
     {
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Nome estável não pode ser vazio.", nameof(name));
+        if (schemaVersion < 1) throw new ArgumentOutOfRangeException(nameof(schemaVersion), "Schema version precisa ser >= 1.");
         var type = ComponentType.Of<T>();
         if (s_byTypeId.ContainsKey(type.Id))
             throw new InvalidOperationException(
@@ -118,10 +183,25 @@ public static class ComponentRegistry
             throw new InvalidOperationException(
                 $"O nome de componente \"{name}\" já está registrado para outro tipo ({existing.ClrType.FullName}).");
 
-        var fields = BuildFields(typeof(T));
-        var descriptor = new ComponentDescriptor(name, type, schemaVersion, typeof(T), fields);
+        var registration = new ComponentRegistration();
+        configure?.Invoke(registration);
+        var fields = BuildFields(typeof(T), registration);
+        var aliases = registration.ComponentAliases.ToArray();
+
+        var claimedNames = new HashSet<string>(StringComparer.Ordinal) { name };
+        foreach (string alias in aliases)
+        {
+            if (!claimedNames.Add(alias))
+                throw new InvalidOperationException($"Nome/alias de componente duplicado: \"{alias}\".");
+            if (s_byName.TryGetValue(alias, out existing))
+                throw new InvalidOperationException(
+                    $"O alias de componente \"{alias}\" já pertence a {existing.ClrType.FullName}.");
+        }
+
+        var descriptor = new ComponentDescriptor(name, type, schemaVersion, typeof(T), aliases, fields);
         s_byTypeId[type.Id] = descriptor;
         s_byName[name] = descriptor;
+        foreach (string alias in aliases) s_byName[alias] = descriptor;
         s_all.Add(descriptor);
     }
 
@@ -214,12 +294,45 @@ public static class ComponentRegistry
     /// gerenciado de verdade (preenche o campo com um valor "todo-bits-1" e observa qual byte mudou em
     /// relação a uma instância zerada), nunca a visão de interop.</para>
     /// </summary>
-    private static ComponentField[] BuildFields(Type root)
+    private static ComponentField[] BuildFields(Type root, ComponentRegistration registration)
     {
-        var list = new List<ComponentField>();
+        var discovered = new List<(string Path, ComponentFieldKind Kind, int Offset, int Size)>();
         Walk(root, "", 0, 0);
-        list.Sort((a, b) => string.CompareOrdinal(a.Path, b.Path));
-        return list.ToArray();
+        discovered.Sort((a, b) => string.CompareOrdinal(a.Path, b.Path));
+
+        var knownPaths = new HashSet<string>(discovered.Select(f => f.Path), StringComparer.Ordinal);
+        foreach (string configuredPath in registration.FieldRules.Keys)
+            if (!knownPaths.Contains(configuredPath))
+                throw new InvalidOperationException(
+                    $"Componente {root.FullName}: configuração referencia campo inexistente \"{configuredPath}\".");
+
+        var claimedKeys = new Dictionary<string, string>(StringComparer.Ordinal);
+        var fields = new ComponentField[discovered.Count];
+        for (int i = 0; i < discovered.Count; i++)
+        {
+            var f = discovered[i];
+            bool configured = registration.FieldRules.TryGetValue(f.Path, out var rule);
+            string id = configured ? rule.Id : f.Path;
+            string[] aliases = configured ? rule.Aliases : Array.Empty<string>();
+            Claim(id, f.Path);
+            Claim(f.Path, f.Path);
+            foreach (string alias in aliases)
+            {
+                if (string.IsNullOrWhiteSpace(alias))
+                    throw new InvalidOperationException($"Componente {root.FullName}: alias vazio no campo \"{f.Path}\".");
+                Claim(alias, f.Path);
+            }
+            fields[i] = new ComponentField(id, f.Path, f.Kind, f.Offset, f.Size, aliases.ToArray());
+        }
+        return fields;
+
+        void Claim(string key, string path)
+        {
+            if (claimedKeys.TryGetValue(key, out string? owner) && owner != path)
+                throw new InvalidOperationException(
+                    $"Componente {root.FullName}: id/path/alias \"{key}\" é ambíguo entre \"{owner}\" e \"{path}\".");
+            claimedKeys[key] = path;
+        }
 
         void Walk(Type t, string prefix, int baseOffset, int depth)
         {
@@ -235,13 +348,13 @@ public static class ComponentRegistry
 
                 if (f.FieldType == typeof(EntityId))
                 {
-                    list.Add(new ComponentField(path, ComponentFieldKind.EntityId, offset, 8));
+                    discovered.Add((path, ComponentFieldKind.EntityId, offset, 8));
                     continue;
                 }
 
                 if (TryLeafKind(f.FieldType, out var kind, out int size))
                 {
-                    list.Add(new ComponentField(path, kind, offset, size));
+                    discovered.Add((path, kind, offset, size));
                     continue;
                 }
 

@@ -1,5 +1,6 @@
 using System.Text;
 using Aether.Flow.Ast;
+using Aether.Flow.Runtime;
 
 namespace Aether.Flow.CodeGen;
 
@@ -37,20 +38,29 @@ public static class FlowToCSharp
 
     private static void EmitEvent(FlowGraph graph, FlowNode evt, StringBuilder sb)
     {
+        bool needsContext = graph.RequiredCapabilities != FlowCapability.None;
+        string contextParameter = needsContext
+            ? "global::Aether.Flow.Runtime.FlowExecutionContext flowContext"
+            : "";
+
         switch (evt.NodeType)
         {
             case NodeTypes.EventStart:
-                sb.Append("    public void Start()\n    {\n");
+                sb.Append("    public void Start(").Append(contextParameter).Append(")\n    {\n");
                 EmitExecChain(graph, evt.Id, "corpo", 2, sb);
                 sb.Append("    }\n");
                 break;
             case NodeTypes.EventUpdate:
-                sb.Append("    public void Update(float dt)\n    {\n");
+                sb.Append("    public void Update(float dt");
+                if (needsContext) sb.Append(", ").Append(contextParameter);
+                sb.Append(")\n    {\n");
                 EmitExecChain(graph, evt.Id, "corpo", 2, sb);
                 sb.Append("    }\n");
                 break;
             case NodeTypes.EventCollision:
-                sb.Append("    public void OnCollision(Entity outro)\n    {\n");
+                sb.Append("    public void OnCollision(Entity outro");
+                if (needsContext) sb.Append(", ").Append(contextParameter);
+                sb.Append(")\n    {\n");
                 EmitExecChain(graph, evt.Id, "corpo", 2, sb);
                 sb.Append("    }\n");
                 break;
@@ -123,6 +133,19 @@ public static class FlowToCSharp
                 string raw = node.Properties.GetValueOrDefault("RawCode", "");
                 foreach (var line in raw.Split('\n'))
                     sb.Append(pad).Append(line.TrimEnd('\r')).Append('\n');
+                EmitExecChain(graph, nodeId, "saida", indent, sb);
+                break;
+            }
+            case NodeTypes.LogMessage:
+            {
+                string message = EmitExpression(graph, node, "mensagem", 0);
+                string level = node.Properties.GetValueOrDefault("Level", nameof(FlowLogLevel.Info));
+                sb.Append(pad).Append("flowContext.Require(")
+                  .Append("global::Aether.Flow.Runtime.FlowCapability.Logging, \"")
+                  .Append(EscapeString(node.Id)).Append("\");\n");
+                sb.Append(pad).Append("flowContext.Logger!.Write(")
+                  .Append("global::Aether.Flow.Runtime.FlowLogLevel.").Append(level).Append(", ")
+                  .Append(message).Append(", \"").Append(EscapeString(node.Id)).Append("\");\n");
                 EmitExecChain(graph, nodeId, "saida", indent, sb);
                 break;
             }
@@ -199,4 +222,8 @@ public static class FlowToCSharp
         if (sb.Length == 0 || char.IsDigit(sb[0])) sb.Insert(0, '_');
         return sb.ToString();
     }
+
+    private static string EscapeString(string value) => value
+        .Replace("\\", "\\\\", StringComparison.Ordinal)
+        .Replace("\"", "\\\"", StringComparison.Ordinal);
 }

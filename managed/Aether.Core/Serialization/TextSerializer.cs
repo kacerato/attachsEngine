@@ -14,7 +14,7 @@ namespace Aether.Serialization;
 /// mundo &lt;versãoDeFormatoDeContêiner&gt;
 /// entidade &lt;índiceDenso&gt;
 ///   componente "&lt;NomeEstável&gt;" &lt;versãoDeEsquema&gt;
-///     campo "&lt;caminho.pontilhado&gt;" &lt;valor&gt;
+///     campo "&lt;idPersistente&gt;" &lt;valor&gt;
 /// </code>
 ///
 /// <para><b>Determinístico</b> (mesmo World sempre produz o mesmo texto, byte a byte): entidades na
@@ -29,19 +29,16 @@ namespace Aether.Serialization;
 /// <c>null</c> — nunca o <see cref="EntityId.Index"/>/<see cref="EntityId.Version"/> brutos, pela mesma
 /// razão documentada em <see cref="WorldSnapshot"/> e <see cref="EntityRefCodec"/>.</para>
 ///
-/// <para><b>Limitação conhecida de migração de esquema no formato texto</b>: ao contrário do formato
-/// binário (que migra BYTES crus de uma versão para a próxima via
-/// <see cref="ComponentRegistry.RegisterMigration{T}"/>), este formato lê campos por NOME/caminho, já
-/// no esquema atual — um campo removido entre versões é ignorado ao ler um arquivo antigo, e um campo
-/// novo fica com o valor padrão (zero) se não estiver presente no arquivo. Um campo renomeado perde o
-/// valor salvo. Uma migração textual fiel exigiria uma tabela de "caminhos de campo por versão" própria
-/// deste formato — o plano só pede round-trip determinístico para o texto e migração de esquema para o
-/// binário (que é onde o teste de migração deste módulo vive), então não implementamos isso aqui; fica
-/// documentado como limitação, não escondido.</para>
+/// <para><b>Migração textual</b>: a versão 2 persiste <see cref="ComponentField.Id"/> em vez do path
+/// CLR. O registro pode declarar aliases de componente e campo; por isso arquivos v1 continuam
+/// legíveis após rename. Campo removido é ignorado, campo adicionado recebe default e mudança de tipo
+/// compatível é reinterpretada pelo parser atual. Valor incompatível falha com contexto em vez de ser
+/// descartado. Migrações binárias continuam usando bytes e cadeia explícita porque preservam layout.</para>
 /// </summary>
 public static class TextSerializer
 {
-    private const int ContainerFormatVersion = 1;
+    private const int ContainerFormatVersion = 2;
+    private const int OldestReadableContainerVersion = 1;
 
     public static string Serialize(World world)
     {
@@ -65,7 +62,7 @@ public static class TextSerializer
                 var raw = WorldSnapshot.RawComponent(e.Chunk, e.Row, typeIndexInArchetype, descriptor.Type.Size).ToArray();
                 sb.Append("  componente ").Append(Quote(descriptor.Name)).Append(' ').Append(descriptor.SchemaVersion).Append('\n');
                 foreach (var field in descriptor.Fields)
-                    sb.Append("    campo ").Append(Quote(field.Path)).Append(' ').Append(FormatField(field, raw, denseIndexOf)).Append('\n');
+                    sb.Append("    campo ").Append(Quote(field.Id)).Append(' ').Append(FormatField(field, raw, denseIndexOf)).Append('\n');
             }
         }
 
@@ -106,8 +103,10 @@ public static class TextSerializer
         bool haveCurrent = false;
         ComponentDescriptor currentDescriptor = default;
         byte[]? currentPayload = null;
+        HashSet<string>? currentFieldsSeen = null;
         int nextExpectedDense = 0;
         bool sawHeader = false;
+        int fileFormatVersion = 0;
 
         void FlushComponent()
         {
@@ -117,6 +116,7 @@ public static class TextSerializer
                     $"Componente \"{currentDescriptor.Name}\" ficou com {currentPayload.Length} bytes montados, esperado {currentDescriptor.Type.Size}.");
             world.AddComponentRaw(current, currentDescriptor.Type, currentPayload);
             currentPayload = null;
+            currentFieldsSeen = null;
         }
 
         foreach (var rawLine in lines)
@@ -129,8 +129,11 @@ public static class TextSerializer
                 case "mundo":
                 {
                     int containerVersion = int.Parse(toks[1], CultureInfo.InvariantCulture);
-                    if (containerVersion != ContainerFormatVersion)
-                        throw new FormatException($"Versão de formato texto {containerVersion} não suportada; esperado {ContainerFormatVersion}.");
+                    if (containerVersion < OldestReadableContainerVersion || containerVersion > ContainerFormatVersion)
+                        throw new FormatException(
+                            $"Versão de formato texto {containerVersion} não suportada; intervalo legível é " +
+                            $"{OldestReadableContainerVersion}..{ContainerFormatVersion}.");
+                    fileFormatVersion = containerVersion;
                     sawHeader = true;
                     break;
                 }
@@ -153,20 +156,38 @@ public static class TextSerializer
                     if (!haveCurrent)
                         throw new FormatException("Linha \"componente\" fora de um bloco \"entidade\".");
                     string name = toks[1];
-                    // A versão de esquema gravada no arquivo é só informativa aqui — ver a limitação de
-                    // migração textual documentada no cabeçalho da classe.
-                    _ = int.Parse(toks[2], CultureInfo.InvariantCulture);
+                    int schemaVersionAtWrite = int.Parse(toks[2], CultureInfo.InvariantCulture);
                     if (!ComponentRegistry.TryGetByName(name, out currentDescriptor))
                     { currentPayload = null; break; } // componente que este build não conhece — campos seguintes são ignorados
+                    if (schemaVersionAtWrite > currentDescriptor.SchemaVersion)
+                        throw new FormatException(
+                            $"Componente \"{name}\" foi salvo no schema {schemaVersionAtWrite}, mais novo que o schema " +
+                            $"{currentDescriptor.SchemaVersion} deste build; downgrade textual não é suportado.");
                     currentPayload = new byte[currentDescriptor.Type.Size];
+                    currentFieldsSeen = new HashSet<string>(StringComparer.Ordinal);
                     break;
                 }
 
                 case "campo":
                 {
                     if (currentPayload is null) break; // dentro de um componente desconhecido — ignorado
-                    var field = FindField(currentDescriptor, toks[1]);
-                    ParseFieldInto(field, toks[2], currentPayload, byDenseIndex);
+                    // Em v1 a chave era o path CLR; em v2 é o id persistente. FindField aceita os
+                    // dois e aliases registrados, mantendo compatibilidade em ambas as direções.
+                    _ = fileFormatVersion;
+                    var field = currentDescriptor.FindField(toks[1]);
+                    if (field is { } knownField && !currentFieldsSeen!.Add(knownField.Id))
+                        throw new FormatException(
+                            $"Campo \"{toks[1]}\" aparece mais de uma vez no componente \"{currentDescriptor.Name}\".");
+                    try
+                    {
+                        ParseFieldInto(field, toks[2], currentPayload, byDenseIndex);
+                    }
+                    catch (Exception ex) when (ex is FormatException or OverflowException or IndexOutOfRangeException)
+                    {
+                        throw new FormatException(
+                            $"Valor incompatível no campo \"{toks[1]}\" do componente " +
+                            $"\"{currentDescriptor.Name}\": {ex.Message}", ex);
+                    }
                     break;
                 }
 
@@ -240,13 +261,6 @@ public static class TextSerializer
             case ComponentFieldKind.Double: BitConverter.TryWriteBytes(raw.AsSpan(field.Offset, 8), double.Parse(token, CultureInfo.InvariantCulture)); break;
             default: throw new InvalidOperationException($"Kind de campo desconhecido: {field.Kind}.");
         }
-    }
-
-    private static ComponentField? FindField(ComponentDescriptor descriptor, string path)
-    {
-        foreach (var f in descriptor.Fields)
-            if (f.Path == path) return f;
-        return null;
     }
 
     // ------------------------------------------------------------ quoting/tokenização estilo shell

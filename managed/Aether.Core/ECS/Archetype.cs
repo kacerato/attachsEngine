@@ -84,9 +84,10 @@ public sealed class Archetype
 
 /// <summary>
 /// Um bloco contíguo de armazenamento SoA para até <see cref="Archetype.ChunkCapacity"/> entidades
-/// de um mesmo arquétipo. O buffer é um <c>byte[]</c> simples: como o índice de um array gerenciado
-/// é recalculado a cada acesso (não é um ponteiro fixo), não precisamos fixar (pin) nem nos
-/// preocupar com o GC compactador mover o array entre uma chamada e outra.
+/// de um mesmo arquétipo. O buffer é um <c>byte[]</c> alocado uma vez no Pinned Object Heap: spans
+/// gerenciados continuam sendo a API normal, mas kernels síncronos em lote podem guardar endereços
+/// de colunas no plano sem fixar centenas de chunks a cada frame. Chunks têm lifecycle longo e
+/// tamanho limitado, o caso apropriado para memória pinada estável.
 /// </summary>
 public sealed class Chunk
 {
@@ -101,7 +102,7 @@ public sealed class Chunk
     internal Chunk(Archetype archetype, int bufferSize)
     {
         Archetype = archetype;
-        Buffer = new byte[bufferSize];
+        Buffer = GC.AllocateUninitializedArray<byte>(bufferSize, pinned: true);
         _entities = new EntityId[archetype.ChunkCapacity];
         Versions = new int[archetype.Types.Length];
     }
@@ -159,11 +160,38 @@ public sealed class Chunk
         return GetSpanUnchecked<T>(typeIndex);
     }
 
+    /// <summary>Acesso direto usado por planos compilados que já validaram tipo, linha e versão
+    /// estrutural. Evita reconstruir um Span e repetir lookup por entidade no caminho quente.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal ref readonly T GetReadOnlyRefUnchecked<T>(int typeIndex, int row) where T : unmanaged =>
+        ref GetRefUnchecked<T>(typeIndex, row);
+
+    /// <summary>Versão mutável sem marcar dirty. O sistema chamador deve chamar
+    /// <see cref="MarkChanged"/> uma vez por coluna/chunk antes de escrever o lote.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal ref T GetWritableRefUnchecked<T>(int typeIndex, int row) where T : unmanaged =>
+        ref GetRefUnchecked<T>(typeIndex, row);
+
+    /// <summary>Endereço estável de um componente dentro do buffer pinado. Somente planos nativos
+    /// síncronos podem conservá-lo, e apenas enquanto mantiverem este Chunk vivo.</summary>
+    internal unsafe nint GetAddressUnchecked<T>(int typeIndex, int row) where T : unmanaged
+    {
+        int offset = Archetype.ColumnOffset(typeIndex) + row * Unsafe.SizeOf<T>();
+        fixed (byte* buffer = Buffer) return (nint)(buffer + offset);
+    }
+
     private Span<T> GetSpanUnchecked<T>(int typeIndex) where T : unmanaged
     {
         int offset = Archetype.ColumnOffset(typeIndex);
         ref byte start = ref Buffer[offset];
         return MemoryMarshal.CreateSpan(ref Unsafe.As<byte, T>(ref start), Count);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private ref T GetRefUnchecked<T>(int typeIndex, int row) where T : unmanaged
+    {
+        int offset = Archetype.ColumnOffset(typeIndex) + row * Unsafe.SizeOf<T>();
+        return ref Unsafe.As<byte, T>(ref Buffer[offset]);
     }
 
     internal void MarkChanged(int typeIndex) => Versions[typeIndex]++;

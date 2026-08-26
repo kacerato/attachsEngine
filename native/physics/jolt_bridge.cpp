@@ -11,6 +11,7 @@
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/Collision/ContactListener.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
@@ -33,9 +34,12 @@
 #include <Jolt/Physics/Constraints/DistanceConstraint.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <limits>
+#include <map>
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -323,6 +327,177 @@ void EnsureGlobalTypesRegistered() {
   (void)registered;
 }
 
+// ------------------------------------------------------------ triggers/sensors (GAP-PHY-03)
+//
+// O Jolt chama ContactListener em workers concorrentes e OnContactRemoved só
+// entrega ids/subshapes. Por isso o listener conserva o conjunto de subcontatos
+// ativo, agrega-o por par dirigido sensor->outro e protege tudo por um mutex.
+// Eventos publicados são uma fotografia por Step, ordenada e sem duplicatas:
+// uma shape composta com vários subshapes ainda produz um único Enter/Stay/Exit
+// lógico para o par de corpos.
+class TriggerContactListener final : public JPH::ContactListener {
+public:
+  void RegisterSensor(AetherBodyHandle body, ae::u32 eventLayerMask) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mSensorMasks[body] = eventLayerMask;
+  }
+
+  void UnregisterSensor(AetherBodyHandle body) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mSensorMasks.erase(body);
+  }
+
+  void BeginStep() {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mFrameEvents = std::move(mPendingEvents);
+    mPendingEvents.clear();
+    mInStep = true;
+  }
+
+  void KeepOverlappingBodiesAwake(JPH::BodyInterface &bodyInterface) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    // O Jolt publica OnContactRemoved ao colocar um corpo para dormir, mesmo
+    // que ele continue geometricamente dentro de um sensor. Isso é correto
+    // para constraints, mas seria um Exit falso para gameplay. Só os pares de
+    // trigger realmente ativos são reativados; corpos fora de sensores mantêm
+    // a política normal de sleep.
+    for (const auto &entry : mActivePairCounts) {
+      const JPH::BodyID sensor(entry.first.sensor);
+      const JPH::BodyID other(entry.first.other);
+      if (bodyInterface.IsAdded(sensor) &&
+          bodyInterface.GetMotionType(sensor) != JPH::EMotionType::Static)
+        bodyInterface.ActivateBody(sensor);
+      if (bodyInterface.IsAdded(other) &&
+          bodyInterface.GetMotionType(other) != JPH::EMotionType::Static)
+        bodyInterface.ActivateBody(other);
+    }
+  }
+
+  void EndStep() {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mInStep = false;
+    std::sort(mFrameEvents.begin(), mFrameEvents.end(), EventLess);
+    mFrameEvents.erase(std::unique(mFrameEvents.begin(), mFrameEvents.end(), EventEqual),
+                       mFrameEvents.end());
+  }
+
+  ae::i32 CopyEvents(AetherTriggerEvent *outEvents, ae::i32 maxResults) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    const ae::i32 count = static_cast<ae::i32>(mFrameEvents.size());
+    const ae::i32 toCopy = outEvents != nullptr && maxResults > 0
+                               ? std::min(count, maxResults)
+                               : 0;
+    std::copy_n(mFrameEvents.begin(), toCopy, outEvents);
+    return count;
+  }
+
+  void OnContactAdded(const JPH::Body &body1, const JPH::Body &body2,
+                      const JPH::ContactManifold &manifold,
+                      JPH::ContactSettings &) override {
+    std::lock_guard<std::mutex> lock(mMutex);
+    const JPH::SubShapeIDPair subPair(body1.GetID(), manifold.mSubShapeID1,
+                                      body2.GetID(), manifold.mSubShapeID2);
+    if (mActiveSubShapes.find(subPair) != mActiveSubShapes.end()) return;
+
+    ActiveSubShape active{};
+    AddDirection(body1, body2, active);
+    AddDirection(body2, body1, active);
+    mActiveSubShapes.emplace(subPair, active);
+  }
+
+  void OnContactPersisted(const JPH::Body &body1, const JPH::Body &body2,
+                          const JPH::ContactManifold &manifold,
+                          JPH::ContactSettings &) override {
+    std::lock_guard<std::mutex> lock(mMutex);
+    const JPH::SubShapeIDPair subPair(body1.GetID(), manifold.mSubShapeID1,
+                                      body2.GetID(), manifold.mSubShapeID2);
+    auto it = mActiveSubShapes.find(subPair);
+    if (it == mActiveSubShapes.end()) {
+      // Pode ocorrer depois de troca de shape/manifold. Trate como um contato
+      // novo em vez de emitir Stay sem Enter.
+      ActiveSubShape active{};
+      AddDirection(body1, body2, active);
+      AddDirection(body2, body1, active);
+      mActiveSubShapes.emplace(subPair, active);
+      return;
+    }
+    for (ae::u32 i = 0; i < it->second.count; ++i)
+      AppendEvent(it->second.directions[i], AetherTriggerEventType::Stay);
+  }
+
+  void OnContactRemoved(const JPH::SubShapeIDPair &subPair) override {
+    std::lock_guard<std::mutex> lock(mMutex);
+    auto it = mActiveSubShapes.find(subPair);
+    if (it == mActiveSubShapes.end()) return;
+    for (ae::u32 i = 0; i < it->second.count; ++i) {
+      const DirectedPair pair = it->second.directions[i];
+      auto countIt = mActivePairCounts.find(pair);
+      if (countIt == mActivePairCounts.end()) continue;
+      if (--countIt->second == 0) {
+        AppendEvent(pair, AetherTriggerEventType::Exit);
+        mActivePairCounts.erase(countIt);
+      }
+    }
+    mActiveSubShapes.erase(it);
+  }
+
+private:
+  struct DirectedPair {
+    AetherBodyHandle sensor = AetherBodyHandle_Invalid;
+    AetherBodyHandle other = AetherBodyHandle_Invalid;
+    bool operator<(const DirectedPair &rhs) const {
+      return sensor != rhs.sensor ? sensor < rhs.sensor : other < rhs.other;
+    }
+  };
+
+  struct ActiveSubShape {
+    DirectedPair directions[2]{};
+    ae::u32 count = 0;
+  };
+
+  static ae::u32 LayerBit(JPH::ObjectLayer layer) {
+    return layer == Layers::NonMoving
+               ? static_cast<ae::u32>(AetherQueryLayerMask::Static)
+               : static_cast<ae::u32>(AetherQueryLayerMask::Dynamic);
+  }
+
+  void AddDirection(const JPH::Body &candidateSensor, const JPH::Body &other,
+                    ActiveSubShape &active) {
+    if (!candidateSensor.IsSensor()) return;
+    const DirectedPair pair{candidateSensor.GetID().GetIndexAndSequenceNumber(),
+                            other.GetID().GetIndexAndSequenceNumber()};
+    auto maskIt = mSensorMasks.find(pair.sensor);
+    if (maskIt == mSensorMasks.end() || (maskIt->second & LayerBit(other.GetObjectLayer())) == 0)
+      return;
+    if (active.count < 2) active.directions[active.count++] = pair;
+    ae::u32 &count = mActivePairCounts[pair];
+    if (count++ == 0) AppendEvent(pair, AetherTriggerEventType::Enter);
+  }
+
+  void AppendEvent(const DirectedPair &pair, AetherTriggerEventType type) {
+    AetherTriggerEvent event{pair.sensor, pair.other, type, 0};
+    (mInStep ? mFrameEvents : mPendingEvents).push_back(event);
+  }
+
+  static bool EventLess(const AetherTriggerEvent &a, const AetherTriggerEvent &b) {
+    if (a.sensor != b.sensor) return a.sensor < b.sensor;
+    if (a.other != b.other) return a.other < b.other;
+    return static_cast<ae::u32>(a.type) < static_cast<ae::u32>(b.type);
+  }
+
+  static bool EventEqual(const AetherTriggerEvent &a, const AetherTriggerEvent &b) {
+    return a.sensor == b.sensor && a.other == b.other && a.type == b.type;
+  }
+
+  std::mutex mMutex;
+  std::map<AetherBodyHandle, ae::u32> mSensorMasks;
+  std::map<JPH::SubShapeIDPair, ActiveSubShape> mActiveSubShapes;
+  std::map<DirectedPair, ae::u32> mActivePairCounts;
+  std::vector<AetherTriggerEvent> mPendingEvents;
+  std::vector<AetherTriggerEvent> mFrameEvents;
+  bool mInStep = false;
+};
+
 } // namespace
 
 // Definição real do tipo opaco declarado em jolt_bridge.h. Cada mundo tem seu
@@ -334,6 +509,7 @@ struct AetherPhysicsWorld {
   BroadPhaseLayerInterfaceImpl broadPhaseLayerInterface;
   ObjectVsBroadPhaseLayerFilterImpl objectVsBroadPhaseLayerFilter;
   ObjectLayerPairFilterImpl objectLayerPairFilter;
+  TriggerContactListener triggerListener;
   JPH::PhysicsSystem physicsSystem;
   JPH::TempAllocatorImpl tempAllocator;
   JPH::JobSystemThreadPool jobSystem;
@@ -379,6 +555,7 @@ struct AetherPhysicsWorld {
     JPH::PhysicsSettings settings = physicsSystem.GetPhysicsSettings();
     settings.mMaxInFlightBodyPairs = static_cast<int>(desc.maxBroadPhasePairs);
     physicsSystem.SetPhysicsSettings(settings);
+    physicsSystem.SetContactListener(&triggerListener);
   }
 
   static int WorkerThreadCount() {
@@ -501,6 +678,39 @@ void ReportUpdateErrors(AetherPhysicsWorld &world, ae::u32 flags) {
   }
 }
 
+AetherBodyHandle CreateBodyInternal(AetherPhysicsWorld &world, const AetherBodyDescV2 &desc) {
+  JPH::RefConst<JPH::Shape> shape = ToJoltShape(desc.shape);
+  if (shape == nullptr) return AetherBodyHandle_Invalid;
+
+  JPH::EAllowedDOFs allowedDOFs = ToJoltAllowedDOFs(desc.allowedDOFs);
+  if (desc.motionType == AetherMotionType::Dynamic &&
+      (static_cast<ae::u8>(allowedDOFs) & 0b111) == 0) {
+    return AetherBodyHandle_Invalid;
+  }
+
+  JPH::BodyCreationSettings bodySettings(
+      shape, JPH::RVec3(desc.position.x, desc.position.y, desc.position.z), ToJolt(desc.rotation),
+      ToJoltMotionType(desc.motionType), ToObjectLayer(desc.motionType));
+  bodySettings.mFriction = desc.friction;
+  bodySettings.mRestitution = desc.restitution;
+  bodySettings.mAllowedDOFs = allowedDOFs;
+  bodySettings.mIsSensor = desc.isSensor != 0;
+  // Sensores cinemáticos precisam enxergar volumes estáticos. O default do
+  // Jolt pula kinematic-vs-non-dynamic porque dois corpos não dinâmicos não
+  // precisam de solver; para triggers, porém, o contato é o próprio resultado.
+  bodySettings.mCollideKinematicVsNonDynamic = bodySettings.mIsSensor;
+
+  JPH::BodyInterface &bodyInterface = world.physicsSystem.GetBodyInterface();
+  JPH::BodyID id = bodyInterface.CreateAndAddBody(
+      bodySettings, desc.motionType == AetherMotionType::Static ? JPH::EActivation::DontActivate
+                                                                : JPH::EActivation::Activate);
+  if (id.IsInvalid()) return AetherBodyHandle_Invalid;
+
+  const AetherBodyHandle handle = id.GetIndexAndSequenceNumber();
+  if (bodySettings.mIsSensor) world.triggerListener.RegisterSensor(handle, desc.eventLayerMask);
+  return handle;
+}
+
 } // namespace
 
 extern "C" {
@@ -524,44 +734,128 @@ void AetherPhysics_DestroyWorld(AetherPhysicsWorld *world) {
 
 AetherBodyHandle AetherPhysics_CreateBody(AetherPhysicsWorld *world, const AetherBodyDesc *desc) {
   if (world == nullptr || desc == nullptr) return AetherBodyHandle_Invalid;
+  AetherBodyDescV2 v2{};
+  v2.structSize = sizeof(v2);
+  v2.apiVersion = AetherBodyApiVersionV2;
+  v2.shape = desc->shape;
+  v2.position = desc->position;
+  v2.rotation = desc->rotation;
+  v2.motionType = desc->motionType;
+  v2.friction = desc->friction;
+  v2.restitution = desc->restitution;
+  v2.allowedDOFs = desc->allowedDOFs;
+  v2.isSensor = 0;
+  v2.eventLayerMask = static_cast<ae::u32>(AetherQueryLayerMask::All);
+  return CreateBodyInternal(*world, v2);
+}
 
-  JPH::RefConst<JPH::Shape> shape = ToJoltShape(desc->shape);
-  if (shape == nullptr) return AetherBodyHandle_Invalid;
-
-  // JPH::EAllowedDOFs::None (nenhum eixo de translação livre) é inválido para um corpo
-  // Dynamic — o próprio Jolt documenta isso como "crasha com divisão por zero" em
-  // MotionProperties::SetMassProperties (ver comentário de AetherAllowedDOFs em
-  // jolt_bridge.h). Corpo estático/cinemático não usa massa/inércia da mesma forma
-  // (mInvMass fica 0 de qualquer forma para Static, e Kinematic não integra força), então só
-  // corpos Dynamic precisam dessa checagem defensiva — mesma disciplina "nunca crasha por
-  // input ruim" do resto da fronteira, em vez de deixar o Jolt abortar o processo.
-  JPH::EAllowedDOFs allowedDOFs = ToJoltAllowedDOFs(desc->allowedDOFs);
-  if (desc->motionType == AetherMotionType::Dynamic &&
-      (static_cast<ae::u8>(allowedDOFs) & 0b111) == 0) {
+AetherBodyHandle AetherPhysics_CreateBodyV2(AetherPhysicsWorld *world,
+                                             const AetherBodyDescV2 *desc) {
+  constexpr ae::u32 validMask = static_cast<ae::u32>(AetherQueryLayerMask::All);
+  if (world == nullptr || desc == nullptr || desc->structSize < sizeof(AetherBodyDescV2) ||
+      desc->apiVersion != AetherBodyApiVersionV2 || (desc->eventLayerMask & ~validMask) != 0) {
     return AetherBodyHandle_Invalid;
   }
+  return CreateBodyInternal(*world, *desc);
+}
 
-  JPH::BodyCreationSettings bodySettings(
-      shape, JPH::RVec3(desc->position.x, desc->position.y, desc->position.z), ToJolt(desc->rotation),
-      ToJoltMotionType(desc->motionType), ToObjectLayer(desc->motionType));
-  bodySettings.mFriction = desc->friction;
-  bodySettings.mRestitution = desc->restitution;
-  bodySettings.mAllowedDOFs = allowedDOFs;
+ae::i32 AetherPhysics_CreateBodiesV2(AetherPhysicsWorld *world,
+                                     const AetherBodyDescV2 *descs,
+                                     AetherBodyHandle *outHandles,
+                                     ae::i32 count) {
+  if (count < 0 || world == nullptr || (count > 0 && (descs == nullptr || outHandles == nullptr)))
+    return 0;
+  if (count == 0) return 0;
 
+  std::fill_n(outHandles, count, AetherBodyHandle_Invalid);
+  constexpr ae::u32 validMask = static_cast<ae::u32>(AetherQueryLayerMask::All);
   JPH::BodyInterface &bodyInterface = world->physicsSystem.GetBodyInterface();
-  JPH::BodyID id = bodyInterface.CreateAndAddBody(
-      bodySettings, desc->motionType == AetherMotionType::Static ? JPH::EActivation::DontActivate
-                                                                   : JPH::EActivation::Activate);
-  if (id.IsInvalid()) return AetherBodyHandle_Invalid;
-  return id.GetIndexAndSequenceNumber();
+  std::vector<JPH::BodyID> ids;
+  std::vector<JPH::BodyID> activateIds;
+  ids.reserve(static_cast<ae::usize>(count));
+  activateIds.reserve(static_cast<ae::usize>(count));
+
+  auto rollback = [&] {
+    if (!ids.empty()) bodyInterface.DestroyBodies(ids.data(), static_cast<int>(ids.size()));
+    std::fill_n(outHandles, count, AetherBodyHandle_Invalid);
+  };
+
+  // Primeiro cria e atribui IDs, ainda fora da broadphase. Qualquer descriptor
+  // inválido ou falta de capacidade desfaz o prefixo inteiro, garantindo a
+  // semântica all-or-none documentada na ABI.
+  for (ae::i32 i = 0; i < count; ++i) {
+    const AetherBodyDescV2 &desc = descs[i];
+    if (desc.structSize < sizeof(AetherBodyDescV2) ||
+        desc.apiVersion != AetherBodyApiVersionV2 ||
+        (desc.eventLayerMask & ~validMask) != 0) {
+      rollback();
+      return 0;
+    }
+
+    JPH::RefConst<JPH::Shape> shape = ToJoltShape(desc.shape);
+    JPH::EAllowedDOFs allowedDOFs = ToJoltAllowedDOFs(desc.allowedDOFs);
+    if (shape == nullptr ||
+        (desc.motionType == AetherMotionType::Dynamic &&
+         (static_cast<ae::u8>(allowedDOFs) & 0b111) == 0)) {
+      rollback();
+      return 0;
+    }
+
+    JPH::BodyCreationSettings settings(
+        shape, JPH::RVec3(desc.position.x, desc.position.y, desc.position.z),
+        ToJolt(desc.rotation), ToJoltMotionType(desc.motionType), ToObjectLayer(desc.motionType));
+    settings.mFriction = desc.friction;
+    settings.mRestitution = desc.restitution;
+    settings.mAllowedDOFs = allowedDOFs;
+    settings.mIsSensor = desc.isSensor != 0;
+    settings.mCollideKinematicVsNonDynamic = settings.mIsSensor;
+
+    JPH::Body *body = bodyInterface.CreateBody(settings);
+    if (body == nullptr) {
+      rollback();
+      return 0;
+    }
+    const JPH::BodyID id = body->GetID();
+    ids.push_back(id);
+    if (desc.motionType != AetherMotionType::Static) activateIds.push_back(id);
+    outHandles[i] = id.GetIndexAndSequenceNumber();
+  }
+
+  // Uma preparação/finalização para o lote evita degradar a árvore incremental
+  // da broadphase como ocorreria com N chamadas CreateAndAddBody.
+  JPH::BodyInterface::AddState addState =
+      bodyInterface.AddBodiesPrepare(ids.data(), static_cast<int>(ids.size()));
+  bodyInterface.AddBodiesFinalize(ids.data(), static_cast<int>(ids.size()), addState,
+                                  JPH::EActivation::DontActivate);
+  if (!activateIds.empty())
+    bodyInterface.ActivateBodies(activateIds.data(), static_cast<int>(activateIds.size()));
+
+  for (ae::i32 i = 0; i < count; ++i)
+    if (descs[i].isSensor != 0)
+      world->triggerListener.RegisterSensor(outHandles[i], descs[i].eventLayerMask);
+  return count;
 }
 
 void AetherPhysics_DestroyBody(AetherPhysicsWorld *world, AetherBodyHandle handle) {
-  if (world == nullptr || handle == AetherBodyHandle_Invalid) return;
-  JPH::BodyID id(handle);
+  AetherPhysics_DestroyBodies(world, &handle, 1);
+}
+
+void AetherPhysics_DestroyBodies(AetherPhysicsWorld *world,
+                                 const AetherBodyHandle *handles,
+                                 ae::i32 count) {
+  if (world == nullptr || handles == nullptr || count <= 0) return;
   JPH::BodyInterface &bodyInterface = world->physicsSystem.GetBodyInterface();
-  bodyInterface.RemoveBody(id);
-  bodyInterface.DestroyBody(id);
+  std::vector<JPH::BodyID> ids;
+  ids.reserve(static_cast<ae::usize>(count));
+  for (ae::i32 i = 0; i < count; ++i) {
+    if (handles[i] == AetherBodyHandle_Invalid) continue;
+    const JPH::BodyID id(handles[i]);
+    if (bodyInterface.IsSensor(id)) world->triggerListener.UnregisterSensor(handles[i]);
+    ids.push_back(id);
+  }
+  if (ids.empty()) return;
+  bodyInterface.RemoveBodies(ids.data(), static_cast<int>(ids.size()));
+  bodyInterface.DestroyBodies(ids.data(), static_cast<int>(ids.size()));
 }
 
 void AetherPhysics_Step(AetherPhysicsWorld *world, float deltaTime, ae::i32 collisionSteps) {
@@ -570,13 +864,22 @@ void AetherPhysics_Step(AetherPhysicsWorld *world, float deltaTime, ae::i32 coll
 
 ae::u32 AetherPhysics_StepV2(AetherPhysicsWorld *world, float deltaTime, ae::i32 collisionSteps) {
   if (world == nullptr) return static_cast<ae::u32>(AetherPhysicsUpdateError::None);
+  world->triggerListener.KeepOverlappingBodiesAwake(world->physicsSystem.GetBodyInterface());
+  world->triggerListener.BeginStep();
   const JPH::EPhysicsUpdateError updateError =
       world->physicsSystem.Update(deltaTime, collisionSteps, &world->tempAllocator, &world->jobSystem);
+  world->triggerListener.EndStep();
   const ae::u32 flags = static_cast<ae::u32>(updateError);
   ++world->stepStats.totalSteps;
   world->stepStats.lastErrorFlags = flags;
   if (flags != 0) ReportUpdateErrors(*world, flags);
   return flags;
+}
+
+ae::i32 AetherPhysics_GetTriggerEvents(AetherPhysicsWorld *world,
+                                       AetherTriggerEvent *outEvents,
+                                       ae::i32 maxResults) {
+  return world == nullptr ? 0 : world->triggerListener.CopyEvents(outEvents, maxResults);
 }
 
 ae::i32 AetherPhysics_GetStepStatsV2(const AetherPhysicsWorld *world,
@@ -713,10 +1016,61 @@ ae::i32 AetherPhysics_OverlapShape(AetherPhysicsWorld *world, const AetherShapeD
 
 // ---------------------------------------------------------------- juntas e motores (4.1.3)
 
-AetherJointHandle AetherPhysics_CreateJoint(AetherPhysicsWorld *world, AetherBodyHandle body1,
-                                             AetherBodyHandle body2, const AetherJointDesc *desc) {
+namespace {
+
+constexpr float kJointPi = 3.14159265358979323846f;
+
+bool IsFinite(AetherVec3 value) {
+  return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+bool IsValidMotor(const AetherJointMotorDesc &motor) {
+  const ae::u32 state = static_cast<ae::u32>(motor.state);
+  return state <= static_cast<ae::u32>(AetherMotorState::PositionAndVelocity) &&
+         std::isfinite(motor.targetVelocity) && std::isfinite(motor.targetPosition) &&
+         std::isfinite(motor.maxForceOrTorque) && motor.maxForceOrTorque >= 0.0f &&
+         std::isfinite(motor.springFrequency) && motor.springFrequency >= 0.0f &&
+         std::isfinite(motor.springDamping) && motor.springDamping >= 0.0f;
+}
+
+bool IsValidJointDesc(const AetherJointDesc &desc) {
+  const ae::u32 kind = static_cast<ae::u32>(desc.kind);
+  if (kind > static_cast<ae::u32>(AetherJointKind::Distance) ||
+      !IsFinite(desc.point1) || !IsFinite(desc.point2) || !IsFinite(desc.axis1) ||
+      !IsFinite(desc.axis2) || !std::isfinite(desc.limitsMin) ||
+      !std::isfinite(desc.limitsMax) || !IsValidMotor(desc.motor))
+    return false;
+
+  if (desc.kind == AetherJointKind::Hinge || desc.kind == AetherJointKind::Slider) {
+    if (ToJolt(desc.axis1).LengthSq() <= 1.0e-12f ||
+        ToJolt(desc.axis2).LengthSq() <= 1.0e-12f)
+      return false;
+    if (desc.limitsMin > desc.limitsMax) return false;
+  }
+
+  if (desc.kind == AetherJointKind::Hinge &&
+      (desc.limitsMin < -kJointPi || desc.limitsMin > 0.0f ||
+       desc.limitsMax < 0.0f || desc.limitsMax > kJointPi))
+    return false;
+
+  return true;
+}
+
+void TransformJointFrame(const JPH::Body &reference, AetherJointDesc &desc) {
+  const JPH::Quat rotation = reference.GetRotation();
+  const JPH::RVec3 position = reference.GetPosition();
+  desc.point1 = FromJolt(position + rotation * ToJolt(desc.point1));
+  desc.point2 = FromJolt(position + rotation * ToJolt(desc.point2));
+  desc.axis1 = FromJolt(rotation * ToJolt(desc.axis1));
+  desc.axis2 = FromJolt(rotation * ToJolt(desc.axis2));
+}
+
+AetherJointHandle CreateJointWorldSpace(AetherPhysicsWorld *world, AetherBodyHandle body1,
+                                         AetherBodyHandle body2, const AetherJointDesc *desc,
+                                         AetherJointSpace inputSpace) {
   if (world == nullptr || desc == nullptr) return AetherJointHandle_Invalid;
   if (body1 == AetherBodyHandle_Invalid || body2 == AetherBodyHandle_Invalid) return AetherJointHandle_Invalid;
+  if (!IsValidJointDesc(*desc)) return AetherJointHandle_Invalid;
 
   // Constraint::Create(Body&, Body&) precisa de referências reais, não de BodyID — diferente
   // do resto desta fronteira (que opera inteiramente via BodyInterface, por BodyID). Um lock
@@ -745,64 +1099,72 @@ AetherJointHandle AetherPhysics_CreateJoint(AetherPhysicsWorld *world, AetherBod
     JPH::Body *jphBody2 = lock.GetBody(1);
     if (jphBody1 == nullptr || jphBody2 == nullptr) return AetherJointHandle_Invalid;
 
-    switch (desc->kind) {
+    AetherJointDesc worldDesc = *desc;
+    if (inputSpace == AetherJointSpace::LocalToBody1)
+      TransformJointFrame(*jphBody1, worldDesc);
+    else if (inputSpace == AetherJointSpace::LocalToBody2)
+      TransformJointFrame(*jphBody2, worldDesc);
+
+    const AetherJointDesc *resolved = &worldDesc;
+
+    switch (resolved->kind) {
       case AetherJointKind::Point: {
         JPH::PointConstraintSettings settings;
         settings.mSpace = JPH::EConstraintSpace::WorldSpace;
-        settings.mPoint1 = JPH::RVec3(desc->point1.x, desc->point1.y, desc->point1.z);
-        settings.mPoint2 = JPH::RVec3(desc->point2.x, desc->point2.y, desc->point2.z);
+        settings.mPoint1 = JPH::RVec3(resolved->point1.x, resolved->point1.y, resolved->point1.z);
+        settings.mPoint2 = JPH::RVec3(resolved->point2.x, resolved->point2.y, resolved->point2.z);
         constraint = settings.Create(*jphBody1, *jphBody2);
         break;
       }
       case AetherJointKind::Hinge: {
         JPH::HingeConstraintSettings settings;
         settings.mSpace = JPH::EConstraintSpace::WorldSpace;
-        settings.mPoint1 = JPH::RVec3(desc->point1.x, desc->point1.y, desc->point1.z);
-        settings.mPoint2 = JPH::RVec3(desc->point2.x, desc->point2.y, desc->point2.z);
-        settings.mHingeAxis1 = ToJolt(desc->axis1).Normalized();
-        settings.mHingeAxis2 = ToJolt(desc->axis2).Normalized();
+        settings.mPoint1 = JPH::RVec3(resolved->point1.x, resolved->point1.y, resolved->point1.z);
+        settings.mPoint2 = JPH::RVec3(resolved->point2.x, resolved->point2.y, resolved->point2.z);
+        settings.mHingeAxis1 = ToJolt(resolved->axis1).Normalized();
+        settings.mHingeAxis2 = ToJolt(resolved->axis2).Normalized();
         // Normal perpendicular ao eixo, gerada automaticamente — a fronteira não pede uma
         // normal explícita do chamador (só usada por Jolt para desenhar/definir ângulo zero;
         // GetNormalizedPerpendicular() é o mesmo helper que o próprio Jolt usa internamente
         // quando o eixo muda sem normal fornecida).
         settings.mNormalAxis1 = settings.mHingeAxis1.GetNormalizedPerpendicular();
         settings.mNormalAxis2 = settings.mHingeAxis2.GetNormalizedPerpendicular();
-        settings.mLimitsMin = desc->limitsMin;
-        settings.mLimitsMax = desc->limitsMax;
-        settings.mMotorSettings = ToJoltMotorSettings(desc->motor, /*isAngular*/ true);
+        settings.mLimitsMin = resolved->limitsMin;
+        settings.mLimitsMax = resolved->limitsMax;
+        settings.mMotorSettings = ToJoltMotorSettings(resolved->motor, /*isAngular*/ true);
         auto *hinge = static_cast<JPH::HingeConstraint *>(settings.Create(*jphBody1, *jphBody2));
-        hinge->SetMotorState(ToJoltMotorState(desc->motor.state));
-        hinge->SetTargetAngularVelocity(desc->motor.targetVelocity);
-        hinge->SetTargetAngle(desc->motor.targetPosition);
+        hinge->SetMotorState(ToJoltMotorState(resolved->motor.state));
+        hinge->SetTargetAngularVelocity(resolved->motor.targetVelocity);
+        hinge->SetTargetAngle(resolved->motor.targetPosition);
         constraint = hinge;
         break;
       }
       case AetherJointKind::Slider: {
         JPH::SliderConstraintSettings settings;
         settings.mSpace = JPH::EConstraintSpace::WorldSpace;
-        settings.mPoint1 = JPH::RVec3(desc->point1.x, desc->point1.y, desc->point1.z);
-        settings.mPoint2 = JPH::RVec3(desc->point2.x, desc->point2.y, desc->point2.z);
-        settings.mSliderAxis1 = ToJolt(desc->axis1).Normalized();
-        settings.mSliderAxis2 = ToJolt(desc->axis2).Normalized();
+        settings.mPoint1 = JPH::RVec3(resolved->point1.x, resolved->point1.y, resolved->point1.z);
+        settings.mPoint2 = JPH::RVec3(resolved->point2.x, resolved->point2.y, resolved->point2.z);
+        settings.mSliderAxis1 = ToJolt(resolved->axis1).Normalized();
+        settings.mSliderAxis2 = ToJolt(resolved->axis2).Normalized();
         settings.mNormalAxis1 = settings.mSliderAxis1.GetNormalizedPerpendicular();
         settings.mNormalAxis2 = settings.mSliderAxis2.GetNormalizedPerpendicular();
-        settings.mLimitsMin = desc->limitsMin;
-        settings.mLimitsMax = desc->limitsMax;
-        settings.mMotorSettings = ToJoltMotorSettings(desc->motor, /*isAngular*/ false);
+        settings.mLimitsMin = resolved->limitsMin;
+        settings.mLimitsMax = resolved->limitsMax;
+        settings.mMotorSettings = ToJoltMotorSettings(resolved->motor, /*isAngular*/ false);
         auto *slider = static_cast<JPH::SliderConstraint *>(settings.Create(*jphBody1, *jphBody2));
-        slider->SetMotorState(ToJoltMotorState(desc->motor.state));
-        slider->SetTargetVelocity(desc->motor.targetVelocity);
-        slider->SetTargetPosition(desc->motor.targetPosition);
+        slider->SetMotorState(ToJoltMotorState(resolved->motor.state));
+        slider->SetTargetVelocity(resolved->motor.targetVelocity);
+        slider->SetTargetPosition(resolved->motor.targetPosition);
         constraint = slider;
         break;
       }
       case AetherJointKind::Distance: {
         JPH::DistanceConstraintSettings settings;
         settings.mSpace = JPH::EConstraintSpace::WorldSpace;
-        settings.mPoint1 = JPH::RVec3(desc->point1.x, desc->point1.y, desc->point1.z);
-        settings.mPoint2 = JPH::RVec3(desc->point2.x, desc->point2.y, desc->point2.z);
-        settings.mMinDistance = desc->limitsMin;
-        settings.mMaxDistance = desc->limitsMax;
+        settings.mPoint1 = JPH::RVec3(resolved->point1.x, resolved->point1.y, resolved->point1.z);
+        settings.mPoint2 = JPH::RVec3(resolved->point2.x, resolved->point2.y, resolved->point2.z);
+        settings.mMinDistance = resolved->limitsMin;
+        settings.mMaxDistance = resolved->limitsMax;
         constraint = settings.Create(*jphBody1, *jphBody2);
         break;
       }
@@ -830,6 +1192,34 @@ AetherJointHandle AetherPhysics_CreateJoint(AetherPhysicsWorld *world, AetherBod
   ae::u32 index = static_cast<ae::u32>(world->jointSlots.size());
   world->jointSlots.push_back(JointSlot{constraint, bodyIds[0], bodyIds[1], 0});
   return PackGenerationalHandle(index, 0);
+}
+
+} // namespace
+
+AetherJointHandle AetherPhysics_CreateJoint(AetherPhysicsWorld *world, AetherBodyHandle body1,
+                                             AetherBodyHandle body2, const AetherJointDesc *desc) {
+  return CreateJointWorldSpace(world, body1, body2, desc, AetherJointSpace::World);
+}
+
+AetherJointHandle AetherPhysics_CreateJointV2(AetherPhysicsWorld *world, AetherBodyHandle body1,
+                                               AetherBodyHandle body2, const AetherJointDescV2 *desc) {
+  if (desc == nullptr || desc->structSize < sizeof(AetherJointDescV2) ||
+      desc->apiVersion != AetherJointApiVersionV2)
+    return AetherJointHandle_Invalid;
+  if (desc->space != AetherJointSpace::World && desc->space != AetherJointSpace::LocalToBody1 &&
+      desc->space != AetherJointSpace::LocalToBody2)
+    return AetherJointHandle_Invalid;
+
+  AetherJointDesc v1{};
+  v1.kind = desc->kind;
+  v1.point1 = desc->point1;
+  v1.point2 = desc->point2;
+  v1.axis1 = desc->axis1;
+  v1.axis2 = desc->axis2;
+  v1.limitsMin = desc->limitsMin;
+  v1.limitsMax = desc->limitsMax;
+  v1.motor = desc->motor;
+  return CreateJointWorldSpace(world, body1, body2, &v1, desc->space);
 }
 
 namespace {

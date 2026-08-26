@@ -1,7 +1,7 @@
 # Matriz de marcos — inventário executável 0.1.1–9.6.7
 
 > **Origem da exigência:** `docs/PLANO-FECHAMENTO-LACUNAS.md` §4.1 ("Inventário
-> executável", dentro da Onda 0). Este documento é a tabela item-a-item pedida
+> executável"). Este documento é a tabela item-a-item pedida
 > ali: todo item numerado de `docs/PLANO-ENGINE-MOBILE.md` (0.1.1 até 9.6.7,
 > ~328 itens) recebe uma linha própria com estado individual e evidência
 > concreta — nunca um cabeçalho de faixa (ex.: "5.1–5.6") marcado como um bloco
@@ -31,13 +31,13 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 277 |
+| não iniciado | 271 |
 | PoC | 9 |
-| parcial | 25 |
-| implementado | 18 |
-| validado em hardware | 2 |
+| parcial | 23 |
+| implementado | 25 |
+| validado em hardware | 4 |
 | aceito | 1 |
-| **Total** | **332** |
+| **Total** | **333** |
 
 (O total real de linhas é 332, não os ~328 itens estritamente `X.Y.Z` do plano
 principal — a Etapa 0.2 tem 5 PoCs de risco identificados só como "PoC-A" a
@@ -59,16 +59,16 @@ não recebem estado agregado — servem apenas de navegação.
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
 | 0.1.1 | Monorepo, build C# (.NET SDK) + CMake/Ninja nativo, CI com dispositivos físicos | parcial | ESTADO.md linha 61 (build C#+CMake/Ninja e runner de testes próprio ✅); CI com dispositivos físicos não existe — só `tools/validate-android-shell.ps1` rodado manualmente |
-| 0.1.2 | Farm de dispositivos: mínimo 12 aparelhos cobrindo Adreno/Mali/PowerVR/Apple, perfis S/A/B/C | parcial | ESTADO.md "Shell Android — validação atual": 1 aparelho físico (Xiaomi SM8735/Adreno). Faltam Mali, PowerVR, Apple e perfil C — matriz mínima de 6 (§5.1 do plano de lacunas) não atingida |
+| 0.1.2 | Farm de dispositivos: mínimo 12 aparelhos cobrindo Adreno/Mali/PowerVR/Apple, perfis S/A/B/C | parcial | ESTADO.md "Shell Android — validação atual": 1 aparelho físico (Xiaomi SM8735/Adreno). Faltam Mali, PowerVR, Apple e perfil C — matriz mínima de 6 (§6.1 do plano de lacunas, `GAP-HW-01`) não atingida |
 | 0.1.3 | Shell nativo Android (NativeActivity/GameActivity) + iOS, loop de app, surface Vulkan, ciclo de vida | validado em hardware (só Android) | ESTADO.md linha 62 e seção "Shell Android — validação atual": surface Vulkan, swapchain, pipeline e apresentação confirmados em hardware físico real (Adreno); lifecycle com 100 ciclos background/foreground, screen off/on, mudança de configuração. iOS: não iniciado (nenhum arquivo em `native/platform/ios` além de stub) |
-| 0.1.4 | Integração .NET no processo nativo: carregar CoreCLR/Mono, chamar C# do C++ e vice-versa | não iniciado | ESTADO.md linha 87: "Ainda não existem ... interop .NET↔renderer da PoC-A"; nenhum host de runtime .NET embutido no `native_activity`/APK |
+| 0.1.4 | Integração .NET no processo nativo: carregar CoreCLR/Mono, chamar C# do C++ e vice-versa | implementado | ESTADO.md "0.1.4": `DotNetHost` hospeda CoreCLR via `hostfxr` e chama C# do C++ com sucesso, integrado ao `android_main.cpp`/Gradle, empacotado no APK de produção (assets + jniLibs), validado em hardware real (Xiaomi SM8735) — log real do dispositivo confirma `CoreCLR hospedado no shell: Ping(2,3)=5` coexistindo com o shell gráfico. Binários vendorizados em `native/third_party/dotnet-runtime/` |
 | 0.1.5 | Telemetria e logging desde o dia 1 | parcial | Logging via logcat usado no shell Android (ESTADO.md linhas 109-121); não há sistema de telemetria estruturado além disso |
 
 ### Etapa 0.2 — Provas de conceito de risco
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 0.2 (PoC-A) | Vulkan + .NET: 5.000 objetos a 60 fps, < 3 ms CPU | não iniciado | Nenhuma integração .NET↔Vulkan existe (ver 0.1.4); `TriangleRenderer` é hardcoded sem interop (ESTADO.md linha 145) |
+| 0.2 (PoC-A) | Vulkan + .NET: 5.000 objetos a 60 fps, < 3 ms CPU | validado em hardware | `InstancedRenderer` (`native/platform/android/instanced_renderer.h/.cpp`) desenha 5.000 quads instanciados cuja posição/cor vêm de `Aether.Interop.NativeEntryPoints.FillInstanceBuffer` (novo, `[UnmanagedCallersOnly]`), um único crossing C++↔C# por frame (nunca por objeto). Medido em hardware real (Xiaomi SM8735): pico do crossing 1,57–2,83 ms em regime estável, dentro do orçamento de 3 ms — log real do dispositivo confirma repetidamente "dentro do orçamento" ao longo de várias janelas de amostragem. Confirmado visualmente (screenshot: grade de 5.000 quads coloridos). Nuance registrada: o primeiro frame após retomar de background sobe a ~5,2 ms (recriação de pipeline/JIT reaquecendo), estabiliza de volta em poucos frames — não é falha do orçamento em regime estável, é custo de retomada, documentado em `ESTADO.md` |
 | 0.2 (PoC-B) | Gestos de edição: 10 testadores completam tarefa em < 30 s | PoC | `prototype/editor.html` prova UX de gizmos/câmera (ESTADO.md linha 63, 130-132), mas nenhum teste formal com 10 usuários foi registrado |
 | 0.2 (PoC-C) | Térmica: 30 min sem throttle, < 4 W | não iniciado | `PowerGovernor` existe com histerese testada (ESTADO.md linha 67, 6 testes), mas não há integração com leitura térmica real do Android nem soak de 30 min registrado |
 | 0.2 (PoC-D) | Hot reload C#: editar → ver mudança em < 2 s | não iniciado | Nenhum pipeline de hot reload implementado nesta base |
@@ -111,27 +111,27 @@ não recebem estado agregado — servem apenas de navegação.
 |---|---|---|---|
 | 1.2.1 | Alocadores: arena de frame, pools por tipo, slab para chunks, alocador de rastreamento | implementado | ESTADO.md linha 65: FrameArena, PoolAllocator, NativeList/Array, MemoryBudget ✅ 22 testes (`MemoryTests.cs`); alocador de rastreamento/debug não confirmado separadamente |
 | 1.2.2 | Job system com work-stealing, dependências, afinidade big.LITTLE | parcial | ESTADO.md linha 66: job system com work-stealing e dependências + `GAP-JOB-01` fechado (grafo de ciclos) ✅ 13 testes; afinidade big.LITTLE não implementada (não mencionada em nenhum teste) |
-| 1.2.3 | Primitivas sem trava (filas SPSC/MPMC, contadores atômicos) | não iniciado | PLANO-FECHAMENTO-LACUNAS.md §6.2: "filas SPSC/MPMC... continuam abertos" |
-| 1.2.4 | Instrumentação: rastreador de alocações por subsistema, visualizador de jobs | não iniciado | PLANO-FECHAMENTO-LACUNAS.md §6.2 item 4: ainda não implementado |
-| 1.2.5 | Analisador Roslyn `[NoAlloc]` | não iniciado | PLANO-FECHAMENTO-LACUNAS.md §6.2 item 5: ainda não implementado; nenhum analisador Roslyn customizado encontrado no repositório |
+| 1.2.3 | Primitivas sem trava (filas SPSC/MPMC, contadores atômicos) | não iniciado | Item futuro explícito do plano principal; nenhuma primitiva lock-free no repositório |
+| 1.2.4 | Instrumentação: rastreador de alocações por subsistema, visualizador de jobs | não iniciado | Item futuro explícito do plano principal; nenhum rastreador/visualizador no repositório |
+| 1.2.5 | Analisador Roslyn `[NoAlloc]` | não iniciado | Item futuro explícito do plano principal; nenhum analisador Roslyn customizado encontrado no repositório |
 
 ### Etapa 1.3 — ECS
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 1.3.1 | Armazenamento por arquétipo em chunks, versionamento de componentes | implementado | Chunks SoA de 16 KB e consultas sem alocação; `World.Read/Write` e `Chunk.GetReadOnlySpan/GetWritableSpan` separam intenção e versionam somente a coluna/chunk escrito. Duas regressões provam ausência de dirty em leitura, incremento único e isolamento entre chunks (`GAP-ECS-01` fechado; 26 testes ECS) |
-| 1.3.2 | Sistema de consultas compiladas e cacheadas, com filtros | parcial | Incluído nos 24 testes de ECS (linha 68); filtros básicos existem, mas "consultas compiladas e cacheadas" completo não é claramente evidenciado além do básico |
-| 1.3.3 | Buffers de comando estruturais aplicados em pontos de sincronização | implementado | `EntityCommandBuffer.cs` existe; ESTADO.md registra command buffer como parte dos 26 testes de ECS |
-| 1.3.4 | Hierarquia como componente + propagação de transform | implementado | ESTADO.md linha 69: hierarquia (lista encadeada de irmãos) + propagação de transform ✅ 10 testes (`HierarchyTests.cs`) |
+| 1.3.1 | Armazenamento por arquétipo em chunks, versionamento de componentes | implementado | Chunks SoA de 16 KB e consultas sem alocação; `World.Read/Write` e `Chunk.GetReadOnlySpan/GetWritableSpan` separam intenção e versionam somente a coluna/chunk escrito. Regressões provam ausência de dirty em leitura, incremento único e isolamento entre chunks (`GAP-ECS-01` fechado; 29 testes ECS) |
+| 1.3.2 | Sistema de consultas compiladas e cacheadas, com filtros | implementado | `CompiledQuery` usa o cache versionado de arquétipos e incorpora arquétipos posteriores; filtros `With`, `Without` e `ComponentChangeFilter<T>` combinam assinatura e versão por chunk/coluna. Iteração estável zero-GC e regressões de invalidação/correção passam |
+| 1.3.3 | Buffers de comando estruturais aplicados em pontos de sincronização | implementado | `EntityCommandBuffer.cs` existe; benchmark de 10 mil add/remove mediu 3/4 ms na execução completa mais recente, preservando ids/dados; integra os 29 testes ECS |
+| 1.3.4 | Hierarquia como componente + propagação de transform | implementado | Hierarquia encadeada + plano topológico invalidável + backend nativo em lote/fallback gerenciado ✅ 20 testes (`HierarchyTests.cs`) |
 | 1.3.5 | Fachada `Node` sobre o ECS, com API amigável | implementado | `managed/Aether.Core/ECS/Node.cs`: `readonly struct` sem ownership sobre `World`+`EntityId`, com componentes, parent/children sem alocação, geração/invalidação e proteção contra reparent entre mundos; 3 regressões em `HierarchyTests.cs` |
-| 1.3.6 | Benchmark: 100k entidades com transform + hierarquia a 60 fps classe A | parcial | `EcsTests.Escala_CemMilEntidades_ConsultaEAtualizacaoCorretasSemAlocar` mede 100 mil entidades flat com zero GC/frame e marcou 4 ms nesta máquina; ainda faltam hierarquia com profundidades realistas/patológicas e execução em aparelho classe A para o gate M1 |
+| 1.3.6 | Benchmark: 100k entidades com transform + hierarquia a 60 fps classe A | validado em hardware | Árvore fator 8/profundidade 7, 60 amostras, plano topológico O(N), uma chamada nativa em lote e zero GC/frame. Host p50 0,96 ms. Xiaomi SM8735: três execuções consecutivas p50 total 0,59/0,59/2,29 ms, p95 0,66/0,66/2,47 ms e p99 0,68/0,69/3,52 ms; backend `NativeBatch`. Meta <6 ms atendida mesmo na corrida afetada por DVFS; `taskset f0` fixa afinidade, não clock |
 
 ### Etapa 1.4 — Reflexão, serialização e recursos
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
 | 1.4.1 | Source generator de metadados de componente | parcial | ESTADO.md linha 70: "registro de metadados de componente (runtime, não source generator — ver ComponentDescriptor)" — implementado via reflexão em runtime, não via Source Generator como o plano pede |
-| 1.4.2 | Serializador binário + texto, com migração de versão de esquema | parcial | ESTADO.md linha 70 (14 testes) e linha 147: `TextSerializer` migra por nome/valor de campo lido no esquema atual, não por bytes crus como o binário — migração de texto é limitada, documentada como intencional |
+| 1.4.2 | Serializador binário + texto, com migração de versão de esquema | implementado | Texto v2 persiste `ComponentField.Id`, lê v1 e resolve aliases de campo/componente; fixtures cobrem rename/adição/remoção/compatibilidade/futuro e v1→v2→v3. Binário prova dois elos v1→v2→v3 e alias; `Joint` prova referências `EntityId`, limites e motor nos dois formatos. 22 testes (`GAP-SER-01` fechado) |
 | 1.4.3 | Sistema de recursos: GUID, referência fraca/forte, carregamento assíncrono, contagem de uso | implementado | ESTADO.md linha 71: ResourceId, ResourceRef/WeakResourceRef, ResourceHandleTable, carregamento assíncrono via JobSystem ✅ 18 testes |
 | 1.4.4 | Sistema de comandos de edição (undo/redo) + WAL de recuperação | implementado | ESTADO.md linha 72: UndoStack + WAL com fsync, checksum FNV-1a, recuperação parcial ✅ 16 testes |
 | 1.4.5 | Índice de dependências em SQLite | não iniciado | ESTADO.md linha 91: "deliberadamente não implementado ainda. Não existe um SQLite de verdade vendorizado no repositório" |
@@ -140,12 +140,15 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 1.5.1 | Biblioteca math com SIMD NEON e testes de precisão | parcial | ESTADO.md linha 64: float2/3/4, quaternion, float4x4, Transform, Bounds, Ray, Plane, Frustum ✅ 25 testes (`MathTests.cs`); SIMD NEON especificamente (vs. fallback escalar) não confirmado nos testes — PLANO-FECHAMENTO-LACUNAS.md §6.5 item 1 lista validação NEON como pendente |
-| 1.5.2 | Tempo: fixed step, interpolação, escala de tempo, pausa | não iniciado | Nenhum módulo de tempo dedicado (`Time.cs`) encontrado; PLANO-FECHAMENTO-LACUNAS.md §6.5 item 2 lista como pendente |
-| 1.5.3 | Eventos e sinais tipados | não iniciado | PLANO-FECHAMENTO-LACUNAS.md §6.5 item 3: pendente; nenhum sistema de eventos/sinais encontrado |
-| 1.5.4 | Sistema de configuração/preferências | não iniciado | PLANO-FECHAMENTO-LACUNAS.md §6.5 item 4: pendente; nenhum sistema de configuração versionada encontrado |
+| 1.5.1 | Biblioteca math com SIMD NEON e testes de precisão | parcial | ESTADO.md linha 64: float2/3/4, quaternion, float4x4, Transform, Bounds, Ray, Plane, Frustum ✅ 27 testes (`MathTests.cs`); o kernel nativo ARM64 de composição está validado, mas SIMD NEON explícito no restante da biblioteca ainda é trabalho do próprio item 1.5.1 |
+| 1.5.2 | Tempo: fixed step, interpolação, escala de tempo, pausa | implementado | `managed/Aether.Core/Time/FixedClock.cs`: `Advance(realDeltaTime)` devolve a contagem de passos fixos e mantém `InterpolationAlpha`; `TimeScale`/`Paused` distintos; teto `MaxStepsPerAdvance` com `DroppedSteps` evita espiral da morte. ✅ 20 testes (`TimeTests.cs`) — cobre drift de precisão em 10k frames, espiral da morte, pausa/retomada, `NoAlloc`. Ainda não consumido por nenhum sistema (`PhysicsSyncSystem`/`TransformSystem` continuam recebendo `deltaTime` solto do chamador) — integração é trabalho futuro, não deste item |
+| 1.5.3 | Eventos e sinais tipados | não iniciado | Nenhum sistema de eventos/sinais encontrado; permanece no item 1.5.3 do plano principal |
+| 1.5.4 | Sistema de configuração/preferências | não iniciado | Nenhum sistema de configuração versionada encontrado; permanece no item 1.5.4 do plano principal |
 
-> **Gate M1:** ESTADO.md linha 26 confirma 0/10 gates fechados. Benchmark de 100k entidades (critério de saída M1) não existe — itens 1.3.6, 1.5.2–1.5.4, 1.2.3–1.2.5 e 1.3.5 seguem pendentes, então M1 permanece aberto mesmo com boa parte de 1.2–1.4 implementada.
+> **Gate M1:** o subgate de desempenho 1.3.6 está validado em aparelho classe A
+> (<6 ms para 100 mil transforms, zero GC). O marco M1 global continua aberto
+> pelos itens 1.5.3–1.5.4 e 1.2.3–1.2.5 ainda pendentes; fechar o benchmark não
+> equivale a fechar todo o marco.
 
 ---
 
@@ -184,7 +187,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 2.3.5 | Fusão de passes em subpasses e anexos memoryless | implementado | ESTADO.md linha 75: "memoryless, fusão de subpasses" incluído nos 41 testes headless |
 | 2.3.6 | Visualizador do grafo (base do recurso de inspeção do usuário) | não iniciado | Nenhum visualizador/UI para o render graph existe; a implementação é puramente headless (ESTADO.md linha 134-135, "Device profiles e render graph... Implementação headless testada... não Execução dessas decisões numa GPU real") |
 
-> **Nota crítica:** toda a Etapa 2.3 é testada apenas headless (CPU/lógica), nunca executada contra uma GPU real. ESTADO.md linha 134 é explícito: a tabela "O que é protótipo ou prova de conceito" documenta que device profiles e render graph "não provam": "Execução dessas decisões numa GPU real". Isto está refletido no `GAP-RHI-01` de PLANO-FECHAMENTO-LACUNAS.md §2.3 ("Render Graph não executa em GPU").
+> **Nota crítica:** toda a Etapa 2.3 é testada apenas headless (CPU/lógica), nunca executada contra uma GPU real. ESTADO.md é explícito: device profiles e render graph não provam a execução dessas decisões numa GPU. A integração permanece nos itens 2.1–2.3 do plano principal; não é uma lacuna separada.
 
 ### Etapa 2.4 — Pipeline de renderização direta
 
@@ -293,7 +296,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 3.7.2 | Três níveis de UI (Essencial/Padrão/Completo) | não iniciado | Nenhuma implementação encontrada |
 | 3.7.3 | Dicas contextuais | não iniciado | Nenhuma implementação encontrada |
 
-> **Gate M3:** não fechado — nem próximo. `GAP-EDITOR-01` (PLANO-FECHAMENTO-LACUNAS.md §2.3) registra que "Editor é protótipo HTML, não produto integrado". Todos os itens da Fase 3 dependem do renderer real (Fase 2, majoritariamente não iniciada) para deixar de ser PoC.
+> **Gate M3:** não fechado — nem próximo. O editor continua sendo protótipo HTML, não produto integrado. Isso permanece detalhado na Fase 3 do plano principal e não é uma lacuna separada.
 
 ---
 
@@ -304,11 +307,11 @@ não recebem estado agregado — servem apenas de navegação.
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
 | 4.1.1 | Integração do Jolt: mundo, corpos, formas, dormência, camadas | implementado | ESTADO.md linha 76: física Jolt + ABI V2 (`GAP-PHY-01` fechado) ✅ 7 testes físicos + 3 testes de ABI/capacidade (`test_jolt_bridge.cpp`, `test_physics_capacity.cpp`) |
-| 4.1.2 | Fachada C# com RigidBody/Collider/Trigger e sync ECS↔Jolt | parcial | ESTADO.md linha 77: RigidBody/Collider + PhysicsSyncSystem + `GAP-PHY-02` fechado ✅ 2 testes C++ + 11 testes C# — mas **Trigger não existe** (ESTADO.md linha 149: "Collider/RigidBody não têm um componente Trigger"), então o escopo do item não está completo |
-| 4.1.3 | Juntas e motores, com gizmos de edição no viewport | parcial | ESTADO.md linha 78: Point/Hinge/Slider/Distance com motor real ✅ 8 testes C++ + 8 testes C# (`test_joint_bridge.cpp`, `PhysicsJointTests.cs`); gizmo existe só no protótipo HTML (não no viewport de produto, que não existe); SixDOF e juntas de veículo/engrenagem/polia/path ficaram de fora (ESTADO.md linha 90); espaço só WorldSpace, não local (linha 151) |
+| 4.1.2 | Fachada C# com RigidBody/Collider/Trigger e sync ECS↔Jolt | implementado | `GAP-PHY-02/03/04` fechados: autoridade cinemática, sensor/filtro/eventos/serialização e criação/destruição transacional em lote. `PhysicsSyncSystem` agrega o spawn do Step; telemetria mede crossings/bytes. ✅ 9 testes C++ + 15 C#; escala 100/1.000/10.000 com 1 crossing create + 1 destroy e zero GC dentro do crossing |
+| 4.1.3 | Juntas e motores, com gizmos de edição no viewport | parcial | `GAP-JOINT-01` fechado: Point/Hinge/Slider/Distance usam ABI V2 `World`/`LocalToBody1`/`LocalToBody2`, componente declarativo `Joint`, referências `EntityId`, resolução tardia, sync idempotente, hot-edit e serialização ✅ 11 testes C++ + 13 testes C# de juntas + round-trip binário/texto. O item permanece parcial porque o gizmo existe só no protótipo HTML, não no viewport de produto; SixDOF e juntas especializadas continuam futuras |
 | 4.1.4 | Queries (raycast/shapecast/overlap) expostas a script e a nós | parcial | ESTADO.md linha 79: RayCastAll/ShapeCastClosest/OverlapShape ✅ 10 testes C++ + 9 testes C# (`test_query_bridge.cpp`, `PhysicsQueryTests.cs`) — mas só "script" está feito; "nós" (Flow) não existem (ESTADO.md linha 154: nenhum nó `physics.raycast` etc.) |
-| 4.1.5 | Character Controller: degraus, rampas, plataformas, agachar, correr, deslizar, escalar, nadar | parcial | ESTADO.md linha 80: CharacterVirtual com degraus/rampas/plataformas/agachar ✅ 12 testes C++ + 11 testes C# (`test_character_bridge.cpp`, `PhysicsCharacterTests.cs`) — mas **escalar e nadar não implementados** (confirmado por leitura do Jolt, ESTADO.md linha 80/90), então o escopo completo do item não está atingido |
-| 4.1.6 | Física 2D (benchmark Jolt-2D vs Box2D v3 → decisão) | parcial | ESTADO.md linha 82: Jolt 3D restrito ao plano XY ✅ 7 testes C++ + 6 testes C# (`test_physics2d_bridge.cpp`, `Physics2DTests.cs`) + benchmark (`benchmark_physics2d.cpp`) — mas **Box2D v3 nunca foi vendorizado nem comparado**; a "decisão por benchmark" que o item pede não existe (ESTADO.md linha 90, 159): é Jolt-restrito comparado consigo mesmo, não uma decisão A/B real |
+| 4.1.5 | Character Controller: degraus, rampas, plataformas, agachar, correr, deslizar, escalar, nadar | parcial | CharacterVirtual cobre cápsula, degraus, rampas, plataformas e stance; `CharacterMotorSystem` centraliza gravidade/plataforma/stick-to-floor e estados `Grounded/Rising/Falling/Sliding` (`GAP-CHAR-01` fechado). ✅ 11 testes C++ + 17 testes C#. Escalar, nadar e nascer agachado continuam não implementados no item principal |
+| 4.1.6 | Física 2D (benchmark Jolt-2D vs Box2D v3 → decisão) | parcial | Jolt Plane2D ✅ 7 testes C++ + 6 C#; Box2D v3.1.1 vendorizado só para benchmark. Três runners A/B medem cenário/qualidade equivalente, percentis, RSS isolado, tamanho e estabilidade; host e Android A integrais 50–5.000 verdes. `ADR-013-PHYSICS-2D-BACKEND.md` permanece proposta: faltam perfis Android B/C antes da decisão, portanto Box2D não entrou no runtime |
 | 4.1.7 | Geração automática de colisores (convex decomposition) na importação | não iniciado | ESTADO.md linha 90: bloqueado por dependência real ausente — Jolt só tem `ConvexHullShape` de hull único; decomposição convexa de verdade exigiria V-HACD/CoACD, nunca vendorizado; também não há importador de malha no repositório |
 | 4.1.8 | Determinismo em ponto fixo (modo opcional) e testes de reprodutibilidade | aceito | ESTADO.md linha 81 e linhas 161-162, 364-385: decisão deliberada de implementar `CROSS_PLATFORM_DETERMINISTIC` do Jolt (que usa float, não ponto fixo) em vez do que o nome do item pede — decisão registrada e documentada como divergência aceita, com 3 testes C++ novos (`test_determinism.cpp`) provando determinismo run-to-run (não cross-platform real, que exigiria hardware/SO diferentes) |
 | 4.1.9 | Escalonamento térmico (sub-steps, islands) | não iniciado | ESTADO.md linha 90: "4.1.9 (sub-stepping adaptativo ligado ao PowerGovernor térmico)" listado explicitamente como não implementado |
@@ -380,10 +383,10 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 5.1.1 | Definição da AST do AetherFlow | implementado | ESTADO.md linha 73: AST implementada (`FlowNode.cs`, `FlowGraph.cs`, `FlowConnection.cs`, `FlowPin.cs`, `FlowVariable.cs`, `FlowType.cs`) ✅ parte dos 43 testes Flow |
+| 5.1.1 | Definição da AST do AetherFlow | implementado | AST implementada (`FlowNode.cs`, `FlowGraph.cs`, `FlowConnection.cs`, `FlowPin.cs`, `FlowVariable.cs`, `FlowType.cs`) ✅ parte dos 48 testes Flow |
 | 5.1.2 | Sistema de tipos, inferência, coerção segura, genéricos limitados | parcial | `FlowType.cs` existe com tipos básicos; genéricos limitados e inferência avançada não confirmados como completos — ESTADO.md linha 142 confirma catálogo de nós mínimo (~12), sugerindo sistema de tipos também mínimo |
 | 5.1.3 | Formato de arquivo `.aflow` + serialização | implementado | ESTADO.md linha 73 e 187-188 (`GAP-FLOW-01`): serializador `.aflow` com round-trip testado, incluindo controle terminal simétrico (`FlowSerializer.cs`) |
-| 5.1.4 | Validador semântico (ciclos, tipos, pinos obrigatórios) | implementado | `FlowValidator.cs` existe; ESTADO.md linha 73 confirma "validador" nos 43 testes verdes |
+| 5.1.4 | Validador semântico (ciclos, tipos, pinos obrigatórios) | implementado | `FlowValidator.cs` também valida capabilities do contexto de execução; integra os 48 testes Flow |
 | 5.1.5 | Compilador AST → C# gerado legível | implementado | `FlowToCSharp.cs`; ESTADO.md linha 73 confirma "gerador de C#" testado, incluindo `GAP-FLOW-01` (return/break/continue simétricos) |
 | 5.1.6 | Interpretador de AST para iteração instantânea | implementado | `FlowInterpreter.cs`; ESTADO.md linha 73 confirma "interpretador" testado |
 
@@ -420,7 +423,7 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 5.5.1 | Implementação de todas as categorias (~400 nós) | parcial | ESTADO.md linha 142: "Biblioteca de nós mínima (~12 nós), não o catálogo da Parte 9.5" — `NodeLibrary.cs` confirma catálogo pequeno, não as ~400 categorias completas do plano |
+| 5.5.1 | Implementação de todas as categorias (~400 nós) | parcial | Biblioteca mínima (~13 nós), incluindo `log.message` como prova do contexto externo; não entrega as ~400 categorias do plano |
 | 5.5.2 | Geração automática de nós a partir de C# (`[FlowNode]`) | não iniciado | Nenhum atributo `[FlowNode]` ou gerador associado encontrado no código lido |
 | 5.5.3 | Documentação inline de cada nó | não iniciado | Nenhuma documentação inline por nó encontrada |
 | 5.5.4 | Macros e sub-grafos reutilizáveis, publicáveis | não iniciado | Nenhuma implementação de macros/sub-grafos encontrada |
@@ -434,7 +437,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 5.6.3 | Time-travel debugging | não iniciado | Nenhuma implementação encontrada |
 | 5.6.4 | Mapa de calor de custo por nó | não iniciado | Nenhuma implementação encontrada |
 
-> **Nota sobre a faixa "5.1–5.6" em ESTADO.md:** ESTADO.md linha 73 agrupa "5.1–5.6 (fundação)" com ⚠️ e 43 testes verdes, mas o próprio texto ali já avisa "catálogo, serviços externos, editor e API de produto de 5.1–5.6 continuam incompletos". Esta matriz desagrega essa faixa: só 5.1.1, 5.1.3, 5.1.4, 5.1.5 e 5.1.6 (a fundação de AST/validador/gerador/interpretador/serializador) são `implementado`; 5.2–5.6 são majoritariamente `não iniciado` ou `parcial`, porque o canvas de produto, o modo lista/blocos, a biblioteca completa e a depuração visual não existem.
+> **Nota sobre a faixa "5.1–5.6" em ESTADO.md:** os 48 testes cobrem a fundação e o contrato externo (`GAP-FLOW-01/02`), não toda a faixa. Esta matriz continua desagregando o roadmap: canvas, modos de autoria, catálogo completo e depuração visual permanecem não iniciados ou parciais.
 
 ### Etapa 5.7 — Scripting C# completo
 

@@ -1,7 +1,7 @@
 # Shell Android nativo
 
 Implementação do item **0.1.3** da Fase 0, estendida pelo shell gráfico mínimo
-da Onda 1 §5.2 de `PLANO-FECHAMENTO-LACUNAS.md`. O marco estabelece a fronteira
+dos itens **0.2.4/2.2** do plano principal. O marco estabelece a fronteira
 de plataforma e prova um pipeline Vulkan completo em hardware Android real.
 
 ## Responsabilidades

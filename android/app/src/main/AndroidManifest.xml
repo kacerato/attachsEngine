@@ -6,9 +6,18 @@
         android:required="false"
         android:version="1" />
 
+    <!-- extractNativeLibs="true": por padrão o Android moderno carrega .so direto de dentro do
+         .apk (mapeado em memória), sem extrair para disco — funciona para o carregamento
+         automático do lib_name do NativeActivity, mas dlopen() chamado manualmente pelo nosso
+         próprio código (DotNetHost::initialize, para libhostfxr.so vendorizado) não tem esse
+         suporte especial e falha com "library not found" mesmo com o .so presente no APK
+         (descoberto em execução real — ver docs/ESTADO.md item 0.1.4). Forçar extração real em
+         disco é o jeito simples e confiável de resolver isso; custa espaço extra no dispositivo
+         (o .apk já carrega os .so comprimidos, extração duplica esse espaço em disco). -->
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
+        android:extractNativeLibs="true"
         android:fullBackupContent="@xml/backup_rules"
         android:hasCode="false"
         android:icon="@drawable/ic_aether"

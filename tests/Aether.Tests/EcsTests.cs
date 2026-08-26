@@ -239,6 +239,70 @@ public static class EcsTests
         Assert.Equal(0, total);
     }
 
+    [Test] public static void QueryCompilada_ReusaCacheEMantemArquetiposNovosEExclusoes()
+    {
+        var world = new World();
+        var query = world.Query().With<Position>().Without<Tag>().Compile();
+        int CountEntities()
+        {
+            int count = 0;
+            foreach (var chunk in query) count += chunk.Count;
+            return count;
+        }
+
+        Assert.Equal(0, CountEntities());
+        world.CreateEntity(new Position(float3.Zero));
+        Assert.Equal(1, CountEntities(), "consulta compilada precisa observar arquétipo criado depois dela");
+        world.CreateEntity(new Position(float3.One), new Health(10));
+        Assert.Equal(2, CountEntities(), "novo arquétipo compatível invalida somente o cache de matches");
+        var excluded = world.CreateEntity(new Position(float3.One));
+        world.AddComponent(excluded, new Tag());
+        Assert.Equal(2, CountEntities(), "Without continua aplicado depois de mudanças estruturais");
+
+        Assert.NoAlloc(() => _ = CountEntities(), "consulta compilada estável reutiliza cache sem GC");
+    }
+
+    [Test] public static void FiltroDeMudanca_EntregaSomenteChunkEColunaAlteradosESemGcEstavel()
+    {
+        var world = new World();
+        var first = world.CreateEntity(new Position(float3.Zero), new Velocity(float3.One));
+        Chunk firstChunk = null!;
+        foreach (var chunk in world.Query<Position, Velocity>()) { firstChunk = chunk; break; }
+        EntityId secondChunkEntity = default;
+        for (int i = 1; i <= firstChunk.Capacity; i++)
+            secondChunkEntity = world.CreateEntity(new Position(new float3(i, 0, 0)), new Velocity(float3.One));
+
+        var filter = new ComponentChangeFilter<Position>();
+        var changed = world.Query().With<Velocity>().Changed(filter);
+        int CountChanged(out Chunk? last)
+        {
+            int count = 0;
+            last = null;
+            foreach (var chunk in changed) { count++; last = chunk; }
+            return count;
+        }
+
+        Assert.Equal(2, CountChanged(out _), "primeira observação entrega todos os chunks compatíveis");
+        Assert.Equal(0, CountChanged(out _), "sem escrita, nenhum chunk reaparece");
+        _ = world.Read<Position>(first).Value;
+        world.Write<Velocity>(first).Value = float3.Zero;
+        Assert.Equal(0, CountChanged(out _), "leitura de Position e escrita em Velocity não disparam Position");
+
+        world.Write<Position>(secondChunkEntity).Value = new float3(9, 9, 9);
+        Assert.Equal(1, CountChanged(out var changedChunk));
+        Assert.True(changedChunk is not null && changedChunk != firstChunk,
+            "somente o segundo chunk, realmente escrito, deve passar pelo filtro");
+        Assert.Equal(0, CountChanged(out _));
+
+        int stableCount = -1;
+        Assert.NoAlloc(() => stableCount = CountChanged(out _),
+            "filtro aquecido sem mudanças não aloca no caminho de frame");
+        Assert.Equal(0, stableCount);
+
+        filter.Reset();
+        Assert.Equal(2, CountChanged(out _), "Reset torna todos os chunks observáveis novamente");
+    }
+
     [Test] public static void Query_IteracaoNaoAloca()
     {
         var world = new World();
@@ -444,5 +508,32 @@ public static class EcsTests
         }
         Assert.Equal(n, visited, "todas as entidades foram visitadas exatamente uma vez");
         Assert.Equal(n, world.EntityCount);
+    }
+
+    [Test] public static void Benchmark_MudancasEstruturaisEmDezMilEntidades_PreservaIdsEDados()
+    {
+        const int total = 10_000;
+        var world = new World();
+        var entities = new EntityId[total];
+        for (int i = 0; i < total; i++)
+            entities[i] = world.CreateEntity(new Position(new float3(i, 0, 0)));
+
+        var add = Stopwatch.StartNew();
+        for (int i = 0; i < total; i++) world.AddComponent(entities[i], new Velocity(float3.One));
+        add.Stop();
+        var remove = Stopwatch.StartNew();
+        for (int i = 0; i < total; i++) world.RemoveComponent<Velocity>(entities[i]);
+        remove.Stop();
+
+        for (int i = 0; i < total; i++)
+        {
+            Assert.True(world.Exists(entities[i]), "mudança de arquétipo preserva id+geração");
+            Assert.Close((float)i, world.Read<Position>(entities[i]).Value.X,
+                what: "componente sobrevivente não pode ser embaralhado");
+            Assert.False(world.HasComponent<Velocity>(entities[i]));
+        }
+        Console.WriteLine(
+            $"    [estrutural-10k] add={add.ElapsedMilliseconds} ms, " +
+            $"remove={remove.ElapsedMilliseconds} ms, ids/dados preservados");
     }
 }

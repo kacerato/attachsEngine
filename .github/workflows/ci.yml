@@ -1,4 +1,4 @@
-# CI confiável (item §4.2 de docs/PLANO-FECHAMENTO-LACUNAS.md, Onda 0).
+# CI confiável (item §4.2 de docs/PLANO-FECHAMENTO-LACUNAS.md).
 #
 # Suítes separadas de propósito, não uma única pipeline monolítica — a regra que motiva
 # isso (§4.2.2): um teste que depende de aether_physics deve FALHAR no job de integração
@@ -22,7 +22,7 @@
 #                     GitHub-hosted runners não têm hardware Android conectado. Ver
 #                     .github/workflows/android-device.yml (workflow_dispatch manual, para
 #                     quando houver self-hosted runner com o laboratório de dispositivos do
-#                     plano — §5.1 de PLANO-FECHAMENTO-LACUNAS.md).
+#                     plano — §6.1 de PLANO-FECHAMENTO-LACUNAS.md).
 #   soak            — mesma limitação de hardware; soak de 30 min (PoC-C térmica) também
 #                     pertence a um runner com aparelho físico real.
 name: CI
@@ -87,6 +87,9 @@ jobs:
     if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -208,6 +211,9 @@ jobs:
     if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -220,10 +226,13 @@ jobs:
       - name: Configurar e compilar benchmarks
         run: |
           cmake -S native -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DAETHER_VULKAN_HEADERS="$env:GITHUB_WORKSPACE/build/vulkan-headers"
-          cmake --build build/native --config Release --target benchmark_physics2d
-      - name: Rodar benchmark_physics2d
-        working-directory: build/native
-        run: ./benchmark_physics2d.exe | Tee-Object -FilePath benchmark_physics2d_result.txt
+          cmake --build build/native --config Release --target benchmark_physics2d benchmark_physics2d_jolt benchmark_physics2d_box2d
+      - name: Rodar comparação Jolt Plane2D x Box2D e runners isolados
+        run: ./tools/run-physics2d-ab.ps1 -Platform Host -BuildDirectory build/native -OutputDirectory build/benchmarks/physics2d -SkipBuild
+      - name: Rodar benchmark ECS hierárquico de 100 mil entidades (host informativo)
+        run: |
+          dotnet build Aether.sln -c Release
+          dotnet run --project tests/Aether.Tests -c Release --no-build Benchmark_CemMilTransformsEmHierarquiaRealista | Tee-Object -FilePath build/benchmark_ecs_hierarchy_result.txt
       - name: Validar registro versionado e mecanismo de gate
         run: |
           ./tools/validate-metrics-budget.ps1 -OutputPath build/metrics/budget-schema-report.json
@@ -239,7 +248,8 @@ jobs:
         with:
           name: benchmark-results-${{ github.sha }}
           path: |
-            build/native/benchmark_physics2d_result.txt
+            build/benchmarks/physics2d/**
+            build/benchmark_ecs_hierarchy_result.txt
             build/metrics/*.json
             metrics/budgets.v1.json
 

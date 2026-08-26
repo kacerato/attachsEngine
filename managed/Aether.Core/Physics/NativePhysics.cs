@@ -81,6 +81,14 @@ public enum NativeJointKind : uint
     Distance = 3,
 }
 
+/// <summary>Referencial dos pontos/eixos de <see cref="NativeJointDescV2"/>.</summary>
+public enum NativeJointSpace : uint
+{
+    World = 0,
+    LocalToBody1 = 1,
+    LocalToBody2 = 2,
+}
+
 /// <summary>Mesmo layout de <c>AetherMotorState</c>. Só Hinge e Slider usam motor de verdade
 /// (Point/Distance não têm <c>JPH::MotorSettings</c> — ver comentário em jolt_bridge.h).</summary>
 public enum NativeMotorState : uint
@@ -108,6 +116,24 @@ public struct NativeJointMotorDesc
 public struct NativeJointDesc
 {
     public NativeJointKind Kind;
+    public float3 Point1;
+    public float3 Point2;
+    public float3 Axis1;
+    public float3 Axis2;
+    public float LimitsMin;
+    public float LimitsMax;
+    public NativeJointMotorDesc Motor;
+}
+
+/// <summary>Mesmo layout de <c>AetherJointDescV2</c>. V1 permanece declarado acima para
+/// compatibilidade de ABI e para testes de layout, mas código gerenciado novo usa somente V2.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct NativeJointDescV2
+{
+    public uint StructSize;
+    public uint ApiVersion;
+    public NativeJointKind Kind;
+    public NativeJointSpace Space;
     public float3 Point1;
     public float3 Point2;
     public float3 Axis1;
@@ -242,13 +268,28 @@ internal static partial class NativePhysics
     internal static partial uint AetherPhysics_CreateBody(nint world, in NativeBodyDesc desc);
 
     [LibraryImport(LibraryName)]
+    internal static partial uint AetherPhysics_CreateBodyV2(nint world, in PhysicsBodyDescription desc);
+
+    [LibraryImport(LibraryName)]
+    internal static unsafe partial int AetherPhysics_CreateBodiesV2(nint world,
+        PhysicsBodyDescription* descs, PhysicsBodyHandle* outHandles, int count);
+
+    [LibraryImport(LibraryName)]
     internal static partial void AetherPhysics_DestroyBody(nint world, uint handle);
+
+    [LibraryImport(LibraryName)]
+    internal static unsafe partial void AetherPhysics_DestroyBodies(nint world,
+        PhysicsBodyHandle* handles, int count);
 
     [LibraryImport(LibraryName)]
     internal static partial void AetherPhysics_Step(nint world, float deltaTime, int collisionSteps);
 
     [LibraryImport(LibraryName)]
     internal static partial NativePhysicsUpdateError AetherPhysics_StepV2(nint world, float deltaTime, int collisionSteps);
+
+    [LibraryImport(LibraryName)]
+    internal static unsafe partial int AetherPhysics_GetTriggerEvents(nint world,
+        PhysicsTriggerEvent* outEvents, int maxResults);
 
     [LibraryImport(LibraryName)]
     internal static partial int AetherPhysics_GetStepStatsV2(nint world, ref NativePhysicsStepStatsV2 outStats);
@@ -277,6 +318,9 @@ internal static partial class NativePhysics
 
     [LibraryImport(LibraryName)]
     internal static partial uint AetherPhysics_CreateJoint(nint world, uint body1, uint body2, in NativeJointDesc desc);
+
+    [LibraryImport(LibraryName)]
+    internal static partial uint AetherPhysics_CreateJointV2(nint world, uint body1, uint body2, in NativeJointDescV2 desc);
 
     [LibraryImport(LibraryName)]
     internal static partial void AetherPhysics_DestroyJoint(nint world, uint handle);

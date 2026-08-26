@@ -100,6 +100,27 @@ struct AetherBodyDesc {
   AetherAllowedDOFs allowedDOFs; // AetherAllowedDOFs::All (== 0) por padrão — ver comentário acima
 };
 
+// ABI de criação de corpo versionada (GAP-PHY-03). A V1 permanece congelada:
+// aumentar AetherBodyDesc quebraria callers já compilados que passam a struct
+// por ponteiro. eventLayerMask usa os bits de AetherQueryLayerMask (Static=1,
+// Dynamic=2); fica como u32 aqui porque o enum é declarado na seção de queries
+// abaixo e PODs de fronteira não precisam carregar dependências de ordem.
+constexpr ae::u32 AetherBodyApiVersionV2 = 2;
+
+struct AetherBodyDescV2 {
+  ae::u32 structSize;
+  ae::u32 apiVersion;
+  AetherShapeDesc shape;
+  AetherVec3 position;
+  AetherQuat rotation;
+  AetherMotionType motionType;
+  float friction;
+  float restitution;
+  AetherAllowedDOFs allowedDOFs;
+  ae::u32 isSensor;       // 0 = sólido; qualquer outro valor = sensor sem resposta física
+  ae::u32 eventLayerMask; // bits AetherQueryLayerMask; All (3) é o default da fachada C#
+};
+
 // Opaco de propósito — o layout real (PhysicsSystem, alocador temporário, job
 // system, filtros de camada) vive só em jolt_bridge.cpp.
 struct AetherPhysicsWorld;
@@ -180,8 +201,28 @@ void AetherPhysics_DestroyWorld(AetherPhysicsWorld *world);
 /// os DOFs travados) e esta fronteira recusa a criação em vez de deixar o processo abortar.
 AetherBodyHandle AetherPhysics_CreateBody(AetherPhysicsWorld *world, const AetherBodyDesc *desc);
 
+/// Variante versionada que expõe sensor/filtro sem alterar o layout V1. Rejeita
+/// versão, tamanho e bits de filtro desconhecidos devolvendo Invalid.
+AetherBodyHandle AetherPhysics_CreateBodyV2(AetherPhysicsWorld *world, const AetherBodyDescV2 *desc);
+
+/// Cria um lote de corpos com uma única travessia de ABI e uma única inserção
+/// ampla na broadphase. Semântica transacional: ou todos os `count` corpos são
+/// criados/adicionados e o retorno é `count`, ou nenhum permanece vivo, todos
+/// os outHandles ficam Invalid e o retorno é 0. Arrays podem ser nulos somente
+/// quando count == 0.
+ae::i32 AetherPhysics_CreateBodiesV2(AetherPhysicsWorld *world,
+                                     const AetherBodyDescV2 *descs,
+                                     AetherBodyHandle *outHandles,
+                                     ae::i32 count);
+
 /// Remove e destrói um corpo. Handle passa a ser inválido depois desta chamada.
 void AetherPhysics_DestroyBody(AetherPhysicsWorld *world, AetherBodyHandle handle);
+
+/// Remove/destrói um lote numa única operação de broadphase. Handles Invalid
+/// são ignorados; os demais seguem o mesmo contrato de validade da API unitária.
+void AetherPhysics_DestroyBodies(AetherPhysicsWorld *world,
+                                 const AetherBodyHandle *handles,
+                                 ae::i32 count);
 
 /// Avança a simulação. `collisionSteps` segue a mesma convenção do Jolt: 1 é o
 /// caso comum para `deltaTime` de até 1/60s; passos maiores exigem mais de 1
@@ -192,6 +233,27 @@ void AetherPhysics_Step(AetherPhysicsWorld *world, float deltaTime, ae::i32 coll
 /// Jolt. O símbolo V1 continua chamável, mas também registra/contabiliza os
 /// mesmos erros antes de descartar apenas o valor de retorno para preservar ABI.
 ae::u32 AetherPhysics_StepV2(AetherPhysicsWorld *world, float deltaTime, ae::i32 collisionSteps);
+
+enum class AetherTriggerEventType : ae::u32 {
+  Enter = 0,
+  Stay = 1,
+  Exit = 2,
+};
+
+struct AetherTriggerEvent {
+  AetherBodyHandle sensor;
+  AetherBodyHandle other;
+  AetherTriggerEventType type;
+  ae::u32 reserved;
+};
+
+/// Copia a fotografia de eventos do último Step completo. O retorno é a
+/// quantidade REAL; se exceder maxResults, só o prefixo determinístico cabe no
+/// buffer, mas o chamador detecta truncamento pelo retorno. A fotografia não é
+/// consumida pela leitura e é substituída no próximo Step.
+ae::i32 AetherPhysics_GetTriggerEvents(AetherPhysicsWorld *world,
+                                       AetherTriggerEvent *outEvents,
+                                       ae::i32 maxResults);
 
 /// Copia os contadores cumulativos do mundo. O chamador deve inicializar
 /// structSize e apiVersion; devolve 1 em sucesso, 0 em argumento/versão inválido.
@@ -354,6 +416,35 @@ struct AetherJointDesc {
   AetherJointMotorDesc motor;
 };
 
+/// Referencial no qual todos os pontos/eixos do descritor V2 são expressos. O Jolt só
+/// oferece WorldSpace ou LocalToBodyCOM por constraint; expor LocalToBody1/2 aqui é mais
+/// previsível para autoria: a fronteira converte ponto (posição + rotação) e eixo (somente
+/// rotação) pelo transform do corpo de referência e cria a constraint em WorldSpace.
+enum class AetherJointSpace : ae::u32 {
+  World = 0,
+  LocalToBody1 = 1,
+  LocalToBody2 = 2,
+};
+
+/// ABI versionada da junta. A V1 acima permanece congelada e equivale a Space::World.
+/// structSize/apiVersion permitem acrescentar campos ao final sem reinterpretar callers
+/// compilados contra o layout anterior.
+constexpr ae::u32 AetherJointApiVersionV2 = 2;
+
+struct AetherJointDescV2 {
+  ae::u32 structSize;
+  ae::u32 apiVersion;
+  AetherJointKind kind;
+  AetherJointSpace space;
+  AetherVec3 point1;
+  AetherVec3 point2;
+  AetherVec3 axis1;
+  AetherVec3 axis2;
+  float limitsMin;
+  float limitsMax;
+  AetherJointMotorDesc motor;
+};
+
 using AetherJointHandle = ae::u32;
 constexpr AetherJointHandle AetherJointHandle_Invalid = 0xFFFFFFFFu;
 
@@ -366,6 +457,14 @@ constexpr AetherJointHandle AetherJointHandle_Invalid = 0xFFFFFFFFu;
 /// use-after-free que o resto da engine usa em World.cs — ver EntitySlot.Version).
 AetherJointHandle AetherPhysics_CreateJoint(AetherPhysicsWorld *world, AetherBodyHandle body1,
                                              AetherBodyHandle body2, const AetherJointDesc *desc);
+
+/// Versão nova com referencial explícito e validação integral antes de tocar no Jolt.
+/// LocalToBody1/2 transforma TODOS os pontos/eixos pelo corpo indicado. Retorna Invalid para
+/// versão/tamanho/espaço/tipo/motor inválido, eixo degenerado ou limites incompatíveis. Para
+/// Hinge, [-pi,+pi] exatos representam rotação contínua; valores fora do contrato
+/// min=[-pi,0], max=[0,+pi] são recusados, nunca truncados silenciosamente.
+AetherJointHandle AetherPhysics_CreateJointV2(AetherPhysicsWorld *world, AetherBodyHandle body1,
+                                               AetherBodyHandle body2, const AetherJointDescV2 *desc);
 
 /// Remove e destrói a junta. Handle passa a ser inválido depois desta chamada. É seguro (e
 /// necessário) destruir uma junta antes de destruir os corpos que ela conecta — mas destruir

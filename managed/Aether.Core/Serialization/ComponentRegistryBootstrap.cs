@@ -1,3 +1,5 @@
+using Aether.Physics;
+
 namespace Aether.Serialization;
 
 /// <summary>
@@ -28,6 +30,8 @@ public static class ComponentRegistryBootstrap
             ComponentRegistry.Register<Parent>("Aether.Parent", schemaVersion: 1);
             ComponentRegistry.Register<FirstChild>("Aether.FirstChild", schemaVersion: 1);
             ComponentRegistry.Register<NextSibling>("Aether.NextSibling", schemaVersion: 1);
+            ComponentRegistry.Register<Trigger>("Aether.Physics.Trigger", schemaVersion: 1);
+            ComponentRegistry.Register<Joint>("Aether.Physics.Joint", schemaVersion: 1);
 
             s_registered = true;
         }

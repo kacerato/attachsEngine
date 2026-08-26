@@ -297,3 +297,105 @@ AE_TEST(destruir_junta_duas_vezes_nao_crasha_e_handle_reciclado_nao_colide) {
 
   AetherPhysics_DestroyWorld(world);
 }
+
+AE_TEST(junta_v2_local_ao_corpo_1_converte_pontos_para_o_mundo) {
+  AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0.0f, -9.81f, 0.0f}, 16);
+  AetherBodyHandle anchor = MakeSphere(world, {10.0f, 5.0f, 0.0f}, AetherMotionType::Static);
+  AetherBodyHandle bob = MakeSphere(world, {12.0f, 5.0f, 0.0f}, AetherMotionType::Dynamic);
+
+  AetherJointDescV2 desc{};
+  desc.structSize = sizeof(desc);
+  desc.apiVersion = AetherJointApiVersionV2;
+  desc.kind = AetherJointKind::Point;
+  desc.space = AetherJointSpace::LocalToBody1;
+  desc.point1 = {2.0f, 0.0f, 0.0f};
+  desc.point2 = {2.0f, 0.0f, 0.0f};
+  desc.motor = NoMotor();
+
+  AetherJointHandle joint = AetherPhysics_CreateJointV2(world, anchor, bob, &desc);
+  AE_EXPECT_TRUE(joint != AetherJointHandle_Invalid, "V2 local ao corpo 1 deveria criar a junta");
+  for (int i = 0; i < 120; ++i) AetherPhysics_Step(world, 1.0f / 60.0f, 1);
+
+  AetherVec3 position{};
+  AetherPhysics_GetTransform(world, bob, &position, nullptr);
+  AE_EXPECT_TRUE(near(position.x, 12.0f, 0.05f) && near(position.y, 5.0f, 0.05f),
+                 "pontos locais deveriam ser convertidos pelo transform do corpo 1");
+  AetherPhysics_DestroyWorld(world);
+}
+
+AE_TEST(junta_v2_local_ao_corpo_2_converte_eixo_rotacionado) {
+  AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0.0f, 0.0f, 0.0f}, 16);
+  AetherBodyHandle anchor = MakeSphere(world, {0.0f, 0.0f, 0.0f}, AetherMotionType::Static);
+
+  AetherBodyDesc bodyDesc{};
+  bodyDesc.shape.kind = AetherShapeKind::Sphere;
+  bodyDesc.shape.sphereRadius = 0.5f;
+  bodyDesc.position = {0.0f, 0.0f, 0.0f};
+  bodyDesc.rotation = {0.0f, 0.0f, 0.70710678f, 0.70710678f}; // +90 graus em Z
+  bodyDesc.motionType = AetherMotionType::Dynamic;
+  bodyDesc.friction = 0.5f;
+  AetherBodyHandle sliderBody = AetherPhysics_CreateBody(world, &bodyDesc);
+
+  AetherJointDescV2 desc{};
+  desc.structSize = sizeof(desc);
+  desc.apiVersion = AetherJointApiVersionV2;
+  desc.kind = AetherJointKind::Slider;
+  desc.space = AetherJointSpace::LocalToBody2;
+  desc.axis1 = {1.0f, 0.0f, 0.0f};
+  desc.axis2 = {1.0f, 0.0f, 0.0f};
+  desc.limitsMin = -3.0f;
+  desc.limitsMax = 3.0f;
+  desc.motor.state = AetherMotorState::Position;
+  desc.motor.targetPosition = 2.0f;
+  desc.motor.maxForceOrTorque = 1000000.0f;
+  desc.motor.springFrequency = 4.0f;
+  desc.motor.springDamping = 1.0f;
+
+  AetherJointHandle joint = AetherPhysics_CreateJointV2(world, anchor, sliderBody, &desc);
+  AE_EXPECT_TRUE(joint != AetherJointHandle_Invalid, "V2 local ao corpo 2 deveria criar slider");
+  for (int i = 0; i < 180; ++i) AetherPhysics_Step(world, 1.0f / 60.0f, 1);
+
+  AetherVec3 position{};
+  AetherPhysics_GetTransform(world, sliderBody, &position, nullptr);
+  AE_EXPECT_TRUE(std::fabs(position.y) > 1.5f,
+                 "eixo X local rotacionado 90 graus deveria produzir movimento no eixo Y mundial");
+  AE_EXPECT_TRUE(std::fabs(position.x) < 0.2f,
+                 "conversão do eixo não pode deixar o slider no X mundial original");
+  AetherPhysics_DestroyWorld(world);
+}
+
+AE_TEST(junta_v2_valida_versao_e_contrato_continuo_da_dobradica) {
+  AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0.0f, 0.0f, 0.0f}, 16);
+  AetherBodyHandle anchor = MakeSphere(world, {0.0f, 0.0f, 0.0f}, AetherMotionType::Static);
+  AetherBodyHandle arm = MakeSphere(world, {1.0f, 0.0f, 0.0f}, AetherMotionType::Dynamic);
+
+  AetherJointDescV2 desc{};
+  desc.structSize = sizeof(desc);
+  desc.apiVersion = AetherJointApiVersionV2;
+  desc.kind = AetherJointKind::Hinge;
+  desc.space = AetherJointSpace::World;
+  desc.axis1 = {0.0f, 0.0f, 1.0f};
+  desc.axis2 = {0.0f, 0.0f, 1.0f};
+  desc.limitsMin = -3.14159265f;
+  desc.limitsMax = 3.14159265f;
+  desc.motor = NoMotor();
+
+  AetherJointHandle continuous = AetherPhysics_CreateJointV2(world, anchor, arm, &desc);
+  AE_EXPECT_TRUE(continuous != AetherJointHandle_Invalid,
+                 "[-pi,+pi] exatos devem representar hinge contínua válida");
+  AetherPhysics_DestroyJoint(world, continuous);
+
+  desc.limitsMax = 4.0f;
+  AE_EXPECT_TRUE(AetherPhysics_CreateJointV2(world, anchor, arm, &desc) == AetherJointHandle_Invalid,
+                 "limite acima de +pi deve ser recusado, não truncado");
+  desc.limitsMax = 3.14159265f;
+  desc.axis2 = {0.0f, 0.0f, 0.0f};
+  AE_EXPECT_TRUE(AetherPhysics_CreateJointV2(world, anchor, arm, &desc) == AetherJointHandle_Invalid,
+                 "eixo degenerado deve ser recusado antes de chegar ao Jolt");
+  desc.axis2 = {0.0f, 0.0f, 1.0f};
+  desc.apiVersion++;
+  AE_EXPECT_TRUE(AetherPhysics_CreateJointV2(world, anchor, arm, &desc) == AetherJointHandle_Invalid,
+                 "versão desconhecida deve ser recusada");
+
+  AetherPhysics_DestroyWorld(world);
+}
