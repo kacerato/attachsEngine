@@ -24,5 +24,7 @@
     <None Include="../../build/native/libaether_physics.so" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../build/native/libaether_physics.so')" />
     <None Include="../../build/native/aether_transform.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../build/native/aether_transform.dll')" />
     <None Include="../../build/native/libaether_transform.so" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../build/native/libaether_transform.so')" />
+    <None Include="../../build/native/aether_resources.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../build/native/aether_resources.dll')" />
+    <None Include="../../build/native/libaether_resources.so" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../build/native/libaether_resources.so')" />
   </ItemGroup>
 </Project>
