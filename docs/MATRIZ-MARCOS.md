@@ -31,10 +31,10 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 262 |
+| não iniciado | 261 |
 | PoC | 9 |
 | parcial | 26 |
-| implementado | 30 |
+| implementado | 31 |
 | validado em hardware | 5 |
 | aceito | 1 |
 | **Total** | **333** |
@@ -87,7 +87,7 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 0.4.1 | ADRs para linguagem, ECS vs cena, formato de arquivo, build, backend gráfico | não iniciado | Nenhum diretório/arquivo de ADR (`docs/adr/` ou similar) encontrado no repositório |
+| 0.4.1 | ADRs para linguagem, ECS vs cena, formato de arquivo, build, backend gráfico | implementado | `docs/adr/ADR-01` a `ADR-12` (mais a `ADR-013` pré-existente): as 12 decisões do Apêndice A do plano principal, cada uma com contexto, alternativas descartadas e evidência real do código quando implementada (7 das 12 têm implementação testada com paths/contagens de teste citados; 4 são registradas como decisão preventiva sem código ainda — Play separado, build em nuvem, pipeline único, menu radial de produto; ADR-03/04/06 têm divergência ou limitação documentada explicitamente). `docs/adr/README.md` indexa todas com estado |
 | 0.4.2 | Especificação do IDL de fronteira C#↔C++ | não iniciado | Não existe `.aidl` nem gerador de binding; P/Invoke atual é escrito à mão (`[LibraryImport]` em `NativePhysics.cs`, conforme ESTADO.md linha 267-281) |
 | 0.4.3 | Orçamentos (memória, energia, frame time) como testes automatizados | parcial | `metrics/budgets.v1.json` versiona limites de P/Invoke, alocação, CPU, GPU, memória e energia; `tools/validate-metrics-budget.ps1` valida contrato, cobertura e violações no CI, incluindo fixture negativa. Os coletores CPU/GPU/memória/energia em aparelho ainda são `device-required`, portanto o item só fica completo após produzir séries reais na matriz de hardware |
 
