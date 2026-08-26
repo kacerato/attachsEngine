@@ -31,9 +31,9 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 266 |
+| não iniciado | 265 |
 | PoC | 9 |
-| parcial | 22 |
+| parcial | 23 |
 | implementado | 30 |
 | validado em hardware | 5 |
 | aceito | 1 |
@@ -99,7 +99,7 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 1.1.1 | Abstração de sistema de arquivos (assets, escopo Android, iCloud/Files iOS) | não iniciado | Nenhuma camada de filesystem abstrata em `native/platform` ou `managed/`; apenas I/O direto usado por WAL/testes |
+| 1.1.1 | Abstração de sistema de arquivos (assets, escopo Android, iCloud/Files iOS) | parcial | `managed/Aether.Core/Platform/IFileSystem.cs`: interface por escopo nomeado (`FileSystemScope.Assets`/`PersistentData`/`Cache`), sem caminho absoluto livre. `StandardFileSystem` implementa sobre `System.IO` (raiz por escopo configurável), usada em desktop/testes e como base para a implementação Android real injetar `internalDataPath`/`externalDataPath` de `ANativeActivity` (já resolvidos nativamente em `native/platform/android/android_paths.h`, sem JNI). ✅ 19 testes (`PlatformFileSystemTests.cs`) — cobre round-trip via bytes e streams, escape via `..` bloqueado, caminho absoluto rejeitado, escrita em `Assets` lança, isolamento entre escopos, enumeração não-recursiva. Continua `parcial`: a implementação Android real (consumindo os paths nativos) e a migração de `WriteAheadLog`/persistência de `ConfigurationStore` para usar esta abstração são integração futura, fora do critério objetivo desta fatia |
 | 1.1.2 | Entrada: toque multi-ponto, caneta, teclado, mouse, gamepad, sensores | não iniciado | Nenhum sistema de input implementado no núcleo; `android_window.cpp` trata só lifecycle de janela, não input |
 | 1.1.3 | Ciclo de vida robusto: pausa, retomada, perda/recriação de surface, memória baixa | validado em hardware (Android) | ESTADO.md "Shell Android — validação atual": lifecycle 4 testes portáteis + 100 ciclos background/foreground + screen off/on + `SurfaceLost`/`OutOfDate` tratados (linhas 210-223); `tests/native/test_app_lifecycle.cpp` |
 | 1.1.4 | Janela/display: taxa variável, notch/safe area, multi-janela, display externo | não iniciado | Não há tratamento de safe area/multi-window/taxa variável; shell Android é landscape fixo simples |
@@ -143,7 +143,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 1.5.1 | Biblioteca math com SIMD NEON e testes de precisão | parcial | ESTADO.md linha 64: float2/3/4, quaternion, float4x4, Transform, Bounds, Ray, Plane, Frustum ✅ 27 testes (`MathTests.cs`); o kernel nativo ARM64 de composição está validado, mas SIMD NEON explícito no restante da biblioteca ainda é trabalho do próprio item 1.5.1 |
 | 1.5.2 | Tempo: fixed step, interpolação, escala de tempo, pausa | implementado | `managed/Aether.Core/Time/FixedClock.cs`: `Advance(realDeltaTime)` devolve a contagem de passos fixos e mantém `InterpolationAlpha`; `TimeScale`/`Paused` distintos; teto `MaxStepsPerAdvance` com `DroppedSteps` evita espiral da morte. ✅ 20 testes (`TimeTests.cs`) — cobre drift de precisão em 10k frames, espiral da morte, pausa/retomada, `NoAlloc`. Ainda não consumido por nenhum sistema (`PhysicsSyncSystem`/`TransformSystem` continuam recebendo `deltaTime` solto do chamador) — integração é trabalho futuro, não deste item |
 | 1.5.3 | Eventos e sinais tipados | implementado | `managed/Aether.Core/Events/Signal.cs`: `Signal<T>` publicador/assinante com array de slots pré-alocado e alça geracional `SignalSubscription` (mesmo padrão de `PhysicsBodyHandle`). ✅ 13 testes (`SignalTests.cs`) — cobre reciclagem de slot, auto-remoção durante a própria publicação, idempotência de `Unsubscribe`, crescimento de array. Ainda não consumido por nenhum sistema existente (física/ECS continuam com seus próprios padrões de polling, ex. `GetTriggerEvents`) — integração é trabalho futuro |
-| 1.5.4 | Sistema de configuração/preferências | implementado | `managed/Aether.Core/Configuration/ConfigurationStore.cs`: dicionário chave→valor tipado (int/float/bool/string), leitura tolerante e estrita, serialização texto determinística com round-trip completo. ✅ 25 testes (`ConfigurationStoreTests.cs`). Persistência em disco (onde salvar por plataforma) depende de 1.1.1 (abstração de filesystem), ainda não iniciado — deliberadamente fora do escopo deste tipo, que só serializa para `string` |
+| 1.5.4 | Sistema de configuração/preferências | implementado | `managed/Aether.Core/Configuration/ConfigurationStore.cs`: dicionário chave→valor tipado (int/float/bool/string), leitura tolerante e estrita, serialização texto determinística com round-trip completo. ✅ 25 testes (`ConfigurationStoreTests.cs`). Persistência em disco (onde salvar por plataforma) pode agora usar 1.1.1 (`IFileSystem`, parcial), mas a integração em si — chamar `WriteAllBytes`/`ReadAllBytes` a partir do `ConfigurationStore` — ainda não foi feita, deliberadamente fora do escopo deste tipo, que só serializa para `string` |
 
 > **Gate M1: FECHADO.** O subgate de desempenho 1.3.6 está validado em aparelho
 > classe A (<6 ms para 100 mil transforms, zero GC). A Etapa 1.5 (matemática/tempo/
