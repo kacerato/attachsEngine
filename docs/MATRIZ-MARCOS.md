@@ -31,9 +31,9 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 264 |
+| não iniciado | 263 |
 | PoC | 9 |
-| parcial | 24 |
+| parcial | 25 |
 | implementado | 30 |
 | validado em hardware | 5 |
 | aceito | 1 |
@@ -102,7 +102,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 1.1.1 | Abstração de sistema de arquivos (assets, escopo Android, iCloud/Files iOS) | parcial | `managed/Aether.Core/Platform/IFileSystem.cs`: interface por escopo nomeado (`FileSystemScope.Assets`/`PersistentData`/`Cache`), sem caminho absoluto livre. `StandardFileSystem` implementa sobre `System.IO` (raiz por escopo configurável), usada em desktop/testes e como base para a implementação Android real injetar `internalDataPath`/`externalDataPath` de `ANativeActivity` (já resolvidos nativamente em `native/platform/android/android_paths.h`, sem JNI). ✅ 19 testes (`PlatformFileSystemTests.cs`) — cobre round-trip via bytes e streams, escape via `..` bloqueado, caminho absoluto rejeitado, escrita em `Assets` lança, isolamento entre escopos, enumeração não-recursiva. Continua `parcial`: a implementação Android real (consumindo os paths nativos) e a migração de `WriteAheadLog`/persistência de `ConfigurationStore` para usar esta abstração são integração futura, fora do critério objetivo desta fatia |
 | 1.1.2 | Entrada: toque multi-ponto, caneta, teclado, mouse, gamepad, sensores | parcial | `managed/Aether.Core/Input/`: `TouchPoint`/`TouchPhase` (ciclo Began→Moved/Stationary→Ended/Cancelled, delta e predição linear via `InputState.PredictPosition`), `PenInfo` (pressão/tilt/rotação/botão lateral associado por Id de toque), `KeyCode`/`KeyEvent`, `MouseState`, `GamepadState`. `InputState` agrega tudo por frame com modelo push (`PushTouch`/`PushKey`/`SetMouse`/`SetGamepad`) + `EndFrame` consolidando fases e limpando eventos do frame. ✅ 25 testes (`InputTests.cs`) — ciclo de vida completo de multi-touch, predição, caneta desassociada ao finalizar toque, zero GC na leitura de `ActiveTouches`. Continua `parcial`: nenhuma captação real de Android (`AInputEvent`)/iOS (`UITouch`)/sensores existe ainda — é tradução futura para os tipos já definidos aqui, mesma disciplina de 1.1.1 |
 | 1.1.3 | Ciclo de vida robusto: pausa, retomada, perda/recriação de surface, memória baixa | validado em hardware (Android) | ESTADO.md "Shell Android — validação atual": lifecycle 4 testes portáteis + 100 ciclos background/foreground + screen off/on + `SurfaceLost`/`OutOfDate` tratados (linhas 210-223); `tests/native/test_app_lifecycle.cpp` |
-| 1.1.4 | Janela/display: taxa variável, notch/safe area, multi-janela, display externo | não iniciado | Não há tratamento de safe area/multi-window/taxa variável; shell Android é landscape fixo simples |
+| 1.1.4 | Janela/display: taxa variável, notch/safe area, multi-janela, display externo | parcial | `managed/Aether.Core/Platform/`: `SafeAreaInsets` (margem por borda para notch/barra de gestos, consumida futuramente pela UI do item 4.6.1), `DisplayInfo` (resolução, densidade, `RefreshRateHz` variável, `SafeAreaSize()` saturando em zero) e `WindowState` (display principal + displays externos via modelo push `SetPrimaryDisplay`/`AddOrUpdateExternalDisplay`/`RemoveDisplay` — "multi-janela" aqui é múltiplos displays simultâneos, não split-screen de processo). ✅ 23 testes (`WindowStateTests.cs`) — cobre validação de dimensão/densidade/taxa negativa, saturação de safe-area, troca de Id do principal rejeitada, display externo declarado `IsBuiltIn` rejeitado, múltiplos displays externos coexistindo. Continua `parcial`: nenhuma captação real de `Display`/`DisplayCutout` (Android) ou `UIScreen` (iOS) existe — shell Android segue landscape fixo simples |
 | 1.1.5 | Energia e térmica: leitura de estado, API do PowerGovernor | parcial | `PowerGovernor` com histerese implementado e testado (ESTADO.md linha 67), mas sem leitura real de `thermalStatus` do Android integrada |
 
 ### Etapa 1.2 — Memória e concorrência
