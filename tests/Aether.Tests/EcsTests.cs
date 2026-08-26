@@ -51,13 +51,13 @@ public static class EcsTests
         var world = new World();
         var e = world.CreateEntity(new Position(new float3(1, 2, 3)));
 
-        Assert.Close(new float3(1, 2, 3), world.GetComponent<Position>(e).Value);
+        Assert.Close(new float3(1, 2, 3), world.Read<Position>(e).Value);
 
-        world.GetComponent<Position>(e).Value = new float3(9, 9, 9);
-        Assert.Close(new float3(9, 9, 9), world.GetComponent<Position>(e).Value, what: "escrita pela referência devolvida persiste");
+        world.Write<Position>(e).Value = new float3(9, 9, 9);
+        Assert.Close(new float3(9, 9, 9), world.Read<Position>(e).Value, what: "escrita pela referência devolvida persiste");
 
         world.SetComponent(e, new Position(new float3(-1, -1, -1)));
-        Assert.Close(new float3(-1, -1, -1), world.GetComponent<Position>(e).Value);
+        Assert.Close(new float3(-1, -1, -1), world.Read<Position>(e).Value);
     }
 
     [Test] public static void TryGetComponent_DevolveFalseQuandoAusente()
@@ -67,6 +67,59 @@ public static class EcsTests
 
         Assert.True(world.TryGetComponent<Position>(e, out _));
         Assert.False(world.TryGetComponent<Velocity>(e, out _), "entidade não tem Velocity");
+    }
+
+    [Test] public static void ChangeDetection_LeituraNaoMarca_EscritaMarcaSomenteAColuna()
+    {
+        var world = new World();
+        var e = world.CreateEntity(new Position(float3.Zero), new Velocity(float3.One));
+        Chunk chunk = null!;
+        foreach (var candidate in world.Query<Position, Velocity>()) { chunk = candidate; break; }
+
+        int positionBefore = chunk.GetChangeVersion<Position>();
+        int velocityBefore = chunk.GetChangeVersion<Velocity>();
+
+        _ = world.Read<Position>(e).Value;
+        Assert.True(world.TryGetComponent<Position>(e, out _));
+        _ = chunk.GetReadOnlySpan<Position>()[0];
+        Assert.Equal(positionBefore, chunk.GetChangeVersion<Position>(), "leituras não podem sujar Position");
+        Assert.Equal(velocityBefore, chunk.GetChangeVersion<Velocity>(), "ler Position não pode sujar Velocity");
+
+        ref var position = ref world.Write<Position>(e);
+        position.Value = new float3(1, 2, 3);
+        position.Value.X = 4;
+        Assert.Equal(positionBefore + 1, chunk.GetChangeVersion<Position>(),
+            "uma referência Write marca uma vez, não uma vez por campo alterado");
+        Assert.Equal(velocityBefore, chunk.GetChangeVersion<Velocity>());
+
+        var writable = chunk.GetWritableSpan<Position>();
+        writable[0].Value.Y = 8;
+        writable[0].Value.Z = 9;
+        Assert.Equal(positionBefore + 2, chunk.GetChangeVersion<Position>(),
+            "um span mutável marca uma vez por acesso lógico");
+    }
+
+    [Test] public static void ChangeDetection_EscritaMarcaExatamenteOChunkAcessado()
+    {
+        var world = new World();
+        var first = world.CreateEntity(new Position(float3.Zero));
+        Chunk firstChunk = null!;
+        foreach (var candidate in world.Query<Position>()) { firstChunk = candidate; break; }
+        for (int i = 1; i <= firstChunk.Capacity; i++)
+            world.CreateEntity(new Position(new float3(i, 0, 0)));
+
+        var chunks = new List<Chunk>();
+        foreach (var chunk in world.Query<Position>()) chunks.Add(chunk);
+        Assert.Equal(2, chunks.Count, "o teste precisa de dois chunks do mesmo arquétipo");
+        int firstBefore = chunks[0].GetChangeVersion<Position>();
+        int secondBefore = chunks[1].GetChangeVersion<Position>();
+
+        chunks[1].GetWritableSpan<Position>()[0].Value = float3.One;
+
+        Assert.Equal(firstBefore, chunks[0].GetChangeVersion<Position>(),
+            "escrever no segundo chunk não pode sujar o primeiro");
+        Assert.Equal(secondBefore + 1, chunks[1].GetChangeVersion<Position>());
+        Assert.True(world.Exists(first));
     }
 
     [Test] public static void HasComponent_ReflexoDoArquetipoAtual()
@@ -87,8 +140,8 @@ public static class EcsTests
 
         world.AddComponent(e, new Velocity(new float3(4, 5, 6)));
 
-        Assert.Close(new float3(1, 2, 3), world.GetComponent<Position>(e).Value, what: "Position sobrevive à migração de arquétipo");
-        Assert.Close(new float3(4, 5, 6), world.GetComponent<Velocity>(e).Value);
+        Assert.Close(new float3(1, 2, 3), world.Read<Position>(e).Value, what: "Position sobrevive à migração de arquétipo");
+        Assert.Close(new float3(4, 5, 6), world.Read<Velocity>(e).Value);
     }
 
     [Test] public static void RemoveComponent_MigraArquetipoPreservandoOsOutrosComponentes()
@@ -99,7 +152,7 @@ public static class EcsTests
         world.RemoveComponent<Velocity>(e);
 
         Assert.False(world.HasComponent<Velocity>(e));
-        Assert.Close(new float3(1, 2, 3), world.GetComponent<Position>(e).Value, what: "Position sobrevive à remoção de Velocity");
+        Assert.Close(new float3(1, 2, 3), world.Read<Position>(e).Value, what: "Position sobrevive à remoção de Velocity");
     }
 
     [Test] public static void AddComponent_DeTipoJaExistente_Lanca()
@@ -125,7 +178,7 @@ public static class EcsTests
 
         try
         {
-            world.GetComponent<Position>(e);
+            _ = world.Read<Position>(e);
             throw new AssertException("esperado InvalidOperationException, nada foi lançado");
         }
         catch (InvalidOperationException ex)
@@ -197,8 +250,8 @@ public static class EcsTests
         {
             foreach (var chunk in world.Query<Position, Velocity>())
             {
-                var pos = chunk.GetSpan<Position>();
-                var vel = chunk.GetSpan<Velocity>();
+                var pos = chunk.GetWritableSpan<Position>();
+                var vel = chunk.GetReadOnlySpan<Velocity>();
                 for (int i = 0; i < chunk.Count; i++)
                 {
                     pos[i].Value += vel[i].Value;
@@ -225,8 +278,8 @@ public static class EcsTests
         {
             if (i == 4) { Assert.False(world.Exists(ids[i])); continue; }
             Assert.True(world.Exists(ids[i]), $"entidade {i} deveria sobreviver ao swap-back");
-            Assert.Close((float)i, world.GetComponent<Position>(ids[i]).Value.X, what: $"Position da entidade {i} não pode ter sido embaralhada");
-            Assert.Equal(i * 10, world.GetComponent<Health>(ids[i]).Value, what: $"Health da entidade {i} não pode ter sido embaralhado");
+            Assert.Close((float)i, world.Read<Position>(ids[i]).Value.X, what: $"Position da entidade {i} não pode ter sido embaralhada");
+            Assert.Equal(i * 10, world.Read<Health>(ids[i]).Value, what: $"Health da entidade {i} não pode ter sido embaralhado");
         }
     }
 
@@ -282,7 +335,7 @@ public static class EcsTests
             for (int i = 0; i < chunk.Count; i++) { filho = e[i]; filhoAchado = true; }
         }
         Assert.True(paiAchado); Assert.True(filhoAchado);
-        Assert.True(world.GetComponent<Parent>(filho).Value == pai, "a referência ao id temporário do pai foi resolvida corretamente no playback");
+        Assert.True(world.Read<Parent>(filho).Value == pai, "a referência ao id temporário do pai foi resolvida corretamente no playback");
     }
 
     [Test] public static void ECB_AddComponentDiferidoEmEntidadeJaExistente()
@@ -292,7 +345,7 @@ public static class EcsTests
         var ecb = new EntityCommandBuffer();
         ecb.AddComponent(e, new Position(new float3(7, 7, 7)));
         ecb.Playback(world);
-        Assert.Close(new float3(7, 7, 7), world.GetComponent<Position>(e).Value);
+        Assert.Close(new float3(7, 7, 7), world.Read<Position>(e).Value);
     }
 
     // ---------------------------------------------------------------- hierarquia
@@ -309,11 +362,11 @@ public static class EcsTests
         world.AddComponent(filho, new Parent(pai));
 
         TransformSystem.Propagate(world);
-        Assert.Close(new float3(10, 0, 2), world.GetComponent<WorldTransform>(filho).Value.Position, what: "filho segue o pai");
+        Assert.Close(new float3(10, 0, 2), world.Read<WorldTransform>(filho).Value.Position, what: "filho segue o pai");
 
-        world.GetComponent<LocalTransform>(pai).Value = Transform.FromPosition(new float3(100, 0, 0));
+        world.Write<LocalTransform>(pai).Value = Transform.FromPosition(new float3(100, 0, 0));
         TransformSystem.Propagate(world);
-        Assert.Close(new float3(100, 0, 2), world.GetComponent<WorldTransform>(filho).Value.Position, what: "mover o pai move o filho");
+        Assert.Close(new float3(100, 0, 2), world.Read<WorldTransform>(filho).Value.Position, what: "mover o pai move o filho");
     }
 
     [Test] public static void Hierarquia_TresNiveis_PropagaCorretamente()
@@ -327,9 +380,9 @@ public static class EcsTests
 
         TransformSystem.Propagate(world);
 
-        Assert.Close(new float3(1, 0, 0), world.GetComponent<WorldTransform>(avo).Value.Position);
-        Assert.Close(new float3(1, 1, 0), world.GetComponent<WorldTransform>(pai).Value.Position);
-        Assert.Close(new float3(1, 1, 1), world.GetComponent<WorldTransform>(neto).Value.Position, what: "neto acumula translação de avô e pai");
+        Assert.Close(new float3(1, 0, 0), world.Read<WorldTransform>(avo).Value.Position);
+        Assert.Close(new float3(1, 1, 0), world.Read<WorldTransform>(pai).Value.Position);
+        Assert.Close(new float3(1, 1, 1), world.Read<WorldTransform>(neto).Value.Position, what: "neto acumula translação de avô e pai");
     }
 
     [Test] public static void Hierarquia_DestruirPai_NetoNaoTravaEEhTratadoComoRaiz()
@@ -342,7 +395,7 @@ public static class EcsTests
         world.DestroyEntity(pai);
 
         TransformSystem.Propagate(world);   // não pode lançar nem travar
-        Assert.Close(new float3(0, 3, 0), world.GetComponent<WorldTransform>(filho).Value.Position,
+        Assert.Close(new float3(0, 3, 0), world.Read<WorldTransform>(filho).Value.Position,
             what: "órfão vira raiz: WorldTransform = LocalTransform");
     }
 
@@ -365,8 +418,8 @@ public static class EcsTests
         {
             foreach (var chunk in world.Query<Position, Velocity>())
             {
-                var pos = chunk.GetSpan<Position>();
-                var vel = chunk.GetSpan<Velocity>();
+                var pos = chunk.GetWritableSpan<Position>();
+                var vel = chunk.GetReadOnlySpan<Velocity>();
                 for (int i = 0; i < chunk.Count; i++)
                     pos[i].Value += vel[i].Value * dt;
             }
@@ -379,7 +432,7 @@ public static class EcsTests
         int visited = 0;
         foreach (var chunk in world.Query<Position, Velocity>())
         {
-            var pos = chunk.GetSpan<Position>();
+            var pos = chunk.GetReadOnlySpan<Position>();
             var entities = chunk.Entities;
             for (int i = 0; i < chunk.Count; i++)
             {

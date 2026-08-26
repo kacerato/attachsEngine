@@ -15,6 +15,9 @@ public static class NodeTypes
 
     public const string FlowIf = "flow.if";
     public const string FlowWhile = "flow.while";
+    public const string FlowReturn = "flow.return";
+    public const string FlowBreak = "flow.break";
+    public const string FlowContinue = "flow.continue";
 
     public const string SetVariable = "flow.set_variable";
     public const string GetVariable = "flow.get_variable";
@@ -74,6 +77,17 @@ public static class NodeLibrary
         Outputs = { Exec("corpo"), Exec("fim") },
     };
 
+    /// <summary>Encerra o evento atual. Os eventos suportados hoje retornam
+    /// <c>void</c>, portanto este nó não possui entrada de valor nem saída de
+    /// execução.</summary>
+    public static FlowNode FlowReturn(string id) => TerminalControl(id, NodeTypes.FlowReturn);
+
+    /// <summary>Encerra apenas o laço mais interno que contém este nó.</summary>
+    public static FlowNode FlowBreak(string id) => TerminalControl(id, NodeTypes.FlowBreak);
+
+    /// <summary>Pula o restante da iteração do laço mais interno.</summary>
+    public static FlowNode FlowContinue(string id) => TerminalControl(id, NodeTypes.FlowContinue);
+
     public static FlowNode SetVariable(string id, string variableName, FlowType type) => new()
     {
         Id = id,
@@ -123,4 +137,11 @@ public static class NodeLibrary
 
     private static FlowPin Exec(string name, PinDirection dir = PinDirection.Output) => new() { Name = name, Type = FlowType.Exec, Direction = dir };
     private static FlowPin Data(string name, FlowType type, PinDirection dir) => new() { Name = name, Type = type, Direction = dir };
+
+    private static FlowNode TerminalControl(string id, string nodeType) => new()
+    {
+        Id = id,
+        NodeType = nodeType,
+        Inputs = { Exec("entrada", PinDirection.Input) },
+    };
 }

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "budgetRevision": "2026-08-26.1",
+  "producer": "schema-self-test-pass",
+  "capturedAtUtc": "2026-08-26T00:00:00Z",
+  "metrics": [
+    { "id": "interop.native_calls_per_frame", "value": 200 },
+    { "id": "allocations.gen0_collections_per_60s", "value": 0 },
+    { "id": "cpu.editor_frame_time_ms", "value": 16.6 },
+    { "id": "gpu.runtime_frame_time_ms", "value": 16.6 },
+    { "id": "memory.editor_resident_bytes", "value": 1610612736 },
+    { "id": "energy.sustained_power_watts_30m", "value": 4.0 }
+  ]
+}

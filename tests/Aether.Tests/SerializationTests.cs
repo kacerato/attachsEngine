@@ -122,9 +122,9 @@ public static class SerializationTests
         var filhoId = new EntityId(1, 0);
 
         Assert.True(w2.HasComponent<FirstChild>(paiId), "o pai recupera o FirstChild apontando pro filho");
-        Assert.Equal(filhoId, w2.GetComponent<FirstChild>(paiId).Value);
-        Assert.Equal(paiId, w2.GetComponent<Parent>(filhoId).Value, "o filho recupera o Parent apontando pro pai");
-        Assert.Equal(EntityId.Null, w2.GetComponent<NextSibling>(filhoId).Value, "filho único: próximo irmão é nulo");
+        Assert.Equal(filhoId, w2.Read<FirstChild>(paiId).Value);
+        Assert.Equal(paiId, w2.Read<Parent>(filhoId).Value, "o filho recupera o Parent apontando pro pai");
+        Assert.Equal(EntityId.Null, w2.Read<NextSibling>(filhoId).Value, "filho único: próximo irmão é nulo");
     }
 
     [Test] public static void ComponenteNaoRegistrado_EIgnoradoAoSalvarEAoCarregar()
@@ -200,8 +200,8 @@ public static class SerializationTests
 
         var paiId = new EntityId(0, 0);
         var filhoId = new EntityId(1, 0);
-        Assert.Close(new float3(5f, -2f, 9f), w2.GetComponent<LocalTransform>(paiId).Value.Position, 1e-6f, "posição local do pai sobrevive");
-        Assert.Equal(paiId, w2.GetComponent<Parent>(filhoId).Value, "hierarquia sobrevive ao round-trip de texto");
+        Assert.Close(new float3(5f, -2f, 9f), w2.Read<LocalTransform>(paiId).Value.Position, 1e-6f, "posição local do pai sobrevive");
+        Assert.Equal(paiId, w2.Read<Parent>(filhoId).Value, "hierarquia sobrevive ao round-trip de texto");
 
         string text2 = TextSerializer.Serialize(w2);
         Assert.Equal(text, text2, "resserializar o mundo recarregado bate byte a byte com o texto original");
@@ -225,15 +225,15 @@ public static class SerializationTests
         stream.Position = 0;
         BinarySerializer.Read(w2, stream);
         var idBin = new EntityId(0, 0);
-        Assert.True(w2.GetComponent<SinalizadorSeguidoDeByte>(idBin).Ligado, "bool sobrevive ao round-trip binário");
-        Assert.Equal((byte)200, w2.GetComponent<SinalizadorSeguidoDeByte>(idBin).Extra, "byte após o bool sobrevive ao round-trip binário, sem estourar os limites do buffer");
+        Assert.True(w2.Read<SinalizadorSeguidoDeByte>(idBin).Ligado, "bool sobrevive ao round-trip binário");
+        Assert.Equal((byte)200, w2.Read<SinalizadorSeguidoDeByte>(idBin).Extra, "byte após o bool sobrevive ao round-trip binário, sem estourar os limites do buffer");
 
         string text = TextSerializer.Serialize(w1);
         var w3 = NovoMundo();
         TextSerializer.Deserialize(w3, text);
         var idText = new EntityId(0, 0);
-        Assert.True(w3.GetComponent<SinalizadorSeguidoDeByte>(idText).Ligado, "bool sobrevive ao round-trip de texto");
-        Assert.Equal((byte)200, w3.GetComponent<SinalizadorSeguidoDeByte>(idText).Extra, "byte após o bool sobrevive ao round-trip de texto");
+        Assert.True(w3.Read<SinalizadorSeguidoDeByte>(idText).Ligado, "bool sobrevive ao round-trip de texto");
+        Assert.Equal((byte)200, w3.Read<SinalizadorSeguidoDeByte>(idText).Extra, "byte após o bool sobrevive ao round-trip de texto");
     }
 
     [Test] public static void MundoVazio_SerializaEDesserializaSemExcecaoTexto()
@@ -294,7 +294,7 @@ public static class SerializationTests
         BinarySerializer.Read(world, stream);
 
         var id = new EntityId(0, 0);
-        var migrado = world.GetComponent<FakeComponentV2>(id);
+        var migrado = world.Read<FakeComponentV2>(id);
         Assert.Equal(111, migrado.A, "campo A preserva o valor através da migração, mesmo mudando de offset");
         Assert.Equal(222, migrado.B, "campo B preserva o valor através da migração, mesmo mudando de offset");
     }

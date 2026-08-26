@@ -14,10 +14,10 @@ namespace Aether.Physics;
 /// <para>
 /// Direção da sincronização por tipo de corpo: <see cref="NativeMotionType.Dynamic"/> é dono da
 /// transform depois de criado (Jolt→ECS todo frame, a simulação decide a posição);
-/// <see cref="NativeMotionType.Static"/> não sincroniza depois da criação — nunca se move, então
-/// recopiar a cada frame seria uma chamada nativa desperdiçada. <see cref="NativeMotionType.Kinematic"/>
-/// só recebe a transform inicial na criação — ver o comentário de <see cref="SyncDynamicJoltToEcs"/>
-/// para por que reposicioná-lo depois disso não está implementado nesta fatia.
+/// <see cref="NativeMotionType.Static"/> mantém a transform de autoria e não sincroniza depois da
+/// criação. <see cref="NativeMotionType.Kinematic"/> é dirigido pelo ECS/animação e envia alvos
+/// ECS→Jolt antes do Step. O cache de alvo por body evita crossings estáveis e envia um comando
+/// final para zerar a velocidade depois que o movimento termina.
 /// </para>
 /// </summary>
 public static class PhysicsSyncSystem
@@ -33,9 +33,27 @@ public static class PhysicsSyncSystem
     {
         SyncNewBodies(world, physicsWorld);
 
+        SyncKinematicEcsToJolt(world, physicsWorld, deltaTime);
+
         physicsWorld.Step(deltaTime, collisionSteps);
 
         SyncDynamicJoltToEcs(world, physicsWorld);
+    }
+
+    private static void SyncKinematicEcsToJolt(World world, PhysicsWorld physicsWorld, float deltaTime)
+    {
+        foreach (var chunk in world.Query().With<RigidBody>().With<WorldTransform>())
+        {
+            var bodies = chunk.GetReadOnlySpan<RigidBody>();
+            var transforms = chunk.GetReadOnlySpan<WorldTransform>();
+            for (int i = 0; i < chunk.Count; i++)
+            {
+                if (bodies[i].MotionType != NativeMotionType.Kinematic || !bodies[i].Handle.IsValid)
+                    continue;
+                var target = transforms[i].Value;
+                physicsWorld.MoveKinematic(bodies[i].Handle, target.Position, target.Rotation, deltaTime);
+            }
+        }
     }
 
     /// <summary>Cria o corpo nativo de toda entidade com <see cref="RigidBody"/>+<see cref="Collider"/>
@@ -46,39 +64,44 @@ public static class PhysicsSyncSystem
     {
         foreach (var chunk in world.Query().With<RigidBody>().With<Collider>().With<WorldTransform>())
         {
-            var bodies = chunk.GetSpan<RigidBody>();
-            var colliders = chunk.GetSpan<Collider>();
-            var transforms = chunk.GetSpan<WorldTransform>();
+            var bodies = chunk.GetReadOnlySpan<RigidBody>();
+            var colliders = chunk.GetReadOnlySpan<Collider>();
+            var transforms = chunk.GetReadOnlySpan<WorldTransform>();
+
+            bool needsCreation = false;
+            for (int i = 0; i < chunk.Count; i++)
+                if (!bodies[i].Handle.IsValid) { needsCreation = true; break; }
+            if (!needsCreation) continue;
+
+            var writableBodies = chunk.GetWritableSpan<RigidBody>();
 
             for (int i = 0; i < chunk.Count; i++)
             {
-                if (bodies[i].Handle.IsValid) continue;
+                if (writableBodies[i].Handle.IsValid) continue;
 
                 var t = transforms[i].Value;
                 var handle = physicsWorld.CreateBody(colliders[i].ToShape(), t.Position, t.Rotation,
-                    bodies[i].MotionType, bodies[i].Friction, bodies[i].Restitution);
-                bodies[i].Handle = handle;
+                    writableBodies[i].MotionType, writableBodies[i].Friction, writableBodies[i].Restitution);
+                writableBodies[i].Handle = handle;
             }
         }
     }
 
     /// <summary>Corpos dinâmicos são donos da posição — a simulação decide, o ECS só reflete.
-    /// <para>
-    /// Corpo <see cref="NativeMotionType.Kinematic"/> NÃO é resincronizado ECS→Jolt depois da
-    /// criação nesta fatia — deliberadamente, não por descuido: mover um corpo cinemático exige
-    /// <c>JPH::BodyInterface::MoveKinematic</c> (ou um setter de transform direto), e nenhum dos
-    /// dois é exposto pela fronteira C ABI atual (<c>native/physics/jolt_bridge.h</c>, item
-    /// 4.1.1) — só <c>AetherPhysics_SetLinearVelocity</c>/<c>AetherPhysics_GetTransform</c> existem.
-    /// Adicionar esse setter é extensão do lado nativo, fora do escopo de "fachada C#" deste item.
-    /// Um cinemático recebe a transform correta uma única vez, na criação (<see cref="SyncNewBodies"/>).
-    /// </para>
-    /// </summary>
+    /// Cinemáticos nunca entram neste caminho, evitando feedback Jolt→ECS→Jolt.</summary>
     private static void SyncDynamicJoltToEcs(World world, PhysicsWorld physicsWorld)
     {
         foreach (var chunk in world.Query().With<RigidBody>().With<WorldTransform>())
         {
-            var bodies = chunk.GetSpan<RigidBody>();
-            var transforms = chunk.GetSpan<WorldTransform>();
+            var bodies = chunk.GetReadOnlySpan<RigidBody>();
+
+            bool hasDynamicBody = false;
+            for (int i = 0; i < chunk.Count; i++)
+                if (bodies[i].MotionType == NativeMotionType.Dynamic && bodies[i].Handle.IsValid)
+                { hasDynamicBody = true; break; }
+            if (!hasDynamicBody) continue;
+
+            var transforms = chunk.GetWritableSpan<WorldTransform>();
 
             for (int i = 0; i < chunk.Count; i++)
             {
@@ -99,7 +122,7 @@ public static class PhysicsSyncSystem
     public static void DestroyBody(World world, PhysicsWorld physicsWorld, EntityId entity)
     {
         if (!world.HasComponent<RigidBody>(entity)) return;
-        ref var body = ref world.GetComponent<RigidBody>(entity);
+        ref var body = ref world.Write<RigidBody>(entity);
         if (!body.Handle.IsValid) return;
         physicsWorld.DestroyBody(body.Handle);
         body.Handle = PhysicsBodyHandle.Invalid;

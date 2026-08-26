@@ -109,6 +109,15 @@ public static class FlowToCSharp
                 EmitExecChain(graph, nodeId, "fim", indent, sb);
                 break;
             }
+            case NodeTypes.FlowReturn:
+                sb.Append(pad).Append("return;\n");
+                break;
+            case NodeTypes.FlowBreak:
+                sb.Append(pad).Append("break;\n");
+                break;
+            case NodeTypes.FlowContinue:
+                sb.Append(pad).Append("continue;\n");
+                break;
             case NodeTypes.CodeRaw:
             {
                 string raw = node.Properties.GetValueOrDefault("RawCode", "");

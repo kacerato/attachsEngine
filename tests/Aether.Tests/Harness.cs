@@ -101,6 +101,7 @@ public static class TestRunner
             .ToList();
 
         int passed = 0, failed = 0, skipped = 0;
+        int missingNativeTests = 0;
         string? currentGroup = null;
         var sw = Stopwatch.StartNew();
         var failures = new List<string>();
@@ -118,9 +119,19 @@ public static class TestRunner
 
             try
             {
+                int missingNativeBefore = NativeInterop.SkippedForMissingLibraryCount;
                 method.Invoke(null, null);
-                passed++;
-                Console.WriteLine($"    {Green}ok{Reset}   {method.Name}");
+                if (NativeInterop.SkippedForMissingLibraryCount > missingNativeBefore)
+                {
+                    skipped++;
+                    missingNativeTests++;
+                    Console.WriteLine($"    {Dim}- {method.Name}  (biblioteca nativa ausente){Reset}");
+                }
+                else
+                {
+                    passed++;
+                    Console.WriteLine($"    {Green}ok{Reset}   {method.Name}");
+                }
             }
             catch (TargetInvocationException tie)
             {
@@ -132,6 +143,22 @@ public static class TestRunner
                 if (inner is not AssertException)
                     Console.WriteLine($"         {inner.StackTrace?.Split('\n').FirstOrDefault()?.Trim()}");
             }
+        }
+
+        // GAP-CORE-01 / §4.2 de PLANO-FECHAMENTO-LACUNAS.md: "teste que depende de aether_physics
+        // deve falhar no job de integração se a biblioteca não estiver presente. Skip é permitido
+        // somente no job unitário explicitamente sem nativo." AETHER_REQUIRE_NATIVE=1 é esse job
+        // de integração — sem ela, ausência de lib nativa continua sendo "ok" silencioso (fluxo
+        // de desenvolvimento local sem toolchain nativa instalada), exatamente como antes.
+        bool requireNative = Environment.GetEnvironmentVariable("AETHER_REQUIRE_NATIVE") == "1";
+        if (requireNative && missingNativeTests > 0)
+        {
+            failed++;
+            string msg = $"AETHER_REQUIRE_NATIVE=1, mas a biblioteca nativa \"aether_physics\" não foi encontrada " +
+                         $"({missingNativeTests} teste(s) foram marcados como pulados) — job de integração " +
+                         "não pode reportar verde sem o nativo presente.";
+            Console.WriteLine($"\n  {Red}FALHA{Reset} integração-nativa\n         {msg}");
+            failures.Add($"integração-nativa: {msg}");
         }
 
         sw.Stop();

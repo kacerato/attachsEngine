@@ -12,11 +12,7 @@ namespace Aether.Tests;
 /// </summary>
 public static class PhysicsJointTests
 {
-    private static bool NativeLibraryAvailable()
-    {
-        try { using var w = new PhysicsWorld(new float3(0f, -9.81f, 0f), 16); return true; }
-        catch (DllNotFoundException) { return false; }
-    }
+    private static bool NativeLibraryAvailable() => NativeInterop.PhysicsLibraryAvailable();
 
     private static PhysicsBodyHandle MakeSphere(PhysicsWorld physics, float3 position, NativeMotionType motion) =>
         physics.CreateBody(PhysicsShape.Sphere(0.5f), position, quaternion.Identity, motion);

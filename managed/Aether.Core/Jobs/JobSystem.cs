@@ -29,9 +29,9 @@ public sealed class JobException : Exception
 /// </summary>
 public sealed class JobSystem : IDisposable
 {
-    // Timeout de segurança: se Complete() não consegue nem achar trabalho pra ajudar
-    // nem ver o job alvo terminar por tempo demais, é sinal de ciclo de dependência
-    // (ou de um job que nunca termina) — falha com mensagem clara em vez de travar.
+    // Watchdog externo: ciclos entre jobs são detectados pelo JobDependencyGraph antes
+    // da espera. Este timeout permanece para trabalho externo que nunca retorna (I/O,
+    // callback nativo travado etc.), que o grafo não tem como observar internamente.
     private static readonly TimeSpan DeadlockTimeout = TimeSpan.FromSeconds(3);
 
     private readonly ConcurrentQueue<JobEntry> _performanceQueue = new();
@@ -182,6 +182,7 @@ public sealed class JobSystem : IDisposable
         }
 
         entry.RemainingDependencies = 1;
+        JobDependencyGraph.SetPrerequisite(entry, prereq);
         bool prereqDone;
         lock (prereq.Lock)
         {
@@ -203,27 +204,40 @@ public sealed class JobSystem : IDisposable
         var entry = handle.Entry!;
 
         var stack = _executionStack ??= new List<JobEntry>();
-        if (stack.Contains(entry))
-            throw new InvalidOperationException(
-                "ciclo de dependência detectado: Complete() foi chamado, a partir da própria execução do job, esperando por ele mesmo");
-
-        var sw = Stopwatch.StartNew();
-        while (!entry.Completed)
+        JobEntry? waiter = stack.Count == 0 ? null : stack[^1];
+        bool waitRegistered = false;
+        if (waiter is not null && !entry.Completed)
         {
-            if (TryDequeueAny(out var helped))
+            if (!JobDependencyGraph.TryBeginWait(waiter, entry, out string cyclePath))
+                throw new InvalidOperationException(
+                    $"ciclo de dependência detectado antes da espera: {cyclePath}");
+            waitRegistered = true;
+        }
+
+        try
+        {
+            var sw = Stopwatch.StartNew();
+            while (!entry.Completed)
             {
-                RunEntry(helped);
+                if (TryDequeueAny(out var helped))
+                {
+                    RunEntry(helped);
+                }
+                else if (!entry.Done.Wait(2))
+                {
+                    if (sw.Elapsed > DeadlockTimeout)
+                        throw new InvalidOperationException(
+                            $"watchdog: job '{entry.DiagnosticName}' não terminou após {DeadlockTimeout.TotalSeconds:0}s sem nenhum trabalho disponível para ajudar");
+                }
             }
-            else if (!entry.Done.Wait(2))
-            {
-                if (sw.Elapsed > DeadlockTimeout)
-                    throw new InvalidOperationException(
-                        $"possível ciclo de dependência: job '{entry.Label}' não terminou após {DeadlockTimeout.TotalSeconds:0}s sem nenhum trabalho disponível para ajudar");
-            }
+        }
+        finally
+        {
+            if (waitRegistered) JobDependencyGraph.EndWait(waiter!, entry);
         }
 
         if (entry.Fault is not null)
-            throw new JobException($"job '{entry.Label}' (ou uma de suas dependências) falhou durante a execução", entry.Fault);
+            throw new JobException($"job '{entry.DiagnosticName}' (ou uma de suas dependências) falhou durante a execução", entry.Fault);
     }
 
     public void Dispose()

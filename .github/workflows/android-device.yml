@@ -1,0 +1,68 @@
+# android-device / soak (§4.2.1 de docs/PLANO-FECHAMENTO-LACUNAS.md) — as duas suítes
+# que ci.yml explicitamente NÃO cobre, porque exigem hardware físico real via ADB.
+#
+# GitHub-hosted runners não têm um celular Android conectado. Este workflow só faz
+# sentido rodando num self-hosted runner com o laboratório de dispositivos do plano
+# (§5.1: mínimo 6 aparelhos — hoje o repositório tem 1, Xiaomi SM8735/Adreno, ver
+# docs/ESTADO.md "Shell Android — validação atual"). Até esse runner existir,
+# workflow_dispatch é o único gatilho: nada roda sozinho, nada finge cobertura que
+# não existe. Rodar localmente sem GitHub Actions, com o mesmo comando que este job
+# executaria:
+#
+#   pwsh tools/validate-android-shell.ps1 -LifecycleCycles 100 -ExerciseScreenCycle -ExerciseConfigurationChange
+#
+name: android-device (requer self-hosted runner com aparelho físico)
+
+on:
+  workflow_dispatch:
+    inputs:
+      lifecycleCycles:
+        description: "Quantos ciclos background/foreground exercitar"
+        default: "100"
+        type: string
+      soak:
+        description: "Rodar o soak térmico de 30 min (PoC-C) além do ciclo de lifecycle"
+        default: false
+        type: boolean
+
+jobs:
+  android-device:
+    name: android-device (validate-android-shell.ps1 em aparelho real)
+    # self-hosted: GitHub-hosted não tem ADB/GPU Android. Sem um runner rotulado
+    # "android-device-lab" configurado, este job fica pendente indefinidamente (visível
+    # no Actions como "Waiting for a runner") em vez de falhar silenciosamente como se
+    # tivesse rodado — comportamento correto para uma suíte ainda sem infraestrutura.
+    runs-on: [self-hosted, android-device-lab]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compilar APK debug
+        working-directory: android
+        run: ./gradlew assembleDebug --stacktrace
+      - name: Validar em aparelho físico (lifecycle, surface, swapchain)
+        shell: pwsh
+        run: |
+          tools/validate-android-shell.ps1 `
+            -LifecycleCycles ${{ inputs.lifecycleCycles }} `
+            -ExerciseScreenCycle `
+            -ExerciseConfigurationChange `
+            -OutputDirectory android-device-report
+      - name: Soak de estabilidade de 30 min (opcional; potência PoC-C exige coletor próprio)
+        if: ${{ inputs.soak }}
+        shell: pwsh
+        run: |
+          tools/validate-android-shell.ps1 `
+            -LifecycleCycles 1 `
+            -SoakMinutes 30 `
+            -OutputDirectory android-device-report-soak
+      - name: Anexar a revisão dos orçamentos ao relatório
+        shell: pwsh
+        run: tools/validate-metrics-budget.ps1 -OutputPath android-device-report/metrics-budget-schema.json
+      - name: Publicar relatório (JSON + screenshots) e inventário do aparelho
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-device-report-${{ github.sha }}
+          path: |
+            android-device-report/**
+            android-device-report-soak/**
+          if-no-files-found: warn

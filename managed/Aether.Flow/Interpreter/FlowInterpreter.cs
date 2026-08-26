@@ -25,6 +25,20 @@ public sealed class FlowExecutionLimitException : Exception
 /// </summary>
 public sealed class FlowInterpreter
 {
+    private enum ControlSignal
+    {
+        None,
+        Return,
+        Break,
+        Continue,
+    }
+
+    private readonly record struct ExecutionStep(string? NextNodeId, ControlSignal Signal)
+    {
+        public static ExecutionStep Next(string? nodeId) => new(nodeId, ControlSignal.None);
+        public static ExecutionStep Stop(ControlSignal signal) => new(null, signal);
+    }
+
     private readonly FlowGraph _graph;
     private readonly Dictionary<string, FlowValue> _variables = new();
     private readonly int _maxSteps;
@@ -57,7 +71,9 @@ public sealed class FlowInterpreter
         var startConn = _graph.OutgoingFrom(evt.Id, "corpo").FirstOrDefault();
         if (startConn is null) return; // evento sem corpo: nada para fazer, não é erro
 
-        ExecuteChain(startConn.To.NodeId);
+        var signal = ExecuteChain(startConn.To.NodeId);
+        if (signal is ControlSignal.Break or ControlSignal.Continue)
+            throw new InvalidOperationException("O grafo contém 'Parar laço' ou 'Continuar' fora de um laço válido. Execute o validador antes de rodar o evento.");
     }
 
     private void Step(string nodeId)
@@ -69,20 +85,23 @@ public sealed class FlowInterpreter
 
     /// <summary>Executa a sequência de nós de execução a partir de <paramref name="nodeId"/>
     /// até não haver mais próximo (fim do bloco).</summary>
-    private void ExecuteChain(string? nodeId)
+    private ControlSignal ExecuteChain(string? nodeId)
     {
         while (nodeId is not null)
         {
             Step(nodeId);
             var node = _graph.FindNode(nodeId)!;
-            nodeId = ExecuteOne(node);
+            var result = ExecuteOne(node);
+            if (result.Signal != ControlSignal.None) return result.Signal;
+            nodeId = result.NextNodeId;
         }
+        return ControlSignal.None;
     }
 
     /// <summary>Executa um único nó e devolve o id do PRÓXIMO nó da cadeia
     /// (ou null se o bloco termina aqui). Nós de laço/ramo tratam sua própria
     /// recursão internamente e devolvem apenas o que vem DEPOIS deles.</summary>
-    private string? ExecuteOne(FlowNode node)
+    private ExecutionStep ExecuteOne(FlowNode node)
     {
         switch (node.NodeType)
         {
@@ -90,29 +109,39 @@ public sealed class FlowInterpreter
             {
                 var value = Evaluate(node, "valor");
                 _variables[node.Properties["VariableName"]] = value;
-                return NextOf(node.Id, "saida");
+                return ExecutionStep.Next(NextOf(node.Id, "saida"));
             }
             case NodeTypes.FlowIf:
             {
                 bool cond = Evaluate(node, "condicao").BoolValue;
-                ExecuteChain(NextOf(node.Id, cond ? "entao" : "senao"));
-                return NextOf(node.Id, "depois"); // os dois ramos convergem aqui, exista "senão" ou não
+                var branchSignal = ExecuteChain(NextOf(node.Id, cond ? "entao" : "senao"));
+                if (branchSignal != ControlSignal.None) return ExecutionStep.Stop(branchSignal);
+                return ExecutionStep.Next(NextOf(node.Id, "depois")); // os dois ramos convergem aqui, exista "senão" ou não
             }
             case NodeTypes.FlowWhile:
             {
                 while (Evaluate(node, "condicao").BoolValue)
                 {
                     Step(node.Id); // cada iteração conta para o limite de passos
-                    ExecuteChain(NextOf(node.Id, "corpo"));
+                    var bodySignal = ExecuteChain(NextOf(node.Id, "corpo"));
+                    if (bodySignal == ControlSignal.Return) return ExecutionStep.Stop(ControlSignal.Return);
+                    if (bodySignal == ControlSignal.Break) break;
+                    if (bodySignal == ControlSignal.Continue) continue;
                 }
-                return NextOf(node.Id, "fim");
+                return ExecutionStep.Next(NextOf(node.Id, "fim"));
             }
+            case NodeTypes.FlowReturn:
+                return ExecutionStep.Stop(ControlSignal.Return);
+            case NodeTypes.FlowBreak:
+                return ExecutionStep.Stop(ControlSignal.Break);
+            case NodeTypes.FlowContinue:
+                return ExecutionStep.Stop(ControlSignal.Continue);
             case NodeTypes.CodeRaw:
                 // Nó opaco: o interpretador de edição não tenta rodar C# arbitrário.
                 // No modo build ele já foi compilado para IL como qualquer outro código.
-                return NextOf(node.Id, "saida");
+                return ExecutionStep.Next(NextOf(node.Id, "saida"));
             default:
-                return NextOf(node.Id, "saida");
+                return ExecutionStep.Next(NextOf(node.Id, "saida"));
         }
     }
 

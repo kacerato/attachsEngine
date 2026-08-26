@@ -183,6 +183,60 @@ AE_TEST(set_e_get_linear_velocity_fazem_round_trip_exato) {
   AetherPhysics_DestroyWorld(world);
 }
 
+AE_TEST(move_kinematic_v2_rejeita_corpo_incorreto_e_alcanca_alvo) {
+  AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0.0f, 0.0f, 0.0f}, 16);
+  AetherBodyDesc dynamicDesc = BoxDesc({0.5f, 0.5f, 0.5f}, {0.0f, 3.0f, 0.0f},
+                                       AetherMotionType::Dynamic);
+  AetherBodyHandle dynamicBody = AetherPhysics_CreateBody(world, &dynamicDesc);
+  AE_EXPECT_TRUE(AetherPhysics_MoveKinematicV2(world, dynamicBody, {1.0f, 3.0f, 0.0f},
+                                                {0.0f, 0.0f, 0.0f, 1.0f}, 1.0f / 60.0f) == 0,
+                 "MoveKinematicV2 deve recusar corpo dinâmico");
+
+  AetherBodyDesc platformDesc = BoxDesc({2.0f, 0.5f, 2.0f}, {0.0f, 0.0f, 0.0f},
+                                        AetherMotionType::Kinematic);
+  AetherBodyHandle platform = AetherPhysics_CreateBody(world, &platformDesc);
+  AE_EXPECT_TRUE(AetherPhysics_MoveKinematicV2(world, platform, {2.0f, 1.0f, 0.0f},
+                                                {0.0f, 0.0f, 0.0f, 1.0f}, 0.5f) == 1,
+                 "MoveKinematicV2 deve aceitar alvo de corpo cinemático");
+  for (int i = 0; i < 30; ++i) AetherPhysics_Step(world, 1.0f / 60.0f, 1);
+
+  AetherVec3 position{};
+  AetherPhysics_GetTransform(world, platform, &position, nullptr);
+  AE_EXPECT_TRUE(near(position.x, 2.0f, 0.02f) && near(position.y, 1.0f, 0.02f),
+                 "cinemático deve chegar ao alvo no deltaTime contratado");
+  AetherPhysics_DestroyWorld(world);
+}
+
+AE_TEST(plataforma_move_kinematic_transporta_corpo_dinamico_apoiado) {
+  AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0.0f, -9.81f, 0.0f}, 16);
+  AetherBodyDesc platformDesc = BoxDesc({3.0f, 0.5f, 3.0f}, {0.0f, 0.0f, 0.0f},
+                                        AetherMotionType::Kinematic);
+  platformDesc.friction = 1.0f;
+  AetherBodyHandle platform = AetherPhysics_CreateBody(world, &platformDesc);
+  AetherBodyDesc boxDesc = BoxDesc({0.5f, 0.5f, 0.5f}, {0.0f, 1.1f, 0.0f},
+                                   AetherMotionType::Dynamic);
+  boxDesc.friction = 1.0f;
+  AetherBodyHandle box = AetherPhysics_CreateBody(world, &boxDesc);
+  const float dt = 1.0f / 60.0f;
+  for (int i = 0; i < 90; ++i) AetherPhysics_Step(world, dt, 1);
+
+  for (int i = 1; i <= 90; ++i) {
+    const float progress = static_cast<float>(i) / 90.0f;
+    const AetherQuat rotation{0.0f, std::sin(progress * 0.15f), 0.0f,
+                              std::cos(progress * 0.15f)};
+    AE_EXPECT_TRUE(AetherPhysics_MoveKinematicV2(world, platform, {progress * 1.5f, 0.0f, 0.0f},
+                                                  rotation, dt) == 1,
+                   "alvo transladado/rotacionado deveria ser aceito");
+    AetherPhysics_Step(world, dt, 1);
+  }
+
+  AetherVec3 boxPosition{};
+  AetherPhysics_GetTransform(world, box, &boxPosition, nullptr);
+  AE_EXPECT_TRUE(boxPosition.x > 0.4f,
+                 "corpo apoiado deve ser transportado pela velocidade física do cinemático");
+  AetherPhysics_DestroyWorld(world);
+}
+
 AE_TEST(handle_invalido_e_mundo_nulo_sao_tratados_sem_crash) {
   AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0.0f, -9.81f, 0.0f}, 16);
 

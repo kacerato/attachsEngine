@@ -28,6 +28,7 @@ enum class SwapchainStatus : u32 {
   SuboptimalNeedsRecreate = 1, // ainda utilizável neste frame, mas recriar em seguida
   OutOfDateMustRecreate = 2,   // resize/rotação/perda de surface: recriar antes de usar
   SurfaceLost = 3,             // superfície perdida (ex.: app foi para background); recriar surface inteira
+  FatalError = 4,              // device/queue/comando falhou; não tentar reutilizar o frame atual
 };
 
 // Interface mínima de device — implementada por VulkanDevice (real) e, no
@@ -70,6 +71,70 @@ public:
 
   virtual u32 width() const = 0;
   virtual u32 height() const = 0;
+};
+
+// Implementação real de ISwapchain. Item 5.2 do plano de lacunas ("shell
+// gráfico mínimo"): a primeira peça do RHI que efetivamente desenha algo na
+// tela, não só cria handles. Como IDevice/ISwapchain acima, não é exercitada
+// por teste nesta máquina de build (sem GPU/loader) — validada em execução
+// real no shell Android (ver docs/ESTADO.md, seção "Shell Android").
+class VulkanSwapchain final : public ISwapchain {
+public:
+  VulkanSwapchain() = default;
+  ~VulkanSwapchain() override;
+
+  VulkanSwapchain(const VulkanSwapchain &) = delete;
+  VulkanSwapchain &operator=(const VulkanSwapchain &) = delete;
+
+  // `device`/`physicalDevice`/`surface`/`graphicsQueueFamily` sobrevivem ao
+  // VulkanSwapchain (posse é de VulkanDevice/AndroidVulkanSurface) — este
+  // tipo só guarda os handles que ele mesmo cria (swapchain, image views,
+  // sync objects), nunca os que recebeu de fora.
+  bool initialize(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                  u32 graphicsQueueFamily, u32 width, u32 height);
+  void shutdown();
+
+  bool recreate(u32 newWidth, u32 newHeight) override;
+  SwapchainStatus acquireNextImage(u32 *outImageIndex) override;
+  SwapchainStatus present(u32 imageIndex) override;
+
+  u32 width() const override { return extent_.width; }
+  u32 height() const override { return extent_.height; }
+
+  // Acesso para quem grava comandos de desenho (fora desta interface mínima
+  // porque ISwapchain não deveria expor detalhe de formato/view a quem só
+  // quer orquestrar frames — RenderGraph e afins consomem só a interface).
+  VkImageView imageView(u32 index) const { return imageViews_[index]; }
+  VkFormat imageFormat() const { return format_; }
+  u32 imageCount() const { return imageCount_; }
+  bool isReady() const { return swapchain_ != VK_NULL_HANDLE && imageCount_ > 0; }
+  VkSemaphore imageAvailableSemaphore() const { return imageAvailableSemaphore_; }
+  VkSemaphore renderFinishedSemaphore() const { return renderFinishedSemaphore_; }
+  VkFence inFlightFence() const { return inFlightFence_; }
+
+private:
+  void destroySwapchainObjects();
+
+  VkDevice device_ = VK_NULL_HANDLE;
+  VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
+  VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+  u32 graphicsQueueFamily_ = 0;
+  VkQueue graphicsQueue_ = VK_NULL_HANDLE;
+
+  VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
+  VkFormat format_ = VK_FORMAT_UNDEFINED;
+  VkExtent2D extent_{0, 0};
+  static constexpr u32 kMaxSwapchainImages = 8;
+  VkImage images_[kMaxSwapchainImages]{};
+  VkImageView imageViews_[kMaxSwapchainImages]{};
+  u32 imageCount_ = 0;
+
+  // Sincronização de um frame em voo só (suficiente para o item 5.2 — provar
+  // que o pipeline completo funciona; múltiplos frames em voo é otimização
+  // do RHI completo, Onda 3).
+  VkSemaphore imageAvailableSemaphore_ = VK_NULL_HANDLE;
+  VkSemaphore renderFinishedSemaphore_ = VK_NULL_HANDLE;
+  VkFence inFlightFence_ = VK_NULL_HANDLE;
 };
 
 // Implementação real sobre a API Vulkan. Não instanciada em nenhum teste

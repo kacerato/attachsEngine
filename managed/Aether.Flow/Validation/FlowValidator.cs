@@ -17,6 +17,7 @@ public static class FlowValidator
         CheckTiposDasConexoes(graph, diagnostics);
         CheckCicloDeDados(graph, diagnostics);
         CheckCicloDeExecucaoIlegitimo(graph, diagnostics);
+        CheckEscopoDoControle(graph, diagnostics);
         CheckVariaveisReferenciadas(graph, diagnostics);
         CheckEventosDuplicados(graph, diagnostics);
         CheckNosOrfaos(graph, diagnostics);
@@ -123,6 +124,57 @@ public static class FlowValidator
     }
 
     private static bool NodeLibrary_IsLoop(FlowNode? n) => n is not null && NodeTypes.LoopNodeTypes.Contains(n.NodeType);
+
+    private static void CheckEscopoDoControle(FlowGraph graph, List<FlowDiagnostic> diagnostics)
+    {
+        var loopBodyNodes = new HashSet<string>();
+        foreach (var loop in graph.Nodes.Where(NodeLibrary_IsLoop))
+        {
+            var pending = new Stack<string>(graph.OutgoingFrom(loop.Id, "corpo").Select(c => c.To.NodeId));
+            var visited = new HashSet<string>();
+            while (pending.Count > 0)
+            {
+                string id = pending.Pop();
+                // Uma aresta explícita de volta ao próprio laço fecha a região;
+                // não seguimos seus pinos "corpo"/"fim", que pertencem a
+                // regiões diferentes.
+                if (id == loop.Id || !visited.Add(id)) continue;
+                loopBodyNodes.Add(id);
+                var node = graph.FindNode(id);
+                if (node is null) continue;
+                foreach (var pin in node.Outputs.Where(p => p.IsExec))
+                    foreach (var connection in graph.OutgoingFrom(id, pin.Name))
+                        pending.Push(connection.To.NodeId);
+            }
+        }
+
+        foreach (var node in graph.Nodes)
+        {
+            bool isTerminal = node.NodeType is NodeTypes.FlowReturn or NodeTypes.FlowBreak or NodeTypes.FlowContinue;
+            if (!isTerminal) continue;
+
+            if (node.Outputs.Any(p => p.IsExec))
+            {
+                diagnostics.Add(new FlowDiagnostic(Severity.Erro,
+                    $"O bloco {FriendlyName(node)} encerra o caminho atual e não pode ter uma saída de execução.",
+                    node.Id));
+            }
+
+            if (node.Inputs.Any(p => !p.IsExec))
+            {
+                diagnostics.Add(new FlowDiagnostic(Severity.Erro,
+                    $"O bloco {FriendlyName(node)} não aceita valor. Os eventos atuais não possuem retorno com resultado.",
+                    node.Id));
+            }
+
+            if (node.NodeType is NodeTypes.FlowBreak or NodeTypes.FlowContinue && !loopBodyNodes.Contains(node.Id))
+            {
+                diagnostics.Add(new FlowDiagnostic(Severity.Erro,
+                    $"O bloco {FriendlyName(node)} só pode ser usado dentro do corpo de um bloco Enquanto.",
+                    node.Id));
+            }
+        }
+    }
 
     private static void CheckVariaveisReferenciadas(FlowGraph graph, List<FlowDiagnostic> diagnostics)
     {
@@ -287,6 +339,9 @@ public static class FlowValidator
         NodeTypes.EventCollision => "Quando colidir",
         NodeTypes.FlowIf => "Se",
         NodeTypes.FlowWhile => "Enquanto",
+        NodeTypes.FlowReturn => "Retornar",
+        NodeTypes.FlowBreak => "Parar laço",
+        NodeTypes.FlowContinue => "Continuar laço",
         NodeTypes.SetVariable => $"Definir {node.Properties.GetValueOrDefault("VariableName", "?")}",
         NodeTypes.GetVariable => node.Properties.GetValueOrDefault("VariableName", "?"),
         NodeTypes.MathAdd => "Somar",

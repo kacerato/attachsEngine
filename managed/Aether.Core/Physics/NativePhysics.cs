@@ -160,6 +160,49 @@ public struct NativeCharacterDesc
     public float MaxStrength;
 }
 
+internal enum NativePhysicsOverflowPolicy : uint
+{
+    BuildDefault = 0,
+    Warning = 1,
+    FailFast = 2,
+}
+
+[Flags]
+internal enum NativePhysicsUpdateError : uint
+{
+    None = 0,
+    ManifoldCacheFull = 1u << 0,
+    BodyPairCacheFull = 1u << 1,
+    ContactConstraintsFull = 1u << 2,
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativePhysicsWorldDescV2
+{
+    public uint StructSize;
+    public uint ApiVersion;
+    public float3 Gravity;
+    public uint MaxBodies;
+    public uint MaxBodyPairs;
+    public uint MaxContactConstraints;
+    public uint MaxBroadPhasePairs;
+    public NativePhysicsOverflowPolicy OverflowPolicy;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct NativePhysicsStepStatsV2
+{
+    public uint StructSize;
+    public uint ApiVersion;
+    public ulong TotalSteps;
+    public ulong OverflowSteps;
+    public ulong ManifoldCacheFullCount;
+    public ulong BodyPairCacheFullCount;
+    public ulong ContactConstraintsFullCount;
+    public NativePhysicsUpdateError LastErrorFlags;
+    public uint Reserved;
+}
+
 /// <summary>
 /// Bindings P/Invoke cruas sobre <c>native/physics/jolt_bridge.h</c> (itens 4.1.1 e 4.1.3, juntas
 /// e motores). Espelha a
@@ -190,6 +233,9 @@ internal static partial class NativePhysics
     internal static partial nint AetherPhysics_CreateWorld(float3 gravity, uint maxBodies);
 
     [LibraryImport(LibraryName)]
+    internal static partial nint AetherPhysics_CreateWorldV2(in NativePhysicsWorldDescV2 desc);
+
+    [LibraryImport(LibraryName)]
     internal static partial void AetherPhysics_DestroyWorld(nint world);
 
     [LibraryImport(LibraryName)]
@@ -202,6 +248,12 @@ internal static partial class NativePhysics
     internal static partial void AetherPhysics_Step(nint world, float deltaTime, int collisionSteps);
 
     [LibraryImport(LibraryName)]
+    internal static partial NativePhysicsUpdateError AetherPhysics_StepV2(nint world, float deltaTime, int collisionSteps);
+
+    [LibraryImport(LibraryName)]
+    internal static partial int AetherPhysics_GetStepStatsV2(nint world, ref NativePhysicsStepStatsV2 outStats);
+
+    [LibraryImport(LibraryName)]
     internal static unsafe partial void AetherPhysics_GetTransform(nint world, uint handle, float3* outPosition, quaternion* outRotation);
 
     [LibraryImport(LibraryName)]
@@ -209,6 +261,10 @@ internal static partial class NativePhysics
 
     [LibraryImport(LibraryName)]
     internal static partial float3 AetherPhysics_GetLinearVelocity(nint world, uint handle);
+
+    [LibraryImport(LibraryName)]
+    internal static partial int AetherPhysics_MoveKinematicV2(nint world, uint handle,
+        float3 targetPosition, quaternion targetRotation, float deltaTime);
 
     [LibraryImport(LibraryName)]
     [return: MarshalAs(UnmanagedType.I4)]

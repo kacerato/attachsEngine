@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Aether.Flow.Ast;
 using Aether.Flow.CodeGen;
 using Aether.Flow.Interpreter;
@@ -333,6 +334,310 @@ public static class FlowTests
         Assert.Equal(1L, interp.Variables["a"].IntValue, "ramo 'então' do 'se' interno deveria ter rodado");
         Assert.Equal(1L, interp.Variables["b"].IntValue, "instrução depois do 'se' interno deveria ter rodado");
         Assert.Equal(1L, interp.Variables["c"].IntValue, "instrução depois do 'se' externo deveria ter rodado");
+    }
+
+    [Test] public static void Interpretador_ReturnDentroDeIfImpedeAContinuacaoDoEvento()
+    {
+        const string code =
+            "public class RetornoAntecipado\n" +
+            "{\n" +
+            "    public bool sair = true;\n" +
+            "    public int marcador = 0;\n" +
+            "\n" +
+            "    public void Start()\n" +
+            "    {\n" +
+            "        if (sair)\n" +
+            "        {\n" +
+            "            return;\n" +
+            "        }\n" +
+            "        marcador = 9;\n" +
+            "    }\n" +
+            "}\n";
+
+        var graphTrue = CSharpToFlow.Parse(code);
+        Assert.True(graphTrue.Nodes.Any(n => n.NodeType == NodeTypes.FlowReturn),
+            "return precisa virar nó explícito, nunca code.raw");
+        Assert.False(graphTrue.Nodes.Any(n => n.NodeType == NodeTypes.CodeRaw),
+            "todo o exemplo pertence ao subconjunto suportado");
+        var interpTrue = new FlowInterpreter(graphTrue);
+        interpTrue.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(0L, interpTrue.Variables["marcador"].IntValue,
+            "return no ramo verdadeiro precisa impedir a instrução depois do if");
+
+        var graphFalse = CSharpToFlow.Parse(code);
+        DefinirValorInicial(graphFalse, "sair", FlowValue.OfBool(false));
+        var interpFalse = new FlowInterpreter(graphFalse);
+        interpFalse.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(9L, interpFalse.Variables["marcador"].IntValue,
+            "quando o ramo com return não é tomado, a continuação deve executar");
+
+        string regenerated = FlowToCSharp.Generate(graphTrue);
+        Assert.Equal(NormalizarFimDeLinha(code), NormalizarFimDeLinha(regenerated),
+            "parse/generate de return antecipado deve preservar a forma canônica");
+        var roundTripped = CSharpToFlow.Parse(regenerated);
+        var roundTripInterpreter = new FlowInterpreter(roundTripped);
+        roundTripInterpreter.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(0L, roundTripInterpreter.Variables["marcador"].IntValue,
+            "o segundo parse precisa preservar a semântica do retorno");
+    }
+
+    [Test] public static void Interpretador_BreakDentroDeIfEncerraSomenteOLaco()
+    {
+        const string code =
+            "public class PararLaco\n" +
+            "{\n" +
+            "    public int contador = 0;\n" +
+            "    public int soma = 0;\n" +
+            "    public int marcador = 0;\n" +
+            "\n" +
+            "    public void Start()\n" +
+            "    {\n" +
+            "        while (contador < 10)\n" +
+            "        {\n" +
+            "            contador = contador + 1;\n" +
+            "            if (contador == 3)\n" +
+            "            {\n" +
+            "                break;\n" +
+            "            }\n" +
+            "            soma = soma + 1;\n" +
+            "        }\n" +
+            "        marcador = 9;\n" +
+            "    }\n" +
+            "}\n";
+
+        var graph = CSharpToFlow.Parse(code);
+        var diagnostics = FlowValidator.Validate(graph);
+        Assert.False(diagnostics.Any(d => d.Severity == Severity.Erro),
+            "break dentro do corpo de while precisa ser válido");
+
+        var interpreter = new FlowInterpreter(graph);
+        interpreter.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(3L, interpreter.Variables["contador"].IntValue);
+        Assert.Equal(2L, interpreter.Variables["soma"].IntValue,
+            "a iteração que executa break não pode rodar o restante do corpo");
+        Assert.Equal(9L, interpreter.Variables["marcador"].IntValue,
+            "break encerra o laço, não o evento");
+
+        string regenerated = FlowToCSharp.Generate(graph);
+        Assert.Equal(NormalizarFimDeLinha(code), NormalizarFimDeLinha(regenerated));
+    }
+
+    [Test] public static void Interpretador_ContinueDentroDeIfPulaORestanteDaIteracao()
+    {
+        const string code =
+            "public class ContinuarLaco\n" +
+            "{\n" +
+            "    public int contador = 0;\n" +
+            "    public int soma = 0;\n" +
+            "\n" +
+            "    public void Start()\n" +
+            "    {\n" +
+            "        while (contador < 5)\n" +
+            "        {\n" +
+            "            contador = contador + 1;\n" +
+            "            if (contador == 3)\n" +
+            "            {\n" +
+            "                continue;\n" +
+            "            }\n" +
+            "            soma = soma + 1;\n" +
+            "        }\n" +
+            "    }\n" +
+            "}\n";
+
+        var graph = CSharpToFlow.Parse(code);
+        var interpreter = new FlowInterpreter(graph);
+        interpreter.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(5L, interpreter.Variables["contador"].IntValue);
+        Assert.Equal(4L, interpreter.Variables["soma"].IntValue,
+            "somente a iteração contador==3 deve pular a soma");
+
+        string regenerated = FlowToCSharp.Generate(graph);
+        var reconstructed = CSharpToFlow.Parse(regenerated);
+        var reconstructedInterpreter = new FlowInterpreter(reconstructed);
+        reconstructedInterpreter.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(4L, reconstructedInterpreter.Variables["soma"].IntValue,
+            "continue precisa sobreviver ao round-trip C#");
+    }
+
+    [Test] public static void Interpretador_BreakAninhadoEncerraApenasOLacoMaisInterno()
+    {
+        const string code =
+            "public class LacosAninhados\n" +
+            "{\n" +
+            "    public int externo = 0;\n" +
+            "    public int interno = 0;\n" +
+            "    public int total = 0;\n" +
+            "\n" +
+            "    public void Start()\n" +
+            "    {\n" +
+            "        while (externo < 2)\n" +
+            "        {\n" +
+            "            externo = externo + 1;\n" +
+            "            interno = 0;\n" +
+            "            while (interno < 5)\n" +
+            "            {\n" +
+            "                interno = interno + 1;\n" +
+            "                if (interno == 2)\n" +
+            "                {\n" +
+            "                    break;\n" +
+            "                }\n" +
+            "                total = total + 1;\n" +
+            "            }\n" +
+            "            total = total + 10;\n" +
+            "        }\n" +
+            "    }\n" +
+            "}\n";
+
+        var graph = CSharpToFlow.Parse(code);
+        var interpreter = new FlowInterpreter(graph);
+        interpreter.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(2L, interpreter.Variables["externo"].IntValue,
+            "break interno não pode encerrar o laço externo");
+        Assert.Equal(2L, interpreter.Variables["interno"].IntValue);
+        Assert.Equal(22L, interpreter.Variables["total"].IntValue);
+    }
+
+    [Test] public static void Validador_BreakEContinueForaDeLacoGeramErro()
+    {
+        var graph = new FlowGraph { Name = "ControleInvalido" };
+        var start = NodeLibrary.EventStart("evt");
+        var iff = NodeLibrary.FlowIf("if");
+        iff.Literals["condicao"] = FlowValue.OfBool(true);
+        var stop = NodeLibrary.FlowBreak("break");
+        var next = NodeLibrary.FlowContinue("continue");
+        graph.Nodes.AddRange(new[] { start, iff, stop, next });
+        graph.Connections.Add(new FlowConnection { From = new("evt", "corpo"), To = new("if", "entrada") });
+        graph.Connections.Add(new FlowConnection { From = new("if", "entao"), To = new("break", "entrada") });
+        graph.Connections.Add(new FlowConnection { From = new("if", "senao"), To = new("continue", "entrada") });
+
+        var diagnostics = FlowValidator.Validate(graph);
+        Assert.True(diagnostics.Any(d => d.Severity == Severity.Erro && d.NodeId == "break"));
+        Assert.True(diagnostics.Any(d => d.Severity == Severity.Erro && d.NodeId == "continue"));
+    }
+
+    [Test] public static void Validador_ReturnComValorManualGeraErro()
+    {
+        var graph = new FlowGraph { Name = "RetornoComValor" };
+        var start = NodeLibrary.EventStart("evt");
+        var terminal = NodeLibrary.FlowReturn("return");
+        terminal.Inputs.Add(new FlowPin { Name = "valor", Type = FlowType.Int, Direction = PinDirection.Input });
+        terminal.Literals["valor"] = FlowValue.OfInt(1);
+        graph.Nodes.AddRange(new[] { start, terminal });
+        graph.Connections.Add(new FlowConnection { From = new("evt", "corpo"), To = new("return", "entrada") });
+
+        var diagnostics = FlowValidator.Validate(graph);
+        Assert.True(diagnostics.Any(d => d.Severity == Severity.Erro && d.NodeId == "return" && d.Message.Contains("não aceita valor")),
+            "um .aflow editado manualmente não pode introduzir return com valor em evento void");
+    }
+
+    [Test] public static void Parser_RejeitaReturnComValorEInstrucaoInalcancavel()
+    {
+        const string withValue =
+            "public class Invalido { public void Start() { return 1; } }";
+        Assert.Throws<FormatException>(() => CSharpToFlow.Parse(withValue),
+            "eventos void não podem aceitar return com valor");
+
+        const string unreachable =
+            "public class Inalcancavel { public int x = 0; public void Start() { return; x = 1; } }";
+        Assert.Throws<FormatException>(() => CSharpToFlow.Parse(unreachable),
+            "o parser deve rejeitar código inalcançável em vez de reinterpretá-lo silenciosamente");
+    }
+
+    [Test] public static void RoundTrip_SerializacaoPreservaNosDeControleTerminal()
+    {
+        var graph = new FlowGraph { Name = "Terminais" };
+        graph.Nodes.Add(NodeLibrary.FlowReturn("return"));
+        graph.Nodes.Add(NodeLibrary.FlowBreak("break"));
+        graph.Nodes.Add(NodeLibrary.FlowContinue("continue"));
+
+        string text = FlowSerializer.Serialize(graph);
+        var reconstructed = FlowSerializer.Deserialize(text);
+        Assert.True(reconstructed.Nodes.Any(n => n.NodeType == NodeTypes.FlowReturn));
+        Assert.True(reconstructed.Nodes.Any(n => n.NodeType == NodeTypes.FlowBreak));
+        Assert.True(reconstructed.Nodes.Any(n => n.NodeType == NodeTypes.FlowContinue));
+        Assert.True(reconstructed.Nodes.All(n => n.Inputs.Count == 1 && n.Inputs[0].Name == "entrada"));
+        Assert.True(reconstructed.Nodes.All(n => n.Outputs.Count == 0),
+            "nós terminais não podem ganhar saída durante serialização");
+    }
+
+    [Test] public static void Diferencial_CSharpOriginalInterpretadorECSharpRegeneradoConcordam()
+    {
+        const string returnCode =
+            "public class RetornoReal\n" +
+            "{\n" +
+            "    public bool sair = true;\n" +
+            "    public int marcador = 0;\n" +
+            "\n" +
+            "    public void Start()\n" +
+            "    {\n" +
+            "        if (sair)\n" +
+            "        {\n" +
+            "            return;\n" +
+            "        }\n" +
+            "        marcador = 9;\n" +
+            "    }\n" +
+            "}\n";
+
+        const string loopCode =
+            "public class ControleReal\n" +
+            "{\n" +
+            "    public int contador = 0;\n" +
+            "    public int soma = 0;\n" +
+            "    public int marcador = 0;\n" +
+            "\n" +
+            "    public void Start()\n" +
+            "    {\n" +
+            "        while (contador < 5)\n" +
+            "        {\n" +
+            "            contador = contador + 1;\n" +
+            "            if (contador == 2)\n" +
+            "            {\n" +
+            "                continue;\n" +
+            "            }\n" +
+            "            if (contador == 4)\n" +
+            "            {\n" +
+            "                break;\n" +
+            "            }\n" +
+            "            soma = soma + 1;\n" +
+            "        }\n" +
+            "        marcador = 9;\n" +
+            "    }\n" +
+            "}\n";
+
+        var returnGraph = CSharpToFlow.Parse(returnCode);
+        var returnInterpreter = new FlowInterpreter(returnGraph);
+        returnInterpreter.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(0L, returnInterpreter.Variables["marcador"].IntValue);
+
+        var loopGraph = CSharpToFlow.Parse(loopCode);
+        var loopInterpreter = new FlowInterpreter(loopGraph);
+        loopInterpreter.RunEvent(NodeTypes.EventStart);
+        Assert.Equal(4L, loopInterpreter.Variables["contador"].IntValue);
+        Assert.Equal(2L, loopInterpreter.Variables["soma"].IntValue);
+        Assert.Equal(9L, loopInterpreter.Variables["marcador"].IntValue);
+
+        string source =
+            "namespace OriginalReturn\n{\n" + returnCode + "}\n" +
+            "namespace RegeneratedReturn\n{\n" + FlowToCSharp.Generate(returnGraph) + "}\n" +
+            "namespace OriginalLoop\n{\n" + loopCode + "}\n" +
+            "namespace RegeneratedLoop\n{\n" + FlowToCSharp.Generate(loopGraph) + "}\n" +
+            "public static class Program\n" +
+            "{\n" +
+            "    public static void Main()\n" +
+            "    {\n" +
+            "        var or = new OriginalReturn.RetornoReal(); or.Start();\n" +
+            "        var rr = new RegeneratedReturn.RetornoReal(); rr.Start();\n" +
+            "        var ol = new OriginalLoop.ControleReal(); ol.Start();\n" +
+            "        var rl = new RegeneratedLoop.ControleReal(); rl.Start();\n" +
+            "        Console.WriteLine($\"return:{or.marcador}:{rr.marcador}\");\n" +
+            "        Console.WriteLine($\"loop:{ol.contador},{ol.soma},{ol.marcador}:{rl.contador},{rl.soma},{rl.marcador}\");\n" +
+            "    }\n" +
+            "}\n";
+
+        string output = CompileAndRunCSharp(source);
+        string normalized = NormalizarFimDeLinha(output).Trim();
+        Assert.Equal("return:0:0\nloop:4,2,9:4,2,9", normalized,
+            "C# original, interpretador e C# regenerado precisam produzir o mesmo estado determinístico");
     }
 
     // ---------------- validador ----------------
@@ -753,4 +1058,58 @@ public static class FlowTests
 
     private static string NormalizarFimDeLinha(string s) =>
         string.Join('\n', s.Replace("\r\n", "\n").Split('\n').Select(l => l.TrimEnd()));
+
+    private static string CompileAndRunCSharp(string source)
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"aether-flow-differential-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            string projectPath = Path.Combine(directory, "Differential.csproj");
+            File.WriteAllText(projectPath,
+                "<Project Sdk=\"Microsoft.NET.Sdk\">" +
+                "<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>" +
+                "<ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>" +
+                "<RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(directory, "NuGet.config"),
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?><configuration><packageSources><clear /></packageSources></configuration>");
+            File.WriteAllText(Path.Combine(directory, "Program.cs"), source);
+
+            string dotnetHost = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = dotnetHost,
+                WorkingDirectory = directory,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+            startInfo.ArgumentList.Add("run");
+            startInfo.ArgumentList.Add("--project");
+            startInfo.ArgumentList.Add(projectPath);
+            startInfo.ArgumentList.Add("--configuration");
+            startInfo.ArgumentList.Add("Release");
+            startInfo.ArgumentList.Add("--nologo");
+            startInfo.ArgumentList.Add("--verbosity");
+            startInfo.ArgumentList.Add("quiet");
+
+            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("não foi possível iniciar o compilador C# do SDK.");
+            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
+            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(60_000))
+            {
+                process.Kill(entireProcessTree: true);
+                throw new TimeoutException("a compilação diferencial de C# excedeu 60 segundos.");
+            }
+            Task.WaitAll(stdoutTask, stderrTask);
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException($"C# diferencial não compilou/executou (código {process.ExitCode}):\n{stderrTask.Result}\n{stdoutTask.Result}");
+            return stdoutTask.Result;
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
 }

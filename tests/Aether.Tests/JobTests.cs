@@ -149,4 +149,94 @@ public static class JobTests
         Assert.True(lancou, "ciclo de dependência precisa lançar, não travar o runner");
         Assert.False(jobConcluiu, "a linha depois do auto-Complete nunca deveria rodar");
     }
+
+    [Test] public static void Complete_DeDependenteEnquantoPrerequisitoExecuta_DetectaCaminhoAntesDeEsperar()
+    {
+        using var js = UmWorker();
+        using var podeContinuar = new ManualResetEventSlim(false);
+        JobHandle dependente = default;
+
+        var prerequisito = js.Schedule(() =>
+        {
+            podeContinuar.Wait();
+            js.Complete(dependente);
+        });
+        dependente = js.Schedule(() => { }, prerequisito);
+        podeContinuar.Set();
+
+        Exception? falha = CaptureFailure(js, prerequisito);
+        Assert.True(ExceptionTreeContains(falha, "ciclo de dependência detectado antes da espera"),
+            "o grafo precisa recusar prerequisito -> dependente -> prerequisito sem esperar watchdog");
+        Assert.True(ExceptionTreeContains(falha, " -> "),
+            "o diagnóstico precisa incluir o caminho completo do ciclo");
+    }
+
+    [Test] public static void Complete_CicloEntreDoisJobsIndependentes_DetectaSemTimeout()
+    {
+        using var js = VariosWorkers();
+        using var partida = new ManualResetEventSlim(false);
+        JobHandle a = default;
+        JobHandle b = default;
+
+        a = js.Schedule(() => { partida.Wait(); js.Complete(b); });
+        b = js.Schedule(() => { partida.Wait(); js.Complete(a); });
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        partida.Set();
+
+        Exception? falhaA = CaptureFailure(js, a);
+        Exception? falhaB = CaptureFailure(js, b);
+        sw.Stop();
+
+        Assert.True(ExceptionTreeContains(falhaA, "ciclo de dependência detectado antes da espera") ||
+                    ExceptionTreeContains(falhaB, "ciclo de dependência detectado antes da espera"),
+            "uma das duas arestas concorrentes precisa detectar o ciclo atomicamente");
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(2),
+            "a detecção por grafo deve ocorrer antes do watchdog de 3 segundos");
+    }
+
+    [Test] public static void Complete_CicloDeTresJobs_DiagnosticaTodosOsNos()
+    {
+        using var js = VariosWorkers();
+        using var partida = new ManualResetEventSlim(false);
+        JobHandle a = default;
+        JobHandle b = default;
+        JobHandle c = default;
+
+        a = js.Schedule(() => { partida.Wait(); js.Complete(b); });
+        b = js.Schedule(() => { partida.Wait(); js.Complete(c); });
+        c = js.Schedule(() => { partida.Wait(); js.Complete(a); });
+        partida.Set();
+
+        Exception?[] falhas =
+        {
+            CaptureFailure(js, a),
+            CaptureFailure(js, b),
+            CaptureFailure(js, c),
+        };
+        string? diagnostico = falhas.Select(FindCycleMessage).FirstOrDefault(m => m is not null);
+        Assert.True(diagnostico is not null, "o ciclo A -> B -> C -> A precisa ser detectado");
+        Assert.True(diagnostico!.Split(" -> ").Length >= 4,
+            "o caminho precisa listar os três jobs e repetir o inicial no fechamento");
+    }
+
+    private static Exception? CaptureFailure(JobSystem jobs, JobHandle handle)
+    {
+        try { jobs.Complete(handle); return null; }
+        catch (Exception ex) { return ex; }
+    }
+
+    private static bool ExceptionTreeContains(Exception? error, string text)
+    {
+        for (Exception? current = error; current is not null; current = current.InnerException)
+            if (current.Message.Contains(text, StringComparison.Ordinal)) return true;
+        return false;
+    }
+
+    private static string? FindCycleMessage(Exception? error)
+    {
+        for (Exception? current = error; current is not null; current = current.InnerException)
+            if (current.Message.Contains("ciclo de dependência detectado antes da espera", StringComparison.Ordinal))
+                return current.Message;
+        return null;
+    }
 }

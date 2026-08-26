@@ -216,6 +216,91 @@ public enum AllowedDOFs : uint
     Plane2D = NativeAllowedDOFs.Plane2D,
 }
 
+/// <summary>Comportamento ao esgotar uma capacidade da simulação. O padrão interrompe
+/// imediatamente builds Debug/teste e registra warnings limitados por frequência em Release.</summary>
+public enum PhysicsOverflowPolicy : uint
+{
+    BuildDefault = 0,
+    /// <summary>Em Release, registra warning e contador. Em Debug, o assert interno do próprio
+    /// Jolt continua fail-fast antes que o retorno possa ser consumido.</summary>
+    Warning = 1,
+    FailFast = 2,
+}
+
+/// <summary>Flags devolvidas pelo passo do Jolt. Qualquer valor diferente de
+/// <see cref="None"/> significa que contatos foram descartados e a simulação daquele frame
+/// não é integral.</summary>
+[Flags]
+public enum PhysicsUpdateError : uint
+{
+    None = 0,
+    ManifoldCacheFull = 1u << 0,
+    BodyPairCacheFull = 1u << 1,
+    ContactConstraintsFull = 1u << 2,
+}
+
+/// <summary>Capacidades independentes do mundo de física. <see cref="MaxBroadPhasePairs"/>
+/// controla o buffer de pares em voo produzido pela broad phase; não é sinônimo de
+/// <see cref="MaxBodyPairs"/>, que limita o cache persistente de pares de corpos.</summary>
+public readonly struct PhysicsWorldConfiguration
+{
+    public float3 Gravity { get; }
+    public uint MaxBodies { get; }
+    public uint MaxBodyPairs { get; }
+    public uint MaxContactConstraints { get; }
+    public uint MaxBroadPhasePairs { get; }
+    public PhysicsOverflowPolicy OverflowPolicy { get; }
+
+    public PhysicsWorldConfiguration(float3 gravity, uint maxBodies, uint maxBodyPairs,
+        uint maxContactConstraints, uint maxBroadPhasePairs,
+        PhysicsOverflowPolicy overflowPolicy = PhysicsOverflowPolicy.BuildDefault)
+    {
+        if (maxBodies == 0) throw new ArgumentOutOfRangeException(nameof(maxBodies));
+        if (maxBodyPairs < 4) throw new ArgumentOutOfRangeException(nameof(maxBodyPairs), "Jolt requer ao menos quatro slots de pares.");
+        if (maxContactConstraints == 0) throw new ArgumentOutOfRangeException(nameof(maxContactConstraints));
+        if (maxBroadPhasePairs < 1024 || maxBroadPhasePairs > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(maxBroadPhasePairs), "O buffer da broad phase deve estar entre 1.024 e Int32.MaxValue.");
+        if (overflowPolicy is < PhysicsOverflowPolicy.BuildDefault or > PhysicsOverflowPolicy.FailFast)
+            throw new ArgumentOutOfRangeException(nameof(overflowPolicy));
+
+        Gravity = gravity;
+        MaxBodies = maxBodies;
+        MaxBodyPairs = maxBodyPairs;
+        MaxContactConstraints = maxContactConstraints;
+        MaxBroadPhasePairs = maxBroadPhasePairs;
+        OverflowPolicy = overflowPolicy;
+    }
+
+    /// <summary>Defaults conservadores usados também pelo símbolo nativo V1. Eles preservam
+    /// compatibilidade sem confundir a capacidade de corpos com a de pares/contatos.</summary>
+    public static PhysicsWorldConfiguration ForBodyCapacity(float3 gravity, uint maxBodies,
+        PhysicsOverflowPolicy overflowPolicy = PhysicsOverflowPolicy.BuildDefault)
+    {
+        if (maxBodies == 0) throw new ArgumentOutOfRangeException(nameof(maxBodies));
+        uint bodyPairs = Math.Max(1024u, SaturatingMultiply(maxBodies, 4));
+        uint contacts = Math.Max(1024u, SaturatingMultiply(maxBodies, 2));
+        uint broadPhasePairs = Math.Max(16384u, bodyPairs);
+        if (broadPhasePairs > int.MaxValue) broadPhasePairs = int.MaxValue;
+        return new PhysicsWorldConfiguration(gravity, maxBodies, bodyPairs, contacts,
+            broadPhasePairs, overflowPolicy);
+    }
+
+    private static uint SaturatingMultiply(uint value, uint multiplier)
+    {
+        ulong result = (ulong)value * multiplier;
+        return result > uint.MaxValue ? uint.MaxValue : (uint)result;
+    }
+}
+
+/// <summary>Diagnóstico cumulativo de capacidade de um mundo.</summary>
+public readonly record struct PhysicsStepStatistics(
+    ulong TotalSteps,
+    ulong OverflowSteps,
+    ulong ManifoldCacheFullCount,
+    ulong BodyPairCacheFullCount,
+    ulong ContactConstraintsFullCount,
+    PhysicsUpdateError LastErrorFlags);
+
 /// <summary>
 /// Wrapper gerenciado de um <c>AetherPhysicsWorld*</c> nativo. Dono do ponteiro nativo — chamar
 /// <see cref="Dispose"/> (ou deixar o finalizador rodar, como rede de segurança) libera o mundo e
@@ -230,14 +315,42 @@ public enum AllowedDOFs : uint
 /// </summary>
 public sealed class PhysicsWorld : IDisposable
 {
+    private struct KinematicSyncState
+    {
+        public float3 TargetPosition;
+        public quaternion TargetRotation;
+        public bool NeedsStopCommand;
+    }
+
     private nint _handle;
     private bool _disposed;
+    private readonly Dictionary<uint, KinematicSyncState> _kinematicSync = new();
+
+    /// <summary>Quantidade de crossings nativos realmente emitidos por
+    /// <see cref="MoveKinematic"/>. Útil para profiling e regressões de dirty sync.</summary>
+    public ulong KinematicMoveCallCount { get; private set; }
 
     public PhysicsWorld(float3 gravity, uint maxBodies = 1024)
+        : this(PhysicsWorldConfiguration.ForBodyCapacity(gravity, maxBodies))
     {
-        _handle = NativePhysics.AetherPhysics_CreateWorld(gravity, maxBodies);
+    }
+
+    public PhysicsWorld(in PhysicsWorldConfiguration configuration)
+    {
+        var desc = new NativePhysicsWorldDescV2
+        {
+            StructSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativePhysicsWorldDescV2>(),
+            ApiVersion = 2,
+            Gravity = configuration.Gravity,
+            MaxBodies = configuration.MaxBodies,
+            MaxBodyPairs = configuration.MaxBodyPairs,
+            MaxContactConstraints = configuration.MaxContactConstraints,
+            MaxBroadPhasePairs = configuration.MaxBroadPhasePairs,
+            OverflowPolicy = (NativePhysicsOverflowPolicy)configuration.OverflowPolicy,
+        };
+        _handle = NativePhysics.AetherPhysics_CreateWorldV2(in desc);
         if (_handle == nint.Zero)
-            throw new InvalidOperationException("Falha ao criar o mundo de física nativo (Jolt) — ver stderr para detalhes do Jolt.");
+            throw new InvalidOperationException("Falha ao criar o mundo de física nativo V2 (Jolt) — ver stderr [Physics] para o limite ou versão recusada.");
     }
 
     internal nint Handle => _disposed ? throw new ObjectDisposedException(nameof(PhysicsWorld)) : _handle;
@@ -262,6 +375,14 @@ public sealed class PhysicsWorld : IDisposable
             AllowedDOFs = (NativeAllowedDOFs)allowedDOFs,
         };
         uint raw = NativePhysics.AetherPhysics_CreateBody(Handle, in desc);
+        if (raw != PhysicsBodyHandle.Invalid.Value && motionType == NativeMotionType.Kinematic)
+        {
+            _kinematicSync[raw] = new KinematicSyncState
+            {
+                TargetPosition = position,
+                TargetRotation = rotation,
+            };
+        }
         return new PhysicsBodyHandle(raw);
     }
 
@@ -269,10 +390,26 @@ public sealed class PhysicsWorld : IDisposable
     {
         if (!handle.IsValid) return;
         NativePhysics.AetherPhysics_DestroyBody(Handle, handle.Value);
+        _kinematicSync.Remove(handle.Value);
     }
 
-    public void Step(float deltaTime, int collisionSteps = 1) =>
-        NativePhysics.AetherPhysics_Step(Handle, deltaTime, collisionSteps);
+    public PhysicsUpdateError Step(float deltaTime, int collisionSteps = 1) =>
+        (PhysicsUpdateError)NativePhysics.AetherPhysics_StepV2(Handle, deltaTime, collisionSteps);
+
+    public PhysicsStepStatistics GetStepStatistics()
+    {
+        var stats = new NativePhysicsStepStatsV2
+        {
+            StructSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativePhysicsStepStatsV2>(),
+            ApiVersion = 2,
+        };
+        if (NativePhysics.AetherPhysics_GetStepStatsV2(Handle, ref stats) == 0)
+            throw new InvalidOperationException("A biblioteca nativa recusou o descritor de estatísticas V2.");
+
+        return new PhysicsStepStatistics(stats.TotalSteps, stats.OverflowSteps,
+            stats.ManifoldCacheFullCount, stats.BodyPairCacheFullCount,
+            stats.ContactConstraintsFullCount, (PhysicsUpdateError)stats.LastErrorFlags);
+    }
 
     public unsafe void GetTransform(PhysicsBodyHandle handle, out float3 position, out quaternion rotation)
     {
@@ -294,6 +431,32 @@ public sealed class PhysicsWorld : IDisposable
 
     public float3 GetLinearVelocity(PhysicsBodyHandle handle) =>
         handle.IsValid ? NativePhysics.AetherPhysics_GetLinearVelocity(Handle, handle.Value) : float3.Zero;
+
+    /// <summary>Agenda um alvo cinemático para o próximo Step. Alvos idênticos não atravessam
+    /// a ABI a cada frame. Depois de um movimento, um único comando idêntico adicional zera a
+    /// velocidade calculada pelo Jolt; os frames estáveis seguintes não fazem crossing.</summary>
+    public bool MoveKinematic(PhysicsBodyHandle handle, float3 targetPosition,
+        quaternion targetRotation, float deltaTime)
+    {
+        if (!handle.IsValid) return false;
+        if (deltaTime <= 0f) throw new ArgumentOutOfRangeException(nameof(deltaTime));
+        if (!_kinematicSync.TryGetValue(handle.Value, out var state)) return false;
+
+        bool targetChanged = !state.TargetPosition.Equals(targetPosition) ||
+                             !state.TargetRotation.Equals(targetRotation);
+        if (!targetChanged && !state.NeedsStopCommand) return false;
+
+        if (NativePhysics.AetherPhysics_MoveKinematicV2(Handle, handle.Value, targetPosition,
+                targetRotation, deltaTime) == 0)
+            return false;
+
+        state.TargetPosition = targetPosition;
+        state.TargetRotation = targetRotation;
+        state.NeedsStopCommand = targetChanged;
+        _kinematicSync[handle.Value] = state;
+        KinematicMoveCallCount++;
+        return true;
+    }
 
     public bool IsActive(PhysicsBodyHandle handle) =>
         handle.IsValid && NativePhysics.AetherPhysics_IsActive(Handle, handle.Value) != 0;
@@ -421,6 +584,7 @@ public sealed class PhysicsWorld : IDisposable
     {
         if (_disposed) return;
         NativePhysics.AetherPhysics_DestroyWorld(_handle);
+        _kinematicSync.Clear();
         _handle = nint.Zero;
         _disposed = true;
         GC.SuppressFinalize(this);

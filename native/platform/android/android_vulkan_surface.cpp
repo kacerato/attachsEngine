@@ -58,12 +58,30 @@ bool AndroidVulkanSurface::initialize(ANativeWindow *window) {
                       ANativeWindow_getWidth(window), ANativeWindow_getHeight(window),
                       capabilities.minImageCount, capabilities.maxImageCount,
                       device_.graphicsQueueFamily());
+
+  if (!swapchain_.initialize(device_.handle(), device_.physicalDevice(), surface_,
+                             device_.graphicsQueueFamily(),
+                             static_cast<ae::u32>(ANativeWindow_getWidth(window)),
+                             static_cast<ae::u32>(ANativeWindow_getHeight(window)))) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar a swapchain de apresentação.");
+    shutdown();
+    return false;
+  }
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "Swapchain pronta: %ux%u, %u imagens.",
+                      swapchain_.width(), swapchain_.height(), swapchain_.imageCount());
   return true;
 }
 
+bool AndroidVulkanSurface::recreateSwapchain(ANativeWindow *window) {
+  if (window == nullptr || !isReady()) return false;
+  return swapchain_.recreate(static_cast<ae::u32>(ANativeWindow_getWidth(window)),
+                             static_cast<ae::u32>(ANativeWindow_getHeight(window)));
+}
+
 void AndroidVulkanSurface::shutdown() {
+  if (device_.handle() != VK_NULL_HANDLE) vkDeviceWaitIdle(device_.handle());
+  swapchain_.shutdown();
   if (surface_ != VK_NULL_HANDLE) {
-    if (device_.handle() != VK_NULL_HANDLE) vkDeviceWaitIdle(device_.handle());
     vkDestroySurfaceKHR(device_.instance(), surface_, nullptr);
     surface_ = VK_NULL_HANDLE;
   }

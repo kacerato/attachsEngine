@@ -10,20 +10,37 @@
 
 #include <cstdlib>
 #include <new>
+#if defined(_WIN32)
+#include <malloc.h>
+#endif
 
 namespace ae {
 
 // Aloca `size` bytes alinhados a `alignment` (potência de 2). Wrapper fino
 // sobre aligned_alloc/free para isolar o único ponto de alocação do sistema.
 inline void *alignedAlloc(usize size, usize alignment) {
-  AE_CHECK((alignment & (alignment - 1)) == 0, "alinhamento precisa ser potência de 2");
+  AE_CHECK(alignment != 0 && (alignment & (alignment - 1)) == 0,
+           "alinhamento precisa ser potência de 2");
+#if defined(_WIN32)
+  // A CRT do Windows/LLVM-MinGW não oferece aligned_alloc de forma
+  // portátil. _aligned_malloc/_aligned_free são o par obrigatório nessa
+  // plataforma; isolar a diferença aqui preserva o contrato do allocator.
+  return _aligned_malloc(size == 0 ? alignment : size, alignment);
+#else
   // aligned_alloc exige que size seja múltiplo de alignment.
   usize rounded = (size + alignment - 1) & ~(alignment - 1);
   if (rounded == 0) rounded = alignment;
   return std::aligned_alloc(alignment, rounded);
+#endif
 }
 
-inline void alignedFree(void *ptr) { std::free(ptr); }
+inline void alignedFree(void *ptr) {
+#if defined(_WIN32)
+  _aligned_free(ptr);
+#else
+  std::free(ptr);
+#endif
+}
 
 // LinearAllocator: arena que só cresce (bump pointer) até ser resetada.
 // Ideal para dados de um único frame — reset é O(1) e não libera memória

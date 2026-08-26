@@ -1,5 +1,11 @@
 # Plano de fechamento de lacunas e convergência dos marcos
 
+> **Estado vivo em 26/08/2026:** 5 das 18 lacunas registradas estão integralmente
+> fechadas (`GAP-FLOW-01`, `GAP-PHY-01`, `GAP-PHY-02`, `GAP-JOB-01` e
+> `GAP-ECS-01`). Os gates M0–M9 permanecem 0/10;
+> avanços parciais de hardware/shell não encerram M0. Evidências e contagens
+> detalhadas ficam em `ESTADO.md`.
+
 ## 1. Propósito e autoridade
 
 Este documento é o plano de execução para transformar o estado atual da Aether nos marcos demonstráveis definidos em `PLANO-ENGINE-MOBILE.md`. Ele não substitui o plano principal. O plano principal continua sendo a fonte de verdade para produto, arquitetura e critérios M0–M9; este documento define ordem, dependências, correções, testes e regras de aceite para fechar o que está parcial ou ausente em `ESTADO.md`.
@@ -122,13 +128,31 @@ Arquivos persistentes usam `formatVersion`, IDs estáveis de tipo/campo e migrad
 
 ### 4.2 CI confiável
 
-1. Separar suites `unit`, `native`, `interop`, `android-host`, `android-device`, `benchmark` e `soak`.
-2. Teste que depende de `aether_physics` deve falhar no job de integração se a biblioteca não estiver presente. Skip é permitido somente no job unitário explicitamente sem nativo.
-3. Publicar APK, logs, resultados, perfis e versão do NDK/JDK como artefatos.
-4. Adicionar clean build periódico para detectar dependência acidental de cache.
-5. Registrar orçamento de chamadas P/Invoke, alocações/frame, CPU, GPU, memória e energia como métricas versionadas.
+**Estado: implementação concluída.** A execução hospedada aguarda a publicação do
+repositório; `android-device` e `soak` também aguardam um runner físico rotulado
+`android-device-lab`. Essas pendências são de evidência operacional, não stubs
+silenciosos na pipeline.
 
-**Aceite:** uma máquina limpa reproduz todos os artefatos offline; falhas de dependência não se transformam em falsos verdes.
+1. ✅ Suites `unit`, `native`, `interop`, `android-host`, `benchmark` e
+   `clean-build-nightly` são jobs independentes. `android-device`/`soak` vivem num
+   workflow manual próprio porque exigem ADB e hardware reais.
+2. ✅ `interop` e o clean build usam `AETHER_REQUIRE_NATIVE=1`; ausência da DLL
+   transforma os testes dependentes em skips contabilizados e falha o job. Somente
+   `unit` permite esses skips explicitamente.
+3. ✅ APK, logs/resultados, executáveis, budgets e versões do NDK/JDK são publicados
+   como artefatos dos jobs aplicáveis.
+4. ✅ O clean build diário usa árvore nova, compila o nativo antes do gerenciado,
+   instala headers Vulkan isolados do NDK e executa 242 testes C# + 96 nativos.
+5. ✅ `metrics/budgets.v1.json` versiona budgets de P/Invoke, alocação, CPU, GPU,
+   memória e energia. `tools/validate-metrics-budget.ps1` valida o contrato e quebra
+   o gate ao ultrapassar limites; coletores que exigem dispositivo permanecem
+   declarados como `device-required`, sem fabricar medições em runner hospedado.
+
+**Aceite:** o caminho limpo foi reproduzido localmente com 242/242 testes C# e
+96/96 nativos; a fixture negativa de 301 chamadas nativas/frame quebra o gate.
+Falhas de dependência não se transformam em falsos verdes. A primeira execução no
+GitHub e as séries CPU/GPU/memória/energia em hardware continuam como evidências
+necessárias para M0/M1, sem reabrir a implementação desta seção.
 
 ### 4.3 Correção imediata do AetherFlow
 
@@ -238,24 +262,43 @@ M0 fecha somente com cubo texturizado controlado por toque, shader C# atualizado
 
 ### 6.2 Memória e concorrência 1.2
 
+**Estado parcial:** `GAP-JOB-01` fechado; filas SPSC/MPMC, profiling de
+alocação, analisador NoAlloc e sanitizers continuam abertos.
+
 1. Finalizar primitivas SPSC/MPMC e contadores com testes de stress e sanitizers.
-2. Substituir detecção parcial do JobSystem por grafo de dependências com cores/gerações e detecção no agendamento/espera.
-3. Manter timeout apenas como watchdog do processo, não mecanismo primário.
+2. ✅ O JobSystem registra pré-requisitos e esperas runtime em grafo explícito e
+   detecta ciclos antes do bloqueio, incluindo arestas publicadas concorrentemente.
+3. ✅ O timeout permanece apenas como watchdog de trabalho externo não observável
+   pelo grafo, não como mecanismo primário de detecção de ciclo.
 4. Implementar rastreamento de alocações por subsistema e visualizador de jobs.
 5. Criar analisador `[NoAlloc]` e permitir exceções somente com justificativa versionada.
 6. Rodar TSAN/ASAN/UBSAN onde a toolchain suportar, além de stress de shutdown e cancelamento.
 
-**Aceite:** ciclos de 2–N jobs são rejeitados com caminho do ciclo; nenhum caminho quente marcado aloca.
+**Aceite parcial:** ciclos de 2–N jobs são rejeitados com caminho do ciclo
+(`GAP-JOB-01` verde). A parte de alocação depende do analisador `[NoAlloc]` ainda
+aberto nesta seção.
 
 ### 6.3 ECS 1.3
 
-1. Introduzir `Read<T>`/`ReadOnly<T>` e `Write<T>` ou wrapper equivalente. Somente escrita incrementa versão, uma vez por acesso lógico.
-2. Migrar sistemas internos e manter `GetComponent<T>` temporariamente como API deprecated conservadora.
-3. Criar fachada `Node` como `readonly struct` sobre `EntityId`, sem ownership duplicado.
+**Estado parcial:** `GAP-ECS-01` fechado; fachada `Node`, filtros avançados e
+benchmark hierárquico em aparelho ainda estão abertos.
+
+1. ✅ `World.Read<T>`/`Write<T>` e
+   `Chunk.GetReadOnlySpan<T>`/`GetWritableSpan<T>` separam intenção. Somente o
+   acesso mutável incrementa a versão, uma vez por referência/span obtido.
+2. ✅ Hierarquia, propagação de transforms e sincronização física usam os novos
+   acessores. `GetComponent<T>`/`GetSpan<T>` permanecem temporariamente como APIs
+   deprecated conservadoras para compatibilidade.
+3. ✅ `Node` é uma fachada `readonly struct` sobre `World`+`EntityId`, sem estado
+   ou ownership duplicado. Expõe componentes, parent/children sem alocação e
+   invalida com a geração da entidade; reparent entre mundos é recusado.
 4. Completar filtros/cache de consultas e benchmark de mudanças estruturais.
 5. Medir 100 mil entidades hierarquizadas com profundidades realistas e casos patológicos.
 
-**Aceite:** teste prova que leitura não marca mudança, escrita marca exatamente o chunk/componente correto; benchmark M1 cumpre < 6 ms e zero GC/frame em aparelho A.
+**Aceite parcial:** duas regressões provam que leitura não marca mudança e escrita
+marca exatamente o chunk/componente correto (`GAP-ECS-01` verde). O teste flat de
+100 mil entidades mantém zero GC/frame e mediu 4 ms nesta máquina; o aceite M1
+continua aberto até medir hierarquia real a < 6 ms em aparelho classe A.
 
 ### 6.4 Reflexão, serialização e recursos 1.4
 
@@ -365,11 +408,19 @@ Usuário novo monta cena de 20 objetos com luz, material e prefab em menos de 15
 
 #### 9.1.1 Cinemáticos e sincronização
 
-1. Expor `MoveKinematic`/setter pela ABI versionada.
-2. Usar dirty version do Transform para sincronizar apenas mudanças reais.
-3. Definir autoridade explícita: estático=autoria, dinâmico=Jolt, cinemático=ECS/animação.
-4. Evitar loop de feedback ao escrever `WorldTransform`.
-5. Testar plataforma transladando e girando com personagem e corpo apoiado.
+**Estado: fechado (`GAP-PHY-02`).**
+
+1. `AetherPhysics_MoveKinematicV2` expõe o movimento pela ABI versionada.
+2. Um cache exato de alvo por body sincroniza somente mudanças reais e envia uma
+   única parada no frame seguinte. O ECS agora possui versões exatas por
+   chunk/coluna (`GAP-ECS-01` fechado), mas o cache por body continua necessário:
+   a versão de chunk identifica a coluna alterada, não qual corpo mudou nem o alvo
+   anterior usado para emitir a parada final.
+3. Autoridade definida: estático=autoria, dinâmico=Jolt e
+   cinemático=ECS/animação.
+4. Somente corpos dinâmicos percorrem Jolt→ECS, eliminando o loop de feedback.
+5. Regressões cobrem plataforma transladando e girando com character e corpo
+   dinâmico apoiado, além de validar que frames estáveis não cruzam a ABI.
 
 #### 9.1.2 Triggers e eventos
 

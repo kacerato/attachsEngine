@@ -15,7 +15,8 @@ namespace Aether.Flow.CodeGen;
 ///   - métodos de evento: `public void Start()`, `public void Update(float dt)`,
 ///     `public void OnCollision(Entity outro)`
 ///   - dentro de um método: atribuição simples `Alvo = expressao;`,
-///     `if (cond) { ... } else { ... }`, `while (cond) { ... }`
+///     `if (cond) { ... } else { ... }`, `while (cond) { ... }`,
+///     `return;`, `break;` e `continue;`
 ///   - expressões: identificador (variável), literal (bool/int/float/string),
 ///     `+ - * /` e comparações `&lt; &lt;= &gt; &gt;= == !=`, parênteses
 ///
@@ -207,9 +208,12 @@ public static class CSharpToFlow
         /// cada uma ao pino de execução <paramref name="fromPin"/> do nó <paramref name="fromNode"/>.</summary>
         private void ParseStatementsInto(string fromNode, string fromPin)
         {
-            string curNode = fromNode, curPin = fromPin;
+            string curNode = fromNode;
+            string? curPin = fromPin;
             while (!IsSymbol("}"))
             {
+                if (curPin is null)
+                    throw new FormatException($"instrução inalcançável depois de um controle terminal perto de '{Cur.Text}' (posição {Cur.Start}).");
                 var (nodeId, outPin) = ParseStatement();
                 _graph.Connections.Add(new FlowConnection
                 {
@@ -223,10 +227,13 @@ public static class CSharpToFlow
 
         /// <summary>Analisa uma instrução e devolve (id do nó criado, nome do pino de saída
         /// pelo qual a próxima instrução deve encadear).</summary>
-        private (string nodeId, string outPin) ParseStatement()
+        private (string nodeId, string? outPin) ParseStatement()
         {
             if (IsIdent("if")) return ParseIf();
             if (IsIdent("while")) return ParseWhile();
+            if (IsIdent("return")) return ParseTerminalControl(NodeTypes.FlowReturn);
+            if (IsIdent("break")) return ParseTerminalControl(NodeTypes.FlowBreak);
+            if (IsIdent("continue")) return ParseTerminalControl(NodeTypes.FlowContinue);
             if (Cur.Kind == TokKind.Ident && _toks[_pos + 1].Kind == TokKind.Symbol && _toks[_pos + 1].Text == "="
                 && LooksLikeKnownIdentifier(Cur.Text))
                 return ParseAssignment();
@@ -234,9 +241,32 @@ public static class CSharpToFlow
             return ParseRawStatement();
         }
 
+        private (string, string?) ParseTerminalControl(string nodeType)
+        {
+            string keyword = Advance().Text;
+            if (!IsSymbol(";"))
+            {
+                if (nodeType == NodeTypes.FlowReturn)
+                    throw new FormatException("os eventos AetherFlow atuais retornam void; use 'return;' sem valor.");
+                throw new FormatException($"'{keyword}' não aceita valor ou expressão.");
+            }
+            Advance();
+
+            string id = NewId(keyword);
+            var node = nodeType switch
+            {
+                NodeTypes.FlowReturn => NodeLibrary.FlowReturn(id),
+                NodeTypes.FlowBreak => NodeLibrary.FlowBreak(id),
+                NodeTypes.FlowContinue => NodeLibrary.FlowContinue(id),
+                _ => throw new InvalidOperationException($"controle terminal desconhecido: {nodeType}"),
+            };
+            _graph.Nodes.Add(node);
+            return (id, null);
+        }
+
         private bool LooksLikeKnownIdentifier(string name) => _graph.FindVariable(name) is not null;
 
-        private (string, string) ParseAssignment()
+        private (string, string?) ParseAssignment()
         {
             string varName = Expect(TokKind.Ident).Text;
             Expect(TokKind.Symbol, "=");
@@ -251,7 +281,7 @@ public static class CSharpToFlow
             return (id, "saida");
         }
 
-        private (string, string) ParseIf()
+        private (string, string?) ParseIf()
         {
             Expect(TokKind.Ident, "if");
             Expect(TokKind.Symbol, "(");
@@ -280,7 +310,7 @@ public static class CSharpToFlow
             return (id, "depois");
         }
 
-        private (string, string) ParseWhile()
+        private (string, string?) ParseWhile()
         {
             Expect(TokKind.Ident, "while");
             Expect(TokKind.Symbol, "(");
@@ -300,7 +330,7 @@ public static class CSharpToFlow
 
         /// <summary>Escape hatch: captura o texto original de uma instrução (ou bloco) que
         /// não está no subconjunto suportado e a preserva como nó <c>code.raw</c> opaco.</summary>
-        private (string, string) ParseRawStatement()
+        private (string, string?) ParseRawStatement()
         {
             int startOffset = Cur.Start;
             int braceDepth = 0, parenDepth = 0;

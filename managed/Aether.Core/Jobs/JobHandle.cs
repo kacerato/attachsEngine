@@ -37,6 +37,7 @@ public readonly struct JobHandle : IEquatable<JobHandle>
         if (prereqs.Count == 1) return new JobHandle(prereqs[0]);
 
         var join = new JobEntry { Work = null, EnqueueSelf = null, RemainingDependencies = prereqs.Count };
+        JobDependencyGraph.SetPrerequisites(join, prereqs);
         foreach (var p in prereqs)
         {
             bool pending;

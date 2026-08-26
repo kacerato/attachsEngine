@@ -107,22 +107,59 @@ public sealed class Chunk
     }
 
     /// <summary>Ids das entidades ocupando as posições [0, Count) deste chunk, na mesma ordem
-    /// usada pelos spans de componente devolvidos por <see cref="GetSpan{T}"/>.</summary>
+    /// usada pelos spans de componente.</summary>
     public ReadOnlySpan<EntityId> Entities => _entities.AsSpan(0, Count);
 
     internal ref EntityId EntityAt(int index) => ref _entities[index];
 
-    /// <summary>Span, sem cópia, da coluna do componente <typeparamref name="T"/> para as
-    /// entidades atualmente ocupadas neste chunk.</summary>
+    /// <summary>Visão somente leitura, sem cópia, da coluna do componente. Obter esta visão não
+    /// altera a versão usada por change detection.</summary>
+    public ReadOnlySpan<T> GetReadOnlySpan<T>() where T : unmanaged
+    {
+        int idx = RequireTypeIndex<T>();
+        return GetReadOnlySpan<T>(idx);
+    }
+
+    /// <summary>Visão mutável, sem cópia, da coluna do componente. A versão da coluna avança
+    /// exatamente uma vez ao obter o span, independentemente de quantos elementos forem escritos
+    /// durante esse acesso lógico.</summary>
+    public Span<T> GetWritableSpan<T>() where T : unmanaged
+    {
+        int idx = RequireTypeIndex<T>();
+        MarkChanged(idx);
+        return GetSpanUnchecked<T>(idx);
+    }
+
+    /// <summary>API de compatibilidade conservadora. Código novo deve declarar a intenção com
+    /// <see cref="GetReadOnlySpan{T}"/> ou <see cref="GetWritableSpan{T}"/>.</summary>
+    [Obsolete("GetSpan<T>() é conservador e marca escrita. Use GetReadOnlySpan<T>() ou GetWritableSpan<T>().")]
     public Span<T> GetSpan<T>() where T : unmanaged
+    {
+        return GetWritableSpan<T>();
+    }
+
+    /// <summary>Versão atual da coluna. Leitores podem guardar este valor e comparar por igualdade
+    /// para decidir se precisam reprocessar o chunk.</summary>
+    public int GetChangeVersion<T>() where T : unmanaged => Versions[RequireTypeIndex<T>()];
+
+    private int RequireTypeIndex<T>() where T : unmanaged
     {
         int idx = Archetype.IndexOf(ComponentType.Of<T>());
         if (idx < 0)
             throw new InvalidOperationException($"O chunk não contém o componente {typeof(T).Name}.");
-        return GetSpan<T>(idx);
+        return idx;
     }
 
-    internal Span<T> GetSpan<T>(int typeIndex) where T : unmanaged
+    internal ReadOnlySpan<T> GetReadOnlySpan<T>(int typeIndex) where T : unmanaged =>
+        GetSpanUnchecked<T>(typeIndex);
+
+    internal Span<T> GetWritableSpan<T>(int typeIndex) where T : unmanaged
+    {
+        MarkChanged(typeIndex);
+        return GetSpanUnchecked<T>(typeIndex);
+    }
+
+    private Span<T> GetSpanUnchecked<T>(int typeIndex) where T : unmanaged
     {
         int offset = Archetype.ColumnOffset(typeIndex);
         ref byte start = ref Buffer[offset];

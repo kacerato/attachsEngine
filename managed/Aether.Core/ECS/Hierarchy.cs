@@ -64,7 +64,7 @@ public static class Hierarchy
         if (parent == EntityId.Null) return;
 
         EntityId head = world.HasComponent<FirstChild>(parent)
-            ? world.GetComponent<FirstChild>(parent).Value
+            ? world.Read<FirstChild>(parent).Value
             : EntityId.Null;
 
         SetOrAdd(world, child, new NextSibling(head));
@@ -76,14 +76,14 @@ public static class Hierarchy
     public static void Detach(World world, EntityId child)
     {
         if (!world.HasComponent<Parent>(child)) return;
-        EntityId parent = world.GetComponent<Parent>(child).Value;
+        EntityId parent = world.Read<Parent>(child).Value;
         EntityId next = world.HasComponent<NextSibling>(child)
-            ? world.GetComponent<NextSibling>(child).Value
+            ? world.Read<NextSibling>(child).Value
             : EntityId.Null;
 
         if (world.Exists(parent) && world.HasComponent<FirstChild>(parent))
         {
-            EntityId head = world.GetComponent<FirstChild>(parent).Value;
+            EntityId head = world.Read<FirstChild>(parent).Value;
             if (head == child)
             {
                 world.SetComponent(parent, new FirstChild(next));
@@ -95,7 +95,7 @@ public static class Hierarchy
                 while (cursor != EntityId.Null && world.Exists(cursor))
                 {
                     EntityId sibling = world.HasComponent<NextSibling>(cursor)
-                        ? world.GetComponent<NextSibling>(cursor).Value
+                        ? world.Read<NextSibling>(cursor).Value
                         : EntityId.Null;
                     if (sibling == child) { world.SetComponent(cursor, new NextSibling(next)); break; }
                     cursor = sibling;
@@ -123,7 +123,7 @@ public static class Hierarchy
         for (int guard = 0; guard < MaxDepth && cursor != EntityId.Null; guard++)
         {
             if (!world.HasComponent<Parent>(cursor)) return false;
-            cursor = world.GetComponent<Parent>(cursor).Value;
+            cursor = world.Read<Parent>(cursor).Value;
             if (cursor == ancestor) return true;
         }
         return false;
@@ -160,7 +160,7 @@ public struct ChildEnumerator
         _current = EntityId.Null;
         _guard = 0;
         Next = world.Exists(parent) && world.HasComponent<FirstChild>(parent)
-            ? world.GetComponent<FirstChild>(parent).Value
+            ? world.Read<FirstChild>(parent).Value
             : EntityId.Null;
     }
 
@@ -174,7 +174,7 @@ public struct ChildEnumerator
         if (Next == EntityId.Null || !_world.Exists(Next) || ++_guard > 1_000_000) return false;
         _current = Next;
         Next = _world.HasComponent<NextSibling>(_current)
-            ? _world.GetComponent<NextSibling>(_current).Value
+            ? _world.Read<NextSibling>(_current).Value
             : EntityId.Null;
         return true;
     }
@@ -229,8 +229,8 @@ public static class TransformSystem
         {
             foreach (var chunk in world.Query().With<LocalTransform>().With<WorldTransform>().Without<Parent>())
             {
-                var local = chunk.GetSpan<LocalTransform>();
-                var world_ = chunk.GetSpan<WorldTransform>();
+                var local = chunk.GetReadOnlySpan<LocalTransform>();
+                var world_ = chunk.GetWritableSpan<WorldTransform>();
                 var entities = chunk.Entities;
                 for (int i = 0; i < chunk.Count; i++)
                 {
@@ -245,9 +245,9 @@ public static class TransformSystem
                 progressed = false;
                 foreach (var chunk in world.Query().With<Parent>().With<LocalTransform>().With<WorldTransform>())
                 {
-                    var parents = chunk.GetSpan<Parent>();
-                    var local = chunk.GetSpan<LocalTransform>();
-                    var world_ = chunk.GetSpan<WorldTransform>();
+                    var parents = chunk.GetReadOnlySpan<Parent>();
+                    var local = chunk.GetReadOnlySpan<LocalTransform>();
+                    var world_ = chunk.GetWritableSpan<WorldTransform>();
                     var entities = chunk.Entities;
 
                     for (int i = 0; i < chunk.Count; i++)
@@ -267,7 +267,7 @@ public static class TransformSystem
 
                         if (!ready[parentId.Index]) continue;   // pai ainda não resolvido nesta passada
 
-                        var parentWorld = world.GetComponent<WorldTransform>(parentId);
+                        var parentWorld = world.Read<WorldTransform>(parentId);
                         world_[i].Value = parentWorld.Value.TransformChild(local[i].Value);
                         ready[selfIndex] = true;
                         progressed = true;

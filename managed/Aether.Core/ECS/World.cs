@@ -49,6 +49,28 @@ public sealed class World
 
     // ---------------------------------------------------------------- criação / destruição
 
+    /// <summary>Cria uma entidade vazia e devolve a fachada sem ownership sobre ela.</summary>
+    public Node CreateNode() => new(this, CreateEntity());
+
+    /// <summary>Obtém a fachada de uma entidade viva. A geração do id é validada agora e em cada
+    /// operação posterior feita pelo Node.</summary>
+    public Node GetNode(EntityId id)
+    {
+        _ = RequireAlive(id);
+        return new Node(this, id);
+    }
+
+    public bool TryGetNode(EntityId id, out Node node)
+    {
+        if (Exists(id))
+        {
+            node = new Node(this, id);
+            return true;
+        }
+        node = default;
+        return false;
+    }
+
     public EntityId CreateEntity()
     {
         var archetype = GetOrCreateArchetype(default, Array.Empty<ComponentType>());
@@ -61,7 +83,7 @@ public sealed class World
         sig.Add(ComponentType.Of<T1>());
         var archetype = GetOrCreateArchetype(sig, new[] { ComponentType.Of<T1>() });
         var id = AllocateInArchetype(archetype);
-        GetComponent<T1>(id) = c1;
+        Write<T1>(id) = c1;
         return id;
     }
 
@@ -71,8 +93,8 @@ public sealed class World
         sig.Add(ComponentType.Of<T1>()); sig.Add(ComponentType.Of<T2>());
         var archetype = GetOrCreateArchetype(sig, new[] { ComponentType.Of<T1>(), ComponentType.Of<T2>() });
         var id = AllocateInArchetype(archetype);
-        GetComponent<T1>(id) = c1;
-        GetComponent<T2>(id) = c2;
+        Write<T1>(id) = c1;
+        Write<T2>(id) = c2;
         return id;
     }
 
@@ -83,9 +105,9 @@ public sealed class World
         sig.Add(ComponentType.Of<T1>()); sig.Add(ComponentType.Of<T2>()); sig.Add(ComponentType.Of<T3>());
         var archetype = GetOrCreateArchetype(sig, new[] { ComponentType.Of<T1>(), ComponentType.Of<T2>(), ComponentType.Of<T3>() });
         var id = AllocateInArchetype(archetype);
-        GetComponent<T1>(id) = c1;
-        GetComponent<T2>(id) = c2;
-        GetComponent<T3>(id) = c3;
+        Write<T1>(id) = c1;
+        Write<T2>(id) = c2;
+        Write<T3>(id) = c3;
         return id;
     }
 
@@ -156,10 +178,9 @@ public sealed class World
         return ref _slots[id.Index];
     }
 
-    /// <summary>Referência direta ao componente armazenado — sem cópia. Como não há como saber se
-    /// o chamador vai só ler ou também escrever através da referência, tratamos todo acesso como
-    /// uma possível escrita e avançamos a versão da coluna (conservador, mas correto).</summary>
-    public ref T GetComponent<T>(EntityId id) where T : unmanaged
+    /// <summary>Referência somente leitura ao componente armazenado, sem cópia e sem alterar a
+    /// versão da coluna.</summary>
+    public ref readonly T Read<T>(EntityId id) where T : unmanaged
     {
         ref var slot = ref RequireAlive(id);
         var archetype = slot.Archetype!;
@@ -167,8 +188,29 @@ public sealed class World
         if (typeIndex < 0)
             throw new InvalidOperationException($"A entidade {id} não possui o componente {typeof(T).Name}.");
         var chunk = archetype.Chunks[slot.ChunkIndex];
-        chunk.MarkChanged(typeIndex);
-        return ref chunk.GetSpan<T>(typeIndex)[slot.Row];
+        return ref chunk.GetReadOnlySpan<T>(typeIndex)[slot.Row];
+    }
+
+    /// <summary>Referência mutável ao componente armazenado. Obter a referência avança a versão
+    /// apenas da coluna/chunk correspondente, exatamente uma vez por acesso lógico.</summary>
+    public ref T Write<T>(EntityId id) where T : unmanaged
+    {
+        ref var slot = ref RequireAlive(id);
+        var archetype = slot.Archetype!;
+        int typeIndex = archetype.IndexOf(ComponentType.Of<T>());
+        if (typeIndex < 0)
+            throw new InvalidOperationException($"A entidade {id} não possui o componente {typeof(T).Name}.");
+        var chunk = archetype.Chunks[slot.ChunkIndex];
+        return ref chunk.GetWritableSpan<T>(typeIndex)[slot.Row];
+    }
+
+    /// <summary>API de compatibilidade conservadora. Como devolve <c>ref</c> mutável, continua
+    /// marcando escrita; código novo deve declarar a intenção com <see cref="Read{T}"/> ou
+    /// <see cref="Write{T}"/>.</summary>
+    [Obsolete("GetComponent<T>() marca escrita. Use Read<T>() ou Write<T>().")]
+    public ref T GetComponent<T>(EntityId id) where T : unmanaged
+    {
+        return ref Write<T>(id);
     }
 
     public bool TryGetComponent<T>(EntityId id, out T value) where T : unmanaged
@@ -180,7 +222,7 @@ public sealed class World
             int typeIndex = archetype.IndexOf(ComponentType.Of<T>());
             if (typeIndex >= 0)
             {
-                value = archetype.Chunks[slot.ChunkIndex].GetSpan<T>(typeIndex)[slot.Row];
+                value = archetype.Chunks[slot.ChunkIndex].GetReadOnlySpan<T>(typeIndex)[slot.Row];
                 return true;
             }
         }
@@ -197,7 +239,7 @@ public sealed class World
 
     public void SetComponent<T>(EntityId id, in T value) where T : unmanaged
     {
-        GetComponent<T>(id) = value;
+        Write<T>(id) = value;
     }
 
     public void AddComponent<T>(EntityId id, in T value) where T : unmanaged
@@ -217,7 +259,7 @@ public sealed class World
 
         MoveEntity(id, ref slot, oldArchetype, newArchetype);
 
-        GetComponent<T>(id) = value;
+        Write<T>(id) = value;
     }
 
     public void RemoveComponent<T>(EntityId id) where T : unmanaged

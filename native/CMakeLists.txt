@@ -17,7 +17,15 @@ endif()
 # Jolt nunca vê nossas flags -Werror/-fno-rtti/-fno-exceptions, então um warning no
 # CÓDIGO DE TERCEIROS nunca quebra nosso build (não é responsabilidade nossa arrumar
 # warning de upstream, e -Werror em código que não escrevemos é frágil por natureza).
-set(USE_ASSERTS ON CACHE BOOL "" FORCE)
+# O Jolt transforma qualquer EPhysicsUpdateError em assert quando USE_ASSERTS
+# está ligado. Isso é desejável em Debug/teste (fail-fast), mas impediria o
+# contrato de Release de devolver flags, registrar contador e continuar com
+# warning rate-limited. A política acompanha o tipo de build explicitamente.
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+  set(USE_ASSERTS OFF CACHE BOOL "" FORCE)
+else()
+  set(USE_ASSERTS ON CACHE BOOL "" FORCE)
+endif()
 set(DOUBLE_PRECISION OFF CACHE BOOL "" FORCE) # engine usa float em toda a matemática (ver CONVENCOES.md)
 set(CPP_EXCEPTIONS_ENABLED OFF CACHE BOOL "" FORCE)
 set(CPP_RTTI_ENABLED OFF CACHE BOOL "" FORCE)
@@ -29,6 +37,12 @@ set(DEBUG_RENDERER_IN_DISTRIBUTION OFF CACHE BOOL "" FORCE)
 set(JPH_USE_DX12 OFF CACHE BOOL "" FORCE)
 set(JPH_USE_VK OFF CACHE BOOL "" FORCE)
 set(JPH_USE_MTL OFF CACHE BOOL "" FORCE)
+# O check de IPO/LTO do Jolt reporta explicitamente que o NDK usado pelo alvo
+# Android não suporta essa configuração. Mantê-lo ON só repete um warning em
+# todo clean build; não desliga uma otimização que estivesse funcionando.
+if(ANDROID)
+  set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
+endif()
 
 # Item 4.1.8 do plano ("determinismo em ponto fixo, modo opcional"): o Jolt não tem um modo
 # fixed-point — reescrever seu solver/matemática inteiros para ponto fixo seria uma reescrita
@@ -71,11 +85,20 @@ add_compile_options(
 
 set(AETHER_VULKAN_HEADERS "" CACHE PATH "Diretório que contém vulkan/vulkan.h")
 if(AETHER_VULKAN_HEADERS)
+  if(NOT EXISTS "${AETHER_VULKAN_HEADERS}/vulkan/vulkan.h")
+    message(FATAL_ERROR "AETHER_VULKAN_HEADERS='${AETHER_VULKAN_HEADERS}' não contém vulkan/vulkan.h")
+  endif()
   set(Vulkan_INCLUDE_DIRS ${AETHER_VULKAN_HEADERS})
 elseif(NOT ANDROID)
   find_package(Vulkan QUIET)
-  if(NOT Vulkan_INCLUDE_DIRS)
+  if(NOT Vulkan_INCLUDE_DIRS AND EXISTS "/usr/include/vulkan/vulkan.h")
     set(Vulkan_INCLUDE_DIRS /usr/include)
+  endif()
+  if(NOT Vulkan_INCLUDE_DIRS)
+    message(FATAL_ERROR
+      "Headers Vulkan não encontrados. Instale o Vulkan SDK ou configure "
+      "-DAETHER_VULKAN_HEADERS=<diretório que contém vulkan/vulkan.h>. "
+      "No CI Windows usamos os headers do NDK pinado, sem depender de cache global.")
   endif()
 endif()
 
@@ -125,6 +148,7 @@ if(ANDROID)
     platform/android/android_main.cpp
     platform/android/android_window.cpp
     platform/android/android_vulkan_surface.cpp
+    platform/android/android_triangle_renderer.cpp
   )
   target_include_directories(aether_android PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_link_libraries(aether_android PRIVATE
@@ -194,6 +218,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_query_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_character_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_physics2d_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_physics_capacity.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_determinism.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
@@ -209,4 +234,13 @@ if(NOT ANDROID)
   target_include_directories(benchmark_physics2d PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(benchmark_physics2d PRIVATE aether_core aether_physics)
   target_compile_options(benchmark_physics2d PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-O2>)
+
+  # Probe separado porque induzir overflow em Debug dispara corretamente o
+  # assert fail-fast do próprio Jolt. Em Release este binário valida a outra
+  # metade do contrato: warning + flags + contadores, sem encerramento silencioso.
+  add_executable(physics_overflow_probe
+    ${CMAKE_SOURCE_DIR}/../tests/native/physics_overflow_probe.cpp
+  )
+  target_include_directories(physics_overflow_probe PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(physics_overflow_probe PRIVATE aether_core aether_physics)
 endif()

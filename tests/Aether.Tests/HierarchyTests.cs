@@ -9,6 +9,62 @@ public static class HierarchyTests
 {
     private static World NovoMundo() => new();
 
+    [Test] public static void Node_EhFachadaSemOwnershipDuplicadoESegueAGeracaoDaEntidade()
+    {
+        var world = NovoMundo();
+        var node = world.CreateNode();
+        node.Add(new LocalTransform(Transform.Identity));
+
+        node.Write<LocalTransform>().Value = Transform.FromPosition(new float3(3, 4, 5));
+        Assert.Close(new float3(3, 4, 5), world.Read<LocalTransform>(node.Id).Value.Position);
+        Assert.Equal(1, world.EntityCount, "Node não cria um segundo objeto além da entidade");
+        Assert.Equal(node, world.GetNode(node.Id));
+
+        EntityId oldId = node.Id;
+        node.Destroy();
+        Assert.False(node.IsValid, "todas as cópias da fachada observam a entidade destruída");
+        Assert.Throws<InvalidOperationException>(() => { _ = node.Read<LocalTransform>(); });
+
+        var replacement = world.CreateNode();
+        Assert.Equal(oldId.Index, replacement.Id.Index, "o slot pode ser reciclado");
+        Assert.NotEqual(oldId.Version, replacement.Id.Version, "a geração impede alias com o Node antigo");
+        Assert.True(node != replacement);
+    }
+
+    [Test] public static void Node_HierarquiaAmigavelMantemComponentesEIteraSemAlocar()
+    {
+        var world = NovoMundo();
+        var parent = world.CreateNode();
+        var childA = world.CreateNode();
+        var childB = world.CreateNode();
+        childA.SetParent(parent);
+        childB.SetParent(parent);
+
+        Assert.Equal(parent, childA.Parent);
+        int count = 0;
+        Assert.NoAlloc(() =>
+        {
+            count = 0;
+            foreach (var child in parent.Children)
+            {
+                Assert.True(child == childA || child == childB);
+                count++;
+            }
+        }, "Node.Children adapta a lista de EntityId sem alocar");
+        Assert.Equal(2, count);
+
+        childA.SetParent(default);
+        Assert.False(childA.Parent.IsValid);
+        Assert.Equal(1, Hierarchy.ChildCount(world, parent.Id));
+    }
+
+    [Test] public static void Node_RecusaParentDeOutroWorld()
+    {
+        var child = NovoMundo().CreateNode();
+        var foreignParent = NovoMundo().CreateNode();
+        Assert.Throws<ArgumentException>(() => child.SetParent(foreignParent));
+    }
+
     [Test] public static void SetParent_PrendeEDesprende()
     {
         var w = NovoMundo();
@@ -17,7 +73,7 @@ public static class HierarchyTests
 
         Hierarchy.SetParent(w, filho, pai);
         Assert.True(w.HasComponent<Parent>(filho), "o filho passou a ter pai");
-        Assert.Equal(pai, w.GetComponent<Parent>(filho).Value);
+        Assert.Equal(pai, w.Read<Parent>(filho).Value);
         Assert.Equal(1, Hierarchy.ChildCount(w, pai));
 
         Hierarchy.SetParent(w, filho, EntityId.Null);
@@ -79,7 +135,7 @@ public static class HierarchyTests
 
         Hierarchy.Detach(w, b);
         Assert.Equal(1, Hierarchy.ChildCount(w, pai));
-        Assert.Equal(a, w.GetComponent<FirstChild>(pai).Value, "a cabeça passou a ser o irmão seguinte");
+        Assert.Equal(a, w.Read<FirstChild>(pai).Value, "a cabeça passou a ser o irmão seguinte");
     }
 
     [Test] public static void SetParent_TrocarDePaiNaoDeixaRestoNoAntigo()
@@ -94,7 +150,7 @@ public static class HierarchyTests
 
         Assert.Equal(0, Hierarchy.ChildCount(w, pai1), "o pai antigo não guarda referência órfã");
         Assert.Equal(1, Hierarchy.ChildCount(w, pai2));
-        Assert.Equal(pai2, w.GetComponent<Parent>(filho).Value);
+        Assert.Equal(pai2, w.Read<Parent>(filho).Value);
     }
 
     [Test] public static void SetParent_RecusaCiclo()
@@ -163,7 +219,7 @@ public static class HierarchyTests
 
         TransformSystem.Propagate(w);
 
-        Assert.Close(new float3(10f, 0f, 2f), w.GetComponent<WorldTransform>(filho).Value.Position, 1e-4f,
+        Assert.Close(new float3(10f, 0f, 2f), w.Read<WorldTransform>(filho).Value.Position, 1e-4f,
             "a posição do filho no mundo é a do pai composta com a local");
     }
 }

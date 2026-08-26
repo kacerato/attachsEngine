@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "budgetRevision": "2026-08-26.1",
+  "source": "docs/PLANO-ENGINE-MOBILE.md §18.1 e docs/CONVENCOES.md §§2-3",
+  "requiredCategories": [
+    "interop",
+    "allocations",
+    "cpu",
+    "gpu",
+    "memory",
+    "energy"
+  ],
+  "metrics": [
+    {
+      "id": "interop.native_calls_per_frame",
+      "category": "interop",
+      "unit": "calls/frame",
+      "comparison": "maximum",
+      "target": 200,
+      "failureThreshold": 300,
+      "scope": "frame de editor/runtime em aparelho classe A",
+      "collector": "contador agregado da fronteira C#↔C++ da PoC-A",
+      "enforcement": "device-required"
+    },
+    {
+      "id": "allocations.gen0_collections_per_60s",
+      "category": "allocations",
+      "unit": "collections/60s",
+      "comparison": "maximum",
+      "target": 0,
+      "failureThreshold": 0,
+      "scope": "60 segundos de gameplay da cena de referência",
+      "collector": "contadores GC do runtime .NET no aparelho",
+      "enforcement": "device-required"
+    },
+    {
+      "id": "cpu.editor_frame_time_ms",
+      "category": "cpu",
+      "unit": "ms/frame",
+      "comparison": "maximum",
+      "target": 16.6,
+      "failureThreshold": 20.0,
+      "scope": "editor com cena de referência em aparelho classe A",
+      "collector": "profiler CPU/frame pacing do runtime",
+      "enforcement": "device-required"
+    },
+    {
+      "id": "gpu.runtime_frame_time_ms",
+      "category": "gpu",
+      "unit": "ms/frame",
+      "comparison": "maximum",
+      "target": 16.6,
+      "failureThreshold": 16.6,
+      "scope": "runtime da demo de referência em aparelho classe A",
+      "collector": "timestamp queries Vulkan por frame",
+      "enforcement": "device-required"
+    },
+    {
+      "id": "memory.editor_resident_bytes",
+      "category": "memory",
+      "unit": "bytes",
+      "comparison": "maximum",
+      "target": 1610612736,
+      "failureThreshold": 2147483648,
+      "scope": "editor com projeto de referência carregado",
+      "collector": "memória residente/PSS do processo no aparelho",
+      "enforcement": "device-required"
+    },
+    {
+      "id": "energy.sustained_power_watts_30m",
+      "category": "energy",
+      "unit": "W",
+      "comparison": "maximum",
+      "target": 4.0,
+      "failureThreshold": 5.0,
+      "scope": "30 minutos de edição contínua em aparelho classe A",
+      "collector": "bateria/medidor externo normalizado pelo laboratório",
+      "enforcement": "device-required"
+    }
+  ]
+}

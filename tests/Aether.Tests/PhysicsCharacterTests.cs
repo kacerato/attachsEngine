@@ -12,11 +12,7 @@ namespace Aether.Tests;
 /// </summary>
 public static class PhysicsCharacterTests
 {
-    private static bool NativeLibraryAvailable()
-    {
-        try { using var w = new PhysicsWorld(float3.Zero, 16); return true; }
-        catch (DllNotFoundException) { return false; }
-    }
+    private static bool NativeLibraryAvailable() => NativeInterop.PhysicsLibraryAvailable();
 
     private static PhysicsBodyHandle MakeBox(PhysicsWorld physics, float3 halfExtent, float3 position,
         quaternion rotation, NativeMotionType motion) =>
@@ -194,6 +190,40 @@ public static class PhysicsCharacterTests
         physics.GetCharacterTransform(character, out var posAfter, out _);
         float deltaX = posAfter.X - posBefore.X;
         Assert.True(deltaX > 1.5f, "character deveria ter sido arrastado pela plataforma móvel em X");
+    }
+
+    [Test] public static void Character_AcompanhaPlataformaDirigidaPorMoveKinematic()
+    {
+        if (!NativeLibraryAvailable()) return;
+        using var physics = new PhysicsWorld(new float3(0f, -9.81f, 0f), 16);
+        var platform = MakeBox(physics, new float3(5f, 0.5f, 5f), float3.Zero,
+            quaternion.Identity, NativeMotionType.Kinematic);
+        var character = physics.CreateCharacter(CharacterDesc.Default,
+            new float3(0f, 3f, 0f), quaternion.Identity);
+
+        const float dt = 1f / 60f;
+        for (int i = 1; i <= 150; i++)
+        {
+            float targetX = i * dt * 1.5f;
+            physics.MoveKinematic(platform, new float3(targetX, 0f, 0f),
+                quaternion.AxisAngle(float3.Up, i * dt * 0.1f), dt);
+            var ground = physics.GetCharacterGroundState(character);
+            var velocity = physics.GetCharacterVelocity(character);
+            if (ground != CharacterGroundState.InAir)
+            {
+                var groundVelocity = physics.GetCharacterGroundVelocity(character);
+                velocity.X = groundVelocity.X;
+                velocity.Z = groundVelocity.Z;
+            }
+            velocity.Y -= 9.81f * dt;
+            physics.SetCharacterVelocity(character, velocity);
+            physics.UpdateCharacter(character, dt, new float3(0f, -9.81f, 0f));
+            physics.Step(dt);
+        }
+
+        physics.GetCharacterTransform(character, out var final, out _);
+        Assert.True(final.X > 1f,
+            "character deveria herdar a velocidade da plataforma movida por alvo cinemático");
     }
 
     [Test] public static void AgacharTrocaParaCapsulaMenor_ELevantarTrocaDeVolta()

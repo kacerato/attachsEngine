@@ -1,0 +1,294 @@
+# CI confiável (item §4.2 de docs/PLANO-FECHAMENTO-LACUNAS.md, Onda 0).
+#
+# Suítes separadas de propósito, não uma única pipeline monolítica — a regra que motiva
+# isso (§4.2.2): um teste que depende de aether_physics deve FALHAR no job de integração
+# se a lib nativa não estiver presente, nunca reportar "verde" silenciosamente. Cada job
+# abaixo tem uma responsabilidade e uma garantia diferentes; misturá-los mascararia qual
+# camada realmente falhou.
+#
+# Cobertura real desta pipeline (rodável em runner hospedado do GitHub, sem hardware):
+#   unit           — C# sem nativo, roda em qualquer máquina, sempre pode pular física.
+#   native          — suíte de testes nativos C++ (aether_tests), headless.
+#   interop         — C# + lib nativa compilada, AETHER_REQUIRE_NATIVE=1: falha se a
+#                     lib não estiver presente, não passa "vazio".
+#   android-host    — compila o APK Android via Gradle/NDK (build only, sem instalar/rodar
+#                     em device — GitHub-hosted runners não têm ADB nem GPU Android).
+#   benchmark       — valida o registro versionado de orçamentos, prova que violações quebram
+#                     o gate e publica benchmark/relatório. Tempos de host continuam evidência,
+#                     não substituem métricas em aparelho.
+#
+# NÃO coberto por este workflow, documentado explicitamente em vez de fingido:
+#   android-device  — requer aparelho físico real via ADB (tools/validate-android-shell.ps1).
+#                     GitHub-hosted runners não têm hardware Android conectado. Ver
+#                     .github/workflows/android-device.yml (workflow_dispatch manual, para
+#                     quando houver self-hosted runner com o laboratório de dispositivos do
+#                     plano — §5.1 de PLANO-FECHAMENTO-LACUNAS.md).
+#   soak            — mesma limitação de hardware; soak de 30 min (PoC-C térmica) também
+#                     pertence a um runner com aparelho físico real.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # clean-build periódico (§4.2.4 do plano de lacunas): roda 1x/dia, fora de todo push,
+  # para pegar dependência acidental de cache que um build incremental mascara. O job
+  # clean-build-nightly abaixo é o único que reage a este gatilho (os demais checam
+  # github.event_name e não rodam de novo por causa dele).
+  schedule:
+    - cron: "0 6 * * *" # diariamente às 06:00 UTC
+
+# Cancela execuções redundantes do mesmo branch/PR — evita gastar minutos de CI em
+# pushes rápidos consecutivos.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: "8.0.x"
+  NDK_VERSION: "27.1.12297006"
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  # --- unit: C# sem dependência nativa. Sempre roda, em qualquer runner. -------------
+  unit:
+    name: unit (C#, sem nativo)
+    runs-on: windows-latest
+    if: github.event_name != 'schedule' # schedule é só para clean-build-nightly
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Restaurar e compilar
+        run: dotnet build Aether.sln --configuration Release
+      - name: Rodar suíte C#
+        # Sem AETHER_REQUIRE_NATIVE: testes de física retornam cedo se aether_physics.dll
+        # não estiver presente (não compilamos nativo neste job) — comportamento esperado
+        # e documentado, não um "falso verde" (ver job interop abaixo para a garantia real).
+        run: |
+          New-Item -ItemType Directory -Path build/ci -Force | Out-Null
+          & dotnet run --project tests/Aether.Tests --no-build --configuration Release 2>&1 | Tee-Object -FilePath build/ci/unit-results.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publicar resultado unitário
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-results
+          path: build/ci/unit-results.txt
+          if-no-files-found: error
+
+  # --- native: suíte de testes C++ headless (aether_tests), sem GPU/loader Vulkan. ---
+  native:
+    name: native (C++, headless)
+    runs-on: windows-latest
+    if: github.event_name != 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Instalar NDK pinado para obter headers Vulkan reproduzíveis
+        run: sdkmanager --install "ndk;${{ env.NDK_VERSION }}"
+      - name: Preparar somente a árvore vulkan/ sem misturar libc Android ao host
+        run: ./tools/prepare-vulkan-headers.ps1 -NdkRoot "$env:ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" -OutputDirectory build/vulkan-headers
+      - name: Configurar CMake (Ninja)
+        run: cmake -S native -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DAETHER_VULKAN_HEADERS="$env:GITHUB_WORKSPACE/build/vulkan-headers"
+      - name: Compilar
+        run: cmake --build build/native --config Release
+      - name: Rodar aether_tests
+        working-directory: build/native
+        run: |
+          & ./aether_tests.exe 2>&1 | Tee-Object -FilePath aether_tests_result.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publicar binários de teste e logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-test-binaries
+          path: |
+            build/native/*.exe
+            build/native/aether_tests_result.txt
+          if-no-files-found: error
+
+  # --- interop: C# + lib nativa real. AETHER_REQUIRE_NATIVE=1 é o que torna este job
+  #     diferente de `unit` — aqui, ausência da lib é FALHA, não skip silencioso. -------
+  interop:
+    name: interop (C# + nativo, exige lib presente)
+    runs-on: windows-latest
+    needs: [native]
+    if: github.event_name != 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Instalar NDK pinado para obter headers Vulkan reproduzíveis
+        run: sdkmanager --install "ndk;${{ env.NDK_VERSION }}"
+      - name: Preparar somente a árvore vulkan/ sem misturar libc Android ao host
+        run: ./tools/prepare-vulkan-headers.ps1 -NdkRoot "$env:ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" -OutputDirectory build/vulkan-headers
+      - name: Configurar CMake (Ninja) — alvo compartilhado aether_physics_shared
+        run: cmake -S native -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DAETHER_VULKAN_HEADERS="$env:GITHUB_WORKSPACE/build/vulkan-headers"
+      - name: Compilar lib nativa compartilhada
+        run: cmake --build build/native --config Release --target aether_physics_shared
+      - name: Restaurar e compilar C#
+        run: dotnet build Aether.sln --configuration Release
+      - name: Rodar suíte C# em modo de integração
+        env:
+          AETHER_REQUIRE_NATIVE: "1"
+        run: |
+          New-Item -ItemType Directory -Path build/ci -Force | Out-Null
+          & dotnet run --project tests/Aether.Tests --no-build --configuration Release 2>&1 | Tee-Object -FilePath build/ci/interop-results.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publicar resultado de interop
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: interop-results
+          path: build/ci/interop-results.txt
+          if-no-files-found: error
+
+  # --- android-host: compila o APK via Gradle/NDK. Build only — sem device conectado,
+  #     não instala/abre/roda nada (isso é android-device.yml, self-hosted). ------------
+  android-host:
+    name: android-host (build via Gradle/NDK, sem device)
+    runs-on: windows-latest
+    if: github.event_name != 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Configurar Android SDK/NDK
+        uses: android-actions/setup-android@v3
+      - name: Instalar NDK pinado
+        run: sdkmanager --install "ndk;${{ env.NDK_VERSION }}"
+      - name: Gradle assembleDebug + lintDebug
+        working-directory: android
+        run: ./gradlew :app:assembleDebug :app:lintDebug --stacktrace
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+      - name: Publicar APK, logs e versões de toolchain
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/logs/**
+          if-no-files-found: warn
+      - name: Registrar versões de NDK/JDK usadas (§4.2.3 do plano de lacunas)
+        run: |
+          echo "NDK: ${{ env.NDK_VERSION }}" > toolchain-versions.txt
+          java -version 2>> toolchain-versions.txt
+          cmake --version >> toolchain-versions.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-versions
+          path: toolchain-versions.txt
+
+  # --- benchmark + orçamento: o registro e o mecanismo de gate são validados no host.
+  #     Tempos do benchmark de host seguem informativos porque variância de runner hospedado
+  #     não representa Adreno/Mali nem energia. Os seis limites device-required quebram o
+  #     workflow de aparelho quando medições reais forem ligadas aos coletores correspondentes.
+  benchmark:
+    name: benchmark (native, resultado publicado como artefato)
+    runs-on: windows-latest
+    needs: [native]
+    if: github.event_name != 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Instalar NDK pinado para obter headers Vulkan reproduzíveis
+        run: sdkmanager --install "ndk;${{ env.NDK_VERSION }}"
+      - name: Preparar somente a árvore vulkan/ sem misturar libc Android ao host
+        run: ./tools/prepare-vulkan-headers.ps1 -NdkRoot "$env:ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" -OutputDirectory build/vulkan-headers
+      - name: Configurar e compilar benchmarks
+        run: |
+          cmake -S native -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DAETHER_VULKAN_HEADERS="$env:GITHUB_WORKSPACE/build/vulkan-headers"
+          cmake --build build/native --config Release --target benchmark_physics2d
+      - name: Rodar benchmark_physics2d
+        working-directory: build/native
+        run: ./benchmark_physics2d.exe | Tee-Object -FilePath benchmark_physics2d_result.txt
+      - name: Validar registro versionado e mecanismo de gate
+        run: |
+          ./tools/validate-metrics-budget.ps1 -OutputPath build/metrics/budget-schema-report.json
+          ./tools/validate-metrics-budget.ps1 -MeasurementPath metrics/fixtures/measurements-pass.v1.json -RequireAllMetrics -OutputPath build/metrics/gate-pass-report.json
+          $rejected = $false
+          try {
+            ./tools/validate-metrics-budget.ps1 -MeasurementPath metrics/fixtures/measurements-fail.v1.json -RequireAllMetrics -OutputPath build/metrics/gate-fail-report.json | Out-Null
+          } catch {
+            if ($_.Exception.Message -match "interop.native_calls_per_frame=301") { $rejected = $true } else { throw }
+          }
+          if (-not $rejected) { throw "O teste negativo de orçamento passou indevidamente." }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: |
+            build/native/benchmark_physics2d_result.txt
+            build/metrics/*.json
+            metrics/budgets.v1.json
+
+  # --- clean-build: roda periodicamente (não em todo push) para pegar dependência
+  #     acidental de cache que um build incremental mascara (§4.2.4 do plano). -----------
+  clean-build-nightly:
+    name: clean-build (detecção de cache acidental)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Instalar NDK pinado para obter headers Vulkan reproduzíveis
+        run: sdkmanager --install "ndk;${{ env.NDK_VERSION }}"
+      - name: Preparar somente a árvore vulkan/ sem misturar libc Android ao host
+        run: ./tools/prepare-vulkan-headers.ps1 -NdkRoot "$env:ANDROID_HOME/ndk/${{ env.NDK_VERSION }}" -OutputDirectory build/vulkan-headers
+      - name: Build nativo limpo (diretório novo, sem build/ reaproveitado)
+        run: |
+          cmake -S native -B build/native-clean -G Ninja -DCMAKE_BUILD_TYPE=Release -DAETHER_VULKAN_HEADERS="$env:GITHUB_WORKSPACE/build/vulkan-headers"
+          cmake --build build/native-clean --config Release
+      - name: Disponibilizar a DLL limpa no caminho de integração
+        run: |
+          New-Item -ItemType Directory -Path build/native -Force | Out-Null
+          Copy-Item -LiteralPath build/native-clean/aether_physics.dll -Destination build/native/aether_physics.dll -Force
+      - name: Build C# limpo após produzir a dependência nativa
+        run: dotnet build Aether.sln --configuration Release
+      - name: Rodar suítes na build limpa exigindo interop real
+        env:
+          AETHER_REQUIRE_NATIVE: "1"
+        run: |
+          New-Item -ItemType Directory -Path build/ci -Force | Out-Null
+          & dotnet run --project tests/Aether.Tests --no-build --configuration Release 2>&1 | Tee-Object -FilePath build/ci/clean-managed-results.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & build/native-clean/aether_tests.exe 2>&1 | Tee-Object -FilePath build/ci/clean-native-results.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./tools/validate-metrics-budget.ps1 -OutputPath build/ci/metrics-budget-schema.json
+      - name: Publicar resultados da build limpa
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean-build-results-${{ github.sha }}
+          path: build/ci/**
+          if-no-files-found: error

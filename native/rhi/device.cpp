@@ -1,12 +1,310 @@
-// Implementação real de VulkanDevice. Não exercitada por teste nesta
-// máquina — sem GPU nem loader Vulkan funcional (ver nota em device.h).
-// Escrita para compilar e para ser correta contra a spec, revisada
-// manualmente; validação em hardware fica para quando houver device real.
+// Implementação real de VulkanDevice/VulkanSwapchain. VulkanDevice não é
+// exercitada por teste nesta máquina — sem GPU nem loader Vulkan funcional
+// (ver nota em device.h) — escrita para compilar e para ser correta contra
+// a spec, revisada manualmente. VulkanSwapchain (item 5.2 do plano de
+// lacunas) foi validada em execução real no shell Android — ver
+// docs/ESTADO.md.
 #include "rhi/device.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace ae::rhi {
+
+VulkanSwapchain::~VulkanSwapchain() {
+  shutdown();
+}
+
+void VulkanSwapchain::destroySwapchainObjects() {
+  for (u32 i = 0; i < imageCount_; ++i) {
+    if (imageViews_[i] != VK_NULL_HANDLE) {
+      vkDestroyImageView(device_, imageViews_[i], nullptr);
+      imageViews_[i] = VK_NULL_HANDLE;
+    }
+  }
+  imageCount_ = 0;
+  if (swapchain_ != VK_NULL_HANDLE) {
+    vkDestroySwapchainKHR(device_, swapchain_, nullptr);
+    swapchain_ = VK_NULL_HANDLE;
+  }
+  format_ = VK_FORMAT_UNDEFINED;
+  extent_ = {0, 0};
+}
+
+void VulkanSwapchain::shutdown() {
+  if (device_ != VK_NULL_HANDLE) {
+    // O caller (AndroidVulkanSurface/shell) é responsável por já ter
+    // esperado o device ficar ocioso antes de chamar shutdown — mesma
+    // invariante documentada em ISwapchain::recreate. Repetir aqui a espera
+    // seria mascarar um shutdown fora de ordem em vez de expor o bug.
+    destroySwapchainObjects();
+    if (inFlightFence_ != VK_NULL_HANDLE) {
+      vkDestroyFence(device_, inFlightFence_, nullptr);
+      inFlightFence_ = VK_NULL_HANDLE;
+    }
+    if (renderFinishedSemaphore_ != VK_NULL_HANDLE) {
+      vkDestroySemaphore(device_, renderFinishedSemaphore_, nullptr);
+      renderFinishedSemaphore_ = VK_NULL_HANDLE;
+    }
+    if (imageAvailableSemaphore_ != VK_NULL_HANDLE) {
+      vkDestroySemaphore(device_, imageAvailableSemaphore_, nullptr);
+      imageAvailableSemaphore_ = VK_NULL_HANDLE;
+    }
+  }
+  device_ = VK_NULL_HANDLE;
+  physicalDevice_ = VK_NULL_HANDLE;
+  surface_ = VK_NULL_HANDLE;
+  graphicsQueue_ = VK_NULL_HANDLE;
+  format_ = VK_FORMAT_UNDEFINED;
+  extent_ = {0, 0};
+}
+
+bool VulkanSwapchain::initialize(VkDevice device, VkPhysicalDevice physicalDevice,
+                                 VkSurfaceKHR surface, u32 graphicsQueueFamily,
+                                 u32 width, u32 height) {
+  if (device == VK_NULL_HANDLE || physicalDevice == VK_NULL_HANDLE ||
+      surface == VK_NULL_HANDLE) {
+    return false;
+  }
+  device_ = device;
+  physicalDevice_ = physicalDevice;
+  surface_ = surface;
+  graphicsQueueFamily_ = graphicsQueueFamily;
+  vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
+
+  VkSemaphoreCreateInfo semInfo{};
+  semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  if (vkCreateSemaphore(device_, &semInfo, nullptr, &imageAvailableSemaphore_) != VK_SUCCESS ||
+      vkCreateSemaphore(device_, &semInfo, nullptr, &renderFinishedSemaphore_) != VK_SUCCESS) {
+    shutdown();
+    return false;
+  }
+  VkFenceCreateInfo fenceInfo{};
+  fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // primeiro wait não deve bloquear
+  if (vkCreateFence(device_, &fenceInfo, nullptr, &inFlightFence_) != VK_SUCCESS) {
+    shutdown();
+    return false;
+  }
+
+  if (!recreate(width, height)) {
+    shutdown();
+    return false;
+  }
+  return true;
+}
+
+bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
+  if (device_ == VK_NULL_HANDLE) return false;
+
+  // Nenhum comando pendente pode referenciar a swapchain antiga neste ponto
+  // — mesma invariante documentada em ISwapchain::recreate (device.h):
+  // destruir cedo demais é a causa mais comum de crash em resize/rotação em
+  // apps Vulkan mobile. Um único frame em voo (item 5.2) simplifica isso: a
+  // fence já garante que o frame anterior terminou antes do caller chamar
+  // recreate (via acquireNextImage/present retornando OutOfDate).
+  vkDeviceWaitIdle(device_);
+
+  VkSurfaceCapabilitiesKHR caps{};
+  if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice_, surface_, &caps) != VK_SUCCESS) {
+    return false;
+  }
+
+  u32 formatCount = 0;
+  if (vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice_, surface_, &formatCount, nullptr) !=
+      VK_SUCCESS) {
+    return false;
+  }
+  if (formatCount == 0) return false;
+  VkSurfaceFormatKHR formats[32];
+  formatCount = std::min(formatCount, 32u);
+  const VkResult formatsResult =
+      vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice_, surface_, &formatCount, formats);
+  if (formatsResult != VK_SUCCESS && formatsResult != VK_INCOMPLETE) return false;
+  VkSurfaceFormatKHR chosen = formats[0];
+  if (formatCount == 1 && chosen.format == VK_FORMAT_UNDEFINED) {
+    chosen.format = VK_FORMAT_B8G8R8A8_SRGB;
+    chosen.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+  }
+  for (u32 i = 0; i < formatCount; ++i) {
+    if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
+        formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+      chosen = formats[i];
+      break;
+    }
+  }
+
+  // currentExtent == 0xFFFFFFFF é o sinal (spec Vulkan) de que a surface
+  // permite ao app escolher o extent dentro de min/max — acontece em vários
+  // drivers Android. Fora isso, currentExtent é a fonte de verdade, não o
+  // width/height que o SO reportou (podem divergir por 1px em alguns
+  // compositores; a spec é clara que currentExtent manda quando definido).
+  VkExtent2D extent = caps.currentExtent;
+  if (extent.width == 0xFFFFFFFFu) {
+    extent.width = std::clamp(newWidth, caps.minImageExtent.width, caps.maxImageExtent.width);
+    extent.height = std::clamp(newHeight, caps.minImageExtent.height, caps.maxImageExtent.height);
+  }
+  if (extent.width == 0 || extent.height == 0) {
+    // Janela minimizada/surface sem área — recriar não faz sentido agora;
+    // o caller deve tentar de novo quando a janela voltar a ter tamanho.
+    return false;
+  }
+
+  if ((caps.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) == 0 ||
+      caps.minImageCount > kMaxSwapchainImages) {
+    return false;
+  }
+
+  u32 desiredImageCount = caps.minImageCount + 1;
+  if (caps.maxImageCount > 0) {
+    desiredImageCount = std::min(desiredImageCount, caps.maxImageCount);
+  }
+  desiredImageCount = std::min(desiredImageCount, kMaxSwapchainImages);
+
+  constexpr VkCompositeAlphaFlagBitsKHR compositeAlphaCandidates[] = {
+      VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+      VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
+      VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
+      VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+  };
+  VkCompositeAlphaFlagBitsKHR compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  bool foundCompositeAlpha = false;
+  for (VkCompositeAlphaFlagBitsKHR candidate : compositeAlphaCandidates) {
+    if ((caps.supportedCompositeAlpha & candidate) != 0) {
+      compositeAlpha = candidate;
+      foundCompositeAlpha = true;
+      break;
+    }
+  }
+  if (!foundCompositeAlpha) return false;
+
+  VkSwapchainKHR oldSwapchain = swapchain_;
+
+  VkSwapchainCreateInfoKHR swapchainInfo{};
+  swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+  swapchainInfo.surface = surface_;
+  swapchainInfo.minImageCount = desiredImageCount;
+  swapchainInfo.imageFormat = chosen.format;
+  swapchainInfo.imageColorSpace = chosen.colorSpace;
+  swapchainInfo.imageExtent = extent;
+  swapchainInfo.imageArrayLayers = 1;
+  swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  swapchainInfo.preTransform = caps.currentTransform;
+  swapchainInfo.compositeAlpha = compositeAlpha;
+  swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR; // sempre suportado, vsync — ponto de partida seguro
+  swapchainInfo.clipped = VK_TRUE;
+  swapchainInfo.oldSwapchain = oldSwapchain;
+
+  VkSwapchainKHR newSwapchain = VK_NULL_HANDLE;
+  const VkResult createResult = vkCreateSwapchainKHR(device_, &swapchainInfo, nullptr, &newSwapchain);
+
+  if (createResult != VK_SUCCESS) {
+    // A swapchain antiga NÃO é aposentada quando a criação falha e continua
+    // sendo a única opção válida. Destruí-la aqui transformaria uma falha
+    // recuperável de resize em perda total do renderer.
+    return false;
+  }
+
+  u32 actualImageCount = 0;
+  if (vkGetSwapchainImagesKHR(device_, newSwapchain, &actualImageCount, nullptr) != VK_SUCCESS ||
+      actualImageCount == 0 || actualImageCount > kMaxSwapchainImages) {
+    vkDestroySwapchainKHR(device_, newSwapchain, nullptr);
+    // vkCreateSwapchainKHR teve sucesso: oldSwapchain foi aposentada e não
+    // pode voltar a apresentar. Limpa os objetos antigos para que isReady()
+    // exponha a perda em vez de permitir uso de handles inválidos.
+    destroySwapchainObjects();
+    return false;
+  }
+
+  VkImage newImages[kMaxSwapchainImages]{};
+  VkImageView newImageViews[kMaxSwapchainImages]{};
+  u32 queriedImageCount = actualImageCount;
+  if (vkGetSwapchainImagesKHR(device_, newSwapchain, &queriedImageCount, newImages) != VK_SUCCESS ||
+      queriedImageCount != actualImageCount) {
+    vkDestroySwapchainKHR(device_, newSwapchain, nullptr);
+    destroySwapchainObjects();
+    return false;
+  }
+
+  for (u32 i = 0; i < actualImageCount; ++i) {
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = newImages[i];
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = chosen.format;
+    viewInfo.components = {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+                           VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY};
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.layerCount = 1;
+    if (vkCreateImageView(device_, &viewInfo, nullptr, &newImageViews[i]) != VK_SUCCESS) {
+      for (u32 created = 0; created < i; ++created) {
+        vkDestroyImageView(device_, newImageViews[created], nullptr);
+      }
+      vkDestroySwapchainKHR(device_, newSwapchain, nullptr);
+      destroySwapchainObjects();
+      return false;
+    }
+  }
+
+  // O caller precisa ter destruído framebuffers que referenciem as views
+  // antigas antes de entrar em recreate(). Depois dessa troca, os objetos
+  // antigos podem ser liberados e os novos publicados de forma atômica.
+  destroySwapchainObjects();
+  swapchain_ = newSwapchain;
+  format_ = chosen.format;
+  extent_ = extent;
+  imageCount_ = actualImageCount;
+  for (u32 i = 0; i < imageCount_; ++i) {
+    images_[i] = newImages[i];
+    imageViews_[i] = newImageViews[i];
+  }
+
+  return true;
+}
+
+SwapchainStatus VulkanSwapchain::acquireNextImage(u32 *outImageIndex) {
+  if (outImageIndex == nullptr || !isReady() ||
+      vkWaitForFences(device_, 1, &inFlightFence_, VK_TRUE, UINT64_MAX) != VK_SUCCESS) {
+    return SwapchainStatus::FatalError;
+  }
+
+  u32 imageIndex = 0;
+  const VkResult result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
+                                                imageAvailableSemaphore_, VK_NULL_HANDLE,
+                                                &imageIndex);
+  if (result == VK_ERROR_OUT_OF_DATE_KHR) return SwapchainStatus::OutOfDateMustRecreate;
+  if (result == VK_ERROR_SURFACE_LOST_KHR) return SwapchainStatus::SurfaceLost;
+  if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) return SwapchainStatus::FatalError;
+
+  // Fence só é resetada depois de sabermos que vamos de fato submeter este
+  // frame — resetar antes e depois falhar em acquire deixaria a fence
+  // sinalizada errado (o próximo acquireNextImage não esperaria nada).
+  if (vkResetFences(device_, 1, &inFlightFence_) != VK_SUCCESS) {
+    return SwapchainStatus::FatalError;
+  }
+
+  *outImageIndex = imageIndex;
+  return result == VK_SUBOPTIMAL_KHR ? SwapchainStatus::SuboptimalNeedsRecreate : SwapchainStatus::Ok;
+}
+
+SwapchainStatus VulkanSwapchain::present(u32 imageIndex) {
+  VkPresentInfoKHR presentInfo{};
+  presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+  presentInfo.waitSemaphoreCount = 1;
+  presentInfo.pWaitSemaphores = &renderFinishedSemaphore_;
+  presentInfo.swapchainCount = 1;
+  presentInfo.pSwapchains = &swapchain_;
+  presentInfo.pImageIndices = &imageIndex;
+
+  const VkResult result = vkQueuePresentKHR(graphicsQueue_, &presentInfo);
+  if (result == VK_ERROR_OUT_OF_DATE_KHR) return SwapchainStatus::OutOfDateMustRecreate;
+  if (result == VK_ERROR_SURFACE_LOST_KHR) return SwapchainStatus::SurfaceLost;
+  if (result == VK_SUBOPTIMAL_KHR) return SwapchainStatus::SuboptimalNeedsRecreate;
+  if (result != VK_SUCCESS) return SwapchainStatus::FatalError;
+  return SwapchainStatus::Ok;
+}
 
 VulkanDevice::~VulkanDevice() {
   shutdown();

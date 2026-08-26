@@ -10,11 +10,7 @@ namespace Aether.Tests;
 /// </summary>
 public static class Physics2DTests
 {
-    private static bool NativeLibraryAvailable()
-    {
-        try { using var w = new PhysicsWorld(float3.Zero, 16); return true; }
-        catch (DllNotFoundException) { return false; }
-    }
+    private static bool NativeLibraryAvailable() => NativeInterop.PhysicsLibraryAvailable();
 
     private static PhysicsBodyHandle MakeSphere2D(PhysicsWorld physics, float3 position, NativeMotionType motion) =>
         physics.CreateBody(PhysicsShape.Sphere(0.5f), position, quaternion.Identity, motion,

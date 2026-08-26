@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
+#include <limits>
 #include <thread>
 #include <vector>
 
@@ -347,13 +348,37 @@ struct AetherPhysicsWorld {
   std::vector<CharacterSlot> characterSlots;
   std::vector<ae::u32> freeCharacterSlots;
 
-  explicit AetherPhysicsWorld(ae::u32 maxBodies)
-      : tempAllocator(8 * 1024 * 1024),
-        jobSystem(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, WorkerThreadCount()) {
-    const JPH::uint maxBodyPairs = std::max<JPH::uint>(1024, maxBodies);
-    const JPH::uint maxContactConstraints = std::max<JPH::uint>(1024, maxBodies);
-    physicsSystem.Init(maxBodies, /*inNumBodyMutexes*/ 0, maxBodyPairs, maxContactConstraints,
+  AetherPhysicsWorldDescV2 desc{};
+  AetherPhysicsStepStatsV2 stepStats{};
+
+  static ae::usize TempAllocatorBytes(const AetherPhysicsWorldDescV2 &worldDesc) {
+    // O Jolt usa este bloco para arrays transitórios de corpos, candidatos da
+    // broad phase e constraints. Um teto fixo de 8 MiB quebrava justamente os
+    // cenários V2 densos; a estimativa abaixo acompanha as capacidades que o
+    // chamador decidiu, mantendo 8 MiB como piso para mundos pequenos.
+    constexpr ae::u64 minimum = 8ull * 1024ull * 1024ull;
+    const ae::u64 estimated = static_cast<ae::u64>(worldDesc.maxBodies) * 512ull +
+                              static_cast<ae::u64>(worldDesc.maxBodyPairs) * 128ull +
+                              static_cast<ae::u64>(worldDesc.maxContactConstraints) * 1024ull +
+                              static_cast<ae::u64>(worldDesc.maxBroadPhasePairs) * 64ull;
+    const ae::u64 selected = std::max(minimum, estimated);
+    const ae::u64 sizeLimit = static_cast<ae::u64>(std::numeric_limits<ae::usize>::max());
+    return static_cast<ae::usize>(std::min(selected, sizeLimit));
+  }
+
+  explicit AetherPhysicsWorld(const AetherPhysicsWorldDescV2 &worldDesc)
+      : tempAllocator(TempAllocatorBytes(worldDesc)),
+        jobSystem(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, WorkerThreadCount()), desc(worldDesc) {
+    stepStats.structSize = sizeof(AetherPhysicsStepStatsV2);
+    stepStats.apiVersion = AetherPhysicsWorldApiVersionV2;
+
+    physicsSystem.Init(desc.maxBodies, /*inNumBodyMutexes*/ 0, desc.maxBodyPairs,
+                        desc.maxContactConstraints,
                         broadPhaseLayerInterface, objectVsBroadPhaseLayerFilter, objectLayerPairFilter);
+
+    JPH::PhysicsSettings settings = physicsSystem.GetPhysicsSettings();
+    settings.mMaxInFlightBodyPairs = static_cast<int>(desc.maxBroadPhasePairs);
+    physicsSystem.SetPhysicsSettings(settings);
   }
 
   static int WorkerThreadCount() {
@@ -364,12 +389,132 @@ struct AetherPhysicsWorld {
   }
 };
 
+namespace {
+
+ae::u32 SaturatingMultiply(ae::u32 value, ae::u32 multiplier) {
+  const ae::u64 result = static_cast<ae::u64>(value) * multiplier;
+  return result > std::numeric_limits<ae::u32>::max() ? std::numeric_limits<ae::u32>::max()
+                                                       : static_cast<ae::u32>(result);
+}
+
+AetherPhysicsWorldDescV2 MakeV1CompatibleDesc(AetherVec3 gravity, ae::u32 maxBodies) {
+  AetherPhysicsWorldDescV2 desc{};
+  desc.structSize = sizeof(desc);
+  desc.apiVersion = AetherPhysicsWorldApiVersionV2;
+  desc.gravity = gravity;
+  desc.maxBodies = maxBodies;
+  desc.maxBodyPairs = std::max<ae::u32>(1024, SaturatingMultiply(maxBodies, 4));
+  desc.maxContactConstraints = std::max<ae::u32>(1024, SaturatingMultiply(maxBodies, 2));
+  desc.maxBroadPhasePairs = std::max<ae::u32>(16384, desc.maxBodyPairs);
+  desc.overflowPolicy = AetherPhysicsOverflowPolicy::BuildDefault;
+  return desc;
+}
+
+bool IsValidWorldDesc(const AetherPhysicsWorldDescV2 *desc) {
+  if (desc == nullptr) {
+    std::fprintf(stderr, "[Physics] CreateWorldV2 recusado: descritor nulo.\n");
+    return false;
+  }
+  if (desc->structSize < sizeof(AetherPhysicsWorldDescV2) ||
+      desc->apiVersion != AetherPhysicsWorldApiVersionV2) {
+    std::fprintf(stderr,
+                 "[Physics] CreateWorldV2 recusado: structSize=%u (mínimo=%zu), apiVersion=%u (esperado=%u).\n",
+                 desc->structSize, sizeof(AetherPhysicsWorldDescV2), desc->apiVersion,
+                 AetherPhysicsWorldApiVersionV2);
+    return false;
+  }
+  if (desc->maxBodies == 0 || desc->maxBodyPairs < 4 || desc->maxContactConstraints == 0 ||
+      desc->maxBroadPhasePairs < 1024 ||
+      desc->maxBodies > JPH::PhysicsSystem::cMaxBodiesLimit ||
+      desc->maxBodyPairs > JPH::PhysicsSystem::cMaxBodyPairsLimit ||
+      desc->maxContactConstraints > JPH::PhysicsSystem::cMaxContactConstraintsLimit ||
+      desc->maxBroadPhasePairs > static_cast<ae::u32>(std::numeric_limits<int>::max())) {
+    std::fprintf(stderr,
+                 "[Physics] CreateWorldV2 recusado: limites inválidos (bodies=%u, bodyPairs=%u, contacts=%u, broadPhasePairs=%u).\n",
+                 desc->maxBodies, desc->maxBodyPairs, desc->maxContactConstraints,
+                 desc->maxBroadPhasePairs);
+    return false;
+  }
+  if (desc->overflowPolicy != AetherPhysicsOverflowPolicy::BuildDefault &&
+      desc->overflowPolicy != AetherPhysicsOverflowPolicy::Warning &&
+      desc->overflowPolicy != AetherPhysicsOverflowPolicy::FailFast) {
+    std::fprintf(stderr, "[Physics] CreateWorldV2 recusado: política de overflow desconhecida (%u).\n",
+                 static_cast<ae::u32>(desc->overflowPolicy));
+    return false;
+  }
+  return true;
+}
+
+bool ShouldFailFast(AetherPhysicsOverflowPolicy policy) {
+  if (policy == AetherPhysicsOverflowPolicy::FailFast) return true;
+  if (policy == AetherPhysicsOverflowPolicy::Warning) return false;
+#ifdef NDEBUG
+  return false;
+#else
+  return true;
+#endif
+}
+
+bool ShouldLogOccurrence(ae::u64 count) {
+  // Primeiro evento e potências de dois: diagnóstico imediato sem inundar o
+  // log em release quando o mesmo mundo permanece saturado por muitos frames.
+  return count == 1 || (count & (count - 1)) == 0;
+}
+
+void ReportUpdateErrors(AetherPhysicsWorld &world, ae::u32 flags) {
+  world.stepStats.lastErrorFlags = flags;
+  ++world.stepStats.overflowSteps;
+
+  struct ErrorInfo {
+    ae::u32 flag;
+    const char *category;
+    ae::u32 capacity;
+    ae::u64 *counter;
+  } errors[] = {
+      {static_cast<ae::u32>(AetherPhysicsUpdateError::ManifoldCacheFull), "ManifoldCacheFull",
+       world.desc.maxContactConstraints, &world.stepStats.manifoldCacheFullCount},
+      {static_cast<ae::u32>(AetherPhysicsUpdateError::BodyPairCacheFull), "BodyPairCacheFull",
+       world.desc.maxBodyPairs, &world.stepStats.bodyPairCacheFullCount},
+      {static_cast<ae::u32>(AetherPhysicsUpdateError::ContactConstraintsFull),
+       "ContactConstraintsFull", world.desc.maxContactConstraints,
+       &world.stepStats.contactConstraintsFullCount},
+  };
+
+  for (ErrorInfo &error : errors) {
+    if ((flags & error.flag) == 0) continue;
+    ++*error.counter;
+    if (ShouldLogOccurrence(*error.counter)) {
+      std::fprintf(stderr,
+                   "[Physics] overflow=%s capacity=%u occurrences=%llu overflowSteps=%llu totalSteps=%llu "
+                   "(bodies=%u bodyPairs=%u contacts=%u broadPhasePairs=%u).\n",
+                   error.category, error.capacity, static_cast<unsigned long long>(*error.counter),
+                   static_cast<unsigned long long>(world.stepStats.overflowSteps),
+                   static_cast<unsigned long long>(world.stepStats.totalSteps), world.desc.maxBodies,
+                   world.desc.maxBodyPairs, world.desc.maxContactConstraints,
+                   world.desc.maxBroadPhasePairs);
+      std::fflush(stderr);
+    }
+  }
+
+  if (ShouldFailFast(world.desc.overflowPolicy)) {
+    AE_CHECK(false, "overflow de capacidade no PhysicsSystem::Update; consulte o diagnóstico [Physics]");
+  }
+}
+
+} // namespace
+
 extern "C" {
 
 AetherPhysicsWorld *AetherPhysics_CreateWorld(AetherVec3 gravity, ae::u32 maxBodies) {
+  const AetherPhysicsWorldDescV2 desc = MakeV1CompatibleDesc(gravity, maxBodies);
+  return AetherPhysics_CreateWorldV2(&desc);
+}
+
+AetherPhysicsWorld *AetherPhysics_CreateWorldV2(const AetherPhysicsWorldDescV2 *desc) {
+  if (!IsValidWorldDesc(desc)) return nullptr;
   EnsureGlobalTypesRegistered();
-  auto *world = new AetherPhysicsWorld(maxBodies);
-  world->physicsSystem.SetGravity(ToJolt(gravity));
+  auto *world = new AetherPhysicsWorld(*desc);
+  world->physicsSystem.SetGravity(ToJolt(desc->gravity));
   return world;
 }
 
@@ -420,8 +565,29 @@ void AetherPhysics_DestroyBody(AetherPhysicsWorld *world, AetherBodyHandle handl
 }
 
 void AetherPhysics_Step(AetherPhysicsWorld *world, float deltaTime, ae::i32 collisionSteps) {
-  if (world == nullptr) return;
-  world->physicsSystem.Update(deltaTime, collisionSteps, &world->tempAllocator, &world->jobSystem);
+  (void)AetherPhysics_StepV2(world, deltaTime, collisionSteps);
+}
+
+ae::u32 AetherPhysics_StepV2(AetherPhysicsWorld *world, float deltaTime, ae::i32 collisionSteps) {
+  if (world == nullptr) return static_cast<ae::u32>(AetherPhysicsUpdateError::None);
+  const JPH::EPhysicsUpdateError updateError =
+      world->physicsSystem.Update(deltaTime, collisionSteps, &world->tempAllocator, &world->jobSystem);
+  const ae::u32 flags = static_cast<ae::u32>(updateError);
+  ++world->stepStats.totalSteps;
+  world->stepStats.lastErrorFlags = flags;
+  if (flags != 0) ReportUpdateErrors(*world, flags);
+  return flags;
+}
+
+ae::i32 AetherPhysics_GetStepStatsV2(const AetherPhysicsWorld *world,
+                                     AetherPhysicsStepStatsV2 *outStats) {
+  if (world == nullptr || outStats == nullptr ||
+      outStats->structSize < sizeof(AetherPhysicsStepStatsV2) ||
+      outStats->apiVersion != AetherPhysicsWorldApiVersionV2) {
+    return 0;
+  }
+  *outStats = world->stepStats;
+  return 1;
 }
 
 void AetherPhysics_GetTransform(AetherPhysicsWorld *world, AetherBodyHandle handle, AetherVec3 *outPosition,
@@ -441,6 +607,18 @@ void AetherPhysics_SetLinearVelocity(AetherPhysicsWorld *world, AetherBodyHandle
 AetherVec3 AetherPhysics_GetLinearVelocity(AetherPhysicsWorld *world, AetherBodyHandle handle) {
   if (world == nullptr || handle == AetherBodyHandle_Invalid) return {0.0f, 0.0f, 0.0f};
   return FromJolt(world->physicsSystem.GetBodyInterface().GetLinearVelocity(JPH::BodyID(handle)));
+}
+
+ae::i32 AetherPhysics_MoveKinematicV2(AetherPhysicsWorld *world, AetherBodyHandle handle,
+                                      AetherVec3 targetPosition, AetherQuat targetRotation,
+                                      float deltaTime) {
+  if (world == nullptr || handle == AetherBodyHandle_Invalid || deltaTime <= 0.0f) return 0;
+  const JPH::BodyID id(handle);
+  JPH::BodyInterface &bodyInterface = world->physicsSystem.GetBodyInterface();
+  if (bodyInterface.GetMotionType(id) != JPH::EMotionType::Kinematic) return 0;
+  bodyInterface.MoveKinematic(id, JPH::RVec3(targetPosition.x, targetPosition.y, targetPosition.z),
+                              ToJolt(targetRotation), deltaTime);
+  return 1;
 }
 
 ae::i32 AetherPhysics_IsActive(AetherPhysicsWorld *world, AetherBodyHandle handle) {

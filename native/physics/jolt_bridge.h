@@ -104,18 +104,69 @@ struct AetherBodyDesc {
 // system, filtros de camada) vive só em jolt_bridge.cpp.
 struct AetherPhysicsWorld;
 
+// ABI V2 (GAP-PHY-01): os quatro limites representam recursos diferentes do
+// Jolt e nunca devem voltar a ser derivados implicitamente de maxBodies.
+// maxBroadPhasePairs configura PhysicsSettings::mMaxInFlightBodyPairs, isto é,
+// o buffer temporário de candidatos produzidos pela broad phase antes da narrow
+// phase. Todos os descritores versionados começam com structSize/apiVersion para
+// permitir acrescentar campos no final sem reinterpretar layouts antigos.
+constexpr ae::u32 AetherPhysicsWorldApiVersionV2 = 2;
+
+enum class AetherPhysicsOverflowPolicy : ae::u32 {
+  // FailFast em Debug/teste; Warning em Release. É o default recomendado para
+  // que desenvolvimento nunca continue após perda de contatos, enquanto uma
+  // build de usuário preserva o processo e mantém diagnóstico/contadores.
+  BuildDefault = 0,
+  // Em build Debug o próprio Jolt possui um assert interno anterior ao retorno
+  // de Update, portanto até Warning termina imediatamente — exatamente a regra
+  // de teste do plano. Esta opção controla o comportamento recuperável Release.
+  Warning = 1,
+  FailFast = 2,
+};
+
+struct AetherPhysicsWorldDescV2 {
+  ae::u32 structSize;
+  ae::u32 apiVersion;
+  AetherVec3 gravity;
+  ae::u32 maxBodies;
+  ae::u32 maxBodyPairs;
+  ae::u32 maxContactConstraints;
+  ae::u32 maxBroadPhasePairs;
+  AetherPhysicsOverflowPolicy overflowPolicy;
+};
+
+enum class AetherPhysicsUpdateError : ae::u32 {
+  None = 0,
+  ManifoldCacheFull = 1u << 0,
+  BodyPairCacheFull = 1u << 1,
+  ContactConstraintsFull = 1u << 2,
+};
+
+struct AetherPhysicsStepStatsV2 {
+  ae::u32 structSize;
+  ae::u32 apiVersion;
+  ae::u64 totalSteps;
+  ae::u64 overflowSteps;
+  ae::u64 manifoldCacheFullCount;
+  ae::u64 bodyPairCacheFullCount;
+  ae::u64 contactConstraintsFullCount;
+  ae::u32 lastErrorFlags;
+  ae::u32 reserved;
+};
+
 // Handle denso: é o próprio JPH::BodyID (índice + número de sequência
 // empacotados por Jolt) reinterpretado como uint32 — não precisamos de uma
 // tabela de handles nossa, o Jolt já resolve reciclagem de índice sozinho.
 using AetherBodyHandle = ae::u32;
 constexpr AetherBodyHandle AetherBodyHandle_Invalid = 0xFFFFFFFFu;
 
-/// Cria um mundo de física com a gravidade e capacidade de corpos dados.
-/// `maxBodies` é um teto rígido (ver PhysicsSystem::Init do Jolt) — criar mais
-/// corpos que isso falha silenciosamente (devolve handle inválido), nunca
-/// estoura buffer. Devolve nullptr em falha de inicialização (praticamente só
-/// out-of-memory).
+/// Símbolo V1 preservado por compatibilidade. Internamente é mapeado para V2
+/// com limites conservadores separados; código novo deve usar CreateWorldV2.
 AetherPhysicsWorld *AetherPhysics_CreateWorld(AetherVec3 gravity, ae::u32 maxBodies);
+
+/// Cria um mundo a partir do descritor versionado. Devolve nullptr e emite um
+/// diagnóstico se versão, tamanho, limites ou política forem inválidos.
+AetherPhysicsWorld *AetherPhysics_CreateWorldV2(const AetherPhysicsWorldDescV2 *desc);
 
 /// Destrói o mundo e TODOS os corpos nele — nenhum AetherBodyHandle deste
 /// mundo continua válido depois desta chamada.
@@ -137,6 +188,15 @@ void AetherPhysics_DestroyBody(AetherPhysicsWorld *world, AetherBodyHandle handl
 /// para manter a simulação estável (ver comentário no HelloWorld do Jolt).
 void AetherPhysics_Step(AetherPhysicsWorld *world, float deltaTime, ae::i32 collisionSteps);
 
+/// Variante V2: devolve a máscara AetherPhysicsUpdateError produzida pelo
+/// Jolt. O símbolo V1 continua chamável, mas também registra/contabiliza os
+/// mesmos erros antes de descartar apenas o valor de retorno para preservar ABI.
+ae::u32 AetherPhysics_StepV2(AetherPhysicsWorld *world, float deltaTime, ae::i32 collisionSteps);
+
+/// Copia os contadores cumulativos do mundo. O chamador deve inicializar
+/// structSize e apiVersion; devolve 1 em sucesso, 0 em argumento/versão inválido.
+ae::i32 AetherPhysics_GetStepStatsV2(const AetherPhysicsWorld *world, AetherPhysicsStepStatsV2 *outStats);
+
 /// Lê a transform atual do corpo (posição do centro de massa + rotação).
 /// Ponteiros de saída nulos são ignorados individualmente — chamador pode
 /// pedir só posição, só rotação, ou as duas.
@@ -145,6 +205,14 @@ void AetherPhysics_GetTransform(AetherPhysicsWorld *world, AetherBodyHandle hand
 
 void AetherPhysics_SetLinearVelocity(AetherPhysicsWorld *world, AetherBodyHandle handle, AetherVec3 velocity);
 AetherVec3 AetherPhysics_GetLinearVelocity(AetherPhysicsWorld *world, AetherBodyHandle handle);
+
+/// Move um corpo cinemático até o alvo durante deltaTime, gerando velocidades
+/// linear/angular físicas para que corpos e characters apoiados sejam
+/// transportados pelo solver. Devolve 1 em sucesso; 0 para mundo/handle
+/// inválido, deltaTime não positivo ou corpo que não seja Kinematic.
+ae::i32 AetherPhysics_MoveKinematicV2(AetherPhysicsWorld *world, AetherBodyHandle handle,
+                                      AetherVec3 targetPosition, AetherQuat targetRotation,
+                                      float deltaTime);
 
 /// 1 se o corpo está ativo (não dormindo, não estático) — corpos dinâmicos que
 /// param de se mover são colocados para dormir automaticamente pelo Jolt.

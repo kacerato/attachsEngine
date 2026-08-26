@@ -69,16 +69,19 @@ struct BenchmarkResult {
 };
 
 BenchmarkResult RunScenario(int bodyCount, int warmupSteps, int measuredSteps) {
-  // maxBodies também dimensiona maxBodyPairs/maxContactConstraints em
-  // AetherPhysicsWorld::AetherPhysicsWorld (jolt_bridge.cpp: max(1024, maxBodies) para os
-  // dois) — um cenário DENSO (muitos corpos empilhados tocando vários vizinhos ao mesmo
-  // tempo) gera mais PARES de contato simultâneos que corpos, então maxBodies == bodyCount
-  // não é suficiente (o Jolt reporta EPhysicsUpdateError::BodyPairCacheFull/
-  // ContactConstraintsFull e descarta contatos em silêncio, sem crashar — mas o assert de
-  // debug do bridge trata isso como falha, ver EnsureGlobalTypesRegistered/AssertFailedImpl).
-  // 4x de folga cobre o pior caso deste cenário de grade compacta sem precisar reimplementar
-  // a lógica de redimensionamento do Jolt.
-  AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0.0f, -9.81f, 0.0f}, static_cast<ae::u32>(bodyCount * 4 + 64));
+  // GAP-PHY-01: cada conceito recebe capacidade própria. maxBodies descreve somente corpos;
+  // a densidade esperada do cenário dimensiona pares, constraints e o buffer da broad phase.
+  // Assim o benchmark não mascara overflow inflando maxBodies artificialmente.
+  AetherPhysicsWorldDescV2 worldDesc{};
+  worldDesc.structSize = sizeof(worldDesc);
+  worldDesc.apiVersion = AetherPhysicsWorldApiVersionV2;
+  worldDesc.gravity = {0.0f, -9.81f, 0.0f};
+  worldDesc.maxBodies = static_cast<ae::u32>(bodyCount + 1);
+  worldDesc.maxBodyPairs = static_cast<ae::u32>(bodyCount * 16);
+  worldDesc.maxContactConstraints = static_cast<ae::u32>(bodyCount * 8);
+  worldDesc.maxBroadPhasePairs = static_cast<ae::u32>(bodyCount < 1024 ? 16384 : bodyCount * 16);
+  worldDesc.overflowPolicy = AetherPhysicsOverflowPolicy::BuildDefault;
+  AetherPhysicsWorld *world = AetherPhysics_CreateWorldV2(&worldDesc);
 
   AetherBodyDesc floorDesc = Box2D({50.0f, 0.5f, 10.0f}, {0.0f, 0.0f, 0.0f}, AetherMotionType::Static);
   AetherPhysics_CreateBody(world, &floorDesc);
@@ -103,7 +106,12 @@ BenchmarkResult RunScenario(int bodyCount, int warmupSteps, int measuredSteps) {
   double maxMs = 0.0;
   for (int i = 0; i < measuredSteps; ++i) {
     auto start = Clock::now();
-    AetherPhysics_Step(world, dt, 1);
+    const ae::u32 errors = AetherPhysics_StepV2(world, dt, 1);
+    if (errors != 0) {
+      std::fprintf(stderr, "[Physics benchmark] StepV2 reportou flags=0x%08x\n", errors);
+      AetherPhysics_DestroyWorld(world);
+      return {static_cast<int>(bodies.size()), 1.0e9, 1.0e9};
+    }
     double stepMs = MillisecondsSince(start);
     totalMs += stepMs;
     if (stepMs > maxMs) maxMs = stepMs;
@@ -126,10 +134,12 @@ int main() {
   std::printf("KPI de referência (docs/PLANO-ENGINE-MOBILE.md 18.1): frame time do runtime <= 16.6ms (60fps)\n\n");
   std::printf("%10s %14s %14s %8s\n", "corpos", "step medio(ms)", "step maximo(ms)", "ok<16.6ms?");
 
-  const int counts[] = {50, 100, 200, 500, 1000};
+  const int counts[] = {50, 100, 200, 500, 1000, 5000};
   bool allWithinBudget = true;
   for (int count : counts) {
-    BenchmarkResult result = RunScenario(count, /*warmupSteps*/ 120, /*measuredSteps*/ 180);
+    const int warmupSteps = count >= 5000 ? 10 : 120;
+    const int measuredSteps = count >= 5000 ? 20 : 180;
+    BenchmarkResult result = RunScenario(count, warmupSteps, measuredSteps);
     bool withinBudget = result.maxStepMs <= 16.6;
     if (!withinBudget) allWithinBudget = false;
     std::printf("%10d %14.3f %14.3f %8s\n", result.bodyCount, result.avgStepMs, result.maxStepMs,
