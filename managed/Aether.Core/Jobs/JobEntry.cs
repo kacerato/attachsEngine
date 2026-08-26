@@ -55,6 +55,16 @@ internal sealed class JobEntry
 
     public string DiagnosticName => $"{Label}#{Id}";
 
+    /// <summary>Item 1.2.4 (visualizador de jobs): duração da execução de <see cref="Work"/> em
+    /// ticks de <see cref="System.Diagnostics.Stopwatch"/>, preenchida por
+    /// <c>JobSystem.RunEntry</c>. Zero para nós de junção (nunca rodam <see cref="Work"/>).</summary>
+    public long ExecutionTicks;
+
+    /// <summary>Bytes alocados no heap gerenciado durante a execução de <see cref="Work"/>
+    /// (thread que efetivamente rodou o job — ver <c>Diagnostics.AllocationTracker</c> para a
+    /// limitação de "só mede a thread chamadora"). Preenchida por <c>JobSystem.RunEntry</c>.</summary>
+    public long AllocatedBytes;
+
     /// <summary>
     /// Chamado por um pré-requisito que acabou de terminar. Propaga a falha (se
     /// houver) e, ao chegar a zero dependências pendentes, enfileira este job

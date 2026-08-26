@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+  </PropertyGroup>
+
+  <!--
+    Item 1.2.5 do plano: analisador Roslyn para [NoAlloc]. Mantém a política de zero
+    dependência externa (docs/CONVENCOES.md): Microsoft.CodeAnalysis(.CSharp) já vem DENTRO
+    do próprio SDK do .NET instalado (Roslyn/bincore/), não via NuGet — referenciado aqui por
+    HintPath relativo a $(MSBuildToolsPath) (a raiz do SDK em uso), não um path absoluto
+    fixo, para continuar funcionando em outra máquina com outra versão de SDK instalada.
+    <Private>false</Private>: não copia essas DLLs para a saída — quem carrega um analisador
+    (o compilador csc/roslyn dentro do próprio processo de build) já as tem carregadas.
+  -->
+  <ItemGroup>
+    <Reference Include="Microsoft.CodeAnalysis">
+      <HintPath>$(MSBuildToolsPath)\Roslyn\bincore\Microsoft.CodeAnalysis.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp">
+      <HintPath>$(MSBuildToolsPath)\Roslyn\bincore\Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

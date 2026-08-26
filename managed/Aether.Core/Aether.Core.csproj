@@ -3,4 +3,15 @@
     <RootNamespace>Aether.Core</RootNamespace>
     <AssemblyName>Aether.Core</AssemblyName>
   </PropertyGroup>
+
+  <!-- Item 1.2.5: aplica o analisador [NoAlloc] (AETH001-005) ao próprio código de Aether.Core.
+       OutputItemType="Analyzer" faz o compilador carregar Aether.Analyzers.dll como analisador
+       de código-fonte deste projeto (não como referência de tipo comum) — ReferenceOutputAssembly
+       desligado porque não queremos que o assembly do ANALISADOR vire uma dependência em
+       runtime do Aether.Core, só que ele rode durante o build. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Aether.Analyzers\Aether.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
 </Project>

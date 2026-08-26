@@ -31,11 +31,11 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 271 |
+| não iniciado | 266 |
 | PoC | 9 |
-| parcial | 23 |
-| implementado | 25 |
-| validado em hardware | 4 |
+| parcial | 22 |
+| implementado | 30 |
+| validado em hardware | 5 |
 | aceito | 1 |
 | **Total** | **333** |
 
@@ -111,9 +111,9 @@ não recebem estado agregado — servem apenas de navegação.
 |---|---|---|---|
 | 1.2.1 | Alocadores: arena de frame, pools por tipo, slab para chunks, alocador de rastreamento | implementado | ESTADO.md linha 65: FrameArena, PoolAllocator, NativeList/Array, MemoryBudget ✅ 22 testes (`MemoryTests.cs`); alocador de rastreamento/debug não confirmado separadamente |
 | 1.2.2 | Job system com work-stealing, dependências, afinidade big.LITTLE | parcial | ESTADO.md linha 66: job system com work-stealing e dependências + `GAP-JOB-01` fechado (grafo de ciclos) ✅ 13 testes; afinidade big.LITTLE não implementada (não mencionada em nenhum teste) |
-| 1.2.3 | Primitivas sem trava (filas SPSC/MPMC, contadores atômicos) | não iniciado | Item futuro explícito do plano principal; nenhuma primitiva lock-free no repositório |
-| 1.2.4 | Instrumentação: rastreador de alocações por subsistema, visualizador de jobs | não iniciado | Item futuro explícito do plano principal; nenhum rastreador/visualizador no repositório |
-| 1.2.5 | Analisador Roslyn `[NoAlloc]` | não iniciado | Item futuro explícito do plano principal; nenhum analisador Roslyn customizado encontrado no repositório |
+| 1.2.3 | Primitivas sem trava (filas SPSC/MPMC, contadores atômicos) | implementado | `managed/Aether.Core/Concurrency/`: `AtomicCounter` (wrapper sobre `Interlocked`) e `SpscRingBuffer<T>` (fila circular SPSC wait-free sobre `NativeArray<T>`). ✅ 12 testes (`ConcurrencyTests.cs`) — inclui teste de concorrência real (produtor/consumidor em threads separadas, 200k itens) e teste de atomicidade real (8 threads concorrentes). MPMC genérico continua sendo `ConcurrentQueue<T>` do BCL (já em uso em `JobSystem`), não reimplementado — SPSC é o caso mais específico que valia primitiva própria |
+| 1.2.4 | Instrumentação: rastreador de alocações por subsistema, visualizador de jobs | implementado | `managed/Aether.Core/Diagnostics/AllocationTracker.cs` + `managed/Aether.Core/Jobs/JobDiagnostics.cs`: mede alocação real por thread, `JobSystem.Schedule` aceita `label` de subsistema e instrumenta cada execução (duração + alocação + falha), snapshot via `JobSystem.Diagnostics` (buffer circular + totais agregados por label). ✅ 13 testes (`DiagnosticsTests.cs`) |
+| 1.2.5 | Analisador Roslyn `[NoAlloc]` | implementado | `managed/Aether.Analyzers/NoAllocAnalyzer.cs` (projeto novo, referencia Roslyn direto do SDK via `$(MSBuildToolsPath)`, sem NuGet) + `Diagnostics/NoAllocAttribute.cs`. 5 regras (AETH001-005: new de tipo referência, lambda capturante, LINQ, concatenação de string, foreach sobre interface) rodando em tempo de build sobre `Aether.Core` via `ProjectReference OutputItemType="Analyzer"`. Validado com build real (arquivo probe descartável): as 5 regras dispararam nas linhas exatas esperadas, sem falso positivo em código limpo equivalente (incluindo `foreach` sobre array não acionar AETH005). Suíte completa (363 testes) segue verde |
 
 ### Etapa 1.3 — ECS
 
@@ -142,13 +142,15 @@ não recebem estado agregado — servem apenas de navegação.
 |---|---|---|---|
 | 1.5.1 | Biblioteca math com SIMD NEON e testes de precisão | parcial | ESTADO.md linha 64: float2/3/4, quaternion, float4x4, Transform, Bounds, Ray, Plane, Frustum ✅ 27 testes (`MathTests.cs`); o kernel nativo ARM64 de composição está validado, mas SIMD NEON explícito no restante da biblioteca ainda é trabalho do próprio item 1.5.1 |
 | 1.5.2 | Tempo: fixed step, interpolação, escala de tempo, pausa | implementado | `managed/Aether.Core/Time/FixedClock.cs`: `Advance(realDeltaTime)` devolve a contagem de passos fixos e mantém `InterpolationAlpha`; `TimeScale`/`Paused` distintos; teto `MaxStepsPerAdvance` com `DroppedSteps` evita espiral da morte. ✅ 20 testes (`TimeTests.cs`) — cobre drift de precisão em 10k frames, espiral da morte, pausa/retomada, `NoAlloc`. Ainda não consumido por nenhum sistema (`PhysicsSyncSystem`/`TransformSystem` continuam recebendo `deltaTime` solto do chamador) — integração é trabalho futuro, não deste item |
-| 1.5.3 | Eventos e sinais tipados | não iniciado | Nenhum sistema de eventos/sinais encontrado; permanece no item 1.5.3 do plano principal |
-| 1.5.4 | Sistema de configuração/preferências | não iniciado | Nenhum sistema de configuração versionada encontrado; permanece no item 1.5.4 do plano principal |
+| 1.5.3 | Eventos e sinais tipados | implementado | `managed/Aether.Core/Events/Signal.cs`: `Signal<T>` publicador/assinante com array de slots pré-alocado e alça geracional `SignalSubscription` (mesmo padrão de `PhysicsBodyHandle`). ✅ 13 testes (`SignalTests.cs`) — cobre reciclagem de slot, auto-remoção durante a própria publicação, idempotência de `Unsubscribe`, crescimento de array. Ainda não consumido por nenhum sistema existente (física/ECS continuam com seus próprios padrões de polling, ex. `GetTriggerEvents`) — integração é trabalho futuro |
+| 1.5.4 | Sistema de configuração/preferências | implementado | `managed/Aether.Core/Configuration/ConfigurationStore.cs`: dicionário chave→valor tipado (int/float/bool/string), leitura tolerante e estrita, serialização texto determinística com round-trip completo. ✅ 25 testes (`ConfigurationStoreTests.cs`). Persistência em disco (onde salvar por plataforma) depende de 1.1.1 (abstração de filesystem), ainda não iniciado — deliberadamente fora do escopo deste tipo, que só serializa para `string` |
 
-> **Gate M1:** o subgate de desempenho 1.3.6 está validado em aparelho classe A
-> (<6 ms para 100 mil transforms, zero GC). O marco M1 global continua aberto
-> pelos itens 1.5.3–1.5.4 e 1.2.3–1.2.5 ainda pendentes; fechar o benchmark não
-> equivale a fechar todo o marco.
+> **Gate M1: FECHADO.** O subgate de desempenho 1.3.6 está validado em aparelho
+> classe A (<6 ms para 100 mil transforms, zero GC). A Etapa 1.5 (matemática/tempo/
+> eventos/configuração) está fechada. 1.2.3 (primitivas lock-free), 1.2.4
+> (instrumentação) e 1.2.5 (analisador Roslyn `[NoAlloc]`) estão fechados. Todos os
+> itens que compunham o marco M1 estão implementados com evidência de teste/build
+> real — não há mais subitem pendente neste gate.
 
 ---
 

@@ -39,10 +39,15 @@ public sealed class JobSystem : IDisposable
     private readonly ConcurrentQueue<JobEntry> _anyQueue = new();
     private readonly Thread[] _workers;
     private volatile bool _shuttingDown;
+    private readonly JobDiagnostics _diagnostics = new();
 
     [ThreadStatic] private static List<JobEntry>? _executionStack;
 
     public int WorkerCount => _workers.Length;
+
+    /// <summary>Item 1.2.4: visualizador de jobs — últimos jobs concluídos + totais por label.
+    /// Ver <see cref="JobDiagnostics"/>.</summary>
+    public JobDiagnostics Diagnostics => _diagnostics;
 
     /// <param name="performanceWorkers">Workers de núcleo "grande". -1 = automático a partir de <see cref="Environment.ProcessorCount"/>.</param>
     /// <param name="efficiencyWorkers">Workers de núcleo "pequeno" (import, compressão, etc).</param>
@@ -123,6 +128,11 @@ public sealed class JobSystem : IDisposable
     {
         var stack = _executionStack ??= new List<JobEntry>();
         stack.Add(entry);
+        // Item 1.2.4 (visualizador de jobs): mede duração+alocação da execução real, não do
+        // agendamento — Stopwatch.GetTimestamp()/AllocationTracker.Begin() são ambos leituras
+        // baratas (sem alocação, sem lock), seguras no caminho quente de todo job.
+        long startTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+        long allocBegin = global::Aether.Diagnostics.AllocationTracker.Begin();
         try
         {
             // Uma exceção do job não pode derrubar o worker: capturamos aqui e
@@ -135,6 +145,9 @@ public sealed class JobSystem : IDisposable
         }
         finally
         {
+            entry.ExecutionTicks = System.Diagnostics.Stopwatch.GetTimestamp() - startTicks;
+            entry.AllocatedBytes = global::Aether.Diagnostics.AllocationTracker.BytesSince(allocBegin);
+            _diagnostics.Record(entry);
             stack.RemoveAt(stack.Count - 1);
             entry.FinishInline();
         }
@@ -144,9 +157,18 @@ public sealed class JobSystem : IDisposable
         => Schedule(job, CoreAffinity.Any, dependsOn);
 
     public JobHandle Schedule(Action job, CoreAffinity affinity, JobHandle dependsOn = default)
+        => Schedule(job, "job", affinity, dependsOn);
+
+    /// <summary>Mesmo agendamento de <see cref="Schedule(Action,CoreAffinity,JobHandle)"/>, com
+    /// <paramref name="label"/> atribuindo este job a uma categoria para o visualizador de jobs
+    /// (item 1.2.4) — ex.: <c>"physics.step"</c>, <c>"render.cull"</c>. Sem label explícito, todo
+    /// job cai na categoria genérica <c>"job"</c>, o que ainda funciona mas não separa
+    /// subsistemas no snapshot de <see cref="Diagnostics"/>.</summary>
+    public JobHandle Schedule(Action job, string label, CoreAffinity affinity, JobHandle dependsOn = default)
     {
         ArgumentNullException.ThrowIfNull(job);
-        var entry = new JobEntry { Work = job, Affinity = affinity, EnqueueSelf = Enqueue };
+        ArgumentNullException.ThrowIfNull(label);
+        var entry = new JobEntry { Work = job, Affinity = affinity, EnqueueSelf = Enqueue, Label = label };
         return ScheduleEntry(entry, dependsOn);
     }
 
