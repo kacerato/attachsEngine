@@ -31,9 +31,9 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 263 |
+| não iniciado | 262 |
 | PoC | 9 |
-| parcial | 25 |
+| parcial | 26 |
 | implementado | 30 |
 | validado em hardware | 5 |
 | aceito | 1 |
@@ -134,7 +134,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 1.4.2 | Serializador binário + texto, com migração de versão de esquema | implementado | Texto v2 persiste `ComponentField.Id`, lê v1 e resolve aliases de campo/componente; fixtures cobrem rename/adição/remoção/compatibilidade/futuro e v1→v2→v3. Binário prova dois elos v1→v2→v3 e alias; `Joint` prova referências `EntityId`, limites e motor nos dois formatos. 22 testes (`GAP-SER-01` fechado) |
 | 1.4.3 | Sistema de recursos: GUID, referência fraca/forte, carregamento assíncrono, contagem de uso | implementado | ESTADO.md linha 71: ResourceId, ResourceRef/WeakResourceRef, ResourceHandleTable, carregamento assíncrono via JobSystem ✅ 18 testes |
 | 1.4.4 | Sistema de comandos de edição (undo/redo) + WAL de recuperação | implementado | ESTADO.md linha 72: UndoStack + WAL com fsync, checksum FNV-1a, recuperação parcial ✅ 16 testes |
-| 1.4.5 | Índice de dependências em SQLite | não iniciado | ESTADO.md linha 91: "deliberadamente não implementado ainda. Não existe um SQLite de verdade vendorizado no repositório" |
+| 1.4.5 | Índice de dependências em SQLite | parcial | SQLite 3.53.4 vendorizado (`native/third_party/sqlite/`, amálgama oficial verificado por hash SHA3-256) + binding nativo `native/resources/sqlite_bridge.h/.cpp` (open/close, prepare/step/reset, bind por tipo, leitura de coluna, texto sempre como ponteiro+comprimento). ✅ 7 testes C++ (`test_sqlite_bridge.cpp`), build nativo 119/119 verde. Continua `parcial`: falta o binding C# via P/Invoke e o schema do índice de dependências em si (deliberadamente adiado — Fase 7, quando existir consumidor real) |
 
 ### Etapa 1.5 — Matemática, tempo e utilitários
 

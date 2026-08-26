@@ -83,6 +83,13 @@ set(BOX2D_PROFILE OFF CACHE BOOL "" FORCE)
 set(BOX2D_VALIDATE OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/Box2D EXCLUDE_FROM_ALL)
 
+# --- SQLite 3.53.4 (item 1.4.5: índice de dependências) --------------------
+# Mesmo motivo de entrar antes das flags estritas da engine: warnings de código de terceiros
+# (aqui, C puro dentro de um build majoritariamente C++) não podem quebrar nossos alvos.
+# EXCLUDE_FROM_ALL: só compilada quando algo depende dela (aether_resources abaixo), não em
+# todo `cmake --build .` genérico.
+add_subdirectory(third_party/sqlite EXCLUDE_FROM_ALL)
+
 # Engine mobile: sem RTTI, sem exceções, warnings tratados como erro nos alvos de runtime.
 # (só para o NOSSO código — ver a nota acima sobre por que o Jolt entra antes desta linha.)
 add_compile_options(
@@ -237,6 +244,29 @@ if(NOT ANDROID)
   target_link_libraries(aether_physics_shared PUBLIC aether_core PRIVATE Jolt)
 endif()
 
+# --- aether_resources: fronteira C ABI blittable sobre o SQLite vendorizado (item 1.4.5) --
+# Só o binding (abrir/fechar, preparar/step, bind/coluna) — o schema do índice de dependências em
+# si é trabalho futuro da Fase 7, quando existir consumidor real (ver sqlite_bridge.h).
+add_library(aether_resources STATIC
+  resources/sqlite_bridge.cpp
+)
+target_include_directories(aether_resources PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(aether_resources PUBLIC aether_core PRIVATE sqlite3)
+
+# --- aether_resources_shared: mesma lógica de aether_physics_shared — P/Invoke precisa de
+# biblioteca dinâmica carregável em runtime, não estática linkada no processo de teste nativo.
+if(NOT ANDROID)
+  add_library(aether_resources_shared SHARED
+    resources/sqlite_bridge.cpp
+  )
+  set_target_properties(aether_resources_shared PROPERTIES OUTPUT_NAME "aether_resources")
+  if(WIN32)
+    set_target_properties(aether_resources_shared PROPERTIES PREFIX "")
+  endif()
+  target_include_directories(aether_resources_shared PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(aether_resources_shared PUBLIC aether_core PRIVATE sqlite3)
+endif()
+
 # --- aether_tests: runner próprio, sem dependência externa ------------------
 if(NOT ANDROID)
   add_executable(aether_tests
@@ -248,6 +278,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_jolt_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_sqlite_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_trigger_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_body_batch_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_joint_bridge.cpp
@@ -259,7 +290,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_transform_bridge.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
-  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_rhi aether_physics aether_transform)
+  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_rhi aether_physics aether_transform aether_resources)
 
   # Probe separado porque induzir overflow em Debug dispara corretamente o
   # assert fail-fast do próprio Jolt. Em Release este binário valida a outra
