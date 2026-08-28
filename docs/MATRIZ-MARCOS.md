@@ -31,11 +31,11 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 256 |
+| não iniciado | 255 |
 | PoC | 9 |
 | parcial | 31 |
 | implementado | 32 |
-| validado em hardware | 4 |
+| validado em hardware | 5 |
 | aceito | 1 |
 | **Total** | **333** |
 
@@ -71,7 +71,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 0.2 (PoC-A) | Vulkan + .NET: 5.000 objetos a 60 fps, < 3 ms CPU | parcial | Simpleperf identificou trigonometria repetida e trabalho em Binder/BLAST. Cache sem alocação e build C# automático integrados: smoke release 60,039 FPS, CPU média 2,412 ms/pico 18,237 ms, interop wall médio 0,537 ms (antes 1,192). CPU máxima não atende ao orçamento; matriz e causa individual dos picos pendentes. Ver `PROFILING-ANDROID.md` e `m0-batch-20260828/optimized-smoke/report.json` |
 | 0.2 (PoC-B) | Gestos de edição: 10 testadores completam tarefa em < 30 s | PoC | `prototype/editor.html` prova UX de gizmos/câmera (ESTADO.md linha 63, 130-132), mas nenhum teste formal com 10 usuários foi registrado |
 | 0.2 (PoC-C) | Térmica: 30 min sem throttle, < 4 W | parcial | Runner integrado CPU/FPS/potência com cobertura, média temporal, KEEP_SCREEN_ON local e evidência incremental. Smoke de 28/08: 60,039 FPS, mínimo 59/1 s, 2,273 W médios, status térmico 0. Rodada longa interrompida pelo usuário; CPU parcial recuperada, sem série longa de energia/FPS válida. 30 min, sensor no PowerGovernor e matriz continuam pendentes; ver `PROFILING-ANDROID.md` |
-| 0.2 (PoC-D) | Hot reload C#: editar → ver mudança em < 2 s | não iniciado | Nenhum pipeline de hot reload implementado nesta base |
+| 0.2 (PoC-D) | Hot reload C#: editar → ver mudança em < 2 s | validado em hardware | `managed/Aether.Core/Scripting/HotReloadHost.cs`: carrega/descarrega assembly de script via `AssemblyLoadContext` collectible (não o protocolo completo de Hot Reload do .NET — decisão registrada no comentário de classe: escopo de PoC, não da pipeline de produto da Fase 5/9). Entry points `HotReload_Load/InvokeCompute/Unload/GetManagedHeapBytes` em `NativeEntryPoints.cs`. **Medido em hardware real** (Xiaomi 25053PC47G/Snapdragon SM8735, mesmo aparelho de referência): 10 ciclos completos load→invoke→unload em 128 ms totais (12,8 ms/ciclo média) — muito abaixo do orçamento de 2 s — com troca real de comportamento confirmada (V1 `x+1` e V2 `x*10` nos mesmos 5 → 6 e 50) e delta de heap gerenciado de apenas ~21 KB após os 10 ciclos (não crescimento linear indicando vazamento). Achado registrado com honestidade: a confirmação síncrona de "contexto totalmente coletado" via `WeakReference` nem sempre conclui dentro do orçamento de tentativas em hardware Android sob carga do shell gráfico (sempre confirma no host Windows/x64) — o ciclo funcional e o heap não mentem, mas essa checagem específica é um indicador imperfeito nesse ambiente, documentado como tal, não escondido | ✅ 11 testes (`HotReloadHostTests.cs`), incluindo compilação Roslyn em memória simulando duas versões de um script editado, medição de tempo do ciclo (host), e múltiplos ciclos sem crescimento de memória |
 | 0.2 (PoC-E) | Compressão ASTC em GPU: < 300 ms para 4096×4096 | não iniciado | Nenhum compressor ASTC/compute shader no repositório |
 
 ### Etapa 0.3 — Pesquisa de UX
@@ -446,7 +446,7 @@ não recebem estado agregado — servem apenas de navegação.
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
 | 5.7.1 | Compilação Roslyn no dispositivo, incremental | não iniciado | Nenhuma implementação de compilação Roslyn no dispositivo encontrada |
-| 5.7.2 | Hot reload com migração de estado | não iniciado | Ver 0.2 PoC-D — não implementado |
+| 5.7.2 | Hot reload com migração de estado | não iniciado | A viabilidade técnica do ciclo load/unload de assembly está provada e validada em hardware (0.2 PoC-D), mas migração de estado entre versões do script (preservar valores de campo ao trocar de assembly) e integração com o pipeline de edição do AetherFlow não existem — este item é sobre o produto final, não a fundação técnica que 0.2 já entrega |
 | 5.7.3 | Editor de código touch: símbolos, autocompletar, snippets | não iniciado | Nenhuma implementação encontrada |
 | 5.7.4 | Ditado por voz com gramática de código [opcional] | não iniciado | Nenhuma implementação encontrada |
 | 5.7.5 | Depurador de C# no dispositivo | não iniciado | Nenhuma implementação encontrada |

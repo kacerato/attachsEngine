@@ -11,6 +11,22 @@
   </ItemGroup>
 
   <!--
+    Item 0.2 (PoC-D, hot reload): HotReloadHostTests compila C# em memória via Roslyn para simular
+    o resultado de uma edição do usuário virando um assembly novo — mesmo mecanismo de
+    Aether.Analyzers.csproj (Roslyn já vem dentro do SDK, sem NuGet), mas aqui as DLLs precisam
+    estar no diretório de saída (Private não desligado) porque o PROCESSO DE TESTE as carrega em
+    runtime para compilar, não o MSBuild em tempo de build.
+  -->
+  <ItemGroup>
+    <Reference Include="Microsoft.CodeAnalysis">
+      <HintPath>$(MSBuildToolsPath)\Roslyn\bincore\Microsoft.CodeAnalysis.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp">
+      <HintPath>$(MSBuildToolsPath)\Roslyn\bincore\Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <!--
     Testes de Aether.Physics carregam a biblioteca nativa "aether_physics" via [LibraryImport]
     em runtime — precisa estar ao lado do executável de teste. Não há build nativo automático
     aqui de propósito (dotnet build não deveria depender de ter cmake/ninja disponível para
