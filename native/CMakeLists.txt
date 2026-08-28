@@ -198,6 +198,7 @@ if(ANDROID)
     platform/android/instanced_renderer.cpp
     platform/android/dotnet_host.cpp
     platform/android/dotnet_assets.cpp
+    platform/android/astc_encode_probe.cpp
   )
   target_include_directories(aether_android PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

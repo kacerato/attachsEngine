@@ -2,6 +2,7 @@
 param(
     [ValidatePattern('^[a-z][a-z0-9_]*$')]
     [string]$ShaderName = "instanced",
+    [string[]]$Stages = @("vert", "frag"),
     [string]$OutputHeader,
     [string]$NdkPath,
     [switch]$Check
@@ -58,7 +59,7 @@ function Convert-SpirvToArray {
 
 try {
     $compiled = [ordered]@{}
-    foreach ($stage in @("vert", "frag")) {
+    foreach ($stage in $Stages) {
         $source = Join-Path $shaderDirectory "$ShaderName.$stage"
         if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Shader ausente: $source" }
         $binary = Join-Path $temporaryDirectory "$ShaderName.$stage.spv"
@@ -79,12 +80,12 @@ try {
     $header.Add("")
     $header.Add("namespace ae::rhi::shaders {")
     $header.Add("")
-    foreach ($stage in @("Vert", "Frag")) {
-        $key = $stage.ToLowerInvariant()
-        $header.Add("inline constexpr uint32_t k${prefix}${stage}Spirv[] = {")
-        foreach ($line in $compiled[$key].Lines) { $header.Add($line) }
+    foreach ($stage in $Stages) {
+        $stageTitle = [Globalization.CultureInfo]::InvariantCulture.TextInfo.ToTitleCase($stage)
+        $header.Add("inline constexpr uint32_t k${prefix}${stageTitle}Spirv[] = {")
+        foreach ($line in $compiled[$stage].Lines) { $header.Add($line) }
         $header.Add("};")
-        $header.Add("inline constexpr uint32_t k${prefix}${stage}SpirvSize = sizeof(k${prefix}${stage}Spirv);")
+        $header.Add("inline constexpr uint32_t k${prefix}${stageTitle}SpirvSize = sizeof(k${prefix}${stageTitle}Spirv);")
         $header.Add("")
     }
     $header.Add("} // namespace ae::rhi::shaders")

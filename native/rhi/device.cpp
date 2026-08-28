@@ -445,10 +445,21 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface) {
   queueInfo.queueCount = 1;
   queueInfo.pQueuePriorities = &priority;
 
+  // ASTC é o formato de compressão de textura obrigatório no piso de hardware do plano
+  // (RNF-11: "Vulkan 1.1 + ASTC + 6 GB RAM"), então habilitá-lo aqui não é uma feature opcional
+  // condicional — todo aparelho-alvo já suporta. Consultada via GetPhysicalDeviceFeatures (não
+  // presumida) porque uma feature não solicitada continua desligada mesmo se o hardware suportar,
+  // e vkCreateDevice falha se pedirmos uma feature que o GetFeatures não confirmou disponível.
+  VkPhysicalDeviceFeatures supportedFeatures{};
+  vkGetPhysicalDeviceFeatures(physicalDevice_, &supportedFeatures);
+  VkPhysicalDeviceFeatures enabledFeatures{};
+  enabledFeatures.textureCompressionASTC_LDR = supportedFeatures.textureCompressionASTC_LDR;
+
   VkDeviceCreateInfo deviceInfo{};
   deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.queueCreateInfoCount = 1;
   deviceInfo.pQueueCreateInfos = &queueInfo;
+  deviceInfo.pEnabledFeatures = &enabledFeatures;
   const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
   if (presentationSurface != VK_NULL_HANDLE) {
     deviceInfo.enabledExtensionCount = 1;

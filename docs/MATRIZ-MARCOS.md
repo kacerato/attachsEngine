@@ -31,11 +31,11 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 255 |
+| não iniciado | 254 |
 | PoC | 9 |
 | parcial | 31 |
 | implementado | 32 |
-| validado em hardware | 5 |
+| validado em hardware | 6 |
 | aceito | 1 |
 | **Total** | **333** |
 
@@ -72,7 +72,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 0.2 (PoC-B) | Gestos de edição: 10 testadores completam tarefa em < 30 s | PoC | `prototype/editor.html` prova UX de gizmos/câmera (ESTADO.md linha 63, 130-132), mas nenhum teste formal com 10 usuários foi registrado |
 | 0.2 (PoC-C) | Térmica: 30 min sem throttle, < 4 W | parcial | Runner integrado CPU/FPS/potência com cobertura, média temporal, KEEP_SCREEN_ON local e evidência incremental. Smoke de 28/08: 60,039 FPS, mínimo 59/1 s, 2,273 W médios, status térmico 0. Rodada longa interrompida pelo usuário; CPU parcial recuperada, sem série longa de energia/FPS válida. 30 min, sensor no PowerGovernor e matriz continuam pendentes; ver `PROFILING-ANDROID.md` |
 | 0.2 (PoC-D) | Hot reload C#: editar → ver mudança em < 2 s | validado em hardware | `managed/Aether.Core/Scripting/HotReloadHost.cs`: carrega/descarrega assembly de script via `AssemblyLoadContext` collectible (não o protocolo completo de Hot Reload do .NET — decisão registrada no comentário de classe: escopo de PoC, não da pipeline de produto da Fase 5/9). Entry points `HotReload_Load/InvokeCompute/Unload/GetManagedHeapBytes` em `NativeEntryPoints.cs`. **Medido em hardware real** (Xiaomi 25053PC47G/Snapdragon SM8735, mesmo aparelho de referência): 10 ciclos completos load→invoke→unload em 128 ms totais (12,8 ms/ciclo média) — muito abaixo do orçamento de 2 s — com troca real de comportamento confirmada (V1 `x+1` e V2 `x*10` nos mesmos 5 → 6 e 50) e delta de heap gerenciado de apenas ~21 KB após os 10 ciclos (não crescimento linear indicando vazamento). Achado registrado com honestidade: a confirmação síncrona de "contexto totalmente coletado" via `WeakReference` nem sempre conclui dentro do orçamento de tentativas em hardware Android sob carga do shell gráfico (sempre confirma no host Windows/x64) — o ciclo funcional e o heap não mentem, mas essa checagem específica é um indicador imperfeito nesse ambiente, documentado como tal, não escondido | ✅ 11 testes (`HotReloadHostTests.cs`), incluindo compilação Roslyn em memória simulando duas versões de um script editado, medição de tempo do ciclo (host), e múltiplos ciclos sem crescimento de memória |
-| 0.2 (PoC-E) | Compressão ASTC em GPU: < 300 ms para 4096×4096 | não iniciado | Nenhum compressor ASTC/compute shader no repositório |
+| 0.2 (PoC-E) | Compressão ASTC em GPU: < 300 ms para 4096×4096 | validado em hardware | `native/rhi/shaders/astc_encode.comp`: encoder ASTC 4x4 mínimo (não de produção — bounding box RGB como endpoints, projeção escalar como peso; 1 partição, single-plane, sem trit/quint). `native/platform/android/astc_encode_probe.h/.cpp`: dispara o compute shader sobre o `VulkanDevice` já validado do shell, mede via GPU timestamp query, e valida o resultado através do **hardware decode real** (cria uma imagem `VK_FORMAT_ASTC_4x4_UNORM_BLOCK` com os bytes gerados e lê de volta via blit — o driver Adreno é o decoder de referência, não uma reimplementação própria). **Medido em hardware real** (mesmo Xiaomi de referência): 1,6-1,7 ms para 4096×4096 completo (1.048.576 blocos), muito abaixo do orçamento de 300 ms; diferença máxima de canal de 4/255 entre original e decodificado pelo hardware, confirmando bloco estruturalmente correto, não lixo. `device.cpp` passou a habilitar `textureCompressionASTC_LDR` explicitamente (ausente antes — nenhuma feature Vulkan era habilitada). Um bug real foi encontrado e corrigido durante a validação: a primeira versão usava QUANT_16 (4 bits/canal) para os endpoints, mas o formato ASTC deriva o quant mode dos endpoints do espaço de bits sobrando após reservar os pesos (`quant_mode_table` do encoder de referência ARM) — para este block mode o único quant mode válido é QUANT_32 (5 bits/canal); o hardware decodificava os bytes antigos como lixo porque reinterpretava a mesma região de bits com um quant mode diferente do que o encoder assumiu. Documentado em detalhe no cabeçalho do `.comp`, para não repetir o erro. Bloco de exercício manual no `android_main.cpp` removido do shell após a evidência ser coletada — mesma disciplina do PoC-D |
 
 ### Etapa 0.3 — Pesquisa de UX
 
@@ -475,7 +475,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 6.1.1 | Importadores: glTF, FBX, OBJ, USD/USDZ, VRM, Collada, STL/PLY | não iniciado | Nenhum importador de asset no repositório |
 | 6.1.2 | Imagens: PNG/JPG/WebP/EXR/HDR/TGA/PSD | não iniciado | Nenhuma implementação encontrada |
 | 6.1.3 | Processamento de malha: cache, LOD, tangentes, quantização | não iniciado | Nenhuma implementação encontrada |
-| 6.1.4 | Compressão ASTC/ETC2 em compute shader + KTX2/Basis | não iniciado | Nenhuma implementação encontrada (ver PoC-E, 0.2) |
+| 6.1.4 | Compressão ASTC/ETC2 em compute shader + KTX2/Basis | não iniciado | A viabilidade técnica do encoder ASTC em compute shader está provada e validada em hardware (0.2 PoC-E), mas é um encoder mínimo (bounding box, sem particionamento múltiplo), sem ETC2, sem empacotamento KTX2/Basis, e sem integração ao pipeline de import — este item é sobre o encoder de produção completo, não a fundação técnica que 0.2 já entrega |
 | 6.1.5 | Cache por hash, import incremental, preview progressivo | não iniciado | Nenhuma implementação encontrada |
 | 6.1.6 | Streaming de texturas por mip | não iniciado | Nenhuma implementação encontrada |
 

@@ -1,0 +1,171 @@
+#version 450
+
+// PoC-E do plano (item 0.2): "compressão ASTC em GPU — < 300 ms para 4096x4096". Encoder ASTC
+// MÍNIMO, não de produção: cada bloco de 4x4 texels vira um bloco físico ASTC de 128 bits usando
+// a heurística mais simples possível (bounding box RGB como endpoints, projeção escalar como
+// peso) — 1 partição, single-plane, sem trit/quint em nenhum campo, para provar a viabilidade de
+// desempenho de "comprimir em compute shader", não a qualidade de compressão de um encoder real
+// (isso é trabalho da Fase 6, item 6.1.4, com um encoder de produção como o astc-encoder da ARM).
+//
+// Layout de bits do bloco físico (128 bits = 4x uint), confirmado contra a especificação Khronos
+// (OES_texture_compression_astc.txt) e a implementação de referência ARM astc-encoder:
+//
+//   bits  0-10  (11): block mode = 0x253 — weight grid 4x4, single-plane, QUANT_32 (5 bits/peso,
+//                      sem trit/quint — o range mais simples de implementar)
+//   bits 11-12  ( 2): partition count - 1 = 0 (1 partição — sem campo de partition-seed)
+//   bits 13-16  ( 4): CEM (color endpoint mode) = 8 — "LDR RGB, direct", 6 valores de endpoint
+//   bits 17-46  (30): 6 valores de endpoint (e0.r,e1.r,e0.g,e1.g,e0.b,e1.b), QUANT_32 (5 bits/
+//                      valor, LSB-first sequencial). NÃO É UMA ESCOLHA LIVRE: o quant mode dos
+//                      endpoints é derivado do espaço de bits que sobra após reservar os 80 bits
+//                      de peso (color_bits = 111 - 80 = 31 para 1 partição), e a tabela
+//                      quant_mode_table[3][31] do astc-encoder de referência da ARM mapeia
+//                      exatamente para QUANT_32 (30 bits, cabendo nos 31 disponíveis) — o decoder
+//                      SEMPRE recalcula esse quant mode a partir do espaço sobrando, não lê um
+//                      campo explícito dizendo qual quant mode foi usado. Usar QUANT_16 aqui (como
+//                      uma primeira versão deste shader fazia) produz um bloco que o hardware
+//                      decodifica como lixo — confirmado em execução real no Adreno do aparelho de
+//                      referência antes desta correção.
+//   bit  47     ( 1): padding, sempre zero
+//   bits 48-127 (80): 16 pesos (5 bits cada, QUANT_32), um por texel em ordem raster (x cresce
+//                      mais rápido) — ARMAZENADOS EM ORDEM DE BITS REVERSA A PARTIR DO FIM DO
+//                      BLOCO (peculiaridade documentada do formato: bit lógico n do stream de
+//                      pesos vira o bit físico 127-n do bloco). Como QUANT_32 não usa trit/quint,
+//                      a reversão aqui se reduz a: para o peso de índice i (0..15), seus 5 bits
+//                      físicos ficam em [127 - 5*i - 4 .. 127 - 5*i], com os PRÓPRIOS BITS do
+//                      valor também invertidos em ordem (bit mais significativo do valor vai para
+//                      a posição física mais baixa dentro do grupo de 5).
+//
+// Sem particionamento múltiplo, sem HDR, sem alpha (CEM 8 = RGB) — o mínimo que produz um bloco
+// ASTC 4x4 válido e decodificável por qualquer decoder real (testado contra o hardware Adreno do
+// próprio dispositivo, que decodifica o formato nativamente).
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba8) uniform readonly image2D sourceImage;
+layout(set = 0, binding = 1, std430) buffer OutputBlocks {
+  uvec4 blocks[];
+};
+
+layout(push_constant) uniform PushConstants {
+  uint blocksPerRow;
+} pc;
+
+const uint kBlockMode = 0x253u;
+
+// Escreve `bitCount` bits de `value` no bloco, começando no bit `offset` (0 = LSB do primeiro
+// uint), avançando para bits mais significativos — mesma convenção "LSB-first" usada pelo
+// encoder de referência para block mode/partition/CEM/endpoints (tudo exceto os pesos).
+void writeBitsLsbFirst(inout uvec4 block, uint offset, uint bitCount, uint value) {
+  for (uint i = 0u; i < bitCount; ++i) {
+    uint bit = (value >> i) & 1u;
+    uint absoluteBit = offset + i;
+    uint word = absoluteBit >> 5u;
+    uint bitInWord = absoluteBit & 31u;
+    if (bit != 0u) {
+      block[word] |= (1u << bitInWord);
+    }
+  }
+}
+
+// Escreve o peso de índice `weightIndex` (0..15), valor de 5 bits `value` (0..31), na região de
+// pesos do bloco — que cresce do bit físico 127 para baixo, com os bits do PRÓPRIO valor também
+// invertidos (bit mais significativo do valor na posição física mais baixa do grupo de 5). Isso é
+// equivalente a reverter o buffer de peso inteiro (byte-reverse + bit-reverse) e sobrepor no fim
+// do bloco, mas calculado diretamente por peso porque QUANT_32 não usa trit/quint (sem blocos de
+// 5/3 valores entrelaçados para desfazer).
+void writeWeightReversed(inout uvec4 block, uint weightIndex, uint value) {
+  const uint weightBits = 5u;
+  uint logicalBitBase = weightIndex * weightBits; // posição do valor no stream lógico de pesos, bit 0 = primeiro peso, primeiro bit
+  for (uint i = 0u; i < weightBits; ++i) {
+    // bit i do VALOR (i=0 é o menos significativo do valor) mapeia para o bit lógico
+    // (logicalBitBase + i) do stream de pesos, que por sua vez vira o bit físico
+    // 127 - (logicalBitBase + i) do bloco — a reversão do formato ASTC.
+    uint logicalBit = logicalBitBase + i;
+    uint physicalBit = 127u - logicalBit;
+    uint bitValue = (value >> i) & 1u;
+    uint word = physicalBit >> 5u;
+    uint bitInWord = physicalBit & 31u;
+    if (bitValue != 0u) {
+      block[word] |= (1u << bitInWord);
+    }
+  }
+}
+
+// Quantiza um componente de cor [0,255] para QUANT_32 (5 bits, 0..31) — o quant mode exigido pelo
+// formato para este block mode (ver comentário de cabeçalho do arquivo), não uma escolha livre.
+uint quantizeColor5Bit(uint value255) {
+  return uint(round(float(value255) * 31.0 / 255.0));
+}
+
+// Quantiza um peso de interpolação [0,1] para QUANT_32 (5 bits, 0..31).
+uint quantizeWeight5Bit(float weight01) {
+  return uint(round(clamp(weight01, 0.0, 1.0) * 31.0));
+}
+
+void main() {
+  uvec2 blockCoord = gl_GlobalInvocationID.xy;
+  ivec2 imageSize = imageSize(sourceImage);
+  uint blocksX = uint(imageSize.x + 3) / 4u;
+  uint blocksY = uint(imageSize.y + 3) / 4u;
+  if (blockCoord.x >= blocksX || blockCoord.y >= blocksY) return;
+
+  // Lê os 16 texels do bloco (clampando na borda para imagens cuja dimensão não é múltiplo de 4).
+  vec3 texels[16];
+  for (uint ty = 0u; ty < 4u; ++ty) {
+    for (uint tx = 0u; tx < 4u; ++tx) {
+      ivec2 pixelCoord = ivec2(blockCoord.x * 4u + tx, blockCoord.y * 4u + ty);
+      pixelCoord = min(pixelCoord, imageSize - ivec2(1));
+      texels[ty * 4u + tx] = imageLoad(sourceImage, pixelCoord).rgb;
+    }
+  }
+
+  // Endpoints = bounding box RGB dos 16 texels — a heurística mais simples que produz endpoints
+  // válidos; um encoder de produção testaria múltiplos eixos de projeção e particionamento, isto
+  // aqui só precisa produzir um bloco válido e razoavelmente próximo da cor original.
+  vec3 minColor = texels[0];
+  vec3 maxColor = texels[0];
+  for (uint i = 1u; i < 16u; ++i) {
+    minColor = min(minColor, texels[i]);
+    maxColor = max(maxColor, texels[i]);
+  }
+
+  vec3 axis = maxColor - minColor;
+  float axisLengthSq = dot(axis, axis);
+
+  uvec4 block = uvec4(0u);
+
+  // Cabeçalho: block mode, partition count-1=0, CEM=8 (LDR RGB direct).
+  writeBitsLsbFirst(block, 0u, 11u, kBlockMode);
+  writeBitsLsbFirst(block, 11u, 2u, 0u);
+  writeBitsLsbFirst(block, 13u, 4u, 8u);
+
+  // Endpoints (bits 17-46): e0.r,e1.r,e0.g,e1.g,e0.b,e1.b — ordem confirmada da especificação,
+  // intercalada por canal, não (e0.rgb, e1.rgb) sequencial.
+  uvec3 minQ = uvec3(quantizeColor5Bit(uint(round(minColor.r * 255.0))),
+                      quantizeColor5Bit(uint(round(minColor.g * 255.0))),
+                      quantizeColor5Bit(uint(round(minColor.b * 255.0))));
+  uvec3 maxQ = uvec3(quantizeColor5Bit(uint(round(maxColor.r * 255.0))),
+                      quantizeColor5Bit(uint(round(maxColor.g * 255.0))),
+                      quantizeColor5Bit(uint(round(maxColor.b * 255.0))));
+
+  writeBitsLsbFirst(block, 17u, 5u, minQ.r);
+  writeBitsLsbFirst(block, 22u, 5u, maxQ.r);
+  writeBitsLsbFirst(block, 27u, 5u, minQ.g);
+  writeBitsLsbFirst(block, 32u, 5u, maxQ.g);
+  writeBitsLsbFirst(block, 37u, 5u, minQ.b);
+  writeBitsLsbFirst(block, 42u, 5u, maxQ.b);
+  // bit 47 permanece zero (padding) — uvec4(0u) inicial já garante isso.
+
+  // Pesos (bits 48-127, ordem reversa): projeção escalar de cada texel na linha minColor->maxColor.
+  for (uint i = 0u; i < 16u; ++i) {
+    float t = 0.0;
+    if (axisLengthSq > 1e-8) {
+      t = dot(texels[i] - minColor, axis) / axisLengthSq;
+    }
+    uint quantized = quantizeWeight5Bit(t);
+    writeWeightReversed(block, i, quantized);
+  }
+
+  uint blockIndex = blockCoord.y * pc.blocksPerRow + blockCoord.x;
+  blocks[blockIndex] = block;
+}
