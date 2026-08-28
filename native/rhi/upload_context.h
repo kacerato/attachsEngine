@@ -29,6 +29,13 @@ public:
                                  u64 sourceSizeBytes, VulkanImage &destination);
   bool uploadSampledMipChain(VulkanMemoryAllocator &allocator, const void *sourceBytes,
                             u64 sourceSizeBytes, VulkanImage &destination);
+  // Static geometry upload. Destination is device-local and already created
+  // with TRANSFER_DST plus its final usage; completion is synchronous because
+  // this context belongs to initialization/import, never the frame loop.
+  bool uploadBuffer(VulkanMemoryAllocator &allocator, const void *sourceBytes,
+                    u64 sourceSizeBytes, VulkanBuffer &destination,
+                    VkPipelineStageFlags destinationStage,
+                    VkAccessFlags destinationAccess);
 
 private:
   VkDevice device_ = VK_NULL_HANDLE;

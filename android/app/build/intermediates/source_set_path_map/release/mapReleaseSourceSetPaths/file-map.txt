@@ -1,0 +1,7 @@
+dev.aether.editor.app-pngs-0 C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\generated\res\pngs\release
+dev.aether.editor.app-resValues-1 C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\generated\res\resValues\release
+dev.aether.editor.app-packageReleaseResources-2 C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\intermediates\incremental\release\packageReleaseResources\merged.dir
+dev.aether.editor.app-packageReleaseResources-3 C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\intermediates\incremental\release\packageReleaseResources\stripped.dir
+dev.aether.editor.app-release-4 C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\intermediates\merged_res\release\mergeReleaseResources
+dev.aether.editor.app-main-5 C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\res
+dev.aether.editor.app-release-6 C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\release\res

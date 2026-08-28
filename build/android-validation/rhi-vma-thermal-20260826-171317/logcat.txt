@@ -1,0 +1,59 @@
+--- startup ---
+--------- beginning of main
+I/Aether.Android(15642): Shell nativo iniciado.
+I/Aether.Android(15642): Extração de assets .NET concluída: 179 ok, 0 falharam.
+I/Aether.Android(15642): CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Core.runtimeconfig.json).
+I/Aether.Android(15642): CoreCLR hospedado no shell: Ping(2,3)=5.
+I/Aether.Android(15642): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(15642): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(15642): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(15642): InstancedRenderer pronto: 5000 instâncias (PoC-A).
+I/Aether.Android(15642): Aplicativo ativo.
+I/Aether.Android(15642): Primeiro frame após ativação apresentado: ciclo=1.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1576.5 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1602.8 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1565.7 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): Marco de renderização atingido: 1000 frames apresentados.
+
+--- lifecycle 1 ---
+lifecycle-1-e0024d260a4149f1b4776265a0686d4b
+I/Aether.Android(15642): Aplicativo suspenso.
+I/Aether.Android(15642): Aplicativo ativo.
+I/Aether.Android(15642): Primeiro frame após ativação apresentado: ciclo=2.
+
+--- final logcat window ---
+--------- beginning of main
+I/Aether.Android(15642): Shell nativo iniciado.
+I/Aether.Android(15642): Extração de assets .NET concluída: 179 ok, 0 falharam.
+I/Aether.Android(15642): CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Core.runtimeconfig.json).
+I/Aether.Android(15642): CoreCLR hospedado no shell: Ping(2,3)=5.
+I/Aether.Android(15642): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(15642): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(15642): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(15642): InstancedRenderer pronto: 5000 instâncias (PoC-A).
+I/Aether.Android(15642): Aplicativo ativo.
+I/Aether.Android(15642): Primeiro frame após ativação apresentado: ciclo=1.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1576.5 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1602.8 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1565.7 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): Marco de renderização atingido: 1000 frames apresentados.
+I/Aether.Validation(17492): lifecycle-1-e0024d260a4149f1b4776265a0686d4b
+I/Aether.Android(15642): Aplicativo suspenso.
+I/Aether.Android(15642): Aplicativo ativo.
+I/Aether.Android(15642): Primeiro frame após ativação apresentado: ciclo=2.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1713.2 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=3367.8 us (orçamento: 3000 us) — ACIMA do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=3569.3 us (orçamento: 3000 us) — ACIMA do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1659.9 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1642.7 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1624.8 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1680.8 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1733.7 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=3647.3 us (orçamento: 3000 us) — ACIMA do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=2401.0 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1946.5 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1847.0 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(15642): PoC-A: 5000 instâncias, crossing C++<->C# pico=1800.1 us (orçamento: 3000 us) — dentro do orçamento.
+
+--- crash buffer ---
+

@@ -155,4 +155,55 @@ bool VulkanUploadContext::uploadSampledMipChain(VulkanMemoryAllocator &allocator
   return vkResetFences(device_, 1, &fence_) == VK_SUCCESS;
 }
 
+bool VulkanUploadContext::uploadBuffer(VulkanMemoryAllocator &allocator, const void *sourceBytes,
+    u64 sourceSizeBytes, VulkanBuffer &destination, VkPipelineStageFlags destinationStage,
+    VkAccessFlags destinationAccess) {
+  if (device_ == VK_NULL_HANDLE || sourceBytes == nullptr || sourceSizeBytes == 0 ||
+      !allocator.isReady() || allocator.device() != device_ || destination.owner_ != &allocator ||
+      !destination.isReady() || destination.sizeBytes() != sourceSizeBytes ||
+      destinationStage == 0 || destinationAccess == 0) return false;
+
+  BufferDesc stagingDesc{};
+  stagingDesc.sizeBytes = sourceSizeBytes;
+  stagingDesc.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+  stagingDesc.memoryClass = MemoryClass::Staging;
+  stagingDesc.cpuAccess = CpuAccess::SequentialWrite;
+  stagingDesc.preferDeviceMemory = false;
+  VulkanBuffer staging;
+  if (!allocator.createBuffer(stagingDesc, &staging) || staging.mappedData() == nullptr) return false;
+  std::memcpy(staging.mappedData(), sourceBytes, static_cast<usize>(sourceSizeBytes));
+  if (!allocator.flushBuffer(staging)) return false;
+
+  if (vkResetCommandPool(device_, commandPool_, 0) != VK_SUCCESS) return false;
+  VkCommandBufferBeginInfo beginInfo{};
+  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+  if (vkBeginCommandBuffer(commandBuffer_, &beginInfo) != VK_SUCCESS) return false;
+  VkBufferCopy copy{0, 0, sourceSizeBytes};
+  vkCmdCopyBuffer(commandBuffer_, staging.handle(), destination.handle(), 1, &copy);
+  VkBufferMemoryBarrier barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+  barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  barrier.dstAccessMask = destinationAccess;
+  barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.buffer = destination.handle();
+  barrier.size = sourceSizeBytes;
+  vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TRANSFER_BIT, destinationStage,
+                       0, 0, nullptr, 1, &barrier, 0, nullptr);
+  if (vkEndCommandBuffer(commandBuffer_) != VK_SUCCESS) return false;
+
+  VkSubmitInfo submitInfo{};
+  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submitInfo.commandBufferCount = 1;
+  submitInfo.pCommandBuffers = &commandBuffer_;
+  if (vkQueueSubmit(queue_, 1, &submitInfo, fence_) != VK_SUCCESS) return false;
+  const VkResult waitResult = vkWaitForFences(device_, 1, &fence_, VK_TRUE, UINT64_MAX);
+  if (waitResult != VK_SUCCESS) {
+    vkQueueWaitIdle(queue_);
+    return false;
+  }
+  return vkResetFences(device_, 1, &fence_) == VK_SUCCESS;
+}
+
 } // namespace ae::rhi

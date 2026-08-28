@@ -1,0 +1,289 @@
+
+  EcsTests
+    [32mok[0m   AddComponent_DeTipoJaExistente_Lanca
+    [32mok[0m   AddComponent_MigraArquetipoPreservandoOsOutrosComponentes
+    [estrutural-10k] add=3 ms, remove=4 ms, ids/dados preservados
+    [32mok[0m   Benchmark_MudancasEstruturaisEmDezMilEntidades_PreservaIdsEDados
+    [32mok[0m   ChangeDetection_EscritaMarcaExatamenteOChunkAcessado
+    [32mok[0m   ChangeDetection_LeituraNaoMarca_EscritaMarcaSomenteAColuna
+    [32mok[0m   CriarEDestruirEntidade_ExistsReflete
+    [32mok[0m   DestruirEntidadeNoMeioDoChunk_SwapBackMantemAsOutrasIntegras
+    [32mok[0m   DestruirEntidadeQueNaoExiste_NaoAcontece_EhErroDeUso
+    [32mok[0m   ECB_AddComponentDiferidoEmEntidadeJaExistente
+    [32mok[0m   ECB_CriacaoDiferida_SoAparaceNoPlayback
+    [32mok[0m   ECB_DestruicaoDiferida
+    [32mok[0m   ECB_ReferenciaAEntidadeCriadaNoProprioBuffer
+    [escala] criar 100000 entidades: 34 ms
+    [escala] iterar+atualizar 100000 entidades: 4 ms
+    [32mok[0m   Escala_CemMilEntidades_ConsultaEAtualizacaoCorretasSemAlocar
+    [32mok[0m   FiltroDeMudanca_EntregaSomenteChunkEColunaAlteradosESemGcEstavel
+    [32mok[0m   GetComponent_EmEntidadeDestruida_LancaComMensagemEmPortugues
+    [32mok[0m   GetSetComponent_LeemEEscrevemOMesmoArmazenamento
+    [32mok[0m   HasComponent_ReflexoDoArquetipoAtual
+    [32mok[0m   Hierarquia_DestruirPai_NetoNaoTravaEEhTratadoComoRaiz
+    [32mok[0m   Hierarquia_PaiMovidoMoveOFilho
+    [32mok[0m   Hierarquia_TresNiveis_PropagaCorretamente
+    [32mok[0m   IdReciclado_ComVersaoNova_NaoEhConfundidoComOAntigo
+    [32mok[0m   QueryCompilada_ReusaCacheEMantemArquetiposNovosEExclusoes
+    [32mok[0m   Query_ComWithSoDevolveEntidadesComTodosOsComponentes
+    [32mok[0m   Query_ComWithoutExcluiEntidadesComOComponenteProibido
+    [32mok[0m   Query_IteracaoNaoAloca
+    [32mok[0m   Query_SobreMundoVazio_NaoExplode
+    [32mok[0m   RemoveComponent_DeTipoAusente_Lanca
+    [32mok[0m   RemoveComponent_MigraArquetipoPreservandoOsOutrosComponentes
+    [32mok[0m   TryGetComponent_DevolveFalseQuandoAusente
+
+  EditingTests
+    [32mok[0m   ExecuteWithWal_GravaNoDiscoAntesDeChamarDoDoComando
+    [32mok[0m   Execute_DepoisDeUmUndo_DescartaOFuturoDeRedo
+    [32mok[0m   Execute_RodaOComandoEEmpilhaParaUndo
+    [32mok[0m   Redo_ReaplicaOQueFoiDesfeito
+    [32mok[0m   UndoStack_EstourarProfundidadeMaxima_DescartaOMaisAntigoENaoLanca
+    [32mok[0m   UndoStack_ProfundidadeMaximaInvalida_Lanca
+    [32mok[0m   Undo_DesfazNaOrdemInversaDeExecucao
+    [32mok[0m   Undo_PilhaVazia_DevolveFalseSemLancar
+    [32mok[0m   WalCommandRegistry_RegistrarDeNovoMesmoParTagTipo_EhIdempotente
+    [32mok[0m   WalCommandRegistry_RegistrarMesmaTagParaTipoDiferente_Lanca
+    [32mok[0m   WriteAheadLog_AppendContinuaAposReabrirNoMesmoArquivo
+    [32mok[0m   WriteAheadLog_Checkpoint_ZeraOLogERecoverNaoTrazNadaDepois
+    [32mok[0m   WriteAheadLog_Recover_ApósCrashSemCheckpoint_DevolveComandosNaOrdemCerta
+    [32mok[0m   WriteAheadLog_Recover_ArquivoInexistente_DevolveListaVazia
+    [32mok[0m   WriteAheadLog_Recover_ArquivoTruncadoNoMeioDoUltimoRegistro_DevolveOsAnterioresSemLancar
+    [32mok[0m   WriteAheadLog_Recover_ChecksumCorrompido_ParaAntesDoRegistroCorrompido
+
+  FlowTests
+    [32mok[0m   CodeGen_GrafoConhecidoProduzCSharpEsperado
+    [32mok[0m   CodeGen_PrecedenciaSoUsaParentesesQuandoNecessario
+    [32mok[0m   CodeGen_SeComSenaoSeguidoDeInstrucaoNaoDuplicaNemPerdeAInstrucaoSeguinte
+    [32mok[0m   CodeGen_SeSemSenaoSeguidoDeInstrucaoApareceDepoisDoBlocoFechado
+    [32mok[0m   Diferencial_CSharpOriginalInterpretadorECSharpRegeneradoConcordam
+    [32mok[0m   Interpretador_BreakAninhadoEncerraApenasOLacoMaisInterno
+    [32mok[0m   Interpretador_BreakDentroDeIfEncerraSomenteOLaco
+    [32mok[0m   Interpretador_ContinueDentroDeIfPulaORestanteDaIteracao
+    [32mok[0m   Interpretador_DefinirVariavelNoInicio
+    [32mok[0m   Interpretador_EnquantoComAlvoZeroNaoExecutaOCorpo
+    [32mok[0m   Interpretador_EnquantoRepeteONumeroCertoDeVezes
+    [32mok[0m   Interpretador_EventoSemCorpoNaoLancaExcecao
+    [32mok[0m   Interpretador_GrafoVazioNaoLancaExcecao
+    [32mok[0m   Interpretador_LacoInfinitoEhInterrompidoComMensagemClara
+    [32mok[0m   Interpretador_NoSemNenhumaConexaoNaoAfetaExecucao
+    [32mok[0m   Interpretador_ReturnDentroDeIfImpedeAContinuacaoDoEvento
+    [32mok[0m   Interpretador_SeAninhadoDentroDoRamoEntaoDeOutroSeComInstrucoesDepoisDosDois
+    [32mok[0m   Interpretador_SeComSenaoOsDoisRamosConvergemParaDepois
+    [32mok[0m   Interpretador_SeDentroDeEnquantoContinuaOCorpoDoLaco
+    [32mok[0m   Interpretador_SeExecutaRamoFalso
+    [32mok[0m   Interpretador_SeExecutaRamoVerdadeiro
+    [32mok[0m   Interpretador_SeSemSenaoAindaAssimEncadeiaDepois
+    [32mok[0m   Parser_RejeitaReturnComValorEInstrucaoInalcancavel
+    [32mok[0m   RoundTrip_AstParaCSharpParaAstEhEquivalente
+    [32mok[0m   RoundTrip_CSharpForaDoSubconjuntoViraCodeRaw
+    [32mok[0m   RoundTrip_GrafoVazioSerializaEDeserializaSemErro
+    [32mok[0m   RoundTrip_IfEleGeraOMesmoComportamentoDepoisDeReconstruido
+    [32mok[0m   RoundTrip_ParserLeIfNaoUltimoEReconstroiOGrafoCorretamente
+    [32mok[0m   RoundTrip_ParserLeIfSemSenaoSeguidoDeInstrucao
+    [32mok[0m   RoundTrip_SerializacaoEhDeterministica
+    [32mok[0m   RoundTrip_SerializacaoIdaEVoltaPreservaOGrafo
+    [32mok[0m   RoundTrip_SerializacaoPreservaNosDeControleTerminal
+    [32mok[0m   Validador_BreakEContinueForaDeLacoGeramErro
+    [32mok[0m   Validador_CicloDeDadosGeraErro
+    [32mok[0m   Validador_CicloDeExecucaoAtravesDeLacoEhLegitimo
+    [32mok[0m   Validador_CicloDeExecucaoSemLacoGeraErro
+    [32mok[0m   Validador_EventosDuplicadosGeraAviso
+    [32mok[0m   Validador_MensagensSaoEmPortuguesSemJargao
+    [32mok[0m   Validador_NoOrfaoGeraAviso
+    [32mok[0m   Validador_PinoObrigatorioVazioGeraErro
+    [32mok[0m   Validador_ReturnComValorManualGeraErro
+    [32mok[0m   Validador_TipoIncompativelNaConexaoGeraErro
+    [32mok[0m   Validador_VariavelInexistenteGeraErro
+
+  HierarchyTests
+    [hierarquia-100k] setup=303 ms, depth=7, p50=16.06 ms, p95=32.07 ms, p99=40.16 ms, GC/frame=0
+    [32mok[0m   Benchmark_CemMilTransformsEmHierarquiaRealista_SemGcEComPercentis
+    [32mok[0m   Detach_CosturaAListaNoMeio
+    [32mok[0m   Detach_RemoveOPrimeiroDaLista
+    [32mok[0m   EnumerateChildren_DeQuemNaoTemFilhosNaoExplode
+    [32mok[0m   EnumerateChildren_NaoAloca
+    [32mok[0m   Hierarquia_AguentaMuitosFilhos
+    [32mok[0m   Node_EhFachadaSemOwnershipDuplicadoESegueAGeracaoDaEntidade
+    [32mok[0m   Node_HierarquiaAmigavelMantemComponentesEIteraSemAlocar
+    [32mok[0m   Node_RecusaParentDeOutroWorld
+    [32mok[0m   Propagacao_AindaFuncionaComAHierarquiaEncadeada
+    [32mok[0m   SetParent_PrendeEDesprende
+    [32mok[0m   SetParent_RecusaCiclo
+    [32mok[0m   SetParent_RecusaEntidadeDestruida
+    [32mok[0m   SetParent_RecusaProfundidadePatologicaAntesDeAlterarAHierarquia
+    [32mok[0m   SetParent_TrocarDePaiNaoDeixaRestoNoAntigo
+
+  JobTests
+    [32mok[0m   CombineDependencies_JuncaoSoConcluiQuandoTodasTerminam
+    [32mok[0m   Complete_CicloDeTresJobs_DiagnosticaTodosOsNos
+    [32mok[0m   Complete_CicloEntreDoisJobsIndependentes_DetectaSemTimeout
+    [32mok[0m   Complete_DeDependenteEnquantoPrerequisitoExecuta_DetectaCaminhoAntesDeEsperar
+    [32mok[0m   Complete_DentroDoProprioJob_DetectaCicloEmVezDeTravar
+    [32mok[0m   Complete_HandleDefault_NaoFazNada
+    [32mok[0m   Complete_RelancaExcecaoDoJobComContexto
+    [32mok[0m   JobSystem_FuncionaComUmUnicoWorker
+    [32mok[0m   ScheduleParallel_CobreExatamenteORangeSemSobreporENemDeixarBuraco
+    [32mok[0m   ScheduleParallel_ComCountZero_NaoFazNada
+    [32mok[0m   Schedule_CadeiaDeDependencias_ExecutaNaOrdemCerta
+    [32mok[0m   Schedule_NJobsIndependentes_TodosExecutam
+    [32mok[0m   StressDeDezMilJobsPequenos
+
+  MathTests
+    [32mok[0m   AlignUp_ELimitesDeAlocador
+    [32mok[0m   Bounds_EncapsulateConstroiAPartirDoVazio
+    [32mok[0m   Bounds_TransformCobreOObjetoGirado
+    [32mok[0m   Cross_SegueRegraDaMaoEsquerda
+    [32mok[0m   Damp_EhIndependenteDaTaxaDeQuadros
+    [32mok[0m   Frustum_CulaOQueEstaAtrasEForaDaVista
+    [32mok[0m   LookAt_ColocaCameraNaOrigemOlhandoParaFrente
+    [32mok[0m   Math_NaoAlocaNoCaminhoQuente
+    [32mok[0m   Matriz_InversaDeSingularNaoExplode
+    [32mok[0m   Matriz_InversaDesfazTransformacao
+    [32mok[0m   Matriz_MultiplicacaoRespeitaOrdemPaiFilho
+    [32mok[0m   Matriz_TRSCasaComTransformComponente
+    [32mok[0m   Normalized_NuncaProduzNaN
+    [32mok[0m   Projecao_ReverseZInverteAProfundidade
+    [32mok[0m   Projecao_VulkanColocaProfundidadeEmZeroUm
+    [32mok[0m   Projecao_YInvertidoParaConvencaoVulkan
+    [32mok[0m   Quaternion_ComposicaoEhAssociativaEOrdemImporta
+    [32mok[0m   Quaternion_InversoDesfazRotacao
+    [32mok[0m   Quaternion_LookRotationOlhaParaOAlvo
+    [32mok[0m   Quaternion_RotacaoDe90GrausEmY
+    [32mok[0m   Quaternion_SlerpPegaCaminhoCurto
+    [32mok[0m   Ray_AcertaEErraAABB
+    [32mok[0m   Ray_ClosestPointOnAxis_EhABaseDoGizmoDeEixo
+    [32mok[0m   Ray_ClosestPointOnAxis_NaoExplodeComEixoParalelo
+    [32mok[0m   Snap_ArredondaParaAGradeDoEditor
+
+  MemoryTests
+    [32mok[0m   FrameArena_AlocacaoDeTamanhoZeroDevolveSpanVazio
+    [32mok[0m   FrameArena_AlocacaoRespeitaAlinhamento
+    [32mok[0m   FrameArena_ContagemNegativaLanca
+    [32mok[0m   FrameArena_CresceComBlocosQuandoEstoura
+    [32mok[0m   FrameArena_NaoAlocaNoHeapGerenciadoEmAllocEReset
+    [32mok[0m   FrameArena_PeakBytesReflete_O_MaiorUsoJaVisto
+    [32mok[0m   FrameArena_ResetReusaAMesmaMemoria
+    [32mok[0m   MemoryBudget_CallbackDeLimiarDisparaUmaVezSoNaoARepeteCadaByte
+    [32mok[0m   MemoryBudget_RemainingNuncaFicaNegativo
+    [32mok[0m   MemoryBudget_SomaAlocacoesELiberacoesPorCategoria
+    [32mok[0m   NativeArray_DisposeDuploEhSeguro
+    [32mok[0m   NativeArray_IndexadorRef_AlteraOConteudoReal
+    [32mok[0m   NativeArray_IndiceForaDeFaixaLanca
+    [32mok[0m   NativeArray_TamanhoZeroFuncionaSemLancar
+    [32mok[0m   NativeList_Cresce_E_PreservaConteudo
+    [32mok[0m   NativeList_DisposeDuploEhSeguro
+    [32mok[0m   NativeList_IndexadorRef_AlteraOConteudoReal
+    [32mok[0m   NativeList_IndiceForaDeFaixaLancaComMensagemClara
+    [32mok[0m   PoolAllocator_DoubleFreeEhDetectado
+    [32mok[0m   PoolAllocator_IndiceForaDeFaixaLanca
+    [32mok[0m   PoolAllocator_PonteirosContinuamValidosAposCrescer
+    [32mok[0m   PoolAllocator_RentReturnRent_DevolveOMesmoBloco
+
+  Physics2DTests
+    [32mok[0m   CorpoDynamic_ComTodosOsDofsDeTranslacaoTravados_EhRecusado
+    [32mok[0m   CorpoNormal_AllowedDOFsDefault_ContinuaLivreEmTodosOsEixos
+    [32mok[0m   CorpoPlane2D_AssentaSobrePiso2D_NaAlturaEsperada
+    [32mok[0m   CorpoPlane2D_CaiNormalmenteNoPlanoXY_SobGravidade
+    [32mok[0m   CorpoPlane2D_NaoSeMoveEmZ_MesmoComVelocidadeDiretaEmZ
+    [32mok[0m   CorpoStatic_ComDofsTravados_NaoEhAfetadoPelaValidacaoDeDynamic
+
+  PhysicsCharacterTests
+    [32mok[0m   AgacharDebaixoDeTetoBaixo_ImpedeLevantar
+    [32mok[0m   AgacharTrocaParaCapsulaMenor_ELevantarTrocaDeVolta
+    [32mok[0m   Character_AcompanhaPlataformaDirigidaPorMoveKinematic
+    [32mok[0m   Character_AndaSobreRampaAndavel_SemFicarPreso
+    [32mok[0m   Character_CaiSobGravidadeEAssentaSobrePisoEstatico
+    [32mok[0m   Character_ContraRampaIngremeDemais_PrimeiroContatoNaoEhOnGround
+    [32mok[0m   Character_EmQuedaSemPiso_ReportaEstadoEmAr
+    [32mok[0m   Character_GrudadoAPlataformaMovel_HerdaAVelocidadeDoChao
+    [32mok[0m   Character_SobeDegrauComUpdateCharacter
+    [32mok[0m   CriarEDestruirCharacter_SemDeixarEstadoPendurado
+    [32mok[0m   DestroyCharacter_ChamadoDuasVezes_NaoLancaEHandleReciclado_TemGeracaoDiferente
+
+  PhysicsJointTests
+    [32mok[0m   CreateJoint_ComHandleDeCorpoInvalido_DevolveHandleInvalidoSemLancar
+    [32mok[0m   DestroyJoint_ChamadoDuasVezes_NaoLancaEHandleReciclado_TemGeracaoDiferente
+    [32mok[0m   DestroyJoint_LiberaOCorpoQueVoltaACairLivremente
+    [32mok[0m   JuntaDistancia_LimitaAfastamentoEntreDoisCorpos
+    [32mok[0m   JuntaDobradica_ComLimites_AnguloNuncaUltrapassaOLimite
+    [32mok[0m   JuntaPonto_PrendeCorpoDinamicoAAncoraEstatica
+    [32mok[0m   MotorDeDobradica_ComVelocidadeAlvo_GiraOBracoNaVelocidadeCorreta
+    [32mok[0m   MotorDeSlider_ComPosicaoAlvo_ConvergeParaOAlvo
+
+  PhysicsQueryTests
+    [32mok[0m   OverlapShape_ComIgnoreBody_ExcluiOProprioCorpo
+    [32mok[0m   OverlapShape_EncontraCorposDentroDoVolumeEIgnoraOsDeFora
+    [32mok[0m   OverlapShape_SemNenhumCorpoDentro_DevolveContagemZero
+    [32mok[0m   RayCastAll_AcertaTodosOsCorposEmpilhadosOrdenadosPorDistancia
+    [32mok[0m   RayCastAll_ComBufferMenorQueOsHits_DevolveContagemRealNaoTruncada
+    [32mok[0m   RayCastAll_ComIgnoreBody_ExcluiOCorpoEspecificado
+    [32mok[0m   RayCastAll_ComLayerMaskStatic_IgnoraCorposDinamicos
+    [32mok[0m   ShapeCastClosest_EsferaVarridaAcertaOPisoNoPontoDeContato
+    [32mok[0m   ShapeCastClosest_SemAlcanceSuficiente_NaoAcertaNada
+
+  PhysicsTests
+    [32mok[0m   CorpoDinamico_CaiSobGravidadeESincronizaWorldTransform
+    [32mok[0m   CorpoEstatico_NaoRecebeTransformDoJoltAposCriacao
+    [32mok[0m   CriarCorpoEstatico_NaoLancaEDevolveHandleValido
+    [32mok[0m   DestroyBody_LimpaHandleENaoCrashaChamadoDuasVezes
+    [32mok[0m   KinematicSync_EmiteMovimentoEParadaUmaVezSemCrossingEstavel
+    [32mok[0m   PlataformaCinematicaMovidaPeloEcs_TransportaCorpoDinamico
+    [32mok[0m   RayCastClosest_AcertaCorpoCriadoPelaFachada
+    [32mok[0m   StepV2_DevolveFlagsEContadoresDoMesmoMundo
+    [32mok[0m   SyncNewBodies_CriaCorpoNativoUmaUnicaVez
+    [32mok[0m   WorldConfiguration_DefaultsMantemCapacidadesIndependentes
+    [32mok[0m   WorldConfiguration_RejeitaLimitesQueOJoltNaoPodeUsar
+
+  PowerTests
+    [32mok[0m   BateriaBaixaSemCarregador_ReduzOTetoDeFps
+    [32mok[0m   CadaEstadoTermico_ProduzOPerfilDaTabela
+    [32mok[0m   MelhoraSustentada_EventualmenteSobeDeQualidade
+    [32mok[0m   NullThermalSource_SempreDevolveNominal
+    [32mok[0m   OscilarPertoDoLimiar_NaoOscilaASaida
+    [32mok[0m   PiorarEhImediato_MasMelhorarExigeHisterese
+
+  ResourceTests
+    [32mok[0m   ResourceHandleTable_AddRefERelease_ContagemSobeEDesce
+    [32mok[0m   ResourceHandleTable_RecursoComContagemZero_FicaElegivelParaDescarregar
+    [32mok[0m   ResourceHandleTable_Release_AlemDaContagemConcedida_Lanca
+    [32mok[0m   ResourceHandleTable_Release_IdNuncaRegistrado_Lanca
+    [32mok[0m   ResourceHandleTable_TryGet_CaminhoQuenteNaoAloca
+    [32mok[0m   ResourceHandleTable_TryGet_RecursoNuncaRegistrado_DevolveFalse
+    [32mok[0m   ResourceId_Empty_EhODefaultEIgualANone
+    [32mok[0m   ResourceId_New_GeraIdsDiferentesENaoVazios
+    [32mok[0m   ResourceManager_LoadAsync_ChamadaRepetidaNaoDisparaSegundoCarregamento
+    [32mok[0m   ResourceManager_LoadAsync_LoaderQueLancaMarcaFailedSemDerrubarAJob
+    [32mok[0m   ResourceManager_LoadAsync_NaoBloqueiaAChamadoraEnquantoCarrega
+    [32mok[0m   ResourceRef_AddRef_CriaPosseIndependenteDaOriginal
+    [32mok[0m   ResourceRef_CopiaDeStruct_NaoIncrementaContagem
+    [32mok[0m   ResourceRef_Dispose_LiberaAPosseNaTabela
+    [32mok[0m   ResourceRef_TryGetValue_AntesDeCarregarDevolveFalse_DepoisDevolveOValor
+    [32mok[0m   WeakResourceRef_TryResolve_EnquantoAindaCarregando_DevolveFalse
+    [32mok[0m   WeakResourceRef_TryResolve_RecursoCarregado_DevolveReferenciaFortePropria
+    [32mok[0m   WeakResourceRef_TryResolve_RecursoNuncaCarregado_DevolveFalse
+
+  SerializationTests
+    [32mok[0m   ComponenteNaoRegistrado_EIgnoradoAoSalvarEAoCarregar
+    [32mok[0m   Deserialize_RecusaWorldNaoVazio
+    [32mok[0m   Hierarquia_SobreviveAoRoundTripBinario
+    [32mok[0m   MigracaoBinariaV1ParaV3_AplicaDoisElosEAliasDeComponente
+    [32mok[0m   MigracaoDeEsquema_AplicaCadeiaAoLerUmBlobVersao1
+    [32mok[0m   MundoVazio_SerializaEDesserializaSemExcecao
+    [32mok[0m   MundoVazio_SerializaEDesserializaSemExcecaoTexto
+    [32mok[0m   OffsetDeCampoAposBool_NaoUsaLayoutMarshaledDoInteropERespeitaOTamanhoRealDaStruct
+    [32mok[0m   Read_RecusaWorldNaoVazio
+    [32mok[0m   RegisterBuiltins_EIdempotente
+    [32mok[0m   RegisterMigration_RecusaVersaoInvalida
+    [32mok[0m   Register_RecusaNomeDuplicadoParaTipoDiferente
+    [32mok[0m   Register_RecusaTipoDuplicado
+    [32mok[0m   RoundTripBinario_EBitExato
+    [32mok[0m   RoundTripTexto_EDeterministico
+    [32mok[0m   RoundTripTexto_PreservaValoresEHierarquia
+    [32mok[0m   TextoV1ParaV3_PreservaRenameAdicaoRemocaoETipoCompativel
+    [32mok[0m   TextoV2ParaV3_IdEstavelSobreviveASegundoRename
+    [32mok[0m   Texto_CampoDuplicadoPorAliasEhRecusado
+    [32mok[0m   Texto_MudancaIncompativelEFuturoFalhamComContexto
+
+  [32mTUDO VERDE[0m — 252 passaram, 0 falharam, 0 pulados em 3969 ms
+

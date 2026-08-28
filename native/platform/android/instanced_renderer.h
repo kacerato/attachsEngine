@@ -10,6 +10,10 @@
 #include "rhi/upload_context.h"
 #include "renderer/render_instance.h"
 #include "platform/android/material_preview_resources.h"
+#include "platform/android/dirt_road_resources.h"
+#include "platform/free_camera_controller.h"
+
+#include <vector>
 
 namespace ae::platform::android {
 
@@ -34,13 +38,15 @@ public:
   bool initialize(rhi::VulkanDevice &device, rhi::VulkanSwapchain &swapchain,
                   DotNetHost &dotNetHost, u32 instanceCount, bool scenePreview = false,
                   AAssetManager *materialAssets = nullptr, bool forceTextureFallback = false,
-                  const std::atomic<bool> *cancel = nullptr);
+                  const std::atomic<bool> *cancel = nullptr, bool dirtRoadPreview = false);
   void shutdown();
 
   // Os ângulos de órbita vêm da camada de input, em radianos. O renderer
   // permanece independente de AInputEvent/touch IDs e pode futuramente
   // receber a mesma ação de teclado, gamepad ou NoCode.
-  rhi::SwapchainStatus drawFrame(float timeSeconds, float orbitYaw, float orbitPitch);
+  rhi::SwapchainStatus drawFrame(float timeSeconds, const platform::FreeCameraState &camera);
+  bool hasDefaultCamera() const { return dirtRoadPreview_ && dirtRoadResources_.header().drawCount != 0; }
+  platform::FreeCameraState defaultCamera() const { return dirtRoadResources_.defaultCamera(); }
 
   // Microssegundos de wall time no crossing C++→C# de FillInstanceBuffer do frame
   // mais recente (só o crossing + preenchimento, não o frame Vulkan inteiro
@@ -65,6 +71,8 @@ private:
   bool createTextureResources();
   bool createBindlessRegistry();
   bool createTextureDescriptors();
+  bool createEnvironmentDescriptors();
+  bool createSkyPipeline();
 
   VkDevice device_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
@@ -93,6 +101,13 @@ private:
   u32 baseTextureIndex_ = rhi::kBindlessIndexInvalid;
   VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline pipeline_ = VK_NULL_HANDLE;
+  VkPipeline transparentPipeline_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout environmentSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorPool environmentPool_ = VK_NULL_HANDLE;
+  VkDescriptorSet environmentSet_ = VK_NULL_HANDLE;
+  rhi::VulkanBuffer environmentUniform_{};
+  VkPipelineLayout skyPipelineLayout_ = VK_NULL_HANDLE;
+  VkPipeline skyPipeline_ = VK_NULL_HANDLE;
 
   static constexpr u32 kMaxFramebuffers = 8;
   VkFramebuffer framebuffers_[kMaxFramebuffers]{};
@@ -114,13 +129,18 @@ private:
   u32 drawnInstanceCount_ = 0;
   bool scenePreview_ = false;
   bool materialPreview_ = false;
+  bool dirtRoadPreview_ = false;
   MaterialPreviewResources materialResources_;
+  DirtRoadResources dirtRoadResources_;
+  std::vector<u32> dirtTextureSlots_;
+  std::vector<VkDescriptorSet> dirtMaterialSets_;
+  std::vector<u32> transparentDrawOrder_;
   struct MaterialParameters { float roughness=1, metallic=1, normalScale=1; };
   MaterialParameters materialParameters_;
   int lastExtractionStatus_ = 0;
   using ExtractSceneFn = int (*)(renderer::RenderInstance *, int capacity, int stride, int version);
   ExtractSceneFn extractScene_ = nullptr;
-  u32 instanceStride() const { return scenePreview_ ? sizeof(renderer::RenderInstance) : 5 * sizeof(float); }
+  u32 instanceStride() const { return (scenePreview_ || dirtRoadPreview_) ? sizeof(renderer::RenderInstance) : 5 * sizeof(float); }
 
   using FillInstanceBufferFn = void (*)(float *outBuffer, int instanceCount, float timeSeconds);
   FillInstanceBufferFn fillInstanceBuffer_ = nullptr;

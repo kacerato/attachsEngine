@@ -1,0 +1,103 @@
+--- startup ---
+--------- beginning of main
+I/Aether.Android(20657): Shell nativo iniciado.
+I/Aether.Android(20657): Extração de assets .NET concluída: 179 ok, 0 falharam.
+I/Aether.Android(20657): CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Core.runtimeconfig.json).
+I/Aether.Android(20657): CoreCLR hospedado no shell: Ping(2,3)=5.
+I/Aether.Android(20657): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(20657): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(20657): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(20657): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Android(20657): Aplicativo ativo.
+I/Aether.Android(20657): Primeiro frame após ativação apresentado: ciclo=1.
+I/Aether.Android(20657): PoC-A: 5000 instâncias, crossing C++<->C# pico=3564.6 us (orçamento: 3000 us) — ACIMA do orçamento.
+I/Aether.Android(20657): PoC-A: 5000 instâncias, crossing C++<->C# pico=1586.8 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(20657): PoC-A: 5000 instâncias, crossing C++<->C# pico=3021.7 us (orçamento: 3000 us) — ACIMA do orçamento.
+I/Aether.Android(20657): Marco de renderização atingido: 1000 frames apresentados.
+
+--- lifecycle 1 ---
+lifecycle-1-c29d5ba2934a41b2b6ff62acd6c58b41
+I/Aether.Android(20657): Aplicativo suspenso.
+I/Aether.Android(20657): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(20657): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(20657): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(20657): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Android(20657): Aplicativo ativo.
+I/Aether.Android(20657): Primeiro frame após ativação apresentado: ciclo=2.
+
+--- configuration change ---
+configuration-change-4ba9fd49f60c4d9498adf3cfadad5647
+I/Aether.Android(20657): PoC-A: 5000 instâncias, crossing C++<->C# pico=3661.6 us (orçamento: 3000 us) — ACIMA do orçamento.
+I/Aether.Android(20657): Configuração alterada: janela=2772x1280.
+I/Aether.Android(20657): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(20657): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+
+--- configuration restore ---
+configuration-restore-93b22c3a38c34a8da7c95678b1f17507
+I/Aether.Android(20657): Configuração alterada: janela=2772x1280.
+I/Aether.Android(20657): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(20657): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+
+--- screen cycle ---
+screen-cycle-adfed45be6314f879b9a7f8e8c73178d
+I/Aether.Android(20657): Aplicativo suspenso.
+I/Aether.Android(20657): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(20657): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(20657): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(20657): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Android(20657): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(20657): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(20657): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(20657): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Android(20657): Aplicativo ativo.
+I/Aether.Android(20657): Primeiro frame após ativação apresentado: ciclo=3.
+
+--- final logcat window ---
+--------- beginning of main
+I/Aether.Android(20657): Shell nativo iniciado.
+I/Aether.Android(20657): Extração de assets .NET concluída: 179 ok, 0 falharam.
+I/Aether.Android(20657): CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Core.runtimeconfig.json).
+I/Aether.Android(20657): CoreCLR hospedado no shell: Ping(2,3)=5.
+I/Aether.Android(20657): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(20657): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(20657): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(20657): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Android(20657): Aplicativo ativo.
+I/Aether.Android(20657): Primeiro frame após ativação apresentado: ciclo=1.
+I/Aether.Android(20657): PoC-A: 5000 instâncias, crossing C++<->C# pico=3564.6 us (orçamento: 3000 us) — ACIMA do orçamento.
+I/Aether.Android(20657): PoC-A: 5000 instâncias, crossing C++<->C# pico=1586.8 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(20657): PoC-A: 5000 instâncias, crossing C++<->C# pico=3021.7 us (orçamento: 3000 us) — ACIMA do orçamento.
+I/Aether.Android(20657): Marco de renderização atingido: 1000 frames apresentados.
+I/Aether.Validation(28089): lifecycle-1-c29d5ba2934a41b2b6ff62acd6c58b41
+I/Aether.Android(20657): Aplicativo suspenso.
+I/Aether.Android(20657): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(20657): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(20657): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(20657): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Android(20657): Aplicativo ativo.
+I/Aether.Android(20657): Primeiro frame após ativação apresentado: ciclo=2.
+I/Aether.Validation(28197): configuration-change-4ba9fd49f60c4d9498adf3cfadad5647
+I/Aether.Android(20657): PoC-A: 5000 instâncias, crossing C++<->C# pico=3661.6 us (orçamento: 3000 us) — ACIMA do orçamento.
+I/Aether.Android(20657): Configuração alterada: janela=2772x1280.
+I/Aether.Android(20657): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(20657): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Validation(28250): configuration-restore-93b22c3a38c34a8da7c95678b1f17507
+I/Aether.Android(20657): Configuração alterada: janela=2772x1280.
+I/Aether.Android(20657): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(20657): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Validation(28284): screen-cycle-adfed45be6314f879b9a7f8e8c73178d
+I/Aether.Android(20657): Aplicativo suspenso.
+I/Aether.Android(20657): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(20657): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(20657): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(20657): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Android(20657): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(20657): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(20657): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(20657): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Android(20657): Aplicativo ativo.
+I/Aether.Android(20657): Primeiro frame após ativação apresentado: ciclo=3.
+I/Aether.Android(20657): Aplicativo suspenso.
+
+--- crash buffer ---
+

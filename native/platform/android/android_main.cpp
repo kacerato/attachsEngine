@@ -2,6 +2,7 @@
 #include "platform/android/android_launch_options.h"
 #include "platform/android/astc_encode_probe.h"
 #include "platform/android/android_frame_profiler.h"
+#include "platform/android/android_frame_pacer.h"
 #include "platform/android/android_vulkan_surface.h"
 #include "platform/android/android_window.h"
 #include "platform/android/dotnet_assets.h"
@@ -9,6 +10,7 @@
 #include "platform/android/instanced_renderer.h"
 #include "platform/android/lifecycle_trace.h"
 #include "platform/app_lifecycle.h"
+#include "platform/free_camera_controller.h"
 
 #include <android/log.h>
 #include <android/window.h>
@@ -34,12 +36,15 @@ struct AndroidShell final {
   android_app *app = nullptr;
   ae::platform::AppLifecycle lifecycle;
   ae::platform::android::AndroidFrameProfiler frameProfiler;
+  ae::platform::android::AndroidFramePacer framePacer;
   ae::platform::android::AndroidVulkanSurface vulkanSurface;
   ae::platform::android::InstancedRenderer instancedRenderer;
   bool instancedRendererReady = false;
   bool forceDescriptorFallback = false;
+  bool pocABenchmark = false;
   bool scenePreview = false;
   bool materialPreview = false;
+  bool dirtRoadPreview = false;
   bool forceTextureFallback = false;
   std::future<bool> rendererInitialization;
   std::atomic<bool> cancelRendererInitialization{false};
@@ -59,12 +64,8 @@ struct AndroidShell final {
   ae::platform::android::DotNetHost dotNetHost;
   std::chrono::steady_clock::time_point shellStartTime = std::chrono::steady_clock::now();
   double pocAMaxFillMicroseconds = 0.0;
-  bool orbitTouchActive = false;
-  int32_t orbitPointerId = -1;
-  float lastTouchX = 0.0f;
-  float lastTouchY = 0.0f;
-  float orbitYaw = 0.0f;
-  float orbitPitch = 0.0f;
+  ae::platform::FreeCameraController cameraController;
+  bool mapCameraInitialized = false;
 };
 
 // Extrai o runtime .NET vendorizado (se ainda não extraído) e hospeda o
@@ -138,9 +139,15 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
   else if (shell.rendererInitialization.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
   const bool ready=shell.rendererInitialization.get();
   shell.instancedRendererReady=ready && !cancel;
+  if (shell.instancedRendererReady && shell.dirtRoadPreview && !shell.mapCameraInitialized &&
+      shell.instancedRenderer.hasDefaultCamera()) {
+    shell.cameraController.setState(shell.instancedRenderer.defaultCamera());
+    shell.mapCameraInitialized = true;
+  }
   if (!shell.instancedRendererReady) shell.instancedRenderer.shutdown();
   __android_log_print(cancel ? ANDROID_LOG_INFO : (ready ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR),
-      LogTag,"[MaterialPreview] initialization=%s",cancel?"cancelled":(ready?"ready":"failed"));
+      LogTag,"[%s] initialization=%s",shell.dirtRoadPreview?"DirtRoad":"MaterialPreview",
+      cancel?"cancelled":(ready?"ready":"failed"));
 }
 
 bool rebuildInstancedRenderer(AndroidShell &shell) {
@@ -148,19 +155,20 @@ bool rebuildInstancedRenderer(AndroidShell &shell) {
   shell.frameProfiler.reset();
   ae::platform::android::ScopedLifecycleStage trace("rebuild-renderer");
   shell.instancedRenderer.shutdown();
-  if (!shell.dotNetHost.isReady()) {
+  if (!shell.dotNetHost.isReady() && !shell.dirtRoadPreview) {
     shell.instancedRendererReady = false;
     return false;
   }
   shell.instancedRendererReady = false;
-  if (shell.materialPreview) {
+  if (shell.materialPreview || shell.dirtRoadPreview) {
     shell.cancelRendererInitialization.store(false);
     shell.rendererInitialization=std::async(std::launch::async,[&shell] {
       return shell.instancedRenderer.initialize(shell.vulkanSurface.device(),shell.vulkanSurface.swapchain(),
-          shell.dotNetHost,ScenePreviewCapacity,true,shell.app->activity->assetManager,
-          shell.forceTextureFallback,&shell.cancelRendererInitialization);
+          shell.dotNetHost,ScenePreviewCapacity,!shell.dirtRoadPreview,shell.app->activity->assetManager,
+          shell.forceTextureFallback,&shell.cancelRendererInitialization,shell.dirtRoadPreview);
     });
-    __android_log_print(ANDROID_LOG_INFO,LogTag,"[MaterialPreview] initialization=loading");
+    __android_log_print(ANDROID_LOG_INFO,LogTag,"[%s] initialization=loading",
+                        shell.dirtRoadPreview?"DirtRoad":"MaterialPreview");
     return true;
   }
   shell.instancedRendererReady = shell.instancedRenderer.initialize(
@@ -217,6 +225,7 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     shell.vulkanSurface.shutdown();
   }
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::BecameActive)) {
+    shell.framePacer.start();
     shell.frameProfiler.reset();
     ++shell.activationCount;
     shell.activatedAtMs = ae::platform::android::lifecycleUptimeMs();
@@ -224,9 +233,9 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     __android_log_print(ANDROID_LOG_INFO, LogTag, "Aplicativo ativo.");
   }
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::BecameInactive)) {
+    shell.framePacer.stop();
     shell.frameProfiler.reset();
-    shell.orbitTouchActive = false;
-    shell.orbitPointerId = -1;
+    shell.cameraController.cancelGesture();
     __android_log_print(ANDROID_LOG_INFO, LogTag, "Aplicativo suspenso.");
   }
 }
@@ -284,9 +293,8 @@ void handleCommand(android_app *app, int32_t command) {
       ae::platform::android::lifecycleUptimeMs() - startedMs);
 }
 
-// Traduz o gesto Android para dois valores genéricos de órbita. A fronteira
-// com o renderer recebe apenas radianos; AInputEvent e IDs de toque ficam na
-// camada platform, preparando o caminho para o InputMap sem acoplá-lo à GPU.
+// AInputEvent remains platform-only. The reusable controller exposes a camera
+// state that keyboard/gamepad/NoCode can drive later through the same contract.
 int32_t handleInput(android_app *app, AInputEvent *event) {
   if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) return 0;
 
@@ -297,55 +305,32 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
       (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >>
       AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
 
-  if (actionType == AMOTION_EVENT_ACTION_DOWN) {
-    shell.orbitPointerId = AMotionEvent_getPointerId(event, 0);
-    shell.lastTouchX = AMotionEvent_getX(event, 0);
-    shell.lastTouchY = AMotionEvent_getY(event, 0);
-    shell.orbitTouchActive = true;
+  const int32_t width = app->window != nullptr ? ANativeWindow_getWidth(app->window) : 0;
+  const int32_t height = app->window != nullptr ? ANativeWindow_getHeight(app->window) : 0;
+  if (width <= 0 || height <= 0) return 0;
+  if (actionType == AMOTION_EVENT_ACTION_CANCEL) {
+    shell.cameraController.cancelGesture();
     return 1;
   }
-
-  if (actionType == AMOTION_EVENT_ACTION_MOVE && shell.orbitTouchActive) {
-    const size_t pointerCount = AMotionEvent_getPointerCount(event);
-    for (size_t index = 0; index < pointerCount; ++index) {
-      if (AMotionEvent_getPointerId(event, index) != shell.orbitPointerId) continue;
-      const float x = AMotionEvent_getX(event, index);
-      const float y = AMotionEvent_getY(event, index);
-      const int32_t width = app->window != nullptr ? ANativeWindow_getWidth(app->window) : 0;
-      const int32_t height = app->window != nullptr ? ANativeWindow_getHeight(app->window) : 0;
-      if (width > 0 && height > 0) {
-        constexpr float fullTurnRadians = 6.28318530718f;
-        constexpr float halfTurnRadians = 3.14159265359f;
-        constexpr float maxPitchRadians = 1.35f;
-        shell.orbitYaw += (x - shell.lastTouchX) / static_cast<float>(width) * fullTurnRadians;
-        shell.orbitPitch = std::clamp(
-            shell.orbitPitch +
-                (y - shell.lastTouchY) / static_cast<float>(height) * halfTurnRadians,
-            -maxPitchRadians, maxPitchRadians);
-      }
-      shell.lastTouchX = x;
-      shell.lastTouchY = y;
-      return 1;
-    }
+  ae::platform::FreeCameraTouch touches[2]{};
+  ae::u32 count = 0;
+  const size_t pointerCount = AMotionEvent_getPointerCount(event);
+  for (size_t index = 0; index < pointerCount && count < 2; ++index) {
+    const bool lifted = (actionType == AMOTION_EVENT_ACTION_UP ||
+                         actionType == AMOTION_EVENT_ACTION_POINTER_UP) && index == actionIndex;
+    if (lifted) continue;
+    touches[count++] = {AMotionEvent_getPointerId(event, index),
+                        AMotionEvent_getX(event, index), AMotionEvent_getY(event, index)};
   }
-
-  const bool trackedPointerReleased =
-      (actionType == AMOTION_EVENT_ACTION_UP ||
-       actionType == AMOTION_EVENT_ACTION_POINTER_UP) &&
-      actionIndex < AMotionEvent_getPointerCount(event) &&
-      AMotionEvent_getPointerId(event, actionIndex) == shell.orbitPointerId;
-  if (trackedPointerReleased || actionType == AMOTION_EVENT_ACTION_CANCEL) {
-    shell.orbitTouchActive = false;
-    shell.orbitPointerId = -1;
-    if (trackedPointerReleased) {
-      __android_log_print(ANDROID_LOG_INFO, LogTag,
-                          "Órbita touch atualizada: yaw=%.3f rad, pitch=%.3f rad.",
-                          shell.orbitYaw, shell.orbitPitch);
-    }
-    return 1;
+  if (count == 2 && touches[0].id > touches[1].id) std::swap(touches[0], touches[1]);
+  shell.cameraController.updateTouches(touches, count, static_cast<float>(width), static_cast<float>(height));
+  if (actionType == AMOTION_EVENT_ACTION_UP) {
+    const auto &camera = shell.cameraController.state();
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+        "[Camera] position=(%.2f,%.2f,%.2f) yaw=%.3f pitch=%.3f",
+        camera.position[0],camera.position[1],camera.position[2],camera.yaw,camera.pitch);
   }
-
-  return shell.orbitTouchActive ? 1 : 0;
+  return 1;
 }
 
 } // namespace
@@ -357,10 +342,12 @@ void android_main(android_app *app) {
       app->activity, "aether.force_descriptor_fallback");
   shell.scenePreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.scene_preview");
   const bool benchmarkPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.poc_a");
-  // The launcher opens the material sample. Legacy fixtures remain explicit,
-  // so a benchmark can never silently measure a one-object scene.
-  shell.materialPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.material_preview") ||
-      (!shell.scenePreview && !benchmarkPreview);
+  shell.pocABenchmark = benchmarkPreview;
+  shell.materialPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.material_preview");
+  const bool explicitMap = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.map_preview");
+  // The launcher opens the production-test map. Diagnostic fixtures remain
+  // explicit so benchmark numbers can never silently include the full scene.
+  shell.dirtRoadPreview = explicitMap || (!shell.scenePreview && !benchmarkPreview && !shell.materialPreview);
   shell.forceTextureFallback = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.force_texture_fallback");
   shell.scenePreview = shell.scenePreview || shell.materialPreview;
   shell.sceneValidation = shell.scenePreview &&
@@ -383,6 +370,7 @@ void android_main(android_app *app) {
   __android_log_print(ANDROID_LOG_INFO, LogTag, "Shell nativo iniciado.");
 
   initializeDotNetHost(shell);
+  shell.framePacer.initialize();
 
   // Diagnóstico opt-in, fora da thread de eventos/render. Device e fila são
   // exclusivos do worker: não há vkQueueSubmit concorrente na fila do shell.
@@ -417,7 +405,10 @@ void android_main(android_app *app) {
     const bool shouldDraw = shell.lifecycle.isActive() && shell.instancedRendererReady;
     android_poll_source *source = nullptr;
     int events = 0;
-    const int result = ALooper_pollOnce(shouldDraw ? 0 : (shell.rendererInitialization.valid() ? 16 : -1), nullptr, &events,
+    const int pollTimeout = shell.lifecycle.isActive() && shell.framePacer.available()
+                                ? -1
+                                : (shouldDraw ? 0 : (shell.rendererInitialization.valid() ? 16 : -1));
+    const int result = ALooper_pollOnce(pollTimeout, nullptr, &events,
                                         reinterpret_cast<void **>(&source));
     if (result >= 0 && source != nullptr) source->process(app, source);
 
@@ -428,7 +419,8 @@ void android_main(android_app *app) {
     collectRendererInitialization(shell,false);
 
     // O evento processado acima pode ter destruído o renderer/janela.
-    if (shell.lifecycle.isActive() && shell.instancedRendererReady) {
+    const bool frameAdmitted = !shell.framePacer.available() || shell.framePacer.consumeFrame();
+    if (shell.lifecycle.isActive() && shell.instancedRendererReady && frameAdmitted) {
       if (shell.sceneValidation && shell.sceneStep < 3 &&
           shell.presentedFrameCount >= SceneValidationIntervalFrames * static_cast<ae::u64>(shell.sceneStep + 1)) {
         if (shell.applySceneStep == nullptr || shell.applySceneStep(shell.sceneStep + 1) != 0) {
@@ -442,7 +434,7 @@ void android_main(android_app *app) {
                                     std::chrono::steady_clock::now() - shell.shellStartTime)
                                     .count();
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
-          timeSeconds, shell.orbitYaw, shell.orbitPitch);
+          timeSeconds, shell.cameraController.state());
       if (frameStatus == ae::rhi::SwapchainStatus::Ok ||
           frameStatus == ae::rhi::SwapchainStatus::SuboptimalNeedsRecreate) {
         ++shell.presentedFrameCount;
@@ -452,7 +444,7 @@ void android_main(android_app *app) {
               "[ScenePreview] snapshot instances=%u hash=%llu yaw=%.6f pitch=%.6f",
               shell.instancedRenderer.drawnInstanceCount(),
               static_cast<unsigned long long>(shell.instancedRenderer.snapshotFingerprint()),
-              shell.orbitYaw, shell.orbitPitch);
+              shell.cameraController.state().yaw, shell.cameraController.state().pitch);
         }
         if (shell.scenePreview && shell.sceneReportedStep != shell.sceneStep &&
             shell.instancedRenderer.lastExtractionStatus() == 0) {
@@ -482,7 +474,7 @@ void android_main(android_app *app) {
         // PoC-A (item 0.2): reporta o pico de custo do crossing C++→C# a
         // cada ~5s, não a cada frame — o objetivo é ter evidência legível
         // no log contra o critério de < 3 ms de CPU, sem inundar o logcat.
-        if (!shell.scenePreview && shell.presentedFrameCount % PocAReportIntervalFrames == 0) {
+        if (shell.pocABenchmark && shell.presentedFrameCount % PocAReportIntervalFrames == 0) {
           __android_log_print(
               ANDROID_LOG_INFO, LogTag,
               "PoC-A: %u instâncias, crossing C++<->C# pico=%.1f us (orçamento: 3000 us) — %s.",

@@ -1,0 +1,12 @@
+Benchmark fisica 2D A/B v1 — Jolt Plane2D x Box2D v3.1.1
+Cenario equivalente: circulos r=0.45, piso 100x1, dt=1/60, solver step=1, excitacao +/-0.01m/s
+RSS comparavel somente nos runners isolados; host nao decide backend mobile.
+backend          corpos  p50(ms)  p95(ms)  p99(ms)  max(ms)  rss(MiB)  int(MiB)  estavel
+SCHEMA,backend,requested_bodies,created_bodies,trials,warmup_steps,measured_steps,mean_ms,p50_ms,p95_ms,p99_ms,max_ms,peak_rss_delta_bytes,internal_bytes,max_contacts,stable,isolated_process
+box2d-v3.1.1         50    0.006    0.007    0.008    0.014      0.30      0.10      sim
+RESULT,box2d-v3.1.1,50,50,1,120,180,0.006454,0.006300,0.007005,0.008168,0.014400,319488,107992,50,true,true
+box2d-v3.1.1        500    0.092    0.138    0.199    0.273      0.99      1.09      sim
+RESULT,box2d-v3.1.1,500,500,1,120,180,0.095400,0.092350,0.137695,0.199401,0.272700,1036288,1141368,1007,true,true
+
+COMPARE: ganho positivo = Box2D mais rapido. Gate inicial: >=30% sustentado em B/C.
+Saida valida para decisao: estabilidade=sim; falta executar matriz mobile B/C.

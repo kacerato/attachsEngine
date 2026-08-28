@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "device": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
+  "apkSha256": "DF89B93CD7E4309CFB35E8E701EF91F43039D6D4880E3F14867372963251AFA7",
+  "cases": [
+    {
+      "mode": "bindless",
+      "pid": "22951",
+      "status": "passed",
+      "steps": [
+        2,
+        2,
+        1,
+        2
+      ],
+      "snapshot": "instances=2 hash=7578579925771095170 yaw=0.000000 pitch=0.000000",
+      "resumeStateIdentical": true,
+      "resumeImageIdentical": false,
+      "visualReviewRequired": true,
+      "screenshotSha256": "68F0204E226DBD7BEB0EF1A9139FDCFFAD97571072D8B9AE428090066243917D"
+    },
+    {
+      "mode": "fallback",
+      "pid": "22954",
+      "status": "passed",
+      "steps": [
+        2,
+        2,
+        1,
+        2
+      ],
+      "snapshot": "instances=2 hash=7578579925771095170 yaw=0.000000 pitch=0.000000",
+      "resumeStateIdentical": true,
+      "resumeImageIdentical": false,
+      "visualReviewRequired": true,
+      "screenshotSha256": "68F0204E226DBD7BEB0EF1A9139FDCFFAD97571072D8B9AE428090066243917D"
+    }
+  ],
+  "error": null
+}

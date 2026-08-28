@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 4,
+  "status": "blocked",
+  "startedAtUtc": "2026-08-28T16:46:39.4878256Z",
+  "finishedAtUtc": "2026-08-28T16:47:31.6007332Z",
+  "package": "dev.aether.editor",
+  "activity": "android.app.NativeActivity",
+  "apk": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+  "device": {
+    "serial": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
+    "manufacturer": "Xiaomi",
+    "model": "25053PC47G",
+    "device": "onyx",
+    "board": "sun",
+    "socModel": "SM8735",
+    "androidRelease": "16",
+    "apiLevel": "36",
+    "abi": "arm64-v8a"
+  },
+  "configuration": {
+    "lifecycleCycles": 3,
+    "startupTimeoutSeconds": 45,
+    "cycleTimeoutSeconds": 20,
+    "soakMinutes": 0,
+    "profileSeconds": 0,
+    "powerBudgetWatts": 4.0,
+    "requirePowerBudget": false,
+    "requireSoakBudget": false,
+    "minimumSoakFps": 55.0,
+    "configurationChange": false,
+    "screenCycle": true,
+    "screenCycles": 1,
+    "screenshotEqualityRequired": false,
+    "initiallyAsleep": false
+  },
+  "checks": [
+    {
+      "name": "apk-install",
+      "status": "passed",
+      "details": "APK instalado com adb install -r -t."
+    },
+    {
+      "name": "app-data-clean",
+      "status": "passed",
+      "details": "Dados do pacote limpos antes do teste."
+    },
+    {
+      "name": "startup",
+      "status": "passed",
+      "details": {
+        "pid": "24427",
+        "frameMilestone": 1000
+      }
+    },
+    {
+      "name": "background-foreground",
+      "status": "passed",
+      "details": {
+        "cycles": 3,
+        "stablePid": "24427",
+        "renderResumedEveryCycle": true,
+        "resourceRecreationsObserved": 0
+      }
+    }
+  ],
+  "screenshots": {
+    "before": {
+      "path": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\20260828-134639\\before-lifecycle.png",
+      "sha256": "C2129EAE000817A829C57DBB2FE0F9A18E8E543C1832A8CE6D9DB4A54CB58615",
+      "bytes": 570437
+    }
+  },
+  "measurements": {
+    "resourceRecreationsDuringLifecycle": 0,
+    "powerSamples": [],
+    "keyguardWaits": [
+      {
+        "elapsedMs": 203.334,
+        "dismissRequests": 0,
+        "showing": false,
+        "screenState": "SCREEN_STATE_ON",
+        "context": "startup"
+      }
+    ],
+    "keyguardDismissRequests": [
+      {
+        "context": "screen-cycle-1",
+        "requestedAtUtc": "2026-08-28T16:47:09.5981240Z",
+        "output": ""
+      }
+    ],
+    "managedBuild": {
+      "observedId": "aff4048fe2ee688ce7dd8706eaadbfc06c4d200cc744c9c6fe80edec003eea8a",
+      "reusedExtraction": false,
+      "apkId": "aff4048fe2ee688ce7dd8706eaadbfc06c4d200cc744c9c6fe80edec003eea8a",
+      "coreSha256": "77E148569359DF4A75C9D9B43C23DB0B50FD6A46DD63C4D5AF0F5F3F87423BE3"
+    }
+  },
+  "artifacts": {
+    "apkSha256": "5C78EDA3650DCE5A148886C5DB158A32BAA30D61260F9383D17C5C0AADCCBE3E",
+    "gitRevision": "e651841e54358b5abbdb595e12340dac07ab103b",
+    "gitDirty": true,
+    "outputDirectory": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\20260828-134639",
+    "adb": "C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+    "lifecycleDiagnostics": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\20260828-134639\\lifecycle-diagnostics.json",
+    "logcat": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\20260828-134639\\logcat.txt",
+    "lifecycleTimeline": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\20260828-134639\\lifecycle-timeline.txt"
+  },
+  "error": "Aparelho bloqueado: desbloqueio não confirmado em 20 s (keyguard=True, screen=SCREEN_STATE_OFF, secure=True). Desbloqueie manualmente; a retomada gráfica não foi validada.",
+  "failureKind": "device-keyguard-blocked"
+}

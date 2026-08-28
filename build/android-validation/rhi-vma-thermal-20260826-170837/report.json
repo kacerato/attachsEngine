@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "status": "failed",
+  "startedAtUtc": "2026-08-26T20:08:37.3308094Z",
+  "finishedAtUtc": "2026-08-26T20:09:28.4041079Z",
+  "package": "dev.aether.editor",
+  "activity": "android.app.NativeActivity",
+  "apk": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+  "device": {
+    "serial": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
+    "manufacturer": "Xiaomi",
+    "model": "25053PC47G",
+    "device": "onyx",
+    "board": "sun",
+    "socModel": "SM8735",
+    "androidRelease": "16",
+    "apiLevel": "36",
+    "abi": "arm64-v8a"
+  },
+  "configuration": {
+    "lifecycleCycles": 1,
+    "startupTimeoutSeconds": 45,
+    "cycleTimeoutSeconds": 20,
+    "soakMinutes": 1,
+    "powerBudgetWatts": 4.0,
+    "requirePowerBudget": true,
+    "configurationChange": false,
+    "screenCycle": false,
+    "screenshotEqualityRequired": true,
+    "initiallyAsleep": false
+  },
+  "checks": [
+    {
+      "name": "apk-install",
+      "status": "passed",
+      "details": "APK instalado com adb install -r -t."
+    },
+    {
+      "name": "app-data-clean",
+      "status": "passed",
+      "details": "Dados do pacote limpos antes do teste."
+    }
+  ],
+  "screenshots": {},
+  "measurements": {
+    "resourceRecreationsDuringLifecycle": 0,
+    "powerSamples": []
+  },
+  "artifacts": {
+    "outputDirectory": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\rhi-vma-thermal-20260826-170837",
+    "adb": "C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+    "logcat": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\rhi-vma-thermal-20260826-170837\\logcat.txt"
+  },
+  "error": "Timeout aguardando inicialização gráfica (padrão 'Pipeline do tri', mínimo 1)."
+}

@@ -1,10 +1,10 @@
-bin/
-obj/
-build/
-android/.gradle/
-android/local.properties
-android/app/.cxx/
-android/app/build/
-.aether/
-*.user
-__pycache__/
+# bin/
+# obj/
+# build/
+# android/.gradle/
+# android/local.properties
+# android/app/.cxx/
+# android/app/build/
+# .aether/
+# *.user
+# __pycache__/

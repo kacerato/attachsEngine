@@ -1,0 +1,25 @@
+{
+  "capturedAtUtc": "2026-08-28T11:37:28.4039686Z",
+  "reason": "Timeout aguardando retomada após acender a tela após o marcador 'screen-cycle-4434e77fa10345b39fc82aa038a36da6' (padrão 'Aplicativo ativo\\.').",
+  "pid": "29611",
+  "power": [
+    "  mWakefulness=Asleep",
+    "  mWakefulnessChanging=false",
+    "Display Power: com.android.server.power.PowerManagerService$2@3823098"
+  ],
+  "keyguard": [
+    "    mKeyguardOccluded=false mKeyguardOccludedChanged=false mPendingKeyguardOccluded=false",
+    "    KeyguardServiceDelegate",
+    "      showing=true",
+    "      inputRestricted=false",
+    "      occluded=false",
+    "      deviceHasKeyguard=true",
+    "      screenState=SCREEN_STATE_OFF",
+    "      interactiveState=INTERACTIVE_STATE_SLEEP",
+    "      KeyguardStateMonitor",
+    "        mIsShowing=true",
+    "        mInputRestricted=true"
+  ],
+  "focus": [],
+  "resumedActivity": []
+}

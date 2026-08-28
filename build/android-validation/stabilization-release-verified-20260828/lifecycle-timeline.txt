@@ -1,0 +1,60 @@
+--------- beginning of main
+08-28 14:12:12.719  8395  9264 I Aether.Android: Shell nativo iniciado.
+08-28 14:12:12.733  8395  9264 I Aether.Android: Extração de assets .NET concluída: 179 ok, 0 falharam.
+08-28 14:12:12.733  8395  9264 I Aether.Android: [ManagedBuild] id=aff4048fe2ee688ce7dd8706eaadbfc06c4d200cc744c9c6fe80edec003eea8a reused=1
+08-28 14:12:12.797  8395  9264 I Aether.Android: CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Core.runtimeconfig.json).
+08-28 14:12:12.846  8395  9264 I Aether.Android: CoreCLR hospedado no shell: Ping(2,3)=5.
+08-28 14:12:12.847  8395  9264 I Aether.Android: [Lifecycle] seq=1 cmd=START(10) phase=begin uptime_ms=783500320.432 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+08-28 14:12:12.847  8395  9264 I Aether.Android: [Lifecycle] seq=1 cmd=START(10) phase=end uptime_ms=783500320.490 elapsed_ms=0.058 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+08-28 14:12:12.849  8395  9264 I Aether.Android: [Lifecycle] seq=2 cmd=RESUME(11) phase=begin uptime_ms=783500322.993 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+08-28 14:12:12.849  8395  9264 I Aether.Android: [Lifecycle] seq=2 cmd=RESUME(11) phase=end uptime_ms=783500323.035 elapsed_ms=0.042 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+08-28 14:12:12.866  8395  9264 I Aether.Android: [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=783500339.921 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+08-28 14:12:12.866  8395  9264 I Aether.Android: [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=end uptime_ms=783500339.980 elapsed_ms=0.060 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+08-28 14:12:12.874  8395  9264 I Aether.Android: [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=begin uptime_ms=783500347.892 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+08-28 14:12:12.874  8395  9264 I Aether.Android: [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=783500347.911
+08-28 14:12:12.882  8395  9264 I Aether.Android: Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+08-28 14:12:12.915  8395  9264 I Aether.Android: Swapchain pronta: 1280x2772, 5 imagens.
+08-28 14:12:12.915  8395  9264 I Aether.Android: [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=783500389.059
+08-28 14:12:12.982  8395  9264 I Aether.Android: Descritores: caminho=bindless, capacidade bindless=16777216.
+08-28 14:12:12.982  8395  9264 I Aether.Android: RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+08-28 14:12:12.982  8395  9264 I Aether.Android: InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+08-28 14:12:12.982  8395  9264 I Aether.Android: RHI/VMA [buffer]: uso=100032, pico=100032 bytes.
+08-28 14:12:12.982  8395  9264 I Aether.Android: RHI/VMA [texture]: uso=20544, pico=20544 bytes.
+08-28 14:12:12.982  8395  9264 I Aether.Android: RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+08-28 14:12:12.982  8395  9264 I Aether.Android: RHI/VMA [staging]: uso=0, pico=16384 bytes.
+08-28 14:12:12.982  8395  9264 I Aether.Android: [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=783500456.127 elapsed_ms=67.068
+08-28 14:12:12.982  8395  9264 I Aether.Android: [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=783500456.132 elapsed_ms=108.222
+08-28 14:12:12.982  8395  9264 I Aether.Android: [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=end uptime_ms=783500456.136 elapsed_ms=108.244 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:12.982  8395  9264 I Aether.Android: [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=783500456.266 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:12.982  8395  9264 I Aether.Android: [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=783500456.274 elapsed_ms=0.007 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:12.982  8395  9264 I Aether.Android: [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=begin uptime_ms=783500456.280 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:12.982  8395  9264 I Aether.Android: [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=end uptime_ms=783500456.284 elapsed_ms=0.004 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:12.982  8395  9264 I Aether.Android: [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=783500456.290 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:12.982  8395  9264 I Aether.Android: [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=783500456.294 elapsed_ms=0.004 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:12.982  8395  9264 I Aether.Android: [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=783500456.300 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:12.983  8395  9264 I Aether.Android: Aplicativo ativo.
+08-28 14:12:12.983  8395  9264 I Aether.Android: [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=end uptime_ms=783500456.701 elapsed_ms=0.401 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+08-28 14:12:12.988  8395  9264 I Aether.Android: Primeiro frame após ativação apresentado: ciclo=1. latency_ms=4.845 uptime_ms=783500461.514
+08-28 14:12:13.037  8395  9264 I Aether.Android: [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=783500510.530 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+08-28 14:12:13.037  8395  9264 I Aether.Android: [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=783500510.582 elapsed_ms=0.052 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+08-28 14:12:17.934  8395  9264 I Aether.Android: PoC-A: 5000 instâncias, crossing C++<->C# pico=1106.8 us (orçamento: 3000 us) — dentro do orçamento.
+08-28 14:12:22.931  8395  9264 I Aether.Android: PoC-A: 5000 instâncias, crossing C++<->C# pico=1575.4 us (orçamento: 3000 us) — dentro do orçamento.
+08-28 14:12:27.927  8395  9264 I Aether.Android: PoC-A: 5000 instâncias, crossing C++<->C# pico=851.6 us (orçamento: 3000 us) — dentro do orçamento.
+08-28 14:12:29.591  8395  9264 I Aether.Android: Marco de renderização atingido: 1000 frames apresentados.
+08-28 14:12:31.560  9634  9634 I Aether.Validation: lifecycle-1-3378c79e92c242a4ac469e1944bae274
+08-28 14:12:31.748  8395  9264 I Aether.Android: [Lifecycle] seq=10 cmd=PAUSE(13) phase=begin uptime_ms=783519221.810 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+08-28 14:12:31.748  8395  9264 I Aether.Android: Aplicativo suspenso.
+08-28 14:12:31.748  8395  9264 I Aether.Android: [Lifecycle] seq=10 cmd=PAUSE(13) phase=end uptime_ms=783519221.923 elapsed_ms=0.113 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+08-28 14:12:31.759  8395  9264 I Aether.Android: [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=begin uptime_ms=783519232.561 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+08-28 14:12:31.759  8395  9264 I Aether.Android: [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=end uptime_ms=783519232.584 elapsed_ms=0.023 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+08-28 14:12:32.151  8395  9264 I Aether.Android: [Lifecycle] seq=12 cmd=RESUME(11) phase=begin uptime_ms=783519625.133 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:32.151  8395  9264 I Aether.Android: [Lifecycle] seq=12 cmd=RESUME(11) phase=end uptime_ms=783519625.146 elapsed_ms=0.013 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:32.183  8395  9264 I Aether.Android: [Lifecycle] seq=13 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=783519656.930 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:32.183  8395  9264 I Aether.Android: [Lifecycle] seq=13 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=783519656.941 elapsed_ms=0.010 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:32.272  8395  9264 I Aether.Android: [Lifecycle] seq=14 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=783519746.140 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+08-28 14:12:32.272  8395  9264 I Aether.Android: Aplicativo ativo.
+08-28 14:12:32.272  8395  9264 I Aether.Android: [Lifecycle] seq=14 cmd=GAINED_FOCUS(6) phase=end uptime_ms=783519746.327 elapsed_ms=0.187 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+08-28 14:12:32.273  8395  9264 I Aether.Android: Primeiro frame após ativação apresentado: ciclo=2. latency_ms=0.709 uptime_ms=783519747.018
+08-28 14:12:32.286  8395  9264 I Aether.Android: [Lifecycle] seq=15 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=783519759.680 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+08-28 14:12:32.286  8395  9264 I Aether.Android: [Lifecycle] seq=15 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=783519759.722 elapsed_ms=0.042 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+08-28 14:12:33.402  8395  9264 I Aether.Android: PoC-A: 5000 instâncias, crossing C++<->C# pico=2048.3 us (orçamento: 3000 us) — dentro do orçamento.

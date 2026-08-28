@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "timestampUtc": "2026-08-26T16:50:56.9018724Z",
+  "commit": "3e145df3ec7becb24afa951162727acd7fc096c2",
+  "platform": "Android",
+  "scenarioVersion": 1,
+  "bodyCounts": [
+    50,
+    100,
+    200,
+    500,
+    1000,
+    5000
+  ],
+  "joltCollisionSteps": 4,
+  "box2dSubSteps": 4,
+  "trials": 3,
+  "quick": false,
+  "isolatedRunners": true,
+  "binarySizeBytes": {
+    "benchmark_physics2d": 24939936,
+    "benchmark_physics2d_jolt": 23338992,
+    "benchmark_physics2d_box2d": 2050272
+  },
+  "host": null,
+  "device": {
+    "manufacturer": "Xiaomi",
+    "model": "25053PC47G",
+    "sdk": "36",
+    "abi": "arm64-v8a",
+    "hardware": "qcom",
+    "profile": "A",
+    "batteryTemperatureStartC": 34.4,
+    "batteryTemperatureEndC": 35.0
+  },
+  "reports": {
+    "benchmark_physics2d": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\benchmarks\\physics2d-android-a\\benchmark_physics2d.txt",
+    "benchmark_physics2d_jolt": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\benchmarks\\physics2d-android-a\\benchmark_physics2d_jolt.txt",
+    "benchmark_physics2d_box2d": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\benchmarks\\physics2d-android-a\\benchmark_physics2d_box2d.txt"
+  }
+}

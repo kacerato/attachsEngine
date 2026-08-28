@@ -1,0 +1,4 @@
+C:\Users\jamaa\Downloads\aether-fase0-1\build\android-managed-baseline\Aether.Core.dll
+C:\Users\jamaa\Downloads\aether-fase0-1\build\android-managed-baseline\Aether.Core.deps.json
+C:\Users\jamaa\Downloads\aether-fase0-1\build\android-managed-baseline\Aether.Core.runtimeconfig.json
+C:\Users\jamaa\Downloads\aether-fase0-1\build\android-managed-baseline\Aether.Core.pdb

@@ -150,6 +150,7 @@ target_link_libraries(aether_core PUBLIC Threads::Threads)
 add_library(aether_platform STATIC
   platform/app_lifecycle.cpp
   platform/atomic_asset_file.cpp
+  platform/free_camera_controller.cpp
 )
 target_include_directories(aether_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_platform PUBLIC aether_core)
@@ -192,8 +193,11 @@ if(ANDROID)
 
   add_library(aether_android SHARED
     platform/android/android_main.cpp
+    platform/android/android_texture_loader.cpp
+    platform/android/dirt_road_resources.cpp
     platform/android/android_launch_options.cpp
     platform/android/android_frame_profiler.cpp
+    platform/android/android_frame_pacer.cpp
     platform/android/android_window.cpp
     platform/android/android_paths.cpp
     platform/android/android_vulkan_surface.cpp
@@ -288,6 +292,8 @@ endif()
 if(NOT ANDROID)
   add_executable(aether_tests
     ../tests/native/test_atomic_asset_file.cpp
+    ../tests/native/test_free_camera_controller.cpp
+    ../tests/native/test_map_package.cpp
     ../tests/native/test_material_preview.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/main.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_allocators.cpp

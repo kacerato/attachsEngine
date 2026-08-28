@@ -1,0 +1,286 @@
+--- startup ---
+--------- beginning of main
+I/Aether.Android(22252): Shell nativo iniciado.
+I/Aether.Android(22252): Extração de assets .NET concluída: 179 ok, 0 falharam.
+I/Aether.Android(22252): [ManagedBuild] id=aff4048fe2ee688ce7dd8706eaadbfc06c4d200cc744c9c6fe80edec003eea8a reused=0
+I/Aether.Android(22252): CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Core.runtimeconfig.json).
+I/Aether.Android(22252): CoreCLR hospedado no shell: Ping(2,3)=5.
+I/Aether.Android(22252): [Lifecycle] seq=1 cmd=START(10) phase=begin uptime_ms=781712414.538 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(22252): [Lifecycle] seq=1 cmd=START(10) phase=end uptime_ms=781712414.551 elapsed_ms=0.014 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(22252): [Lifecycle] seq=2 cmd=RESUME(11) phase=begin uptime_ms=781712419.301 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=2 cmd=RESUME(11) phase=end uptime_ms=781712419.419 elapsed_ms=0.124 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=781712441.045 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=end uptime_ms=781712441.054 elapsed_ms=0.010 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=begin uptime_ms=781712468.959 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=781712469.003
+I/Aether.Android(22252): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+I/Aether.Android(22252): Swapchain pronta: 1280x2772, 5 imagens.
+I/Aether.Android(22252): [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=781712569.441
+I/Aether.Android(22252): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(22252): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Android(22252): RHI/VMA [buffer]: uso=100032, pico=100032 bytes.
+I/Aether.Android(22252): RHI/VMA [texture]: uso=20544, pico=20544 bytes.
+I/Aether.Android(22252): RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+I/Aether.Android(22252): RHI/VMA [staging]: uso=0, pico=16384 bytes.
+I/Aether.Android(22252): [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=781712673.256 elapsed_ms=103.815
+I/Aether.Android(22252): [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=781712673.261 elapsed_ms=204.257
+I/Aether.Android(22252): [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=end uptime_ms=781712673.264 elapsed_ms=204.309 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781712673.283 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781712673.288 elapsed_ms=0.005 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=begin uptime_ms=781712673.293 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=end uptime_ms=781712673.296 elapsed_ms=0.003 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=781712673.299 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=781712673.303 elapsed_ms=0.003 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=781712673.310 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Aplicativo ativo.
+I/Aether.Android(22252): [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=end uptime_ms=781712673.562 elapsed_ms=0.252 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Primeiro frame após ativação apresentado: ciclo=1. latency_ms=4.224 uptime_ms=781712677.747
+I/Aether.Android(22252): [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781712686.635 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781712686.653 elapsed_ms=0.019 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): PoC-A: 5000 instâncias, crossing C++<->C# pico=843.8 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(22252): PoC-A: 5000 instâncias, crossing C++<->C# pico=917.4 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(22252): PoC-A: 5000 instâncias, crossing C++<->C# pico=1215.2 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(22252): Marco de renderização atingido: 1000 frames apresentados.
+
+--- lifecycle 1 ---
+lifecycle-1-178102b31faf422caa6fe0897ee2f60a
+I/Aether.Android(22252): [Lifecycle] seq=10 cmd=PAUSE(13) phase=begin uptime_ms=781731899.392 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): Aplicativo suspenso.
+I/Aether.Android(22252): [Lifecycle] seq=10 cmd=PAUSE(13) phase=end uptime_ms=781731899.410 elapsed_ms=0.019 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=begin uptime_ms=781731918.808 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=end uptime_ms=781731918.821 elapsed_ms=0.014 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=12 cmd=RESUME(11) phase=begin uptime_ms=781732243.725 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=12 cmd=RESUME(11) phase=end uptime_ms=781732243.732 elapsed_ms=0.008 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=13 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781732302.389 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=13 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781732302.406 elapsed_ms=0.018 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=14 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=781732423.329 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Aplicativo ativo.
+I/Aether.Android(22252): [Lifecycle] seq=14 cmd=GAINED_FOCUS(6) phase=end uptime_ms=781732423.514 elapsed_ms=0.186 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Primeiro frame após ativação apresentado: ciclo=2. latency_ms=1.386 uptime_ms=781732424.887
+I/Aether.Android(22252): [Lifecycle] seq=15 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781732461.154 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=15 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781732461.203 elapsed_ms=0.049 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+
+--- lifecycle 2 ---
+lifecycle-2-e60240d8d02a4b2297d54aa4ecca5eaa
+I/Aether.Android(22252): [Lifecycle] seq=16 cmd=PAUSE(13) phase=begin uptime_ms=781733299.338 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): Aplicativo suspenso.
+I/Aether.Android(22252): [Lifecycle] seq=16 cmd=PAUSE(13) phase=end uptime_ms=781733299.347 elapsed_ms=0.010 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=17 cmd=LOST_FOCUS(7) phase=begin uptime_ms=781733305.092 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=17 cmd=LOST_FOCUS(7) phase=end uptime_ms=781733305.106 elapsed_ms=0.015 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=18 cmd=RESUME(11) phase=begin uptime_ms=781733597.538 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=18 cmd=RESUME(11) phase=end uptime_ms=781733597.547 elapsed_ms=0.009 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=19 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781733620.765 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=19 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781733620.781 elapsed_ms=0.017 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=20 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=781733743.950 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Aplicativo ativo.
+I/Aether.Android(22252): [Lifecycle] seq=20 cmd=GAINED_FOCUS(6) phase=end uptime_ms=781733744.205 elapsed_ms=0.255 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Primeiro frame após ativação apresentado: ciclo=3. latency_ms=2.529 uptime_ms=781733746.712
+I/Aether.Android(22252): [Lifecycle] seq=21 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781733781.996 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=21 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781733782.025 elapsed_ms=0.030 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+
+--- lifecycle 3 ---
+lifecycle-3-6349d3b0ce8f404cb4d06952dc570d72
+I/Aether.Android(22252): [Lifecycle] seq=22 cmd=PAUSE(13) phase=begin uptime_ms=781734600.696 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): Aplicativo suspenso.
+I/Aether.Android(22252): [Lifecycle] seq=22 cmd=PAUSE(13) phase=end uptime_ms=781734600.712 elapsed_ms=0.016 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=23 cmd=LOST_FOCUS(7) phase=begin uptime_ms=781734609.210 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=23 cmd=LOST_FOCUS(7) phase=end uptime_ms=781734609.230 elapsed_ms=0.022 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=24 cmd=RESUME(11) phase=begin uptime_ms=781734916.482 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=24 cmd=RESUME(11) phase=end uptime_ms=781734916.607 elapsed_ms=0.126 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=25 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781734952.767 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=25 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781734952.856 elapsed_ms=0.089 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=26 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=781735065.360 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Aplicativo ativo.
+I/Aether.Android(22252): [Lifecycle] seq=26 cmd=GAINED_FOCUS(6) phase=end uptime_ms=781735065.696 elapsed_ms=0.336 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Primeiro frame após ativação apresentado: ciclo=4. latency_ms=1.191 uptime_ms=781735066.860
+I/Aether.Android(22252): [Lifecycle] seq=27 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781735080.569 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=27 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781735080.587 elapsed_ms=0.019 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+
+--- screen cycle ---
+screen-wake-1-de8ae6857f95448cab87db5e6309d4e0
+I/Aether.Android(22252): [Lifecycle] seq=33 cmd=START(10) phase=begin uptime_ms=781748281.560 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(22252): [Lifecycle] seq=33 cmd=START(10) phase=end uptime_ms=781748281.576 elapsed_ms=0.018 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(22252): [Lifecycle] seq=34 cmd=RESUME(11) phase=begin uptime_ms=781748283.203 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=34 cmd=RESUME(11) phase=end uptime_ms=781748283.210 elapsed_ms=0.008 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=35 cmd=INIT_WINDOW(1) phase=begin uptime_ms=781748300.228 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=781748300.234
+I/Aether.Android(22252): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+I/Aether.Android(22252): Swapchain pronta: 1280x2772, 5 imagens.
+I/Aether.Android(22252): [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=781748342.824
+I/Aether.Android(22252): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(22252): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Android(22252): RHI/VMA [buffer]: uso=100032, pico=100032 bytes.
+I/Aether.Android(22252): RHI/VMA [texture]: uso=20544, pico=20544 bytes.
+I/Aether.Android(22252): RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+I/Aether.Android(22252): RHI/VMA [staging]: uso=0, pico=16384 bytes.
+I/Aether.Android(22252): [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=781748447.627 elapsed_ms=104.803
+I/Aether.Android(22252): [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=781748447.633 elapsed_ms=147.398
+I/Aether.Android(22252): [Lifecycle] seq=35 cmd=INIT_WINDOW(1) phase=end uptime_ms=781748447.636 elapsed_ms=147.408 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=36 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781748447.752 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=36 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781748447.771 elapsed_ms=0.020 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=37 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=781748447.778 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=37 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=781748447.782 elapsed_ms=0.004 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=38 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=781748447.851 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Aplicativo ativo.
+I/Aether.Android(22252): [Lifecycle] seq=38 cmd=GAINED_FOCUS(6) phase=end uptime_ms=781748448.305 elapsed_ms=0.454 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Primeiro frame após ativação apresentado: ciclo=5. latency_ms=2.294 uptime_ms=781748450.554
+I/Aether.Android(22252): [Lifecycle] seq=39 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781748501.020 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=39 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781748501.043 elapsed_ms=0.023 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=40 cmd=PAUSE(13) phase=begin uptime_ms=781748710.464 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): Aplicativo suspenso.
+I/Aether.Android(22252): [Lifecycle] seq=40 cmd=PAUSE(13) phase=end uptime_ms=781748710.495 elapsed_ms=0.032 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=41 cmd=RESUME(11) phase=begin uptime_ms=781748710.867 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Aplicativo ativo.
+I/Aether.Android(22252): [Lifecycle] seq=41 cmd=RESUME(11) phase=end uptime_ms=781748710.890 elapsed_ms=0.023 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Primeiro frame após ativação apresentado: ciclo=6. latency_ms=16.410 uptime_ms=781748727.297
+I/Aether.Android(22252): [Lifecycle] seq=42 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781748727.331 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=42 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781748727.351 elapsed_ms=0.020 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+
+--- final logcat window ---
+--------- beginning of main
+I/Aether.Android(22252): Shell nativo iniciado.
+I/Aether.Android(22252): Extração de assets .NET concluída: 179 ok, 0 falharam.
+I/Aether.Android(22252): [ManagedBuild] id=aff4048fe2ee688ce7dd8706eaadbfc06c4d200cc744c9c6fe80edec003eea8a reused=0
+I/Aether.Android(22252): CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Core.runtimeconfig.json).
+I/Aether.Android(22252): CoreCLR hospedado no shell: Ping(2,3)=5.
+I/Aether.Android(22252): [Lifecycle] seq=1 cmd=START(10) phase=begin uptime_ms=781712414.538 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(22252): [Lifecycle] seq=1 cmd=START(10) phase=end uptime_ms=781712414.551 elapsed_ms=0.014 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(22252): [Lifecycle] seq=2 cmd=RESUME(11) phase=begin uptime_ms=781712419.301 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=2 cmd=RESUME(11) phase=end uptime_ms=781712419.419 elapsed_ms=0.124 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=781712441.045 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=end uptime_ms=781712441.054 elapsed_ms=0.010 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=begin uptime_ms=781712468.959 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=781712469.003
+I/Aether.Android(22252): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+I/Aether.Android(22252): Swapchain pronta: 1280x2772, 5 imagens.
+I/Aether.Android(22252): [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=781712569.441
+I/Aether.Android(22252): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(22252): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Android(22252): RHI/VMA [buffer]: uso=100032, pico=100032 bytes.
+I/Aether.Android(22252): RHI/VMA [texture]: uso=20544, pico=20544 bytes.
+I/Aether.Android(22252): RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+I/Aether.Android(22252): RHI/VMA [staging]: uso=0, pico=16384 bytes.
+I/Aether.Android(22252): [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=781712673.256 elapsed_ms=103.815
+I/Aether.Android(22252): [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=781712673.261 elapsed_ms=204.257
+I/Aether.Android(22252): [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=end uptime_ms=781712673.264 elapsed_ms=204.309 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781712673.283 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781712673.288 elapsed_ms=0.005 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=begin uptime_ms=781712673.293 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=end uptime_ms=781712673.296 elapsed_ms=0.003 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=781712673.299 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=781712673.303 elapsed_ms=0.003 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=781712673.310 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Aplicativo ativo.
+I/Aether.Android(22252): [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=end uptime_ms=781712673.562 elapsed_ms=0.252 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Primeiro frame após ativação apresentado: ciclo=1. latency_ms=4.224 uptime_ms=781712677.747
+I/Aether.Android(22252): [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781712686.635 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781712686.653 elapsed_ms=0.019 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): PoC-A: 5000 instâncias, crossing C++<->C# pico=843.8 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(22252): PoC-A: 5000 instâncias, crossing C++<->C# pico=917.4 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(22252): PoC-A: 5000 instâncias, crossing C++<->C# pico=1215.2 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android(22252): Marco de renderização atingido: 1000 frames apresentados.
+I/Aether.Validation(23911): lifecycle-1-178102b31faf422caa6fe0897ee2f60a
+I/Aether.Android(22252): [Lifecycle] seq=10 cmd=PAUSE(13) phase=begin uptime_ms=781731899.392 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): Aplicativo suspenso.
+I/Aether.Android(22252): [Lifecycle] seq=10 cmd=PAUSE(13) phase=end uptime_ms=781731899.410 elapsed_ms=0.019 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=begin uptime_ms=781731918.808 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=end uptime_ms=781731918.821 elapsed_ms=0.014 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=12 cmd=RESUME(11) phase=begin uptime_ms=781732243.725 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=12 cmd=RESUME(11) phase=end uptime_ms=781732243.732 elapsed_ms=0.008 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=13 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781732302.389 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=13 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781732302.406 elapsed_ms=0.018 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=14 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=781732423.329 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Aplicativo ativo.
+I/Aether.Android(22252): [Lifecycle] seq=14 cmd=GAINED_FOCUS(6) phase=end uptime_ms=781732423.514 elapsed_ms=0.186 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Primeiro frame após ativação apresentado: ciclo=2. latency_ms=1.386 uptime_ms=781732424.887
+I/Aether.Android(22252): [Lifecycle] seq=15 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781732461.154 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=15 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781732461.203 elapsed_ms=0.049 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): PoC-A: 5000 instâncias, crossing C++<->C# pico=1721.5 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Validation(23983): lifecycle-2-e60240d8d02a4b2297d54aa4ecca5eaa
+I/Aether.Android(22252): [Lifecycle] seq=16 cmd=PAUSE(13) phase=begin uptime_ms=781733299.338 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): Aplicativo suspenso.
+I/Aether.Android(22252): [Lifecycle] seq=16 cmd=PAUSE(13) phase=end uptime_ms=781733299.347 elapsed_ms=0.010 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=17 cmd=LOST_FOCUS(7) phase=begin uptime_ms=781733305.092 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=17 cmd=LOST_FOCUS(7) phase=end uptime_ms=781733305.106 elapsed_ms=0.015 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=18 cmd=RESUME(11) phase=begin uptime_ms=781733597.538 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=18 cmd=RESUME(11) phase=end uptime_ms=781733597.547 elapsed_ms=0.009 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=19 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781733620.765 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=19 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781733620.781 elapsed_ms=0.017 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=20 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=781733743.950 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Aplicativo ativo.
+I/Aether.Android(22252): [Lifecycle] seq=20 cmd=GAINED_FOCUS(6) phase=end uptime_ms=781733744.205 elapsed_ms=0.255 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Primeiro frame após ativação apresentado: ciclo=3. latency_ms=2.529 uptime_ms=781733746.712
+I/Aether.Android(22252): [Lifecycle] seq=21 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781733781.996 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=21 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781733782.025 elapsed_ms=0.030 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Validation(24047): lifecycle-3-6349d3b0ce8f404cb4d06952dc570d72
+I/Aether.Android(22252): [Lifecycle] seq=22 cmd=PAUSE(13) phase=begin uptime_ms=781734600.696 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): Aplicativo suspenso.
+I/Aether.Android(22252): [Lifecycle] seq=22 cmd=PAUSE(13) phase=end uptime_ms=781734600.712 elapsed_ms=0.016 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=23 cmd=LOST_FOCUS(7) phase=begin uptime_ms=781734609.210 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=23 cmd=LOST_FOCUS(7) phase=end uptime_ms=781734609.230 elapsed_ms=0.022 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=24 cmd=RESUME(11) phase=begin uptime_ms=781734916.482 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=24 cmd=RESUME(11) phase=end uptime_ms=781734916.607 elapsed_ms=0.126 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=25 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781734952.767 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=25 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781734952.856 elapsed_ms=0.089 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=26 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=781735065.360 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Aplicativo ativo.
+I/Aether.Android(22252): [Lifecycle] seq=26 cmd=GAINED_FOCUS(6) phase=end uptime_ms=781735065.696 elapsed_ms=0.336 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Primeiro frame após ativação apresentado: ciclo=4. latency_ms=1.191 uptime_ms=781735066.860
+I/Aether.Android(22252): [Lifecycle] seq=27 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781735080.569 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=27 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781735080.587 elapsed_ms=0.019 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Validation(24121): screen-cycle-1-eb97f56e762044e1b102b0bcf950752a
+I/Aether.Android(22252): [Lifecycle] seq=28 cmd=PAUSE(13) phase=begin uptime_ms=781736145.773 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): Aplicativo suspenso.
+I/Aether.Android(22252): [Lifecycle] seq=28 cmd=PAUSE(13) phase=end uptime_ms=781736145.789 elapsed_ms=0.017 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=29 cmd=TERM_WINDOW(2) phase=begin uptime_ms=781736160.469 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] stage=destroy-surface-renderer phase=begin uptime_ms=781736160.482
+I/Aether.Android(22252): [Lifecycle] stage=destroy-surface-renderer phase=end uptime_ms=781736202.221 elapsed_ms=41.739
+I/Aether.Android(22252): [Lifecycle] seq=29 cmd=TERM_WINDOW(2) phase=end uptime_ms=781736202.249 elapsed_ms=41.780 resumed=0 focus=1 window=0 active=0 renderer=0 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=30 cmd=STOP(14) phase=begin uptime_ms=781736218.660 elapsed_ms=0.000 resumed=0 focus=1 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(22252): [Lifecycle] seq=30 cmd=STOP(14) phase=end uptime_ms=781736218.680 elapsed_ms=0.021 resumed=0 focus=1 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(22252): [Lifecycle] seq=31 cmd=SAVE_STATE(12) phase=begin uptime_ms=781736219.076 elapsed_ms=0.000 resumed=0 focus=1 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(22252): [Lifecycle] seq=31 cmd=SAVE_STATE(12) phase=end uptime_ms=781736219.087 elapsed_ms=0.012 resumed=0 focus=1 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(22252): [Lifecycle] seq=32 cmd=LOST_FOCUS(7) phase=begin uptime_ms=781736467.328 elapsed_ms=0.000 resumed=0 focus=1 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(22252): [Lifecycle] seq=32 cmd=LOST_FOCUS(7) phase=end uptime_ms=781736467.361 elapsed_ms=0.034 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Validation(24315): screen-wake-1-de8ae6857f95448cab87db5e6309d4e0
+I/Aether.Android(22252): [Lifecycle] seq=33 cmd=START(10) phase=begin uptime_ms=781748281.560 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(22252): [Lifecycle] seq=33 cmd=START(10) phase=end uptime_ms=781748281.576 elapsed_ms=0.018 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(22252): [Lifecycle] seq=34 cmd=RESUME(11) phase=begin uptime_ms=781748283.203 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=34 cmd=RESUME(11) phase=end uptime_ms=781748283.210 elapsed_ms=0.008 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=35 cmd=INIT_WINDOW(1) phase=begin uptime_ms=781748300.228 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=781748300.234
+I/Aether.Android(22252): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+I/Aether.Android(22252): Swapchain pronta: 1280x2772, 5 imagens.
+I/Aether.Android(22252): [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=781748342.824
+I/Aether.Android(22252): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(22252): InstancedRenderer pronto: cubo texturizado + depth, 5000 instâncias (PoC-A).
+I/Aether.Android(22252): RHI/VMA [buffer]: uso=100032, pico=100032 bytes.
+I/Aether.Android(22252): RHI/VMA [texture]: uso=20544, pico=20544 bytes.
+I/Aether.Android(22252): RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+I/Aether.Android(22252): RHI/VMA [staging]: uso=0, pico=16384 bytes.
+I/Aether.Android(22252): [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=781748447.627 elapsed_ms=104.803
+I/Aether.Android(22252): [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=781748447.633 elapsed_ms=147.398
+I/Aether.Android(22252): [Lifecycle] seq=35 cmd=INIT_WINDOW(1) phase=end uptime_ms=781748447.636 elapsed_ms=147.408 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=36 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781748447.752 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=36 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781748447.771 elapsed_ms=0.020 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=37 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=781748447.778 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=37 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=781748447.782 elapsed_ms=0.004 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=38 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=781748447.851 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Aplicativo ativo.
+I/Aether.Android(22252): [Lifecycle] seq=38 cmd=GAINED_FOCUS(6) phase=end uptime_ms=781748448.305 elapsed_ms=0.454 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Primeiro frame após ativação apresentado: ciclo=5. latency_ms=2.294 uptime_ms=781748450.554
+I/Aether.Android(22252): [Lifecycle] seq=39 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781748501.020 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=39 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781748501.043 elapsed_ms=0.023 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=40 cmd=PAUSE(13) phase=begin uptime_ms=781748710.464 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): Aplicativo suspenso.
+I/Aether.Android(22252): [Lifecycle] seq=40 cmd=PAUSE(13) phase=end uptime_ms=781748710.495 elapsed_ms=0.032 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(22252): [Lifecycle] seq=41 cmd=RESUME(11) phase=begin uptime_ms=781748710.867 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Aplicativo ativo.
+I/Aether.Android(22252): [Lifecycle] seq=41 cmd=RESUME(11) phase=end uptime_ms=781748710.890 elapsed_ms=0.023 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): Primeiro frame após ativação apresentado: ciclo=6. latency_ms=16.410 uptime_ms=781748727.297
+I/Aether.Android(22252): [Lifecycle] seq=42 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=781748727.331 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): [Lifecycle] seq=42 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=781748727.351 elapsed_ms=0.020 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(22252): PoC-A: 5000 instâncias, crossing C++<->C# pico=1317.9 us (orçamento: 3000 us) — dentro do orçamento.
+
+--- crash buffer ---
+

@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 4,
+  "status": "failed",
+  "startedAtUtc": "2026-08-28T14:55:35.3241148Z",
+  "finishedAtUtc": "2026-08-28T14:56:34.3150838Z",
+  "package": "dev.aether.editor",
+  "activity": "android.app.NativeActivity",
+  "apk": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+  "device": {
+    "serial": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
+    "manufacturer": "Xiaomi",
+    "model": "25053PC47G",
+    "device": "onyx",
+    "board": "sun",
+    "socModel": "SM8735",
+    "androidRelease": "16",
+    "apiLevel": "36",
+    "abi": "arm64-v8a"
+  },
+  "configuration": {
+    "lifecycleCycles": 3,
+    "startupTimeoutSeconds": 45,
+    "cycleTimeoutSeconds": 20,
+    "soakMinutes": 0,
+    "profileSeconds": 0,
+    "powerBudgetWatts": 4.0,
+    "requirePowerBudget": false,
+    "requireSoakBudget": false,
+    "minimumSoakFps": 55.0,
+    "configurationChange": false,
+    "screenCycle": true,
+    "screenCycles": 1,
+    "screenshotEqualityRequired": true,
+    "initiallyAsleep": false
+  },
+  "checks": [
+    {
+      "name": "apk-install",
+      "status": "passed",
+      "details": "APK instalado com adb install -r -t."
+    },
+    {
+      "name": "app-data-clean",
+      "status": "passed",
+      "details": "Dados do pacote limpos antes do teste."
+    },
+    {
+      "name": "startup",
+      "status": "passed",
+      "details": {
+        "pid": "30400",
+        "frameMilestone": 1000
+      }
+    },
+    {
+      "name": "background-foreground",
+      "status": "passed",
+      "details": {
+        "cycles": 3,
+        "stablePid": "30400",
+        "renderResumedEveryCycle": true,
+        "resourceRecreationsObserved": 0
+      }
+    },
+    {
+      "name": "screen-off-on",
+      "status": "passed",
+      "details": {
+        "cycle": 1,
+        "stablePid": "30400"
+      }
+    },
+    {
+      "name": "trim-memory-proxy",
+      "status": "passed",
+      "details": "Processo sobreviveu; este comando é proxy e não garante APP_CMD_LOW_MEMORY real."
+    }
+  ],
+  "screenshots": {
+    "before": {
+      "path": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\20260828-115536\\before-lifecycle.png",
+      "sha256": "347E13A9B196FB97D6892B71420ED801CBCBE4B7970F1C96A4BB208AB953F945",
+      "bytes": 555437
+    },
+    "after": {
+      "path": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\20260828-115536\\after-lifecycle.png",
+      "sha256": "0D07759A35AC77A5CBCDE5AC7F524F301E5980167FC88221222B802387D5B4BA",
+      "bytes": 560322
+    }
+  },
+  "measurements": {
+    "resourceRecreationsDuringLifecycle": 0,
+    "powerSamples": [],
+    "keyguardWaits": [
+      {
+        "elapsedMs": 127.356,
+        "dismissRequests": 0,
+        "showing": false,
+        "screenState": "SCREEN_STATE_ON",
+        "context": "startup"
+      },
+      {
+        "elapsedMs": 2455.889,
+        "dismissRequests": 1,
+        "showing": false,
+        "screenState": "SCREEN_STATE_ON",
+        "context": "screen-cycle-1"
+      }
+    ],
+    "keyguardDismissRequests": [
+      {
+        "context": "screen-cycle-1",
+        "requestedAtUtc": "2026-08-28T14:56:06.0047580Z",
+        "output": ""
+      }
+    ],
+    "managedBuild": {
+      "observedId": "aff4048fe2ee688ce7dd8706eaadbfc06c4d200cc744c9c6fe80edec003eea8a",
+      "reusedExtraction": false,
+      "apkId": "aff4048fe2ee688ce7dd8706eaadbfc06c4d200cc744c9c6fe80edec003eea8a",
+      "coreSha256": "77E148569359DF4A75C9D9B43C23DB0B50FD6A46DD63C4D5AF0F5F3F87423BE3"
+    }
+  },
+  "artifacts": {
+    "apkSha256": "9D66D55D09FF0A77FAC33D21AE3AD30855DF4EAA14ABB3B7F2576C72CF19E68E",
+    "gitRevision": "14da302cb8990f61681f2c3d3b1c10adc4ac7100",
+    "gitDirty": true,
+    "outputDirectory": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\20260828-115536",
+    "adb": "C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+    "lifecycleDiagnostics": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\20260828-115536\\lifecycle-diagnostics.json",
+    "logcat": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\20260828-115536\\logcat.txt",
+    "lifecycleTimeline": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\20260828-115536\\lifecycle-timeline.txt"
+  },
+  "error": "As capturas antes/depois diferem: 347E13A9B196FB97D6892B71420ED801CBCBE4B7970F1C96A4BB208AB953F945 != 0D07759A35AC77A5CBCDE5AC7F524F301E5980167FC88221222B802387D5B4BA.",
+  "failureKind": null
+}

@@ -1,0 +1,15 @@
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\bin\Release\net8.0\Aether.Scene.deps.json
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\bin\Release\net8.0\Aether.Scene.dll
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\bin\Release\net8.0\Aether.Scene.pdb
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\bin\Release\net8.0\Aether.Core.dll
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\bin\Release\net8.0\Aether.Core.pdb
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Release\net8.0\Aether.Scene.csproj.AssemblyReference.cache
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Release\net8.0\Aether.Scene.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Release\net8.0\Aether.Scene.AssemblyInfoInputs.cache
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Release\net8.0\Aether.Scene.AssemblyInfo.cs
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Release\net8.0\Aether.Scene.csproj.CoreCompileInputs.cache
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Release\net8.0\Aether.S.74DBFBF9.Up2Date
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Release\net8.0\Aether.Scene.dll
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Release\net8.0\refint\Aether.Scene.dll
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Release\net8.0\Aether.Scene.pdb
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Release\net8.0\ref\Aether.Scene.dll

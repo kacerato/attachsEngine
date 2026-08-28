@@ -1,0 +1,19 @@
+@echo off
+"C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\cmake.exe" ^
+  "-HC:\\Users\\jamaa\\Downloads\\aether-fase0-1\\native" ^
+  "-DCMAKE_SYSTEM_NAME=Android" ^
+  "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON" ^
+  "-DCMAKE_SYSTEM_VERSION=26" ^
+  "-DANDROID_PLATFORM=android-26" ^
+  "-DANDROID_ABI=arm64-v8a" ^
+  "-DCMAKE_ANDROID_ARCH_ABI=arm64-v8a" ^
+  "-DANDROID_NDK=C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006" ^
+  "-DCMAKE_ANDROID_NDK=C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006" ^
+  "-DCMAKE_TOOLCHAIN_FILE=C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\build\\cmake\\android.toolchain.cmake" ^
+  "-DCMAKE_MAKE_PROGRAM=C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe" ^
+  "-DCMAKE_CXX_FLAGS=-std=c++20" ^
+  "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\263i2b2r\\obj\\arm64-v8a" ^
+  "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\263i2b2r\\obj\\arm64-v8a" ^
+  "-DCMAKE_BUILD_TYPE=RelWithDebInfo" ^
+  "-BC:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\.cxx\\RelWithDebInfo\\263i2b2r\\arm64-v8a" ^
+  -GNinja

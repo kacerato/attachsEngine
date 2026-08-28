@@ -42,9 +42,9 @@ removidas/recriadas, buffer insuficiente sem escrita parcial, recursos
 desconhecidos, dados inválidos, zero alocação e round-trip texto/binário.
 Android debug/release/lint e shaders foram compilados/validados.
 
-Escopo desse lote: um par cubo/checker embutido, material opaco sem iluminação,
-câmera diagnóstica e cena de teste. Não equivale a PBR, Asset Browser,
-Inspector, save/load pela UI ou Play isolado.
+O cubo/checker continua como fixture isolada; o launcher corrente já possui os
+vertical slices PBR/esfera e mapa real descritos abaixo. Isso ainda não equivale
+a Asset Browser, Inspector, save/load pela UI ou Play isolado.
 Contrato e evidências: `SCENE-RENDER-INTEGRATION.md`.
 `scene-snapshot-20260828/report.json` passou em bindless/fallback com
 Khronos validation ativa e estado preservado após retomada. Capturas foram
@@ -70,14 +70,43 @@ Build otimizado instalado preservando dados. Checkpoint curto da esfera:
 120,11 FPS exibidos/5,14 s; CPU média por janela 1,15–1,21 ms, pico 4,37 ms.
 Não é medição de Sponza/PoC-A, tempo GPU ou aceite térmico/energético.
 
+### Mapa glTF real + câmera livre — vertical slice implementado
+
+`[UPDATE] Dirt Road Through Forest`, de 99.Miles (CC BY 4.0), foi importado
+offline pelo `tools/cook-gltf-map.py` para o formato versionado AEMAP v1 e AETX
+v1. O runtime não interpreta JSON nem decodifica imagens: carrega 27 draws,
+26 materiais, 424.849 vértices, 341.109 triângulos e 70 texturas, com buffers
+de geometria device-local via staging. ASTC 6×6 preserva fontes até 4096² e o
+fallback RGBA8 é limitado a 512 px; ambos têm cadeias completas de mip.
+
+O renderer usa dois pipelines: opacos com depth write e transparências com
+blend, depth read e ordenação draw-level traseira→frontal. PBR móvel cobre
+base color/factor, normal/scale, metallic-roughness/factors, emissive, cor de
+vértice, UV0/UV1 e fator especular. Bindless e descritores convencionais por
+material foram exercitados no mesmo Adreno. A carga observada foi 1,19–1,57 s;
+memória RHI após carga: ~34,7 MiB de buffers, ~60,9 MiB de texturas e ~14,3 MiB
+de render targets. Não é ainda streaming/LOD/culling, sombras ou pós-processo.
+
+A câmera livre é um controlador portátil independente de Android/Vulkan: um
+dedo olha, arrasto com dois dedos desloca lateralmente e sobe/desce, pinça
+avança/recua; mudanças no conjunto de pointer IDs recalibram sem salto. Posição
+e orientação sobrevivem à recriação da surface. No hardware real, o mapa
+apresentou o primeiro frame e um swipe alterou yaw de 0 para 1,360 rad; pan e
+pinça possuem regressão nativa determinística. APK debug instalado com `-r`,
+sem desbloqueio automático nem mudança de timeout global.
+
+Artefatos e atribuição: `samples/dirt-road/README.md`, `manifest.json` e
+`LICENSE.txt`. A validação Python confere identidade, todos os SHA-256,
+estrutura/contagens AEMAP, formatos, mips e limite do fallback.
+
 ## Resumo
 
 | | |
 |---|---|
 | Testes C# | **506 passando**, 0 falhando, 0 pulados (inclui 5 de material/esfera e 15 de integração cena/render); interop nativo obrigatório na regressão |
 | Verificações das ferramentas Android | **47 passando**: 12 de lifecycle/desbloqueio, 18 de frames/evidência incremental, 13 de térmica/FPS e 4 de identidade dos assets após build |
-| Testes C++ | **165 passando**, 0 falhando: 159 anteriores + 6 de geometria, formato, mipmaps e residência |
-| Import do material | **6 testes Python passando**: hashes/payloads, resolução real, mips lineares/normais, HDR e LUT |
+| Testes C++ | **170 passando**, 0 falhando: inclui formato AEMAP e câmera livre multi-touch |
+| Imports gráficos | **9 testes Python passando**: 6 de material + 3 do mapa (identidade/hashes, AEMAP e 140 cadeias AETX) |
 | Linhas C# | ~11.000 |
 | Linhas C++ (próprias, sem código vendorizado) | ~3.400 |
 | Dependências baixadas no build | **nenhuma** — build e testes rodam offline; Jolt Physics, Box2D, SQLite, runtime .NET e VMA são vendorizados em `native/third_party/`, com versão/licença/hash ou commit registrados |
@@ -90,7 +119,7 @@ Não é medição de Sponza/PoC-A, tempo GPU ou aceite térmico/energético.
 | Lacunas integralmente fechadas | **11/13** — `GAP-FLOW-01`, `GAP-FLOW-02`, `GAP-PHY-01`, `GAP-PHY-02`, `GAP-PHY-03`, `GAP-PHY-04`, `GAP-JOINT-01`, `GAP-JOB-01`, `GAP-ECS-01`, `GAP-SER-01`, `GAP-CHAR-01` |
 | Gates M0–M9 fechados | **0/10** |
 | Hardware M0 | parcial — 1 aparelho Adreno; matriz mínima, Mali e perfil C pendentes |
-| Shell gráfico mínimo (0.1.3 + critério visual M0) | cubo texturizado, depth, staging e rotação por toque validados no Android; projeção corrigida para pré-rotação da surface. Validation layers ativas em build debug (item 2.1.6). M0 continua aberto: hot reload C#, soak formal e matriz de aparelhos pendentes |
+| Shell gráfico mínimo (0.1.3 + critério visual M0) | cubo, esfera PBR e mapa real com depth/staging/câmera livre validados no Android; projeção corrigida para pré-rotação da surface. Validation layers ativas em build debug (item 2.1.6). M0 continua aberto: hot reload C#, soak formal e matriz de aparelhos pendentes |
 | §4.1 Inventário executável | `docs/MATRIZ-MARCOS.md`: **333 registros** (328 itens numerados + 5 PoCs): 249 não iniciados, 39 parciais, 31 implementados, 8 PoCs, 5 validados em hardware e 1 aceito. Contagens reconciliadas com as linhas; reclassificações refletem escopo integral/evidência, não remoção de funcionalidades. |
 | §4.2 CI confiável | ✅ implementação concluída — `.github/workflows/ci.yml` separa `unit`/`native`/`interop`/`android-host`/`benchmark`/`clean-build-nightly`; integração e clean build exigem a DLL nativa; cada job publica evidência; o clean build instala headers Vulkan isolados do NDK e foi reproduzido localmente; a regressão corrente passa em 506/506 testes C# e 165/165 nativos. `metrics/budgets.v1.json` versiona P/Invoke, alocação, CPU, GPU, memória e energia, com gate positivo e negativo. `android-device`/`soak` ficam num workflow manual para runner físico. A execução hospedada continua pendente, pois ainda não há remote nem runner `android-device-lab` |
 | §4 — verdade operacional/correções | ✅ implementação local completa (§4.1–§4.4); execução CI hospedada, laboratório Android e métricas coletadas em hardware permanecem evidências operacionais dos gates seguintes |

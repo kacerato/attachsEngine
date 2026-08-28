@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 2,
+  "status": "passed",
+  "startedAtUtc": "2026-08-26T20:29:01.3953546Z",
+  "finishedAtUtc": "2026-08-26T20:29:35.5517849Z",
+  "package": "dev.aether.editor",
+  "activity": "android.app.NativeActivity",
+  "apk": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+  "device": {
+    "serial": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
+    "manufacturer": "Xiaomi",
+    "model": "25053PC47G",
+    "device": "onyx",
+    "board": "sun",
+    "socModel": "SM8735",
+    "androidRelease": "16",
+    "apiLevel": "36",
+    "abi": "arm64-v8a"
+  },
+  "configuration": {
+    "lifecycleCycles": 1,
+    "startupTimeoutSeconds": 45,
+    "cycleTimeoutSeconds": 20,
+    "soakMinutes": 0,
+    "powerBudgetWatts": 4.0,
+    "requirePowerBudget": false,
+    "configurationChange": true,
+    "screenCycle": true,
+    "screenshotEqualityRequired": false,
+    "initiallyAsleep": false
+  },
+  "checks": [
+    {
+      "name": "apk-install",
+      "status": "passed",
+      "details": "APK instalado com adb install -r -t."
+    },
+    {
+      "name": "app-data-clean",
+      "status": "passed",
+      "details": "Dados do pacote limpos antes do teste."
+    },
+    {
+      "name": "startup",
+      "status": "passed",
+      "details": {
+        "pid": "20657",
+        "frameMilestone": 1000
+      }
+    },
+    {
+      "name": "background-foreground",
+      "status": "passed",
+      "details": {
+        "cycles": 1,
+        "stablePid": "20657",
+        "renderResumedEveryCycle": true,
+        "resourceRecreationsObserved": 1
+      }
+    },
+    {
+      "name": "configuration-change",
+      "status": "passed",
+      "details": {
+        "previousUiMode": "yes",
+        "targetUiMode": "no",
+        "stablePid": "20657"
+      }
+    },
+    {
+      "name": "screen-off-on",
+      "status": "passed",
+      "details": {
+        "stablePid": "20657"
+      }
+    },
+    {
+      "name": "trim-memory-proxy",
+      "status": "passed",
+      "details": "Processo sobreviveu; este comando é proxy e não garante APP_CMD_LOW_MEMORY real."
+    },
+    {
+      "name": "screenshot-stability",
+      "status": "passed",
+      "details": {
+        "identical": false,
+        "beforeSha256": "5D5FA569CC8E06579F6C956E182903A6D6B95F446E770EC6B8140DB16553CAD2",
+        "afterSha256": "02BA27801517E8EC30B76B4561EFCFB73070E9E6D373DAF8516F07F01D1F1660"
+      }
+    }
+  ],
+  "screenshots": {
+    "before": {
+      "path": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\rhi-texture-depth-touch-20260826\\before-lifecycle.png",
+      "sha256": "5D5FA569CC8E06579F6C956E182903A6D6B95F446E770EC6B8140DB16553CAD2",
+      "bytes": 1294318
+    },
+    "after": {
+      "path": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\rhi-texture-depth-touch-20260826\\after-lifecycle.png",
+      "sha256": "02BA27801517E8EC30B76B4561EFCFB73070E9E6D373DAF8516F07F01D1F1660",
+      "bytes": 1393765
+    }
+  },
+  "measurements": {
+    "resourceRecreationsDuringLifecycle": 1,
+    "powerSamples": []
+  },
+  "artifacts": {
+    "outputDirectory": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\rhi-texture-depth-touch-20260826",
+    "adb": "C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+    "logcat": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\rhi-texture-depth-touch-20260826\\logcat.txt"
+  },
+  "error": null
+}

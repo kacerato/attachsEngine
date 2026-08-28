@@ -1,0 +1,33 @@
+{
+  "capturedAtUtc": "2026-08-28T11:41:10.7275298Z",
+  "reason": "Timeout aguardando 1.000 frames apresentados (padrão 'Marco de renderização atingido: 1000 frames apresentados\\.', mínimo 1).",
+  "pid": "31512",
+  "power": [
+    "  mWakefulness=Awake",
+    "  mWakefulnessChanging=false",
+    "Display Power: com.android.server.power.PowerManagerService$2@3823098"
+  ],
+  "keyguard": [
+    "    mKeyguardOccluded=false mKeyguardOccludedChanged=false mPendingKeyguardOccluded=false",
+    "    KeyguardServiceDelegate",
+    "      showing=false",
+    "      inputRestricted=false",
+    "      occluded=false",
+    "      secure=true",
+    "      deviceHasKeyguard=true",
+    "      screenState=SCREEN_STATE_ON",
+    "      interactiveState=INTERACTIVE_STATE_AWAKE",
+    "      KeyguardStateMonitor",
+    "        mIsShowing=false",
+    "        mSimSecure=false",
+    "        mInputRestricted=false",
+    "        mTrusted=false"
+  ],
+  "focus": [
+    "  mCurrentFocus=Window{27a5937 u0 dev.aether.editor/android.app.NativeActivity}",
+    "  mFocusedApp=ActivityRecord{137289946 u0 dev.aether.editor/android.app.NativeActivity t1402}"
+  ],
+  "resumedActivity": [
+    "    topResumedActivity=ActivityRecord{137289946 u0 dev.aether.editor/android.app.NativeActivity t1402}"
+  ]
+}

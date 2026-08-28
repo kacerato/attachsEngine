@@ -1,0 +1,6 @@
+C:\Users\jamaa\Downloads\aether-fase0-1\native\CMakeLists.txt
+C:\Users\jamaa\Downloads\aether-fase0-1\native\third_party\Box2D\CMakeLists.txt
+C:\Users\jamaa\Downloads\aether-fase0-1\native\third_party\Box2D\src\CMakeLists.txt
+C:\Users\jamaa\Downloads\aether-fase0-1\native\third_party\JoltPhysics\Build\CMakeLists.txt
+C:\Users\jamaa\Downloads\aether-fase0-1\native\third_party\JoltPhysics\Jolt\Jolt.cmake
+C:\Users\jamaa\Downloads\aether-fase0-1\native\third_party\sqlite\CMakeLists.txt

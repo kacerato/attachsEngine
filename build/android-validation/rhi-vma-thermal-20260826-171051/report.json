@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "status": "failed",
+  "startedAtUtc": "2026-08-26T20:10:51.2128469Z",
+  "finishedAtUtc": "2026-08-26T20:12:40.8760298Z",
+  "package": "dev.aether.editor",
+  "activity": "android.app.NativeActivity",
+  "apk": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+  "device": {
+    "serial": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
+    "manufacturer": "Xiaomi",
+    "model": "25053PC47G",
+    "device": "onyx",
+    "board": "sun",
+    "socModel": "SM8735",
+    "androidRelease": "16",
+    "apiLevel": "36",
+    "abi": "arm64-v8a"
+  },
+  "configuration": {
+    "lifecycleCycles": 1,
+    "startupTimeoutSeconds": 45,
+    "cycleTimeoutSeconds": 20,
+    "soakMinutes": 1,
+    "powerBudgetWatts": 4.0,
+    "requirePowerBudget": true,
+    "configurationChange": false,
+    "screenCycle": false,
+    "screenshotEqualityRequired": true,
+    "initiallyAsleep": false
+  },
+  "checks": [
+    {
+      "name": "app-data-clean",
+      "status": "passed",
+      "details": "Dados do pacote limpos antes do teste."
+    },
+    {
+      "name": "startup",
+      "status": "passed",
+      "details": {
+        "pid": "14062",
+        "frameMilestone": 1000
+      }
+    },
+    {
+      "name": "background-foreground",
+      "status": "passed",
+      "details": {
+        "cycles": 1,
+        "stablePid": "14062",
+        "renderResumedEveryCycle": true,
+        "resourceRecreationsObserved": 0
+      }
+    },
+    {
+      "name": "stability-soak",
+      "status": "passed",
+      "details": {
+        "requestedMinutes": 1,
+        "elapsedSeconds": 61.445,
+        "healthSamples": 11,
+        "stablePid": "14062",
+        "powerMeasured": true,
+        "averageWatts": 2.1874,
+        "peakWatts": 6.3497,
+        "budgetWatts": 4.0,
+        "withinPowerBudget": true,
+        "peakThermalStatus": 0.0
+      }
+    },
+    {
+      "name": "trim-memory-proxy",
+      "status": "passed",
+      "details": "Processo sobreviveu; este comando é proxy e não garante APP_CMD_LOW_MEMORY real."
+    }
+  ],
+  "screenshots": {
+    "before": {
+      "path": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\rhi-vma-thermal-20260826-171051\\before-lifecycle.png",
+      "sha256": "85A2D52A5909736534EEB689C23CAD93F1C37009CA86B47AB00EAE99CE4A11DA",
+      "bytes": 311936
+    },
+    "after": {
+      "path": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\rhi-vma-thermal-20260826-171051\\after-lifecycle.png",
+      "sha256": "C60596DB23C39A83F2433ACC73FAB250462D9074112166342087A230799C8848",
+      "bytes": 312957
+    }
+  },
+  "measurements": {
+    "resourceRecreationsDuringLifecycle": 0,
+    "powerSamples": [
+      {
+        "capturedAtUtc": "2026-08-26T20:11:19.7318530Z",
+        "thermalStatus": 0,
+        "currentAmps": 0.187,
+        "voltageVolts": 4.035,
+        "powerWatts": 0.7545,
+        "batteryLevelPercent": 71,
+        "batteryTemperatureCelsius": 34.3
+      },
+      {
+        "capturedAtUtc": "2026-08-26T20:11:25.2659776Z",
+        "thermalStatus": 0,
+        "currentAmps": 0.468,
+        "voltageVolts": 3.986,
+        "powerWatts": 1.8654,
+        "batteryLevelPercent": 71,
+        "batteryTemperatureCelsius": 34.3
+      },
+      {
+        "capturedAtUtc": "2026-08-26T20:11:30.7495180Z",
+        "thermalStatus": 0,
+        "currentAmps": 0.468,
+        "voltageVolts": 4.035,
+        "powerWatts": 1.8884,
+        "batteryLevelPercent": 71,
+        "batteryTemperatureCelsius": 34.3
+      },
+      {
+        "capturedAtUtc": "2026-08-26T20:11:36.3021012Z",
+        "thermalStatus": 0,
+        "currentAmps": 0.562,
+        "voltageVolts": 4.035,
+        "powerWatts": 2.2677,
+        "batteryLevelPercent": 71,
+        "batteryTemperatureCelsius": 34.3
+      },
+      {
+        "capturedAtUtc": "2026-08-26T20:11:41.8719911Z",
+        "thermalStatus": 0,
+        "currentAmps": 0.187,
+        "voltageVolts": 4.035,
+        "powerWatts": 0.7545,
+        "batteryLevelPercent": 71,
+        "batteryTemperatureCelsius": 34.3
+      },
+      {
+        "capturedAtUtc": "2026-08-26T20:11:47.4590489Z",
+        "thermalStatus": 0,
+        "currentAmps": 0.468,
+        "voltageVolts": 4.035,
+        "powerWatts": 1.8884,
+        "batteryLevelPercent": 71,
+        "batteryTemperatureCelsius": 34.3
+      },
+      {
+        "capturedAtUtc": "2026-08-26T20:11:53.0942019Z",
+        "thermalStatus": 0,
+        "currentAmps": 0.656,
+        "voltageVolts": 4.035,
+        "powerWatts": 2.647,
+        "batteryLevelPercent": 71,
+        "batteryTemperatureCelsius": 34.3
+      },
+      {
+        "capturedAtUtc": "2026-08-26T20:11:58.7170351Z",
+        "thermalStatus": 0,
+        "currentAmps": 0.562,
+        "voltageVolts": 4.035,
+        "powerWatts": 2.2677,
+        "batteryLevelPercent": 71,
+        "batteryTemperatureCelsius": 34.3
+      },
+      {
+        "capturedAtUtc": "2026-08-26T20:12:04.3220091Z",
+        "thermalStatus": 0,
+        "currentAmps": 0.375,
+        "voltageVolts": 4.035,
+        "powerWatts": 1.5131,
+        "batteryLevelPercent": 71,
+        "batteryTemperatureCelsius": 34.3
+      },
+      {
+        "capturedAtUtc": "2026-08-26T20:12:09.9660983Z",
+        "thermalStatus": 0,
+        "currentAmps": 0.468,
+        "voltageVolts": 3.986,
+        "powerWatts": 1.8654,
+        "batteryLevelPercent": 71,
+        "batteryTemperatureCelsius": 34.3
+      },
+      {
+        "capturedAtUtc": "2026-08-26T20:12:15.5851289Z",
+        "thermalStatus": 0,
+        "currentAmps": 1.593,
+        "voltageVolts": 3.986,
+        "powerWatts": 6.3497,
+        "batteryLevelPercent": 71,
+        "batteryTemperatureCelsius": 34.3
+      }
+    ],
+    "soakElapsedSeconds": 61.445,
+    "soakHealthSamples": 11,
+    "powerSampleCount": 11,
+    "powerAverageWatts": 2.1874,
+    "powerPeakWatts": 6.3497,
+    "thermalStatusPeak": 0.0
+  },
+  "artifacts": {
+    "outputDirectory": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\rhi-vma-thermal-20260826-171051",
+    "adb": "C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+    "logcat": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\rhi-vma-thermal-20260826-171051\\logcat.txt"
+  },
+  "error": "As capturas antes/depois diferem: 85A2D52A5909736534EEB689C23CAD93F1C37009CA86B47AB00EAE99CE4A11DA != C60596DB23C39A83F2433ACC73FAB250462D9074112166342087A230799C8848."
+}

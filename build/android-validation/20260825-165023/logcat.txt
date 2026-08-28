@@ -1,0 +1,50 @@
+--- startup ---
+--------- beginning of main
+I/Aether.Android(25340): Shell nativo iniciado.
+I/Aether.Android(25340): Surface Vulkan pronta: janela=1280x2772, imagens=4..64, fila=0.
+I/Aether.Android(25340): Swapchain pronta: 1280x2772, 5 imagens.
+I/Aether.Android(25340): Pipeline do triângulo pronto.
+I/Aether.Android(25340): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(25340): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(25340): Pipeline do triângulo pronto.
+I/Aether.Android(25340): Aplicativo ativo.
+I/Aether.Android(25340): Primeiro frame após ativação apresentado: ciclo=1.
+I/Aether.Android(25340): Marco de renderização atingido: 1000 frames apresentados.
+
+--- screen cycle ---
+screen-cycle-c87b3272a1b74ac587caf8fbd75d8b77
+I/Aether.Android(25340): Aplicativo suspenso.
+I/Aether.Android(25340): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(25340): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(25340): Pipeline do triângulo pronto.
+I/Aether.Android(25340): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(25340): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(25340): Pipeline do triângulo pronto.
+I/Aether.Android(25340): Aplicativo ativo.
+I/Aether.Android(25340): Primeiro frame após ativação apresentado: ciclo=2.
+
+--- final logcat window ---
+--------- beginning of main
+I/Aether.Android(25340): Shell nativo iniciado.
+I/Aether.Android(25340): Surface Vulkan pronta: janela=1280x2772, imagens=4..64, fila=0.
+I/Aether.Android(25340): Swapchain pronta: 1280x2772, 5 imagens.
+I/Aether.Android(25340): Pipeline do triângulo pronto.
+I/Aether.Android(25340): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(25340): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(25340): Pipeline do triângulo pronto.
+I/Aether.Android(25340): Aplicativo ativo.
+I/Aether.Android(25340): Primeiro frame após ativação apresentado: ciclo=1.
+I/Aether.Android(25340): Marco de renderização atingido: 1000 frames apresentados.
+I/Aether.Validation(28751): screen-cycle-c87b3272a1b74ac587caf8fbd75d8b77
+I/Aether.Android(25340): Aplicativo suspenso.
+I/Aether.Android(25340): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(25340): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(25340): Pipeline do triângulo pronto.
+I/Aether.Android(25340): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android(25340): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android(25340): Pipeline do triângulo pronto.
+I/Aether.Android(25340): Aplicativo ativo.
+I/Aether.Android(25340): Primeiro frame após ativação apresentado: ciclo=2.
+
+--- crash buffer ---
+

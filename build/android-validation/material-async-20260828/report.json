@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "device": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
+  "apkSha256": "94F77E64149976E32424EC21B46053EEF66A11B2CE6051B99D61C79BB44223A3",
+  "cases": [
+    {
+      "mode": "bindless",
+      "pid": "5052",
+      "status": "passed",
+      "steps": [
+        1,
+        1,
+        0,
+        1
+      ],
+      "snapshot": "instances=1 hash=10101527230192540629 yaw=0.000000 pitch=0.000000",
+      "resumeStateIdentical": true,
+      "resumeImageIdentical": false,
+      "visualReviewRequired": true,
+      "screenshotSha256": "CC2A7B141EA9DBD05AA5D585AB7629838F0355B0D4263C70CFFF57BE1A660BB2",
+      "materialLogs": [
+        "08-28 14:52:54.892  5052  7334 I Aether.Android: [MaterialPreview] initialization=loading",
+        "08-28 14:52:55.675  5052  7380 I Aether.Android: [MaterialPreview] texture=material_preview/albedo.aetex resident=8192x8192 mips=14 bytes=39816832",
+        "08-28 14:52:56.229  5052  7380 I Aether.Android: [MaterialPreview] texture=material_preview/normal.aetex resident=8192x8192 mips=14 bytes=39816832",
+        "08-28 14:52:56.773  5052  7380 I Aether.Android: [MaterialPreview] texture=material_preview/arm.aetex resident=8192x8192 mips=14 bytes=39816832",
+        "08-28 14:52:56.990  5052  7380 I Aether.Android: [MaterialPreview] texture=material_preview/studio.aetex resident=256x128 mips=9 bytes=349528",
+        "08-28 14:52:56.994  5052  7380 I Aether.Android: [MaterialPreview] texture=material_preview/brdf.aetex resident=128x128 mips=1 bytes=131072",
+        "08-28 14:52:56.995  5052  7380 I Aether.Android: [MaterialPreview] ready triangles=36480 textures=ASTC6x6 load_ms=1881.721",
+        "08-28 14:52:57.036  5052  7334 I Aether.Android: [MaterialPreview] initialization=ready",
+        "08-28 14:53:04.334  5052  7334 I Aether.Android: [MaterialPreview] initialization=loading",
+        "08-28 14:53:04.723  5052  7680 I Aether.Android: [MaterialPreview] texture=material_preview/albedo.aetex resident=8192x8192 mips=14 bytes=39816832",
+        "08-28 14:53:05.213  5052  7680 I Aether.Android: [MaterialPreview] texture=material_preview/normal.aetex resident=8192x8192 mips=14 bytes=39816832",
+        "08-28 14:53:05.678  5052  7680 I Aether.Android: [MaterialPreview] texture=material_preview/arm.aetex resident=8192x8192 mips=14 bytes=39816832",
+        "08-28 14:53:05.870  5052  7680 I Aether.Android: [MaterialPreview] texture=material_preview/studio.aetex resident=256x128 mips=9 bytes=349528",
+        "08-28 14:53:05.873  5052  7680 I Aether.Android: [MaterialPreview] texture=material_preview/brdf.aetex resident=128x128 mips=1 bytes=131072",
+        "08-28 14:53:05.874  5052  7680 I Aether.Android: [MaterialPreview] ready triangles=36480 textures=ASTC6x6 load_ms=1489.748",
+        "08-28 14:53:05.906  5052  7334 I Aether.Android: [MaterialPreview] initialization=ready"
+      ]
+    },
+    {
+      "mode": "fallback",
+      "pid": "5306",
+      "status": "passed",
+      "steps": [
+        1,
+        1,
+        0,
+        1
+      ],
+      "snapshot": "instances=1 hash=10101527230192540629 yaw=0.000000 pitch=0.000000",
+      "resumeStateIdentical": true,
+      "resumeImageIdentical": false,
+      "visualReviewRequired": true,
+      "screenshotSha256": "CC2A7B141EA9DBD05AA5D585AB7629838F0355B0D4263C70CFFF57BE1A660BB2",
+      "materialLogs": [
+        "08-28 14:53:08.934  5306  7816 I Aether.Android: [MaterialPreview] initialization=loading",
+        "08-28 14:53:09.396  5306  7845 I Aether.Android: [MaterialPreview] texture=material_preview/albedo.aetex resident=8192x8192 mips=14 bytes=39816832",
+        "08-28 14:53:09.932  5306  7845 I Aether.Android: [MaterialPreview] texture=material_preview/normal.aetex resident=8192x8192 mips=14 bytes=39816832",
+        "08-28 14:53:10.424  5306  7845 I Aether.Android: [MaterialPreview] texture=material_preview/arm.aetex resident=8192x8192 mips=14 bytes=39816832",
+        "08-28 14:53:10.646  5306  7845 I Aether.Android: [MaterialPreview] texture=material_preview/studio.aetex resident=256x128 mips=9 bytes=349528",
+        "08-28 14:53:10.653  5306  7845 I Aether.Android: [MaterialPreview] texture=material_preview/brdf.aetex resident=128x128 mips=1 bytes=131072",
+        "08-28 14:53:10.655  5306  7845 I Aether.Android: [MaterialPreview] ready triangles=36480 textures=ASTC6x6 load_ms=1634.661",
+        "08-28 14:53:10.696  5306  7816 I Aether.Android: [MaterialPreview] initialization=ready",
+        "08-28 14:53:17.968  5306  7816 I Aether.Android: [MaterialPreview] initialization=loading",
+        "08-28 14:53:18.371  5306  8061 I Aether.Android: [MaterialPreview] texture=material_preview/albedo.aetex resident=8192x8192 mips=14 bytes=39816832",
+        "08-28 14:53:18.890  5306  8061 I Aether.Android: [MaterialPreview] texture=material_preview/normal.aetex resident=8192x8192 mips=14 bytes=39816832",
+        "08-28 14:53:19.368  5306  8061 I Aether.Android: [MaterialPreview] texture=material_preview/arm.aetex resident=8192x8192 mips=14 bytes=39816832",
+        "08-28 14:53:19.573  5306  8061 I Aether.Android: [MaterialPreview] texture=material_preview/studio.aetex resident=256x128 mips=9 bytes=349528",
+        "08-28 14:53:19.578  5306  8061 I Aether.Android: [MaterialPreview] texture=material_preview/brdf.aetex resident=128x128 mips=1 bytes=131072",
+        "08-28 14:53:19.578  5306  8061 I Aether.Android: [MaterialPreview] ready triangles=36480 textures=ASTC6x6 load_ms=1583.700",
+        "08-28 14:53:19.610  5306  7816 I Aether.Android: [MaterialPreview] initialization=ready"
+      ]
+    },
+    {
+      "mode": "texture-fallback",
+      "pid": "6588",
+      "status": "passed",
+      "steps": [
+        1,
+        1,
+        0,
+        1
+      ],
+      "snapshot": "instances=1 hash=10101527230192540629 yaw=0.000000 pitch=0.000000",
+      "resumeStateIdentical": true,
+      "resumeImageIdentical": false,
+      "visualReviewRequired": true,
+      "screenshotSha256": "6B65E5EF4C007C140B9927E873B86D30B06F9CB7D77A3C10546C37E71028935A",
+      "materialLogs": [
+        "08-28 14:53:22.461  6588  8242 I Aether.Android: [MaterialPreview] initialization=loading",
+        "08-28 14:53:22.645  6588  8260 I Aether.Android: [MaterialPreview] texture=material_preview/albedo-fallback.aetex resident=1024x1024 mips=11 bytes=5592404",
+        "08-28 14:53:22.715  6588  8260 I Aether.Android: [MaterialPreview] texture=material_preview/normal-fallback.aetex resident=1024x1024 mips=11 bytes=5592404",
+        "08-28 14:53:22.789  6588  8260 I Aether.Android: [MaterialPreview] texture=material_preview/arm-fallback.aetex resident=1024x1024 mips=11 bytes=5592404",
+        "08-28 14:53:22.821  6588  8260 I Aether.Android: [MaterialPreview] texture=material_preview/studio.aetex resident=256x128 mips=9 bytes=349528",
+        "08-28 14:53:22.825  6588  8260 I Aether.Android: [MaterialPreview] texture=material_preview/brdf.aetex resident=128x128 mips=1 bytes=131072",
+        "08-28 14:53:22.826  6588  8260 I Aether.Android: [MaterialPreview] ready triangles=36480 textures=RGBA8-fallback load_ms=252.778",
+        "08-28 14:53:22.858  6588  8242 I Aether.Android: [MaterialPreview] initialization=ready",
+        "08-28 14:53:30.127  6588  8242 I Aether.Android: [MaterialPreview] initialization=loading",
+        "08-28 14:53:30.239  6588  8691 I Aether.Android: [MaterialPreview] texture=material_preview/albedo-fallback.aetex resident=1024x1024 mips=11 bytes=5592404",
+        "08-28 14:53:30.314  6588  8691 I Aether.Android: [MaterialPreview] texture=material_preview/normal-fallback.aetex resident=1024x1024 mips=11 bytes=5592404",
+        "08-28 14:53:30.393  6588  8691 I Aether.Android: [MaterialPreview] texture=material_preview/arm-fallback.aetex resident=1024x1024 mips=11 bytes=5592404",
+        "08-28 14:53:30.425  6588  8691 I Aether.Android: [MaterialPreview] texture=material_preview/studio.aetex resident=256x128 mips=9 bytes=349528",
+        "08-28 14:53:30.432  6588  8691 I Aether.Android: [MaterialPreview] texture=material_preview/brdf.aetex resident=128x128 mips=1 bytes=131072",
+        "08-28 14:53:30.433  6588  8691 I Aether.Android: [MaterialPreview] ready triangles=36480 textures=RGBA8-fallback load_ms=280.898",
+        "08-28 14:53:30.466  6588  8242 I Aether.Android: [MaterialPreview] initialization=ready"
+      ]
+    }
+  ],
+  "error": null
+}

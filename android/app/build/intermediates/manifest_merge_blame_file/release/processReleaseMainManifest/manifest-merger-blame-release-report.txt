@@ -1,0 +1,79 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="dev.aether.editor"
+4    android:versionCode="1"
+5    android:versionName="0.1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="35" />
+10
+11    <uses-feature
+11-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:4:5-7:31
+12        android:name="android.hardware.vulkan.level"
+12-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:5:9-53
+13        android:required="false"
+13-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:6:9-33
+14        android:version="1" />
+14-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:7:9-28
+15    <!--
+16     extractNativeLibs="true": por padrão o Android moderno carrega .so direto de dentro do
+17         .apk (mapeado em memória), sem extrair para disco — funciona para o carregamento
+18         automático do lib_name do NativeActivity, mas dlopen() chamado manualmente pelo nosso
+19         próprio código (DotNetHost::initialize, para libhostfxr.so vendorizado) não tem esse
+20         suporte especial e falha com "library not found" mesmo com o .so presente no APK
+21         (descoberto em execução real — ver docs/ESTADO.md item 0.1.4). Forçar extração real em
+22         disco é o jeito simples e confiável de resolver isso; custa espaço extra no dispositivo
+23         (o .apk já carrega os .so comprimidos, extração duplica esse espaço em disco).
+24    -->
+25    <application
+25-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:17:5-41:19
+26        android:allowBackup="false"
+26-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:18:9-36
+27        android:dataExtractionRules="@xml/data_extraction_rules"
+27-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:19:9-65
+28        android:extractNativeLibs="true"
+28-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:20:9-41
+29        android:fullBackupContent="@xml/backup_rules"
+29-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:21:9-54
+30        android:hasCode="false"
+30-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:22:9-32
+31        android:icon="@drawable/ic_aether"
+31-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:23:9-43
+32        android:label="Aether"
+32-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:24:9-31
+33        android:theme="@style/AetherTheme" >
+33-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:25:9-43
+34        <activity
+34-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:26:9-40:20
+35            android:name="android.app.NativeActivity"
+35-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:27:13-54
+36            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
+36-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:28:13-122
+37            android:exported="true"
+37-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:29:13-36
+38            android:launchMode="singleTask"
+38-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:30:13-44
+39            android:screenOrientation="sensorLandscape" >
+39-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:31:13-56
+40            <meta-data
+40-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:33:13-35:50
+41                android:name="android.app.lib_name"
+41-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:34:17-52
+42                android:value="aether_android" />
+42-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:35:17-47
+43
+44            <intent-filter>
+44-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:36:13-39:29
+45                <action android:name="android.intent.action.MAIN" />
+45-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:37:17-69
+45-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:37:25-66
+46
+47                <category android:name="android.intent.category.LAUNCHER" />
+47-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:38:17-77
+47-->C:\Users\jamaa\Downloads\aether-fase0-1\android\app\src\main\AndroidManifest.xml:38:27-74
+48            </intent-filter>
+49        </activity>
+50    </application>
+51
+52</manifest>

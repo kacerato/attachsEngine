@@ -1,0 +1,647 @@
+{
+  "schemaVersion": 3,
+  "status": "passed",
+  "startedAtUtc": "2026-08-28T11:58:29.9855098Z",
+  "finishedAtUtc": "2026-08-28T11:59:53.9434841Z",
+  "package": "dev.aether.editor",
+  "activity": "android.app.NativeActivity",
+  "apk": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+  "device": {
+    "serial": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
+    "manufacturer": "Xiaomi",
+    "model": "25053PC47G",
+    "device": "onyx",
+    "board": "sun",
+    "socModel": "SM8735",
+    "androidRelease": "16",
+    "apiLevel": "36",
+    "abi": "arm64-v8a"
+  },
+  "configuration": {
+    "lifecycleCycles": 0,
+    "startupTimeoutSeconds": 45,
+    "cycleTimeoutSeconds": 20,
+    "soakMinutes": 0,
+    "profileSeconds": 60,
+    "powerBudgetWatts": 4.0,
+    "requirePowerBudget": false,
+    "configurationChange": false,
+    "screenCycle": false,
+    "screenCycles": 0,
+    "screenshotEqualityRequired": false,
+    "initiallyAsleep": false
+  },
+  "checks": [
+    {
+      "name": "startup",
+      "status": "passed",
+      "details": {
+        "pid": "20589",
+        "frameMilestone": 1000
+      }
+    },
+    {
+      "name": "frame-profile-capture",
+      "status": "passed",
+      "details": {
+        "frames": 4200.0,
+        "elapsedSeconds": 69.93276288999999,
+        "cpuBudgetPassed": false,
+        "pocAAccepted": false
+      }
+    },
+    {
+      "name": "background-foreground",
+      "status": "passed",
+      "details": {
+        "cycles": 0,
+        "stablePid": "20589",
+        "renderResumedEveryCycle": true,
+        "resourceRecreationsObserved": 0
+      }
+    },
+    {
+      "name": "trim-memory-proxy",
+      "status": "passed",
+      "details": "Processo sobreviveu; este comando é proxy e não garante APP_CMD_LOW_MEMORY real."
+    },
+    {
+      "name": "screenshot-stability",
+      "status": "passed",
+      "details": {
+        "identical": false,
+        "beforeSha256": "1D29840AD8F5BC6DF6ECAEBE6634B53E142ED124A7786FA8CDEE322744ECF4BF",
+        "afterSha256": "CF546FD1353B4E75004B81FCEC71D07E1516819F867430399CD89CFC43C7D5EA"
+      }
+    }
+  ],
+  "screenshots": {
+    "before": {
+      "path": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\poc-a-profile-debug-60s-20260828\\before-lifecycle.png",
+      "sha256": "1D29840AD8F5BC6DF6ECAEBE6634B53E142ED124A7786FA8CDEE322744ECF4BF",
+      "bytes": 558374
+    },
+    "after": {
+      "path": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\poc-a-profile-debug-60s-20260828\\after-lifecycle.png",
+      "sha256": "CF546FD1353B4E75004B81FCEC71D07E1516819F867430399CD89CFC43C7D5EA",
+      "bytes": 518130
+    }
+  },
+  "measurements": {
+    "resourceRecreationsDuringLifecycle": 0,
+    "powerSamples": [],
+    "keyguardWaits": [
+      {
+        "elapsedMs": 110.158,
+        "dismissRequests": 0,
+        "showing": false,
+        "screenState": "SCREEN_STATE_ON",
+        "context": "startup"
+      }
+    ],
+    "keyguardDismissRequests": [],
+    "profileEnvironmentStart": {
+      "capturedAtUtc": "2026-08-28T11:58:32.1464233Z",
+      "thermalStatus": 0,
+      "currentAmps": 2.625,
+      "voltageVolts": 3.786,
+      "powerWatts": 9.9382,
+      "batteryLevelPercent": 55,
+      "batteryTemperatureCelsius": 30.9
+    },
+    "profileEnvironmentEnd": {
+      "capturedAtUtc": "2026-08-28T11:59:49.9326539Z",
+      "thermalStatus": 0,
+      "currentAmps": 0.468,
+      "voltageVolts": 3.836,
+      "powerWatts": 1.7952,
+      "batteryLevelPercent": 54,
+      "batteryTemperatureCelsius": 30.9
+    },
+    "frameProfile": {
+      "schemaVersion": 1,
+      "scene": "poc-a-5000-textured-cubes",
+      "pid": 20589,
+      "epoch": 3,
+      "build": "debug",
+      "frames": 4200.0,
+      "elapsedSeconds": 69.93276288999999,
+      "presentFps": 60.05768721888403,
+      "minimumWindowPresentFps": 60.042187,
+      "metrics": {
+        "interval_ms": {
+          "mean": 16.650658,
+          "worstWindowP95": 19.964271,
+          "worstWindowP99": 21.979115,
+          "max": 25.404427
+        },
+        "process_cpu_ms": {
+          "mean": 4.485556142857143,
+          "worstWindowP95": 6.457188,
+          "worstWindowP99": 7.051562,
+          "max": 23.395361
+        },
+        "thread_cpu_ms": {
+          "mean": 3.1427525714285713,
+          "worstWindowP95": 4.29953,
+          "worstWindowP99": 4.998958,
+          "max": 5.692293
+        },
+        "acquire_wall_ms": {
+          "mean": 13.662171142857142,
+          "worstWindowP95": 17.088802,
+          "worstWindowP99": 18.00375,
+          "max": 21.36276
+        },
+        "interop_wall_ms": {
+          "mean": 2.1755814285714288,
+          "worstWindowP95": 3.219427,
+          "worstWindowP99": 3.730105,
+          "max": 5.317552
+        },
+        "record_submit_wall_ms": {
+          "mean": 0.579604,
+          "worstWindowP95": 0.939948,
+          "worstWindowP99": 1.184844,
+          "max": 2.996458
+        },
+        "present_wall_ms": {
+          "mean": 0.17460414285714285,
+          "worstWindowP95": 0.314427,
+          "worstWindowP99": 0.578646,
+          "max": 1.709739
+        }
+      },
+      "pocA": {
+        "cpuLimitMsExclusive": 3.0,
+        "cpuStatistic": "maximum process CPU per present interval, after 5s warm-up",
+        "cpuBudgetPassed": false,
+        "targetDisplayedFps": 60,
+        "displayedFpsMeasured": false,
+        "accepted": false,
+        "limitation": "Present retornado mede envio/ritmo, não scanout; não fecha PoC-A sozinho."
+      },
+      "windows": [
+        {
+          "schemaVersion": 1,
+          "pid": 20589,
+          "epoch": 3,
+          "window": 1,
+          "build": "debug",
+          "instances": 5000,
+          "width": 2772,
+          "height": 1280,
+          "frames": 600,
+          "elapsed_ms": 9991.577809,
+          "present_fps": 60.050576,
+          "warmup_samples": 303,
+          "warmup_process_cpu_max_ms": 49.346405,
+          "interval_ms": {
+            "mean": 16.65263,
+            "p50": 16.542188,
+            "p95": 19.964271,
+            "p99": 21.979115,
+            "max": 25.404427
+          },
+          "process_cpu_ms": {
+            "mean": 4.384766,
+            "p50": 4.949326,
+            "p95": 5.881771,
+            "p99": 6.328284,
+            "max": 7.097656
+          },
+          "thread_cpu_ms": {
+            "mean": 3.231004,
+            "p50": 3.742657,
+            "p95": 4.234115,
+            "p99": 4.712813,
+            "max": 5.049844
+          },
+          "acquire_wall_ms": {
+            "mean": 13.527895,
+            "p50": 13.396458,
+            "p95": 16.514375,
+            "p99": 18.00375,
+            "max": 21.36276
+          },
+          "interop_wall_ms": {
+            "mean": 2.278474,
+            "p50": 2.561094,
+            "p95": 3.181615,
+            "p99": 3.712709,
+            "max": 4.456302
+          },
+          "record_submit_wall_ms": {
+            "mean": 0.596522,
+            "p50": 0.606302,
+            "p95": 0.934792,
+            "p99": 1.184844,
+            "max": 2.801407
+          },
+          "present_wall_ms": {
+            "mean": 0.189335,
+            "p50": 0.189687,
+            "p95": 0.290521,
+            "p99": 0.578646,
+            "max": 1.709739
+          }
+        },
+        {
+          "schemaVersion": 1,
+          "pid": 20589,
+          "epoch": 3,
+          "window": 2,
+          "build": "debug",
+          "instances": 5000,
+          "width": 2772,
+          "height": 1280,
+          "frames": 600,
+          "elapsed_ms": 9990.908902,
+          "present_fps": 60.054596,
+          "warmup_samples": 303,
+          "warmup_process_cpu_max_ms": 49.346405,
+          "interval_ms": {
+            "mean": 16.651515,
+            "p50": 16.650886,
+            "p95": 19.408802,
+            "p99": 21.210312,
+            "max": 22.347083
+          },
+          "process_cpu_ms": {
+            "mean": 4.714836,
+            "p50": 5.092551,
+            "p95": 6.204896,
+            "p99": 6.856823,
+            "max": 23.395361
+          },
+          "thread_cpu_ms": {
+            "mean": 3.331827,
+            "p50": 3.775418,
+            "p95": 4.181616,
+            "p99": 4.656199,
+            "max": 5.617968
+          },
+          "acquire_wall_ms": {
+            "mean": 13.468622,
+            "p50": 13.389062,
+            "p95": 16.014375,
+            "p99": 17.365677,
+            "max": 18.968125
+          },
+          "interop_wall_ms": {
+            "mean": 2.315293,
+            "p50": 2.573385,
+            "p95": 3.219427,
+            "p99": 3.71349,
+            "max": 4.133854
+          },
+          "record_submit_wall_ms": {
+            "mean": 0.620304,
+            "p50": 0.616146,
+            "p95": 0.925885,
+            "p99": 1.081302,
+            "max": 1.498438
+          },
+          "present_wall_ms": {
+            "mean": 0.185952,
+            "p50": 0.189896,
+            "p95": 0.235469,
+            "p99": 0.428073,
+            "max": 1.139427
+          }
+        },
+        {
+          "schemaVersion": 1,
+          "pid": 20589,
+          "epoch": 3,
+          "window": 3,
+          "build": "debug",
+          "instances": 5000,
+          "width": 2772,
+          "height": 1280,
+          "frames": 600,
+          "elapsed_ms": 9992.973799,
+          "present_fps": 60.042187,
+          "warmup_samples": 303,
+          "warmup_process_cpu_max_ms": 49.346405,
+          "interval_ms": {
+            "mean": 16.654956,
+            "p50": 16.712395,
+            "p95": 19.084532,
+            "p99": 20.549114,
+            "max": 21.956042
+          },
+          "process_cpu_ms": {
+            "mean": 4.848184,
+            "p50": 5.15448,
+            "p95": 6.258491,
+            "p99": 6.752344,
+            "max": 7.651304
+          },
+          "thread_cpu_ms": {
+            "mean": 3.456807,
+            "p50": 3.839322,
+            "p95": 4.249531,
+            "p99": 4.632551,
+            "max": 4.952655
+          },
+          "acquire_wall_ms": {
+            "mean": 13.371532,
+            "p50": 13.28849,
+            "p95": 15.703125,
+            "p99": 17.033021,
+            "max": 18.220104
+          },
+          "interop_wall_ms": {
+            "mean": 2.389778,
+            "p50": 2.607031,
+            "p95": 3.196979,
+            "p99": 3.580886,
+            "max": 5.317552
+          },
+          "record_submit_wall_ms": {
+            "mean": 0.638766,
+            "p50": 0.627657,
+            "p95": 0.911771,
+            "p99": 1.028698,
+            "max": 2.199896
+          },
+          "present_wall_ms": {
+            "mean": 0.189336,
+            "p50": 0.191928,
+            "p95": 0.28224,
+            "p99": 0.396927,
+            "max": 0.612135
+          }
+        },
+        {
+          "schemaVersion": 1,
+          "pid": 20589,
+          "epoch": 3,
+          "window": 4,
+          "build": "debug",
+          "instances": 5000,
+          "width": 2772,
+          "height": 1280,
+          "frames": 600,
+          "elapsed_ms": 9990.821715,
+          "present_fps": 60.05512,
+          "warmup_samples": 303,
+          "warmup_process_cpu_max_ms": 49.346405,
+          "interval_ms": {
+            "mean": 16.65137,
+            "p50": 16.601563,
+            "p95": 19.494218,
+            "p99": 20.773698,
+            "max": 22.106614
+          },
+          "process_cpu_ms": {
+            "mean": 4.816993,
+            "p50": 5.126668,
+            "p95": 6.272759,
+            "p99": 6.688177,
+            "max": 7.420576
+          },
+          "thread_cpu_ms": {
+            "mean": 3.426014,
+            "p50": 3.857552,
+            "p95": 4.156199,
+            "p99": 4.888542,
+            "max": 5.501044
+          },
+          "acquire_wall_ms": {
+            "mean": 13.386453,
+            "p50": 13.324271,
+            "p95": 16.041771,
+            "p99": 17.014063,
+            "max": 19.155781
+          },
+          "interop_wall_ms": {
+            "mean": 2.384422,
+            "p50": 2.639739,
+            "p95": 3.218958,
+            "p99": 3.586041,
+            "max": 4.088177
+          },
+          "record_submit_wall_ms": {
+            "mean": 0.626054,
+            "p50": 0.615833,
+            "p95": 0.912135,
+            "p99": 1.098906,
+            "max": 1.624115
+          },
+          "present_wall_ms": {
+            "mean": 0.190211,
+            "p50": 0.189532,
+            "p95": 0.314427,
+            "p99": 0.440886,
+            "max": 0.818958
+          }
+        },
+        {
+          "schemaVersion": 1,
+          "pid": 20589,
+          "epoch": 3,
+          "window": 5,
+          "build": "debug",
+          "instances": 5000,
+          "width": 2772,
+          "height": 1280,
+          "frames": 600,
+          "elapsed_ms": 9988.801662,
+          "present_fps": 60.067265,
+          "warmup_samples": 303,
+          "warmup_process_cpu_max_ms": 49.346405,
+          "interval_ms": {
+            "mean": 16.648003,
+            "p50": 16.647292,
+            "p95": 19.222136,
+            "p99": 20.526823,
+            "max": 22.310469
+          },
+          "process_cpu_ms": {
+            "mean": 5.014606,
+            "p50": 5.285573,
+            "p95": 6.457188,
+            "p99": 7.051562,
+            "max": 7.400261
+          },
+          "thread_cpu_ms": {
+            "mean": 3.508548,
+            "p50": 3.912761,
+            "p95": 4.29953,
+            "p99": 4.910991,
+            "max": 5.692293
+          },
+          "acquire_wall_ms": {
+            "mean": 13.311269,
+            "p50": 13.224427,
+            "p95": 15.575104,
+            "p99": 17.362604,
+            "max": 18.351719
+          },
+          "interop_wall_ms": {
+            "mean": 2.445198,
+            "p50": 2.688229,
+            "p95": 3.184844,
+            "p99": 3.548334,
+            "max": 3.819375
+          },
+          "record_submit_wall_ms": {
+            "mean": 0.63657,
+            "p50": 0.621979,
+            "p95": 0.939948,
+            "p99": 1.088698,
+            "max": 2.996458
+          },
+          "present_wall_ms": {
+            "mean": 0.18959,
+            "p50": 0.191927,
+            "p95": 0.282761,
+            "p99": 0.38651,
+            "max": 0.91323
+          }
+        },
+        {
+          "schemaVersion": 1,
+          "pid": 20589,
+          "epoch": 3,
+          "window": 6,
+          "build": "debug",
+          "instances": 5000,
+          "width": 2772,
+          "height": 1280,
+          "frames": 600,
+          "elapsed_ms": 9988.402705,
+          "present_fps": 60.069665,
+          "warmup_samples": 303,
+          "warmup_process_cpu_max_ms": 49.346405,
+          "interval_ms": {
+            "mean": 16.647338,
+            "p50": 16.615625,
+            "p95": 19.047291,
+            "p99": 19.971875,
+            "max": 21.214479
+          },
+          "process_cpu_ms": {
+            "mean": 4.452695,
+            "p50": 4.134373,
+            "p95": 6.293126,
+            "p99": 6.94297,
+            "max": 7.526252
+          },
+          "thread_cpu_ms": {
+            "mean": 3.054084,
+            "p50": 2.747239,
+            "p95": 4.215261,
+            "p99": 4.998958,
+            "max": 5.189427
+          },
+          "acquire_wall_ms": {
+            "mean": 13.774135,
+            "p50": 13.7975,
+            "p95": 15.986563,
+            "p99": 17.391927,
+            "max": 18.925521
+          },
+          "interop_wall_ms": {
+            "mean": 2.097916,
+            "p50": 1.888229,
+            "p95": 3.16448,
+            "p99": 3.730105,
+            "max": 3.929948
+          },
+          "record_submit_wall_ms": {
+            "mean": 0.554553,
+            "p50": 0.538021,
+            "p95": 0.844583,
+            "p99": 0.967553,
+            "max": 1.531145
+          },
+          "present_wall_ms": {
+            "mean": 0.165518,
+            "p50": 0.148906,
+            "p95": 0.230573,
+            "p99": 0.469948,
+            "max": 0.642084
+          }
+        },
+        {
+          "schemaVersion": 1,
+          "pid": 20589,
+          "epoch": 3,
+          "window": 7,
+          "build": "debug",
+          "instances": 5000,
+          "width": 2772,
+          "height": 1280,
+          "frames": 600,
+          "elapsed_ms": 9989.276298,
+          "present_fps": 60.064411,
+          "warmup_samples": 303,
+          "warmup_process_cpu_max_ms": 49.346405,
+          "interval_ms": {
+            "mean": 16.648794,
+            "p50": 16.646666,
+            "p95": 18.8475,
+            "p99": 19.886458,
+            "max": 22.263698
+          },
+          "process_cpu_ms": {
+            "mean": 3.166813,
+            "p50": 3.508229,
+            "p95": 3.901094,
+            "p99": 4.429583,
+            "max": 4.637238
+          },
+          "thread_cpu_ms": {
+            "mean": 1.990984,
+            "p50": 2.252863,
+            "p95": 2.388751,
+            "p99": 2.47,
+            "max": 2.732397
+          },
+          "acquire_wall_ms": {
+            "mean": 14.795292,
+            "p50": 14.73802,
+            "p95": 17.088802,
+            "p99": 17.847813,
+            "max": 21.20474
+          },
+          "interop_wall_ms": {
+            "mean": 1.317989,
+            "p50": 1.486197,
+            "p95": 1.583802,
+            "p99": 1.657969,
+            "max": 1.762239
+          },
+          "record_submit_wall_ms": {
+            "mean": 0.384459,
+            "p50": 0.411094,
+            "p95": 0.52724,
+            "p99": 0.630104,
+            "max": 0.678594
+          },
+          "present_wall_ms": {
+            "mean": 0.112287,
+            "p50": 0.1225,
+            "p95": 0.143073,
+            "p99": 0.203282,
+            "max": 0.26599
+          }
+        }
+      ]
+    }
+  },
+  "artifacts": {
+    "apkSha256": "676F3F53861D42E69C4D88ABC9FE2C99746711CEC3421AC2AFC2589CF8964FB9",
+    "gitRevision": "0b1b0d3b6ea5c000229db9176b0b9b924a5247f1",
+    "gitDirty": true,
+    "outputDirectory": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\poc-a-profile-debug-60s-20260828",
+    "adb": "C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+    "logcat": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\poc-a-profile-debug-60s-20260828\\logcat.txt",
+    "lifecycleTimeline": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\poc-a-profile-debug-60s-20260828\\lifecycle-timeline.txt"
+  },
+  "error": null,
+  "failureKind": null
+}

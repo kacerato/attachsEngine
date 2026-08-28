@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.aether.editor"
+    android:versionCode="1"
+    android:versionName="0.1.0" >
+
+    <uses-sdk
+        android:minSdkVersion="26"
+        android:targetSdkVersion="35" />
+
+    <uses-feature
+        android:name="android.hardware.vulkan.level"
+        android:required="false"
+        android:version="1" />
+    <!--
+     extractNativeLibs="true": por padrão o Android moderno carrega .so direto de dentro do
+         .apk (mapeado em memória), sem extrair para disco — funciona para o carregamento
+         automático do lib_name do NativeActivity, mas dlopen() chamado manualmente pelo nosso
+         próprio código (DotNetHost::initialize, para libhostfxr.so vendorizado) não tem esse
+         suporte especial e falha com "library not found" mesmo com o .so presente no APK
+         (descoberto em execução real — ver docs/ESTADO.md item 0.1.4). Forçar extração real em
+         disco é o jeito simples e confiável de resolver isso; custa espaço extra no dispositivo
+         (o .apk já carrega os .so comprimidos, extração duplica esse espaço em disco).
+    -->
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:extractNativeLibs="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:hasCode="false"
+        android:icon="@drawable/ic_aether"
+        android:label="Aether"
+        android:theme="@style/AetherTheme" >
+        <activity
+            android:name="android.app.NativeActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape" >
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="aether_android" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

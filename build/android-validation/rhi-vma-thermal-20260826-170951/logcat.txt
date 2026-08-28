@@ -1,0 +1,21 @@
+
+
+--- final logcat window ---
+--------- beginning of main
+I/Aether.Android( 5145): Shell nativo iniciado.
+I/Aether.Android( 5145): Extração de assets .NET concluída: 179 ok, 0 falharam.
+I/Aether.Android( 5145): CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Core.runtimeconfig.json).
+I/Aether.Android( 5145): CoreCLR hospedado no shell: Ping(2,3)=5.
+I/Aether.Android( 5145): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android( 5145): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android( 5145): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android( 5145): InstancedRenderer pronto: 5000 instâncias (PoC-A).
+I/Aether.Android( 5145): Aplicativo ativo.
+I/Aether.Android( 5145): Primeiro frame após ativação apresentado: ciclo=1.
+I/Aether.Android( 5145): PoC-A: 5000 instâncias, crossing C++<->C# pico=2160.6 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android( 5145): PoC-A: 5000 instâncias, crossing C++<->C# pico=1593.7 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android( 5145): PoC-A: 5000 instâncias, crossing C++<->C# pico=1611.1 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android( 5145): Marco de renderização atingido: 1000 frames apresentados.
+
+--- crash buffer ---
+

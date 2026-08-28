@@ -1,0 +1,18 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor --add-meta-info app_type=debuggable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e task-clock:u -f 500 --duration 20
+Arch: arm64
+Event: task-clock:u (type 1, config 1)
+Samples: 1310
+Event count: 2620000000
+
+Overhead  Command         Shared Object                                                                                Symbol
+11.45%    Thread-13       /apex/com.android.runtime/lib64/bionic/libm.so                                               sinf
+9.24%     Thread-13       unknown                                                                                      unknown[+75f86e74a8]
+8.09%     Thread-13       /apex/com.android.runtime/lib64/bionic/libm.so                                               cosf
+4.50%     Thread-13       unknown                                                                                      unknown[+75f86e729c]
+4.27%     Thread-13       /apex/com.android.runtime/lib64/bionic/libc.so                                               pthread_getspecific
+1.91%     Thread-13       /apex/com.android.runtime/lib64/bionic/libm.so                                               reduce_large
+1.53%     Thread-13       /data/data/dev.aether.editor/files/dotnet/shared/Microsoft.NETCore.App/8.0.27/libcoreclr.so  @plt
+1.22%     Thread-13       unknown                                                                                      unknown[+75f86e72cc]
+1.07%     Thread-13       unknown                                                                                      unknown[+75f87f4f3c]
+1.07%     binder:24647_4  /apex/com.android.runtime/lib64/bionic/libc.so                                               scudo::Allocator<scudo::AndroidNormalConfig, &(scudo_malloc_postinit)>::allocate(unsigned long, scudo::Chunk::Origin, unsigned long, bool)
+1.07%     binder:24647_4  /system/lib64/libgui.so                                                                      $x.cold.0

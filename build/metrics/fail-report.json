@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "budgetRevision": "2026-08-26.1",
+  "budgetPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\metrics\\budgets.v1.json",
+  "measurementPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\metrics\\fixtures\\measurements-fail.v1.json",
+  "status": "failed",
+  "definitionsValidated": 6,
+  "measurementsValidated": 6,
+  "results": [
+    {
+      "id": "interop.native_calls_per_frame",
+      "category": "interop",
+      "value": 301.0,
+      "unit": "calls/frame",
+      "target": 200.0,
+      "failureThreshold": 300.0,
+      "comparison": "maximum",
+      "enforcement": "device-required",
+      "status": "failed"
+    },
+    {
+      "id": "allocations.gen0_collections_per_60s",
+      "category": "allocations",
+      "value": 0.0,
+      "unit": "collections/60s",
+      "target": 0.0,
+      "failureThreshold": 0.0,
+      "comparison": "maximum",
+      "enforcement": "device-required",
+      "status": "passed"
+    },
+    {
+      "id": "cpu.editor_frame_time_ms",
+      "category": "cpu",
+      "value": 16.6,
+      "unit": "ms/frame",
+      "target": 16.6,
+      "failureThreshold": 20.0,
+      "comparison": "maximum",
+      "enforcement": "device-required",
+      "status": "passed"
+    },
+    {
+      "id": "gpu.runtime_frame_time_ms",
+      "category": "gpu",
+      "value": 16.6,
+      "unit": "ms/frame",
+      "target": 16.6,
+      "failureThreshold": 16.6,
+      "comparison": "maximum",
+      "enforcement": "device-required",
+      "status": "passed"
+    },
+    {
+      "id": "memory.editor_resident_bytes",
+      "category": "memory",
+      "value": 1610612736.0,
+      "unit": "bytes",
+      "target": 1610612736.0,
+      "failureThreshold": 2147483648.0,
+      "comparison": "maximum",
+      "enforcement": "device-required",
+      "status": "passed"
+    },
+    {
+      "id": "energy.sustained_power_watts_30m",
+      "category": "energy",
+      "value": 4.0,
+      "unit": "W",
+      "target": 4.0,
+      "failureThreshold": 5.0,
+      "comparison": "maximum",
+      "enforcement": "device-required",
+      "status": "passed"
+    }
+  ],
+  "violations": [
+    "interop.native_calls_per_frame=301 calls/frame, limite de falha=300 (maximum)"
+  ]
+}

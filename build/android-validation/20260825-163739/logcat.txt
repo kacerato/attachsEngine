@@ -1,0 +1,10 @@
+--------- beginning of main
+I/Aether.Android(31993): Shell nativo iniciado.
+I/Aether.Android(31993): Surface Vulkan pronta: janela=1280x2772, imagens=4..64, fila=0.
+I/Aether.Android(31993): Swapchain pronta: 1280x2772, 5 imagens.
+I/Aether.Android(31993): Pipeline do triângulo pronto.
+--------- beginning of system
+E/ActivityManager( 3536): Unable to freeze binder for 31993: -11
+
+--- crash buffer ---
+

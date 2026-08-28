@@ -64,6 +64,7 @@ public:
 
 private:
   friend class VulkanMemoryAllocator;
+  friend class VulkanUploadContext;
   class VulkanMemoryAllocator *owner_ = nullptr;
   VkBuffer buffer_ = VK_NULL_HANDLE;
   VmaAllocation allocation_ = VK_NULL_HANDLE;

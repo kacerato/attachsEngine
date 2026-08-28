@@ -5,11 +5,15 @@
 #include "rhi/shaders/scene_preview_spirv.h"
 #include "rhi/shaders/material_preview_spirv.h"
 #include "rhi/shaders/material_fallback_spirv.h"
+#include "rhi/shaders/dirt_road_spirv.h"
+#include "rhi/shaders/dirt_road_fallback_spirv.h"
+#include "rhi/shaders/dirt_road_sky_spirv.h"
 #include "renderer/sphere_mesh.h"
 
 #include <android/log.h>
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <chrono>
 #include <cstring>
 
@@ -20,7 +24,7 @@ constexpr const char *LogTag = "Aether.Android";
 constexpr u32 kTextureSize = 64;
 // Shared diagnostic capacity: dummy plus checker, or five material maps.
 // Unused slots are initialized by BindlessTextureRegistry before registration.
-constexpr u32 kBindlessCapacity = 64;
+constexpr u32 kBindlessCapacity = 256;
 
 struct FramePushConstants {
   float timeSeconds;
@@ -42,6 +46,18 @@ struct FramePushConstants {
 static_assert(sizeof(FramePushConstants) == 64);
 static_assert(offsetof(FramePushConstants, exposure) == 36);
 static_assert(offsetof(FramePushConstants, encodeSrgb) == 48);
+
+struct DirtRoadPushConstants {
+  float cameraFrame[4];
+  float surfaceTransform[4];
+  float cameraPositionNear[4];
+  float baseColorFactor[4];
+  float emissiveFactorAndStrength[4];
+  u32 textureIndices[4];
+  u32 materialFlags[4];
+  float materialFactors[4];
+};
+static_assert(sizeof(DirtRoadPushConstants) == 128);
 
 bool formatSupportsDepthAttachment(VkPhysicalDevice physicalDevice, VkFormat format) {
   VkFormatProperties properties{};
@@ -142,12 +158,19 @@ bool InstancedRenderer::createRenderPass() {
 }
 
 bool InstancedRenderer::createPipeline() {
-  VkShaderModule vertModule = materialPreview_
+  VkShaderModule vertModule = dirtRoadPreview_
+      ? createShaderModule(device_, rhi::shaders::kDirt_RoadVertSpirv, rhi::shaders::kDirt_RoadVertSpirvSize)
+      : materialPreview_
       ? createShaderModule(device_, rhi::shaders::kMaterial_PreviewVertSpirv, rhi::shaders::kMaterial_PreviewVertSpirvSize)
       : scenePreview_
       ? createShaderModule(device_, rhi::shaders::kScene_PreviewVertSpirv, rhi::shaders::kScene_PreviewVertSpirvSize)
       : createShaderModule(device_, rhi::shaders::kInstancedVertSpirv, rhi::shaders::kInstancedVertSpirvSize);
-  VkShaderModule fragModule = materialPreview_
+  VkShaderModule fragModule = dirtRoadPreview_
+      ? (useBindless_
+          ? createShaderModule(device_, rhi::shaders::kDirt_RoadFragSpirv, rhi::shaders::kDirt_RoadFragSpirvSize)
+          : createShaderModule(device_, rhi::shaders::kDirt_Road_FallbackFragSpirv,
+                               rhi::shaders::kDirt_Road_FallbackFragSpirvSize))
+      : materialPreview_
       ? (useBindless_
           ? createShaderModule(device_, rhi::shaders::kMaterial_PreviewFragSpirv, rhi::shaders::kMaterial_PreviewFragSpirvSize)
           : createShaderModule(device_, rhi::shaders::kMaterial_FallbackFragSpirv, rhi::shaders::kMaterial_FallbackFragSpirvSize))
@@ -180,7 +203,7 @@ bool InstancedRenderer::createPipeline() {
   binding.stride = instanceStride();
   binding.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 
-  VkVertexInputAttributeDescription attributes[9]{};
+  VkVertexInputAttributeDescription attributes[11]{};
   attributes[0].location = 0;
   attributes[0].binding = 1;
   attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
@@ -194,19 +217,28 @@ bool InstancedRenderer::createPipeline() {
       attributes[i] = {i, 1, VK_FORMAT_R32G32B32A32_SFLOAT, i * 16u};
     }
   }
-  VkVertexInputBindingDescription bindings[2]={binding,{0,sizeof(renderer::MeshVertex),VK_VERTEX_INPUT_RATE_VERTEX}};
+  VkVertexInputBindingDescription bindings[2]={binding,{0,static_cast<u32>(materialPreview_?sizeof(renderer::MeshVertex):renderer::MapVertexStride),VK_VERTEX_INPUT_RATE_VERTEX}};
   if (materialPreview_) {
     attributes[5]={5,0,VK_FORMAT_R32G32B32_SFLOAT,0};
     attributes[6]={6,0,VK_FORMAT_R32G32B32_SFLOAT,12};
     attributes[7]={7,0,VK_FORMAT_R32G32B32A32_SFLOAT,24};
     attributes[8]={8,0,VK_FORMAT_R32G32_SFLOAT,40};
   }
+  if (dirtRoadPreview_) {
+    attributes[0]={0,0,VK_FORMAT_R32G32B32_SFLOAT,0};
+    attributes[1]={1,0,VK_FORMAT_R32G32B32_SFLOAT,12};
+    attributes[2]={2,0,VK_FORMAT_R32G32B32A32_SFLOAT,24};
+    attributes[3]={3,0,VK_FORMAT_R32G32_SFLOAT,40};
+    attributes[4]={4,0,VK_FORMAT_R32G32_SFLOAT,48};
+    attributes[5]={5,0,VK_FORMAT_R32G32B32A32_SFLOAT,56};
+    for(u32 i=0;i<5;++i)attributes[6+i]={6+i,1,VK_FORMAT_R32G32B32A32_SFLOAT,i*16u};
+  }
 
   VkPipelineVertexInputStateCreateInfo vertexInput{};
   vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  vertexInput.vertexBindingDescriptionCount = materialPreview_ ? 2 : 1;
+  vertexInput.vertexBindingDescriptionCount = (materialPreview_ || dirtRoadPreview_) ? 2 : 1;
   vertexInput.pVertexBindingDescriptions = bindings;
-  vertexInput.vertexAttributeDescriptionCount = materialPreview_ ? 9 : (scenePreview_ ? 5 : 2);
+  vertexInput.vertexAttributeDescriptionCount = dirtRoadPreview_ ? 11 : (materialPreview_ ? 9 : (scenePreview_ ? 5 : 2));
   vertexInput.pVertexAttributeDescriptions = attributes;
 
   VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -253,17 +285,17 @@ bool InstancedRenderer::createPipeline() {
   colorBlend.attachmentCount = 1;
   colorBlend.pAttachments = &colorBlendAttachment;
 
-  const VkDescriptorSetLayout bindlessLayout = textureSetLayout_;
+  const VkDescriptorSetLayout setLayouts[2] = {textureSetLayout_, environmentSetLayout_};
   VkPipelineLayoutCreateInfo layoutInfo{};
   layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  layoutInfo.setLayoutCount = 1;
-  layoutInfo.pSetLayouts = &bindlessLayout;
+  layoutInfo.setLayoutCount = dirtRoadPreview_ ? 2u : 1u;
+  layoutInfo.pSetLayouts = setLayouts;
   VkPushConstantRange pushRange{};
   // vertex lê timeSeconds/aspectRatio/órbita/surfaceTransform; fragment lê
   // materialIndex para indexar o array bindless (ver instanced.frag) — as
   // duas stages compartilham o mesmo range porque é um único struct.
   pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-  pushRange.size = sizeof(FramePushConstants);
+  pushRange.size = dirtRoadPreview_ ? sizeof(DirtRoadPushConstants) : sizeof(FramePushConstants);
   layoutInfo.pushConstantRangeCount = 1;
   layoutInfo.pPushConstantRanges = &pushRange;
   const bool layoutOk = vkCreatePipelineLayout(device_, &layoutInfo, nullptr, &pipelineLayout_) == VK_SUCCESS;
@@ -288,11 +320,147 @@ bool InstancedRenderer::createPipeline() {
 
     pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                            &pipeline_) == VK_SUCCESS;
+    if (pipelineOk && dirtRoadPreview_) {
+      depthStencil.depthWriteEnable = VK_FALSE;
+      colorBlendAttachment.blendEnable = VK_TRUE;
+      colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+      colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+      colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+      colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+      colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+      colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+      pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+                                             &transparentPipeline_) == VK_SUCCESS;
+    }
   }
 
   vkDestroyShaderModule(device_, vertModule, nullptr);
   vkDestroyShaderModule(device_, fragModule, nullptr);
   return layoutOk && pipelineOk;
+}
+
+bool InstancedRenderer::createEnvironmentDescriptors() {
+  if (!dirtRoadPreview_) return true;
+  rhi::BufferDesc buffer{};
+  buffer.sizeBytes = sizeof(EnvironmentLighting);
+  buffer.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+  buffer.cpuAccess = rhi::CpuAccess::SequentialWrite;
+  buffer.preferDeviceMemory = false;
+  if (!memoryAllocator_->createBuffer(buffer, &environmentUniform_)) return false;
+  std::memcpy(environmentUniform_.mappedData(), &dirtRoadResources_.environmentLighting(), sizeof(EnvironmentLighting));
+  if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
+
+  VkDescriptorSetLayoutBinding bindings[2]{};
+  bindings[0].binding = 0;
+  bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  bindings[0].descriptorCount = 1;
+  bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+  bindings[1].binding = 1;
+  bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  bindings[1].descriptorCount = 1;
+  bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  VkDescriptorSetLayoutCreateInfo layout{};
+  layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  layout.bindingCount = 2;
+  layout.pBindings = bindings;
+  if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
+  VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+                                   {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}};
+  VkDescriptorPoolCreateInfo pool{};
+  pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  pool.maxSets = 1;
+  pool.poolSizeCount = 2;
+  pool.pPoolSizes = sizes;
+  if (vkCreateDescriptorPool(device_, &pool, nullptr, &environmentPool_) != VK_SUCCESS) return false;
+  VkDescriptorSetAllocateInfo allocation{};
+  allocation.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  allocation.descriptorPool = environmentPool_;
+  allocation.descriptorSetCount = 1;
+  allocation.pSetLayouts = &environmentSetLayout_;
+  if (vkAllocateDescriptorSets(device_, &allocation, &environmentSet_) != VK_SUCCESS) return false;
+  VkDescriptorBufferInfo uniform{environmentUniform_.handle(), 0, sizeof(EnvironmentLighting)};
+  VkDescriptorImageInfo image{dirtRoadResources_.environmentSampler(), dirtRoadResources_.environmentView(),
+                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet writes[2]{};
+  writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  writes[0].dstSet = environmentSet_;
+  writes[0].dstBinding = 0;
+  writes[0].descriptorCount = 1;
+  writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  writes[0].pBufferInfo = &uniform;
+  writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  writes[1].dstSet = environmentSet_;
+  writes[1].dstBinding = 1;
+  writes[1].descriptorCount = 1;
+  writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  writes[1].pImageInfo = &image;
+  vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
+  return true;
+}
+
+bool InstancedRenderer::createSkyPipeline() {
+  if (!dirtRoadPreview_) return true;
+  VkShaderModule vert = createShaderModule(device_, rhi::shaders::kDirt_Road_SkyVertSpirv,
+                                           rhi::shaders::kDirt_Road_SkyVertSpirvSize);
+  VkShaderModule frag = createShaderModule(device_, rhi::shaders::kDirt_Road_SkyFragSpirv,
+                                           rhi::shaders::kDirt_Road_SkyFragSpirvSize);
+  if (vert == VK_NULL_HANDLE || frag == VK_NULL_HANDLE) {
+    if (vert != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vert, nullptr);
+    if (frag != VK_NULL_HANDLE) vkDestroyShaderModule(device_, frag, nullptr);
+    return false;
+  }
+  VkPipelineShaderStageCreateInfo stages[2]{};
+  stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+               VK_SHADER_STAGE_VERTEX_BIT, vert, "main", nullptr};
+  stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+               VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr};
+  VkPipelineVertexInputStateCreateInfo vertex{};
+  vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  VkPipelineInputAssemblyStateCreateInfo assembly{};
+  assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  VkPipelineViewportStateCreateInfo viewport{};
+  viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewport.viewportCount = 1; viewport.scissorCount = 1;
+  VkPipelineRasterizationStateCreateInfo raster{};
+  raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  raster.polygonMode = VK_POLYGON_MODE_FILL; raster.cullMode = VK_CULL_MODE_NONE; raster.lineWidth = 1;
+  VkPipelineMultisampleStateCreateInfo multisample{};
+  multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+  VkPipelineDepthStencilStateCreateInfo depth{};
+  depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depth.depthTestEnable = VK_FALSE; depth.depthWriteEnable = VK_FALSE;
+  VkPipelineColorBlendAttachmentState attachment{};
+  attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  VkPipelineColorBlendStateCreateInfo blend{};
+  blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  blend.attachmentCount = 1; blend.pAttachments = &attachment;
+  VkDynamicState states[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+  VkPipelineDynamicStateCreateInfo dynamic{};
+  dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  dynamic.dynamicStateCount = 2; dynamic.pDynamicStates = states;
+  VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(DirtRoadPushConstants)};
+  VkPipelineLayoutCreateInfo layout{};
+  layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layout.setLayoutCount = 1; layout.pSetLayouts = &environmentSetLayout_;
+  layout.pushConstantRangeCount = 1; layout.pPushConstantRanges = &push;
+  bool ok = vkCreatePipelineLayout(device_, &layout, nullptr, &skyPipelineLayout_) == VK_SUCCESS;
+  if (ok) {
+    VkGraphicsPipelineCreateInfo pipeline{};
+    pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipeline.stageCount = 2; pipeline.pStages = stages; pipeline.pVertexInputState = &vertex;
+    pipeline.pInputAssemblyState = &assembly; pipeline.pViewportState = &viewport;
+    pipeline.pRasterizationState = &raster; pipeline.pMultisampleState = &multisample;
+    pipeline.pDepthStencilState = &depth; pipeline.pColorBlendState = &blend;
+    pipeline.pDynamicState = &dynamic; pipeline.layout = skyPipelineLayout_;
+    pipeline.renderPass = renderPass_; pipeline.subpass = 0;
+    ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, &skyPipeline_) == VK_SUCCESS;
+  }
+  vkDestroyShaderModule(device_, vert, nullptr);
+  vkDestroyShaderModule(device_, frag, nullptr);
+  return ok;
 }
 
 bool InstancedRenderer::createFramebuffers() {
@@ -347,8 +515,22 @@ bool InstancedRenderer::createInstanceBuffer() {
   desc.memoryClass = rhi::MemoryClass::Buffer;
   desc.cpuAccess = rhi::CpuAccess::SequentialWrite;
   desc.preferDeviceMemory = false;
-  return memoryAllocator_ != nullptr && memoryAllocator_->createBuffer(desc, &instanceBuffer_) &&
-         instanceBuffer_.mappedData() != nullptr;
+  if (memoryAllocator_ == nullptr || !memoryAllocator_->createBuffer(desc, &instanceBuffer_) ||
+      instanceBuffer_.mappedData() == nullptr) return false;
+  if (dirtRoadPreview_) {
+    auto *instances = static_cast<renderer::RenderInstance *>(instanceBuffer_.mappedData());
+    const auto &draws = dirtRoadResources_.draws();
+    if (draws.size() != instanceCount_) return false;
+    for (u32 index = 0; index < instanceCount_; ++index) {
+      std::memcpy(instances[index].model, draws[index].model, sizeof(instances[index].model));
+      instances[index].tint[0] = instances[index].tint[1] = instances[index].tint[2] =
+          instances[index].tint[3] = 1.0f;
+      instances[index].entityIndex = index;
+      instances[index].entityGeneration = 1;
+    }
+    return memoryAllocator_->flushBuffer(instanceBuffer_);
+  }
+  return true;
 }
 
 bool InstancedRenderer::createDepthImage() {
@@ -435,6 +617,19 @@ bool InstancedRenderer::createBindlessRegistry() {
     }
     return true;
   }
+  if (dirtRoadPreview_) {
+    baseTextureIndex_ = bindlessRegistry_.registerTexture(
+        baseTexture_.view(), baseSampler_.handle(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    if (baseTextureIndex_ == rhi::kBindlessIndexInvalid) return false;
+    dirtTextureSlots_.resize(dirtRoadResources_.textureCount());
+    for (u32 index = 0; index < dirtRoadResources_.textureCount(); ++index) {
+      dirtTextureSlots_[index] = bindlessRegistry_.registerTexture(
+          dirtRoadResources_.view(index), dirtRoadResources_.sampler(index),
+          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+      if (dirtTextureSlots_[index] == rhi::kBindlessIndexInvalid) return false;
+    }
+    return true;
+  }
   baseTextureIndex_ = bindlessRegistry_.registerTexture(
       baseTexture_.view(), baseSampler_.handle(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
   return baseTextureIndex_ != rhi::kBindlessIndexInvalid;
@@ -445,6 +640,58 @@ bool InstancedRenderer::createTextureDescriptors() {
     if (!createBindlessRegistry()) return false;
     textureSetLayout_ = bindlessRegistry_.layout();
     textureSet_ = bindlessRegistry_.descriptorSet();
+    return true;
+  }
+  if (dirtRoadPreview_) {
+    VkDescriptorSetLayoutBinding bindings[4]{};
+    for (u32 index = 0; index < 4; ++index) {
+      bindings[index].binding = index;
+      bindings[index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+      bindings[index].descriptorCount = 1;
+      bindings[index].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    }
+    VkDescriptorSetLayoutCreateInfo layout{};
+    layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layout.bindingCount = 4;
+    layout.pBindings = bindings;
+    if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &textureSetLayout_) != VK_SUCCESS) return false;
+    const u32 materialCount = static_cast<u32>(dirtRoadResources_.materials().size());
+    VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, materialCount * 4};
+    VkDescriptorPoolCreateInfo pool{};
+    pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool.maxSets = materialCount;
+    pool.poolSizeCount = 1;
+    pool.pPoolSizes = &poolSize;
+    if (vkCreateDescriptorPool(device_, &pool, nullptr, &texturePool_) != VK_SUCCESS) return false;
+    dirtMaterialSets_.resize(materialCount);
+    std::vector<VkDescriptorSetLayout> layouts(materialCount, textureSetLayout_);
+    VkDescriptorSetAllocateInfo allocation{};
+    allocation.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocation.descriptorPool = texturePool_;
+    allocation.descriptorSetCount = materialCount;
+    allocation.pSetLayouts = layouts.data();
+    if (vkAllocateDescriptorSets(device_, &allocation, dirtMaterialSets_.data()) != VK_SUCCESS) return false;
+    for (u32 materialIndex = 0; materialIndex < materialCount; ++materialIndex) {
+      VkDescriptorImageInfo images[4]{};
+      VkWriteDescriptorSet writes[4]{};
+      const auto &material = dirtRoadResources_.materials()[materialIndex];
+      for (u32 slot = 0; slot < 4; ++slot) {
+        const u32 texture = material.textureIndices[slot];
+        const bool valid = texture != renderer::InvalidMapTexture;
+        images[slot] = {valid ? dirtRoadResources_.sampler(texture) : baseSampler_.handle(),
+                        valid ? dirtRoadResources_.view(texture) : baseTexture_.view(),
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        writes[slot].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[slot].dstSet = dirtMaterialSets_[materialIndex];
+        writes[slot].dstBinding = slot;
+        writes[slot].descriptorCount = 1;
+        writes[slot].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[slot].pImageInfo = &images[slot];
+      }
+      vkUpdateDescriptorSets(device_, 4, writes, 0, nullptr);
+    }
+    textureSet_ = dirtMaterialSets_.front();
+    baseTextureIndex_ = 0;
     return true;
   }
   VkDescriptorSetLayoutBinding binding{};
@@ -488,8 +735,8 @@ bool InstancedRenderer::createTextureDescriptors() {
 bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapchain &swapchain,
                                    DotNetHost &dotNetHost, u32 instanceCount, bool scenePreview,
                                    AAssetManager *materialAssets, bool forceTextureFallback,
-                                   const std::atomic<bool> *cancel) {
-  if (instanceCount == 0 || !dotNetHost.isReady()) return false;
+                                   const std::atomic<bool> *cancel, bool dirtRoadPreview) {
+  if (instanceCount == 0 || (!dotNetHost.isReady() && !dirtRoadPreview)) return false;
 
   device_ = device.handle();
   physicalDevice_ = device.physicalDevice();
@@ -499,8 +746,9 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   swapchain_ = &swapchain;
   graphicsQueueFamily_ = device.graphicsQueueFamily();
   instanceCount_ = instanceCount;
-  materialPreview_ = materialAssets != nullptr;
-  scenePreview_ = scenePreview || materialPreview_;
+  dirtRoadPreview_ = dirtRoadPreview;
+  materialPreview_ = materialAssets != nullptr && !dirtRoadPreview_;
+  scenePreview_ = !dirtRoadPreview_ && (scenePreview || materialPreview_);
   drawnInstanceCount_ = 0;
   lastExtractionStatus_ = 0;
   vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
@@ -521,7 +769,7 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
           "Aether.Rendering.Interop.SceneEntryPoints, Aether.Rendering","GetMaterialParameters"));
       if(readMaterial==nullptr || readMaterial(&materialParameters_,sizeof(MaterialParameters))!=0)return false;
     }
-  } else {
+  } else if (!dirtRoadPreview_) {
     fillInstanceBuffer_ = reinterpret_cast<FillInstanceBufferFn>(dotNetHost.getManagedFunctionPointer(
         "Aether.Interop.NativeEntryPoints, Aether.Core", "FillInstanceBuffer"));
     if (fillInstanceBuffer_ == nullptr) {
@@ -533,6 +781,15 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   if (!createCommandResources()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar recursos de comando/upload.");
     return false;
+  }
+  if (dirtRoadPreview_) {
+    if (!dirtRoadResources_.initialize(device, uploadContext_, materialAssets,
+                                       forceTextureFallback, cancel)) return false;
+    instanceCount_ = dirtRoadResources_.header().drawCount;
+    for (u32 index = 0; index < instanceCount_; ++index) {
+      const u32 material = dirtRoadResources_.draws()[index].materialIndex;
+      if ((dirtRoadResources_.materials()[material].flags & 1u) != 0) transparentDrawOrder_.push_back(index);
+    }
   }
   if (!createInstanceBuffer()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o buffer de instâncias.");
@@ -552,12 +809,20 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar os descritores de textura.");
     return false;
   }
+  if (!createEnvironmentDescriptors()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar descritores do ambiente HDRI.");
+    return false;
+  }
   if (!createRenderPass()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o render pass instanciado.");
     return false;
   }
   if (!createPipeline()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pipeline instanciado.");
+    return false;
+  }
+  if (!createSkyPipeline()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pipeline do céu HDRI.");
     return false;
   }
   if (!createFramebuffers()) {
@@ -595,7 +860,8 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
 
   __android_log_print(ANDROID_LOG_INFO, LogTag,
                       "InstancedRenderer pronto: cubo texturizado + depth, capacidade=%u, modo=%s.",
-                      instanceCount_, materialPreview_ ? "material-preview" : (scenePreview_ ? "scene-preview" : "PoC-A"));
+                      instanceCount_, dirtRoadPreview_ ? "dirt-road" :
+                      (materialPreview_ ? "material-preview" : (scenePreview_ ? "scene-preview" : "PoC-A")));
   const rhi::MemoryBudgetSnapshot snapshot = memoryAllocator_->budgetSnapshot();
   for (usize i = 0; i < rhi::MemoryClassCount; ++i) {
     __android_log_print(ANDROID_LOG_INFO, LogTag, "RHI/VMA [%s]: uso=%llu, pico=%llu bytes.",
@@ -620,15 +886,33 @@ void InstancedRenderer::shutdown() {
     vkDestroyPipeline(device_, pipeline_, nullptr);
     pipeline_ = VK_NULL_HANDLE;
   }
+  if (skyPipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, skyPipeline_, nullptr);
+    skyPipeline_ = VK_NULL_HANDLE;
+  }
+  if (transparentPipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, transparentPipeline_, nullptr);
+    transparentPipeline_ = VK_NULL_HANDLE;
+  }
   if (pipelineLayout_ != VK_NULL_HANDLE) {
     vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
     pipelineLayout_ = VK_NULL_HANDLE;
+  }
+  if (skyPipelineLayout_ != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(device_, skyPipelineLayout_, nullptr);
+    skyPipelineLayout_ = VK_NULL_HANDLE;
   }
   if (renderPass_ != VK_NULL_HANDLE) {
     vkDestroyRenderPass(device_, renderPass_, nullptr);
     renderPass_ = VK_NULL_HANDLE;
   }
   bindlessRegistry_.shutdown();
+  if (environmentPool_ != VK_NULL_HANDLE) vkDestroyDescriptorPool(device_, environmentPool_, nullptr);
+  if (environmentSetLayout_ != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(device_, environmentSetLayout_, nullptr);
+  environmentPool_ = VK_NULL_HANDLE;
+  environmentSetLayout_ = VK_NULL_HANDLE;
+  environmentSet_ = VK_NULL_HANDLE;
+  environmentUniform_.reset();
   if (texturePool_ != VK_NULL_HANDLE) vkDestroyDescriptorPool(device_, texturePool_, nullptr);
   if (!useBindless_ && textureSetLayout_ != VK_NULL_HANDLE)
     vkDestroyDescriptorSetLayout(device_, textureSetLayout_, nullptr);
@@ -638,6 +922,10 @@ void InstancedRenderer::shutdown() {
   useBindless_ = false;
   baseTextureIndex_ = rhi::kBindlessIndexInvalid;
   materialResources_.shutdown();
+  dirtRoadResources_.shutdown();
+  dirtTextureSlots_.clear();
+  dirtMaterialSets_.clear();
+  transparentDrawOrder_.clear();
   baseSampler_.shutdown();
   baseTexture_.reset();
   dummySampler_.shutdown();
@@ -652,6 +940,9 @@ void InstancedRenderer::shutdown() {
   swapchain_ = nullptr;
   fillInstanceBuffer_ = nullptr;
   extractScene_ = nullptr;
+  dirtRoadPreview_ = false;
+  materialPreview_ = false;
+  scenePreview_ = false;
 }
 
 u64 InstancedRenderer::snapshotFingerprint() const {
@@ -665,8 +956,8 @@ u64 InstancedRenderer::snapshotFingerprint() const {
   return hash;
 }
 
-rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbitYaw,
-                                                  float orbitPitch) {
+rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
+                                                  const platform::FreeCameraState &camera) {
   using Clock = std::chrono::steady_clock;
   const auto acquireStart = frameProfilingEnabled_ ? Clock::now() : Clock::time_point{};
   lastFrameTimings_ = {};
@@ -681,7 +972,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
   // não o frame Vulkan inteiro — a pergunta da PoC-A é sobre o custo da
   // fronteira de interop especificamente.
   const auto fillStart = std::chrono::steady_clock::now();
-  if (scenePreview_) {
+  if (dirtRoadPreview_) {
+    drawnInstanceCount_ = instanceCount_;
+    lastExtractionStatus_ = 0;
+  } else if (scenePreview_) {
     const int count = extractScene_(static_cast<renderer::RenderInstance *>(instanceBuffer_.mappedData()),
         static_cast<int>(instanceCount_), sizeof(renderer::RenderInstance), renderer::RenderInstanceAbiVersion);
     const int status = count >= 0 && static_cast<u32>(count) <= instanceCount_ ? 0 : (count < 0 ? count : -5);
@@ -704,7 +998,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
     lastFrameTimings_.acquireMs = std::chrono::duration<double, std::milli>(fillStart - acquireStart).count();
     lastFrameTimings_.interopMs = lastFillMicroseconds_ / 1000.0;
   }
-  if (!memoryAllocator_->flushBuffer(instanceBuffer_)) return rhi::SwapchainStatus::FatalError;
+  if (!dirtRoadPreview_ && !memoryAllocator_->flushBuffer(instanceBuffer_)) return rhi::SwapchainStatus::FatalError;
 
   if (vkResetCommandBuffer(commandBuffer_, 0) != VK_SUCCESS) return rhi::SwapchainStatus::FatalError;
   VkCommandBufferBeginInfo beginInfo{};
@@ -728,19 +1022,20 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
   // Item 2.1.6 do plano: marcador de debug em volta do desenho do cubo —
   // aparece como um grupo nomeado em RenderDoc/Android GPU Inspector ao
   // capturar um frame. No-op em build release.
-  rhiDevice_->cmdBeginDebugLabel(commandBuffer_, "InstancedRenderer/cube", 0.2f, 0.6f, 0.9f);
+  rhiDevice_->cmdBeginDebugLabel(commandBuffer_, dirtRoadPreview_ ? "DirtRoad/map" : "InstancedRenderer/cube", 0.2f, 0.6f, 0.9f);
 
   vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
   const VkDescriptorSet bindlessSet = textureSet_;
-  vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1,
-                          &bindlessSet, 0, nullptr);
+  if (!dirtRoadPreview_ || useBindless_)
+    vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1,
+                            &bindlessSet, 0, nullptr);
   const VkExtent2D displayExtent = swapchain_->displayExtent();
   const rhi::SurfaceTransform &surfaceTransform = swapchain_->surfaceTransform();
   const FramePushConstants pushConstants{
       timeSeconds,
       static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height),
-      orbitYaw,
-      orbitPitch,
+      camera.yaw,
+      camera.pitch,
       surfaceTransform.xx, surfaceTransform.xy, surfaceTransform.yx, surfaceTransform.yy,
       baseTextureIndex_,
       1.15f, materialParameters_.roughness, materialParameters_.metallic,
@@ -749,8 +1044,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
       materialParameters_.normalScale,
       {},
   };
-  vkCmdPushConstants(commandBuffer_, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                     0, sizeof(pushConstants), &pushConstants);
+  if (!dirtRoadPreview_)
+    vkCmdPushConstants(commandBuffer_, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, sizeof(pushConstants), &pushConstants);
 
   VkViewport viewport{};
   viewport.width = static_cast<float>(swapchain_->width());
@@ -763,10 +1059,85 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
   scissor.extent = {swapchain_->width(), swapchain_->height()};
   vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
 
+  if (dirtRoadPreview_) {
+    DirtRoadPushConstants skyPush{};
+    skyPush.cameraFrame[0] = static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height);
+    skyPush.cameraFrame[1] = camera.yaw;
+    skyPush.cameraFrame[2] = camera.pitch;
+    skyPush.surfaceTransform[0] = surfaceTransform.xx;
+    skyPush.surfaceTransform[1] = surfaceTransform.xy;
+    skyPush.surfaceTransform[2] = surfaceTransform.yx;
+    skyPush.surfaceTransform[3] = surfaceTransform.yy;
+    vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipeline_);
+    vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipelineLayout_,
+                            0, 1, &environmentSet_, 0, nullptr);
+    vkCmdPushConstants(commandBuffer_, skyPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT,
+                       0, sizeof(skyPush), &skyPush);
+    vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
+    vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
+    vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
+                            1, 1, &environmentSet_, 0, nullptr);
+    if (useBindless_)
+      vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
+                              0, 1, &textureSet_, 0, nullptr);
+  }
+
   VkDeviceSize offset = 0;
   const VkBuffer instanceBufferHandle = instanceBuffer_.handle();
   vkCmdBindVertexBuffers(commandBuffer_, 1, 1, &instanceBufferHandle, &offset);
-  if (materialPreview_) {
+  if (dirtRoadPreview_) {
+    const VkBuffer mesh = dirtRoadResources_.vertexBuffer();
+    vkCmdBindVertexBuffers(commandBuffer_, 0, 1, &mesh, &offset);
+    vkCmdBindIndexBuffer(commandBuffer_, dirtRoadResources_.indexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+    const bool encodeSrgb = swapchain_->imageFormat()!=VK_FORMAT_B8G8R8A8_SRGB &&
+                            swapchain_->imageFormat()!=VK_FORMAT_R8G8B8A8_SRGB;
+    auto drawMapPrimitive = [&](u32 drawIndex) {
+      const auto &draw = dirtRoadResources_.draws()[drawIndex];
+      const auto &material = dirtRoadResources_.materials()[draw.materialIndex];
+      if (!useBindless_) {
+        const VkDescriptorSet set = dirtMaterialSets_[draw.materialIndex];
+        vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
+                                0, 1, &set, 0, nullptr);
+      }
+      DirtRoadPushConstants push{};
+      push.cameraFrame[0] = static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height);
+      push.cameraFrame[1] = camera.yaw; push.cameraFrame[2] = camera.pitch; push.cameraFrame[3] = 1.25f;
+      push.surfaceTransform[0]=surfaceTransform.xx;push.surfaceTransform[1]=surfaceTransform.xy;
+      push.surfaceTransform[2]=surfaceTransform.yx;push.surfaceTransform[3]=surfaceTransform.yy;
+      std::memcpy(push.cameraPositionNear, camera.position, sizeof(camera.position));
+      push.cameraPositionNear[3] = dirtRoadResources_.header().nearPlane;
+      std::memcpy(push.baseColorFactor, material.baseColorFactor, sizeof(push.baseColorFactor));
+      std::memcpy(push.emissiveFactorAndStrength, material.emissiveFactorAndStrength,
+                  sizeof(push.emissiveFactorAndStrength));
+      for (u32 slot = 0; slot < 4; ++slot) {
+        const u32 texture = material.textureIndices[slot];
+        push.textureIndices[slot] = useBindless_ && texture != renderer::InvalidMapTexture
+                                        ? dirtTextureSlots_[texture] : baseTextureIndex_;
+      }
+      push.materialFlags[0]=material.flags;push.materialFlags[1]=material.textureCoordinates;
+      push.materialFlags[2]=encodeSrgb?1u:0u;
+      push.materialFlags[3]=std::bit_cast<u32>(dirtRoadResources_.header().farPlane);
+      push.materialFactors[0]=material.roughness;push.materialFactors[1]=material.metallic;
+      push.materialFactors[2]=material.normalScale;push.materialFactors[3]=material.specular;
+      vkCmdPushConstants(commandBuffer_,pipelineLayout_,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                         0,sizeof(push),&push);
+      vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,
+                       static_cast<i32>(draw.vertexOffset),drawIndex);
+    };
+    for (u32 drawIndex = 0; drawIndex < dirtRoadResources_.draws().size(); ++drawIndex) {
+      const auto &draw = dirtRoadResources_.draws()[drawIndex];
+      if ((dirtRoadResources_.materials()[draw.materialIndex].flags & 1u) == 0) drawMapPrimitive(drawIndex);
+    }
+    std::sort(transparentDrawOrder_.begin(), transparentDrawOrder_.end(), [&](u32 left, u32 right) {
+      const auto &a=dirtRoadResources_.draws()[left];const auto &b=dirtRoadResources_.draws()[right];
+      float da=0,db=0;for(u32 axis=0;axis<3;++axis){const float av=a.boundsCenter[axis]-camera.position[axis];
+        const float bv=b.boundsCenter[axis]-camera.position[axis];da+=av*av;db+=bv*bv;}return da>db;
+    });
+    if (!transparentDrawOrder_.empty()) {
+      vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, transparentPipeline_);
+      for (u32 drawIndex : transparentDrawOrder_) drawMapPrimitive(drawIndex);
+    }
+  } else if (materialPreview_) {
     const VkBuffer mesh=materialResources_.vertexBuffer();
     vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);
     vkCmdBindIndexBuffer(commandBuffer_,materialResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);

@@ -1,0 +1,14 @@
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/CMakeFiles/aether_core.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/CMakeFiles/aether_platform.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/CMakeFiles/aether_rendergraph.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/CMakeFiles/aether_rhi.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/CMakeFiles/aether_physics.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/CMakeFiles/aether_physics_shared.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/CMakeFiles/aether_tests.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/CMakeFiles/benchmark_physics2d.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/CMakeFiles/physics_overflow_probe.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/CMakeFiles/edit_cache.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/CMakeFiles/rebuild_cache.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/third_party/JoltPhysics/Build/CMakeFiles/Jolt.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/third_party/JoltPhysics/Build/CMakeFiles/edit_cache.dir
+C:/Users/jamaa/Downloads/aether-fase0-1/build/native-ci-audit/third_party/JoltPhysics/Build/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "timestampUtc": "2026-08-26T16:36:22.7677921Z",
+  "commit": "3e145df3ec7becb24afa951162727acd7fc096c2",
+  "platform": "Host",
+  "trials": 1,
+  "quick": true,
+  "isolatedRunners": true,
+  "binarySizeBytes": {
+    "benchmark_physics2d": 21749248,
+    "benchmark_physics2d_jolt": 21465088,
+    "benchmark_physics2d_box2d": 376832
+  },
+  "device": null,
+  "reports": {
+    "benchmark_physics2d": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\benchmarks\\physics2d-buildcheck\\benchmark_physics2d.txt",
+    "benchmark_physics2d_jolt": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\benchmarks\\physics2d-buildcheck\\benchmark_physics2d_jolt.txt",
+    "benchmark_physics2d_box2d": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\benchmarks\\physics2d-buildcheck\\benchmark_physics2d_box2d.txt"
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 3,
+  "status": "passed",
+  "startedAtUtc": "2026-08-28T11:42:56.7515628Z",
+  "finishedAtUtc": "2026-08-28T11:43:40.6016934Z",
+  "package": "dev.aether.editor",
+  "activity": "android.app.NativeActivity",
+  "apk": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+  "device": {
+    "serial": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
+    "manufacturer": "Xiaomi",
+    "model": "25053PC47G",
+    "device": "onyx",
+    "board": "sun",
+    "socModel": "SM8735",
+    "androidRelease": "16",
+    "apiLevel": "36",
+    "abi": "arm64-v8a"
+  },
+  "configuration": {
+    "lifecycleCycles": 0,
+    "startupTimeoutSeconds": 45,
+    "cycleTimeoutSeconds": 20,
+    "soakMinutes": 0,
+    "powerBudgetWatts": 4.0,
+    "requirePowerBudget": false,
+    "configurationChange": false,
+    "screenCycle": true,
+    "screenCycles": 1,
+    "screenshotEqualityRequired": false,
+    "initiallyAsleep": false
+  },
+  "checks": [
+    {
+      "name": "startup",
+      "status": "passed",
+      "details": {
+        "pid": "6119",
+        "frameMilestone": 1000
+      }
+    },
+    {
+      "name": "background-foreground",
+      "status": "passed",
+      "details": {
+        "cycles": 0,
+        "stablePid": "6119",
+        "renderResumedEveryCycle": true,
+        "resourceRecreationsObserved": 0
+      }
+    },
+    {
+      "name": "screen-off-on",
+      "status": "passed",
+      "details": {
+        "cycle": 1,
+        "stablePid": "6119"
+      }
+    },
+    {
+      "name": "trim-memory-proxy",
+      "status": "passed",
+      "details": "Processo sobreviveu; este comando é proxy e não garante APP_CMD_LOW_MEMORY real."
+    },
+    {
+      "name": "screenshot-stability",
+      "status": "passed",
+      "details": {
+        "identical": false,
+        "beforeSha256": "48528C896F90E5CECFD3BEC44EB39865B4871C725A29E1FB395D3977F5593387",
+        "afterSha256": "D5233E35D0FA7EFEC776E8C5F27D602783E8AC0AC6DD59E45DAA4284C09D2E7B"
+      }
+    }
+  ],
+  "screenshots": {
+    "before": {
+      "path": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\lifecycle-keyguard-20260828-blocked\\before-lifecycle.png",
+      "sha256": "48528C896F90E5CECFD3BEC44EB39865B4871C725A29E1FB395D3977F5593387",
+      "bytes": 556977
+    },
+    "after": {
+      "path": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\lifecycle-keyguard-20260828-blocked\\after-lifecycle.png",
+      "sha256": "D5233E35D0FA7EFEC776E8C5F27D602783E8AC0AC6DD59E45DAA4284C09D2E7B",
+      "bytes": 484124
+    }
+  },
+  "measurements": {
+    "resourceRecreationsDuringLifecycle": 0,
+    "powerSamples": [],
+    "keyguardWaits": [
+      {
+        "elapsedMs": 193.683,
+        "dismissRequests": 0,
+        "showing": false,
+        "screenState": "SCREEN_STATE_ON",
+        "context": "startup"
+      },
+      {
+        "elapsedMs": 16182.703,
+        "dismissRequests": 1,
+        "showing": false,
+        "screenState": "SCREEN_STATE_ON",
+        "context": "screen-cycle-1"
+      }
+    ],
+    "keyguardDismissRequests": [
+      {
+        "context": "screen-cycle-1",
+        "requestedAtUtc": "2026-08-28T11:43:20.9918857Z",
+        "output": ""
+      }
+    ]
+  },
+  "artifacts": {
+    "outputDirectory": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\lifecycle-keyguard-20260828-blocked",
+    "adb": "C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+    "logcat": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\lifecycle-keyguard-20260828-blocked\\logcat.txt",
+    "lifecycleTimeline": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\build\\android-validation\\lifecycle-keyguard-20260828-blocked\\lifecycle-timeline.txt"
+  },
+  "error": null,
+  "failureKind": null
+}

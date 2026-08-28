@@ -1,0 +1,10 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor --add-meta-info app_type=debuggable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e task-clock:u -f 500 --duration 20
+Arch: arm64
+Event: task-clock:u (type 1, config 1)
+Samples: 1310
+Event count: 2620000000
+
+Overhead  Command         Tid
+80.53%    Thread-13       28666
+17.63%    binder:24647_4  28682
+1.83%     blastAsyncWork  28688

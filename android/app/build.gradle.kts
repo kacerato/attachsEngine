@@ -24,11 +24,14 @@ val publishManagedCore by tasks.registering(Exec::class) {
 val prepareEngineAssets by tasks.registering(Sync::class) {
     dependsOn(publishManagedCore)
     inputs.file("../../samples/material-preview/manifest.json")
+    inputs.file("../../samples/dirt-road/manifest.json")
     from("src/main/assets") {
         exclude("dotnet/Aether.*", "dotnet_manifest.txt", "dotnet_build_id.txt")
     }
     from(managedOutput) { include("Aether.Core.dll", "Aether.Scene.dll", "Aether.Rendering.dll", "Aether.Rendering.deps.json", "Aether.Rendering.runtimeconfig.json"); into("dotnet") }
     from("../../samples/material-preview/Imported") { include("*.aetex"); into("material_preview") }
+    from("../../samples/dirt-road/Imported") { include("*.aetex", "*.aemap", "*.aeenv"); into("dirt_road") }
+    from("../../samples/dirt-road") { include("manifest.json", "LICENSE.txt"); into("dirt_road") }
     into(generatedAssets)
     doLast {
         val root = generatedAssets.get().asFile
@@ -49,6 +52,24 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
             }
             val actualHash = assetDigest.digest().joinToString("") { "%02x".format(it) }
             check(actualHash == expectedHash) { "Cooked material asset checksum mismatch: $name" }
+        }
+        val mapManifest = JsonSlurper().parse(file("../../samples/dirt-road/manifest.json")) as Map<*, *>
+        check(mapManifest["version"] == 1 && mapManifest["format"] == "AEMAP-1") {
+            "Unsupported dirt road package manifest"
+        }
+        val mapOutputs = mapManifest["outputs"] as Map<*, *>
+        check(mapOutputs.isNotEmpty()) { "Empty dirt road package" }
+        mapOutputs.forEach { (name, expectedHash) ->
+            val asset = root.resolve("dirt_road/$name")
+            check(asset.isFile) { "Missing cooked map asset: $name; see samples/dirt-road/README.md" }
+            val digest = MessageDigest.getInstance("SHA-256")
+            asset.inputStream().use { stream ->
+                val buffer = ByteArray(65536)
+                var count = stream.read(buffer)
+                while (count >= 0) { digest.update(buffer, 0, count); count = stream.read(buffer) }
+            }
+            val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
+            check(actualHash == expectedHash) { "Cooked map asset checksum mismatch: $name" }
         }
         val dotnet = root.resolve("dotnet")
         val paths = dotnet.walkTopDown().filter { it.isFile }.map { it.relativeTo(dotnet).invariantSeparatorsPath }.sorted().toList()
@@ -72,7 +93,7 @@ android {
     namespace = "dev.aether.editor"
     compileSdk = 35
     ndkVersion = "27.1.12297006"
-    androidResources { noCompress += "aetex" }
+    androidResources { noCompress += setOf("aetex", "aemap", "aeenv") }
     sourceSets.getByName("main").assets.setSrcDirs(listOf(generatedAssets))
 
     defaultConfig {

@@ -1,0 +1,8 @@
+C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\managed\rendering\Aether.Rendering.dll
+C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\managed\rendering\Aether.Rendering.deps.json
+C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\managed\rendering\Aether.Rendering.runtimeconfig.json
+C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\managed\rendering\Aether.Rendering.pdb
+C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\managed\rendering\Aether.Core.dll
+C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\managed\rendering\Aether.Scene.dll
+C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\managed\rendering\Aether.Core.pdb
+C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\managed\rendering\Aether.Scene.pdb

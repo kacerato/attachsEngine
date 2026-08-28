@@ -1,0 +1,36 @@
+{
+    "logs": [
+        {
+            "outputFile": "dev.aether.editor.app-mergeDebugResources-2:/values/values.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\src\\main\\res\\values\\styles.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "12",
+                        "endColumns": "12",
+                        "endOffsets": "677"
+                    }
+                }
+            ]
+        },
+        {
+            "outputFile": "C:\\Users\\jamaa\\.gradle\\daemon\\8.10.2\\dev.aether.editor.app-mergeDebugResources-2:\\values\\values.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\src\\main\\res\\values\\styles.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "13",
+                        "endColumns": "12",
+                        "endOffsets": "744"
+                    }
+                }
+            ]
+        }
+    ]
+}

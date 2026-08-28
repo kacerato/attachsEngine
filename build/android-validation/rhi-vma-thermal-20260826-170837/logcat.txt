@@ -1,0 +1,27 @@
+
+
+--- final logcat window ---
+--------- beginning of main
+I/Aether.Android( 4285): Shell nativo iniciado.
+I/Aether.Android( 4285): Extração de assets .NET concluída: 179 ok, 0 falharam.
+I/Aether.Android( 4285): CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Core.runtimeconfig.json).
+I/Aether.Android( 4285): CoreCLR hospedado no shell: Ping(2,3)=5.
+I/Aether.Android( 4285): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0.
+I/Aether.Android( 4285): Swapchain pronta: 2772x1280, 5 imagens.
+I/Aether.Android( 4285): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android( 4285): InstancedRenderer pronto: 5000 instâncias (PoC-A).
+I/Aether.Android( 4285): Aplicativo ativo.
+I/Aether.Android( 4285): Primeiro frame após ativação apresentado: ciclo=1.
+I/Aether.Android( 4285): PoC-A: 5000 instâncias, crossing C++<->C# pico=2160.0 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android( 4285): PoC-A: 5000 instâncias, crossing C++<->C# pico=1570.6 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android( 4285): PoC-A: 5000 instâncias, crossing C++<->C# pico=1545.0 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android( 4285): Marco de renderização atingido: 1000 frames apresentados.
+I/Aether.Android( 4285): PoC-A: 5000 instâncias, crossing C++<->C# pico=3529.6 us (orçamento: 3000 us) — ACIMA do orçamento.
+I/Aether.Android( 4285): PoC-A: 5000 instâncias, crossing C++<->C# pico=3593.1 us (orçamento: 3000 us) — ACIMA do orçamento.
+I/Aether.Android( 4285): PoC-A: 5000 instâncias, crossing C++<->C# pico=2065.2 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android( 4285): PoC-A: 5000 instâncias, crossing C++<->C# pico=1730.3 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android( 4285): PoC-A: 5000 instâncias, crossing C++<->C# pico=1700.5 us (orçamento: 3000 us) — dentro do orçamento.
+I/Aether.Android( 4285): PoC-A: 5000 instâncias, crossing C++<->C# pico=1768.8 us (orçamento: 3000 us) — dentro do orçamento.
+
+--- crash buffer ---
+

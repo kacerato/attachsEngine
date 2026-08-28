@@ -1,0 +1,8 @@
+-- CMake C compiler: Clang
+-- CMake C++ compiler: Clang
+-- CMake system name: Android
+-- CMake host system processor: AMD64
+-- Box2D using Unix
+-- Configuring done
+-- Generating done
+-- Build files have been written to: C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/RelWithDebInfo/263i2b2r/arm64-v8a
