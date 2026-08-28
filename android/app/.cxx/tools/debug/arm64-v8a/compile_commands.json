@@ -76,6 +76,11 @@
 },
 {
   "directory": "C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/54ts2y19/arm64-v8a",
+  "command": "C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/jamaa/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/jamaa/Downloads/aether-fase0-1/native -IC:/Users/jamaa/Downloads/aether-fase0-1/native/third_party/VulkanMemoryAllocator/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_rhi.dir\\rhi\\pipeline_cache.cpp.o -c C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\native\\rhi\\pipeline_cache.cpp",
+  "file": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\native\\rhi\\pipeline_cache.cpp"
+},
+{
+  "directory": "C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/54ts2y19/arm64-v8a",
   "command": "C:\\Users\\jamaa\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/jamaa/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/jamaa/Downloads/aether-fase0-1/native -IC:/Users/jamaa/Downloads/aether-fase0-1/native/third_party/VulkanMemoryAllocator/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_rhi.dir\\rhi\\resource.cpp.o -c C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\native\\rhi\\resource.cpp",
   "file": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\native\\rhi\\resource.cpp"
 },

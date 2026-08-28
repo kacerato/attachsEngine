@@ -13,3 +13,4 @@ C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Debug\net8.0\Ae
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Debug\net8.0\refint\Aether.Scene.dll
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Debug\net8.0\Aether.Scene.pdb
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Debug\net8.0\ref\Aether.Scene.dll
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Scene\obj\Debug\net8.0\Aether.Scene.sourcelink.json

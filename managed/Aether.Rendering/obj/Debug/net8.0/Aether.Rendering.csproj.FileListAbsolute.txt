@@ -15,3 +15,4 @@ C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Rendering\obj\Debug\net8.
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Rendering\obj\Debug\net8.0\refint\Aether.Rendering.dll
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Rendering\obj\Debug\net8.0\Aether.Rendering.pdb
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Rendering\obj\Debug\net8.0\ref\Aether.Rendering.dll
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Rendering\obj\Debug\net8.0\Aether.Rendering.sourcelink.json

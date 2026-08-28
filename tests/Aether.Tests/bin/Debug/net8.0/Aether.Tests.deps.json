@@ -10,6 +10,7 @@
         "dependencies": {
           "Aether.Core": "1.0.0",
           "Aether.Flow": "1.0.0",
+          "Aether.Rendering": "1.0.0",
           "Aether.Scene": "1.0.0",
           "Microsoft.CodeAnalysis.CSharp": "4.11.0.0",
           "Microsoft.CodeAnalysis": "4.11.0.0"
@@ -32,6 +33,18 @@
         },
         "runtime": {
           "Aether.Flow.dll": {
+            "assemblyVersion": "1.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "Aether.Rendering/1.0.0": {
+        "dependencies": {
+          "Aether.Core": "1.0.0",
+          "Aether.Scene": "1.0.0"
+        },
+        "runtime": {
+          "Aether.Rendering.dll": {
             "assemblyVersion": "1.0.0",
             "fileVersion": "1.0.0.0"
           }
@@ -160,6 +173,11 @@
       "sha512": ""
     },
     "Aether.Flow/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Aether.Rendering/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

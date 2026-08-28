@@ -145,6 +145,13 @@ build CMakeFiles/aether_platform.dir/platform/atomic_asset_file.cpp.obj: CXX_COM
   OBJECT_DIR = CMakeFiles\aether_platform.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_platform.dir\platform
 
+build CMakeFiles/aether_platform.dir/platform/free_camera_controller.cpp.obj: CXX_COMPILER__aether_platform_Debug C$:/Users/jamaa/Downloads/aether-fase0-1/native/platform/free_camera_controller.cpp || cmake_object_order_depends_target_aether_platform
+  DEP_FILE = CMakeFiles\aether_platform.dir\platform\free_camera_controller.cpp.obj.d
+  FLAGS = -g -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -IC:/Users/jamaa/Downloads/aether-fase0-1/native
+  OBJECT_DIR = CMakeFiles\aether_platform.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_platform.dir\platform
+
 
 # =============================================================================
 # Link build statements for STATIC_LIBRARY target aether_platform
@@ -153,7 +160,7 @@ build CMakeFiles/aether_platform.dir/platform/atomic_asset_file.cpp.obj: CXX_COM
 #############################################
 # Link the static library libaether_platform.a
 
-build libaether_platform.a: CXX_STATIC_LIBRARY_LINKER__aether_platform_Debug CMakeFiles/aether_platform.dir/platform/app_lifecycle.cpp.obj CMakeFiles/aether_platform.dir/platform/atomic_asset_file.cpp.obj || libaether_core.a
+build libaether_platform.a: CXX_STATIC_LIBRARY_LINKER__aether_platform_Debug CMakeFiles/aether_platform.dir/platform/app_lifecycle.cpp.obj CMakeFiles/aether_platform.dir/platform/atomic_asset_file.cpp.obj CMakeFiles/aether_platform.dir/platform/free_camera_controller.cpp.obj || libaether_core.a
   LANGUAGE_COMPILE_FLAGS = -g
   OBJECT_DIR = CMakeFiles\aether_platform.dir
   POST_BUILD = cd .
@@ -251,6 +258,13 @@ build CMakeFiles/aether_rhi.dir/rhi/memory_budget.cpp.obj: CXX_COMPILER__aether_
   OBJECT_DIR = CMakeFiles\aether_rhi.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_rhi.dir\rhi
 
+build CMakeFiles/aether_rhi.dir/rhi/pipeline_cache.cpp.obj: CXX_COMPILER__aether_rhi_Debug C$:/Users/jamaa/Downloads/aether-fase0-1/native/rhi/pipeline_cache.cpp || cmake_object_order_depends_target_aether_rhi
+  DEP_FILE = CMakeFiles\aether_rhi.dir\rhi\pipeline_cache.cpp.obj.d
+  FLAGS = -g -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -IC:/Users/jamaa/Downloads/aether-fase0-1/native -IC:/Users/jamaa/Downloads/aether-fase0-1/native/third_party/VulkanMemoryAllocator/include -IC:/Users/jamaa/Downloads/aether-fase0-1/build/host-vulkan-headers
+  OBJECT_DIR = CMakeFiles\aether_rhi.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_rhi.dir\rhi
+
 build CMakeFiles/aether_rhi.dir/rhi/resource.cpp.obj: CXX_COMPILER__aether_rhi_Debug C$:/Users/jamaa/Downloads/aether-fase0-1/native/rhi/resource.cpp || cmake_object_order_depends_target_aether_rhi
   DEP_FILE = CMakeFiles\aether_rhi.dir\rhi\resource.cpp.obj.d
   FLAGS = -g -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -std=c++20
@@ -280,7 +294,7 @@ build CMakeFiles/aether_rhi.dir/rhi/upload_context.cpp.obj: CXX_COMPILER__aether
 #############################################
 # Link the static library libaether_rhi.a
 
-build libaether_rhi.a: CXX_STATIC_LIBRARY_LINKER__aether_rhi_Debug CMakeFiles/aether_rhi.dir/rhi/bindless_index_allocator.cpp.obj CMakeFiles/aether_rhi.dir/rhi/bindless_registry.cpp.obj CMakeFiles/aether_rhi.dir/rhi/descriptor_cache.cpp.obj CMakeFiles/aether_rhi.dir/rhi/device_profile.cpp.obj CMakeFiles/aether_rhi.dir/rhi/device.cpp.obj CMakeFiles/aether_rhi.dir/rhi/memory_allocator.cpp.obj CMakeFiles/aether_rhi.dir/rhi/memory_budget.cpp.obj CMakeFiles/aether_rhi.dir/rhi/resource.cpp.obj CMakeFiles/aether_rhi.dir/rhi/resource_desc.cpp.obj CMakeFiles/aether_rhi.dir/rhi/upload_context.cpp.obj || libaether_core.a
+build libaether_rhi.a: CXX_STATIC_LIBRARY_LINKER__aether_rhi_Debug CMakeFiles/aether_rhi.dir/rhi/bindless_index_allocator.cpp.obj CMakeFiles/aether_rhi.dir/rhi/bindless_registry.cpp.obj CMakeFiles/aether_rhi.dir/rhi/descriptor_cache.cpp.obj CMakeFiles/aether_rhi.dir/rhi/device_profile.cpp.obj CMakeFiles/aether_rhi.dir/rhi/device.cpp.obj CMakeFiles/aether_rhi.dir/rhi/memory_allocator.cpp.obj CMakeFiles/aether_rhi.dir/rhi/memory_budget.cpp.obj CMakeFiles/aether_rhi.dir/rhi/pipeline_cache.cpp.obj CMakeFiles/aether_rhi.dir/rhi/resource.cpp.obj CMakeFiles/aether_rhi.dir/rhi/resource_desc.cpp.obj CMakeFiles/aether_rhi.dir/rhi/upload_context.cpp.obj || libaether_core.a
   LANGUAGE_COMPILE_FLAGS = -g
   OBJECT_DIR = CMakeFiles\aether_rhi.dir
   POST_BUILD = cd .
@@ -436,6 +450,20 @@ build cmake_object_order_depends_target_aether_tests: phony || cmake_object_orde
 
 build CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_atomic_asset_file.cpp.obj: CXX_COMPILER__aether_tests_Debug C$:/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_atomic_asset_file.cpp || cmake_object_order_depends_target_aether_tests
   DEP_FILE = CMakeFiles\aether_tests.dir\C_\Users\jamaa\Downloads\aether-fase0-1\tests\native\test_atomic_asset_file.cpp.obj.d
+  FLAGS = -g -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -IC:/Users/jamaa/Downloads/aether-fase0-1/native/../tests/native -IC:/Users/jamaa/Downloads/aether-fase0-1/native -IC:/Users/jamaa/Downloads/aether-fase0-1/native/third_party/VulkanMemoryAllocator/include -IC:/Users/jamaa/Downloads/aether-fase0-1/build/host-vulkan-headers
+  OBJECT_DIR = CMakeFiles\aether_tests.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_tests.dir\C_\Users\jamaa\Downloads\aether-fase0-1\tests\native
+
+build CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_free_camera_controller.cpp.obj: CXX_COMPILER__aether_tests_Debug C$:/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_free_camera_controller.cpp || cmake_object_order_depends_target_aether_tests
+  DEP_FILE = CMakeFiles\aether_tests.dir\C_\Users\jamaa\Downloads\aether-fase0-1\tests\native\test_free_camera_controller.cpp.obj.d
+  FLAGS = -g -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -IC:/Users/jamaa/Downloads/aether-fase0-1/native/../tests/native -IC:/Users/jamaa/Downloads/aether-fase0-1/native -IC:/Users/jamaa/Downloads/aether-fase0-1/native/third_party/VulkanMemoryAllocator/include -IC:/Users/jamaa/Downloads/aether-fase0-1/build/host-vulkan-headers
+  OBJECT_DIR = CMakeFiles\aether_tests.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_tests.dir\C_\Users\jamaa\Downloads\aether-fase0-1\tests\native
+
+build CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_map_package.cpp.obj: CXX_COMPILER__aether_tests_Debug C$:/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_map_package.cpp || cmake_object_order_depends_target_aether_tests
+  DEP_FILE = CMakeFiles\aether_tests.dir\C_\Users\jamaa\Downloads\aether-fase0-1\tests\native\test_map_package.cpp.obj.d
   FLAGS = -g -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -std=c++20
   INCLUDES = -IC:/Users/jamaa/Downloads/aether-fase0-1/native/../tests/native -IC:/Users/jamaa/Downloads/aether-fase0-1/native -IC:/Users/jamaa/Downloads/aether-fase0-1/native/third_party/VulkanMemoryAllocator/include -IC:/Users/jamaa/Downloads/aether-fase0-1/build/host-vulkan-headers
   OBJECT_DIR = CMakeFiles\aether_tests.dir
@@ -624,7 +652,7 @@ build CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/
 #############################################
 # Link the executable aether_tests.exe
 
-build aether_tests.exe: CXX_EXECUTABLE_LINKER__aether_tests_Debug CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_atomic_asset_file.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_material_preview.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/main.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_allocators.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_job_system.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_descriptor_cache.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_bindless_registry.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_device_profile.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_descriptor_indexing_support.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_astc_probe_validation.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_memory_budget.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_rhi_resources.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_render_graph.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_app_lifecycle.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_frame_statistics.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_jolt_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_sqlite_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_trigger_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_body_batch_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_joint_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_query_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_character_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_physics2d_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_physics_capacity.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_determinism.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_transform_bridge.cpp.obj | libaether_core.a libaether_platform.a libaether_rendergraph.a libaether_rhi.a libaether_physics.a libaether_transform.dll.a libaether_resources.a third_party/JoltPhysics/Build/libJolt.a libaether_core.a third_party/sqlite/libsqlite3.a || aether_transform.dll libaether_core.a libaether_physics.a libaether_platform.a libaether_rendergraph.a libaether_resources.a libaether_rhi.a third_party/JoltPhysics/Build/libJolt.a third_party/sqlite/libsqlite3.a
+build aether_tests.exe: CXX_EXECUTABLE_LINKER__aether_tests_Debug CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_atomic_asset_file.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_free_camera_controller.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_map_package.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_material_preview.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/main.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_allocators.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_job_system.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_descriptor_cache.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_bindless_registry.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_device_profile.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_descriptor_indexing_support.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_astc_probe_validation.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_memory_budget.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_rhi_resources.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_render_graph.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_app_lifecycle.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_frame_statistics.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_jolt_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_sqlite_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_trigger_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_body_batch_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_joint_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_query_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_character_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_physics2d_bridge.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_physics_capacity.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_determinism.cpp.obj CMakeFiles/aether_tests.dir/C_/Users/jamaa/Downloads/aether-fase0-1/tests/native/test_transform_bridge.cpp.obj | libaether_core.a libaether_platform.a libaether_rendergraph.a libaether_rhi.a libaether_physics.a libaether_transform.dll.a libaether_resources.a third_party/JoltPhysics/Build/libJolt.a libaether_core.a third_party/sqlite/libsqlite3.a || aether_transform.dll libaether_core.a libaether_physics.a libaether_platform.a libaether_rendergraph.a libaether_resources.a libaether_rhi.a third_party/JoltPhysics/Build/libJolt.a third_party/sqlite/libsqlite3.a
   FLAGS = -g
   LINK_LIBRARIES = libaether_core.a  libaether_platform.a  libaether_rendergraph.a  libaether_rhi.a  libaether_physics.a  libaether_transform.dll.a  libaether_resources.a  third_party/JoltPhysics/Build/libJolt.a  libaether_core.a  -lpthread  third_party/sqlite/libsqlite3.a  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\aether_tests.dir

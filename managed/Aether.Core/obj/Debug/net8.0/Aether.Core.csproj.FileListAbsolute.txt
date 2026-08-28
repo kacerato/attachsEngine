@@ -9,3 +9,4 @@ C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Core\obj\Debug\net8.0\Aet
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Core\obj\Debug\net8.0\refint\Aether.Core.dll
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Core\obj\Debug\net8.0\Aether.Core.pdb
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Core\obj\Debug\net8.0\ref\Aether.Core.dll
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Core\obj\Debug\net8.0\Aether.Core.sourcelink.json

@@ -13,3 +13,4 @@ C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Flow\obj\Debug\net8.0\Aet
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Flow\obj\Debug\net8.0\refint\Aether.Flow.dll
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Flow\obj\Debug\net8.0\Aether.Flow.pdb
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Flow\obj\Debug\net8.0\ref\Aether.Flow.dll
+C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Flow\obj\Debug\net8.0\Aether.Flow.sourcelink.json

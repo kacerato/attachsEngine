@@ -1,4 +1,14 @@
 ninja: Entering directory `C:\Users\jamaa\Downloads\aether-fase0-1\android\app\.cxx\Debug\54ts2y19\arm64-v8a'
-[1/3] Building CXX object CMakeFiles/aether_android.dir/platform/android/dirt_road_resources.cpp.o
-[2/3] Building CXX object CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o
-[3/3] Linking CXX shared library C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\intermediates\cxx\Debug\54ts2y19\obj\arm64-v8a\libaether_android.so
+[1/13] Building CXX object CMakeFiles/aether_rhi.dir/rhi/descriptor_cache.cpp.o
+[2/13] Building CXX object CMakeFiles/aether_android.dir/platform/android/android_vulkan_surface.cpp.o
+[3/13] Building CXX object CMakeFiles/aether_android.dir/platform/android/android_triangle_renderer.cpp.o
+[4/13] Building CXX object CMakeFiles/aether_android.dir/platform/android/android_texture_loader.cpp.o
+[5/13] Building CXX object CMakeFiles/aether_android.dir/platform/android/astc_encode_probe.cpp.o
+[6/13] Building CXX object CMakeFiles/aether_rhi.dir/rhi/device.cpp.o
+[7/13] Building CXX object CMakeFiles/aether_android.dir/platform/android/material_preview_resources.cpp.o
+[8/13] Building CXX object CMakeFiles/aether_rhi.dir/rhi/pipeline_cache.cpp.o
+[9/13] Building CXX object CMakeFiles/aether_android.dir/platform/android/dirt_road_resources.cpp.o
+[10/13] Building CXX object CMakeFiles/aether_android.dir/platform/android/android_main.cpp.o
+[11/13] Linking CXX static library libaether_rhi.a
+[12/13] Building CXX object CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o
+[13/13] Linking CXX shared library C:\Users\jamaa\Downloads\aether-fase0-1\android\app\build\intermediates\cxx\Debug\54ts2y19\obj\arm64-v8a\libaether_android.so

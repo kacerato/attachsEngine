@@ -259,6 +259,13 @@ build CMakeFiles/aether_rhi.dir/rhi/memory_budget.cpp.o: CXX_COMPILER__aether_rh
   OBJECT_DIR = CMakeFiles\aether_rhi.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_rhi.dir\rhi
 
+build CMakeFiles/aether_rhi.dir/rhi/pipeline_cache.cpp.o: CXX_COMPILER__aether_rhi_Debug C$:/Users/jamaa/Downloads/aether-fase0-1/native/rhi/pipeline_cache.cpp || cmake_object_order_depends_target_aether_rhi
+  DEP_FILE = CMakeFiles\aether_rhi.dir\rhi\pipeline_cache.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/jamaa/Downloads/aether-fase0-1/native -IC:/Users/jamaa/Downloads/aether-fase0-1/native/third_party/VulkanMemoryAllocator/include
+  OBJECT_DIR = CMakeFiles\aether_rhi.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_rhi.dir\rhi
+
 build CMakeFiles/aether_rhi.dir/rhi/resource.cpp.o: CXX_COMPILER__aether_rhi_Debug C$:/Users/jamaa/Downloads/aether-fase0-1/native/rhi/resource.cpp || cmake_object_order_depends_target_aether_rhi
   DEP_FILE = CMakeFiles\aether_rhi.dir\rhi\resource.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
@@ -288,7 +295,7 @@ build CMakeFiles/aether_rhi.dir/rhi/upload_context.cpp.o: CXX_COMPILER__aether_r
 #############################################
 # Link the static library libaether_rhi.a
 
-build libaether_rhi.a: CXX_STATIC_LIBRARY_LINKER__aether_rhi_Debug CMakeFiles/aether_rhi.dir/rhi/bindless_index_allocator.cpp.o CMakeFiles/aether_rhi.dir/rhi/bindless_registry.cpp.o CMakeFiles/aether_rhi.dir/rhi/descriptor_cache.cpp.o CMakeFiles/aether_rhi.dir/rhi/device_profile.cpp.o CMakeFiles/aether_rhi.dir/rhi/device.cpp.o CMakeFiles/aether_rhi.dir/rhi/memory_allocator.cpp.o CMakeFiles/aether_rhi.dir/rhi/memory_budget.cpp.o CMakeFiles/aether_rhi.dir/rhi/resource.cpp.o CMakeFiles/aether_rhi.dir/rhi/resource_desc.cpp.o CMakeFiles/aether_rhi.dir/rhi/upload_context.cpp.o || libaether_core.a
+build libaether_rhi.a: CXX_STATIC_LIBRARY_LINKER__aether_rhi_Debug CMakeFiles/aether_rhi.dir/rhi/bindless_index_allocator.cpp.o CMakeFiles/aether_rhi.dir/rhi/bindless_registry.cpp.o CMakeFiles/aether_rhi.dir/rhi/descriptor_cache.cpp.o CMakeFiles/aether_rhi.dir/rhi/device_profile.cpp.o CMakeFiles/aether_rhi.dir/rhi/device.cpp.o CMakeFiles/aether_rhi.dir/rhi/memory_allocator.cpp.o CMakeFiles/aether_rhi.dir/rhi/memory_budget.cpp.o CMakeFiles/aether_rhi.dir/rhi/pipeline_cache.cpp.o CMakeFiles/aether_rhi.dir/rhi/resource.cpp.o CMakeFiles/aether_rhi.dir/rhi/resource_desc.cpp.o CMakeFiles/aether_rhi.dir/rhi/upload_context.cpp.o || libaether_core.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info
   OBJECT_DIR = CMakeFiles\aether_rhi.dir
   POST_BUILD = cd .

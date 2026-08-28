@@ -2,7 +2,7 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "C:/Users/jamaa/Downloads/aether-fase0-1/android/app/build/intermediates/cxx/Debug/54ts2y19/obj/arm64-v8a/benchmark_physics2d_box2d"
+			"path" : "C:/Users/jamaa/Downloads/aether-fase0-1/android/app/build/intermediates/cxx/Debug/54ts2y19/obj/arm64-v8a/benchmark_physics2d_jolt"
 		}
 	],
 	"backtrace" : 1,
@@ -28,13 +28,13 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 351,
+				"line" : 348,
 				"parent" : 0
 			},
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 353,
+				"line" : 350,
 				"parent" : 0
 			},
 			{
@@ -46,13 +46,13 @@
 			{
 				"command" : 3,
 				"file" : 0,
-				"line" : 359,
+				"line" : 360,
 				"parent" : 0
 			},
 			{
 				"command" : 4,
 				"file" : 0,
-				"line" : 352,
+				"line" : 349,
 				"parent" : 0
 			}
 		]
@@ -94,6 +94,10 @@
 					"fragment" : "-O2"
 				},
 				{
+					"backtrace" : 2,
+					"fragment" : "-pthread"
+				},
+				{
 					"fragment" : "-std=c++20"
 				}
 			],
@@ -101,18 +105,14 @@
 			[
 				{
 					"backtrace" : 5,
-					"define" : "AETHER_BENCHMARK_BOX2D_ONLY=1"
+					"define" : "AETHER_BENCHMARK_JOLT_ONLY=1"
 				}
 			],
 			"includes" : 
 			[
 				{
 					"backtrace" : 2,
-					"path" : "C:/Users/jamaa/Downloads/aether-fase0-1/native/third_party/Box2D/src/../include"
-				},
-				{
-					"backtrace" : 2,
-					"path" : "C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/54ts2y19/arm64-v8a/third_party/Box2D/src"
+					"path" : "C:/Users/jamaa/Downloads/aether-fase0-1/native"
 				}
 			],
 			"language" : "CXX",
@@ -138,10 +138,18 @@
 	[
 		{
 			"backtrace" : 2,
-			"id" : "box2d::@d5cf16edf171c907b709"
+			"id" : "aether_core::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "aether_physics::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "Jolt::@1d28f1fc98c8454a2bb1"
 		}
 	],
-	"id" : "benchmark_physics2d_box2d::@6890427a1f51a3e7e1df",
+	"id" : "benchmark_physics2d_jolt::@6890427a1f51a3e7e1df",
 	"link" : 
 	{
 		"commandFragments" : 
@@ -156,7 +164,30 @@
 			},
 			{
 				"backtrace" : 2,
-				"fragment" : "third_party\\Box2D\\src\\libbox2dd.a",
+				"fragment" : "-pthread",
+				"role" : "flags"
+			},
+			{
+				"backtrace" : 2,
+				"fragment" : "libaether_core.a",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 2,
+				"fragment" : "libaether_physics.a",
+				"role" : "libraries"
+			},
+			{
+				"backtrace" : 2,
+				"fragment" : "libaether_core.a",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "-pthread",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "third_party\\JoltPhysics\\Build\\libJolt.a",
 				"role" : "libraries"
 			},
 			{
@@ -170,8 +201,8 @@
 			"path" : "C:/Users/jamaa/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
 		}
 	},
-	"name" : "benchmark_physics2d_box2d",
-	"nameOnDisk" : "benchmark_physics2d_box2d",
+	"name" : "benchmark_physics2d_jolt",
+	"nameOnDisk" : "benchmark_physics2d_jolt",
 	"paths" : 
 	{
 		"build" : ".",
