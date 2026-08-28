@@ -21,6 +21,18 @@
 
 #include <vulkan/vulkan.h>
 
+// Item 2.1.6 do plano ("camadas de validação, marcadores de debug"): só
+// existe fora de __ANDROID__ com build debug (!NDEBUG) real — esta máquina
+// de build host compila device.h/.cpp só para linkar em aether_rhi/aether_tests
+// (ver nota no topo do arquivo), nunca executa este código, então os campos
+// de VK_EXT_debug_utils ficariam sem uso ali (-Werror rejeitaria). Definida
+// aqui, não em device.cpp, porque controla o layout da própria classe abaixo.
+#if defined(__ANDROID__) && !defined(NDEBUG)
+#define AETHER_VULKAN_VALIDATION 1
+#else
+#define AETHER_VULKAN_VALIDATION 0
+#endif
+
 namespace ae::rhi {
 
 // Resultado de uma tentativa de aquisição/apresentação de swapchain. Modela
@@ -114,7 +126,18 @@ public:
   VkExtent2D displayExtent() const { return transformSurfaceExtent(extent_, surfaceTransform_); }
   bool isReady() const { return swapchain_ != VK_NULL_HANDLE && imageCount_ > 0; }
   VkSemaphore imageAvailableSemaphore() const { return imageAvailableSemaphore_; }
-  VkSemaphore renderFinishedSemaphore() const { return renderFinishedSemaphore_; }
+  // Item 2.1.6 (achado via validation layer em hardware real): o semáforo de
+  // "render terminou" precisa ser um por IMAGEM de swapchain, não um global
+  // — vkQueuePresentKHR consome esse semáforo de forma assíncrona ao
+  // compositor da plataforma, e nada garante que o present da imagem N-1
+  // terminou de consumir seu semáforo antes do acquire devolver a mesma
+  // imagem de novo (a fence de "um frame em voo" só garante que a GPU
+  // terminou de EXECUTAR, não que o compositor terminou de PRESENTAR).
+  // last*() existe só para o caller montar o wait de present com o índice
+  // certo — ver VulkanSwapchain::present(imageIndex).
+  VkSemaphore renderFinishedSemaphore(u32 imageIndex) const {
+    return renderFinishedSemaphores_[imageIndex];
+  }
   VkFence inFlightFence() const { return inFlightFence_; }
 
 private:
@@ -135,11 +158,12 @@ private:
   VkImageView imageViews_[kMaxSwapchainImages]{};
   u32 imageCount_ = 0;
 
-  // Sincronização de um frame em voo só (suficiente para o item 5.2 — provar
-  // que o pipeline completo funciona; múltiplos frames em voo é otimização
-  // do RHI completo, Onda 3).
+  // Sincronização de um frame em voo só na CPU (a fence abaixo — suficiente
+  // para o item 5.2, múltiplos frames em voo é otimização do RHI completo,
+  // Onda 3), mas renderFinishedSemaphores_ precisa de um handle por imagem
+  // de swapchain independente disso — ver comentário do getter acima.
   VkSemaphore imageAvailableSemaphore_ = VK_NULL_HANDLE;
-  VkSemaphore renderFinishedSemaphore_ = VK_NULL_HANDLE;
+  VkSemaphore renderFinishedSemaphores_[kMaxSwapchainImages]{};
   VkFence inFlightFence_ = VK_NULL_HANDLE;
 };
 
@@ -180,6 +204,22 @@ public:
   DeviceProfile deviceProfile() const { return deviceProfile_; }
   const EnabledPaths &enabledPaths() const { return enabledPaths_; }
 
+  // Item 2.1.6 do plano ("camadas de validação, marcadores de debug, captura
+  // de frame"): true só em build debug (!NDEBUG) E quando VK_EXT_debug_utils
+  // foi de fato habilitada em initializeInstance — nunca presumido. Os
+  // helpers abaixo são no-ops seguros quando false, para que o resto do RHI
+  // possa chamá-los incondicionalmente (mesmo padrão de "consulta, nunca
+  // presume" já usado para ASTC/descriptor_indexing).
+#if AETHER_VULKAN_VALIDATION
+  bool debugUtilsEnabled() const { return setDebugUtilsObjectNameFn_ != nullptr; }
+#else
+  bool debugUtilsEnabled() const { return false; }
+#endif
+  void setObjectName(VkObjectType type, u64 handle, const char *name) const;
+  void cmdBeginDebugLabel(VkCommandBuffer commandBuffer, const char *label, float r, float g,
+                          float b) const;
+  void cmdEndDebugLabel(VkCommandBuffer commandBuffer) const;
+
 private:
   VkInstance instance_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
@@ -189,6 +229,14 @@ private:
   DeviceFeatures deviceFeatures_{};
   DeviceProfile deviceProfile_ = DeviceProfile::C;
   EnabledPaths enabledPaths_{};
+
+#if AETHER_VULKAN_VALIDATION
+  VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;
+  PFN_vkSetDebugUtilsObjectNameEXT setDebugUtilsObjectNameFn_ = nullptr;
+  PFN_vkCmdBeginDebugUtilsLabelEXT cmdBeginDebugUtilsLabelFn_ = nullptr;
+  PFN_vkCmdEndDebugUtilsLabelEXT cmdEndDebugUtilsLabelFn_ = nullptr;
+  PFN_vkDestroyDebugUtilsMessengerEXT destroyDebugUtilsMessengerFn_ = nullptr;
+#endif
 };
 
 } // namespace ae::rhi

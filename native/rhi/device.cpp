@@ -10,7 +10,43 @@
 #include <cstring>
 #include <vector>
 
+// AETHER_VULKAN_VALIDATION é definida por device.h (controla o layout da
+// própria classe VulkanDevice) — aqui só inclui <android/log.h> quando o
+// bloco está de fato ativo; o host não tem esse header (ver nota em device.h).
+#if AETHER_VULKAN_VALIDATION
+#include <android/log.h>
+#endif
+
 namespace ae::rhi {
+
+#if AETHER_VULKAN_VALIDATION
+namespace {
+constexpr const char *kValidationLogTag = "Aether.Vulkan";
+
+// Item 2.1.6 do plano: mensagens de VK_LAYER_KHRONOS_validation/debug_utils
+// chegam aqui (build debug apenas — ver initializeInstance) e são roteadas
+// para o logcat, para aparecerem junto do resto do log do shell em vez de um
+// canal separado que ninguém olha.
+VKAPI_ATTR VkBool32 VKAPI_CALL debugUtilsCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT /*type*/,
+    const VkDebugUtilsMessengerCallbackDataEXT *callbackData, void * /*userData*/) {
+  const int priority = (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+                           ? ANDROID_LOG_ERROR
+                       : (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+                           ? ANDROID_LOG_WARN
+                       : (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) ? ANDROID_LOG_INFO
+                                                                                   : ANDROID_LOG_VERBOSE;
+  __android_log_print(priority, kValidationLogTag, "[%s] %s",
+                      callbackData->pMessageIdName != nullptr ? callbackData->pMessageIdName : "?",
+                      callbackData->pMessage != nullptr ? callbackData->pMessage : "");
+  // VK_FALSE: nunca abortar a chamada Vulkan que gerou o aviso — a camada de
+  // validação já é opt-in só em debug; abortar a chamada mudaria o
+  // comportamento observável do app entre build debug e release, o oposto
+  // do que uma ferramenta de diagnóstico deve fazer.
+  return VK_FALSE;
+}
+}  // namespace
+#endif
 
 VulkanSwapchain::~VulkanSwapchain() {
   shutdown();
@@ -43,9 +79,11 @@ void VulkanSwapchain::shutdown() {
       vkDestroyFence(device_, inFlightFence_, nullptr);
       inFlightFence_ = VK_NULL_HANDLE;
     }
-    if (renderFinishedSemaphore_ != VK_NULL_HANDLE) {
-      vkDestroySemaphore(device_, renderFinishedSemaphore_, nullptr);
-      renderFinishedSemaphore_ = VK_NULL_HANDLE;
+    for (u32 i = 0; i < kMaxSwapchainImages; ++i) {
+      if (renderFinishedSemaphores_[i] != VK_NULL_HANDLE) {
+        vkDestroySemaphore(device_, renderFinishedSemaphores_[i], nullptr);
+        renderFinishedSemaphores_[i] = VK_NULL_HANDLE;
+      }
     }
     if (imageAvailableSemaphore_ != VK_NULL_HANDLE) {
       vkDestroySemaphore(device_, imageAvailableSemaphore_, nullptr);
@@ -73,10 +111,11 @@ bool VulkanSwapchain::initialize(VkDevice device, VkPhysicalDevice physicalDevic
   graphicsQueueFamily_ = graphicsQueueFamily;
   vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
 
+  // renderFinishedSemaphores_ não é criado aqui — depende de imageCount_,
+  // só conhecido depois de recreate() (abaixo) consultar a swapchain real.
   VkSemaphoreCreateInfo semInfo{};
   semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-  if (vkCreateSemaphore(device_, &semInfo, nullptr, &imageAvailableSemaphore_) != VK_SUCCESS ||
-      vkCreateSemaphore(device_, &semInfo, nullptr, &renderFinishedSemaphore_) != VK_SUCCESS) {
+  if (vkCreateSemaphore(device_, &semInfo, nullptr, &imageAvailableSemaphore_) != VK_SUCCESS) {
     shutdown();
     return false;
   }
@@ -274,6 +313,27 @@ bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
     imageViews_[i] = newImageViews[i];
   }
 
+  // Item 2.1.6 (achado via validation layer): um renderFinishedSemaphore_
+  // por imagem, criado/recriado aqui porque imageCount_ só é conhecido
+  // depois da troca acima — destrói e recria todos mesmo que a contagem não
+  // tenha mudado (recreate() já passou por vkDeviceWaitIdle no topo desta
+  // função, então nenhum comando pendente pode estar referenciando os
+  // semáforos antigos neste ponto).
+  for (u32 i = 0; i < kMaxSwapchainImages; ++i) {
+    if (renderFinishedSemaphores_[i] != VK_NULL_HANDLE) {
+      vkDestroySemaphore(device_, renderFinishedSemaphores_[i], nullptr);
+      renderFinishedSemaphores_[i] = VK_NULL_HANDLE;
+    }
+  }
+  VkSemaphoreCreateInfo renderFinishedSemInfo{};
+  renderFinishedSemInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  for (u32 i = 0; i < imageCount_; ++i) {
+    if (vkCreateSemaphore(device_, &renderFinishedSemInfo, nullptr, &renderFinishedSemaphores_[i]) !=
+        VK_SUCCESS) {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -303,10 +363,12 @@ SwapchainStatus VulkanSwapchain::acquireNextImage(u32 *outImageIndex) {
 }
 
 SwapchainStatus VulkanSwapchain::present(u32 imageIndex) {
+  if (imageIndex >= imageCount_) return SwapchainStatus::FatalError;
+  const VkSemaphore waitSemaphore = renderFinishedSemaphores_[imageIndex];
   VkPresentInfoKHR presentInfo{};
   presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   presentInfo.waitSemaphoreCount = 1;
-  presentInfo.pWaitSemaphores = &renderFinishedSemaphore_;
+  presentInfo.pWaitSemaphores = &waitSemaphore;
   presentInfo.swapchainCount = 1;
   presentInfo.pSwapchains = &swapchain_;
   presentInfo.pImageIndices = &imageIndex;
@@ -334,12 +396,56 @@ void VulkanDevice::shutdown() {
     device_ = VK_NULL_HANDLE;
   }
   if (instance_ != VK_NULL_HANDLE) {
+#if AETHER_VULKAN_VALIDATION
+    if (debugMessenger_ != VK_NULL_HANDLE && destroyDebugUtilsMessengerFn_ != nullptr) {
+      destroyDebugUtilsMessengerFn_(instance_, debugMessenger_, nullptr);
+    }
+    debugMessenger_ = VK_NULL_HANDLE;
+    setDebugUtilsObjectNameFn_ = nullptr;
+    cmdBeginDebugUtilsLabelFn_ = nullptr;
+    cmdEndDebugUtilsLabelFn_ = nullptr;
+    destroyDebugUtilsMessengerFn_ = nullptr;
+#endif
     vkDestroyInstance(instance_, nullptr);
     instance_ = VK_NULL_HANDLE;
   }
   physicalDevice_ = VK_NULL_HANDLE;
   graphicsQueueFamily_ = 0;
 }
+
+#if AETHER_VULKAN_VALIDATION
+void VulkanDevice::setObjectName(VkObjectType type, u64 handle, const char *name) const {
+  if (setDebugUtilsObjectNameFn_ == nullptr || handle == 0) return;
+  VkDebugUtilsObjectNameInfoEXT info{};
+  info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+  info.objectType = type;
+  info.objectHandle = handle;
+  info.pObjectName = name;
+  setDebugUtilsObjectNameFn_(device_, &info);
+}
+
+void VulkanDevice::cmdBeginDebugLabel(VkCommandBuffer commandBuffer, const char *label, float r,
+                                      float g, float b) const {
+  if (cmdBeginDebugUtilsLabelFn_ == nullptr) return;
+  VkDebugUtilsLabelEXT info{};
+  info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+  info.pLabelName = label;
+  info.color[0] = r;
+  info.color[1] = g;
+  info.color[2] = b;
+  info.color[3] = 1.0f;
+  cmdBeginDebugUtilsLabelFn_(commandBuffer, &info);
+}
+
+void VulkanDevice::cmdEndDebugLabel(VkCommandBuffer commandBuffer) const {
+  if (cmdEndDebugUtilsLabelFn_ == nullptr) return;
+  cmdEndDebugUtilsLabelFn_(commandBuffer);
+}
+#else
+void VulkanDevice::setObjectName(VkObjectType, u64, const char *) const {}
+void VulkanDevice::cmdBeginDebugLabel(VkCommandBuffer, const char *, float, float, float) const {}
+void VulkanDevice::cmdEndDebugLabel(VkCommandBuffer) const {}
+#endif
 
 bool VulkanDevice::initialize(const char *appName) {
   if (!initializeInstance(appName, nullptr, 0)) return false;
@@ -355,18 +461,18 @@ bool VulkanDevice::initializeInstance(const char *appName,
                                       u32 requiredExtensionCount) {
   if (instance_ != VK_NULL_HANDLE || appName == nullptr) return false;
 
-  u32 availableCount = 0;
-  if (vkEnumerateInstanceExtensionProperties(nullptr, &availableCount, nullptr) != VK_SUCCESS) {
+  u32 availableExtensionCount = 0;
+  if (vkEnumerateInstanceExtensionProperties(nullptr, &availableExtensionCount, nullptr) != VK_SUCCESS) {
     return false;
   }
   VkExtensionProperties available[64];
-  availableCount = availableCount > 64 ? 64 : availableCount;
-  if (vkEnumerateInstanceExtensionProperties(nullptr, &availableCount, available) != VK_SUCCESS) {
+  availableExtensionCount = availableExtensionCount > 64 ? 64 : availableExtensionCount;
+  if (vkEnumerateInstanceExtensionProperties(nullptr, &availableExtensionCount, available) != VK_SUCCESS) {
     return false;
   }
   for (u32 required = 0; required < requiredExtensionCount; ++required) {
     bool found = false;
-    for (u32 candidate = 0; candidate < availableCount; ++candidate) {
+    for (u32 candidate = 0; candidate < availableExtensionCount; ++candidate) {
       if (std::strcmp(requiredExtensions[required], available[candidate].extensionName) == 0) {
         found = true;
         break;
@@ -374,6 +480,80 @@ bool VulkanDevice::initializeInstance(const char *appName,
     }
     if (!found) return false;
   }
+
+  std::vector<const char *> enabledExtensions(requiredExtensions,
+                                              requiredExtensions + requiredExtensionCount);
+  std::vector<const char *> enabledLayers;
+
+  // Item 2.1.4 (bindless): VK_KHR_get_physical_device_properties2 foi
+  // promovida a core no Vulkan 1.1, mas "core" não significa "habilitada
+  // automaticamente" — descoberto em hardware real (Xiaomi via validation
+  // layer, item 2.1.6): sem pedir esta extensão de instância explicitamente,
+  // vkGetInstanceProcAddr ainda resolve um ponteiro não-nulo para
+  // vkGetPhysicalDeviceFeatures2KHR, mas a chamada silenciosamente devolve a
+  // struct encadeada zerada em vez das sub-features reais do device — nunca
+  // rejeitada pela validation layer (nenhuma VUID dispara), só incorreta.
+  // Mesma disciplina de "consultar, nunca presumir" do resto do arquivo:
+  // habilita só se realmente enumerada como disponível.
+  bool physicalDeviceProperties2Available = false;
+  for (u32 candidate = 0; candidate < availableExtensionCount; ++candidate) {
+    if (std::strcmp(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+                    available[candidate].extensionName) == 0) {
+      physicalDeviceProperties2Available = true;
+      break;
+    }
+  }
+  if (physicalDeviceProperties2Available) {
+    enabledExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+  }
+
+#if AETHER_VULKAN_VALIDATION
+  // Item 2.1.6 do plano: só em build debug (!NDEBUG — CMAKE_BUILD_TYPE=Debug
+  // via AGP, ver android/app/build.gradle.kts buildTypes.debug), e só se a
+  // camada/extensão de fato existirem — nunca presumidas, mesma disciplina
+  // de ASTC/descriptor_indexing em initializeDevice(). Sem
+  // libVkLayer_khronos_validation.so empacotado no APK (ver
+  // native/third_party/vulkan-validation-layers/) a camada simplesmente não
+  // aparece na enumeração e o shell sobe normalmente sem ela.
+  bool debugUtilsExtensionAvailable = false;
+  for (u32 candidate = 0; candidate < availableExtensionCount; ++candidate) {
+    if (std::strcmp(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, available[candidate].extensionName) == 0) {
+      debugUtilsExtensionAvailable = true;
+      break;
+    }
+  }
+
+  bool validationLayerAvailable = false;
+  {
+    u32 availableLayerCount = 0;
+    vkEnumerateInstanceLayerProperties(&availableLayerCount, nullptr);
+    if (availableLayerCount > 0) {
+      std::vector<VkLayerProperties> layers(availableLayerCount);
+      vkEnumerateInstanceLayerProperties(&availableLayerCount, layers.data());
+      for (const auto &layer : layers) {
+        if (std::strcmp("VK_LAYER_KHRONOS_validation", layer.layerName) == 0) {
+          validationLayerAvailable = true;
+          break;
+        }
+      }
+    }
+  }
+
+  if (debugUtilsExtensionAvailable) enabledExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+  if (validationLayerAvailable) enabledLayers.push_back("VK_LAYER_KHRONOS_validation");
+
+  VkDebugUtilsMessengerCreateInfoEXT messengerInfo{};
+  if (debugUtilsExtensionAvailable) {
+    messengerInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    messengerInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                                    VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                                    VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+    messengerInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                                VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                                VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    messengerInfo.pfnUserCallback = debugUtilsCallback;
+  }
+#endif
 
   VkApplicationInfo appInfo{};
   appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -388,12 +568,39 @@ bool VulkanDevice::initializeInstance(const char *appName,
   VkInstanceCreateInfo instInfo{};
   instInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   instInfo.pApplicationInfo = &appInfo;
-  instInfo.enabledExtensionCount = requiredExtensionCount;
-  instInfo.ppEnabledExtensionNames = requiredExtensions;
+  instInfo.enabledExtensionCount = static_cast<u32>(enabledExtensions.size());
+  instInfo.ppEnabledExtensionNames = enabledExtensions.empty() ? nullptr : enabledExtensions.data();
+  instInfo.enabledLayerCount = static_cast<u32>(enabledLayers.size());
+  instInfo.ppEnabledLayerNames = enabledLayers.empty() ? nullptr : enabledLayers.data();
+#if AETHER_VULKAN_VALIDATION
+  // Encadeado no pNext (não só criado depois de vkCreateInstance): captura
+  // mensagens de validação emitidas durante a própria criação da instância,
+  // que é quando a spec Vulkan é mais fácil de violar por acidente (structs
+  // de criação mal preenchidas) — prática recomendada pelo próprio Khronos.
+  if (debugUtilsExtensionAvailable) instInfo.pNext = &messengerInfo;
+#endif
 
   if (vkCreateInstance(&instInfo, nullptr, &instance_) != VK_SUCCESS) {
     return false;
   }
+
+#if AETHER_VULKAN_VALIDATION
+  if (debugUtilsExtensionAvailable) {
+    auto createMessenger = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+        vkGetInstanceProcAddr(instance_, "vkCreateDebugUtilsMessengerEXT"));
+    destroyDebugUtilsMessengerFn_ = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+        vkGetInstanceProcAddr(instance_, "vkDestroyDebugUtilsMessengerEXT"));
+    if (createMessenger != nullptr) {
+      createMessenger(instance_, &messengerInfo, nullptr, &debugMessenger_);
+    }
+    setDebugUtilsObjectNameFn_ = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
+        vkGetInstanceProcAddr(instance_, "vkSetDebugUtilsObjectNameEXT"));
+    cmdBeginDebugUtilsLabelFn_ = reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
+        vkGetInstanceProcAddr(instance_, "vkCmdBeginDebugUtilsLabelEXT"));
+    cmdEndDebugUtilsLabelFn_ = reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(
+        vkGetInstanceProcAddr(instance_, "vkCmdEndDebugUtilsLabelEXT"));
+  }
+#endif
 
   return true;
 }
@@ -503,15 +710,21 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface) {
     }
   }
 
-  // As três sub-features mínimas que compõem "bindless" de verdade (plano §5.2: "shaders acessam
+  // As quatro sub-features mínimas que compõem "bindless" de verdade (plano §5.2: "shaders acessam
   // textures[materialIndex], sem descriptor set por objeto"): array runtime-sized no shader,
-  // indexação não-uniforme (materialIndex varia por invocação, não é constante de compilação), e
+  // indexação não-uniforme (materialIndex varia por invocação, não é constante de compilação),
   // slots parcialmente vinculados (nem todo índice do array precisa ter uma textura real ainda —
-  // ver bindless_registry.h, o padrão "dummy" documentado lá depende exatamente disso).
+  // ver bindless_registry.h, o padrão "dummy" documentado lá depende exatamente disso), e update
+  // de binding de imagem/sampler após o bind (BindlessTextureRegistry usa
+  // VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT num binding COMBINED_IMAGE_SAMPLER — sem esta
+  // quarta sub-feature especificamente para tipos de imagem amostrada, vkCreateDescriptorSetLayout
+  // viola VUID-...-descriptorBindingSampledImageUpdateAfterBind-03006, confirmado em hardware real
+  // via validation layer, item 2.1.6 — a lista de "3 mínimas" estava incompleta).
   bool bindlessSupported = descriptorIndexingExtensionSupported &&
                            descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing &&
                            descriptorIndexingFeatures.descriptorBindingPartiallyBound &&
-                           descriptorIndexingFeatures.runtimeDescriptorArray;
+                           descriptorIndexingFeatures.runtimeDescriptorArray &&
+                           descriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind;
 
   VkPhysicalDeviceDescriptorIndexingFeatures enabledDescriptorIndexingFeatures{};
   enabledDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
@@ -519,6 +732,7 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface) {
   enabledDescriptorIndexingFeatures.descriptorBindingPartiallyBound = bindlessSupported;
   enabledDescriptorIndexingFeatures.descriptorBindingUpdateUnusedWhilePending = bindlessSupported;
   enabledDescriptorIndexingFeatures.runtimeDescriptorArray = bindlessSupported;
+  enabledDescriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind = bindlessSupported;
 
   VkDeviceCreateInfo deviceInfo{};
   deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

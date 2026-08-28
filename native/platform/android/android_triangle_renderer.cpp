@@ -323,7 +323,7 @@ rhi::SwapchainStatus TriangleRenderer::drawFrame() {
   }
 
   const VkSemaphore waitSemaphore = swapchain_->imageAvailableSemaphore();
-  const VkSemaphore signalSemaphore = swapchain_->renderFinishedSemaphore();
+  const VkSemaphore signalSemaphore = swapchain_->renderFinishedSemaphore(imageIndex);
   VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   VkSubmitInfo submitInfo{};
   submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

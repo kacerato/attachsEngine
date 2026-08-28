@@ -1,0 +1,23 @@
+Origem: https://github.com/KhronosGroup/Vulkan-ValidationLayers
+Release: vulkan-sdk-1.4.357.0
+Asset: android-binaries-1.4.357.0.tar.gz
+URL do asset: https://github.com/KhronosGroup/Vulkan-ValidationLayers/releases/download/vulkan-sdk-1.4.357.0/android-binaries-1.4.357.0.tar.gz
+Data da vendorização: 2026-08-28
+
+Arquivo extraído do arquivo (só arm64-v8a; armeabi-v7a/x86/x86_64 descartados —
+o CMake/Gradle deste projeto só builda arm64-v8a, ver android/app/build.gradle.kts):
+  android-binaries-1.4.357.0/arm64-v8a/libVkLayer_khronos_validation.so
+  -> arm64-v8a/libVkLayer_khronos_validation.so
+
+SHA-256 do .so vendorizado:
+1b8e4bc4701c6f7448bf6028aed4a787fb04e2e2aa8c2ad47265101ccffacc68
+
+Metadados do binário (via `file`):
+ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically
+linked, for Android 26, built by NDK r27d (13750724), BuildID[sha1]=
+9725d2d92d4636ecaad2b7f2bdcf82d19acfa39f, stripped
+
+NDK usado para compilar o binário oficial (r27d / 27.3.13750724) é a mesma
+major do NDK deste projeto (27.1.12297006, ver ndkVersion em
+android/app/build.gradle.kts) — a ABI da layer não depende de patch de NDK,
+só da major/API mínima, e "for Android 26" bate exatamente com minSdk=26.

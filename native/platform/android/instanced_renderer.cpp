@@ -406,6 +406,7 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
 
   device_ = device.handle();
   physicalDevice_ = device.physicalDevice();
+  rhiDevice_ = &device;
   memoryAllocator_ = &device.memoryAllocator();
   swapchain_ = &swapchain;
   graphicsQueueFamily_ = device.graphicsQueueFamily();
@@ -451,6 +452,25 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar os framebuffers instanciados.");
     return false;
   }
+  // Item 2.1.6 do plano: nomeia os objetos-chave deste renderer para que
+  // captures de frame (RenderDoc/Android GPU Inspector) e mensagens de
+  // validação mostrem "InstancedRenderer/pipeline" em vez de um handle
+  // opaco. No-op em build release (setObjectName checa debugUtilsEnabled()
+  // internamente via VulkanDevice).
+  rhiDevice_->setObjectName(VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<u64>(pipeline_),
+                            "InstancedRenderer/pipeline");
+  rhiDevice_->setObjectName(VK_OBJECT_TYPE_PIPELINE_LAYOUT, reinterpret_cast<u64>(pipelineLayout_),
+                            "InstancedRenderer/pipelineLayout");
+  rhiDevice_->setObjectName(VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                            reinterpret_cast<u64>(bindlessRegistry_.descriptorSet()),
+                            "InstancedRenderer/bindlessSet");
+  rhiDevice_->setObjectName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<u64>(instanceBuffer_.handle()),
+                            "InstancedRenderer/instanceBuffer");
+  rhiDevice_->setObjectName(VK_OBJECT_TYPE_IMAGE, reinterpret_cast<u64>(baseTexture_.handle()),
+                            "InstancedRenderer/baseTexture");
+  rhiDevice_->setObjectName(VK_OBJECT_TYPE_COMMAND_BUFFER, reinterpret_cast<u64>(commandBuffer_),
+                            "InstancedRenderer/commandBuffer");
+
   const rhi::MemoryBudgetEntry bufferBudget =
       memoryAllocator_->budgetSnapshot().entries[static_cast<usize>(rhi::MemoryClass::Buffer)];
   __android_log_print(ANDROID_LOG_INFO, LogTag,
@@ -556,6 +576,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
   renderPassInfo.clearValueCount = 2;
   renderPassInfo.pClearValues = clearValues;
   vkCmdBeginRenderPass(commandBuffer_, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+  // Item 2.1.6 do plano: marcador de debug em volta do desenho do cubo —
+  // aparece como um grupo nomeado em RenderDoc/Android GPU Inspector ao
+  // capturar um frame. No-op em build release.
+  rhiDevice_->cmdBeginDebugLabel(commandBuffer_, "InstancedRenderer/cube", 0.2f, 0.6f, 0.9f);
 
   vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
   const VkDescriptorSet bindlessSet = bindlessRegistry_.descriptorSet();
@@ -591,11 +615,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
   vkCmdBindVertexBuffers(commandBuffer_, 1, 1, &instanceBufferHandle, &offset);
   vkCmdDraw(commandBuffer_, 36, instanceCount_, 0, 0); // 36 vértices/cubo (12 triângulos)
 
+  rhiDevice_->cmdEndDebugLabel(commandBuffer_);
   vkCmdEndRenderPass(commandBuffer_);
   if (vkEndCommandBuffer(commandBuffer_) != VK_SUCCESS) return rhi::SwapchainStatus::FatalError;
 
   const VkSemaphore waitSemaphore = swapchain_->imageAvailableSemaphore();
-  const VkSemaphore signalSemaphore = swapchain_->renderFinishedSemaphore();
+  const VkSemaphore signalSemaphore = swapchain_->renderFinishedSemaphore(imageIndex);
   VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   VkSubmitInfo submitInfo{};
   submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

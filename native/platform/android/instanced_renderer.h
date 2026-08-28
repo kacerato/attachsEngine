@@ -59,6 +59,14 @@ private:
 
   VkDevice device_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
+  // Item 2.1.6 do plano: guardado além do VkDevice handle acima para poder
+  // chamar VulkanDevice::setObjectName/cmdBeginDebugLabel — não dono, só
+  // referência (o VulkanDevice sobrevive ao InstancedRenderer, ver
+  // AndroidVulkanSurface). nullptr é seguro: os métodos de debug em
+  // VulkanDevice são no-op quando VK_EXT_debug_utils não está habilitada
+  // (build release), então rhiDevice_ só é lido em build debug de qualquer
+  // forma.
+  rhi::VulkanDevice *rhiDevice_ = nullptr;
   rhi::VulkanMemoryAllocator *memoryAllocator_ = nullptr;
   rhi::VulkanSwapchain *swapchain_ = nullptr;
   u32 graphicsQueueFamily_ = 0;

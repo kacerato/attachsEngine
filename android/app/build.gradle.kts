@@ -98,6 +98,13 @@ android {
         }
     }
 
+    // Item 2.1.6 do plano: libVkLayer_khronos_validation.so só entra no APK
+    // debug — o código nativo (native/rhi/device.cpp) também só tenta
+    // habilitá-la fora de NDEBUG, mas mantê-la fora do sourceSet release é a
+    // defesa primária (não faz sentido inflar ~27 MB num APK de distribuição
+    // por uma ferramenta de diagnóstico que nunca roda ali).
+    sourceSets.getByName("debug").jniLibs.srcDir("../../native/third_party/vulkan-validation-layers")
+
     lint {
         // O editor é intencionalmente landscape e o primeiro alvo nativo é
         // ARM64. targetSdk 35 acompanha o máximo oficialmente suportado pelo
