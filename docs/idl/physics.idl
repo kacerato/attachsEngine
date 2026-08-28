@@ -1,0 +1,64 @@
+library: aether_physics
+managed_type: Aether.Physics.NativePhysics
+native_header: native/physics/jolt_bridge.h
+
+[enums]
+NativeMotionType | uint32 | flags=false | Static, Kinematic, Dynamic
+NativeShapeKind | uint32 | flags=false | Box, Sphere, Capsule
+NativeAllowedDOFs | uint32 | flags=true | All, TranslationX, TranslationY, TranslationZ, RotationX, RotationY, RotationZ, Plane2D
+NativeJointKind | uint32 | flags=false | Point, Hinge, Slider, Distance
+NativeJointSpace | uint32 | flags=false | World, LocalToBody1, LocalToBody2
+NativeMotorState | uint32 | flags=false | Off, Velocity, Position, PositionAndVelocity
+NativeQueryLayerMask | uint32 | flags=true | None, Static, Dynamic, All
+NativeCharacterGroundState | uint32 | flags=false | OnGround, OnSteepGround, NotSupported, InAir
+NativePhysicsOverflowPolicy | uint32 | flags=false | BuildDefault, Warning, FailFast
+NativePhysicsUpdateError | uint32 | flags=true | None, ManifoldCacheFull, BodyPairCacheFull, ContactConstraintsFull
+
+[structs]
+NativeShapeDesc | Kind, BoxHalfExtent, SphereRadius, CapsuleHalfHeight
+NativeBodyDesc | Shape, Position, Rotation, MotionType, Friction, Restitution, AllowedDOFs
+NativeJointMotorDesc | State, TargetVelocity, TargetPosition, MaxForceOrTorque, SpringFrequency, SpringDamping
+NativeJointDesc | Kind, Point1, Point2, Axis1, Axis2, LimitsMin, LimitsMax, Motor
+NativeJointDescV2 | StructSize, ApiVersion, Kind, Space, Point1, Point2, Axis1, Axis2, LimitsMin, LimitsMax, Motor
+NativeShapeQueryHit | Body, Fraction, ContactPointOnQuery, ContactPointOnHit, PenetrationAxis
+NativeCharacterDesc | Radius, StandingHalfHeight, CrouchingHalfHeight, MaxSlopeAngle, Mass, MaxStrength
+NativePhysicsWorldDescV2 | StructSize, ApiVersion, Gravity, MaxBodies, MaxBodyPairs, MaxContactConstraints, MaxBroadPhasePairs, OverflowPolicy
+NativePhysicsStepStatsV2 | StructSize, ApiVersion, TotalSteps, OverflowSteps, ManifoldCacheFullCount, BodyPairCacheFullCount, ContactConstraintsFullCount, LastErrorFlags, Reserved
+
+[functions]
+AetherPhysics_CreateWorld | gravity: float3, maxBodies: uint | returns: nint
+AetherPhysics_CreateWorldV2 | desc: in NativePhysicsWorldDescV2 | returns: nint
+AetherPhysics_DestroyWorld | world: nint | returns: void
+AetherPhysics_CreateBody | world: nint, desc: in NativeBodyDesc | returns: uint
+AetherPhysics_CreateBodyV2 | world: nint, desc: in PhysicsBodyDescription | returns: uint
+AetherPhysics_CreateBodiesV2 | world: nint, descs: PhysicsBodyDescription*, outHandles: PhysicsBodyHandle*, count: int | returns: int
+AetherPhysics_DestroyBody | world: nint, handle: uint | returns: void
+AetherPhysics_DestroyBodies | world: nint, handles: PhysicsBodyHandle*, count: int | returns: void
+AetherPhysics_Step | world: nint, deltaTime: float, collisionSteps: int | returns: void
+AetherPhysics_StepV2 | world: nint, deltaTime: float, collisionSteps: int | returns: NativePhysicsUpdateError
+AetherPhysics_GetTriggerEvents | world: nint, outEvents: PhysicsTriggerEvent*, maxResults: int | returns: int
+AetherPhysics_GetStepStatsV2 | world: nint, outStats: ref NativePhysicsStepStatsV2 | returns: int
+AetherPhysics_GetTransform | world: nint, handle: uint, outPosition: float3*, outRotation: quaternion* | returns: void
+AetherPhysics_SetLinearVelocity | world: nint, handle: uint, velocity: float3 | returns: void
+AetherPhysics_GetLinearVelocity | world: nint, handle: uint | returns: float3
+AetherPhysics_MoveKinematicV2 | world: nint, handle: uint, targetPosition: float3, targetRotation: quaternion, deltaTime: float | returns: int
+AetherPhysics_IsActive | world: nint, handle: uint | returns: int
+AetherPhysics_RayCastClosest | world: nint, origin: float3, direction: float3, outBody: uint*, outHitFraction: float* | returns: int
+AetherPhysics_CreateJoint | world: nint, body1: uint, body2: uint, desc: in NativeJointDesc | returns: uint
+AetherPhysics_CreateJointV2 | world: nint, body1: uint, body2: uint, desc: in NativeJointDescV2 | returns: uint
+AetherPhysics_DestroyJoint | world: nint, handle: uint | returns: void
+AetherPhysics_SetJointMotor | world: nint, handle: uint, motor: in NativeJointMotorDesc | returns: void
+AetherPhysics_GetJointPosition | world: nint, handle: uint | returns: float
+AetherPhysics_RayCastAll | world: nint, origin: float3, direction: float3, layerMask: NativeQueryLayerMask, ignoreBody: uint, outBodies: uint*, outFractions: float*, maxResults: int | returns: int
+AetherPhysics_ShapeCastClosest | world: nint, shape: in NativeShapeDesc, origin: float3, rotation: quaternion, direction: float3, layerMask: NativeQueryLayerMask, ignoreBody: uint, outHit: NativeShapeQueryHit* | returns: int
+AetherPhysics_OverlapShape | world: nint, shape: in NativeShapeDesc, origin: float3, rotation: quaternion, layerMask: NativeQueryLayerMask, ignoreBody: uint, outHits: NativeShapeQueryHit*, maxResults: int | returns: int
+AetherPhysics_CreateCharacter | world: nint, desc: in NativeCharacterDesc, position: float3, rotation: quaternion | returns: uint
+AetherPhysics_DestroyCharacter | world: nint, handle: uint | returns: void
+AetherPhysics_SetCharacterVelocity | world: nint, handle: uint, velocity: float3 | returns: void
+AetherPhysics_GetCharacterVelocity | world: nint, handle: uint | returns: float3
+AetherPhysics_UpdateCharacter | world: nint, handle: uint, deltaTime: float, gravity: float3, layerMask: NativeQueryLayerMask, ignoreBody: uint | returns: void
+AetherPhysics_GetCharacterTransform | world: nint, handle: uint, outPosition: float3*, outRotation: quaternion* | returns: void
+AetherPhysics_GetCharacterGroundState | world: nint, handle: uint | returns: NativeCharacterGroundState
+AetherPhysics_GetCharacterGroundVelocity | world: nint, handle: uint | returns: float3
+AetherPhysics_GetCharacterGroundNormal | world: nint, handle: uint | returns: float3
+AetherPhysics_SetCharacterCrouching | world: nint, handle: uint, crouching: int | returns: int

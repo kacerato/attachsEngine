@@ -31,10 +31,10 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 258 |
+| não iniciado | 257 |
 | PoC | 9 |
 | parcial | 30 |
-| implementado | 31 |
+| implementado | 32 |
 | validado em hardware | 4 |
 | aceito | 1 |
 | **Total** | **333** |
@@ -68,9 +68,9 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 0.2 (PoC-A) | Vulkan + .NET: 5.000 objetos a 60 fps, < 3 ms CPU | parcial | Coletor CPU processo/thread + percentis e SurfaceFlinger integrados. Nativo otimizado: 60,056 FPS exibidos/60,244 s; CPU média 2,928 ms, pior p95 de janela 3,880 ms, pico 15,429 ms em 4.200 frames. Orçamento de CPU não atendido; matriz e atribuição dos picos pendentes. Ver `PROFILING-ANDROID.md` e `poc-a-profile-release-display-20260828/report.json` |
+| 0.2 (PoC-A) | Vulkan + .NET: 5.000 objetos a 60 fps, < 3 ms CPU | parcial | Simpleperf identificou trigonometria repetida e trabalho em Binder/BLAST. Cache sem alocação e build C# automático integrados: smoke release 60,039 FPS, CPU média 2,412 ms/pico 18,237 ms, interop wall médio 0,537 ms (antes 1,192). CPU máxima não atende ao orçamento; matriz e causa individual dos picos pendentes. Ver `PROFILING-ANDROID.md` e `m0-batch-20260828/optimized-smoke/report.json` |
 | 0.2 (PoC-B) | Gestos de edição: 10 testadores completam tarefa em < 30 s | PoC | `prototype/editor.html` prova UX de gizmos/câmera (ESTADO.md linha 63, 130-132), mas nenhum teste formal com 10 usuários foi registrado |
-| 0.2 (PoC-C) | Térmica: 30 min sem throttle, < 4 W | parcial | `tools/validate-android-shell.ps1` agora coleta `ibat`, `vbat` e status térmico reais do Android, persiste cada amostra e pode exigir o orçamento por `-RequirePowerBudget`. Checkpoint aprovado no Xiaomi SM8735 (`build/android-validation/rhi-vma-thermal-20260826-171317/report.json`): 61,507 s/11 amostras, média 1,7136 W, pico 4,1096 W, status máximo 0. Faltam o soak formal de 30 min, integração do sensor ao `PowerGovernor` e matriz de aparelhos |
+| 0.2 (PoC-C) | Térmica: 30 min sem throttle, < 4 W | parcial | Runner integrado CPU/FPS/potência com cobertura, média temporal, KEEP_SCREEN_ON local e evidência incremental. Smoke de 28/08: 60,039 FPS, mínimo 59/1 s, 2,273 W médios, status térmico 0. Rodada longa interrompida pelo usuário; CPU parcial recuperada, sem série longa de energia/FPS válida. 30 min, sensor no PowerGovernor e matriz continuam pendentes; ver `PROFILING-ANDROID.md` |
 | 0.2 (PoC-D) | Hot reload C#: editar → ver mudança em < 2 s | não iniciado | Nenhum pipeline de hot reload implementado nesta base |
 | 0.2 (PoC-E) | Compressão ASTC em GPU: < 300 ms para 4096×4096 | não iniciado | Nenhum compressor ASTC/compute shader no repositório |
 
@@ -88,7 +88,7 @@ não recebem estado agregado — servem apenas de navegação.
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
 | 0.4.1 | ADRs para linguagem, ECS vs cena, formato de arquivo, build, backend gráfico | implementado | `docs/adr/ADR-01` a `ADR-12` (mais a `ADR-013` pré-existente): as 12 decisões do Apêndice A do plano principal, cada uma com contexto, alternativas descartadas e evidência real do código quando implementada (7 das 12 têm implementação testada com paths/contagens de teste citados; 4 são registradas como decisão preventiva sem código ainda — Play separado, build em nuvem, pipeline único, menu radial de produto; ADR-03/04/06 têm divergência ou limitação documentada explicitamente). `docs/adr/README.md` indexa todas com estado |
-| 0.4.2 | Especificação do IDL de fronteira C#↔C++ | não iniciado | Não existe `.aidl` nem gerador de binding; P/Invoke atual é escrito à mão (`[LibraryImport]` em `NativePhysics.cs`, conforme ESTADO.md linha 267-281) |
+| 0.4.2 | Especificação do IDL de fronteira C#↔C++ | implementado | `docs/idl/FORMATO-IDL.md`: formato texto próprio (sem YAML/JSON externo — zero dependência), descritivo e validado, não gerador (decisão registrada explicitamente, evita reescrever bindings já testados/validados em hardware). `docs/idl/physics.idl`, `sqlite.idl`, `transform.idl` descrevem os três bindings reais. `tests/Aether.Tests/IdlValidationTests.cs` compara cada `.idl` contra o `Native*.cs` real via reflection. ✅ 7 testes — validado empiricamente que detecta divergência (corrupção deliberada introduzida e pega pelo teste); o processo de escrita já achou 2 discrepâncias reais no código |
 | 0.4.3 | Orçamentos (memória, energia, frame time) como testes automatizados | parcial | `metrics/budgets.v1.json` versiona limites de P/Invoke, alocação, CPU, GPU, memória e energia; `tools/validate-metrics-budget.ps1` valida contrato, cobertura e violações no CI, incluindo fixture negativa. Os coletores CPU/GPU/memória/energia em aparelho ainda são `device-required`, portanto o item só fica completo após produzir séries reais na matriz de hardware |
 
 ---

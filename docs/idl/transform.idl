@@ -1,0 +1,9 @@
+library: aether_transform
+managed_type: Aether.NativeTransformKernel
+native_header: native/transform/transform_bridge.h
+
+[structs]
+NativeTransformPlanEntry | Local, World, Parent, _reserved
+
+[functions]
+AetherTransform_PropagatePlan | entries: NativeTransformPlanEntry*, count: int | returns: int

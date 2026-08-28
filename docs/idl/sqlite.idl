@@ -1,0 +1,24 @@
+library: aether_resources
+managed_type: Aether.Resources.NativeSqlite
+native_header: native/resources/sqlite_bridge.h
+
+[enums]
+NativeSqliteResult | int32 | flags=false | Ok, Error, CantOpen, Busy, Misuse, Row, Done
+NativeSqliteColumnType | int32 | flags=false | Integer, Float, Text, Blob, Null
+
+[functions]
+AetherSqlite_Open | utf8Path: byte*, pathLength: int | returns: nint
+AetherSqlite_Close | connection: nint | returns: NativeSqliteResult
+AetherSqlite_GetLastError | connection: nint, outUtf8Message: byte**, outLength: int* | returns: void
+AetherSqlite_Prepare | connection: nint, utf8Sql: byte*, sqlLength: int | returns: nint
+AetherSqlite_Finalize | statement: nint | returns: void
+AetherSqlite_Step | statement: nint | returns: NativeSqliteResult
+AetherSqlite_Reset | statement: nint | returns: NativeSqliteResult
+AetherSqlite_BindInt64 | statement: nint, index: int, value: long | returns: NativeSqliteResult
+AetherSqlite_BindDouble | statement: nint, index: int, value: double | returns: NativeSqliteResult
+AetherSqlite_BindText | statement: nint, index: int, utf8Value: byte*, length: int | returns: NativeSqliteResult
+AetherSqlite_BindNull | statement: nint, index: int | returns: NativeSqliteResult
+AetherSqlite_ColumnType | statement: nint, columnIndex: int | returns: NativeSqliteColumnType
+AetherSqlite_ColumnInt64 | statement: nint, columnIndex: int | returns: long
+AetherSqlite_ColumnDouble | statement: nint, columnIndex: int | returns: double
+AetherSqlite_ColumnText | statement: nint, columnIndex: int, outUtf8Text: byte**, outLength: int* | returns: void
