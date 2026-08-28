@@ -392,6 +392,7 @@ void VulkanDevice::shutdown() {
   // (vkDeviceWaitIdle) antes de destruir o device.
   if (device_ != VK_NULL_HANDLE) {
     vkDeviceWaitIdle(device_);
+    pipelineCache_.shutdown();
     memoryAllocator_.shutdown();
     vkDestroyDevice(device_, nullptr);
     device_ = VK_NULL_HANDLE;
@@ -783,6 +784,7 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
     device_ = VK_NULL_HANDLE;
     return false;
   }
+  pipelineCache_.initialize(device_);
 
   // Preenche DeviceFeatures com os dados reais consultados acima e deriva perfil/caminhos
   // habilitados via a lógica pura já testada headless (device_profile.cpp) — não reimplementamos

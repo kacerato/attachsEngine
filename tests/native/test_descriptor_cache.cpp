@@ -35,12 +35,12 @@ AE_TEST(DescritorCache_getOrCreate_reusa_objeto_para_mesma_descricao) {
 
 AE_TEST(DescritorCache_descricoes_diferentes_criam_entradas_diferentes) {
   int factoryCalls = 0;
-  DescriptorCache<SamplerDesc, u64> cache([&factoryCalls](const SamplerDesc &) -> u64 {
+  DescriptorCache<SamplerCacheTestDesc, u64> cache([&factoryCalls](const SamplerCacheTestDesc &) -> u64 {
     return static_cast<u64>(++factoryCalls);
   });
 
-  SamplerDesc s1{0, 0, 0, 0, 0, false, 0.0f};
-  SamplerDesc s2{1, 0, 0, 0, 0, false, 0.0f};
+  SamplerCacheTestDesc s1{0, 0, 0, 0, 0, false, 0.0f};
+  SamplerCacheTestDesc s2{1, 0, 0, 0, 0, false, 0.0f};
   u64 h1 = cache.getOrCreate(s1);
   u64 h2 = cache.getOrCreate(s2);
 

@@ -30,7 +30,14 @@ struct PipelineDesc {
   bool operator==(const PipelineDesc &other) const = default;
 };
 
-struct SamplerDesc {
+// Nome distinto de rhi::SamplerDesc (resource.h, tipo real de produção com
+// campos Vulkan completos como mipmapMode) — este aqui só existe para
+// exercitar DescriptorCache com uma segunda Desc simples no teste, nunca
+// usado por código de renderização real. Colidiam em ae::rhi antes desta
+// renomeação; a colisão só ficou visível quando pipeline_cache.h (que inclui
+// este arquivo) passou a ser incluído pela mesma unidade de tradução que já
+// incluía resource.h (via device.h → instanced_renderer.h).
+struct SamplerCacheTestDesc {
   u32 magFilter = 0;
   u32 minFilter = 0;
   u32 addressModeU = 0;
@@ -39,7 +46,7 @@ struct SamplerDesc {
   bool anisotropyEnable = false;
   float maxAnisotropy = 0.0f;
 
-  bool operator==(const SamplerDesc &other) const = default;
+  bool operator==(const SamplerCacheTestDesc &other) const = default;
 };
 
 struct RenderPassDesc {

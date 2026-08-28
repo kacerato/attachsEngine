@@ -171,6 +171,7 @@ add_library(aether_rhi STATIC
   rhi/device.cpp
   rhi/memory_allocator.cpp
   rhi/memory_budget.cpp
+  rhi/pipeline_cache.cpp
   rhi/resource.cpp
   rhi/resource_desc.cpp
   rhi/upload_context.cpp

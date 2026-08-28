@@ -17,6 +17,7 @@
 #include "core/base.h"
 #include "rhi/device_profile.h"
 #include "rhi/memory_allocator.h"
+#include "rhi/pipeline_cache.h"
 #include "rhi/surface_transform.h"
 
 #include <vulkan/vulkan.h>
@@ -197,6 +198,14 @@ public:
   VulkanMemoryAllocator &memoryAllocator() { return memoryAllocator_; }
   const VulkanMemoryAllocator &memoryAllocator() const { return memoryAllocator_; }
 
+  // Item 2.1.3 do plano: cache real de render pass/pipeline layout/pipeline
+  // gráfico, compartilhado entre todos os renderers (TriangleRenderer,
+  // InstancedRenderer) — vive aqui, não em cada renderer, porque precisa
+  // sobreviver ao shutdown()/initialize() de um renderer individual (é
+  // exatamente esse ciclo, repetido a cada troca de tela, que o cache existe
+  // para evitar recriar). Ver rhi/pipeline_cache.h.
+  PipelineCache &pipelineCache() { return pipelineCache_; }
+
   // Item 2.1.4 do plano: features/perfil detectados de verdade em initializeDevice() via
   // vkGetPhysicalDeviceFeatures2 (não presumidos) — classifyDeviceProfile/derivePaths
   // (device_profile.h, já testados headless) decidem a partir destes valores reais.
@@ -227,6 +236,7 @@ private:
   VkDevice device_ = VK_NULL_HANDLE;
   u32 graphicsQueueFamily_ = 0;
   VulkanMemoryAllocator memoryAllocator_{};
+  PipelineCache pipelineCache_{};
   DeviceFeatures deviceFeatures_{};
   DeviceProfile deviceProfile_ = DeviceProfile::C;
   EnabledPaths enabledPaths_{};
