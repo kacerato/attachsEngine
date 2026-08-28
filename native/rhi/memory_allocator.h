@@ -35,10 +35,14 @@ struct ImageDesc {
   VkImageUsageFlags usage = 0;
   VkImageAspectFlags aspectMask = 0;
   MemoryClass memoryClass = MemoryClass::Texture;
+  u32 mipLevels = 1;
 };
 
 bool isImageDescValid(const ImageDesc &desc);
 bool isRgba8UploadValid(const ImageDesc &desc, u64 sourceSizeBytes);
+// Tightly packed complete mip chains, supported RGBA8/RGBA16F/ASTC6x6 formats.
+u64 sampledMipByteSize(VkFormat format, u32 width, u32 height);
+u64 sampledChainByteSize(const ImageDesc &desc);
 
 // Recurso move-only com ownership explícito. A destruição passa pelo allocator
 // que o criou, mantendo VkBuffer e VmaAllocation inseparáveis.
@@ -86,7 +90,7 @@ public:
   VkFormat format() const { return format_; }
   u32 width() const { return width_; }
   u32 height() const { return height_; }
-  ImageDesc description() const { return {width_, height_, format_, usage_, aspectMask_, memoryClass_}; }
+  ImageDesc description() const { return {width_, height_, format_, usage_, aspectMask_, memoryClass_, mipLevels_}; }
 
 private:
   friend class VulkanMemoryAllocator;
@@ -97,6 +101,7 @@ private:
   VmaAllocation allocation_ = VK_NULL_HANDLE;
   u32 width_ = 0;
   u32 height_ = 0;
+  u32 mipLevels_ = 1;
   VkFormat format_ = VK_FORMAT_UNDEFINED;
   VkImageUsageFlags usage_ = 0;
   VkImageAspectFlags aspectMask_ = 0;

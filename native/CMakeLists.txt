@@ -199,6 +199,7 @@ if(ANDROID)
     platform/android/android_vulkan_surface.cpp
     platform/android/android_triangle_renderer.cpp
     platform/android/instanced_renderer.cpp
+    platform/android/material_preview_resources.cpp
     platform/android/dotnet_host.cpp
     platform/android/dotnet_assets.cpp
     platform/android/astc_encode_probe.cpp
@@ -287,6 +288,7 @@ endif()
 if(NOT ANDROID)
   add_executable(aether_tests
     ../tests/native/test_atomic_asset_file.cpp
+    ../tests/native/test_material_preview.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/main.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_allocators.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_job_system.cpp

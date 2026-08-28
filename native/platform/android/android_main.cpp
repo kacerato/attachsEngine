@@ -17,6 +17,7 @@
 #include <chrono>
 #include <cstdio>
 #include <future>
+#include <atomic>
 
 namespace {
 
@@ -25,6 +26,8 @@ constexpr ae::u64 ValidationFrameMilestone = 1000;
 // PoC-A (item 0.2 do plano): 5.000 objetos é o número que o critério de
 // sucesso pede ("5.000 objetos renderizados a 60 fps com < 3 ms de CPU").
 constexpr ae::u32 PocAInstanceCount = 5000;
+constexpr ae::u32 ScenePreviewCapacity = 256;
+constexpr ae::u64 SceneValidationIntervalFrames = 180;
 constexpr ae::u64 PocAReportIntervalFrames = 300; // ~5s a 60fps — log periódico, não por frame
 
 struct AndroidShell final {
@@ -35,6 +38,18 @@ struct AndroidShell final {
   ae::platform::android::InstancedRenderer instancedRenderer;
   bool instancedRendererReady = false;
   bool forceDescriptorFallback = false;
+  bool scenePreview = false;
+  bool materialPreview = false;
+  bool forceTextureFallback = false;
+  std::future<bool> rendererInitialization;
+  std::atomic<bool> cancelRendererInitialization{false};
+  bool sceneValidation = false;
+  int sceneStep = 0;
+  int sceneReportedStep = -1;
+  using SceneStepFn = int (*)(int);
+  using SceneShutdownFn = void (*)();
+  SceneStepFn applySceneStep = nullptr;
+  SceneShutdownFn shutdownScene = nullptr;
   ae::u64 presentedFrameCount = 0;
   ae::u64 activationCount = 0;
   ae::u64 lifecycleCommandSequence = 0;
@@ -78,9 +93,9 @@ void initializeDotNetHost(AndroidShell &shell) {
 
   char runtimeConfigPath[600];
   char managedAssemblyPath[600];
-  std::snprintf(runtimeConfigPath, sizeof(runtimeConfigPath), "%s/Aether.Core.runtimeconfig.json",
+  std::snprintf(runtimeConfigPath, sizeof(runtimeConfigPath), "%s/Aether.Rendering.runtimeconfig.json",
                dotnetRoot);
-  std::snprintf(managedAssemblyPath, sizeof(managedAssemblyPath), "%s/Aether.Core.dll", dotnetRoot);
+  std::snprintf(managedAssemblyPath, sizeof(managedAssemblyPath), "%s/Aether.Rendering.dll", dotnetRoot);
 
   if (!shell.dotNetHost.initialize(nativeLibraryDir, dotnetRoot, runtimeConfigPath,
                                    managedAssemblyPath)) {
@@ -99,6 +114,12 @@ void initializeDotNetHost(AndroidShell &shell) {
     __android_log_print(ANDROID_LOG_INFO, LogTag, "CoreCLR hospedado no shell: Ping(2,3)=%d.",
                         ping(2, 3));
   }
+  if (shell.scenePreview) {
+    shell.applySceneStep = reinterpret_cast<AndroidShell::SceneStepFn>(shell.dotNetHost.getManagedFunctionPointer(
+        "Aether.Rendering.Interop.SceneEntryPoints, Aether.Rendering", "ApplyValidationStep"));
+    shell.shutdownScene = reinterpret_cast<AndroidShell::SceneShutdownFn>(shell.dotNetHost.getManagedFunctionPointer(
+        "Aether.Rendering.Interop.SceneEntryPoints, Aether.Rendering", "Shutdown"));
+  }
 }
 
 // Reconstrói o renderer instanciado depois que a surface/swapchain existem
@@ -108,7 +129,22 @@ void initializeDotNetHost(AndroidShell &shell) {
 // Sem CoreCLR pronto (dotNetHost.isReady() falso), a PoC-A simplesmente não
 // roda nesta sessão — degradação silenciosa, mesma disciplina de "continuar
 // sem GPU" já usada para Vulkan.
+// The worker exclusively owns the renderer and graphics queue until get() hands
+// ownership back. No frame submits overlap upload. Surface teardown cancels and
+// joins BEFORE destroying anything referenced by the worker.
+void collectRendererInitialization(AndroidShell &shell, bool cancel) {
+  if (!shell.rendererInitialization.valid()) return;
+  if (cancel) shell.cancelRendererInitialization.store(true);
+  else if (shell.rendererInitialization.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
+  const bool ready=shell.rendererInitialization.get();
+  shell.instancedRendererReady=ready && !cancel;
+  if (!shell.instancedRendererReady) shell.instancedRenderer.shutdown();
+  __android_log_print(cancel ? ANDROID_LOG_INFO : (ready ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR),
+      LogTag,"[MaterialPreview] initialization=%s",cancel?"cancelled":(ready?"ready":"failed"));
+}
+
 bool rebuildInstancedRenderer(AndroidShell &shell) {
+  collectRendererInitialization(shell,true);
   shell.frameProfiler.reset();
   ae::platform::android::ScopedLifecycleStage trace("rebuild-renderer");
   shell.instancedRenderer.shutdown();
@@ -116,14 +152,27 @@ bool rebuildInstancedRenderer(AndroidShell &shell) {
     shell.instancedRendererReady = false;
     return false;
   }
+  shell.instancedRendererReady = false;
+  if (shell.materialPreview) {
+    shell.cancelRendererInitialization.store(false);
+    shell.rendererInitialization=std::async(std::launch::async,[&shell] {
+      return shell.instancedRenderer.initialize(shell.vulkanSurface.device(),shell.vulkanSurface.swapchain(),
+          shell.dotNetHost,ScenePreviewCapacity,true,shell.app->activity->assetManager,
+          shell.forceTextureFallback,&shell.cancelRendererInitialization);
+    });
+    __android_log_print(ANDROID_LOG_INFO,LogTag,"[MaterialPreview] initialization=loading");
+    return true;
+  }
   shell.instancedRendererReady = shell.instancedRenderer.initialize(
       shell.vulkanSurface.device(), shell.vulkanSurface.swapchain(), shell.dotNetHost,
-      PocAInstanceCount);
+      shell.scenePreview ? ScenePreviewCapacity : PocAInstanceCount, shell.scenePreview,
+      shell.materialPreview ? shell.app->activity->assetManager : nullptr, shell.forceTextureFallback);
   if (!shell.instancedRendererReady) shell.instancedRenderer.shutdown();
   return shell.instancedRendererReady;
 }
 
 bool recreateSwapchainAndRenderer(AndroidShell &shell) {
+  collectRendererInitialization(shell,true);
   ae::platform::android::ScopedLifecycleStage trace("recreate-swapchain-renderer");
   // Framebuffers precisam morrer ANTES das image views da swapchain antiga.
   // Inverter esta ordem viola o lifetime Vulkan mesmo depois de wait-idle.
@@ -137,6 +186,7 @@ bool recreateSwapchainAndRenderer(AndroidShell &shell) {
 }
 
 bool recreateSurfaceAndRenderer(AndroidShell &shell) {
+  collectRendererInitialization(shell,true);
   ae::platform::android::ScopedLifecycleStage trace("recreate-surface-renderer");
   shell.instancedRenderer.shutdown();
   shell.instancedRendererReady = false;
@@ -160,6 +210,7 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     }
   }
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::DestroySurface)) {
+    collectRendererInitialization(shell,true);
     ae::platform::android::ScopedLifecycleStage trace("destroy-surface-renderer");
     shell.instancedRenderer.shutdown();
     shell.instancedRendererReady = false;
@@ -304,6 +355,16 @@ void android_main(android_app *app) {
   shell.app = app;
   shell.forceDescriptorFallback = ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.force_descriptor_fallback");
+  shell.scenePreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.scene_preview");
+  const bool benchmarkPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.poc_a");
+  // The launcher opens the material sample. Legacy fixtures remain explicit,
+  // so a benchmark can never silently measure a one-object scene.
+  shell.materialPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.material_preview") ||
+      (!shell.scenePreview && !benchmarkPreview);
+  shell.forceTextureFallback = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.force_texture_fallback");
+  shell.scenePreview = shell.scenePreview || shell.materialPreview;
+  shell.sceneValidation = shell.scenePreview &&
+      ae::platform::android::readBooleanLaunchOption(app->activity, "aether.scene_validation");
   app->userData = &shell;
   app->onAppCmd = handleCommand;
   app->onInputEvent = handleInput;
@@ -356,7 +417,7 @@ void android_main(android_app *app) {
     const bool shouldDraw = shell.lifecycle.isActive() && shell.instancedRendererReady;
     android_poll_source *source = nullptr;
     int events = 0;
-    const int result = ALooper_pollOnce(shouldDraw ? 0 : -1, nullptr, &events,
+    const int result = ALooper_pollOnce(shouldDraw ? 0 : (shell.rendererInitialization.valid() ? 16 : -1), nullptr, &events,
                                         reinterpret_cast<void **>(&source));
     if (result >= 0 && source != nullptr) source->process(app, source);
 
@@ -364,9 +425,19 @@ void android_main(android_app *app) {
       applyEvent(shell, ae::platform::AppEvent::Destroy);
       continue;
     }
+    collectRendererInitialization(shell,false);
 
     // O evento processado acima pode ter destruído o renderer/janela.
     if (shell.lifecycle.isActive() && shell.instancedRendererReady) {
+      if (shell.sceneValidation && shell.sceneStep < 3 &&
+          shell.presentedFrameCount >= SceneValidationIntervalFrames * static_cast<ae::u64>(shell.sceneStep + 1)) {
+        if (shell.applySceneStep == nullptr || shell.applySceneStep(shell.sceneStep + 1) != 0) {
+          __android_log_print(ANDROID_LOG_ERROR, LogTag, "[ScenePreview] Falha na mutação de validação.");
+          shell.sceneValidation = false;
+        } else {
+          ++shell.sceneStep;
+        }
+      }
       const float timeSeconds = std::chrono::duration<float>(
                                     std::chrono::steady_clock::now() - shell.shellStartTime)
                                     .count();
@@ -375,6 +446,21 @@ void android_main(android_app *app) {
       if (frameStatus == ae::rhi::SwapchainStatus::Ok ||
           frameStatus == ae::rhi::SwapchainStatus::SuboptimalNeedsRecreate) {
         ++shell.presentedFrameCount;
+        if (shell.scenePreview && shell.instancedRenderer.lastExtractionStatus() == 0 &&
+            (shell.sceneReportedStep != shell.sceneStep || shell.firstFrameAfterActivationPending)) {
+          __android_log_print(ANDROID_LOG_INFO, LogTag,
+              "[ScenePreview] snapshot instances=%u hash=%llu yaw=%.6f pitch=%.6f",
+              shell.instancedRenderer.drawnInstanceCount(),
+              static_cast<unsigned long long>(shell.instancedRenderer.snapshotFingerprint()),
+              shell.orbitYaw, shell.orbitPitch);
+        }
+        if (shell.scenePreview && shell.sceneReportedStep != shell.sceneStep &&
+            shell.instancedRenderer.lastExtractionStatus() == 0) {
+          shell.sceneReportedStep = shell.sceneStep;
+          __android_log_print(ANDROID_LOG_INFO, LogTag,
+              "[ScenePreview] presented step=%d instances=%u abi=1 stride=88",
+              shell.sceneStep, shell.instancedRenderer.drawnInstanceCount());
+        }
         if (shell.instancedRenderer.lastFillMicroseconds() > shell.pocAMaxFillMicroseconds) {
           shell.pocAMaxFillMicroseconds = shell.instancedRenderer.lastFillMicroseconds();
         }
@@ -396,7 +482,7 @@ void android_main(android_app *app) {
         // PoC-A (item 0.2): reporta o pico de custo do crossing C++→C# a
         // cada ~5s, não a cada frame — o objetivo é ter evidência legível
         // no log contra o critério de < 3 ms de CPU, sem inundar o logcat.
-        if (shell.presentedFrameCount % PocAReportIntervalFrames == 0) {
+        if (!shell.scenePreview && shell.presentedFrameCount % PocAReportIntervalFrames == 0) {
           __android_log_print(
               ANDROID_LOG_INFO, LogTag,
               "PoC-A: %u instâncias, crossing C++<->C# pico=%.1f us (orçamento: 3000 us) — %s.",
@@ -408,7 +494,7 @@ void android_main(android_app *app) {
       if (frameStatus == ae::rhi::SwapchainStatus::Ok) {
         const VkExtent2D display = shell.vulkanSurface.swapchain().displayExtent();
         shell.frameProfiler.record(shell.instancedRenderer.lastFrameTimings(),
-                                    PocAInstanceCount, display.width, display.height);
+                                    shell.instancedRenderer.drawnInstanceCount(), display.width, display.height);
       } else {
         shell.frameProfiler.reset();
       }
@@ -433,5 +519,7 @@ void android_main(android_app *app) {
     }
   }
 
+  collectRendererInitialization(shell,true);
+  if (shell.shutdownScene != nullptr) shell.shutdownScene();
   __android_log_print(ANDROID_LOG_INFO, LogTag, "Shell nativo encerrado.");
 }

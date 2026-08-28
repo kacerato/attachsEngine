@@ -227,6 +227,7 @@ public static class TextSerializer
             ComponentFieldKind.UInt64 => BitConverter.ToUInt64(raw, field.Offset).ToString(CultureInfo.InvariantCulture),
             ComponentFieldKind.Single => BitConverter.ToSingle(raw, field.Offset).ToString("R", CultureInfo.InvariantCulture),
             ComponentFieldKind.Double => BitConverter.ToDouble(raw, field.Offset).ToString("R", CultureInfo.InvariantCulture),
+            ComponentFieldKind.Guid => new Guid(raw.AsSpan(field.Offset, 16)).ToString("D"),
             _ => throw new InvalidOperationException($"Kind de campo desconhecido: {field.Kind}."),
         };
     }
@@ -259,6 +260,7 @@ public static class TextSerializer
             case ComponentFieldKind.UInt64: BitConverter.TryWriteBytes(raw.AsSpan(field.Offset, 8), ulong.Parse(token, CultureInfo.InvariantCulture)); break;
             case ComponentFieldKind.Single: BitConverter.TryWriteBytes(raw.AsSpan(field.Offset, 4), float.Parse(token, CultureInfo.InvariantCulture)); break;
             case ComponentFieldKind.Double: BitConverter.TryWriteBytes(raw.AsSpan(field.Offset, 8), double.Parse(token, CultureInfo.InvariantCulture)); break;
+            case ComponentFieldKind.Guid: Guid.ParseExact(token, "D").TryWriteBytes(raw.AsSpan(field.Offset, 16)); break;
             default: throw new InvalidOperationException($"Kind de campo desconhecido: {field.Kind}.");
         }
     }

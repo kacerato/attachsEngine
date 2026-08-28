@@ -8,6 +8,7 @@
     <ProjectReference Include="../../managed/Aether.Core/Aether.Core.csproj" />
     <ProjectReference Include="../../managed/Aether.Flow/Aether.Flow.csproj" />
     <ProjectReference Include="../../managed/Aether.Scene/Aether.Scene.csproj" />
+    <ProjectReference Include="../../managed/Aether.Rendering/Aether.Rendering.csproj" />
   </ItemGroup>
 
   <!--

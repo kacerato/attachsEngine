@@ -2,6 +2,10 @@
 
 #include "rhi/shaders/instanced_spirv.h"
 #include "rhi/shaders/instanced_fallback_spirv.h"
+#include "rhi/shaders/scene_preview_spirv.h"
+#include "rhi/shaders/material_preview_spirv.h"
+#include "rhi/shaders/material_fallback_spirv.h"
+#include "renderer/sphere_mesh.h"
 
 #include <android/log.h>
 #include <algorithm>
@@ -13,12 +17,9 @@ namespace ae::platform::android {
 
 namespace {
 constexpr const char *LogTag = "Aether.Android";
-constexpr u32 kBytesPerInstance = 5 * sizeof(float); // vec2 posição + vec3 cor, ver instanced.vert
 constexpr u32 kTextureSize = 64;
-// Capacidade do array bindless desta PoC: 1 textura real (o checker board do
-// cubo) é suficiente hoje, mas o registro precisa caber pelo menos a dummy +
-// a textura real: ver comentário de BindlessTextureRegistry::initialize sobre
-// por que todo slot é preenchido com a dummy antes de qualquer registro.
+// Shared diagnostic capacity: dummy plus checker, or five material maps.
+// Unused slots are initialized by BindlessTextureRegistry before registration.
 constexpr u32 kBindlessCapacity = 64;
 
 struct FramePushConstants {
@@ -31,9 +32,16 @@ struct FramePushConstants {
   float surfaceYX;
   float surfaceYY;
   u32 materialIndex;
-  float padding[3]; // mantém o struct múltiplo de 16 bytes (regra comum de alinhamento de push constant)
+  float exposure;
+  float roughnessFactor;
+  float metallicFactor;
+  u32 encodeSrgb;
+  float normalScale;
+  float reserved[2];
 };
-static_assert(sizeof(FramePushConstants) == 48);
+static_assert(sizeof(FramePushConstants) == 64);
+static_assert(offsetof(FramePushConstants, exposure) == 36);
+static_assert(offsetof(FramePushConstants, encodeSrgb) == 48);
 
 bool formatSupportsDepthAttachment(VkPhysicalDevice physicalDevice, VkFormat format) {
   VkFormatProperties properties{};
@@ -134,9 +142,16 @@ bool InstancedRenderer::createRenderPass() {
 }
 
 bool InstancedRenderer::createPipeline() {
-  VkShaderModule vertModule = createShaderModule(device_, rhi::shaders::kInstancedVertSpirv,
-                                                 rhi::shaders::kInstancedVertSpirvSize);
-  VkShaderModule fragModule = useBindless_
+  VkShaderModule vertModule = materialPreview_
+      ? createShaderModule(device_, rhi::shaders::kMaterial_PreviewVertSpirv, rhi::shaders::kMaterial_PreviewVertSpirvSize)
+      : scenePreview_
+      ? createShaderModule(device_, rhi::shaders::kScene_PreviewVertSpirv, rhi::shaders::kScene_PreviewVertSpirvSize)
+      : createShaderModule(device_, rhi::shaders::kInstancedVertSpirv, rhi::shaders::kInstancedVertSpirvSize);
+  VkShaderModule fragModule = materialPreview_
+      ? (useBindless_
+          ? createShaderModule(device_, rhi::shaders::kMaterial_PreviewFragSpirv, rhi::shaders::kMaterial_PreviewFragSpirvSize)
+          : createShaderModule(device_, rhi::shaders::kMaterial_FallbackFragSpirv, rhi::shaders::kMaterial_FallbackFragSpirvSize))
+      : useBindless_
       ? createShaderModule(device_, rhi::shaders::kInstancedFragSpirv, rhi::shaders::kInstancedFragSpirvSize)
       : createShaderModule(device_, rhi::shaders::kInstanced_FallbackFragSpirv,
                            rhi::shaders::kInstanced_FallbackFragSpirvSize);
@@ -162,10 +177,10 @@ bool InstancedRenderer::createPipeline() {
   // vértice.
   VkVertexInputBindingDescription binding{};
   binding.binding = 1;
-  binding.stride = kBytesPerInstance;
+  binding.stride = instanceStride();
   binding.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 
-  VkVertexInputAttributeDescription attributes[2]{};
+  VkVertexInputAttributeDescription attributes[9]{};
   attributes[0].location = 0;
   attributes[0].binding = 1;
   attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
@@ -174,12 +189,24 @@ bool InstancedRenderer::createPipeline() {
   attributes[1].binding = 1;
   attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
   attributes[1].offset = 2 * sizeof(float);
+  if (scenePreview_) {
+    for (u32 i = 0; i < 5; ++i) {
+      attributes[i] = {i, 1, VK_FORMAT_R32G32B32A32_SFLOAT, i * 16u};
+    }
+  }
+  VkVertexInputBindingDescription bindings[2]={binding,{0,sizeof(renderer::MeshVertex),VK_VERTEX_INPUT_RATE_VERTEX}};
+  if (materialPreview_) {
+    attributes[5]={5,0,VK_FORMAT_R32G32B32_SFLOAT,0};
+    attributes[6]={6,0,VK_FORMAT_R32G32B32_SFLOAT,12};
+    attributes[7]={7,0,VK_FORMAT_R32G32B32A32_SFLOAT,24};
+    attributes[8]={8,0,VK_FORMAT_R32G32_SFLOAT,40};
+  }
 
   VkPipelineVertexInputStateCreateInfo vertexInput{};
   vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  vertexInput.vertexBindingDescriptionCount = 1;
-  vertexInput.pVertexBindingDescriptions = &binding;
-  vertexInput.vertexAttributeDescriptionCount = 2;
+  vertexInput.vertexBindingDescriptionCount = materialPreview_ ? 2 : 1;
+  vertexInput.pVertexBindingDescriptions = bindings;
+  vertexInput.vertexAttributeDescriptionCount = materialPreview_ ? 9 : (scenePreview_ ? 5 : 2);
   vertexInput.pVertexAttributeDescriptions = attributes;
 
   VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -315,7 +342,7 @@ void InstancedRenderer::destroyFramebuffers() {
 
 bool InstancedRenderer::createInstanceBuffer() {
   rhi::BufferDesc desc{};
-  desc.sizeBytes = static_cast<u64>(instanceCount_) * kBytesPerInstance;
+  desc.sizeBytes = static_cast<u64>(instanceCount_) * instanceStride();
   desc.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
   desc.memoryClass = rhi::MemoryClass::Buffer;
   desc.cpuAccess = rhi::CpuAccess::SequentialWrite;
@@ -399,6 +426,15 @@ bool InstancedRenderer::createBindlessRegistry() {
                                     dummySampler_.handle())) {
     return false;
   }
+  if (materialPreview_) {
+    for(u32 i=0;i<MaterialPreviewResources::TextureCount;++i) {
+      const u32 slot=bindlessRegistry_.registerTexture(materialResources_.view(i),materialResources_.sampler(i),
+          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+      if(slot==rhi::kBindlessIndexInvalid || (i>0 && slot!=baseTextureIndex_+i))return false;
+      if(i==0)baseTextureIndex_=slot;
+    }
+    return true;
+  }
   baseTextureIndex_ = bindlessRegistry_.registerTexture(
       baseTexture_.view(), baseSampler_.handle(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
   return baseTextureIndex_ != rhi::kBindlessIndexInvalid;
@@ -414,14 +450,14 @@ bool InstancedRenderer::createTextureDescriptors() {
   VkDescriptorSetLayoutBinding binding{};
   binding.binding = 0;
   binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  binding.descriptorCount = 1;
+  binding.descriptorCount = materialPreview_ ? MaterialPreviewResources::TextureCount : 1;
   binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
   VkDescriptorSetLayoutCreateInfo layout{};
   layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   layout.bindingCount = 1;
   layout.pBindings = &binding;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &textureSetLayout_) != VK_SUCCESS) return false;
-  VkDescriptorPoolSize size{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1};
+  VkDescriptorPoolSize size{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, binding.descriptorCount};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool.maxSets = 1;
@@ -434,20 +470,25 @@ bool InstancedRenderer::createTextureDescriptors() {
   allocation.descriptorSetCount = 1;
   allocation.pSetLayouts = &textureSetLayout_;
   if (vkAllocateDescriptorSets(device_, &allocation, &textureSet_) != VK_SUCCESS) return false;
-  VkDescriptorImageInfo image{baseSampler_.handle(), baseTexture_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkDescriptorImageInfo images[MaterialPreviewResources::TextureCount]{};
+  for(u32 i=0;i<binding.descriptorCount;++i)
+    images[i]={materialPreview_?materialResources_.sampler(i):baseSampler_.handle(),
+               materialPreview_?materialResources_.view(i):baseTexture_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkWriteDescriptorSet write{};
   write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   write.dstSet = textureSet_;
-  write.descriptorCount = 1;
+  write.descriptorCount = binding.descriptorCount;
   write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  write.pImageInfo = &image;
+  write.pImageInfo = images;
   vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
   baseTextureIndex_ = 0;
   return true;
 }
 
 bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapchain &swapchain,
-                                   DotNetHost &dotNetHost, u32 instanceCount) {
+                                   DotNetHost &dotNetHost, u32 instanceCount, bool scenePreview,
+                                   AAssetManager *materialAssets, bool forceTextureFallback,
+                                   const std::atomic<bool> *cancel) {
   if (instanceCount == 0 || !dotNetHost.isReady()) return false;
 
   device_ = device.handle();
@@ -458,13 +499,35 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   swapchain_ = &swapchain;
   graphicsQueueFamily_ = device.graphicsQueueFamily();
   instanceCount_ = instanceCount;
+  materialPreview_ = materialAssets != nullptr;
+  scenePreview_ = scenePreview || materialPreview_;
+  drawnInstanceCount_ = 0;
+  lastExtractionStatus_ = 0;
   vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
 
-  fillInstanceBuffer_ = reinterpret_cast<FillInstanceBufferFn>(dotNetHost.getManagedFunctionPointer(
-      "Aether.Interop.NativeEntryPoints, Aether.Core", "FillInstanceBuffer"));
-  if (fillInstanceBuffer_ == nullptr) {
-    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao resolver FillInstanceBuffer.");
-    return false;
+  if (scenePreview_) {
+    using InitializeSceneFn = int (*)();
+    auto initializeScene = reinterpret_cast<InitializeSceneFn>(dotNetHost.getManagedFunctionPointer(
+        "Aether.Rendering.Interop.SceneEntryPoints, Aether.Rendering", materialPreview_ ? "InitializeMaterialPreview" : "Initialize"));
+    extractScene_ = reinterpret_cast<ExtractSceneFn>(dotNetHost.getManagedFunctionPointer(
+        "Aether.Rendering.Interop.SceneEntryPoints, Aether.Rendering", "Extract"));
+    if (initializeScene == nullptr || extractScene_ == nullptr || initializeScene() != 0) {
+      __android_log_print(ANDROID_LOG_ERROR, LogTag, "[ScenePreview] Falha ao inicializar cena gerenciada.");
+      return false;
+    }
+    if (materialPreview_) {
+      using ReadMaterialFn=int (*)(MaterialParameters*,int);
+      auto readMaterial=reinterpret_cast<ReadMaterialFn>(dotNetHost.getManagedFunctionPointer(
+          "Aether.Rendering.Interop.SceneEntryPoints, Aether.Rendering","GetMaterialParameters"));
+      if(readMaterial==nullptr || readMaterial(&materialParameters_,sizeof(MaterialParameters))!=0)return false;
+    }
+  } else {
+    fillInstanceBuffer_ = reinterpret_cast<FillInstanceBufferFn>(dotNetHost.getManagedFunctionPointer(
+        "Aether.Interop.NativeEntryPoints, Aether.Core", "FillInstanceBuffer"));
+    if (fillInstanceBuffer_ == nullptr) {
+      __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao resolver FillInstanceBuffer.");
+      return false;
+    }
   }
 
   if (!createCommandResources()) {
@@ -479,6 +542,8 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar/upload da textura do cubo.");
     return false;
   }
+  if (materialPreview_ && !materialResources_.initialize(device,uploadContext_,materialAssets,forceTextureFallback,cancel))return false;
+  if (cancel && cancel->load()) return false;
   if (!createDepthImage()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o depth buffer.");
     return false;
@@ -529,8 +594,8 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
                       static_cast<unsigned long long>(bufferBudget.limitBytes));
 
   __android_log_print(ANDROID_LOG_INFO, LogTag,
-                      "InstancedRenderer pronto: cubo texturizado + depth, %u instâncias (PoC-A).",
-                      instanceCount_);
+                      "InstancedRenderer pronto: cubo texturizado + depth, capacidade=%u, modo=%s.",
+                      instanceCount_, materialPreview_ ? "material-preview" : (scenePreview_ ? "scene-preview" : "PoC-A"));
   const rhi::MemoryBudgetSnapshot snapshot = memoryAllocator_->budgetSnapshot();
   for (usize i = 0; i < rhi::MemoryClassCount; ++i) {
     __android_log_print(ANDROID_LOG_INFO, LogTag, "RHI/VMA [%s]: uso=%llu, pico=%llu bytes.",
@@ -572,6 +637,7 @@ void InstancedRenderer::shutdown() {
   textureSet_ = VK_NULL_HANDLE;
   useBindless_ = false;
   baseTextureIndex_ = rhi::kBindlessIndexInvalid;
+  materialResources_.shutdown();
   baseSampler_.shutdown();
   baseTexture_.reset();
   dummySampler_.shutdown();
@@ -585,6 +651,18 @@ void InstancedRenderer::shutdown() {
   memoryAllocator_ = nullptr;
   swapchain_ = nullptr;
   fillInstanceBuffer_ = nullptr;
+  extractScene_ = nullptr;
+}
+
+u64 InstancedRenderer::snapshotFingerprint() const {
+  if (!scenePreview_ || instanceBuffer_.mappedData() == nullptr) return 0;
+  const auto *bytes = static_cast<const u8 *>(instanceBuffer_.mappedData());
+  u64 hash = 14695981039346656037ull;
+  for (usize i = 0; i < static_cast<usize>(drawnInstanceCount_) * instanceStride(); ++i) {
+    hash ^= bytes[i];
+    hash *= 1099511628211ull;
+  }
+  return hash;
 }
 
 rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbitYaw,
@@ -603,8 +681,22 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
   // não o frame Vulkan inteiro — a pergunta da PoC-A é sobre o custo da
   // fronteira de interop especificamente.
   const auto fillStart = std::chrono::steady_clock::now();
-  fillInstanceBuffer_(static_cast<float *>(instanceBuffer_.mappedData()),
-                      static_cast<int>(instanceCount_), timeSeconds);
+  if (scenePreview_) {
+    const int count = extractScene_(static_cast<renderer::RenderInstance *>(instanceBuffer_.mappedData()),
+        static_cast<int>(instanceCount_), sizeof(renderer::RenderInstance), renderer::RenderInstanceAbiVersion);
+    const int status = count >= 0 && static_cast<u32>(count) <= instanceCount_ ? 0 : (count < 0 ? count : -5);
+    if (status != lastExtractionStatus_)
+      __android_log_print(status == 0 ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR, LogTag,
+          "[ScenePreview] extraction_status=%d capacity=%u", status, instanceCount_);
+    lastExtractionStatus_ = status;
+    drawnInstanceCount_ = status == 0 ? static_cast<u32>(count) : 0;
+    // On invalid data submit a clear-only frame: acquire already owns a semaphore.
+    // Never draw stale entities or abandon an unsignalled in-flight fence.
+  } else {
+    fillInstanceBuffer_(static_cast<float *>(instanceBuffer_.mappedData()),
+                        static_cast<int>(instanceCount_), timeSeconds);
+    drawnInstanceCount_ = instanceCount_;
+  }
   const auto fillEnd = std::chrono::steady_clock::now();
   lastFillMicroseconds_ =
       std::chrono::duration<double, std::micro>(fillEnd - fillStart).count();
@@ -651,6 +743,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
       orbitPitch,
       surfaceTransform.xx, surfaceTransform.xy, surfaceTransform.yx, surfaceTransform.yy,
       baseTextureIndex_,
+      1.15f, materialParameters_.roughness, materialParameters_.metallic,
+      (swapchain_->imageFormat()==VK_FORMAT_B8G8R8A8_SRGB ||
+       swapchain_->imageFormat()==VK_FORMAT_R8G8B8A8_SRGB) ? 0u : 1u,
+      materialParameters_.normalScale,
       {},
   };
   vkCmdPushConstants(commandBuffer_, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -670,7 +766,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
   VkDeviceSize offset = 0;
   const VkBuffer instanceBufferHandle = instanceBuffer_.handle();
   vkCmdBindVertexBuffers(commandBuffer_, 1, 1, &instanceBufferHandle, &offset);
-  vkCmdDraw(commandBuffer_, 36, instanceCount_, 0, 0); // 36 vértices/cubo (12 triângulos)
+  if (materialPreview_) {
+    const VkBuffer mesh=materialResources_.vertexBuffer();
+    vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);
+    vkCmdBindIndexBuffer(commandBuffer_,materialResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
+    vkCmdDrawIndexed(commandBuffer_,materialResources_.indexCount(),drawnInstanceCount_,0,0,0);
+  } else {
+    vkCmdDraw(commandBuffer_, 36, drawnInstanceCount_, 0, 0);
+  }
 
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
   vkCmdEndRenderPass(commandBuffer_);

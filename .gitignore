@@ -7,3 +7,4 @@ android/app/.cxx/
 android/app/build/
 .aether/
 *.user
+__pycache__/

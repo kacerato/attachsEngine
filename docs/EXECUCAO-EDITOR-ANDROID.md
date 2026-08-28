@@ -8,7 +8,7 @@ em `PLANO-ENGINE-MOBILE.md`; este documento não cria fases ou gates alternativo
 | Ordem | Referências do plano principal | Entrega verificável | Estado desta execução |
 |---|---|---|---|
 | 1 | 2.1.4, 2.1.6, 2.1.7; PoC-E | Estabilizar os caminhos gráficos existentes e a evidência de compressão | Correções abaixo implementadas e validadas; não encerra os itens completos |
-| 2 | Parte 3.3; 1.4; 2.1–2.5 | Cena e componentes alimentam recursos e lotes de renderização; criar/remover/mover atualiza a imagem | Pendente de integração |
+| 2 | Parte 3.3; 1.4; 2.1–2.5 | Cena e componentes alimentam recursos e lotes de renderização; criar/remover/mover atualiza a imagem | Primeira integração implementada: cubo/checker, matrizes completas e fixture Android; recursos múltiplos e editor pendentes |
 | 3 | 3.1; 3.4.6 | UI retida/GPU, layout, tokens, áreas seguras e roteamento de toque | Pendente |
 | 4 | 3.2; 3.3; 3.4.1 | Câmera, seleção, hierarquia e gizmos com resolução de conflitos de gestos | Pendente |
 | 5 | 1.4; Parte 4.4; 3.4.2 | Inspector pelos metadados, edição por comandos e undo/redo integrado | Pendente de integração |
@@ -118,12 +118,35 @@ diagnóstico. Não reinicia soak de 30 minutos. A regressão local desta execuç
 é 159 testes C++ e 486 C#, sem falhas; shaders passam em `spirv-val` e o build
 Android debug/release e lint foram executados.
 
-## Próxima integração
+## Integração cena/render — lote 2
 
-Antes de desenhar painéis, definir o contrato de extração de renderização no
-módulo `Aether.Rendering`, consumindo o ECS e os recursos existentes, sem
-inverter a dependência Core→Rendering. A PoC de 5.000 instâncias permanece
-fixture de performance separada. Essa entrega precisa transportar transforms
-completos e recursos, preservar serialização e identidade, tratar remoção e
-hierarquia, e incluir teste de zero alocação. Não basta converter posições XY
-da demonstração em uma falsa cena editável.
+Contrato implementado em `Aether.Rendering`, com MeshRenderer serializável,
+GUIDs de recursos, matriz afim completa e ABI de 88 bytes. A PoC-A permanece
+separada. Testes cobrem remoção/recriação, hierarquia, validação sem escrita
+parcial, serialização e zero alocação. A cena tem um único par cubo/checker
+disponível; não é um renderer de materiais completo.
+
+Arquitetura, reprodução, limitações e a referência visual de esfera 8K/16K
+proposta pelo usuário estão em `SCENE-RENDER-INTEGRATION.md`. O próximo
+bloco de interface continua sendo UI retida/GPU; a esfera de materiais
+pertence às entregas de recursos/PBR/IBL da Fase 2, sem antecipar o aceite M2.
+
+## Esfera de materiais — lote 3
+
+Implementada a referência proposta, como sample padrão do launcher:
+esfera UV indexada (36.480 triângulos), material PBR GGX/Burley/Fresnel,
+normal mapping, IBL especular pré-filtrada e albedo/normal/ARM 8192² reais.
+ASTC 6×6 com 14 mips, fallback RGBA8 1K e residência inicial por quota/capability.
+Upload generalizado no RHI; import/bake somente offline; worker com cancelamento
+e ownership exclusivo durante carga. Recursos e parâmetros têm IDs/JSON v1.
+
+Testes: 506 C#, 165 C++, 47 ferramentas Android e 6 do import; shaders,
+debug/release/lint aprovados. `material-final-20260828/report.json` passou nos
+três caminhos em Android com Khronos validation. Regressões PoC-A e cubos:
+`material-regression-poca-20260828/` e `material-regression-cube-20260828/`.
+HOME durante carga cancelou o worker e retomou sem mudar PID.
+
+2.4.2/2.4.4/2.4.6 são **parciais**, não concluídos. Sem multiscatter, SH/probes,
+sombras, pós completo ou Inspector. O próximo bloco de integração continua
+sendo UI retida/GPU e edição conectada à cena; não ampliar para efeitos soltos.
+Contratos, memória, licenças, reprodução e evidências: `MATERIAL-PREVIEW.md`.

@@ -40,9 +40,9 @@ public:
   // self-contained: a API de hospedagem de componente recusa runtimeconfig
   // self-contained, confirmado em execução real — "Initialization for
   // self-contained components is not supported"). `runtimeConfigPath`/
-  // `managedAssemblyPath` apontam para Aether.Core.runtimeconfig.json e
-  // Aether.Core.dll publicados pelo `dotnet publish` e empacotados como
-  // assets do APK.
+  // `managedAssemblyPath` apontam para o módulo raiz da composição atual
+  // (Aether.Rendering.runtimeconfig.json / Aether.Rendering.dll). Suas
+  // dependências Core/Scene são publicadas juntas, no mesmo contexto de carga.
   bool initialize(const char *nativeLibraryDir, const char *dotnetRoot,
                   const char *runtimeConfigPath, const char *managedAssemblyPath);
   void shutdown();

@@ -8,6 +8,8 @@
 #include "rhi/memory_allocator.h"
 #include "rhi/resource.h"
 #include "rhi/upload_context.h"
+#include "renderer/render_instance.h"
+#include "platform/android/material_preview_resources.h"
 
 namespace ae::platform::android {
 
@@ -30,7 +32,9 @@ public:
   // `dotNetHost` precisa já estar inicializado (ver DotNetHost::isReady) —
   // resolve o ponteiro de FillInstanceBuffer uma vez aqui, não a cada frame.
   bool initialize(rhi::VulkanDevice &device, rhi::VulkanSwapchain &swapchain,
-                  DotNetHost &dotNetHost, u32 instanceCount);
+                  DotNetHost &dotNetHost, u32 instanceCount, bool scenePreview = false,
+                  AAssetManager *materialAssets = nullptr, bool forceTextureFallback = false,
+                  const std::atomic<bool> *cancel = nullptr);
   void shutdown();
 
   // Os ângulos de órbita vêm da camada de input, em radianos. O renderer
@@ -43,6 +47,10 @@ public:
   // — separar os dois é o que permite atribuir custo à fronteira de
   // interop especificamente, a pergunta que a PoC-A faz).
   double lastFillMicroseconds() const { return lastFillMicroseconds_; }
+  u32 drawnInstanceCount() const { return drawnInstanceCount_; }
+  int lastExtractionStatus() const { return lastExtractionStatus_; }
+  // Diagnostic only: computed on demand at lifecycle/mutation checkpoints.
+  u64 snapshotFingerprint() const;
   void setFrameProfilingEnabled(bool enabled) { frameProfilingEnabled_ = enabled; }
   const profiler::RenderPhaseTimings &lastFrameTimings() const { return lastFrameTimings_; }
 
@@ -103,6 +111,16 @@ private:
   rhi::VulkanSampler baseSampler_{};
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
   u32 instanceCount_ = 0;
+  u32 drawnInstanceCount_ = 0;
+  bool scenePreview_ = false;
+  bool materialPreview_ = false;
+  MaterialPreviewResources materialResources_;
+  struct MaterialParameters { float roughness=1, metallic=1, normalScale=1; };
+  MaterialParameters materialParameters_;
+  int lastExtractionStatus_ = 0;
+  using ExtractSceneFn = int (*)(renderer::RenderInstance *, int capacity, int stride, int version);
+  ExtractSceneFn extractScene_ = nullptr;
+  u32 instanceStride() const { return scenePreview_ ? sizeof(renderer::RenderInstance) : 5 * sizeof(float); }
 
   using FillInstanceBufferFn = void (*)(float *outBuffer, int instanceCount, float timeSeconds);
   FillInstanceBufferFn fillInstanceBuffer_ = nullptr;

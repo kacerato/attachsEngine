@@ -358,7 +358,7 @@ function Assert-AppPid {
 }
 
 function Start-AetherActivity {
-    $arguments = @("shell", "am", "start", "-W", "-n", $ComponentName)
+    $arguments = @("shell", "am", "start", "-W", "-n", $ComponentName, "--ez", "aether.poc_a", "true")
     if ($CaptureSeconds -gt 0) { $arguments += @("--ez", "aether.profile_frames", "true") }
     $startOutput = Invoke-Adb -Arguments $arguments
     if (($startOutput -join "`n") -match "Error:") {

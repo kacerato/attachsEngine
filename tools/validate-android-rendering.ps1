@@ -43,6 +43,7 @@ try {
         $fallback = if ($mode -eq 'fallback') { 'true' } else { 'false' }
         $probe = if ($mode -eq 'bindless') { 'true' } else { 'false' }
         Invoke-Device @('shell', 'am', 'start', '-S', '-n', $component,
+            '--ez', 'aether.poc_a', 'true',
             '--ez', 'aether.force_descriptor_fallback', $fallback,
             '--ez', 'aether.astc_probe', $probe) | Write-Output
         $timer = [Diagnostics.Stopwatch]::StartNew()

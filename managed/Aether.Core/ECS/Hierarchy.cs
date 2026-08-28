@@ -235,6 +235,25 @@ public struct WorldTransform
 /// </summary>
 public static class TransformSystem
 {
+    /// <summary>Matriz afim exata de uma entidade. Diferente da decomposição TRS de WorldTransform,
+    /// preserva shear produzido por escala não uniforme de um pai e rotação do filho.
+    /// Leitura sem mutação/alocação, O(profundidade), no máximo MaxDepth arestas.
+    /// A árvore deve permanecer imutável durante a chamada.</summary>
+    public static bool TryGetWorldMatrix(World world, EntityId entity, out float4x4 matrix)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        matrix = float4x4.Identity;
+        for (int depth = 0; depth <= Hierarchy.MaxDepth; ++depth)
+        {
+            if (!world.Exists(entity) || !world.HasComponent<LocalTransform>(entity)) return false;
+            matrix = world.Read<LocalTransform>(entity).Value.ToMatrix() * matrix;
+            if (!world.HasComponent<Parent>(entity)) return true;
+            entity = world.Read<Parent>(entity).Value;
+            if (entity == EntityId.Null) return true;
+        }
+        return false;
+    }
+
     /// <summary>Backend usado na última propagação, disponível para profiler e diagnóstico.</summary>
     public static TransformPropagationBackend ActiveBackend => NativeTransformKernel.ActiveBackend;
 

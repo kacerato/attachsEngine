@@ -28,16 +28,16 @@ try {
     if ($id -cne [IO.File]::ReadAllText((Join-Path $assets 'dotnet_build_id.txt'))) { throw 'SHA-256 dos assets difere do build ID.' }
 } finally { $digest.Dispose() }
 Write-Host 'PASS: build ID identifica o conteúdo completo'
-foreach ($name in @('Aether.Core.dll', 'Aether.Core.deps.json', 'Aether.Core.runtimeconfig.json')) {
+foreach ($name in @('Aether.Core.dll', 'Aether.Scene.dll', 'Aether.Rendering.dll', 'Aether.Rendering.deps.json', 'Aether.Rendering.runtimeconfig.json')) {
     $generated = (Get-FileHash -LiteralPath (Join-Path $dotnetRoot $name)).Hash
-    $published = (Get-FileHash -LiteralPath (Join-Path $root "managed/core/$name")).Hash
+    $published = (Get-FileHash -LiteralPath (Join-Path $root "managed/rendering/$name")).Hash
     if ($generated -ne $published) { throw "Asset stale: $name." }
 }
 Write-Host 'PASS: assembly e manifestos vêm do publish corrente'
-$config = Get-Content -LiteralPath (Join-Path $dotnetRoot 'Aether.Core.runtimeconfig.json') -Raw | ConvertFrom-Json
+$config = Get-Content -LiteralPath (Join-Path $dotnetRoot 'Aether.Rendering.runtimeconfig.json') -Raw | ConvertFrom-Json
 if ($config.runtimeOptions.framework.name -ne 'Microsoft.NETCore.App' -or
     $null -ne $config.runtimeOptions.PSObject.Properties['includedFrameworks']) { throw 'Publicação precisa ser framework-dependent.' }
-$deps = Get-Content -LiteralPath (Join-Path $dotnetRoot 'Aether.Core.deps.json') -Raw | ConvertFrom-Json
+$deps = Get-Content -LiteralPath (Join-Path $dotnetRoot 'Aether.Rendering.deps.json') -Raw | ConvertFrom-Json
 if ($deps.runtimeTarget.name -notmatch '/linux-bionic-arm64$') { throw 'RID gerenciado incorreto.' }
 Write-Host 'PASS: framework-dependent e RID Android ARM64'
 Write-Host '4 verificações dos assets Android passaram.'

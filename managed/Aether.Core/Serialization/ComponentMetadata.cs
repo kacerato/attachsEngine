@@ -16,7 +16,7 @@ namespace Aether.Serialization;
 public enum ComponentFieldKind
 {
     Bool, Byte, SByte, Int16, UInt16, Char, Int32, UInt32, Int64, UInt64, Single, Double,
-    EntityId,
+    EntityId, Guid,
 }
 
 /// <summary>
@@ -43,7 +43,7 @@ public readonly struct ComponentField
     /// que a contém diretamente) — soma dos offsets de cada nível do caminho.</summary>
     internal readonly int Offset;
 
-    /// <summary>Tamanho em bytes desta folha: 1, 2, 4 ou 8 conforme <see cref="Kind"/> (8 para
+    /// <summary>Tamanho em bytes desta folha: 1, 2, 4, 8 ou 16 conforme <see cref="Kind"/> (16 para Guid; 8 para
     /// <see cref="ComponentFieldKind.EntityId"/>, que é <c>{int Index; int Version;}</c>).</summary>
     internal readonly int Size;
 
@@ -420,6 +420,7 @@ public static class ComponentRegistry
         if (type == typeof(float)) return BitConverter.Int32BitsToSingle(-1);
         if (type == typeof(double)) return BitConverter.Int64BitsToDouble(-1L);
         if (type == typeof(EntityId)) return new EntityId(-1, -1);
+        if (type == typeof(Guid)) return new Guid("ffffffff-ffff-ffff-ffff-ffffffffffff");
 
         // Tipo aninhado (ex.: float3 dentro de Transform): preenche cada campo público recursivamente.
         object nested = Activator.CreateInstance(type)!;
@@ -445,6 +446,7 @@ public static class ComponentRegistry
 
     private static bool TryLeafKind(Type t, out ComponentFieldKind kind, out int size)
     {
+        if (t == typeof(Guid)) { kind = ComponentFieldKind.Guid; size = 16; return true; }
         if (t == typeof(bool))   { kind = ComponentFieldKind.Bool;   size = 1; return true; }
         if (t == typeof(byte))   { kind = ComponentFieldKind.Byte;   size = 1; return true; }
         if (t == typeof(sbyte))  { kind = ComponentFieldKind.SByte;  size = 1; return true; }

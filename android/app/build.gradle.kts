@@ -1,4 +1,5 @@
 import java.security.MessageDigest
+import groovy.json.JsonSlurper
 
 plugins {
     id("com.android.application")
@@ -6,27 +7,49 @@ plugins {
 
 // The packaged engine must come from this checkout, never a stale checked-in DLL.
 // Keep the vendored BCL unchanged; publish only our framework-dependent component.
-val managedOutput = layout.buildDirectory.dir("managed/core")
+val managedOutput = layout.buildDirectory.dir("managed/rendering")
 val generatedAssets = layout.buildDirectory.dir("generated/aetherAssets")
 val publishManagedCore by tasks.registering(Exec::class) {
     inputs.files(fileTree("../../managed/Aether.Core") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
+    inputs.files(fileTree("../../managed/Aether.Scene") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
+    inputs.files(fileTree("../../managed/Aether.Rendering") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
     inputs.files(fileTree("../../managed/Aether.Analyzers") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
     inputs.files("../../Directory.Build.props", "../../NuGet.Config")
     outputs.dir(managedOutput)
     workingDir = rootProject.projectDir.parentFile
-    commandLine("dotnet", "publish", "managed/Aether.Core/Aether.Core.csproj", "-c", "Release",
+    commandLine("dotnet", "publish", "managed/Aether.Rendering/Aether.Rendering.csproj", "-c", "Release",
         "-r", "linux-bionic-arm64", "--self-contained", "false",
         "-p:GenerateRuntimeConfigurationFiles=true", "-o", managedOutput.get().asFile.absolutePath)
 }
 val prepareEngineAssets by tasks.registering(Sync::class) {
     dependsOn(publishManagedCore)
+    inputs.file("../../samples/material-preview/manifest.json")
     from("src/main/assets") {
-        exclude("dotnet/Aether.Core.*", "dotnet_manifest.txt", "dotnet_build_id.txt")
+        exclude("dotnet/Aether.*", "dotnet_manifest.txt", "dotnet_build_id.txt")
     }
-    from(managedOutput) { include("Aether.Core.dll", "Aether.Core.deps.json", "Aether.Core.runtimeconfig.json"); into("dotnet") }
+    from(managedOutput) { include("Aether.Core.dll", "Aether.Scene.dll", "Aether.Rendering.dll", "Aether.Rendering.deps.json", "Aether.Rendering.runtimeconfig.json"); into("dotnet") }
+    from("../../samples/material-preview/Imported") { include("*.aetex"); into("material_preview") }
     into(generatedAssets)
     doLast {
         val root = generatedAssets.get().asFile
+        val materialManifest = JsonSlurper().parse(file("../../samples/material-preview/manifest.json")) as Map<*, *>
+        check(materialManifest["version"] == 1) { "Unsupported material preview manifest version" }
+        val materialOutputs = materialManifest["outputs"] as Map<*, *>
+        val requiredMaps = setOf("albedo.aetex", "normal.aetex", "arm.aetex", "albedo-fallback.aetex",
+            "normal-fallback.aetex", "arm-fallback.aetex", "studio.aetex", "brdf.aetex")
+        check(materialOutputs.keys == requiredMaps) { "Incomplete material preview manifest" }
+        materialOutputs.forEach { (name, expectedHash) ->
+            val asset = root.resolve("material_preview/$name")
+            check(asset.isFile) { "Missing cooked material asset: $name; see samples/material-preview/README.md" }
+            val assetDigest = MessageDigest.getInstance("SHA-256")
+            asset.inputStream().use { stream ->
+                val buffer = ByteArray(65536)
+                var count = stream.read(buffer)
+                while (count >= 0) { assetDigest.update(buffer, 0, count); count = stream.read(buffer) }
+            }
+            val actualHash = assetDigest.digest().joinToString("") { "%02x".format(it) }
+            check(actualHash == expectedHash) { "Cooked material asset checksum mismatch: $name" }
+        }
         val dotnet = root.resolve("dotnet")
         val paths = dotnet.walkTopDown().filter { it.isFile }.map { it.relativeTo(dotnet).invariantSeparatorsPath }.sorted().toList()
         root.resolve("dotnet_manifest.txt").writeText(paths.joinToString("\n", postfix = "\n"))
@@ -49,6 +72,7 @@ android {
     namespace = "dev.aether.editor"
     compileSdk = 35
     ndkVersion = "27.1.12297006"
+    androidResources { noCompress += "aetex" }
     sourceSets.getByName("main").assets.setSrcDirs(listOf(generatedAssets))
 
     defaultConfig {

@@ -1,6 +1,8 @@
 #include "rhi/upload_context.h"
 
 #include <cstring>
+#include <array>
+#include <algorithm>
 
 namespace ae::rhi {
 
@@ -58,10 +60,19 @@ bool VulkanUploadContext::uploadRgba8ToSampledImage(VulkanMemoryAllocator &alloc
                                                      const void *sourceBytes,
                                                      u64 sourceSizeBytes,
                                                      VulkanImage &destination) {
+  if (!isRgba8UploadValid(destination.description(), sourceSizeBytes)) return false;
+  return uploadSampledMipChain(allocator, sourceBytes, sourceSizeBytes, destination);
+}
+
+bool VulkanUploadContext::uploadSampledMipChain(VulkanMemoryAllocator &allocator,
+    const void *sourceBytes, u64 sourceSizeBytes, VulkanImage &destination) {
+  const ImageDesc desc = destination.description();
+  constexpr auto requiredUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
   if (device_ == VK_NULL_HANDLE || sourceBytes == nullptr || !allocator.isReady() ||
       allocator.device() != device_ || destination.owner_ != &allocator ||
       !destination.isReady() || destination.uploadSubmitted_ ||
-      !isRgba8UploadValid(destination.description(), sourceSizeBytes)) {
+      desc.aspectMask != VK_IMAGE_ASPECT_COLOR_BIT || (desc.usage & requiredUsage) != requiredUsage ||
+      sourceSizeBytes == 0 || sourceSizeBytes != sampledChainByteSize(desc)) {
     return false;
   }
 
@@ -90,19 +101,26 @@ bool VulkanUploadContext::uploadRgba8ToSampledImage(VulkanMemoryAllocator &alloc
   toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   toTransfer.image = destination.handle();
   toTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  toTransfer.subresourceRange.levelCount = 1;
+  toTransfer.subresourceRange.levelCount = desc.mipLevels;
   toTransfer.subresourceRange.layerCount = 1;
   toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
   vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1,
                        &toTransfer);
 
-  VkBufferImageCopy copy{};
-  copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  copy.imageSubresource.layerCount = 1;
-  copy.imageExtent = {destination.width(), destination.height(), 1};
+  std::array<VkBufferImageCopy, 32> copies{};
+  u64 offset = 0;
+  for (u32 mip = 0; mip < desc.mipLevels; ++mip) {
+    auto &copy = copies[mip];
+    copy.bufferOffset = offset;
+    copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.imageSubresource.mipLevel = mip;
+    copy.imageSubresource.layerCount = 1;
+    copy.imageExtent = {std::max(1u,desc.width>>mip), std::max(1u,desc.height>>mip), 1};
+    offset += sampledMipByteSize(desc.format, copy.imageExtent.width, copy.imageExtent.height);
+  }
   vkCmdCopyBufferToImage(commandBuffer_, staging.handle(), destination.handle(),
-                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, desc.mipLevels, copies.data());
 
   VkImageMemoryBarrier toShaderRead{};
   toShaderRead.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -112,7 +130,7 @@ bool VulkanUploadContext::uploadRgba8ToSampledImage(VulkanMemoryAllocator &alloc
   toShaderRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
   toShaderRead.image = destination.handle();
   toShaderRead.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  toShaderRead.subresourceRange.levelCount = 1;
+  toShaderRead.subresourceRange.levelCount = desc.mipLevels;
   toShaderRead.subresourceRange.layerCount = 1;
   toShaderRead.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
   toShaderRead.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;

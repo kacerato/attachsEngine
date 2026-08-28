@@ -182,6 +182,10 @@ jobs:
       - name: Verificar shaders embutidos contra GLSL e NDK pinado
         run: |
           ./tools/generate-embedded-shaders.ps1 -ShaderName instanced -Check
+          ./tools/generate-embedded-shaders.ps1 -ShaderName instanced_fallback -Stages frag -Check
+          ./tools/generate-embedded-shaders.ps1 -ShaderName scene_preview -Stages vert -Check
+          ./tools/generate-embedded-shaders.ps1 -ShaderName material_preview -Check
+          ./tools/generate-embedded-shaders.ps1 -ShaderName material_fallback -Stages frag -Check
           ./tools/generate-embedded-shaders.ps1 -ShaderName triangle -Check
       - name: Testar classificação de desbloqueio do runner (sem aparelho)
         run: |

@@ -31,9 +31,9 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 253 |
-| PoC | 9 |
-| parcial | 34 |
+| não iniciado | 249 |
+| PoC | 8 |
+| parcial | 39 |
 | implementado | 31 |
 | validado em hardware (inclui variantes "só Android"/"Android") | 5 |
 | aceito | 1 |
@@ -195,11 +195,11 @@ não recebem estado agregado — servem apenas de navegação.
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
 | 2.4.1 | Depth prepass + Forward+ com clusterização de luzes | não iniciado | O cubo usa depth attachment no mesmo pass de cor. Não há depth prepass, luzes clusterizadas nem Forward+ |
-| 2.4.2 | BRDF PBR completo (GGX multiscatter, Burley, Fresnel) | não iniciado | Nenhum shader de material PBR encontrado além do triângulo hardcoded |
+| 2.4.2 | BRDF PBR completo (GGX multiscatter, Burley, Fresnel) | parcial | Esfera com GGX single-scatter, Smith correlacionado, Burley, Schlick, normal mapping e mapas 8K reais; validada em Adreno nos dois caminhos de descritores. Multiscatter e comparação quantitativa com render offline pendentes; MATERIAL-PREVIEW.md |
 | 2.4.3 | Sombras: cascaded shadow maps, spot/point | não iniciado | Nenhuma implementação de sombras encontrada |
-| 2.4.4 | IBL: skybox HDR, pré-filtragem especular, SH, reflection probes | não iniciado | Nenhuma implementação de IBL encontrada |
+| 2.4.4 | IBL: skybox HDR, pré-filtragem especular, SH, reflection probes | parcial | Ambiente HDR analítico RGBA16F pré-filtrado GGX offline e LUT BRDF split-sum amostrados pela esfera. Skybox visual, SH e probes ainda ausentes; MATERIAL-PREVIEW.md |
 | 2.4.5 | Transparência ordenada + partículas básicas | não iniciado | Nenhuma implementação de transparência/partículas encontrada |
-| 2.4.6 | Pós-processamento: exposição, bloom, tonemapping, LUT, TAA | não iniciado | Nenhum pipeline de pós-processamento encontrado |
+| 2.4.6 | Pós-processamento: exposição, bloom, tonemapping, LUT, TAA | parcial | Exposição fixa/Reinhard e transferência sRGB correta no shader do sample. Sem passes de pós, AgX, bloom, LUT de grading ou TAA; LUT BRDF pertence ao IBL, não ao grading. MATERIAL-PREVIEW.md |
 
 ### Etapa 2.5 — Culling e batching
 
@@ -207,7 +207,7 @@ não recebem estado agregado — servem apenas de navegação.
 |---|---|---|---|
 | 2.5.1 | BVH de cena com atualização incremental | não iniciado | Nenhuma implementação de BVH de cena encontrada |
 | 2.5.2 | Frustum + occlusion culling (HZB) | não iniciado | Nenhuma implementação de culling encontrada |
-| 2.5.3 | Instancing automático por malha+material | não iniciado | Nenhuma implementação encontrada |
+| 2.5.3 | Instancing automático por malha+material | parcial | RenderSceneExtractor extrai MeshRenderer/transform em lote para Vulkan; fixtures cubo/checker e esfera/PBR, cada uma com um par conhecido. IDs persistentes, ABI e validação de matrizes; agrupamento simultâneo de múltiplos pares/GPU-driven pendente. SCENE-RENDER-INTEGRATION.md e MATERIAL-PREVIEW.md |
 | 2.5.4 | Sistema de LOD com transição por dither temporal | não iniciado | Nenhuma implementação encontrada |
 | 2.5.5 | Ordenação de draws por PSO e profundidade | não iniciado | Nenhuma implementação encontrada |
 
@@ -251,7 +251,7 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 3.3.1 | Controle de câmera completo com inércia e limites | PoC | Protótipo HTML implementa orbit/pan/zoom (ESTADO.md linha 130-132); não integrado ao renderer Vulkan real |
+| 3.3.1 | Controle de câmera completo com inércia e limites | parcial | Cena Vulkan com perspectiva e órbita touch, pitch limitado. CameraComponent, pan/zoom, inércia e configuração completa ainda pendentes; SCENE-RENDER-INTEGRATION.md |
 | 3.3.2 | Gimbal de eixos, grade adaptativa, overlays de debug | PoC | Protótipo HTML tem gimbal básico; não é o viewport de produto |
 | 3.3.3 | Gizmos touch-first com HUD numérico, anti-oclusão, lupa | PoC | ESTADO.md linha 78 (item 4.1.3) menciona gizmo de junta adicionado ao protótipo (`jointPoint`/`jointAxis`), reforçando que o gizmo vive só no protótipo HTML, não no viewport Vulkan de produto |
 | 3.3.4 | Seleção: toque, laço, hierarquia, material, realce | PoC | Seleção básica existe no protótipo HTML; não no runtime real |

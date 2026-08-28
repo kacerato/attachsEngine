@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "asset": "metal_plate_02",
+  "license": "CC0-1.0",
+  "source": "https://polyhaven.com/a/metal_plate_02",
+  "sources": [
+    {
+      "map": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/metal_plate_02/metal_plate_02_diff_8k.jpg",
+      "md5": "94e2d607ae4e5fdd517ee183b6d5a9cd",
+      "sha256": "2d73ed6dcd6fa1d64c290b0dfaa83b9e0c22141137c1713827e2c039719f288b"
+    },
+    {
+      "map": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/metal_plate_02/metal_plate_02_nor_gl_8k.jpg",
+      "md5": "8f2275830e64d10cfcc57402545025e8",
+      "sha256": "fd6440044b0fcbdde97ec30e59d3aca2dc7529af32894f0e47f5a135709cdcb7"
+    },
+    {
+      "map": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/8k/metal_plate_02/metal_plate_02_arm_8k.jpg",
+      "md5": "94c7d7970fbdb91eac368fe4a914fb39",
+      "sha256": "133a0676b806b60082dfec9bfd5cdd832d182edec1b39645b3c45c917bc39918"
+    }
+  ],
+  "encoder": "astcenc 5.7.0 medium 6x6",
+  "outputs": {
+    "albedo-fallback.aetex": "b654490a0532ec2405aebb16edcf21257c65e0af91d26cb6c42fc7f4092b1c0d",
+    "albedo.aetex": "08a76dd8d4c5fcf9de39031caa8fab61757a1bf266d19397b13cd12aa1a79741",
+    "arm-fallback.aetex": "5109bd0f30e1b4674c0b9894d819eb50e7db5a13b06e21c0ba70a56ebd6e59ff",
+    "arm.aetex": "9630948a57ffa59b48b8da7f318c2e9d784494d066dcada013286e6fda47f373",
+    "brdf.aetex": "dbbe2ba3a5c5f9000543d4864e626e3b70695c43f6eaa8bd0513a18f9fa15acb",
+    "normal-fallback.aetex": "fbbc9bb19f252ccb37311465841fbac0d9ff445d3a6b6b610e4c9086d9db9477",
+    "normal.aetex": "a0d01c8c0bef7d77b199ca2e67febd67da0cac3dc105ff977ce3e7e3af419f0a",
+    "studio.aetex": "0452e2c1f0427cd3b04e3f5c09d4ae667b4f3d905f39bc5079dd7d152e5698e3"
+  }
+}

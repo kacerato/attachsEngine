@@ -29,13 +29,55 @@ permanecem parciais no escopo completo, apesar dos caminhos já validados:
 faltam tabelas globais restantes, captura AGI/RenderDoc inspecionada e
 detecção/matriz completas de GPUs, respectivamente.
 
+## Integração cena/render — 28/08/2026
+
+Implementados `MeshRenderer` com referências ResourceId persistentes,
+serialização de Guid, extração de matrizes afins completas e tint em lote,
+ABI C#/C++ de 88 bytes e apresentação Vulkan com depth/perspectiva.
+`Aether.Rendering` é a raiz do componente hospedado, sem Core depender do
+renderer. A PoC-A de 5.000 instâncias continua separada e disponível.
+
+15 testes novos cobrem ABI, hierarquia/escala não uniforme, entidades
+removidas/recriadas, buffer insuficiente sem escrita parcial, recursos
+desconhecidos, dados inválidos, zero alocação e round-trip texto/binário.
+Android debug/release/lint e shaders foram compilados/validados.
+
+Escopo desse lote: um par cubo/checker embutido, material opaco sem iluminação,
+câmera diagnóstica e cena de teste. Não equivale a PBR, Asset Browser,
+Inspector, save/load pela UI ou Play isolado.
+Contrato e evidências: `SCENE-RENDER-INTEGRATION.md`.
+`scene-snapshot-20260828/report.json` passou em bindless/fallback com
+Khronos validation ativa e estado preservado após retomada. Capturas foram
+revisadas: objetos idênticos; diferenças restritas ao indicador lateral OEM,
+mantidas explicitamente no relatório como desigualdade da tela completa.
+### Esfera PBR 8K — lote seguinte implementado
+
+O launcher agora abre uma esfera de 36.480 triângulos com albedo/normal/ARM
+**8192×8192 reais**, ASTC 6×6 e 14 mips, iluminação GGX/Burley/Fresnel e IBL
+especular de estúdio pré-filtrada offline. IDs/JSON v1 de material, RHI de
+cadeias de mip, fallback 1K RGBA8 e limite de residência por quota/capability.
+Carga em worker exclusivo, com cancelamento antes de teardown da surface.
+
+`material-final-20260828/report.json`: bindless, descritores convencionais e
+fallback de textura passaram em Android, com criação/remoção/transform e
+snapshot preservado na retomada. Cubos e PoC-A também passaram nas regressões.
+HOME durante carga exercitou cancelamento e retomada no mesmo processo.
+Texturas ASTC ocupam ~114 MiB de payload, não a memória total do app; carga
+debug observada ~1,5–1,9 s. 16K não foi ativado. Inspector, multiscatter,
+SH/probes, sombras e pós completo continuam pendentes; M2 continua aberto.
+Detalhes e evidência: `MATERIAL-PREVIEW.md`.
+Build otimizado instalado preservando dados. Checkpoint curto da esfera:
+120,11 FPS exibidos/5,14 s; CPU média por janela 1,15–1,21 ms, pico 4,37 ms.
+Não é medição de Sponza/PoC-A, tempo GPU ou aceite térmico/energético.
+
 ## Resumo
 
 | | |
 |---|---|
-| Testes C# | **486 passando**, 0 falhando (inclui 6 de equivalência/ABI/zero alocação da fixture de instancing, 7 de validação do IDL de fronteira (item 0.4.2), 20 de tokens de design (item 0.3.4) e 11 de hot reload (PoC-D, item 0.2)) |
+| Testes C# | **506 passando**, 0 falhando, 0 pulados (inclui 5 de material/esfera e 15 de integração cena/render); interop nativo obrigatório na regressão |
 | Verificações das ferramentas Android | **47 passando**: 12 de lifecycle/desbloqueio, 18 de frames/evidência incremental, 13 de térmica/FPS e 4 de identidade dos assets após build |
-| Testes C++ | **159 passando**, 0 falhando: 152 da base herdada + 3 de contrato/limites bindless + 4 de timestamps/corpus/comparação ASTC. Regressão C# obrigando interop nativo: 486/486, sem skips. |
+| Testes C++ | **165 passando**, 0 falhando: 159 anteriores + 6 de geometria, formato, mipmaps e residência |
+| Import do material | **6 testes Python passando**: hashes/payloads, resolução real, mips lineares/normais, HDR e LUT |
 | Linhas C# | ~11.000 |
 | Linhas C++ (próprias, sem código vendorizado) | ~3.400 |
 | Dependências baixadas no build | **nenhuma** — build e testes rodam offline; Jolt Physics, Box2D, SQLite, runtime .NET e VMA são vendorizados em `native/third_party/`, com versão/licença/hash ou commit registrados |
@@ -49,8 +91,8 @@ detecção/matriz completas de GPUs, respectivamente.
 | Gates M0–M9 fechados | **0/10** |
 | Hardware M0 | parcial — 1 aparelho Adreno; matriz mínima, Mali e perfil C pendentes |
 | Shell gráfico mínimo (0.1.3 + critério visual M0) | cubo texturizado, depth, staging e rotação por toque validados no Android; projeção corrigida para pré-rotação da surface. Validation layers ativas em build debug (item 2.1.6). M0 continua aberto: hot reload C#, soak formal e matriz de aparelhos pendentes |
-| §4.1 Inventário executável | `docs/MATRIZ-MARCOS.md`: **333 registros** (328 itens numerados + 5 PoCs): 253 não iniciados, 34 parciais, 31 implementados, 9 PoCs, 5 validados em hardware e 1 aceito. Contagens reconciliadas com as linhas; reclassificações refletem escopo integral/evidência, não remoção de funcionalidades. |
-| §4.2 CI confiável | ✅ implementação concluída — `.github/workflows/ci.yml` separa `unit`/`native`/`interop`/`android-host`/`benchmark`/`clean-build-nightly`; integração e clean build exigem a DLL nativa; cada job publica evidência; o clean build instala headers Vulkan isolados do NDK e foi reproduzido localmente; a regressão corrente passa em 486/486 testes C# e 159/159 nativos. `metrics/budgets.v1.json` versiona P/Invoke, alocação, CPU, GPU, memória e energia, com gate positivo e negativo. `android-device`/`soak` ficam num workflow manual para runner físico. A execução hospedada continua pendente, pois ainda não há remote nem runner `android-device-lab` |
+| §4.1 Inventário executável | `docs/MATRIZ-MARCOS.md`: **333 registros** (328 itens numerados + 5 PoCs): 249 não iniciados, 39 parciais, 31 implementados, 8 PoCs, 5 validados em hardware e 1 aceito. Contagens reconciliadas com as linhas; reclassificações refletem escopo integral/evidência, não remoção de funcionalidades. |
+| §4.2 CI confiável | ✅ implementação concluída — `.github/workflows/ci.yml` separa `unit`/`native`/`interop`/`android-host`/`benchmark`/`clean-build-nightly`; integração e clean build exigem a DLL nativa; cada job publica evidência; o clean build instala headers Vulkan isolados do NDK e foi reproduzido localmente; a regressão corrente passa em 506/506 testes C# e 165/165 nativos. `metrics/budgets.v1.json` versiona P/Invoke, alocação, CPU, GPU, memória e energia, com gate positivo e negativo. `android-device`/`soak` ficam num workflow manual para runner físico. A execução hospedada continua pendente, pois ainda não há remote nem runner `android-device-lab` |
 | §4 — verdade operacional/correções | ✅ implementação local completa (§4.1–§4.4); execução CI hospedada, laboratório Android e métricas coletadas em hardware permanecem evidências operacionais dos gates seguintes |
 
 `GAP-FLOW-01` está fechado porque `return`, `break` e `continue` agora são nós
@@ -242,14 +284,15 @@ quando suspenso ou sem renderer, evitando consumo térmico fora de foreground.
 
 | Onde | Limitação | Consequência |
 |---|---|---|
-| `.github/workflows/*.yml` | Nenhum workflow rodou no GitHub ainda — o repositório não tem remote configurado (`git remote -v` vazio) | YAML foi parseado e o caminho limpo exato foi reproduzido localmente, incluindo headers Vulkan isolados; a regressão corrente passa em 486/486 testes C# e 159/159 nativos. A primeira execução hospedada ainda é necessária para validar permissões, cache, publicação de artefatos e ambiente dos runners |
+| `.github/workflows/*.yml` | Nenhum workflow rodou no GitHub ainda — o repositório não tem remote configurado (`git remote -v` vazio) | YAML foi parseado e o caminho limpo exato foi reproduzido localmente, incluindo headers Vulkan isolados; a regressão corrente passa em 506/506 testes C# e 165/165 nativos. A primeira execução hospedada ainda é necessária para validar permissões, cache, publicação de artefatos e ambiente dos runners |
 | `World.GetComponent<T>`/`Chunk.GetSpan<T>` | APIs legadas continuam marcando escrita em toda chamada porque devolvem acesso mutável | Compatibilidade é preservada sem falsos negativos. Código novo e todos os sistemas internos usam `Read`/`Write` e spans explícitos; remoção das APIs antigas exige janela de depreciação |
 | `Aether.Flow` | Biblioteca de nós mínima (~12 nós), não o catálogo da Parte 9.5 | Prova a tese, não entrega o produto |
 | `prototype/editor.html` | Rasterização por painter's algorithm em Canvas 2D | Artefatos de ordenação entre objetos grandes que se interpenetram. Irrelevante para o que o protótipo testa |
 | `VulkanSwapchain` | Um único frame em voo e máximo técnico atual de 8 imagens | Correto para o shell gráfico mínimo; múltiplos frames em voo, pacing e política dinâmica pertencem ao RHI completo (item 2.1 do plano principal) |
 | `TriangleRenderer` | Render hardcoded, sem depth, vertex buffer, textura ou Render Graph. Não é mais o renderer ativo no loop principal (substituído por `InstancedRenderer`, ver PoC-A) | Continua no repositório como evidência histórica do item 5.2 (shell gráfico mínimo, 1.000 frames/100 retomadas validados) — a classe compila e funciona, só não é chamada de `android_main.cpp` |
-| `InstancedRenderer` | Cubo gerado por índice e checker procedural enviado à GPU; sem asset importado, material de produto, cena serializável ou Render Graph | Prova de recursos RHI/M0, não componente de gameplay; não promete Inspector, undo ou NoCode ainda |
-| `VulkanMemoryAllocator`/upload | Buffers e imagens 2D de uma camada/mip; upload inicial síncrono RGBA8 na fila gráfica, antes de uso por outros comandos; device/allocator devem sobreviver aos recursos | 2.1.2/2.1.3 permanecem parciais: cotas estáticas de 75% dos heaps precisam de calibração por perfil/pressão; faltam `VK_EXT_memory_budget`, mips, streaming e pipeline cache |
+| `InstancedRenderer` | Sample padrão esfera/PBR 8K com cena serializável e assets cozidos; cubos/PoC-A preservados. Só um par mesh/material conhecido por fixture, sem catálogo GPU genérico ou Render Graph | Não inclui Inspector, undo/NoCode de materiais, múltiplos pares simultâneos nem renderer PBR completo; MATERIAL-PREVIEW.md |
+| `MaterialPreviewResources` | ~114 MiB de payload dos três mapas ASTC; fallback 1K; limite de residência inicial e worker de carga, sem UI de progresso nem streaming | 8K não é garantia em todo aparelho. Cerca de 130,4 MiB adicionais de assets no pacote; 16K não habilitado. Sombras, multiscatter, SH/probes e pós completo pendentes |
+| `VulkanMemoryAllocator`/upload | Buffers e imagens 2D de uma camada com cadeia de mips; upload inicial RGBA8/ASTC/RGBA16F na fila gráfica, exclusivo do worker durante carga do material; device/allocator sobrevivem aos recursos | 2.1.2/2.1.3 permanecem parciais: cotas estáticas precisam de calibração por pressão/perfil; faltam `VK_EXT_memory_budget`, streaming e pipeline cache completo |
 | PoC-C térmica | Runner integra CPU, FPS exibido e ibat×vbat com cobertura/integração temporal. Smoke de 28/08: 60,039 FPS, mínimo 59/1 s, média 2,273 W/status térmico 0. Ensaio longo interrompido a pedido do usuário: 769,373 s de CPU recuperados do Logcat, sem série longa válida de energia/FPS | PoC-C continua parcial: 30 min não foram concluídos, sensor não alimenta o PowerGovernor e matriz pendente. A perda de dados ao interromper motivou persistência JSONL incremental; não reconstruímos métricas inexistentes. Ver PROFILING-ANDROID.md |
 | `InstancedRenderer` (PoC-A) | `m0-batch-20260828/optimized-smoke/`: 60,039 FPS exibidos; CPU média 2,412 ms/pico 18,237 ms, thread de render média 1,217 ms/pico 2,318 ms. Cache de 100 KB prepara cores/layout sem alterar a animação; interop wall médio 0,537 ms, antes 1,192 ms | PoC-A parcial: o processo excede 3 ms. Simpleperf atribuiu custo a trigonometria e threads Binder/BLAST, mas não a causa de cada pico; não há prova contra GC/JIT. Faltam matriz e timestamps GPU; ver PROFILING-ANDROID.md |
 | Identidade do C# empacotado | Gradle agora publica C# Release para ARM64 e gera assets/manifesto/build ID pelo conteúdo; a DLL legada é excluída. Android troca arquivos atomicamente e confirma a geração por último; tamanho igual não significa versão igual | Corrigido e integrado: build debug/release/lint e verificações de identidade passam; relatório v4 compara o build ID do APK com o confirmado pelo processo. Não é hot reload: a atualização ocorre antes de carregar CoreCLR |

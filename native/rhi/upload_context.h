@@ -27,6 +27,8 @@ public:
   // a formatos comprimidos, mips ou depth antes de esses contratos existirem.
   bool uploadRgba8ToSampledImage(VulkanMemoryAllocator &allocator, const void *sourceBytes,
                                  u64 sourceSizeBytes, VulkanImage &destination);
+  bool uploadSampledMipChain(VulkanMemoryAllocator &allocator, const void *sourceBytes,
+                            u64 sourceSizeBytes, VulkanImage &destination);
 
 private:
   VkDevice device_ = VK_NULL_HANDLE;
