@@ -187,7 +187,7 @@ public:
   bool initializeInstance(const char *appName,
                           const char *const *requiredExtensions,
                           u32 requiredExtensionCount);
-  bool initializeDevice(VkSurfaceKHR presentationSurface);
+  bool initializeDevice(VkSurfaceKHR presentationSurface, bool allowBindless = true);
   void shutdown();
 
   VkDevice handle() const override { return device_; }
@@ -203,6 +203,7 @@ public:
   const DeviceFeatures &deviceFeatures() const { return deviceFeatures_; }
   DeviceProfile deviceProfile() const { return deviceProfile_; }
   const EnabledPaths &enabledPaths() const { return enabledPaths_; }
+  u32 bindlessTextureCapacity() const { return bindlessTextureCapacity_; }
 
   // Item 2.1.6 do plano ("camadas de validação, marcadores de debug, captura
   // de frame"): true só em build debug (!NDEBUG) E quando VK_EXT_debug_utils
@@ -229,6 +230,7 @@ private:
   DeviceFeatures deviceFeatures_{};
   DeviceProfile deviceProfile_ = DeviceProfile::C;
   EnabledPaths enabledPaths_{};
+  u32 bindlessTextureCapacity_ = 0;
 
 #if AETHER_VULKAN_VALIDATION
   VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;

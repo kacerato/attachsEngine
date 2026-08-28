@@ -102,6 +102,18 @@ public:
     return it == entries_.end() ? 0 : it->second.hitCount;
   }
 
+  // Visita todo handle cacheado — usado por donos que precisam destruir
+  // recursos reais (ex.: vkDestroyPipeline) antes de descartar o cache, já
+  // que DescriptorCache em si é agnóstico ao tipo de Handle e não sabe como
+  // liberá-lo.
+  template <typename Fn> void forEachHandle(Fn &&fn) const {
+    for (const auto &[key, entry] : entries_) {
+      fn(entry.handle);
+    }
+  }
+
+  void clear() { entries_.clear(); }
+
 private:
   struct Entry {
     Handle handle;

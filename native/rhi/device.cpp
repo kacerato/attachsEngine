@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include "rhi/descriptor_indexing_support.h"
 #include <vector>
 
 // AETHER_VULKAN_VALIDATION é definida por device.h (controla o layout da
@@ -411,6 +412,10 @@ void VulkanDevice::shutdown() {
   }
   physicalDevice_ = VK_NULL_HANDLE;
   graphicsQueueFamily_ = 0;
+  bindlessTextureCapacity_ = 0;
+  deviceFeatures_ = {};
+  enabledPaths_ = {};
+  deviceProfile_ = DeviceProfile::C;
 }
 
 #if AETHER_VULKAN_VALIDATION
@@ -459,7 +464,8 @@ bool VulkanDevice::initialize(const char *appName) {
 bool VulkanDevice::initializeInstance(const char *appName,
                                       const char *const *requiredExtensions,
                                       u32 requiredExtensionCount) {
-  if (instance_ != VK_NULL_HANDLE || appName == nullptr) return false;
+  if (instance_ != VK_NULL_HANDLE || appName == nullptr ||
+      (requiredExtensionCount > 0 && requiredExtensions == nullptr)) return false;
 
   u32 availableExtensionCount = 0;
   if (vkEnumerateInstanceExtensionProperties(nullptr, &availableExtensionCount, nullptr) != VK_SUCCESS) {
@@ -481,8 +487,11 @@ bool VulkanDevice::initializeInstance(const char *appName,
     if (!found) return false;
   }
 
-  std::vector<const char *> enabledExtensions(requiredExtensions,
-                                              requiredExtensions + requiredExtensionCount);
+  std::vector<const char *> enabledExtensions;
+  if (requiredExtensionCount > 0) {
+    if (requiredExtensions == nullptr) return false;
+    enabledExtensions.assign(requiredExtensions, requiredExtensions + requiredExtensionCount);
+  }
   std::vector<const char *> enabledLayers;
 
   // Item 2.1.4 (bindless): VK_KHR_get_physical_device_properties2 foi
@@ -585,6 +594,13 @@ bool VulkanDevice::initializeInstance(const char *appName,
   }
 
 #if AETHER_VULKAN_VALIDATION
+  __android_log_print(ANDROID_LOG_INFO, "Aether.Vulkan",
+      "[VulkanDiagnostics] validation=%s debug_utils=%s",
+      validationLayerAvailable ? "enabled" : "disabled",
+      debugUtilsExtensionAvailable ? "enabled" : "disabled");
+#endif
+
+#if AETHER_VULKAN_VALIDATION
   if (debugUtilsExtensionAvailable) {
     auto createMessenger = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
         vkGetInstanceProcAddr(instance_, "vkCreateDebugUtilsMessengerEXT"));
@@ -605,7 +621,7 @@ bool VulkanDevice::initializeInstance(const char *appName,
   return true;
 }
 
-bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface) {
+bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allowBindless) {
   if (instance_ == VK_NULL_HANDLE || device_ != VK_NULL_HANDLE) return false;
 
   u32 physCount = 0;
@@ -720,19 +736,23 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface) {
   // quarta sub-feature especificamente para tipos de imagem amostrada, vkCreateDescriptorSetLayout
   // viola VUID-...-descriptorBindingSampledImageUpdateAfterBind-03006, confirmado em hardware real
   // via validation layer, item 2.1.6 — a lista de "3 mínimas" estava incompleta).
-  bool bindlessSupported = descriptorIndexingExtensionSupported &&
-                           descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing &&
-                           descriptorIndexingFeatures.descriptorBindingPartiallyBound &&
-                           descriptorIndexingFeatures.runtimeDescriptorArray &&
-                           descriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind;
-
-  VkPhysicalDeviceDescriptorIndexingFeatures enabledDescriptorIndexingFeatures{};
-  enabledDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-  enabledDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = bindlessSupported;
-  enabledDescriptorIndexingFeatures.descriptorBindingPartiallyBound = bindlessSupported;
-  enabledDescriptorIndexingFeatures.descriptorBindingUpdateUnusedWhilePending = bindlessSupported;
-  enabledDescriptorIndexingFeatures.runtimeDescriptorArray = bindlessSupported;
-  enabledDescriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind = bindlessSupported;
+  VkPhysicalDeviceDescriptorIndexingProperties indexingProperties{};
+  indexingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES;
+  if (descriptorIndexingExtensionSupported) {
+    auto getProperties2 = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+        vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceProperties2"));
+    if (getProperties2 != nullptr) {
+      VkPhysicalDeviceProperties2 properties{};
+      properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+      properties.pNext = &indexingProperties;
+      getProperties2(physicalDevice_, &properties);
+    }
+  }
+  bindlessTextureCapacity_ = ae::rhi::bindlessTextureCapacity(
+      descriptorIndexingExtensionSupported, descriptorIndexingFeatures, indexingProperties);
+  const bool bindlessSupported = allowBindless && bindlessTextureCapacity_ > 0;
+  if (!bindlessSupported) bindlessTextureCapacity_ = 0;
+  auto enabledDescriptorIndexingFeatures = enabledBindlessTextureFeatures(bindlessSupported);
 
   VkDeviceCreateInfo deviceInfo{};
   deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

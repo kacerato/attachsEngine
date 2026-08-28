@@ -1,8 +1,10 @@
 #include "platform/android/instanced_renderer.h"
 
 #include "rhi/shaders/instanced_spirv.h"
+#include "rhi/shaders/instanced_fallback_spirv.h"
 
 #include <android/log.h>
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstring>
@@ -134,8 +136,10 @@ bool InstancedRenderer::createRenderPass() {
 bool InstancedRenderer::createPipeline() {
   VkShaderModule vertModule = createShaderModule(device_, rhi::shaders::kInstancedVertSpirv,
                                                  rhi::shaders::kInstancedVertSpirvSize);
-  VkShaderModule fragModule = createShaderModule(device_, rhi::shaders::kInstancedFragSpirv,
-                                                 rhi::shaders::kInstancedFragSpirvSize);
+  VkShaderModule fragModule = useBindless_
+      ? createShaderModule(device_, rhi::shaders::kInstancedFragSpirv, rhi::shaders::kInstancedFragSpirvSize)
+      : createShaderModule(device_, rhi::shaders::kInstanced_FallbackFragSpirv,
+                           rhi::shaders::kInstanced_FallbackFragSpirvSize);
   if (vertModule == VK_NULL_HANDLE || fragModule == VK_NULL_HANDLE) {
     if (vertModule != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vertModule, nullptr);
     if (fragModule != VK_NULL_HANDLE) vkDestroyShaderModule(device_, fragModule, nullptr);
@@ -222,7 +226,7 @@ bool InstancedRenderer::createPipeline() {
   colorBlend.attachmentCount = 1;
   colorBlend.pAttachments = &colorBlendAttachment;
 
-  const VkDescriptorSetLayout bindlessLayout = bindlessRegistry_.layout();
+  const VkDescriptorSetLayout bindlessLayout = textureSetLayout_;
   VkPipelineLayoutCreateInfo layoutInfo{};
   layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   layoutInfo.setLayoutCount = 1;
@@ -391,13 +395,55 @@ bool InstancedRenderer::createTextureResources() {
 }
 
 bool InstancedRenderer::createBindlessRegistry() {
-  if (!bindlessRegistry_.initialize(device_, kBindlessCapacity, dummyTexture_.view(),
+  if (!bindlessRegistry_.initialize(device_, std::min(kBindlessCapacity, rhiDevice_->bindlessTextureCapacity()), dummyTexture_.view(),
                                     dummySampler_.handle())) {
     return false;
   }
   baseTextureIndex_ = bindlessRegistry_.registerTexture(
       baseTexture_.view(), baseSampler_.handle(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
   return baseTextureIndex_ != rhi::kBindlessIndexInvalid;
+}
+
+bool InstancedRenderer::createTextureDescriptors() {
+  if (useBindless_) {
+    if (!createBindlessRegistry()) return false;
+    textureSetLayout_ = bindlessRegistry_.layout();
+    textureSet_ = bindlessRegistry_.descriptorSet();
+    return true;
+  }
+  VkDescriptorSetLayoutBinding binding{};
+  binding.binding = 0;
+  binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  binding.descriptorCount = 1;
+  binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  VkDescriptorSetLayoutCreateInfo layout{};
+  layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  layout.bindingCount = 1;
+  layout.pBindings = &binding;
+  if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &textureSetLayout_) != VK_SUCCESS) return false;
+  VkDescriptorPoolSize size{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1};
+  VkDescriptorPoolCreateInfo pool{};
+  pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  pool.maxSets = 1;
+  pool.poolSizeCount = 1;
+  pool.pPoolSizes = &size;
+  if (vkCreateDescriptorPool(device_, &pool, nullptr, &texturePool_) != VK_SUCCESS) return false;
+  VkDescriptorSetAllocateInfo allocation{};
+  allocation.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  allocation.descriptorPool = texturePool_;
+  allocation.descriptorSetCount = 1;
+  allocation.pSetLayouts = &textureSetLayout_;
+  if (vkAllocateDescriptorSets(device_, &allocation, &textureSet_) != VK_SUCCESS) return false;
+  VkDescriptorImageInfo image{baseSampler_.handle(), baseTexture_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet write{};
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.dstSet = textureSet_;
+  write.descriptorCount = 1;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  write.pImageInfo = &image;
+  vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+  baseTextureIndex_ = 0;
+  return true;
 }
 
 bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapchain &swapchain,
@@ -407,6 +453,7 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   device_ = device.handle();
   physicalDevice_ = device.physicalDevice();
   rhiDevice_ = &device;
+  useBindless_ = device.enabledPaths().bindless;
   memoryAllocator_ = &device.memoryAllocator();
   swapchain_ = &swapchain;
   graphicsQueueFamily_ = device.graphicsQueueFamily();
@@ -436,8 +483,8 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o depth buffer.");
     return false;
   }
-  if (!createBindlessRegistry()) {
-    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o registro bindless de texturas.");
+  if (!createTextureDescriptors()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar os descritores de textura.");
     return false;
   }
   if (!createRenderPass()) {
@@ -462,8 +509,8 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   rhiDevice_->setObjectName(VK_OBJECT_TYPE_PIPELINE_LAYOUT, reinterpret_cast<u64>(pipelineLayout_),
                             "InstancedRenderer/pipelineLayout");
   rhiDevice_->setObjectName(VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                            reinterpret_cast<u64>(bindlessRegistry_.descriptorSet()),
-                            "InstancedRenderer/bindlessSet");
+                            reinterpret_cast<u64>(textureSet_),
+                            "InstancedRenderer/textureSet");
   rhiDevice_->setObjectName(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<u64>(instanceBuffer_.handle()),
                             "InstancedRenderer/instanceBuffer");
   rhiDevice_->setObjectName(VK_OBJECT_TYPE_IMAGE, reinterpret_cast<u64>(baseTexture_.handle()),
@@ -473,6 +520,8 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
 
   const rhi::MemoryBudgetEntry bufferBudget =
       memoryAllocator_->budgetSnapshot().entries[static_cast<usize>(rhi::MemoryClass::Buffer)];
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "Descritores: caminho=%s, capacidade bindless=%u.",
+                      useBindless_ ? "bindless" : "fallback", device.bindlessTextureCapacity());
   __android_log_print(ANDROID_LOG_INFO, LogTag,
                       "RHI/VMA: buffer de instâncias=%llu bytes; uso=%llu, limite=%llu bytes.",
                       static_cast<unsigned long long>(instanceBuffer_.sizeBytes()),
@@ -515,6 +564,13 @@ void InstancedRenderer::shutdown() {
     renderPass_ = VK_NULL_HANDLE;
   }
   bindlessRegistry_.shutdown();
+  if (texturePool_ != VK_NULL_HANDLE) vkDestroyDescriptorPool(device_, texturePool_, nullptr);
+  if (!useBindless_ && textureSetLayout_ != VK_NULL_HANDLE)
+    vkDestroyDescriptorSetLayout(device_, textureSetLayout_, nullptr);
+  texturePool_ = VK_NULL_HANDLE;
+  textureSetLayout_ = VK_NULL_HANDLE;
+  textureSet_ = VK_NULL_HANDLE;
+  useBindless_ = false;
   baseTextureIndex_ = rhi::kBindlessIndexInvalid;
   baseSampler_.shutdown();
   baseTexture_.reset();
@@ -525,6 +581,7 @@ void InstancedRenderer::shutdown() {
   uploadContext_.shutdown();
   device_ = VK_NULL_HANDLE;
   physicalDevice_ = VK_NULL_HANDLE;
+  rhiDevice_ = nullptr;
   memoryAllocator_ = nullptr;
   swapchain_ = nullptr;
   fillInstanceBuffer_ = nullptr;
@@ -582,7 +639,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
   rhiDevice_->cmdBeginDebugLabel(commandBuffer_, "InstancedRenderer/cube", 0.2f, 0.6f, 0.9f);
 
   vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-  const VkDescriptorSet bindlessSet = bindlessRegistry_.descriptorSet();
+  const VkDescriptorSet bindlessSet = textureSet_;
   vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1,
                           &bindlessSet, 0, nullptr);
   const VkExtent2D displayExtent = swapchain_->displayExtent();

@@ -192,6 +192,7 @@ if(ANDROID)
 
   add_library(aether_android SHARED
     platform/android/android_main.cpp
+    platform/android/android_launch_options.cpp
     platform/android/android_frame_profiler.cpp
     platform/android/android_window.cpp
     platform/android/android_paths.cpp
@@ -292,6 +293,8 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_descriptor_cache.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_bindless_registry.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_device_profile.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_descriptor_indexing_support.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_astc_probe_validation.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_memory_budget.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_rhi_resources.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp

@@ -5,6 +5,8 @@
 #include <android/log.h>
 
 #include <cmath>
+#include "profiler/gpu_timestamp.h"
+#include "platform/astc_probe_validation.h"
 #include <cstring>
 #include <vector>
 
@@ -51,8 +53,38 @@ struct ProbeResources {
   VkDeviceMemory readbackBufferMemory = VK_NULL_HANDLE;
   void *readbackBufferMapped = nullptr;
 
+  VkBuffer stagingBuffer = VK_NULL_HANDLE;
+  VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+  void *stagingMapped = nullptr;
+  bool pending = false;
+
+  ~ProbeResources() { destroy(); }
+
+  bool check(VkResult result, const char *operation) const {
+    if (result == VK_SUCCESS) return true;
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "%s falhou: VkResult=%d.", operation, result);
+    return false;
+  }
+
+  bool submitAndWait() {
+    VkSubmitInfo submit{};
+    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &commandBuffer;
+    if (!check(vkQueueSubmit(queue, 1, &submit, fence), "vkQueueSubmit")) return false;
+    pending = true;
+    if (!check(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX), "vkWaitForFences")) return false;
+    pending = false;
+    return true;
+  }
+
   void destroy() {
     if (device == VK_NULL_HANDLE) return;
+    // Falha de espera nunca autoriza destruir recursos ainda usados pela GPU.
+    if (pending) check(vkDeviceWaitIdle(device), "vkDeviceWaitIdle/cleanup");
+    if (stagingMapped != nullptr) vkUnmapMemory(device, stagingMemory);
+    if (stagingBuffer != VK_NULL_HANDLE) vkDestroyBuffer(device, stagingBuffer, nullptr);
+    if (stagingMemory != VK_NULL_HANDLE) vkFreeMemory(device, stagingMemory, nullptr);
     if (pipeline != VK_NULL_HANDLE) vkDestroyPipeline(device, pipeline, nullptr);
     if (pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
     if (shaderModule != VK_NULL_HANDLE) vkDestroyShaderModule(device, shaderModule, nullptr);
@@ -74,6 +106,7 @@ struct ProbeResources {
     if (readbackBufferMapped != nullptr) vkUnmapMemory(device, readbackBufferMemory);
     if (readbackBuffer != VK_NULL_HANDLE) vkDestroyBuffer(device, readbackBuffer, nullptr);
     if (readbackBufferMemory != VK_NULL_HANDLE) vkFreeMemory(device, readbackBufferMemory, nullptr);
+    device = VK_NULL_HANDLE;
   }
 };
 
@@ -161,41 +194,36 @@ void transitionImageLayout(VkCommandBuffer cmd, VkImage image, VkImageLayout old
   vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 }
 
-// Preenche `pixels` (RGBA8, linhas compactas) com um padrão de teste que a heurística de eixo
-// único do encoder consegue representar razoavelmente bem (variação suave por bloco 4x4) —
-// suficiente para validar bit-packing/decodificação de hardware, não para medir qualidade visual
-// de compressão (ver limitação documentada em astc_encode.comp).
-void fillTestPattern(std::vector<u8> &pixels, u32 width, u32 height) {
-  pixels.resize(static_cast<usize>(width) * height * 4);
-  for (u32 y = 0; y < height; ++y) {
-    for (u32 x = 0; x < width; ++x) {
-      // Blocos 4x4 de cor sólida, variando lentamente ao longo da imagem — cada bloco individual
-      // é praticamente uniforme (o caso que a heurística de bounding box representa bem), mas a
-      // textura inteira varia, evitando medir só o caso degenerado "tudo uma cor".
-      u32 blockX = x / 4;
-      u32 blockY = y / 4;
-      u8 r = static_cast<u8>((blockX * 7) & 0xFF);
-      u8 g = static_cast<u8>((blockY * 11) & 0xFF);
-      u8 b = static_cast<u8>(((blockX + blockY) * 5) & 0xFF);
-      usize offset = (static_cast<usize>(y) * width + x) * 4;
-      pixels[offset + 0] = r;
-      pixels[offset + 1] = g;
-      pixels[offset + 2] = b;
-      pixels[offset + 3] = 255;
-    }
-  }
-}
-
 } // namespace
 
 AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureWidth, u32 textureHeight) {
   AstcEncodeProbeResult result;
+  if (device.handle() == VK_NULL_HANDLE || textureWidth == 0 || textureHeight == 0 ||
+      textureWidth > 4096 || textureHeight > 4096) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Probe aceita dimensões entre 1 e 4096 e device válido.");
+    return result;
+  }
 
   ProbeResources res;
   res.device = device.handle();
   res.physicalDevice = device.physicalDevice();
   res.queueFamily = device.graphicsQueueFamily();
   vkGetDeviceQueue(res.device, res.queueFamily, 0, &res.queue);
+
+  u32 queueCount = 0;
+  vkGetPhysicalDeviceQueueFamilyProperties(res.physicalDevice, &queueCount, nullptr);
+  std::vector<VkQueueFamilyProperties> queues(queueCount);
+  vkGetPhysicalDeviceQueueFamilyProperties(res.physicalDevice, &queueCount, queues.data());
+  if (res.queueFamily >= queueCount || !(queues[res.queueFamily].queueFlags & VK_QUEUE_COMPUTE_BIT) ||
+      queues[res.queueFamily].timestampValidBits == 0) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Fila sem compute/timestamps: evidência indisponível.");
+    return result;
+  }
+  VkPhysicalDeviceProperties deviceProps{};
+  vkGetPhysicalDeviceProperties(res.physicalDevice, &deviceProps);
+  if (textureWidth > deviceProps.limits.maxImageDimension2D ||
+      textureHeight > deviceProps.limits.maxImageDimension2D ||
+      !deviceProps.limits.timestampComputeAndGraphics) return result;
 
   const u32 blocksX = (textureWidth + 3) / 4;
   const u32 blocksY = (textureHeight + 3) / 4;
@@ -262,26 +290,21 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   // Staging: sobe o padrão de teste RGBA8 via buffer host-visible + vkCmdCopyBufferToImage —
   // mesma técnica de VulkanUploadContext, reimplementada aqui localmente porque este probe é
   // standalone e não compartilha estado com o upload context do shell.
-  std::vector<u8> testPixels;
-  fillTestPattern(testPixels, textureWidth, textureHeight);
+  std::vector<u8> testPixels(static_cast<usize>(textureWidth) * textureHeight * 4);
+  if (!ae::platform::fillAstcProbePattern(testPixels, textureWidth, textureHeight)) return result;
   VkDeviceSize stagingSize = static_cast<VkDeviceSize>(testPixels.size());
 
-  VkBuffer stagingBuffer = VK_NULL_HANDLE;
-  VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-  void *stagingMapped = nullptr;
-  if (!createHostVisibleBuffer(res, stagingSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &stagingBuffer, &stagingMemory, &stagingMapped)) {
+  if (!createHostVisibleBuffer(res, stagingSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &res.stagingBuffer, &res.stagingMemory, &res.stagingMapped)) {
     res.destroy();
     return result;
   }
-  std::memcpy(stagingMapped, testPixels.data(), testPixels.size());
+  std::memcpy(res.stagingMapped, testPixels.data(), testPixels.size());
 
   // ---------------- Buffer de saída dos blocos ASTC ----------------
   if (!createHostVisibleBuffer(res, outputBufferSize,
-                               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                               VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                &res.outputBuffer, &res.outputBufferMemory, &res.outputBufferMapped)) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar buffer de saída.");
-    vkDestroyBuffer(res.device, stagingBuffer, nullptr);
-    vkFreeMemory(res.device, stagingMemory, nullptr);
     res.destroy();
     return result;
   }
@@ -292,8 +315,6 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   shaderInfo.codeSize = rhi::shaders::kAstc_EncodeCompSpirvSize;
   shaderInfo.pCode = rhi::shaders::kAstc_EncodeCompSpirv;
   if (vkCreateShaderModule(res.device, &shaderInfo, nullptr, &res.shaderModule) != VK_SUCCESS) {
-    vkDestroyBuffer(res.device, stagingBuffer, nullptr);
-    vkFreeMemory(res.device, stagingMemory, nullptr);
     res.destroy();
     return result;
   }
@@ -313,8 +334,6 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   setLayoutInfo.bindingCount = 2;
   setLayoutInfo.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(res.device, &setLayoutInfo, nullptr, &res.descriptorSetLayout) != VK_SUCCESS) {
-    vkDestroyBuffer(res.device, stagingBuffer, nullptr);
-    vkFreeMemory(res.device, stagingMemory, nullptr);
     res.destroy();
     return result;
   }
@@ -331,8 +350,6 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   layoutInfo.pushConstantRangeCount = 1;
   layoutInfo.pPushConstantRanges = &pushConstantRange;
   if (vkCreatePipelineLayout(res.device, &layoutInfo, nullptr, &res.pipelineLayout) != VK_SUCCESS) {
-    vkDestroyBuffer(res.device, stagingBuffer, nullptr);
-    vkFreeMemory(res.device, stagingMemory, nullptr);
     res.destroy();
     return result;
   }
@@ -345,8 +362,6 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   pipelineInfo.stage.pName = "main";
   pipelineInfo.layout = res.pipelineLayout;
   if (vkCreateComputePipelines(res.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &res.pipeline) != VK_SUCCESS) {
-    vkDestroyBuffer(res.device, stagingBuffer, nullptr);
-    vkFreeMemory(res.device, stagingMemory, nullptr);
     res.destroy();
     return result;
   }
@@ -360,8 +375,6 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   descPoolInfo.poolSizeCount = 2;
   descPoolInfo.pPoolSizes = poolSizes;
   if (vkCreateDescriptorPool(res.device, &descPoolInfo, nullptr, &res.descriptorPool) != VK_SUCCESS) {
-    vkDestroyBuffer(res.device, stagingBuffer, nullptr);
-    vkFreeMemory(res.device, stagingMemory, nullptr);
     res.destroy();
     return result;
   }
@@ -372,8 +385,6 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   descAllocInfo.descriptorSetCount = 1;
   descAllocInfo.pSetLayouts = &res.descriptorSetLayout;
   if (vkAllocateDescriptorSets(res.device, &descAllocInfo, &res.descriptorSet) != VK_SUCCESS) {
-    vkDestroyBuffer(res.device, stagingBuffer, nullptr);
-    vkFreeMemory(res.device, stagingMemory, nullptr);
     res.destroy();
     return result;
   }
@@ -406,7 +417,7 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   VkCommandBufferBeginInfo beginInfo{};
   beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-  vkBeginCommandBuffer(res.commandBuffer, &beginInfo);
+  if (!res.check(vkBeginCommandBuffer(res.commandBuffer, &beginInfo), "vkBeginCommandBuffer")) return result;
 
   vkCmdResetQueryPool(res.commandBuffer, res.queryPool, 0, 2);
 
@@ -416,13 +427,13 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   VkBufferImageCopy copyRegion{};
   copyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
   copyRegion.imageExtent = {textureWidth, textureHeight, 1};
-  vkCmdCopyBufferToImage(res.commandBuffer, stagingBuffer, res.sourceImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+  vkCmdCopyBufferToImage(res.commandBuffer, res.stagingBuffer, res.sourceImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
   transitionImageLayout(res.commandBuffer, res.sourceImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
                         VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-  vkCmdWriteTimestamp(res.commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, res.queryPool, 0);
+  vkCmdWriteTimestamp(res.commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, res.queryPool, 0);
 
   vkCmdBindPipeline(res.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, res.pipeline);
   vkCmdBindDescriptorSets(res.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, res.pipelineLayout, 0, 1, &res.descriptorSet, 0, nullptr);
@@ -433,38 +444,25 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   VkMemoryBarrier computeToHostBarrier{};
   computeToHostBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
   computeToHostBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-  computeToHostBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
-  vkCmdPipelineBarrier(res.commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+  computeToHostBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  vkCmdPipelineBarrier(res.commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                        0, 1, &computeToHostBarrier, 0, nullptr, 0, nullptr);
 
   vkCmdWriteTimestamp(res.commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, res.queryPool, 1);
 
-  vkEndCommandBuffer(res.commandBuffer);
-
-  VkSubmitInfo submitInfo{};
-  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submitInfo.commandBufferCount = 1;
-  submitInfo.pCommandBuffers = &res.commandBuffer;
-  vkQueueSubmit(res.queue, 1, &submitInfo, res.fence);
-  vkWaitForFences(res.device, 1, &res.fence, VK_TRUE, UINT64_MAX);
-
-  // ---------------- Medição de tempo via GPU timestamp ----------------
-  VkPhysicalDeviceProperties deviceProps{};
-  vkGetPhysicalDeviceProperties(res.physicalDevice, &deviceProps);
-  float timestampPeriodNs = deviceProps.limits.timestampPeriod;
+  if (!res.check(vkEndCommandBuffer(res.commandBuffer), "vkEndCommandBuffer") || !res.submitAndWait()) return result;
 
   u64 timestamps[2] = {0, 0};
   VkResult queryResult = vkGetQueryPoolResults(res.device, res.queryPool, 0, 2, sizeof(timestamps), timestamps,
                                                sizeof(u64), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
-  if (queryResult == VK_SUCCESS && timestamps[1] > timestamps[0]) {
-    double elapsedNs = static_cast<double>(timestamps[1] - timestamps[0]) * timestampPeriodNs;
-    result.encodeMilliseconds = elapsedNs / 1.0e6;
+  result.timingValid = queryResult == VK_SUCCESS && ae::profiler::gpuTimestampMilliseconds(
+      timestamps[0], timestamps[1], queues[res.queueFamily].timestampValidBits,
+      deviceProps.limits.timestampPeriod, result.encodeMilliseconds);
+  if (!result.timingValid) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Timestamp inválido: evidência de desempenho rejeitada.");
+    return result;
   }
   result.blockCount = blockCount;
-  result.succeeded = true;
-
-  vkDestroyBuffer(res.device, stagingBuffer, nullptr);
-  vkFreeMemory(res.device, stagingMemory, nullptr);
 
   // ---------------- Validação via hardware decode ----------------
   // Cria uma imagem ASTC_4x4 real, sobe os blocos gerados pelo compute shader, e usa vkCmdBlitImage
@@ -473,7 +471,9 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   // reimplementação própria.
   VkFormatProperties astcFormatProps{};
   vkGetPhysicalDeviceFormatProperties(res.physicalDevice, VK_FORMAT_ASTC_4x4_UNORM_BLOCK, &astcFormatProps);
-  bool astcBlitSupported = (astcFormatProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) != 0 &&
+  VkFormatProperties rgbaProps{};
+  vkGetPhysicalDeviceFormatProperties(res.physicalDevice, VK_FORMAT_R8G8B8A8_UNORM, &rgbaProps);
+  bool astcBlitSupported = (rgbaProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT) != 0 && (astcFormatProps.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) != 0 &&
                            (astcFormatProps.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0;
 
   if (!astcBlitSupported) {
@@ -509,8 +509,8 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   VkCommandBufferBeginInfo beginInfo2{};
   beginInfo2.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   beginInfo2.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-  vkResetCommandBuffer(res.commandBuffer, 0);
-  vkBeginCommandBuffer(res.commandBuffer, &beginInfo2);
+  if (!res.check(vkResetCommandBuffer(res.commandBuffer, 0), "vkResetCommandBuffer") ||
+      !res.check(vkBeginCommandBuffer(res.commandBuffer, &beginInfo2), "vkBeginCommandBuffer/readback")) return result;
 
   transitionImageLayout(res.commandBuffer, res.astcImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -542,43 +542,28 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   readbackCopyRegion.imageExtent = {textureWidth, textureHeight, 1};
   vkCmdCopyImageToBuffer(res.commandBuffer, res.readbackImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, res.readbackBuffer, 1, &readbackCopyRegion);
 
-  vkEndCommandBuffer(res.commandBuffer);
+  VkMemoryBarrier readbackBarrier{};
+  readbackBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+  readbackBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  readbackBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+  vkCmdPipelineBarrier(res.commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+                       0, 1, &readbackBarrier, 0, nullptr, 0, nullptr);
+  if (!res.check(vkEndCommandBuffer(res.commandBuffer), "vkEndCommandBuffer/readback") ||
+      !res.check(vkResetFences(res.device, 1, &res.fence), "vkResetFences") ||
+      !res.submitAndWait()) return result;
 
-  vkResetFences(res.device, 1, &res.fence);
-  VkSubmitInfo submitInfo2{};
-  submitInfo2.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submitInfo2.commandBufferCount = 1;
-  submitInfo2.pCommandBuffers = &res.commandBuffer;
-  vkQueueSubmit(res.queue, 1, &submitInfo2, res.fence);
-  vkWaitForFences(res.device, 1, &res.fence, VK_TRUE, UINT64_MAX);
-
-  // Compara uma amostra de texels (não a imagem inteira, por custo de CPU) entre a fonte original
-  // e o resultado decodificado pelo hardware — um texel por bloco 4x4, no canto (0,0) do bloco.
-  const u8 *decoded = static_cast<const u8 *>(res.readbackBufferMapped);
-  float maxDiff = 0.0f;
-  u32 sampledBlocks = 0;
-  for (u32 by = 0; by < blocksY; by += 4) { // amostra 1 a cada 4 blocos para manter o teste rápido em 4K
-    for (u32 bx = 0; bx < blocksX; bx += 4) {
-      u32 x = bx * 4;
-      u32 y = by * 4;
-      if (x >= textureWidth || y >= textureHeight) continue;
-      usize offset = (static_cast<usize>(y) * textureWidth + x) * 4;
-      for (int c = 0; c < 3; ++c) {
-        float diff = std::fabs(static_cast<float>(decoded[offset + c]) - static_cast<float>(testPixels[offset + c]));
-        maxDiff = std::max(maxDiff, diff);
-      }
-      ++sampledBlocks;
-    }
-  }
-  result.maxChannelDifference = maxDiff;
-  // QUANT_32 (5 bits/canal, 32 níveis) já perde precisão de cor por design frente aos 256 níveis
-  // originais — espaçamento de quantização de ~8 por nível. Uma diferença de até 24 (~3 níveis)
-  // confirma que o hardware decodificou algo estruturalmente coerente com o que foi codificado.
-  result.hardwareDecodeMatchesSource = maxDiff <= 24.0f;
-
+  const auto *decoded = static_cast<const u8 *>(res.readbackBufferMapped);
+  u32 maxDifference = 0;
+  if (!ae::platform::compareAstcProbePixels(testPixels, {decoded, testPixels.size()}, maxDifference)) return result;
+  result.testedTexels = static_cast<u64>(textureWidth) * textureHeight;
+  result.maxChannelDifference = static_cast<float>(maxDifference);
+  // Limite estrutural do corpus sintético, não um critério de qualidade de importação.
+  result.hardwareDecodeMatchesSource = maxDifference <= 24;
+  result.succeeded = result.timingValid && result.hardwareDecodeMatchesSource;
   __android_log_print(ANDROID_LOG_INFO, LogTag,
-                      "Validação de hardware decode: %u blocos amostrados, diferença máxima de canal=%.1f, coerente=%s.",
-                      sampledBlocks, static_cast<double>(maxDiff), result.hardwareDecodeMatchesSource ? "sim" : "não");
+      "Hardware decode: %llu texels RGBA, diferença máxima=%u, coerente=%s.",
+      static_cast<unsigned long long>(result.testedTexels), maxDifference,
+      result.hardwareDecodeMatchesSource ? "sim" : "não");
 
   res.destroy();
   return result;

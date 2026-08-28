@@ -56,16 +56,12 @@ private:
   bool createDepthImage();
   bool createTextureResources();
   bool createBindlessRegistry();
+  bool createTextureDescriptors();
 
   VkDevice device_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
-  // Item 2.1.6 do plano: guardado além do VkDevice handle acima para poder
-  // chamar VulkanDevice::setObjectName/cmdBeginDebugLabel — não dono, só
-  // referência (o VulkanDevice sobrevive ao InstancedRenderer, ver
-  // AndroidVulkanSurface). nullptr é seguro: os métodos de debug em
-  // VulkanDevice são no-op quando VK_EXT_debug_utils não está habilitada
-  // (build release), então rhiDevice_ só é lido em build debug de qualquer
-  // forma.
+  // Referência não proprietária para capabilities e diagnóstico. O device
+  // deve sobreviver ao renderer; a referência é limpa em shutdown().
   rhi::VulkanDevice *rhiDevice_ = nullptr;
   rhi::VulkanMemoryAllocator *memoryAllocator_ = nullptr;
   rhi::VulkanSwapchain *swapchain_ = nullptr;
@@ -80,6 +76,10 @@ private:
   // compartilhado entre renderers; se um segundo pipeline bindless aparecer,
   // promover a dono no VulkanDevice passa a valer a pena.
   rhi::BindlessTextureRegistry bindlessRegistry_{};
+  bool useBindless_ = false;
+  VkDescriptorSetLayout textureSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorPool texturePool_ = VK_NULL_HANDLE;
+  VkDescriptorSet textureSet_ = VK_NULL_HANDLE;
   rhi::VulkanImage dummyTexture_{};
   rhi::VulkanSampler dummySampler_{};
   u32 baseTextureIndex_ = rhi::kBindlessIndexInvalid;

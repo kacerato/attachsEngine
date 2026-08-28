@@ -14,7 +14,7 @@ AndroidVulkanSurface::~AndroidVulkanSurface() {
   shutdown();
 }
 
-bool AndroidVulkanSurface::initialize(ANativeWindow *window) {
+bool AndroidVulkanSurface::initialize(ANativeWindow *window, bool allowBindless) {
   if (window == nullptr || isReady()) return false;
 
   const char *extensions[] = {
@@ -37,7 +37,7 @@ bool AndroidVulkanSurface::initialize(ANativeWindow *window) {
     return false;
   }
 
-  if (!device_.initializeDevice(surface_)) {
+  if (!device_.initializeDevice(surface_, allowBindless)) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag,
                         "Nenhuma GPU possui fila gráfica capaz de apresentar nesta surface.");
     shutdown();

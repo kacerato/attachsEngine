@@ -23,7 +23,7 @@ public:
   AndroidVulkanSurface(const AndroidVulkanSurface &) = delete;
   AndroidVulkanSurface &operator=(const AndroidVulkanSurface &) = delete;
 
-  bool initialize(ANativeWindow *window);
+  bool initialize(ANativeWindow *window, bool allowBindless = true);
   void shutdown();
   bool isReady() const { return surface_ != VK_NULL_HANDLE && swapchain_.isReady(); }
 

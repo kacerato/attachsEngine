@@ -1,4 +1,5 @@
 #include "platform/android/android_frame_profiler.h"
+#include "platform/android/android_launch_options.h"
 #include <android/log.h>
 #include <android/native_activity.h>
 #include <cstdio>
@@ -17,45 +18,8 @@ bool readClock(clockid_t clock, u64 &out) {
 }
 } // namespace
 
-// Read once at launch; no JNI calls or Activity references retained per frame.
 bool readFrameProfilingOption(ANativeActivity *activity) {
-  JNIEnv *env = nullptr;
-  bool attachedHere = false;
-  const jint result = activity->vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
-  if (result == JNI_EDETACHED) {
-    if (activity->vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
-      __android_log_print(ANDROID_LOG_ERROR, LogTag, "[FrameProfile] Falha ao anexar JNI.");
-      return false;
-    }
-    attachedHere = true;
-  } else if (result != JNI_OK) {
-    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[FrameProfile] JNI indisponível.");
-    return false;
-  }
-  bool enabled = false;
-  const bool localFrame = env->PushLocalFrame(8) == JNI_OK;
-  const bool ok = localFrame && [&]() {
-    jclass activityClass = env->GetObjectClass(activity->clazz);
-    if (activityClass == nullptr) return false;
-    jmethodID getIntent = env->GetMethodID(activityClass, "getIntent", "()Landroid/content/Intent;");
-    if (getIntent == nullptr) return false;
-    jobject intent = env->CallObjectMethod(activity->clazz, getIntent);
-    if (env->ExceptionCheck()) return false;
-    if (intent == nullptr) return true;
-    jclass intentClass = env->GetObjectClass(intent);
-    if (intentClass == nullptr) return false;
-    jmethodID getBoolean = env->GetMethodID(intentClass, "getBooleanExtra", "(Ljava/lang/String;Z)Z");
-    if (getBoolean == nullptr) return false;
-    jstring key = env->NewStringUTF("aether.profile_frames");
-    if (key == nullptr) return false;
-    enabled = env->CallBooleanMethod(intent, getBoolean, key, JNI_FALSE) == JNI_TRUE;
-    return !env->ExceptionCheck();
-  }();
-  if (env->ExceptionCheck()) env->ExceptionClear();
-  if (localFrame) env->PopLocalFrame(nullptr);
-  if (attachedHere) activity->vm->DetachCurrentThread();
-  if (!ok) __android_log_print(ANDROID_LOG_ERROR, LogTag, "[FrameProfile] Falha ao ler opção de lançamento.");
-  return ok && enabled;
+  return readBooleanLaunchOption(activity, "aether.profile_frames");
 }
 
 void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,

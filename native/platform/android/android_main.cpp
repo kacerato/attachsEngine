@@ -1,4 +1,6 @@
 #include "platform/android/android_paths.h"
+#include "platform/android/android_launch_options.h"
+#include "platform/android/astc_encode_probe.h"
 #include "platform/android/android_frame_profiler.h"
 #include "platform/android/android_vulkan_surface.h"
 #include "platform/android/android_window.h"
@@ -14,6 +16,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <future>
 
 namespace {
 
@@ -31,6 +34,7 @@ struct AndroidShell final {
   ae::platform::android::AndroidVulkanSurface vulkanSurface;
   ae::platform::android::InstancedRenderer instancedRenderer;
   bool instancedRendererReady = false;
+  bool forceDescriptorFallback = false;
   ae::u64 presentedFrameCount = 0;
   ae::u64 activationCount = 0;
   ae::u64 lifecycleCommandSequence = 0;
@@ -137,7 +141,7 @@ bool recreateSurfaceAndRenderer(AndroidShell &shell) {
   shell.instancedRenderer.shutdown();
   shell.instancedRendererReady = false;
   shell.vulkanSurface.shutdown();
-  if (shell.app->window == nullptr || !shell.vulkanSurface.initialize(shell.app->window)) {
+  if (shell.app->window == nullptr || !shell.vulkanSurface.initialize(shell.app->window, !shell.forceDescriptorFallback)) {
     return false;
   }
   return rebuildInstancedRenderer(shell);
@@ -147,7 +151,7 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
   const ae::platform::LifecycleAction action = shell.lifecycle.apply(event);
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::CreateSurface)) {
     ae::platform::android::ScopedLifecycleStage trace("create-surface-renderer");
-    if (!shell.vulkanSurface.initialize(shell.app->window)) {
+    if (!shell.vulkanSurface.initialize(shell.app->window, !shell.forceDescriptorFallback)) {
       __android_log_print(ANDROID_LOG_ERROR, LogTag,
                           "O shell continuará ativo sem GPU; uma nova janela tentará novamente.");
     } else if (!rebuildInstancedRenderer(shell)) {
@@ -298,6 +302,8 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
 void android_main(android_app *app) {
   AndroidShell shell{};
   shell.app = app;
+  shell.forceDescriptorFallback = ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.force_descriptor_fallback");
   app->userData = &shell;
   app->onAppCmd = handleCommand;
   app->onInputEvent = handleInput;
@@ -316,6 +322,30 @@ void android_main(android_app *app) {
   __android_log_print(ANDROID_LOG_INFO, LogTag, "Shell nativo iniciado.");
 
   initializeDotNetHost(shell);
+
+  // Diagnóstico opt-in, fora da thread de eventos/render. Device e fila são
+  // exclusivos do worker: não há vkQueueSubmit concorrente na fila do shell.
+  std::future<void> astcProbe;
+  if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.astc_probe")) {
+    astcProbe = std::async(std::launch::async, [] {
+      const auto start = std::chrono::steady_clock::now();
+      ae::rhi::VulkanDevice probeDevice;
+      if (!probeDevice.initialize("Aether ASTC diagnostic")) {
+        __android_log_print(ANDROID_LOG_ERROR, "Aether.AstcProbe", "[AstcProbe] {\"succeeded\":false,\"error\":\"device_initialization\"}");
+        return;
+      }
+      const auto result = ae::platform::android::runAstcEncodeProbe(probeDevice, 4096, 4096);
+      const double wallMs = std::chrono::duration<double, std::milli>(
+          std::chrono::steady_clock::now() - start).count();
+      char gpuMs[64] = "null";
+      if (result.timingValid) std::snprintf(gpuMs, sizeof(gpuMs), "%.6f", result.encodeMilliseconds);
+      __android_log_print(ANDROID_LOG_INFO, "Aether.AstcProbe",
+          "[AstcProbe] {\"schemaVersion\":1,\"succeeded\":%s,\"gpu_encode_ms\":%s,\"probe_wall_ms\":%.6f,"
+          "\"tested_texels\":%llu,\"max_channel_difference\":%.1f,\"corpus\":\"opaque_blocks_ramps_checker\"}",
+          result.succeeded ? "true" : "false", gpuMs, wallMs,
+          static_cast<unsigned long long>(result.testedTexels), static_cast<double>(result.maxChannelDifference));
+    });
+  }
 
   while (!shell.lifecycle.isDestroyed()) {
     // Item 5.2 do plano de lacunas: só sai do poll bloqueante (-1, custo
