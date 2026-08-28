@@ -31,9 +31,9 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 257 |
+| não iniciado | 256 |
 | PoC | 9 |
-| parcial | 30 |
+| parcial | 31 |
 | implementado | 32 |
 | validado em hardware | 4 |
 | aceito | 1 |
@@ -81,7 +81,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 0.3.1 | Estudo com 20 usuários das personas P1/P2/P3 | não iniciado | Nenhum artefato de pesquisa de usuário no repositório |
 | 0.3.2 | Protótipo interativo de câmera, gizmos, menu radial (Flutter/nativo, sem engine) | implementado | ESTADO.md linha 63: `prototype/editor.html` ✅; arquivos `prototype/editor.html`, `prototype/verify.mjs`, screenshots `shot-*.png` |
 | 0.3.3 | Teste de usabilidade do protótipo com métricas de tempo-para-tarefa | não iniciado | Nenhum relatório de teste de usabilidade no repositório |
-| 0.3.4 | Sistema de design (tokens, tipografia, ícones, hápticos) | não iniciado | Não há documento/arquivo de design tokens; `prototype/editor.html` usa estilos ad hoc, não um sistema formal |
+| 0.3.4 | Sistema de design (tokens, tipografia, ícones, hápticos) | parcial | `managed/Aether.Core/Design/`: `ColorToken`/`ColorPalette` (temas `Dark`/`Light` transcritos exatamente de `prototype/editor.html`, incluindo cores de eixo X/Y/Z conforme CONVENCOES.md §5), `SpacingScale` (progressão geométrica base-4 + dimensões estruturais citadas pelo plano — TopBar 40dp/Dock 64dp/Rail 44dp), `TypographyScale` (6 degraus nomeados cobrindo a faixa 9-19px observada no protótipo, duas famílias de fonte transcritas), `HapticVocabulary` (mapeia `HapticCue`→`HapticIntensity` para seleção/snap/duplicar/erro/confirmação/menu radial). ✅ 20 testes (`DesignTokensTests.cs`) — cobre conversão hex exata, paletas dark/light distintas com contraste básico, progressão crescente de espaçamento/tipografia, todo `HapticCue` com intensidade mapeada. Continua `parcial`: ícones vetoriais ficam de fora (protótipo usa só glifos de texto, sem pipeline SDF real — trabalho genuíno do item 3.1.1/3.1.2), e nenhuma integração de plataforma (Vibrator/UIFeedbackGenerator) existe ainda para o vocabulário háptico |
 
 ### Etapa 0.4 — Decisões arquiteturais registradas
 
@@ -231,7 +231,7 @@ não recebem estado agregado — servem apenas de navegação.
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
 | 3.1.1 | UI retida com layout flex/constraint, virtualização, SDF | não iniciado | Nenhum framework de UI retida em C#/nativo; `prototype/editor.html` usa HTML/Canvas, fora do runtime de produto (ESTADO.md linha 132) |
-| 3.1.2 | Sistema de design implementado: tokens, tema, ícones | não iniciado | Ver 0.3.4 — nenhum sistema de design formal implementado no produto |
+| 3.1.2 | Sistema de design implementado: tokens, tema, ícones | não iniciado | 0.3.4 já entrega tokens/tema/tipografia/hápticos como dados testados em `Aether.Design`, mas nenhuma UI de produto os consome ainda — ícones vetoriais também continuam ausentes (ver 0.3.4). Este item é sobre a implementação consumindo os tokens numa UI real, não sobre a definição dos tokens em si |
 | 3.1.3 | Animação e física de UI (molas, momentum, snap) | não iniciado | Nenhuma implementação encontrada fora do protótipo HTML |
 | 3.1.4 | Feedback háptico com vocabulário definido | não iniciado | Nenhuma implementação de háptico encontrada |
 | 3.1.5 | Acessibilidade: leitor de tela, escala, alto contraste | não iniciado | Nenhuma implementação encontrada |
