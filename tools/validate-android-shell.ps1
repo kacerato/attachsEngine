@@ -16,6 +16,9 @@ param(
     [ValidateRange(0.1, 100.0)]
     [double]$PowerBudgetWatts = 4.0,
     [switch]$RequirePowerBudget,
+    [switch]$RequireSoakBudget,
+    [ValidateRange(1, 240)]
+    [double]$MinimumSoakFps = 55,
     [switch]$SkipInstall,
     [switch]$PreserveAppData,
     [switch]$ExerciseConfigurationChange,
@@ -31,6 +34,10 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "android-shell-lifecycle.ps1")
 . (Join-Path $PSScriptRoot "android-frame-profile.ps1")
+. (Join-Path $PSScriptRoot "android-soak-profile.ps1")
+if ($RequireSoakBudget -and $SoakMinutes -lt 30) { throw '-RequireSoakBudget exige pelo menos 30 minutos.' }
+if ($RequirePowerBudget -and $SoakMinutes -eq 0) { throw '-RequirePowerBudget exige -SoakMinutes para coletar potência contínua.' }
+$CaptureSeconds = [Math]::Max($ProfileSeconds, $SoakMinutes * 60)
 
 $PackageName = "dev.aether.editor"
 $ActivityName = "android.app.NativeActivity"
@@ -55,7 +62,7 @@ $EvidenceLog = [System.Collections.Generic.List[string]]::new()
 $ConfigurationState = $null
 $WakeState = $null
 $Report = [ordered]@{
-    schemaVersion = 3
+    schemaVersion = 4
     status = "running"
     startedAtUtc = [DateTime]::UtcNow.ToString("o")
     finishedAtUtc = $null
@@ -71,6 +78,8 @@ $Report = [ordered]@{
         profileSeconds = $ProfileSeconds
         powerBudgetWatts = $PowerBudgetWatts
         requirePowerBudget = [bool]$RequirePowerBudget
+        requireSoakBudget = [bool]$RequireSoakBudget
+        minimumSoakFps = $MinimumSoakFps
         configurationChange = [bool]$ExerciseConfigurationChange
         screenCycle = [bool]$ExerciseScreenCycle
         screenCycles = if ($ExerciseScreenCycle) { $ScreenCycles } else { 0 }
@@ -200,12 +209,17 @@ function Get-PowerSample {
         $batteryTemperatureCelsius = [Math]::Round(([int]$Matches[1]) / 10.0, 1)
     }
 
+    $poweredStates = [regex]::Matches($battery, '(?m)^\s*(?:AC|USB|Wireless|Dock) powered:\s*(true|false)\s*$')
+    $externallyPowered = if ($poweredStates.Count -ge 3) {
+        @($poweredStates | Where-Object { $_.Groups[1].Value -eq 'true' }).Count -gt 0
+    } else { $null }
     return [ordered]@{
         capturedAtUtc = [DateTime]::UtcNow.ToString("o")
         thermalStatus = $thermalStatus
         currentAmps = $currentAmps
         voltageVolts = $voltageVolts
         powerWatts = $powerWatts
+        externallyPowered = $externallyPowered
         batteryLevelPercent = $batteryLevel
         batteryTemperatureCelsius = $batteryTemperatureCelsius
     }
@@ -345,7 +359,7 @@ function Assert-AppPid {
 
 function Start-AetherActivity {
     $arguments = @("shell", "am", "start", "-W", "-n", $ComponentName)
-    if ($ProfileSeconds -gt 0) { $arguments += @("--ez", "aether.profile_frames", "true") }
+    if ($CaptureSeconds -gt 0) { $arguments += @("--ez", "aether.profile_frames", "true") }
     $startOutput = Invoke-Adb -Arguments $arguments
     if (($startOutput -join "`n") -match "Error:") {
         throw "Android recusou iniciar $ComponentName`: $($startOutput -join [Environment]::NewLine)"
@@ -496,7 +510,7 @@ try {
     Invoke-Adb -Arguments @("logcat", "-c") | Out-Null
     $WakeState = Prepare-DeviceWakeState
     $Report.configuration.initiallyAsleep = $WakeState.initiallyAsleep
-    if ($ProfileSeconds -gt 0) { $Report.measurements.profileEnvironmentStart = Get-PowerSample }
+    if ($CaptureSeconds -gt 0) { $Report.measurements.profileEnvironmentStart = Get-PowerSample }
     Start-AetherActivity
 
     foreach ($pattern in $StartupPatterns) {
@@ -505,11 +519,48 @@ try {
     Wait-ForPatternCount -Pattern $FrameMilestonePattern -MinimumCount 1 -TimeoutSeconds $StartupTimeoutSeconds -Description "1.000 frames apresentados" | Out-Null
     $initialPid = Assert-AppPid -ExpectedPid $null -Context "a inicialização"
     Assert-NoRuntimeFailure
+    $managedLog = Get-AetherLog
+    if ($managedLog -match '\[ManagedBuild\] id=([a-f0-9]{64}) reused=([01])') {
+        $Report.measurements.managedBuild = [ordered]@{ observedId = $Matches[1]; reusedExtraction = $Matches[2] -eq '1'; apkId = $null; coreSha256 = $null }
+        if (-not $SkipInstall) {
+            $archive = [IO.Compression.ZipFile]::OpenRead($resolvedApk)
+            try {
+                $idEntry = $archive.GetEntry('assets/dotnet_build_id.txt')
+                $dllEntry = $archive.GetEntry('assets/dotnet/Aether.Core.dll')
+                if ($null -eq $idEntry -or $null -eq $dllEntry) { throw 'APK sem identidade/assembly gerenciado.' }
+                $reader = [IO.StreamReader]::new($idEntry.Open())
+                try { $Report.measurements.managedBuild.apkId = $reader.ReadToEnd() } finally { $reader.Dispose() }
+                $stream = $dllEntry.Open()
+                $hasher = [Security.Cryptography.SHA256]::Create()
+                try { $Report.measurements.managedBuild.coreSha256 = [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace('-', '') }
+                finally { $stream.Dispose(); $hasher.Dispose() }
+                if ($Report.measurements.managedBuild.apkId -cne $Report.measurements.managedBuild.observedId) {
+                    throw 'Build .NET extraído não corresponde ao APK instalado.'
+                }
+            } finally { $archive.Dispose() }
+        }
+    } else { throw 'Inicialização sem identidade verificável do build .NET; recompile o APK.' }
     $EvidenceLog.Add("--- startup ---`n$(Get-AetherLog)")
     Add-PassedCheck -Name "startup" -Details ([ordered]@{ pid = $initialPid; frameMilestone = 1000 })
 
-    if ($ProfileSeconds -gt 0) {
-        $profileDeadline = [DateTime]::UtcNow.AddSeconds($ProfileSeconds + $StartupTimeoutSeconds + $CycleTimeoutSeconds)
+    if ($CaptureSeconds -gt 0) {
+        $contextPath = Join-Path $script:ResolvedOutputDirectory 'capture-context.json'
+        $windowPath = Join-Path $script:ResolvedOutputDirectory 'frame-windows.jsonl'
+        $powerPath = Join-Path $script:ResolvedOutputDirectory 'power-samples.jsonl'
+        $surfacePath = Join-Path $script:ResolvedOutputDirectory 'surface-batches.jsonl'
+        foreach ($path in @($contextPath, $windowPath, $powerPath, $surfacePath)) {
+            if (Test-Path -LiteralPath $path) { throw 'Diretório já contém coleta; use um novo para não misturar evidência.' }
+        }
+        $Report.artifacts.captureContext = $contextPath
+        $Report.artifacts.frameWindows = $windowPath
+        $Report.artifacts.powerSamples = $powerPath
+        $Report.artifacts.surfaceBatches = $surfacePath
+        $Report | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $contextPath -Encoding utf8
+        $profileDeadline = [DateTime]::UtcNow.AddSeconds($CaptureSeconds + $StartupTimeoutSeconds + $CycleTimeoutSeconds)
+        $captureClock = [Diagnostics.Stopwatch]::StartNew()
+        $nextPowerSample = 0.0
+        $nextCpuSample = 0.0
+        $capturedWindows = @{}
         $capture = $null
         $layerText = Get-AdbValue -Arguments @('shell', 'dumpsys', 'SurfaceFlinger', '--list')
         $surfaceLayer = Find-FrameProfileSurfaceLayer -Text $layerText -Component $ComponentName
@@ -521,6 +572,15 @@ try {
         $displayPolls = 0
         do {
             Assert-AppPid -ExpectedPid $initialPid -Context "a coleta CPU/frame" | Out-Null
+            if ($SoakMinutes -gt 0 -and $captureClock.Elapsed.TotalSeconds -ge $nextPowerSample) {
+                Assert-NoRuntimeFailure
+                $sample = Get-PowerSample
+                $sample.elapsedSeconds = $captureClock.Elapsed.TotalSeconds
+                $Report.measurements.powerSamples.Add($sample)
+                Write-ProfileEvidence -Path $powerPath -Value $sample
+                $nextPowerSample = $sample.elapsedSeconds + 5
+                Write-Progress -Activity 'CPU, apresentação e térmica Android' -Status "$([int]$sample.elapsedSeconds) / $CaptureSeconds s" -PercentComplete ([Math]::Min(100, $sample.elapsedSeconds / $CaptureSeconds * 100))
+            }
             if ($displayAvailable) {
                 # O nome reconhecido contém somente pacote/classe/#id, sem shell metacharacters.
                 if ($surfaceLayer -notmatch '^[a-zA-Z0-9._/#]+$') { throw 'Nome de surface não reconhecido.' }
@@ -531,20 +591,35 @@ try {
                     $displayAvailable = $false
                 } else {
                     if ($displayLast -gt 0 -and $times[0] -gt $displayLast) { $displayContinuous = $false }
-                    foreach ($time in $times) { [void]$displayTimes.Add($time) }
+                    $newTimes = [Collections.Generic.List[long]]::new()
+                    foreach ($time in $times) { if ($displayTimes.Add($time)) { $newTimes.Add($time) } }
+                    if ($newTimes.Count -gt 0) {
+                        Write-ProfileEvidence -Path $surfacePath -Value ([ordered]@{
+                            elapsedSeconds = $captureClock.Elapsed.TotalSeconds; layer = $surfaceLayer
+                            continuous = $displayContinuous; timestamps = $newTimes.ToArray()
+                        })
+                    }
                     $displayLast = $times[-1]
                 }
             }
-            $windows = @(ConvertFrom-FrameProfileLog -Text (Get-AetherLog) -ExpectedPid $initialPid)
-            $capture = Get-FrameProfileCapture -Windows $windows -MinimumSeconds $ProfileSeconds
-            if ($null -ne $capture) {
+            if ($captureClock.Elapsed.TotalSeconds -ge $nextCpuSample) {
+                foreach ($window in @(ConvertFrom-FrameProfileLog -Text (Get-AetherLog) -ExpectedPid $initialPid)) {
+                    if (-not $capturedWindows.ContainsKey("$($window.epoch):$($window.window)")) {
+                        Write-ProfileEvidence -Path $windowPath -Value $window
+                    }
+                    $capturedWindows["$($window.epoch):$($window.window)"] = $window
+                }
+                $capture = Get-FrameProfileCapture -Windows @($capturedWindows.Values) -MinimumSeconds $CaptureSeconds
+                $nextCpuSample = $captureClock.Elapsed.TotalSeconds + 2
+            }
+            if ($null -ne $capture -and $captureClock.Elapsed.TotalSeconds -ge $CaptureSeconds) {
                 $displaySummary = Get-SurfaceFrameSummary -Timestamps @($displayTimes)
                 if (-not $displayAvailable -or -not $displayContinuous -or
-                    ($null -ne $displaySummary -and $displaySummary.elapsedSeconds -ge $ProfileSeconds)) { break }
+                    ($null -ne $displaySummary -and $displaySummary.elapsedSeconds -ge $CaptureSeconds)) { break }
             }
             Start-Sleep -Milliseconds 250
         } while ([DateTime]::UtcNow -lt $profileDeadline)
-        if ($null -eq $capture) { throw "FrameProfile não produziu $ProfileSeconds s contínuos; sem evidência suficiente." }
+        if ($null -eq $capture) { throw "FrameProfile não produziu $CaptureSeconds s contínuos; sem evidência suficiente." }
         Assert-NoRuntimeFailure
         $Report.measurements.profileEnvironmentEnd = Get-PowerSample
         $Report.measurements.frameProfile = $capture
@@ -556,7 +631,7 @@ try {
             summary = $displaySummary
         }
         $displayValidated = $displayAvailable -and $displayContinuous -and $null -ne $displaySummary -and
-            $displaySummary.elapsedSeconds -ge $ProfileSeconds
+            $displaySummary.elapsedSeconds -ge $CaptureSeconds
         $Report.measurements.displayFrameProfile.valid = $displayValidated
         if (-not $displayValidated -and $null -ne $displaySummary) { $displaySummary.displayedFps = $null }
         $capture.pocA.displayedFpsMeasured = $displayValidated
@@ -573,6 +648,37 @@ try {
         })
         Write-Host "FrameProfile: $($capture.presentFps) presents/s; CPU processo média=$($capture.metrics.process_cpu_ms.mean) ms; máximo=$($capture.metrics.process_cpu_ms.max) ms."
         # Sucesso da coleta não significa aprovação do orçamento nem FPS exibido comprovado.
+        if ($SoakMinutes -gt 0) {
+            $sample = Get-PowerSample
+            $sample.elapsedSeconds = $captureClock.Elapsed.TotalSeconds
+            $Report.measurements.powerSamples.Add($sample)
+            Write-ProfileEvidence -Path $powerPath -Value $sample
+            $power = Get-SoakPowerSummary -Samples @($Report.measurements.powerSamples) -BudgetWatts $PowerBudgetWatts
+            $Report.measurements.soak = [ordered]@{
+                requestedMinutes = $SoakMinutes
+                elapsedSeconds = $captureClock.Elapsed.TotalSeconds
+                power = $power
+                displayedFpsMeasured = $displayValidated
+                minimumRollingSecondFps = if ($displayValidated) { $displaySummary.minimumRollingSecondFps } else { $null }
+                minimumRequiredFps = $MinimumSoakFps
+                deviceCriteriaPassed = $false
+                accepted = $false
+                limitation = 'Um aparelho; HAL amostrado não comprova ausência de throttle entre amostras; CPU/scanout em intervalos sobrepostos.'
+            }
+            $soak = $Report.measurements.soak
+            $soak.deviceCriteriaPassed = $displayValidated -and $soak.minimumRollingSecondFps -ge $MinimumSoakFps -and
+                $power.elapsedSeconds -ge 1800 -and $power.withinPowerBudget -and $power.noThermalWarningObserved
+            Write-Host "Soak: $($power.elapsedSeconds) s; potência média=$($power.averageWatts) W; mínimo em janela de 1 s=$($soak.minimumRollingSecondFps) FPS; critérios do aparelho=$($soak.deviceCriteriaPassed)."
+            if (($RequirePowerBudget -or $RequireSoakBudget) -and -not $power.withinPowerBudget) {
+                throw 'Potência ausente, descontínua, sob carga externa ou acima do orçamento; consulte measurements.soak.'
+            }
+            if ($RequireSoakBudget -and -not $soak.deviceCriteriaPassed) {
+                throw 'Critérios térmicos/FPS/duração não atendidos no aparelho; consulte measurements.soak.'
+            }
+            Add-PassedCheck -Name 'continuous-soak-capture' -Details $soak
+        }
+        $captureClock.Stop()
+        Write-Progress -Activity 'CPU, apresentação e térmica Android' -Completed
     }
 
     $Report.screenshots.before = Save-DeviceScreenshot -Name "before-lifecycle"
@@ -606,61 +712,6 @@ try {
         renderResumedEveryCycle = $true
         resourceRecreationsObserved = $Report.measurements.resourceRecreationsDuringLifecycle
     })
-
-    if ($SoakMinutes -gt 0) {
-        $soak = [Diagnostics.Stopwatch]::StartNew()
-        $deadline = [DateTime]::UtcNow.AddMinutes($SoakMinutes)
-        $samples = 0
-        $powerSamples = [System.Collections.Generic.List[object]]::new()
-        while ([DateTime]::UtcNow -lt $deadline) {
-            Start-Sleep -Seconds 5
-            Assert-AppPid -ExpectedPid $initialPid -Context "o soak de estabilidade" | Out-Null
-            Assert-NoRuntimeFailure
-            $powerSample = Get-PowerSample
-            $powerSamples.Add($powerSample)
-            $Report.measurements.powerSamples.Add($powerSample)
-            ++$samples
-            Write-Progress -Activity "Soak de estabilidade Android" -Status "$([Math]::Floor($soak.Elapsed.TotalMinutes)) de $SoakMinutes min" -PercentComplete ([Math]::Min(100, ($soak.Elapsed.TotalMinutes / $SoakMinutes) * 100))
-        }
-        $soak.Stop()
-        Write-Progress -Activity "Soak de estabilidade Android" -Completed
-        $Report.measurements.soakElapsedSeconds = [Math]::Round($soak.Elapsed.TotalSeconds, 3)
-        $Report.measurements.soakHealthSamples = $samples
-        $validPowerSamples = @($powerSamples | Where-Object { $null -ne $_.powerWatts })
-        $Report.measurements.powerSampleCount = $validPowerSamples.Count
-        if ($validPowerSamples.Count -gt 0) {
-            $powerValues = @($validPowerSamples | ForEach-Object { [double]$_.powerWatts })
-            $Report.measurements.powerAverageWatts = [Math]::Round(($powerValues | Measure-Object -Average).Average, 4)
-            $Report.measurements.powerPeakWatts = [Math]::Round(($powerValues | Measure-Object -Maximum).Maximum, 4)
-        } else {
-            $Report.measurements.powerAverageWatts = $null
-            $Report.measurements.powerPeakWatts = $null
-        }
-        $thermalStatuses = @($powerSamples | Where-Object { $null -ne $_.thermalStatus } | ForEach-Object { [int]$_.thermalStatus })
-        $Report.measurements.thermalStatusPeak = if ($thermalStatuses.Count -gt 0) {
-            ($thermalStatuses | Measure-Object -Maximum).Maximum
-        } else { $null }
-        $withinPowerBudget = $null -ne $Report.measurements.powerAverageWatts -and
-            $Report.measurements.powerAverageWatts -lt $PowerBudgetWatts
-        if ($RequirePowerBudget -and $validPowerSamples.Count -eq 0) {
-            throw "O aparelho não expôs ibat/vbat pelo thermalservice; o orçamento de potência não pôde ser validado."
-        }
-        if ($RequirePowerBudget -and -not $withinPowerBudget) {
-            throw "Potência média de $($Report.measurements.powerAverageWatts) W excedeu o orçamento de $PowerBudgetWatts W."
-        }
-        Add-PassedCheck -Name "stability-soak" -Details ([ordered]@{
-            requestedMinutes = $SoakMinutes
-            elapsedSeconds = $Report.measurements.soakElapsedSeconds
-            healthSamples = $samples
-            stablePid = $initialPid
-            powerMeasured = $validPowerSamples.Count -gt 0
-            averageWatts = $Report.measurements.powerAverageWatts
-            peakWatts = $Report.measurements.powerPeakWatts
-            budgetWatts = $PowerBudgetWatts
-            withinPowerBudget = $withinPowerBudget
-            peakThermalStatus = $Report.measurements.thermalStatusPeak
-        })
-    }
 
     if ($ExerciseConfigurationChange) {
         $uiModeOutput = Get-AdbValue -Arguments @("shell", "cmd", "uimode", "night")

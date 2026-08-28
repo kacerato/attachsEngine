@@ -9,6 +9,7 @@
 #include "platform/app_lifecycle.h"
 
 #include <android/log.h>
+#include <android/window.h>
 #include <android_native_app_glue.h>
 #include <algorithm>
 #include <chrono>
@@ -302,6 +303,13 @@ void android_main(android_app *app) {
   app->onInputEvent = handleInput;
   shell.frameProfiler.setEnabled(ae::platform::android::readFrameProfilingOption(app->activity));
   shell.instancedRenderer.setFrameProfilingEnabled(shell.frameProfiler.enabled());
+  if (shell.frameProfiler.enabled()) {
+    // A long benchmark must not time out into the keyguard. This window flag
+    // only keeps an already-unlocked foreground window awake; it changes no
+    // global timeout, cannot unlock a device and has no effect in background.
+    ANativeActivity_setWindowFlags(app->activity, AWINDOW_FLAG_KEEP_SCREEN_ON, 0);
+    __android_log_print(ANDROID_LOG_INFO, LogTag, "[FrameProfile] KEEP_SCREEN_ON na janela de medição.");
+  }
 
   ae::platform::android::applyImmersiveLandscapeWindow(app->activity);
 

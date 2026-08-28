@@ -43,6 +43,9 @@ jobs:
     runs-on: [self-hosted, android-device-lab]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
       - name: Compilar APK debug
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
@@ -54,13 +57,16 @@ jobs:
             -ExerciseScreenCycle `
             -ExerciseConfigurationChange `
             -OutputDirectory android-device-report
-      - name: Soak de estabilidade de 30 min (opcional; potência PoC-C exige coletor próprio)
+      - name: Soak contínuo de 30 min (CPU, FPS exibido e potência; exige sensores disponíveis)
         if: ${{ inputs.soak }}
         shell: pwsh
         run: |
           tools/validate-android-shell.ps1 `
             -LifecycleCycles 1 `
             -SoakMinutes 30 `
+            -RequireSoakBudget `
+            -PreserveAppData `
+            -AllowScreenshotDifference `
             -OutputDirectory android-device-report-soak
       - name: Benchmark A/B de física 2D no aparelho
         shell: pwsh

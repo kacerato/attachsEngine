@@ -17,6 +17,7 @@ namespace Aether.Interop;
 /// </summary>
 public static class NativeEntryPoints
 {
+    private static readonly Core.Diagnostics.InstancingWorkload Workload = new(5000);
     /// <summary>
     /// Primeira prova de vida do host CoreCLR embutido: soma dois inteiros do lado gerenciado.
     /// Sem efeito colateral de propósito — é a fatia mínima que prova que
@@ -50,16 +51,25 @@ public static class NativeEntryPoints
     {
         if (outBuffer == null || instanceCount <= 0) return;
 
+        if (instanceCount == Workload.InstanceCount)
+        {
+            Workload.Fill(new Span<float>(outBuffer, instanceCount * Core.Diagnostics.InstancingWorkload.FloatsPerInstance), timeSeconds);
+            return;
+        }
+
+        // Compatibility path for callers with a different count; no unbounded
+        // cache or allocation when the workload changes at runtime.
+        int gridSize = (int)MathF.Ceiling(MathF.Sqrt(instanceCount));
+
         for (int i = 0; i < instanceCount; i++)
         {
             // Distribuição determinística em grade normalizada [-0.9, 0.9], com uma oscilação
             // orbital por instância para o quadro mudar a cada chamada — sem alocar (sem LINQ,
             // sem coleção intermediária), lendo/escrevendo direto no ponteiro recebido.
-            int gridSize = (int)MathF.Ceiling(MathF.Sqrt(instanceCount));
             int row = i / gridSize;
             int col = i % gridSize;
-            float baseX = (col / (float)(gridSize - 1) - 0.5f) * 1.8f;
-            float baseY = (row / (float)(gridSize - 1) - 0.5f) * 1.8f;
+            float baseX = gridSize == 1 ? 0 : (col / (float)(gridSize - 1) - 0.5f) * 1.8f;
+            float baseY = gridSize == 1 ? 0 : (row / (float)(gridSize - 1) - 0.5f) * 1.8f;
 
             float phase = i * 0.017f;
             float orbitRadius = 0.01f;

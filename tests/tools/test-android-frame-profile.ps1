@@ -23,6 +23,17 @@ function Assert-Rejected {
     Assert-Profile $rejected
 }
 
+Test-Profile 'evidência incremental preserva amostras anteriores sem relatório final' {
+    $path = [IO.Path]::GetTempFileName()
+    try {
+        Write-ProfileEvidence -Path $path -Value (New-TestWindow 1)
+        Write-ProfileEvidence -Path $path -Value (New-TestWindow 2)
+        $rows = @(Get-Content -LiteralPath $path | ForEach-Object { $_ | ConvertFrom-Json })
+        Assert-Profile ($rows.Count -eq 2 -and $rows[0].window -eq 1 -and $rows[1].window -eq 2)
+        Assert-Profile ($rows[0].frames -eq 600 -and $rows[1].pid -eq 7)
+    } finally { Remove-Item -LiteralPath $path }
+}
+
 Test-Profile 'JSON nativo válido' {
     $windows = @(ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow)) 7)
     Assert-Profile ($windows.Count -eq 1 -and $windows[0].present_fps -eq 60)

@@ -1,4 +1,11 @@
 # Leitura/estatística dos relatórios nativos. Não depende de ADB.
+function Write-ProfileEvidence {
+    param([string]$Path, [object]$Value)
+    # Append on the host as samples arrive: cancelling the process must not lose
+    # an entire soak held in memory. Each complete JSONL line is independently readable.
+    [IO.File]::AppendAllText($Path, ($Value | ConvertTo-Json -Depth 10 -Compress) + "`n", [Text.UTF8Encoding]::new($false))
+}
+
 function Find-FrameProfileSurfaceLayer {
     param([string]$Text, [string]$Component)
     $pattern = '(?m)(?:^|RequestedLayerState\{)(' + [regex]::Escape($Component) + '#\d+)(?:\s|$)'
@@ -25,11 +32,20 @@ function Get-SurfaceFrameSummary {
     $intervals = @(for ($i = 1; $i -lt $sorted.Count; ++$i) { ($sorted[$i] - $sorted[$i - 1]) / 1e6 })
     $intervals = @($intervals | Sort-Object)
     $duration = ($sorted[-1] - $sorted[0]) / 1e9
+    # Sliding 1 s windows (including stalls), not a mean over the entire soak.
+    $minimumRollingFps = $null
+    $end = 0
+    for ($start = 0; $start -lt $sorted.Count -and $sorted[$start] + 1000000000L -le $sorted[-1]; ++$start) {
+        while ($end + 1 -lt $sorted.Count -and $sorted[$end + 1] -le $sorted[$start] + 1000000000L) { ++$end }
+        $fps = $end - $start
+        if ($null -eq $minimumRollingFps -or $fps -lt $minimumRollingFps) { $minimumRollingFps = $fps }
+    }
     return [ordered]@{
         source = 'SurfaceFlinger FrameTracker actualPresentTime'
         frames = $sorted.Count
         elapsedSeconds = $duration
         displayedFps = ($sorted.Count - 1) / $duration
+        minimumRollingSecondFps = $minimumRollingFps
         firstPresentNs = $sorted[0]
         lastPresentNs = $sorted[-1]
         intervalMs = [ordered]@{

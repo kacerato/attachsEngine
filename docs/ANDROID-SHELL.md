@@ -37,7 +37,7 @@ recriam swapchain+renderer. Estado de órbita sobrevive às recriações no proc
 
 ## Build e shaders
 
-Requer Java 17, SDK 35, NDK `27.1.12297006`, CMake `3.22.1` e Gradle 8.10.2
+Requer .NET SDK 8, Java 17, SDK 35, NDK `27.1.12297006`, CMake `3.22.1` e Gradle 8.10.2
 (wrapper). ABI arm64-v8a, segmentos ELF alinhados a páginas de 16 KB.
 
 ```powershell
@@ -50,6 +50,15 @@ Requer Java 17, SDK 35, NDK `27.1.12297006`, CMake `3.22.1` e Gradle 8.10.2
 Sem `-Check`, o gerador recompila GLSL, valida com spirv-val e atualiza o header.
 O CI Android verifica ambos os shaders contra o NDK pinado. Esse processo não
 é hot reload nem compilação Slang/HLSL.
+
+`publishManagedCore` recompila C# Release/framework-dependent para ARM64.
+`prepareEngineAssets` combina o publish com a BCL vendorizada; os arquivos
+legados `src/main/assets/dotnet/Aether.Core.*` não entram no APK.
+Manifesto e SHA-256 da árvore são gerados em `build/generated/aetherAssets`.
+No aparelho, `.build-id` só é confirmado após todas as substituições atômicas;
+alterações de mesmo tamanho não reutilizam DLL antiga. A extração ocorre antes
+de hospedar CoreCLR, sem IO de assets no render loop.
+`tests/tools/test-android-managed-assets.ps1` verifica a identidade após o build.
 
 ## Validação em aparelho
 
@@ -111,7 +120,7 @@ confirma que delegate/monitor já não mostram keyguard antes de iniciar a Activ
 Código de saída zero de `wm` não é prova de desbloqueio. O marcador de retomada
 é criado depois de confirmar tela apagada, evitando aceitar ativação anterior.
 
-O relatório v3 separa `keyguardWaits`/`keyguardDismissRequests` das evidências
+O relatório v4 preserva a separação de `keyguardWaits`/`keyguardDismissRequests` das evidências
 de lifecycle. Sem desbloqueio no prazo, registra `status=blocked`,
 `failureKind=device-keyguard-blocked` e retorna código 1: não é PASS nem prova
 de lentidão gráfica. Saída desconhecida do dumpsys falha explicitamente.
@@ -128,15 +137,18 @@ O contrato de desbloqueio seguro segue a [API Android KeyguardManager](https://d
 `send-trim-memory` é apenas proxy
 de pressão de memória, não prova de APP_CMD_LOW_MEMORY real.
 
-O runner aceita `-SoakMinutes`, coleta ibat×vbat/status térmico e pode exigir
-orçamento médio com `-RequirePowerBudget`. O checkpoint de 1 minuto de 26/08
-valida o coletor, não o critério de 30 min da PoC-C.
+O runner combina `-SoakMinutes` e `-ProfileSeconds` numa captura contínua:
+CPU, FPS exibido (mínimo em janelas de 1 s) e ibat×vbat/status térmico.
+`-RequireSoakBudget` exige 30 min, FPS e energia; `-RequirePowerBudget` só energia.
+Sensores/cobertura ausentes ou alimentação externa não viram aprovação.
+Profiling mantém apenas sua janela em primeiro plano ligada, sem alterar o
+bloqueio do Android. Checkpoints de 1 minuto não fecham PoC-C.
 
 ## Limites e próximo gate
 
 CPU total/thread, distribuição de frames e FPS exibidos agora têm coleta opt-in
-com `-ProfileSeconds 60`. Resultado: 60,056 FPS no compositor, CPU processo média
-2,928 ms e pico 15,429 ms na captura otimizada; o orçamento < 3 ms ainda não foi
+com `-ProfileSeconds 60`. Após cache do workload: 60,039 FPS no compositor, CPU processo média
+2,412 ms e pico 18,237 ms no smoke de 28/08; o orçamento < 3 ms ainda não foi
 atendido. Método, resultados e limitações em [PROFILING-ANDROID.md](PROFILING-ANDROID.md).
 
 Cubo/texture/depth/touch estão integrados. Permanecem: geometria importada,

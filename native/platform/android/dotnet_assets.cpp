@@ -1,4 +1,5 @@
 #include "platform/android/dotnet_assets.h"
+#include "platform/atomic_asset_file.h"
 
 #include <android/asset_manager.h>
 #include <android/log.h>
@@ -15,6 +16,10 @@ namespace {
 constexpr const char *LogTag = "Aether.Android";
 constexpr const char *ManifestAssetPath = "dotnet_manifest.txt";
 constexpr const char *AssetSourcePrefix = "dotnet/"; // ver android/app/src/main/assets/dotnet/
+
+int readAsset(void *context, void *buffer, size_t capacity) {
+  return AAsset_read(static_cast<AAsset *>(context), buffer, capacity);
+}
 
 // mkdir -p mínimo: cria cada segmento do caminho, ignorando EEXIST — os
 // manifestos de asset têm profundidade fixa e pequena (shared/Microsoft.
@@ -44,7 +49,7 @@ bool makeDirectoriesRecursive(char *path) {
 }
 
 bool copyOneAsset(AAssetManager *assetManager, const char *relativePath,
-                  const char *destinationRoot) {
+                  const char *destinationRoot, bool sameBuild) {
   char assetPath[512];
   int written = std::snprintf(assetPath, sizeof(assetPath), "%s%s", AssetSourcePrefix, relativePath);
   if (written <= 0 || static_cast<size_t>(written) >= sizeof(assetPath)) return false;
@@ -64,11 +69,10 @@ bool copyOneAsset(AAssetManager *assetManager, const char *relativePath,
 
   const off_t assetLength = AAsset_getLength(asset);
 
-  // Já extraído com o tamanho certo numa execução anterior — pula, extração
-  // completa de ~28 MB só precisa acontecer uma vez por instalação/atualização
-  // do APK, não a cada abertura do app.
+  // Equal length alone does not identify an assembly. The build digest changes
+  // even for a same-size edit; commit it only after the entire extraction succeeds.
   struct stat existing{};
-  if (stat(destinationPath, &existing) == 0 && existing.st_size == assetLength) {
+  if (sameBuild && stat(destinationPath, &existing) == 0 && existing.st_size == assetLength) {
     AAsset_close(asset);
     return true;
   }
@@ -85,27 +89,7 @@ bool copyOneAsset(AAssetManager *assetManager, const char *relativePath,
     }
   }
 
-  FILE *outFile = std::fopen(destinationPath, "wb");
-  if (outFile == nullptr) {
-    __android_log_print(ANDROID_LOG_ERROR, LogTag, "fopen(%s) falhou: %s", destinationPath,
-                        strerror(errno));
-    AAsset_close(asset);
-    return false;
-  }
-
-  char buffer[64 * 1024];
-  int readBytes;
-  bool ok = true;
-  while ((readBytes = AAsset_read(asset, buffer, sizeof(buffer))) > 0) {
-    if (std::fwrite(buffer, 1, static_cast<size_t>(readBytes), outFile) !=
-        static_cast<size_t>(readBytes)) {
-      ok = false;
-      break;
-    }
-  }
-  if (readBytes < 0) ok = false;
-
-  std::fclose(outFile);
+  const bool ok = replaceAssetFile(destinationPath, static_cast<uint64_t>(assetLength), readAsset, asset);
   AAsset_close(asset);
   if (!ok) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao copiar asset %s para %s.", assetPath,
@@ -127,6 +111,35 @@ bool ensureDotNetAssetsExtracted(ANativeActivity *activity, char *outDotnetRoot,
   if (written <= 0 || written >= outDotnetRootSize) return false;
 
   if (!makeDirectoriesRecursive(outDotnetRoot)) return false;
+
+  char buildId[65]{};
+  AAsset *buildAsset = AAssetManager_open(activity->assetManager, "dotnet_build_id.txt", AASSET_MODE_BUFFER);
+  if (buildAsset == nullptr) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Build ID .NET ausente; APK deve ser reconstruído.");
+    return false;
+  }
+  const bool validBuild = AAsset_getLength(buildAsset) == 64 && AAsset_read(buildAsset, buildId, 64) == 64 &&
+      validAssetBuildId(buildId, 64);
+  if (!validBuild) { AAsset_close(buildAsset); return false; }
+  char markerPath[512];
+  written = std::snprintf(markerPath, sizeof(markerPath), "%s/.build-id", outDotnetRoot);
+  if (written <= 0 || static_cast<size_t>(written) >= sizeof(markerPath)) { AAsset_close(buildAsset); return false; }
+  char previousId[65]{};
+  FILE *marker = std::fopen(markerPath, "rb");
+  bool sameBuild = false;
+  if (marker != nullptr) {
+    sameBuild = std::fread(previousId, 1, sizeof(previousId), marker) == 64 &&
+        std::memcmp(previousId, buildId, 64) == 0;
+    std::fclose(marker);
+  }
+  AAsset_close(buildAsset);
+
+  // Invalidate before the first replacement: an interrupted upgrade followed by
+  // an APK rollback must not accept a mixture of old/new files with equal sizes.
+  if (!sameBuild && std::remove(markerPath) != 0 && errno != ENOENT) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao invalidar build .NET anterior: %s", strerror(errno));
+    return false;
+  }
 
   AAsset *manifest =
       AAssetManager_open(activity->assetManager, ManifestAssetPath, AASSET_MODE_BUFFER);
@@ -157,7 +170,7 @@ bool ensureDotNetAssetsExtracted(ANativeActivity *activity, char *outDotnetRoot,
   char *line = std::strtok(manifestCopy.data(), "\n\r");
   while (line != nullptr) {
     if (*line != '\0') {
-      if (copyOneAsset(activity->assetManager, line, outDotnetRoot)) {
+      if (copyOneAsset(activity->assetManager, line, outDotnetRoot, sameBuild)) {
         ++copiedCount;
       } else {
         ++failedCount;
@@ -169,7 +182,17 @@ bool ensureDotNetAssetsExtracted(ANativeActivity *activity, char *outDotnetRoot,
   __android_log_print(ANDROID_LOG_INFO, LogTag,
                       "Extração de assets .NET concluída: %d ok, %d falharam.", copiedCount,
                       failedCount);
-  return failedCount == 0;
+  if (failedCount != 0 || copiedCount == 0) return false;
+  buildAsset = AAssetManager_open(activity->assetManager, "dotnet_build_id.txt", AASSET_MODE_STREAMING);
+  if (buildAsset == nullptr) return false;
+  const bool committed = sameBuild || replaceAssetFile(markerPath, 64, readAsset, buildAsset);
+  AAsset_close(buildAsset);
+  if (!committed) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao confirmar build .NET extraído.");
+    return false;
+  }
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "[ManagedBuild] id=%s reused=%d", buildId, sameBuild ? 1 : 0);
+  return true;
 }
 
 } // namespace ae::platform::android

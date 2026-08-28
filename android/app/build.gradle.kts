@@ -1,11 +1,55 @@
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
 }
+
+// The packaged engine must come from this checkout, never a stale checked-in DLL.
+// Keep the vendored BCL unchanged; publish only our framework-dependent component.
+val managedOutput = layout.buildDirectory.dir("managed/core")
+val generatedAssets = layout.buildDirectory.dir("generated/aetherAssets")
+val publishManagedCore by tasks.registering(Exec::class) {
+    inputs.files(fileTree("../../managed/Aether.Core") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
+    inputs.files(fileTree("../../managed/Aether.Analyzers") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
+    inputs.files("../../Directory.Build.props", "../../NuGet.Config")
+    outputs.dir(managedOutput)
+    workingDir = rootProject.projectDir.parentFile
+    commandLine("dotnet", "publish", "managed/Aether.Core/Aether.Core.csproj", "-c", "Release",
+        "-r", "linux-bionic-arm64", "--self-contained", "false",
+        "-p:GenerateRuntimeConfigurationFiles=true", "-o", managedOutput.get().asFile.absolutePath)
+}
+val prepareEngineAssets by tasks.registering(Sync::class) {
+    dependsOn(publishManagedCore)
+    from("src/main/assets") {
+        exclude("dotnet/Aether.Core.*", "dotnet_manifest.txt", "dotnet_build_id.txt")
+    }
+    from(managedOutput) { include("Aether.Core.dll", "Aether.Core.deps.json", "Aether.Core.runtimeconfig.json"); into("dotnet") }
+    into(generatedAssets)
+    doLast {
+        val root = generatedAssets.get().asFile
+        val dotnet = root.resolve("dotnet")
+        val paths = dotnet.walkTopDown().filter { it.isFile }.map { it.relativeTo(dotnet).invariantSeparatorsPath }.sorted().toList()
+        root.resolve("dotnet_manifest.txt").writeText(paths.joinToString("\n", postfix = "\n"))
+        val digest = MessageDigest.getInstance("SHA-256")
+        paths.forEach { path ->
+            digest.update(path.toByteArray(Charsets.UTF_8))
+            digest.update(0.toByte())
+            dotnet.resolve(path).inputStream().use { stream ->
+                val buffer = ByteArray(65536)
+                var count = stream.read(buffer)
+                while (count >= 0) { digest.update(buffer, 0, count); count = stream.read(buffer) }
+            }
+        }
+        root.resolve("dotnet_build_id.txt").writeText(digest.digest().joinToString("") { "%02x".format(it) })
+    }
+}
+tasks.named("preBuild") { dependsOn(prepareEngineAssets) }
 
 android {
     namespace = "dev.aether.editor"
     compileSdk = 35
     ndkVersion = "27.1.12297006"
+    sourceSets.getByName("main").assets.setSrcDirs(listOf(generatedAssets))
 
     defaultConfig {
         applicationId = "dev.aether.editor"

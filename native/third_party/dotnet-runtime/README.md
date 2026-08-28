@@ -55,13 +55,19 @@ dotnet publish managed/Aether.Core/Aether.Core.csproj -c Release \
 de `"includedFrameworks"` — só o primeiro formato é aceito pelo fluxo de
 hospedagem de componente que `DotNetHost` usa.
 
+O Gradle executa esse publish automaticamente (`publishManagedCore`), mantendo a
+BCL vendorizada e gerando assets/manifesto/build ID sob `android/app/build/`.
+Os binários legados `android/app/src/main/assets/dotnet/Aether.Core.*` ainda
+existem no repositório, mas são excluídos do APK; não os edite para atualizar
+o app. A identidade é verificada por `tests/tools/test-android-managed-assets.ps1`.
+
 ## O que NÃO está aqui, de propósito
 
 - A Base Class Library gerenciada (`System.*.dll`) e os assemblies do próprio
   projeto (`Aether.Core.dll` etc.) — esses são artefato de **build**
   (`dotnet publish`), não binário de terceiros vendorizado. Empacotados pelo
-  Gradle a partir da saída do publish, nunca commitados aqui — mesma
-  disciplina de `bin/`/`obj/` no `.gitignore`.
+  Gradle a partir da saída do publish. A BCL legada está versionada sob assets;
+  os outputs novos do próprio projeto ficam em `build/`, ignorados pelo Git.
 - `apphost`/`libnethost.*` — resolvem o hostfxr via variável de ambiente ou
   registro global do SDK, que não existem dentro do processo de um app
   Android. O shell abre `libhostfxr.so` direto por caminho conhecido dentro
