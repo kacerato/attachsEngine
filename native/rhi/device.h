@@ -15,6 +15,7 @@
 #pragma once
 
 #include "core/base.h"
+#include "rhi/device_profile.h"
 #include "rhi/memory_allocator.h"
 #include "rhi/surface_transform.h"
 
@@ -172,12 +173,22 @@ public:
   VulkanMemoryAllocator &memoryAllocator() { return memoryAllocator_; }
   const VulkanMemoryAllocator &memoryAllocator() const { return memoryAllocator_; }
 
+  // Item 2.1.4 do plano: features/perfil detectados de verdade em initializeDevice() via
+  // vkGetPhysicalDeviceFeatures2 (não presumidos) — classifyDeviceProfile/derivePaths
+  // (device_profile.h, já testados headless) decidem a partir destes valores reais.
+  const DeviceFeatures &deviceFeatures() const { return deviceFeatures_; }
+  DeviceProfile deviceProfile() const { return deviceProfile_; }
+  const EnabledPaths &enabledPaths() const { return enabledPaths_; }
+
 private:
   VkInstance instance_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
   VkDevice device_ = VK_NULL_HANDLE;
   u32 graphicsQueueFamily_ = 0;
   VulkanMemoryAllocator memoryAllocator_{};
+  DeviceFeatures deviceFeatures_{};
+  DeviceProfile deviceProfile_ = DeviceProfile::C;
+  EnabledPaths enabledPaths_{};
 };
 
 } // namespace ae::rhi

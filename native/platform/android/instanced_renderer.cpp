@@ -13,6 +13,11 @@ namespace {
 constexpr const char *LogTag = "Aether.Android";
 constexpr u32 kBytesPerInstance = 5 * sizeof(float); // vec2 posição + vec3 cor, ver instanced.vert
 constexpr u32 kTextureSize = 64;
+// Capacidade do array bindless desta PoC: 1 textura real (o checker board do
+// cubo) é suficiente hoje, mas o registro precisa caber pelo menos a dummy +
+// a textura real: ver comentário de BindlessTextureRegistry::initialize sobre
+// por que todo slot é preenchido com a dummy antes de qualquer registro.
+constexpr u32 kBindlessCapacity = 64;
 
 struct FramePushConstants {
   float timeSeconds;
@@ -23,8 +28,10 @@ struct FramePushConstants {
   float surfaceXY;
   float surfaceYX;
   float surfaceYY;
+  u32 materialIndex;
+  float padding[3]; // mantém o struct múltiplo de 16 bytes (regra comum de alinhamento de push constant)
 };
-static_assert(sizeof(FramePushConstants) == 32);
+static_assert(sizeof(FramePushConstants) == 48);
 
 bool formatSupportsDepthAttachment(VkPhysicalDevice physicalDevice, VkFormat format) {
   VkFormatProperties properties{};
@@ -215,12 +222,16 @@ bool InstancedRenderer::createPipeline() {
   colorBlend.attachmentCount = 1;
   colorBlend.pAttachments = &colorBlendAttachment;
 
+  const VkDescriptorSetLayout bindlessLayout = bindlessRegistry_.layout();
   VkPipelineLayoutCreateInfo layoutInfo{};
   layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   layoutInfo.setLayoutCount = 1;
-  layoutInfo.pSetLayouts = &descriptorSetLayout_;
+  layoutInfo.pSetLayouts = &bindlessLayout;
   VkPushConstantRange pushRange{};
-  pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  // vertex lê timeSeconds/aspectRatio/órbita/surfaceTransform; fragment lê
+  // materialIndex para indexar o array bindless (ver instanced.frag) — as
+  // duas stages compartilham o mesmo range porque é um único struct.
+  pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
   pushRange.size = sizeof(FramePushConstants);
   layoutInfo.pushConstantRangeCount = 1;
   layoutInfo.pPushConstantRanges = &pushRange;
@@ -324,6 +335,29 @@ bool InstancedRenderer::createDepthImage() {
 }
 
 bool InstancedRenderer::createTextureResources() {
+  // Dummy 1x1 branca: exigida por BindlessTextureRegistry::initialize para
+  // preencher todo slot do array antes de qualquer registro real (ver
+  // comentário no header) — nunca é de fato amostrada em um caminho correto,
+  // já que baseTextureIndex_ é sempre válido antes do primeiro drawFrame.
+  const std::array<u8, 4> dummyPixels{255, 255, 255, 255};
+  rhi::ImageDesc dummyDesc{};
+  dummyDesc.width = 1;
+  dummyDesc.height = 1;
+  dummyDesc.format = VK_FORMAT_R8G8B8A8_SRGB;
+  dummyDesc.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  dummyDesc.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  dummyDesc.memoryClass = rhi::MemoryClass::Texture;
+  if (!memoryAllocator_->createImage(dummyDesc, &dummyTexture_)) return false;
+  if (!uploadContext_.uploadRgba8ToSampledImage(*memoryAllocator_, dummyPixels.data(),
+                                                sizeof(dummyPixels), dummyTexture_)) {
+    return false;
+  }
+  rhi::SamplerDesc dummySamplerDesc{};
+  dummySamplerDesc.minFilter = VK_FILTER_NEAREST;
+  dummySamplerDesc.magFilter = VK_FILTER_NEAREST;
+  dummySamplerDesc.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+  if (!dummySampler_.initialize(device_, dummySamplerDesc)) return false;
+
   std::array<u8, kTextureSize * kTextureSize * 4> pixels{};
   for (u32 y = 0; y < kTextureSize; ++y) {
     for (u32 x = 0; x < kTextureSize; ++x) {
@@ -356,55 +390,14 @@ bool InstancedRenderer::createTextureResources() {
   return baseSampler_.initialize(device_, samplerDesc);
 }
 
-bool InstancedRenderer::createDescriptors() {
-  VkDescriptorSetLayoutBinding binding{};
-  binding.binding = 0;
-  binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  binding.descriptorCount = 1;
-  binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-  VkDescriptorSetLayoutCreateInfo layoutInfo{};
-  layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  layoutInfo.bindingCount = 1;
-  layoutInfo.pBindings = &binding;
-  if (vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr, &descriptorSetLayout_) !=
-      VK_SUCCESS) {
+bool InstancedRenderer::createBindlessRegistry() {
+  if (!bindlessRegistry_.initialize(device_, kBindlessCapacity, dummyTexture_.view(),
+                                    dummySampler_.handle())) {
     return false;
   }
-
-  VkDescriptorPoolSize poolSize{};
-  poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  poolSize.descriptorCount = 1;
-  VkDescriptorPoolCreateInfo poolInfo{};
-  poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  poolInfo.maxSets = 1;
-  poolInfo.poolSizeCount = 1;
-  poolInfo.pPoolSizes = &poolSize;
-  if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS) {
-    return false;
-  }
-
-  VkDescriptorSetAllocateInfo allocationInfo{};
-  allocationInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  allocationInfo.descriptorPool = descriptorPool_;
-  allocationInfo.descriptorSetCount = 1;
-  allocationInfo.pSetLayouts = &descriptorSetLayout_;
-  if (vkAllocateDescriptorSets(device_, &allocationInfo, &descriptorSet_) != VK_SUCCESS) {
-    return false;
-  }
-
-  VkDescriptorImageInfo imageInfo{};
-  imageInfo.sampler = baseSampler_.handle();
-  imageInfo.imageView = baseTexture_.view();
-  imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  VkWriteDescriptorSet write{};
-  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  write.dstSet = descriptorSet_;
-  write.dstBinding = 0;
-  write.descriptorCount = 1;
-  write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  write.pImageInfo = &imageInfo;
-  vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
-  return true;
+  baseTextureIndex_ = bindlessRegistry_.registerTexture(
+      baseTexture_.view(), baseSampler_.handle(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+  return baseTextureIndex_ != rhi::kBindlessIndexInvalid;
 }
 
 bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapchain &swapchain,
@@ -442,8 +435,8 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o depth buffer.");
     return false;
   }
-  if (!createDescriptors()) {
-    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar descritores da textura.");
+  if (!createBindlessRegistry()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o registro bindless de texturas.");
     return false;
   }
   if (!createRenderPass()) {
@@ -501,17 +494,12 @@ void InstancedRenderer::shutdown() {
     vkDestroyRenderPass(device_, renderPass_, nullptr);
     renderPass_ = VK_NULL_HANDLE;
   }
-  if (descriptorPool_ != VK_NULL_HANDLE) {
-    vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
-    descriptorPool_ = VK_NULL_HANDLE;
-    descriptorSet_ = VK_NULL_HANDLE;
-  }
-  if (descriptorSetLayout_ != VK_NULL_HANDLE) {
-    vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr);
-    descriptorSetLayout_ = VK_NULL_HANDLE;
-  }
+  bindlessRegistry_.shutdown();
+  baseTextureIndex_ = rhi::kBindlessIndexInvalid;
   baseSampler_.shutdown();
   baseTexture_.reset();
+  dummySampler_.shutdown();
+  dummyTexture_.reset();
   depthImage_.reset();
   instanceBuffer_.reset();
   uploadContext_.shutdown();
@@ -570,8 +558,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
   vkCmdBeginRenderPass(commandBuffer_, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
   vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
+  const VkDescriptorSet bindlessSet = bindlessRegistry_.descriptorSet();
   vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1,
-                          &descriptorSet_, 0, nullptr);
+                          &bindlessSet, 0, nullptr);
   const VkExtent2D displayExtent = swapchain_->displayExtent();
   const rhi::SurfaceTransform &surfaceTransform = swapchain_->surfaceTransform();
   const FramePushConstants pushConstants{
@@ -580,9 +569,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbit
       orbitYaw,
       orbitPitch,
       surfaceTransform.xx, surfaceTransform.xy, surfaceTransform.yx, surfaceTransform.yy,
+      baseTextureIndex_,
+      {},
   };
-  vkCmdPushConstants(commandBuffer_, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                     sizeof(pushConstants), &pushConstants);
+  vkCmdPushConstants(commandBuffer_, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                     0, sizeof(pushConstants), &pushConstants);
 
   VkViewport viewport{};
   viewport.width = static_cast<float>(swapchain_->width());

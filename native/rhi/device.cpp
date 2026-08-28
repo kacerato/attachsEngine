@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <vector>
 
 namespace ae::rhi {
 
@@ -455,15 +456,87 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface) {
   VkPhysicalDeviceFeatures enabledFeatures{};
   enabledFeatures.textureCompressionASTC_LDR = supportedFeatures.textureCompressionASTC_LDR;
 
+  // Item 2.1.4 (bindless via descriptor_indexing): VK_EXT_descriptor_indexing é core no Vulkan
+  // 1.2+, mas continua exigindo consulta explícita de suporte — extensão core não significa
+  // feature automaticamente habilitada (mesma disciplina de ASTC acima). Checamos a extensão via
+  // enumeração (não presumimos "é core, logo existe") porque o piso mínimo do plano é só Vulkan
+  // 1.1 (RNF-11) — em 1.1/1.2 sem a extensão explícita, bindless simplesmente fica desligado e o
+  // dispositivo cai para DeviceProfile::C (ver device_profile.cpp), não é um erro fatal.
+  bool descriptorIndexingExtensionSupported = false;
+  {
+    u32 extensionCount = 0;
+    vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extensionCount, nullptr);
+    if (extensionCount > 0) {
+      std::vector<VkExtensionProperties> extensions(extensionCount);
+      vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extensionCount, extensions.data());
+      for (const auto &ext : extensions) {
+        if (std::strcmp(ext.extensionName, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) == 0) {
+          descriptorIndexingExtensionSupported = true;
+          break;
+        }
+      }
+    }
+  }
+
+  VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures{};
+  descriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+  if (descriptorIndexingExtensionSupported) {
+    // vkGetPhysicalDeviceFeatures2 (core, sem sufixo) é legal de chamar em
+    // tempo de execução — a instância pede apiVersion 1.1 acima — mas o stub
+    // libvulkan.so vendorizado pelo NDK para minSdk 26 (RNF-11 admite 1.1)
+    // não exporta esse símbolo estaticamente em toda revisão de NDK; a
+    // variante KHR tem ABI idêntica e é sempre resolvível via
+    // vkGetInstanceProcAddr, que é como o próprio Khronos loader trata
+    // "extensão core promovida" — resolver em runtime em vez de linkar
+    // estático evita depender de qual símbolo aquele stub específico expõe.
+    auto getFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
+        vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceFeatures2KHR"));
+    if (getFeatures2 == nullptr) {
+      getFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
+          vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceFeatures2"));
+    }
+    if (getFeatures2 != nullptr) {
+      VkPhysicalDeviceFeatures2 features2{};
+      features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+      features2.pNext = &descriptorIndexingFeatures;
+      getFeatures2(physicalDevice_, &features2);
+    }
+  }
+
+  // As três sub-features mínimas que compõem "bindless" de verdade (plano §5.2: "shaders acessam
+  // textures[materialIndex], sem descriptor set por objeto"): array runtime-sized no shader,
+  // indexação não-uniforme (materialIndex varia por invocação, não é constante de compilação), e
+  // slots parcialmente vinculados (nem todo índice do array precisa ter uma textura real ainda —
+  // ver bindless_registry.h, o padrão "dummy" documentado lá depende exatamente disso).
+  bool bindlessSupported = descriptorIndexingExtensionSupported &&
+                           descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing &&
+                           descriptorIndexingFeatures.descriptorBindingPartiallyBound &&
+                           descriptorIndexingFeatures.runtimeDescriptorArray;
+
+  VkPhysicalDeviceDescriptorIndexingFeatures enabledDescriptorIndexingFeatures{};
+  enabledDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+  enabledDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = bindlessSupported;
+  enabledDescriptorIndexingFeatures.descriptorBindingPartiallyBound = bindlessSupported;
+  enabledDescriptorIndexingFeatures.descriptorBindingUpdateUnusedWhilePending = bindlessSupported;
+  enabledDescriptorIndexingFeatures.runtimeDescriptorArray = bindlessSupported;
+
   VkDeviceCreateInfo deviceInfo{};
   deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  deviceInfo.pNext = bindlessSupported ? &enabledDescriptorIndexingFeatures : nullptr;
   deviceInfo.queueCreateInfoCount = 1;
   deviceInfo.pQueueCreateInfos = &queueInfo;
   deviceInfo.pEnabledFeatures = &enabledFeatures;
-  const char *deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
+  std::vector<const char *> deviceExtensions;
   if (presentationSurface != VK_NULL_HANDLE) {
-    deviceInfo.enabledExtensionCount = 1;
-    deviceInfo.ppEnabledExtensionNames = deviceExtensions;
+    deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+  }
+  if (bindlessSupported) {
+    deviceExtensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+  }
+  if (!deviceExtensions.empty()) {
+    deviceInfo.enabledExtensionCount = static_cast<u32>(deviceExtensions.size());
+    deviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
   }
 
   if (vkCreateDevice(physicalDevice_, &deviceInfo, nullptr, &device_) != VK_SUCCESS) {
@@ -476,6 +549,19 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface) {
     device_ = VK_NULL_HANDLE;
     return false;
   }
+
+  // Preenche DeviceFeatures com os dados reais consultados acima e deriva perfil/caminhos
+  // habilitados via a lógica pura já testada headless (device_profile.cpp) — não reimplementamos
+  // a decisão aqui, só alimentamos com dados reais em vez dos valores à mão que os testes usam.
+  VkPhysicalDeviceProperties deviceProperties{};
+  vkGetPhysicalDeviceProperties(physicalDevice_, &deviceProperties);
+  deviceFeatures_ = DeviceFeatures{};
+  deviceFeatures_.vulkan1_3 = deviceProperties.apiVersion >= VK_API_VERSION_1_3;
+  deviceFeatures_.descriptorIndexing = descriptorIndexingExtensionSupported;
+  deviceFeatures_.bindlessNonUniformIndexing = bindlessSupported;
+  deviceFeatures_.maxBoundDescriptorSets = deviceProperties.limits.maxBoundDescriptorSets;
+  deviceProfile_ = classifyDeviceProfile(deviceFeatures_);
+  enabledPaths_ = derivePaths(deviceProfile_, deviceFeatures_);
 
   return true;
 }

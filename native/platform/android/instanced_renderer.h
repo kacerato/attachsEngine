@@ -3,6 +3,7 @@
 #include "core/base.h"
 #include "profiler/frame_statistics.h"
 #include "platform/android/dotnet_host.h"
+#include "rhi/bindless_registry.h"
 #include "rhi/device.h"
 #include "rhi/memory_allocator.h"
 #include "rhi/resource.h"
@@ -54,7 +55,7 @@ private:
   bool createInstanceBuffer();
   bool createDepthImage();
   bool createTextureResources();
-  bool createDescriptors();
+  bool createBindlessRegistry();
 
   VkDevice device_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
@@ -64,9 +65,16 @@ private:
   VkQueue graphicsQueue_ = VK_NULL_HANDLE;
 
   VkRenderPass renderPass_ = VK_NULL_HANDLE;
-  VkDescriptorSetLayout descriptorSetLayout_ = VK_NULL_HANDLE;
-  VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
-  VkDescriptorSet descriptorSet_ = VK_NULL_HANDLE;
+  // Item 2.1.4 do plano: em vez de um descriptor set por-objeto com 1 binding,
+  // o pipeline instanciado consome o registro bindless (array único indexado
+  // por materialIndex no shader) — ver rhi/bindless_registry.h. Esta PoC tem
+  // um único consumidor hoje, então o registro é dono deste objeto, não
+  // compartilhado entre renderers; se um segundo pipeline bindless aparecer,
+  // promover a dono no VulkanDevice passa a valer a pena.
+  rhi::BindlessTextureRegistry bindlessRegistry_{};
+  rhi::VulkanImage dummyTexture_{};
+  rhi::VulkanSampler dummySampler_{};
+  u32 baseTextureIndex_ = rhi::kBindlessIndexInvalid;
   VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline pipeline_ = VK_NULL_HANDLE;
 

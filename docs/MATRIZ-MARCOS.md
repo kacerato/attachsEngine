@@ -31,13 +31,13 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 254 |
-| PoC | 9 |
-| parcial | 31 |
+| não iniciado | 253 |
+| PoC | 8 |
+| parcial | 29 |
 | implementado | 32 |
-| validado em hardware | 6 |
+| validado em hardware (inclui variantes "só Android"/"Android") | 5 |
 | aceito | 1 |
-| **Total** | **333** |
+| **Total** | **328** |
 
 (O total real de linhas é 333, não os ~328 itens estritamente `X.Y.Z` do plano
 principal — a Etapa 0.2 tem 5 PoCs de risco identificados só como "PoC-A" a
@@ -163,7 +163,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 2.1.1 | Inicialização: instância, dispositivo, filas, swapchain com recriação robusta | validado em hardware | ESTADO.md "Shell Android — validação atual": instance/device/surface/swapchain confirmados em hardware físico real; recriação após `OUT_OF_DATE`/surface loss tratada (linhas 210-223) |
 | 2.1.2 | Alocação de memória com VMA + budgets por categoria | parcial | VMA 3.4.0 vendorizado; buffers, textura RGBA8, depth e staging reais passam por `VulkanMemoryAllocator`, com quotas e picos por categoria. Staging liberado após fence; recursos liberados antes do device. Calibração por perfil/pressão real (`VK_EXT_memory_budget`) pendente. Contrato: `RHI-RECURSOS.md` |
 | 2.1.3 | Objetos: buffers, imagens, samplers, pipelines, com cache hasheado | parcial | `VulkanBuffer`, `VulkanImage`/view e `VulkanSampler` move-only integrados ao cubo Android, com upload RGBA8/staging, descritor, depth e órbita touch. 5 testes novos de descritores/upload/pré-rotação; suíte nativa 127/127. Pipeline genérico/cache hasheado e sub-recursos avançados continuam pendentes |
-| 2.1.4 | Bindless via descriptor_indexing | não iniciado | Nenhuma implementação de bindless encontrada no RHI atual |
+| 2.1.4 | Bindless via descriptor_indexing | validado em hardware | `BindlessIndexAllocator` (headless, 7 testes) + `BindlessTextureRegistry` real (`VK_EXT_descriptor_indexing`, partially-bound + update-after-bind); `VulkanDevice::initializeDevice` detecta as 3 sub-features via `vkGetPhysicalDeviceFeatures2KHR` (resolvida por `vkGetInstanceProcAddr`, não linkada estática — stub do NDK minSdk 26 não exporta o símbolo core sem sufixo) e alimenta `DeviceProfile`/`EnabledPaths` já existentes com dados reais em vez de presumidos. `InstancedRenderer` (PoC-A, produção) migrado do descriptor set por-objeto para o registro bindless: `instanced.frag` indexa `sampler2D textures[]` via `nonuniformEXT(materialIndex)` recebido por push constant. Xiaomi físico via ADB: cubo texturizado renderiza corretamente pelo caminho bindless, 3 ciclos de lifecycle + recriação de surface/swapchain sem erro (`validate-android-shell.ps1 -AllowScreenshotDifference` PASS); 152 testes nativos host + 486 testes C# verdes |
 | 2.1.5 | Gravação de command buffers multi-thread; timeline semaphores | não iniciado | Shell atual usa command buffer único, sem gravação multi-thread; ESTADO.md linha 144 confirma "um único frame em voo" |
 | 2.1.6 | Camadas de validação, marcadores de debug, captura de frame | parcial | ESTADO.md linha 28 e nota de correções: validation layers mencionadas como pendentes para "captura com validation layers"; não confirmado como ativado por padrão em teste |
 | 2.1.7 | Detecção de capabilities e perfis de dispositivo (S/A/B/C) | implementado | ESTADO.md linha 74: "perfis de dispositivo S/A/B/C ✅ lógica testada" (headless, `test_device_profile.cpp`) |

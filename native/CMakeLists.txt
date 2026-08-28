@@ -163,6 +163,8 @@ target_link_libraries(aether_rendergraph PUBLIC aether_core)
 
 # --- aether_rhi: descritores/cache/perfis de dispositivo + wrappers Vulkan -
 add_library(aether_rhi STATIC
+  rhi/bindless_index_allocator.cpp
+  rhi/bindless_registry.cpp
   rhi/descriptor_cache.cpp
   rhi/device_profile.cpp
   rhi/device.cpp
@@ -288,6 +290,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_allocators.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_job_system.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_descriptor_cache.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_bindless_registry.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_device_profile.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_memory_budget.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_rhi_resources.cpp

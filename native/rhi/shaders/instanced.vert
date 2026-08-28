@@ -20,6 +20,7 @@ layout(push_constant) uniform FramePushConstants {
   float orbitYaw;
   float orbitPitch;
   vec4 surfaceTransform;
+  uint materialIndex; // índice no array bindless (rhi/bindless_registry.h) — ver instanced.frag
 } frame;
 
 const vec3 kCubeVertices[36] = vec3[](
