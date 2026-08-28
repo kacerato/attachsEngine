@@ -141,6 +141,7 @@ endif()
 add_library(aether_core STATIC
   core/assert.cpp
   core/job_system.cpp
+  profiler/frame_statistics.cpp
 )
 target_include_directories(aether_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_core PUBLIC Threads::Threads)
@@ -164,8 +165,17 @@ add_library(aether_rhi STATIC
   rhi/descriptor_cache.cpp
   rhi/device_profile.cpp
   rhi/device.cpp
+  rhi/memory_allocator.cpp
+  rhi/memory_budget.cpp
+  rhi/resource.cpp
+  rhi/resource_desc.cpp
+  rhi/upload_context.cpp
 )
-target_include_directories(aether_rhi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${Vulkan_INCLUDE_DIRS})
+target_include_directories(aether_rhi PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/VulkanMemoryAllocator/include
+  ${Vulkan_INCLUDE_DIRS}
+)
 target_link_libraries(aether_rhi PUBLIC aether_core)
 
 if(ANDROID)
@@ -179,6 +189,7 @@ if(ANDROID)
 
   add_library(aether_android SHARED
     platform/android/android_main.cpp
+    platform/android/android_frame_profiler.cpp
     platform/android/android_window.cpp
     platform/android/android_paths.cpp
     platform/android/android_vulkan_surface.cpp
@@ -275,8 +286,11 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_job_system.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_descriptor_cache.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_device_profile.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_memory_budget.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_rhi_resources.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_statistics.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_jolt_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_sqlite_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_trigger_bridge.cpp

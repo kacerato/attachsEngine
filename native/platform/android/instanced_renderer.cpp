@@ -3,6 +3,7 @@
 #include "rhi/shaders/instanced_spirv.h"
 
 #include <android/log.h>
+#include <array>
 #include <chrono>
 #include <cstring>
 
@@ -11,6 +12,41 @@ namespace ae::platform::android {
 namespace {
 constexpr const char *LogTag = "Aether.Android";
 constexpr u32 kBytesPerInstance = 5 * sizeof(float); // vec2 posição + vec3 cor, ver instanced.vert
+constexpr u32 kTextureSize = 64;
+
+struct FramePushConstants {
+  float timeSeconds;
+  float aspectRatio;
+  float orbitYaw;
+  float orbitPitch;
+  float surfaceXX;
+  float surfaceXY;
+  float surfaceYX;
+  float surfaceYY;
+};
+static_assert(sizeof(FramePushConstants) == 32);
+
+bool formatSupportsDepthAttachment(VkPhysicalDevice physicalDevice, VkFormat format) {
+  VkFormatProperties properties{};
+  vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &properties);
+  return (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
+}
+
+VkFormat chooseDepthFormat(VkPhysicalDevice physicalDevice) {
+  constexpr VkFormat candidates[] = {
+      VK_FORMAT_D32_SFLOAT,
+      VK_FORMAT_D24_UNORM_S8_UINT,
+      VK_FORMAT_D16_UNORM,
+  };
+  for (VkFormat candidate : candidates) {
+    if (formatSupportsDepthAttachment(physicalDevice, candidate)) return candidate;
+  }
+  return VK_FORMAT_UNDEFINED;
+}
+
+bool hasStencil(VkFormat format) {
+  return format == VK_FORMAT_D24_UNORM_S8_UINT || format == VK_FORMAT_D32_SFLOAT_S8_UINT;
+}
 
 VkShaderModule createShaderModule(VkDevice device, const uint32_t *code, uint32_t codeSize) {
   VkShaderModuleCreateInfo info{};
@@ -22,21 +58,6 @@ VkShaderModule createShaderModule(VkDevice device, const uint32_t *code, uint32_
   return module;
 }
 
-// Mesma varredura padrão de tipo de memória que qualquer app Vulkan precisa
-// fazer sem VMA (que só entra no RHI completo, Onda 3, item 7.1).
-bool findMemoryType(VkPhysicalDevice physicalDevice, u32 typeFilter, VkMemoryPropertyFlags properties,
-                    u32 *outIndex) {
-  VkPhysicalDeviceMemoryProperties memoryProperties{};
-  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
-  for (u32 i = 0; i < memoryProperties.memoryTypeCount; ++i) {
-    if ((typeFilter & (1u << i)) &&
-        (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-      *outIndex = i;
-      return true;
-    }
-  }
-  return false;
-}
 } // namespace
 
 InstancedRenderer::~InstancedRenderer() {
@@ -58,23 +79,43 @@ bool InstancedRenderer::createRenderPass() {
   colorRef.attachment = 0;
   colorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+  VkAttachmentDescription depthAttachment{};
+  depthAttachment.format = depthFormat_;
+  depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+  depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+  VkAttachmentReference depthRef{};
+  depthRef.attachment = 1;
+  depthRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
   VkSubpassDescription subpass{};
   subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
   subpass.colorAttachmentCount = 1;
   subpass.pColorAttachments = &colorRef;
+  subpass.pDepthStencilAttachment = &depthRef;
 
   VkSubpassDependency dependency{};
   dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
   dependency.dstSubpass = 0;
-  dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
   dependency.srcAccessMask = 0;
-  dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+  const VkAttachmentDescription attachments[] = {colorAttachment, depthAttachment};
 
   VkRenderPassCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  info.attachmentCount = 1;
-  info.pAttachments = &colorAttachment;
+  info.attachmentCount = 2;
+  info.pAttachments = attachments;
   info.subpassCount = 1;
   info.pSubpasses = &subpass;
   info.dependencyCount = 1;
@@ -104,7 +145,7 @@ bool InstancedRenderer::createPipeline() {
   stages[1].module = fragModule;
   stages[1].pName = "main";
 
-  // Um binding por instância (VK_VERTEX_INPUT_RATE_INSTANCE) — o quad em si
+  // Um binding por instância (VK_VERTEX_INPUT_RATE_INSTANCE) — o cubo em si
   // não tem vertex buffer (gerado por gl_VertexIndex igual ao TriangleRenderer,
   // ver instanced.vert), só a posição/cor avança por instância, não por
   // vértice.
@@ -156,6 +197,14 @@ bool InstancedRenderer::createPipeline() {
   multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
   multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
+  VkPipelineDepthStencilStateCreateInfo depthStencil{};
+  depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depthStencil.depthTestEnable = VK_TRUE;
+  depthStencil.depthWriteEnable = VK_TRUE;
+  depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+  depthStencil.minDepthBounds = 0.0f;
+  depthStencil.maxDepthBounds = 1.0f;
+
   VkPipelineColorBlendAttachmentState colorBlendAttachment{};
   colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -168,6 +217,13 @@ bool InstancedRenderer::createPipeline() {
 
   VkPipelineLayoutCreateInfo layoutInfo{};
   layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layoutInfo.setLayoutCount = 1;
+  layoutInfo.pSetLayouts = &descriptorSetLayout_;
+  VkPushConstantRange pushRange{};
+  pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  pushRange.size = sizeof(FramePushConstants);
+  layoutInfo.pushConstantRangeCount = 1;
+  layoutInfo.pPushConstantRanges = &pushRange;
   const bool layoutOk = vkCreatePipelineLayout(device_, &layoutInfo, nullptr, &pipelineLayout_) == VK_SUCCESS;
 
   bool pipelineOk = false;
@@ -181,6 +237,7 @@ bool InstancedRenderer::createPipeline() {
     pipelineInfo.pViewportState = &viewportState;
     pipelineInfo.pRasterizationState = &rasterizer;
     pipelineInfo.pMultisampleState = &multisample;
+    pipelineInfo.pDepthStencilState = &depthStencil;
     pipelineInfo.pColorBlendState = &colorBlend;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = pipelineLayout_;
@@ -199,12 +256,12 @@ bool InstancedRenderer::createPipeline() {
 bool InstancedRenderer::createFramebuffers() {
   framebufferCount_ = swapchain_->imageCount();
   for (u32 i = 0; i < framebufferCount_; ++i) {
-    VkImageView attachment = swapchain_->imageView(i);
+    const VkImageView attachments[] = {swapchain_->imageView(i), depthImage_.view()};
     VkFramebufferCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     info.renderPass = renderPass_;
-    info.attachmentCount = 1;
-    info.pAttachments = &attachment;
+    info.attachmentCount = 2;
+    info.pAttachments = attachments;
     info.width = swapchain_->width();
     info.height = swapchain_->height();
     info.layers = 1;
@@ -213,6 +270,22 @@ bool InstancedRenderer::createFramebuffers() {
     }
   }
   return true;
+}
+
+bool InstancedRenderer::createCommandResources() {
+  VkCommandPoolCreateInfo poolInfo{};
+  poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  poolInfo.queueFamilyIndex = graphicsQueueFamily_;
+  if (vkCreateCommandPool(device_, &poolInfo, nullptr, &commandPool_) != VK_SUCCESS) return false;
+
+  VkCommandBufferAllocateInfo allocInfo{};
+  allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  allocInfo.commandPool = commandPool_;
+  allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  allocInfo.commandBufferCount = 1;
+  if (vkAllocateCommandBuffers(device_, &allocInfo, &commandBuffer_) != VK_SUCCESS) return false;
+  return uploadContext_.initialize(device_, graphicsQueueFamily_);
 }
 
 void InstancedRenderer::destroyFramebuffers() {
@@ -226,40 +299,112 @@ void InstancedRenderer::destroyFramebuffers() {
 }
 
 bool InstancedRenderer::createInstanceBuffer() {
-  VkBufferCreateInfo bufferInfo{};
-  bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  bufferInfo.size = static_cast<VkDeviceSize>(instanceCount_) * kBytesPerInstance;
-  bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-  bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  if (vkCreateBuffer(device_, &bufferInfo, nullptr, &instanceBuffer_) != VK_SUCCESS) return false;
+  rhi::BufferDesc desc{};
+  desc.sizeBytes = static_cast<u64>(instanceCount_) * kBytesPerInstance;
+  desc.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+  desc.memoryClass = rhi::MemoryClass::Buffer;
+  desc.cpuAccess = rhi::CpuAccess::SequentialWrite;
+  desc.preferDeviceMemory = false;
+  return memoryAllocator_ != nullptr && memoryAllocator_->createBuffer(desc, &instanceBuffer_) &&
+         instanceBuffer_.mappedData() != nullptr;
+}
 
-  VkMemoryRequirements requirements{};
-  vkGetBufferMemoryRequirements(device_, instanceBuffer_, &requirements);
+bool InstancedRenderer::createDepthImage() {
+  depthFormat_ = chooseDepthFormat(physicalDevice_);
+  if (depthFormat_ == VK_FORMAT_UNDEFINED) return false;
+  rhi::ImageDesc desc{};
+  desc.width = swapchain_->width();
+  desc.height = swapchain_->height();
+  desc.format = depthFormat_;
+  desc.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+  desc.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+  if (hasStencil(depthFormat_)) desc.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+  desc.memoryClass = rhi::MemoryClass::RenderTarget;
+  return memoryAllocator_->createImage(desc, &depthImage_);
+}
 
-  u32 memoryTypeIndex = 0;
-  const VkMemoryPropertyFlags hostVisibleCoherent =
-      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-  if (!findMemoryType(physicalDevice_, requirements.memoryTypeBits, hostVisibleCoherent,
-                      &memoryTypeIndex)) {
+bool InstancedRenderer::createTextureResources() {
+  std::array<u8, kTextureSize * kTextureSize * 4> pixels{};
+  for (u32 y = 0; y < kTextureSize; ++y) {
+    for (u32 x = 0; x < kTextureSize; ++x) {
+      const bool light = ((x / 8u) + (y / 8u)) % 2u == 0;
+      const usize offset = static_cast<usize>(y * kTextureSize + x) * 4;
+      pixels[offset + 0] = light ? 220 : 24;
+      pixels[offset + 1] = light ? 245 : 76;
+      pixels[offset + 2] = light ? 245 : 86;
+      pixels[offset + 3] = 255;
+    }
+  }
+
+  rhi::ImageDesc imageDesc{};
+  imageDesc.width = kTextureSize;
+  imageDesc.height = kTextureSize;
+  imageDesc.format = VK_FORMAT_R8G8B8A8_SRGB;
+  imageDesc.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  imageDesc.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  imageDesc.memoryClass = rhi::MemoryClass::Texture;
+  if (!memoryAllocator_->createImage(imageDesc, &baseTexture_)) return false;
+  if (!uploadContext_.uploadRgba8ToSampledImage(*memoryAllocator_, pixels.data(), sizeof(pixels),
+                                                baseTexture_)) {
     return false;
   }
 
-  VkMemoryAllocateInfo allocInfo{};
-  allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-  allocInfo.allocationSize = requirements.size;
-  allocInfo.memoryTypeIndex = memoryTypeIndex;
-  if (vkAllocateMemory(device_, &allocInfo, nullptr, &instanceBufferMemory_) != VK_SUCCESS) {
-    return false;
-  }
-  if (vkBindBufferMemory(device_, instanceBuffer_, instanceBufferMemory_, 0) != VK_SUCCESS) {
+  rhi::SamplerDesc samplerDesc{};
+  samplerDesc.minFilter = VK_FILTER_NEAREST;
+  samplerDesc.magFilter = VK_FILTER_NEAREST;
+  samplerDesc.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+  return baseSampler_.initialize(device_, samplerDesc);
+}
+
+bool InstancedRenderer::createDescriptors() {
+  VkDescriptorSetLayoutBinding binding{};
+  binding.binding = 0;
+  binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  binding.descriptorCount = 1;
+  binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  VkDescriptorSetLayoutCreateInfo layoutInfo{};
+  layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  layoutInfo.bindingCount = 1;
+  layoutInfo.pBindings = &binding;
+  if (vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr, &descriptorSetLayout_) !=
+      VK_SUCCESS) {
     return false;
   }
 
-  // Mapeado uma vez pelo tempo de vida do buffer (host-coherent: sem
-  // flush/invalidate manual) — FillInstanceBuffer escreve direto aqui a
-  // cada frame, sem re-mapear.
-  return vkMapMemory(device_, instanceBufferMemory_, 0, bufferInfo.size, 0, &instanceBufferMapped_) ==
-         VK_SUCCESS;
+  VkDescriptorPoolSize poolSize{};
+  poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  poolSize.descriptorCount = 1;
+  VkDescriptorPoolCreateInfo poolInfo{};
+  poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  poolInfo.maxSets = 1;
+  poolInfo.poolSizeCount = 1;
+  poolInfo.pPoolSizes = &poolSize;
+  if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS) {
+    return false;
+  }
+
+  VkDescriptorSetAllocateInfo allocationInfo{};
+  allocationInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  allocationInfo.descriptorPool = descriptorPool_;
+  allocationInfo.descriptorSetCount = 1;
+  allocationInfo.pSetLayouts = &descriptorSetLayout_;
+  if (vkAllocateDescriptorSets(device_, &allocationInfo, &descriptorSet_) != VK_SUCCESS) {
+    return false;
+  }
+
+  VkDescriptorImageInfo imageInfo{};
+  imageInfo.sampler = baseSampler_.handle();
+  imageInfo.imageView = baseTexture_.view();
+  imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  VkWriteDescriptorSet write{};
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.dstSet = descriptorSet_;
+  write.dstBinding = 0;
+  write.descriptorCount = 1;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  write.pImageInfo = &imageInfo;
+  vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+  return true;
 }
 
 bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapchain &swapchain,
@@ -268,6 +413,7 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
 
   device_ = device.handle();
   physicalDevice_ = device.physicalDevice();
+  memoryAllocator_ = &device.memoryAllocator();
   swapchain_ = &swapchain;
   graphicsQueueFamily_ = device.graphicsQueueFamily();
   instanceCount_ = instanceCount;
@@ -280,6 +426,26 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     return false;
   }
 
+  if (!createCommandResources()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar recursos de comando/upload.");
+    return false;
+  }
+  if (!createInstanceBuffer()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o buffer de instâncias.");
+    return false;
+  }
+  if (!createTextureResources()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar/upload da textura do cubo.");
+    return false;
+  }
+  if (!createDepthImage()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o depth buffer.");
+    return false;
+  }
+  if (!createDescriptors()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar descritores da textura.");
+    return false;
+  }
   if (!createRenderPass()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o render pass instanciado.");
     return false;
@@ -292,32 +458,24 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar os framebuffers instanciados.");
     return false;
   }
-  if (!createInstanceBuffer()) {
-    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o buffer de instâncias.");
-    return false;
-  }
+  const rhi::MemoryBudgetEntry bufferBudget =
+      memoryAllocator_->budgetSnapshot().entries[static_cast<usize>(rhi::MemoryClass::Buffer)];
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+                      "RHI/VMA: buffer de instâncias=%llu bytes; uso=%llu, limite=%llu bytes.",
+                      static_cast<unsigned long long>(instanceBuffer_.sizeBytes()),
+                      static_cast<unsigned long long>(bufferBudget.usedBytes),
+                      static_cast<unsigned long long>(bufferBudget.limitBytes));
 
-  VkCommandPoolCreateInfo poolInfo{};
-  poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-  poolInfo.queueFamilyIndex = graphicsQueueFamily_;
-  if (vkCreateCommandPool(device_, &poolInfo, nullptr, &commandPool_) != VK_SUCCESS) {
-    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o command pool instanciado.");
-    return false;
-  }
-
-  VkCommandBufferAllocateInfo allocInfo{};
-  allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  allocInfo.commandPool = commandPool_;
-  allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  allocInfo.commandBufferCount = 1;
-  if (vkAllocateCommandBuffers(device_, &allocInfo, &commandBuffer_) != VK_SUCCESS) {
-    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao alocar o command buffer instanciado.");
-    return false;
-  }
-
-  __android_log_print(ANDROID_LOG_INFO, LogTag, "InstancedRenderer pronto: %u instâncias (PoC-A).",
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+                      "InstancedRenderer pronto: cubo texturizado + depth, %u instâncias (PoC-A).",
                       instanceCount_);
+  const rhi::MemoryBudgetSnapshot snapshot = memoryAllocator_->budgetSnapshot();
+  for (usize i = 0; i < rhi::MemoryClassCount; ++i) {
+    __android_log_print(ANDROID_LOG_INFO, LogTag, "RHI/VMA [%s]: uso=%llu, pico=%llu bytes.",
+                        rhi::memoryClassName(static_cast<rhi::MemoryClass>(i)),
+                        static_cast<unsigned long long>(snapshot.entries[i].usedBytes),
+                        static_cast<unsigned long long>(snapshot.entries[i].peakBytes));
+  }
   return true;
 }
 
@@ -343,23 +501,32 @@ void InstancedRenderer::shutdown() {
     vkDestroyRenderPass(device_, renderPass_, nullptr);
     renderPass_ = VK_NULL_HANDLE;
   }
-  if (instanceBufferMemory_ != VK_NULL_HANDLE) {
-    if (instanceBufferMapped_ != nullptr) vkUnmapMemory(device_, instanceBufferMemory_);
-    vkFreeMemory(device_, instanceBufferMemory_, nullptr);
-    instanceBufferMemory_ = VK_NULL_HANDLE;
-    instanceBufferMapped_ = nullptr;
+  if (descriptorPool_ != VK_NULL_HANDLE) {
+    vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
+    descriptorPool_ = VK_NULL_HANDLE;
+    descriptorSet_ = VK_NULL_HANDLE;
   }
-  if (instanceBuffer_ != VK_NULL_HANDLE) {
-    vkDestroyBuffer(device_, instanceBuffer_, nullptr);
-    instanceBuffer_ = VK_NULL_HANDLE;
+  if (descriptorSetLayout_ != VK_NULL_HANDLE) {
+    vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr);
+    descriptorSetLayout_ = VK_NULL_HANDLE;
   }
+  baseSampler_.shutdown();
+  baseTexture_.reset();
+  depthImage_.reset();
+  instanceBuffer_.reset();
+  uploadContext_.shutdown();
   device_ = VK_NULL_HANDLE;
   physicalDevice_ = VK_NULL_HANDLE;
+  memoryAllocator_ = nullptr;
   swapchain_ = nullptr;
   fillInstanceBuffer_ = nullptr;
 }
 
-rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds) {
+rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds, float orbitYaw,
+                                                  float orbitPitch) {
+  using Clock = std::chrono::steady_clock;
+  const auto acquireStart = frameProfilingEnabled_ ? Clock::now() : Clock::time_point{};
+  lastFrameTimings_ = {};
   u32 imageIndex = 0;
   const rhi::SwapchainStatus acquireStatus = swapchain_->acquireNextImage(&imageIndex);
   if (acquireStatus != rhi::SwapchainStatus::Ok &&
@@ -371,11 +538,16 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds) {
   // não o frame Vulkan inteiro — a pergunta da PoC-A é sobre o custo da
   // fronteira de interop especificamente.
   const auto fillStart = std::chrono::steady_clock::now();
-  fillInstanceBuffer_(static_cast<float *>(instanceBufferMapped_),
+  fillInstanceBuffer_(static_cast<float *>(instanceBuffer_.mappedData()),
                       static_cast<int>(instanceCount_), timeSeconds);
   const auto fillEnd = std::chrono::steady_clock::now();
   lastFillMicroseconds_ =
       std::chrono::duration<double, std::micro>(fillEnd - fillStart).count();
+  if (frameProfilingEnabled_) {
+    lastFrameTimings_.acquireMs = std::chrono::duration<double, std::milli>(fillStart - acquireStart).count();
+    lastFrameTimings_.interopMs = lastFillMicroseconds_ / 1000.0;
+  }
+  if (!memoryAllocator_->flushBuffer(instanceBuffer_)) return rhi::SwapchainStatus::FatalError;
 
   if (vkResetCommandBuffer(commandBuffer_, 0) != VK_SUCCESS) return rhi::SwapchainStatus::FatalError;
   VkCommandBufferBeginInfo beginInfo{};
@@ -384,19 +556,33 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds) {
     return rhi::SwapchainStatus::FatalError;
   }
 
-  VkClearValue clearColor{};
-  clearColor.color = {{0.02f, 0.02f, 0.05f, 1.0f}};
+  VkClearValue clearValues[2]{};
+  clearValues[0].color = {{0.02f, 0.02f, 0.05f, 1.0f}};
+  clearValues[1].depthStencil = {1.0f, 0};
 
   VkRenderPassBeginInfo renderPassInfo{};
   renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   renderPassInfo.renderPass = renderPass_;
   renderPassInfo.framebuffer = framebuffers_[imageIndex];
   renderPassInfo.renderArea.extent = {swapchain_->width(), swapchain_->height()};
-  renderPassInfo.clearValueCount = 1;
-  renderPassInfo.pClearValues = &clearColor;
+  renderPassInfo.clearValueCount = 2;
+  renderPassInfo.pClearValues = clearValues;
   vkCmdBeginRenderPass(commandBuffer_, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
   vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
+  vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1,
+                          &descriptorSet_, 0, nullptr);
+  const VkExtent2D displayExtent = swapchain_->displayExtent();
+  const rhi::SurfaceTransform &surfaceTransform = swapchain_->surfaceTransform();
+  const FramePushConstants pushConstants{
+      timeSeconds,
+      static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height),
+      orbitYaw,
+      orbitPitch,
+      surfaceTransform.xx, surfaceTransform.xy, surfaceTransform.yx, surfaceTransform.yy,
+  };
+  vkCmdPushConstants(commandBuffer_, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                     sizeof(pushConstants), &pushConstants);
 
   VkViewport viewport{};
   viewport.width = static_cast<float>(swapchain_->width());
@@ -410,8 +596,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds) {
   vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
 
   VkDeviceSize offset = 0;
-  vkCmdBindVertexBuffers(commandBuffer_, 1, 1, &instanceBuffer_, &offset);
-  vkCmdDraw(commandBuffer_, 6, instanceCount_, 0, 0); // 6 vértices/quad (2 triângulos)
+  const VkBuffer instanceBufferHandle = instanceBuffer_.handle();
+  vkCmdBindVertexBuffers(commandBuffer_, 1, 1, &instanceBufferHandle, &offset);
+  vkCmdDraw(commandBuffer_, 36, instanceCount_, 0, 0); // 36 vértices/cubo (12 triângulos)
 
   vkCmdEndRenderPass(commandBuffer_);
   if (vkEndCommandBuffer(commandBuffer_) != VK_SUCCESS) return rhi::SwapchainStatus::FatalError;
@@ -433,7 +620,13 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds) {
     return rhi::SwapchainStatus::FatalError;
   }
 
+  const auto presentStart = frameProfilingEnabled_ ? Clock::now() : Clock::time_point{};
   const rhi::SwapchainStatus presentStatus = swapchain_->present(imageIndex);
+  if (frameProfilingEnabled_) {
+    const auto presentEnd = Clock::now();
+    lastFrameTimings_.recordSubmitMs = std::chrono::duration<double, std::milli>(presentStart - fillEnd).count();
+    lastFrameTimings_.presentMs = std::chrono::duration<double, std::milli>(presentEnd - presentStart).count();
+  }
   if (presentStatus != rhi::SwapchainStatus::Ok) return presentStatus;
   return acquireStatus == rhi::SwapchainStatus::SuboptimalNeedsRecreate
              ? rhi::SwapchainStatus::SuboptimalNeedsRecreate

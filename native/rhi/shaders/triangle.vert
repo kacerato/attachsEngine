@@ -7,6 +7,9 @@
 // funciona em hardware real. Vertex buffer/upload de geometria real é
 // escopo do RHI completo (Onda 3, item 7.1).
 layout(location = 0) out vec3 vColor;
+layout(push_constant) uniform SurfacePushConstants {
+  vec4 transform;
+} surface;
 
 const vec2 kPositions[3] = vec2[](
   vec2(0.0, -0.5),
@@ -21,6 +24,8 @@ const vec3 kColors[3] = vec3[](
 );
 
 void main() {
-  gl_Position = vec4(kPositions[gl_VertexIndex], 0.0, 1.0);
+  vec2 position = kPositions[gl_VertexIndex];
+  gl_Position = vec4(dot(surface.transform.xy, position),
+                     dot(surface.transform.zw, position), 0.0, 1.0);
   vColor = kColors[gl_VertexIndex];
 }

@@ -54,10 +54,11 @@ bool AndroidVulkanSurface::initialize(ANativeWindow *window) {
   }
 
   __android_log_print(ANDROID_LOG_INFO, LogTag,
-                      "Surface Vulkan pronta: janela=%dx%d, imagens=%u..%u, fila=%u.",
+                      "Surface Vulkan pronta: janela=%dx%d, imagens=%u..%u, fila=%u, transform=%u, suportados=%u.",
                       ANativeWindow_getWidth(window), ANativeWindow_getHeight(window),
                       capabilities.minImageCount, capabilities.maxImageCount,
-                      device_.graphicsQueueFamily());
+                      device_.graphicsQueueFamily(), capabilities.currentTransform,
+                      capabilities.supportedTransforms);
 
   if (!swapchain_.initialize(device_.handle(), device_.physicalDevice(), surface_,
                              device_.graphicsQueueFamily(),

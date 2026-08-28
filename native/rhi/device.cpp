@@ -150,6 +150,17 @@ bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
     return false;
   }
 
+  SurfaceTransform transform{};
+  VkSurfaceTransformFlagBitsKHR preTransform = caps.currentTransform;
+  if (!describeSurfaceTransform(preTransform, transform)) {
+    if ((caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) == 0) return false;
+    preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+  }
+  // preTransform=currentTransform promises pre-rotated pixels. The image must
+  // use the natural extent, while projection uses the visible display extent.
+  // Using landscape dimensions for both made the cube appear flattened.
+  extent = transformSurfaceExtent(extent, transform);
+
   if ((caps.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) == 0 ||
       caps.minImageCount > kMaxSwapchainImages) {
     return false;
@@ -190,7 +201,7 @@ bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
   swapchainInfo.imageArrayLayers = 1;
   swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
   swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  swapchainInfo.preTransform = caps.currentTransform;
+  swapchainInfo.preTransform = preTransform;
   swapchainInfo.compositeAlpha = compositeAlpha;
   swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR; // sempre suportado, vsync — ponto de partida seguro
   swapchainInfo.clipped = VK_TRUE;
@@ -255,6 +266,7 @@ bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
   swapchain_ = newSwapchain;
   format_ = chosen.format;
   extent_ = extent;
+  surfaceTransform_ = transform;
   imageCount_ = actualImageCount;
   for (u32 i = 0; i < imageCount_; ++i) {
     images_[i] = newImages[i];
@@ -316,6 +328,7 @@ void VulkanDevice::shutdown() {
   // (vkDeviceWaitIdle) antes de destruir o device.
   if (device_ != VK_NULL_HANDLE) {
     vkDeviceWaitIdle(device_);
+    memoryAllocator_.shutdown();
     vkDestroyDevice(device_, nullptr);
     device_ = VK_NULL_HANDLE;
   }
@@ -443,6 +456,13 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface) {
   }
 
   if (vkCreateDevice(physicalDevice_, &deviceInfo, nullptr, &device_) != VK_SUCCESS) {
+    return false;
+  }
+
+  if (!memoryAllocator_.initialize(instance_, physicalDevice_, device_,
+                                   deriveMobileMemoryBudget(physicalDevice_))) {
+    vkDestroyDevice(device_, nullptr);
+    device_ = VK_NULL_HANDLE;
     return false;
   }
 

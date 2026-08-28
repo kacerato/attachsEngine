@@ -11,10 +11,17 @@ param(
     [int]$CycleTimeoutSeconds = 20,
     [ValidateRange(0, 120)]
     [int]$SoakMinutes = 0,
+    [ValidateRange(0, 600)]
+    [int]$ProfileSeconds = 0,
+    [ValidateRange(0.1, 100.0)]
+    [double]$PowerBudgetWatts = 4.0,
+    [switch]$RequirePowerBudget,
     [switch]$SkipInstall,
     [switch]$PreserveAppData,
     [switch]$ExerciseConfigurationChange,
     [switch]$ExerciseScreenCycle,
+    [ValidateRange(1, 100)]
+    [int]$ScreenCycles = 1,
     [switch]$AllowScreenshotDifference,
     [switch]$KeepAppRunning,
     [string]$OutputDirectory
@@ -22,6 +29,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "android-shell-lifecycle.ps1")
+. (Join-Path $PSScriptRoot "android-frame-profile.ps1")
 
 $PackageName = "dev.aether.editor"
 $ActivityName = "android.app.NativeActivity"
@@ -32,13 +41,13 @@ $ResumeFramePattern = "Primeiro frame após ativação apresentado:"
 $ResourcePatterns = @(
     "Surface Vulkan pronta:",
     "Swapchain pronta:",
-    "Pipeline do tri"
+    "InstancedRenderer pronto:"
 )
 $StartupPatterns = @(
     "Shell nativo iniciado\.",
     "Surface Vulkan pronta:",
     "Swapchain pronta:",
-    "Pipeline do tri",
+    "InstancedRenderer pronto:",
     "Aplicativo ativo\."
 )
 $RemoteArtifacts = [System.Collections.Generic.List[string]]::new()
@@ -46,7 +55,7 @@ $EvidenceLog = [System.Collections.Generic.List[string]]::new()
 $ConfigurationState = $null
 $WakeState = $null
 $Report = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 3
     status = "running"
     startedAtUtc = [DateTime]::UtcNow.ToString("o")
     finishedAtUtc = $null
@@ -59,17 +68,25 @@ $Report = [ordered]@{
         startupTimeoutSeconds = $StartupTimeoutSeconds
         cycleTimeoutSeconds = $CycleTimeoutSeconds
         soakMinutes = $SoakMinutes
+        profileSeconds = $ProfileSeconds
+        powerBudgetWatts = $PowerBudgetWatts
+        requirePowerBudget = [bool]$RequirePowerBudget
         configurationChange = [bool]$ExerciseConfigurationChange
         screenCycle = [bool]$ExerciseScreenCycle
+        screenCycles = if ($ExerciseScreenCycle) { $ScreenCycles } else { 0 }
         screenshotEqualityRequired = -not [bool]$AllowScreenshotDifference
     }
     checks = [System.Collections.Generic.List[object]]::new()
     screenshots = [ordered]@{}
     measurements = [ordered]@{
         resourceRecreationsDuringLifecycle = 0
+        powerSamples = [System.Collections.Generic.List[object]]::new()
+        keyguardWaits = [System.Collections.Generic.List[object]]::new()
+        keyguardDismissRequests = [System.Collections.Generic.List[object]]::new()
     }
     artifacts = [ordered]@{}
     error = $null
+    failureKind = $null
 }
 
 function Resolve-AdbExecutable {
@@ -146,12 +163,81 @@ function Get-AdbValue {
     return ((Invoke-Adb -Arguments $Arguments -AllowFailure) -join "`n").Trim()
 }
 
+function Get-PowerSample {
+    $thermal = Get-AdbValue -Arguments @("shell", "dumpsys", "thermalservice")
+    $battery = Get-AdbValue -Arguments @("shell", "dumpsys", "battery")
+
+    $thermalStatus = $null
+    if ($thermal -match "(?m)^Thermal Status:\s*(-?\d+)\s*$") {
+        $thermalStatus = [int]$Matches[1]
+    }
+
+    # Usa a seção atual do HAL, não o cache histórico mostrado antes dela.
+    $currentHal = $thermal
+    $halMarker = "Current temperatures from HAL:"
+    $halIndex = $thermal.IndexOf($halMarker, [StringComparison]::Ordinal)
+    if ($halIndex -ge 0) { $currentHal = $thermal.Substring($halIndex) }
+
+    $currentAmps = $null
+    $voltageVolts = $null
+    if ($currentHal -match "Temperature\{mValue=([-+]?\d+(?:\.\d+)?),\s*mType=7,\s*mName=ibat") {
+        $currentAmps = [double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
+    }
+    if ($currentHal -match "Temperature\{mValue=([-+]?\d+(?:\.\d+)?),\s*mType=6,\s*mName=vbat") {
+        $voltageVolts = [double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
+    }
+
+    $powerWatts = $null
+    if ($null -ne $currentAmps -and $null -ne $voltageVolts -and
+        [Math]::Abs($currentAmps) -le 30.0 -and $voltageVolts -ge 2.0 -and $voltageVolts -le 20.0) {
+        $powerWatts = [Math]::Round([Math]::Abs($currentAmps * $voltageVolts), 4)
+    }
+
+    $batteryLevel = $null
+    $batteryTemperatureCelsius = $null
+    if ($battery -match "(?m)^\s*level:\s*(\d+)\s*$") { $batteryLevel = [int]$Matches[1] }
+    if ($battery -match "(?m)^\s*temperature:\s*(-?\d+)\s*$") {
+        $batteryTemperatureCelsius = [Math]::Round(([int]$Matches[1]) / 10.0, 1)
+    }
+
+    return [ordered]@{
+        capturedAtUtc = [DateTime]::UtcNow.ToString("o")
+        thermalStatus = $thermalStatus
+        currentAmps = $currentAmps
+        voltageVolts = $voltageVolts
+        powerWatts = $powerWatts
+        batteryLevelPercent = $batteryLevel
+        batteryTemperatureCelsius = $batteryTemperatureCelsius
+    }
+}
+
 function Get-AetherLog {
     return ((Invoke-Adb -Arguments @("logcat", "-d", "-v", "brief", "$LogTag`:V", "Aether.Validation:I", "AndroidRuntime:E", "ActivityManager:E", "DEBUG:E", "*:S") -AllowFailure) -join "`n")
 }
 
 function Get-CrashLog {
     return ((Invoke-Adb -Arguments @("logcat", "-b", "crash", "-d", "-v", "brief") -AllowFailure) -join "`n")
+}
+
+function Save-LifecycleDiagnostics {
+    param([Parameter(Mandatory = $true)][string]$Reason)
+    # Captura antes de qualquer cleanup: force-stop/restauração ocultariam o estado que falhou.
+    $snapshot = [ordered]@{
+        capturedAtUtc = [DateTime]::UtcNow.ToString("o")
+        reason = $Reason
+        pid = Get-AppPid
+        power = @((Invoke-Adb -Arguments @("shell", "dumpsys", "power") -AllowFailure) |
+            Where-Object { $_ -match "mWakefulness=|mInteractive=|Display Power:|mWakefulnessChanging=" })
+        keyguard = @((Invoke-Adb -Arguments @("shell", "dumpsys", "window", "policy") -AllowFailure) |
+            Where-Object { $_ -match "(?i)keyguard|showing=|occluded=|inputRestricted=|interactiveState=|screenState=|secure=|trusted=" })
+        focus = @((Invoke-Adb -Arguments @("shell", "dumpsys", "window") -AllowFailure) |
+            Where-Object { $_ -match "mCurrentFocus=|mFocusedApp=" })
+        resumedActivity = @((Invoke-Adb -Arguments @("shell", "dumpsys", "activity", "activities") -AllowFailure) |
+            Where-Object { $_ -match "topResumedActivity=|mResumedActivity=" })
+    }
+    $path = Join-Path $script:ResolvedOutputDirectory "lifecycle-diagnostics.json"
+    $snapshot | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $path -Encoding UTF8
+    $Report.artifacts.lifecycleDiagnostics = $path
 }
 
 function Get-PatternCount {
@@ -232,8 +318,7 @@ function Assert-NoRuntimeFailure {
         "FATAL EXCEPTION",
         "ANR in $([regex]::Escape($PackageName))",
         "Fatal signal",
-        "E/$([regex]::Escape($LogTag)).*(Falha|Erro)",
-        "$([regex]::Escape($LogTag)).*E.*(Falha|Erro)"
+        "(?m)^E/$([regex]::Escape($LogTag))"
     )
     foreach ($pattern in $failurePatterns) {
         if ($aetherLog -match $pattern -or $crashLog -match $pattern) {
@@ -259,10 +344,29 @@ function Assert-AppPid {
 }
 
 function Start-AetherActivity {
-    $startOutput = Invoke-Adb -Arguments @("shell", "am", "start", "-W", "-n", $ComponentName)
+    $arguments = @("shell", "am", "start", "-W", "-n", $ComponentName)
+    if ($ProfileSeconds -gt 0) { $arguments += @("--ez", "aether.profile_frames", "true") }
+    $startOutput = Invoke-Adb -Arguments $arguments
     if (($startOutput -join "`n") -match "Error:") {
         throw "Android recusou iniciar $ComponentName`: $($startOutput -join [Environment]::NewLine)"
     }
+}
+
+function Wait-ForDeviceUnlock {
+    param([string]$Context, [int]$TimeoutSeconds)
+    Write-Host "Aguardando tela ligada e desbloqueada ($Context); se houver PIN/biometria, desbloqueie manualmente."
+    $result = Wait-AndroidKeyguardDismissed -TimeoutSeconds $TimeoutSeconds -ReadPolicy {
+        (Invoke-Adb -Arguments @("shell", "dumpsys", "window", "policy")) -join "`n"
+    } -RequestDismiss {
+        $output = Invoke-Adb -Arguments @("shell", "wm", "dismiss-keyguard")
+        $Report.measurements.keyguardDismissRequests.Add([ordered]@{
+            context = $Context
+            requestedAtUtc = [DateTime]::UtcNow.ToString("o")
+            output = $output -join "`n"
+        })
+    }
+    $result.context = $Context
+    $Report.measurements.keyguardWaits.Add($result)
 }
 
 function Prepare-DeviceWakeState {
@@ -275,10 +379,11 @@ function Prepare-DeviceWakeState {
         systemProximity = $null
         globalProximity = $null
     }
-
     if ($needsProximityOverride) {
         $state.systemProximity = Get-AdbValue -Arguments @("shell", "settings", "get", "system", "enable_screen_on_proximity_sensor")
         $state.globalProximity = Get-AdbValue -Arguments @("shell", "settings", "get", "global", "enable_screen_on_proximity_sensor")
+        # Registrar antes de alterar o aparelho: falha no desbloqueio também exige restore.
+        $script:WakeState = $state
         if ($state.systemProximity -ne "null") {
             Invoke-Adb -Arguments @("shell", "settings", "put", "system", "enable_screen_on_proximity_sensor", "0") | Out-Null
         }
@@ -287,11 +392,10 @@ function Prepare-DeviceWakeState {
         }
     }
 
+    $script:WakeState = $state
     Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_WAKEUP") | Out-Null
     Wait-ForWakefulness -Expected "Awake" -TimeoutSeconds $StartupTimeoutSeconds
-    Invoke-Adb -Arguments @("shell", "wm", "dismiss-keyguard") -AllowFailure | Out-Null
-    Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_BACK") -AllowFailure | Out-Null
-    Start-Sleep -Milliseconds 500
+    Wait-ForDeviceUnlock -Context "startup" -TimeoutSeconds $StartupTimeoutSeconds
     return $state
 }
 
@@ -357,6 +461,11 @@ try {
 
     $resolvedApk = [IO.Path]::GetFullPath($ApkPath)
     $Report.apk = $resolvedApk
+    if (Test-Path -LiteralPath $resolvedApk -PathType Leaf) {
+        $Report.artifacts.apkSha256 = (Get-FileHash -LiteralPath $resolvedApk -Algorithm SHA256).Hash
+    }
+    $Report.artifacts.gitRevision = ((& git -C (Join-Path $PSScriptRoot '..') rev-parse HEAD 2>$null) -join '').Trim()
+    $Report.artifacts.gitDirty = @(& git -C (Join-Path $PSScriptRoot '..') status --porcelain).Count -gt 0
     $Report.artifacts.outputDirectory = $script:ResolvedOutputDirectory
     $Report.artifacts.adb = $script:ResolvedAdb
 
@@ -387,6 +496,7 @@ try {
     Invoke-Adb -Arguments @("logcat", "-c") | Out-Null
     $WakeState = Prepare-DeviceWakeState
     $Report.configuration.initiallyAsleep = $WakeState.initiallyAsleep
+    if ($ProfileSeconds -gt 0) { $Report.measurements.profileEnvironmentStart = Get-PowerSample }
     Start-AetherActivity
 
     foreach ($pattern in $StartupPatterns) {
@@ -397,6 +507,73 @@ try {
     Assert-NoRuntimeFailure
     $EvidenceLog.Add("--- startup ---`n$(Get-AetherLog)")
     Add-PassedCheck -Name "startup" -Details ([ordered]@{ pid = $initialPid; frameMilestone = 1000 })
+
+    if ($ProfileSeconds -gt 0) {
+        $profileDeadline = [DateTime]::UtcNow.AddSeconds($ProfileSeconds + $StartupTimeoutSeconds + $CycleTimeoutSeconds)
+        $capture = $null
+        $layerText = Get-AdbValue -Arguments @('shell', 'dumpsys', 'SurfaceFlinger', '--list')
+        $surfaceLayer = Find-FrameProfileSurfaceLayer -Text $layerText -Component $ComponentName
+        $displayTimes = [Collections.Generic.SortedSet[long]]::new()
+        $displaySummary = $null
+        $displayContinuous = $true
+        $displayAvailable = $null -ne $surfaceLayer
+        $displayLast = 0L
+        $displayPolls = 0
+        do {
+            Assert-AppPid -ExpectedPid $initialPid -Context "a coleta CPU/frame" | Out-Null
+            if ($displayAvailable) {
+                # O nome reconhecido contém somente pacote/classe/#id, sem shell metacharacters.
+                if ($surfaceLayer -notmatch '^[a-zA-Z0-9._/#]+$') { throw 'Nome de surface não reconhecido.' }
+                $latency = Get-AdbValue -Arguments @('shell', 'dumpsys', 'SurfaceFlinger', '--latency', $surfaceLayer)
+                $times = @(ConvertFrom-SurfaceFrameLatency $latency | Sort-Object -Unique)
+                ++$displayPolls
+                if ($times.Count -eq 0) {
+                    $displayAvailable = $false
+                } else {
+                    if ($displayLast -gt 0 -and $times[0] -gt $displayLast) { $displayContinuous = $false }
+                    foreach ($time in $times) { [void]$displayTimes.Add($time) }
+                    $displayLast = $times[-1]
+                }
+            }
+            $windows = @(ConvertFrom-FrameProfileLog -Text (Get-AetherLog) -ExpectedPid $initialPid)
+            $capture = Get-FrameProfileCapture -Windows $windows -MinimumSeconds $ProfileSeconds
+            if ($null -ne $capture) {
+                $displaySummary = Get-SurfaceFrameSummary -Timestamps @($displayTimes)
+                if (-not $displayAvailable -or -not $displayContinuous -or
+                    ($null -ne $displaySummary -and $displaySummary.elapsedSeconds -ge $ProfileSeconds)) { break }
+            }
+            Start-Sleep -Milliseconds 250
+        } while ([DateTime]::UtcNow -lt $profileDeadline)
+        if ($null -eq $capture) { throw "FrameProfile não produziu $ProfileSeconds s contínuos; sem evidência suficiente." }
+        Assert-NoRuntimeFailure
+        $Report.measurements.profileEnvironmentEnd = Get-PowerSample
+        $Report.measurements.frameProfile = $capture
+        $Report.measurements.displayFrameProfile = [ordered]@{
+            layer = $surfaceLayer
+            available = $displayAvailable
+            continuous = $displayContinuous
+            polls = $displayPolls
+            summary = $displaySummary
+        }
+        $displayValidated = $displayAvailable -and $displayContinuous -and $null -ne $displaySummary -and
+            $displaySummary.elapsedSeconds -ge $ProfileSeconds
+        $Report.measurements.displayFrameProfile.valid = $displayValidated
+        if (-not $displayValidated -and $null -ne $displaySummary) { $displaySummary.displayedFps = $null }
+        $capture.pocA.displayedFpsMeasured = $displayValidated
+        $capture.pocA.limitation = 'CPU e apresentação têm janelas próprias sobrepostas; um aparelho não fecha a matriz PoC-A.'
+        if ($displayValidated) {
+            $capture.pocA.observedDisplayedFps = $displaySummary.displayedFps
+            Write-Host "SurfaceFlinger: $($displaySummary.displayedFps) frames exibidos/s em $($displaySummary.elapsedSeconds) s contínuos."
+        }
+        Add-PassedCheck -Name "frame-profile-capture" -Details ([ordered]@{
+            frames = $capture.frames
+            elapsedSeconds = $capture.elapsedSeconds
+            cpuBudgetPassed = $capture.pocA.cpuBudgetPassed
+            pocAAccepted = $false
+        })
+        Write-Host "FrameProfile: $($capture.presentFps) presents/s; CPU processo média=$($capture.metrics.process_cpu_ms.mean) ms; máximo=$($capture.metrics.process_cpu_ms.max) ms."
+        # Sucesso da coleta não significa aprovação do orçamento nem FPS exibido comprovado.
+    }
 
     $Report.screenshots.before = Save-DeviceScreenshot -Name "before-lifecycle"
 
@@ -434,10 +611,14 @@ try {
         $soak = [Diagnostics.Stopwatch]::StartNew()
         $deadline = [DateTime]::UtcNow.AddMinutes($SoakMinutes)
         $samples = 0
+        $powerSamples = [System.Collections.Generic.List[object]]::new()
         while ([DateTime]::UtcNow -lt $deadline) {
             Start-Sleep -Seconds 5
             Assert-AppPid -ExpectedPid $initialPid -Context "o soak de estabilidade" | Out-Null
             Assert-NoRuntimeFailure
+            $powerSample = Get-PowerSample
+            $powerSamples.Add($powerSample)
+            $Report.measurements.powerSamples.Add($powerSample)
             ++$samples
             Write-Progress -Activity "Soak de estabilidade Android" -Status "$([Math]::Floor($soak.Elapsed.TotalMinutes)) de $SoakMinutes min" -PercentComplete ([Math]::Min(100, ($soak.Elapsed.TotalMinutes / $SoakMinutes) * 100))
         }
@@ -445,12 +626,39 @@ try {
         Write-Progress -Activity "Soak de estabilidade Android" -Completed
         $Report.measurements.soakElapsedSeconds = [Math]::Round($soak.Elapsed.TotalSeconds, 3)
         $Report.measurements.soakHealthSamples = $samples
+        $validPowerSamples = @($powerSamples | Where-Object { $null -ne $_.powerWatts })
+        $Report.measurements.powerSampleCount = $validPowerSamples.Count
+        if ($validPowerSamples.Count -gt 0) {
+            $powerValues = @($validPowerSamples | ForEach-Object { [double]$_.powerWatts })
+            $Report.measurements.powerAverageWatts = [Math]::Round(($powerValues | Measure-Object -Average).Average, 4)
+            $Report.measurements.powerPeakWatts = [Math]::Round(($powerValues | Measure-Object -Maximum).Maximum, 4)
+        } else {
+            $Report.measurements.powerAverageWatts = $null
+            $Report.measurements.powerPeakWatts = $null
+        }
+        $thermalStatuses = @($powerSamples | Where-Object { $null -ne $_.thermalStatus } | ForEach-Object { [int]$_.thermalStatus })
+        $Report.measurements.thermalStatusPeak = if ($thermalStatuses.Count -gt 0) {
+            ($thermalStatuses | Measure-Object -Maximum).Maximum
+        } else { $null }
+        $withinPowerBudget = $null -ne $Report.measurements.powerAverageWatts -and
+            $Report.measurements.powerAverageWatts -lt $PowerBudgetWatts
+        if ($RequirePowerBudget -and $validPowerSamples.Count -eq 0) {
+            throw "O aparelho não expôs ibat/vbat pelo thermalservice; o orçamento de potência não pôde ser validado."
+        }
+        if ($RequirePowerBudget -and -not $withinPowerBudget) {
+            throw "Potência média de $($Report.measurements.powerAverageWatts) W excedeu o orçamento de $PowerBudgetWatts W."
+        }
         Add-PassedCheck -Name "stability-soak" -Details ([ordered]@{
             requestedMinutes = $SoakMinutes
             elapsedSeconds = $Report.measurements.soakElapsedSeconds
             healthSamples = $samples
             stablePid = $initialPid
-            powerMeasured = $false
+            powerMeasured = $validPowerSamples.Count -gt 0
+            averageWatts = $Report.measurements.powerAverageWatts
+            peakWatts = $Report.measurements.powerPeakWatts
+            budgetWatts = $PowerBudgetWatts
+            withinPowerBudget = $withinPowerBudget
+            peakThermalStatus = $Report.measurements.thermalStatusPeak
         })
     }
 
@@ -464,7 +672,7 @@ try {
         $targetUiMode = if ($ConfigurationState -eq "yes") { "no" } else { "yes" }
         Invoke-Adb -Arguments @("shell", "cmd", "uimode", "night", $targetUiMode) | Out-Null
         Wait-ForPatternAfterMarker -Marker $configMarker -Pattern "Configuração alterada:" -TimeoutSeconds $CycleTimeoutSeconds -Description "APP_CMD_CONFIG_CHANGED" | Out-Null
-        $configLog = Wait-ForPatternAfterMarker -Marker $configMarker -Pattern "Pipeline do tri" -TimeoutSeconds $CycleTimeoutSeconds -Description "pipeline após configuração"
+        $configLog = Wait-ForPatternAfterMarker -Marker $configMarker -Pattern "InstancedRenderer pronto:" -TimeoutSeconds $CycleTimeoutSeconds -Description "pipeline após configuração"
         Assert-AppPid -ExpectedPid $initialPid -Context "a mudança de configuração" | Out-Null
         Assert-NoRuntimeFailure
         $EvidenceLog.Add("--- configuration change ---`n$configLog")
@@ -477,26 +685,28 @@ try {
         $restoreMarker = Write-LogMarker -Prefix "configuration-restore"
         Invoke-Adb -Arguments @("shell", "cmd", "uimode", "night", $ConfigurationState) | Out-Null
         Wait-ForPatternAfterMarker -Marker $restoreMarker -Pattern "Configuração alterada:" -TimeoutSeconds $CycleTimeoutSeconds -Description "restauração da configuração" | Out-Null
-        $restoreLog = Wait-ForPatternAfterMarker -Marker $restoreMarker -Pattern "Pipeline do tri" -TimeoutSeconds $CycleTimeoutSeconds -Description "pipeline após restauração"
+        $restoreLog = Wait-ForPatternAfterMarker -Marker $restoreMarker -Pattern "InstancedRenderer pronto:" -TimeoutSeconds $CycleTimeoutSeconds -Description "pipeline após restauração"
         $EvidenceLog.Add("--- configuration restore ---`n$restoreLog")
         $ConfigurationState = $null
     }
 
-    if ($ExerciseScreenCycle) {
-        $screenMarker = Write-LogMarker -Prefix "screen-cycle"
+    for ($screenCycle = 1; $ExerciseScreenCycle -and $screenCycle -le $ScreenCycles; ++$screenCycle) {
+        $screenMarker = Write-LogMarker -Prefix "screen-cycle-$screenCycle"
         Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_POWER") | Out-Null
         Wait-ForPatternAfterMarker -Marker $screenMarker -Pattern "Aplicativo suspenso\." -TimeoutSeconds $CycleTimeoutSeconds -Description "suspensão ao apagar a tela" | Out-Null
         Wait-ForWakefulness -Expected "Asleep" -TimeoutSeconds $CycleTimeoutSeconds
+        # Não aceitar uma ativação transitória anterior ao estado Asleep como retomada.
+        $screenMarker = Write-LogMarker -Prefix "screen-wake-$screenCycle"
         Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_WAKEUP") -AllowFailure | Out-Null
         Wait-ForWakefulness -Expected "Awake" -TimeoutSeconds $CycleTimeoutSeconds
-        Invoke-Adb -Arguments @("shell", "wm", "dismiss-keyguard") -AllowFailure | Out-Null
+        Wait-ForDeviceUnlock -Context "screen-cycle-$screenCycle" -TimeoutSeconds $CycleTimeoutSeconds
         Start-AetherActivity
         Wait-ForPatternAfterMarker -Marker $screenMarker -Pattern "Aplicativo ativo\." -TimeoutSeconds $CycleTimeoutSeconds -Description "retomada após acender a tela" | Out-Null
         $screenLog = Wait-ForPatternAfterMarker -Marker $screenMarker -Pattern $ResumeFramePattern -TimeoutSeconds $CycleTimeoutSeconds -Description "primeiro frame após o ciclo de tela"
         Assert-AppPid -ExpectedPid $initialPid -Context "o ciclo de tela" | Out-Null
         Assert-NoRuntimeFailure
         $EvidenceLog.Add("--- screen cycle ---`n$screenLog")
-        Add-PassedCheck -Name "screen-off-on" -Details ([ordered]@{ stablePid = $initialPid })
+        Add-PassedCheck -Name "screen-off-on" -Details ([ordered]@{ cycle = $screenCycle; stablePid = $initialPid })
     }
 
     Invoke-Adb -Arguments @("shell", "am", "send-trim-memory", $PackageName, "RUNNING_CRITICAL") | Out-Null
@@ -531,7 +741,15 @@ try {
 catch {
     $Report.status = "failed"
     $Report.error = $_.Exception.Message
-    Write-Host "FAIL: $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.Exception.Data['AetherFailureKind'] -eq 'device-keyguard-blocked') {
+        $Report.status = "blocked"
+        $Report.failureKind = 'device-keyguard-blocked'
+    }
+    Write-Host "$($Report.status.ToUpperInvariant()): $($Report.error)" -ForegroundColor Red
+    if ($script:ResolvedAdb -and $script:ResolvedSerial -and $script:ResolvedOutputDirectory) {
+        try { Save-LifecycleDiagnostics -Reason $Report.error }
+        catch { $Report.artifacts.lifecycleDiagnosticsError = $_.Exception.Message }
+    }
 }
 finally {
     if ($script:ResolvedAdb -and $script:ResolvedSerial) {
@@ -552,6 +770,10 @@ finally {
             $logPath = Join-Path $script:ResolvedOutputDirectory "logcat.txt"
             (($EvidenceLog -join "`n`n") + "`n`n--- final logcat window ---`n" + (Get-AetherLog) + "`n`n--- crash buffer ---`n" + (Get-CrashLog)) | Set-Content -LiteralPath $logPath -Encoding UTF8
             $Report.artifacts.logcat = $logPath
+            $timelinePath = Join-Path $script:ResolvedOutputDirectory "lifecycle-timeline.txt"
+            Invoke-Adb -Arguments @("logcat", "-d", "-v", "threadtime", "$LogTag`:V", "Aether.Validation:I", "*:S") -AllowFailure |
+                Set-Content -LiteralPath $timelinePath -Encoding UTF8
+            $Report.artifacts.lifecycleTimeline = $timelinePath
         }
     }
     $Report.finishedAtUtc = [DateTime]::UtcNow.ToString("o")

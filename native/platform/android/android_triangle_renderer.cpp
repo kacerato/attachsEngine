@@ -137,6 +137,11 @@ bool TriangleRenderer::createPipeline() {
 
   VkPipelineLayoutCreateInfo layoutInfo{};
   layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  VkPushConstantRange pushRange{};
+  pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  pushRange.size = 4 * sizeof(float);
+  layoutInfo.pushConstantRangeCount = 1;
+  layoutInfo.pPushConstantRanges = &pushRange;
   const bool layoutOk = vkCreatePipelineLayout(device_, &layoutInfo, nullptr, &pipelineLayout_) == VK_SUCCESS;
 
   bool pipelineOk = false;
@@ -306,6 +311,10 @@ rhi::SwapchainStatus TriangleRenderer::drawFrame() {
   scissor.extent = {swapchain_->width(), swapchain_->height()};
   vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
 
+  const rhi::SurfaceTransform &transform = swapchain_->surfaceTransform();
+  const float surfaceMatrix[] = {transform.xx, transform.xy, transform.yx, transform.yy};
+  vkCmdPushConstants(commandBuffer_, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                     sizeof(surfaceMatrix), surfaceMatrix);
   vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
 
   vkCmdEndRenderPass(commandBuffer_);

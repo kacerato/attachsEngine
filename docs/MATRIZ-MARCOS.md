@@ -31,15 +31,15 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 261 |
+| não iniciado | 258 |
 | PoC | 9 |
-| parcial | 26 |
+| parcial | 30 |
 | implementado | 31 |
-| validado em hardware | 5 |
+| validado em hardware | 4 |
 | aceito | 1 |
 | **Total** | **333** |
 
-(O total real de linhas é 332, não os ~328 itens estritamente `X.Y.Z` do plano
+(O total real de linhas é 333, não os ~328 itens estritamente `X.Y.Z` do plano
 principal — a Etapa 0.2 tem 5 PoCs de risco identificados só como "PoC-A" a
 "PoC-E" dentro do item 0.2, sem numeração própria em `X.Y.Z`; cada um recebeu
 linha individual aqui por ter critério de aceite próprio no plano. "Validado
@@ -60,7 +60,7 @@ não recebem estado agregado — servem apenas de navegação.
 |---|---|---|---|
 | 0.1.1 | Monorepo, build C# (.NET SDK) + CMake/Ninja nativo, CI com dispositivos físicos | parcial | ESTADO.md linha 61 (build C#+CMake/Ninja e runner de testes próprio ✅); CI com dispositivos físicos não existe — só `tools/validate-android-shell.ps1` rodado manualmente |
 | 0.1.2 | Farm de dispositivos: mínimo 12 aparelhos cobrindo Adreno/Mali/PowerVR/Apple, perfis S/A/B/C | parcial | ESTADO.md "Shell Android — validação atual": 1 aparelho físico (Xiaomi SM8735/Adreno). Faltam Mali, PowerVR, Apple e perfil C — matriz mínima de 6 (§6.1 do plano de lacunas, `GAP-HW-01`) não atingida |
-| 0.1.3 | Shell nativo Android (NativeActivity/GameActivity) + iOS, loop de app, surface Vulkan, ciclo de vida | validado em hardware (só Android) | ESTADO.md linha 62 e seção "Shell Android — validação atual": surface Vulkan, swapchain, pipeline e apresentação confirmados em hardware físico real (Adreno); lifecycle com 100 ciclos background/foreground, screen off/on, mudança de configuração. iOS: não iniciado (nenhum arquivo em `native/platform/ios` além de stub) |
+| 0.1.3 | Shell nativo Android (NativeActivity/GameActivity) + iOS, loop de app, surface Vulkan, ciclo de vida | validado em hardware (só Android) | Shell Android no Adreno; 100 ciclos históricos do triângulo, agora cubo/depth/touch com 3 retomadas, configuração e screen off/on em `lifecycle-keyguard-20260828-verified/`. Timeout investigado: keyguard com senha, não trava gráfica demonstrada. Runner separa desbloqueio de retomada; ver `ANDROID-SHELL.md`. iOS não iniciado |
 | 0.1.4 | Integração .NET no processo nativo: carregar CoreCLR/Mono, chamar C# do C++ e vice-versa | implementado | ESTADO.md "0.1.4": `DotNetHost` hospeda CoreCLR via `hostfxr` e chama C# do C++ com sucesso, integrado ao `android_main.cpp`/Gradle, empacotado no APK de produção (assets + jniLibs), validado em hardware real (Xiaomi SM8735) — log real do dispositivo confirma `CoreCLR hospedado no shell: Ping(2,3)=5` coexistindo com o shell gráfico. Binários vendorizados em `native/third_party/dotnet-runtime/` |
 | 0.1.5 | Telemetria e logging desde o dia 1 | parcial | Logging via logcat usado no shell Android (ESTADO.md linhas 109-121); não há sistema de telemetria estruturado além disso |
 
@@ -68,9 +68,9 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 0.2 (PoC-A) | Vulkan + .NET: 5.000 objetos a 60 fps, < 3 ms CPU | validado em hardware | `InstancedRenderer` (`native/platform/android/instanced_renderer.h/.cpp`) desenha 5.000 quads instanciados cuja posição/cor vêm de `Aether.Interop.NativeEntryPoints.FillInstanceBuffer` (novo, `[UnmanagedCallersOnly]`), um único crossing C++↔C# por frame (nunca por objeto). Medido em hardware real (Xiaomi SM8735): pico do crossing 1,57–2,83 ms em regime estável, dentro do orçamento de 3 ms — log real do dispositivo confirma repetidamente "dentro do orçamento" ao longo de várias janelas de amostragem. Confirmado visualmente (screenshot: grade de 5.000 quads coloridos). Nuance registrada: o primeiro frame após retomar de background sobe a ~5,2 ms (recriação de pipeline/JIT reaquecendo), estabiliza de volta em poucos frames — não é falha do orçamento em regime estável, é custo de retomada, documentado em `ESTADO.md` |
+| 0.2 (PoC-A) | Vulkan + .NET: 5.000 objetos a 60 fps, < 3 ms CPU | parcial | Coletor CPU processo/thread + percentis e SurfaceFlinger integrados. Nativo otimizado: 60,056 FPS exibidos/60,244 s; CPU média 2,928 ms, pior p95 de janela 3,880 ms, pico 15,429 ms em 4.200 frames. Orçamento de CPU não atendido; matriz e atribuição dos picos pendentes. Ver `PROFILING-ANDROID.md` e `poc-a-profile-release-display-20260828/report.json` |
 | 0.2 (PoC-B) | Gestos de edição: 10 testadores completam tarefa em < 30 s | PoC | `prototype/editor.html` prova UX de gizmos/câmera (ESTADO.md linha 63, 130-132), mas nenhum teste formal com 10 usuários foi registrado |
-| 0.2 (PoC-C) | Térmica: 30 min sem throttle, < 4 W | não iniciado | `PowerGovernor` existe com histerese testada (ESTADO.md linha 67, 6 testes), mas não há integração com leitura térmica real do Android nem soak de 30 min registrado |
+| 0.2 (PoC-C) | Térmica: 30 min sem throttle, < 4 W | parcial | `tools/validate-android-shell.ps1` agora coleta `ibat`, `vbat` e status térmico reais do Android, persiste cada amostra e pode exigir o orçamento por `-RequirePowerBudget`. Checkpoint aprovado no Xiaomi SM8735 (`build/android-validation/rhi-vma-thermal-20260826-171317/report.json`): 61,507 s/11 amostras, média 1,7136 W, pico 4,1096 W, status máximo 0. Faltam o soak formal de 30 min, integração do sensor ao `PowerGovernor` e matriz de aparelhos |
 | 0.2 (PoC-D) | Hot reload C#: editar → ver mudança em < 2 s | não iniciado | Nenhum pipeline de hot reload implementado nesta base |
 | 0.2 (PoC-E) | Compressão ASTC em GPU: < 300 ms para 4096×4096 | não iniciado | Nenhum compressor ASTC/compute shader no repositório |
 
@@ -101,7 +101,7 @@ não recebem estado agregado — servem apenas de navegação.
 |---|---|---|---|
 | 1.1.1 | Abstração de sistema de arquivos (assets, escopo Android, iCloud/Files iOS) | parcial | `managed/Aether.Core/Platform/IFileSystem.cs`: interface por escopo nomeado (`FileSystemScope.Assets`/`PersistentData`/`Cache`), sem caminho absoluto livre. `StandardFileSystem` implementa sobre `System.IO` (raiz por escopo configurável), usada em desktop/testes e como base para a implementação Android real injetar `internalDataPath`/`externalDataPath` de `ANativeActivity` (já resolvidos nativamente em `native/platform/android/android_paths.h`, sem JNI). ✅ 19 testes (`PlatformFileSystemTests.cs`) — cobre round-trip via bytes e streams, escape via `..` bloqueado, caminho absoluto rejeitado, escrita em `Assets` lança, isolamento entre escopos, enumeração não-recursiva. Continua `parcial`: a implementação Android real (consumindo os paths nativos) e a migração de `WriteAheadLog`/persistência de `ConfigurationStore` para usar esta abstração são integração futura, fora do critério objetivo desta fatia |
 | 1.1.2 | Entrada: toque multi-ponto, caneta, teclado, mouse, gamepad, sensores | parcial | `managed/Aether.Core/Input/`: `TouchPoint`/`TouchPhase` (ciclo Began→Moved/Stationary→Ended/Cancelled, delta e predição linear via `InputState.PredictPosition`), `PenInfo` (pressão/tilt/rotação/botão lateral associado por Id de toque), `KeyCode`/`KeyEvent`, `MouseState`, `GamepadState`. `InputState` agrega tudo por frame com modelo push (`PushTouch`/`PushKey`/`SetMouse`/`SetGamepad`) + `EndFrame` consolidando fases e limpando eventos do frame. ✅ 25 testes (`InputTests.cs`) — ciclo de vida completo de multi-touch, predição, caneta desassociada ao finalizar toque, zero GC na leitura de `ActiveTouches`. Continua `parcial`: nenhuma captação real de Android (`AInputEvent`)/iOS (`UITouch`)/sensores existe ainda — é tradução futura para os tipos já definidos aqui, mesma disciplina de 1.1.1 |
-| 1.1.3 | Ciclo de vida robusto: pausa, retomada, perda/recriação de surface, memória baixa | validado em hardware (Android) | ESTADO.md "Shell Android — validação atual": lifecycle 4 testes portáteis + 100 ciclos background/foreground + screen off/on + `SurfaceLost`/`OutOfDate` tratados (linhas 210-223); `tests/native/test_app_lifecycle.cpp` |
+| 1.1.3 | Ciclo de vida robusto: pausa, retomada, perda/recriação de surface, memória baixa | validado em hardware (Android) | 7 testes C++ portáteis + 12 regressões do runner; comandos e tempos instrumentados. 100 ciclos históricos do triângulo e regressão de cubo com 3 retomadas/configuração/screen-cycle; bloqueio seguro recebe classificação própria. `SurfaceLost`/`OutOfDate` tratados; pressão real e matriz de GPUs pendentes. Ver `ANDROID-SHELL.md` |
 | 1.1.4 | Janela/display: taxa variável, notch/safe area, multi-janela, display externo | parcial | `managed/Aether.Core/Platform/`: `SafeAreaInsets` (margem por borda para notch/barra de gestos, consumida futuramente pela UI do item 4.6.1), `DisplayInfo` (resolução, densidade, `RefreshRateHz` variável, `SafeAreaSize()` saturando em zero) e `WindowState` (display principal + displays externos via modelo push `SetPrimaryDisplay`/`AddOrUpdateExternalDisplay`/`RemoveDisplay` — "multi-janela" aqui é múltiplos displays simultâneos, não split-screen de processo). ✅ 23 testes (`WindowStateTests.cs`) — cobre validação de dimensão/densidade/taxa negativa, saturação de safe-area, troca de Id do principal rejeitada, display externo declarado `IsBuiltIn` rejeitado, múltiplos displays externos coexistindo. Continua `parcial`: nenhuma captação real de `Display`/`DisplayCutout` (Android) ou `UIScreen` (iOS) existe — shell Android segue landscape fixo simples |
 | 1.1.5 | Energia e térmica: leitura de estado, API do PowerGovernor | parcial | `PowerGovernor` com histerese implementado e testado (ESTADO.md linha 67), mas sem leitura real de `thermalStatus` do Android integrada |
 
@@ -161,8 +161,8 @@ não recebem estado agregado — servem apenas de navegação.
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
 | 2.1.1 | Inicialização: instância, dispositivo, filas, swapchain com recriação robusta | validado em hardware | ESTADO.md "Shell Android — validação atual": instance/device/surface/swapchain confirmados em hardware físico real; recriação após `OUT_OF_DATE`/surface loss tratada (linhas 210-223) |
-| 2.1.2 | Alocação de memória com VMA + budgets por categoria | não iniciado | Nenhuma integração com VMA (Vulkan Memory Allocator) encontrada; alocação de memória Vulkan no shell é manual e mínima |
-| 2.1.3 | Objetos: buffers, imagens, samplers, pipelines, com cache hasheado | parcial | ESTADO.md linha 74: "RHI Vulkan: cache de descritores, perfis de dispositivo S/A/B/C ✅ lógica testada" (headless); pipeline mínimo existe no `TriangleRenderer` mas sem buffers/imagens/samplers genéricos (linha 145: "sem depth, vertex buffer, textura") |
+| 2.1.2 | Alocação de memória com VMA + budgets por categoria | parcial | VMA 3.4.0 vendorizado; buffers, textura RGBA8, depth e staging reais passam por `VulkanMemoryAllocator`, com quotas e picos por categoria. Staging liberado após fence; recursos liberados antes do device. Calibração por perfil/pressão real (`VK_EXT_memory_budget`) pendente. Contrato: `RHI-RECURSOS.md` |
+| 2.1.3 | Objetos: buffers, imagens, samplers, pipelines, com cache hasheado | parcial | `VulkanBuffer`, `VulkanImage`/view e `VulkanSampler` move-only integrados ao cubo Android, com upload RGBA8/staging, descritor, depth e órbita touch. 5 testes novos de descritores/upload/pré-rotação; suíte nativa 127/127. Pipeline genérico/cache hasheado e sub-recursos avançados continuam pendentes |
 | 2.1.4 | Bindless via descriptor_indexing | não iniciado | Nenhuma implementação de bindless encontrada no RHI atual |
 | 2.1.5 | Gravação de command buffers multi-thread; timeline semaphores | não iniciado | Shell atual usa command buffer único, sem gravação multi-thread; ESTADO.md linha 144 confirma "um único frame em voo" |
 | 2.1.6 | Camadas de validação, marcadores de debug, captura de frame | parcial | ESTADO.md linha 28 e nota de correções: validation layers mencionadas como pendentes para "captura com validation layers"; não confirmado como ativado por padrão em teste |
@@ -172,11 +172,11 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 2.2.1 | Pipeline Slang/HLSL → SPIR-V, com reflexão automática de bindings | não iniciado | ESTADO.md linha 146: "SPIR-V embutido foi gerado manualmente... Ainda não há toolchain reprodutível de shaders" |
+| 2.2.1 | Pipeline Slang/HLSL → SPIR-V, com reflexão automática de bindings | não iniciado | Existe apenas a fatia GLSL → SPIR-V reprodutível (`generate-embedded-shaders.ps1`, `glslc`/`spirv-val` do NDK pinado). Slang/HLSL e reflection automática continuam sem implementação |
 | 2.2.2 | Sistema de variantes com orçamento e cache em disco | não iniciado | Nenhum sistema de variantes de shader encontrado |
 | 2.2.3 | Pipeline cache persistido + pré-aquecimento | não iniciado | Nenhuma persistência de pipeline cache encontrada no shell atual |
 | 2.2.4 | Compilação em background com material de fallback rosa | não iniciado | Nenhum material de fallback ou compilação em background implementado |
-| 2.2.5 | Biblioteca de shaders base com precisão explícita | parcial | `native/rhi/shaders/triangle.vert`/`triangle.frag` existem e foram conferidos byte a byte contra o embed (ESTADO.md linhas 229-233), mas é só o shader do triângulo, não uma biblioteca base |
+| 2.2.5 | Biblioteca de shaders base com precisão explícita | parcial | Shaders GLSL de triângulo e cubo texturizado; geração validada e verificação `-Check` no CI Android. Não constituem ainda a biblioteca de materiais/shaders do produto |
 
 ### Etapa 2.3 — Render Graph
 
@@ -195,7 +195,7 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 2.4.1 | Depth prepass + Forward+ com clusterização de luzes | não iniciado | ESTADO.md linha 145: `TriangleRenderer` é "sem depth... Render Graph" — nenhum depth prepass ou Forward+ implementado |
+| 2.4.1 | Depth prepass + Forward+ com clusterização de luzes | não iniciado | O cubo usa depth attachment no mesmo pass de cor. Não há depth prepass, luzes clusterizadas nem Forward+ |
 | 2.4.2 | BRDF PBR completo (GGX multiscatter, Burley, Fresnel) | não iniciado | Nenhum shader de material PBR encontrado além do triângulo hardcoded |
 | 2.4.3 | Sombras: cascaded shadow maps, spot/point | não iniciado | Nenhuma implementação de sombras encontrada |
 | 2.4.4 | IBL: skybox HDR, pré-filtragem especular, SH, reflection probes | não iniciado | Nenhuma implementação de IBL encontrada |
@@ -685,7 +685,7 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 8.6.1 | Profiler de CPU com timeline por thread | não iniciado | Nenhuma implementação encontrada |
+| 8.6.1 | Profiler de CPU com timeline por thread | parcial | `native/profiler/frame_statistics.*` + adaptador Android opt-in, relógios CPU processo/thread, fases wall-time, percentis e coleta reproduzível no aparelho. 10 testes C++ + 17 do parser/coletores. Ainda não existe timeline por thread/job nem atribuição de stack/GC/JIT. Ver `PROFILING-ANDROID.md` |
 | 8.6.2 | Profiler de GPU por pass do render graph | não iniciado | Nenhuma implementação encontrada |
 | 8.6.3 | Profiler de memória por categoria | não iniciado | Nenhuma implementação encontrada |
 | 8.6.4 | Monitor térmico e de energia com histórico | não iniciado | Nenhuma implementação encontrada |

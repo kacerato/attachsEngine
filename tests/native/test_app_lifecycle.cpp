@@ -62,3 +62,59 @@ AE_TEST(lifecycle_destroy_limpa_recursos_e_ignora_eventos_tardios) {
   AE_EXPECT_TRUE(!hasAction(late, LifecycleAction::CreateSurface), "eventos tardios nao podem recriar recursos");
   AE_EXPECT_TRUE(!lifecycle.hasWindow(), "um aplicativo destruido nao pode readquirir janela");
 }
+
+AE_TEST(lifecycle_diagnostico_reflete_resume_foco_e_destroy) {
+  AppLifecycle lifecycle;
+  AE_EXPECT_TRUE(!lifecycle.isResumed() && !lifecycle.hasFocus(), "diagnostico inicial deve ser inativo");
+  lifecycle.apply(AppEvent::Resume);
+  AE_EXPECT_TRUE(lifecycle.isResumed() && !lifecycle.hasFocus(), "resume nao implica foco");
+  lifecycle.apply(AppEvent::GainFocus);
+  lifecycle.apply(AppEvent::Pause);
+  AE_EXPECT_TRUE(!lifecycle.isResumed() && lifecycle.hasFocus(), "pause nao inventa LOST_FOCUS");
+  lifecycle.apply(AppEvent::Destroy);
+  AE_EXPECT_TRUE(!lifecycle.isResumed() && !lifecycle.hasFocus(), "destroy deve limpar ambos");
+}
+
+AE_TEST(lifecycle_retomada_aceita_todas_ordens_sem_ativacao_precoce) {
+  const AppEvent orders[][3] = {
+      {AppEvent::Resume, AppEvent::GainFocus, AppEvent::WindowCreated},
+      {AppEvent::Resume, AppEvent::WindowCreated, AppEvent::GainFocus},
+      {AppEvent::GainFocus, AppEvent::Resume, AppEvent::WindowCreated},
+      {AppEvent::GainFocus, AppEvent::WindowCreated, AppEvent::Resume},
+      {AppEvent::WindowCreated, AppEvent::Resume, AppEvent::GainFocus},
+      {AppEvent::WindowCreated, AppEvent::GainFocus, AppEvent::Resume},
+  };
+  for (const auto &order : orders) {
+    AppLifecycle lifecycle;
+    lifecycle.apply(AppEvent::Resume);
+    lifecycle.apply(AppEvent::GainFocus);
+    lifecycle.apply(AppEvent::WindowCreated);
+    lifecycle.apply(AppEvent::Pause);
+    lifecycle.apply(AppEvent::LoseFocus);
+    lifecycle.apply(AppEvent::WindowDestroyed);
+    for (int i = 0; i < 3; ++i) {
+      const auto action = lifecycle.apply(order[i]);
+      AE_EXPECT_TRUE(lifecycle.isActive() == (i == 2), "retomada deve aguardar as tres condicoes");
+      AE_EXPECT_TRUE(hasAction(action, LifecycleAction::BecameActive) == (i == 2), "ativar uma unica vez");
+      const auto duplicate = lifecycle.apply(order[i]);
+      AE_EXPECT_TRUE(!hasAction(duplicate, LifecycleAction::BecameActive), "evento repetido nao reativa");
+      AE_EXPECT_TRUE(!hasAction(duplicate, LifecycleAction::CreateSurface), "evento repetido nao recria surface");
+    }
+  }
+}
+
+AE_TEST(lifecycle_keyguard_preserva_suspensao_ate_resume_e_foco_reais) {
+  AppLifecycle lifecycle;
+  // Sequencia observada no Android: resume transitório, pause e janela atrás do keyguard.
+  lifecycle.apply(AppEvent::Resume);
+  lifecycle.apply(AppEvent::Pause);
+  const auto window = lifecycle.apply(AppEvent::WindowCreated);
+  AE_EXPECT_TRUE(hasAction(window, LifecycleAction::CreateSurface), "janela pode criar recursos sem ativar");
+  AE_EXPECT_TRUE(!lifecycle.isActive(), "renderer pronto nao implica aplicativo ativo");
+  lifecycle.apply(AppEvent::WindowDestroyed);
+  lifecycle.apply(AppEvent::Resume);
+  lifecycle.apply(AppEvent::WindowCreated);
+  AE_EXPECT_TRUE(!lifecycle.isActive(), "sem foco real o aplicativo deve continuar suspenso");
+  const auto focus = lifecycle.apply(AppEvent::GainFocus);
+  AE_EXPECT_TRUE(hasAction(focus, LifecycleAction::BecameActive), "desbloqueio completo deve ativar");
+}

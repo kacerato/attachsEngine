@@ -38,6 +38,8 @@ public:
   LifecycleAction apply(AppEvent event);
 
   bool isActive() const { return active_; }
+  bool isResumed() const { return resumed_; }
+  bool hasFocus() const { return focused_; }
   bool hasWindow() const { return hasWindow_; }
   bool isDestroyed() const { return destroyed_; }
 

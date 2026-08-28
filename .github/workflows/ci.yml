@@ -176,6 +176,14 @@ jobs:
         uses: android-actions/setup-android@v3
       - name: Instalar NDK pinado
         run: sdkmanager --install "ndk;${{ env.NDK_VERSION }}"
+      - name: Verificar shaders embutidos contra GLSL e NDK pinado
+        run: |
+          ./tools/generate-embedded-shaders.ps1 -ShaderName instanced -Check
+          ./tools/generate-embedded-shaders.ps1 -ShaderName triangle -Check
+      - name: Testar classificação de desbloqueio do runner (sem aparelho)
+        run: |
+          ./tests/tools/test-android-shell-lifecycle.ps1
+          ./tests/tools/test-android-frame-profile.ps1
       - name: Gradle assembleDebug + lintDebug
         working-directory: android
         run: ./gradlew :app:assembleDebug :app:lintDebug --stacktrace

@@ -15,6 +15,8 @@
 #pragma once
 
 #include "core/base.h"
+#include "rhi/memory_allocator.h"
+#include "rhi/surface_transform.h"
 
 #include <vulkan/vulkan.h>
 
@@ -107,6 +109,8 @@ public:
   VkImageView imageView(u32 index) const { return imageViews_[index]; }
   VkFormat imageFormat() const { return format_; }
   u32 imageCount() const { return imageCount_; }
+  const SurfaceTransform &surfaceTransform() const { return surfaceTransform_; }
+  VkExtent2D displayExtent() const { return transformSurfaceExtent(extent_, surfaceTransform_); }
   bool isReady() const { return swapchain_ != VK_NULL_HANDLE && imageCount_ > 0; }
   VkSemaphore imageAvailableSemaphore() const { return imageAvailableSemaphore_; }
   VkSemaphore renderFinishedSemaphore() const { return renderFinishedSemaphore_; }
@@ -124,6 +128,7 @@ private:
   VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
   VkFormat format_ = VK_FORMAT_UNDEFINED;
   VkExtent2D extent_{0, 0};
+  SurfaceTransform surfaceTransform_{};
   static constexpr u32 kMaxSwapchainImages = 8;
   VkImage images_[kMaxSwapchainImages]{};
   VkImageView imageViews_[kMaxSwapchainImages]{};
@@ -164,12 +169,15 @@ public:
   VkPhysicalDevice physicalDevice() const override { return physicalDevice_; }
   VkInstance instance() const { return instance_; }
   u32 graphicsQueueFamily() const { return graphicsQueueFamily_; }
+  VulkanMemoryAllocator &memoryAllocator() { return memoryAllocator_; }
+  const VulkanMemoryAllocator &memoryAllocator() const { return memoryAllocator_; }
 
 private:
   VkInstance instance_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
   VkDevice device_ = VK_NULL_HANDLE;
   u32 graphicsQueueFamily_ = 0;
+  VulkanMemoryAllocator memoryAllocator_{};
 };
 
 } // namespace ae::rhi

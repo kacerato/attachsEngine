@@ -1,13 +1,16 @@
 #include "platform/android/android_paths.h"
+#include "platform/android/android_frame_profiler.h"
 #include "platform/android/android_vulkan_surface.h"
 #include "platform/android/android_window.h"
 #include "platform/android/dotnet_assets.h"
 #include "platform/android/dotnet_host.h"
 #include "platform/android/instanced_renderer.h"
+#include "platform/android/lifecycle_trace.h"
 #include "platform/app_lifecycle.h"
 
 #include <android/log.h>
 #include <android_native_app_glue.h>
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 
@@ -23,16 +26,25 @@ constexpr ae::u64 PocAReportIntervalFrames = 300; // ~5s a 60fps — log periód
 struct AndroidShell final {
   android_app *app = nullptr;
   ae::platform::AppLifecycle lifecycle;
+  ae::platform::android::AndroidFrameProfiler frameProfiler;
   ae::platform::android::AndroidVulkanSurface vulkanSurface;
   ae::platform::android::InstancedRenderer instancedRenderer;
   bool instancedRendererReady = false;
   ae::u64 presentedFrameCount = 0;
   ae::u64 activationCount = 0;
+  ae::u64 lifecycleCommandSequence = 0;
+  double activatedAtMs = 0.0;
   bool firstFrameAfterActivationPending = false;
   bool validationFrameMilestoneLogged = false;
   ae::platform::android::DotNetHost dotNetHost;
   std::chrono::steady_clock::time_point shellStartTime = std::chrono::steady_clock::now();
   double pocAMaxFillMicroseconds = 0.0;
+  bool orbitTouchActive = false;
+  int32_t orbitPointerId = -1;
+  float lastTouchX = 0.0f;
+  float lastTouchY = 0.0f;
+  float orbitYaw = 0.0f;
+  float orbitPitch = 0.0f;
 };
 
 // Extrai o runtime .NET vendorizado (se ainda não extraído) e hospeda o
@@ -92,6 +104,8 @@ void initializeDotNetHost(AndroidShell &shell) {
 // roda nesta sessão — degradação silenciosa, mesma disciplina de "continuar
 // sem GPU" já usada para Vulkan.
 bool rebuildInstancedRenderer(AndroidShell &shell) {
+  shell.frameProfiler.reset();
+  ae::platform::android::ScopedLifecycleStage trace("rebuild-renderer");
   shell.instancedRenderer.shutdown();
   if (!shell.dotNetHost.isReady()) {
     shell.instancedRendererReady = false;
@@ -105,6 +119,7 @@ bool rebuildInstancedRenderer(AndroidShell &shell) {
 }
 
 bool recreateSwapchainAndRenderer(AndroidShell &shell) {
+  ae::platform::android::ScopedLifecycleStage trace("recreate-swapchain-renderer");
   // Framebuffers precisam morrer ANTES das image views da swapchain antiga.
   // Inverter esta ordem viola o lifetime Vulkan mesmo depois de wait-idle.
   shell.instancedRenderer.shutdown();
@@ -117,6 +132,7 @@ bool recreateSwapchainAndRenderer(AndroidShell &shell) {
 }
 
 bool recreateSurfaceAndRenderer(AndroidShell &shell) {
+  ae::platform::android::ScopedLifecycleStage trace("recreate-surface-renderer");
   shell.instancedRenderer.shutdown();
   shell.instancedRendererReady = false;
   shell.vulkanSurface.shutdown();
@@ -129,6 +145,7 @@ bool recreateSurfaceAndRenderer(AndroidShell &shell) {
 void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
   const ae::platform::LifecycleAction action = shell.lifecycle.apply(event);
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::CreateSurface)) {
+    ae::platform::android::ScopedLifecycleStage trace("create-surface-renderer");
     if (!shell.vulkanSurface.initialize(shell.app->window)) {
       __android_log_print(ANDROID_LOG_ERROR, LogTag,
                           "O shell continuará ativo sem GPU; uma nova janela tentará novamente.");
@@ -138,22 +155,32 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     }
   }
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::DestroySurface)) {
+    ae::platform::android::ScopedLifecycleStage trace("destroy-surface-renderer");
     shell.instancedRenderer.shutdown();
     shell.instancedRendererReady = false;
     shell.vulkanSurface.shutdown();
   }
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::BecameActive)) {
+    shell.frameProfiler.reset();
     ++shell.activationCount;
+    shell.activatedAtMs = ae::platform::android::lifecycleUptimeMs();
     shell.firstFrameAfterActivationPending = true;
     __android_log_print(ANDROID_LOG_INFO, LogTag, "Aplicativo ativo.");
   }
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::BecameInactive)) {
+    shell.frameProfiler.reset();
+    shell.orbitTouchActive = false;
+    shell.orbitPointerId = -1;
     __android_log_print(ANDROID_LOG_INFO, LogTag, "Aplicativo suspenso.");
   }
 }
 
 void handleCommand(android_app *app, int32_t command) {
   auto &shell = *static_cast<AndroidShell *>(app->userData);
+  const ae::u64 sequence = ++shell.lifecycleCommandSequence;
+  const double startedMs = ae::platform::android::lifecycleUptimeMs();
+  ae::platform::android::traceLifecycleCommand(*app, shell.lifecycle, sequence, command,
+                                               "begin", shell.instancedRendererReady, 0.0);
   switch (command) {
   case APP_CMD_INIT_WINDOW:
     applyEvent(shell, ae::platform::AppEvent::WindowCreated);
@@ -196,6 +223,73 @@ void handleCommand(android_app *app, int32_t command) {
   default:
     break;
   }
+  ae::platform::android::traceLifecycleCommand(
+      *app, shell.lifecycle, sequence, command, "end", shell.instancedRendererReady,
+      ae::platform::android::lifecycleUptimeMs() - startedMs);
+}
+
+// Traduz o gesto Android para dois valores genéricos de órbita. A fronteira
+// com o renderer recebe apenas radianos; AInputEvent e IDs de toque ficam na
+// camada platform, preparando o caminho para o InputMap sem acoplá-lo à GPU.
+int32_t handleInput(android_app *app, AInputEvent *event) {
+  if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) return 0;
+
+  auto &shell = *static_cast<AndroidShell *>(app->userData);
+  const int32_t action = AMotionEvent_getAction(event);
+  const int32_t actionType = action & AMOTION_EVENT_ACTION_MASK;
+  const size_t actionIndex = static_cast<size_t>(
+      (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >>
+      AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
+
+  if (actionType == AMOTION_EVENT_ACTION_DOWN) {
+    shell.orbitPointerId = AMotionEvent_getPointerId(event, 0);
+    shell.lastTouchX = AMotionEvent_getX(event, 0);
+    shell.lastTouchY = AMotionEvent_getY(event, 0);
+    shell.orbitTouchActive = true;
+    return 1;
+  }
+
+  if (actionType == AMOTION_EVENT_ACTION_MOVE && shell.orbitTouchActive) {
+    const size_t pointerCount = AMotionEvent_getPointerCount(event);
+    for (size_t index = 0; index < pointerCount; ++index) {
+      if (AMotionEvent_getPointerId(event, index) != shell.orbitPointerId) continue;
+      const float x = AMotionEvent_getX(event, index);
+      const float y = AMotionEvent_getY(event, index);
+      const int32_t width = app->window != nullptr ? ANativeWindow_getWidth(app->window) : 0;
+      const int32_t height = app->window != nullptr ? ANativeWindow_getHeight(app->window) : 0;
+      if (width > 0 && height > 0) {
+        constexpr float fullTurnRadians = 6.28318530718f;
+        constexpr float halfTurnRadians = 3.14159265359f;
+        constexpr float maxPitchRadians = 1.35f;
+        shell.orbitYaw += (x - shell.lastTouchX) / static_cast<float>(width) * fullTurnRadians;
+        shell.orbitPitch = std::clamp(
+            shell.orbitPitch +
+                (y - shell.lastTouchY) / static_cast<float>(height) * halfTurnRadians,
+            -maxPitchRadians, maxPitchRadians);
+      }
+      shell.lastTouchX = x;
+      shell.lastTouchY = y;
+      return 1;
+    }
+  }
+
+  const bool trackedPointerReleased =
+      (actionType == AMOTION_EVENT_ACTION_UP ||
+       actionType == AMOTION_EVENT_ACTION_POINTER_UP) &&
+      actionIndex < AMotionEvent_getPointerCount(event) &&
+      AMotionEvent_getPointerId(event, actionIndex) == shell.orbitPointerId;
+  if (trackedPointerReleased || actionType == AMOTION_EVENT_ACTION_CANCEL) {
+    shell.orbitTouchActive = false;
+    shell.orbitPointerId = -1;
+    if (trackedPointerReleased) {
+      __android_log_print(ANDROID_LOG_INFO, LogTag,
+                          "Órbita touch atualizada: yaw=%.3f rad, pitch=%.3f rad.",
+                          shell.orbitYaw, shell.orbitPitch);
+    }
+    return 1;
+  }
+
+  return shell.orbitTouchActive ? 1 : 0;
 }
 
 } // namespace
@@ -205,6 +299,9 @@ void android_main(android_app *app) {
   shell.app = app;
   app->userData = &shell;
   app->onAppCmd = handleCommand;
+  app->onInputEvent = handleInput;
+  shell.frameProfiler.setEnabled(ae::platform::android::readFrameProfilingOption(app->activity));
+  shell.instancedRenderer.setFrameProfilingEnabled(shell.frameProfiler.enabled());
 
   ae::platform::android::applyImmersiveLandscapeWindow(app->activity);
 
@@ -230,11 +327,13 @@ void android_main(android_app *app) {
       continue;
     }
 
-    if (shouldDraw) {
+    // O evento processado acima pode ter destruído o renderer/janela.
+    if (shell.lifecycle.isActive() && shell.instancedRendererReady) {
       const float timeSeconds = std::chrono::duration<float>(
                                     std::chrono::steady_clock::now() - shell.shellStartTime)
                                     .count();
-      const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(timeSeconds);
+      const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
+          timeSeconds, shell.orbitYaw, shell.orbitPitch);
       if (frameStatus == ae::rhi::SwapchainStatus::Ok ||
           frameStatus == ae::rhi::SwapchainStatus::SuboptimalNeedsRecreate) {
         ++shell.presentedFrameCount;
@@ -244,8 +343,10 @@ void android_main(android_app *app) {
         if (shell.firstFrameAfterActivationPending) {
           shell.firstFrameAfterActivationPending = false;
           __android_log_print(ANDROID_LOG_INFO, LogTag,
-                              "Primeiro frame após ativação apresentado: ciclo=%llu.",
-                              static_cast<unsigned long long>(shell.activationCount));
+                              "Primeiro frame após ativação apresentado: ciclo=%llu. latency_ms=%.3f uptime_ms=%.3f",
+                              static_cast<unsigned long long>(shell.activationCount),
+                              ae::platform::android::lifecycleUptimeMs() - shell.activatedAtMs,
+                              ae::platform::android::lifecycleUptimeMs());
         }
         if (!shell.validationFrameMilestoneLogged &&
             shell.presentedFrameCount >= ValidationFrameMilestone) {
@@ -265,6 +366,13 @@ void android_main(android_app *app) {
               shell.pocAMaxFillMicroseconds < 3000.0 ? "dentro do orçamento" : "ACIMA do orçamento");
           shell.pocAMaxFillMicroseconds = 0.0;
         }
+      }
+      if (frameStatus == ae::rhi::SwapchainStatus::Ok) {
+        const VkExtent2D display = shell.vulkanSurface.swapchain().displayExtent();
+        shell.frameProfiler.record(shell.instancedRenderer.lastFrameTimings(),
+                                    PocAInstanceCount, display.width, display.height);
+      } else {
+        shell.frameProfiler.reset();
       }
       if (frameStatus == ae::rhi::SwapchainStatus::SuboptimalNeedsRecreate ||
           frameStatus == ae::rhi::SwapchainStatus::OutOfDateMustRecreate) {

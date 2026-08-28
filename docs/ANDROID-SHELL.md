@@ -1,117 +1,146 @@
 # Shell Android nativo
 
-Implementação do item **0.1.3** da Fase 0, estendida pelo shell gráfico mínimo
-dos itens **0.2.4/2.2** do plano principal. O marco estabelece a fronteira
-de plataforma e prova um pipeline Vulkan completo em hardware Android real.
+Fatia de fundação dos itens 0.1.3 e 2.1 e do critério visual M0. O APK é um
+shell Vulkan/.NET, não um editor de cenas. Estado atualizado em 28/08/2026.
 
 ## Responsabilidades
 
-- `android/`: empacotamento Gradle, manifesto, recursos e configuração NDK.
-- `native/platform/app_lifecycle.*`: máquina de estado portátil e testável.
-- `native/platform/android/android_main.cpp`: tradução de `APP_CMD_*` para a
-  máquina de estado; não contém regras de renderização.
-- `native/platform/android/android_window.*`: landscape imersivo e restauração
-  das flags quando o Android devolve foco.
-- `native/platform/android/android_vulkan_surface.*`: ownership de instance,
-  device, `VkSurfaceKHR` e swapchain enquanto a janela nativa existe.
-- `native/platform/android/android_triangle_renderer.*`: vertical slice de
-  render pass, pipeline, framebuffers, command buffer e draw do triângulo.
-- `native/rhi/device.*`: device e swapchain Vulkan genéricos, sem dependência
-  Android; diferencia resize, perda de surface e erro fatal.
-- `native/rhi/shaders/`: fonte GLSL do triângulo e SPIR-V embutido temporário.
+- `android/`: Gradle, manifesto, recursos e NDK.
+- `native/platform/app_lifecycle.*`: máquina de estado portátil/testável.
+- `android_main.cpp`: traduz lifecycle e toque Android; envia yaw/pitch em
+  radianos, nunca `AInputEvent`, para o renderer.
+- `android_window.*`: landscape imersivo e restauração ao receber foco.
+- `lifecycle_trace.h`: comandos/estados antes e depois do handler, durações de
+  recriação e latência até o primeiro present após ativação; somente por evento.
+- `android_vulkan_surface.*`: possui surface, device e swapchain.
+- `instanced_renderer.*`: cubo checker central + 4.999 mini-cubos, depth,
+  descritores e draw instanciado; um crossing C++→C# por frame.
+- `dotnet_host.*`/`dotnet_assets.*`: hospedagem CoreCLR e extração dos assets.
+- `native/rhi/`: recursos Vulkan/VMA, budgets, upload, swapchain e pré-rotação
+  independentes de Android. Contratos detalhados em [RHI-RECURSOS.md](RHI-RECURSOS.md).
+- `android_triangle_renderer.*`: fixture histórico, não o renderer ativo.
 
 ## Lifecycle e ownership
 
-```text
-INIT_WINDOW  -> cria instance, surface, device, swapchain e pipeline
-RESUME+FOCUS -> aplicativo ativo; acquire/draw/submit/present contínuo
-PAUSE/FOCUS  -> suspende desenho; mantém recursos se a janela ainda existe
-TERM_WINDOW  -> wait-idle; destrói renderer, swapchain, surface e device
-DESTROY      -> garante liberação e encerra o loop
-```
+INIT_WINDOW cria surface/device/swapchain e renderer. RESUME+FOCUS ativa
+apresentação; PAUSE/LOST_FOCUS suspende desenho e cancela o arraste.
+TERM_WINDOW espera GPU e destrói renderer antes da swapchain/device.
+DESTROY libera recursos e encerra o loop.
 
-O loop usa `ALooper_pollOnce(0)` somente quando lifecycle e renderer estão
-ativos. Suspenso, sem janela ou sem pipeline, volta a `ALooper_pollOnce(-1)` e
-permanece bloqueado entre eventos, sem busy-loop fora de foreground.
+O poll é não bloqueante somente com lifecycle ativo e renderer pronto.
+Após processar cada evento, o loop verifica novamente essas condições:
+um TERM_WINDOW não pode deixar o frame seguinte acessar recursos destruídos.
 
-Na recriação, a ordem é obrigatória: framebuffers e command pool morrem antes
-das image views/swapchain; depois surface/device. `SurfaceLost` recria a surface
-inteira, enquanto `OutOfDate`/`Suboptimal` recriam apenas swapchain+renderer.
+Na recriação, framebuffers/comandos morrem antes das image views/swapchain.
+`SurfaceLost` recria a surface inteira; `OutOfDate`/`Suboptimal` e configuração
+recriam swapchain+renderer. Estado de órbita sobrevive às recriações no processo.
 
-## Build
+## Build e shaders
 
-Pré-requisitos fixados pelo build atual:
-
-- Java 17;
-- Android SDK/compileSdk 35;
-- NDK `27.1.12297006`;
-- CMake `3.22.1`;
-- Gradle 8.10.2 (wrapper incluído);
-- ABI `arm64-v8a`.
-- segmentos ELF alinhados para páginas Android de 16 KB.
+Requer Java 17, SDK 35, NDK `27.1.12297006`, CMake `3.22.1` e Gradle 8.10.2
+(wrapper). ABI arm64-v8a, segmentos ELF alinhados a páginas de 16 KB.
 
 ```powershell
-cd android
-.\gradlew.bat :app:lintDebug :app:assembleDebug --offline
+# Na raiz; SDK deve estar configurado em ANDROID_HOME
+.\tools\generate-embedded-shaders.ps1 -ShaderName instanced -Check
+.\tools\generate-embedded-shaders.ps1 -ShaderName triangle -Check
+.\android\gradlew.bat -p android :app:assembleDebug :app:assembleRelease :app:lintDebug --offline
 ```
 
-## Validação e limite deste marco
+Sem `-Check`, o gerador recompila GLSL, valida com spirv-val e atualiza o header.
+O CI Android verifica ambos os shaders contra o NDK pinado. Esse processo não
+é hot reload nem compilação Slang/HLSL.
 
-Validado no Xiaomi 25053PC47G (`onyx`, Snapdragon SM8735/Adreno, Android 16):
+## Validação em aparelho
 
-- APK instala e abre;
-- surface 2772×1280 e swapchain de 5 imagens são criadas;
-- triângulo RGB é apresentado;
-- 100 ciclos background→foreground preservam o PID e retomam a apresentação;
-- mudança e restauração de `uiMode` recriam swapchain e pipeline;
-- screenshots antes/depois são bit-idênticas (SHA-256
-  `949E1829D4D53BDC63F1B548C88ECF05ECD27FEDD47E8E03FDF4FDB9B2A59719`).
+Xiaomi 25053PC47G (onyx, SM8735/Adreno, Android 16):
 
-Nos 100 ciclos automatizados, o Android reteve a mesma `ANativeWindow`; isso é
-permitido e evita trabalho desnecessário. A retomada com recursos retidos e a
-recriação por configuração são invariantes distintas e ambas foram verificadas.
-Uma rodada manual anterior percorreu a destruição/recriação integral da janela,
-mas a injeção determinística de `SurfaceLost` ainda não faz parte do runner.
+- APK instala, hospeda .NET e apresenta 1.000 frames;
+- display 2772×1280, imagem da swapchain 1280×2772 com pré-rotação de 90°;
+- cubo texturizado com depth, upload staging e rotação por arraste;
+- 2 retomadas, configuração/uiMode e tela off/on verdes na regressão de 28/08;
+- capturas inspecionadas; a distorção de proporção da primeira versão foi corrigida.
+
+Evidência: `build/android-validation/rhi-cube-final-20260828/report.json`.
+A rodada recompilada `rhi-cube-verified-20260828/` excedeu 20 s ao reacender
+a tela; a falha histórica continua preservada. A investigação posterior está
+em `lifecycle-trace-20260828-01/` e `lifecycle-trace-20260828-02/`: o Android
+manteve o keyguard visível e não devolveu foco ao aplicativo. O usuário confirmou
+que o aparelho tem senha. No segundo ensaio a tela de bloqueio voltou a apagar;
+o snapshot foi coletado antes do cleanup. Não foi demonstrada trava do renderer.
+
+O runner corrigido passou 3 retomadas, configuração/restauração e screen off/on
+em `lifecycle-keyguard-20260828-verified/report.json`, PID 4256 preservado.
+A espera pelo desbloqueio foi 6.218 ms; depois, a recriação gráfica levou
+43,901 ms e o primeiro present retornou 1,540 ms após a ativação. Esta última
+métrica não inclui o tempo anterior à ativação nem mede scanout/FPS sustentado.
+Essa rodada usou até três solicitações de dismissal; a versão final solicita
+uma única vez, para não interferir na autenticação humana.
+A versão final também passou screen off/on com uma solicitação, PID 6119,
+em `lifecycle-keyguard-20260828-blocked/report.json`: apesar do nome do diretório
+(destinado a teste negativo), houve desbloqueio em 16,183 s e o resultado correto
+foi PASS. O caso de bloqueio persistente foi validado pelos testes headless, não
+por essa rodada. O ensaio auxiliar `lifecycle-keyguard-20260828-negative/` falhou
+por usar apenas 5 s para atingir 1.000 frames; não é evidência de bloqueio nem
+regressão gráfica. Todos os relatórios permanecem preservados.
+O fluxo normal sem ciclo de tela é registrado separadamente em
+`rhi-cube-normal-20260828/`.
+Os 100 ciclos e capturas bit-idênticas históricos pertencem ao antigo triângulo,
+não à cena animada. Não foi executada validation layer Vulkan nesta rodada.
 
 ### Runner reproduzível
 
-`tools/validate-android-shell.ps1` automatiza a validação sem incorporar ADB ao
-runtime. Ele descobre um único aparelho autorizado (ou aceita
-`-DeviceSerial`), instala e limpa o app, confirma os logs de inicialização,
-espera 1.000 frames realmente apresentados, exercita retomadas preservando o
-PID e comprova que a apresentação volta após cada retomada. Como o Android pode
-reter legitimamente a mesma `ANativeWindow` em background, o runner registra
-quantas recriações ocorreram nesses ciclos sem exigi-las artificialmente. A
-opção de mudança de configuração alterna temporariamente o `uiMode` e verifica
-separadamente a recriação obrigatória de swapchain/pipeline. O teste também
-simula pressão de memória e compara capturas SHA-256. Erros do shell, crash
-nativo, exceção Java ou ANR tornam a
-execução vermelha. O app é encerrado e os temporários remotos são removidos em
-`finally`, inclusive quando o teste falha. Se o aparelho estiver dormindo, o
-runner preserva a proteção de proximidade, desperta/dispensa o keyguard e devolve
-o aparelho ao estado de energia original ao terminar. No ciclo de tela, ele
-sincroniza as transições `Asleep`/`Awake` com `dumpsys power` e aguarda o modo
-imersivo convergir antes de comparar a captura, em vez de depender de sleeps
-fixos sujeitos a corrida.
+`tools/validate-android-shell.ps1` instala, inventaria, espera frames apresentados,
+exercita lifecycle, coleta Logcat/capturas e detecta erros/crash/ANR. Por padrão
+limpa dados do pacote; use `-PreserveAppData` para conservá-los. Descobre um único
+aparelho autorizado; com vários, passe `-DeviceSerial`.
 
 ```powershell
-# Regressão rápida local (3 retomadas)
-.\tools\validate-android-shell.ps1
-
-# Critério do shell gráfico (100 retomadas) e mudança de configuração
-.\tools\validate-android-shell.ps1 -LifecycleCycles 100 -ExerciseConfigurationChange
-
-# Aparelho específico e ciclo de tela, se o laboratório permitir desbloqueio
-.\tools\validate-android-shell.ps1 -DeviceSerial SERIAL -ExerciseScreenCycle
+.\tools\validate-android-shell.ps1 -AllowScreenshotDifference -PreserveAppData
+.\tools\validate-android-shell.ps1 -LifecycleCycles 100 -ExerciseConfigurationChange -AllowScreenshotDifference -PreserveAppData
+.\tools\validate-android-shell.ps1 -ExerciseScreenCycle -AllowScreenshotDifference -PreserveAppData
+.\tests\tools\test-android-shell-lifecycle.ps1
 ```
 
-Cada execução grava capturas, Logcat e `report.json` em
-`build/android-validation/<data-hora>/`, diretório ignorado pelo Git. A mudança
-de configuração é opcional porque alterna o modo noturno global do aparelho;
-quando usada, o runner salva e restaura o valor original mesmo após falha. O
-ciclo de tela também é opcional porque aparelhos com bloqueio seguro podem
-exigir intervenção humana ao despertar.
+`-AllowScreenshotDifference` é necessário para a animação: comparação de hash não
+é teste de correção visual. uiMode e tela são opcionais e restaurados ao terminar;
+bloqueio seguro exige desbloqueio humano, nunca envio de senha pelo runner.
+`-ScreenCycles N` repete o teste quando `-ExerciseScreenCycle` está habilitado.
+O runner aguarda `SCREEN_STATE_ON`, solicita `wm dismiss-keyguard` uma vez e
+confirma que delegate/monitor já não mostram keyguard antes de iniciar a Activity.
+Código de saída zero de `wm` não é prova de desbloqueio. O marcador de retomada
+é criado depois de confirmar tela apagada, evitando aceitar ativação anterior.
 
-O marco ainda não é o renderer da engine. Não possui depth, vertex/index buffer,
-textura, cubo, Render Graph executado, múltiplos frames em voo, toolchain de
-shader ou interop .NET. Também falta validar Mali/perfil C e outros drivers.
+O relatório v3 separa `keyguardWaits`/`keyguardDismissRequests` das evidências
+de lifecycle. Sem desbloqueio no prazo, registra `status=blocked`,
+`failureKind=device-keyguard-blocked` e retorna código 1: não é PASS nem prova
+de lentidão gráfica. Saída desconhecida do dumpsys falha explicitamente.
+O timeout de renderização permanece em 20 s por padrão; não foi aumentado.
+Falhas salvam `lifecycle-diagnostics.json` antes de restaurar o aparelho;
+`lifecycle-timeline.txt` mantém timestamps e estados nativos.
+
+Os helpers possuem 12 regressões headless integradas ao CI Android; a máquina
+de lifecycle tem 7 testes C++, incluindo as seis ordens de retomada e
+resume/pause transitório atrás do keyguard. O engine continua aguardando
+RESUME + foco + janela, sem polling periódico enquanto suspenso.
+O contrato de desbloqueio seguro segue a [API Android KeyguardManager](https://developer.android.com/reference/android/app/KeyguardManager#requestDismissKeyguard(android.app.Activity,%20android.app.KeyguardManager.KeyguardDismissCallback)).
+
+`send-trim-memory` é apenas proxy
+de pressão de memória, não prova de APP_CMD_LOW_MEMORY real.
+
+O runner aceita `-SoakMinutes`, coleta ibat×vbat/status térmico e pode exigir
+orçamento médio com `-RequirePowerBudget`. O checkpoint de 1 minuto de 26/08
+valida o coletor, não o critério de 30 min da PoC-C.
+
+## Limites e próximo gate
+
+CPU total/thread, distribuição de frames e FPS exibidos agora têm coleta opt-in
+com `-ProfileSeconds 60`. Resultado: 60,056 FPS no compositor, CPU processo média
+2,928 ms e pico 15,429 ms na captura otimizada; o orçamento < 3 ms ainda não foi
+atendido. Método, resultados e limitações em [PROFILING-ANDROID.md](PROFILING-ANDROID.md).
+
+Cubo/texture/depth/touch estão integrados. Permanecem: geometria importada,
+Material/Scene de produto, InputState gerenciado ligado ao Android, Render Graph
+executado, uploads assíncronos, múltiplos frames em voo, hot reload C#, profiling
+com timeline/atribuição por thread, timestamp queries GPU, validation layers e
+matriz Mali/perfil C. A coleta atual não fecha esses gates. M0 continua aberto.
