@@ -99,69 +99,6 @@ Artefatos e atribuição: `samples/dirt-road/README.md`, `manifest.json` e
 `LICENSE.txt`. A validação Python confere identidade, todos os SHA-256,
 estrutura/contagens AEMAP, formatos, mips e limite do fallback.
 
-## Ambiente/IBL global — 29/08/2026
-
-Causa raiz do defeito relatado na cena de teste (floresta escura, cores
-lavadas, fundo das árvores esbranquiçado): `environment.aetex`/`.aeenv`
-vinham de uma fotografia HDRI real ("sunset forest", Poly Haven, ~89,5 MB)
-usada como fonte de reflexão especular **e** de irradiância difusa, enquanto
-a cúpula visível já era um céu procedural azul independente (item O2 de
-`PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md`) — as duas fontes nunca combinavam em
-cor/direção/exposição. Em ângulo raso a reflexão especular da foto picotava
-blobs claros desconexos nas bordas da folhagem; a ambiente difusa herdava o
-tom frio/escuro da foto em vez do azul real do céu.
-
-Corrigido tornando o próprio céu procedural a única fonte de verdade: novo
-`tools/cook-procedural-sky.py` (substitui `cook-hdri-environment.py` para
-este asset; a ferramenta antiga continua existindo para mapas futuros que
-queiram uma HDRI fotográfica real) usa a mesma função de gradiente
-céu/horizonte de `dirt_road_sky.frag` (sem sol/nuvens, que continuam sendo
-luz direta explícita, evitando contar o sol duas vezes) para gerar (1) uma
-cadeia de mips especular de 128×64 (antes 4096×2048 — **~89,5 MB → 85 KB**,
-formato `.aeenv` v2, versionado (`decodeEnvironment` recusa qualquer arquivo
-que não seja v2/224 bytes, sem migração — é asset cozinhado local, não dado
-de usuário). Auto-teste embutido (`self_test()`, também rodado por
-`tests/tools/test_dirt_road_assets.py`) prova a integração numericamente:
-céu uniforme de radiância 1 deve resultar em irradiância π em qualquer
-direção e zerar todas as bandas acima de l=0 — falha a suíte antes de
-qualquer render se a quadratura ou os fatores de convolução do lobo cosseno
-estiverem errados.
-
-`environment_lighting.glsl` ganhou `evaluateSkyIrradiance(n)` (reconstrução
-SH9) substituindo o termo de ambiente hemisférico anterior (`n.y`-only, sem
-piso realista); `dirt_road_shading.glsl` usa `(SH/π)*ambientColorStrength`
-(normalização Lambertiana `albedo/π * E`, fisicamente correta, com
-`ambientColorStrength` preservado como knob de tintura/força artístico,
-neutro por padrão). Novo `tonemap.glsl` compartilhado por
-`dirt_road_sky.frag` e `environment_lighting.glsl` troca a curva ACES-fit
-anterior (desatura tons saturados/brilhantes) por uma aproximação AgX
-(Sobotka/Wrensch, fórmula pública), reduzindo o "apagado" percebido sem
-mudar a normalização de exposição linear já existente.
-
-Isto é uma mudança de engine global, não específica da cena: qualquer
-scene/mapa que carregue o formato `EnvironmentLighting`/AEEN-2 herda céu,
-irradiância difusa e reflexão especular coerentes automaticamente — não há
-`if (dirt-road)` em lugar nenhum do caminho alterado, consistente com a
-regra 4 de `PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md` §1.
-
-**Validado:** os 3 shaders tocados (`dirt_road`, `dirt_road_fallback`,
-`dirt_road_sky`) recompilam e passam `spirv-val` via
-`tools/generate-embedded-shaders.ps1` (NDK 27.1.12297006); os 7 testes de
-`test_dirt_road_assets.py` (4 preexistentes + 3 novos, incluindo o
-round-trip SH) passam; build C++ host de `aether_tests` permanece verde
-(196/196 alvos); `gradlew :app:assembleDebug --offline` compila
-`dirt_road_resources.cpp`/`instanced_renderer.cpp` de verdade pelo NDK
-ARM64, o hash SHA-256 de `manifest.json` bate para os novos
-`environment.aetex`/`.aeenv` e o APK final embarca os assets pequenos
-corretos (confirmado no ZIP de assets gerados, 224 B / 85 KiB). **Pendente:**
-GTAO/oclusão de contato (item O2.7 do plano
-de otimização, escopo maior e separado), exposição temporal por histograma,
-e — mais importante — **confirmação visual em hardware físico**, que não
-foi possível nesta sessão por não haver aparelho Android conectado via ADB;
-os valores padrão de sol/exposição/ambiente foram calibrados por simulação
-numérica da fórmula de shading, não por render real. Primeira execução em
-device é o próximo passo obrigatório antes de considerar este item fechado.
-
 ## Resumo
 
 | | |
@@ -169,7 +106,7 @@ device é o próximo passo obrigatório antes de considerar este item fechado.
 | Testes C# | **506 passando**, 0 falhando, 0 pulados (inclui 5 de material/esfera e 15 de integração cena/render); interop nativo obrigatório na regressão |
 | Verificações das ferramentas Android | **47 passando**: 12 de lifecycle/desbloqueio, 18 de frames/evidência incremental, 13 de térmica/FPS e 4 de identidade dos assets após build |
 | Testes C++ | **170 passando**, 0 falhando: inclui formato AEMAP e câmera livre multi-touch |
-| Imports gráficos | **13 testes Python passando**: 6 de material + 7 do mapa (identidade/hashes, AEMAP, 140 cadeias AETX, estrutura AEEN v2 e round-trip da projeção SH do céu procedural) |
+| Imports gráficos | **9 testes Python passando**: 6 de material + 3 do mapa (identidade/hashes, AEMAP e 140 cadeias AETX) |
 | Linhas C# | ~11.000 |
 | Linhas C++ (próprias, sem código vendorizado) | ~3.400 |
 | Dependências baixadas no build | **nenhuma** — build e testes rodam offline; Jolt Physics, Box2D, SQLite, runtime .NET e VMA são vendorizados em `native/third_party/`, com versão/licença/hash ou commit registrados |
@@ -305,7 +242,7 @@ uma cadeia v1→v2→v3 de dois migradores resolvendo o nome antigo do component
 | **2.1.2–2.1.3 (recursos e upload)** | VMA 3.4.0 encapsulado por `VulkanMemoryAllocator`; buffer/imagem/view move-only, sampler e upload RGBA8 com staging, flush explícito, barreiras e fence. Budgets Buffer/Texture/RenderTarget/Staging; nenhum upload no frame estável. `SurfaceTransform` mantém dimensões naturais da swapchain e projeção visível coerentes, incluindo rotação/espelho. Contratos em `RHI-RECURSOS.md`. `rhi/pipeline_cache.h/.cpp` (novo): `PipelineCache` real generaliza `DescriptorCache<Desc,Handle>` (já testado headless) para `RenderPassCache`/`PipelineLayoutCache`/`GraphicsPipelineCache`, ancorados em `VulkanDevice` — sobrevivem a `shutdown()`/`initialize()` de um renderer individual, compartilháveis entre `TriangleRenderer`/`InstancedRenderer`. `GraphicsPipelineCacheDesc` referencia render pass/pipeline layout pelo handle já cacheado (não descrição recursiva) mais um `vertexInputHash` do chamador para os aspectos que não cabem como campo escalar. Renomeado `SamplerDesc` de teste em `descriptor_cache.h` para `SamplerCacheTestDesc` — colidia com o `SamplerDesc` real de `resource.h` em `ae::rhi` assim que as duas unidades de tradução se encontraram via `device.h` | ✅ Debug/release ARM64 e lint; 170/170 C++ e 506/506 C# sem skips. Cubo/depth/textura reais no Xiaomi, relatório `build/android-validation/rhi-cube-final-20260828/report.json`. **`PipelineCache` conectado ao `VulkanDevice` e compilado/linkado, mas ainda não consumido**: `TriangleRenderer`/`InstancedRenderer` continuam chamando `vkCreateGraphicsPipelines`/`vkCreateRenderPass` diretamente em cada `initialize()` — a recriação por troca de tela ainda não foi eliminada, só a infraestrutura para eliminá-la existe. Validado em hardware físico (Xiaomi) que a integração não introduziu regressão: cena "dirt road" completa renderiza sem erro, `validate-android-shell.ps1` PASS em 3 ciclos. Pressure budgets e uploads assíncronos continuam futuros; migração dos renderers para o cache é o próximo passo real |
 | **2.1/2.3** | RHI Vulkan: cache de descritores, perfis de dispositivo S/A/B/C e Render Graph headless | ✅ lógica testada; execução completa do Render Graph na GPU permanece futura |
 | **2.1.4** | Registro bindless de texturas integrado; contrato de quatro sub-features e seis limites; fallback convencional real sem descriptor indexing habilitado | Ambos os caminhos passam em hardware com Khronos ativa (`rendering-20260828-140330/report.json`); 3 novas regressões headless. Escopo integral parcial: faltam tabelas globais restantes/consumidores; ver `EXECUCAO-EDITOR-ANDROID.md`. |
-| **2.1.6** | Validation layers e debug markers integrados em debug; semáforos por imagem e negociação de bindless corrigidos no commit herdado d56c992; `VulkanGpuFrameTimer` reutilizável mede timestamps reais da fila e checkpoints globais Geometry/Background/Transparent. O FrameProfile v3 usa distribuições compactas e separa GPU de CPU/acquire/present | Sem VUID no caminho medido. O diagnóstico guiou o prepass seletivo de alpha-mask: GPU fresca 17,12→12,71–12,78 ms, 60,05–60,07 FPS em 2772×1280; A/B aquecido 28,94→22,68 ms. Checkpoints dentro do mesmo render pass em TBDR não substituem captura: ainda falta frame RenderDoc/AGI inspecionado para fechar o item integral. |
+| **2.1.6** | Validation layers e debug markers integrados em debug; semáforos por imagem e negociação de bindless corrigidos no commit herdado d56c992 | Logs atuais sem VUID nos dois caminhos e no probe ASTC. Ainda falta captura de frame RenderDoc/AGI inspecionada para fechar o item integral; screenshot não a substitui. |
 | **2.3** | **Render graph**: topológico, poda, aliasing, barreiras, load/store ops, memoryless, fusão de subpasses | ✅ 41 testes |
 | **4.1.1 + GAP-PHY-01** | Física Jolt e ABI de capacidade segura: mundo/corpos/Step/queries básicos, mais `AetherPhysicsWorldDescV2` com quatro limites independentes, política de overflow, `StepV2` com `EPhysicsUpdateError` espelhado e estatísticas cumulativas. O símbolo V1 permanece e mapeia para defaults conservadores; o alocador temporário acompanha as capacidades configuradas | ✅ 7 testes físicos existentes + 3 testes de ABI/capacidade; pilhas densas de 500/1.000/5.000 sem overflow; probe Release retorna `0x7` e contabiliza as três categorias induzidas |
 | **4.1.2 + GAP-PHY-02/03/04** | Fachada C# de física: componentes ECS `RigidBody`/`Collider`/`Trigger`, wrapper `PhysicsWorld` e `PhysicsSyncSystem`. Autoridade estático/dinâmico/cinemático explícita; trigger persistente com filtro e Enter/Stay/Exit; `CreateBodiesV2`/`DestroyBodies` transacionais em `Span`, telemetria de crossings/bytes e spawn ECS agregado. ABI V1 permanece congelada | ✅ três gaps de física fechados; 9 testes C++ de trigger/batching + 15 testes C# de fachada/sync; 100/1.000/10.000 corpos com 1 crossing create + 1 destroy e zero GC no crossing |
