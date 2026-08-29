@@ -24,10 +24,13 @@ void main() {
   uint flags=frame.materialFlags.x;
   vec4 baseSample=texture(BASE_MAP,selectedUv(0));
   vec4 base=baseSample*frame.baseColorFactor*vColor;
-  // Fully transparent atlas texels cannot affect the framebuffer. Rejecting
-  // them before normal/PBR work preserves the exact 8-bit alpha result and is
-  // particularly important for dense forest cards.
-  if((flags&1u)!=0u && base.a<(1.0/255.0)) discard;
+  // MASK coverage writes depth like opaque geometry. This removes the large
+  // overdraw/order artifacts caused by treating foliage cards as BLEND while
+  // preserving real soft transparency for water and road decals.
+  if((flags&16u)!=0u) {
+    float alphaCutoff=float((frame.materialFlags.y>>8u)&255u)/255.0;
+    if(base.a<alphaCutoff) discard;
+  } else if((flags&1u)!=0u && base.a<(1.0/255.0)) discard;
   vec3 mr=(flags&4u)!=0u?texture(MR_MAP,selectedUv(2)).rgb:vec3(1);
   float rough=clamp(mr.g*frame.materialFactors.x,.07,1);
   float metal=clamp(mr.b*frame.materialFactors.y,0,1);
@@ -45,8 +48,15 @@ void main() {
   vec3 color=directLight(n,v,normalize(environment.sunDirectionIntensity.xyz),sunRadiance,
                          base.rgb,f0,metal,rough);
   float nv=max(dot(n,v),0.0);
-  color+=(1-metal)*base.rgb*environment.ambientColorStrength.rgb*
-         environment.ambientColorStrength.w;
+  // Diffuse indirect from the SH9 sky/ground irradiance baked in
+  // tools/cook-procedural-sky.py from the same radiance the visible dome
+  // and specular reflections use, so ambient color always matches what is
+  // actually overhead instead of a disconnected, separately-tinted source.
+  // Dividing by PI turns irradiance into the Lambertian outgoing-radiance
+  // normalization (albedo/PI * E). ambientColorStrength keeps a global
+  // artist tint/strength knob on top (neutral (1,1,1)/1.0 by default).
+  vec3 indirect=(evaluateSkyIrradiance(n)/PI)*environment.ambientColorStrength.rgb;
+  color+=(1-metal)*base.rgb*indirect*environment.ambientColorStrength.w;
   // Rough dielectrics carry almost no readable high-frequency reflection.
   // Skip that fetch coherently per material while retaining HDR reflections
   // on wet, polished and metallic surfaces.

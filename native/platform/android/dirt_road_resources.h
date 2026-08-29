@@ -12,13 +12,20 @@
 
 namespace ae::platform::android {
 
+// AEEN v2. skyIrradianceSH holds 9 SH (bands l=0,1,2) irradiance
+// coefficients, RGB each padded to a 4th float for std140-safe layout,
+// matching `vec4 skyIrradianceSH[9]` in environment_lighting.glsl exactly.
+// Basis order and cosine-lobe convolution are documented in
+// tools/cook-procedural-sky.py; both sides must stay in lockstep since there
+// is no shared codegen for this cross-language layout.
 struct EnvironmentLighting final {
   float sunDirectionIntensity[4]{};
   float sunColorAngularRadius[4]{};
   float ambientColorStrength[4]{};
   float parameters[4]{}; // exposure, rotation, maximum environment LOD, reserved
+  float skyIrradianceSH[36]{};
 };
-static_assert(sizeof(EnvironmentLighting) == 64);
+static_assert(sizeof(EnvironmentLighting) == 208);
 
 // Runtime representation of the cooked Dirt Road test scene. Source glTF,
 // image decoders and import metadata remain outside the APK render path.
