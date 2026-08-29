@@ -1,0 +1,863 @@
+--- startup ---
+--------- beginning of main
+I/Aether.Android(28414): Shell nativo iniciado.
+I/Aether.Android(28414): Extração de assets .NET concluída: 181 ok, 0 falharam.
+I/Aether.Android(28414): [ManagedBuild] id=555d53d5a3c419ebe3ef652cdf3729c6e21363858c2838eedf55c4e7bdeb024c reused=0
+I/Aether.Android(28414): CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Rendering.runtimeconfig.json).
+I/Aether.Android(28414): CoreCLR hospedado no shell: Ping(2,3)=5.
+I/Aether.Android(28414): [FramePacer] VSYNC do Android controla a admissão de frames.
+I/Aether.Android(28414): [Lifecycle] seq=1 cmd=START(10) phase=begin uptime_ms=808783415.636 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(28414): [Lifecycle] seq=1 cmd=START(10) phase=end uptime_ms=808783415.649 elapsed_ms=0.014 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(28414): [Lifecycle] seq=2 cmd=RESUME(11) phase=begin uptime_ms=808783427.346 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=2 cmd=RESUME(11) phase=end uptime_ms=808783427.363 elapsed_ms=0.018 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=808783458.731 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=end uptime_ms=808783458.752 elapsed_ms=0.022 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=begin uptime_ms=808783480.802 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=808783480.812
+I/Aether.Android(28414): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+I/Aether.Android(28414): Swapchain pronta: 1280x2772, 5 imagens.
+I/Aether.Android(28414): [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=808783563.057
+I/Aether.Android(28414): Descritores: caminho=bindless, capacidade bindless=16777216.
+I/Aether.Android(28414): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(28414): InstancedRenderer pronto: cubo texturizado + depth, capacidade=5000, modo=PoC-A.
+I/Aether.Android(28414): RHI/VMA [buffer]: uso=100032, pico=100032 bytes.
+I/Aether.Android(28414): RHI/VMA [texture]: uso=20544, pico=20544 bytes.
+I/Aether.Android(28414): RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+I/Aether.Android(28414): RHI/VMA [staging]: uso=0, pico=16384 bytes.
+I/Aether.Android(28414): [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=808783635.468 elapsed_ms=72.412
+I/Aether.Android(28414): [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=808783635.473 elapsed_ms=154.661
+I/Aether.Android(28414): [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=end uptime_ms=808783635.475 elapsed_ms=154.674 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808783635.498 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808783635.503 elapsed_ms=0.005 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=begin uptime_ms=808783635.547 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=end uptime_ms=808783635.556 elapsed_ms=0.009 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=808783635.561 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=808783635.564 elapsed_ms=0.003 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=808783635.569 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): Aplicativo ativo.
+I/Aether.Android(28414): [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=end uptime_ms=808783635.863 elapsed_ms=0.294 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): Primeiro frame após ativação apresentado: ciclo=1. latency_ms=4.772 uptime_ms=808783640.621
+I/Aether.Android(28414): [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808783650.452 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808783650.471 elapsed_ms=0.021 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=10 cmd=PAUSE(13) phase=begin uptime_ms=808783658.500 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(28414): Aplicativo suspenso.
+I/Aether.Android(28414): [Lifecycle] seq=10 cmd=PAUSE(13) phase=end uptime_ms=808783658.522 elapsed_ms=0.023 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(28414): [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=begin uptime_ms=808783687.641 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(28414): [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=end uptime_ms=808783687.666 elapsed_ms=0.026 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(28414): [Lifecycle] seq=12 cmd=TERM_WINDOW(2) phase=begin uptime_ms=808783841.059 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(28414): [Lifecycle] stage=destroy-surface-renderer phase=begin uptime_ms=808783841.074
+I/Aether.Android(28414): [Lifecycle] stage=destroy-surface-renderer phase=end uptime_ms=808783887.868 elapsed_ms=46.794
+I/Aether.Android(28414): [Lifecycle] seq=12 cmd=TERM_WINDOW(2) phase=end uptime_ms=808783887.894 elapsed_ms=46.836 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=13
+I/Aether.Android(28414): [Lifecycle] seq=13 cmd=STOP(14) phase=begin uptime_ms=808783890.590 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(28414): [Lifecycle] seq=13 cmd=STOP(14) phase=end uptime_ms=808783890.602 elapsed_ms=0.013 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(28414): [Lifecycle] seq=14 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=808783896.694 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(28414): [Lifecycle] seq=14 cmd=INPUT_CHANGED(0) phase=end uptime_ms=808783896.757 elapsed_ms=0.065 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(28414): [Lifecycle] seq=15 cmd=DESTROY(15) phase=begin uptime_ms=808783899.447 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(28414): [Lifecycle] seq=15 cmd=DESTROY(15) phase=end uptime_ms=808783899.459 elapsed_ms=0.013 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(28414): Shell nativo encerrado.
+I/Aether.Android(28414): Shell nativo iniciado.
+I/Aether.Android(28414): Extração de assets .NET concluída: 181 ok, 0 falharam.
+I/Aether.Android(28414): [ManagedBuild] id=555d53d5a3c419ebe3ef652cdf3729c6e21363858c2838eedf55c4e7bdeb024c reused=1
+I/Aether.Android(29974): Shell nativo iniciado.
+I/Aether.Android(29974): Extração de assets .NET concluída: 181 ok, 0 falharam.
+I/Aether.Android(29974): [ManagedBuild] id=555d53d5a3c419ebe3ef652cdf3729c6e21363858c2838eedf55c4e7bdeb024c reused=1
+I/Aether.Android(29974): CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Rendering.runtimeconfig.json).
+I/Aether.Android(29974): CoreCLR hospedado no shell: Ping(2,3)=5.
+I/Aether.Android(29974): [FramePacer] VSYNC do Android controla a admissão de frames.
+I/Aether.Android(29974): [Lifecycle] seq=1 cmd=START(10) phase=begin uptime_ms=808789081.705 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(29974): [Lifecycle] seq=1 cmd=START(10) phase=end uptime_ms=808789081.735 elapsed_ms=0.030 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(29974): [Lifecycle] seq=2 cmd=RESUME(11) phase=begin uptime_ms=808789090.301 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=2 cmd=RESUME(11) phase=end uptime_ms=808789090.342 elapsed_ms=0.042 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=808789116.667 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=end uptime_ms=808789116.678 elapsed_ms=0.012 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=begin uptime_ms=808789134.839 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=808789134.850
+I/Aether.Android(29974): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+I/Aether.Android(29974): Swapchain pronta: 1280x2772, 5 imagens.
+I/Aether.Android(29974): [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=808789179.269
+I/Aether.Android(29974): [DirtRoad] initialization=loading
+I/Aether.Android(29974): [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=808789179.513 elapsed_ms=0.245
+I/Aether.Android(29974): [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=808789179.519 elapsed_ms=44.669
+I/Aether.Android(29974): [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=end uptime_ms=808789179.530 elapsed_ms=44.690 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808789179.594 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808789179.601 elapsed_ms=0.006 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=begin uptime_ms=808789179.608 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=end uptime_ms=808789179.614 elapsed_ms=0.007 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=808789179.620 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=808789179.628 elapsed_ms=0.008 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=808789179.635 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): Aplicativo ativo.
+I/Aether.Android(29974): [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=end uptime_ms=808789180.191 elapsed_ms=0.556 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808789198.993 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808789199.102 elapsed_ms=0.109 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_000.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_001.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_002.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_003.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_004.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_005.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_006.aetex resident=256x128 mips=9 bytes=20528
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_007.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_008.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_009.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_010.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_011.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_012.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_013.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_014.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_015.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_016.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_017.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_018.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_019.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_020.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_021.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_022.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_023.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_024.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_025.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_026.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_027.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_028.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_029.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_030.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_031.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_032.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_033.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_034.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_035.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_036.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_037.aetex resident=512x256 mips=10 bytes=79696
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_038.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_039.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_040.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_041.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_042.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_043.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_044.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_045.aetex resident=2048x512 mips=12 bytes=629040
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_046.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_047.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_048.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_049.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_050.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_051.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_052.aetex resident=4096x4096 mips=13 bytes=9961536
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_053.aetex resident=4096x4096 mips=13 bytes=9961536
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_054.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_055.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_056.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_057.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_058.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_059.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_060.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_061.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_062.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_063.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_064.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_065.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_066.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_067.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_068.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_069.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [Environment] texture=dirt_road/environment.aetex resident=4096x2048 mips=13 bytes=89478488
+I/Aether.Android(29974): [DirtRoad] ready draws=27 materials=26 textures=70 triangles=341109 encoding=ASTC6x6 load_ms=3002.226
+I/Aether.Android(29974): Descritores: caminho=bindless, capacidade bindless=16777216.
+I/Aether.Android(29974): RHI/VMA: buffer de instâncias=2376 bytes; uso=34685184, limite=2411095449 bytes.
+I/Aether.Android(29974): InstancedRenderer pronto: cubo texturizado + depth, capacidade=27, modo=dirt-road.
+I/Aether.Android(29974): RHI/VMA [buffer]: uso=34685184, pico=34685184 bytes.
+I/Aether.Android(29974): RHI/VMA [texture]: uso=150716480, pico=150716480 bytes.
+I/Aether.Android(29974): RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+I/Aether.Android(29974): RHI/VMA [staging]: uso=0, pico=89478528 bytes.
+I/Aether.Android(29974): [DirtRoad] initialization=ready
+I/Aether.Android(29974): Primeiro frame após ativação apresentado: ciclo=1. latency_ms=3514.345 uptime_ms=808792694.525
+I/Aether.Android(29974): [Camera] position=(72.32,160.75,-468.68) yaw=-0.356 pitch=0.052
+I/Aether.Android(29974): [Camera] position=(41.99,162.88,-399.96) yaw=-0.374 pitch=0.075
+I/Aether.Android(29974): [Camera] position=(10.31,160.09,-320.43) yaw=-0.377 pitch=0.075
+I/Aether.Android(29974): [Camera] position=(-21.06,158.76,-237.62) yaw=-0.373 pitch=0.055
+I/Aether.Android(29974): [Camera] position=(-49.03,157.97,-162.75) yaw=-0.373 pitch=0.055
+I/Aether.Android(29974): [Camera] position=(-71.09,155.36,-101.80) yaw=-0.375 pitch=0.055
+I/Aether.Android(29974): [Camera] position=(-71.09,155.36,-101.80) yaw=0.534 pitch=0.198
+I/Aether.Android(29974): [Camera] position=(-57.85,150.89,-78.29) yaw=0.534 pitch=0.198
+I/Aether.Android(29974): [Camera] position=(-25.72,157.14,-45.28) yaw=0.831 pitch=-0.141
+I/Aether.Android(29974): [Camera] position=(-13.74,156.98,-27.90) yaw=0.629 pitch=-0.001
+I/Aether.Android(29974): [Camera] position=(-13.74,156.98,-27.90) yaw=0.842 pitch=0.269
+I/Aether.Android(29974): Marco de renderização atingido: 1000 frames apresentados.
+
+--- lifecycle 1 ---
+lifecycle-1-f4ea0d69035c4bb6b7acb7e893a7f547
+I/Aether.Android(29974): [Lifecycle] seq=10 cmd=PAUSE(13) phase=begin uptime_ms=808821582.472 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): Aplicativo suspenso.
+I/Aether.Android(29974): [Lifecycle] seq=10 cmd=PAUSE(13) phase=end uptime_ms=808821582.494 elapsed_ms=0.023 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=begin uptime_ms=808821589.940 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=end uptime_ms=808821589.959 elapsed_ms=0.021 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=12 cmd=RESUME(11) phase=begin uptime_ms=808821885.698 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=12 cmd=RESUME(11) phase=end uptime_ms=808821885.763 elapsed_ms=0.066 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=13 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808821916.386 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=13 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808821916.405 elapsed_ms=0.020 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=14 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=808822052.271 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Aplicativo ativo.
+I/Aether.Android(29974): [Lifecycle] seq=14 cmd=GAINED_FOCUS(6) phase=end uptime_ms=808822052.693 elapsed_ms=0.423 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Primeiro frame após ativação apresentado: ciclo=2. latency_ms=1.848 uptime_ms=808822054.527
+I/Aether.Android(29974): [Lifecycle] seq=15 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808822071.261 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=15 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808822071.282 elapsed_ms=0.021 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+
+--- lifecycle 2 ---
+lifecycle-2-f4e0cfea29c247a2b354d3ddea6b366a
+I/Aether.Android(29974): [Lifecycle] seq=16 cmd=PAUSE(13) phase=begin uptime_ms=808823146.432 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): Aplicativo suspenso.
+I/Aether.Android(29974): [Lifecycle] seq=16 cmd=PAUSE(13) phase=end uptime_ms=808823146.444 elapsed_ms=0.013 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=17 cmd=LOST_FOCUS(7) phase=begin uptime_ms=808823148.305 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=17 cmd=LOST_FOCUS(7) phase=end uptime_ms=808823148.324 elapsed_ms=0.020 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=18 cmd=RESUME(11) phase=begin uptime_ms=808823331.739 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=18 cmd=RESUME(11) phase=end uptime_ms=808823331.783 elapsed_ms=0.045 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=19 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808823353.170 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=19 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808823353.187 elapsed_ms=0.018 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=20 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=808823466.437 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Aplicativo ativo.
+I/Aether.Android(29974): [Lifecycle] seq=20 cmd=GAINED_FOCUS(6) phase=end uptime_ms=808823466.834 elapsed_ms=0.398 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Primeiro frame após ativação apresentado: ciclo=3. latency_ms=2.256 uptime_ms=808823469.054
+I/Aether.Android(29974): [Lifecycle] seq=21 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808823486.511 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=21 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808823486.579 elapsed_ms=0.070 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+
+--- lifecycle 3 ---
+lifecycle-3-0757f6bd9f6940d98632f2fb3728d2ba
+I/Aether.Android(29974): [Lifecycle] seq=22 cmd=PAUSE(13) phase=begin uptime_ms=808824313.280 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): Aplicativo suspenso.
+I/Aether.Android(29974): [Lifecycle] seq=22 cmd=PAUSE(13) phase=end uptime_ms=808824313.297 elapsed_ms=0.019 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=23 cmd=LOST_FOCUS(7) phase=begin uptime_ms=808824333.001 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=23 cmd=LOST_FOCUS(7) phase=end uptime_ms=808824333.017 elapsed_ms=0.017 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=24 cmd=RESUME(11) phase=begin uptime_ms=808824535.734 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=24 cmd=RESUME(11) phase=end uptime_ms=808824535.754 elapsed_ms=0.020 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=25 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808824552.068 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=25 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808824552.087 elapsed_ms=0.020 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=26 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=808824581.997 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Aplicativo ativo.
+I/Aether.Android(29974): [Lifecycle] seq=26 cmd=GAINED_FOCUS(6) phase=end uptime_ms=808824582.554 elapsed_ms=0.558 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Primeiro frame após ativação apresentado: ciclo=4. latency_ms=2.650 uptime_ms=808824584.934
+I/Aether.Android(29974): [Lifecycle] seq=27 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808824602.484 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=27 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808824602.547 elapsed_ms=0.065 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=28 cmd=LOST_FOCUS(7) phase=begin uptime_ms=808824602.563 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Aplicativo suspenso.
+I/Aether.Android(29974): [Lifecycle] seq=28 cmd=LOST_FOCUS(7) phase=end uptime_ms=808824602.576 elapsed_ms=0.013 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=29 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=808824696.778 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Aplicativo ativo.
+I/Aether.Android(29974): [Lifecycle] seq=29 cmd=GAINED_FOCUS(6) phase=end uptime_ms=808824697.165 elapsed_ms=0.388 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Primeiro frame após ativação apresentado: ciclo=5. latency_ms=1.587 uptime_ms=808824698.736
+I/Aether.Android(29974): [Lifecycle] seq=30 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808824717.124 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=30 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808824717.177 elapsed_ms=0.055 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+
+--- configuration change ---
+configuration-change-1e81f9cd6acb4cdbbdb5d7e5f98d1d1d
+I/Aether.Android(29974): [Lifecycle] seq=31 cmd=CONFIG_CHANGED(8) phase=begin uptime_ms=808825158.383 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Configuração alterada: janela=2772x1280.
+I/Aether.Android(29974): [Lifecycle] stage=recreate-swapchain-renderer phase=begin uptime_ms=808825158.397
+I/Aether.Android(29974): [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=808825257.852
+I/Aether.Android(29974): [DirtRoad] initialization=loading
+I/Aether.Android(29974): [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=808825258.087 elapsed_ms=0.236
+I/Aether.Android(29974): [Lifecycle] stage=recreate-swapchain-renderer phase=end uptime_ms=808825258.090 elapsed_ms=99.693
+I/Aether.Android(29974): [Lifecycle] seq=31 cmd=CONFIG_CHANGED(8) phase=end uptime_ms=808825258.093 elapsed_ms=99.714 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=32 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=808825258.203 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=32 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=808825258.207 elapsed_ms=0.003 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_000.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_001.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_002.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_003.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_004.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_005.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_006.aetex resident=256x128 mips=9 bytes=20528
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_007.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_008.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_009.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_010.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_011.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_012.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_013.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_014.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_015.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_016.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_017.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_018.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_019.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_020.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_021.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_022.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_023.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_024.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_025.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_026.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_027.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_028.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_029.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_030.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_031.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_032.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_033.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_034.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_035.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_036.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_037.aetex resident=512x256 mips=10 bytes=79696
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_038.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_039.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_040.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_041.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_042.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_043.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_044.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_045.aetex resident=2048x512 mips=12 bytes=629040
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_046.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_047.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_048.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_049.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_050.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_051.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_052.aetex resident=4096x4096 mips=13 bytes=9961536
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_053.aetex resident=4096x4096 mips=13 bytes=9961536
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_054.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_055.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_056.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_057.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_058.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_059.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_060.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_061.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_062.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_063.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_064.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_065.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_066.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_067.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_068.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_069.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [Environment] texture=dirt_road/environment.aetex resident=4096x2048 mips=13 bytes=89478488
+I/Aether.Android(29974): [DirtRoad] ready draws=27 materials=26 textures=70 triangles=341109 encoding=ASTC6x6 load_ms=4236.542
+I/Aether.Android(29974): Descritores: caminho=bindless, capacidade bindless=16777216.
+I/Aether.Android(29974): RHI/VMA: buffer de instâncias=2376 bytes; uso=34685184, limite=2411095449 bytes.
+I/Aether.Android(29974): InstancedRenderer pronto: cubo texturizado + depth, capacidade=27, modo=dirt-road.
+I/Aether.Android(29974): RHI/VMA [buffer]: uso=34685184, pico=34685184 bytes.
+I/Aether.Android(29974): RHI/VMA [texture]: uso=150716480, pico=150716480 bytes.
+I/Aether.Android(29974): RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+I/Aether.Android(29974): RHI/VMA [staging]: uso=0, pico=89478528 bytes.
+I/Aether.Android(29974): [DirtRoad] initialization=ready
+
+--- configuration restore ---
+configuration-restore-84ee04a1a25249019624754881ad10ad
+I/Aether.Android(29974): [Lifecycle] seq=33 cmd=CONFIG_CHANGED(8) phase=begin uptime_ms=808830784.117 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Configuração alterada: janela=2772x1280.
+I/Aether.Android(29974): [Lifecycle] stage=recreate-swapchain-renderer phase=begin uptime_ms=808830784.134
+I/Aether.Android(29974): [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=808830862.497
+I/Aether.Android(29974): [DirtRoad] initialization=loading
+I/Aether.Android(29974): [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=808830862.890 elapsed_ms=0.393
+I/Aether.Android(29974): [Lifecycle] stage=recreate-swapchain-renderer phase=end uptime_ms=808830862.898 elapsed_ms=78.765
+I/Aether.Android(29974): [Lifecycle] seq=33 cmd=CONFIG_CHANGED(8) phase=end uptime_ms=808830862.903 elapsed_ms=78.787 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=34 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=808830863.031 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=34 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=808830863.047 elapsed_ms=0.016 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_000.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_001.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_002.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_003.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_004.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_005.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_006.aetex resident=256x128 mips=9 bytes=20528
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_007.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_008.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_009.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_010.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_011.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_012.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_013.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_014.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_015.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_016.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_017.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_018.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_019.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_020.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_021.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_022.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_023.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_024.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_025.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_026.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_027.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_028.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_029.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_030.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_031.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_032.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_033.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_034.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_035.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_036.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_037.aetex resident=512x256 mips=10 bytes=79696
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_038.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_039.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_040.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_041.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_042.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_043.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_044.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_045.aetex resident=2048x512 mips=12 bytes=629040
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_046.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_047.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_048.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_049.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_050.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_051.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_052.aetex resident=4096x4096 mips=13 bytes=9961536
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_053.aetex resident=4096x4096 mips=13 bytes=9961536
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_054.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_055.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_056.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_057.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_058.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_059.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_060.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_061.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_062.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_063.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_064.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_065.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_066.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_067.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_068.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_069.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [Environment] texture=dirt_road/environment.aetex resident=4096x2048 mips=13 bytes=89478488
+I/Aether.Android(29974): [DirtRoad] ready draws=27 materials=26 textures=70 triangles=341109 encoding=ASTC6x6 load_ms=4317.227
+I/Aether.Android(29974): Descritores: caminho=bindless, capacidade bindless=16777216.
+I/Aether.Android(29974): RHI/VMA: buffer de instâncias=2376 bytes; uso=34685184, limite=2411095449 bytes.
+I/Aether.Android(29974): InstancedRenderer pronto: cubo texturizado + depth, capacidade=27, modo=dirt-road.
+I/Aether.Android(29974): RHI/VMA [buffer]: uso=34685184, pico=34685184 bytes.
+I/Aether.Android(29974): RHI/VMA [texture]: uso=150716480, pico=150716480 bytes.
+I/Aether.Android(29974): RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+I/Aether.Android(29974): RHI/VMA [staging]: uso=0, pico=89478528 bytes.
+I/Aether.Android(29974): [DirtRoad] initialization=ready
+
+--- final logcat window ---
+--------- beginning of main
+I/Aether.Android(28414): Shell nativo iniciado.
+I/Aether.Android(28414): Extração de assets .NET concluída: 181 ok, 0 falharam.
+I/Aether.Android(28414): [ManagedBuild] id=555d53d5a3c419ebe3ef652cdf3729c6e21363858c2838eedf55c4e7bdeb024c reused=0
+I/Aether.Android(28414): CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Rendering.runtimeconfig.json).
+I/Aether.Android(28414): CoreCLR hospedado no shell: Ping(2,3)=5.
+I/Aether.Android(28414): [FramePacer] VSYNC do Android controla a admissão de frames.
+I/Aether.Android(28414): [Lifecycle] seq=1 cmd=START(10) phase=begin uptime_ms=808783415.636 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(28414): [Lifecycle] seq=1 cmd=START(10) phase=end uptime_ms=808783415.649 elapsed_ms=0.014 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(28414): [Lifecycle] seq=2 cmd=RESUME(11) phase=begin uptime_ms=808783427.346 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=2 cmd=RESUME(11) phase=end uptime_ms=808783427.363 elapsed_ms=0.018 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=808783458.731 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=end uptime_ms=808783458.752 elapsed_ms=0.022 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=begin uptime_ms=808783480.802 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=808783480.812
+I/Aether.Android(28414): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+I/Aether.Android(28414): Swapchain pronta: 1280x2772, 5 imagens.
+I/Aether.Android(28414): [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=808783563.057
+I/Aether.Android(28414): Descritores: caminho=bindless, capacidade bindless=16777216.
+I/Aether.Android(28414): RHI/VMA: buffer de instâncias=100000 bytes; uso=100032, limite=2411095449 bytes.
+I/Aether.Android(28414): InstancedRenderer pronto: cubo texturizado + depth, capacidade=5000, modo=PoC-A.
+I/Aether.Android(28414): RHI/VMA [buffer]: uso=100032, pico=100032 bytes.
+I/Aether.Android(28414): RHI/VMA [texture]: uso=20544, pico=20544 bytes.
+I/Aether.Android(28414): RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+I/Aether.Android(28414): RHI/VMA [staging]: uso=0, pico=16384 bytes.
+I/Aether.Android(28414): [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=808783635.468 elapsed_ms=72.412
+I/Aether.Android(28414): [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=808783635.473 elapsed_ms=154.661
+I/Aether.Android(28414): [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=end uptime_ms=808783635.475 elapsed_ms=154.674 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808783635.498 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808783635.503 elapsed_ms=0.005 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=begin uptime_ms=808783635.547 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=end uptime_ms=808783635.556 elapsed_ms=0.009 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=808783635.561 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=808783635.564 elapsed_ms=0.003 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=808783635.569 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): Aplicativo ativo.
+I/Aether.Android(28414): [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=end uptime_ms=808783635.863 elapsed_ms=0.294 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): Primeiro frame após ativação apresentado: ciclo=1. latency_ms=4.772 uptime_ms=808783640.621
+I/Aether.Android(28414): [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808783650.452 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808783650.471 elapsed_ms=0.021 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(28414): [Lifecycle] seq=10 cmd=PAUSE(13) phase=begin uptime_ms=808783658.500 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(28414): Aplicativo suspenso.
+I/Aether.Android(28414): [Lifecycle] seq=10 cmd=PAUSE(13) phase=end uptime_ms=808783658.522 elapsed_ms=0.023 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(28414): [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=begin uptime_ms=808783687.641 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(28414): [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=end uptime_ms=808783687.666 elapsed_ms=0.026 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(28414): [Lifecycle] seq=12 cmd=TERM_WINDOW(2) phase=begin uptime_ms=808783841.059 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(28414): [Lifecycle] stage=destroy-surface-renderer phase=begin uptime_ms=808783841.074
+I/Aether.Android(28414): [Lifecycle] stage=destroy-surface-renderer phase=end uptime_ms=808783887.868 elapsed_ms=46.794
+I/Aether.Android(28414): [Lifecycle] seq=12 cmd=TERM_WINDOW(2) phase=end uptime_ms=808783887.894 elapsed_ms=46.836 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=13
+I/Aether.Android(28414): [Lifecycle] seq=13 cmd=STOP(14) phase=begin uptime_ms=808783890.590 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(28414): [Lifecycle] seq=13 cmd=STOP(14) phase=end uptime_ms=808783890.602 elapsed_ms=0.013 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(28414): [Lifecycle] seq=14 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=808783896.694 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(28414): [Lifecycle] seq=14 cmd=INPUT_CHANGED(0) phase=end uptime_ms=808783896.757 elapsed_ms=0.065 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(28414): [Lifecycle] seq=15 cmd=DESTROY(15) phase=begin uptime_ms=808783899.447 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(28414): [Lifecycle] seq=15 cmd=DESTROY(15) phase=end uptime_ms=808783899.459 elapsed_ms=0.013 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=14
+I/Aether.Android(28414): Shell nativo encerrado.
+I/Aether.Android(28414): Shell nativo iniciado.
+I/Aether.Android(28414): Extração de assets .NET concluída: 181 ok, 0 falharam.
+I/Aether.Android(28414): [ManagedBuild] id=555d53d5a3c419ebe3ef652cdf3729c6e21363858c2838eedf55c4e7bdeb024c reused=1
+I/Aether.Android(29974): Shell nativo iniciado.
+I/Aether.Android(29974): Extração de assets .NET concluída: 181 ok, 0 falharam.
+I/Aether.Android(29974): [ManagedBuild] id=555d53d5a3c419ebe3ef652cdf3729c6e21363858c2838eedf55c4e7bdeb024c reused=1
+I/Aether.Android(29974): CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Rendering.runtimeconfig.json).
+I/Aether.Android(29974): CoreCLR hospedado no shell: Ping(2,3)=5.
+I/Aether.Android(29974): [FramePacer] VSYNC do Android controla a admissão de frames.
+I/Aether.Android(29974): [Lifecycle] seq=1 cmd=START(10) phase=begin uptime_ms=808789081.705 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(29974): [Lifecycle] seq=1 cmd=START(10) phase=end uptime_ms=808789081.735 elapsed_ms=0.030 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+I/Aether.Android(29974): [Lifecycle] seq=2 cmd=RESUME(11) phase=begin uptime_ms=808789090.301 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=2 cmd=RESUME(11) phase=end uptime_ms=808789090.342 elapsed_ms=0.042 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=808789116.667 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=end uptime_ms=808789116.678 elapsed_ms=0.012 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=begin uptime_ms=808789134.839 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=808789134.850
+I/Aether.Android(29974): Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+I/Aether.Android(29974): Swapchain pronta: 1280x2772, 5 imagens.
+I/Aether.Android(29974): [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=808789179.269
+I/Aether.Android(29974): [DirtRoad] initialization=loading
+I/Aether.Android(29974): [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=808789179.513 elapsed_ms=0.245
+I/Aether.Android(29974): [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=808789179.519 elapsed_ms=44.669
+I/Aether.Android(29974): [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=end uptime_ms=808789179.530 elapsed_ms=44.690 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808789179.594 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808789179.601 elapsed_ms=0.006 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=begin uptime_ms=808789179.608 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=end uptime_ms=808789179.614 elapsed_ms=0.007 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=808789179.620 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=808789179.628 elapsed_ms=0.008 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=808789179.635 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): Aplicativo ativo.
+I/Aether.Android(29974): [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=end uptime_ms=808789180.191 elapsed_ms=0.556 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808789198.993 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808789199.102 elapsed_ms=0.109 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_000.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_001.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_002.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_003.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_004.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_005.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_006.aetex resident=256x128 mips=9 bytes=20528
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_007.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_008.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_009.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_010.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_011.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_012.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_013.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_014.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_015.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_016.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_017.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_018.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_019.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_020.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_021.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_022.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_023.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_024.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_025.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_026.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_027.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_028.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_029.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_030.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_031.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_032.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_033.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_034.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_035.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_036.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_037.aetex resident=512x256 mips=10 bytes=79696
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_038.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_039.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_040.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_041.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_042.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_043.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_044.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_045.aetex resident=2048x512 mips=12 bytes=629040
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_046.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_047.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_048.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_049.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_050.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_051.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_052.aetex resident=4096x4096 mips=13 bytes=9961536
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_053.aetex resident=4096x4096 mips=13 bytes=9961536
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_054.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_055.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_056.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_057.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_058.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_059.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_060.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_061.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_062.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_063.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_064.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_065.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_066.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_067.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_068.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_069.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [Environment] texture=dirt_road/environment.aetex resident=4096x2048 mips=13 bytes=89478488
+I/Aether.Android(29974): [DirtRoad] ready draws=27 materials=26 textures=70 triangles=341109 encoding=ASTC6x6 load_ms=3002.226
+I/Aether.Android(29974): Descritores: caminho=bindless, capacidade bindless=16777216.
+I/Aether.Android(29974): RHI/VMA: buffer de instâncias=2376 bytes; uso=34685184, limite=2411095449 bytes.
+I/Aether.Android(29974): InstancedRenderer pronto: cubo texturizado + depth, capacidade=27, modo=dirt-road.
+I/Aether.Android(29974): RHI/VMA [buffer]: uso=34685184, pico=34685184 bytes.
+I/Aether.Android(29974): RHI/VMA [texture]: uso=150716480, pico=150716480 bytes.
+I/Aether.Android(29974): RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+I/Aether.Android(29974): RHI/VMA [staging]: uso=0, pico=89478528 bytes.
+I/Aether.Android(29974): [DirtRoad] initialization=ready
+I/Aether.Android(29974): Primeiro frame após ativação apresentado: ciclo=1. latency_ms=3514.345 uptime_ms=808792694.525
+I/Aether.Android(29974): [Camera] position=(72.32,160.75,-468.68) yaw=-0.356 pitch=0.052
+I/Aether.Android(29974): [Camera] position=(41.99,162.88,-399.96) yaw=-0.374 pitch=0.075
+I/Aether.Android(29974): [Camera] position=(10.31,160.09,-320.43) yaw=-0.377 pitch=0.075
+I/Aether.Android(29974): [Camera] position=(-21.06,158.76,-237.62) yaw=-0.373 pitch=0.055
+I/Aether.Android(29974): [Camera] position=(-49.03,157.97,-162.75) yaw=-0.373 pitch=0.055
+I/Aether.Android(29974): [Camera] position=(-71.09,155.36,-101.80) yaw=-0.375 pitch=0.055
+I/Aether.Android(29974): [Camera] position=(-71.09,155.36,-101.80) yaw=0.534 pitch=0.198
+I/Aether.Android(29974): [Camera] position=(-57.85,150.89,-78.29) yaw=0.534 pitch=0.198
+I/Aether.Android(29974): [Camera] position=(-25.72,157.14,-45.28) yaw=0.831 pitch=-0.141
+I/Aether.Android(29974): [Camera] position=(-13.74,156.98,-27.90) yaw=0.629 pitch=-0.001
+I/Aether.Android(29974): [Camera] position=(-13.74,156.98,-27.90) yaw=0.842 pitch=0.269
+I/Aether.Android(29974): Marco de renderização atingido: 1000 frames apresentados.
+I/Aether.Validation(  634): lifecycle-1-f4ea0d69035c4bb6b7acb7e893a7f547
+I/Aether.Android(29974): [Lifecycle] seq=10 cmd=PAUSE(13) phase=begin uptime_ms=808821582.472 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): Aplicativo suspenso.
+I/Aether.Android(29974): [Lifecycle] seq=10 cmd=PAUSE(13) phase=end uptime_ms=808821582.494 elapsed_ms=0.023 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=begin uptime_ms=808821589.940 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=11 cmd=LOST_FOCUS(7) phase=end uptime_ms=808821589.959 elapsed_ms=0.021 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=12 cmd=RESUME(11) phase=begin uptime_ms=808821885.698 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=12 cmd=RESUME(11) phase=end uptime_ms=808821885.763 elapsed_ms=0.066 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=13 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808821916.386 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=13 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808821916.405 elapsed_ms=0.020 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=14 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=808822052.271 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Aplicativo ativo.
+I/Aether.Android(29974): [Lifecycle] seq=14 cmd=GAINED_FOCUS(6) phase=end uptime_ms=808822052.693 elapsed_ms=0.423 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Primeiro frame após ativação apresentado: ciclo=2. latency_ms=1.848 uptime_ms=808822054.527
+I/Aether.Android(29974): [Lifecycle] seq=15 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808822071.261 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=15 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808822071.282 elapsed_ms=0.021 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Validation(  702): lifecycle-2-f4e0cfea29c247a2b354d3ddea6b366a
+I/Aether.Android(29974): [Lifecycle] seq=16 cmd=PAUSE(13) phase=begin uptime_ms=808823146.432 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): Aplicativo suspenso.
+I/Aether.Android(29974): [Lifecycle] seq=16 cmd=PAUSE(13) phase=end uptime_ms=808823146.444 elapsed_ms=0.013 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=17 cmd=LOST_FOCUS(7) phase=begin uptime_ms=808823148.305 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=17 cmd=LOST_FOCUS(7) phase=end uptime_ms=808823148.324 elapsed_ms=0.020 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=18 cmd=RESUME(11) phase=begin uptime_ms=808823331.739 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=18 cmd=RESUME(11) phase=end uptime_ms=808823331.783 elapsed_ms=0.045 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=19 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808823353.170 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=19 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808823353.187 elapsed_ms=0.018 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=20 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=808823466.437 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Aplicativo ativo.
+I/Aether.Android(29974): [Lifecycle] seq=20 cmd=GAINED_FOCUS(6) phase=end uptime_ms=808823466.834 elapsed_ms=0.398 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Primeiro frame após ativação apresentado: ciclo=3. latency_ms=2.256 uptime_ms=808823469.054
+I/Aether.Android(29974): [Lifecycle] seq=21 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808823486.511 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=21 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808823486.579 elapsed_ms=0.070 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Validation(  762): lifecycle-3-0757f6bd9f6940d98632f2fb3728d2ba
+I/Aether.Android(29974): [Lifecycle] seq=22 cmd=PAUSE(13) phase=begin uptime_ms=808824313.280 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): Aplicativo suspenso.
+I/Aether.Android(29974): [Lifecycle] seq=22 cmd=PAUSE(13) phase=end uptime_ms=808824313.297 elapsed_ms=0.019 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=23 cmd=LOST_FOCUS(7) phase=begin uptime_ms=808824333.001 elapsed_ms=0.000 resumed=0 focus=1 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=23 cmd=LOST_FOCUS(7) phase=end uptime_ms=808824333.017 elapsed_ms=0.017 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=13
+I/Aether.Android(29974): [Lifecycle] seq=24 cmd=RESUME(11) phase=begin uptime_ms=808824535.734 elapsed_ms=0.000 resumed=0 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=24 cmd=RESUME(11) phase=end uptime_ms=808824535.754 elapsed_ms=0.020 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=25 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808824552.068 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=25 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808824552.087 elapsed_ms=0.020 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=26 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=808824581.997 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Aplicativo ativo.
+I/Aether.Android(29974): [Lifecycle] seq=26 cmd=GAINED_FOCUS(6) phase=end uptime_ms=808824582.554 elapsed_ms=0.558 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Primeiro frame após ativação apresentado: ciclo=4. latency_ms=2.650 uptime_ms=808824584.934
+I/Aether.Android(29974): [Lifecycle] seq=27 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808824602.484 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=27 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808824602.547 elapsed_ms=0.065 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=28 cmd=LOST_FOCUS(7) phase=begin uptime_ms=808824602.563 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Aplicativo suspenso.
+I/Aether.Android(29974): [Lifecycle] seq=28 cmd=LOST_FOCUS(7) phase=end uptime_ms=808824602.576 elapsed_ms=0.013 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=29 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=808824696.778 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Aplicativo ativo.
+I/Aether.Android(29974): [Lifecycle] seq=29 cmd=GAINED_FOCUS(6) phase=end uptime_ms=808824697.165 elapsed_ms=0.388 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Primeiro frame após ativação apresentado: ciclo=5. latency_ms=1.587 uptime_ms=808824698.736
+I/Aether.Android(29974): [Lifecycle] seq=30 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=808824717.124 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=30 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=808824717.177 elapsed_ms=0.055 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Validation(  842): configuration-change-1e81f9cd6acb4cdbbdb5d7e5f98d1d1d
+I/Aether.Android(29974): [Lifecycle] seq=31 cmd=CONFIG_CHANGED(8) phase=begin uptime_ms=808825158.383 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Configuração alterada: janela=2772x1280.
+I/Aether.Android(29974): [Lifecycle] stage=recreate-swapchain-renderer phase=begin uptime_ms=808825158.397
+I/Aether.Android(29974): [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=808825257.852
+I/Aether.Android(29974): [DirtRoad] initialization=loading
+I/Aether.Android(29974): [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=808825258.087 elapsed_ms=0.236
+I/Aether.Android(29974): [Lifecycle] stage=recreate-swapchain-renderer phase=end uptime_ms=808825258.090 elapsed_ms=99.693
+I/Aether.Android(29974): [Lifecycle] seq=31 cmd=CONFIG_CHANGED(8) phase=end uptime_ms=808825258.093 elapsed_ms=99.714 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=32 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=808825258.203 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=32 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=808825258.207 elapsed_ms=0.003 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_000.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_001.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_002.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_003.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_004.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_005.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_006.aetex resident=256x128 mips=9 bytes=20528
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_007.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_008.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_009.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_010.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_011.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_012.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_013.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_014.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_015.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_016.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_017.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_018.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_019.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_020.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_021.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_022.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_023.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_024.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_025.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_026.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_027.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_028.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_029.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_030.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_031.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_032.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_033.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_034.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_035.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_036.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_037.aetex resident=512x256 mips=10 bytes=79696
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_038.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_039.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_040.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_041.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_042.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_043.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_044.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_045.aetex resident=2048x512 mips=12 bytes=629040
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_046.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_047.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_048.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_049.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_050.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_051.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_052.aetex resident=4096x4096 mips=13 bytes=9961536
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_053.aetex resident=4096x4096 mips=13 bytes=9961536
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_054.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_055.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_056.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_057.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_058.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_059.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_060.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_061.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_062.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_063.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_064.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_065.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_066.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_067.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_068.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_069.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [Environment] texture=dirt_road/environment.aetex resident=4096x2048 mips=13 bytes=89478488
+I/Aether.Android(29974): [DirtRoad] ready draws=27 materials=26 textures=70 triangles=341109 encoding=ASTC6x6 load_ms=4236.542
+I/Aether.Android(29974): Descritores: caminho=bindless, capacidade bindless=16777216.
+I/Aether.Android(29974): RHI/VMA: buffer de instâncias=2376 bytes; uso=34685184, limite=2411095449 bytes.
+I/Aether.Android(29974): InstancedRenderer pronto: cubo texturizado + depth, capacidade=27, modo=dirt-road.
+I/Aether.Android(29974): RHI/VMA [buffer]: uso=34685184, pico=34685184 bytes.
+I/Aether.Android(29974): RHI/VMA [texture]: uso=150716480, pico=150716480 bytes.
+I/Aether.Android(29974): RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+I/Aether.Android(29974): RHI/VMA [staging]: uso=0, pico=89478528 bytes.
+I/Aether.Android(29974): [DirtRoad] initialization=ready
+I/Aether.Validation( 1580): configuration-restore-84ee04a1a25249019624754881ad10ad
+I/Aether.Android(29974): [Lifecycle] seq=33 cmd=CONFIG_CHANGED(8) phase=begin uptime_ms=808830784.117 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=1 native_window=1 glue_state=11
+I/Aether.Android(29974): Configuração alterada: janela=2772x1280.
+I/Aether.Android(29974): [Lifecycle] stage=recreate-swapchain-renderer phase=begin uptime_ms=808830784.134
+I/Aether.Android(29974): [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=808830862.497
+I/Aether.Android(29974): [DirtRoad] initialization=loading
+I/Aether.Android(29974): [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=808830862.890 elapsed_ms=0.393
+I/Aether.Android(29974): [Lifecycle] stage=recreate-swapchain-renderer phase=end uptime_ms=808830862.898 elapsed_ms=78.765
+I/Aether.Android(29974): [Lifecycle] seq=33 cmd=CONFIG_CHANGED(8) phase=end uptime_ms=808830862.903 elapsed_ms=78.787 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=34 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=808830863.031 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [Lifecycle] seq=34 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=808830863.047 elapsed_ms=0.016 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_000.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_001.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_002.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_003.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_004.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_005.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_006.aetex resident=256x128 mips=9 bytes=20528
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_007.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_008.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_009.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_010.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_011.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_012.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_013.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_014.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_015.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_016.aetex resident=128x1024 mips=11 bytes=81088
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_017.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_018.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_019.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_020.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_021.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_022.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_023.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_024.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_025.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_026.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_027.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_028.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_029.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_030.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_031.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_032.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_033.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_034.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_035.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_036.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_037.aetex resident=512x256 mips=10 bytes=79696
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_038.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_039.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_040.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_041.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_042.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_043.aetex resident=1024x512 mips=11 bytes=314992
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_044.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_045.aetex resident=2048x512 mips=12 bytes=629040
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_046.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_047.aetex resident=256x256 mips=9 bytes=40096
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_048.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_049.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_050.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_051.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_052.aetex resident=4096x4096 mips=13 bytes=9961536
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_053.aetex resident=4096x4096 mips=13 bytes=9961536
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_054.aetex resident=2048x2048 mips=12 bytes=2497712
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_055.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_056.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_057.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_058.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_059.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_060.aetex resident=512x512 mips=10 bytes=158432
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_061.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_062.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_063.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_064.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_065.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_066.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_067.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_068.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [DirtRoad] texture=dirt_road/texture_069.aetex resident=1024x1024 mips=11 bytes=626288
+I/Aether.Android(29974): [Environment] texture=dirt_road/environment.aetex resident=4096x2048 mips=13 bytes=89478488
+I/Aether.Android(29974): [DirtRoad] ready draws=27 materials=26 textures=70 triangles=341109 encoding=ASTC6x6 load_ms=4317.227
+I/Aether.Android(29974): Descritores: caminho=bindless, capacidade bindless=16777216.
+I/Aether.Android(29974): RHI/VMA: buffer de instâncias=2376 bytes; uso=34685184, limite=2411095449 bytes.
+I/Aether.Android(29974): InstancedRenderer pronto: cubo texturizado + depth, capacidade=27, modo=dirt-road.
+I/Aether.Android(29974): RHI/VMA [buffer]: uso=34685184, pico=34685184 bytes.
+I/Aether.Android(29974): RHI/VMA [texture]: uso=150716480, pico=150716480 bytes.
+I/Aether.Android(29974): RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+I/Aether.Android(29974): RHI/VMA [staging]: uso=0, pico=89478528 bytes.
+I/Aether.Android(29974): [DirtRoad] initialization=ready
+
+--- crash buffer ---
+--------- beginning of crash
+F/libc    (28414): FORTIFY: pthread_mutex_lock called on a destroyed mutex (0x75f460eaf8)

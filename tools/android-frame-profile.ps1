@@ -59,10 +59,11 @@ function Get-SurfaceFrameSummary {
 }
 
 $FrameProfileMetricNames = @('interval_ms', 'process_cpu_ms', 'thread_cpu_ms', 'acquire_wall_ms',
-    'interop_wall_ms', 'record_submit_wall_ms', 'present_wall_ms')
+    'interop_wall_ms', 'record_submit_wall_ms', 'present_wall_ms', 'gpu_frame_ms',
+    'gpu_geometry_ms', 'gpu_background_ms', 'gpu_transparent_ms')
 
 function ConvertFrom-FrameProfileLog {
-    param([string]$Text, [string]$ExpectedPid)
+    param([string]$Text, [string]$ExpectedPid, [Nullable[int]]$ExpectedInstances = 5000)
     $seen = @{}
     foreach ($line in ($Text -split "`n")) {
         if ($line -notmatch '\[FrameProfile\] (\{.*)$') { continue }
@@ -75,13 +76,19 @@ function ConvertFrom-FrameProfileLog {
                 throw "FrameProfile inválido: $field."
             }
         }
-        if ($window.schemaVersion -ne 1 -or $window.instances -ne 5000 -or
+        if ($window.schemaVersion -ne 3 -or
+            ($null -ne $ExpectedInstances -and $window.instances -ne $ExpectedInstances) -or
             $window.frames -ne 600 -or $window.elapsed_ms -le 0 -or
             $window.width -le 0 -or $window.height -le 0 -or $window.epoch -lt 1 -or $window.window -lt 1) {
             throw 'Relatório FrameProfile incompatível ou incompleto.'
         }
         foreach ($metric in $FrameProfileMetricNames) {
-            $distribution = $window.$metric
+            $compact = @($window.$metric)
+            if ($compact.Count -ne 5) { throw "FrameProfile inválido: $metric precisa de 5 valores." }
+            $distribution = [pscustomobject]@{
+                mean = $compact[0]; p50 = $compact[1]; p95 = $compact[2]; p99 = $compact[3]; max = $compact[4]
+            }
+            $window.$metric = $distribution
             foreach ($field in @('mean', 'p50', 'p95', 'p99', 'max')) {
                 $value = [double]$distribution.$field
                 if ($null -eq $distribution.$field -or [double]::IsNaN($value) -or [double]::IsInfinity($value) -or $value -lt 0) {
@@ -95,7 +102,10 @@ function ConvertFrom-FrameProfileLog {
         }
         $derivedFps = 1000.0 * $window.frames / $window.elapsed_ms
         if ([Math]::Abs($derivedFps - $window.present_fps) -gt 0.001 -or
-            [Math]::Abs($window.interval_ms.mean * $window.frames - $window.elapsed_ms) -gt 0.001) {
+            # Distribuições usam 4 casas para permanecer abaixo do limite de
+            # 1023 bytes por entrada do logger Android. Em 600 frames, o erro
+            # máximo de arredondamento da média é 0,03 ms.
+            [Math]::Abs($window.interval_ms.mean * $window.frames - $window.elapsed_ms) -gt 0.05) {
             throw 'Tempo/FPS inconsistente no FrameProfile.'
         }
         $key = "$($window.epoch):$($window.window)"
@@ -106,7 +116,8 @@ function ConvertFrom-FrameProfileLog {
 }
 
 function Get-FrameProfileCapture {
-    param([object[]]$Windows, [double]$MinimumSeconds)
+    param([object[]]$Windows, [double]$MinimumSeconds,
+          [string]$Scene = 'poc-a-5000-textured-cubes')
     if ($Windows.Count -eq 0) { return $null }
     $ordered = @($Windows | Sort-Object window)
     $latest = $ordered[-1]
@@ -139,7 +150,7 @@ function Get-FrameProfileCapture {
     }
     return [ordered]@{
         schemaVersion = 1
-        scene = 'poc-a-5000-textured-cubes'
+        scene = $Scene
         pid = $latest.pid
         epoch = $latest.epoch
         build = $latest.build

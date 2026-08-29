@@ -27,6 +27,11 @@ param(
     [int]$ScreenCycles = 1,
     [switch]$AllowScreenshotDifference,
     [switch]$KeepAppRunning,
+    [ValidateSet("poc-a", "dirt-road", "scene-preview", "material-preview")]
+    [string]$Scene = "poc-a",
+    [string]$CameraPose,
+    [ValidateSet(30, 60, 90, 120)]
+    [int]$TargetFps = 60,
     [string]$OutputDirectory
 )
 
@@ -38,6 +43,19 @@ $ErrorActionPreference = "Stop"
 if ($RequireSoakBudget -and $SoakMinutes -lt 30) { throw '-RequireSoakBudget exige pelo menos 30 minutos.' }
 if ($RequirePowerBudget -and $SoakMinutes -eq 0) { throw '-RequirePowerBudget exige -SoakMinutes para coletar potência contínua.' }
 $CaptureSeconds = [Math]::Max($ProfileSeconds, $SoakMinutes * 60)
+$ParsedCameraPose = $null
+if ($CameraPose) {
+    $parts = @($CameraPose -split ',' | ForEach-Object { $_.Trim() })
+    if ($parts.Count -ne 5) { throw '-CameraPose exige x,y,z,yaw,pitch.' }
+    $ParsedCameraPose = @($parts | ForEach-Object {
+        $value = 0.0
+        if (-not [double]::TryParse($_, [Globalization.NumberStyles]::Float,
+                [Globalization.CultureInfo]::InvariantCulture, [ref]$value)) {
+            throw "Valor inválido em -CameraPose: $_"
+        }
+        $value
+    })
+}
 
 $PackageName = "dev.aether.editor"
 $ActivityName = "android.app.NativeActivity"
@@ -76,6 +94,9 @@ $Report = [ordered]@{
         cycleTimeoutSeconds = $CycleTimeoutSeconds
         soakMinutes = $SoakMinutes
         profileSeconds = $ProfileSeconds
+        scene = $Scene
+        cameraPose = $CameraPose
+        targetFps = $TargetFps
         powerBudgetWatts = $PowerBudgetWatts
         requirePowerBudget = [bool]$RequirePowerBudget
         requireSoakBudget = [bool]$RequireSoakBudget
@@ -358,8 +379,27 @@ function Assert-AppPid {
 }
 
 function Start-AetherActivity {
-    $arguments = @("shell", "am", "start", "-W", "-n", $ComponentName, "--ez", "aether.poc_a", "true")
-    if ($CaptureSeconds -gt 0) { $arguments += @("--ez", "aether.profile_frames", "true") }
+    $arguments = @("shell", "am", "start", "-W", "-n", $ComponentName)
+    $sceneExtra = switch ($Scene) {
+        "poc-a" { "aether.poc_a" }
+        "dirt-road" { "aether.map_preview" }
+        "scene-preview" { "aether.scene_preview" }
+        "material-preview" { "aether.material_preview" }
+    }
+    $arguments += @("--ez", $sceneExtra, "true")
+    $arguments += @("--ef", "aether.target_fps", $TargetFps.ToString([Globalization.CultureInfo]::InvariantCulture))
+    if ($CaptureSeconds -gt 0) {
+        $arguments += @("--ez", "aether.profile_frames", "true")
+        if ($null -ne $ParsedCameraPose) { $arguments += @("--ez", "aether.lock_camera", "true") }
+    }
+    if ($null -ne $ParsedCameraPose) {
+        $cameraKeys = @('aether.camera_x', 'aether.camera_y', 'aether.camera_z',
+                        'aether.camera_yaw', 'aether.camera_pitch')
+        for ($index = 0; $index -lt $cameraKeys.Count; ++$index) {
+            $arguments += @('--ef', $cameraKeys[$index],
+                $ParsedCameraPose[$index].ToString('R', [Globalization.CultureInfo]::InvariantCulture))
+        }
+    }
     $startOutput = Invoke-Adb -Arguments $arguments
     if (($startOutput -join "`n") -match "Error:") {
         throw "Android recusou iniciar $ComponentName`: $($startOutput -join [Environment]::NewLine)"
@@ -603,13 +643,15 @@ try {
                 }
             }
             if ($captureClock.Elapsed.TotalSeconds -ge $nextCpuSample) {
-                foreach ($window in @(ConvertFrom-FrameProfileLog -Text (Get-AetherLog) -ExpectedPid $initialPid)) {
+                $expectedInstances = if ($Scene -eq "poc-a") { 5000 } else { $null }
+                foreach ($window in @(ConvertFrom-FrameProfileLog -Text (Get-AetherLog) -ExpectedPid $initialPid -ExpectedInstances $expectedInstances)) {
                     if (-not $capturedWindows.ContainsKey("$($window.epoch):$($window.window)")) {
                         Write-ProfileEvidence -Path $windowPath -Value $window
                     }
                     $capturedWindows["$($window.epoch):$($window.window)"] = $window
                 }
-                $capture = Get-FrameProfileCapture -Windows @($capturedWindows.Values) -MinimumSeconds $CaptureSeconds
+                $sceneName = if ($Scene -eq "poc-a") { "poc-a-5000-textured-cubes" } else { $Scene }
+                $capture = Get-FrameProfileCapture -Windows @($capturedWindows.Values) -MinimumSeconds $CaptureSeconds -Scene $sceneName
                 $nextCpuSample = $captureClock.Elapsed.TotalSeconds + 2
             }
             if ($null -ne $capture -and $captureClock.Elapsed.TotalSeconds -ge $CaptureSeconds) {

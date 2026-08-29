@@ -49,7 +49,7 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
 #endif
   char json[3072];
   int used = std::snprintf(json, sizeof(json),
-      "{\"schemaVersion\":1,\"pid\":%d,\"epoch\":%u,\"window\":%llu,\"build\":\"%s\","
+      "{\"schemaVersion\":3,\"pid\":%d,\"epoch\":%u,\"window\":%llu,\"build\":\"%s\","
       "\"instances\":%u,\"width\":%u,\"height\":%u,\"frames\":%u,\"elapsed_ms\":%.6f,"
       "\"present_fps\":%.6f,\"warmup_samples\":%u,\"warmup_process_cpu_max_ms\":%.6f",
       getpid(), epoch_, static_cast<unsigned long long>(++window_), build, instances, width, height,
@@ -58,8 +58,10 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
   if (used < 0 || static_cast<size_t>(used) >= sizeof(json)) return;
   for (u32 metric = 0; metric < profiler::FrameMetricCount; ++metric) {
     const auto &d = summary.metrics[metric];
+    // Schema v3 usa vetor compacto [mean,p50,p95,p99,max]. O formato anterior
+    // excederia o limite de 1023 bytes do Logcat ao adicionar tempos por passe.
     const int written = std::snprintf(json + used, sizeof(json) - used,
-        ",\"%s\":{\"mean\":%.6f,\"p50\":%.6f,\"p95\":%.6f,\"p99\":%.6f,\"max\":%.6f}",
+        ",\"%s\":[%.4f,%.4f,%.4f,%.4f,%.4f]",
         profiler::FrameMetricNames[metric], d.mean, d.p50, d.p95, d.p99, d.maximum);
     if (written < 0 || static_cast<size_t>(written) >= sizeof(json) - used) {
       __android_log_print(ANDROID_LOG_ERROR, LogTag, "[FrameProfile] Buffer de relatório insuficiente.");

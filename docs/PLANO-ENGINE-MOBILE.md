@@ -67,6 +67,45 @@ Uma **engine de jogos completa cujo ambiente de autoria é um aplicativo mobile 
 4. **Aposta no-code:** o AetherFlow não é um brinquedo paralelo ao código. Ele **compila para o mesmo IL** que o C#, com o mesmo desempenho, e qualquer grafo pode ser convertido para C# e vice-versa (round-trip).
 5. **Aposta de produto:** o criador **nunca precisa de um PC**. Da primeira caixa até a loja publicada.
 
+## 0.4 Contrato global de desempenho — tick, chunks e renderização
+
+O alvo da engine não é “60 FPS na cena de teste”. O runtime e todo jogo publicado
+usam a mesma arquitetura, com cadências de **60, 90 e 120 Hz** e qualidade visual
+preservada. Cada cena de amostra é somente um benchmark; nenhuma regra pode consultar
+nome de mapa, asset ou modelo de aparelho. O plano executável e as medições ficam em
+[`PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md`](PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md).
+
+| Cadência | Frame | CPU (lane) | GPU (lane) | Uso |
+|---:|---:|---:|---:|---|
+| 120 Hz | 8,33 ms | ≤ 6,50 ms | ≤ 7,33 ms | alvo de desempenho em painel 120 Hz |
+| 90 Hz | 11,11 ms | ≤ 8,67 ms | ≤ 9,78 ms | fallback de cadência, não de gráficos |
+| 60 Hz | 16,67 ms | ≤ 13,00 ms | ≤ 14,67 ms | piso sustentado do perfil A |
+
+CPU e GPU são lanes sobrepostas, portanto seus números não são somados. A margem
+restante pertence a compositor, jitter do SO e variação térmica. Trocar cadência não
+autoriza reduzir resolução, materiais, iluminação, geometria ou distância; qualquer
+degradação visual é outra política, explícita e opt-in.
+
+O frame global segue obrigatoriamente esta sequência:
+
+1. Amostrar input e relógio uma vez por frame apresentado.
+2. Executar zero ou mais passos de **fixed tick** (padrão 60 Hz), com teto de catch-up;
+   render a 90/120 Hz interpola estados, sem acelerar física ou gameplay.
+3. Consultar versões dos chunks ECS e extrair apenas componentes alterados. Sistemas
+   sem alteração não percorrem o mundo e o caminho estável aloca zero bytes.
+4. Atualizar uma cena GPU persistente por lotes; não reconstruir listas, buffers e
+   descriptors por entidade a cada frame.
+5. Fazer visibilidade conservadora (frustum → HZB → LOD), compactação e geração de
+   comandos indiretos na GPU. A CPU envia poucos pacotes grandes e bounded.
+6. Executar Render Graph, apresentar na taxa escolhida pelo painel e registrar tempos
+   CPU, GPU, espera de acquire/present, draws visíveis e descartes de tick.
+
+“Chunk” nunca é um termo genérico: **chunk ECS** é armazenamento SoA de 16 KiB;
+**render chunk** é um lote espacial/material persistente voltado a culling/indirect;
+**streaming chunk** é uma unidade assíncrona de I/O. Converter um mesh em centenas de
+draws de CPU não é chunking válido. Subdivisão só entra quando a compactação/indirect
+impede que a granularidade aumente linearmente o custo de CPU.
+
 ---
 
 # PARTE 1 — ANÁLISE COMPETITIVA E TESE DO PRODUTO
@@ -1640,6 +1679,10 @@ Esta fase existe para responder cinco perguntas que, se respondidas "não", muda
 
 ### Etapa 2.4 — Pipeline de renderização direta *(6 semanas)*
 - **2.4.1** Depth prepass + Forward+ com clusterização de luzes (froxels em compute).
+  - Fatura parcial validada em hardware: prepass seletivo de cobertura para materiais
+    alpha-mask, global e orientado por flags do material. Preserva o PBR e reduziu
+    21,6–25,4% do tempo GPU no hotspot; o Forward+ e o depth prepass geral continuam
+    pendentes, portanto o item não está concluído.
 - **2.4.2** BRDF PBR completo (GGX multiscatter, Burley, Fresnel), com validação contra referência offline.
 - **2.4.3** Sombras: cascaded shadow maps com PCF/PCSS, sombras de spot e point (cubemap com atlas).
 - **2.4.4** IBL: skybox HDR, pré-filtragem de especular, SH de irradiância, reflection probes.

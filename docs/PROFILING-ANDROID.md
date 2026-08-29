@@ -81,13 +81,16 @@ O gate de CPU usa conservadoramente **máximo < 3 ms**, pois o plano não define
 percentil; média e p95/p99 continuam visíveis. `accepted` permanece falso enquanto
 houver critérios/matriz não atendidos. Não exportamos esta cena como se fosse
 `cpu.editor_frame_time_ms` do editor completo, nem preenchemos um orçamento GPU
-com tempo de acquire. Faltam timestamp queries GPU e correlação exata dos picos
-com threads/stacks. A amostragem Simpleperf abaixo localiza custo agregado, mas
+com tempo de acquire. O FrameProfile v3 registra timestamps GPU do frame e
+checkpoints Geometry/Background/Transparent. Em TBDR, checkpoints dentro do mesmo
+render pass podem ser resolvidos no fim do tile e não substituem uma captura AGI;
+a correlação exata dos picos com threads/stacks também permanece pendente. A
+amostragem Simpleperf abaixo localiza custo agregado, mas
 não prova a causa de todos os picos. Um minuto não fecha o soak de 30 minutos,
 e um aparelho não fecha a matriz Mali/perfil C.
 
-Testes: 10 C++ para estatísticas, 5 C++ para extração atômica/build ID,
-6 C# para equivalência/ABI/zero alocação do workload, 18 PowerShell para frames,
+Testes: 11 C++ para estatísticas, 5 C++ para extração atômica/build ID,
+6 C# para equivalência/ABI/zero alocação do workload, 19 PowerShell para frames,
 13 para térmica/FPS de janela e 4 verificações dos assets gerados após build.
 
 ## Resultado no Xiaomi SM8735/Adreno, Android 16

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 4,
+  "status": "failed",
+  "startedAtUtc": "2026-08-29T00:18:43.2759838Z",
+  "finishedAtUtc": "2026-08-29T00:19:34.7279994Z",
+  "package": "dev.aether.editor",
+  "activity": "android.app.NativeActivity",
+  "apk": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+  "device": {
+    "serial": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
+    "manufacturer": "Xiaomi",
+    "model": "25053PC47G",
+    "device": "onyx",
+    "board": "sun",
+    "socModel": "SM8735",
+    "androidRelease": "16",
+    "apiLevel": "36",
+    "abi": "arm64-v8a"
+  },
+  "configuration": {
+    "lifecycleCycles": 3,
+    "startupTimeoutSeconds": 45,
+    "cycleTimeoutSeconds": 20,
+    "soakMinutes": 0,
+    "profileSeconds": 0,
+    "powerBudgetWatts": 4.0,
+    "requirePowerBudget": false,
+    "requireSoakBudget": false,
+    "minimumSoakFps": 55.0,
+    "configurationChange": true,
+    "screenCycle": false,
+    "screenCycles": 0,
+    "screenshotEqualityRequired": true
+  },
+  "checks": [],
+  "screenshots": {},
+  "measurements": {
+    "resourceRecreationsDuringLifecycle": 0,
+    "powerSamples": [],
+    "keyguardWaits": [],
+    "keyguardDismissRequests": []
+  },
+  "artifacts": {
+    "apkSha256": "A85CF948794BD8F613F0F70D853D84F91B7A7697D26488A999E4EF9070458D06",
+    "gitRevision": "48d0e62d98dcb3eaa947571ce52e4d7f452fdc20",
+    "gitDirty": true,
+    "outputDirectory": "C:\\Users\\donod\\Downloads\\atchengine\\build\\environment-check-device-20260828-211842",
+    "adb": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+    "lifecycleDiagnostics": "C:\\Users\\donod\\Downloads\\atchengine\\build\\environment-check-device-20260828-211842\\lifecycle-diagnostics.json",
+    "logcat": "C:\\Users\\donod\\Downloads\\atchengine\\build\\environment-check-device-20260828-211842\\logcat.txt",
+    "lifecycleTimeline": "C:\\Users\\donod\\Downloads\\atchengine\\build\\environment-check-device-20260828-211842\\lifecycle-timeline.txt"
+  },
+  "error": "adb -s adb-53e1eb7-cDkkst._adb-tls-connect._tcp install -r -t C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk falhou (código 1): Performing Streamed Install\r\nadb.exe: failed to install C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package dev.aether.editor signatures do not match newer version; ignoring!]\r\n",
+  "failureKind": null
+}

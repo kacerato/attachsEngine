@@ -11,6 +11,7 @@
 #include "platform/android/lifecycle_trace.h"
 #include "platform/app_lifecycle.h"
 #include "platform/free_camera_controller.h"
+#include "core/frame_policy.h"
 
 #include <android/log.h>
 #include <android/window.h>
@@ -46,6 +47,7 @@ struct AndroidShell final {
   bool materialPreview = false;
   bool dirtRoadPreview = false;
   bool forceTextureFallback = false;
+  bool lockCamera = false;
   std::future<bool> rendererInitialization;
   std::atomic<bool> cancelRendererInitialization{false};
   bool sceneValidation = false;
@@ -66,6 +68,9 @@ struct AndroidShell final {
   double pocAMaxFillMicroseconds = 0.0;
   ae::platform::FreeCameraController cameraController;
   bool mapCameraInitialized = false;
+  bool hasLaunchCamera = false;
+  ae::platform::FreeCameraState launchCamera{};
+  ae::FrameBudget frameBudget = ae::makeFrameBudget(60.0f, 60.0f, 60);
 };
 
 // Extrai o runtime .NET vendorizado (se ainda não extraído) e hospeda o
@@ -141,8 +146,16 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
   shell.instancedRendererReady=ready && !cancel;
   if (shell.instancedRendererReady && shell.dirtRoadPreview && !shell.mapCameraInitialized &&
       shell.instancedRenderer.hasDefaultCamera()) {
-    shell.cameraController.setState(shell.instancedRenderer.defaultCamera());
+    shell.cameraController.setState(shell.hasLaunchCamera ? shell.launchCamera
+                                                          : shell.instancedRenderer.defaultCamera());
     shell.mapCameraInitialized = true;
+    if (shell.hasLaunchCamera) {
+      const auto &camera=shell.cameraController.state();
+      __android_log_print(ANDROID_LOG_INFO, LogTag,
+          "[Camera] launch pose=(%.2f,%.2f,%.2f) yaw=%.3f pitch=%.3f locked=%s",
+          camera.position[0],camera.position[1],camera.position[2],camera.yaw,camera.pitch,
+          shell.lockCamera?"true":"false");
+    }
   }
   if (!shell.instancedRendererReady) shell.instancedRenderer.shutdown();
   __android_log_print(cancel ? ANDROID_LOG_INFO : (ready ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR),
@@ -209,6 +222,8 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
   const ae::platform::LifecycleAction action = shell.lifecycle.apply(event);
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::CreateSurface)) {
     ae::platform::android::ScopedLifecycleStage trace("create-surface-renderer");
+    ae::platform::android::requestRenderFrameRate(shell.app->window,
+                                                   static_cast<float>(shell.frameBudget.renderHz));
     if (!shell.vulkanSurface.initialize(shell.app->window, !shell.forceDescriptorFallback)) {
       __android_log_print(ANDROID_LOG_ERROR, LogTag,
                           "O shell continuará ativo sem GPU; uma nova janela tentará novamente.");
@@ -225,6 +240,8 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     shell.vulkanSurface.shutdown();
   }
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::BecameActive)) {
+    ae::platform::android::requestRenderFrameRate(shell.app->window,
+                                                   static_cast<float>(shell.frameBudget.renderHz));
     shell.framePacer.start();
     shell.frameProfiler.reset();
     ++shell.activationCount;
@@ -299,6 +316,10 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
   if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) return 0;
 
   auto &shell = *static_cast<AndroidShell *>(app->userData);
+  if (shell.lockCamera) {
+    shell.cameraController.cancelGesture();
+    return 1;
+  }
   const int32_t action = AMotionEvent_getAction(event);
   const int32_t actionType = action & AMOTION_EVENT_ACTION_MASK;
   const size_t actionIndex = static_cast<size_t>(
@@ -349,6 +370,19 @@ void android_main(android_app *app) {
   // explicit so benchmark numbers can never silently include the full scene.
   shell.dirtRoadPreview = explicitMap || (!shell.scenePreview && !benchmarkPreview && !shell.materialPreview);
   shell.forceTextureFallback = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.force_texture_fallback");
+  shell.lockCamera = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.lock_camera");
+  shell.hasLaunchCamera =
+      ae::platform::android::readFloatLaunchOption(app->activity, "aether.camera_x", shell.launchCamera.position[0]) &&
+      ae::platform::android::readFloatLaunchOption(app->activity, "aether.camera_y", shell.launchCamera.position[1]) &&
+      ae::platform::android::readFloatLaunchOption(app->activity, "aether.camera_z", shell.launchCamera.position[2]) &&
+      ae::platform::android::readFloatLaunchOption(app->activity, "aether.camera_yaw", shell.launchCamera.yaw) &&
+      ae::platform::android::readFloatLaunchOption(app->activity, "aether.camera_pitch", shell.launchCamera.pitch);
+  // 60 Hz é o padrão sustentado até o governor automático conseguir provar
+  // margem para 90/120. O projeto/benchmark pode solicitar as metas maiores.
+  float requestedRenderHz = 60.0f;
+  ae::platform::android::readFloatLaunchOption(app->activity, "aether.target_fps", requestedRenderHz);
+  shell.frameBudget = ae::makeFrameBudget(requestedRenderHz, requestedRenderHz, 60);
+  shell.framePacer.setTargetFrameRate(shell.frameBudget.renderHz);
   shell.scenePreview = shell.scenePreview || shell.materialPreview;
   shell.sceneValidation = shell.scenePreview &&
       ae::platform::android::readBooleanLaunchOption(app->activity, "aether.scene_validation");
@@ -357,6 +391,9 @@ void android_main(android_app *app) {
   app->onInputEvent = handleInput;
   shell.frameProfiler.setEnabled(ae::platform::android::readFrameProfilingOption(app->activity));
   shell.instancedRenderer.setFrameProfilingEnabled(shell.frameProfiler.enabled());
+  shell.instancedRenderer.setCoveragePrepassEnabled(
+      !ae::platform::android::readBooleanLaunchOption(app->activity,
+                                                       "aether.disable_coverage_prepass"));
   if (shell.frameProfiler.enabled()) {
     // A long benchmark must not time out into the keyguard. This window flag
     // only keeps an already-unlocked foreground window awake; it changes no
@@ -368,6 +405,11 @@ void android_main(android_app *app) {
   ae::platform::android::applyImmersiveLandscapeWindow(app->activity);
 
   __android_log_print(ANDROID_LOG_INFO, LogTag, "Shell nativo iniciado.");
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+                      "[FramePolicy] render=%u Hz (%.3f ms), fixed tick=%u Hz, CPU<=%.3f ms, GPU<=%.3f ms.",
+                      shell.frameBudget.renderHz, static_cast<double>(shell.frameBudget.frameIntervalMs),
+                      shell.frameBudget.simulationHz, static_cast<double>(shell.frameBudget.cpuLaneBudgetMs),
+                      static_cast<double>(shell.frameBudget.gpuLaneBudgetMs));
 
   initializeDotNetHost(shell);
   shell.framePacer.initialize();

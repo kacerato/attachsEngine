@@ -7,6 +7,8 @@
 #include "rhi/shaders/material_fallback_spirv.h"
 #include "rhi/shaders/dirt_road_spirv.h"
 #include "rhi/shaders/dirt_road_fallback_spirv.h"
+#include "rhi/shaders/dirt_road_coverage_spirv.h"
+#include "rhi/shaders/dirt_road_coverage_fallback_spirv.h"
 #include "rhi/shaders/dirt_road_sky_spirv.h"
 #include "renderer/sphere_mesh.h"
 
@@ -15,6 +17,7 @@
 #include <array>
 #include <bit>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 
 namespace ae::platform::android {
@@ -178,9 +181,19 @@ bool InstancedRenderer::createPipeline() {
       ? createShaderModule(device_, rhi::shaders::kInstancedFragSpirv, rhi::shaders::kInstancedFragSpirvSize)
       : createShaderModule(device_, rhi::shaders::kInstanced_FallbackFragSpirv,
                            rhi::shaders::kInstanced_FallbackFragSpirvSize);
-  if (vertModule == VK_NULL_HANDLE || fragModule == VK_NULL_HANDLE) {
+  VkShaderModule coverageFragModule = dirtRoadPreview_
+      ? (useBindless_
+          ? createShaderModule(device_, rhi::shaders::kDirt_Road_CoverageFragSpirv,
+                               rhi::shaders::kDirt_Road_CoverageFragSpirvSize)
+          : createShaderModule(device_, rhi::shaders::kDirt_Road_Coverage_FallbackFragSpirv,
+                               rhi::shaders::kDirt_Road_Coverage_FallbackFragSpirvSize))
+      : VK_NULL_HANDLE;
+  if (vertModule == VK_NULL_HANDLE || fragModule == VK_NULL_HANDLE ||
+      (dirtRoadPreview_ && coverageFragModule == VK_NULL_HANDLE)) {
     if (vertModule != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vertModule, nullptr);
     if (fragModule != VK_NULL_HANDLE) vkDestroyShaderModule(device_, fragModule, nullptr);
+    if (coverageFragModule != VK_NULL_HANDLE)
+      vkDestroyShaderModule(device_, coverageFragModule, nullptr);
     return false;
   }
 
@@ -260,7 +273,10 @@ bool InstancedRenderer::createPipeline() {
   rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
   rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
   rasterizer.cullMode = VK_CULL_MODE_NONE;
-  rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+  // glTF uses counter-clockwise front faces. This was irrelevant while every
+  // pipeline disabled culling, but becomes part of the correctness contract
+  // as soon as solid geometry enables backface rejection.
+  rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   rasterizer.lineWidth = 1.0f;
 
   VkPipelineMultisampleStateCreateInfo multisample{};
@@ -321,7 +337,24 @@ bool InstancedRenderer::createPipeline() {
     pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                            &pipeline_) == VK_SUCCESS;
     if (pipelineOk && dirtRoadPreview_) {
+      // MASK global em duas fases: primeiro apenas alpha+depth; depois PBR só
+      // na camada visível (EQUAL). Preserva pixels e evita sombrear as muitas
+      // folhas ocultas por outras folhas.
+      stages[1].module = coverageFragModule;
+      colorBlendAttachment.colorWriteMask = 0;
+      pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+                                             &coveragePipeline_) == VK_SUCCESS;
+
+      stages[1].module = fragModule;
+      colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
       depthStencil.depthWriteEnable = VK_FALSE;
+      depthStencil.depthCompareOp = VK_COMPARE_OP_EQUAL;
+      if (pipelineOk)
+        pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+                                               &coverageShadePipeline_) == VK_SUCCESS;
+
+      depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
       colorBlendAttachment.blendEnable = VK_TRUE;
       colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
       colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
@@ -329,13 +362,16 @@ bool InstancedRenderer::createPipeline() {
       colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
       colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
       colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-      pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
-                                             &transparentPipeline_) == VK_SUCCESS;
+      if (pipelineOk)
+        pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+                                               &transparentPipeline_) == VK_SUCCESS;
     }
   }
 
   vkDestroyShaderModule(device_, vertModule, nullptr);
   vkDestroyShaderModule(device_, fragModule, nullptr);
+  if (coverageFragModule != VK_NULL_HANDLE)
+    vkDestroyShaderModule(device_, coverageFragModule, nullptr);
   return layoutOk && pipelineOk;
 }
 
@@ -430,7 +466,11 @@ bool InstancedRenderer::createSkyPipeline() {
   multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
   VkPipelineDepthStencilStateCreateInfo depth{};
   depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-  depth.depthTestEnable = VK_FALSE; depth.depthWriteEnable = VK_FALSE;
+  // The sky is submitted after depth-writing opaque geometry. At depth 1 it
+  // shades only clear pixels, avoiding a full-resolution fragment pass behind
+  // the scene while producing the exact same color where the sky is visible.
+  depth.depthTestEnable = VK_TRUE; depth.depthWriteEnable = VK_FALSE;
+  depth.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
   VkPipelineColorBlendAttachmentState attachment{};
   attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                               VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -752,6 +792,10 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   drawnInstanceCount_ = 0;
   lastExtractionStatus_ = 0;
   vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
+  if (!gpuFrameTimer_.initialize(device_, physicalDevice_, graphicsQueueFamily_)) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag,
+                        "[FrameProfile] timestamps GPU indisponíveis nesta fila.");
+  }
 
   if (scenePreview_) {
     using InitializeSceneFn = int (*)();
@@ -788,7 +832,13 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     instanceCount_ = dirtRoadResources_.header().drawCount;
     for (u32 index = 0; index < instanceCount_; ++index) {
       const u32 material = dirtRoadResources_.draws()[index].materialIndex;
-      if ((dirtRoadResources_.materials()[material].flags & 1u) != 0) transparentDrawOrder_.push_back(index);
+      const u32 flags = dirtRoadResources_.materials()[material].flags;
+      if ((flags & renderer::MapMaterialBlend) != 0)
+        transparentDrawOrder_.push_back(index);
+      else if ((flags & renderer::MapMaterialAlphaMask) != 0)
+        coverageDrawOrder_.push_back(index);
+      else
+        solidDrawOrder_.push_back(index);
     }
   }
   if (!createInstanceBuffer()) {
@@ -862,6 +912,11 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
                       "InstancedRenderer pronto: cubo texturizado + depth, capacidade=%u, modo=%s.",
                       instanceCount_, dirtRoadPreview_ ? "dirt-road" :
                       (materialPreview_ ? "material-preview" : (scenePreview_ ? "scene-preview" : "PoC-A")));
+  if (dirtRoadPreview_)
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+                        "[DirtRoad] passes solid=%zu coverage=%zu transparent=%zu coverage_prepass=%s; culling desativado por contrato visual.",
+                        solidDrawOrder_.size(), coverageDrawOrder_.size(), transparentDrawOrder_.size(),
+                        coveragePrepassEnabled_ ? "on" : "off");
   const rhi::MemoryBudgetSnapshot snapshot = memoryAllocator_->budgetSnapshot();
   for (usize i = 0; i < rhi::MemoryClassCount; ++i) {
     __android_log_print(ANDROID_LOG_INFO, LogTag, "RHI/VMA [%s]: uso=%llu, pico=%llu bytes.",
@@ -885,6 +940,14 @@ void InstancedRenderer::shutdown() {
   if (pipeline_ != VK_NULL_HANDLE) {
     vkDestroyPipeline(device_, pipeline_, nullptr);
     pipeline_ = VK_NULL_HANDLE;
+  }
+  if (coveragePipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, coveragePipeline_, nullptr);
+    coveragePipeline_ = VK_NULL_HANDLE;
+  }
+  if (coverageShadePipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, coverageShadePipeline_, nullptr);
+    coverageShadePipeline_ = VK_NULL_HANDLE;
   }
   if (skyPipeline_ != VK_NULL_HANDLE) {
     vkDestroyPipeline(device_, skyPipeline_, nullptr);
@@ -925,6 +988,8 @@ void InstancedRenderer::shutdown() {
   dirtRoadResources_.shutdown();
   dirtTextureSlots_.clear();
   dirtMaterialSets_.clear();
+  solidDrawOrder_.clear();
+  coverageDrawOrder_.clear();
   transparentDrawOrder_.clear();
   baseSampler_.shutdown();
   baseTexture_.reset();
@@ -933,6 +998,7 @@ void InstancedRenderer::shutdown() {
   depthImage_.reset();
   instanceBuffer_.reset();
   uploadContext_.shutdown();
+  gpuFrameTimer_.shutdown();
   device_ = VK_NULL_HANDLE;
   physicalDevice_ = VK_NULL_HANDLE;
   rhiDevice_ = nullptr;
@@ -966,6 +1032,18 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if (acquireStatus != rhi::SwapchainStatus::Ok &&
       acquireStatus != rhi::SwapchainStatus::SuboptimalNeedsRecreate) {
     return acquireStatus;
+  }
+  if (frameProfilingEnabled_) {
+    rhi::GpuFrameTimings gpuTimings{};
+    if (gpuFrameTimer_.collectPrevious(gpuTimings)) {
+      lastFrameTimings_.gpuFrameMs = gpuTimings.frameMs;
+      lastFrameTimings_.gpuGeometryMs =
+          gpuTimings.passesMs[static_cast<u32>(rhi::GpuFramePass::Geometry)];
+      lastFrameTimings_.gpuBackgroundMs =
+          gpuTimings.passesMs[static_cast<u32>(rhi::GpuFramePass::Background)];
+      lastFrameTimings_.gpuTransparentMs =
+          gpuTimings.passesMs[static_cast<u32>(rhi::GpuFramePass::Transparent)];
+    }
   }
 
   // O crossing C++→C# medido isoladamente: só o tempo de FillInstanceBuffer,
@@ -1006,6 +1084,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if (vkBeginCommandBuffer(commandBuffer_, &beginInfo) != VK_SUCCESS) {
     return rhi::SwapchainStatus::FatalError;
   }
+  if (frameProfilingEnabled_) gpuFrameTimer_.begin(commandBuffer_);
 
   VkClearValue clearValues[2]{};
   clearValues[0].color = {{0.02f, 0.02f, 0.05f, 1.0f}};
@@ -1060,21 +1139,6 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
 
   if (dirtRoadPreview_) {
-    DirtRoadPushConstants skyPush{};
-    skyPush.cameraFrame[0] = static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height);
-    skyPush.cameraFrame[1] = camera.yaw;
-    skyPush.cameraFrame[2] = camera.pitch;
-    skyPush.surfaceTransform[0] = surfaceTransform.xx;
-    skyPush.surfaceTransform[1] = surfaceTransform.xy;
-    skyPush.surfaceTransform[2] = surfaceTransform.yx;
-    skyPush.surfaceTransform[3] = surfaceTransform.yy;
-    vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipeline_);
-    vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipelineLayout_,
-                            0, 1, &environmentSet_, 0, nullptr);
-    vkCmdPushConstants(commandBuffer_, skyPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT,
-                       0, sizeof(skyPush), &skyPush);
-    vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
-    vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
     vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
                             1, 1, &environmentSet_, 0, nullptr);
     if (useBindless_)
@@ -1114,7 +1178,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         push.textureIndices[slot] = useBindless_ && texture != renderer::InvalidMapTexture
                                         ? dirtTextureSlots_[texture] : baseTextureIndex_;
       }
-      push.materialFlags[0]=material.flags;push.materialFlags[1]=material.textureCoordinates;
+      push.materialFlags[0]=material.flags;
+      const u32 alphaCutoff = static_cast<u32>(std::clamp(material.alphaCutoff, 0.0f, 1.0f) * 255.0f + .5f);
+      push.materialFlags[1]=material.textureCoordinates | (alphaCutoff << 8u);
       push.materialFlags[2]=encodeSrgb?1u:0u;
       push.materialFlags[3]=std::bit_cast<u32>(dirtRoadResources_.header().farPlane);
       push.materialFactors[0]=material.roughness;push.materialFactors[1]=material.metallic;
@@ -1124,10 +1190,51 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,
                        static_cast<i32>(draw.vertexOffset),drawIndex);
     };
-    for (u32 drawIndex = 0; drawIndex < dirtRoadResources_.draws().size(); ++drawIndex) {
-      const auto &draw = dirtRoadResources_.draws()[drawIndex];
-      if ((dirtRoadResources_.materials()[draw.materialIndex].flags & 1u) == 0) drawMapPrimitive(drawIndex);
+    auto nearestBoundsDistanceSquared = [&](u32 drawIndex) {
+      const auto &draw=dirtRoadResources_.draws()[drawIndex];float distanceSquared=0;
+      for(u32 axis=0;axis<3;++axis){const float delta=draw.boundsCenter[axis]-camera.position[axis];
+        distanceSquared+=delta*delta;}
+      const float distance=std::sqrt(distanceSquared);
+      const float nearest=std::max(0.0f,distance-draw.boundsRadius);
+      return nearest*nearest;
+    };
+    const auto frontToBack = [&](u32 left, u32 right) {
+      return nearestBoundsDistanceSquared(left)<nearestBoundsDistanceSquared(right);
+    };
+    std::sort(solidDrawOrder_.begin(), solidDrawOrder_.end(), frontToBack);
+    std::sort(coverageDrawOrder_.begin(), coverageDrawOrder_.end(), frontToBack);
+    for (u32 drawIndex : solidDrawOrder_) {
+      drawMapPrimitive(drawIndex);
     }
+    if (!coverageDrawOrder_.empty()) {
+      if (coveragePrepassEnabled_)
+        vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, coveragePipeline_);
+      for (u32 drawIndex : coverageDrawOrder_) drawMapPrimitive(drawIndex);
+      if (coveragePrepassEnabled_) {
+        vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, coverageShadePipeline_);
+        for (u32 drawIndex : coverageDrawOrder_) drawMapPrimitive(drawIndex);
+      }
+    }
+    if (frameProfilingEnabled_)
+      gpuFrameTimer_.markPassEnd(commandBuffer_, rhi::GpuFramePass::Geometry);
+
+    DirtRoadPushConstants skyPush{};
+    skyPush.cameraFrame[0] = static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height);
+    skyPush.cameraFrame[1] = camera.yaw;
+    skyPush.cameraFrame[2] = camera.pitch;
+    skyPush.surfaceTransform[0] = surfaceTransform.xx;
+    skyPush.surfaceTransform[1] = surfaceTransform.xy;
+    skyPush.surfaceTransform[2] = surfaceTransform.yx;
+    skyPush.surfaceTransform[3] = surfaceTransform.yy;
+    vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipeline_);
+    vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipelineLayout_,
+                            0, 1, &environmentSet_, 0, nullptr);
+    vkCmdPushConstants(commandBuffer_, skyPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT,
+                       0, sizeof(skyPush), &skyPush);
+    vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
+    if (frameProfilingEnabled_)
+      gpuFrameTimer_.markPassEnd(commandBuffer_, rhi::GpuFramePass::Background);
+
     std::sort(transparentDrawOrder_.begin(), transparentDrawOrder_.end(), [&](u32 left, u32 right) {
       const auto &a=dirtRoadResources_.draws()[left];const auto &b=dirtRoadResources_.draws()[right];
       float da=0,db=0;for(u32 axis=0;axis<3;++axis){const float av=a.boundsCenter[axis]-camera.position[axis];
@@ -1135,19 +1242,33 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     });
     if (!transparentDrawOrder_.empty()) {
       vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, transparentPipeline_);
-      for (u32 drawIndex : transparentDrawOrder_) drawMapPrimitive(drawIndex);
+      vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
+                              1, 1, &environmentSet_, 0, nullptr);
+      if (useBindless_)
+        vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
+                                0, 1, &textureSet_, 0, nullptr);
+      for (u32 drawIndex : transparentDrawOrder_) {
+        drawMapPrimitive(drawIndex);
+      }
     }
+    if (frameProfilingEnabled_)
+      gpuFrameTimer_.markPassEnd(commandBuffer_, rhi::GpuFramePass::Transparent);
   } else if (materialPreview_) {
     const VkBuffer mesh=materialResources_.vertexBuffer();
     vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);
     vkCmdBindIndexBuffer(commandBuffer_,materialResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
     vkCmdDrawIndexed(commandBuffer_,materialResources_.indexCount(),drawnInstanceCount_,0,0,0);
+    if (frameProfilingEnabled_)
+      gpuFrameTimer_.markPassEnd(commandBuffer_, rhi::GpuFramePass::Geometry);
   } else {
     vkCmdDraw(commandBuffer_, 36, drawnInstanceCount_, 0, 0);
+    if (frameProfilingEnabled_)
+      gpuFrameTimer_.markPassEnd(commandBuffer_, rhi::GpuFramePass::Geometry);
   }
 
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
   vkCmdEndRenderPass(commandBuffer_);
+  if (frameProfilingEnabled_) gpuFrameTimer_.end(commandBuffer_);
   if (vkEndCommandBuffer(commandBuffer_) != VK_SUCCESS) return rhi::SwapchainStatus::FatalError;
 
   const VkSemaphore waitSemaphore = swapchain_->imageAvailableSemaphore();

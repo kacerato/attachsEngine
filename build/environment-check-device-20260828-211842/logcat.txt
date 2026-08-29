@@ -1,0 +1,154 @@
+
+
+--- final logcat window ---
+--------- beginning of crash
+F/DEBUG   ( 8084): *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+F/DEBUG   ( 8084): Build fingerprint: 'POCO/onyx_global/onyx:16/BP2A.250605.031.A3/OS3.0.303.0.WOLMIXM:user/release-keys'
+F/DEBUG   ( 8084): Revision: '0'
+F/DEBUG   ( 8084): ABI: 'arm64'
+F/DEBUG   ( 8084): Timestamp: 2026-08-28 19:33:37.052563499-0300
+F/DEBUG   ( 8084): Process uptime: 93s
+F/DEBUG   ( 8084): Cmdline: com.aliucord
+F/DEBUG   ( 8084): pid: 6853, tid: 8075, name: ProcessStablePh  >>> com.aliucord <<<
+F/DEBUG   ( 8084): uid: 10406
+F/DEBUG   ( 8084): tagged_addr_ctrl: 0000000000000001 (PR_TAGGED_ADDR_ENABLE)
+F/DEBUG   ( 8084): pac_enabled_keys: 000000000000000f (PR_PAC_APIAKEY, PR_PAC_APIBKEY, PR_PAC_APDAKEY, PR_PAC_APDBKEY)
+F/DEBUG   ( 8084): signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000000000000
+F/DEBUG   ( 8084): Cause: null pointer dereference
+F/DEBUG   ( 8084):     x0  0000007282f3eee8  x1  000000000000000e  x2  b400007475a34410  x3  0000000000000000
+F/DEBUG   ( 8084):     x4  0000007282f3ed78  x5  0000007343870748  x6  0000000000000040  x7  000000760438269d
+F/DEBUG   ( 8084):     x8  00000072890bd000  x9  edabf8b2434ba938  x10 000000734440d3c1  x11 0000000000000001
+F/DEBUG   ( 8084):     x12 0000000000000000  x13 0000000000000023  x14 0000007282f40780  x15 0000000000080100
+F/DEBUG   ( 8084):     x16 000000734422f208  x17 000000728909f95c  x18 00000072827a8000  x19 b400007475a34410
+F/DEBUG   ( 8084):     x20 0000007282f3eee8  x21 b4000074659cf9f0  x22 0000000000000000  x23 0000000000000007
+F/DEBUG   ( 8084):     x24 0000007286299e98  x25 000000734440e000  x26 b400007355a1f310  x27 0000000000000000
+F/DEBUG   ( 8084):     x28 000000724017178c  x29 0000007282f3ee30
+F/DEBUG   ( 8084):     lr  0000007343de6238  sp  0000007282f3ed10  pc  0000000000000000  pst 0000000080001400
+F/DEBUG   ( 8084): 41 total frames
+F/DEBUG   ( 8084): backtrace:
+F/DEBUG   ( 8084):       #00 pc 0000000000000000  <unknown>
+F/DEBUG   ( 8084):       #01 pc 00000000005e6234  /apex/com.android.art/lib64/libart.so (art::ClassLinker::InitializeClass(art::Thread*, art::Handle<art::mirror::Class>, bool, bool)+6448) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #02 pc 0000000000276cfc  /apex/com.android.art/lib64/libart.so (NterpGetStaticField+692) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #03 pc 000000000066dfb0  /apex/com.android.art/lib64/libart.so (nterp_get_static_field+48) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #04 pc 0000000000667e60  /apex/com.android.art/lib64/libart.so (nterp_op_sget_object_slow_path+48) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #05 pc 0000000000071560  /data/app/~~PBp8NpHOvw0fS8JwqJFAaQ==/com.google.android.gms-r9875lnAc11q4ZLX37Sc8Q==/split_MeasurementDynamite_installtime.apk (offset 0x1000) (m7.aon.e+0)
+F/DEBUG   ( 8084):       #06 pc 00000000002aaf94  /apex/com.android.art/lib64/libart.so (art_quick_invoke_stub+612) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #07 pc 0000000000585f48  /apex/com.android.art/lib64/libart.so (bool art::interpreter::DoCall<false>(art::ArtMethod*, art::Thread*, art::ShadowFrame&, art::Instruction const*, unsigned short, bool, art::JValue*)+2688) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #08 pc 0000000000490364  /apex/com.android.art/lib64/libart.so (void art::interpreter::ExecuteSwitchImplCpp<false>(art::interpreter::SwitchImplContext*)+1484) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #09 pc 00000000003d1718  /apex/com.android.art/lib64/libart.so (ExecuteSwitchImplAsm+8) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #10 pc 00000000000710ec  /data/app/~~PBp8NpHOvw0fS8JwqJFAaQ==/com.google.android.gms-r9875lnAc11q4ZLX37Sc8Q==/split_MeasurementDynamite_installtime.apk (offset 0x1000) (m7.aof.d+0)
+F/DEBUG   ( 8084):       #11 pc 00000000003d22e4  /apex/com.android.art/lib64/libart.so (art::interpreter::ArtInterpreterToInterpreterBridge(art::Thread*, art::CodeItemDataAccessor const&, art::ShadowFrame*, art::JValue*)+448) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #12 pc 0000000000586338  /apex/com.android.art/lib64/libart.so (bool art::interpreter::DoCall<false>(art::ArtMethod*, art::Thread*, art::ShadowFrame&, art::Instruction const*, unsigned short, bool, art::JValue*)+3696) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #13 pc 000000000048ff6c  /apex/com.android.art/lib64/libart.so (void art::interpreter::ExecuteSwitchImplCpp<false>(art::interpreter::SwitchImplContext*)+468) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #14 pc 00000000003d1718  /apex/com.android.art/lib64/libart.so (ExecuteSwitchImplAsm+8) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #15 pc 000000000006e7a8  /data/app/~~PBp8NpHOvw0fS8JwqJFAaQ==/com.google.android.gms-r9875lnAc11q4ZLX37Sc8Q==/split_MeasurementDynamite_installtime.apk (offset 0x1000) (m7.alw.d+0)
+F/DEBUG   ( 8084):       #16 pc 00000000003d136c  /apex/com.android.art/lib64/libart.so (art::interpreter::Execute(art::Thread*, art::CodeItemDataAccessor const&, art::ShadowFrame&, art::JValue, bool, bool) (.__uniq.112435418011751916792819755956732575238.llvm.15381326084910962254)+364) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #17 pc 00000000003d0aa0  /apex/com.android.art/lib64/libart.so (artQuickToInterpreterBridge+1020) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #18 pc 00000000002c2438  /apex/com.android.art/lib64/libart.so (art_quick_to_interpreter_bridge+88) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #19 pc 00000000006683e8  /apex/com.android.art/lib64/libart.so (nterp_helper+152) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #20 pc 000000000005dfc4  /data/app/~~PBp8NpHOvw0fS8JwqJFAaQ==/com.google.android.gms-r9875lnAc11q4ZLX37Sc8Q==/split_MeasurementDynamite_installtime.apk (offset 0x1000) (m7.zy.<clinit>+4)
+F/DEBUG   ( 8084):       #21 pc 00000000002ab260  /apex/com.android.art/lib64/libart.so (art_quick_invoke_static_stub+640) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #22 pc 00000000005e61a8  /apex/com.android.art/lib64/libart.so (art::ClassLinker::InitializeClass(art::Thread*, art::Handle<art::mirror::Class>, bool, bool)+6308) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #23 pc 0000000000276cfc  /apex/com.android.art/lib64/libart.so (NterpGetStaticField+692) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #24 pc 000000000066dfb0  /apex/com.android.art/lib64/libart.so (nterp_get_static_field+48) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #25 pc 0000000000667e60  /apex/com.android.art/lib64/libart.so (nterp_op_sget_object_slow_path+48) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #26 pc 000000000005df74  /data/app/~~PBp8NpHOvw0fS8JwqJFAaQ==/com.google.android.gms-r9875lnAc11q4ZLX37Sc8Q==/split_MeasurementDynamite_installtime.apk (offset 0x1000) (m7.zx.run+0)
+F/DEBUG   ( 8084):       #27 pc 000000000066a0c4  /apex/com.android.art/lib64/libart.so (nterp_helper+7540) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #28 pc 0000000000069be0  /data/app/~~PBp8NpHOvw0fS8JwqJFAaQ==/com.google.android.gms-r9875lnAc11q4ZLX37Sc8Q==/split_MeasurementDynamite_installtime.apk (offset 0x1000) (m7.aio.run+24)
+F/DEBUG   ( 8084):       #29 pc 000000000053bb9c  /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat (java.util.concurrent.Executors$RunnableAdapter.call+60)
+F/DEBUG   ( 8084):       #30 pc 000000000053a9a4  /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat (java.util.concurrent.FutureTask.run+180)
+F/DEBUG   ( 8084):       #31 pc 0000000000543ba0  /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat (java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run+128)
+F/DEBUG   ( 8084):       #32 pc 00000000005462cc  /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat (java.util.concurrent.ThreadPoolExecutor.runWorker+956)
+F/DEBUG   ( 8084):       #33 pc 000000000054a7e8  /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat (java.util.concurrent.ThreadPoolExecutor$Worker.run+56)
+F/DEBUG   ( 8084):       #34 pc 00000000003d15f0  /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat (java.lang.Thread.run+64)
+F/DEBUG   ( 8084):       #35 pc 00000000002aaf94  /apex/com.android.art/lib64/libart.so (art_quick_invoke_stub+612) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #36 pc 00000000002709b0  /apex/com.android.art/lib64/libart.so (art::ArtMethod::Invoke(art::Thread*, unsigned int*, unsigned int, art::JValue*, char const*)+220) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #37 pc 00000000004bdfc8  /apex/com.android.art/lib64/libart.so (art::Thread::CreateCallback(void*)+1184) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #38 pc 00000000004bdb18  /apex/com.android.art/lib64/libart.so (art::Thread::CreateCallbackWithUffdGc(void*)+8) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #39 pc 0000000000082d74  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+184) (BuildId: 223a572c9f034c6a9337d8b3bedc75f3)
+F/DEBUG   ( 8084):       #40 pc 00000000000751f0  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+68) (BuildId: 223a572c9f034c6a9337d8b3bedc75f3)
+--------- beginning of system
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+E/ActivityManager( 3536): Unable to find UidObserver by token
+
+--- crash buffer ---
+--------- beginning of crash
+F/libc    ( 6853): Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0 in tid 8075 (ProcessStablePh), pid 6853 (com.aliucord)
+F/DEBUG   ( 8084): *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+F/DEBUG   ( 8084): Build fingerprint: 'POCO/onyx_global/onyx:16/BP2A.250605.031.A3/OS3.0.303.0.WOLMIXM:user/release-keys'
+F/DEBUG   ( 8084): Revision: '0'
+F/DEBUG   ( 8084): ABI: 'arm64'
+F/DEBUG   ( 8084): Timestamp: 2026-08-28 19:33:37.052563499-0300
+F/DEBUG   ( 8084): Process uptime: 93s
+F/DEBUG   ( 8084): Cmdline: com.aliucord
+F/DEBUG   ( 8084): pid: 6853, tid: 8075, name: ProcessStablePh  >>> com.aliucord <<<
+F/DEBUG   ( 8084): uid: 10406
+F/DEBUG   ( 8084): tagged_addr_ctrl: 0000000000000001 (PR_TAGGED_ADDR_ENABLE)
+F/DEBUG   ( 8084): pac_enabled_keys: 000000000000000f (PR_PAC_APIAKEY, PR_PAC_APIBKEY, PR_PAC_APDAKEY, PR_PAC_APDBKEY)
+F/DEBUG   ( 8084): signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000000000000
+F/DEBUG   ( 8084): Cause: null pointer dereference
+F/DEBUG   ( 8084):     x0  0000007282f3eee8  x1  000000000000000e  x2  b400007475a34410  x3  0000000000000000
+F/DEBUG   ( 8084):     x4  0000007282f3ed78  x5  0000007343870748  x6  0000000000000040  x7  000000760438269d
+F/DEBUG   ( 8084):     x8  00000072890bd000  x9  edabf8b2434ba938  x10 000000734440d3c1  x11 0000000000000001
+F/DEBUG   ( 8084):     x12 0000000000000000  x13 0000000000000023  x14 0000007282f40780  x15 0000000000080100
+F/DEBUG   ( 8084):     x16 000000734422f208  x17 000000728909f95c  x18 00000072827a8000  x19 b400007475a34410
+F/DEBUG   ( 8084):     x20 0000007282f3eee8  x21 b4000074659cf9f0  x22 0000000000000000  x23 0000000000000007
+F/DEBUG   ( 8084):     x24 0000007286299e98  x25 000000734440e000  x26 b400007355a1f310  x27 0000000000000000
+F/DEBUG   ( 8084):     x28 000000724017178c  x29 0000007282f3ee30
+F/DEBUG   ( 8084):     lr  0000007343de6238  sp  0000007282f3ed10  pc  0000000000000000  pst 0000000080001400
+F/DEBUG   ( 8084): 41 total frames
+F/DEBUG   ( 8084): backtrace:
+F/DEBUG   ( 8084):       #00 pc 0000000000000000  <unknown>
+F/DEBUG   ( 8084):       #01 pc 00000000005e6234  /apex/com.android.art/lib64/libart.so (art::ClassLinker::InitializeClass(art::Thread*, art::Handle<art::mirror::Class>, bool, bool)+6448) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #02 pc 0000000000276cfc  /apex/com.android.art/lib64/libart.so (NterpGetStaticField+692) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #03 pc 000000000066dfb0  /apex/com.android.art/lib64/libart.so (nterp_get_static_field+48) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #04 pc 0000000000667e60  /apex/com.android.art/lib64/libart.so (nterp_op_sget_object_slow_path+48) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #05 pc 0000000000071560  /data/app/~~PBp8NpHOvw0fS8JwqJFAaQ==/com.google.android.gms-r9875lnAc11q4ZLX37Sc8Q==/split_MeasurementDynamite_installtime.apk (offset 0x1000) (m7.aon.e+0)
+F/DEBUG   ( 8084):       #06 pc 00000000002aaf94  /apex/com.android.art/lib64/libart.so (art_quick_invoke_stub+612) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #07 pc 0000000000585f48  /apex/com.android.art/lib64/libart.so (bool art::interpreter::DoCall<false>(art::ArtMethod*, art::Thread*, art::ShadowFrame&, art::Instruction const*, unsigned short, bool, art::JValue*)+2688) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #08 pc 0000000000490364  /apex/com.android.art/lib64/libart.so (void art::interpreter::ExecuteSwitchImplCpp<false>(art::interpreter::SwitchImplContext*)+1484) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #09 pc 00000000003d1718  /apex/com.android.art/lib64/libart.so (ExecuteSwitchImplAsm+8) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #10 pc 00000000000710ec  /data/app/~~PBp8NpHOvw0fS8JwqJFAaQ==/com.google.android.gms-r9875lnAc11q4ZLX37Sc8Q==/split_MeasurementDynamite_installtime.apk (offset 0x1000) (m7.aof.d+0)
+F/DEBUG   ( 8084):       #11 pc 00000000003d22e4  /apex/com.android.art/lib64/libart.so (art::interpreter::ArtInterpreterToInterpreterBridge(art::Thread*, art::CodeItemDataAccessor const&, art::ShadowFrame*, art::JValue*)+448) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #12 pc 0000000000586338  /apex/com.android.art/lib64/libart.so (bool art::interpreter::DoCall<false>(art::ArtMethod*, art::Thread*, art::ShadowFrame&, art::Instruction const*, unsigned short, bool, art::JValue*)+3696) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #13 pc 000000000048ff6c  /apex/com.android.art/lib64/libart.so (void art::interpreter::ExecuteSwitchImplCpp<false>(art::interpreter::SwitchImplContext*)+468) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #14 pc 00000000003d1718  /apex/com.android.art/lib64/libart.so (ExecuteSwitchImplAsm+8) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #15 pc 000000000006e7a8  /data/app/~~PBp8NpHOvw0fS8JwqJFAaQ==/com.google.android.gms-r9875lnAc11q4ZLX37Sc8Q==/split_MeasurementDynamite_installtime.apk (offset 0x1000) (m7.alw.d+0)
+F/DEBUG   ( 8084):       #16 pc 00000000003d136c  /apex/com.android.art/lib64/libart.so (art::interpreter::Execute(art::Thread*, art::CodeItemDataAccessor const&, art::ShadowFrame&, art::JValue, bool, bool) (.__uniq.112435418011751916792819755956732575238.llvm.15381326084910962254)+364) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #17 pc 00000000003d0aa0  /apex/com.android.art/lib64/libart.so (artQuickToInterpreterBridge+1020) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #18 pc 00000000002c2438  /apex/com.android.art/lib64/libart.so (art_quick_to_interpreter_bridge+88) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #19 pc 00000000006683e8  /apex/com.android.art/lib64/libart.so (nterp_helper+152) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #20 pc 000000000005dfc4  /data/app/~~PBp8NpHOvw0fS8JwqJFAaQ==/com.google.android.gms-r9875lnAc11q4ZLX37Sc8Q==/split_MeasurementDynamite_installtime.apk (offset 0x1000) (m7.zy.<clinit>+4)
+F/DEBUG   ( 8084):       #21 pc 00000000002ab260  /apex/com.android.art/lib64/libart.so (art_quick_invoke_static_stub+640) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #22 pc 00000000005e61a8  /apex/com.android.art/lib64/libart.so (art::ClassLinker::InitializeClass(art::Thread*, art::Handle<art::mirror::Class>, bool, bool)+6308) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #23 pc 0000000000276cfc  /apex/com.android.art/lib64/libart.so (NterpGetStaticField+692) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #24 pc 000000000066dfb0  /apex/com.android.art/lib64/libart.so (nterp_get_static_field+48) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #25 pc 0000000000667e60  /apex/com.android.art/lib64/libart.so (nterp_op_sget_object_slow_path+48) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #26 pc 000000000005df74  /data/app/~~PBp8NpHOvw0fS8JwqJFAaQ==/com.google.android.gms-r9875lnAc11q4ZLX37Sc8Q==/split_MeasurementDynamite_installtime.apk (offset 0x1000) (m7.zx.run+0)
+F/DEBUG   ( 8084):       #27 pc 000000000066a0c4  /apex/com.android.art/lib64/libart.so (nterp_helper+7540) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #28 pc 0000000000069be0  /data/app/~~PBp8NpHOvw0fS8JwqJFAaQ==/com.google.android.gms-r9875lnAc11q4ZLX37Sc8Q==/split_MeasurementDynamite_installtime.apk (offset 0x1000) (m7.aio.run+24)
+F/DEBUG   ( 8084):       #29 pc 000000000053bb9c  /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat (java.util.concurrent.Executors$RunnableAdapter.call+60)
+F/DEBUG   ( 8084):       #30 pc 000000000053a9a4  /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat (java.util.concurrent.FutureTask.run+180)
+F/DEBUG   ( 8084):       #31 pc 0000000000543ba0  /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat (java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run+128)
+F/DEBUG   ( 8084):       #32 pc 00000000005462cc  /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat (java.util.concurrent.ThreadPoolExecutor.runWorker+956)
+F/DEBUG   ( 8084):       #33 pc 000000000054a7e8  /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat (java.util.concurrent.ThreadPoolExecutor$Worker.run+56)
+F/DEBUG   ( 8084):       #34 pc 00000000003d15f0  /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat (java.lang.Thread.run+64)
+F/DEBUG   ( 8084):       #35 pc 00000000002aaf94  /apex/com.android.art/lib64/libart.so (art_quick_invoke_stub+612) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #36 pc 00000000002709b0  /apex/com.android.art/lib64/libart.so (art::ArtMethod::Invoke(art::Thread*, unsigned int*, unsigned int, art::JValue*, char const*)+220) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #37 pc 00000000004bdfc8  /apex/com.android.art/lib64/libart.so (art::Thread::CreateCallback(void*)+1184) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #38 pc 00000000004bdb18  /apex/com.android.art/lib64/libart.so (art::Thread::CreateCallbackWithUffdGc(void*)+8) (BuildId: 61c7a211c01ef3c0068b4fbe31051050)
+F/DEBUG   ( 8084):       #39 pc 0000000000082d74  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+184) (BuildId: 223a572c9f034c6a9337d8b3bedc75f3)
+F/DEBUG   ( 8084):       #40 pc 00000000000751f0  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+68) (BuildId: 223a572c9f034c6a9337d8b3bedc75f3)

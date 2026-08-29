@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 4,
+  "status": "running",
+  "startedAtUtc": "2026-08-29T01:33:48.5650164Z",
+  "finishedAtUtc": null,
+  "package": "dev.aether.editor",
+  "activity": "android.app.NativeActivity",
+  "apk": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+  "device": {
+    "serial": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
+    "manufacturer": "Xiaomi",
+    "model": "25053PC47G",
+    "device": "onyx",
+    "board": "sun",
+    "socModel": "SM8735",
+    "androidRelease": "16",
+    "apiLevel": "36",
+    "abi": "arm64-v8a"
+  },
+  "configuration": {
+    "lifecycleCycles": 0,
+    "startupTimeoutSeconds": 45,
+    "cycleTimeoutSeconds": 20,
+    "soakMinutes": 0,
+    "profileSeconds": 20,
+    "scene": "dirt-road",
+    "cameraPose": "-51.37,158.74,-71.25,1.152,-0.032",
+    "powerBudgetWatts": 4.0,
+    "requirePowerBudget": false,
+    "requireSoakBudget": false,
+    "minimumSoakFps": 55.0,
+    "configurationChange": false,
+    "screenCycle": false,
+    "screenCycles": 0,
+    "screenshotEqualityRequired": false,
+    "initiallyAsleep": false
+  },
+  "checks": [
+    {
+      "name": "apk-install",
+      "status": "passed",
+      "details": "APK instalado com adb install -r -t."
+    },
+    {
+      "name": "app-data-clean",
+      "status": "passed",
+      "details": "Dados do pacote limpos antes do teste."
+    },
+    {
+      "name": "startup",
+      "status": "passed",
+      "details": {
+        "pid": "8295",
+        "frameMilestone": 1000
+      }
+    }
+  ],
+  "screenshots": {},
+  "measurements": {
+    "resourceRecreationsDuringLifecycle": 0,
+    "powerSamples": [],
+    "keyguardWaits": [
+      {
+        "elapsedMs": 157.563,
+        "dismissRequests": 0,
+        "showing": false,
+        "screenState": "SCREEN_STATE_ON",
+        "context": "startup"
+      }
+    ],
+    "keyguardDismissRequests": [],
+    "profileEnvironmentStart": {
+      "capturedAtUtc": "2026-08-29T01:34:14.7741567Z",
+      "thermalStatus": 0,
+      "currentAmps": 1.968,
+      "voltageVolts": 3.687,
+      "powerWatts": 7.256,
+      "externallyPowered": false,
+      "batteryLevelPercent": 31,
+      "batteryTemperatureCelsius": 40.8
+    },
+    "managedBuild": {
+      "observedId": "555d53d5a3c419ebe3ef652cdf3729c6e21363858c2838eedf55c4e7bdeb024c",
+      "reusedExtraction": false,
+      "apkId": "555d53d5a3c419ebe3ef652cdf3729c6e21363858c2838eedf55c4e7bdeb024c",
+      "coreSha256": "4BC07B237C72ECEE9CBCBEE2F02D613F14F3EC68F2137534C01B9A08F3220159"
+    }
+  },
+  "artifacts": {
+    "apkSha256": "46381B6A50BFA4EBF5956CB3C61BFD42B2AFD15846D84F443A0CA36F39D4E184",
+    "gitRevision": "48d0e62d98dcb3eaa947571ce52e4d7f452fdc20",
+    "gitDirty": true,
+    "outputDirectory": "C:\\Users\\donod\\Downloads\\atchengine\\build\\android-validation\\fps-global-user-hotspot-clustered",
+    "adb": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+    "captureContext": "C:\\Users\\donod\\Downloads\\atchengine\\build\\android-validation\\fps-global-user-hotspot-clustered\\capture-context.json",
+    "frameWindows": "C:\\Users\\donod\\Downloads\\atchengine\\build\\android-validation\\fps-global-user-hotspot-clustered\\frame-windows.jsonl",
+    "powerSamples": "C:\\Users\\donod\\Downloads\\atchengine\\build\\android-validation\\fps-global-user-hotspot-clustered\\power-samples.jsonl",
+    "surfaceBatches": "C:\\Users\\donod\\Downloads\\atchengine\\build\\android-validation\\fps-global-user-hotspot-clustered\\surface-batches.jsonl"
+  },
+  "error": null,
+  "failureKind": null
+}

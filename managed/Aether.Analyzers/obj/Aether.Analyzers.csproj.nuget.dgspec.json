@@ -1,21 +1,21 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Analyzers\\Aether.Analyzers.csproj": {}
+    "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Analyzers\\Aether.Analyzers.csproj": {}
   },
   "projects": {
-    "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Analyzers\\Aether.Analyzers.csproj": {
+    "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Analyzers\\Aether.Analyzers.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Analyzers\\Aether.Analyzers.csproj",
+        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Analyzers\\Aether.Analyzers.csproj",
         "projectName": "Aether.Analyzers",
-        "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Analyzers\\Aether.Analyzers.csproj",
-        "packagesPath": "C:\\Users\\jamaa\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Analyzers\\obj\\",
+        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Analyzers\\Aether.Analyzers.csproj",
+        "packagesPath": "C:\\Users\\donod\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Analyzers\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\NuGet.Config",
-          "C:\\Users\\jamaa\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\donod\\Downloads\\atchengine\\NuGet.Config",
+          "C:\\Users\\donod\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -57,7 +57,12 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.421/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "linux-bionic-arm64": {
+          "#import": []
         }
       }
     }

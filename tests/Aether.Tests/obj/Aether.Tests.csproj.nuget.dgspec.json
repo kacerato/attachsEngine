@@ -1,21 +1,21 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\tests\\Aether.Tests\\Aether.Tests.csproj": {}
+    "C:\\Users\\donod\\Downloads\\atchengine\\tests\\Aether.Tests\\Aether.Tests.csproj": {}
   },
   "projects": {
-    "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Core\\Aether.Core.csproj": {
+    "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Core\\Aether.Core.csproj",
+        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj",
         "projectName": "Aether.Core",
-        "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Core\\Aether.Core.csproj",
-        "packagesPath": "C:\\Users\\jamaa\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Core\\obj\\",
+        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj",
+        "packagesPath": "C:\\Users\\donod\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\NuGet.Config",
-          "C:\\Users\\jamaa\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\donod\\Downloads\\atchengine\\NuGet.Config",
+          "C:\\Users\\donod\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -57,22 +57,22 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.421/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Flow\\Aether.Flow.csproj": {
+    "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Flow\\Aether.Flow.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Flow\\Aether.Flow.csproj",
+        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Flow\\Aether.Flow.csproj",
         "projectName": "Aether.Flow",
-        "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Flow\\Aether.Flow.csproj",
-        "packagesPath": "C:\\Users\\jamaa\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Flow\\obj\\",
+        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Flow\\Aether.Flow.csproj",
+        "packagesPath": "C:\\Users\\donod\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Flow\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\NuGet.Config",
-          "C:\\Users\\jamaa\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\donod\\Downloads\\atchengine\\NuGet.Config",
+          "C:\\Users\\donod\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -81,8 +81,8 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Core\\Aether.Core.csproj": {
-                "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Core\\Aether.Core.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj"
               }
             }
           }
@@ -118,22 +118,22 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.421/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Rendering\\Aether.Rendering.csproj": {
+    "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\Aether.Rendering.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Rendering\\Aether.Rendering.csproj",
+        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\Aether.Rendering.csproj",
         "projectName": "Aether.Rendering",
-        "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Rendering\\Aether.Rendering.csproj",
-        "packagesPath": "C:\\Users\\jamaa\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Rendering\\obj\\",
+        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\Aether.Rendering.csproj",
+        "packagesPath": "C:\\Users\\donod\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\NuGet.Config",
-          "C:\\Users\\jamaa\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\donod\\Downloads\\atchengine\\NuGet.Config",
+          "C:\\Users\\donod\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -142,11 +142,11 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Core\\Aether.Core.csproj": {
-                "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Core\\Aether.Core.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj"
               },
-              "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Scene\\Aether.Scene.csproj": {
-                "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Scene\\Aether.Scene.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj"
               }
             }
           }
@@ -182,22 +182,22 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.421/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Scene\\Aether.Scene.csproj": {
+    "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Scene\\Aether.Scene.csproj",
+        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj",
         "projectName": "Aether.Scene",
-        "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Scene\\Aether.Scene.csproj",
-        "packagesPath": "C:\\Users\\jamaa\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Scene\\obj\\",
+        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj",
+        "packagesPath": "C:\\Users\\donod\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\NuGet.Config",
-          "C:\\Users\\jamaa\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\donod\\Downloads\\atchengine\\NuGet.Config",
+          "C:\\Users\\donod\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -206,8 +206,8 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Core\\Aether.Core.csproj": {
-                "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Core\\Aether.Core.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj"
               }
             }
           }
@@ -243,22 +243,22 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.421/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\tests\\Aether.Tests\\Aether.Tests.csproj": {
+    "C:\\Users\\donod\\Downloads\\atchengine\\tests\\Aether.Tests\\Aether.Tests.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\tests\\Aether.Tests\\Aether.Tests.csproj",
+        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine\\tests\\Aether.Tests\\Aether.Tests.csproj",
         "projectName": "Aether.Tests",
-        "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\tests\\Aether.Tests\\Aether.Tests.csproj",
-        "packagesPath": "C:\\Users\\jamaa\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\tests\\Aether.Tests\\obj\\",
+        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\tests\\Aether.Tests\\Aether.Tests.csproj",
+        "packagesPath": "C:\\Users\\donod\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine\\tests\\Aether.Tests\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\NuGet.Config",
-          "C:\\Users\\jamaa\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\donod\\Downloads\\atchengine\\NuGet.Config",
+          "C:\\Users\\donod\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -267,17 +267,17 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Core\\Aether.Core.csproj": {
-                "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Core\\Aether.Core.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj"
               },
-              "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Flow\\Aether.Flow.csproj": {
-                "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Flow\\Aether.Flow.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Flow\\Aether.Flow.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Flow\\Aether.Flow.csproj"
               },
-              "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Rendering\\Aether.Rendering.csproj": {
-                "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Rendering\\Aether.Rendering.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\Aether.Rendering.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\Aether.Rendering.csproj"
               },
-              "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Scene\\Aether.Scene.csproj": {
-                "projectPath": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\managed\\Aether.Scene\\Aether.Scene.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj"
               }
             }
           }
@@ -313,7 +313,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.421/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

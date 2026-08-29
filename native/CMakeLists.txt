@@ -169,6 +169,7 @@ add_library(aether_rhi STATIC
   rhi/descriptor_cache.cpp
   rhi/device_profile.cpp
   rhi/device.cpp
+  rhi/gpu_frame_timer.cpp
   rhi/memory_allocator.cpp
   rhi/memory_budget.cpp
   rhi/pipeline_cache.cpp
@@ -309,6 +310,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_statistics.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_policy.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_jolt_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_sqlite_bridge.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_trigger_bridge.cpp

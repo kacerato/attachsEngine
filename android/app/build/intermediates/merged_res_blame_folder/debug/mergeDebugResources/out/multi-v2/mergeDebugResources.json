@@ -1,27 +1,19 @@
 {
     "logs": [
         {
-            "outputFile": "C:\\Users\\jamaa\\.gradle\\daemon\\8.10.2\\dev.aether.editor.app-debug-4:\\values_values.arsc.flat",
-            "map": [
-                {
-                    "source": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\src\\main\\res\\values\\styles.xml",
-                    "from": {
-                        "startLines": "2",
-                        "startColumns": "4",
-                        "startOffsets": "55",
-                        "endLines": "13",
-                        "endColumns": "12",
-                        "endOffsets": "744"
-                    }
-                }
-            ]
-        },
-        {
             "outputFile": "dev.aether.editor.app-debug-4:/values_values.arsc.flat",
             "map": [
                 {
-                    "source": "C:\\Users\\jamaa\\Downloads\\aether-fase0-1\\android\\app\\src\\main\\res\\values\\styles.xml",
+                    "source": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\src\\main\\res\\values\\styles.xml",
                     "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "57",
+                        "endLines": "12",
+                        "endColumns": "12",
+                        "endOffsets": "689"
+                    },
+                    "to": {
                         "startLines": "2",
                         "startColumns": "4",
                         "startOffsets": "55",

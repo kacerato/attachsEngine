@@ -1,0 +1,148 @@
+--------- beginning of main
+08-28 21:58:44.691  6774  9249 I Aether.Android: [FrameProfile] KEEP_SCREEN_ON na janela de medição.
+08-28 21:58:44.692  6774  9249 I Aether.Android: Shell nativo iniciado.
+08-28 21:58:44.927  6774  9249 I Aether.Android: Extração de assets .NET concluída: 181 ok, 0 falharam.
+08-28 21:58:44.928  6774  9249 I Aether.Android: [ManagedBuild] id=555d53d5a3c419ebe3ef652cdf3729c6e21363858c2838eedf55c4e7bdeb024c reused=0
+08-28 21:58:44.998  6774  9249 I Aether.Android: CoreCLR carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Rendering.runtimeconfig.json).
+08-28 21:58:45.069  6774  9249 I Aether.Android: CoreCLR hospedado no shell: Ping(2,3)=5.
+08-28 21:58:45.070  6774  9249 I Aether.Android: [FramePacer] VSYNC do Android controla a admissão de frames.
+08-28 21:58:45.070  6774  9249 I Aether.Android: [Lifecycle] seq=1 cmd=START(10) phase=begin uptime_ms=810907813.099 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+08-28 21:58:45.070  6774  9249 I Aether.Android: [Lifecycle] seq=1 cmd=START(10) phase=end uptime_ms=810907813.112 elapsed_ms=0.014 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+08-28 21:58:45.077  6774  9249 I Aether.Android: [Lifecycle] seq=2 cmd=RESUME(11) phase=begin uptime_ms=810907820.024 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+08-28 21:58:45.077  6774  9249 I Aether.Android: [Lifecycle] seq=2 cmd=RESUME(11) phase=end uptime_ms=810907820.036 elapsed_ms=0.014 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+08-28 21:58:45.114  6774  9249 I Aether.Android: [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=810907856.963 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+08-28 21:58:45.114  6774  9249 I Aether.Android: [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=end uptime_ms=810907857.009 elapsed_ms=0.047 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+08-28 21:58:45.128  6774  9249 I Aether.Android: [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=begin uptime_ms=810907871.246 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+08-28 21:58:45.128  6774  9249 I Aether.Android: [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=810907871.255
+08-28 21:58:45.148  6774  9249 I Aether.Android: Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+08-28 21:58:45.179  6774  9249 I Aether.Android: Swapchain pronta: 1280x2772, 5 imagens.
+08-28 21:58:45.179  6774  9249 I Aether.Android: [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=810907921.936
+08-28 21:58:45.179  6774  9249 I Aether.Android: [DirtRoad] initialization=loading
+08-28 21:58:45.179  6774  9249 I Aether.Android: [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=810907922.058 elapsed_ms=0.123
+08-28 21:58:45.179  6774  9249 I Aether.Android: [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=810907922.065 elapsed_ms=50.809
+08-28 21:58:45.179  6774  9249 I Aether.Android: [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=end uptime_ms=810907922.069 elapsed_ms=50.824 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+08-28 21:58:45.179  6774  9249 I Aether.Android: [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=810907922.091 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+08-28 21:58:45.179  6774  9249 I Aether.Android: [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=810907922.110 elapsed_ms=0.020 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+08-28 21:58:45.179  6774  9249 I Aether.Android: [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=begin uptime_ms=810907922.126 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+08-28 21:58:45.179  6774  9249 I Aether.Android: [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=end uptime_ms=810907922.131 elapsed_ms=0.005 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+08-28 21:58:45.179  6774  9249 I Aether.Android: [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=810907922.137 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+08-28 21:58:45.179  6774  9249 I Aether.Android: [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=810907922.140 elapsed_ms=0.003 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+08-28 21:58:45.396  6774  9249 I Aether.Android: [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=810908138.496 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+08-28 21:58:45.396  6774  9249 I Aether.Android: Aplicativo ativo.
+08-28 21:58:45.396  6774  9249 I Aether.Android: [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=end uptime_ms=810908139.328 elapsed_ms=0.833 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+08-28 21:58:45.417  6774  9249 I Aether.Android: [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=810908159.907 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+08-28 21:58:45.417  6774  9249 I Aether.Android: [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=810908159.945 elapsed_ms=0.039 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+08-28 21:58:45.509  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_000.aetex resident=2048x2048 mips=12 bytes=2497712
+08-28 21:58:45.545  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_001.aetex resident=2048x2048 mips=12 bytes=2497712
+08-28 21:58:45.583  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_002.aetex resident=2048x2048 mips=12 bytes=2497712
+08-28 21:58:45.622  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_003.aetex resident=2048x2048 mips=12 bytes=2497712
+08-28 21:58:45.643  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_004.aetex resident=1024x512 mips=11 bytes=314992
+08-28 21:58:45.648  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_005.aetex resident=1024x512 mips=11 bytes=314992
+08-28 21:58:45.651  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_006.aetex resident=256x128 mips=9 bytes=20528
+08-28 21:58:45.657  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_007.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.667  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_008.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.677  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_009.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.683  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_010.aetex resident=128x1024 mips=11 bytes=81088
+08-28 21:58:45.685  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_011.aetex resident=128x1024 mips=11 bytes=81088
+08-28 21:58:45.687  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_012.aetex resident=128x1024 mips=11 bytes=81088
+08-28 21:58:45.695  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_013.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.703  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_014.aetex resident=128x1024 mips=11 bytes=81088
+08-28 21:58:45.708  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_015.aetex resident=128x1024 mips=11 bytes=81088
+08-28 21:58:45.712  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_016.aetex resident=128x1024 mips=11 bytes=81088
+08-28 21:58:45.715  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_017.aetex resident=512x512 mips=10 bytes=158432
+08-28 21:58:45.727  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_018.aetex resident=512x512 mips=10 bytes=158432
+08-28 21:58:45.731  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_019.aetex resident=256x256 mips=9 bytes=40096
+08-28 21:58:45.738  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_020.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.769  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_021.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.785  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_022.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.793  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_023.aetex resident=256x256 mips=9 bytes=40096
+08-28 21:58:45.796  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_024.aetex resident=512x512 mips=10 bytes=158432
+08-28 21:58:45.800  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_025.aetex resident=256x256 mips=9 bytes=40096
+08-28 21:58:45.803  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_026.aetex resident=256x256 mips=9 bytes=40096
+08-28 21:58:45.806  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_027.aetex resident=256x256 mips=9 bytes=40096
+08-28 21:58:45.808  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_028.aetex resident=256x256 mips=9 bytes=40096
+08-28 21:58:45.815  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_029.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.827  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_030.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.834  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_031.aetex resident=512x512 mips=10 bytes=158432
+08-28 21:58:45.841  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_032.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.847  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_033.aetex resident=512x512 mips=10 bytes=158432
+08-28 21:58:45.853  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_034.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.860  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_035.aetex resident=1024x512 mips=11 bytes=314992
+08-28 21:58:45.865  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_036.aetex resident=1024x512 mips=11 bytes=314992
+08-28 21:58:45.869  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_037.aetex resident=512x256 mips=10 bytes=79696
+08-28 21:58:45.873  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_038.aetex resident=1024x512 mips=11 bytes=314992
+08-28 21:58:45.878  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_039.aetex resident=1024x512 mips=11 bytes=314992
+08-28 21:58:45.883  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_040.aetex resident=1024x512 mips=11 bytes=314992
+08-28 21:58:45.889  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_041.aetex resident=1024x512 mips=11 bytes=314992
+08-28 21:58:45.898  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_042.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.904  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_043.aetex resident=1024x512 mips=11 bytes=314992
+08-28 21:58:45.912  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_044.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.928  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_045.aetex resident=2048x512 mips=12 bytes=629040
+08-28 21:58:45.939  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_046.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.944  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_047.aetex resident=256x256 mips=9 bytes=40096
+08-28 21:58:45.950  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_048.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:45.956  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_049.aetex resident=512x512 mips=10 bytes=158432
+08-28 21:58:45.959  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_050.aetex resident=512x512 mips=10 bytes=158432
+08-28 21:58:45.965  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_051.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:46.089  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_052.aetex resident=4096x4096 mips=13 bytes=9961536
+08-28 21:58:46.226  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_053.aetex resident=4096x4096 mips=13 bytes=9961536
+08-28 21:58:46.320  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_054.aetex resident=2048x2048 mips=12 bytes=2497712
+08-28 21:58:46.347  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_055.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:46.354  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_056.aetex resident=512x512 mips=10 bytes=158432
+08-28 21:58:46.362  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_057.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:46.368  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_058.aetex resident=512x512 mips=10 bytes=158432
+08-28 21:58:46.372  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_059.aetex resident=512x512 mips=10 bytes=158432
+08-28 21:58:46.376  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_060.aetex resident=512x512 mips=10 bytes=158432
+08-28 21:58:46.384  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_061.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:46.394  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_062.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:46.404  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_063.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:46.415  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_064.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:46.426  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_065.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:46.436  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_066.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:46.446  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_067.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:46.456  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_068.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:46.467  6774  9313 I Aether.Android: [DirtRoad] texture=dirt_road/texture_069.aetex resident=1024x1024 mips=11 bytes=626288
+08-28 21:58:47.326  6774  9313 I Aether.Android: [Environment] texture=dirt_road/environment.aetex resident=4096x2048 mips=13 bytes=89478488
+08-28 21:58:47.918  6774  9313 I Aether.Android: [DirtRoad] ready draws=27 materials=26 textures=70 triangles=341109 encoding=ASTC6x6 load_ms=2739.042
+08-28 21:58:48.270  6774  9313 I Aether.Android: Descritores: caminho=bindless, capacidade bindless=16777216.
+08-28 21:58:48.270  6774  9313 I Aether.Android: RHI/VMA: buffer de instâncias=2376 bytes; uso=34685184, limite=2411095449 bytes.
+08-28 21:58:48.270  6774  9313 I Aether.Android: InstancedRenderer pronto: cubo texturizado + depth, capacidade=27, modo=dirt-road.
+08-28 21:58:48.270  6774  9313 I Aether.Android: [DirtRoad] passes opaque=23 transparent=4; solid backface culling ativo.
+08-28 21:58:48.270  6774  9313 I Aether.Android: RHI/VMA [buffer]: uso=34685184, pico=34685184 bytes.
+08-28 21:58:48.270  6774  9313 I Aether.Android: RHI/VMA [texture]: uso=150716480, pico=150716480 bytes.
+08-28 21:58:48.270  6774  9313 I Aether.Android: RHI/VMA [render-target]: uso=14344192, pico=14344192 bytes.
+08-28 21:58:48.270  6774  9313 I Aether.Android: RHI/VMA [staging]: uso=0, pico=89478528 bytes.
+08-28 21:58:48.270  6774  9249 I Aether.Android: [DirtRoad] initialization=ready
+08-28 21:58:48.276  6774  9249 I Aether.Android: Primeiro frame após ativação apresentado: ciclo=1. latency_ms=2879.632 uptime_ms=810911018.944
+08-28 21:58:49.267  6774  9249 I Aether.Android: [Camera] position=(72.32,160.75,-468.68) yaw=-0.400 pitch=-0.081
+08-28 21:58:49.711  6774  9249 I Aether.Android: [Camera] position=(43.09,165.97,-402.33) yaw=-0.407 pitch=-0.124
+08-28 21:58:50.028  6774  9249 I Aether.Android: [Camera] position=(43.09,165.97,-402.33) yaw=-0.051 pitch=0.079
+08-28 21:58:50.509  6774  9249 I Aether.Android: [Camera] position=(35.94,165.79,-330.15) yaw=-0.061 pitch=0.072
+08-28 21:58:50.777  6774  9249 I Aether.Android: [Camera] position=(35.94,165.79,-330.15) yaw=-0.311 pitch=0.016
+08-28 21:58:51.237  6774  9249 I Aether.Android: [Camera] position=(10.67,167.08,-261.09) yaw=-0.320 pitch=-0.020
+08-28 21:58:51.748  6774  9249 I Aether.Android: [Camera] position=(-13.91,168.35,-188.83) yaw=-0.320 pitch=-0.020
+08-28 21:58:52.214  6774  9249 I Aether.Android: [Camera] position=(-36.62,171.56,-119.68) yaw=-0.326 pitch=-0.033
+08-28 21:58:52.628  6774  9249 I Aether.Android: [Camera] position=(-50.30,173.44,-78.34) yaw=-0.326 pitch=-0.033
+08-28 21:58:53.054  6774  9249 I Aether.Android: [Camera] position=(-50.30,173.44,-78.34) yaw=0.513 pitch=0.309
+08-28 21:58:53.876  6774  9249 I Aether.Android: [Camera] position=(-34.47,167.75,-50.73) yaw=0.509 pitch=0.309
+08-28 21:58:55.144  6774  9249 I Aether.Android: [Camera] position=(-18.92,166.24,-30.06) yaw=0.652 pitch=0.116
+08-28 21:58:57.343  6774  9249 I Aether.Android: [Camera] position=(-54.73,161.73,-47.99) yaw=1.138 pitch=0.025
+08-28 21:58:58.282  6774  9249 I Aether.Android: [Camera] position=(-45.66,159.88,-48.16) yaw=1.779 pitch=0.144
+08-28 21:58:59.194  6774  9249 I Aether.Android: [Camera] position=(-50.75,159.56,-52.35) yaw=1.059 pitch=-0.080
+08-28 21:59:00.122  6774  9249 I Aether.Android: [Camera] position=(-40.17,157.77,-53.75) yaw=1.818 pitch=0.156
+08-28 21:59:00.955  6774  9249 I Aether.Android: [Camera] position=(-53.41,153.97,-60.19) yaw=1.167 pitch=-0.153
+08-28 21:59:01.486  6774  9249 I Aether.Android: [Camera] position=(-53.41,153.97,-60.19) yaw=1.192 pitch=0.039
+08-28 21:59:02.793  6774  9249 I Aether.Android: [Camera] position=(-47.24,164.04,-56.66) yaw=1.192 pitch=0.039
+08-28 21:59:03.686  6774  9249 I Aether.Android: [Camera] position=(-47.24,164.04,-56.66) yaw=1.163 pitch=0.070
+08-28 21:59:08.016  6774  9249 I Aether.Android: [FrameProfile] {"schemaVersion":1,"pid":6774,"epoch":3,"window":1,"build":"debug","instances":27,"width":2772,"height":1280,"frames":600,"elapsed_ms":14723.824473,"present_fps":40.750282,"warmup_samples":249,"warmup_process_cpu_max_ms":18.052448,"interval_ms":{"mean":24.539707,"p50":24.032552,"p95":28.722344,"p99":35.476979,"max":38.816667},"process_cpu_ms":{"mean":3.919990,"p50":3.648851,"p95":7.238697,"p99":8.192342,"max":26.372236},"thread_cpu_ms":{"mean":1.841634,"p50":1.675990,"p95":3.102500,"p99":4.415626,"max":5.174114},"acquire_wall_ms":{"mean":22.792914,"p50":22.383386,"p95":26.905886,"p99":33.166510,"max":37.552188},"interop_wall_ms":{"mean":0.000244,"p50":0.000209,"p95":0.000469,"p99":0.000677,"max":0.001979},"record_submit_wall_ms":{"mean":1.173231,"p50":1.039010,"p95":2.281458,"p99":3.246406,"max":6.382708},"present_wall_ms":{"mean":0.354131,"p50":0.294115,"p95":0.758958,"p99":1.142552,"max":1.881927}}
+08-28 21:59:11.830  6774  9249 I Aether.Android: Marco de renderização atingido: 1000 frames apresentados.
+08-28 21:59:23.208  6774  9249 I Aether.Android: [FrameProfile] {"schemaVersion":1,"pid":6774,"epoch":3,"window":2,"build":"debug","instances":27,"width":2772,"height":1280,"frames":600,"elapsed_ms":15197.075359,"present_fps":39.481281,"warmup_samples":249,"warmup_process_cpu_max_ms":18.052448,"interval_ms":{"mean":25.328459,"p50":25.053802,"p95":28.549479,"p99":32.989219,"max":36.046823},"process_cpu_ms":{"mean":2.968148,"p50":3.103802,"p95":3.626042,"p99":4.009895,"max":5.135883},"thread_cpu_ms":{"mean":2.270128,"p50":2.454896,"p95":2.734114,"p99":2.943647,"max":4.361925},"acquire_wall_ms":{"mean":23.307243,"p50":22.894479,"p95":26.715625,"p99":31.262031,"max":34.920469},"interop_wall_ms":{"mean":0.000325,"p50":0.000313,"p95":0.000521,"p99":0.000729,"max":0.001042},"record_submit_wall_ms":{"mean":1.409818,"p50":1.533021,"p95":1.681667,"p99":1.857552,"max":3.441042},"present_wall_ms":{"mean":0.444820,"p50":0.459844,"p95":0.610625,"p99":0.745782,"max":1.317864}}
+08-28 21:59:36.459  6774  9249 I Aether.Android: [Camera] position=(-26.13,161.75,-46.96) yaw=1.164 pitch=0.068
+08-28 21:59:36.870  6774  9249 I Aether.Android: [Camera] position=(-26.13,161.75,-46.96) yaw=0.763 pitch=0.028
+08-28 21:59:37.247  6774  9249 I Aether.Android: [Camera] position=(-11.88,163.14,-31.83) yaw=0.764 pitch=0.027
+08-28 21:59:37.595  6774  9249 I Aether.Android: [Camera] position=(-11.88,163.14,-31.83) yaw=0.979 pitch=0.014
+08-28 21:59:38.020  6774  9249 I Aether.Android: [Camera] position=(9.31,162.40,-17.03) yaw=0.979 pitch=0.014
+08-28 21:59:38.321  6774  9249 I Aether.Android: [FrameProfile] {"schemaVersion":1,"pid":6774,"epoch":3,"window":3,"build":"debug","instances":27,"width":2772,"height":1280,"frames":600,"elapsed_ms":15112.564265,"present_fps":39.702064,"warmup_samples":249,"warmup_process_cpu_max_ms":18.052448,"interval_ms":{"mean":25.187607,"p50":24.742083,"p95":29.238959,"p99":32.443490,"max":34.990208},"process_cpu_ms":{"mean":2.913094,"p50":2.659061,"p95":5.422396,"p99":7.897239,"max":23.943494},"thread_cpu_ms":{"mean":1.881657,"p50":1.783699,"p95":2.731406,"p99":3.004791,"max":4.807603},"acquire_wall_ms":{"mean":23.507199,"p50":23.212865,"p95":27.316666,"p99":31.028437,"max":33.484635},"interop_wall_ms":{"mean":0.000324,"p50":0.000312,"p95":0.000573,"p99":0.000625,"max":0.022604},"record_submit_wall_ms":{"mean":1.175971,"p50":1.069115,"p95":1.696198,"p99":1.887760,"max":2.976719},"present_wall_ms":{"mean":0.354168,"p50":0.322656,"p95":0.590989,"p99":0.777917,"max":1.245000}}
+08-28 21:59:39.097  6774  9249 I Aether.Android: [Camera] position=(-0.35,161.57,-18.18) yaw=1.528 pitch=-0.083
+08-28 21:59:40.544  6774  9249 I Aether.Android: [Camera] position=(-7.70,159.90,-17.35) yaw=1.803 pitch=-0.130
+08-28 21:59:42.913  6774  9249 I Aether.Android: [Camera] position=(1.55,162.27,-9.74) yaw=1.803 pitch=-0.130

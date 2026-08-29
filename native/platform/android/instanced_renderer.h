@@ -5,6 +5,7 @@
 #include "platform/android/dotnet_host.h"
 #include "rhi/bindless_registry.h"
 #include "rhi/device.h"
+#include "rhi/gpu_frame_timer.h"
 #include "rhi/memory_allocator.h"
 #include "rhi/resource.h"
 #include "rhi/upload_context.h"
@@ -58,6 +59,9 @@ public:
   // Diagnostic only: computed on demand at lifecycle/mutation checkpoints.
   u64 snapshotFingerprint() const;
   void setFrameProfilingEnabled(bool enabled) { frameProfilingEnabled_ = enabled; }
+  // Chave diagnóstica A/B. O padrão da engine permanece ativado; jogos não
+  // precisam configurar nada para receber o caminho otimizado.
+  void setCoveragePrepassEnabled(bool enabled) { coveragePrepassEnabled_ = enabled; }
   const profiler::RenderPhaseTimings &lastFrameTimings() const { return lastFrameTimings_; }
 
 private:
@@ -101,6 +105,8 @@ private:
   u32 baseTextureIndex_ = rhi::kBindlessIndexInvalid;
   VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline pipeline_ = VK_NULL_HANDLE;
+  VkPipeline coveragePipeline_ = VK_NULL_HANDLE;
+  VkPipeline coverageShadePipeline_ = VK_NULL_HANDLE;
   VkPipeline transparentPipeline_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout environmentSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorPool environmentPool_ = VK_NULL_HANDLE;
@@ -116,6 +122,7 @@ private:
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
   VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
   rhi::VulkanUploadContext uploadContext_{};
+  rhi::VulkanGpuFrameTimer gpuFrameTimer_{};
 
   // Buffer host-visible persistente: 5.000 instâncias * 20 bytes = ~100 KB.
   // A textura imutável abaixo usa o caminho de staging do RHI; este buffer
@@ -134,6 +141,8 @@ private:
   DirtRoadResources dirtRoadResources_;
   std::vector<u32> dirtTextureSlots_;
   std::vector<VkDescriptorSet> dirtMaterialSets_;
+  std::vector<u32> solidDrawOrder_;
+  std::vector<u32> coverageDrawOrder_;
   std::vector<u32> transparentDrawOrder_;
   struct MaterialParameters { float roughness=1, metallic=1, normalScale=1; };
   MaterialParameters materialParameters_;
@@ -146,6 +155,7 @@ private:
   FillInstanceBufferFn fillInstanceBuffer_ = nullptr;
   double lastFillMicroseconds_ = 0.0;
   bool frameProfilingEnabled_ = false;
+  bool coveragePrepassEnabled_ = true;
   profiler::RenderPhaseTimings lastFrameTimings_{};
 };
 

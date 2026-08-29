@@ -18,15 +18,21 @@ struct RenderPhaseTimings {
   double interopMs = 0;
   double recordSubmitMs = 0;
   double presentMs = 0;
+  double gpuFrameMs = 0;
+  double gpuGeometryMs = 0;
+  double gpuBackgroundMs = 0;
+  double gpuTransparentMs = 0;
 };
 
 enum class FrameMetric : u32 {
-  Interval, ProcessCpu, ThreadCpu, AcquireWall, InteropWall, RecordSubmitWall, PresentWall, Count
+  Interval, ProcessCpu, ThreadCpu, AcquireWall, InteropWall, RecordSubmitWall, PresentWall,
+  GpuFrame, GpuGeometry, GpuBackground, GpuTransparent, Count
 };
 constexpr u32 FrameMetricCount = static_cast<u32>(FrameMetric::Count);
 constexpr const char *FrameMetricNames[] = {
     "interval_ms", "process_cpu_ms", "thread_cpu_ms", "acquire_wall_ms",
-    "interop_wall_ms", "record_submit_wall_ms", "present_wall_ms"};
+    "interop_wall_ms", "record_submit_wall_ms", "present_wall_ms", "gpu_frame_ms",
+    "gpu_geometry_ms", "gpu_background_ms", "gpu_transparent_ms"};
 
 struct Distribution {
   double mean = 0, p50 = 0, p95 = 0, p99 = 0, maximum = 0;

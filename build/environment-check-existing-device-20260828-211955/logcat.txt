@@ -1,0 +1,7 @@
+
+
+--- final logcat window ---
+
+
+--- crash buffer ---
+

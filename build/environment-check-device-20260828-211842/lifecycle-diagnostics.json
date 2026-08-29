@@ -1,0 +1,31 @@
+{
+  "capturedAtUtc": "2026-08-29T00:19:27.7192322Z",
+  "reason": "adb -s adb-53e1eb7-cDkkst._adb-tls-connect._tcp install -r -t C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk falhou (código 1): Performing Streamed Install\r\nadb.exe: failed to install C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package dev.aether.editor signatures do not match newer version; ignoring!]\r\n",
+  "pid": null,
+  "power": [
+    "  mWakefulness=Asleep",
+    "  mWakefulnessChanging=false",
+    "Display Power: com.android.server.power.PowerManagerService$2@3823098"
+  ],
+  "keyguard": [
+    "    mKeyguardOccluded=false mKeyguardOccludedChanged=false mPendingKeyguardOccluded=false",
+    "    KeyguardServiceDelegate",
+    "      showing=true",
+    "      inputRestricted=false",
+    "      occluded=false",
+    "      secure=true",
+    "      deviceHasKeyguard=true",
+    "      screenState=SCREEN_STATE_OFF",
+    "      interactiveState=INTERACTIVE_STATE_SLEEP",
+    "      KeyguardStateMonitor",
+    "        mIsShowing=true",
+    "        mSimSecure=false",
+    "        mInputRestricted=true",
+    "        mTrusted=false"
+  ],
+  "focus": [
+    "  mCurrentFocus=Window{b2d2b35 u0 NotificationShade}",
+    "  mFocusedApp=ActivityRecord{142872446 u0 com.twitter.android/com.x.android.main.MainActivity t1603}"
+  ],
+  "resumedActivity": []
+}

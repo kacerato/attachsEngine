@@ -2,7 +2,11 @@
 
 #include <android/log.h>
 #include <android/native_activity.h>
+#include <android/native_window.h>
 #include <android/window.h>
+#include <dlfcn.h>
+#include <cmath>
+#include <cstdint>
 
 namespace ae::platform::android {
 
@@ -82,6 +86,33 @@ bool applyImmersiveLandscapeWindow(ANativeActivity *activity) {
 
   if (attachedHere) activity->vm->DetachCurrentThread();
   return success;
+}
+
+bool requestRenderFrameRate(ANativeWindow *window, float framesPerSecond) {
+  if (window == nullptr || !std::isfinite(framesPerSecond) || framesPerSecond <= 0.0f) return false;
+
+  // minSdk 26: resolver em runtime mantém o APK compatível. A função existe a
+  // partir da API 30; abaixo disso o Choreographer/swapchain permanecem válidos.
+  using SetFrameRate = int32_t (*)(ANativeWindow *, float, int8_t);
+  // O linker por namespace do Android não garante que símbolos de uma
+  // dependência apareçam em RTLD_DEFAULT. Abrir libandroid explicitamente é
+  // necessário em alguns OEMs, embora a função exista no nível de API.
+  static void *libandroid = dlopen("libandroid.so", RTLD_NOW | RTLD_LOCAL);
+  auto setFrameRate = libandroid == nullptr ? nullptr : reinterpret_cast<SetFrameRate>(
+      dlsym(libandroid, "ANativeWindow_setFrameRate"));
+  if (setFrameRate == nullptr) {
+    const char *error = dlerror();
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+                        "[FramePolicy] Surface.setFrameRate indisponível: %s.",
+                        error != nullptr ? error : "símbolo ausente");
+    return false;
+  }
+  constexpr int8_t CompatibilityDefault = 0;
+  const int32_t result = setFrameRate(window, framesPerSecond, CompatibilityDefault);
+  __android_log_print(result == 0 ? ANDROID_LOG_INFO : ANDROID_LOG_WARN, LogTag,
+                      "[FramePolicy] solicitação da surface=%.0f Hz resultado=%d.",
+                      static_cast<double>(framesPerSecond), result);
+  return result == 0;
 }
 
 } // namespace ae::platform::android

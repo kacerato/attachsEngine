@@ -1,0 +1,134 @@
+{
+  "buildFiles": [
+    "C:\\Users\\donod\\Downloads\\atchengine\\native\\CMakeLists.txt",
+    "C:\\Users\\donod\\Downloads\\atchengine\\native\\third_party\\Box2D\\CMakeLists.txt",
+    "C:\\Users\\donod\\Downloads\\atchengine\\native\\third_party\\Box2D\\src\\CMakeLists.txt",
+    "C:\\Users\\donod\\Downloads\\atchengine\\native\\third_party\\JoltPhysics\\Build\\CMakeLists.txt",
+    "C:\\Users\\donod\\Downloads\\atchengine\\native\\third_party\\JoltPhysics\\Jolt\\Jolt.cmake",
+    "C:\\Users\\donod\\Downloads\\atchengine\\native\\third_party\\sqlite\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\193m4w5b\\arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\193m4w5b\\arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "Jolt::@1d28f1fc98c8454a2bb1": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "Jolt",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\193m4w5b\\arm64-v8a\\third_party\\JoltPhysics\\Build\\libJolt.a"
+    },
+    "aether_android::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_android",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\Debug\\193m4w5b\\obj\\arm64-v8a\\libaether_android.so",
+      "runtimeFiles": []
+    },
+    "aether_core::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_core",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\193m4w5b\\arm64-v8a\\libaether_core.a"
+    },
+    "aether_native_app_glue::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_native_app_glue",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\193m4w5b\\arm64-v8a\\libaether_native_app_glue.a"
+    },
+    "aether_physics::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_physics",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\193m4w5b\\arm64-v8a\\libaether_physics.a"
+    },
+    "aether_platform::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_platform",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\193m4w5b\\arm64-v8a\\libaether_platform.a"
+    },
+    "aether_rendergraph::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_rendergraph",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\193m4w5b\\arm64-v8a\\libaether_rendergraph.a"
+    },
+    "aether_resources::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_resources",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\193m4w5b\\arm64-v8a\\libaether_resources.a"
+    },
+    "aether_rhi::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_rhi",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\193m4w5b\\arm64-v8a\\libaether_rhi.a"
+    },
+    "aether_transform::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_transform",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\Debug\\193m4w5b\\obj\\arm64-v8a\\libaether_transform.so",
+      "runtimeFiles": []
+    },
+    "benchmark_physics2d::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "benchmark_physics2d",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\Debug\\193m4w5b\\obj\\arm64-v8a\\benchmark_physics2d",
+      "runtimeFiles": []
+    },
+    "benchmark_physics2d_box2d::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "benchmark_physics2d_box2d",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\Debug\\193m4w5b\\obj\\arm64-v8a\\benchmark_physics2d_box2d",
+      "runtimeFiles": []
+    },
+    "benchmark_physics2d_jolt::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "benchmark_physics2d_jolt",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\Debug\\193m4w5b\\obj\\arm64-v8a\\benchmark_physics2d_jolt",
+      "runtimeFiles": []
+    },
+    "box2d::@d5cf16edf171c907b709": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "box2d",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\193m4w5b\\arm64-v8a\\third_party\\Box2D\\src\\libbox2dd.a"
+    },
+    "sqlite3::@404bef308afbc8f16dd1": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "sqlite3",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\193m4w5b\\arm64-v8a\\third_party\\sqlite\\libsqlite3.a"
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe",
+      "cppCompilerExecutable": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe"
+    }
+  },
+  "cFileExtensions": [
+    "c"
+  ],
+  "cppFileExtensions": [
+    "cxx",
+    "cpp"
+  ]
+}

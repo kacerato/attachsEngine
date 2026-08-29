@@ -1,0 +1,11 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/donod/Downloads/atchengine/build/environment-check-native/cmake_install.cmake",
+		"C:/Users/donod/Downloads/atchengine/build/environment-check-native/third_party/JoltPhysics/Build/cmake_install.cmake",
+		"C:/Users/donod/Downloads/atchengine/build/environment-check-native/third_party/Box2D/cmake_install.cmake",
+		"C:/Users/donod/Downloads/atchengine/build/environment-check-native/third_party/Box2D/src/cmake_install.cmake",
+		"C:/Users/donod/Downloads/atchengine/build/environment-check-native/third_party/sqlite/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

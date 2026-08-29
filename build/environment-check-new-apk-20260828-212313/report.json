@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 4,
+  "status": "passed",
+  "startedAtUtc": "2026-08-29T00:23:15.3761357Z",
+  "finishedAtUtc": "2026-08-29T00:24:21.8787966Z",
+  "package": "dev.aether.editor",
+  "activity": "android.app.NativeActivity",
+  "apk": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+  "device": {
+    "serial": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
+    "manufacturer": "Xiaomi",
+    "model": "25053PC47G",
+    "device": "onyx",
+    "board": "sun",
+    "socModel": "SM8735",
+    "androidRelease": "16",
+    "apiLevel": "36",
+    "abi": "arm64-v8a"
+  },
+  "configuration": {
+    "lifecycleCycles": 3,
+    "startupTimeoutSeconds": 45,
+    "cycleTimeoutSeconds": 20,
+    "soakMinutes": 0,
+    "profileSeconds": 0,
+    "powerBudgetWatts": 4.0,
+    "requirePowerBudget": false,
+    "requireSoakBudget": false,
+    "minimumSoakFps": 55.0,
+    "configurationChange": true,
+    "screenCycle": false,
+    "screenCycles": 0,
+    "screenshotEqualityRequired": true,
+    "initiallyAsleep": false
+  },
+  "checks": [
+    {
+      "name": "startup",
+      "status": "passed",
+      "details": {
+        "pid": "29974",
+        "frameMilestone": 1000
+      }
+    },
+    {
+      "name": "background-foreground",
+      "status": "passed",
+      "details": {
+        "cycles": 3,
+        "stablePid": "29974",
+        "renderResumedEveryCycle": true,
+        "resourceRecreationsObserved": 0
+      }
+    },
+    {
+      "name": "configuration-change",
+      "status": "passed",
+      "details": {
+        "previousUiMode": "yes",
+        "targetUiMode": "no",
+        "stablePid": "29974"
+      }
+    },
+    {
+      "name": "trim-memory-proxy",
+      "status": "passed",
+      "details": "Processo sobreviveu; este comando é proxy e não garante APP_CMD_LOW_MEMORY real."
+    },
+    {
+      "name": "screenshot-stability",
+      "status": "passed",
+      "details": {
+        "identical": true,
+        "beforeSha256": "F64EE6284B0F0CF8039DC749FEACDAC88F50F8B1F1EE737FE5CC395324C4D043",
+        "afterSha256": "F64EE6284B0F0CF8039DC749FEACDAC88F50F8B1F1EE737FE5CC395324C4D043"
+      }
+    }
+  ],
+  "screenshots": {
+    "before": {
+      "path": "C:\\Users\\donod\\Downloads\\atchengine\\build\\environment-check-new-apk-20260828-212313\\before-lifecycle.png",
+      "sha256": "F64EE6284B0F0CF8039DC749FEACDAC88F50F8B1F1EE737FE5CC395324C4D043",
+      "bytes": 6476084
+    },
+    "after": {
+      "path": "C:\\Users\\donod\\Downloads\\atchengine\\build\\environment-check-new-apk-20260828-212313\\after-lifecycle.png",
+      "sha256": "F64EE6284B0F0CF8039DC749FEACDAC88F50F8B1F1EE737FE5CC395324C4D043",
+      "bytes": 6476084
+    }
+  },
+  "measurements": {
+    "resourceRecreationsDuringLifecycle": 0,
+    "powerSamples": [],
+    "keyguardWaits": [
+      {
+        "elapsedMs": 949.055,
+        "dismissRequests": 0,
+        "showing": false,
+        "screenState": "SCREEN_STATE_ON",
+        "context": "startup"
+      }
+    ],
+    "keyguardDismissRequests": [],
+    "managedBuild": {
+      "observedId": "555d53d5a3c419ebe3ef652cdf3729c6e21363858c2838eedf55c4e7bdeb024c",
+      "reusedExtraction": false,
+      "apkId": null,
+      "coreSha256": null
+    }
+  },
+  "artifacts": {
+    "apkSha256": "A85CF948794BD8F613F0F70D853D84F91B7A7697D26488A999E4EF9070458D06",
+    "gitRevision": "48d0e62d98dcb3eaa947571ce52e4d7f452fdc20",
+    "gitDirty": true,
+    "outputDirectory": "C:\\Users\\donod\\Downloads\\atchengine\\build\\environment-check-new-apk-20260828-212313",
+    "adb": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+    "logcat": "C:\\Users\\donod\\Downloads\\atchengine\\build\\environment-check-new-apk-20260828-212313\\logcat.txt",
+    "lifecycleTimeline": "C:\\Users\\donod\\Downloads\\atchengine\\build\\environment-check-new-apk-20260828-212313\\lifecycle-timeline.txt"
+  },
+  "error": null,
+  "failureKind": null
+}

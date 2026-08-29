@@ -6,7 +6,7 @@ function Assert-Profile { param([bool]$Value); if (-not $Value) { throw 'Asserç
 function Test-Profile { param([string]$Name, [scriptblock]$Body); & $Body; ++$script:count; Write-Host "PASS: $Name" }
 function New-TestWindow {
     param([int]$Index = 1, [int]$Epoch = 1)
-    $window = [ordered]@{ schemaVersion = 1; pid = 7; epoch = $Epoch; window = $Index; build = 'debug';
+    $window = [ordered]@{ schemaVersion = 3; pid = 7; epoch = $Epoch; window = $Index; build = 'debug';
         instances = 5000; width = 2772; height = 1280; frames = 600; elapsed_ms = 10000.0;
         present_fps = 60.0; warmup_samples = 300; warmup_process_cpu_max_ms = 4.0 }
     foreach ($metric in $FrameProfileMetricNames) {
@@ -15,7 +15,15 @@ function New-TestWindow {
     }
     return [pscustomobject]$window
 }
-function Convert-TestWindow { param($Window); return '[FrameProfile] ' + ($Window | ConvertTo-Json -Depth 5 -Compress) }
+function Convert-TestWindow {
+    param($Window)
+    $wire = $Window | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+    foreach ($metric in $FrameProfileMetricNames) {
+        $d = $wire.$metric
+        $wire.$metric = @($d.mean, $d.p50, $d.p95, $d.p99, $d.max)
+    }
+    return '[FrameProfile] ' + ($wire | ConvertTo-Json -Depth 5 -Compress)
+}
 function Assert-Rejected {
     param([scriptblock]$Body)
     $rejected = $false
@@ -40,6 +48,13 @@ Test-Profile 'JSON nativo válido' {
 }
 Test-Profile 'não mistura outro processo' {
     Assert-Profile (@(ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow)) 8).Count -eq 0)
+}
+Test-Profile 'aceita contagem explícita da cena real' {
+    $window = New-TestWindow
+    $window.instances = 27
+    $windows = @(ConvertFrom-FrameProfileLog (Convert-TestWindow $window) 7 27)
+    $capture = Get-FrameProfileCapture $windows 10 'dirt-road'
+    Assert-Profile ($capture.scene -eq 'dirt-road' -and $capture.windows[0].instances -eq 27)
 }
 Test-Profile 'duplicatas não aumentam duração' {
     $line = Convert-TestWindow (New-TestWindow)

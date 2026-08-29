@@ -21,7 +21,9 @@ void FrameStatistics::reset() {
 }
 
 FrameSampleResult FrameStatistics::record(FrameCounters now, const RenderPhaseTimings &phases) {
-  const double phaseValues[] = {phases.acquireMs, phases.interopMs, phases.recordSubmitMs, phases.presentMs};
+  const double phaseValues[] = {phases.acquireMs, phases.interopMs, phases.recordSubmitMs,
+                                phases.presentMs, phases.gpuFrameMs, phases.gpuGeometryMs,
+                                phases.gpuBackgroundMs, phases.gpuTransparentMs};
   for (double value : phaseValues) {
     if (!std::isfinite(value) || value < 0) {
       reset();
@@ -52,7 +54,8 @@ FrameSampleResult FrameStatistics::record(FrameCounters now, const RenderPhaseTi
   }
   if (count_ == windowFrames_) count_ = 0;
   const double values[] = {wallMs, processMs, threadMs, phases.acquireMs, phases.interopMs,
-                           phases.recordSubmitMs, phases.presentMs};
+                           phases.recordSubmitMs, phases.presentMs, phases.gpuFrameMs,
+                           phases.gpuGeometryMs, phases.gpuBackgroundMs, phases.gpuTransparentMs};
   for (u32 metric = 0; metric < FrameMetricCount; ++metric) samples_[metric][count_] = values[metric];
   ++count_;
   return count_ == windowFrames_ ? FrameSampleResult::WindowReady : FrameSampleResult::Collecting;

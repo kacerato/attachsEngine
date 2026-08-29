@@ -16,6 +16,7 @@
          (o .apk já carrega os .so comprimidos, extração duplica esse espaço em disco). -->
     <application
         android:allowBackup="false"
+        android:appCategory="game"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:extractNativeLibs="true"
         android:fullBackupContent="@xml/backup_rules"

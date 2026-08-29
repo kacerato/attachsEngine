@@ -22,6 +22,12 @@ MAP_VERSION = 1
 HEADER_SIZE = 144
 VERTEX_STRIDE = 72
 INVALID_TEXTURE = 0xFFFFFFFF
+MATERIAL_BLEND = 1 << 0
+MATERIAL_NORMAL_MAP = 1 << 1
+MATERIAL_METALLIC_ROUGHNESS_MAP = 1 << 2
+MATERIAL_EMISSIVE_MAP = 1 << 3
+MATERIAL_ALPHA_MASK = 1 << 4
+MATERIAL_DOUBLE_SIDED = 1 << 5
 
 
 def align(value, alignment=16):
@@ -180,7 +186,22 @@ def texture_semantics(gltf):
     return result
 
 
-def material_record(material, texture_map):
+def alpha_coverage_is_cutout(source):
+    """Recognize hard coverage atlases incorrectly exported as BLEND.
+
+    A large transparent region plus mostly binary coverage is characteristic
+    of leaves, grass and fences. Soft road edges, puddles and painted decals
+    intentionally stay blended. Explicit glTF MASK always wins independently
+    of this compatibility heuristic.
+    """
+    alpha = np.asarray(Image.open(io.BytesIO(source)).convert("RGBA"), dtype=np.uint8)[..., 3]
+    count = alpha.size
+    transparent = np.count_nonzero(alpha == 0) / count
+    binary = (np.count_nonzero(alpha == 0) + np.count_nonzero(alpha == 255)) / count
+    return transparent >= .5 and binary >= .6
+
+
+def material_record(material, texture_map, inferred_cutouts=frozenset()):
     pbr = material.get("pbrMetallicRoughness", {})
     infos = [pbr.get("baseColorTexture"), material.get("normalTexture"),
              pbr.get("metallicRoughnessTexture"), material.get("emissiveTexture")]
@@ -190,10 +211,16 @@ def material_record(material, texture_map):
     texcoords = sum((int(info.get("texCoord", 0)) & 3) << (slot * 2)
                     for slot, info in enumerate(infos) if info)
     flags = 0
-    if material.get("alphaMode", "OPAQUE") == "BLEND": flags |= 1
-    if infos[1]: flags |= 2
-    if infos[2]: flags |= 4
-    if infos[3]: flags |= 8
+    alpha_mode = material.get("alphaMode", "OPAQUE")
+    base_texture = infos[0]["index"] if infos[0] else None
+    if alpha_mode == "MASK" or (alpha_mode == "BLEND" and base_texture in inferred_cutouts):
+        flags |= MATERIAL_ALPHA_MASK
+    elif alpha_mode == "BLEND":
+        flags |= MATERIAL_BLEND
+    if infos[1]: flags |= MATERIAL_NORMAL_MAP
+    if infos[2]: flags |= MATERIAL_METALLIC_ROUGHNESS_MAP
+    if infos[3]: flags |= MATERIAL_EMISSIVE_MAP
+    if material.get("doubleSided", False): flags |= MATERIAL_DOUBLE_SIDED
     base = pbr.get("baseColorFactor", [1, 1, 1, 1])
     emissive = material.get("emissiveFactor", [0, 0, 0])
     specular = material.get("extensions", {}).get("KHR_materials_specular", {}).get("specularFactor", 1.0)
@@ -231,10 +258,13 @@ def main():
         texture_map = texture_semantics(gltf)
         texture_records = []
         texture_sources = []
+        inferred_cutouts = set()
         for (texture_index, srgb), cooked_index in sorted(texture_map.items(), key=lambda item: item[1]):
             texture = gltf["textures"][texture_index]
             image = gltf["images"][texture["source"]]
             source = archive.read(image["uri"])
+            if srgb and alpha_coverage_is_cutout(source):
+                inferred_cutouts.add(texture_index)
             normal_map = any(material.get("normalTexture", {}).get("index") == texture_index
                              for material in gltf["materials"]) and not srgb
             dimensions = cook_texture(args.astcenc, args.cache, args.out,
@@ -252,7 +282,8 @@ def main():
                                     "normalMap": normal_map, "dimensions": dimensions,
                                     "sha256": hashlib.sha256(source).hexdigest()})
 
-        materials = [material_record(material, texture_map) for material in gltf["materials"]]
+        materials = [material_record(material, texture_map, inferred_cutouts)
+                     for material in gltf["materials"]]
         vertices, indices, draws = [], [], []
         world_min = np.array([np.inf, np.inf, np.inf])
         world_max = -world_min

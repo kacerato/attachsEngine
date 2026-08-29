@@ -1,0 +1,8 @@
+C:\Users\donod\Downloads\atchengine\android\app\build\managed\rendering\Aether.Rendering.dll
+C:\Users\donod\Downloads\atchengine\android\app\build\managed\rendering\Aether.Rendering.deps.json
+C:\Users\donod\Downloads\atchengine\android\app\build\managed\rendering\Aether.Rendering.runtimeconfig.json
+C:\Users\donod\Downloads\atchengine\android\app\build\managed\rendering\Aether.Rendering.pdb
+C:\Users\donod\Downloads\atchengine\android\app\build\managed\rendering\Aether.Core.dll
+C:\Users\donod\Downloads\atchengine\android\app\build\managed\rendering\Aether.Scene.dll
+C:\Users\donod\Downloads\atchengine\android\app\build\managed\rendering\Aether.Core.pdb
+C:\Users\donod\Downloads\atchengine\android\app\build\managed\rendering\Aether.Scene.pdb

@@ -14,6 +14,16 @@ inline constexpr u32 MapPackageHeaderSize = 144;
 inline constexpr u32 MapVertexStride = 72;
 inline constexpr u32 InvalidMapTexture = 0xFFFFFFFFu;
 
+// Material flags are shared by the offline glTF cooker and the Vulkan shader.
+// Keep alpha masking out of the blended bit: cutout vegetation belongs in the
+// depth-writing opaque pass, while glass/water/soft decals remain back-to-front.
+inline constexpr u32 MapMaterialBlend = 1u << 0;
+inline constexpr u32 MapMaterialNormalMap = 1u << 1;
+inline constexpr u32 MapMaterialMetallicRoughnessMap = 1u << 2;
+inline constexpr u32 MapMaterialEmissiveMap = 1u << 3;
+inline constexpr u32 MapMaterialAlphaMask = 1u << 4;
+inline constexpr u32 MapMaterialDoubleSided = 1u << 5;
+
 struct MapTextureRecord {
   u32 flags;
   u32 reserved[3];

@@ -70,6 +70,30 @@ AE_TEST(frame_statistics_rejeita_nan_infinito_e_fase_negativa) {
   }
 }
 
+AE_TEST(frame_statistics_inclui_timestamp_gpu_sem_confundir_com_wall_cpu) {
+  FrameStatistics statistics;
+  statistics.configure(0, 1);
+  statistics.record({}, {});
+  RenderPhaseTimings phases{};
+  phases.gpuFrameMs = 7.25;
+  phases.gpuGeometryMs = 5.0;
+  phases.gpuBackgroundMs = 1.25;
+  phases.gpuTransparentMs = 1.0;
+  statistics.record({10'000'000, 2'000'000, 1'000'000}, phases);
+  FrameProfileSummary summary;
+  AE_EXPECT_TRUE(statistics.summarize(summary), "janela GPU pronta");
+  AE_EXPECT_EQ(summary.metrics[static_cast<ae::u32>(FrameMetric::GpuFrame)].mean, 7.25,
+               "timestamp GPU preservado separadamente");
+  AE_EXPECT_EQ(summary.metrics[static_cast<ae::u32>(FrameMetric::ProcessCpu)].mean, 2.0,
+               "GPU nao altera relogio CPU");
+  AE_EXPECT_EQ(summary.metrics[static_cast<ae::u32>(FrameMetric::GpuGeometry)].mean, 5.0,
+               "geometria GPU separada");
+  AE_EXPECT_EQ(summary.metrics[static_cast<ae::u32>(FrameMetric::GpuBackground)].mean, 1.25,
+               "fundo GPU separado");
+  AE_EXPECT_EQ(summary.metrics[static_cast<ae::u32>(FrameMetric::GpuTransparent)].mean, 1.0,
+               "transparencia GPU separada");
+}
+
 AE_TEST(frame_statistics_cpu_multithread_pode_exceder_wall_time) {
   FrameStatistics statistics;
   statistics.configure(0, 1);
