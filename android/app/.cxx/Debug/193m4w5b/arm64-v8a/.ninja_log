@@ -71,3 +71,9 @@
 106	8297	8096821478858486	CMakeFiles/aether_android.dir/platform/android/dirt_road_resources.cpp.o	2b8f5b2439e7f828
 127	8785	8096821483760708	CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o	7f8f305a5a5f8625
 8785	9661	8096821492420777	C:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/193m4w5b/obj/arm64-v8a/libaether_android.so	7c912d1393f2cab2
+68	28736	8097136226361764	CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o	7f8f305a5a5f8625
+28738	30438	8097136243149615	C:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/193m4w5b/obj/arm64-v8a/libaether_android.so	7c912d1393f2cab2
+195	13802	8097140971708695	CMakeFiles/aether_android.dir/platform/android/dirt_road_resources.cpp.o	2b8f5b2439e7f828
+223	14031	8097140974109181	CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o	7f8f305a5a5f8625
+134	15772	8097140990573064	CMakeFiles/aether_android.dir/platform/android/android_main.cpp.o	be15d177030571b9
+15772	18251	8097141015771737	C:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/193m4w5b/obj/arm64-v8a/libaether_android.so	7c912d1393f2cab2

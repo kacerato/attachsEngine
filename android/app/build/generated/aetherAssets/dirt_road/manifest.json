@@ -942,8 +942,8 @@
     }
   ],
   "outputs": {
-    "environment.aeenv": "812c5663a9f6b62ca31a94f8ffeeda0b8fee5399ba0e0e0db39b16914d1f8db9",
-    "environment.aetex": "8637330a9a802d03eb5d5d77025a522f2823a29688b671fad0ddc434c6262b54",
+    "environment.aeenv": "f2f97788a3c663902d66fcf194de4169fc00c76635c8a8beac01149c18673e36",
+    "environment.aetex": "3463f273abd6a9d56fc569a1a0a1f1570d5b80f2f7a9646e00165dbb2be05f53",
     "scene.aemap": "385a6fe50282735d1ff34b752dceafcd2722e883102b5c98293933940ee67145",
     "texture_000-fallback.aetex": "bf1899635a5400f6d969ede803d01ce54aa2af1c0977876257d6e9aa28909659",
     "texture_000.aetex": "cb46d964b4ac7c9d2752ff860d8d8a370f22ce776aa7b218c1f307c669c9f4eb",
@@ -1087,74 +1087,34 @@
     "texture_069.aetex": "9635b9f3510f1dffb613faa9b5c7af7fc9c5402d3804355263146dae90b498b7"
   },
   "environment": {
-    "asset": "procedural_sky_v1",
-    "description": "Analytic sky/ground gradient, no external source; shared by the visible sky dome, the specular env mip chain and the SH9 diffuse irradiance below.",
+    "asset": "sunset_forest",
+    "author": "Andreas Mischok",
+    "license": "CC0-1.0",
+    "source": "https://polyhaven.com/a/sunset_forest",
+    "download": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/sunset_forest_4k.hdr",
+    "sourceSha256": "471ca0f29b0af12a3e128d2b963b207124ffb68d730e68eadf899d978f1ee8d1",
     "resolution": [
-      128,
-      64
+      4096,
+      2048
     ],
-    "encoding": "RGBA16F linear, full mip chain, sun/clouds excluded",
-    "format": "AEEN-2",
+    "encoding": "RGBA16F linear, full mip chain",
     "sunDirection": [
-      0.405941707667544,
-      0.8480480961564261,
-      0.34062553718331134
+      0.8410912156105042,
+      0.5088301301002502,
+      0.18345962464809418
     ],
     "sunColor": [
-      1.0,
-      0.97,
-      0.9
+      1.0495476722717285,
+      0.9891286492347717,
+      0.9617923498153687
     ],
-    "sunIntensity": 2.6,
-    "sunAngularRadiusDeg": 0.27,
-    "ambientStrength": 1.0,
-    "exposure": 1.0,
-    "skyIrradianceSH": [
-      [
-        2.251357223160267,
-        3.5251625041085424,
-        5.543615144270535
-      ],
-      [
-        -0.17394506705350343,
-        0.5349590569504397,
-        1.843720238296062
-      ],
-      [
-        4.109956578464376e-18,
-        -3.282440926958769e-17,
-        -4.125870797373378e-17
-      ],
-      [
-        8.781342058802956e-17,
-        1.312798928555133e-16,
-        2.769421119076714e-16
-      ],
-      [
-        7.628639610673591e-20,
-        1.6615510220840545e-17,
-        2.7617810193554384e-17
-      ],
-      [
-        6.448426470818716e-19,
-        -3.779580756314715e-18,
-        -1.5228148597944568e-18
-      ],
-      [
-        -0.23477403657870666,
-        -0.2993498788837018,
-        -0.2956439310998707
-      ],
-      [
-        1.1858539720138472e-18,
-        -3.582559912290541e-18,
-        -1.1899433057398619e-17
-      ],
-      [
-        -3.887323847555593e-17,
-        -5.325601898508161e-17,
-        -9.759828505013905e-17
-      ]
-    ]
+    "sunIntensity": 2.1,
+    "ambientColor": [
+      0.9143915772438049,
+      1.0047136545181274,
+      1.2053899765014648
+    ],
+    "ambientStrength": 0.28,
+    "exposure": 0.72
   }
 }
