@@ -304,6 +304,32 @@ demais suítes Android e `assembleDebug` pelo NDK real. Teste de mutação confi
 economia depende da correção. **Nada medido em hardware** — sem ADB nesta sessão; a
 hipótese de 0,3–1,2 ms de P1 permanece hipótese.
 
+## Mips que preservam cobertura de alpha — 31/08/2026
+
+Terceira fatia do programa de margem (P3 — vegetação e overdraw). O cooker gerava
+mips por box filter uniforme, inclusive no alpha. Box filter preserva a média do
+alpha; um material alpha-tested só enxerga a fração de texels acima do cutoff.
+Medido no cooker sobre um atlas de galhos, a cobertura ia a **zero no mip 5** — a
+vegetação desaparecia com a distância — e sobrava ~30% nos mips 1–2.
+
+A semântica de cobertura passou a vir do material (`MASK` explícito ou `BLEND`
+promovido pela heurística de atlas), nunca de nome de textura ou cena. Cutoffs
+divergentes na mesma textura usam o menor, que erra para o lado de preservar texels.
+A correção é a de Castaño/NVIDIA: busca binária do multiplicador de alpha que faz o
+mesmo cutoff render a cobertura do nível base. A busca devolve o limite superior
+convergido, não a última sonda — cobertura é função escada da escala e o alvo cai
+entre degraus. Resultado: 100–108% de cobertura até o mip 6, onde antes era 0%.
+
+O cozimento agora **falha** se uma textura de cobertura zerar um mip, e o manifesto
+versiona `alphaSemantics`, `coverageCutoff` e `coverageByMip` por textura.
+
+**O asset não foi recozido:** a fonte do mapa não está no repositório, então o
+`scene.aemap` empacotado ainda carrega os mips defeituosos. Esta fatia corrige o
+pipeline; o ganho depende do mesmo recook pendente do AEMAP v3/LOD.
+
+Verificação: **36/36** Python (+15), 231/231 C++ e 70/70 PowerShell. Nada medido em
+hardware.
+
 ## Resumo
 
 | | |

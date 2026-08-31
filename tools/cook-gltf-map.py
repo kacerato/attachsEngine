@@ -219,6 +219,86 @@ def simplify_primitive_levels(position, normal, tangent, uv0, uv1, color, indice
     return levels
 
 
+def alpha_coverage(alpha, cutoff):
+    """Fracao de texels que passam no teste de alpha.
+
+    E a unica grandeza que o runtime enxerga de um material alpha-tested: o
+    fragmento existe ou nao existe. Media de alpha nao e cobertura.
+    """
+    if alpha.size == 0:
+        return 0.0
+    return float(np.count_nonzero(alpha >= cutoff)) / float(alpha.size)
+
+
+def scale_alpha_to_coverage(alpha, cutoff, target_coverage, iterations=16):
+    """Reescala o alpha de um mip para reproduzir a cobertura do nivel base.
+
+    Um box filter preserva a MEDIA do alpha, nao a fracao acima do cutoff. Em
+    folhagem, galho fino e cerca, as duas divergem rapido: medir a cena real
+    mostrou a cobertura caindo a zero por volta do mip 5, ou seja, a vegetacao
+    literalmente desaparece com a distancia, e sobrando ~30% nos mips 1-2.
+
+    A correcao e a de Castano/NVIDIA, tambem usada pelo "Mip Maps Preserve
+    Coverage" da Unity: buscar o multiplicador de alpha que faz o mesmo cutoff
+    render a mesma cobertura. Cobertura e monotonica nao-decrescente no fator,
+    entao busca binaria converge.
+
+    Cobertura 0 ou 1 no nivel base nao tem o que preservar e sai intacta --
+    evita amplificar ruido de uma textura totalmente transparente ou opaca.
+    """
+    if target_coverage <= 0.0 or target_coverage >= 1.0 or alpha.size == 0:
+        return alpha
+    # Invariante da busca: `high` e sempre uma escala conhecida por atingir a
+    # cobertura alvo, `low` sempre uma que fica abaixo. Devolver `high` -- e nao
+    # a ultima sonda -- e o que garante que o mip nunca sai com MENOS cobertura
+    # que o nivel base.
+    #
+    # Isso importa porque cobertura e uma funcao ESCADA da escala: o alpha de um
+    # atlas de recorte e quase binario, e o box filter de 2x2 produz poucos
+    # valores distintos, entao o alvo costuma cair entre dois degraus e nao ha
+    # escala que o atinja exatamente. Escolher o degrau de cima mantem folhagem
+    # levemente mais densa; escolher o de baixo removeria vegetacao, que e o
+    # defeito que esta funcao existe para corrigir.
+    low, high = 0.0, 4.0
+    for _ in range(iterations):
+        middle = (low + high) * 0.5
+        if alpha_coverage(np.clip(alpha * middle, 0.0, 1.0), cutoff) < target_coverage:
+            low = middle
+        else:
+            high = middle
+    return np.clip(alpha * high, 0.0, 1.0)
+
+
+def coverage_alpha_cutoffs(gltf, inferred_cutouts=frozenset()):
+    """Indice de textura base-color -> cutoff de alpha a preservar.
+
+    A semantica de cobertura vem do MATERIAL, nunca do nome da textura nem da
+    cena (ADR-014 e a secao 8 do plano de otimizacao proibem regra por cena).
+    Uma textura carrega cobertura quando algum material que a amostra como base
+    color e alpha-tested -- MASK explicito do glTF, ou BLEND que a heuristica
+    de atlas reconheceu como recorte.
+
+    Quando materiais que compartilham a mesma textura discordam do cutoff, o
+    MENOR vence. Nenhuma cadeia de mip e correta para dois cutoffs ao mesmo
+    tempo, e errar para o lado do menor preserva texels a mais: folhagem
+    levemente mais densa ao longe custa alguns fragmentos, enquanto errar para
+    o outro lado remove arvores -- exatamente o que a secao 8 proibe.
+    """
+    cutoffs = {}
+    for material in gltf.get("materials", []):
+        base = material.get("pbrMetallicRoughness", {}).get("baseColorTexture")
+        if base is None:
+            continue
+        index = base["index"]
+        alpha_mode = material.get("alphaMode", "OPAQUE")
+        alpha_tested = alpha_mode == "MASK" or (alpha_mode == "BLEND" and index in inferred_cutouts)
+        if not alpha_tested:
+            continue
+        cutoff = float(material.get("alphaCutoff", .5))
+        cutoffs[index] = min(cutoffs[index], cutoff) if index in cutoffs else cutoff
+    return cutoffs
+
+
 def halve(value):
     height, width, channels = value.shape
     if height == 1 and width == 1:
@@ -248,7 +328,8 @@ def astc_level(astcenc, cache, name, mip, rgba, srgb, quality, jobs):
     return blob[16:]
 
 
-def cook_texture(astcenc, cache, output, name, source, srgb, normal_map, quality, jobs):
+def cook_texture(astcenc, cache, output, name, source, srgb, normal_map, quality, jobs,
+                 coverage_cutoff=None):
     pixels = np.asarray(Image.open(io.BytesIO(source)).convert("RGBA"), dtype=np.float32) / 255.0
     width, height = pixels.shape[1], pixels.shape[0]
     if width == 0 or height == 0 or width & (width - 1) or height & (height - 1):
@@ -260,6 +341,9 @@ def cook_texture(astcenc, cache, output, name, source, srgb, normal_map, quality
 
     levels, fallback = [], []
     fallback_width = fallback_height = 0
+    coverage_target = (alpha_coverage(pixels[..., 3], coverage_cutoff)
+                       if coverage_cutoff is not None else None)
+    coverage_by_mip = []
     mip = 0
     while True:
         display = pixels.copy()
@@ -267,7 +351,15 @@ def cook_texture(astcenc, cache, output, name, source, srgb, normal_map, quality
             display[..., :3] = srgb_encode(display[..., :3])
         elif normal_map:
             display[..., :3] = normalized(display[..., :3]) * .5 + .5
+        if coverage_target is not None and mip > 0:
+            # A escala sai de `display`, nao de `pixels`: o proximo halve()
+            # precisa continuar a partir da cadeia box-filtrada original.
+            # Reescalar antes de reduzir empilharia o erro nivel a nivel.
+            display[..., 3] = scale_alpha_to_coverage(display[..., 3], coverage_cutoff,
+                                                      coverage_target)
         rgba = np.rint(np.clip(display, 0, 1) * 255).astype(np.uint8)
+        if coverage_target is not None:
+            coverage_by_mip.append(round(alpha_coverage(rgba[..., 3] / 255.0, coverage_cutoff), 6))
         current_height, current_width = rgba.shape[:2]
         levels.append(astc_level(astcenc, cache, name, mip, rgba, srgb, quality, jobs))
         # Development fallback stays bounded: ASTC retains the full source;
@@ -285,10 +377,21 @@ def cook_texture(astcenc, cache, output, name, source, srgb, normal_map, quality
             pixels[..., :3] = normalized(pixels[..., :3])
         mip += 1
 
+    # Gate de cozimento, não aviso: uma textura de cobertura cujo mip zera é
+    # vegetação que desaparece com a distância. Falhar aqui é a única forma de
+    # o defeito não chegar ao APK em silêncio — foi assim que ele passou
+    # despercebido até ser medido.
+    if coverage_target is not None:
+        for mip_index, coverage in enumerate(coverage_by_mip):
+            if coverage <= 0.0 < coverage_target:
+                raise ValueError(
+                    f"{name}: mip {mip_index} perdeu toda a cobertura alpha "
+                    f"(alvo {coverage_target:.4f}, cutoff {coverage_cutoff:.3f})")
+
     write_aetx(output / f"{name}.aetex", width, height, 1 if srgb else 2, levels)
     write_aetx(output / f"{name}-fallback.aetex", fallback_width, fallback_height,
                3 if srgb else 4, fallback)
-    return width, height, len(levels)
+    return width, height, len(levels), coverage_by_mip
 
 
 def accessor(gltf, binary, index):
@@ -430,18 +533,30 @@ def main():
         texture_map = texture_semantics(gltf)
         texture_records = []
         texture_sources = []
+        # A heuristica de atlas roda antes do cozimento porque a semantica de
+        # cobertura de uma textura depende dos MATERIAIS que a usam, e o cutoff
+        # deles precisa estar resolvido antes de gerar o primeiro mip.
+        sources = {}
         inferred_cutouts = set()
+        for (texture_index, srgb), _ in sorted(texture_map.items(), key=lambda item: item[1]):
+            texture = gltf["textures"][texture_index]
+            source = archive.read(gltf["images"][texture["source"]]["uri"])
+            sources[(texture_index, srgb)] = source
+            if srgb and alpha_coverage_is_cutout(source):
+                inferred_cutouts.add(texture_index)
+        coverage_cutoffs = coverage_alpha_cutoffs(gltf, inferred_cutouts)
         for (texture_index, srgb), cooked_index in sorted(texture_map.items(), key=lambda item: item[1]):
             texture = gltf["textures"][texture_index]
             image = gltf["images"][texture["source"]]
-            source = archive.read(image["uri"])
-            if srgb and alpha_coverage_is_cutout(source):
-                inferred_cutouts.add(texture_index)
+            source = sources[(texture_index, srgb)]
             normal_map = any(material.get("normalTexture", {}).get("index") == texture_index
                              for material in gltf["materials"]) and not srgb
-            dimensions = cook_texture(args.astcenc, args.cache, args.out,
-                                      f"texture_{cooked_index:03d}", source, srgb,
-                                      normal_map, args.quality, args.jobs)
+            # Só a base color carrega cobertura; normal/ARM/emissive de um
+            # material recortado nao sao alpha-tested.
+            coverage_cutoff = coverage_cutoffs.get(texture_index) if srgb else None
+            *dimensions, coverage_by_mip = cook_texture(
+                args.astcenc, args.cache, args.out, f"texture_{cooked_index:03d}", source, srgb,
+                normal_map, args.quality, args.jobs, coverage_cutoff)
             sampler = gltf.get("samplers", [{}])[texture.get("sampler", 0)]
             flags = (1 if sampler.get("magFilter", 9729) == 9729 else 0)
             flags |= (2 if sampler.get("minFilter", 9987) in (9987, 9985) else 0)
@@ -449,10 +564,18 @@ def main():
             flags |= (8 if sampler.get("wrapT", 10497) == 33071 else 0)
             flags |= (16 if srgb else 0)
             texture_records.append(struct.pack("<4I", flags, 0, 0, 0))
-            texture_sources.append({"cookedIndex": cooked_index, "gltfTexture": texture_index,
-                                    "image": image["uri"], "srgb": srgb,
-                                    "normalMap": normal_map, "dimensions": dimensions,
-                                    "sha256": hashlib.sha256(source).hexdigest()})
+            entry = {"cookedIndex": cooked_index, "gltfTexture": texture_index,
+                     "image": image["uri"], "srgb": srgb,
+                     "normalMap": normal_map, "dimensions": dimensions,
+                     "sha256": hashlib.sha256(source).hexdigest()}
+            # Versiona a decisao de semantica no manifesto: qual cutoff foi
+            # preservado e a cobertura medida por nivel. Sem isso, "a folhagem
+            # sumiu no mip 5" so aparece olhando a imagem no aparelho.
+            if coverage_cutoff is not None:
+                entry["alphaSemantics"] = "coverage"
+                entry["coverageCutoff"] = coverage_cutoff
+                entry["coverageByMip"] = coverage_by_mip
+            texture_sources.append(entry)
 
         materials = [material_record(material, texture_map, inferred_cutouts)
                      for material in gltf["materials"]]

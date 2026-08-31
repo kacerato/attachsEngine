@@ -634,6 +634,73 @@ há nenhum hoje além do depth) e usar render passes nativos com subpasses. As c
 classes do frame vivem num único render pass, então não há fusão a ganhar antes que
 CSM ou pós introduzam um segundo alvo.
 
+### Progresso em 31/08/2026 (P3 — primeira fatia: semântica de cobertura e mips que a preservam)
+
+**Defeito medido, não suposto.** O cooker gerava mips com box filter uniforme,
+aplicado também ao canal alpha. Box filter preserva a **média** do alpha; um material
+alpha-tested só enxerga a **fração de texels acima do cutoff**. As duas divergem
+rápido. Medido no próprio cooker, sobre um atlas sintético de galhos:
+
+| mip | cobertura vs. nível base |
+|---|---:|
+| 1 | 130,3% |
+| 2 | 132,8% |
+| 3 | 45,3% |
+| 4 | 14,4% |
+| 5 | **0,0%** |
+| 6 | **0,0%** |
+
+Ou seja: a vegetação **desaparece por completo** com a distância, e ainda sobra ~30%
+nos dois primeiros níveis. Num atlas de folhas anti-aliased (mais próximo do real) a
+cobertura ainda cai a zero no mip 6. Isso não é um detalhe estético — a seção 8 proíbe
+explicitamente "remover árvores", e era exatamente o que o pipeline de assets fazia,
+em silêncio, a cada cozimento.
+
+**Semântica de cobertura versionada, vinda do material.** `coverage_alpha_cutoffs`
+mapeia textura base-color → cutoff a preservar, decidido pelos **materiais** que a
+amostram: `MASK` explícito do glTF, ou `BLEND` que a heurística de atlas já reconhecia
+como recorte. Nunca por nome de textura ou de cena (ADR-014 e seção 8). Quando dois
+materiais compartilham a textura com cutoffs diferentes, o **menor vence**: nenhuma
+cadeia de mips é correta para dois cutoffs, e errar para o lado do menor preserva
+texels a mais — folhagem levemente densa custa fragmentos, folhagem de menos remove
+árvores. Só a base color recebe o tratamento; normal/ARM/emissive de um material
+recortado não são alpha-tested.
+
+**Correção.** Algoritmo de Castaño/NVIDIA, o mesmo do "Mip Maps Preserve Coverage" da
+Unity: busca binária do multiplicador de alpha que faz o mesmo cutoff render a mesma
+cobertura do nível base. Dois detalhes que importam:
+
+- a escala sai da cópia de saída, não da cadeia usada para reduzir — reescalar antes
+  de reduzir empilharia o erro nível a nível;
+- a busca devolve o **limite superior convergido**, não a última sonda. Cobertura é uma
+  função **escada** da escala (o alpha de um atlas de recorte é quase binário, e o box
+  filter de 2×2 produz poucos valores distintos), então o alvo em geral cai entre dois
+  degraus e nenhuma escala o atinge exatamente. Devolver o degrau de cima garante que
+  um mip nunca sai com menos cobertura que o base. Devolver a última sonda foi
+  literalmente o primeiro bug desta fatia: entregava 69% do alvo em vez de 100%.
+
+Resultado no atlas anti-aliased: cobertura mantida entre **100% e 108%** até o mip 6,
+onde antes era 0%.
+
+**Gate de cozimento, não aviso.** O build agora falha se uma textura de cobertura
+produzir um mip com cobertura zero. O defeito original chegou ao APK justamente por
+ser silencioso; um warning teria o mesmo destino.
+
+**Versionamento.** O manifesto passa a registrar, por textura, `alphaSemantics`,
+`coverageCutoff` e `coverageByMip`. Sem isso, "a folhagem sumiu no mip 5" só aparece
+olhando a imagem no aparelho.
+
+**Limitação importante:** a fonte do mapa (`update_dirt_road_through_forest.zip`) não
+está no repositório, então **o asset atual não foi recozido** — o `scene.aemap`
+empacotado hoje ainda carrega os mips defeituosos. Esta fatia corrige o *pipeline*; o
+ganho visual e de fill-rate só existe depois do recook, que é a mesma dependência de
+"recuperar a fonte" já registrada para o AEMAP v3/LOD de P2. As duas devem sair no
+mesmo recook.
+
+**Verificação:** 36/36 Python (+15), 231/231 C++ e 70/70 PowerShell. Nada medido em
+hardware. A faixa de 0,5–1,5 ms de P3 continua hipótese: ela depende de overdraw
+medido, e overdraw de folhagem só muda depois do recook.
+
 ### O1 — Correção global de materiais e visibilidade
 
 **Alinha:** 2.2.2, 2.2.5, 2.4.2, 2.4.5, 7.3.5.
