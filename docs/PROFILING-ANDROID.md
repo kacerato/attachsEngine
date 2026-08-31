@@ -51,13 +51,22 @@ mesmo frame. O clock do processo/thread segue o [contrato POSIX](https://pubs.op
 
 ```powershell
 .\android\gradlew.bat -p android :app:assembleDebug :app:assembleRelease :app:lintDebug --offline
-.\tools\validate-android-shell.ps1 -Scene dirt-road -ProfileSeconds 60 -LifecycleCycles 0 -AllowScreenshotDifference -PreserveAppData
+.\tools\validate-android-shell.ps1 -Scene dirt-road -ProfileSeconds 60 -LifecycleCycles 0 -CameraRouteMode Record -AllowScreenshotDifference -PreserveAppData
 .\tests\tools\test-android-frame-profile.ps1
 ```
 
 O runner lança a Activity com `--ez aether.profile_frames true`. Sem essa opção,
 não lê relógios CPU por frame nem publica janelas. Não altera senha, frequência,
 DVFS, governadores ou configurações térmicas; mantenha a tela desbloqueada.
+Para `dirt-road`, uma coleta exige `-CameraPose` explícita ou
+`-CameraRouteMode Record/Replay`; o runner recusa usar silenciosamente a câmera
+de overview fora do mapa. Replay preserva o mesmo fingerprint e cada janela
+registra o ordinal da rota, draws e triângulos visíveis no seu fechamento.
+`-DisableCoveragePrepass` existe somente para A/B de diagnóstico, é registrado em
+`configuration.coveragePrepassEnabled` e não altera o default do produto.
+A pose `-15.71,145.27,-25.72,2.75,0.11` corresponde ao fechamento aproximado da
+pior janela observada perto do frame 1734 de `forest-walk-v1`; ela é o ponto fixo
+para atribuição shader/descriptor, enquanto a rota inteira continua sendo o gate de produto.
 
 Para medir o nativo otimizado, assine uma **cópia** do release unsigned com o
 certificado de desenvolvimento já usado pelo debug e passe `-ApkPath` ao runner:
@@ -75,7 +84,7 @@ revisão usaram Build Tools 35.0.0, NDK 27.1.12297006 e RelWithDebInfo no releas
 O relatório conserva hash do APK, revisão Git/worktree sujo, PID, build nativa,
 resolução, temperaturas/status térmico inicial/final, distribuições de janelas
 e timestamps de apresentação. Para cada PID/epoch, o runtime emite separadamente
-`FrameProfileContext` schema 1 com sceneId autoritativo, fingerprint do pacote,
+`FrameProfileContext` schema 3 com sceneId autoritativo, fingerprint do pacote,
 câmera/lock, alvo de FPS e contagens de conteúdo. O host persiste esse contrato em
 `frame-contexts.jsonl`; a captura schema 2 falha se o contexto faltar, divergir da
 cena solicitada ou mudar silenciosamente. O build agora publica C# Release framework-dependent

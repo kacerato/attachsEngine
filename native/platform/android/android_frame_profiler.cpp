@@ -37,23 +37,41 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
   if (contextPending_) {
     const char *scene = context.sceneId != nullptr ? context.sceneId : "unknown";
     __android_log_print(ANDROID_LOG_INFO, LogTag,
-        "[FrameProfileContext] {\"schemaVersion\":2,\"pid\":%d,\"epoch\":%u,"
+        "[FrameProfileContext] {\"schemaVersion\":3,\"pid\":%d,\"epoch\":%u,"
         "\"scene\":\"%s\",\"content_fingerprint\":\"%016llx\",\"target_fps\":%u,"
         "\"gpu_isolation\":\"%s\","
-        "\"camera_locked\":%s,\"camera_pose\":[%.6f,%.6f,%.6f,%.6f,%.6f],"
+        "\"camera_locked\":%s,\"camera_mode\":\"%s\","
+        "\"camera_route_fingerprint\":\"%016llx\",\"camera_route_frame_ordinal\":%llu,"
+        "\"camera_route_tick_count\":%llu,"
+        "\"camera_pose\":[%.6f,%.6f,%.6f,%.6f,%.6f],"
         "\"draws\":%u,\"materials\":%u,\"textures\":%u,\"triangles\":%u,"
+        "\"package_version\":%u,\"render_draws\":%u,\"lod_groups\":%u,"
+        "\"hzb_enabled\":%s,\"lod_enabled\":%s,"
         "\"visible_draws\":%u,\"culled_draws\":%u,\"submitted_draw_calls\":%u,"
         "\"visible_triangles\":%llu,\"submitted_triangles\":%llu,"
+        "\"hzb_tested_draws\":%u,\"hzb_occluded_draws\":%u,\"hzb_revived_draws\":%u,"
+        "\"hzb_motion_skipped_draws\":%u,\"hzb_budget_skipped_draws\":%u,"
         "\"instances\":%u,\"width\":%u,\"height\":%u}",
         getpid(), epoch_, scene, static_cast<unsigned long long>(context.contentFingerprint),
         context.targetFps, context.gpuIsolation != nullptr ? context.gpuIsolation : "full",
         context.cameraLocked ? "true" : "false",
+        context.cameraMode != nullptr ? context.cameraMode : "free",
+        static_cast<unsigned long long>(context.cameraRouteFingerprint),
+        static_cast<unsigned long long>(context.cameraRouteFrameOrdinal),
+        static_cast<unsigned long long>(context.cameraRouteTickCount),
         context.cameraPosition[0], context.cameraPosition[1], context.cameraPosition[2],
         context.cameraYaw, context.cameraPitch, context.drawCount, context.materialCount,
-        context.textureCount, context.triangleCount, context.visibleDrawCount,
+        context.textureCount, context.triangleCount, context.packageVersion,
+        context.renderDrawCount, context.lodGroupCount,
+        context.hzbEnabled ? "true" : "false", context.lodEnabled ? "true" : "false",
+        context.visibleDrawCount,
         context.culledDrawCount, context.submittedDrawCallCount,
         static_cast<unsigned long long>(context.visibleTriangleCount),
-        static_cast<unsigned long long>(context.submittedTriangleCount), instances, width, height);
+        static_cast<unsigned long long>(context.submittedTriangleCount),
+        context.hzbTestedDrawCount, context.hzbOccludedDrawCount, context.hzbRevivedDrawCount,
+        context.hzbSkippedCameraMotionDrawCount,
+        context.hzbSkippedBudgetDrawCount,
+        instances, width, height);
     contextPending_ = false;
   }
   const auto result = statistics_.record(counters, phases);
@@ -74,10 +92,14 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
   int used = std::snprintf(json, sizeof(json),
       "{\"schemaVersion\":3,\"pid\":%d,\"epoch\":%u,\"window\":%llu,\"build\":\"%s\","
       "\"instances\":%u,\"width\":%u,\"height\":%u,\"frames\":%u,\"elapsed_ms\":%.6f,"
-      "\"present_fps\":%.6f,\"warmup_samples\":%u,\"warmup_process_cpu_max_ms\":%.6f",
+      "\"present_fps\":%.6f,\"warmup_samples\":%u,\"warmup_process_cpu_max_ms\":%.6f,"
+      "\"route_frame\":%llu,\"visible_draws\":%u,\"visible_triangles\":%llu",
       getpid(), epoch_, static_cast<unsigned long long>(++window_), build, instances, width, height,
       summary.samples, summary.elapsedMs, summary.presentFps, summary.warmupSamples,
-      summary.warmupProcessCpuMaxMs);
+      summary.warmupProcessCpuMaxMs,
+      static_cast<unsigned long long>(context.cameraRouteFrameOrdinal),
+      context.visibleDrawCount,
+      static_cast<unsigned long long>(context.visibleTriangleCount));
   if (used < 0 || static_cast<size_t>(used) >= sizeof(json)) return;
   for (u32 metric = 0; metric < profiler::FrameMetricCount; ++metric) {
     const auto &d = summary.metrics[metric];

@@ -5,10 +5,29 @@ layout(location=2) in vec4 vTangent;
 layout(location=3) in vec2 vUv0;
 layout(location=4) in vec2 vUv1;
 layout(location=5) in vec4 vColor;
+layout(location=6) in float vDither;
 layout(location=0) out vec4 outColor;
 layout(constant_id=0) const uint GPU_COST_ISOLATION=0u;
 const float PI=3.141592653589793;
 #include "environment_lighting.glsl"
+// LOD cross-fade (see renderer::selectLodLevel): vDither==0 for every draw
+// outside an active transition, so this is a no-op discard everywhere LOD is
+// disabled or a group has only one level. The two draws sharing a
+// transitioning lodGroupId carry signed complementary masks: outgoing uses
+// +factor and keeps threshold>=factor; incoming uses -factor and keeps
+// threshold<factor. The prior `1-factor` encoding made one mask a subset of
+// the other, causing double shading/overdraw instead of a cross-fade.
+const float BAYER4X4[16]=float[16](
+  0.0/16.0,8.0/16.0,2.0/16.0,10.0/16.0,
+  12.0/16.0,4.0/16.0,14.0/16.0,6.0/16.0,
+  3.0/16.0,11.0/16.0,1.0/16.0,9.0/16.0,
+  15.0/16.0,7.0/16.0,13.0/16.0,5.0/16.0);
+bool ditherDiscard(vec2 fragCoord,float dither) {
+  if(dither==0.0) return false;
+  ivec2 cell=ivec2(fragCoord)&3;
+  float threshold=BAYER4X4[cell.y*4+cell.x];
+  return dither>0.0?threshold<dither:threshold>=-dither;
+}
 vec2 selectedUv(uint slot) { return ((frame.materialFlags.y>>(slot*2))&3u)==1u?vUv1:vUv0; }
 float pow5(float value) { float squared=value*value;return squared*squared*value; }
 vec3 fresnel(vec3 f0,float vh) { return f0+(1-f0)*pow5(1-vh); }
@@ -23,6 +42,7 @@ vec3 directLight(vec3 n,vec3 v,vec3 l,vec3 radiance,vec3 base,vec3 f0,float meta
   return ((1-f)*(1-metal)*base*fd+distribution(nh,alpha)*visibility(nv,nl,alpha)*f)*radiance*nl;
 }
 void main() {
+  if(ditherDiscard(gl_FragCoord.xy,vDither)) discard;
   uint flags=frame.materialFlags.x;
   uint isolation=GPU_COST_ISOLATION;
   vec4 baseSample=texture(BASE_MAP,selectedUv(0));

@@ -34,6 +34,22 @@ param(
     [int]$TargetFps = 60,
     [ValidateSet('full', 'no-normal', 'no-ibl', 'base-color')]
     [string]$GpuIsolation = 'full',
+    [switch]$DisableCoveragePrepass,
+    [ValidateSet('Off', 'Record', 'Replay')]
+    [string]$CameraRouteMode = 'Off',
+    [string]$CameraRoutePath = '/data/user/0/dev.aether.editor/files/frame-profile.aeroute',
+    [switch]$EnableHzb,
+    [ValidateRange(0, 120)]
+    [int]$HzbHysteresisFrames = 3,
+    [ValidateRange(0, 1000000)]
+    [int]$HzbMinimumCandidateDraws = 128,
+    [ValidateRange(0.0, 0.1)]
+    [double]$HzbDepthBias = 0.00001,
+    [switch]$EnableLod,
+    [ValidateRange(0.1, 16.0)]
+    [double]$LodPixelErrorBudget = 2.0,
+    [ValidateRange(0.1, 1.0)]
+    [double]$LodHysteresisBandRatio = 0.75,
     [string]$OutputDirectory
 )
 
@@ -57,6 +73,10 @@ if ($CameraPose) {
         }
         $value
     })
+}
+if ($CaptureSeconds -gt 0 -and $Scene -eq 'dirt-road' -and
+    $CameraRouteMode -eq 'Off' -and $null -eq $ParsedCameraPose) {
+    throw 'Profiling dirt-road exige -CameraPose ou -CameraRouteMode Record/Replay; a câmera de overview fica fora do mapa e não é benchmark válido.'
 }
 
 $PackageName = "dev.aether.editor"
@@ -101,6 +121,16 @@ $Report = [ordered]@{
         cameraPose = $CameraPose
         targetFps = $TargetFps
         gpuIsolation = $GpuIsolation
+        coveragePrepassEnabled = -not [bool]$DisableCoveragePrepass
+        cameraRouteMode = $CameraRouteMode
+        cameraRoutePath = $CameraRoutePath
+        hzbEnabled = [bool]$EnableHzb
+        hzbHysteresisFrames = $HzbHysteresisFrames
+        hzbMinimumCandidateDraws = $HzbMinimumCandidateDraws
+        hzbDepthBias = $HzbDepthBias
+        lodEnabled = [bool]$EnableLod
+        lodPixelErrorBudget = $LodPixelErrorBudget
+        lodHysteresisBandRatio = $LodHysteresisBandRatio
         powerBudgetWatts = $PowerBudgetWatts
         requirePowerBudget = [bool]$RequirePowerBudget
         requireSoakBudget = [bool]$RequireSoakBudget
@@ -431,9 +461,37 @@ function Start-AetherActivity {
         'base-color' { 3 }
     }
     $arguments += @('--ei', 'aether.gpu_isolation', [string]$gpuIsolationValue)
+    if ($DisableCoveragePrepass) {
+        $arguments += @('--ez', 'aether.disable_coverage_prepass', 'true')
+    }
+    $routeModeValue = switch ($CameraRouteMode) {
+        'Off' { 0 }
+        'Record' { 1 }
+        'Replay' { 2 }
+    }
+    if ($routeModeValue -ne 0) {
+        $arguments += @('--ei', 'aether.camera_route_mode', [string]$routeModeValue)
+        $arguments += @('--es', 'aether.camera_route_path', $CameraRoutePath)
+    }
+    if ($EnableHzb) {
+        $arguments += @('--ez', 'aether.hzb_occlusion', 'true')
+        $arguments += @('--ei', 'aether.hzb_hysteresis_frames', [string]$HzbHysteresisFrames)
+        $arguments += @('--ei', 'aether.hzb_minimum_candidate_draws',
+            [string]$HzbMinimumCandidateDraws)
+        $arguments += @('--ef', 'aether.hzb_depth_bias',
+            $HzbDepthBias.ToString('R', [Globalization.CultureInfo]::InvariantCulture))
+    }
+    if ($EnableLod) {
+        $arguments += @('--ez', 'aether.lod_selection', 'true')
+        $arguments += @('--ef', 'aether.lod_pixel_error_budget',
+            $LodPixelErrorBudget.ToString('R', [Globalization.CultureInfo]::InvariantCulture))
+        $arguments += @('--ef', 'aether.lod_hysteresis_band_ratio',
+            $LodHysteresisBandRatio.ToString('R', [Globalization.CultureInfo]::InvariantCulture))
+    }
     if ($CaptureSeconds -gt 0) {
         $arguments += @("--ez", "aether.profile_frames", "true")
-        if ($Scene -eq 'dirt-road' -or $null -ne $ParsedCameraPose) {
+        if (($Scene -eq 'dirt-road' -and $CameraRouteMode -ne 'Record') -or
+            $null -ne $ParsedCameraPose) {
             $arguments += @("--ez", "aether.lock_camera", "true")
         }
     }
@@ -730,6 +788,12 @@ try {
         if ($null -eq $capture) { throw "FrameProfile não produziu $CaptureSeconds s contínuos; sem evidência suficiente." }
         if ($capture.context.gpu_isolation -ne $GpuIsolation) {
             throw "Runtime aplicou gpu_isolation '$($capture.context.gpu_isolation)', esperado '$GpuIsolation'."
+        }
+        if ([bool]$capture.context.hzb_enabled -ne [bool]$EnableHzb) {
+            throw "Runtime aplicou hzb_enabled '$($capture.context.hzb_enabled)', esperado '$([bool]$EnableHzb)'."
+        }
+        if ([bool]$capture.context.lod_enabled -ne [bool]$EnableLod) {
+            throw "Runtime aplicou lod_enabled '$($capture.context.lod_enabled)', esperado '$([bool]$EnableLod)'."
         }
         Assert-NoRuntimeFailure
         $Report.measurements.profileEnvironmentEnd = Get-PowerSample

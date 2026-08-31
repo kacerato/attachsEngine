@@ -242,6 +242,18 @@ bool VulkanMemoryAllocator::flushBuffer(VulkanBuffer &buffer, u64 offsetBytes, u
   return vmaFlushAllocation(allocator_, buffer.allocation_, offsetBytes, flushBytes) == VK_SUCCESS;
 }
 
+bool VulkanMemoryAllocator::invalidateBuffer(VulkanBuffer &buffer, u64 offsetBytes, u64 sizeBytes) {
+  if (!isReady() || buffer.owner_ != this || buffer.allocation_ == VK_NULL_HANDLE ||
+      buffer.mappedData_ == nullptr ||
+      offsetBytes > buffer.sizeBytes_) {
+    return false;
+  }
+  const u64 available = buffer.sizeBytes_ - offsetBytes;
+  const u64 invalidateBytes = sizeBytes == 0 ? available : sizeBytes;
+  if (invalidateBytes > available) return false;
+  return vmaInvalidateAllocation(allocator_, buffer.allocation_, offsetBytes, invalidateBytes) == VK_SUCCESS;
+}
+
 bool VulkanMemoryAllocator::createImage(const ImageDesc &desc, VulkanImage *outImage) {
   if (allocator_ == VK_NULL_HANDLE || outImage == nullptr || outImage->isReady() ||
       !isImageDescValid(desc)) {

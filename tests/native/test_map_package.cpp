@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 using namespace ae;
@@ -22,19 +23,45 @@ void setFloat(std::vector<u8> &bytes, usize offset, float value) {
   std::memcpy(&encoded, &value, sizeof(value));
   setWord(bytes, offset, encoded);
 }
+usize alignUp16(usize value) { return (value + 15) & ~static_cast<usize>(15); }
+
+// Builds a one-texture/one-material/one-draw/one-vertex/three-index fixture
+// for the given version, computing section offsets from the version's actual
+// on-disk draw record stride (96 bytes for v1/v2, 108 for v3) instead of
+// hardcoding them -- hardcoded offsets would silently go stale the next time
+// MapDrawRecord's on-disk layout changes. Deliberately writes the draw
+// record field-by-field via setWord/setFloat rather than
+// reinterpret_cast<MapDrawRecord*>: that struct is v3-shaped in memory, and
+// casting it onto a v1/v2-strided buffer location would write 12 bytes past
+// the real record -- exactly the bug decodeMapPackage's own per-version
+// unpack exists to avoid.
 std::vector<u8> packageFixture(u32 version = MapPackageVersion,
-                               u32 vertexStride = MapVertexStride) {
-  std::vector<u8> bytes(144 + 16 + 80 + 96 + 80 + 12);
+                               u32 vertexStride = MapVertexStride,
+                               u32 lodLevel = 0, float geometricError = 0.0f, u32 lodGroupId = 0) {
+  const u32 drawStride = version >= 3 ? MapDrawRecordStride : MapDrawRecordStrideV1V2;
+  const usize textureOffset = 144;
+  const usize materialOffset = textureOffset + 16;
+  const usize drawOffset = materialOffset + 80;
+  const usize vertexOffset = alignUp16(drawOffset + drawStride);
+  const usize indexOffset = alignUp16(vertexOffset + vertexStride);
+  const usize totalSize = indexOffset + 12; // Three u32 indices.
+
+  std::vector<u8> bytes(totalSize);
   setWord(bytes, 0, MapPackageMagic); setWord(bytes, 4, version);
   setWord(bytes, 8, MapPackageHeaderSize); setWord(bytes, 12, vertexStride);
   for (usize offset : {16u, 20u, 24u, 28u}) setWord(bytes, offset, 1);
-  setWord(bytes, 32, 3); setWide(bytes, 40, 144); setWide(bytes, 48, 160);
-  setWide(bytes, 56, 240); setWide(bytes, 64, 336); setWide(bytes, 72, 416);
+  setWord(bytes, 32, 3);
+  setWide(bytes, 40, textureOffset); setWide(bytes, 48, materialOffset);
+  setWide(bytes, 56, drawOffset); setWide(bytes, 64, vertexOffset); setWide(bytes, 72, indexOffset);
   setFloat(bytes, 124, .1f); setFloat(bytes, 128, 1000); setWord(bytes, 132, 1);
-  auto *material = reinterpret_cast<MapMaterialRecord *>(bytes.data() + 160);
+  auto *material = reinterpret_cast<MapMaterialRecord *>(bytes.data() + materialOffset);
   for (u32 &texture : material->textureIndices) texture = InvalidMapTexture;
-  auto *draw = reinterpret_cast<MapDrawRecord *>(bytes.data() + 240);
-  draw->indexCount = 3;
+  setWord(bytes, drawOffset + 4, 3); // indexCount.
+  if (version >= 3) {
+    setWord(bytes, drawOffset + 96, lodLevel);
+    setFloat(bytes, drawOffset + 100, geometricError);
+    setWord(bytes, drawOffset + 104, lodGroupId);
+  }
   return bytes;
 }
 }
@@ -47,6 +74,9 @@ AE_TEST(Map_package_decodes_bounded_versioned_sections) {
   AE_EXPECT_EQ(view.header.vertexStride, MapVertexStride, "packed vertex stride");
   AE_EXPECT_EQ(view.header.vertexCount, 1u, "vertex count");
   AE_EXPECT_EQ(view.draws[0].indexCount, 3u, "draw count");
+  AE_EXPECT_EQ(view.draws[0].lodLevel, 0u, "v3 lodLevel round-trips");
+  AE_EXPECT_TRUE(view.draws[0].geometricError == 0.0f, "v3 geometricError round-trips");
+  AE_EXPECT_EQ(view.draws[0].lodGroupId, 0u, "v3 lodGroupId round-trips");
   AE_EXPECT_TRUE(view.contentFingerprint != 0, "package identity");
   MapPackageView same;
   AE_EXPECT_TRUE(decodeMapPackage(bytes, same), "same fixture");
@@ -63,8 +93,34 @@ AE_TEST(Map_package_rejects_version_ranges_and_material_references) {
   setWord(bytes, 4, MapPackageVersion + 1);
   AE_EXPECT_TRUE(!decodeMapPackage(bytes, view), "future version");
   setWord(bytes, 4, MapPackageVersion);
-  reinterpret_cast<MapDrawRecord *>(bytes.data() + 240)->materialIndex = 2;
+  // drawOffset is 240 regardless of version (materialOffset(160) + one
+  // 80-byte MapMaterialRecord) -- only vertexOffset/indexOffset shift with
+  // the draw record's on-disk stride. materialIndex sits at the fourth u32
+  // field (offset +12), a position unchanged since v1.
+  setWord(bytes, 240 + 12, 2);
   AE_EXPECT_TRUE(!decodeMapPackage(bytes, view), "invalid material");
+}
+
+AE_TEST(Map_package_rejects_non_finite_or_negative_geometric_error) {
+  MapPackageView view;
+  auto nanError = packageFixture(MapPackageVersion, MapVertexStride, 0,
+                                 std::numeric_limits<float>::quiet_NaN(), 0);
+  AE_EXPECT_TRUE(!decodeMapPackage(nanError, view), "NaN geometricError rejected");
+  auto negativeError = packageFixture(MapPackageVersion, MapVertexStride, 0, -1.0f, 0);
+  AE_EXPECT_TRUE(!decodeMapPackage(negativeError, view), "negative geometricError rejected");
+}
+
+AE_TEST(Map_package_rejects_invalid_lod_contract_fields) {
+  MapPackageView view;
+  AE_EXPECT_TRUE(!decodeMapPackage(
+      packageFixture(MapPackageVersion, MapVertexStride, MapMaximumLodLevels, 1.0f, 0), view),
+      "LOD level above the package contract is rejected");
+  AE_EXPECT_TRUE(!decodeMapPackage(
+      packageFixture(MapPackageVersion, MapVertexStride, 1, 1.0f, 1), view),
+      "LOD group outside draw count is rejected");
+  AE_EXPECT_TRUE(!decodeMapPackage(
+      packageFixture(MapPackageVersion, MapVertexStride, 0, 0.5f, 0), view),
+      "finest LOD must have zero geometric error");
 }
 
 AE_TEST(Map_package_keeps_legacy_v1_readable_and_rejects_mixed_layouts) {
@@ -73,8 +129,20 @@ AE_TEST(Map_package_keeps_legacy_v1_readable_and_rejects_mixed_layouts) {
   AE_EXPECT_TRUE(decodeMapPackage(legacy, view), "legacy v1 package");
   AE_EXPECT_EQ(view.header.version, 1u, "legacy version");
   AE_EXPECT_EQ(view.header.vertexStride, MapVertexStrideV1, "legacy float stride");
+  AE_EXPECT_EQ(view.draws[0].lodLevel, 0u, "legacy package defaults to LOD level 0");
+  AE_EXPECT_TRUE(view.draws[0].geometricError == 0.0f, "legacy package has zero geometric error");
+  AE_EXPECT_EQ(view.draws[0].lodGroupId, 0u, "legacy package's only draw is its own trivial LOD group");
   auto mixed = packageFixture(1, MapVertexStride);
   AE_EXPECT_TRUE(!decodeMapPackage(mixed, view), "v1 cannot claim packed v2 layout");
+}
+
+AE_TEST(Map_package_v2_also_defaults_lod_fields_to_no_lod) {
+  MapPackageView view;
+  auto v2 = packageFixture(2, MapVertexStride);
+  AE_EXPECT_TRUE(decodeMapPackage(v2, view), "v2 package (no LOD fields on disk)");
+  AE_EXPECT_EQ(view.header.version, 2u, "v2 version");
+  AE_EXPECT_EQ(view.draws[0].lodLevel, 0u, "v2 package defaults to LOD level 0");
+  AE_EXPECT_TRUE(view.draws[0].geometricError == 0.0f, "v2 package has zero geometric error");
 }
 
 AE_TEST(Static_collision_transforms_world_includes_blend_and_skips_cutout_cards) {
@@ -105,7 +173,7 @@ AE_TEST(Static_collision_transforms_world_includes_blend_and_skips_cutout_cards)
   package.header.vertexStride = sizeof(CollisionVertex);
   package.header.indexCount = static_cast<u32>(indices.size());
   package.materials = materials;
-  package.draws = draws;
+  package.draws.assign(draws.begin(), draws.end());
   package.vertices = {reinterpret_cast<const u8 *>(vertices.data()), sizeof(vertices)};
   package.indices = indices;
 

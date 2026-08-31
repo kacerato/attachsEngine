@@ -18,7 +18,7 @@ function New-TestWindow {
 function New-TestContext {
     param([int]$Epoch = 1, [string]$Scene = 'poc-a-5000-textured-cubes', [int]$Instances = 5000)
     return [pscustomobject][ordered]@{
-        schemaVersion = 1; pid = 7; epoch = $Epoch; scene = $Scene
+        schemaVersion = 2; pid = 7; epoch = $Epoch; scene = $Scene
         content_fingerprint = '0123456789abcdef'; target_fps = 60; camera_locked = $true
         gpu_isolation = 'full'
         camera_pose = @(1.0, 2.0, 3.0, 0.25, -0.5); draws = $Instances
@@ -70,6 +70,15 @@ Test-Profile 'JSON nativo válido' {
     $windows = @(ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow)) 7)
     Assert-Profile ($windows.Count -eq 1 -and $windows[0].present_fps -eq 60)
 }
+Test-Profile 'janela preserva ordinal e volume do hotspot' {
+    $window = New-TestWindow
+    $window | Add-Member -NotePropertyName route_frame -NotePropertyValue 599
+    $window | Add-Member -NotePropertyName visible_draws -NotePropertyValue 48
+    $window | Add-Member -NotePropertyName visible_triangles -NotePropertyValue 318340
+    $decoded = @(ConvertFrom-FrameProfileLog (Convert-TestWindow $window) 7)
+    Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].route_frame -eq 599 -and
+        $decoded[0].visible_draws -eq 48 -and $decoded[0].visible_triangles -eq 318340)
+}
 Test-Profile 'não mistura outro processo' {
     Assert-Profile (@(ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow)) 8).Count -eq 0)
 }
@@ -84,6 +93,70 @@ Test-Profile 'contexto valida e preserva isolamento GPU' {
     $decoded = @(ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7)
     Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].gpu_isolation -eq 'no-ibl')
     $context.gpu_isolation = 'inventado'
+    Assert-Rejected { ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7 }
+}
+Test-Profile 'contexto schema v2 sem camera_mode infere locked/free' {
+    $context = New-TestContext
+    $context.schemaVersion = 2
+    $context.camera_locked = $true
+    $decoded = @(ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7)
+    Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].camera_mode -eq 'locked' -and
+        $decoded[0].camera_route_fingerprint -eq '0000000000000000')
+}
+Test-Profile 'contexto schema v3 aceita camera_mode route com fingerprint válido' {
+    $context = New-TestContext
+    $context.schemaVersion = 3
+    $context | Add-Member -NotePropertyName camera_mode -NotePropertyValue 'route'
+    $context | Add-Member -NotePropertyName camera_route_fingerprint -NotePropertyValue '1122334455667788'
+    $context | Add-Member -NotePropertyName camera_route_frame_ordinal -NotePropertyValue 42
+    $context | Add-Member -NotePropertyName camera_route_tick_count -NotePropertyValue 3600
+    $decoded = @(ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7)
+    Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].camera_mode -eq 'route' -and
+        $decoded[0].camera_route_frame_ordinal -eq 42)
+}
+Test-Profile 'contexto route sem fingerprint válido é rejeitado' {
+    $context = New-TestContext
+    $context.schemaVersion = 3
+    $context | Add-Member -NotePropertyName camera_mode -NotePropertyValue 'route'
+    $context | Add-Member -NotePropertyName camera_route_fingerprint -NotePropertyValue '0000000000000000'
+    $context | Add-Member -NotePropertyName camera_route_frame_ordinal -NotePropertyValue 0
+    $context | Add-Member -NotePropertyName camera_route_tick_count -NotePropertyValue 0
+    Assert-Rejected { ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7 }
+}
+Test-Profile 'contexto sem contadores de HZB assume zero (desativado)' {
+    $context = New-TestContext
+    $decoded = @(ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7)
+    Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].hzb_tested_draws -eq 0 -and
+        $decoded[0].hzb_occluded_draws -eq 0 -and $decoded[0].hzb_revived_draws -eq 0)
+}
+Test-Profile 'contexto aceita contadores de HZB consistentes' {
+    $context = New-TestContext
+    $context | Add-Member -NotePropertyName hzb_tested_draws -NotePropertyValue 40
+    $context | Add-Member -NotePropertyName hzb_occluded_draws -NotePropertyValue 12
+    $context | Add-Member -NotePropertyName hzb_revived_draws -NotePropertyValue 3
+    $context | Add-Member -NotePropertyName hzb_budget_skipped_draws -NotePropertyValue 0
+    $decoded = @(ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7)
+    Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].hzb_tested_draws -eq 40 -and
+        $decoded[0].hzb_occluded_draws -eq 12)
+}
+Test-Profile 'contexto aceita skip de HZB por orçamento global' {
+    $context = New-TestContext
+    $context | Add-Member -NotePropertyName hzb_budget_skipped_draws -NotePropertyValue 54
+    $decoded = @(ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7)
+    Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].hzb_budget_skipped_draws -eq 54 -and
+        $decoded[0].hzb_tested_draws -eq 0)
+}
+Test-Profile 'contexto com hzb_occluded_draws maior que testados é rejeitado' {
+    $context = New-TestContext
+    $context | Add-Member -NotePropertyName hzb_tested_draws -NotePropertyValue 5
+    $context | Add-Member -NotePropertyName hzb_occluded_draws -NotePropertyValue 9
+    $context | Add-Member -NotePropertyName hzb_revived_draws -NotePropertyValue 0
+    Assert-Rejected { ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7 }
+}
+Test-Profile 'contexto camera_mode inválido é rejeitado' {
+    $context = New-TestContext
+    $context.schemaVersion = 3
+    $context | Add-Member -NotePropertyName camera_mode -NotePropertyValue 'inventado'
     Assert-Rejected { ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7 }
 }
 Test-Profile 'contexto conflitante no mesmo epoch falha' {

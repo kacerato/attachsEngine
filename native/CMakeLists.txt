@@ -150,6 +150,7 @@ target_link_libraries(aether_core PUBLIC Threads::Threads)
 add_library(aether_platform STATIC
   platform/app_lifecycle.cpp
   platform/atomic_asset_file.cpp
+  platform/camera_route.cpp
   platform/first_person_controller.cpp
   platform/free_camera_controller.cpp
   platform/virtual_joystick.cpp
@@ -167,6 +168,8 @@ target_link_libraries(aether_rendergraph PUBLIC aether_core)
 # --- aether_renderer: recursos e conversões independentes do backend -------
 add_library(aether_renderer STATIC
   renderer/frustum_visibility.cpp
+  renderer/hzb_visibility.cpp
+  renderer/lod_selection.cpp
   renderer/spatial_render_chunks.cpp
   renderer/static_collision_mesh.cpp
 )
@@ -311,9 +314,12 @@ endif()
 if(NOT ANDROID)
   add_executable(aether_tests
     ../tests/native/test_atomic_asset_file.cpp
+    ../tests/native/test_camera_route.cpp
     ../tests/native/test_free_camera_controller.cpp
     ../tests/native/test_first_person_controller.cpp
     ../tests/native/test_frustum_visibility.cpp
+    ../tests/native/test_hzb_visibility.cpp
+    ../tests/native/test_lod_selection.cpp
     ../tests/native/test_spatial_render_chunks.cpp
     ../tests/native/test_character_motor.cpp
     ../tests/native/test_map_package.cpp

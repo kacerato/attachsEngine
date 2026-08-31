@@ -6,10 +6,14 @@ gera `Imported/scene.aemap` (geometria, materiais, draws, bounds e câmera) e as
 texturas AETX com mipmaps. O caminho ASTC 6×6 mantém até 4096×4096; o fallback
 RGBA8 é limitado a 512 px por eixo para conter APK e memória.
 
-O pacote atual é AEMAP v2. Posição e UV permanecem em float32; normal e tangente
-usam SNORM16 e cor usa UNORM8, reduzindo o stride de 72 para 48 bytes sem reduzir
-geometria ou resolução. O runtime mantém leitura do AEMAP v1 para projetos antigos.
-Detalhes e gates de precisão estão em `docs/adr/ADR-015-AEMAP-V2-VERTICES-COMPACTOS.md`.
+O pacote versionado atual ainda é AEMAP v2. Posição e UV permanecem em float32;
+normal e tangente usam SNORM16 e cor usa UNORM8, reduzindo o stride de 72 para
+48 bytes sem reduzir geometria ou resolução. O importador/runtime também aceitam
+AEMAP v3, que acrescenta grupos de LOD e erro geométrico projetável, mas essa
+saída só deve substituir o sample v2 depois de recozinhar o ZIP original e passar
+o gate visual/físico. O runtime mantém leitura de AEMAP v1/v2 para projetos
+antigos. Detalhes de compactação estão em
+`docs/adr/ADR-015-AEMAP-V2-VERTICES-COMPACTOS.md`.
 
 ## Controles mobile
 

@@ -12,12 +12,16 @@
 #include "renderer/gpu_mesh_instance.h"
 #include "renderer/gpu_cost_isolation.h"
 #include "renderer/frustum_visibility.h"
+#include "renderer/hzb_visibility.h"
+#include "renderer/lod_selection.h"
 #include "renderer/render_instance.h"
 #include "renderer/runtime_hud.h"
 #include "platform/android/material_preview_resources.h"
 #include "platform/android/dirt_road_resources.h"
 #include "platform/free_camera_controller.h"
 
+#include <array>
+#include <cmath>
 #include <vector>
 
 namespace ae::platform::android {
@@ -86,6 +90,13 @@ public:
   u32 profileTriangleCount() const {
     return dirtRoadPreview_ ? dirtRoadResources_.header().triangleCount : 0;
   }
+  u32 profilePackageVersion() const {
+    return dirtRoadPreview_ ? dirtRoadResources_.header().version : 0;
+  }
+  u32 profileRenderDrawCount() const {
+    return dirtRoadPreview_ ? static_cast<u32>(dirtRoadResources_.draws().size()) : 0;
+  }
+  u32 profileLodGroupCount() const { return static_cast<u32>(lodGroups_.size()); }
   int lastExtractionStatus() const { return lastExtractionStatus_; }
   // Diagnostic only: computed on demand at lifecycle/mutation checkpoints.
   u64 snapshotFingerprint() const;
@@ -95,6 +106,35 @@ public:
   void setCoveragePrepassEnabled(bool enabled) { coveragePrepassEnabled_ = enabled; }
   void setGpuCostIsolation(renderer::GpuCostIsolation mode) { gpuCostIsolation_ = mode; }
   void setRuntimeHudEnabled(bool enabled) { runtimeHudEnabled_ = enabled; }
+  // HZB (Hi-Z) conservative occlusion culling -- see native/renderer/
+  // hzb_visibility.h for the pure CPU decision layer this feeds, and
+  // PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md for the sync/barrier design this
+  // integration follows. Off by default; opt-in via aether.hzb_occlusion.
+  // NOT validated on physical hardware yet -- keep default false until a
+  // physical A/B (Khronos validation layers clean, SSIM/FLIP visual diff)
+  // passes, matching every other experimental flag in this renderer.
+  void setHzbOcclusionEnabled(bool enabled) { hzbOcclusionEnabled_ = enabled; }
+  bool hzbOcclusionEnabled() const { return hzbOcclusionEnabled_; }
+  // Consecutive occluded frames required before an object is actually culled
+  // (grace period; 0 means cull on the first occluded test). See
+  // renderer::updateHzbHysteresis for the exact contract.
+  void setHzbHysteresisFrames(u32 frames) { hzbHysteresisFrames_ = frames; }
+  void setHzbMinimumCandidateDraws(u32 draws) { hzbMinimumCandidateDraws_ = draws; }
+  void setHzbNormalizedDepthBias(float bias) {
+    if (std::isfinite(bias) && bias >= 0.0f) hzbNormalizedDepthBias_ = bias;
+  }
+  // LOD selection by projected screen-space error -- see
+  // native/renderer/lod_selection.h and tools/cook-gltf-map.py's simplifier.
+  // Off by default; opt-in via aether.lod_selection. Also NOT validated on
+  // physical hardware yet -- see setHzbOcclusionEnabled's note, the same
+  // gate applies here.
+  void setLodSelectionEnabled(bool enabled) { lodSelectionEnabled_ = enabled; }
+  bool lodSelectionEnabled() const { return lodSelectionEnabled_; }
+  // Screen-space error budget in pixels and the hysteresis band ratio (see
+  // renderer::selectLodLevel) -- data-driven budgets, never hardcoded
+  // per-scene (ADR-014).
+  void setLodPixelErrorBudget(float budget) { lodPixelErrorBudget_ = budget; }
+  void setLodHysteresisBandRatio(float ratio) { lodHysteresisBandRatio_ = ratio; }
   renderer::GpuCostIsolation gpuCostIsolation() const { return gpuCostIsolation_; }
   const renderer::VisibilityTelemetry &visibilityTelemetry() const {
     return visibilityTelemetry_;
@@ -115,6 +155,22 @@ private:
   bool createEnvironmentDescriptors();
   bool createSkyPipeline();
   bool createRuntimeHudPipeline();
+  bool createHzbResources();
+  void destroyHzbResources();
+  bool createHzbPipeline(const u32 *vertSpirv, u32 vertSpirvSize, const u32 *fragSpirv, u32 fragSpirvSize,
+                         u32 pushConstantBytes, VkPipelineLayout &outLayout, VkPipeline &outPipeline);
+  // Records the full reduction chain (depth -> base level -> coarser levels)
+  // into commandBuffer_. Must be called after the main render pass's
+  // vkCmdEndRenderPass and before the frame's vkQueueSubmit; depthImage_ must
+  // already be in VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL (its state
+  // right after the main pass, before this function transitions it).
+  void recordHzbReductionPass(const platform::FreeCameraState &camera);
+  // Reads back the pyramid built by the PREVIOUS frame's recordHzbReductionPass
+  // into hzbPyramid_. Called once near the top of drawFrame, at the same point
+  // gpuFrameTimer_.collectPrevious() reads last frame's GPU timestamps -- the
+  // acquireNextImage fence wait already guarantees that copy fully landed, so
+  // this never introduces a new stall (see PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md).
+  void readHzbPyramidFromPreviousFrame();
 
   VkDevice device_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
@@ -224,6 +280,85 @@ private:
   u64 renderedFrameCount_ = 0;
   renderer::GpuCostIsolation gpuCostIsolation_ = renderer::GpuCostIsolation::Full;
   profiler::RenderPhaseTimings lastFrameTimings_{};
+
+  // HZB (Hi-Z) occlusion culling -- see setHzbOcclusionEnabled() above and
+  // native/renderer/hzb_visibility.h. All levels share one small render pass
+  // (R32_SFLOAT, MAX-reduction fragment shaders); level 0 samples depthImage_,
+  // level i>0 samples level i-1. Recreated whenever the swapchain-dependent
+  // resources are (createHzbResources()/destroyHzbResources() mirror
+  // createDepthImage()/destroyFramebuffers()'s lifecycle exactly).
+  bool hzbOcclusionEnabled_ = false;
+  // Static workload gate resolved after render packets are built and before
+  // depth/render-pass allocation. Keeps a requested HZB observable while
+  // avoiding sampled depth, STORE and reduction resources for small scenes.
+  bool hzbWorkloadEligible_ = false;
+  u32 hzbHysteresisFrames_ = 3;
+  u32 hzbMinimumCandidateDraws_ = 128;
+  float hzbNormalizedDepthBias_ = 1.0e-5f;
+  static constexpr u32 kHzbLevelCount = 6;
+  struct HzbLevelResources final {
+    rhi::VulkanImage image{};
+    VkFramebuffer framebuffer = VK_NULL_HANDLE;
+    // Descriptor set bound while PRODUCING this level: level 0's set samples
+    // depthImage_; level i>0's set samples hzbLevels_[i-1].image.
+    VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+    u32 width = 0;
+    u32 height = 0;
+    u32 readbackOffsetFloats = 0;
+  };
+  HzbLevelResources hzbLevels_[kHzbLevelCount]{};
+  VkRenderPass hzbRenderPass_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout hzbDescriptorSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorPool hzbDescriptorPool_ = VK_NULL_HANDLE;
+  VkPipelineLayout hzbFirstPipelineLayout_ = VK_NULL_HANDLE;
+  VkPipeline hzbFirstPipeline_ = VK_NULL_HANDLE;
+  VkPipelineLayout hzbReducePipelineLayout_ = VK_NULL_HANDLE;
+  VkPipeline hzbReducePipeline_ = VK_NULL_HANDLE;
+  rhi::VulkanSampler hzbSampler_{};
+  // Host-visible, GPU-written readback of the full pyramid (all kHzbLevelCount
+  // levels, tightly packed via renderer::computeHzbLevelOffsets). Read one
+  // frame late -- see readHzbPyramidFromPreviousFrame().
+  rhi::VulkanBuffer hzbReadbackBuffer_{};
+  bool hzbResourcesReady_ = false;
+  renderer::HzbPyramid hzbPyramid_{};
+  bool hzbPyramidValid_ = false;
+  std::array<renderer::HzbLevelDims, kHzbLevelCount> hzbLevelDims_{};
+  // The CPU consumes a pyramid one frame after it was rendered. Comparing it
+  // against a different camera is not conservative (newly revealed pixels
+  // could be culled), so motion frames fail open until the future same-frame
+  // GPU-driven HZB path exists.
+  platform::FreeCameraState hzbRecordedCamera_{};
+  platform::FreeCameraState hzbPyramidCamera_{};
+  bool hzbRecordedCameraValid_ = false;
+  bool hzbPyramidCameraValid_ = false;
+  bool hzbFrameEligible_ = false;
+  bool hzbPreviousFrameEligible_ = false;
+  // Indexed directly by drawIndex into dirtRoadResources_.draws() (stable
+  // across frames: render chunks are built once at load, never reordered).
+  // Sized/reset in createInstanceBuffer() alongside instanceCount_.
+  std::vector<renderer::HzbHysteresisState> hzbHysteresis_;
+
+  // LOD selection (see setLodSelectionEnabled above). Built once at load in
+  // initialize() (see the lodGroupId bucketing next to
+  // solidDrawOrder_/coverageDrawOrder_'s own construction); lodGroups_[i] is
+  // a list of draw indices for one lodGroupId, sorted by lodLevel ascending,
+  // present only for groups with more than one level. lodGroupHysteresis_ is
+  // index-aligned with lodGroups_ (NOT keyed by lodGroupId directly).
+  bool lodSelectionEnabled_ = false;
+  float lodPixelErrorBudget_ = 2.0f;
+  float lodHysteresisBandRatio_ = 0.75f;
+  // One imported lodGroupId may contain MANY spatial chunks per LOD level.
+  // Grouping levels as buckets (instead of assuming one draw == one level)
+  // preserves chunk-level frustum/indirect submission after LOD selection.
+  std::vector<renderer::LodRenderGroup> lodGroups_;
+  // Built once at load: the subset of solidDrawOrder_ that belongs to no
+  // multi-level group (always a candidate, LOD selection never touches it).
+  std::vector<u32> ungroupedSolidDrawOrder_;
+  // Scratch, rebuilt every frame LOD selection runs: ungroupedSolidDrawOrder_
+  // plus each group's currently-active (and, mid-transition, neighbor)
+  // draw. Reserved once in initialize(); zero-alloc per frame like the
+  // visible*DrawOrder_ scratch lists.
+  std::vector<u32> lodFilteredSolidDrawOrder_;
 };
 
 } // namespace ae::platform::android

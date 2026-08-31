@@ -116,7 +116,7 @@ function ConvertFrom-FrameProfileContextLog {
         if ($line -notmatch '\[FrameProfileContext\] (\{.*)$') { continue }
         $context = $Matches[1] | ConvertFrom-Json
         if ([string]$context.pid -ne $ExpectedPid) { continue }
-        if ($context.schemaVersion -ne 1 -or $context.epoch -lt 1 -or
+        if ($context.schemaVersion -notin @(2, 3) -or $context.epoch -lt 1 -or
             -not $context.scene -or $context.scene -notmatch '^[a-z0-9-]+$' -or
             $context.content_fingerprint -notmatch '^[0-9a-f]{16}$' -or
             $context.target_fps -lt 1 -or $context.instances -lt 1 -or
@@ -132,6 +132,51 @@ function ConvertFrom-FrameProfileContextLog {
         }
         if ($context.gpu_isolation -notin @('full', 'no-normal', 'no-ibl', 'base-color')) {
             throw 'FrameProfileContext contém gpu_isolation inválido.'
+        }
+        if ($context.PSObject.Properties.Name -notcontains 'camera_mode') {
+            # Capturas schema v2 anteriores à rota de câmera continuam legíveis;
+            # inferimos o modo a partir do único sinal que já existia.
+            $inferredMode = if ($context.camera_locked) { 'locked' } else { 'free' }
+            $context | Add-Member -NotePropertyName camera_mode -NotePropertyValue $inferredMode
+            $context | Add-Member -NotePropertyName camera_route_fingerprint -NotePropertyValue '0000000000000000'
+            $context | Add-Member -NotePropertyName camera_route_frame_ordinal -NotePropertyValue 0
+            $context | Add-Member -NotePropertyName camera_route_tick_count -NotePropertyValue 0
+        }
+        if ($context.camera_mode -notin @('free', 'locked', 'route')) {
+            throw 'FrameProfileContext contém camera_mode inválido.'
+        }
+        if ($context.camera_mode -eq 'route' -and
+            ($context.camera_route_fingerprint -notmatch '^[0-9a-f]{16}$' -or
+             $context.camera_route_fingerprint -eq '0000000000000000' -or
+             $context.camera_route_tick_count -lt 1)) {
+            throw 'FrameProfileContext em modo route exige camera_route_fingerprint e tick_count válidos.'
+        }
+        if ($context.PSObject.Properties.Name -notcontains 'hzb_tested_draws') {
+            # Capturas anteriores ao HZB continuam legíveis; zero é o estado
+            # real quando a oclusão HZB está desativada, não uma suposição.
+            $context | Add-Member -NotePropertyName hzb_tested_draws -NotePropertyValue 0
+            $context | Add-Member -NotePropertyName hzb_occluded_draws -NotePropertyValue 0
+            $context | Add-Member -NotePropertyName hzb_revived_draws -NotePropertyValue 0
+            $context | Add-Member -NotePropertyName hzb_motion_skipped_draws -NotePropertyValue 0
+        }
+        if ($context.PSObject.Properties.Name -notcontains 'hzb_motion_skipped_draws') {
+            $context | Add-Member -NotePropertyName hzb_motion_skipped_draws -NotePropertyValue 0
+        }
+        if ($context.PSObject.Properties.Name -notcontains 'hzb_budget_skipped_draws') {
+            $context | Add-Member -NotePropertyName hzb_budget_skipped_draws -NotePropertyValue 0
+        }
+        if ($context.PSObject.Properties.Name -notcontains 'hzb_enabled') {
+            $context | Add-Member -NotePropertyName hzb_enabled -NotePropertyValue $false
+            $context | Add-Member -NotePropertyName lod_enabled -NotePropertyValue $false
+            $context | Add-Member -NotePropertyName package_version -NotePropertyValue 0
+            $context | Add-Member -NotePropertyName render_draws -NotePropertyValue $context.draws
+            $context | Add-Member -NotePropertyName lod_groups -NotePropertyValue 0
+        }
+        if ($context.hzb_tested_draws -lt 0 -or $context.hzb_occluded_draws -lt 0 -or
+            $context.hzb_revived_draws -lt 0 -or $context.hzb_motion_skipped_draws -lt 0 -or
+            $context.hzb_budget_skipped_draws -lt 0 -or
+            $context.hzb_occluded_draws -gt $context.hzb_tested_draws) {
+            throw 'FrameProfileContext contém contadores de HZB inconsistentes.'
         }
         $pose = @($context.camera_pose)
         if ($pose.Count -ne 5) { throw 'FrameProfileContext exige camera_pose com 5 valores.' }
@@ -169,6 +214,17 @@ function ConvertFrom-FrameProfileLog {
             $window.frames -ne 600 -or $window.elapsed_ms -le 0 -or
             $window.width -le 0 -or $window.height -le 0 -or $window.epoch -lt 1 -or $window.window -lt 1) {
             throw 'Relatório FrameProfile incompatível ou incompleto.'
+        }
+        # Schema v3 anterior ao hotspot mapping não carregava o ordinal/volume
+        # no fechamento de cada janela. Mantemos leitura retrocompatível.
+        if ($window.PSObject.Properties.Name -notcontains 'route_frame') {
+            $window | Add-Member -NotePropertyName route_frame -NotePropertyValue 0
+            $window | Add-Member -NotePropertyName visible_draws -NotePropertyValue 0
+            $window | Add-Member -NotePropertyName visible_triangles -NotePropertyValue 0
+        }
+        if ($window.route_frame -lt 0 -or $window.visible_draws -lt 0 -or
+            $window.visible_triangles -lt 0) {
+            throw 'FrameProfile contém contexto de hotspot inválido.'
         }
         foreach ($metric in $FrameProfileMetricNames) {
             $compact = @($window.$metric)

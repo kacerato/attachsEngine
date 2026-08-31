@@ -16,6 +16,14 @@ struct FrameProfileContext final {
   u32 targetFps = 0;
   const char *gpuIsolation = "full";
   bool cameraLocked = false;
+  // "free" | "locked" | "route" -- route implies a CameraRoutePlayer is
+  // actively driving the camera this epoch, distinct from a single static
+  // locked pose. See ae::platform::CameraRouteMode for the recorder/player
+  // side of this contract.
+  const char *cameraMode = "free";
+  u64 cameraRouteFingerprint = 0;
+  u64 cameraRouteFrameOrdinal = 0;
+  u64 cameraRouteTickCount = 0;
   float cameraPosition[3]{};
   float cameraYaw = 0;
   float cameraPitch = 0;
@@ -23,11 +31,24 @@ struct FrameProfileContext final {
   u32 materialCount = 0;
   u32 textureCount = 0;
   u32 triangleCount = 0;
+  u32 packageVersion = 0;
+  u32 renderDrawCount = 0;
+  u32 lodGroupCount = 0;
+  bool hzbEnabled = false;
+  bool lodEnabled = false;
   u32 visibleDrawCount = 0;
   u32 culledDrawCount = 0;
   u32 submittedDrawCallCount = 0;
   u64 visibleTriangleCount = 0;
   u64 submittedTriangleCount = 0;
+  // HZB occlusion stage (see renderer::VisibilityTelemetry); zero on every
+  // frame HZB occlusion is disabled. hzbOccludedDrawCount is already counted
+  // inside culledDrawCount above, not additional to it.
+  u32 hzbTestedDrawCount = 0;
+  u32 hzbOccludedDrawCount = 0;
+  u32 hzbRevivedDrawCount = 0;
+  u32 hzbSkippedCameraMotionDrawCount = 0;
+  u32 hzbSkippedBudgetDrawCount = 0;
 };
 
 class AndroidFrameProfiler final {

@@ -209,14 +209,59 @@ fontes 3×5. O SPIR-V foi validado e o APK assinado, mas a inspeção visual v5 
 pendente porque o aparelho descarregou. A suíte completa anterior passou **185/185**;
 depois da política BLEND/cutout, o teste focal passou **4/4**.
 
+## Rota determinística, HZB e LOD — 31/08/2026
+
+Os três itens da "próxima ordem aprovada" de `PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md`
+(rota → HZB → LOD) foram implementados, revisados e compilados no Android. A rota e
+a correção estática do HZB foram validadas no Xiaomi Adreno; isso não promove HZB ou
+LOD a default. O asset de produção continua AEMAP v2 e registra `lod_groups=0`.
+
+Os três sistemas compilam de verdade via `assembleDebug` (NDK/Gradle real, três
+rodadas separadas: rota, depois HZB, depois LOD) e passam **271 testes automatizados
+sem GPU** (217 C++ nativos, 21 Python do cooker, 33 PowerShell de frame-profile).
+Dois dos testes escritos nesta sessão pegaram bugs reais antes de qualquer commit: um
+erro de arredondamento de índice de texel na seleção de nível do HZB (faria o teste de
+oclusão escanear o texel vizinho errado) e um offset de byte errado na leitura de
+`MapMaterialRecord.flags` no cooker Python (leria o campo de roughness/metallic em vez
+de flags, quebrando silenciosamente a exclusão de blend/alpha-mask da simplificação de
+LOD). Um bug pré-existente e independente também foi corrigido: o parser
+`tools/android-frame-profile.ps1` validava `schemaVersion` contra `1` enquanto o C++
+já emitia `2` havia um tempo — todo contexto de profiling estava sendo rejeitado antes
+desta correção.
+
+Todos os três sistemas ficam atrás de flags opt-in desligadas por padrão
+(`aether.camera_route_mode`, `aether.hzb_occlusion`, `aether.lod_selection`), seguindo
+o mesmo padrão já usado para `coveragePrepassEnabled_`/`GpuCostIsolation`. A rota real
+tem 6.611 poses/55,09 s e 487,16 unidades percorridas. O baseline Release completo foi
+95,16 presents/s, pior janela 84,18, CPU 1,34 ms, GPU 9,13 ms e pior GPU-p95 12,93 ms;
+um frame isolado chegou ao equivalente de 53,9 FPS. HZB usa depth normalizado, respeita
+pré-rotação/store/capability e falha aberto ao mover a câmera; `hzbMinimumCandidateDraws`
+evita pagar readback em cargas pequenas. O teste de coverage em 2.048 triângulos/chunk
+foi rejeitado (125 chunks, GPU 9,14 ms) e o default ficou 8.192. O A/B intercalado do
+prepass `MASK` confirmou o default global: ligado 93,61 → desligado 80,89 → ligado
+92,45 presents/s; sem o prepass a GPU média subiu 18,1% (9,32→11,01 ms), sem ganho
+de CPU e com `thermalStatus=0`. Faltam AGI do hotspot, recook AEMAP v3/LOD, SSIM/FLIP,
+soak de 30 min e Mali físico.
+
+A pose fixa extraída do fechamento da pior janela (`route_frame≈1734`) atribuiu o
+gargalo: full 83,97–85,92 presents/s e 10,37–10,39 ms GPU; base-color 120,08/6,08 ms;
+no-normal 94,41/9,14 ms; no-IBL 87,47/9,98 ms. CPU permaneceu em 1,28–1,59 ms. Os
+shaders bindless foram então corrigidos para tratar os índices por lote de material
+como dinamicamente uniformes (sem `NonUniform` no SPIR-V). Shaders validaram, 225/225
+testes nativos, 10/10 do cooker/LOD e 35/35 do profiler passaram. O v15 foi assinado,
+instalado e medido diretamente por Logcat: cinco janelas em 83,05–83,65 FPS e ~10,38 ms
+GPU, sem ganho contra v14. A correção permanece por expressar o contrato real, mas não
+é contada como otimização. APK v15 SHA-256:
+`9E66F34F1D92985E63589FDF0DE6C404E4B11243B96BB5EA100C5B77FBCC5951`.
+
 ## Resumo
 
 | | |
 |---|---|
 | Testes C# | **506 passando**, 0 falhando, 0 pulados (inclui 5 de material/esfera e 15 de integração cena/render); interop nativo obrigatório na regressão |
-| Verificações das ferramentas Android | **57 passando**: 12 de lifecycle/desbloqueio, 26 de frames/contexto, 13 de térmica/FPS, 4 de identidade dos assets e 2 planos AVD |
-| Testes C++ | **185 passando** na suíte completa, 0 falhando; após o ajuste final BLEND/cutout, **4/4** testes focais passaram. Inclui AEMAP v1/v2, colisão mundial, cápsula, `GpuMeshInstance`, HUD/input e câmera multi-touch |
-| Imports gráficos | **11 testes Python passando**: 6 de material + 5 do mapa/HUD (identidade/hashes, AEMAP, 140 cadeias AETX e orientação de dígitos) |
+| Verificações das ferramentas Android | FrameProfile **35/35** na verificação corrente; os demais grupos preservam suas suítes próprias |
+| Testes C++ | **225 passando** na suíte Release corrente, 0 falhando. Inclui AEMAP v1/v2/v3, colisão mundial, cápsula, `GpuMeshInstance`, HUD/input, câmera multi-touch, rota determinística, HZB, orçamento de workload e seleção/agregação de LOD |
+| Imports gráficos | **21 testes Python passando**: 6 de material + 5 do mapa/HUD (identidade/hashes, AEMAP, 140 cadeias AETX e orientação de dígitos) + 10 do simplificador de LOD (clustering, guardas de costura UV/normal, histerese, offset de `MapMaterialRecord.flags`) |
 | Linhas C# | ~11.000 |
 | Linhas C++ (próprias, sem código vendorizado) | ~3.400 |
 | Dependências baixadas no build | **nenhuma** — build e testes rodam offline; Jolt Physics, Box2D, SQLite, runtime .NET e VMA são vendorizados em `native/third_party/`, com versão/licença/hash ou commit registrados |
@@ -230,7 +275,7 @@ depois da política BLEND/cutout, o teste focal passou **4/4**.
 | Gates M0–M9 fechados | **0/10** |
 | Hardware M0 | parcial — 1 aparelho Adreno; matriz mínima, Mali e perfil C pendentes |
 | Shell gráfico mínimo (0.1.3 + critério visual M0) | cubo, esfera PBR e mapa real com depth/staging/câmera livre validados no Android; projeção corrigida para pré-rotação da surface. Validation layers ativas em build debug (item 2.1.6). M0 continua aberto: hot reload C#, soak formal e matriz de aparelhos pendentes |
-| §4.1 Inventário executável | `docs/MATRIZ-MARCOS.md`: **339 registros** (334 itens numerados + 5 PoCs): 250 não iniciados, 44 parciais, 31 implementados, 8 PoCs, 5 validados em hardware e 1 aceito. Contagens reconciliadas com as linhas; reclassificações refletem escopo integral/evidência, não remoção de funcionalidades. |
+| §4.1 Inventário executável | `docs/MATRIZ-MARCOS.md`: **339 registros** (334 itens numerados + 5 PoCs): 249 não iniciados, 45 parciais, 31 implementados, 8 PoCs, 5 validados em hardware e 1 aceito (2.5.4 saiu de "não iniciado" para "parcial" em 31/08/2026 com a primeira fatia de LOD). Contagens reconciliadas com as linhas; reclassificações refletem escopo integral/evidência, não remoção de funcionalidades. |
 | §4.2 CI confiável | ✅ implementação concluída — `.github/workflows/ci.yml` separa `unit`/`native`/`interop`/`android-host`/`benchmark`/`clean-build-nightly`; integração e clean build exigem a DLL nativa; cada job publica evidência; o clean build instala headers Vulkan isolados do NDK e foi reproduzido localmente; a regressão corrente passa em 506/506 testes C# e 165/165 nativos. `metrics/budgets.v1.json` versiona P/Invoke, alocação, CPU, GPU, memória e energia, com gate positivo e negativo. `android-device`/`soak` ficam num workflow manual para runner físico. A execução hospedada continua pendente, pois ainda não há remote nem runner `android-device-lab` |
 | §4 — verdade operacional/correções | ✅ implementação local completa (§4.1–§4.4); execução CI hospedada, laboratório Android e métricas coletadas em hardware permanecem evidências operacionais dos gates seguintes |
 

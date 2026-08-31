@@ -18,9 +18,10 @@ import numpy as np
 from PIL import Image
 
 MAP_MAGIC = 0x504D4541  # AEMP
-MAP_VERSION = 2
+MAP_VERSION = 3
 HEADER_SIZE = 144
 VERTEX_STRIDE = 48
+DRAW_STRIDE = 108  # v3: 96-byte v1/v2 record + lodLevel/geometricError/lodGroupId.
 INVALID_TEXTURE = 0xFFFFFFFF
 MATERIAL_BLEND = 1 << 0
 MATERIAL_NORMAL_MAP = 1 << 1
@@ -28,6 +29,26 @@ MATERIAL_METALLIC_ROUGHNESS_MAP = 1 << 2
 MATERIAL_EMISSIVE_MAP = 1 << 3
 MATERIAL_ALPHA_MASK = 1 << 4
 MATERIAL_DOUBLE_SIDED = 1 << 5
+
+# LOD generation (item 2.5.4 / 7.1.6 of the plan): up to this many discrete
+# levels per opaque primitive, each a fully separate draw sharing one
+# lodGroupId. Blend and alpha-mask materials are deliberately excluded for
+# this first slice -- see simplify_primitive_levels for why.
+MAX_LOD_LEVELS = 3
+# A primitive below this triangle count is not worth simplifying: the saved
+# triangles would not offset one more draw call/chunk, and small props are
+# the ones most likely to disappear entirely under grid-snap clustering.
+LOD_MINIMUM_TRIANGLES = 256
+# Cell size as a fraction of the primitive's bounding-sphere radius, one
+# entry per additional level beyond level 0 (which is always the untouched
+# original). Strictly increasing so geometricError is strictly increasing by
+# construction, matching MapDrawRecord's documented ordering contract.
+LOD_CELL_SIZE_RATIOS = (0.01, 0.03)
+# Vertices only ever merge within one grid cell AND one discretized-normal
+# bucket AND one discretized-UV0 bucket -- never across a hard edge or a UV
+# island seam. See simplify_by_clustering.
+LOD_NORMAL_BUCKET_COUNT = 6
+LOD_UV_BUCKET_SIZE = 1.0 / 64.0
 
 
 def align(value, alignment=16):
@@ -63,6 +84,139 @@ def vertex_record(position, normal, tangent, uv0, uv1, color):
     packed_color = np.rint(np.clip(color, 0.0, 1.0) * 255.0).astype(np.uint8)
     return struct.pack("<3f4h4h2f2f4B", *position, *packed_normal, *packed_tangent,
                        *uv0, *uv1, *packed_color)
+
+
+def simplify_by_clustering(position, normal, tangent, uv0, uv1, color, indices,
+                           cell_size, uv_bucket_size, normal_bucket_count):
+    """Deterministic grid-snap vertex clustering (LOD simplification).
+
+    Vertices merge only when they share the same position grid cell AND the
+    same discretized-normal bucket AND the same discretized-UV0 bucket --
+    never across a hard edge (normal bucket differs) or a UV island seam
+    (UV0 bucket differs), which would otherwise blend one island's texture
+    across another's geometry or flatten a sharp corner's shading. This is a
+    deliberately weaker guarantee than quadric-error edge collapse (no
+    boundary-preservation reasoning, no legality checks), traded for
+    robustness on arbitrary/non-manifold imported geometry and for being
+    simple enough to verify by hand -- see PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md.
+
+    Representative attributes are the MEAN of every vertex in a cluster, not
+    an arbitrary member: this guarantees the simplified level's bounds can
+    never expand past the original's (a mean is always inside the convex
+    hull of its inputs), which is exactly the property the caller's
+    build-time bounds check exists to confirm holds in practice too.
+
+    uv1 is preserved (averaged) but not used as a clustering guard: it is
+    typically a lightmap/secondary channel, less seam-sensitive than uv0.
+
+    Returns None (never a degenerate/empty result) if simplification would
+    collapse to zero triangles.
+    """
+    if len(indices) == 0 or cell_size <= 0:
+        return None
+    position = np.asarray(position, dtype=np.float64)
+    normal_bucket = np.rint(normal * normal_bucket_count).astype(np.int64)
+    cell = np.floor(position / cell_size).astype(np.int64)
+    uv_bucket = np.floor(np.asarray(uv0, dtype=np.float64) / uv_bucket_size).astype(np.int64)
+    keys = [(*cell[i], *normal_bucket[i], *uv_bucket[i]) for i in range(len(position))]
+
+    cluster_of_key = {}
+    vertex_cluster = np.empty(len(position), dtype=np.int64)
+    for i, key in enumerate(keys):
+        cluster_id = cluster_of_key.setdefault(key, len(cluster_of_key))
+        vertex_cluster[i] = cluster_id
+    cluster_count = len(cluster_of_key)
+
+    counts = np.zeros(cluster_count, dtype=np.int64)
+    np.add.at(counts, vertex_cluster, 1)
+    def average(attribute):
+        attribute = np.asarray(attribute, dtype=np.float64)
+        sums = np.zeros((cluster_count, attribute.shape[1]), dtype=np.float64)
+        np.add.at(sums, vertex_cluster, attribute)
+        return sums / counts[:, None]
+
+    new_position = average(position).astype(np.float32)
+    new_normal = normalized(average(normal)).astype(np.float32)
+    new_tangent = average(tangent)
+    new_tangent[:, :3] = normalized(new_tangent[:, :3])
+    new_tangent = new_tangent.astype(np.float32)
+    new_uv0 = average(uv0).astype(np.float32)
+    new_uv1 = average(uv1).astype(np.float32)
+    new_color = average(color).astype(np.float32)
+
+    triangles = vertex_cluster[np.asarray(indices, dtype=np.int64)].reshape(-1, 3)
+    degenerate = ((triangles[:, 0] == triangles[:, 1]) | (triangles[:, 1] == triangles[:, 2]) |
+                 (triangles[:, 0] == triangles[:, 2]))
+    kept = triangles[~degenerate]
+    if len(kept) == 0:
+        return None
+    new_indices = kept.reshape(-1).astype(np.uint32)
+    return new_position, new_normal, new_tangent, new_uv0, new_uv1, new_color, new_indices
+
+
+def simplify_primitive_levels(position, normal, tangent, uv0, uv1, color, indices,
+                              material_flags, bounds_radius):
+    """Builds the full LOD level chain for one primitive: level 0 (the
+    untouched original) plus up to MAX_LOD_LEVELS - 1 progressively coarser
+    levels from simplify_by_clustering.
+
+    Blend and alpha-mask materials are excluded from simplification entirely
+    for this first slice (levels stays a single, untouched entry): blend's
+    primitive order participates in alpha compositing (simplifying it risks
+    a visibly wrong composite), and alpha-mask/cutout vegetation is exactly
+    the content most likely to collapse into nothing under grid-snap
+    clustering with no human able to check the result visually this cycle.
+    Level generation also stops early (yielding fewer than MAX_LOD_LEVELS
+    total) the moment a candidate level fails to reduce the triangle count
+    versus the previous level -- an unproductive level is never emitted.
+
+    Returns a list of dicts, each
+    {"level": int, "geometricError": float,
+     "position", "normal", "tangent", "uv0", "uv1", "color", "indices"},
+    always at least the one original (untouched) level.
+    """
+    original = {"level": 0, "geometricError": 0.0, "position": position, "normal": normal,
+                "tangent": tangent, "uv0": uv0, "uv1": uv1, "color": color, "indices": indices}
+    levels = [original]
+    triangle_count = len(indices) // 3
+    if (material_flags & (MATERIAL_BLEND | MATERIAL_ALPHA_MASK)) != 0:
+        return levels
+    if triangle_count < LOD_MINIMUM_TRIANGLES or bounds_radius <= 0.0:
+        return levels
+
+    original_minimum = np.asarray(position, dtype=np.float64).min(axis=0)
+    original_maximum = np.asarray(position, dtype=np.float64).max(axis=0)
+    bounds_epsilon = max(bounds_radius * 1.0e-3, 1.0e-4)
+    previous_triangle_count = triangle_count
+    for level_index, ratio in enumerate(LOD_CELL_SIZE_RATIOS, start=1):
+        cell_size = bounds_radius * ratio
+        simplified = simplify_by_clustering(position, normal, tangent, uv0, uv1, color, indices,
+                                            cell_size, LOD_UV_BUCKET_SIZE, LOD_NORMAL_BUCKET_COUNT)
+        if simplified is None:
+            break
+        (s_position, s_normal, s_tangent, s_uv0, s_uv1, s_color, s_indices) = simplified
+        new_triangle_count = len(s_indices) // 3
+        if new_triangle_count >= previous_triangle_count:
+            break  # No further win at this or any coarser ratio; stop here.
+        simplified_minimum = s_position.astype(np.float64).min(axis=0)
+        simplified_maximum = s_position.astype(np.float64).max(axis=0)
+        if (np.any(simplified_minimum < original_minimum - bounds_epsilon) or
+                np.any(simplified_maximum > original_maximum + bounds_epsilon)):
+            raise AssertionError(
+                f"LOD level {level_index} bounds expanded past the original by more than "
+                f"{bounds_epsilon}; clustering invariant violated")
+        geometric_error = cell_size * math.sqrt(3.0) / 2.0
+        if geometric_error <= levels[-1]["geometricError"]:
+            raise AssertionError(
+                f"LOD level {level_index} geometricError {geometric_error} did not increase past "
+                f"level {level_index - 1}'s {levels[-1]['geometricError']}")
+        levels.append({"level": level_index, "geometricError": geometric_error, "position": s_position,
+                       "normal": s_normal, "tangent": s_tangent, "uv0": s_uv0, "uv1": s_uv1,
+                       "color": s_color, "indices": s_indices})
+        previous_triangle_count = new_triangle_count
+        if len(levels) >= MAX_LOD_LEVELS:
+            break
+    return levels
 
 
 def halve(value):
@@ -303,6 +457,8 @@ def main():
         materials = [material_record(material, texture_map, inferred_cutouts)
                      for material in gltf["materials"]]
         vertices, indices, draws = [], [], []
+        lod_level_counts = {}  # For the manifest: level index -> draws generated at that level.
+        next_lod_group_id = 0
         world_min = np.array([np.inf, np.inf, np.inf])
         world_max = -world_min
         for node_index, world in scene_nodes(gltf):
@@ -322,19 +478,44 @@ def main():
                     tangent = np.zeros((len(position), 4), dtype=np.float32)
                     tangent[:, 0] = 1.0
                     tangent[:, 3] = 1.0
-                base_vertex = len(vertices)
-                for values in zip(position, normal, tangent, uv0, uv1, color):
-                    vertices.append(vertex_record(*values))
-                first_index = len(indices)
-                indices.extend(int(value) + base_vertex for value in local_indices)
                 accessor_bounds = gltf["accessors"][attrs["POSITION"]]
                 minimum, maximum = transform_bounds(accessor_bounds["min"], accessor_bounds["max"], world)
                 world_min = np.minimum(world_min, minimum)
                 world_max = np.maximum(world_max, maximum)
+                # World-space bounds are reused unchanged for every LOD level
+                # of this primitive: simplify_by_clustering's mean-based
+                # representative positions can only shrink the local-space
+                # bounds (never expand them, enforced by its own assertion),
+                # so the ORIGINAL (level 0) world bounds remain a valid,
+                # conservative superset for culling every coarser level too.
                 center = (minimum + maximum) * .5
                 radius = float(np.linalg.norm(maximum - minimum) * .5)
-                draws.append(struct.pack("<4I16f4f", first_index, len(local_indices), 0,
-                                         primitive.get("material", 0), *world, *center, radius))
+                local_minimum = np.asarray(accessor_bounds["min"], dtype=np.float64)
+                local_maximum = np.asarray(accessor_bounds["max"], dtype=np.float64)
+                local_radius = float(np.linalg.norm(local_maximum - local_minimum) * .5)
+                # MapMaterialRecord.flags sits at byte offset 68 (4 texture
+                # indices + baseColorFactor[4] + emissiveFactorAndStrength[4]
+                # + roughness/metallic/normalScale/specular + alphaCutoff =
+                # 16+16+16+16+4 bytes), matching material_record's packing
+                # order and native/renderer/map_package.h's struct layout.
+                material_flags = struct.unpack_from("<I", materials[primitive.get("material", 0)],
+                                                    offset=68)[0]
+                lod_levels = simplify_primitive_levels(position, normal, tangent, uv0, uv1, color,
+                                                       local_indices, material_flags, local_radius)
+                lod_group_id = next_lod_group_id
+                next_lod_group_id += 1
+                for entry in lod_levels:
+                    base_vertex = len(vertices)
+                    for values in zip(entry["position"], entry["normal"], entry["tangent"], entry["uv0"],
+                                      entry["uv1"], entry["color"]):
+                        vertices.append(vertex_record(*values))
+                    first_index = len(indices)
+                    indices.extend(int(value) + base_vertex for value in entry["indices"])
+                    draws.append(struct.pack(
+                        "<4I16f4fIfI", first_index, len(entry["indices"]), 0,
+                        primitive.get("material", 0), *world, *center, radius,
+                        entry["level"], entry["geometricError"], lod_group_id))
+                    lod_level_counts[entry["level"]] = lod_level_counts.get(entry["level"], 0) + 1
 
         center = (world_min + world_max) * .5
         extent = world_max - world_min
@@ -343,7 +524,7 @@ def main():
         texture_offset = HEADER_SIZE
         material_offset = align(texture_offset + len(texture_records) * 16)
         draw_offset = align(material_offset + len(materials) * 80)
-        vertex_offset = align(draw_offset + len(draws) * 96)
+        vertex_offset = align(draw_offset + len(draws) * DRAW_STRIDE)
         index_offset = align(vertex_offset + len(vertices) * VERTEX_STRIDE)
         total_size = index_offset + len(indices) * 4
         package = bytearray(total_size)
@@ -358,7 +539,7 @@ def main():
         package[:HEADER_SIZE] = header
         package[texture_offset:texture_offset + len(texture_records) * 16] = b"".join(texture_records)
         package[material_offset:material_offset + len(materials) * 80] = b"".join(materials)
-        package[draw_offset:draw_offset + len(draws) * 96] = b"".join(draws)
+        package[draw_offset:draw_offset + len(draws) * DRAW_STRIDE] = b"".join(draws)
         package[vertex_offset:vertex_offset + len(vertices) * VERTEX_STRIDE] = b"".join(vertices)
         package[index_offset:] = struct.pack(f"<{len(indices)}I", *indices)
         (args.out / "scene.aemap").write_bytes(package)
@@ -367,7 +548,7 @@ def main():
 
     outputs = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
                for path in sorted(args.out.iterdir()) if path.is_file()}
-    manifest = {"version": 2, "format": "AEMAP-2", "sourceZip": args.source.name,
+    manifest = {"version": 3, "format": "AEMAP-3", "sourceZip": args.source.name,
                 "sourceSha256": hashlib.sha256(source_bytes).hexdigest(),
                 "license": "CC-BY-4.0", "author": "99.Miles",
                 "source": "https://sketchfab.com/3d-models/update-dirt-road-through-forest-c4676cdf7715484382400ff63faffd45",
@@ -376,7 +557,13 @@ def main():
                                "draws": len(draws), "vertices": len(vertices),
                                "triangles": len(indices) // 3,
                                "boundsMin": world_min.tolist(), "boundsMax": world_max.tolist(),
-                               "defaultCamera": camera.tolist()},
+                               "defaultCamera": camera.tolist(),
+                               # Draws generated per LOD level index (0 = original/untouched);
+                               # level 0's count also includes every primitive LOD was
+                               # skipped for (blend/alpha-mask materials, primitives below
+                               # LOD_MINIMUM_TRIANGLES). See simplify_primitive_levels.
+                               "lodDrawsByLevel": {str(level): count
+                                                   for level, count in sorted(lod_level_counts.items())}},
                 "textures": texture_sources, "outputs": outputs}
     (args.out.parent / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf8")
 

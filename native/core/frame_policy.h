@@ -42,4 +42,34 @@ inline FrameBudget makeFrameBudget(float displayHz, float requestedMaximumHz,
           interval * 0.78f, interval * 0.88f, interval * 0.10f};
 }
 
+// Visibility-stage budgets (HZB hysteresis, and future LOD pixel-error/dither
+// budgets -- see docs/adr/ADR-014-POLITICA-GLOBAL-RENDERIZACAO.md, "budgets
+// like LOD max error, shadow cascades, AO samples... belong to global
+// policy"). Deliberately its own sibling struct, not fields bolted onto
+// FrameBudget: this covers what the visibility stage is allowed to do with a
+// frame's time budget, not the frame's cadence itself. Populated in
+// android_main.cpp from launch options, never hardcoded in the renderer.
+struct VisibilityBudget final {
+  // CPU-readback HZB has a fixed reduction/copy cost. Below this number of
+  // opaque/coverage candidates, frustum + indirect submission is cheaper and
+  // the HZB stage must fail open. This is a global workload budget, not a
+  // scene-name exception. GPU-driven same-frame HZB may use a lower default.
+  u32 hzbMinimumCandidateDraws = 128;
+  // Consecutive occluded frames an HZB-tested object must accumulate before
+  // it is actually dropped from the draw list (grace period against a stale
+  // Hi-Z sample flickering an object out for one frame). See
+  // renderer::updateHzbHysteresis for the exact contract; 0 means no grace
+  // period at all.
+  u32 hzbHysteresisFrames = 3;
+  // Extra normalized Vulkan depth separation required before HZB may cull a
+  // candidate. This absorbs depth quantization/coplanar precision error and
+  // belongs to the global visibility policy, never to a particular scene.
+  float hzbNormalizedDepthBias = 1.0e-5f;
+  // Projected geometric error allowed for an imported LOD level, in pixels.
+  float lodPixelErrorBudget = 2.0f;
+  // A coarser LOD must fit this fraction of the full pixel budget before
+  // switching, preventing oscillation at the boundary.
+  float lodHysteresisBandRatio = 0.75f;
+};
+
 } // namespace ae

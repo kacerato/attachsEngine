@@ -29,7 +29,7 @@ MapPackageView fixture(std::array<float, 36> &vertices, std::array<u32, 12> &ind
   package.header.indexCount = static_cast<u32>(indices.size());
   package.header.triangleCount = 4;
   package.materials = materials;
-  package.draws = draws;
+  package.draws.assign(draws.begin(), draws.end());
   package.vertices = {reinterpret_cast<const u8 *>(vertices.data()), sizeof(vertices)};
   package.indices = indices;
   return package;
@@ -41,7 +41,7 @@ AE_TEST(Spatial_render_chunks_preserve_triangles_and_split_distant_geometry) {
   std::array<MapMaterialRecord, 1> materials{}; std::array<MapDrawRecord, 1> draws{};
   const MapPackageView package = fixture(vertices, indices, materials, draws);
   SpatialRenderChunks chunks;
-  AE_EXPECT_TRUE(buildSpatialRenderChunks(package, {2}, chunks), "chunk build");
+  AE_EXPECT_TRUE(buildSpatialRenderChunks(package, {2, 2}, chunks), "chunk build");
   AE_EXPECT_EQ(chunks.draws.size(), 2u, "two bounded chunks");
   AE_EXPECT_EQ(chunks.indices.size(), indices.size(), "all indices preserved");
   AE_EXPECT_EQ(chunks.draws[0].indexCount, 6u, "first triangle budget");
@@ -56,8 +56,21 @@ AE_TEST(Spatial_render_chunks_keep_blended_primitive_order_intact) {
   MapPackageView package = fixture(vertices, indices, materials, draws);
   materials[0].flags = MapMaterialBlend;
   SpatialRenderChunks chunks;
-  AE_EXPECT_TRUE(buildSpatialRenderChunks(package, {1}, chunks), "blend build");
+  AE_EXPECT_TRUE(buildSpatialRenderChunks(package, {1, 1}, chunks), "blend build");
   AE_EXPECT_EQ(chunks.draws.size(), 1u, "blend remains one draw");
   for (u32 index = 0; index < indices.size(); ++index)
     AE_EXPECT_EQ(chunks.indices[index], indices[index], "blend order preserved");
+}
+
+
+AE_TEST(Spatial_render_chunks_use_finer_global_budget_for_alpha_coverage) {
+  std::array<float, 36> vertices{}; std::array<u32, 12> indices{};
+  std::array<MapMaterialRecord, 1> materials{}; std::array<MapDrawRecord, 1> draws{};
+  MapPackageView package = fixture(vertices, indices, materials, draws);
+  materials[0].flags = MapMaterialAlphaMask;
+  SpatialRenderChunks chunks;
+  AE_EXPECT_TRUE(buildSpatialRenderChunks(package, {8, 1}, chunks), "coverage build");
+  AE_EXPECT_EQ(chunks.draws.size(), 4u, "coverage usa orçamento fino por classe de material");
+  for (const MapDrawRecord &draw : chunks.draws)
+    AE_EXPECT_EQ(draw.indexCount, 3u, "cada chunk respeita orçamento coverage");
 }

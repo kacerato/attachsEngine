@@ -128,6 +128,62 @@ o percurso determinístico da mesma cena; Test Lab/Game Loop amplia a matriz. O 
 as limitações e a ordem de execução ficam em
 [`PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md`](PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md).
 
+## 0.6 Programa global de margem gráfica
+
+O teto exibido de 120 FPS não mede sozinho a capacidade do renderer: em um painel de
+120 Hz a aplicação nunca apresenta mais de 120 quadros úteis. A margem para acrescentar
+sombras, vegetação, clima, partículas e UI deve ser medida principalmente em **tempo
+GPU**, percentis e potência sustentada. A cena-base de floresta é um benchmark global
+do renderer, não uma cena autorizada a possuir regras próprias.
+
+No aparelho forte de referência, a rota completa está em 9,13 ms de GPU média e o
+hotspot em aproximadamente 10,38 ms. Para deixar de apenas alcançar 120 Hz e passar a
+financiar um pico gráfico superior, o contrato adicional desta cena-base é:
+
+| Medida no aparelho forte | Atual | Gate de margem da cena-base |
+|---|---:|---:|
+| GPU média da rota | 9,13 ms | **≤ 6,20 ms** |
+| GPU média do hotspot | ~10,38 ms | **≤ 6,50 ms** |
+| GPU p95 da rota | variável | **≤ 7,00 ms** |
+| GPU p99 após aquecimento | variável | **≤ 8,00 ms** |
+| apresentação média da rota | 95,16/s | **≥ 110/s** |
+| pior janela móvel de 600 frames | 84,18/s | **≥ 100/s** |
+| CPU p95 do frame | já abaixo do limite | **≤ 3,00 ms** |
+
+Os gates reservam aproximadamente 1,3–2,1 ms dentro do frame de 8,33 ms para qualidade
+adicional e variação do sistema. Não são promessas para todo hardware: perfis A/B/C
+mantêm seus próprios budgets. São também gates conjuntos; uma média boa não compensa
+p99 ruim, imagem divergente, throttling ou estouro de memória.
+
+A redução necessária de aproximadamente 3 ms no hotspot não será atribuída a uma única
+técnica. O plano principal abre as seguintes frentes, todas globais, serializáveis e
+resolvidas por capabilities/budget:
+
+1. **Verdade de GPU:** marcadores por pass/draw class, captura AGI/APA, counters de
+   tiler, fragment, texture, bandwidth, early-Z, cache, occupancy e sincronização.
+2. **Visibilidade e geometria:** cena GPU persistente, BVH, LOD/HLOD, impostors,
+   HZB same-frame e compactação/indirect inteiramente na GPU; zero readback por frame.
+3. **Vegetação e coverage:** semântica explícita de foliage, mips que preservam
+   cobertura, mapa de overdraw, agrupamento espacial e representação distante opaca ou
+   impostor quando visualmente equivalente.
+4. **Pipeline móvel:** Render Graph consumidor, pass culling, attachments transient,
+   load/store por uso real, render passes/subpasses nativos e ausência de targets
+   intermediários não consumidos. O prepass permanece seletivo e guiado por A/B.
+5. **Assets, materiais e shaders:** ASTC/mips por semântica, streaming/residency,
+   compressão de vértices/índices, material LOD e redução de registers/fetches apenas
+   onde counters provarem retorno.
+6. **Iluminação financiada:** probes SH/IBL, luz estática cacheada, CSM cacheada e
+   Forward+ entram consumindo a margem comprovada, nunca antes dela existir.
+7. **Pacing e sustentação:** apresentação via timing real do Android, recursos isolados
+   por frame, ADPF/thermal headroom, perfis S/A/B/C e soak de 30 minutos. Pacing pode
+   reduzir jitter, mas não será contabilizado como redução do trabalho GPU.
+
+A ordem de integração é: instrumentar e capturar → cortar tráfego/passes inúteis →
+reduzir o conjunto visível e sua representação → atacar overdraw/bandwidth dominante →
+validar pacing/térmica → reinvestir a margem em qualidade. Cada etapa só é promovida
+após A/B na rota em movimento, hotspot, diff visual, Adreno e Mali; hipóteses de ganho
+não são somadas antes da medição.
+
 ---
 
 # PARTE 1 — ANÁLISE COMPETITIVA E TESE DO PRODUTO
@@ -1791,6 +1847,31 @@ Esta fase existe para responder cinco perguntas que, se respondidas "não", muda
 > ampliados depois de recursos per-frame e latência toque→pixel estarem no gate.
 > A política Android também consulta suporte público a sustained performance; o
 > Xiaomi respondeu `false`, mantendo fallback sem hooks privados ou carga artificial.
+
+> **Revisão/medição de 31/08/2026:** a rota móvel deixou de ser pendência: o
+> formato `.aeroute` foi validado no Android e `forest-walk-v1` contém 6.611 poses,
+> 55,09 s e 487,16 unidades percorridas. O baseline Release completo ficou em
+> 95,16 presents/s, pior janela 84,18, CPU 1,34 ms, GPU 9,13 ms e pior GPU-p95
+> 12,93 ms; um intervalo isolado equivaleu a 53,9 FPS. Cada janela agora carrega
+> o ordinal da rota e o volume visível para localizar o hotspot, e o runner recusa
+> benchmark da floresta sem pose explícita ou Record/Replay. HZB foi corrigido
+> (depth normalizado, store, pré-rotação e capability), porém o readback CPU só é
+> elegível acima do orçamento global de candidatos e câmera móvel falha aberta;
+> same-frame GPU-driven continua a próxima arquitetura. O agrupador LOD agora
+> preserva múltiplos chunks por nível e o dither é complementar, mas o asset atual
+> é AEMAP v2/zero grupos, logo LOD continua sem ganho físico declarado. O A/B de
+> coverage em 2.048 triângulos/chunk foi rejeitado; 8.192 permanece o default. O
+> prepass seletivo `MASK` foi então isolado na mesma rota: ligado 93,61 → desligado
+> 80,89 → ligado 92,45 presents/s, com GPU média 9,32→11,01 ms (+18,1%) e CPU
+> praticamente invariável. Ele permanece habilitado globalmente; a próxima
+> intervenção partiu da pose fixa do `route_frame≈1734`: full 83,97–85,92 FPS/
+> 10,37–10,39 ms GPU, base-color 120,08/6,08, no-normal 94,41/9,14 e no-IBL
+> 87,47/9,98. Como primeira correção sem alteração visual, os descritores bindless
+> por lote deixaram de ser marcados incorretamente como não uniformes. O v15 físico
+> ficou em 83,05–83,65 FPS/~10,38 ms GPU, sem ganho contra v14; o driver já otimizava
+> esse caso. Próxima fatia: separar fetch/TBN/folhagem, integrar compressão e filtragem
+> semântica de normal + material LOD por erro projetado, depois AGI, HZB
+> same-frame/GPU-driven e recook AEMAP v3/LOD.
 
 > **Correção Android integrada na mesma fatia:** `sensorLandscape` agora trata a
 > troca física entre os dois lados como mudança real de display. Gestos ativos são

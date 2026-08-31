@@ -96,17 +96,24 @@ bool appendChunk(const MapPackageView &package, const MapDrawRecord &source,
 bool buildSpatialRenderChunks(const MapPackageView &package,
                               const SpatialRenderChunkSettings &settings,
                               SpatialRenderChunks &out) {
-  if (settings.targetTrianglesPerChunk == 0 || package.draws.empty() ||
+  if (settings.opaqueTrianglesPerChunk == 0 || settings.coverageTrianglesPerChunk == 0 ||
+      package.draws.empty() ||
       package.indices.empty() || package.vertices.empty()) return false;
   SpatialRenderChunks prepared;
   prepared.indices.reserve(package.indices.size());
   prepared.draws.reserve(package.draws.size() +
-                         package.header.triangleCount / settings.targetTrianglesPerChunk);
+                         package.header.triangleCount /
+                             std::min(settings.opaqueTrianglesPerChunk,
+                                      settings.coverageTrianglesPerChunk));
   std::vector<TriangleRef> triangles;
   for (const MapDrawRecord &draw : package.draws) {
     if (draw.indexCount % 3 != 0 || draw.materialIndex >= package.materials.size()) return false;
     const u32 triangleCount = draw.indexCount / 3;
-    const bool blended = (package.materials[draw.materialIndex].flags & MapMaterialBlend) != 0;
+    const u32 materialFlags = package.materials[draw.materialIndex].flags;
+    const bool blended = (materialFlags & MapMaterialBlend) != 0;
+    const bool coverage = (materialFlags & MapMaterialAlphaMask) != 0;
+    const u32 targetTriangles = coverage ? settings.coverageTrianglesPerChunk
+                                         : settings.opaqueTrianglesPerChunk;
     triangles.clear();
     triangles.resize(triangleCount);
     Point minimum{std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
@@ -126,7 +133,7 @@ bool buildSpatialRenderChunks(const MapPackageView &package,
                       (corners[0].z + corners[1].z + corners[2].z) / 3.0f};
       expand(ref.centroid, minimum, maximum);
     }
-    if (!blended && triangleCount > settings.targetTrianglesPerChunk) {
+    if (!blended && triangleCount > targetTriangles) {
       for (TriangleRef &ref : triangles) {
         ref.morton = morton3(quantize(ref.centroid.x, minimum.x, maximum.x),
                              quantize(ref.centroid.y, minimum.y, maximum.y),
@@ -140,7 +147,7 @@ bool buildSpatialRenderChunks(const MapPackageView &package,
     }
     for (u32 first = 0; first < triangleCount;) {
       const u32 count = blended ? triangleCount :
-          std::min(settings.targetTrianglesPerChunk, triangleCount - first);
+          std::min(targetTriangles, triangleCount - first);
       if (!appendChunk(package, draw, triangles.data() + first, count, prepared)) return false;
       first += count;
     }

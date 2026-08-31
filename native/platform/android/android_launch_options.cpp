@@ -2,6 +2,7 @@
 #include <android/native_activity.h>
 #include <android/log.h>
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 namespace ae::platform::android {
@@ -123,6 +124,56 @@ bool readUnsignedLaunchOption(ANativeActivity *activity, const char *option, u32
   if (!ok || decoded < 0) return false;
   value = static_cast<u32>(decoded);
   return true;
+}
+
+bool readStringLaunchOption(ANativeActivity *activity, const char *option, char *buffer,
+                            usize bufferSize) {
+  if (activity == nullptr || activity->vm == nullptr || option == nullptr || buffer == nullptr ||
+      bufferSize == 0) return false;
+  JNIEnv *env = nullptr;
+  bool attachedHere = false;
+  const jint result = activity->vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
+  if (result == JNI_EDETACHED) {
+    if (activity->vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return false;
+    attachedHere = true;
+  } else if (result != JNI_OK) {
+    return false;
+  }
+  bool decoded = false;
+  const bool localFrame = env->PushLocalFrame(8) == JNI_OK;
+  const bool ok = localFrame && [&]() {
+    jclass activityClass = env->GetObjectClass(activity->clazz);
+    if (activityClass == nullptr) return false;
+    jmethodID getIntent = env->GetMethodID(activityClass, "getIntent", "()Landroid/content/Intent;");
+    if (getIntent == nullptr) return false;
+    jobject intent = env->CallObjectMethod(activity->clazz, getIntent);
+    if (env->ExceptionCheck() || intent == nullptr) return false;
+    jclass intentClass = env->GetObjectClass(intent);
+    if (intentClass == nullptr) return false;
+    jmethodID getString = env->GetMethodID(intentClass, "getStringExtra",
+        "(Ljava/lang/String;)Ljava/lang/String;");
+    if (getString == nullptr) return false;
+    jstring key = env->NewStringUTF(option);
+    if (key == nullptr) return false;
+    auto value = static_cast<jstring>(env->CallObjectMethod(intent, getString, key));
+    if (env->ExceptionCheck() || value == nullptr) return false;
+    const char *chars = env->GetStringUTFChars(value, nullptr);
+    if (chars == nullptr) return false;
+    const usize length = std::strlen(chars);
+    if (length >= bufferSize) {
+      env->ReleaseStringUTFChars(value, chars);
+      return false;
+    }
+    std::memcpy(buffer, chars, length);
+    buffer[length] = '\0';
+    env->ReleaseStringUTFChars(value, chars);
+    decoded = true;
+    return true;
+  }();
+  if (env->ExceptionCheck()) env->ExceptionClear();
+  if (localFrame) env->PopLocalFrame(nullptr);
+  if (attachedHere) activity->vm->DetachCurrentThread();
+  return ok && decoded;
 }
 
 } // namespace ae::platform::android

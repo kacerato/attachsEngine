@@ -11,6 +11,7 @@
 #include "platform/android/instanced_renderer.h"
 #include "platform/android/lifecycle_trace.h"
 #include "platform/app_lifecycle.h"
+#include "platform/camera_route.h"
 #include "platform/first_person_controller.h"
 #include "platform/free_camera_controller.h"
 #include "core/frame_policy.h"
@@ -85,9 +86,37 @@ struct AndroidShell final {
   bool hasLaunchCamera = false;
   ae::platform::FreeCameraState launchCamera{};
   ae::FrameBudget frameBudget = ae::makeFrameBudget(60.0f, 60.0f, 60);
+  ae::VisibilityBudget visibilityBudget{};
   ae::renderer::GpuCostIsolation gpuCostIsolation = ae::renderer::GpuCostIsolation::Full;
   int displayRotation = -1;
+
+  // Deterministic camera route (benchmark A/B tooling, see camera_route.h).
+  // Off by default; a launch option must explicitly opt in.
+  ae::platform::CameraRouteMode cameraRouteMode = ae::platform::CameraRouteMode::Off;
+  char cameraRoutePath[512]{};
+  ae::platform::CameraRouteRecorder cameraRouteRecorder;
+  ae::platform::CameraRoutePlayer cameraRoutePlayer;
+  ae::u64 cameraRouteFrameOrdinal = 0;
+  // Only true once a Replay route has been loaded AND its scene fingerprint
+  // matches the map actually running -- never trust a stale/foreign route.
+  bool cameraRouteReplayActive = false;
 };
+
+// Atomic-writes any pending recorded samples to disk. Safe to call repeatedly
+// (each call re-writes the full route atomically, so it is called from every
+// teardown path -- background/foreground cycling during a recording session
+// must never lose samples already captured) and safe to call with zero
+// samples recorded (a no-op).
+void flushCameraRouteRecordingIfNeeded(AndroidShell &shell) {
+  if (shell.cameraRouteMode != ae::platform::CameraRouteMode::Record) return;
+  if (shell.cameraRouteRecorder.sampleCount() == 0) return;
+  const bool ok = shell.cameraRouteRecorder.writeToFile(
+      shell.cameraRoutePath, shell.instancedRenderer.contentFingerprint(),
+      shell.frameBudget.renderHz);
+  __android_log_print(ok ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR, LogTag,
+      "[CameraRoute] gravação de %u amostras em '%s': %s", shell.cameraRouteRecorder.sampleCount(),
+      shell.cameraRoutePath, ok ? "sucesso" : "falhou");
+}
 
 const char *profileSceneId(const AndroidShell &shell) {
   if (shell.dirtRoadPreview) return "dirt-road";
@@ -196,6 +225,30 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
           camera.position[0],camera.position[1],camera.position[2],camera.yaw,camera.pitch,
           shell.lockCamera?"true":"false");
     }
+    if (shell.cameraRouteMode == ae::platform::CameraRouteMode::Replay) {
+      const bool loaded = shell.cameraRoutePlayer.loadFromFile(shell.cameraRoutePath);
+      const ae::u64 sceneFingerprint = shell.instancedRenderer.contentFingerprint();
+      shell.cameraRouteReplayActive = loaded &&
+          shell.cameraRoutePlayer.data().sceneFingerprint == sceneFingerprint;
+      if (!shell.cameraRouteReplayActive) {
+        __android_log_print(ANDROID_LOG_ERROR, LogTag,
+            "[CameraRoute] replay de '%s' recusado (carregado=%s, fingerprint rota=%016llx cena=%016llx); "
+            "câmera permanece na pose travada.",
+            shell.cameraRoutePath, loaded ? "sim" : "não",
+            loaded ? static_cast<unsigned long long>(shell.cameraRoutePlayer.data().sceneFingerprint) : 0ull,
+            static_cast<unsigned long long>(sceneFingerprint));
+      } else {
+        __android_log_print(ANDROID_LOG_INFO, LogTag,
+            "[CameraRoute] replay ativo: '%s', %u ticks, fingerprint=%016llx.",
+            shell.cameraRoutePath, shell.cameraRoutePlayer.tickCount(),
+            static_cast<unsigned long long>(shell.cameraRoutePlayer.data().sceneFingerprint));
+      }
+    } else if (shell.cameraRouteMode == ae::platform::CameraRouteMode::Record) {
+      shell.cameraRouteRecorder.reset();
+      shell.cameraRouteRecorder.reserve(shell.frameBudget.renderHz * 60u); // hint: ~60s a cadência alvo
+      __android_log_print(ANDROID_LOG_INFO, LogTag,
+          "[CameraRoute] gravação ativa, será escrita em '%s' ao encerrar.", shell.cameraRoutePath);
+    }
   }
   if (!shell.instancedRendererReady) shell.instancedRenderer.shutdown();
   if (shell.instancedRendererReady && shell.lifecycle.isActive())
@@ -276,6 +329,7 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
   }
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::DestroySurface)) {
     collectRendererInitialization(shell,true);
+    flushCameraRouteRecordingIfNeeded(shell);
     ae::platform::android::ScopedLifecycleStage trace("destroy-surface-renderer");
     shell.instancedRenderer.shutdown();
     shell.instancedRendererReady = false;
@@ -300,6 +354,7 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     shell.cameraController.cancelGesture();
     shell.firstPersonTouches.cancel();
     shell.performance.setActive(false, false);
+    flushCameraRouteRecordingIfNeeded(shell);
     __android_log_print(ANDROID_LOG_INFO, LogTag, "Aplicativo suspenso.");
   }
 }
@@ -478,6 +533,25 @@ void android_main(android_app *app) {
   shell.dirtRoadPreview = explicitMap || (!shell.scenePreview && !benchmarkPreview && !shell.materialPreview);
   shell.forceTextureFallback = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.force_texture_fallback");
   shell.lockCamera = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.lock_camera");
+  ae::u32 requestedCameraRouteMode = 0;
+  ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.camera_route_mode",
+                                                   requestedCameraRouteMode);
+  shell.cameraRouteMode = ae::platform::sanitizeCameraRouteMode(requestedCameraRouteMode);
+  ae::platform::android::readStringLaunchOption(app->activity, "aether.camera_route_path",
+      shell.cameraRoutePath, sizeof(shell.cameraRoutePath));
+  if (shell.cameraRouteMode != ae::platform::CameraRouteMode::Off && shell.cameraRoutePath[0] == '\0') {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag,
+        "[CameraRoute] modo '%s' pedido sem aether.camera_route_path; permanecendo Off.",
+        ae::platform::cameraRouteModeName(shell.cameraRouteMode));
+    shell.cameraRouteMode = ae::platform::CameraRouteMode::Off;
+  }
+  if (shell.cameraRouteMode == ae::platform::CameraRouteMode::Replay) {
+    // A rota reproduzida dirige a câmera deterministicamente a cada frame;
+    // input precisa ficar bloqueado exatamente como numa captura de câmera
+    // travada, e o update manual de FirstPersonController/CharacterMotor não
+    // pode competir com ela.
+    shell.lockCamera = true;
+  }
   // Controller mode is a global runtime policy. Diagnostic fixtures and locked
   // camera captures remain deterministic; `aether.free_camera` explicitly
   // selects the editor navigation controller instead.
@@ -527,6 +601,50 @@ void android_main(android_app *app) {
   shell.instancedRenderer.setCoveragePrepassEnabled(
       !ae::platform::android::readBooleanLaunchOption(app->activity,
                                                        "aether.disable_coverage_prepass"));
+  // HZB occlusion is a new, opt-in experiment (unlike coverage prepass above,
+  // which is opt-out): default false until a physical A/B validates it. See
+  // InstancedRenderer::setHzbOcclusionEnabled and
+  // PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md.
+  shell.instancedRenderer.setHzbOcclusionEnabled(
+      ae::platform::android::readBooleanLaunchOption(app->activity, "aether.hzb_occlusion"));
+  ae::u32 requestedHysteresisFrames = shell.visibilityBudget.hzbHysteresisFrames;
+  if (ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.hzb_hysteresis_frames",
+                                                       requestedHysteresisFrames)) {
+    shell.visibilityBudget.hzbHysteresisFrames = requestedHysteresisFrames;
+  }
+  shell.instancedRenderer.setHzbHysteresisFrames(shell.visibilityBudget.hzbHysteresisFrames);
+  ae::u32 hzbMinimumCandidateDraws = shell.visibilityBudget.hzbMinimumCandidateDraws;
+  if (ae::platform::android::readUnsignedLaunchOption(
+          app->activity, "aether.hzb_minimum_candidate_draws", hzbMinimumCandidateDraws)) {
+    shell.visibilityBudget.hzbMinimumCandidateDraws = hzbMinimumCandidateDraws;
+  }
+  shell.instancedRenderer.setHzbMinimumCandidateDraws(
+      shell.visibilityBudget.hzbMinimumCandidateDraws);
+  float hzbNormalizedDepthBias = shell.visibilityBudget.hzbNormalizedDepthBias;
+  if (ae::platform::android::readFloatLaunchOption(app->activity, "aether.hzb_depth_bias",
+                                                    hzbNormalizedDepthBias)) {
+    shell.visibilityBudget.hzbNormalizedDepthBias = hzbNormalizedDepthBias;
+  }
+  shell.instancedRenderer.setHzbNormalizedDepthBias(
+      shell.visibilityBudget.hzbNormalizedDepthBias);
+  // LOD selection: same opt-in-and-off-by-default discipline as HZB above.
+  // See InstancedRenderer::setLodSelectionEnabled and
+  // PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md.
+  shell.instancedRenderer.setLodSelectionEnabled(
+      ae::platform::android::readBooleanLaunchOption(app->activity, "aether.lod_selection"));
+  float lodPixelErrorBudget = shell.visibilityBudget.lodPixelErrorBudget;
+  if (ae::platform::android::readFloatLaunchOption(app->activity, "aether.lod_pixel_error_budget",
+                                                    lodPixelErrorBudget)) {
+    shell.visibilityBudget.lodPixelErrorBudget = lodPixelErrorBudget;
+  }
+  shell.instancedRenderer.setLodPixelErrorBudget(shell.visibilityBudget.lodPixelErrorBudget);
+  float lodHysteresisBandRatio = shell.visibilityBudget.lodHysteresisBandRatio;
+  if (ae::platform::android::readFloatLaunchOption(app->activity, "aether.lod_hysteresis_band_ratio",
+                                                    lodHysteresisBandRatio)) {
+    shell.visibilityBudget.lodHysteresisBandRatio = lodHysteresisBandRatio;
+  }
+  shell.instancedRenderer.setLodHysteresisBandRatio(
+      shell.visibilityBudget.lodHysteresisBandRatio);
   if (shell.frameProfiler.enabled()) {
     // A long benchmark must not time out into the keyguard. This window flag
     // only keeps an already-unlocked foreground window awake; it changes no
@@ -599,7 +717,14 @@ void android_main(android_app *app) {
     const bool frameAdmitted = !shell.framePacer.available() || shell.framePacer.consumeFrame();
     if (shell.lifecycle.isActive() && shell.instancedRendererReady && frameAdmitted) {
       const auto frameWorkStarted = std::chrono::steady_clock::now();
-      if (shell.firstPersonEnabled) {
+      if (shell.cameraRouteReplayActive) {
+        // Determinism comes from indexing by frame ordinal, never by wall
+        // clock -- see camera_route.h. Looping by modulo lets a short route
+        // drive an arbitrarily long soak run.
+        shell.cameraController.setState(
+            shell.cameraRoutePlayer.sample(shell.cameraRouteFrameOrdinal));
+        ++shell.cameraRouteFrameOrdinal;
+      } else if (shell.firstPersonEnabled) {
         auto camera = shell.cameraController.state();
         const float deltaSeconds = std::chrono::duration<float>(
             frameWorkStarted - shell.lastGameplayUpdate).count();
@@ -663,6 +788,9 @@ void android_main(android_app *app) {
           shell.lastFpsPublishedAt = presentedAt;
         }
         ++shell.presentedFrameCount;
+        if (shell.cameraRouteMode == ae::platform::CameraRouteMode::Record) {
+          shell.cameraRouteRecorder.pushSample(shell.cameraController.state());
+        }
         if (shell.scenePreview && shell.instancedRenderer.lastExtractionStatus() == 0 &&
             (shell.sceneReportedStep != shell.sceneStep || shell.firstFrameAfterActivationPending)) {
           __android_log_print(ANDROID_LOG_INFO, LogTag,
@@ -717,6 +845,14 @@ void android_main(android_app *app) {
         context.targetFps = shell.frameBudget.renderHz;
         context.gpuIsolation = ae::renderer::gpuCostIsolationName(shell.gpuCostIsolation);
         context.cameraLocked = shell.lockCamera;
+        context.cameraMode = shell.cameraRouteReplayActive ? "route" : (shell.lockCamera ? "locked" : "free");
+        if (shell.cameraRouteReplayActive) {
+          context.cameraRouteFingerprint = shell.cameraRoutePlayer.data().sceneFingerprint;
+          // frameOrdinal was already advanced past the sample used for this
+          // frame; report the sample actually consumed, not the next one.
+          context.cameraRouteFrameOrdinal = shell.cameraRouteFrameOrdinal - 1;
+          context.cameraRouteTickCount = shell.cameraRoutePlayer.tickCount();
+        }
         std::copy(camera.position, camera.position + 3, context.cameraPosition);
         context.cameraYaw = camera.yaw;
         context.cameraPitch = camera.pitch;
@@ -724,12 +860,22 @@ void android_main(android_app *app) {
         context.materialCount = shell.instancedRenderer.profileMaterialCount();
         context.textureCount = shell.instancedRenderer.profileTextureCount();
         context.triangleCount = shell.instancedRenderer.profileTriangleCount();
+        context.packageVersion = shell.instancedRenderer.profilePackageVersion();
+        context.renderDrawCount = shell.instancedRenderer.profileRenderDrawCount();
+        context.lodGroupCount = shell.instancedRenderer.profileLodGroupCount();
+        context.hzbEnabled = shell.instancedRenderer.hzbOcclusionEnabled();
+        context.lodEnabled = shell.instancedRenderer.lodSelectionEnabled();
         const auto &visibility = shell.instancedRenderer.visibilityTelemetry();
         context.visibleDrawCount = visibility.visibleDraws;
         context.culledDrawCount = visibility.culledDraws;
         context.submittedDrawCallCount = visibility.submittedDrawCalls;
         context.visibleTriangleCount = visibility.visibleTriangles;
         context.submittedTriangleCount = visibility.submittedTriangles;
+        context.hzbTestedDrawCount = visibility.hzbTestedDraws;
+        context.hzbOccludedDrawCount = visibility.hzbOccludedDraws;
+        context.hzbRevivedDrawCount = visibility.hzbRevivedDraws;
+        context.hzbSkippedCameraMotionDrawCount = visibility.hzbSkippedCameraMotionDraws;
+        context.hzbSkippedBudgetDrawCount = visibility.hzbSkippedBudgetDraws;
         shell.frameProfiler.record(shell.instancedRenderer.lastFrameTimings(), context,
                                     shell.instancedRenderer.drawnInstanceCount(), display.width, display.height);
       } else {

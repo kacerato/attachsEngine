@@ -2,18 +2,27 @@
 
 #include "core/base.h"
 
+#include <cmath>
 #include <cstring>
 #include <span>
 #include <type_traits>
+#include <vector>
 
 namespace ae::renderer {
 
 inline constexpr u32 MapPackageMagic = 0x504D4541; // AEMP, little-endian
 inline constexpr u32 MapPackageMinimumVersion = 1;
-inline constexpr u32 MapPackageVersion = 2;
+inline constexpr u32 MapPackageVersion = 3;
 inline constexpr u32 MapPackageHeaderSize = 144;
 inline constexpr u32 MapVertexStrideV1 = 72;
 inline constexpr u32 MapVertexStride = 48;
+// v1/v2 share the 96-byte MapDrawRecord layout (no LOD fields); v3 adds
+// lodLevel/geometricError/lodGroupId (108 bytes). Decoding must never
+// reinterpret_cast the file's bytes directly onto the current in-memory
+// struct across this boundary -- see decodeMapPackage's per-version unpack.
+inline constexpr u32 MapDrawRecordStrideV1V2 = 96;
+inline constexpr u32 MapDrawRecordStride = 108;
+inline constexpr u32 MapMaximumLodLevels = 3;
 inline constexpr u32 InvalidMapTexture = 0xFFFFFFFFu;
 
 // Material flags are shared by the offline glTF cooker and the Vulkan shader.
@@ -58,6 +67,14 @@ struct MapDrawRecord {
   float model[16];
   float boundsCenter[3];
   float boundsRadius;
+  // v3+ only. v1/v2 packages decode to lodLevel=0, geometricError=0.0,
+  // lodGroupId=<this draw's index> -- "level 0, no LOD" for legacy content,
+  // which renderer::computeScreenSpaceError always selects (see
+  // renderer/lod_selection.h). lodGroupId ties the N discrete levels of one
+  // spatial chunk together; it is NOT a material or draw index.
+  u32 lodLevel;
+  float geometricError;
+  u32 lodGroupId;
 };
 
 struct MapPackageHeader {
@@ -91,14 +108,20 @@ struct MapPackageView {
   u64 contentFingerprint = 0;
   std::span<const MapTextureRecord> textures{};
   std::span<const MapMaterialRecord> materials{};
-  std::span<const MapDrawRecord> draws{};
+  // Owned (not a zero-copy span): v1/v2 draws are 96 bytes on disk, v3 draws
+  // are 108. decodeMapPackage unpacks either into this struct's CURRENT
+  // (v3-shaped) layout explicitly, one field at a time -- a raw
+  // reinterpret_cast of file bytes onto MapDrawRecord would silently
+  // misread every legacy package the moment the struct grew. See
+  // decodeMapPackage's per-version unpack loop.
+  std::vector<MapDrawRecord> draws;
   std::span<const u8> vertices{};
   std::span<const u32> indices{};
 };
 
 static_assert(std::is_standard_layout_v<MapTextureRecord> && sizeof(MapTextureRecord) == 16);
 static_assert(std::is_standard_layout_v<MapMaterialRecord> && sizeof(MapMaterialRecord) == 80);
-static_assert(std::is_standard_layout_v<MapDrawRecord> && sizeof(MapDrawRecord) == 96);
+static_assert(std::is_standard_layout_v<MapDrawRecord> && sizeof(MapDrawRecord) == 108);
 
 inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
   if (bytes.size() < MapPackageHeaderSize) return false;
@@ -118,10 +141,13 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
   };
   const u32 version = word(4);
   const u32 vertexStride = word(12);
+  // v3 keeps v2's packed vertex layout; only MapDrawRecord's on-disk stride
+  // changes at v3 (see drawRecordStride below).
   if (word(0) != MapPackageMagic || version < MapPackageMinimumVersion ||
       version > MapPackageVersion || word(8) != MapPackageHeaderSize ||
       (version == 1 && vertexStride != MapVertexStrideV1) ||
-      (version == 2 && vertexStride != MapVertexStride)) return false;
+      ((version == 2 || version == 3) && vertexStride != MapVertexStride)) return false;
+  const u32 drawRecordStride = version >= 3 ? MapDrawRecordStride : MapDrawRecordStrideV1V2;
 
   MapPackageView decoded;
   decoded.header.version = version;
@@ -168,7 +194,7 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
   };
   if (!section(decoded.header.textureOffset, decoded.header.textureCount, sizeof(MapTextureRecord)) ||
       !section(decoded.header.materialOffset, decoded.header.materialCount, sizeof(MapMaterialRecord)) ||
-      !section(decoded.header.drawOffset, decoded.header.drawCount, sizeof(MapDrawRecord)) ||
+      !section(decoded.header.drawOffset, decoded.header.drawCount, drawRecordStride) ||
       !section(decoded.header.vertexOffset, decoded.header.vertexCount, vertexStride) ||
       !section(decoded.header.indexOffset, decoded.header.indexCount, sizeof(u32))) return false;
   if ((decoded.header.textureOffset | decoded.header.materialOffset | decoded.header.drawOffset |
@@ -178,7 +204,7 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
   const u64 materialEnd = decoded.header.materialOffset +
                           static_cast<u64>(decoded.header.materialCount) * sizeof(MapMaterialRecord);
   const u64 drawEnd = decoded.header.drawOffset +
-                      static_cast<u64>(decoded.header.drawCount) * sizeof(MapDrawRecord);
+                      static_cast<u64>(decoded.header.drawCount) * drawRecordStride;
   const u64 vertexEnd = decoded.header.vertexOffset +
                         static_cast<u64>(decoded.header.vertexCount) * vertexStride;
   const u64 indexEnd = decoded.header.indexOffset +
@@ -191,8 +217,36 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
                       decoded.header.textureCount};
   decoded.materials = {reinterpret_cast<const MapMaterialRecord *>(bytes.data() + decoded.header.materialOffset),
                        decoded.header.materialCount};
-  decoded.draws = {reinterpret_cast<const MapDrawRecord *>(bytes.data() + decoded.header.drawOffset),
-                   decoded.header.drawCount};
+  // Never reinterpret_cast this section: v1/v2 files are 96 bytes/record,
+  // v3 is 108. Unpacking one field at a time is what lets a v1/v2 package
+  // stay readable forever even as MapDrawRecord keeps growing.
+  decoded.draws.clear();
+  decoded.draws.reserve(decoded.header.drawCount);
+  for (u32 drawIndex = 0; drawIndex < decoded.header.drawCount; ++drawIndex) {
+    const usize base =
+        static_cast<usize>(decoded.header.drawOffset) + static_cast<usize>(drawIndex) * drawRecordStride;
+    MapDrawRecord record{};
+    record.firstIndex = word(base + 0);
+    record.indexCount = word(base + 4);
+    record.vertexOffset = word(base + 8);
+    record.materialIndex = word(base + 12);
+    for (u32 i = 0; i < 16; ++i) record.model[i] = real(base + 16 + i * 4);
+    for (u32 i = 0; i < 3; ++i) record.boundsCenter[i] = real(base + 80 + i * 4);
+    record.boundsRadius = real(base + 92);
+    if (version >= 3) {
+      record.lodLevel = word(base + 96);
+      record.geometricError = real(base + 100);
+      record.lodGroupId = word(base + 104);
+    } else {
+      // "Level 0, no LOD" for legacy content: computeScreenSpaceError always
+      // selects level 0 when geometricError is 0, and a group of size one
+      // never collides with a real multi-level group from a v3 package.
+      record.lodLevel = 0;
+      record.geometricError = 0.0f;
+      record.lodGroupId = drawIndex;
+    }
+    decoded.draws.push_back(record);
+  }
   decoded.vertices = {bytes.data() + decoded.header.vertexOffset,
                       static_cast<usize>(decoded.header.vertexCount) * vertexStride};
   decoded.indices = {reinterpret_cast<const u32 *>(bytes.data() + decoded.header.indexOffset),
@@ -200,7 +254,11 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
   for (const auto &draw : decoded.draws) {
     if (draw.materialIndex >= decoded.header.materialCount || draw.indexCount == 0 ||
         draw.firstIndex > decoded.header.indexCount ||
-        draw.indexCount > decoded.header.indexCount - draw.firstIndex) return false;
+        draw.indexCount > decoded.header.indexCount - draw.firstIndex ||
+        !std::isfinite(draw.geometricError) || draw.geometricError < 0.0f ||
+        draw.lodLevel >= MapMaximumLodLevels ||
+        draw.lodGroupId >= decoded.header.drawCount ||
+        (draw.lodLevel == 0 && draw.geometricError != 0.0f)) return false;
   }
   for (const auto &material : decoded.materials) {
     for (u32 texture : material.textureIndices) {

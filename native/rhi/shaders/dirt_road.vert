@@ -31,13 +31,21 @@ layout(location=2) out vec4 vTangent;
 layout(location=3) out vec2 vUv0;
 layout(location=4) out vec2 vUv1;
 layout(location=5) out vec4 vColor;
+// LOD dither cross-fade factor (see renderer::selectLodLevel /
+// PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md): [-1,1], 0 = fully opaque, positive =
+// outgoing mask, negative = incoming complementary mask. Piggybacks
+// on GpuMeshInstance.normalColumns[7] (column 1's .w), which
+// buildNormalMatrix leaves at 0 unconditionally -- column 0's .w is the only
+// one carrying real data (tangent handedness sign), so this slot never grew
+// the 128-byte instance struct or its vertex binding stride.
+layout(location=6) out float vDither;
 void main() {
   vPosition=(inModel*vec4(inPosition,1)).xyz;
   mat3 linear=mat3(inModel);
   mat3 normalMatrix=mat3(inNormalColumn0.xyz,inNormalColumn1.xyz,inNormalColumn2.xyz);
   vNormal=normalize(normalMatrix*inNormal);
   vTangent=vec4(normalize(linear*inTangent.xyz),inTangent.w*inNormalColumn0.w);
-  vUv0=inUv0; vUv1=inUv1; vColor=inColor*inTint;
+  vUv0=inUv0; vUv1=inUv1; vColor=inColor*inTint; vDither=inNormalColumn1.w;
   vec3 relative=vPosition-frame.cameraPositionNear.xyz;
   vec3 view=vec3(dot(environment.worldToViewRow0.xyz,relative),
                  dot(environment.worldToViewRow1.xyz,relative),

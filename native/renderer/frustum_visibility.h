@@ -46,6 +46,23 @@ struct VisibilityTelemetry final {
   u64 candidateTriangles = 0;
   u64 visibleTriangles = 0;
   u64 submittedTriangles = 0;
+  // HZB occlusion stage (see renderer/hzb_visibility.h), applied only to
+  // draws that already survived frustum culling above -- hzbOccludedDraws is
+  // therefore already counted inside culledDraws, not additional to it.
+  // Zero on every frame HZB occlusion is disabled or not yet initialized.
+  u32 hzbTestedDraws = 0;
+  u32 hzbOccludedDraws = 0;
+  // Objects whose occluded streak reset to zero this frame (an instant
+  // revive, never delayed -- see updateHzbHysteresis). A large count relative
+  // to hzbTestedDraws would flag thrashing at the hysteresis boundary.
+  u32 hzbRevivedDraws = 0;
+  // Temporal CPU-readback HZB is only conservative when it represents the
+  // same camera pose. Until a same-frame GPU culling path exists, moving
+  // camera frames fail open and report how many candidates skipped HZB.
+  u32 hzbSkippedCameraMotionDraws = 0;
+  // Candidates deliberately left visible because the current workload is
+  // below the global fixed-cost threshold for CPU-readback HZB.
+  u32 hzbSkippedBudgetDraws = 0;
 };
 
 } // namespace ae::renderer

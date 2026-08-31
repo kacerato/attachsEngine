@@ -57,7 +57,8 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
         val mapVersion = (mapManifest["version"] as? Number)?.toInt()
         val mapFormat = mapManifest["format"] as? String
         check((mapVersion == 1 && mapFormat == "AEMAP-1") ||
-              (mapVersion == 2 && mapFormat == "AEMAP-2")) {
+              (mapVersion == 2 && mapFormat == "AEMAP-2") ||
+              (mapVersion == 3 && mapFormat == "AEMAP-3")) {
             "Unsupported dirt road package manifest"
         }
         val mapOutputs = mapManifest["outputs"] as Map<*, *>

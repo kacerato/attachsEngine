@@ -126,6 +126,13 @@ public:
   bool createBuffer(const BufferDesc &desc, VulkanBuffer *outBuffer);
   void destroyBuffer(VulkanBuffer &buffer);
   bool flushBuffer(VulkanBuffer &buffer, u64 offsetBytes = 0, u64 sizeBytes = 0);
+  // Mirror of flushBuffer for the opposite (GPU-wrote, CPU-about-to-read)
+  // direction -- e.g. a vkCmdCopyImageToBuffer readback target. A no-op on
+  // already host-coherent memory (the common case on mobile UMA), but never
+  // assumed: VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT (see createBuffer)
+  // does not itself guarantee coherency, only that VMA prefers cached memory
+  // when available.
+  bool invalidateBuffer(VulkanBuffer &buffer, u64 offsetBytes = 0, u64 sizeBytes = 0);
   bool createImage(const ImageDesc &desc, VulkanImage *outImage);
   void destroyImage(VulkanImage &image);
 

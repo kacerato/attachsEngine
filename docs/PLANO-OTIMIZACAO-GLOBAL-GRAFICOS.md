@@ -82,6 +82,135 @@
 > `ground=0` na estrada. Este recurso melhora a qualidade do benchmark, mas não fecha
 > o gate de desempenho: perfil CPU/GPU longo com gameplay ainda é obrigatório.
 
+> **Rota determinística, HZB com histerese e LOD por erro projetado — revisão
+> e primeira validação Adreno em 31/08/2026.** Os três sistemas da "próxima
+> ordem aprovada" (seção 6.3) foram integrados e revisados antes do A/B físico.
+> Nenhum ganho de HZB/LOD é declarado e as duas flags continuam desligadas por
+> padrão: a rota foi validada; HZB só fechou correção estática; o asset entregue
+> ainda é AEMAP v2 e portanto não contém grupos de LOD.
+>
+> **Rota de câmera** (`native/platform/camera_route.h/.cpp`, formato
+> `.aeroute`): indexada por *ordinal de frame renderizado*, nunca por tempo —
+> `tickRateHz` é só metadado, porque o loop atual não tem fixed tick de
+> simulação e indexar por relógio faria duas execuções amostrarem poses
+> diferentes sob FPS distinto, destruindo a comparação A/B que é o único
+> motivo de a rota existir. Grava fingerprint FNV-1a da cena (mesmo algoritmo
+> do AEMAP) e recusa reproduzir uma rota gravada para outro mapa. Novos
+> launch options `aether.camera_route_mode` (off/record/replay) e
+> `aether.camera_route_path`; replay reaproveita o gate de input de
+> `aether.lock_camera`. `FrameProfileContext` schema v2→v3 (`camera_mode`,
+> `camera_route_fingerprint/frame_ordinal/tick_count`). 7 testes nativos.
+>
+> **HZB** (`native/renderer/hzb_visibility.h/.cpp` + integração em
+> `InstancedRenderer`): pirâmide Hi-Z construída por uma **cadeia de passes
+> gráficos pequenos** (fullscreen triangle + fragment de redução MAX,
+> `R32_SFLOAT`), não compute — o repositório não tinha nenhum compute
+> reutilizável, e TBDR móvel historicamente paga caro a transição
+> gráfico↔compute no meio do frame. Primeiro nível é um *block-max* real
+> sobre a resolução exata do depth (evita subamostrar e superestimar
+> conservadorismo); níveis seguintes são halving 2×2 exato via `texelFetch`.
+> Teste de oclusão com histerese configurável (`aether.hzb_hysteresis_frames`,
+> padrão 3): revive instantâneo em qualquer frame não-ocluído, só cula após N
+> frames consecutivos ocluído, nunca testado = visível. Leitura do readback
+> no início do frame seguinte, no mesmo ponto onde `gpuFrameTimer_` já lê sem
+> stall novo — a espera de fence do `acquireNextImage` (1 frame em voo) já
+> garante a cópia do frame anterior terminada. `depthImage_` ganhou
+> `VK_IMAGE_USAGE_SAMPLED_BIT`; `VulkanMemoryAllocator` ganhou
+> `invalidateBuffer` (espelho de `flushBuffer` para leitura CPU de escrita
+> GPU). Opt-in via `aether.hzb_occlusion`. 10 testes nativos cobrindo
+> MAX-reduction, layout de readback, projeção esfera→retângulo de tela e as
+> transições de histerese — um deles pegou um bug real de arredondamento de
+> índice de texel antes deste texto ser escrito.
+>
+> **LOD** (`native/renderer/lod_selection.h/.cpp` + AEMAP v3 +
+> `tools/cook-gltf-map.py`): fórmula padrão de erro projetado
+> (`geometricError × alturaViewportPx / (2×distância×tan(fovY/2))`, mesma de
+> 3D Tiles/Simplygon), seleção com banda de histerese assimétrica (refina
+> imediatamente, só simplifica com margem extra). `MapDrawRecord` cresceu de
+> 96 para 108 bytes (`lodLevel`, `geometricError`, `lodGroupId`); como o
+> decoder fazia `reinterpret_cast` direto dos bytes do arquivo, crescer a
+> struct exigiria reescrever esse cast — em vez disso `decodeMapPackage`
+> passa a desempacotar campo a campo por versão, e pacotes v1/v2 decodificam
+> com LOD default (nível 0, erro 0, grupo = o próprio índice), permanecendo
+> 100% legíveis. Simplificador do cooker é *vertex clustering* determinístico
+> (grid-snap por posição + guarda de descontinuidade de normal + guarda de
+> ilha de UV, nunca funde através de uma costura), com blend e alpha-mask
+> **excluídos da simplificação nesta fatia** — vegetação/cutout é exatamente
+> o conteúdo mais arriscado de colapsar sem alguém checando visualmente, e
+> blend tem ordem de primitiva que participa da composição. Build falha se
+> `geometricError` não crescer estritamente por nível ou se os bounds do
+> nível simplificado ultrapassarem os originais além de um épsilon. Dither de
+> transição usa o slot `normalColumns[7]` de `GpuMeshInstance` — sempre zero
+> hoje (`buildNormalMatrix` só grava sinal de handedness em `column0.w`), sem
+> crescer a struct de 128 bytes nem a stride do vertex binding — testado
+> contra uma matriz Bayer 4×4 no shading compartilhado de
+> `dirt_road.frag`/`dirt_road_fallback.frag`. Seleção por `lodGroupId` roda
+> por frame, antes do frustum culling, decidindo quais chunks entram como
+> candidatos. Opt-in via `aether.lod_selection`
+> (`aether.lod_pixel_error_budget`, `aether.lod_hysteresis_band_ratio`). 6
+> testes nativos (fórmula, seleção, histerese, dither) + 10 testes Python do
+> simplificador — um deles pegou um bug real de offset de byte na leitura de
+> `MapMaterialRecord.flags` (lia o campo errado, quebrando silenciosamente a
+> exclusão de blend/alpha-mask).
+>
+> **Correção paralela:** `tools/android-frame-profile.ps1` validava
+> `schemaVersion` contra `1` enquanto o C++ já emitia `2` — todo contexto de
+> profiling era rejeitado. Corrigido antes de estender o schema para v3.
+>
+> **Revisão de correção e evidência física:** a integração inicial comparava
+> profundidade Vulkan normalizada com metros em view-space, descartava o depth
+> com `storeOp=DONT_CARE`, ignorava a pré-rotação da Surface, tratava cada chunk
+> espacial como um nível de LOD separado e usava duas máscaras de dither que se
+> sobrepunham. Esses cinco defeitos foram corrigidos. O formato de depth sampled
+> agora é detectado por capability e falha para o depth normal quando ausente.
+> Em Debug no Xiaomi, HZB forçado ficou sem VUID e a captura foi bit a bit idêntica
+> ao caminho sem HZB; essa pose aérea vale apenas como gate de correção, não como
+> benchmark. A leitura CPU custou mais que a oclusão de um único chunk, então a
+> política global ganhou `hzbMinimumCandidateDraws=128`; abaixo do limiar nenhum
+> passe/readback é gravado e `hzb_budget_skipped_draws` explica o fallback. Em
+> movimento, a pirâmide temporal só é usada se a pose coincidir; caso contrário
+> falha aberta. O próximo HZB de produto deve ser same-frame/GPU-driven, sem
+> readback CPU.
+>
+> **Baseline móvel reproduzível v11:** `forest-walk-v1.aeroute` contém 6.611
+> poses (55,09 s a 120 Hz), percorre 487,16 unidades dentro do mapa e carrega o
+> fingerprint `18faf0f1d9d8ee90`. A passagem completa Release mediu 95,16
+> presents/s, pior janela de 600 frames em 84,18, CPU média 1,34 ms, GPU média
+> 9,13 ms e pior GPU-p95 de janela 12,93 ms. O maior intervalo isolado equivaleu
+> a 53,9 FPS, reproduzindo a classe de queda percebida pelo usuário sem usar o
+> overview distante. O profiler agora anexa `route_frame`, draws e triângulos
+> visíveis ao fechamento de cada janela para localizar o hotspot exato.
+>
+> **Experimento rejeitado no mesmo percurso:** reduzir globalmente chunks de
+> alpha-coverage de 8.192 para 2.048 triângulos criou 125 em vez de 58 chunks,
+> mas GPU média ficou 9,14 ms e a estabilidade não melhorou. A configuração por
+> classe de material permanece reutilizável, porém o default volta a 8.192.
+> Um segundo A/B intercalado mediu o próprio prepass seletivo na rota real:
+> ligado 93,61 → desligado 80,89 → ligado 92,45 presents/s. Sem o prepass, a GPU
+> média subiu de 9,32 ms (média dos controles) para 11,01 ms (+18,1%), enquanto
+> CPU média ficou praticamente estável (1,48/1,45/1,66 ms), `thermalStatus=0` e
+> temperatura 34,5→37,0 °C ao longo da sequência. Portanto o prepass de materiais
+> `MASK` permanece ligado globalmente; removê-lo aumenta overdraw e não libera CPU.
+> O fechamento da pior janela (`route_frame≈1734`) foi convertido em pose fixa
+> `(-15,71,145,27,-25,72; yaw=2,75; pitch=0,11)`. Nela, três controles `full`
+> ficaram em 85,92/83,97/84,01 presents/s e 10,37–10,39 ms GPU; `base-color`
+> chegou a 120,08/6,08 ms. `no-normal` isolou 94,41/9,14 ms e `no-ibl`
+> 87,47/9,98 ms, todos com CPU 1,28–1,59 ms e `thermalStatus=0`. Assim, o hotspot
+> é fragment/material e o maior subcusto medido é normal mapping, não CPU.
+> A primeira correção exata removeu `nonuniformEXT` dos índices bindless: esses
+> índices vêm de push constants aplicadas uma vez por lote que já é agrupado por
+> material, portanto são dinamicamente uniformes. O SPIR-V mantém
+> `RuntimeDescriptorArray` e deixa de declarar `ShaderNonUniform`, sem mudar pixels.
+> O v15 foi recompilado/instalado e medido na mesma pose: cinco janelas ficaram em
+> 83,05–83,65 presents/s e ~10,38 ms GPU, dentro/levemente abaixo dos controles v14
+> (83,97–85,92 e 10,37–10,39 ms). O Adreno já scalarizava esse acesso ou o custo é
+> irrelevante; a correção semântica permanece, mas **nenhum ganho é declarado**.
+> O runner agora recusa profiling `dirt-road` sem `CameraPose` ou rota Record/
+> Replay, impedindo que a câmera de overview gere um FPS ilusório. Antes de HZB
+> ou LOD virarem padrão ainda faltam A/B frio/aquecido, diff SSIM/FLIP, soak de
+> 30 min, captura AGI do hotspot e Mali físico. Verificação corrente: 225/225
+> testes C++ Release, 10/10 do simplificador LOD e 35/35 do FrameProfile.
+
 ## 1. Objetivo e regra de qualidade
 
 Elevar o desempenho de cenas reais para **60 FPS sustentados como piso**, com 90 e
@@ -574,14 +703,99 @@ stutter ou mudança visual abrupta.
 | **G1 — Correção** | pipeline Opaque/Mask/Blend/DoubleSided e corpus de materiais | G0 | zero branco e zero desaparecimento conhecido |
 | **G2 — Ambiente** | céu azul/nuvens/sol desacoplado do IBL, SH, exposição AgX | G1 | imagem melhor e custo do céu menor |
 | **G3 — Sol e contato** | CSM cacheada + alpha-test de vegetação + GTAO/bent normals | G1–G2 | iluminação sob copa coerente |
-| **G4 — Visibilidade** | BVH, frustum, HZB, instancing, LOD conservador | G0–G1 | custo proporcional ao visível, sem pop/sumiço |
-| **G5 — Frame móvel** | Render Graph GPU, cache, Forward+, memoryless e paralelismo | G0–G4 | p99 GPU ≤16,6 ms e CPU p95 ≤3 ms |
+| **G4 — Visibilidade** | BVH, frustum, HZB, instancing, LOD/HLOD conservador | G0–G1 | custo proporcional ao visível, sem pop/sumiço |
+| **G5 — Margem móvel** | Render Graph GPU, cache, mobile passes, memoryless e compactação GPU | G0–G4 | aparelho forte: rota GPU média ≤6,20 ms, p95 ≤7,00 ms, p99 ≤8,00 ms e CPU p95 ≤3 ms |
 | **G6 — Sustentação** | soak, perfis, governor e caminho 90/120 Hz | G5 | 60 FPS/30 min ≤4 W no perfil A |
 
 G1 e G2 podem avançar em paralelo depois de G0. G3 depende da semântica correta de
 alpha; G4 não pode ser aprovado enquanto houver desaparecimentos sem diagnóstico.
 
 ## 6. Ciclos de implementação por retorno e dependência
+
+### 6.0 Programa de margem — portfólio, não aposta única
+
+O baseline de 31/08/2026 exige uma mudança de escala: 9,13 ms de GPU média na rota e
+~10,38 ms no hotspot precisam cair para 6,20/6,50 ms. O objetivo não é mostrar “120”
+quando a câmera para ou sai do mapa; é recuperar aproximadamente **3 ms de trabalho
+GPU real** e manter p99 abaixo de 8 ms enquanto o jogador percorre a floresta.
+
+Essa margem será buscada por um portfólio de intervenções. As faixas abaixo são
+hipóteses de planejamento, não ganhos prometidos, não são aditivas e precisam de A/B:
+
+| Frente | Problema que resolve | Hipótese no hotspot | Gate antes de promover |
+|---|---|---:|---|
+| P0 — captura GPU | impede escolher gargalo por intuição | instrumentação, sem ganho contado | AGI/APA com markers e counters na rota/hotspot |
+| P1 — passes/attachments | tráfego externo, stores e targets inúteis em TBDR | 0,3–1,2 ms | Render Graph, load/store e memoryless validados por frame capture |
+| P2 — visibilidade/LOD/HLOD | triângulos e pixels sem contribuição | 1,0–2,5 ms em vistas densas | fonte recooked, erro projetado e diff sem pop |
+| P3 — foliage/coverage | overdraw, alpha test e cartões distantes | 0,5–1,5 ms | heatmap, coverage preservada e mesma silhueta próxima |
+| P4 — bandwidth/material | fetch, mips, registers e residency | 0,3–1,0 ms | counters atribuem custo; SSIM/FLIP e memória passam |
+| P5 — pacing/thermal | jitter, filas e comportamento diferente com gravador | estabilidade, não ms GPU | frame timeline, latência e soak; sem “ganho” fictício |
+| P6 — reinvestimento | mais sombras, luz, céu, densidade e efeitos | consome a reserva | qualidade nova mantém todos os gates de G5/G6 |
+
+#### Ordem executável e dependências
+
+1. **Congelar a verdade reproduzível.** Manter a rota `forest-walk-v1`, hotspot dentro
+   do mapa, APK/hash, pose, resolução e temperatura. Adicionar regiões GPU para
+   coverage, opaque, sky/UI, HZB e post; capturar um frame AGI e um intervalo Android
+   Performance Analyzer. Nenhuma refatoração grande recebe crédito sem essa atribuição.
+2. **Fechar o caminho mobile do frame.** Ligar o Render Graph aos consumidores reais;
+   eliminar attachment/intermediate sem leitor; escolher `loadOp/storeOp` pelo
+   lifetime; experimentar transient/memoryless e render passes nativos. O coverage
+   prepass continua ativo porque o A/B já provou +18,1% de GPU ao removê-lo; depth
+   prepass geral não é presumido como bom em tile-based renderer.
+3. **Fazer o custo acompanhar o visível.** Recuperar a fonte, produzir AEMAP v3 com
+   LODs e HLOD/células, validar o erro em pixels e integrar HZB same-frame → compactação
+   → indirect count. O caminho CPU/readback permanece diagnóstico e desligado quando
+   não amortiza custo. Malha carregada não equivale a malha enviada.
+4. **Tratar vegetação como classe de material, não como nome de cena.** Versionar
+   semântica foliage/coverage/double-sided; gerar mips alpha coverage-aware; medir
+   overdraw; agrupar próximos e usar HLOD/impostor distante. Transparência distante só
+   entra se o fill-rate medido for menor que a alternativa geométrica.
+5. **Otimizar assets e shaders conforme counters.** Aplicar ASTC por semântica,
+   mip/residency budgets, cache/index/mesh optimization e material LOD por erro
+   projetado. Isolar fetch da normal, TBN, IBL e register pressure continua útil, mas
+   é uma subfrente P4 — não dita sozinho todo o roadmap.
+6. **Corrigir estabilidade sem mascarar custo.** Adotar timing/pacing Android,
+   considerar 2–3 frames em voo somente com recursos isolados, medir gravador on/off,
+   thermal headroom e Game Mode. Nunca criar carga artificial ou gancho privado de
+   clocks; o alvo é desempenho sustentável e repetível.
+7. **Reinvestir com orçamento explícito.** Quando a cena-base alcançar G5, gastar a
+   reserva medida em SH/IBL, CSM cacheada, contato, nuvens, partículas e densidade. Cada
+   feature recebe budget de GPU/memória/potência e fallback por capability, não regra
+   por cena.
+
+#### Gates de aceitação por ciclo
+
+- rota em movimento e hotspot dentro do mapa; benchmark parado é apenas diagnóstico;
+- 3 runs frios + 3 aquecidos, janelas móveis, p50/p95/p99 e frame timeline;
+- imagem por SSIM/FLIP mais inspeção de silhueta, foliage, estrada e céu;
+- Adreno forte + Mali físico C; AVD valida somente lógica/fallback/lifecycle;
+- 60 s por alteração e soak de 30 min para promoção global;
+- registro do ganho individual e combinado; se o combinado não repetir, bisectar
+  interação de cache, bandwidth, pass ou temperatura antes de seguir.
+
+#### Referências oficiais que orientam a arquitetura
+
+- Unreal separa caminhos de render móvel, perfis/escalabilidade, cache de PSO,
+  auto-instancing e profiling por ferramentas nativas de cada GPU.
+- Unity URP expõe render scale/shadows, mas também recomenda remover depth/opaque
+  textures desnecessárias, usar store actions corretas, native render passes, SRP
+  Batcher e Render Graph com pass/resource culling.
+- Godot combina frustum, occlusion, mesh LOD, HLOD/visibility ranges, impostors e
+  instancing; também alerta que billboards transparentes podem trocar geometria por
+  fill-rate.
+- Android recomenda ADPF/thermal headroom com ajustes granulares e independentes,
+  testes sustentados, AGI para frame profiling e Frame Pacing para apresentação suave.
+
+Fontes: [Unreal mobile performance](https://dev.epicgames.com/documentation/unreal-engine/performance-and-optimization-for-mobile-in-unreal-engine?lang=en-US),
+[Unreal Android profiling](https://dev.epicgames.com/documentation/unreal-engine/profile-android-projects-with-platformnative-tools?lang=en-US),
+[Unity URP performance](https://docs.unity3d.com/cn/6000.0/Manual/urp/configure-for-better-performance.html),
+[Unity Render Graph](https://docs.unity3d.com/cn/6000.0/Manual/urp/whats-new/urp-whats-new.html),
+[Godot 3D optimization](https://docs.godotengine.org/en/stable/tutorials/performance/optimizing_3d_performance.html),
+[Godot HLOD](https://docs.godotengine.org/en/stable/tutorials/3d/visibility_ranges.html),
+[Android ADPF](https://developer.android.com/games/optimize/adpf/best-practices-adpf?hl=en),
+[Android AGI](https://developer.android.com/agi/frame-trace/frame-profiler?authuser=14) e
+[Android Frame Pacing](https://developer.android.com/games/sdk/frame-pacing?authuser=77&hl=en).
 
 ### 6.1 Ciclo já executado
 
@@ -648,9 +862,14 @@ counters da captura — e não preferência — escolhem a próxima intervençã
    indirect agrupada por material. A subdivisão nunca volta ao caminho de dezenas de
    draws CPU quando `multiDrawIndirect` está disponível; o fallback permanece correto
    e detectado por capability.
-5. HZB em dois passos com histerese e counters de falso positivo/falso negativo.
-6. LOD gerado no import por erro geométrico, selecionado por erro projetado em pixels,
-   com transição dither temporal e preservação de coverage da vegetação.
+5. **Fatia CPU/readback entregue apenas como referência:** HZB temporal com
+   histerese e telemetria. A câmera móvel falha aberta e o gate de 128 candidatos
+   evita alocação/store/readback quando a carga não paga o custo. O caminho de produto
+   pendente é HZB same-frame/GPU-driven em dois passos, com counters de falso
+   positivo/negativo e sem leitura CPU.
+6. **Seleção/runtime entregue, conteúdo pendente:** LOD por erro projetado em pixels,
+   transição dither complementar e múltiplos chunks por nível. O pacote atual é AEMAP
+   v2/zero grupos; gerar LOD exige recook v3 a partir da fonte original e gate visual.
 
 **Saída:** custo cresce com draws/triângulos visíveis, e não com tudo que está
 carregado. A cena pode ganhar densidade/complexidade mantendo o mesmo budget.
@@ -689,8 +908,9 @@ O modo sustentado público do Android foi integrado como política global e cond
 estado privado nem cria carga artificial. ADPF/Game State continuam sendo apenas hints,
 e a próxima redução precisa vir de visibilidade e bandwidth medidos.
 
-1. Gravar uma rota determinística de 60 s (posição/yaw/pitch por tick) atravessando os
-   pontos de 120, 60–80 e ~47 FPS; o benchmark parado fica apenas como diagnóstico.
+1. **Entregue:** rota determinística `forest-walk-v1` de 55,09 s/6.611 poses,
+   atravessando 487,16 unidades dentro do mapa; o benchmark parado fica apenas como
+   diagnóstico.
 2. Registrar por janela CPU/GPU p50/p95/p99, acquire/present, temperatura, ADPF,
    candidatos/visíveis/descartados, draw calls e triângulos submetidos. Executar A/B
    com gravador desligado/ligado sem alterar cena ou preset.
@@ -702,19 +922,32 @@ e a próxima redução precisa vir de visibilidade e bandwidth medidos.
    muito menos que o de draws, os grupos mais pesados continuam espacialmente amplos.
 4. **Entregue:** render chunks espaciais persistentes e multi-draw indirect, com
    fallback por capability, testes de preservação geométrica e imagem equivalente.
-5. Gravar/reproduzir a rota determinística antes do próximo A/B e adicionar HZB de
-   dois passos com histerese e estado “incerto = visível”; medir
-   falso positivo/negativo e ganho nas áreas fechadas da floresta.
-6. Só então ativar LOD por erro projetado em pixels, preservação de coverage e dither
-   temporal. Nenhum LOD é escolhido por nome de cena ou modelo de aparelho.
+5. **Entregue como gate conservador, não promovido a default:** replay por frame e HZB
+   temporal com histerese/estado “incerto = visível”. No mapa atual, apenas 54
+   candidatos e uma oclusão não pagaram o readback; abaixo de 128 candidatos nem os
+   recursos HZB são alocados. Substituir por HZB same-frame/GPU-driven antes de produto.
+6. **Runtime entregue; asset pendente:** LOD por erro projetado em pixels, preservação
+   de coverage e dither temporal. O AEMAP v2 atual não contém grupos; recook v3 da
+   fonte original e diff visual são obrigatórios. Nenhum LOD é escolhido por nome de
+   cena ou modelo de aparelho.
 7. Repetir em Adreno forte, Mali físico classe C e AVD `Aether-C-Synthetic`. O AVD
    valida rotação, input, lifecycle, fallback e memória; não certifica FPS, clocks,
    bandwidth ou comportamento térmico do Galaxy A32.
 
-**Próxima ordem aprovada:** rota determinística → HZB conservador com histerese → LOD
-por erro projetado/coverage+dither → nova captura GPU. Dois frames em voo só entram
-depois que recursos por frame forem isolados e o tempo GPU estiver abaixo do budget;
-eles podem esconder espera da CPU, mas não reduzem o custo de 13–19 ms do pior quadro.
+**Ordem anterior substituída pelo programa 6.0:** normal fetch/TBN/IBL permanecem
+variantes diagnósticas de P4, mas não centralizam o roadmap. A ordem agora é captura
+AGI/APA → passes/attachments móveis → fonte + AEMAP v3/LOD/HLOD → HZB same-frame e
+compactação GPU → foliage/overdraw → assets/shaders atribuídos por counters → pacing e
+soak → reinvestimento visual. Dois frames em voo só entram depois que recursos por
+frame forem isolados e o tempo GPU estiver abaixo do budget; eles podem esconder espera
+da CPU, mas não reduzem o custo do pior quadro.
+
+**Status em 31/08/2026:** rota e correção estática do HZB foram validadas no Xiaomi
+físico; LOD compilou e foi testado, mas não pode atuar porque o asset empacotado ainda
+é AEMAP v2/zero grupos. A rota completa mediu 95,16 presents/s e expôs uma janela
+isolada equivalente a 53,9 FPS. O prepass `MASK` também foi confirmado por A/B móvel:
+desligá-lo perdeu 13,0% de presents/s e adicionou 18,1% de GPU. Permanecem pendentes
+AGI no hotspot, recook v3, SSIM/FLIP, soak de 30 min e Mali físico.
 
 ### 6.4 Ciclo estrutural — Render Graph móvel e qualidade financiada
 

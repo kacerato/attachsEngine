@@ -31,9 +31,9 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 250 |
+| não iniciado | 249 |
 | PoC | 8 |
-| parcial | 44 |
+| parcial | 45 |
 | implementado | 31 |
 | validado em hardware (inclui variantes "só Android"/"Android") | 5 |
 | aceito | 1 |
@@ -196,7 +196,7 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 2.4.1 | Depth prepass + Forward+ com clusterização de luzes | parcial | Prepass seletivo global para materiais alpha-mask validado em hardware: alpha+depth e PBR apenas em depth `EQUAL`, com ganho GPU de 21,6–25,4% sem diferença visual estrutural. Depth prepass geral, Render Graph e Forward+ clusterizado continuam pendentes. |
+| 2.4.1 | Depth prepass + Forward+ com clusterização de luzes | parcial | Prepass seletivo global para materiais alpha-mask validado em hardware: alpha+depth e PBR apenas em depth `EQUAL`, com ganho histórico de 21,6–25,4% sem diferença visual estrutural. A rota determinística confirmou o default por A/B intercalado: ligado 93,61 → desligado 80,89 → ligado 92,45 presents/s; sem ele, GPU média 9,32→11,01 ms (+18,1%) e CPU invariável. Depth prepass geral, Render Graph e Forward+ clusterizado continuam pendentes. |
 | 2.4.2 | BRDF PBR completo (GGX multiscatter, Burley, Fresnel) | parcial | Esfera com GGX single-scatter, Smith correlacionado, Burley, Schlick, normal mapping e mapas 8K reais; validada em Adreno nos dois caminhos de descritores. Multiscatter e comparação quantitativa com render offline pendentes; MATERIAL-PREVIEW.md |
 | 2.4.3 | Sombras: cascaded shadow maps, spot/point | não iniciado | Nenhuma implementação de sombras encontrada |
 | 2.4.4 | IBL: skybox HDR, pré-filtragem especular, SH, reflection probes | parcial | Ambiente HDR analítico RGBA16F pré-filtrado GGX offline e LUT BRDF split-sum amostrados pela esfera. Skybox visual, SH e probes ainda ausentes; MATERIAL-PREVIEW.md |
@@ -208,11 +208,11 @@ não recebem estado agregado — servem apenas de navegação.
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
 | 2.5.1 | BVH de cena com atualização incremental | não iniciado | Nenhuma implementação de BVH de cena encontrada |
-| 2.5.2 | Frustum + occlusion culling (HZB) | parcial | Frustum CPU backend-independent integrado globalmente por draw: seis planos, bounds expandidos, fallback visível para inválidos e scratch lists sem alocação. Render chunks espaciais persistentes foram integrados globalmente: 27 draws de origem viram 58 chunks conservadores de até 8.192 triângulos, preservando índices/triângulos e blend; testes cobrem preservação e determinismo. Na rota física, a visibilidade chegou a 36/58 e 203.716 triângulos lógicos. HZB, histerese, BVH e rota reproduzível continuam pendentes. `native/renderer/frustum_visibility.*`, `native/renderer/spatial_render_chunks.*` e testes correspondentes. |
+| 2.5.2 | Frustum + occlusion culling (HZB) | parcial | Frustum CPU backend-independent e 58 render chunks conservadores validados. HZB opt-in foi corrigido para depth Vulkan normalizado, `storeOp=STORE`, pré-rotação da Surface e capability de formato sampled. Debug Adreno ficou sem VUID e com screenshot idêntica; o readback CPU não compensou na carga pequena, por isso a política global exige por padrão 128 candidatos e publica skip por orçamento. Câmera móvel falha aberta; falta HZB same-frame/GPU-driven, BVH, A/B longo e Mali. |
 | 2.5.3 | Instancing automático por malha+material | parcial | RenderSceneExtractor extrai MeshRenderer/transform em lote para Vulkan; fixtures cubo/checker e esfera/PBR, cada uma com um par conhecido. IDs persistentes, ABI e validação de matrizes; agrupamento simultâneo de múltiplos pares/GPU-driven pendente. SCENE-RENDER-INTEGRATION.md e MATERIAL-PREVIEW.md |
-| 2.5.4 | Sistema de LOD com transição por dither temporal | não iniciado | Nenhuma implementação encontrada |
+| 2.5.4 | Sistema de LOD com transição por dither temporal | parcial | AEMAP v3/cooker, erro projetado, histerese e dither existem. A revisão passou a agrupar vários chunks por nível e tornou as máscaras Bayer complementares, evitando double shading na transição. O asset embarcado ainda é v2 (`lod_groups=0`), portanto não há ganho físico de LOD declarado até recook do ZIP original e gate visual. Meshlets/DAG continuam não iniciados. |
 | 2.5.5 | Ordenação de draws por PSO e profundidade | parcial | Chunks opacos/alpha-mask são ordenados front-to-back, agrupados por material e compactados em `vkCmdDrawIndexedIndirect` quando `multiDrawIndirect` + `drawIndirectFirstInstance` são suportados; transparências permanecem diretas e back-to-front. No Xiaomi, o caminho `indirect=multi-draw` reduziu 82 chamadas CPU para 34 no ponto fixo. Ordenação global por PSO, draw packets persistentes e `DrawIndirectCount` GPU-driven continuam pendentes. |
-| 2.5.6 | Telemetria de visibilidade e fallback por perfil | parcial | `FrameProfileContext` publica chunks candidatos/visíveis/descartados, chamadas realmente submetidas e triângulos lógicos/submetidos, além de cena/hash/câmera e caminho indirect. A v10 mediu 99,46 FPS/9,23 ms GPU no ponto fixo contra 85,86/10,25 ms da v7; em movimento, a pior janela ainda foi 64,39 FPS/13,73 ms com 57/58 chunks. Ainda faltam ocluídos por HZB, LOD por erro, PSO/descriptors e motivo de fallback/perfil resolvido. |
+| 2.5.6 | Telemetria de visibilidade e fallback por perfil | parcial | Contexto publica identidade, AEMAP/render draws/LOD groups, HZB testado/ocluído/revivido e skips por câmera/orçamento. Cada janela passa a guardar `route_frame`, draws e triângulos visíveis para mapear hotspot. A rota completa v11 mediu 95,16 FPS, pior janela 84,18, CPU 1,34 ms, GPU 9,13 ms e pico isolado equivalente a 53,9 FPS. Ainda faltam PSO/descriptors, térmica por janela e motivo de fallback da política resolvida. |
 
 ### Etapa 2.6 — Renderizador 2D
 
@@ -626,7 +626,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 7.6.4 | Integração completa com PowerGovernor | não iniciado | `PowerGovernor` existe (3.4/1.1.5) mas sem integração com perfis gráficos S/A/B/C |
 | 7.6.5 | Comparador visual dos 4 perfis lado a lado | não iniciado | Nenhuma implementação encontrada |
 | 7.6.6 | ResolvedRenderingPolicy global e versionada | não iniciado | Decisão proposta no ADR-014; presets/budgets serializados e migração ainda não existem. |
-| 7.6.7 | Percursos determinísticos e manifestos p50/p95/p99 | parcial | A captura schema 2 agora exige sceneId, fingerprint, câmera travada e contagens do runtime, além das distribuições existentes. Falta percurso animado versionado e matriz por perfil/dispositivo. |
+| 7.6.7 | Percursos determinísticos e manifestos p50/p95/p99 | parcial | `.aeroute` indexado por frame, fingerprint da cena e Record/Replay foram validados no Adreno. `forest-walk-v1` possui 6.611 poses, 55,09 s e 487,16 unidades; replay completo gera janelas com ordinal do hotspot. O runner recusa profiling da floresta sem pose ou rota, eliminando o overview distante. Falta versionar um manifesto térmico/visual e repetir na matriz de dispositivos. |
 | 7.6.8 | Harness AVD C + Game Loop/laboratório físico | parcial | Perfil AVD C e criador idempotente estão versionados/testados, com aceleração e software separados e proibição explícita de certificação. Faltam instalar/executar a imagem x86_64 nesta máquina, Game Loop e laboratório Mali físico. |
 
 > **Gate M7:** não fechado. Há base headless de perfis (7.6.1), identidade de captura

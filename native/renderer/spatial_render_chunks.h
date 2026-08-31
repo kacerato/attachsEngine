@@ -7,9 +7,13 @@
 namespace ae::renderer {
 
 struct SpatialRenderChunkSettings final {
-  // Large enough to keep CPU submission bounded on mobile, small enough to
-  // separate material primitives that span a complete outdoor level.
-  u32 targetTrianglesPerChunk = 8192;
+  // Opaque surfaces usually have useful early-Z and tolerate larger bounds.
+  // Alpha-tested vegetation is dominated by overdraw, so it has an independent
+  // global budget. Hardware A/B must justify lowering it: 2,048 created 125
+  // chunks on the reference map without reducing average GPU time, therefore
+  // the production default remains equal to opaque instead of guessing.
+  u32 opaqueTrianglesPerChunk = 8192;
+  u32 coverageTrianglesPerChunk = 8192;
 };
 
 struct SpatialRenderChunks final {
