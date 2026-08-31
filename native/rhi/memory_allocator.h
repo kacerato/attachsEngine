@@ -36,6 +36,16 @@ struct ImageDesc {
   VkImageAspectFlags aspectMask = 0;
   MemoryClass memoryClass = MemoryClass::Texture;
   u32 mipLevels = 1;
+  // Anexo que nunca precisa existir fora do render pass. Numa GPU TBDR ele vive
+  // na memória do tile e o driver pode não dar lastro em DRAM nenhum. O
+  // allocator acrescenta VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT e prefere
+  // memória LAZILY_ALLOCATED; "prefere" e não "exige" porque nem todo device
+  // expõe esse tipo de memória, e nesses casos a alocação normal continua
+  // correta — só não economiza banda.
+  //
+  // Vulkan proíbe combinar TRANSIENT_ATTACHMENT com SAMPLED/STORAGE/TRANSFER:
+  // isImageDescValid recusa a combinação em vez de deixar o device falhar.
+  bool transient = false;
 };
 
 bool isImageDescValid(const ImageDesc &desc);

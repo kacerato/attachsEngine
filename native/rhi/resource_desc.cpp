@@ -11,6 +11,15 @@ namespace ae::rhi {
 bool isImageDescValid(const ImageDesc &desc) {
   const bool validMemoryClass = desc.memoryClass == MemoryClass::Texture ||
                                 desc.memoryClass == MemoryClass::RenderTarget;
+  // VUID-VkImageCreateInfo-usage-00963: um anexo transitório só pode ser usado
+  // como anexo. Recusar aqui transforma um erro de device em erro de contrato,
+  // no lugar onde o autor da política consegue lê-lo.
+  constexpr VkImageUsageFlags kNonAttachmentUsage =
+      VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
+      VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  if (desc.transient && ((desc.usage & kNonAttachmentUsage) != 0 || desc.mipLevels != 1)) {
+    return false;
+  }
   return desc.width > 0 && desc.height > 0 && desc.format != VK_FORMAT_UNDEFINED &&
          desc.usage != 0 && desc.aspectMask != 0 && validMemoryClass &&
          desc.mipLevels > 0 && desc.mipLevels <= static_cast<u32>(std::bit_width(std::max(desc.width, desc.height)));

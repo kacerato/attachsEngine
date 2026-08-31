@@ -278,6 +278,32 @@ do cooker e 31/31 nas demais suítes Android; `libaether_android.so` reconstruí
 NDK real. **Nada foi medido em hardware** — não havia ADB nesta sessão. Regiões são
 instrumentação e não reduzem nenhum milissegundo; nenhum ganho é declarado.
 
+## Render Graph consumidor e depth memoryless — 31/08/2026
+
+Segunda fatia do programa de margem (P1 — pipeline móvel). O Render Graph saiu de
+código morto: até aqui `aether_rendergraph` era linkado apenas por `aether_tests`,
+com 2.3.1–2.3.5 implementados e testados mas fora de qualquer frame de produção.
+Agora `aether_renderer` depende dele e a política de anexos do frame é derivada.
+
+Três decisões que precisavam concordar — `storeOp` do depth, `SAMPLED_BIT` da imagem
+e escolha de formato — eram escritas à mão em três pontos de
+`instanced_renderer.cpp`. Passaram a ler um `FrameAttachmentPolicy` único, resolvido
+por `native/renderer/frame_graph.cpp` a partir da topologia compilada.
+
+Com HZB desligado (o padrão) ninguém lê o depth depois do pass; o `storeOp` já era
+`DONT_CARE`, mas a imagem seguia alocada como render target comum ocupando DRAM sem
+consumidor. Agora é `TRANSIENT_ATTACHMENT` com memória preferencialmente
+`LAZILY_ALLOCATED`.
+
+Defeito corrigido no compilador: a regra de memoryless exigia grupo de subpass
+**fundido**, o que excluía o caso mais comum em mobile e o único desta engine — depth
+de forward renderer de passe único. Nenhum anexo real conseguia `LAZILY_ALLOCATED`.
+
+Verificação: **231/231** C++, 39/39 PowerShell de FrameProfile, 21/21 Python, 31/31
+demais suítes Android e `assembleDebug` pelo NDK real. Teste de mutação confirma que a
+economia depende da correção. **Nada medido em hardware** — sem ADB nesta sessão; a
+hipótese de 0,3–1,2 ms de P1 permanece hipótese.
+
 ## Resumo
 
 | | |

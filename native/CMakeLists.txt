@@ -167,6 +167,7 @@ target_link_libraries(aether_rendergraph PUBLIC aether_core)
 
 # --- aether_renderer: recursos e conversões independentes do backend -------
 add_library(aether_renderer STATIC
+  renderer/frame_graph.cpp
   renderer/frustum_visibility.cpp
   renderer/hzb_visibility.cpp
   renderer/lod_selection.cpp
@@ -174,7 +175,9 @@ add_library(aether_renderer STATIC
   renderer/static_collision_mesh.cpp
 )
 target_include_directories(aether_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_renderer PUBLIC aether_core)
+# O render graph deixa de ser alvo apenas de teste: a politica de anexos do
+# frame (load/store e memoryless do depth) e derivada dele, nao escrita a mao.
+target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 
 # --- aether_rhi: descritores/cache/perfis de dispositivo + wrappers Vulkan -
 add_library(aether_rhi STATIC
@@ -335,6 +338,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_astc_probe_validation.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_memory_budget.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_rhi_resources.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_statistics.cpp

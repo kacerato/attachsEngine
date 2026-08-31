@@ -157,11 +157,13 @@ bool InstancedRenderer::createRenderPass() {
   depthAttachment.format = depthFormat_;
   depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
   depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  // HZB samples this attachment after the main pass. DONT_CARE makes its
-  // contents undefined and was the root cause of apparently random
-  // occlusion; retain the bandwidth-saving path whenever HZB is disabled.
-  depthAttachment.storeOp = hzbWorkloadEligible_ ? VK_ATTACHMENT_STORE_OP_STORE
-                                                  : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  // Quem decide é o render graph, não este arquivo: HZB amostra o depth depois
+  // do pass principal, e DONT_CARE nesse caso deixa o conteúdo indefinido —
+  // causa raiz da oclusão aparentemente aleatória. A mesma política resolve o
+  // usage e o memoryless da imagem, para que os três não possam divergir.
+  depthAttachment.storeOp = frameAttachmentPolicy_.depthStored
+                                ? VK_ATTACHMENT_STORE_OP_STORE
+                                : VK_ATTACHMENT_STORE_OP_DONT_CARE;
   depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
   depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -739,13 +741,31 @@ bool InstancedRenderer::createInstanceBuffer() {
 }
 
 bool InstancedRenderer::createDepthImage() {
-  depthFormat_ = chooseDepthFormat(physicalDevice_, hzbWorkloadEligible_);
-  if (depthFormat_ == VK_FORMAT_UNDEFINED && hzbWorkloadEligible_) {
+  // Resolvida uma vez por (re)criação de recursos, antes de qualquer decisão de
+  // formato/usage/anexo, para que todas as três leiam o mesmo resultado.
+  renderer::FrameGraphInputs graphInputs{};
+  graphInputs.width = swapchain_->width();
+  graphInputs.height = swapchain_->height();
+  graphInputs.hzbEnabled = hzbWorkloadEligible_;
+  frameAttachmentPolicy_ = renderer::resolveFrameAttachmentPolicy(graphInputs);
+  if (!frameAttachmentPolicy_.valid) {
+    // Falha aberta: sem política compilada, armazenar é o comportamento que
+    // nunca produz conteúdo indefinido.
+    frameAttachmentPolicy_.depthStored = true;
+    frameAttachmentPolicy_.depthSampled = hzbWorkloadEligible_;
+    frameAttachmentPolicy_.depthMemoryless = false;
+    __android_log_print(ANDROID_LOG_WARN, LogTag,
+        "[FrameGraph] política de anexos não compilou; usando store conservador.");
+  }
+  depthFormat_ = chooseDepthFormat(physicalDevice_, frameAttachmentPolicy_.depthSampled);
+  if (depthFormat_ == VK_FORMAT_UNDEFINED && frameAttachmentPolicy_.depthSampled) {
     // Optional capability failure must not take the renderer down. Fall back
     // to the ordinary depth attachment and keep HZB disabled for this device.
     __android_log_print(ANDROID_LOG_WARN, LogTag,
                         "[HZB] nenhum formato depth sampled suportado; fallback visível ativo.");
     hzbWorkloadEligible_ = false;
+    graphInputs.hzbEnabled = false;
+    frameAttachmentPolicy_ = renderer::resolveFrameAttachmentPolicy(graphInputs);
     depthFormat_ = chooseDepthFormat(physicalDevice_, false);
   }
   if (depthFormat_ == VK_FORMAT_UNDEFINED) return false;
@@ -754,11 +774,19 @@ bool InstancedRenderer::createDepthImage() {
   desc.height = swapchain_->height();
   desc.format = depthFormat_;
   desc.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
-               (hzbWorkloadEligible_ ? VK_IMAGE_USAGE_SAMPLED_BIT : 0u);
+               (frameAttachmentPolicy_.depthSampled ? VK_IMAGE_USAGE_SAMPLED_BIT : 0u);
   desc.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
   if (hasStencil(depthFormat_)) desc.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
   desc.memoryClass = rhi::MemoryClass::RenderTarget;
-  return memoryAllocator_->createImage(desc, &depthImage_);
+  // Sem leitor fora do render pass, o depth nunca precisa de lastro em DRAM.
+  desc.transient = frameAttachmentPolicy_.depthMemoryless;
+  if (!memoryAllocator_->createImage(desc, &depthImage_)) return false;
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[FrameGraph] depth %ux%u: store=%s sampled=%s memoryless=%s.",
+      desc.width, desc.height, frameAttachmentPolicy_.depthStored ? "sim" : "nao",
+      frameAttachmentPolicy_.depthSampled ? "sim" : "nao",
+      frameAttachmentPolicy_.depthMemoryless ? "sim" : "nao");
+  return true;
 }
 
 namespace {

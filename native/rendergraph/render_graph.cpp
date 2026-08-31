@@ -397,10 +397,22 @@ std::optional<CompiledGraph> RenderGraph::compile(CompileError *outError) const 
   }
 
   // --- 7. Anexos memoryless ----------------------------------------------
-  // Um recurso transitório nunca precisa ir à DRAM quando todos os passes
-  // que o tocam (primeiro ao último) pertencem ao mesmo grupo de subpass
-  // fundido — o tile fica inteiro no on-chip memory da GPU TBDR do início
-  // ao fim da vida do recurso.
+  // Um recurso transitório nunca precisa ir à DRAM quando todos os passes que
+  // o tocam (primeiro ao último) pertencem ao mesmo grupo de render target — o
+  // tile fica inteiro na memória on-chip da GPU TBDR do início ao fim da vida
+  // do recurso — e nenhum consumidor posterior exige seu conteúdo.
+  //
+  // A condição NÃO é o grupo estar fundido. Um grupo de um pass só é o caso
+  // memoryless mais comum em mobile: o depth de um forward renderer de passe
+  // único, escrito e descartado dentro do mesmo render pass. Exigir fusão
+  // deixava justamente esse caso de fora, e nenhum anexo real do renderer
+  // conseguia LAZILY_ALLOCATED.
+  //
+  // A contenção no grupo já é suficiente e não se confunde com o storeOp: num
+  // grupo fundido o consumidor lê como input attachment, dentro do tile, então
+  // o recurso é "consumido" (storeOp Store) e mesmo assim nunca vai à DRAM. Se
+  // algum pass fora do grupo lesse o recurso, ele seria o lastUse e cairia em
+  // outro grupo, reprovando a checagem abaixo.
   {
     std::unordered_map<PassId, usize> groupOf;
     for (usize g = 0; g < result.subpassGroups.size(); ++g) {
@@ -410,11 +422,9 @@ std::optional<CompiledGraph> RenderGraph::compile(CompileError *outError) const 
       if (resources_[lt.resource].imported) continue;
       PassId firstPass = order[lt.firstUse];
       PassId lastPass = order[lt.lastUse];
-      if (groupOf.count(firstPass) && groupOf.count(lastPass) &&
-          groupOf[firstPass] == groupOf[lastPass] &&
-          result.subpassGroups[groupOf[firstPass]].merged) {
-        result.memorylessResources.push_back(lt.resource);
-      }
+      if (groupOf.count(firstPass) == 0 || groupOf.count(lastPass) == 0) continue;
+      if (groupOf[firstPass] != groupOf[lastPass]) continue;
+      result.memorylessResources.push_back(lt.resource);
     }
     std::sort(result.memorylessResources.begin(), result.memorylessResources.end());
   }

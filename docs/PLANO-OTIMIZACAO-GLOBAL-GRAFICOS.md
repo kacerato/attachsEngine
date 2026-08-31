@@ -581,6 +581,59 @@ Referências operacionais oficiais: [configuração de AVD](https://developer.an
 [Android GPU Inspector](https://developer.android.com/agi) e
 [Game Loop no Firebase Test Lab](https://firebase.google.com/docs/test-lab/android/game-loop).
 
+### Progresso em 31/08/2026 (P1 — primeira fatia: grafo consumidor e depth memoryless)
+
+O Render Graph deixou de ser código morto. Até aqui `aether_rendergraph` era
+linkado **apenas por `aether_tests`**: os itens 2.3.1–2.3.5 estavam implementados e
+testados, mas nenhum frame de produção passava por eles. Agora `aether_renderer`
+depende dele e a política de anexos do frame é *derivada*, não escrita à mão.
+
+**O que estava errado.** A mesma pergunta — "alguém lê o depth depois do render pass
+principal?" — era respondida em três lugares independentes de
+`instanced_renderer.cpp`: o `storeOp` do anexo, a flag `VK_IMAGE_USAGE_SAMPLED_BIT` da
+imagem e a escolha de formato. Três cópias de uma política que precisa concordar. Se
+divergirem, o resultado é erro de validação ou — pior — banda desperdiçada em silêncio,
+que é exatamente o que este programa está tentando medir. As três agora leem
+`FrameAttachmentPolicy`, resolvida uma vez por `native/renderer/frame_graph.cpp`.
+
+**O ganho de banda que estava bloqueado.** Com HZB desligado (o padrão), o depth é
+escrito e descartado dentro do mesmo render pass — ninguém o lê depois. O `storeOp` já
+era `DONT_CARE`, mas a imagem continuava sendo alocada como render target comum,
+ocupando DRAM que nada consumia. Ela agora recebe
+`VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT` e memória **preferencialmente**
+`LAZILY_ALLOCATED`: numa GPU TBDR o anexo vive na memória do tile e pode não receber
+lastro em DRAM nenhum. "Preferencialmente" e não "obrigatoriamente" porque nem todo
+device expõe esse tipo de memória — sem ele a alocação normal continua correta, só não
+economiza. Exigir transformaria uma otimização em falha de inicialização.
+
+**Defeito encontrado no compilador do grafo.** A regra de memoryless exigia que todos
+os passes tocando o recurso estivessem no mesmo grupo de subpass **fundido**
+(`merged`, isto é, ≥2 passes). Isso excluía justamente o caso memoryless mais comum em
+mobile — e o único que esta engine tem hoje: o depth de um forward renderer de passe
+único. Nenhum anexo real conseguia `LAZILY_ALLOCATED`. A contenção no grupo já é
+condição suficiente e não se confunde com o `storeOp`: num grupo fundido o consumidor
+lê como input attachment, dentro do tile, então o recurso é "consumido" e mesmo assim
+nunca vai à DRAM. Se um pass fora do grupo lesse o recurso, ele seria o `lastUse` e
+cairia em outro grupo, reprovando a checagem. A regra perdeu o `merged`; o teste do
+GBuffer fundido continua passando.
+
+`isImageDescValid` também passou a recusar transitório combinado com
+SAMPLED/STORAGE/TRANSFER (VUID-VkImageCreateInfo-usage-00963), transformando um erro
+de device num erro de contrato, no arquivo onde a política é escrita.
+
+**Verificação:** 231/231 C++ (+5), 39/39 PowerShell de FrameProfile, 21/21 Python e
+31/31 nas demais suítes; `assembleDebug` real pelo NDK. Um teste de mutação confirmou
+que `frame_graph_sem_leitor_o_depth_nao_vai_a_dram` falha ao restaurar a regra antiga,
+ou seja, a economia depende de verdade da correção. **Nada medido em hardware** — sem
+ADB nesta sessão. A hipótese de P1 (0,3–1,2 ms) continua hipótese: o A/B com captura de
+frame é o que a promove, e o log `[FrameGraph] depth ...: memoryless=sim` no aparelho é
+a primeira coisa a conferir.
+
+O que P1 ainda não fez: fundir passes de verdade, eliminar targets intermediários (não
+há nenhum hoje além do depth) e usar render passes nativos com subpasses. As cinco
+classes do frame vivem num único render pass, então não há fusão a ganhar antes que
+CSM ou pós introduzam um segundo alvo.
+
 ### O1 — Correção global de materiais e visibilidade
 
 **Alinha:** 2.2.2, 2.2.5, 2.4.2, 2.4.5, 7.3.5.

@@ -11,6 +11,7 @@
 #include "rhi/upload_context.h"
 #include "renderer/gpu_mesh_instance.h"
 #include "renderer/gpu_cost_isolation.h"
+#include "renderer/frame_graph.h"
 #include "renderer/frustum_visibility.h"
 #include "renderer/hzb_visibility.h"
 #include "renderer/lod_selection.h"
@@ -300,6 +301,10 @@ private:
   // depth/render-pass allocation. Keeps a requested HZB observable while
   // avoiding sampled depth, STORE and reduction resources for small scenes.
   bool hzbWorkloadEligible_ = false;
+  // Derivada do render graph em createDepthResources e lida por
+  // createRenderPass. Não é um cache do hzbWorkloadEligible_: é a resposta
+  // compilada de "quem lê o depth depois do pass principal".
+  renderer::FrameAttachmentPolicy frameAttachmentPolicy_{};
   u32 hzbHysteresisFrames_ = 3;
   u32 hzbMinimumCandidateDraws_ = 128;
   float hzbNormalizedDepthBias_ = 1.0e-5f;

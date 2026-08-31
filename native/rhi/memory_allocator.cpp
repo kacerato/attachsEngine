@@ -269,12 +269,21 @@ bool VulkanMemoryAllocator::createImage(const ImageDesc &desc, VulkanImage *outI
   imageInfo.format = desc.format;
   imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
   imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  imageInfo.usage = desc.usage;
+  imageInfo.usage =
+      desc.usage | (desc.transient
+                        ? static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT)
+                        : 0u);
   imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
   imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
   VmaAllocationCreateInfo allocationInfo{};
   allocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+  // Preferido, nunca exigido: um device sem tipo de memória LAZILY_ALLOCATED
+  // continua alocando normalmente e o frame permanece correto — apenas sem a
+  // economia. Exigir transformaria uma otimização em falha de inicialização.
+  if (desc.transient) {
+    allocationInfo.preferredFlags = VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
+  }
 
   VkImage image = VK_NULL_HANDLE;
   VmaAllocation allocation = VK_NULL_HANDLE;
