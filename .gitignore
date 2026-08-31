@@ -8,3 +8,5 @@ build/
 # .aether/
 # *.user
 # __pycache__/
+
+android/local.properties

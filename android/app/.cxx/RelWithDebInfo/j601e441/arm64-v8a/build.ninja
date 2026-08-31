@@ -146,6 +146,13 @@ build CMakeFiles/aether_platform.dir/platform/atomic_asset_file.cpp.o: CXX_COMPI
   OBJECT_DIR = CMakeFiles\aether_platform.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_platform.dir\platform
 
+build CMakeFiles/aether_platform.dir/platform/camera_route.cpp.o: CXX_COMPILER__aether_platform_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/platform/camera_route.cpp || cmake_object_order_depends_target_aether_platform
+  DEP_FILE = CMakeFiles\aether_platform.dir\platform\camera_route.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_platform.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_platform.dir\platform
+
 build CMakeFiles/aether_platform.dir/platform/first_person_controller.cpp.o: CXX_COMPILER__aether_platform_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/platform/first_person_controller.cpp || cmake_object_order_depends_target_aether_platform
   DEP_FILE = CMakeFiles\aether_platform.dir\platform\first_person_controller.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
@@ -175,7 +182,7 @@ build CMakeFiles/aether_platform.dir/platform/virtual_joystick.cpp.o: CXX_COMPIL
 #############################################
 # Link the static library libaether_platform.a
 
-build libaether_platform.a: CXX_STATIC_LIBRARY_LINKER__aether_platform_RelWithDebInfo CMakeFiles/aether_platform.dir/platform/app_lifecycle.cpp.o CMakeFiles/aether_platform.dir/platform/atomic_asset_file.cpp.o CMakeFiles/aether_platform.dir/platform/first_person_controller.cpp.o CMakeFiles/aether_platform.dir/platform/free_camera_controller.cpp.o CMakeFiles/aether_platform.dir/platform/virtual_joystick.cpp.o || libaether_core.a
+build libaether_platform.a: CXX_STATIC_LIBRARY_LINKER__aether_platform_RelWithDebInfo CMakeFiles/aether_platform.dir/platform/app_lifecycle.cpp.o CMakeFiles/aether_platform.dir/platform/atomic_asset_file.cpp.o CMakeFiles/aether_platform.dir/platform/camera_route.cpp.o CMakeFiles/aether_platform.dir/platform/first_person_controller.cpp.o CMakeFiles/aether_platform.dir/platform/free_camera_controller.cpp.o CMakeFiles/aether_platform.dir/platform/virtual_joystick.cpp.o || libaether_core.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
   OBJECT_DIR = CMakeFiles\aether_platform.dir
   POST_BUILD = cd .
@@ -231,6 +238,20 @@ build CMakeFiles/aether_renderer.dir/renderer/frustum_visibility.cpp.o: CXX_COMP
   OBJECT_DIR = CMakeFiles\aether_renderer.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_renderer.dir\renderer
 
+build CMakeFiles/aether_renderer.dir/renderer/hzb_visibility.cpp.o: CXX_COMPILER__aether_renderer_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/renderer/hzb_visibility.cpp || cmake_object_order_depends_target_aether_renderer
+  DEP_FILE = CMakeFiles\aether_renderer.dir\renderer\hzb_visibility.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_renderer.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_renderer.dir\renderer
+
+build CMakeFiles/aether_renderer.dir/renderer/lod_selection.cpp.o: CXX_COMPILER__aether_renderer_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/renderer/lod_selection.cpp || cmake_object_order_depends_target_aether_renderer
+  DEP_FILE = CMakeFiles\aether_renderer.dir\renderer\lod_selection.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_renderer.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_renderer.dir\renderer
+
 build CMakeFiles/aether_renderer.dir/renderer/spatial_render_chunks.cpp.o: CXX_COMPILER__aether_renderer_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/renderer/spatial_render_chunks.cpp || cmake_object_order_depends_target_aether_renderer
   DEP_FILE = CMakeFiles\aether_renderer.dir\renderer\spatial_render_chunks.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
@@ -253,7 +274,7 @@ build CMakeFiles/aether_renderer.dir/renderer/static_collision_mesh.cpp.o: CXX_C
 #############################################
 # Link the static library libaether_renderer.a
 
-build libaether_renderer.a: CXX_STATIC_LIBRARY_LINKER__aether_renderer_RelWithDebInfo CMakeFiles/aether_renderer.dir/renderer/frustum_visibility.cpp.o CMakeFiles/aether_renderer.dir/renderer/spatial_render_chunks.cpp.o CMakeFiles/aether_renderer.dir/renderer/static_collision_mesh.cpp.o || libaether_core.a
+build libaether_renderer.a: CXX_STATIC_LIBRARY_LINKER__aether_renderer_RelWithDebInfo CMakeFiles/aether_renderer.dir/renderer/frustum_visibility.cpp.o CMakeFiles/aether_renderer.dir/renderer/hzb_visibility.cpp.o CMakeFiles/aether_renderer.dir/renderer/lod_selection.cpp.o CMakeFiles/aether_renderer.dir/renderer/spatial_render_chunks.cpp.o CMakeFiles/aether_renderer.dir/renderer/static_collision_mesh.cpp.o || libaether_core.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
   OBJECT_DIR = CMakeFiles\aether_renderer.dir
   POST_BUILD = cd .
