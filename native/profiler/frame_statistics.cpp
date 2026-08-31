@@ -4,6 +4,35 @@
 
 namespace ae::profiler {
 
+bool gpuPassAttributionCollapsed(const std::array<double, GpuPassClassCount> &passMs,
+                                 double frameMs) {
+  // Frame sem tempo medido não afirma nada sobre atribuição.
+  if (!(frameMs > 0.0)) return false;
+  const auto intraPass = [](GpuPassClass pass) {
+    // Tudo que é gravado dentro do render pass principal. HZB fica de fora: é
+    // uma cadeia de passes própria e é legitimamente medida em separado.
+    return pass != GpuPassClass::Hzb;
+  };
+  double dominant = 0.0;
+  double others = 0.0;
+  for (u32 index = 0; index < GpuPassClassCount; ++index) {
+    const auto pass = static_cast<GpuPassClass>(index);
+    if (!intraPass(pass)) continue;
+    const double value = passMs[index];
+    if (value > dominant) {
+      others += dominant;
+      dominant = value;
+    } else {
+      others += value;
+    }
+  }
+  // Assinatura: uma região sozinha responde por quase todo o frame e as demais
+  // somadas são ruído. 0,98/0,01 são folgados de propósito -- a assinatura real
+  // medida foi 0,9993 contra 0,00008, e um limiar apertado transformaria uma
+  // separação legítima porém desigual em falso positivo.
+  return dominant >= frameMs * 0.98 && others <= dominant * 0.01;
+}
+
 bool FrameStatistics::configure(u32 warmupMilliseconds, u32 windowFrames) {
   if (windowFrames == 0 || windowFrames > Capacity) return false;
   warmupNs_ = static_cast<u64>(warmupMilliseconds) * 1'000'000;

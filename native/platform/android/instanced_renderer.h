@@ -282,6 +282,10 @@ private:
   FillInstanceBufferFn fillInstanceBuffer_ = nullptr;
   double lastFillMicroseconds_ = 0.0;
   bool frameProfilingEnabled_ = false;
+  // Timestamps de GPU acompanham o perfil. Uma tentativa de desacoplar os dois
+  // para alimentar cadência adaptativa foi medida e retirada — ver
+  // PROFILING-ANDROID.md, "Cadência adaptativa rejeitada".
+  bool gpuTimingEnabled() const { return frameProfilingEnabled_; }
   bool coveragePrepassEnabled_ = true;
   bool runtimeHudEnabled_ = false;
   renderer::PerspectiveVisibilitySettings visibilitySettings_{};

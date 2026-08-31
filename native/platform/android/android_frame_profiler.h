@@ -55,7 +55,13 @@ class AndroidFrameProfiler final {
 public:
   void setEnabled(bool enabled) { enabled_ = enabled; reset(); }
   bool enabled() const { return enabled_; }
-  void reset() { statistics_.reset(); ++epoch_; contextPending_ = true; }
+  void reset() {
+    statistics_.reset();
+    ++epoch_;
+    contextPending_ = true;
+    collapsedAttributionFrames_ = 0;
+    attributionSampleFrames_ = 0;
+  }
   void record(const profiler::RenderPhaseTimings &phases, const FrameProfileContext &context,
               u32 instances, u32 width, u32 height);
 
@@ -64,6 +70,11 @@ private:
   u32 epoch_ = 0;
   u64 window_ = 0;
   bool contextPending_ = true;
+  // Frames da janela corrente em que os timestamps por região colapsaram (ver
+  // profiler::gpuPassAttributionCollapsed). Publicado junto das regiões para
+  // que ninguém otimize em cima de uma divisão que o hardware não fez.
+  u32 collapsedAttributionFrames_ = 0;
+  u32 attributionSampleFrames_ = 0;
   profiler::FrameStatistics statistics_{};
 };
 

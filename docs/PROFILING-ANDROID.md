@@ -191,6 +191,80 @@ distintos; essa diferença não mede descarte nem duplicação. O smoke valida a
 baseline longo nem fecha um gate de 120 FPS. O parser ADB também aceita o sufixo mDNS
 com espaço que o Android adiciona ao republicar um serviço duplicado.
 
+### Cadência de apresentação e DVFS — medido em 31/08/2026
+
+Origem: FPS percebido como instável, e "melhora" ao ligar o gravador de tela.
+Aparelho `25053PC47G`/Adreno, Release assinado, rota `forest-walk-v1`
+(6.611 poses, fingerprint `18faf0f1d9d8ee90`), 60 s por rodada.
+
+**O que a média escondia.** A engine reportava 95,7 presents/s, mas a cadência que
+o painel realmente entrega é quantizada em vsyncs de 8,3333 ms. Distribuição dos
+intervalos do SurfaceFlinger com o voto padrão de 120 Hz:
+
+| intervalo | equivale a | ocorrência |
+|---|---:|---:|
+| 1 vsync | 120 fps | 74,8% / 75,4% |
+| 2 vsyncs | 60 fps | 24,3% / 23,7% |
+| 3 vsyncs | 40 fps | 0,9% / 0,9% |
+
+Um quarto dos quadros dura o dobro do anterior. A média de 95 fps é real e a
+imagem ainda assim treme — é isso que o usuário percebe, e nenhuma métrica de
+média o expõe. Numa medição anterior, com o aparelho em outro estado de
+governador, a divisão chegou a **48,3% / 49,6%**: alternância quase perfeita
+entre 120 e 60, o pior padrão possível.
+
+**Cadência adaptativa — implementada, medida e retirada.** A hipótese era
+escolher o menor múltiplo de vsync que o custo medido do frame sustenta e
+segurá-lo, produzindo cadência uniforme. Implementada com histerese assimétrica
+(afrouxa em 4 quadros, aperta em 90) e alimentada pelo tempo de GPU do frame,
+deliberadamente não pelo intervalo entre presents — que já contém a espera
+imposta pela própria política.
+
+Ela se auto-alimentou mesmo assim, por um caminho que não estava previsto:
+
+| rodada | cadência | GPU média | apresentado | bateria |
+|---|---|---:|---:|---:|
+| sem pacing | livre (120 Hz) | **8,90 ms** | 96,71 fps | 35,2→36,0 °C |
+| sem pacing | livre (120 Hz) | **11,61 ms** | 76,00 fps | 34,6→34,6 °C |
+| com pacing | travou em 4 vsyncs | **22,11 ms** | 30,93 fps | 32,9→33,0 °C |
+
+O mesmo trabalho passou de 8,90 para 22,11 ms de GPU. `thermalStatus` foi **0**
+nas três, e a rodada mais lenta foi a **mais fria** — o oposto do que throttling
+térmico produziria. A causa é o governador: menos carga, menos clock de GPU,
+frame mais caro em tempo de parede. O laço fecha sozinho — afrouxar a cadência
+reduz a carga, o clock cai, o frame fica mais caro, a política afrouxa de novo —
+e estabilizou em 30 fps a 33 °C.
+
+A implementação foi **retirada**. Uma medição que é função da decisão que ela
+alimenta não sustenta uma política de controle.
+
+**Voto fixo de 60 Hz — A/B intercalado, também rejeitado.** Sem laço nenhum:
+`-TargetFps 60` decidido antes da rodada. Controles de 120 reproduzem, então a
+comparação é válida.
+
+| rodada | SF fps | GPU média | intervalo dominante | pior segundo |
+|---|---:|---:|---:|---:|
+| 120 Hz (controle) | 95,23 | 9,06 ms | 74,8% em 1 vsync | 71 fps |
+| **60 Hz** | 56,15 | **15,13 ms** | **93,0% em 2 vsyncs** | **45 fps** |
+| 120 Hz (controle) | 95,67 | 9,00 ms | 75,4% em 1 vsync | 72 fps |
+
+O voto de 60 Hz **melhora a uniformidade** (93% contra 75%) e **piora o piso**
+(45 contra 71 fps no pior segundo), porque a mesma queda de clock aparece de novo
+— GPU de 9,0 para 15,1 ms — e 7% dos quadros passam a estourar para 4 vsyncs, ou
+seja, 30 fps. Trocar tremor de 120→60 por queda a 30 não é melhora.
+
+**Conclusão operacional.** Nesta GPU, *qualquer* redução da cadência solicitada
+custa cerca de 65% de clock, e o efeito é maior quanto mais fundo se vai
+(9,0 → 15,1 → 22,1 ms). Pacing não compra estabilidade aqui: ele a vende. O voto
+padrão de 120 Hz permanece a escolha correta, e a instabilidade restante — o
+quarto de quadros que cai para 60 — só sai **tornando o frame mais barato**, não
+redistribuindo o tempo. Isso valida numericamente o gate de 6,20 ms da seção 0.6
+do plano principal: é o custo em que praticamente todo quadro cabe em 1 vsync.
+
+**Nota sobre o gravador de tela.** `screenrecord` sobe o voto de energia do
+sistema, então mais quadros alcançam o prazo de 1 vsync e a proporção fica mais
+uniforme. É o mesmo mecanismo por outro lado, e não é um cap de 60 na engine.
+
 ### A/B de backface culling — rejeitado em 29/08/2026
 
 Foi testada uma política global, sem consulta a nome de cena ou aparelho: opacos e

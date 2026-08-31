@@ -103,6 +103,51 @@ AE_TEST(frame_statistics_inclui_timestamp_gpu_sem_confundir_com_wall_cpu) {
                "cadeia HZB medida fora do render pass principal");
 }
 
+// Detector de atribuição colapsada. A assinatura real veio do Adreno do
+// aparelho de referência, medida em 31/08/2026 na rota forest-walk-v1.
+AE_TEST(atribuicao_colapsada_reconhece_a_assinatura_medida_no_adreno) {
+  std::array<double, ae::GpuPassClassCount> passes{};
+  // Valores reais de uma janela: opaque absorve o frame inteiro e as demais
+  // regiões internas ao render pass ficam em ~0,0007 ms.
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Opaque)] = 8.8905;
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Coverage)] = 0.0007;
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Sky)] = 0.0007;
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Transparent)] = 0.0007;
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Ui)] = 0.0007;
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Hzb)] = 0.0035;
+  AE_EXPECT_TRUE(gpuPassAttributionCollapsed(passes, 8.8968),
+                 "assinatura tile-deferred medida precisa ser reconhecida");
+}
+
+AE_TEST(atribuicao_real_nao_e_marcada_como_colapsada) {
+  // Divisão plausível de um frame de 10 ms: nenhuma região domina o total nem
+  // as outras somam ruído. Um limiar apertado marcaria isto por engano e o
+  // relatório passaria a descartar atribuição verdadeira.
+  std::array<double, ae::GpuPassClassCount> passes{};
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Opaque)] = 5.5;
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Coverage)] = 3.0;
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Sky)] = 0.6;
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Transparent)] = 0.6;
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Ui)] = 0.3;
+  AE_EXPECT_TRUE(!gpuPassAttributionCollapsed(passes, 10.0), "divisao real nao colapsa");
+}
+
+AE_TEST(atribuicao_ignora_o_hzb_que_e_medido_fora_do_render_pass) {
+  // Cena sem folhagem/céu/transparência/HUD: Opaque domina de verdade, e o HZB
+  // é uma cadeia de passes própria. Se o HZB entrasse na conta, uma cadeia
+  // legitimamente cara mascararia o colapso das regiões internas.
+  std::array<double, ae::GpuPassClassCount> passes{};
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Opaque)] = 7.0;
+  passes[static_cast<ae::u32>(ae::GpuPassClass::Hzb)] = 3.0;
+  AE_EXPECT_TRUE(gpuPassAttributionCollapsed(passes, 7.0),
+                 "colapso interno e detectado mesmo com HZB caro fora do pass");
+}
+
+AE_TEST(atribuicao_nao_afirma_nada_sem_tempo_de_gpu) {
+  std::array<double, ae::GpuPassClassCount> passes{};
+  AE_EXPECT_TRUE(!gpuPassAttributionCollapsed(passes, 0.0), "frame sem GPU medida nao decide");
+}
+
 // O nome da métrica e o rótulo do marcador de captura precisam vir da mesma
 // tabela: se divergirem, uma captura AGI aponta para uma região com nome que
 // não existe no relatório e a atribuição de custo deixa de ser verificável.

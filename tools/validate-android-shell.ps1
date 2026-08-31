@@ -472,6 +472,7 @@ function Start-AetherActivity {
     if ($routeModeValue -ne 0) {
         $arguments += @('--ei', 'aether.camera_route_mode', [string]$routeModeValue)
         $arguments += @('--es', 'aether.camera_route_path', $CameraRoutePath)
+
     }
     if ($EnableHzb) {
         $arguments += @('--ez', 'aether.hzb_occlusion', 'true')

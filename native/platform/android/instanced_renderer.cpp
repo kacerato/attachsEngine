@@ -1733,7 +1733,7 @@ void InstancedRenderer::beginGpuRegion(GpuPassClass pass) {
 void InstancedRenderer::endGpuRegion(GpuPassClass pass) {
   if (commandBuffer_ == VK_NULL_HANDLE) return;
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
-  if (frameProfilingEnabled_) gpuFrameTimer_.markPassEnd(commandBuffer_, pass);
+  if (gpuTimingEnabled()) gpuFrameTimer_.markPassEnd(commandBuffer_, pass);
 }
 
 rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
@@ -1748,7 +1748,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       acquireStatus != rhi::SwapchainStatus::SuboptimalNeedsRecreate) {
     return acquireStatus;
   }
-  if (frameProfilingEnabled_) {
+  if (gpuTimingEnabled()) {
     rhi::GpuFrameTimings gpuTimings{};
     if (gpuFrameTimer_.collectPrevious(gpuTimings)) {
       lastFrameTimings_.gpuFrameMs = gpuTimings.frameMs;
@@ -1815,7 +1815,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if (vkBeginCommandBuffer(commandBuffer_, &beginInfo) != VK_SUCCESS) {
     return rhi::SwapchainStatus::FatalError;
   }
-  if (frameProfilingEnabled_) gpuFrameTimer_.begin(commandBuffer_);
+  if (gpuTimingEnabled()) gpuFrameTimer_.begin(commandBuffer_);
 
   VkClearValue clearValues[2]{};
   clearValues[0].color = {{0.02f, 0.02f, 0.05f, 1.0f}};
@@ -2254,7 +2254,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if (hzbFrameEligible_) recordHzbReductionPass(camera);
   endGpuRegion(GpuPassClass::Hzb);
   hzbPreviousFrameEligible_ = hzbFrameEligible_;
-  if (frameProfilingEnabled_) gpuFrameTimer_.end(commandBuffer_);
+  if (gpuTimingEnabled()) gpuFrameTimer_.end(commandBuffer_);
   if (vkEndCommandBuffer(commandBuffer_) != VK_SUCCESS) return rhi::SwapchainStatus::FatalError;
 
   const VkSemaphore waitSemaphore = swapchain_->imageAvailableSemaphore();

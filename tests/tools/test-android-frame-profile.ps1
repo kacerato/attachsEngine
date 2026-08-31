@@ -44,11 +44,12 @@ function Get-TestCapture {
         -Scene $Scene -Contexts @($context)
 }
 function Convert-TestWindow {
-    param($Window, [switch]$OmitPasses)
+    param($Window, [switch]$OmitPasses, [string]$Attribution = 'resolved')
     # Espelha o emissor nativo: a janela leva as metricas de frame, e as regioes
     # de GPU saem numa segunda entrada de Logcat pareada por epoch/window.
     $wire = $Window | ConvertTo-Json -Depth 5 | ConvertFrom-Json
-    $passes = [ordered]@{ schemaVersion = 4; pid = $wire.pid; epoch = $wire.epoch; window = $wire.window }
+    $passes = [ordered]@{ schemaVersion = 4; pid = $wire.pid; epoch = $wire.epoch; window = $wire.window
+                          attribution = $Attribution; collapsed_frames = 0; attribution_samples = 600 }
     foreach ($metric in $FrameProfilePassMetricNames) {
         $d = $wire.$metric
         $passes[$metric] = @($d.mean, $d.p50, $d.p95, $d.p99, $d.max)
@@ -314,5 +315,26 @@ Test-Profile 'nomes das regiões acompanham ae::GpuPassClass do nativo' {
     # que StrictMode não confunda "iguais" com erro de propriedade ausente.
     $differences = @(Compare-Object $native $FrameProfilePassMetricNames -SyncWindow 0)
     Assert-Profile ($differences.Count -eq 0)
+}
+Test-Profile 'veredito de atribuição viaja da janela para a captura' {
+    $window = New-TestWindow
+    $parsed = @(ConvertFrom-FrameProfileLog (Convert-TestWindow $window) 7)
+    Assert-Profile ($parsed[0].gpuPassAttribution -eq 'resolved')
+}
+Test-Profile 'uma janela tile-deferred contamina a atribuição da captura inteira' {
+    # Numa GPU TBDR a divisão por região pode não significar nada. Os números
+    # continuam no relatório, mas marcados: consumi-los como atribuição mandaria
+    # o ciclo de otimização atrás do alvo errado.
+    $lines = @(1..3 | ForEach-Object {
+        Convert-TestWindow (New-TestWindow -Index $_) -Attribution $(if ($_ -eq 2) { 'tile-deferred' } else { 'resolved' })
+    }) -join "`n"
+    $windows = @(ConvertFrom-FrameProfileLog $lines 7)
+    Assert-Profile ($windows.Count -eq 3)
+    $capture = Get-TestCapture -Windows $windows -MinimumSeconds 1
+    Assert-Profile ($capture.gpuPassAttribution -eq 'tile-deferred')
+}
+Test-Profile 'registro de passes sem veredito é recusado' {
+    $line = Convert-TestWindow (New-TestWindow)
+    Assert-Rejected { ConvertFrom-FrameProfileLog ($line -replace '"attribution":"resolved",', '') 7 }
 }
 Write-Host "$count testes de FrameProfile passaram."

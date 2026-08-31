@@ -330,6 +330,38 @@ pipeline; o ganho depende do mesmo recook pendente do AEMAP v3/LOD.
 Verificação: **36/36** Python (+15), 231/231 C++ e 70/70 PowerShell. Nada medido em
 hardware.
 
+## Cadência, DVFS e atribuição por passe — validação física em 31/08/2026
+
+Primeira sessão com ADB conectado desde as fatias P0/P1/P3. Release assinado,
+rota `forest-walk-v1`, 60 s por rodada.
+
+**A regressão de FPS relatada era o APK de debug.** O pacote instalado estava
+`DEBUGGABLE` com `VK_LAYER_KHRONOS_validation` carregada e ativa. Em Release, dois
+controles intercalados mediram **95,23 e 95,67 presents/s**, contra a linha de base
+documentada de 95,16 — não há regressão de código nas fatias P0/P1/P3.
+
+**P1 confirmado no aparelho:** `[FrameGraph] depth 1280x2772: store=nao sampled=nao
+memoryless=sim`. A política derivada do render graph atua em hardware real.
+
+**P0 estava mentindo e foi corrigido.** As regiões de GPU mediram
+`gpu_opaque_ms` = 8,89 ms igual ao frame inteiro, com Coverage/Sky/Transparent/UI
+fixos em 0,0007 ms — embora remover o prepass de coverage custe +18% de GPU. Numa
+GPU TBDR os timestamps internos a um render pass podem ser todos satisfeitos quando
+o pass resolve, no fim do tile. O runtime agora detecta a assinatura e publica
+`attribution: tile-deferred`; o relatório recusa tratar a divisão como atribuição.
+Os marcadores de debug continuam válidos e são o que a captura AGI precisa.
+
+**Cadência adaptativa: implementada, medida, retirada.** Ver
+`PROFILING-ANDROID.md`. Reduzir a cadência derrubou o clock da GPU e o mesmo
+trabalho passou de 8,90 para 22,11 ms, estabilizando em 30 fps — com
+`thermalStatus` 0 e o aparelho **mais frio** que nas rodadas rápidas. O voto fixo de
+60 Hz, testado em A/B intercalado, melhorou a uniformidade (93% contra 75%) mas
+piorou o pior segundo (45 contra 71 fps). Ambos rejeitados.
+
+**O que isso fixa para o programa de margem:** o quarto de quadros que cai para
+60 fps não sai por redistribuição de tempo, só por frame mais barato. É a
+validação numérica do gate de 6,20 ms da seção 0.6.
+
 ## Resumo
 
 | | |

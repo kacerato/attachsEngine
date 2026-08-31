@@ -74,6 +74,12 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
         instances, width, height);
     contextPending_ = false;
   }
+  if (phases.gpuFrameMs > 0.0) {
+    ++attributionSampleFrames_;
+    if (profiler::gpuPassAttributionCollapsed(phases.gpuPassMs, phases.gpuFrameMs)) {
+      ++collapsedAttributionFrames_;
+    }
+  }
   const auto result = statistics_.record(counters, phases);
   if (result == profiler::FrameSampleResult::Invalid) {
     reset();
@@ -135,9 +141,19 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
   // consumidor exige o par: uma janela sem suas regiões é captura incompleta,
   // não uma janela cujos passes custaram zero.
   char passes[1024];
+  // attribution diz se a divisao abaixo significa alguma coisa neste hardware.
+  // Numa GPU TBDR os timestamps internos ao render pass podem resolver todos no
+  // fim do tile: as regioes existem, mas o hardware nao as separa.
+  const char *attribution =
+      attributionSampleFrames_ != 0 &&
+              collapsedAttributionFrames_ * 2 >= attributionSampleFrames_
+          ? "tile-deferred"
+          : "resolved";
   int passesUsed = std::snprintf(passes, sizeof(passes),
-      "{\"schemaVersion\":4,\"pid\":%d,\"epoch\":%u,\"window\":%llu",
-      getpid(), epoch_, static_cast<unsigned long long>(window_));
+      "{\"schemaVersion\":4,\"pid\":%d,\"epoch\":%u,\"window\":%llu,"
+      "\"attribution\":\"%s\",\"collapsed_frames\":%u,\"attribution_samples\":%u",
+      getpid(), epoch_, static_cast<unsigned long long>(window_), attribution,
+      collapsedAttributionFrames_, attributionSampleFrames_);
   if (passesUsed < 0 || static_cast<size_t>(passesUsed) >= sizeof(passes)) return;
   passesUsed = appendMetrics(passes, sizeof(passes), passesUsed,
                              profiler::FrameLevelMetricCount, profiler::FrameMetricCount);
@@ -147,6 +163,8 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
     return;
   }
   __android_log_print(ANDROID_LOG_INFO, LogTag, "[FrameProfilePasses] %s", passes);
+  collapsedAttributionFrames_ = 0;
+  attributionSampleFrames_ = 0;
 }
 
 } // namespace ae::platform::android

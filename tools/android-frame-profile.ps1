@@ -154,6 +154,12 @@ function ConvertFrom-FrameProfilePassLog {
         if ($record.schemaVersion -ne 4 -or $record.epoch -lt 1 -or $record.window -lt 1) {
             throw 'Registro FrameProfilePasses incompativel ou incompleto.'
         }
+        if ($record.PSObject.Properties.Name -notcontains 'attribution') {
+            throw 'Registro FrameProfilePasses sem veredito de atribuicao.'
+        }
+        if ($record.attribution -notin @('resolved', 'tile-deferred')) {
+            throw "FrameProfilePasses com atribuicao invalida: $($record.attribution)."
+        }
         ConvertTo-FrameProfileDistributions -Record $record -MetricNames $FrameProfilePassMetricNames -Label 'FrameProfilePasses'
         $key = "$($record.epoch):$($record.window)"
         if ($passes.ContainsKey($key)) { throw "Registro FrameProfilePasses duplicado: $key." }
@@ -292,6 +298,12 @@ function ConvertFrom-FrameProfileLog {
         foreach ($metric in $FrameProfilePassMetricNames) {
             $window | Add-Member -NotePropertyName $metric -NotePropertyValue $passRecord.$metric
         }
+        # Numa GPU TBDR os timestamps internos ao render pass podem resolver
+        # todos no fim do tile: a primeira regiao absorve o frame e as demais
+        # medem ~0. Os numeros continuam no relatorio porque sao o que o
+        # hardware devolveu, mas viajam marcados -- consumir uma divisao que o
+        # hardware nao fez enviaria o ciclo de otimizacao atras do alvo errado.
+        $window | Add-Member -NotePropertyName gpuPassAttribution -NotePropertyValue $passRecord.attribution
         # As regioes particionam o frame: somadas nao podem exceder o tempo total
         # de GPU alem da tolerancia de arredondamento de 4 casas por metrica.
         $passSum = 0.0
@@ -360,9 +372,22 @@ function Get-FrameProfileCapture {
             max = ($selected | ForEach-Object { $_.$metric.max } | Measure-Object -Maximum).Maximum
         }
     }
+    # Janela sem veredito nunca vira 'resolved': isso afirmaria atribuicao que
+    # ninguem mediu. Toda janela vinda de ConvertFrom-FrameProfileLog carrega o
+    # campo, entao 'unknown' so aparece para entrada construida a mao.
+    $attributions = @($selected | ForEach-Object {
+        if ($_.PSObject.Properties.Name -contains 'gpuPassAttribution') { $_.gpuPassAttribution }
+        else { 'unknown' } })
+    $captureAttribution = if ($attributions -contains 'tile-deferred') { 'tile-deferred' }
+                          elseif ($attributions -contains 'unknown') { 'unknown' }
+                          else { 'resolved' }
     return [ordered]@{
         schemaVersion = 2
         scene = $context.scene
+        # 'tile-deferred': o hardware resolveu os timestamps do render pass no
+        # fim do tile e as metricas gpu_*_ms abaixo NAO atribuem custo por
+        # regiao. Os marcadores de debug continuam validos para captura AGI.
+        gpuPassAttribution = $captureAttribution
         context = $context
         pid = $latest.pid
         epoch = $latest.epoch
