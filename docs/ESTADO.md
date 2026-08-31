@@ -399,6 +399,36 @@ sistematicamente pior. Efeito abaixo de **~0,4 ms** não é distinguível em dua
 rodadas. Os ganhos aceitos (0,44 ms memoryless, 0,61 ms precisão do shading)
 estão acima do piso; a precisão dos varyings não está.
 
+## Política global de qualidade e matemática de sombras — 31/08/2026
+
+Núcleo de qualidade da ADR-014 implementado: `renderer/rendering_policy.*` resolve
+uma `ResolvedRenderingPolicy` a partir de perfil de dispositivo, escolha do projeto
+e pressão térmica, com eixos independentes de sombras, ambiente, pós, texturas e
+escala de resolução. Preset é um ponto no espaço de configuração — `QualityPreset`
+não aparece em nenhum campo da política resolvida, de modo que o renderer não pode
+ramificar no nome. Toda redução registra eixo e motivo.
+
+`renderer/shadow_cascades.*` entrega a matemática de sombra direcional em cascata:
+divisão mista uniforme/logarítmica, volume pela esfera circunscrita (invariante à
+rotação da câmera) e ancoragem do centro em texels inteiros. Os três artefatos
+clássicos de CSM estão trancados por teste.
+
+Shaders do passe de sombra (`shadow_depth.vert` e as duas variantes de recorte
+alpha) compilam e passam `spirv-val`. **O passe Vulkan ainda não existe**, então
+sombras não desenham: o sol continua iluminando por N·L sem oclusão. A política é
+resolvida e registrada no aparelho, mas o renderer ainda não lê seus eixos.
+
+Validado no Xiaomi: `auto` resolve perfil B com 3 cascatas @1536 e PCF 3×3, e
+reporta corretamente um clamp de anisotropia por capability.
+
+Três lacunas que esta fatia tornou visíveis: `DeviceFeatures` só preenche quatro
+campos, deixando **os perfis A e S inalcançáveis por detecção**; `samplerAnisotropy`
+nunca é habilitada; e os arquivos de lock do Gradle estavam versionados, causando
+`Failed to release lock` em todo build — corrigido no `.gitignore`.
+
+Verificação: **257/257** C++ (+22), 42/42 PowerShell de FrameProfile, 36/36 Python e
+`assembleRelease` pelo NDK real.
+
 ## Resumo
 
 | | |

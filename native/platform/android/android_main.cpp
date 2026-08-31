@@ -2,6 +2,7 @@
 #include "platform/android/android_launch_options.h"
 #include "platform/android/astc_encode_probe.h"
 #include "platform/android/android_frame_profiler.h"
+#include "renderer/rendering_policy.h"
 #include "platform/android/android_frame_pacer.h"
 #include "platform/android/android_performance.h"
 #include "platform/android/android_vulkan_surface.h"
@@ -88,6 +89,11 @@ struct AndroidShell final {
   ae::FrameBudget frameBudget = ae::makeFrameBudget(60.0f, 60.0f, 60);
   ae::VisibilityBudget visibilityBudget{};
   ae::renderer::GpuCostIsolation gpuCostIsolation = ae::renderer::GpuCostIsolation::Full;
+  // Escolha global do projeto e política resolvida (ADR-014). Uma única
+  // resolução por época de configuração; nenhuma cena tem perfil próprio.
+  ae::renderer::ProjectRenderingSettings renderingSettings{};
+  ae::renderer::ResolvedRenderingPolicy renderingPolicy{};
+  float maximumDisplayHz = 60.0f;
   int displayRotation = -1;
 
   // Deterministic camera route (benchmark A/B tooling, see camera_route.h).
@@ -258,6 +264,61 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
       cancel?"cancelled":(ready?"ready":"failed"));
 }
 
+// A política só pode ser resolvida depois que o device Vulkan existe: antes
+// disso `deviceFeatures()` é o valor default e todo aparelho pareceria perfil C.
+// Esta é a "época de configuração" da ADR-014 — uma resolução por criação de
+// device, imutável enquanto ela durar.
+void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
+  const auto &device = shell.vulkanSurface.device();
+  const auto &features = device.deviceFeatures();
+  ae::renderer::RenderingCapabilities capabilities{};
+  capabilities.profile = device.deviceProfile();
+  capabilities.maximumImage2DSize = device.maximumImage2DSize();
+  capabilities.maximumImageArrayLayers = device.maximumImageArrayLayers();
+  // O suporte real a depth amostrável é decidido junto do formato, na criação do
+  // depth; aqui entra otimista e o renderer reduz se recusar o formato.
+  capabilities.supportsDepthSampling = true;
+  capabilities.maximumSamplerAnisotropy = device.maximumSamplerAnisotropy();
+  capabilities.displayHz = displayHz;
+  // Pressão térmica entra como `None` nesta fatia. O governador já é lido pelo
+  // runner, mas realimentá-lo exige a histerese de recuperação que a ADR pede, e
+  // histerese sem medição reproduz o laço que a cadência adaptativa produziu.
+  shell.renderingPolicy = ae::renderer::resolveRenderingPolicy(
+      shell.renderingSettings, capabilities, ae::renderer::ThermalPressure::None);
+
+  // Os fatos que produziram o perfil ficam ao lado da política: sem eles,
+  // "auto escolheu C" é indistinguível de um bug da política.
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[RenderPolicy] features: vulkan1_3=%d descriptor_indexing=%d nonuniform=%d "
+      "ray_query=%d mesh_shader=%d vrs=%d memoryless=%d -> perfil=%d",
+      features.vulkan1_3 ? 1 : 0, features.descriptorIndexing ? 1 : 0,
+      features.bindlessNonUniformIndexing ? 1 : 0, features.rayQuery ? 1 : 0,
+      features.meshShader ? 1 : 0, features.variableRateShading ? 1 : 0,
+      features.memorylessAttachments ? 1 : 0, static_cast<int>(device.deviceProfile()));
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[RenderPolicy] preset=%s perfil=%d sombras=%s(%u cascatas @%u, %u taps) "
+      "ambiente=%s%s pos=%s%s textura_mip_bias=%u aniso=%.1f escala=%.2f clamps=%u",
+      ae::renderer::qualityPresetName(shell.renderingSettings.preset),
+      static_cast<int>(shell.renderingPolicy.effectiveProfile),
+      shell.renderingPolicy.shadows.enabled ? "on" : "off",
+      shell.renderingPolicy.shadows.cascadeCount,
+      shell.renderingPolicy.shadows.cascadeResolution,
+      shell.renderingPolicy.shadows.filterTaps,
+      shell.renderingPolicy.ambient.hemispheric ? "hemisferio" : "constante",
+      shell.renderingPolicy.ambient.specularProbe ? "+especular" : "",
+      shell.renderingPolicy.post.dedicatedPass ? "passe" : "inline",
+      shell.renderingPolicy.post.bloom ? "+bloom" : "",
+      shell.renderingPolicy.textures.residencyMipBias,
+      static_cast<double>(shell.renderingPolicy.textures.samplerAnisotropy),
+      static_cast<double>(shell.renderingPolicy.resolutionScale),
+      shell.renderingPolicy.clampCount);
+  for (ae::u32 index = 0; index < shell.renderingPolicy.clampCount; ++index) {
+    const auto &clamp = shell.renderingPolicy.clamps[index];
+    __android_log_print(ANDROID_LOG_INFO, LogTag, "[RenderPolicy] %s reduzido por %s.",
+                        clamp.axis, ae::renderer::policyClampName(clamp.reason));
+  }
+}
+
 bool rebuildInstancedRenderer(AndroidShell &shell) {
   collectRendererInitialization(shell,true);
   shell.frameProfiler.reset();
@@ -310,6 +371,7 @@ bool recreateSurfaceAndRenderer(AndroidShell &shell) {
   if (shell.app->window == nullptr || !shell.vulkanSurface.initialize(shell.app->window, !shell.forceDescriptorFallback)) {
     return false;
   }
+  resolveRenderingPolicyForDevice(shell, shell.maximumDisplayHz);
   return rebuildInstancedRenderer(shell);
 }
 
@@ -322,7 +384,8 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     if (!shell.vulkanSurface.initialize(shell.app->window, !shell.forceDescriptorFallback)) {
       __android_log_print(ANDROID_LOG_ERROR, LogTag,
                           "O shell continuará ativo sem GPU; uma nova janela tentará novamente.");
-    } else if (!rebuildInstancedRenderer(shell)) {
+    } else if (resolveRenderingPolicyForDevice(shell, shell.maximumDisplayHz),
+               !rebuildInstancedRenderer(shell)) {
       __android_log_print(ANDROID_LOG_ERROR, LogTag,
                           "Surface pronta, mas o pipeline de desenho falhou ao inicializar.");
     }
@@ -573,6 +636,7 @@ void android_main(android_app *app) {
   ae::platform::android::readFloatLaunchOption(
       app->activity, "aether.target_fps", requestedMaximumRenderHz);
   shell.frameBudget = ae::makeFrameBudget(maximumDisplayHz, requestedMaximumRenderHz, 60);
+  shell.maximumDisplayHz = maximumDisplayHz;
   ae::platform::android::AndroidPerformancePolicy performancePolicy{};
   performancePolicy.targetFrameDurationNs =
       static_cast<ae::i64>(1'000'000'000ULL / shell.frameBudget.renderHz);
@@ -599,8 +663,34 @@ void android_main(android_app *app) {
     shell.gpuCostIsolation = ae::renderer::sanitizeGpuCostIsolation(requestedIsolation);
   }
   shell.instancedRenderer.setGpuCostIsolation(shell.gpuCostIsolation);
-  __android_log_print(ANDROID_LOG_INFO, LogTag, "[GpuIsolation] mode=%s scope=diagnostic-only",
-                      ae::renderer::gpuCostIsolationName(shell.gpuCostIsolation));
+
+  // --- Política global de renderização (ADR-014) ---------------------------
+  // As opções de lançamento são o override de diagnóstico do que, no produto,
+  // virá das Project Settings serializadas. O vocabulário é o mesmo dos dois
+  // lados porque o parsing mora na própria política, não aqui.
+  {
+    char buffer[64]{};
+    if (ae::platform::android::readStringLaunchOption(app->activity, "aether.quality_preset",
+                                                      buffer, sizeof(buffer))) {
+      shell.renderingSettings.preset = ae::renderer::parseQualityPreset(buffer);
+    }
+    if (ae::platform::android::readStringLaunchOption(app->activity, "aether.quality_shadows",
+                                                      buffer, sizeof(buffer))) {
+      shell.renderingSettings.shadows = ae::renderer::parseShadowQuality(buffer);
+    }
+    if (ae::platform::android::readStringLaunchOption(app->activity, "aether.quality_ambient",
+                                                      buffer, sizeof(buffer))) {
+      shell.renderingSettings.ambient = ae::renderer::parseAmbientQuality(buffer);
+    }
+    if (ae::platform::android::readStringLaunchOption(app->activity, "aether.quality_post",
+                                                      buffer, sizeof(buffer))) {
+      shell.renderingSettings.post = ae::renderer::parsePostQuality(buffer);
+    }
+    if (ae::platform::android::readStringLaunchOption(app->activity, "aether.quality_textures",
+                                                      buffer, sizeof(buffer))) {
+      shell.renderingSettings.textures = ae::renderer::parseTextureQuality(buffer);
+    }
+  }
   shell.instancedRenderer.setCoveragePrepassEnabled(
       !ae::platform::android::readBooleanLaunchOption(app->activity,
                                                        "aether.disable_coverage_prepass"));

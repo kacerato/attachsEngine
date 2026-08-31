@@ -214,6 +214,14 @@ public:
   const EnabledPaths &enabledPaths() const { return enabledPaths_; }
   u32 bindlessTextureCapacity() const { return bindlessTextureCapacity_; }
 
+  // Limites físicos que a política global de renderização (ADR-014) precisa para
+  // reduzir um preset ao que o dispositivo comporta. São fatos consultados em
+  // initializeDevice, nunca presumidos, e a política só os usa para reduzir.
+  u32 maximumImage2DSize() const { return maximumImage2DSize_; }
+  u32 maximumImageArrayLayers() const { return maximumImageArrayLayers_; }
+  float maximumSamplerAnisotropy() const { return maximumSamplerAnisotropy_; }
+  bool samplerAnisotropySupported() const { return maximumSamplerAnisotropy_ > 1.0f; }
+
   // Item 2.1.6 do plano ("camadas de validação, marcadores de debug, captura
   // de frame"): true só em build debug (!NDEBUG) E quando VK_EXT_debug_utils
   // foi de fato habilitada em initializeInstance — nunca presumido. Os
@@ -241,6 +249,9 @@ private:
   DeviceProfile deviceProfile_ = DeviceProfile::C;
   EnabledPaths enabledPaths_{};
   u32 bindlessTextureCapacity_ = 0;
+  u32 maximumImage2DSize_ = 4096;
+  u32 maximumImageArrayLayers_ = 256;
+  float maximumSamplerAnisotropy_ = 1.0f;
 
 #if AETHER_VULKAN_VALIDATION
   VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;

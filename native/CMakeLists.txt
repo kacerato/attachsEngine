@@ -169,6 +169,8 @@ target_link_libraries(aether_rendergraph PUBLIC aether_core)
 add_library(aether_renderer STATIC
   renderer/frame_graph.cpp
   renderer/frustum_visibility.cpp
+  renderer/rendering_policy.cpp
+  renderer/shadow_cascades.cpp
   renderer/hzb_visibility.cpp
   renderer/lod_selection.cpp
   renderer/spatial_render_chunks.cpp
@@ -339,6 +341,8 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_memory_budget.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_rhi_resources.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_graph.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_rendering_policy.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_shadow_cascades.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_statistics.cpp

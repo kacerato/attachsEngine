@@ -796,6 +796,13 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   deviceFeatures_.descriptorIndexing = descriptorIndexingExtensionSupported;
   deviceFeatures_.bindlessNonUniformIndexing = bindlessSupported;
   deviceFeatures_.maxBoundDescriptorSets = deviceProperties.limits.maxBoundDescriptorSets;
+  maximumImage2DSize_ = deviceProperties.limits.maxImageDimension2D;
+  maximumImageArrayLayers_ = deviceProperties.limits.maxImageArrayLayers;
+  // samplerAnisotropy é uma feature opcional: sem ela o limite reportado não vale,
+  // e pedir anisotropia > 1 seria uso inválido do sampler.
+  maximumSamplerAnisotropy_ = enabledFeatures.samplerAnisotropy == VK_TRUE
+                                  ? deviceProperties.limits.maxSamplerAnisotropy
+                                  : 1.0f;
   deviceProfile_ = classifyDeviceProfile(deviceFeatures_);
   enabledPaths_ = derivePaths(deviceProfile_, deviceFeatures_);
 
