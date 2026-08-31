@@ -254,6 +254,30 @@ GPU, sem ganho contra v14. A correção permanece por expressar o contrato real,
 é contada como otimização. APK v15 SHA-256:
 `9E66F34F1D92985E63589FDF0DE6C404E4B11243B96BB5EA100C5B77FBCC5951`.
 
+## Regiões de GPU por classe de passe — 31/08/2026
+
+Primeira fatia do programa de margem gráfica (P0 — verdade de GPU). O frame passou
+de três baldes de timestamp para **seis regiões** — Opaque, Coverage, Sky,
+Transparent, UI e HZB — declaradas uma única vez em `native/core/gpu_pass_class.h`
+e consumidas pelo timer, pelo relatório de perfil e pelos marcadores de captura.
+
+Fechou três buracos de atribuição reais: opaco sólido e folhagem alpha-mask estavam
+somados no mesmo balde (a folhagem tem faixa própria no portfólio da seção 6.0 e não
+havia como verificá-la); o HUD não tinha marca nenhuma e caía no intervalo não
+atribuído no fim do frame; e a cadeia do HZB também não tinha marca, deixando
+invisível o custo do próprio mecanismo de visibilidade. O frame inteiro também tinha
+**um** rótulo de debug (`DirtRoad/map`), então a captura AGI prevista chegaria como
+bloco único.
+
+O registro `[FrameProfilePasses]` foi separado da janela porque esta já ocupava 937
+dos ~1023 bytes que o Logcat entrega antes de truncar em silêncio. O par é
+obrigatório: janela órfã é recusada em vez de virar 0 ms por região.
+
+Verificação: **226/226** C++, **39/39** PowerShell de FrameProfile, **21/21** Python
+do cooker e 31/31 nas demais suítes Android; `libaether_android.so` reconstruído pelo
+NDK real. **Nada foi medido em hardware** — não havia ADB nesta sessão. Regiões são
+instrumentação e não reduzem nenhum milissegundo; nenhum ganho é declarado.
+
 ## Resumo
 
 | | |

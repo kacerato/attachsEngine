@@ -27,7 +27,7 @@ bool VulkanGpuFrameTimer::initialize(VkDevice device, VkPhysicalDevice physicalD
   VkQueryPoolCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
   info.queryType = VK_QUERY_TYPE_TIMESTAMP;
-  info.queryCount = GpuFramePassCount + 1;
+  info.queryCount = GpuPassClassCount + 1;
   if (vkCreateQueryPool(device, &info, nullptr, &queryPool_) != VK_SUCCESS) return false;
 
   device_ = device;
@@ -51,7 +51,7 @@ void VulkanGpuFrameTimer::shutdown() {
 bool VulkanGpuFrameTimer::collectPrevious(GpuFrameTimings &timings) {
   timings = {};
   if (!available() || !pending_) return false;
-  std::array<u64, GpuFramePassCount + 1> timestamps{};
+  std::array<u64, GpuPassClassCount + 1> timestamps{};
   const VkResult result = vkGetQueryPoolResults(
       device_, queryPool_, 0, timestamps.size(), sizeof(timestamps), timestamps.data(), sizeof(u64),
       VK_QUERY_RESULT_64_BIT);
@@ -61,7 +61,7 @@ bool VulkanGpuFrameTimer::collectPrevious(GpuFrameTimings &timings) {
            timestampPeriodNanoseconds_ / 1'000'000.0;
   };
   timings.frameMs = toMilliseconds(timestamps.front(), timestamps.back());
-  for (u32 pass = 0; pass < GpuFramePassCount; ++pass)
+  for (u32 pass = 0; pass < GpuPassClassCount; ++pass)
     timings.passesMs[pass] = toMilliseconds(timestamps[pass], timestamps[pass + 1]);
   pending_ = false;
   return true;
@@ -71,16 +71,17 @@ void VulkanGpuFrameTimer::begin(VkCommandBuffer commandBuffer) {
   if (!available() || commandBuffer == VK_NULL_HANDLE) return;
   pending_ = false;
   recordedQueryCount_ = 1;
-  vkCmdResetQueryPool(commandBuffer, queryPool_, 0, GpuFramePassCount + 1);
+  vkCmdResetQueryPool(commandBuffer, queryPool_, 0, GpuPassClassCount + 1);
   vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool_, 0);
 }
 
-void VulkanGpuFrameTimer::markPassEnd(VkCommandBuffer commandBuffer, GpuFramePass pass) {
+void VulkanGpuFrameTimer::markPassEnd(VkCommandBuffer commandBuffer, GpuPassClass pass) {
   if (!available() || commandBuffer == VK_NULL_HANDLE) return;
   const u32 targetQuery = static_cast<u32>(pass) + 1;
-  if (targetQuery >= GpuFramePassCount + 1 || targetQuery < recordedQueryCount_) return;
-  // Preenche checkpoints omitidos no mesmo ponto. Assim renderers simples
-  // podem marcar apenas Geometry, enquanto o formato permanece global.
+  if (targetQuery >= GpuPassClassCount + 1 || targetQuery < recordedQueryCount_) return;
+  // Preenche checkpoints omitidos no mesmo ponto. Assim um renderer simples
+  // pode marcar apenas Opaque e as classes que ele não possui ficam com
+  // duração zero, em vez de absorverem silenciosamente o custo da seguinte.
   while (recordedQueryCount_ <= targetQuery) {
     vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                         queryPool_, recordedQueryCount_++);
@@ -89,7 +90,7 @@ void VulkanGpuFrameTimer::markPassEnd(VkCommandBuffer commandBuffer, GpuFramePas
 
 void VulkanGpuFrameTimer::end(VkCommandBuffer commandBuffer) {
   if (!available() || commandBuffer == VK_NULL_HANDLE || recordedQueryCount_ == 0) return;
-  while (recordedQueryCount_ < GpuFramePassCount + 1) {
+  while (recordedQueryCount_ < GpuPassClassCount + 1) {
     vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                         queryPool_, recordedQueryCount_++);
   }

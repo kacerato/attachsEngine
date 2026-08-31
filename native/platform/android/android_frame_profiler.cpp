@@ -90,7 +90,7 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
 #endif
   char json[3072];
   int used = std::snprintf(json, sizeof(json),
-      "{\"schemaVersion\":3,\"pid\":%d,\"epoch\":%u,\"window\":%llu,\"build\":\"%s\","
+      "{\"schemaVersion\":4,\"pid\":%d,\"epoch\":%u,\"window\":%llu,\"build\":\"%s\","
       "\"instances\":%u,\"width\":%u,\"height\":%u,\"frames\":%u,\"elapsed_ms\":%.6f,"
       "\"present_fps\":%.6f,\"warmup_samples\":%u,\"warmup_process_cpu_max_ms\":%.6f,"
       "\"route_frame\":%llu,\"visible_draws\":%u,\"visible_triangles\":%llu",
@@ -101,23 +101,52 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
       context.visibleDrawCount,
       static_cast<unsigned long long>(context.visibleTriangleCount));
   if (used < 0 || static_cast<size_t>(used) >= sizeof(json)) return;
-  for (u32 metric = 0; metric < profiler::FrameMetricCount; ++metric) {
-    const auto &d = summary.metrics[metric];
-    // Schema v3 usa vetor compacto [mean,p50,p95,p99,max]. O formato anterior
-    // excederia o limite de 1023 bytes do Logcat ao adicionar tempos por passe.
-    const int written = std::snprintf(json + used, sizeof(json) - used,
-        ",\"%s\":[%.4f,%.4f,%.4f,%.4f,%.4f]",
-        profiler::FrameMetricNames[metric], d.mean, d.p50, d.p95, d.p99, d.maximum);
-    if (written < 0 || static_cast<size_t>(written) >= sizeof(json) - used) {
-      __android_log_print(ANDROID_LOG_ERROR, LogTag, "[FrameProfile] Buffer de relatório insuficiente.");
-      return;
+  // Vetor compacto [mean,p50,p95,p99,max] por métrica. Cada entrada do Logcat é
+  // truncada em silêncio perto de 1023 bytes, e a janela v3 já ocupava 937 com
+  // apenas três passes — por isso as classes de passe saem num registro próprio
+  // logo abaixo, em vez de caber "quase sempre" nesta linha.
+  const auto appendMetrics = [&](char *buffer, size_t capacity, int offset, u32 first,
+                                 u32 last) -> int {
+    for (u32 metric = first; metric < last; ++metric) {
+      const auto &d = summary.metrics[metric];
+      const int written = std::snprintf(buffer + offset, capacity - static_cast<size_t>(offset),
+          ",\"%s\":[%.4f,%.4f,%.4f,%.4f,%.4f]",
+          profiler::frameMetricName(metric), d.mean, d.p50, d.p95, d.p99, d.maximum);
+      if (written < 0 || static_cast<size_t>(written) >= capacity - static_cast<size_t>(offset))
+        return -1;
+      offset += written;
     }
-    used += written;
+    return offset;
+  };
+  const auto closeJson = [](char *buffer, size_t capacity, int offset) -> bool {
+    if (offset < 0 || static_cast<size_t>(offset) + 2 > capacity) return false;
+    buffer[offset++] = '}';
+    buffer[offset] = '\0';
+    return true;
+  };
+  used = appendMetrics(json, sizeof(json), used, 0, profiler::FrameLevelMetricCount);
+  if (!closeJson(json, sizeof(json), used)) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[FrameProfile] Buffer de relatório insuficiente.");
+    return;
   }
-  if (static_cast<size_t>(used) + 2 > sizeof(json)) return;
-  json[used++] = '}';
-  json[used] = '\0';
   __android_log_print(ANDROID_LOG_INFO, LogTag, "[FrameProfile] %s", json);
+
+  // Regiões de GPU do frame, pareadas à janela acima por pid/epoch/window. O
+  // consumidor exige o par: uma janela sem suas regiões é captura incompleta,
+  // não uma janela cujos passes custaram zero.
+  char passes[1024];
+  int passesUsed = std::snprintf(passes, sizeof(passes),
+      "{\"schemaVersion\":4,\"pid\":%d,\"epoch\":%u,\"window\":%llu",
+      getpid(), epoch_, static_cast<unsigned long long>(window_));
+  if (passesUsed < 0 || static_cast<size_t>(passesUsed) >= sizeof(passes)) return;
+  passesUsed = appendMetrics(passes, sizeof(passes), passesUsed,
+                             profiler::FrameLevelMetricCount, profiler::FrameMetricCount);
+  if (!closeJson(passes, sizeof(passes), passesUsed)) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag,
+                        "[FrameProfilePasses] Buffer de relatório insuficiente.");
+    return;
+  }
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "[FrameProfilePasses] %s", passes);
 }
 
 } // namespace ae::platform::android

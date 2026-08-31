@@ -1,20 +1,18 @@
 #pragma once
 
 #include "core/base.h"
+#include "core/gpu_pass_class.h"
 
 #include <array>
 #include <vulkan/vulkan.h>
 
 namespace ae::rhi {
 
-// Checkpoints seguem a ordem natural do frame e são suficientemente genéricos
-// para qualquer jogo: geometria opaca/recortada, fundo e transparência.
-enum class GpuFramePass : u32 { Geometry, Background, Transparent, Count };
-constexpr u32 GpuFramePassCount = static_cast<u32>(GpuFramePass::Count);
-
+// As classes de passe vivem em core/gpu_pass_class.h porque o relatório de
+// perfil e os marcadores de captura precisam da mesma lista; aqui só se mede.
 struct GpuFrameTimings {
   double frameMs = 0.0;
-  std::array<double, GpuFramePassCount> passesMs{};
+  std::array<double, GpuPassClassCount> passesMs{};
 };
 
 // Timestamp GPU reutilizável por qualquer renderer. Mede execução real na
@@ -37,7 +35,7 @@ public:
   // anterior. begin/end são gravados no command buffer do frame atual.
   bool collectPrevious(GpuFrameTimings &timings);
   void begin(VkCommandBuffer commandBuffer);
-  void markPassEnd(VkCommandBuffer commandBuffer, GpuFramePass pass);
+  void markPassEnd(VkCommandBuffer commandBuffer, GpuPassClass pass);
   void end(VkCommandBuffer commandBuffer);
 
 private:

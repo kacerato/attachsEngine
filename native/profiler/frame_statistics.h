@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/base.h"
+#include "core/gpu_pass_class.h"
 #include <array>
 
 namespace ae::profiler {
@@ -19,20 +20,39 @@ struct RenderPhaseTimings {
   double recordSubmitMs = 0;
   double presentMs = 0;
   double gpuFrameMs = 0;
-  double gpuGeometryMs = 0;
-  double gpuBackgroundMs = 0;
-  double gpuTransparentMs = 0;
+  // Indexado por GpuPassClass. Um array em vez de campos nomeados porque a
+  // lista de regiões do frame cresce (sombras, pós) e cada campo novo exigia
+  // tocar quatro arquivos que podiam divergir em silêncio.
+  std::array<double, GpuPassClassCount> gpuPassMs{};
 };
 
+// Métricas de nível de frame. As classes de passe vêm logo depois, na ordem de
+// GpuPassClass, formando um espaço de índices único — ver frameMetricName.
 enum class FrameMetric : u32 {
   Interval, ProcessCpu, ThreadCpu, AcquireWall, InteropWall, RecordSubmitWall, PresentWall,
-  GpuFrame, GpuGeometry, GpuBackground, GpuTransparent, Count
+  GpuFrame, Count
 };
-constexpr u32 FrameMetricCount = static_cast<u32>(FrameMetric::Count);
-constexpr const char *FrameMetricNames[] = {
+constexpr u32 FrameLevelMetricCount = static_cast<u32>(FrameMetric::Count);
+constexpr u32 FrameMetricCount = FrameLevelMetricCount + GpuPassClassCount;
+constexpr const char *FrameLevelMetricNames[] = {
     "interval_ms", "process_cpu_ms", "thread_cpu_ms", "acquire_wall_ms",
-    "interop_wall_ms", "record_submit_wall_ms", "present_wall_ms", "gpu_frame_ms",
-    "gpu_geometry_ms", "gpu_background_ms", "gpu_transparent_ms"};
+    "interop_wall_ms", "record_submit_wall_ms", "present_wall_ms", "gpu_frame_ms"};
+static_assert(sizeof(FrameLevelMetricNames) / sizeof(FrameLevelMetricNames[0]) ==
+                  FrameLevelMetricCount,
+              "FrameLevelMetricNames precisa de uma entrada por métrica de frame.");
+
+// Nome único para qualquer índice de métrica. Não duplica a lista de classes de
+// passe: a tabela canônica é a de core/gpu_pass_class.h.
+constexpr const char *frameMetricName(u32 metric) {
+  return metric < FrameLevelMetricCount
+             ? FrameLevelMetricNames[metric]
+             : GpuPassClassMetricNames[metric - FrameLevelMetricCount];
+}
+
+// Índice da métrica de uma classe de passe dentro do espaço acima.
+constexpr u32 frameMetricIndex(GpuPassClass pass) {
+  return FrameLevelMetricCount + static_cast<u32>(pass);
+}
 
 struct Distribution {
   double mean = 0, p50 = 0, p95 = 0, p99 = 0, maximum = 0;

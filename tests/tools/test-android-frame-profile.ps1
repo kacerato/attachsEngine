@@ -6,11 +6,15 @@ function Assert-Profile { param([bool]$Value); if (-not $Value) { throw 'Asserç
 function Test-Profile { param([string]$Name, [scriptblock]$Body); & $Body; ++$script:count; Write-Host "PASS: $Name" }
 function New-TestWindow {
     param([int]$Index = 1, [int]$Epoch = 1)
-    $window = [ordered]@{ schemaVersion = 3; pid = 7; epoch = $Epoch; window = $Index; build = 'debug';
+    $window = [ordered]@{ schemaVersion = 4; pid = 7; epoch = $Epoch; window = $Index; build = 'debug';
         instances = 5000; width = 2772; height = 1280; frames = 600; elapsed_ms = 10000.0;
         present_fps = 60.0; warmup_samples = 300; warmup_process_cpu_max_ms = 4.0 }
     foreach ($metric in $FrameProfileMetricNames) {
-        $value = if ($metric -eq 'interval_ms') { 10000.0 / 600 } else { 1.0 }
+        # Regioes de GPU particionam o frame, entao a soma delas precisa caber
+        # dentro de gpu_frame_ms; 6 x 0,1 cabe no 1,0 das metricas de frame.
+        $value = if ($metric -eq 'interval_ms') { 10000.0 / 600 }
+                 elseif ($FrameProfilePassMetricNames -contains $metric) { 0.1 }
+                 else { 1.0 }
         $window[$metric] = [pscustomobject]@{ mean = $value; p50 = $value; p95 = $value; p99 = $value; max = $value }
     }
     return [pscustomobject]$window
@@ -40,13 +44,23 @@ function Get-TestCapture {
         -Scene $Scene -Contexts @($context)
 }
 function Convert-TestWindow {
-    param($Window)
+    param($Window, [switch]$OmitPasses)
+    # Espelha o emissor nativo: a janela leva as metricas de frame, e as regioes
+    # de GPU saem numa segunda entrada de Logcat pareada por epoch/window.
     $wire = $Window | ConvertTo-Json -Depth 5 | ConvertFrom-Json
-    foreach ($metric in $FrameProfileMetricNames) {
+    $passes = [ordered]@{ schemaVersion = 4; pid = $wire.pid; epoch = $wire.epoch; window = $wire.window }
+    foreach ($metric in $FrameProfilePassMetricNames) {
+        $d = $wire.$metric
+        $passes[$metric] = @($d.mean, $d.p50, $d.p95, $d.p99, $d.max)
+        $wire.PSObject.Properties.Remove($metric)
+    }
+    foreach ($metric in $FrameProfileFrameMetricNames) {
         $d = $wire.$metric
         $wire.$metric = @($d.mean, $d.p50, $d.p95, $d.p99, $d.max)
     }
-    return '[FrameProfile] ' + ($wire | ConvertTo-Json -Depth 5 -Compress)
+    $line = '[FrameProfile] ' + ($wire | ConvertTo-Json -Depth 5 -Compress)
+    if ($OmitPasses) { return $line }
+    return $line + "`n" + '[FrameProfilePasses] ' + ([pscustomobject]$passes | ConvertTo-Json -Depth 5 -Compress)
 }
 function Assert-Rejected {
     param([scriptblock]$Body)
@@ -268,5 +282,37 @@ Test-Profile 'localiza somente a layer de buffer da Activity' {
 Test-Profile 'surface ambígua não produz medição inventada' {
     $text = "dev.aether.editor/android.app.NativeActivity#10`ndev.aether.editor/android.app.NativeActivity#11"
     Assert-Profile ($null -eq (Find-FrameProfileSurfaceLayer $text 'dev.aether.editor/android.app.NativeActivity'))
+}
+Test-Profile 'regiões de GPU chegam pareadas à janela e preservam a partição do frame' {
+    $window = New-TestWindow
+    $parsed = @(ConvertFrom-FrameProfileLog (Convert-TestWindow $window) 7)
+    Assert-Profile ($parsed.Count -eq 1)
+    foreach ($metric in $FrameProfilePassMetricNames) {
+        Assert-Profile ($parsed[0].$metric.mean -eq 0.1)
+    }
+    $regionSum = 0.0
+    foreach ($metric in $FrameProfilePassMetricNames) { $regionSum += $parsed[0].$metric.mean }
+    Assert-Profile ($regionSum -le $parsed[0].gpu_frame_ms.mean)
+}
+Test-Profile 'janela sem registro de regiões é recusada em vez de virar zero' {
+    # O modo de falha que este teste tranca: aceitar a janela órfã produziria
+    # 0 ms para opaco/folhagem/céu e um relatório aparentemente válido.
+    Assert-Rejected { ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow) -OmitPasses) 7 }
+}
+Test-Profile 'regiões que somam mais que o frame são recusadas' {
+    $window = New-TestWindow
+    $window.gpu_opaque_ms = [pscustomobject]@{ mean = 9.0; p50 = 9.0; p95 = 9.0; p99 = 9.0; max = 9.0 }
+    Assert-Rejected { ConvertFrom-FrameProfileLog (Convert-TestWindow $window) 7 }
+}
+Test-Profile 'nomes das regiões acompanham ae::GpuPassClass do nativo' {
+    $header = Get-Content (Join-Path $PSScriptRoot '../../native/core/gpu_pass_class.h') -Raw
+    if ($header -notmatch 'GpuPassClassMetricNames\[\] = \{([^}]*)\}') {
+        throw 'Tabela canônica de nomes não encontrada em gpu_pass_class.h.'
+    }
+    $native = @([regex]::Matches($Matches[1], '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+    # Compare-Object devolve $null quando não há diferença; @() normaliza para
+    # que StrictMode não confunda "iguais" com erro de propriedade ausente.
+    $differences = @(Compare-Object $native $FrameProfilePassMetricNames -SyncWindow 0)
+    Assert-Profile ($differences.Count -eq 0)
 }
 Write-Host "$count testes de FrameProfile passaram."

@@ -22,10 +22,16 @@ void FrameStatistics::reset() {
 
 FrameSampleResult FrameStatistics::record(FrameCounters now, const RenderPhaseTimings &phases) {
   const double phaseValues[] = {phases.acquireMs, phases.interopMs, phases.recordSubmitMs,
-                                phases.presentMs, phases.gpuFrameMs, phases.gpuGeometryMs,
-                                phases.gpuBackgroundMs, phases.gpuTransparentMs};
+                                phases.presentMs, phases.gpuFrameMs};
+  const auto rejectsValue = [](double value) { return !std::isfinite(value) || value < 0; };
   for (double value : phaseValues) {
-    if (!std::isfinite(value) || value < 0) {
+    if (rejectsValue(value)) {
+      reset();
+      return FrameSampleResult::Invalid;
+    }
+  }
+  for (double value : phases.gpuPassMs) {
+    if (rejectsValue(value)) {
       reset();
       return FrameSampleResult::Invalid;
     }
@@ -53,10 +59,14 @@ FrameSampleResult FrameStatistics::record(FrameCounters now, const RenderPhaseTi
     return FrameSampleResult::WarmingUp;
   }
   if (count_ == windowFrames_) count_ = 0;
-  const double values[] = {wallMs, processMs, threadMs, phases.acquireMs, phases.interopMs,
-                           phases.recordSubmitMs, phases.presentMs, phases.gpuFrameMs,
-                           phases.gpuGeometryMs, phases.gpuBackgroundMs, phases.gpuTransparentMs};
-  for (u32 metric = 0; metric < FrameMetricCount; ++metric) samples_[metric][count_] = values[metric];
+  const double frameValues[] = {wallMs, processMs, threadMs, phases.acquireMs, phases.interopMs,
+                                phases.recordSubmitMs, phases.presentMs, phases.gpuFrameMs};
+  static_assert(sizeof(frameValues) / sizeof(frameValues[0]) == FrameLevelMetricCount,
+                "frameValues precisa acompanhar FrameMetric.");
+  for (u32 metric = 0; metric < FrameLevelMetricCount; ++metric)
+    samples_[metric][count_] = frameValues[metric];
+  for (u32 pass = 0; pass < GpuPassClassCount; ++pass)
+    samples_[FrameLevelMetricCount + pass][count_] = phases.gpuPassMs[pass];
   ++count_;
   return count_ == windowFrames_ ? FrameSampleResult::WindowReady : FrameSampleResult::Collecting;
 }

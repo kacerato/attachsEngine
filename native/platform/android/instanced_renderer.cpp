@@ -1692,6 +1692,22 @@ u64 InstancedRenderer::snapshotFingerprint() const {
   return hash;
 }
 
+void InstancedRenderer::beginGpuRegion(GpuPassClass pass) {
+  if (commandBuffer_ == VK_NULL_HANDLE) return;
+  const float *color = GpuPassClassLabelColors[static_cast<u32>(pass)];
+  // O marcador não depende de frameProfilingEnabled_: ele é o que torna uma
+  // captura AGI/RenderDoc legível, e captura acontece fora de uma sessão de
+  // profiling. cmdBeginDebugLabel já é no-op sem VK_EXT_debug_utils.
+  rhiDevice_->cmdBeginDebugLabel(commandBuffer_, gpuPassClassLabel(pass), color[0], color[1],
+                                 color[2]);
+}
+
+void InstancedRenderer::endGpuRegion(GpuPassClass pass) {
+  if (commandBuffer_ == VK_NULL_HANDLE) return;
+  rhiDevice_->cmdEndDebugLabel(commandBuffer_);
+  if (frameProfilingEnabled_) gpuFrameTimer_.markPassEnd(commandBuffer_, pass);
+}
+
 rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                                                   const platform::FreeCameraState &camera,
                                                   const renderer::RuntimeHudState &hud) {
@@ -1708,12 +1724,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     rhi::GpuFrameTimings gpuTimings{};
     if (gpuFrameTimer_.collectPrevious(gpuTimings)) {
       lastFrameTimings_.gpuFrameMs = gpuTimings.frameMs;
-      lastFrameTimings_.gpuGeometryMs =
-          gpuTimings.passesMs[static_cast<u32>(rhi::GpuFramePass::Geometry)];
-      lastFrameTimings_.gpuBackgroundMs =
-          gpuTimings.passesMs[static_cast<u32>(rhi::GpuFramePass::Background)];
-      lastFrameTimings_.gpuTransparentMs =
-          gpuTimings.passesMs[static_cast<u32>(rhi::GpuFramePass::Transparent)];
+      lastFrameTimings_.gpuPassMs = gpuTimings.passesMs;
     }
   }
   // Same "safe without a new stall" reasoning as collectPrevious() above --
@@ -1794,6 +1805,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // aparece como um grupo nomeado em RenderDoc/Android GPU Inspector ao
   // capturar um frame. No-op em build release.
   rhiDevice_->cmdBeginDebugLabel(commandBuffer_, dirtRoadPreview_ ? "DirtRoad/map" : "InstancedRenderer/cube", 0.2f, 0.6f, 0.9f);
+  // Opaque abre aqui e não no primeiro draw: os binds de pipeline/descritor
+  // abaixo são custo da geometria opaca, e deixá-los fora da região só moveria
+  // esse custo para o buraco entre o início do frame e a primeira marca.
+  beginGpuRegion(GpuPassClass::Opaque);
 
   vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
   const VkDescriptorSet bindlessSet = textureSet_;
@@ -2092,6 +2107,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     } else {
       for (u32 drawIndex : visibleSolidDrawOrder_) drawMapPrimitive(drawIndex);
     }
+    // Vegetação alpha-mask sai do mesmo balde que os opacos sólidos. As duas
+    // classes têm custo de fragment muito diferente e o programa de margem
+    // atribui uma faixa própria à folhagem; medi-las somadas tornava essa
+    // atribuição impossível de verificar.
+    endGpuRegion(GpuPassClass::Opaque);
+    beginGpuRegion(GpuPassClass::Coverage);
     if (!visibleCoverageDrawOrder_.empty()) {
       if (coveragePrepassEnabled_)
         vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, coveragePipeline_);
@@ -2107,8 +2128,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           for (u32 drawIndex : visibleCoverageDrawOrder_) drawMapPrimitive(drawIndex);
       }
     }
-    if (frameProfilingEnabled_)
-      gpuFrameTimer_.markPassEnd(commandBuffer_, rhi::GpuFramePass::Geometry);
+    endGpuRegion(GpuPassClass::Coverage);
+    beginGpuRegion(GpuPassClass::Sky);
 
     DirtRoadPushConstants skyPush{};
     skyPush.cameraFrame[0] = static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height);
@@ -2127,8 +2148,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                        0, sizeof(skyPush), &skyPush);
     vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
-    if (frameProfilingEnabled_)
-      gpuFrameTimer_.markPassEnd(commandBuffer_, rhi::GpuFramePass::Background);
+    endGpuRegion(GpuPassClass::Sky);
+    beginGpuRegion(GpuPassClass::Transparent);
 
     std::sort(visibleTransparentDrawOrder_.begin(), visibleTransparentDrawOrder_.end(), [&](u32 left, u32 right) {
       const auto &a=dirtRoadResources_.draws()[left];const auto &b=dirtRoadResources_.draws()[right];
@@ -2146,21 +2167,23 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         drawMapPrimitive(drawIndex);
       }
     }
-    if (frameProfilingEnabled_)
-      gpuFrameTimer_.markPassEnd(commandBuffer_, rhi::GpuFramePass::Transparent);
+    endGpuRegion(GpuPassClass::Transparent);
   } else if (materialPreview_) {
     const VkBuffer mesh=materialResources_.vertexBuffer();
     vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);
     vkCmdBindIndexBuffer(commandBuffer_,materialResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
     vkCmdDrawIndexed(commandBuffer_,materialResources_.indexCount(),drawnInstanceCount_,0,0,0);
-    if (frameProfilingEnabled_)
-      gpuFrameTimer_.markPassEnd(commandBuffer_, rhi::GpuFramePass::Geometry);
+    // Cena sem folhagem/céu/transparência: essas classes ficam com zero em vez
+    // de somarem seu tempo à classe seguinte (ver VulkanGpuFrameTimer).
+    endGpuRegion(GpuPassClass::Opaque);
   } else {
     vkCmdDraw(commandBuffer_, 36, drawnInstanceCount_, 0, 0);
-    if (frameProfilingEnabled_)
-      gpuFrameTimer_.markPassEnd(commandBuffer_, rhi::GpuFramePass::Geometry);
+    endGpuRegion(GpuPassClass::Opaque);
   }
 
+  // A região abre fora do if: o HUD desenhava sem nenhuma marca e seu custo
+  // caía no intervalo não atribuído entre a última classe e o fim do frame.
+  beginGpuRegion(GpuPassClass::Ui);
   if (runtimeHudPipeline_ != VK_NULL_HANDLE && hud.visible) {
     vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, runtimeHudPipeline_);
     const float displayWidth = static_cast<float>(displayExtent.width);
@@ -2192,12 +2215,16 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                 shortEdge*.083f,shortEdge*.040f,2,hud.framesPerSecond);
   }
 
+  endGpuRegion(GpuPassClass::Ui);
+
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
   vkCmdEndRenderPass(commandBuffer_);
   // Must run after the main pass ends (depthImage_ needs its final write
   // landed, in DEPTH_STENCIL_ATTACHMENT_OPTIMAL) and before submit; a no-op
   // when HZB occlusion is disabled or its resources failed to initialize.
+  beginGpuRegion(GpuPassClass::Hzb);
   if (hzbFrameEligible_) recordHzbReductionPass(camera);
+  endGpuRegion(GpuPassClass::Hzb);
   hzbPreviousFrameEligible_ = hzbFrameEligible_;
   if (frameProfilingEnabled_) gpuFrameTimer_.end(commandBuffer_);
   if (vkEndCommandBuffer(commandBuffer_) != VK_SUCCESS) return rhi::SwapchainStatus::FatalError;

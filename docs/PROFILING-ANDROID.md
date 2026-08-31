@@ -7,7 +7,7 @@ O critério do plano principal é 60 FPS com CPU abaixo de 3 ms. Sucesso da
 ## Contrato da medição
 
 - `native/profiler/frame_statistics.*` é portátil, sem Android/Vulkan, com
-  armazenamento fixo para 600 frames × 7 métricas (~34 KB), sem alocação no heap
+  armazenamento fixo para 600 frames × 14 métricas (~67 KB), sem alocação no heap
   por frame. Um único proprietário/thread; não é um profiler de jobs concorrentes.
 - O adaptador Android lê relógios cumulativos após cada present bem-sucedido:
   `CLOCK_MONOTONIC`, `CLOCK_PROCESS_CPUTIME_ID` e `CLOCK_THREAD_CPUTIME_ID`.
@@ -23,6 +23,36 @@ O critério do plano principal é 60 FPS com CPU abaixo de 3 ms. Sucesso da
 - Cada janela de 600 intervalos publica média, p50/p95/p99 nearest-rank e máximo.
   A captura agrega médias ponderadas e **maior percentil de janela**, nunca uma
   média de percentis apresentada como percentil global.
+
+### Regiões de GPU do frame (schema 4)
+
+O tempo de GPU é medido em seis regiões declaradas uma única vez em
+`native/core/gpu_pass_class.h`, na ordem em que o frame as grava: **Opaque**
+(geometria sólida, incluindo os binds que a precedem), **Coverage** (prepass e
+shade de alpha-mask — a vegetação), **Sky**, **Transparent**, **UI** (HUD) e
+**HZB** (cadeia de redução Hi-Z, fora do render pass principal).
+
+Cada região é gravada como marcador de debug **e** timestamp, sempre em par. Os
+dois falham de formas opostas: um marcador sem métrica dá uma captura AGI que não
+fecha com o relatório, e uma métrica sem marcador dá um número que a captura não
+explica. Um marcador não depende de `aether.profile_frames` — captura acontece
+fora de uma sessão de profiling — mas é no-op sem `VK_EXT_debug_utils`.
+
+Uma região sem trabalho no frame vale **zero**, não desaparece: zero é o dado
+"não custou nada nesta pose"; ausência não é dado nenhum. Regiões não marcadas por
+um renderer simples (cubo, material preview) são preenchidas no mesmo ponto, de
+modo que ficam zeradas em vez de somarem seu tempo à região seguinte.
+
+Em GPU móvel TBDR, checkpoints dentro de um mesmo render pass podem ser resolvidos
+no fim do tile: as regiões localizam custo e servem de âncora para a captura, mas
+não substituem AGI/APA na atribuição de tiler, bandwidth e overdraw.
+
+As regiões viajam num registro `[FrameProfilePasses]` separado da janela
+`[FrameProfile]`, pareado por `pid/epoch/window`. O motivo é o limite de ~1023
+bytes por entrada do Logcat, que trunca em silêncio: a janela já ocupava 937 bytes
+com três passes. O consumidor exige o par — uma janela órfã é recusada, porque
+aceitá-la atribuiria 0 ms a opaco/folhagem/céu num relatório de aparência válida —
+e recusa regiões cuja soma exceda o tempo total de GPU do frame.
 
 `present_fps` conta retornos de present por tempo monotônico. Segundo o
 [contrato Vulkan](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueuePresentKHR.html),

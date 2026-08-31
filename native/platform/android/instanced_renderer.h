@@ -171,6 +171,14 @@ private:
   // acquireNextImage fence wait already guarantees that copy fully landed, so
   // this never introduces a new stall (see PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md).
   void readHzbPyramidFromPreviousFrame();
+  // Uma região de GPU é sempre marcador de debug + timestamp, nunca um dos
+  // dois: um marcador sem métrica é uma captura que não fecha com o relatório,
+  // e uma métrica sem marcador é um número que a captura não consegue
+  // explicar. Por isso os dois só são gravados por estes dois métodos, em par.
+  // endGpuRegion deve ser chamado mesmo quando a classe não desenhou nada no
+  // frame, para que a classe seguinte não absorva o custo dela.
+  void beginGpuRegion(GpuPassClass pass);
+  void endGpuRegion(GpuPassClass pass);
 
   VkDevice device_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;

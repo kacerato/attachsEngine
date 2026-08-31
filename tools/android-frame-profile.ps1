@@ -105,9 +105,62 @@ function Get-SurfaceFrameSummary {
     }
 }
 
-$FrameProfileMetricNames = @('interval_ms', 'process_cpu_ms', 'thread_cpu_ms', 'acquire_wall_ms',
-    'interop_wall_ms', 'record_submit_wall_ms', 'present_wall_ms', 'gpu_frame_ms',
-    'gpu_geometry_ms', 'gpu_background_ms', 'gpu_transparent_ms')
+# Metricas de nivel de frame: viajam na propria linha [FrameProfile].
+$FrameProfileFrameMetricNames = @('interval_ms', 'process_cpu_ms', 'thread_cpu_ms', 'acquire_wall_ms',
+    'interop_wall_ms', 'record_submit_wall_ms', 'present_wall_ms', 'gpu_frame_ms')
+# Regioes de GPU: viajam em [FrameProfilePasses], porque a linha da janela ja
+# ocupava 937 dos ~1023 bytes que o Logcat entrega antes de truncar em silencio.
+# A ordem espelha ae::GpuPassClass em native/core/gpu_pass_class.h.
+$FrameProfilePassMetricNames = @('gpu_opaque_ms', 'gpu_coverage_ms', 'gpu_sky_ms',
+    'gpu_transparent_ms', 'gpu_ui_ms', 'gpu_hzb_ms')
+$FrameProfileMetricNames = $FrameProfileFrameMetricNames + $FrameProfilePassMetricNames
+
+# Converte os vetores compactos [mean,p50,p95,p99,max] em objetos e valida
+# monotonicidade. Compartilhado pelos dois registros para que uma regiao de GPU
+# receba exatamente a mesma checagem que uma metrica de frame.
+function ConvertTo-FrameProfileDistributions {
+    param([object]$Record, [string[]]$MetricNames, [string]$Label)
+    foreach ($metric in $MetricNames) {
+        $compact = @($Record.$metric)
+        if ($compact.Count -ne 5) { throw "$Label invalido: $metric precisa de 5 valores." }
+        $distribution = [pscustomobject]@{
+            mean = $compact[0]; p50 = $compact[1]; p95 = $compact[2]; p99 = $compact[3]; max = $compact[4]
+        }
+        foreach ($field in @('mean', 'p50', 'p95', 'p99', 'max')) {
+            $value = [double]$distribution.$field
+            if ($null -eq $distribution.$field -or [double]::IsNaN($value) -or
+                [double]::IsInfinity($value) -or $value -lt 0) {
+                throw "$Label invalido: $metric.$field."
+            }
+        }
+        if ($distribution.p50 -gt $distribution.p95 -or $distribution.p95 -gt $distribution.p99 -or
+            $distribution.p99 -gt $distribution.max -or $distribution.mean -gt $distribution.max) {
+            throw "Percentis inconsistentes: $metric."
+        }
+        if ($Record.PSObject.Properties.Name -contains $metric) { $Record.$metric = $distribution }
+        else { $Record | Add-Member -NotePropertyName $metric -NotePropertyValue $distribution }
+    }
+}
+
+# Regioes de GPU por janela, indexadas por "epoch:window". Emitidas logo apos a
+# janela correspondente; ConvertFrom-FrameProfileLog exige o par.
+function ConvertFrom-FrameProfilePassLog {
+    param([string]$Text, [string]$ExpectedPid)
+    $passes = @{}
+    foreach ($line in ($Text -split "`n")) {
+        if ($line -notmatch '\[FrameProfilePasses\] (\{.*)$') { continue }
+        $record = $Matches[1] | ConvertFrom-Json
+        if ([string]$record.pid -ne $ExpectedPid) { continue }
+        if ($record.schemaVersion -ne 4 -or $record.epoch -lt 1 -or $record.window -lt 1) {
+            throw 'Registro FrameProfilePasses incompativel ou incompleto.'
+        }
+        ConvertTo-FrameProfileDistributions -Record $record -MetricNames $FrameProfilePassMetricNames -Label 'FrameProfilePasses'
+        $key = "$($record.epoch):$($record.window)"
+        if ($passes.ContainsKey($key)) { throw "Registro FrameProfilePasses duplicado: $key." }
+        $passes[$key] = $record
+    }
+    return $passes
+}
 
 function ConvertFrom-FrameProfileContextLog {
     param([string]$Text, [string]$ExpectedPid)
@@ -198,6 +251,7 @@ function ConvertFrom-FrameProfileContextLog {
 function ConvertFrom-FrameProfileLog {
     param([string]$Text, [string]$ExpectedPid, [Nullable[int]]$ExpectedInstances = 5000)
     $seen = @{}
+    $passes = ConvertFrom-FrameProfilePassLog -Text $Text -ExpectedPid $ExpectedPid
     foreach ($line in ($Text -split "`n")) {
         if ($line -notmatch '\[FrameProfile\] (\{.*)$') { continue }
         $window = $Matches[1] | ConvertFrom-Json
@@ -209,7 +263,7 @@ function ConvertFrom-FrameProfileLog {
                 throw "FrameProfile inválido: $field."
             }
         }
-        if ($window.schemaVersion -ne 3 -or
+        if ($window.schemaVersion -ne 4 -or
             ($null -ne $ExpectedInstances -and $window.instances -ne $ExpectedInstances) -or
             $window.frames -ne 600 -or $window.elapsed_ms -le 0 -or
             $window.width -le 0 -or $window.height -le 0 -or $window.epoch -lt 1 -or $window.window -lt 1) {
@@ -226,23 +280,24 @@ function ConvertFrom-FrameProfileLog {
             $window.visible_triangles -lt 0) {
             throw 'FrameProfile contém contexto de hotspot inválido.'
         }
-        foreach ($metric in $FrameProfileMetricNames) {
-            $compact = @($window.$metric)
-            if ($compact.Count -ne 5) { throw "FrameProfile inválido: $metric precisa de 5 valores." }
-            $distribution = [pscustomobject]@{
-                mean = $compact[0]; p50 = $compact[1]; p95 = $compact[2]; p99 = $compact[3]; max = $compact[4]
-            }
-            $window.$metric = $distribution
-            foreach ($field in @('mean', 'p50', 'p95', 'p99', 'max')) {
-                $value = [double]$distribution.$field
-                if ($null -eq $distribution.$field -or [double]::IsNaN($value) -or [double]::IsInfinity($value) -or $value -lt 0) {
-                    throw "FrameProfile inválido: $metric.$field."
-                }
-            }
-            if ($distribution.p50 -gt $distribution.p95 -or $distribution.p95 -gt $distribution.p99 -or
-                $distribution.p99 -gt $distribution.max -or $distribution.mean -gt $distribution.max) {
-                throw "Percentis inconsistentes: $metric."
-            }
+        ConvertTo-FrameProfileDistributions -Record $window -MetricNames $FrameProfileFrameMetricNames -Label 'FrameProfile'
+        # Uma janela sem suas regioes e captura incompleta, nao uma janela cujos
+        # passes custaram zero: aceitar o orfao produziria atribuicao silenciosa
+        # de 0 ms para opaco/folhagem/ceu e o relatorio pareceria valido.
+        $passKey = "$($window.epoch):$($window.window)"
+        if (-not $passes.ContainsKey($passKey)) {
+            throw "Janela FrameProfile sem regioes de GPU correspondentes: $passKey."
+        }
+        $passRecord = $passes[$passKey]
+        foreach ($metric in $FrameProfilePassMetricNames) {
+            $window | Add-Member -NotePropertyName $metric -NotePropertyValue $passRecord.$metric
+        }
+        # As regioes particionam o frame: somadas nao podem exceder o tempo total
+        # de GPU alem da tolerancia de arredondamento de 4 casas por metrica.
+        $passSum = 0.0
+        foreach ($metric in $FrameProfilePassMetricNames) { $passSum += $window.$metric.mean }
+        if ($passSum -gt $window.gpu_frame_ms.mean + 0.01) {
+            throw "Regioes de GPU somam mais que o frame: $passKey."
         }
         $derivedFps = 1000.0 * $window.frames / $window.elapsed_ms
         if ([Math]::Abs($derivedFps - $window.present_fps) -gt 0.001 -or

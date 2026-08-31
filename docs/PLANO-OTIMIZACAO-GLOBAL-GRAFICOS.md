@@ -426,7 +426,8 @@ latência. Próxima ordem: separar timestamps por pass → depth/coverage prepas
 alpha-mask → reduzir overdraw/shading oculto → compactar IBL/bandwidth → reavaliar fila.
 
 **Ciclo GPU concluído em 29/08/2026:** o FrameProfile v3 passou a registrar
-`gpu_geometry_ms`, `gpu_background_ms` e `gpu_transparent_ms`. Em GPU móvel TBDR,
+`gpu_geometry_ms`, `gpu_background_ms` e `gpu_transparent_ms` (esses três nomes foram
+substituídos pelas seis regiões do v4 em 31/08; ver o progresso do item 3 de O0). Em GPU móvel TBDR,
 checkpoints dentro do mesmo render pass podem ser resolvidos no fim do tile e não
 devem ser interpretados como uma captura AGI; ainda assim, o A/B isolou o custo de
 cobertura. O prepass global de materiais `MASK` (alpha+depth, seguido de PBR com
@@ -453,6 +454,51 @@ bandwidth de materiais/IBL, antes de reavaliar frames em voo.
 5. Capturar frame AGI/RenderDoc e estabelecer mapa de custos por pass, bandwidth,
    overdraw e stalls.
 6. Rodar baseline debug e release por 60 s, depois soak de 30 min no mesmo percurso.
+
+**Progresso em 31/08/2026 (item 3 — regiões de GPU por classe de passe):** o frame
+deixou de ser medido em três baldes (`gpu_geometry_ms`/`gpu_background_ms`/
+`gpu_transparent_ms`) e passou a ser medido em seis regiões declaradas em
+`native/core/gpu_pass_class.h`: **Opaque, Coverage, Sky, Transparent, UI e HZB**.
+Três buracos de atribuição foram fechados:
+
+- **opaco sólido e folhagem alpha-mask estavam somados** no mesmo balde `Geometry`.
+  A frente P3 recebe uma faixa própria de 0,5–1,5 ms no portfólio da seção 6.0, e
+  não havia como verificar essa faixa enquanto vegetação e terreno compartilhavam
+  uma única métrica;
+- **o HUD não tinha marca nenhuma:** era desenhado depois da última marca do frame,
+  então seu custo caía no intervalo não atribuído entre a última classe e o fim;
+- **a cadeia de redução do HZB não tinha marca:** o custo do próprio mecanismo de
+  visibilidade era invisível para o relatório que decide se ele paga o que custa.
+
+Cada região é marcador de debug **e** timestamp, gravados sempre em par por
+`beginGpuRegion`/`endGpuRegion`. O motivo é que os dois falham de formas opostas: um
+marcador sem métrica produz captura que não fecha com o relatório, e uma métrica sem
+marcador produz um número que a captura não consegue explicar. Antes desta fatia o
+frame inteiro tinha **um** rótulo (`DirtRoad/map`), ou seja, a captura AGI pedida no
+item 5 chegaria como um bloco único e não atribuiria custo a nada.
+
+O fio da atribuição também mudou de forma: `RenderPhaseTimings` carrega um array
+indexado por `GpuPassClass` em vez de campos nomeados, e os nomes de métrica são lidos
+da mesma tabela canônica pelo perfil e pelos marcadores. Antes, as listas viviam em
+paralelo em quatro arquivos e nada impedia que um rótulo de captura apontasse para uma
+região diferente da métrica de mesmo nome — falha silenciosa, sem erro de compilação.
+Um teste nativo e um teste PowerShell trancam essa equivalência.
+
+**Formato de fio:** a janela `[FrameProfile]` já ocupava **937 dos ~1023 bytes** que o
+Logcat entrega antes de truncar em silêncio, com apenas três passes. Somar seis
+regiões estouraria o limite e corromperia toda janela. As regiões passaram então a um
+registro próprio `[FrameProfilePasses]`, pareado por `pid/epoch/window` — mesma razão
+pela qual `FrameProfileContext` já era emitido separado. O consumidor **exige** o par:
+uma janela órfã é recusada, porque aceitá-la atribuiria 0 ms a opaco/folhagem/céu e
+produziria um relatório aparentemente válido. Também recusa regiões que somem mais que
+o tempo total de GPU do frame. Ambos os registros vão para `schemaVersion` 4.
+
+**Verificação:** 226/226 testes C++ (+1), 39/39 PowerShell de FrameProfile (+4),
+21/21 Python do cooker e 31/31 nas demais suítes de ferramentas Android;
+`libaether_android.so` reconstruído pelo NDK real via `assembleDebug`. **Nenhuma
+medição física foi feita nesta fatia** — não havia ADB conectado. As regiões são
+instrumentação: elas não reduzem nenhum milissegundo e nenhum ganho é declarado.
+Restam do O0 a captura AGI/APA (item 5) e o soak (item 6).
 
 **Aceite:** o relatório identifica a floresta, reproduz a faixa percebida e permite
 atribuir cada milissegundo a CPU, GPU, espera do compositor ou thermal governor.

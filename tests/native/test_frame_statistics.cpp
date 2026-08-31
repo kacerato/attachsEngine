@@ -76,9 +76,12 @@ AE_TEST(frame_statistics_inclui_timestamp_gpu_sem_confundir_com_wall_cpu) {
   statistics.record({}, {});
   RenderPhaseTimings phases{};
   phases.gpuFrameMs = 7.25;
-  phases.gpuGeometryMs = 5.0;
-  phases.gpuBackgroundMs = 1.25;
-  phases.gpuTransparentMs = 1.0;
+  phases.gpuPassMs[static_cast<ae::u32>(ae::GpuPassClass::Opaque)] = 3.5;
+  phases.gpuPassMs[static_cast<ae::u32>(ae::GpuPassClass::Coverage)] = 1.5;
+  phases.gpuPassMs[static_cast<ae::u32>(ae::GpuPassClass::Sky)] = 1.25;
+  phases.gpuPassMs[static_cast<ae::u32>(ae::GpuPassClass::Transparent)] = 1.0;
+  phases.gpuPassMs[static_cast<ae::u32>(ae::GpuPassClass::Ui)] = 0.25;
+  phases.gpuPassMs[static_cast<ae::u32>(ae::GpuPassClass::Hzb)] = 0.5;
   statistics.record({10'000'000, 2'000'000, 1'000'000}, phases);
   FrameProfileSummary summary;
   AE_EXPECT_TRUE(statistics.summarize(summary), "janela GPU pronta");
@@ -86,12 +89,36 @@ AE_TEST(frame_statistics_inclui_timestamp_gpu_sem_confundir_com_wall_cpu) {
                "timestamp GPU preservado separadamente");
   AE_EXPECT_EQ(summary.metrics[static_cast<ae::u32>(FrameMetric::ProcessCpu)].mean, 2.0,
                "GPU nao altera relogio CPU");
-  AE_EXPECT_EQ(summary.metrics[static_cast<ae::u32>(FrameMetric::GpuGeometry)].mean, 5.0,
-               "geometria GPU separada");
-  AE_EXPECT_EQ(summary.metrics[static_cast<ae::u32>(FrameMetric::GpuBackground)].mean, 1.25,
-               "fundo GPU separado");
-  AE_EXPECT_EQ(summary.metrics[static_cast<ae::u32>(FrameMetric::GpuTransparent)].mean, 1.0,
-               "transparencia GPU separada");
+  AE_EXPECT_EQ(summary.metrics[frameMetricIndex(ae::GpuPassClass::Opaque)].mean, 3.5,
+               "opaco solido separado");
+  AE_EXPECT_EQ(summary.metrics[frameMetricIndex(ae::GpuPassClass::Coverage)].mean, 1.5,
+               "folhagem alpha-mask separada do opaco");
+  AE_EXPECT_EQ(summary.metrics[frameMetricIndex(ae::GpuPassClass::Sky)].mean, 1.25,
+               "ceu separado");
+  AE_EXPECT_EQ(summary.metrics[frameMetricIndex(ae::GpuPassClass::Transparent)].mean, 1.0,
+               "transparencia separada");
+  AE_EXPECT_EQ(summary.metrics[frameMetricIndex(ae::GpuPassClass::Ui)].mean, 0.25,
+               "HUD deixa de cair em intervalo nao atribuido");
+  AE_EXPECT_EQ(summary.metrics[frameMetricIndex(ae::GpuPassClass::Hzb)].mean, 0.5,
+               "cadeia HZB medida fora do render pass principal");
+}
+
+// O nome da métrica e o rótulo do marcador de captura precisam vir da mesma
+// tabela: se divergirem, uma captura AGI aponta para uma região com nome que
+// não existe no relatório e a atribuição de custo deixa de ser verificável.
+AE_TEST(frame_metric_nomeia_todas_as_classes_de_passe_na_ordem_do_frame) {
+  AE_EXPECT_EQ(FrameMetricCount, FrameLevelMetricCount + ae::GpuPassClassCount,
+               "espaco de metricas cobre frame e passes");
+  for (ae::u32 pass = 0; pass < ae::GpuPassClassCount; ++pass) {
+    const auto passClass = static_cast<ae::GpuPassClass>(pass);
+    const ae::u32 metric = frameMetricIndex(passClass);
+    AE_EXPECT_TRUE(metric >= FrameLevelMetricCount && metric < FrameMetricCount,
+                   "indice de passe cai dentro do espaco de metricas");
+    AE_EXPECT_TRUE(frameMetricName(metric) == ae::gpuPassClassMetricName(passClass),
+                   "nome da metrica vem da tabela canonica");
+    AE_EXPECT_TRUE(ae::gpuPassClassLabel(passClass) != nullptr,
+                   "toda classe medida tem rotulo de captura");
+  }
 }
 
 AE_TEST(frame_statistics_cpu_multithread_pode_exceder_wall_time) {
