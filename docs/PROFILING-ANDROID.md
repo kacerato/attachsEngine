@@ -191,6 +191,40 @@ distintos; essa diferença não mede descarte nem duplicação. O smoke valida a
 baseline longo nem fecha um gate de 120 FPS. O parser ADB também aceita o sufixo mDNS
 com espaço que o Android adiciona ao republicar um serviço duplicado.
 
+### Depth memoryless — A/B aceito em 31/08/2026
+
+Primeiro ganho **medido** do programa de margem. Aparelho `25053PC47G`/Adreno,
+Release assinado, rota `forest-walk-v1`, 60 s por rodada, intercalado.
+
+Antes de comparar tempo, a pergunta anterior: o driver **concede** o que a
+política pede? `vmaGetAllocationMemoryProperties` responde por alocação, e o
+Adreno concedeu — `lazily_allocated_concedido=sim`. Sem essa checagem a engine
+afirmaria economia de banda a partir de uma preferência que o device poderia ter
+ignorado em silêncio.
+
+| rodada | anexo de depth | GPU média | apresentado |
+|---|---|---:|---:|
+| controle | transitório (memoryless) | **9,065 ms** | 95,27 fps |
+| variante | render target comum | **9,491 ms** | 90,48 fps |
+| controle | transitório (memoryless) | **9,034 ms** | 94,59 fps |
+
+Os dois controles reproduzem dentro de 0,3%, então a comparação é válida.
+Desligar o transitório custa **+0,44 ms de GPU (+4,8%)** e **−4,4 fps (−4,6%)**.
+
+O ganho fica na ponta baixa da faixa hipotética de P1 (0,3–1,2 ms) e deixa de ser
+hipótese. Em escala: são 0,44 ms dos ~2,9 ms que separam os 9,06 ms atuais do
+gate de 6,20 ms — cerca de 15% do caminho, com uma única mudança que não altera
+um pixel.
+
+A chave `aether.disable_transient_depth` existe só para reproduzir este A/B, no
+mesmo espírito de `GpuCostIsolation`: nunca é preset de qualidade.
+
+**Pendência conhecida:** a contabilidade de budget ainda soma o tamanho virtual
+da alocação (`render-target uso=14344192 bytes`) mesmo quando a memória é
+LAZILY_ALLOCATED e o driver pode não comprometer nada disso. O número superestima
+a residência e, por consequência, aperta sem necessidade a quota de texturas.
+`vkGetDeviceMemoryCommitment` é a consulta correta.
+
 ### Cadência de apresentação e DVFS — medido em 31/08/2026
 
 Origem: FPS percebido como instável, e "melhora" ao ligar o gravador de tela.

@@ -106,6 +106,11 @@ public:
   // precisam configurar nada para receber o caminho otimizado.
   void setCoveragePrepassEnabled(bool enabled) { coveragePrepassEnabled_ = enabled; }
   void setGpuCostIsolation(renderer::GpuCostIsolation mode) { gpuCostIsolation_ = mode; }
+  // Chave diagnóstica de A/B, no mesmo espírito de GpuCostIsolation: força o
+  // anexo de profundidade a ser alocado como render target comum, mesmo quando
+  // o render graph provou que ninguém o lê. Existe para medir o que o caminho
+  // memoryless entrega; nunca é um preset de qualidade.
+  void setDisableTransientDepth(bool disabled) { disableTransientDepth_ = disabled; }
   void setRuntimeHudEnabled(bool enabled) { runtimeHudEnabled_ = enabled; }
   // HZB (Hi-Z) conservative occlusion culling -- see native/renderer/
   // hzb_visibility.h for the pure CPU decision layer this feeds, and
@@ -309,6 +314,7 @@ private:
   // createRenderPass. Não é um cache do hzbWorkloadEligible_: é a resposta
   // compilada de "quem lê o depth depois do pass principal".
   renderer::FrameAttachmentPolicy frameAttachmentPolicy_{};
+  bool disableTransientDepth_ = false;
   u32 hzbHysteresisFrames_ = 3;
   u32 hzbMinimumCandidateDraws_ = 128;
   float hzbNormalizedDepthBias_ = 1.0e-5f;

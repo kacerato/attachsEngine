@@ -779,13 +779,24 @@ bool InstancedRenderer::createDepthImage() {
   if (hasStencil(depthFormat_)) desc.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
   desc.memoryClass = rhi::MemoryClass::RenderTarget;
   // Sem leitor fora do render pass, o depth nunca precisa de lastro em DRAM.
-  desc.transient = frameAttachmentPolicy_.depthMemoryless;
+  // A chave diagnóstica só desliga o transitório; ela não mexe em store/sampled,
+  // para que o A/B isole exatamente uma variável.
+  desc.transient = frameAttachmentPolicy_.depthMemoryless && !disableTransientDepth_;
   if (!memoryAllocator_->createImage(desc, &depthImage_)) return false;
+  // A política pede; o driver concede ou não. Reportar as duas coisas separadas
+  // evita afirmar economia de banda que talvez não tenha acontecido.
+  const bool lazyGranted = depthImage_.isLazilyAllocated();
   __android_log_print(ANDROID_LOG_INFO, LogTag,
-      "[FrameGraph] depth %ux%u: store=%s sampled=%s memoryless=%s.",
+      "[FrameGraph] depth %ux%u: store=%s sampled=%s memoryless_pedido=%s "
+      "lazily_allocated_concedido=%s.",
       desc.width, desc.height, frameAttachmentPolicy_.depthStored ? "sim" : "nao",
       frameAttachmentPolicy_.depthSampled ? "sim" : "nao",
-      frameAttachmentPolicy_.depthMemoryless ? "sim" : "nao");
+      desc.transient ? "sim" : "nao", lazyGranted ? "sim" : "nao");
+  if (desc.transient && !lazyGranted) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag,
+        "[FrameGraph] anexo transitório sem memória LAZILY_ALLOCATED neste device; "
+        "correto, porém sem a economia de banda que o transitório existe para dar.");
+  }
   return true;
 }
 

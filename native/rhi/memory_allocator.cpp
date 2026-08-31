@@ -298,6 +298,8 @@ bool VulkanMemoryAllocator::createImage(const ImageDesc &desc, VulkanImage *outI
     vmaDestroyImage(allocator_, image, allocation);
     return false;
   }
+  VkMemoryPropertyFlags grantedProperties = 0;
+  vmaGetAllocationMemoryProperties(allocator_, allocation, &grantedProperties);
 
   VkImageViewCreateInfo viewInfo{};
   viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -318,6 +320,7 @@ bool VulkanMemoryAllocator::createImage(const ImageDesc &desc, VulkanImage *outI
   outImage->image_ = image;
   outImage->view_ = view;
   outImage->allocation_ = allocation;
+  outImage->grantedMemoryProperties_ = grantedProperties;
   outImage->width_ = desc.width;
   outImage->height_ = desc.height;
   outImage->mipLevels_ = desc.mipLevels;

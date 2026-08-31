@@ -587,6 +587,9 @@ void android_main(android_app *app) {
   app->userData = &shell;
   app->onAppCmd = handleCommand;
   app->onInputEvent = handleInput;
+  shell.instancedRenderer.setDisableTransientDepth(
+      ae::platform::android::readBooleanLaunchOption(app->activity,
+                                                     "aether.disable_transient_depth"));
   shell.frameProfiler.setEnabled(ae::platform::android::readFrameProfilingOption(app->activity));
   shell.instancedRenderer.setFrameProfilingEnabled(shell.frameProfiler.enabled());
   ae::u32 requestedIsolation = 0;

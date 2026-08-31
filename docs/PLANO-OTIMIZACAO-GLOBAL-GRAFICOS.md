@@ -581,6 +581,21 @@ Referências operacionais oficiais: [configuração de AVD](https://developer.an
 [Android GPU Inspector](https://developer.android.com/agi) e
 [Game Loop no Firebase Test Lab](https://firebase.google.com/docs/test-lab/android/game-loop).
 
+### P1 medido em hardware — 31/08/2026
+
+O A/B intercalado saiu: o depth memoryless vale **0,44 ms de GPU (+4,8% ao
+desligar)** e **4,4 fps**, com os dois controles reproduzindo dentro de 0,3%.
+Detalhes e tabela em `PROFILING-ANDROID.md`. A faixa hipotética de P1 era
+0,3–1,2 ms; o resultado fica na ponta baixa e **deixa de ser hipótese**.
+
+Antes disso foi verificado o que a fatia original não checava: se o driver
+concede memória `LAZILY_ALLOCATED` quando a política pede um anexo transitório.
+O Adreno concede. Sem essa consulta a engine afirmaria economia a partir de uma
+preferência que o device pode ignorar em silêncio.
+
+São 0,44 ms dos ~2,9 ms que separam os 9,06 ms medidos do gate de 6,20 ms —
+cerca de 15% do caminho, sem alterar um pixel.
+
 ### Progresso em 31/08/2026 (P1 — primeira fatia: grafo consumidor e depth memoryless)
 
 O Render Graph deixou de ser código morto. Até aqui `aether_rendergraph` era

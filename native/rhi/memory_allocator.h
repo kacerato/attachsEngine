@@ -119,6 +119,20 @@ private:
   bool uploadSubmitted_ = false;
   u64 accountedBytes_ = 0;
   MemoryClass memoryClass_ = MemoryClass::Texture;
+  friend class VulkanMemoryAllocator;
+
+public:
+  // Propriedades REAIS do tipo de memória que o driver concedeu. Pedir
+  // LAZILY_ALLOCATED é uma preferência: um device sem esse tipo aloca memória
+  // comum e o `transient` da descrição vira letra morta. Sem consultar isto, a
+  // engine afirmaria economia de banda que talvez não exista.
+  VkMemoryPropertyFlags grantedMemoryProperties() const { return grantedMemoryProperties_; }
+  bool isLazilyAllocated() const {
+    return (grantedMemoryProperties_ & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) != 0;
+  }
+
+private:
+  VkMemoryPropertyFlags grantedMemoryProperties_ = 0;
 };
 
 class VulkanMemoryAllocator final {
