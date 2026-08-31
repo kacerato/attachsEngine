@@ -381,6 +381,24 @@ Acumulado medido do programa de margem: **1,05 ms** (0,44 memoryless + 0,61
 precisão) dos ~2,9 ms até o gate de 6,20 ms — cerca de 36% do caminho, sem
 remover conteúdo.
 
+## Precisão dos varyings e piso de ruído da bancada — 31/08/2026
+
+Segunda metade do item 2.2.5: `vNormal`, `vTangent`, `vColor` e `vDither`
+passaram a `mediump` nos dois estágios; `vPosition`, as UV e toda a cadeia de
+posição/view/clip permaneceram `highp`. O SPIR-V confirma que a interface casa.
+
+Gate de imagem: máximo de 1/255 e a divergência contra fp32 caiu de 7,06% para
+5,72% dos pixels. **Nenhum ganho de desempenho é declarado:** no A/B com
+aquecimento descartado, a diferença entre variantes (0,10 ms) ficou menor que o
+espalhamento dentro de cada variante (0,36 e 0,24 ms). A mudança permanece por
+ser semanticamente correta, mesmo tratamento dado à remoção do `nonuniformEXT`.
+
+**Piso de ruído medido nesta bancada:** repetições da mesma build variaram ~8%,
+e ~4,6% já com aquecimento descartado; a primeira execução após `adb install` é
+sistematicamente pior. Efeito abaixo de **~0,4 ms** não é distinguível em duas
+rodadas. Os ganhos aceitos (0,44 ms memoryless, 0,61 ms precisão do shading)
+estão acima do piso; a precisão dos varyings não está.
+
 ## Resumo
 
 | | |

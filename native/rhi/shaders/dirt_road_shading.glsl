@@ -1,11 +1,12 @@
 #include "dirt_road_frame.glsl"
-layout(location=0) in vec3 vPosition;
-layout(location=1) in vec3 vNormal;
-layout(location=2) in vec4 vTangent;
-layout(location=3) in vec2 vUv0;
-layout(location=4) in vec2 vUv1;
-layout(location=5) in vec4 vColor;
-layout(location=6) in float vDither;
+// A precisao dos varyings precisa casar com dirt_road.vert.
+layout(location=0) in highp vec3 vPosition;
+layout(location=1) in mediump vec3 vNormal;
+layout(location=2) in mediump vec4 vTangent;
+layout(location=3) in highp vec2 vUv0;
+layout(location=4) in highp vec2 vUv1;
+layout(location=5) in mediump vec4 vColor;
+layout(location=6) in mediump float vDither;
 layout(location=0) out vec4 outColor;
 layout(constant_id=0) const uint GPU_COST_ISOLATION=0u;
 const float PI=3.141592653589793;
@@ -22,13 +23,13 @@ const float BAYER4X4[16]=float[16](
   12.0/16.0,4.0/16.0,14.0/16.0,6.0/16.0,
   3.0/16.0,11.0/16.0,1.0/16.0,9.0/16.0,
   15.0/16.0,7.0/16.0,13.0/16.0,5.0/16.0);
-bool ditherDiscard(vec2 fragCoord,float dither) {
+bool ditherDiscard(highp vec2 fragCoord,mediump float dither) {
   if(dither==0.0) return false;
   ivec2 cell=ivec2(fragCoord)&3;
-  float threshold=BAYER4X4[cell.y*4+cell.x];
+  mediump float threshold=BAYER4X4[cell.y*4+cell.x];
   return dither>0.0?threshold<dither:threshold>=-dither;
 }
-vec2 selectedUv(uint slot) { return ((frame.materialFlags.y>>(slot*2))&3u)==1u?vUv1:vUv0; }
+highp vec2 selectedUv(uint slot) { return ((frame.materialFlags.y>>(slot*2))&3u)==1u?vUv1:vUv0; }
 // Precisão explícita (item 2.2.5 do plano). Até aqui o fragmento inteiro rodava
 // em highp por omissão: em Adreno/Mali a ALU fp16 roda ao dobro da taxa e ocupa
 // metade dos registradores, e mais registradores livres significam mais waves em

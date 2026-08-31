@@ -15,18 +15,21 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 
-vec2 environmentUv(vec3 direction) {
+// A UV do panorama permanece highp: sao 1024 px por eixo com costura horizontal,
+// e o fract() perto da costura e exatamente onde fp16 produziria uma emenda
+// visivel. A radiancia devolvida ja pode descer para mediump.
+highp vec2 environmentUv(highp vec3 direction) {
   // Callers provide a normalized reflection direction. reflect() preserves
   // length for normalized N/V, avoiding a redundant reciprocal sqrt per pixel.
-  float phi=atan(direction.z,direction.x)+environment.parameters.y;
+  highp float phi=atan(direction.z,direction.x)+environment.parameters.y;
   return vec2(fract(phi/(2.0*PI)+.5),acos(clamp(direction.y,-1.0,1.0))/PI);
 }
 
-vec3 environmentRadiance(vec3 direction,float lod) {
+mediump vec3 environmentRadiance(highp vec3 direction,mediump float lod) {
   return textureLod(environmentMap,environmentUv(direction),clamp(lod,0.0,environment.parameters.z)).rgb;
 }
 
-vec3 toneMapEnvironment(vec3 color) {
+mediump vec3 toneMapEnvironment(mediump vec3 color) {
   color=max(color*environment.parameters.x,vec3(0));
   // Stable filmic curve with a soft shoulder for the HDR sun.
   return clamp((color*(2.51*color+.03))/(color*(2.43*color+.59)+.14),0.0,1.0);

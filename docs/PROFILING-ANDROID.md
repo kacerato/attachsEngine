@@ -191,6 +191,52 @@ distintos; essa diferença não mede descarte nem duplicação. O smoke valida a
 baseline longo nem fecha um gate de 120 FPS. O parser ADB também aceita o sufixo mDNS
 com espaço que o Android adiciona ao republicar um serviço duplicado.
 
+### Precisão dos varyings — mantida sem ganho declarado, 31/08/2026
+
+Continuação do item 2.2.5 sobre o que sobrou em `highp` depois do shading: as
+saídas do vertex shader. Cada varying é gravado na memória de tile e
+reinterpolado por fragmento, e são 12 floats por pixel entre normal, tangente,
+cor e dither — em teoria, tráfego que cai pela metade em fp16.
+
+`vNormal`, `vTangent`, `vColor` e `vDither` passaram a `mediump` **nos dois
+estágios** (vertex e os dois includes de fragmento que os consomem: shading e
+coverage). `vPosition` e as UV permaneceram `highp` — a primeira alimenta o vetor
+de visão em coordenadas de mundo, as segundas endereçam texturas de até 4096 px,
+onde a mantissa do fp16 já não resolve um texel. Toda a cadeia de posição/view/
+clip do vertex ficou com `highp` explícito: fp16 ali produz tremor de vértice e
+z-fighting.
+
+O SPIR-V confirma que a interface casa: `vColor`, `vDither`, `vNormal` e
+`vTangent` recebem `RelaxedPrecision` nos dois estágios; `vPosition` e as UV, não.
+
+**Gate de imagem:** máximo de **1/255**, zero pixels acima — e a divergência
+total contra fp32 caiu de 7,06% para **5,72%** dos pixels, ou seja, ficou
+*mais próxima* da referência que a fatia anterior.
+
+**A/B intercalado, com a primeira execução após cada `adb install` descartada
+como aquecimento:**
+
+| rodada | variante | GPU média |
+|---|---|---:|
+| w1 | só shading | 8,678 ms |
+| w2 | shading + varyings | 8,638 ms |
+| w3 | só shading | 9,039 ms |
+| w4 | shading + varyings | 8,876 ms |
+
+A diferença entre variantes (0,10 ms) é **menor que o espalhamento dentro de cada
+variante** (0,36 ms e 0,24 ms). **Nenhum ganho é declarado.** A mudança permanece
+porque é semanticamente correta — declara explicitamente uma interface que antes
+dependia do padrão implícito `highp` — e porque o gate de imagem melhorou; é o
+mesmo tratamento dado à remoção do `nonuniformEXT` em 31/08.
+
+**Piso de ruído desta bancada, medido:** repetições da mesma build variaram
+8,458–9,142 ms (~8%), e 8,638–9,039 ms (~4,6%) já com aquecimento descartado.
+Uma primeira execução logo após `adb install` chegou a 9,282 ms contra 8,618 ms
+da mesma build minutos depois. Consequência prática para os próximos ciclos:
+**efeito abaixo de ~0,4 ms não é distinguível em duas rodadas** e exige mais
+repetições ou pose fixa. Os dois ganhos aceitos até aqui (0,44 e 0,61 ms) estão
+acima desse piso; este não está.
+
 ### Precisão explícita no PBR — A/B aceito em 31/08/2026
 
 Item 2.2.5 do plano ("biblioteca de shaders base com precisão explícita"), que
