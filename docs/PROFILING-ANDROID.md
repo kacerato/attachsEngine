@@ -191,6 +191,54 @@ distintos; essa diferença não mede descarte nem duplicação. O smoke valida a
 baseline longo nem fecha um gate de 120 FPS. O parser ADB também aceita o sufixo mDNS
 com espaço que o Android adiciona ao republicar um serviço duplicado.
 
+### Precisão explícita no PBR — A/B aceito em 31/08/2026
+
+Item 2.2.5 do plano ("biblioteca de shaders base com precisão explícita"), que
+estava marcado *parcial* e na prática nunca tinha sido puxado: o fragmento do mapa
+não tinha **um único** qualificador de precisão, então tudo rodava em `highp`
+(fp32) por omissão. Em Adreno/Mali a ALU fp16 roda ao dobro da taxa e ocupa metade
+dos registradores — e registrador livre vira wave em voo, que é o que esconde
+latência de textura.
+
+**A divisão não é "tudo mediump".** Cor, normal, tangente e parâmetros de material
+vivem em [0,1] e cabem folgados em fp16. A numérica do GGX não: `rough` é limitado
+a 0,07, logo `alpha*alpha` vale 2,4e-5, **abaixo do menor normal do fp16**
+(6,1e-5). Em mediump esse termo vira subnormal ou zero e o brilho especular
+desaparece justamente nas superfícies mais lisas. Por isso `distribution`,
+`visibility` e os produtos escalares que as alimentam permanecem `highp`. A
+subtração `eye - vPosition` também fica em highp: são coordenadas de mundo num
+mapa de centenas de unidades; só o resultado normalizado desce para mediump.
+
+O SPIR-V compilado carrega **90 decorações `RelaxedPrecision`**, que é o que
+autoriza o driver a executar em fp16.
+
+**Gate de imagem, pose fixa `(-15,71; 145,27; -25,72; yaw 2,75; pitch 0,11)`:**
+
+| medida | valor |
+|---|---:|
+| pixels diferentes | 250.431 / 3.548.160 (7,06%) |
+| **erro máximo por canal** | **1/255** |
+| pixels com erro > 1/255 | **0** |
+| brilho médio | 173,927 → 173,901 |
+
+Nenhum pixel diverge por mais de um passo de quantização. O gate passa.
+
+**A/B na rota `forest-walk-v1`, intercalado, 60 s por rodada:**
+
+| rodada | precisão | GPU média | apresentado |
+|---|---|---:|---:|
+| controle | mediump | **8,458 ms** | 100,24 fps |
+| variante | highp (fp32) | **9,142 ms** | 94,17 fps |
+| controle | mediump | **8,604 ms** | 99,45 fps |
+
+Os controles reproduzem dentro de 1,7% e o fp32 bate com os controles fp32 das
+sessões anteriores (9,034 / 9,065 ms). Ganho: **−0,61 ms de GPU (−6,7%)** e
+**+5,7 fps (+6,1%)**, sem diferença visual admissível.
+
+**Acumulado do programa de margem, medido:** 0,44 ms (depth memoryless) + 0,61 ms
+(precisão) = **1,05 ms** dos ~2,9 ms que separavam 9,06 ms do gate de 6,20 ms.
+Aproximadamente **36% do caminho**, sem tirar um pixel da cena.
+
 ### Depth memoryless — A/B aceito em 31/08/2026
 
 Primeiro ganho **medido** do programa de margem. Aparelho `25053PC47G`/Adreno,

@@ -362,6 +362,25 @@ piorou o pior segundo (45 contra 71 fps). Ambos rejeitados.
 60 fps não sai por redistribuição de tempo, só por frame mais barato. É a
 validação numérica do gate de 6,20 ms da seção 0.6.
 
+## Precisão explícita no PBR — ganho medido em 31/08/2026
+
+O fragmento do mapa não tinha **nenhum** qualificador de precisão: tudo rodava em
+`highp` por omissão. Item 2.2.5 estava marcado *parcial* e nunca fora puxado.
+
+Cor, normal, tangente e material passaram a `mediump`; a numérica do GGX
+permanece `highp` porque `rough` mínimo de 0,07 produz `alpha²` = 2,4e-5, abaixo
+do menor normal do fp16 — em mediump o especular sumiria nas superfícies lisas.
+A subtração de coordenadas de mundo também fica em highp. O SPIR-V carrega 90
+decorações `RelaxedPrecision`.
+
+Gate de imagem em pose fixa: **erro máximo de 1/255, zero pixels acima disso**.
+A/B intercalado na rota: **8,53 ms contra 9,14 ms de GPU (−6,7%)** e +5,7 fps,
+com os controles reproduzindo dentro de 1,7%.
+
+Acumulado medido do programa de margem: **1,05 ms** (0,44 memoryless + 0,61
+precisão) dos ~2,9 ms até o gate de 6,20 ms — cerca de 36% do caminho, sem
+remover conteúdo.
+
 ## Resumo
 
 | | |
