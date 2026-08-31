@@ -1,8 +1,0 @@
-C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/aether_core.dir
-C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/aether_platform.dir
-C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/aether_rendergraph.dir
-C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/aether_rhi.dir
-C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/aether_native_app_glue.dir
-C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/aether_android.dir
-C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/edit_cache.dir
-C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/rebuild_cache.dir

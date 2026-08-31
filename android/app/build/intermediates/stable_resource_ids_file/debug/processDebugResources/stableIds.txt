@@ -1,4 +1,0 @@
-dev.aether.editor:xml/data_extraction_rules = 0x7f030001
-dev.aether.editor:xml/backup_rules = 0x7f030000
-dev.aether.editor:style/AetherTheme = 0x7f020000
-dev.aether.editor:drawable/ic_aether = 0x7f010000

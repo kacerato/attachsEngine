@@ -2,6 +2,8 @@
 #include "harness.h"
 
 AE_TEST(frame_policy_seleciona_60_90_120_sem_ultrapassar_painel) {
+  AE_EXPECT_EQ(ae::makeFrameBudget(144.0f, static_cast<float>(ae::DefaultMaximumRenderHz)).renderHz,
+               120u, "auto global usa 120 em painel de alta cadencia");
   AE_EXPECT_EQ(ae::makeFrameBudget(120.0f, 120.0f).renderHz, 120u, "painel 120");
   AE_EXPECT_EQ(ae::makeFrameBudget(90.0f, 120.0f).renderHz, 90u, "painel 90");
   AE_EXPECT_EQ(ae::makeFrameBudget(75.0f, 120.0f).renderHz, 60u, "painel intermediario");

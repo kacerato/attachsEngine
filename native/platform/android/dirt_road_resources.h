@@ -2,6 +2,7 @@
 
 #include "platform/free_camera_controller.h"
 #include "renderer/map_package.h"
+#include "renderer/static_collision_mesh.h"
 #include "rhi/device.h"
 #include "rhi/resource.h"
 #include "rhi/upload_context.h"
@@ -17,8 +18,14 @@ struct EnvironmentLighting final {
   float sunColorAngularRadius[4]{};
   float ambientColorStrength[4]{};
   float parameters[4]{}; // exposure, rotation, maximum environment LOD, reserved
+  // AEEN v2 serializa estes parâmetros no Environment Resource global. O
+  // decoder mantém migração explícita para projetos AEEN v1.
+  float skyZenithCloudCoverage[4]{}; // rgb linear, cobertura 0..1
+  float skyHorizonCloudDensity[4]{}; // rgb linear, densidade 0..1
+  float groundColorSaturation[4]{};  // rgb linear, saturação global
+  float cloudLightWindSpeed[4]{};    // rgb linear, velocidade angular
 };
-static_assert(sizeof(EnvironmentLighting) == 64);
+static_assert(sizeof(EnvironmentLighting) == 128);
 
 // Runtime representation of the cooked Dirt Road test scene. Source glTF,
 // image decoders and import metadata remain outside the APK render path.
@@ -40,10 +47,15 @@ public:
   const std::vector<renderer::MapMaterialRecord> &materials() const { return materials_; }
   const std::vector<renderer::MapDrawRecord> &draws() const { return draws_; }
   const renderer::MapPackageHeader &header() const { return header_; }
+  u64 packageFingerprint() const { return packageFingerprint_; }
   platform::FreeCameraState defaultCamera() const;
+  platform::FreeCameraState defaultGameplayCamera() const;
+  const renderer::StaticCollisionMesh &staticCollisionMesh() const { return collisionMesh_; }
+  void releaseStaticCollisionCpuData() { collisionMesh_.clear(); }
 
 private:
   renderer::MapPackageHeader header_{};
+  u64 packageFingerprint_ = 0;
   std::vector<renderer::MapTextureRecord> textureRecords_;
   std::vector<renderer::MapMaterialRecord> materials_;
   std::vector<renderer::MapDrawRecord> draws_;
@@ -52,6 +64,7 @@ private:
   rhi::VulkanImage environmentImage_;
   rhi::VulkanSampler environmentSampler_;
   EnvironmentLighting environmentLighting_{};
+  renderer::StaticCollisionMesh collisionMesh_{};
   rhi::VulkanBuffer vertices_;
   rhi::VulkanBuffer indices_;
 };

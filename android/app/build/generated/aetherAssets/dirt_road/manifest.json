@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "format": "AEMAP-1",
+  "version": 2,
+  "format": "AEMAP-2",
   "sourceZip": "update_dirt_road_through_forest.zip",
   "sourceSha256": "069f360d54ec2642f9de74dddcbb0043acfda9e2aa8066a6fe50b303cf944c57",
   "license": "CC-BY-4.0",
@@ -942,9 +942,9 @@
     }
   ],
   "outputs": {
-    "environment.aeenv": "f2f97788a3c663902d66fcf194de4169fc00c76635c8a8beac01149c18673e36",
-    "environment.aetex": "3463f273abd6a9d56fc569a1a0a1f1570d5b80f2f7a9646e00165dbb2be05f53",
-    "scene.aemap": "385a6fe50282735d1ff34b752dceafcd2722e883102b5c98293933940ee67145",
+    "environment.aeenv": "257715e1bddedacaf3453c5195ce06043faad8efb84e38c7fa17a9d915c95d04",
+    "environment.aetex": "216c35ea5c4a0b7b7efa01eb8af501413b34dfc14dcc92e7995913e41eda5a29",
+    "scene.aemap": "7356624d8e72c4fd710dd420004c7d22a2e0cf88b3738d128003bfee51a43586",
     "texture_000-fallback.aetex": "bf1899635a5400f6d969ede803d01ce54aa2af1c0977876257d6e9aa28909659",
     "texture_000.aetex": "cb46d964b4ac7c9d2752ff860d8d8a370f22ce776aa7b218c1f307c669c9f4eb",
     "texture_001-fallback.aetex": "d81efae4903b06389eb27ac9cab59db08051384296c3a13b42611dd148e3e17d",
@@ -1087,34 +1087,39 @@
     "texture_069.aetex": "9635b9f3510f1dffb613faa9b5c7af7fc9c5402d3804355263146dae90b498b7"
   },
   "environment": {
-    "asset": "sunset_forest",
-    "author": "Andreas Mischok",
-    "license": "CC0-1.0",
-    "source": "https://polyhaven.com/a/sunset_forest",
-    "download": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/sunset_forest_4k.hdr",
-    "sourceSha256": "471ca0f29b0af12a3e128d2b963b207124ffb68d730e68eadf899d978f1ee8d1",
+    "asset": "day-clouds-panorama-v1",
+    "authoring": "OpenAI image generation, curated for Aether",
+    "sourcePath": "samples/dirt-road/Source/day-clouds-panorama-v1.png",
+    "sourceSha256": "d36ae342a1cafeebe59aecfdd2bcaad8dd53f091fb0b6eab5a55c2940d386701",
     "resolution": [
-      4096,
-      2048
+      1024,
+      512
     ],
-    "encoding": "RGBA16F linear, full mip chain",
+    "encoding": "RGBA8 sRGB, seam/pole-safe equirectangular full mip chain",
     "sunDirection": [
-      0.8410912156105042,
-      0.5088301301002502,
-      0.18345962464809418
+      -0.17007840381683187,
+      0.6518337253008787,
+      0.7390440657467573
     ],
     "sunColor": [
-      1.0495476722717285,
-      0.9891286492347717,
-      0.9617923498153687
+      1.08,
+      0.99,
+      0.88
     ],
-    "sunIntensity": 2.1,
+    "sunIntensity": 2.6,
     "ambientColor": [
-      0.9143915772438049,
-      1.0047136545181274,
-      1.2053899765014648
+      0.8605632781982422,
+      1.0158562660217285,
+      1.2535161972045898
     ],
-    "ambientStrength": 0.28,
-    "exposure": 0.72
+    "ambientStrength": 0.56,
+    "exposure": 1.0,
+    "groundBounceColor": [
+      0.75,
+      0.82,
+      0.6
+    ],
+    "saturation": 1.0,
+    "environmentResourceVersion": 2
   }
 }

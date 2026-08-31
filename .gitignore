@@ -1,6 +1,6 @@
 # bin/
 # obj/
-# build/
+build/
 # android/.gradle/
 # android/local.properties
 # android/app/.cxx/

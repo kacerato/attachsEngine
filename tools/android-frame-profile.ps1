@@ -25,6 +25,52 @@ function ConvertFrom-SurfaceFrameLatency {
     }
 }
 
+function New-SurfaceFrameCaptureState {
+    return [pscustomobject]@{
+        timestamps = [Collections.Generic.SortedSet[long]]::new()
+        pendingLines = [Collections.Generic.List[string]]::new()
+        lastTimestamp = 0L
+        continuous = $true
+        polls = 0
+    }
+}
+
+function Merge-SurfaceFrameSnapshot {
+    param(
+        [Parameter(Mandatory = $true)][object]$State,
+        [Parameter(Mandatory = $true)][long[]]$Timestamps
+    )
+    $times = @($Timestamps | Sort-Object -Unique)
+    if ($times.Count -eq 0) { return @() }
+    ++$State.polls
+
+    # FrameTracker guarda uma janela circular curta. O coletor dedicado deve
+    # produzir sobreposição; ainda aceitamos o próximo intervalo observável
+    # quando o lote girou exatamente na fronteira. Uma lacuna maior que três
+    # intervalos típicos permanece inválida porque não é possível distinguir
+    # stall real de timestamps sobrescritos.
+    if ($State.lastTimestamp -gt 0 -and $times[0] -gt $State.lastTimestamp) {
+        $rawIntervals = @(for ($i = 1; $i -lt $times.Count; ++$i) {
+            [double]($times[$i] - $times[$i - 1])
+        })
+        $intervals = @($rawIntervals | Sort-Object)
+        $typicalInterval = if ($intervals.Count -gt 0) {
+            $intervals[[int][Math]::Floor($intervals.Count / 2)]
+        } else { 16666667.0 }
+        $maximumAdjacentGap = [Math]::Max(40000000.0, $typicalInterval * 3.25)
+        if (($times[0] - $State.lastTimestamp) -gt $maximumAdjacentGap) {
+            $State.continuous = $false
+        }
+    }
+
+    $newTimes = [Collections.Generic.List[long]]::new()
+    foreach ($time in $times) {
+        if ($State.timestamps.Add($time)) { $newTimes.Add($time) }
+    }
+    $State.lastTimestamp = $times[-1]
+    return $newTimes.ToArray()
+}
+
 function Get-SurfaceFrameSummary {
     param([long[]]$Timestamps)
     $sorted = @($Timestamps | Sort-Object -Unique)
@@ -42,6 +88,7 @@ function Get-SurfaceFrameSummary {
     }
     return [ordered]@{
         source = 'SurfaceFlinger FrameTracker actualPresentTime'
+        interpretation = 'tracked layer frames made visible; capture window is independent from engine profile windows'
         frames = $sorted.Count
         elapsedSeconds = $duration
         displayedFps = ($sorted.Count - 1) / $duration
@@ -61,6 +108,47 @@ function Get-SurfaceFrameSummary {
 $FrameProfileMetricNames = @('interval_ms', 'process_cpu_ms', 'thread_cpu_ms', 'acquire_wall_ms',
     'interop_wall_ms', 'record_submit_wall_ms', 'present_wall_ms', 'gpu_frame_ms',
     'gpu_geometry_ms', 'gpu_background_ms', 'gpu_transparent_ms')
+
+function ConvertFrom-FrameProfileContextLog {
+    param([string]$Text, [string]$ExpectedPid)
+    $seen = @{}
+    foreach ($line in ($Text -split "`n")) {
+        if ($line -notmatch '\[FrameProfileContext\] (\{.*)$') { continue }
+        $context = $Matches[1] | ConvertFrom-Json
+        if ([string]$context.pid -ne $ExpectedPid) { continue }
+        if ($context.schemaVersion -ne 1 -or $context.epoch -lt 1 -or
+            -not $context.scene -or $context.scene -notmatch '^[a-z0-9-]+$' -or
+            $context.content_fingerprint -notmatch '^[0-9a-f]{16}$' -or
+            $context.target_fps -lt 1 -or $context.instances -lt 1 -or
+            $context.width -lt 1 -or $context.height -lt 1 -or
+            $context.draws -lt 0 -or $context.materials -lt 0 -or
+            $context.textures -lt 0 -or $context.triangles -lt 0) {
+            throw 'FrameProfileContext incompatível ou incompleto.'
+        }
+        if ($context.PSObject.Properties.Name -notcontains 'gpu_isolation') {
+            # Capturas schema v1 anteriores ao isolamento continuam legíveis e
+            # representam o caminho de qualidade completo.
+            $context | Add-Member -NotePropertyName gpu_isolation -NotePropertyValue 'full'
+        }
+        if ($context.gpu_isolation -notin @('full', 'no-normal', 'no-ibl', 'base-color')) {
+            throw 'FrameProfileContext contém gpu_isolation inválido.'
+        }
+        $pose = @($context.camera_pose)
+        if ($pose.Count -ne 5) { throw 'FrameProfileContext exige camera_pose com 5 valores.' }
+        foreach ($value in $pose) {
+            if ($null -eq $value -or [double]::IsNaN([double]$value) -or
+                [double]::IsInfinity([double]$value)) { throw 'FrameProfileContext contém câmera inválida.' }
+        }
+        $key = "$($context.pid):$($context.epoch)"
+        $wire = $context | ConvertTo-Json -Depth 5 -Compress
+        if ($seen.ContainsKey($key)) {
+            if ($seen[$key] -cne $wire) { throw "FrameProfileContext conflitante: $key." }
+            continue
+        }
+        $seen[$key] = $wire
+        $context
+    }
+}
 
 function ConvertFrom-FrameProfileLog {
     param([string]$Text, [string]$ExpectedPid, [Nullable[int]]$ExpectedInstances = 5000)
@@ -117,11 +205,24 @@ function ConvertFrom-FrameProfileLog {
 
 function Get-FrameProfileCapture {
     param([object[]]$Windows, [double]$MinimumSeconds,
-          [string]$Scene = 'poc-a-5000-textured-cubes')
+          [string]$Scene = 'poc-a-5000-textured-cubes',
+          [object[]]$Contexts)
     if ($Windows.Count -eq 0) { return $null }
     $ordered = @($Windows | Sort-Object window)
     $latest = $ordered[-1]
     $selected = @($ordered | Where-Object { $_.epoch -eq $latest.epoch })
+    $matchingContexts = @($Contexts | Where-Object { $_.pid -eq $latest.pid -and $_.epoch -eq $latest.epoch })
+    if ($matchingContexts.Count -ne 1) {
+        throw "Captura exige exatamente um FrameProfileContext para PID/epoch; encontrados $($matchingContexts.Count)."
+    }
+    $context = $matchingContexts[0]
+    if ($context.scene -cne $Scene) {
+        throw "Cena nativa '$($context.scene)' difere da cena solicitada '$Scene'."
+    }
+    if ($context.instances -ne $latest.instances -or $context.width -ne $latest.width -or
+        $context.height -ne $latest.height) {
+        throw 'FrameProfileContext não corresponde às janelas da captura.'
+    }
     foreach ($window in $selected) {
         if ($window.width -ne $latest.width -or $window.height -ne $latest.height -or
             $window.build -ne $latest.build -or $window.pid -ne $latest.pid) {
@@ -149,8 +250,9 @@ function Get-FrameProfileCapture {
         }
     }
     return [ordered]@{
-        schemaVersion = 1
-        scene = $Scene
+        schemaVersion = 2
+        scene = $context.scene
+        context = $context
         pid = $latest.pid
         epoch = $latest.epoch
         build = $latest.build

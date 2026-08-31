@@ -9,7 +9,11 @@
 #include "rhi/memory_allocator.h"
 #include "rhi/resource.h"
 #include "rhi/upload_context.h"
+#include "renderer/gpu_mesh_instance.h"
+#include "renderer/gpu_cost_isolation.h"
+#include "renderer/frustum_visibility.h"
 #include "renderer/render_instance.h"
+#include "renderer/runtime_hud.h"
 #include "platform/android/material_preview_resources.h"
 #include "platform/android/dirt_road_resources.h"
 #include "platform/free_camera_controller.h"
@@ -45,9 +49,17 @@ public:
   // Os ângulos de órbita vêm da camada de input, em radianos. O renderer
   // permanece independente de AInputEvent/touch IDs e pode futuramente
   // receber a mesma ação de teclado, gamepad ou NoCode.
-  rhi::SwapchainStatus drawFrame(float timeSeconds, const platform::FreeCameraState &camera);
+  rhi::SwapchainStatus drawFrame(float timeSeconds, const platform::FreeCameraState &camera,
+                                 const renderer::RuntimeHudState &hud = {});
   bool hasDefaultCamera() const { return dirtRoadPreview_ && dirtRoadResources_.header().drawCount != 0; }
   platform::FreeCameraState defaultCamera() const { return dirtRoadResources_.defaultCamera(); }
+  platform::FreeCameraState defaultGameplayCamera() const {
+    return dirtRoadResources_.defaultGameplayCamera();
+  }
+  const renderer::StaticCollisionMesh &staticCollisionMesh() const {
+    return dirtRoadResources_.staticCollisionMesh();
+  }
+  void releaseStaticCollisionCpuData(){dirtRoadResources_.releaseStaticCollisionCpuData();}
 
   // Microssegundos de wall time no crossing C++→C# de FillInstanceBuffer do frame
   // mais recente (só o crossing + preenchimento, não o frame Vulkan inteiro
@@ -55,6 +67,25 @@ public:
   // interop especificamente, a pergunta que a PoC-A faz).
   double lastFillMicroseconds() const { return lastFillMicroseconds_; }
   u32 drawnInstanceCount() const { return drawnInstanceCount_; }
+  // Identidade e contagens do pacote realmente carregado (item O0 do plano de
+  // otimização): o relatório de perfil recebe a cena do renderer em vez de
+  // inferi-la. Fora do mapa cozido não há pacote, e as contagens ficam em zero
+  // em vez de reportar números de outra cena.
+  u64 contentFingerprint() const {
+    return dirtRoadPreview_ ? dirtRoadResources_.packageFingerprint() : 0;
+  }
+  u32 profileDrawCount() const {
+    return dirtRoadPreview_ ? dirtRoadResources_.header().drawCount : 0;
+  }
+  u32 profileMaterialCount() const {
+    return dirtRoadPreview_ ? dirtRoadResources_.header().materialCount : 0;
+  }
+  u32 profileTextureCount() const {
+    return dirtRoadPreview_ ? dirtRoadResources_.header().textureCount : 0;
+  }
+  u32 profileTriangleCount() const {
+    return dirtRoadPreview_ ? dirtRoadResources_.header().triangleCount : 0;
+  }
   int lastExtractionStatus() const { return lastExtractionStatus_; }
   // Diagnostic only: computed on demand at lifecycle/mutation checkpoints.
   u64 snapshotFingerprint() const;
@@ -62,6 +93,12 @@ public:
   // Chave diagnóstica A/B. O padrão da engine permanece ativado; jogos não
   // precisam configurar nada para receber o caminho otimizado.
   void setCoveragePrepassEnabled(bool enabled) { coveragePrepassEnabled_ = enabled; }
+  void setGpuCostIsolation(renderer::GpuCostIsolation mode) { gpuCostIsolation_ = mode; }
+  void setRuntimeHudEnabled(bool enabled) { runtimeHudEnabled_ = enabled; }
+  renderer::GpuCostIsolation gpuCostIsolation() const { return gpuCostIsolation_; }
+  const renderer::VisibilityTelemetry &visibilityTelemetry() const {
+    return visibilityTelemetry_;
+  }
   const profiler::RenderPhaseTimings &lastFrameTimings() const { return lastFrameTimings_; }
 
 private:
@@ -77,6 +114,7 @@ private:
   bool createTextureDescriptors();
   bool createEnvironmentDescriptors();
   bool createSkyPipeline();
+  bool createRuntimeHudPipeline();
 
   VkDevice device_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
@@ -114,6 +152,8 @@ private:
   rhi::VulkanBuffer environmentUniform_{};
   VkPipelineLayout skyPipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline skyPipeline_ = VK_NULL_HANDLE;
+  VkPipelineLayout runtimeHudPipelineLayout_ = VK_NULL_HANDLE;
+  VkPipeline runtimeHudPipeline_ = VK_NULL_HANDLE;
 
   static constexpr u32 kMaxFramebuffers = 8;
   VkFramebuffer framebuffers_[kMaxFramebuffers]{};
@@ -128,6 +168,7 @@ private:
   // A textura imutável abaixo usa o caminho de staging do RHI; este buffer
   // dinâmico é preenchido em lote todo frame e explicitamente flushed.
   rhi::VulkanBuffer instanceBuffer_{};
+  rhi::VulkanBuffer indirectBuffer_{};
   rhi::VulkanImage depthImage_{};
   rhi::VulkanImage baseTexture_{};
   rhi::VulkanSampler baseSampler_{};
@@ -144,18 +185,44 @@ private:
   std::vector<u32> solidDrawOrder_;
   std::vector<u32> coverageDrawOrder_;
   std::vector<u32> transparentDrawOrder_;
+  // Scratch lists retain capacity across frames. Visibility must never allocate
+  // in drawFrame(), particularly while the player is moving through the map.
+  std::vector<u32> visibleSolidDrawOrder_;
+  std::vector<u32> visibleCoverageDrawOrder_;
+  std::vector<u32> visibleTransparentDrawOrder_;
+  struct IndirectBatch final {
+    u32 materialIndex = 0;
+    u32 firstCommand = 0;
+    u32 commandCount = 0;
+    u64 triangles = 0;
+  };
+  std::vector<VkDrawIndexedIndirectCommand> indirectCommands_;
+  std::vector<IndirectBatch> indirectSolidBatches_;
+  std::vector<IndirectBatch> indirectCoverageBatches_;
+  bool useMultiDrawIndirect_ = false;
   struct MaterialParameters { float roughness=1, metallic=1, normalScale=1; };
   MaterialParameters materialParameters_;
   int lastExtractionStatus_ = 0;
   using ExtractSceneFn = int (*)(renderer::RenderInstance *, int capacity, int stride, int version);
   ExtractSceneFn extractScene_ = nullptr;
-  u32 instanceStride() const { return (scenePreview_ || dirtRoadPreview_) ? sizeof(renderer::RenderInstance) : 5 * sizeof(float); }
+  u32 instanceStride() const {
+    // O mapa cozido carrega, além do modelo, as três colunas da normal matrix
+    // preparadas uma vez por transform, para o vertex shader não recomputar
+    // transpose(inverse(mat3)) por vértice.
+    if (dirtRoadPreview_) return sizeof(renderer::GpuMeshInstance);
+    return scenePreview_ ? sizeof(renderer::RenderInstance) : 5 * sizeof(float);
+  }
 
   using FillInstanceBufferFn = void (*)(float *outBuffer, int instanceCount, float timeSeconds);
   FillInstanceBufferFn fillInstanceBuffer_ = nullptr;
   double lastFillMicroseconds_ = 0.0;
   bool frameProfilingEnabled_ = false;
   bool coveragePrepassEnabled_ = true;
+  bool runtimeHudEnabled_ = false;
+  renderer::PerspectiveVisibilitySettings visibilitySettings_{};
+  renderer::VisibilityTelemetry visibilityTelemetry_{};
+  u64 renderedFrameCount_ = 0;
+  renderer::GpuCostIsolation gpuCostIsolation_ = renderer::GpuCostIsolation::Full;
   profiler::RenderPhaseTimings lastFrameTimings_{};
 };
 

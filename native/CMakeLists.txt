@@ -150,7 +150,9 @@ target_link_libraries(aether_core PUBLIC Threads::Threads)
 add_library(aether_platform STATIC
   platform/app_lifecycle.cpp
   platform/atomic_asset_file.cpp
+  platform/first_person_controller.cpp
   platform/free_camera_controller.cpp
+  platform/virtual_joystick.cpp
 )
 target_include_directories(aether_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_platform PUBLIC aether_core)
@@ -161,6 +163,15 @@ add_library(aether_rendergraph STATIC
 )
 target_include_directories(aether_rendergraph PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_rendergraph PUBLIC aether_core)
+
+# --- aether_renderer: recursos e conversões independentes do backend -------
+add_library(aether_renderer STATIC
+  renderer/frustum_visibility.cpp
+  renderer/spatial_render_chunks.cpp
+  renderer/static_collision_mesh.cpp
+)
+target_include_directories(aether_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(aether_renderer PUBLIC aether_core)
 
 # --- aether_rhi: descritores/cache/perfis de dispositivo + wrappers Vulkan -
 add_library(aether_rhi STATIC
@@ -198,6 +209,7 @@ if(ANDROID)
     platform/android/android_texture_loader.cpp
     platform/android/dirt_road_resources.cpp
     platform/android/android_launch_options.cpp
+    platform/android/android_performance.cpp
     platform/android/android_frame_profiler.cpp
     platform/android/android_frame_pacer.cpp
     platform/android/android_window.cpp
@@ -217,6 +229,7 @@ if(ANDROID)
   target_link_libraries(aether_android PRIVATE
     aether_core
     aether_platform
+    aether_renderer
     aether_rhi
     aether_native_app_glue
     android
@@ -238,10 +251,14 @@ endif()
 # POD simples (float, uint32_t, ponteiro opaco), nunca um tipo do Jolt exposto diretamente —
 # isso mantém o C# livre de conhecer qualquer detalhe interno do Jolt.
 add_library(aether_physics STATIC
+  physics/character_motor.cpp
   physics/jolt_bridge.cpp
 )
 target_include_directories(aether_physics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_physics PUBLIC aether_core PRIVATE Jolt)
+if(ANDROID)
+  target_link_libraries(aether_android PRIVATE aether_physics)
+endif()
 # O Jolt foi compilado com CPP_RTTI_ENABLED/CPP_EXCEPTIONS_ENABLED=OFF (ver acima), então o
 # link é consistente com -fno-rtti -fno-exceptions do resto do nosso código nativo.
 
@@ -295,8 +312,13 @@ if(NOT ANDROID)
   add_executable(aether_tests
     ../tests/native/test_atomic_asset_file.cpp
     ../tests/native/test_free_camera_controller.cpp
+    ../tests/native/test_first_person_controller.cpp
+    ../tests/native/test_frustum_visibility.cpp
+    ../tests/native/test_spatial_render_chunks.cpp
+    ../tests/native/test_character_motor.cpp
     ../tests/native/test_map_package.cpp
     ../tests/native/test_material_preview.cpp
+    ../tests/native/test_normal_matrix.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/main.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_allocators.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_job_system.cpp
@@ -324,7 +346,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_transform_bridge.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
-  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_rhi aether_physics aether_transform aether_resources)
+  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_physics aether_transform aether_resources)
 
   # Probe separado porque induzir overflow em Debug dispara corretamente o
   # assert fail-fast do próprio Jolt. Em Release este binário valida a outra

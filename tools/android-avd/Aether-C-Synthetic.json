@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "profileId": "aether-c-synthetic-v1",
+  "name": "Aether-C-Synthetic",
+  "systemImage": "system-images;android-35;google_apis;arm64-v8a",
+  "device": "pixel_5",
+  "purpose": "correctness-fallback-lifecycle-memory-only",
+  "performanceCertification": false,
+  "config": {
+    "aether.profile.id": "aether-c-synthetic-v1",
+    "hw.cpu.ncore": "2",
+    "hw.ramSize": "4096",
+    "hw.lcd.width": "1080",
+    "hw.lcd.height": "2400",
+    "hw.lcd.density": "411",
+    "hw.lcd.vsync": "60",
+    "hw.gpu.enabled": "yes",
+    "hw.gpu.mode": "auto",
+    "vm.heapSize": "256",
+    "disk.dataPartition.size": "6G",
+    "showDeviceFrame": "no"
+  }
+}

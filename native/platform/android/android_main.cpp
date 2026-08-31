@@ -3,6 +3,7 @@
 #include "platform/android/astc_encode_probe.h"
 #include "platform/android/android_frame_profiler.h"
 #include "platform/android/android_frame_pacer.h"
+#include "platform/android/android_performance.h"
 #include "platform/android/android_vulkan_surface.h"
 #include "platform/android/android_window.h"
 #include "platform/android/dotnet_assets.h"
@@ -10,8 +11,11 @@
 #include "platform/android/instanced_renderer.h"
 #include "platform/android/lifecycle_trace.h"
 #include "platform/app_lifecycle.h"
+#include "platform/first_person_controller.h"
 #include "platform/free_camera_controller.h"
 #include "core/frame_policy.h"
+#include "renderer/gpu_cost_isolation.h"
+#include "physics/character_motor.h"
 
 #include <android/log.h>
 #include <android/window.h>
@@ -38,6 +42,7 @@ struct AndroidShell final {
   ae::platform::AppLifecycle lifecycle;
   ae::platform::android::AndroidFrameProfiler frameProfiler;
   ae::platform::android::AndroidFramePacer framePacer;
+  ae::platform::android::AndroidPerformance performance;
   ae::platform::android::AndroidVulkanSurface vulkanSurface;
   ae::platform::android::InstancedRenderer instancedRenderer;
   bool instancedRendererReady = false;
@@ -67,11 +72,29 @@ struct AndroidShell final {
   std::chrono::steady_clock::time_point shellStartTime = std::chrono::steady_clock::now();
   double pocAMaxFillMicroseconds = 0.0;
   ae::platform::FreeCameraController cameraController;
+  ae::platform::FirstPersonController firstPersonController;
+  ae::platform::FirstPersonTouchControls firstPersonTouches;
+  ae::physics::CharacterMotor characterMotor;
+  bool firstPersonEnabled = false;
+  std::chrono::steady_clock::time_point lastGameplayUpdate{};
+  std::chrono::steady_clock::time_point lastPresentedAt{};
+  std::chrono::steady_clock::time_point lastFpsPublishedAt{};
+  float smoothedFps = 0.0f;
+  ae::u32 displayedFps = 0;
   bool mapCameraInitialized = false;
   bool hasLaunchCamera = false;
   ae::platform::FreeCameraState launchCamera{};
   ae::FrameBudget frameBudget = ae::makeFrameBudget(60.0f, 60.0f, 60);
+  ae::renderer::GpuCostIsolation gpuCostIsolation = ae::renderer::GpuCostIsolation::Full;
+  int displayRotation = -1;
 };
+
+const char *profileSceneId(const AndroidShell &shell) {
+  if (shell.dirtRoadPreview) return "dirt-road";
+  if (shell.materialPreview) return "material-preview";
+  if (shell.scenePreview) return "scene-preview";
+  return "poc-a-5000-textured-cubes";
+}
 
 // Extrai o runtime .NET vendorizado (se ainda não extraído) e hospeda o
 // CoreCLR — item 0.1.4 do plano. Chamado uma vez na criação do shell, não a
@@ -146,9 +169,26 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
   shell.instancedRendererReady=ready && !cancel;
   if (shell.instancedRendererReady && shell.dirtRoadPreview && !shell.mapCameraInitialized &&
       shell.instancedRenderer.hasDefaultCamera()) {
-    shell.cameraController.setState(shell.hasLaunchCamera ? shell.launchCamera
-                                                          : shell.instancedRenderer.defaultCamera());
-    shell.mapCameraInitialized = true;
+    const ae::platform::FreeCameraState initialCamera=shell.hasLaunchCamera?shell.launchCamera
+        :(shell.firstPersonEnabled?shell.instancedRenderer.defaultGameplayCamera()
+                                 :shell.instancedRenderer.defaultCamera());
+    shell.cameraController.setState(initialCamera);
+    if(shell.firstPersonEnabled){
+      const auto &mesh=shell.instancedRenderer.staticCollisionMesh();
+      const AetherVec3 spawn{initialCamera.position[0],initialCamera.position[1],
+                             initialCamera.position[2]};
+      if(!shell.characterMotor.initialize(mesh.vertices,mesh.indices,spawn)){
+        __android_log_print(ANDROID_LOG_ERROR,LogTag,
+            "[FirstPerson] Falha ao criar cápsula/malha estática de colisão.");
+        shell.instancedRendererReady=false;
+      }else{
+        __android_log_print(ANDROID_LOG_INFO,LogTag,
+            "[FirstPerson] colisão pronta vertices=%zu triangles=%zu.",
+            mesh.vertices.size(),mesh.indices.size()/3);
+      }
+    }
+    shell.instancedRenderer.releaseStaticCollisionCpuData();
+    shell.mapCameraInitialized = shell.instancedRendererReady;
     if (shell.hasLaunchCamera) {
       const auto &camera=shell.cameraController.state();
       __android_log_print(ANDROID_LOG_INFO, LogTag,
@@ -158,6 +198,8 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
     }
   }
   if (!shell.instancedRendererReady) shell.instancedRenderer.shutdown();
+  if (shell.instancedRendererReady && shell.lifecycle.isActive())
+    shell.performance.setActive(true, false);
   __android_log_print(cancel ? ANDROID_LOG_INFO : (ready ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR),
       LogTag,"[%s] initialization=%s",shell.dirtRoadPreview?"DirtRoad":"MaterialPreview",
       cancel?"cancelled":(ready?"ready":"failed"));
@@ -247,12 +289,17 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     ++shell.activationCount;
     shell.activatedAtMs = ae::platform::android::lifecycleUptimeMs();
     shell.firstFrameAfterActivationPending = true;
+    shell.lastPresentedAt = {};
+    shell.smoothedFps = 0.0f;
+    shell.performance.setActive(true, !shell.instancedRendererReady);
     __android_log_print(ANDROID_LOG_INFO, LogTag, "Aplicativo ativo.");
   }
   if (ae::platform::hasAction(action, ae::platform::LifecycleAction::BecameInactive)) {
     shell.framePacer.stop();
     shell.frameProfiler.reset();
     shell.cameraController.cancelGesture();
+    shell.firstPersonTouches.cancel();
+    shell.performance.setActive(false, false);
     __android_log_print(ANDROID_LOG_INFO, LogTag, "Aplicativo suspenso.");
   }
 }
@@ -285,6 +332,15 @@ void handleCommand(android_app *app, int32_t command) {
     break;
   case APP_CMD_CONFIG_CHANGED:
     if (app->window != nullptr) {
+      const int newRotation = ae::platform::android::queryDisplayRotation(
+          app->activity, shell.displayRotation);
+      const bool physicalRotationChanged = shell.displayRotation >= 0 &&
+                                           newRotation != shell.displayRotation;
+      shell.displayRotation = newRotation;
+      // A pointer delta must never bridge two coordinate systems. This is
+      // global for both the editor camera and runtime action controller.
+      shell.cameraController.cancelGesture();
+      shell.firstPersonTouches.cancel();
       __android_log_print(ANDROID_LOG_INFO, LogTag, "Configuração alterada: janela=%dx%d.",
                           ANativeWindow_getWidth(app->window),
                           ANativeWindow_getHeight(app->window));
@@ -292,9 +348,17 @@ void handleCommand(android_app *app, int32_t command) {
       // comum em drivers mobile que em desktop) — recriar aqui em vez de só
       // esperar o próximo acquire/present falhar, mesmo aviso documentado
       // em ISwapchain::recreate.
-      if (shell.vulkanSurface.isReady() && !recreateSwapchainAndRenderer(shell)) {
+      // A 180-degree landscape flip keeps the same WxH. Some Android drivers
+      // therefore leave an old currentTransform attached to the existing
+      // VkSurfaceKHR and never report OUT_OF_DATE. A fresh Surface is required
+      // only for a real Display rotation; UI-mode and keyboard changes retain
+      // the cheaper swapchain path.
+      const bool recreated = !shell.vulkanSurface.isReady() ||
+          (physicalRotationChanged ? recreateSurfaceAndRenderer(shell)
+                                   : recreateSwapchainAndRenderer(shell));
+      if (!recreated) {
         __android_log_print(ANDROID_LOG_ERROR, LogTag,
-                            "Falha ao recriar swapchain/pipeline após mudança de configuração.");
+                            "Falha ao recriar surface/swapchain após mudança de configuração.");
       }
     }
     break;
@@ -318,17 +382,59 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
   auto &shell = *static_cast<AndroidShell *>(app->userData);
   if (shell.lockCamera) {
     shell.cameraController.cancelGesture();
+    shell.firstPersonTouches.cancel();
     return 1;
   }
+  else if(shell.instancedRendererReady&&shell.dirtRoadPreview&&shell.characterMotor.isReady())
+    shell.instancedRenderer.releaseStaticCollisionCpuData();
   const int32_t action = AMotionEvent_getAction(event);
   const int32_t actionType = action & AMOTION_EVENT_ACTION_MASK;
   const size_t actionIndex = static_cast<size_t>(
       (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >>
       AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
 
-  const int32_t width = app->window != nullptr ? ANativeWindow_getWidth(app->window) : 0;
-  const int32_t height = app->window != nullptr ? ANativeWindow_getHeight(app->window) : 0;
+  const int32_t bufferWidth = app->window != nullptr ? ANativeWindow_getWidth(app->window) : 0;
+  const int32_t bufferHeight = app->window != nullptr ? ANativeWindow_getHeight(app->window) : 0;
+  // The swapchain can use a 90-degree pre-transform: its buffer is portrait
+  // while Android motion coordinates and the visible HUD are landscape.
+  const int32_t width = std::max(bufferWidth, bufferHeight);
+  const int32_t height = std::min(bufferWidth, bufferHeight);
   if (width <= 0 || height <= 0) return 0;
+  if (shell.firstPersonEnabled) {
+    if (actionType == AMOTION_EVENT_ACTION_CANCEL) {
+      shell.firstPersonTouches.cancel();
+      return 1;
+    }
+    if (actionType == AMOTION_EVENT_ACTION_DOWN ||
+        actionType == AMOTION_EVENT_ACTION_POINTER_DOWN) {
+      shell.firstPersonTouches.pointerDown(
+          AMotionEvent_getPointerId(event, actionIndex),
+          AMotionEvent_getX(event, actionIndex), AMotionEvent_getY(event, actionIndex),
+          static_cast<float>(width), static_cast<float>(height));
+    } else if (actionType == AMOTION_EVENT_ACTION_MOVE) {
+      const size_t pointerCount = AMotionEvent_getPointerCount(event);
+      for (size_t index = 0; index < pointerCount; ++index) {
+        shell.firstPersonTouches.pointerMove(
+            AMotionEvent_getPointerId(event, index), AMotionEvent_getX(event, index),
+            AMotionEvent_getY(event, index), static_cast<float>(width),
+            static_cast<float>(height));
+      }
+    } else if (actionType == AMOTION_EVENT_ACTION_UP ||
+               actionType == AMOTION_EVENT_ACTION_POINTER_UP) {
+      const int32_t pointerId = AMotionEvent_getPointerId(event, actionIndex);
+      const bool releasedMovement = shell.firstPersonTouches.joystickState().active &&
+          shell.firstPersonTouches.joystickState().pointerId == pointerId;
+      shell.firstPersonTouches.pointerUp(pointerId);
+      if (releasedMovement) {
+        const auto &camera = shell.cameraController.state();
+        __android_log_print(ANDROID_LOG_INFO,LogTag,
+            "[FirstPerson] position=(%.2f,%.2f,%.2f) yaw=%.3f pitch=%.3f ground=%u",
+            camera.position[0],camera.position[1],camera.position[2],camera.yaw,camera.pitch,
+            static_cast<ae::u32>(shell.characterMotor.groundState()));
+      }
+    }
+    return 1;
+  }
   if (actionType == AMOTION_EVENT_ACTION_CANCEL) {
     shell.cameraController.cancelGesture();
     return 1;
@@ -359,6 +465,7 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
 void android_main(android_app *app) {
   AndroidShell shell{};
   shell.app = app;
+  shell.displayRotation = ae::platform::android::queryDisplayRotation(app->activity);
   shell.forceDescriptorFallback = ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.force_descriptor_fallback");
   shell.scenePreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.scene_preview");
@@ -371,17 +478,34 @@ void android_main(android_app *app) {
   shell.dirtRoadPreview = explicitMap || (!shell.scenePreview && !benchmarkPreview && !shell.materialPreview);
   shell.forceTextureFallback = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.force_texture_fallback");
   shell.lockCamera = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.lock_camera");
+  // Controller mode is a global runtime policy. Diagnostic fixtures and locked
+  // camera captures remain deterministic; `aether.free_camera` explicitly
+  // selects the editor navigation controller instead.
+  shell.firstPersonEnabled = shell.dirtRoadPreview && !shell.lockCamera &&
+      !ae::platform::android::readBooleanLaunchOption(app->activity, "aether.free_camera");
+  shell.instancedRenderer.setRuntimeHudEnabled(shell.firstPersonEnabled);
   shell.hasLaunchCamera =
       ae::platform::android::readFloatLaunchOption(app->activity, "aether.camera_x", shell.launchCamera.position[0]) &&
       ae::platform::android::readFloatLaunchOption(app->activity, "aether.camera_y", shell.launchCamera.position[1]) &&
       ae::platform::android::readFloatLaunchOption(app->activity, "aether.camera_z", shell.launchCamera.position[2]) &&
       ae::platform::android::readFloatLaunchOption(app->activity, "aether.camera_yaw", shell.launchCamera.yaw) &&
       ae::platform::android::readFloatLaunchOption(app->activity, "aether.camera_pitch", shell.launchCamera.pitch);
-  // 60 Hz é o padrão sustentado até o governor automático conseguir provar
-  // margem para 90/120. O projeto/benchmark pode solicitar as metas maiores.
-  float requestedRenderHz = 60.0f;
-  ae::platform::android::readFloatLaunchOption(app->activity, "aether.target_fps", requestedRenderHz);
-  shell.frameBudget = ae::makeFrameBudget(requestedRenderHz, requestedRenderHz, 60);
+  // Sem ProjectRenderingSettings serializado ainda, Auto usa a maior cadência
+  // global suportada (até 120 Hz). A capability física e a preferência são
+  // entradas distintas para não solicitar 120 Hz em painéis limitados a 60/90.
+  const float maximumDisplayHz =
+      ae::platform::android::queryMaximumDisplayRefreshRate(app->activity);
+  float requestedMaximumRenderHz = static_cast<float>(ae::DefaultMaximumRenderHz);
+  ae::platform::android::readFloatLaunchOption(
+      app->activity, "aether.target_fps", requestedMaximumRenderHz);
+  shell.frameBudget = ae::makeFrameBudget(maximumDisplayHz, requestedMaximumRenderHz, 60);
+  ae::platform::android::AndroidPerformancePolicy performancePolicy{};
+  performancePolicy.targetFrameDurationNs =
+      static_cast<ae::i64>(1'000'000'000ULL / shell.frameBudget.renderHz);
+  performancePolicy.preferSustainedPerformance =
+      !ae::platform::android::readBooleanLaunchOption(
+          app->activity, "aether.disable_sustained_performance");
+  shell.performance.initialize(app->activity, performancePolicy);
   shell.framePacer.setTargetFrameRate(shell.frameBudget.renderHz);
   shell.scenePreview = shell.scenePreview || shell.materialPreview;
   shell.sceneValidation = shell.scenePreview &&
@@ -391,6 +515,15 @@ void android_main(android_app *app) {
   app->onInputEvent = handleInput;
   shell.frameProfiler.setEnabled(ae::platform::android::readFrameProfilingOption(app->activity));
   shell.instancedRenderer.setFrameProfilingEnabled(shell.frameProfiler.enabled());
+  ae::u32 requestedIsolation = 0;
+  if (ae::platform::android::readUnsignedLaunchOption(app->activity,
+                                                       "aether.gpu_isolation",
+                                                       requestedIsolation)) {
+    shell.gpuCostIsolation = ae::renderer::sanitizeGpuCostIsolation(requestedIsolation);
+  }
+  shell.instancedRenderer.setGpuCostIsolation(shell.gpuCostIsolation);
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "[GpuIsolation] mode=%s scope=diagnostic-only",
+                      ae::renderer::gpuCostIsolationName(shell.gpuCostIsolation));
   shell.instancedRenderer.setCoveragePrepassEnabled(
       !ae::platform::android::readBooleanLaunchOption(app->activity,
                                                        "aether.disable_coverage_prepass"));
@@ -413,6 +546,8 @@ void android_main(android_app *app) {
 
   initializeDotNetHost(shell);
   shell.framePacer.initialize();
+  shell.lastGameplayUpdate = std::chrono::steady_clock::now();
+  shell.lastFpsPublishedAt = shell.lastGameplayUpdate;
 
   // Diagnóstico opt-in, fora da thread de eventos/render. Device e fila são
   // exclusivos do worker: não há vkQueueSubmit concorrente na fila do shell.
@@ -463,6 +598,23 @@ void android_main(android_app *app) {
     // O evento processado acima pode ter destruído o renderer/janela.
     const bool frameAdmitted = !shell.framePacer.available() || shell.framePacer.consumeFrame();
     if (shell.lifecycle.isActive() && shell.instancedRendererReady && frameAdmitted) {
+      const auto frameWorkStarted = std::chrono::steady_clock::now();
+      if (shell.firstPersonEnabled) {
+        auto camera = shell.cameraController.state();
+        const float deltaSeconds = std::chrono::duration<float>(
+            frameWorkStarted - shell.lastGameplayUpdate).count();
+        const ae::platform::FirstPersonInput input=shell.firstPersonTouches.consumeInput();
+        ae::platform::FirstPersonInput lookOnly=input;
+        lookOnly.moveRight=0.0f;
+        lookOnly.moveForward=0.0f;
+        shell.firstPersonController.update(camera,lookOnly,deltaSeconds);
+        if(shell.characterMotor.update(input.moveRight,input.moveForward,camera.yaw,deltaSeconds)){
+          const AetherVec3 eye=shell.characterMotor.eyePosition();
+          camera.position[0]=eye.x;camera.position[1]=eye.y;camera.position[2]=eye.z;
+        }
+        shell.cameraController.setState(camera);
+      }
+      shell.lastGameplayUpdate = frameWorkStarted;
       if (shell.sceneValidation && shell.sceneStep < 3 &&
           shell.presentedFrameCount >= SceneValidationIntervalFrames * static_cast<ae::u64>(shell.sceneStep + 1)) {
         if (shell.applySceneStep == nullptr || shell.applySceneStep(shell.sceneStep + 1) != 0) {
@@ -475,10 +627,41 @@ void android_main(android_app *app) {
       const float timeSeconds = std::chrono::duration<float>(
                                     std::chrono::steady_clock::now() - shell.shellStartTime)
                                     .count();
+      ae::renderer::RuntimeHudState hud{};
+      hud.visible = shell.firstPersonEnabled;
+      if (shell.firstPersonEnabled) {
+        const auto &joystick = shell.firstPersonTouches.joystickState();
+        hud.joystickActive = joystick.active;
+        hud.joystickCenterX = joystick.originX;
+        hud.joystickCenterY = joystick.originY;
+        hud.joystickKnobX = joystick.knobX;
+        hud.joystickKnobY = joystick.knobY;
+        hud.joystickRadiusPixels = joystick.radiusPixels;
+        hud.framesPerSecond = shell.displayedFps;
+      }
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
-          timeSeconds, shell.cameraController.state());
+          timeSeconds, shell.cameraController.state(), hud);
+      shell.performance.reportFrameDuration(std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now() - frameWorkStarted).count());
       if (frameStatus == ae::rhi::SwapchainStatus::Ok ||
           frameStatus == ae::rhi::SwapchainStatus::SuboptimalNeedsRecreate) {
+        const auto presentedAt = std::chrono::steady_clock::now();
+        if (shell.lastPresentedAt != std::chrono::steady_clock::time_point{}) {
+          const float interval = std::chrono::duration<float>(presentedAt-shell.lastPresentedAt).count();
+          if (interval > 0.0f && interval < 0.25f) {
+            const float instantaneous = 1.0f / interval;
+            shell.smoothedFps = shell.smoothedFps > 0.0f
+                                    ? shell.smoothedFps*.90f+instantaneous*.10f
+                                    : instantaneous;
+          }
+        }
+        shell.lastPresentedAt = presentedAt;
+        if (presentedAt-shell.lastFpsPublishedAt >= std::chrono::milliseconds(250)) {
+          shell.displayedFps = static_cast<ae::u32>(std::clamp(
+              std::lround(shell.smoothedFps),0l,
+              static_cast<long>(std::min(shell.frameBudget.renderHz,999u))));
+          shell.lastFpsPublishedAt = presentedAt;
+        }
         ++shell.presentedFrameCount;
         if (shell.scenePreview && shell.instancedRenderer.lastExtractionStatus() == 0 &&
             (shell.sceneReportedStep != shell.sceneStep || shell.firstFrameAfterActivationPending)) {
@@ -527,7 +710,27 @@ void android_main(android_app *app) {
       }
       if (frameStatus == ae::rhi::SwapchainStatus::Ok) {
         const VkExtent2D display = shell.vulkanSurface.swapchain().displayExtent();
-        shell.frameProfiler.record(shell.instancedRenderer.lastFrameTimings(),
+        const auto &camera = shell.cameraController.state();
+        ae::platform::android::FrameProfileContext context{};
+        context.sceneId = profileSceneId(shell);
+        context.contentFingerprint = shell.instancedRenderer.contentFingerprint();
+        context.targetFps = shell.frameBudget.renderHz;
+        context.gpuIsolation = ae::renderer::gpuCostIsolationName(shell.gpuCostIsolation);
+        context.cameraLocked = shell.lockCamera;
+        std::copy(camera.position, camera.position + 3, context.cameraPosition);
+        context.cameraYaw = camera.yaw;
+        context.cameraPitch = camera.pitch;
+        context.drawCount = shell.instancedRenderer.profileDrawCount();
+        context.materialCount = shell.instancedRenderer.profileMaterialCount();
+        context.textureCount = shell.instancedRenderer.profileTextureCount();
+        context.triangleCount = shell.instancedRenderer.profileTriangleCount();
+        const auto &visibility = shell.instancedRenderer.visibilityTelemetry();
+        context.visibleDrawCount = visibility.visibleDraws;
+        context.culledDrawCount = visibility.culledDraws;
+        context.submittedDrawCallCount = visibility.submittedDrawCalls;
+        context.visibleTriangleCount = visibility.visibleTriangles;
+        context.submittedTriangleCount = visibility.submittedTriangles;
+        shell.frameProfiler.record(shell.instancedRenderer.lastFrameTimings(), context,
                                     shell.instancedRenderer.drawnInstanceCount(), display.width, display.height);
       } else {
         shell.frameProfiler.reset();
@@ -554,6 +757,9 @@ void android_main(android_app *app) {
   }
 
   collectRendererInitialization(shell,true);
+  shell.characterMotor.shutdown();
+  shell.performance.setActive(false, false);
+  shell.performance.shutdown();
   if (shell.shutdownScene != nullptr) shell.shutdownScene();
   __android_log_print(ANDROID_LOG_INFO, LogTag, "Shell nativo encerrado.");
 }

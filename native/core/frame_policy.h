@@ -7,6 +7,11 @@
 
 namespace ae {
 
+// O runtime usa a maior cadência móvel oficialmente suportada pela política
+// quando o projeto ainda não possui uma preferência serializada. A capacidade
+// real do display continua sendo a autoridade que reduz 120 para 90/60.
+inline constexpr u32 DefaultMaximumRenderHz = 120;
+
 // Contrato portátil de cadência. Android/iOS escolhem a apresentação usando
 // este mesmo orçamento; gameplay/física continuam num fixed tick independente.
 struct FrameBudget final {

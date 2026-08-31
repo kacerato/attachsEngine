@@ -99,14 +99,124 @@ Artefatos e atribuição: `samples/dirt-road/README.md`, `manifest.json` e
 `LICENSE.txt`. A validação Python confere identidade, todos os SHA-256,
 estrutura/contagens AEMAP, formatos, mips e limite do fallback.
 
+### Primeira otimização global da floresta — integrada em 29/08/2026
+
+O shader da floresta não calcula mais `inverse(mat3(model))` por vértice. O renderer
+genérico prepara `GpuMeshInstance` com uma normal matrix de três colunas uma vez por
+draw/transform, incluindo sinal de handedness para tangentes; o mapa é o primeiro
+consumidor, não uma condição de política gráfica.
+O ABI público `RenderInstance` de 88 bytes não mudou. Matrizes singulares/NaN falham
+na carga; escala não uniforme, escala pequena e espelhamento possuem regressão nativa.
+
+O pacote AEMAP agora expõe fingerprint estável dos bytes carregados. Em profiling, o
+runtime publica cena real, fingerprint, câmera, resolução e contagens; o runner recusa
+rótulo de cena falso e preserva o contexto incrementalmente. O AVD sintético C também
+foi materializado como perfil JSON e criador idempotente para Android Studio, mantendo
+explicitamente `performanceCertification=false`. O `Aether-C-Synthetic` ARM64 foi criado
+no Device Manager local com 2 cores/4 GB/1080×2400; não foi iniciado porque o host é x64
+e não oferece aceleração de CPU para a ABI ARM64 exclusiva do APK.
+
+O APK Release assinado foi então medido no Xiaomi `25053PC47G`/SM8735/Adreno, Android 16,
+na cena e câmera travadas em `dirt-road`, fingerprint `dd907ec34bbebc21`, pose
+`0,160,-100,0,0.08`, 2772×1280, 27 draws, 70 texturas e 341.109 triângulos. Com voto de
+120 Hz confirmado pelo Android (`mActiveModeId=1`), 60 s úteis produziram 5.400 frames em
+69,121 s: **78,124 presents/s**, pior janela de 600 frames **73,431**, CPU de processo
+média **1,408 ms**/p95 de pior janela **2,643 ms** e GPU média **11,396 ms**/p95 de pior
+janela **18,409 ms**. Bateria 38,3→40,0 °C, status térmico 0 e alimentação externa; não é
+soak nem medição de potência válida. Isso localiza o limite na GPU/variância da geometria:
+a CPU possui folga, mas o p95 GPU não cabe nos 8,33 ms de 120 Hz e ainda excede o orçamento
+confortável de 60 Hz. O relatório longo está em
+`build/android-validation/dirt-road-close-release-120hz-60s-20260829/report.json`.
+
+O coletor SurfaceFlinger anterior perdeu trechos da janela circular ao disputar ADB com
+logcat e potência, portanto essa série longa permaneceu corretamente inválida. O runner
+agora usa coleta concorrente, aceita somente sobreposição/fronteira adjacente e continua
+invalidando perda real; também aceita serial mDNS republicado com sufixo `(2)`. O smoke
+posterior passou com 16,784 s contínuos de `actualPresentTime`. Essa cadência mede frames
+novos da layer tornados visíveis, mas usa janela independente da captura nativa; as duas
+taxas só podem ser comparadas quando os intervalos estiverem temporalmente alinhados.
+
+Backface culling também foi prototipado como política global por semântica de material e
+handedness. A versão conservadora manteve `MASK` AEMAP v1 dupla face e ficou estável
+dentro de cada execução, mas a comparação cruzada ainda mostrou terreno/folhagem removidos:
+334.281 de 3.548.160 pixels (9,42%) divergiram do baseline. O A/B físico consecutivo também
+regrediu de 97,463 para 86,339 presents/s, GPU média de 9,035 para 9,983 ms e pior p95 de
+9,891 para 13,652 ms, com `thermalStatus=0`. A implementação foi retirada e o resultado
+negativo foi registrado em `PROFILING-ANDROID.md`; uma nova tentativa requer captura AGI e
+contrato de cobertura versionado, não ajuste por cena.
+
+O diagnóstico seguinte passou a isolar custo de fragment como variante compilada de
+pipeline Vulkan, não como flag de qualidade. O modo é validado no launch, propagado ao
+renderer por enum, registrado no contexto do perfil e resolvido por specialization
+constant; `full` é sempre o default/fallback. No A/B físico intercalado
+`full → base-color → full`, mesma cena/fingerprint/câmera/APK, `base-color` não melhorou:
+GPU média 9,715→10,080→11,040 ms e SurfaceFlinger 93,446→88,507→91,612/s, com
+`thermalStatus=0`. Isso evita remover detalhes gráficos sem evidência e move o próximo
+passo para atribuição de vertex/raster/tiles, visibilidade e frame pacing. A matriz
+dinâmica anterior ficou invalidada para atribuição porque seu controle `full` oscilou
+90,808→70,786 presents/s.
+
+O primeiro ajuste orientado por esse diagnóstico é o AEMAP v2: posição/UV permanecem
+float32, normal/tangente usam SNORM16 e cor UNORM8. O stride global caiu 72→48 bytes,
+com decoder v1 preservado e rejeição de versão/layout mistos. `scene.aemap` caiu
+34.688.380→24.491.996 bytes e o APK 402.443.803→392.244.763. Em dois runs Adreno,
+GPU média foi 8,887/7,420 ms, engine 99,395/117,294 presents/s e SurfaceFlinger
+110,202/111,855/s. A comparação v1/v2 mudou só 523/3.548.160 pixels, máximo 1/255.
+É evidência inicial; A/B longo, soak e Mali permanecem obrigatórios.
+
+### Céu/ambiente global — 30/08/2026
+
+O `sunset_forest` 4096×2048 RGBA16F (~89,5 MB), que aparecia como árvores
+esticadas no fundo, saiu do caminho ativo. `tools/cook-sky-panorama.py` cozinha
+`samples/dirt-road/Source/day-clouds-panorama-v1.png` para AETX 1024×512 sRGB
+com 11 mips (~2,80 MB) e seam horizontal; o céu faz um lookup direcional e foi
+validado no aparelho em yaw 0°/90°. A tentativa procedural full-screen caiu para
+84,82 FPS e foi descartada; a versão de uma amostra mediu 117,27 FPS sob boost.
+
+AEEN v2 possui 144 bytes e serializa a configuração global de sol, ambiente,
+exposição, céu e ground bounce; AEEN v1/80 bytes segue legível por migração. O
+shading usa irradiância hemisférica sem passe/draw/fetch extra e elevou a
+luminância média da vegetação na pose fixa de 37,34 para 45,18. CSM, GTAO, SH,
+probe especular separado e exposição temporal continuam abertos.
+
+O comportamento relatado durante gravação foi reproduzido: após o governador
+relaxar, a engine observou ~98,72 Hz; com `adb screenrecord` ativo no mesmo APK e
+câmera, o SurfaceFlinger mediu 112,04 FPS, com `Thermal Status: 0`. Não há cap de
+60 na engine. O runner futuro deve registrar estado de gravação/GameTurbo e votos
+de energia como contexto, sem regras por fabricante ou aparelho.
+
+Validação desta fatia: CMake Release limpo e **180/180 C++**, **26/26** contratos de
+FrameProfile, **2/2** planos AVD, SPIR-V reproduzível, além de Android Debug + Release
++ Lint offline. O build Windows precisou ampliar para GCC as supressões já existentes
+somente em volta da implementação vendorizada VMA; `-Werror` permanece nos fontes da
+engine.
+
+### Benchmark FPS com personagem e colisão — 30/08/2026
+
+O mapa real agora pode ser percorrido com joystick flutuante inferior esquerdo e
+look simultâneo na metade direita. `FirstPersonController` produz ações; a câmera
+não contém gameplay. `CharacterMotor` possui mundo Jolt, cápsula, gravidade e fixed
+step, consumindo `StaticCollisionMesh` do renderer. O conversor aplica a matriz
+mundial de cada draw AEMAP, compacta vértices e reverte winding na fronteira de
+asset. Materiais BLEND continuam físicos; alpha-mask é não físico por default e
+flags `MapMaterialNoCollision`/`MapMaterialForceCollision` permitem override.
+
+No Xiaomi, a colisão final carregou 188.681 vértices e 156.119 triângulos. O log
+registrou Y entre 148 e 157 durante deslocamento e `ground=0` sobre a estrada, em
+vez dos valores negativos crescentes da falha anterior. O HUD Vulkan fica no topo;
+o shader v5 remove a reflexão local que invertia a ordem e corrige o bit-column das
+fontes 3×5. O SPIR-V foi validado e o APK assinado, mas a inspeção visual v5 ficou
+pendente porque o aparelho descarregou. A suíte completa anterior passou **185/185**;
+depois da política BLEND/cutout, o teste focal passou **4/4**.
+
 ## Resumo
 
 | | |
 |---|---|
 | Testes C# | **506 passando**, 0 falhando, 0 pulados (inclui 5 de material/esfera e 15 de integração cena/render); interop nativo obrigatório na regressão |
-| Verificações das ferramentas Android | **47 passando**: 12 de lifecycle/desbloqueio, 18 de frames/evidência incremental, 13 de térmica/FPS e 4 de identidade dos assets após build |
-| Testes C++ | **170 passando**, 0 falhando: inclui formato AEMAP e câmera livre multi-touch |
-| Imports gráficos | **9 testes Python passando**: 6 de material + 3 do mapa (identidade/hashes, AEMAP e 140 cadeias AETX) |
+| Verificações das ferramentas Android | **57 passando**: 12 de lifecycle/desbloqueio, 26 de frames/contexto, 13 de térmica/FPS, 4 de identidade dos assets e 2 planos AVD |
+| Testes C++ | **185 passando** na suíte completa, 0 falhando; após o ajuste final BLEND/cutout, **4/4** testes focais passaram. Inclui AEMAP v1/v2, colisão mundial, cápsula, `GpuMeshInstance`, HUD/input e câmera multi-touch |
+| Imports gráficos | **11 testes Python passando**: 6 de material + 5 do mapa/HUD (identidade/hashes, AEMAP, 140 cadeias AETX e orientação de dígitos) |
 | Linhas C# | ~11.000 |
 | Linhas C++ (próprias, sem código vendorizado) | ~3.400 |
 | Dependências baixadas no build | **nenhuma** — build e testes rodam offline; Jolt Physics, Box2D, SQLite, runtime .NET e VMA são vendorizados em `native/third_party/`, com versão/licença/hash ou commit registrados |
@@ -120,7 +230,7 @@ estrutura/contagens AEMAP, formatos, mips e limite do fallback.
 | Gates M0–M9 fechados | **0/10** |
 | Hardware M0 | parcial — 1 aparelho Adreno; matriz mínima, Mali e perfil C pendentes |
 | Shell gráfico mínimo (0.1.3 + critério visual M0) | cubo, esfera PBR e mapa real com depth/staging/câmera livre validados no Android; projeção corrigida para pré-rotação da surface. Validation layers ativas em build debug (item 2.1.6). M0 continua aberto: hot reload C#, soak formal e matriz de aparelhos pendentes |
-| §4.1 Inventário executável | `docs/MATRIZ-MARCOS.md`: **333 registros** (328 itens numerados + 5 PoCs): 249 não iniciados, 39 parciais, 31 implementados, 8 PoCs, 5 validados em hardware e 1 aceito. Contagens reconciliadas com as linhas; reclassificações refletem escopo integral/evidência, não remoção de funcionalidades. |
+| §4.1 Inventário executável | `docs/MATRIZ-MARCOS.md`: **339 registros** (334 itens numerados + 5 PoCs): 250 não iniciados, 44 parciais, 31 implementados, 8 PoCs, 5 validados em hardware e 1 aceito. Contagens reconciliadas com as linhas; reclassificações refletem escopo integral/evidência, não remoção de funcionalidades. |
 | §4.2 CI confiável | ✅ implementação concluída — `.github/workflows/ci.yml` separa `unit`/`native`/`interop`/`android-host`/`benchmark`/`clean-build-nightly`; integração e clean build exigem a DLL nativa; cada job publica evidência; o clean build instala headers Vulkan isolados do NDK e foi reproduzido localmente; a regressão corrente passa em 506/506 testes C# e 165/165 nativos. `metrics/budgets.v1.json` versiona P/Invoke, alocação, CPU, GPU, memória e energia, com gate positivo e negativo. `android-device`/`soak` ficam num workflow manual para runner físico. A execução hospedada continua pendente, pois ainda não há remote nem runner `android-device-lab` |
 | §4 — verdade operacional/correções | ✅ implementação local completa (§4.1–§4.4); execução CI hospedada, laboratório Android e métricas coletadas em hardware permanecem evidências operacionais dos gates seguintes |
 
@@ -295,6 +405,7 @@ para a matriz mínima de 6 aparelhos que o plano pede antes de considerar M0 rep
 | Screen off/on | ✅ Runner corrigido distingue keyguard de retomada gráfica. `lifecycle-keyguard-20260828-verified/report.json`: 3 retomadas + configuração + screen off/on, PID 4256; desbloqueio 6.218 ms, recriação 43,901 ms e primeiro present 1,540 ms após ativação. O aparelho tem senha (confirmado pelo usuário); falhas históricas preservadas. Ver ANDROID-SHELL.md |
 | Rotação para além de landscape e matriz de múltiplos aparelhos | ⏳ `uiMode` foi exercitado; rotação fora de landscape é bloqueada por design por `screenOrientation="sensorLandscape"`; só há um aparelho no laboratório (faltam Mali e perfil C) |
 | Revalidação pós-sessão (28/08, tarde) | ✅ `tools/validate-android-shell.ps1` reexecutado no mesmo Xiaomi após os commits desta sessão (extração atômica de assets, `InstancingWorkload`, hot reload): **20 ciclos** background/foreground + mudança de configuração + screen off/on, PID `17496` estável, zero recriações de recurso — confirma que nada regrediu. Profiling de frame separado (`-ProfileSeconds 60`): SurfaceFlinger 60,06 FPS/61,6 s contínuos, `presentFps` 60,06, CPU processo média 2,33 ms (pico 22,1 ms) — consistente com medições anteriores da PoC-A, mesma limitação já documentada (CPU excede o orçamento de 3 ms em picos, matriz de 1 aparelho não fecha o gate). **Achado de ferramental**: rodar os scripts com `powershell` (Windows PowerShell 5.1) corrompe literais de string acentuados no próprio código-fonte `.ps1` (lido com a codepage do sistema, não UTF-8), quebrando o casamento de padrão contra o logcat; `pwsh` (PowerShell 7) também exige forçar `[Console]::OutputEncoding`/`$OutputEncoding` para UTF-8 explicitamente neste ambiente, senão herda `IBM850` do console — documentado aqui para quem for rodar estes scripts localmente fora do CI (que já usa `pwsh` com ambiente configurado) |
+| Otimização móvel v10 (30/08) | ✅ Diagnóstico de variantes na mesma câmera provou gargalo de fragment/texture (PBR completo 85,86 FPS/10,25 ms GPU; base-color apenas diagnóstico 120,11/6,45 ms), não falta de carga CPU. World-to-view por frame e simplificações matemáticas equivalentes reduziram o PBR sem mudar a imagem. O import/runtime cria 58 render chunks determinísticos, preserva geometria/blend e usa multi-draw indirect por material (`indirect=multi-draw` no Xiaomi): 82 chamadas CPU da primeira versão caíram para 34. Ponto fixo v10: 99,46 FPS/9,23 ms GPU; rota manual, primeiras cinco janelas 98,34 FPS em média, pior janela 64,39 FPS/13,73 ms com 57/58 chunks. `PowerManager` informou sustained performance não suportado, então o fallback público permaneceu ativo. APK instalado: `build/aether-spatial-indirect-v10-release.apk`, SHA-256 `30A6A5B5FF0FB0C55D8FF6A8E8B906268F49A5F205138DB4D49CF8DA246D6285`. Suíte nativa Release 190/190 e build Android Release aprovados. Ainda não é 120 FPS estável; HZB/LOD e rota reproduzível são os próximos gates. |
 
 O APK é um **shell gráfico de fundação**, não um editor demonstrativo. Ele
 desenha continuamente apenas quando lifecycle está ativo e bloqueia o looper
@@ -446,6 +557,20 @@ quando suspenso ou sem renderer, evitando consumo térmico fora de foreground.
   estados e o shell escolhe entre reconstruir swapchain ou surface inteira. (4)
   `compositeAlpha=OPAQUE` era presumido; agora é escolhido entre os bits realmente suportados,
   e uso de color attachment/limite de imagens são validados antes da criação.
+- **Rotação landscape, visibilidade e submissão global (30/08/2026).** A troca entre os dois
+  lados de `sensorLandscape` podia preservar uma `VkSurfaceKHR` com transformação
+  antiga porque 2772×1280 continua 2772×1280; o HUD ainda removia o sinal da matriz.
+  O shell agora consulta `Display.getRotation()`, cancela gestos na mudança, recria a
+  Surface apenas quando a rotação física muda; o HUD usa somente a troca de eixos,
+  pois suas posições já estão no espaço visível do Android. No renderer, frustum
+  culling conservador, render chunks espaciais determinísticos e multi-draw indirect
+  por material foram integrados antes da gravação Vulkan, com scratch lists sem
+  alocação e telemetria de draws/triângulos. A suíte nativa Release passa em 190/190,
+  o APK arm64 Release compila e a v10 foi instalada no Xiaomi. Capturas ADB confirmam
+  joystick no canto inferior esquerdo e imagem equivalente. O ponto fixo passou de
+  85,86 FPS/10,25 ms GPU na v7 para 99,46/9,23 ms na v10; a rota ainda possui janela
+  de 64,39 FPS quando 57/58 chunks ficam visíveis. A virada física de 180° ainda
+  requer confirmação manual, e a rota móvel reproduzível continua pendente.
 - **Build host Windows — alocação alinhada portável.** O clean build com LLVM-MinGW revelou
   que essa CRT não fornece `std::aligned_alloc` de forma utilizável. `alignedAlloc/alignedFree`
   agora usam o par obrigatório `_aligned_malloc/_aligned_free` em `_WIN32` e preservam

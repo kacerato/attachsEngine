@@ -32,6 +32,8 @@ param(
     [string]$CameraPose,
     [ValidateSet(30, 60, 90, 120)]
     [int]$TargetFps = 60,
+    [ValidateSet('full', 'no-normal', 'no-ibl', 'base-color')]
+    [string]$GpuIsolation = 'full',
     [string]$OutputDirectory
 )
 
@@ -79,6 +81,7 @@ $RemoteArtifacts = [System.Collections.Generic.List[string]]::new()
 $EvidenceLog = [System.Collections.Generic.List[string]]::new()
 $ConfigurationState = $null
 $WakeState = $null
+$script:SurfaceCollectorJob = $null
 $Report = [ordered]@{
     schemaVersion = 4
     status = "running"
@@ -97,6 +100,7 @@ $Report = [ordered]@{
         scene = $Scene
         cameraPose = $CameraPose
         targetFps = $TargetFps
+        gpuIsolation = $GpuIsolation
         powerBudgetWatts = $PowerBudgetWatts
         requirePowerBudget = [bool]$RequirePowerBudget
         requireSoakBudget = [bool]$RequireSoakBudget
@@ -171,7 +175,10 @@ function Get-ConnectedDeviceSerial {
     $devices = Invoke-AdbBase -Arguments @("devices", "-l")
     $connected = @(
         $devices | ForEach-Object {
-            if ($_ -match "^(\S+)\s+device(?:\s|$)") { $Matches[1] }
+            # Seriais mDNS podem receber sufixo de serviço com espaço, como
+            # "(2)", quando o Android republica o pareamento. A coluna de
+            # estado delimita o serial com segurança; \S+ truncava o endpoint.
+            if ($_ -match "^(.+?)\s+device(?:\s|$)") { $Matches[1] }
         }
     )
 
@@ -252,6 +259,35 @@ function Get-AetherLog {
 
 function Get-CrashLog {
     return ((Invoke-Adb -Arguments @("logcat", "-b", "crash", "-d", "-v", "brief") -AllowFailure) -join "`n")
+}
+
+function Merge-SurfaceCollectorLines {
+    param(
+        [Parameter(Mandatory = $true)][object[]]$Lines,
+        [Parameter(Mandatory = $true)][object]$State,
+        [Parameter(Mandatory = $true)][string]$EvidencePath,
+        [Parameter(Mandatory = $true)][string]$Layer
+    )
+    foreach ($item in $Lines) {
+        $line = $item.ToString()
+        if ($line -match '^__AETHER_SURFACE_BATCH__:(\d+(?:\.\d+)?)$') {
+            $elapsed = [double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
+            $times = @(ConvertFrom-SurfaceFrameLatency ($State.pendingLines -join "`n"))
+            $State.pendingLines.Clear()
+            if ($times.Count -eq 0) { continue }
+            $newTimes = @(Merge-SurfaceFrameSnapshot -State $State -Timestamps $times)
+            if ($newTimes.Count -gt 0) {
+                Write-ProfileEvidence -Path $EvidencePath -Value ([ordered]@{
+                    elapsedSeconds = $elapsed
+                    layer = $Layer
+                    continuous = $State.continuous
+                    timestamps = $newTimes
+                })
+            }
+            continue
+        }
+        $State.pendingLines.Add($line)
+    }
 }
 
 function Save-LifecycleDiagnostics {
@@ -388,9 +424,18 @@ function Start-AetherActivity {
     }
     $arguments += @("--ez", $sceneExtra, "true")
     $arguments += @("--ef", "aether.target_fps", $TargetFps.ToString([Globalization.CultureInfo]::InvariantCulture))
+    $gpuIsolationValue = switch ($GpuIsolation) {
+        'full' { 0 }
+        'no-normal' { 1 }
+        'no-ibl' { 2 }
+        'base-color' { 3 }
+    }
+    $arguments += @('--ei', 'aether.gpu_isolation', [string]$gpuIsolationValue)
     if ($CaptureSeconds -gt 0) {
         $arguments += @("--ez", "aether.profile_frames", "true")
-        if ($null -ne $ParsedCameraPose) { $arguments += @("--ez", "aether.lock_camera", "true") }
+        if ($Scene -eq 'dirt-road' -or $null -ne $ParsedCameraPose) {
+            $arguments += @("--ez", "aether.lock_camera", "true")
+        }
     }
     if ($null -ne $ParsedCameraPose) {
         $cameraKeys = @('aether.camera_x', 'aether.camera_y', 'aether.camera_z',
@@ -585,13 +630,15 @@ try {
 
     if ($CaptureSeconds -gt 0) {
         $contextPath = Join-Path $script:ResolvedOutputDirectory 'capture-context.json'
+        $runtimeContextPath = Join-Path $script:ResolvedOutputDirectory 'frame-contexts.jsonl'
         $windowPath = Join-Path $script:ResolvedOutputDirectory 'frame-windows.jsonl'
         $powerPath = Join-Path $script:ResolvedOutputDirectory 'power-samples.jsonl'
         $surfacePath = Join-Path $script:ResolvedOutputDirectory 'surface-batches.jsonl'
-        foreach ($path in @($contextPath, $windowPath, $powerPath, $surfacePath)) {
+        foreach ($path in @($contextPath, $runtimeContextPath, $windowPath, $powerPath, $surfacePath)) {
             if (Test-Path -LiteralPath $path) { throw 'Diretório já contém coleta; use um novo para não misturar evidência.' }
         }
         $Report.artifacts.captureContext = $contextPath
+        $Report.artifacts.frameContexts = $runtimeContextPath
         $Report.artifacts.frameWindows = $windowPath
         $Report.artifacts.powerSamples = $powerPath
         $Report.artifacts.surfaceBatches = $surfacePath
@@ -601,15 +648,27 @@ try {
         $nextPowerSample = 0.0
         $nextCpuSample = 0.0
         $capturedWindows = @{}
+        $capturedContexts = @{}
         $capture = $null
         $layerText = Get-AdbValue -Arguments @('shell', 'dumpsys', 'SurfaceFlinger', '--list')
         $surfaceLayer = Find-FrameProfileSurfaceLayer -Text $layerText -Component $ComponentName
-        $displayTimes = [Collections.Generic.SortedSet[long]]::new()
+        $surfaceState = New-SurfaceFrameCaptureState
         $displaySummary = $null
-        $displayContinuous = $true
         $displayAvailable = $null -ne $surfaceLayer
-        $displayLast = 0L
-        $displayPolls = 0
+        if ($displayAvailable) {
+            # FrameTracker tem somente uma janela circular curta. Um job dedicado
+            # consulta sem ser bloqueado por logcat/potência do runner principal.
+            $script:SurfaceCollectorJob = Start-Job -ScriptBlock {
+                param([string]$Adb, [string]$Serial, [string]$Layer)
+                $clock = [Diagnostics.Stopwatch]::StartNew()
+                while ($true) {
+                    & $Adb -s $Serial shell dumpsys SurfaceFlinger --latency $Layer 2>$null
+                    $elapsed = $clock.Elapsed.TotalSeconds.ToString('F6', [Globalization.CultureInfo]::InvariantCulture)
+                    "__AETHER_SURFACE_BATCH__:$elapsed"
+                    Start-Sleep -Milliseconds 100
+                }
+            } -ArgumentList $script:ResolvedAdb, $script:ResolvedSerial, $surfaceLayer
+        }
         do {
             Assert-AppPid -ExpectedPid $initialPid -Context "a coleta CPU/frame" | Out-Null
             if ($SoakMinutes -gt 0 -and $captureClock.Elapsed.TotalSeconds -ge $nextPowerSample) {
@@ -622,57 +681,67 @@ try {
                 Write-Progress -Activity 'CPU, apresentação e térmica Android' -Status "$([int]$sample.elapsedSeconds) / $CaptureSeconds s" -PercentComplete ([Math]::Min(100, $sample.elapsedSeconds / $CaptureSeconds * 100))
             }
             if ($displayAvailable) {
-                # O nome reconhecido contém somente pacote/classe/#id, sem shell metacharacters.
                 if ($surfaceLayer -notmatch '^[a-zA-Z0-9._/#]+$') { throw 'Nome de surface não reconhecido.' }
-                $latency = Get-AdbValue -Arguments @('shell', 'dumpsys', 'SurfaceFlinger', '--latency', $surfaceLayer)
-                $times = @(ConvertFrom-SurfaceFrameLatency $latency | Sort-Object -Unique)
-                ++$displayPolls
-                if ($times.Count -eq 0) {
-                    $displayAvailable = $false
-                } else {
-                    if ($displayLast -gt 0 -and $times[0] -gt $displayLast) { $displayContinuous = $false }
-                    $newTimes = [Collections.Generic.List[long]]::new()
-                    foreach ($time in $times) { if ($displayTimes.Add($time)) { $newTimes.Add($time) } }
-                    if ($newTimes.Count -gt 0) {
-                        Write-ProfileEvidence -Path $surfacePath -Value ([ordered]@{
-                            elapsedSeconds = $captureClock.Elapsed.TotalSeconds; layer = $surfaceLayer
-                            continuous = $displayContinuous; timestamps = $newTimes.ToArray()
-                        })
-                    }
-                    $displayLast = $times[-1]
+                $surfaceOutput = @(Receive-Job -Job $script:SurfaceCollectorJob)
+                if ($surfaceOutput.Count -gt 0) {
+                    Merge-SurfaceCollectorLines -Lines $surfaceOutput `
+                        -State $surfaceState -EvidencePath $surfacePath -Layer $surfaceLayer
                 }
+                if ($script:SurfaceCollectorJob.State -eq 'Failed') { $displayAvailable = $false }
             }
             if ($captureClock.Elapsed.TotalSeconds -ge $nextCpuSample) {
+                $profileLog = Get-AetherLog
+                foreach ($context in @(ConvertFrom-FrameProfileContextLog -Text $profileLog -ExpectedPid $initialPid)) {
+                    $contextKey = "$($context.pid):$($context.epoch)"
+                    if (-not $capturedContexts.ContainsKey($contextKey)) {
+                        Write-ProfileEvidence -Path $runtimeContextPath -Value $context
+                    }
+                    $capturedContexts[$contextKey] = $context
+                }
                 $expectedInstances = if ($Scene -eq "poc-a") { 5000 } else { $null }
-                foreach ($window in @(ConvertFrom-FrameProfileLog -Text (Get-AetherLog) -ExpectedPid $initialPid -ExpectedInstances $expectedInstances)) {
+                foreach ($window in @(ConvertFrom-FrameProfileLog -Text $profileLog -ExpectedPid $initialPid -ExpectedInstances $expectedInstances)) {
                     if (-not $capturedWindows.ContainsKey("$($window.epoch):$($window.window)")) {
                         Write-ProfileEvidence -Path $windowPath -Value $window
                     }
                     $capturedWindows["$($window.epoch):$($window.window)"] = $window
                 }
                 $sceneName = if ($Scene -eq "poc-a") { "poc-a-5000-textured-cubes" } else { $Scene }
-                $capture = Get-FrameProfileCapture -Windows @($capturedWindows.Values) -MinimumSeconds $CaptureSeconds -Scene $sceneName
+                $capture = Get-FrameProfileCapture -Windows @($capturedWindows.Values) -MinimumSeconds $CaptureSeconds -Scene $sceneName -Contexts @($capturedContexts.Values)
                 $nextCpuSample = $captureClock.Elapsed.TotalSeconds + 2
             }
             if ($null -ne $capture -and $captureClock.Elapsed.TotalSeconds -ge $CaptureSeconds) {
-                $displaySummary = Get-SurfaceFrameSummary -Timestamps @($displayTimes)
-                if (-not $displayAvailable -or -not $displayContinuous -or
+                $displaySummary = Get-SurfaceFrameSummary -Timestamps @($surfaceState.timestamps)
+                if (-not $displayAvailable -or -not $surfaceState.continuous -or
                     ($null -ne $displaySummary -and $displaySummary.elapsedSeconds -ge $CaptureSeconds)) { break }
             }
             Start-Sleep -Milliseconds 250
         } while ([DateTime]::UtcNow -lt $profileDeadline)
+        if ($null -ne $script:SurfaceCollectorJob) {
+            Stop-Job -Job $script:SurfaceCollectorJob -ErrorAction SilentlyContinue
+            $surfaceOutput = @(Receive-Job -Job $script:SurfaceCollectorJob -ErrorAction SilentlyContinue)
+            if ($surfaceOutput.Count -gt 0) {
+                Merge-SurfaceCollectorLines -Lines $surfaceOutput `
+                    -State $surfaceState -EvidencePath $surfacePath -Layer $surfaceLayer
+            }
+            Remove-Job -Job $script:SurfaceCollectorJob -Force -ErrorAction SilentlyContinue
+            $script:SurfaceCollectorJob = $null
+            $displaySummary = Get-SurfaceFrameSummary -Timestamps @($surfaceState.timestamps)
+        }
         if ($null -eq $capture) { throw "FrameProfile não produziu $CaptureSeconds s contínuos; sem evidência suficiente." }
+        if ($capture.context.gpu_isolation -ne $GpuIsolation) {
+            throw "Runtime aplicou gpu_isolation '$($capture.context.gpu_isolation)', esperado '$GpuIsolation'."
+        }
         Assert-NoRuntimeFailure
         $Report.measurements.profileEnvironmentEnd = Get-PowerSample
         $Report.measurements.frameProfile = $capture
         $Report.measurements.displayFrameProfile = [ordered]@{
             layer = $surfaceLayer
             available = $displayAvailable
-            continuous = $displayContinuous
-            polls = $displayPolls
+            continuous = $surfaceState.continuous
+            polls = $surfaceState.polls
             summary = $displaySummary
         }
-        $displayValidated = $displayAvailable -and $displayContinuous -and $null -ne $displaySummary -and
+        $displayValidated = $displayAvailable -and $surfaceState.continuous -and $null -ne $displaySummary -and
             $displaySummary.elapsedSeconds -ge $CaptureSeconds
         $Report.measurements.displayFrameProfile.valid = $displayValidated
         if (-not $displayValidated -and $null -ne $displaySummary) { $displaySummary.displayedFps = $null }
@@ -680,7 +749,7 @@ try {
         $capture.pocA.limitation = 'CPU e apresentação têm janelas próprias sobrepostas; um aparelho não fecha a matriz PoC-A.'
         if ($displayValidated) {
             $capture.pocA.observedDisplayedFps = $displaySummary.displayedFps
-            Write-Host "SurfaceFlinger: $($displaySummary.displayedFps) frames exibidos/s em $($displaySummary.elapsedSeconds) s contínuos."
+            Write-Host "SurfaceFlinger: $($displaySummary.displayedFps) eventos actualPresentTime/s em $($displaySummary.elapsedSeconds) s contínuos."
         }
         Add-PassedCheck -Name "frame-profile-capture" -Details ([ordered]@{
             frames = $capture.frames
@@ -845,6 +914,11 @@ catch {
     }
 }
 finally {
+    if ($null -ne $script:SurfaceCollectorJob) {
+        Stop-Job -Job $script:SurfaceCollectorJob -ErrorAction SilentlyContinue
+        Remove-Job -Job $script:SurfaceCollectorJob -Force -ErrorAction SilentlyContinue
+        $script:SurfaceCollectorJob = $null
+    }
     if ($script:ResolvedAdb -and $script:ResolvedSerial) {
         if ($ConfigurationState) {
             Invoke-Adb -Arguments @("shell", "cmd", "uimode", "night", $ConfigurationState) -AllowFailure | Out-Null

@@ -1,7 +1,13 @@
-"""Cook a photographic Radiance HDR panorama into Aether environment assets.
+"""Cook a legacy photographic Radiance HDR panorama into Aether environment assets.
 
 This is an offline importer. Runtime consumes only AETX/AEEN and never needs
 FFmpeg, network access, or an HDR image decoder.
+
+This tool is retained for AEEN v1 migration tests and authored HDRI workflows.
+It is not the active visible-sky pipeline for the Dirt Road sample; use
+``cook-sky-panorama.py`` for that project-owned AEEN v2 resource. Running this
+tool against ``samples/dirt-road/Imported`` intentionally replaces the active
+environment and therefore requires an explicit output path.
 """
 import argparse
 import hashlib
@@ -49,8 +55,8 @@ def main():
     parser.add_argument("--ffmpeg", default="ffmpeg")
     parser.add_argument("--cache", type=pathlib.Path,
                         default=pathlib.Path("build/environment/source"))
-    parser.add_argument("--out", type=pathlib.Path,
-                        default=pathlib.Path("samples/dirt-road/Imported"))
+    parser.add_argument("--out", type=pathlib.Path, required=True,
+                        help="Explicit output directory; never defaults over the active sample sky")
     parser.add_argument("--sun-intensity", type=float, default=2.1)
     parser.add_argument("--ambient-strength", type=float, default=.28)
     parser.add_argument("--exposure", type=float, default=.72)

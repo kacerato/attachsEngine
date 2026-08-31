@@ -9,9 +9,11 @@
 namespace ae::renderer {
 
 inline constexpr u32 MapPackageMagic = 0x504D4541; // AEMP, little-endian
-inline constexpr u32 MapPackageVersion = 1;
+inline constexpr u32 MapPackageMinimumVersion = 1;
+inline constexpr u32 MapPackageVersion = 2;
 inline constexpr u32 MapPackageHeaderSize = 144;
-inline constexpr u32 MapVertexStride = 72;
+inline constexpr u32 MapVertexStrideV1 = 72;
+inline constexpr u32 MapVertexStride = 48;
 inline constexpr u32 InvalidMapTexture = 0xFFFFFFFFu;
 
 // Material flags are shared by the offline glTF cooker and the Vulkan shader.
@@ -23,6 +25,11 @@ inline constexpr u32 MapMaterialMetallicRoughnessMap = 1u << 2;
 inline constexpr u32 MapMaterialEmissiveMap = 1u << 3;
 inline constexpr u32 MapMaterialAlphaMask = 1u << 4;
 inline constexpr u32 MapMaterialDoubleSided = 1u << 5;
+// Rendering transparency and physical participation are separate concerns.
+// Import settings can suppress any surface explicitly or opt an alpha-cutout
+// mesh (for example, a gameplay fence) back into collision.
+inline constexpr u32 MapMaterialNoCollision = 1u << 6;
+inline constexpr u32 MapMaterialForceCollision = 1u << 7;
 
 struct MapTextureRecord {
   u32 flags;
@@ -54,6 +61,8 @@ struct MapDrawRecord {
 };
 
 struct MapPackageHeader {
+  u32 version = 0;
+  u32 vertexStride = 0;
   u32 textureCount = 0;
   u32 materialCount = 0;
   u32 drawCount = 0;
@@ -76,6 +85,10 @@ struct MapPackageHeader {
 
 struct MapPackageView {
   MapPackageHeader header{};
+  // FNV-1a over the exact validated package bytes. This is diagnostic
+  // identity, not a security checksum; the APK SHA-256 remains the artifact
+  // integrity source in the Android runner.
+  u64 contentFingerprint = 0;
   std::span<const MapTextureRecord> textures{};
   std::span<const MapMaterialRecord> materials{};
   std::span<const MapDrawRecord> draws{};
@@ -103,10 +116,16 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
     std::memcpy(&value, &encoded, sizeof(value));
     return value;
   };
-  if (word(0) != MapPackageMagic || word(4) != MapPackageVersion ||
-      word(8) != MapPackageHeaderSize || word(12) != MapVertexStride) return false;
+  const u32 version = word(4);
+  const u32 vertexStride = word(12);
+  if (word(0) != MapPackageMagic || version < MapPackageMinimumVersion ||
+      version > MapPackageVersion || word(8) != MapPackageHeaderSize ||
+      (version == 1 && vertexStride != MapVertexStrideV1) ||
+      (version == 2 && vertexStride != MapVertexStride)) return false;
 
   MapPackageView decoded;
+  decoded.header.version = version;
+  decoded.header.vertexStride = vertexStride;
   decoded.header.textureCount = word(16);
   decoded.header.materialCount = word(20);
   decoded.header.drawCount = word(24);
@@ -150,7 +169,7 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
   if (!section(decoded.header.textureOffset, decoded.header.textureCount, sizeof(MapTextureRecord)) ||
       !section(decoded.header.materialOffset, decoded.header.materialCount, sizeof(MapMaterialRecord)) ||
       !section(decoded.header.drawOffset, decoded.header.drawCount, sizeof(MapDrawRecord)) ||
-      !section(decoded.header.vertexOffset, decoded.header.vertexCount, MapVertexStride) ||
+      !section(decoded.header.vertexOffset, decoded.header.vertexCount, vertexStride) ||
       !section(decoded.header.indexOffset, decoded.header.indexCount, sizeof(u32))) return false;
   if ((decoded.header.textureOffset | decoded.header.materialOffset | decoded.header.drawOffset |
        decoded.header.vertexOffset | decoded.header.indexOffset) % 16 != 0) return false;
@@ -161,7 +180,7 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
   const u64 drawEnd = decoded.header.drawOffset +
                       static_cast<u64>(decoded.header.drawCount) * sizeof(MapDrawRecord);
   const u64 vertexEnd = decoded.header.vertexOffset +
-                        static_cast<u64>(decoded.header.vertexCount) * MapVertexStride;
+                        static_cast<u64>(decoded.header.vertexCount) * vertexStride;
   const u64 indexEnd = decoded.header.indexOffset +
                        static_cast<u64>(decoded.header.indexCount) * sizeof(u32);
   if (textureEnd > decoded.header.materialOffset || materialEnd > decoded.header.drawOffset ||
@@ -175,7 +194,7 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
   decoded.draws = {reinterpret_cast<const MapDrawRecord *>(bytes.data() + decoded.header.drawOffset),
                    decoded.header.drawCount};
   decoded.vertices = {bytes.data() + decoded.header.vertexOffset,
-                      static_cast<usize>(decoded.header.vertexCount) * MapVertexStride};
+                      static_cast<usize>(decoded.header.vertexCount) * vertexStride};
   decoded.indices = {reinterpret_cast<const u32 *>(bytes.data() + decoded.header.indexOffset),
                      decoded.header.indexCount};
   for (const auto &draw : decoded.draws) {
@@ -188,6 +207,13 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
       if (texture != InvalidMapTexture && texture >= decoded.header.textureCount) return false;
     }
   }
+  u64 fingerprint = 14695981039346656037ull;
+  for (u8 byte : bytes) {
+    fingerprint ^= byte;
+    fingerprint *= 1099511628211ull;
+  }
+  decoded.contentFingerprint = fingerprint;
+
   out = decoded;
   return true;
 }

@@ -31,15 +31,15 @@
 
 | Estado | Contagem |
 |---|---|
-| não iniciado | 249 |
+| não iniciado | 250 |
 | PoC | 8 |
-| parcial | 39 |
+| parcial | 44 |
 | implementado | 31 |
 | validado em hardware (inclui variantes "só Android"/"Android") | 5 |
 | aceito | 1 |
-| **Total** | **333** |
+| **Total** | **339** |
 
-(O total real de linhas é 333, não os ~328 itens estritamente `X.Y.Z` do plano
+(O total real de linhas é 339: 334 itens estritamente `X.Y.Z` do plano
 principal — a Etapa 0.2 tem 5 PoCs de risco identificados só como "PoC-A" a
 "PoC-E" dentro do item 0.2, sem numeração própria em `X.Y.Z`; cada um recebeu
 linha individual aqui por ter critério de aceite próprio no plano. "Validado
@@ -87,7 +87,7 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 0.4.1 | ADRs para linguagem, ECS vs cena, formato de arquivo, build, backend gráfico | implementado | `docs/adr/ADR-01` a `ADR-12` (mais a `ADR-013` pré-existente): as 12 decisões do Apêndice A do plano principal, cada uma com contexto, alternativas descartadas e evidência real do código quando implementada (7 das 12 têm implementação testada com paths/contagens de teste citados; 4 são registradas como decisão preventiva sem código ainda — Play separado, build em nuvem, pipeline único, menu radial de produto; ADR-03/04/06 têm divergência ou limitação documentada explicitamente). `docs/adr/README.md` indexa todas com estado |
+| 0.4.1 | ADRs para linguagem, ECS vs cena, formato de arquivo, build, backend gráfico | implementado | `docs/adr/ADR-01` a `ADR-014`: as 12 decisões originais e as propostas posteriores de física 2D/política global têm contexto, alternativas descartadas, consequências, gates e evidência real quando implementadas. ADR-014 está corretamente marcada como proposta e não transforma documentação em feature concluída. `docs/adr/README.md` indexa todas com estado. |
 | 0.4.2 | Especificação do IDL de fronteira C#↔C++ | implementado | `docs/idl/FORMATO-IDL.md`: formato texto próprio (sem YAML/JSON externo — zero dependência), descritivo e validado, não gerador (decisão registrada explicitamente, evita reescrever bindings já testados/validados em hardware). `docs/idl/physics.idl`, `sqlite.idl`, `transform.idl` descrevem os três bindings reais. `tests/Aether.Tests/IdlValidationTests.cs` compara cada `.idl` contra o `Native*.cs` real via reflection. ✅ 7 testes — validado empiricamente que detecta divergência (corrupção deliberada introduzida e pega pelo teste); o processo de escrita já achou 2 discrepâncias reais no código |
 | 0.4.3 | Orçamentos (memória, energia, frame time) como testes automatizados | parcial | `metrics/budgets.v1.json` versiona limites de P/Invoke, alocação, CPU, GPU, memória e energia; `tools/validate-metrics-budget.ps1` valida contrato, cobertura e violações no CI, incluindo fixture negativa. Os coletores CPU/GPU/memória/energia em aparelho ainda são `device-required`, portanto o item só fica completo após produzir séries reais na matriz de hardware |
 
@@ -164,8 +164,10 @@ não recebem estado agregado — servem apenas de navegação.
 | 2.1.3 | Objetos: buffers, imagens, samplers, pipelines, com cache hasheado | parcial | `VulkanBuffer`, `VulkanImage`/view e `VulkanSampler` move-only integrados ao shell Android, com upload RGBA8/staging, descritor, depth e órbita touch. `rhi/pipeline_cache.h/.cpp` (novo): `PipelineCache` real generaliza `DescriptorCache<Desc,Handle>` (já testado headless) para os três objetos que hoje cada renderer recria do zero em toda troca de tela — `RenderPassCache`/`PipelineLayoutCache`/`GraphicsPipelineCache`, todos ancorados em `VulkanDevice` (sobrevivem a `shutdown()`/`initialize()` de um renderer individual, compartilháveis entre `TriangleRenderer` e `InstancedRenderer`). `GraphicsPipelineCacheDesc` referencia render pass/pipeline layout por handle já cacheado (não por descrição recursiva) e carrega um `vertexInputHash` calculado pelo chamador para os aspectos que não cabem como campo escalar fixo. Renomeado `descriptor_cache.h`'s `SamplerDesc` de teste para `SamplerCacheTestDesc` — colidia em `ae::rhi` com o `SamplerDesc` real de produção (`resource.h`) assim que as duas unidades de tradução passaram a se encontrar via `device.h`. **Infraestrutura pronta e conectada ao `VulkanDevice`, mas `TriangleRenderer`/`InstancedRenderer` ainda não foram migrados para consumi-la** — ambos continuam chamando `vkCreateGraphicsPipelines`/`vkCreateRenderPass` diretamente a cada `initialize()`, então o cache existe mas não está eliminando a recriação por troca de tela ainda; migração de consumidores é o próximo passo real do item | ✅ 170/170 testes nativos host (sem regressão; nenhum teste novo do `PipelineCache` em si — só compila e linka, mesma nota de não-testabilidade sem GPU que já se aplica a `device.cpp`), 506/506 testes C#, build Android limpo, validado em hardware físico (Xiaomi): cena "dirt road" completa (70 texturas ASTC, 341k triângulos) renderiza sem erro após a integração, `validate-android-shell.ps1 -AllowScreenshotDifference` PASS em 3 ciclos de lifecycle |
 | 2.1.4 | Bindless via descriptor_indexing | parcial | Registro de texturas combinado com samplers integrado ao renderer e validado no Android. Quatro sub-features e seis limites verificados, sem solicitar update-unused não usado. Fallback convencional completo, com shader próprio e features realmente desabilitadas no device, também validado com Khronos ativa. Faltam tabelas globais de buffers/samplers e uso entre consumidores para o escopo integral; ver `EXECUCAO-EDITOR-ANDROID.md` e `rendering-20260828-140330/report.json`. |
 | 2.1.5 | Gravação de command buffers multi-thread; timeline semaphores | não iniciado | Shell atual usa command buffer único, sem gravação multi-thread; ESTADO.md linha 144 confirma "um único frame em voo" |
-| 2.1.6 | Camadas de validação, marcadores de debug, captura de frame | parcial | Camada Khronos vendorizada só em debug, callback e marcadores integrados. `VulkanGpuFrameTimer`/FrameProfile v3 medem frame e checkpoints Geometry/Background/Transparent. O resultado orientou prepass seletivo de cobertura: GPU fresca 17,12→12,71–12,78 ms e 60,05–60,07 FPS em 2772×1280; A/B aquecido 28,94→22,68 ms. Sem redução gráfica e sem VUID no caminho medido. Em TBDR, timestamps internos ao mesmo render pass têm resolução limitada; falta captura AGI/RenderDoc inspecionada para fechar o item. |
+| 2.1.6 | Camadas de validação, marcadores de debug, captura de frame | parcial | Camada Khronos vendorizada só em debug, callback e marcadores integrados. `VulkanGpuFrameTimer`/FrameProfile v3 medem frame e checkpoints Geometry/Background/Transparent. O resultado orientou prepass seletivo de cobertura: GPU fresca 17,12→12,71–12,78 ms e 60,05–60,07 FPS em 2772×1280; A/B aquecido 28,94→22,68 ms. A cena real agora publica fingerprint/câmera/contagens e possui baseline Release repetível no Xiaomi com painel efetivamente em 120 Hz: 78,12 presents/s, CPU 1,41 ms e GPU 11,40 ms média/18,41 ms no pior p95. O coletor SurfaceFlinger é concorrente, invalida perda do ring e registra separadamente sua própria janela de frames tornados visíveis. O isolamento compilado de fragment impediu atribuição falsa a PBR e levou ao AEMAP v2 global (stride 72→48, decoder v1 preservado): dois runs Adreno mediram GPU 8,89/7,42 ms e SurfaceFlinger 110,20/111,85/s, com diferença visual máxima 1/255. Sem redução gráfica e sem VUID no caminho medido. Em TBDR, timestamps internos ao mesmo render pass têm resolução limitada; faltam A/B longo, Mali e captura AGI/Android Performance Analyzer inspecionada para fechar o item. |
 | 2.1.7 | Detecção de capabilities e perfis de dispositivo (S/A/B/C) | parcial | Lógica pura de perfis testada; consulta real de descriptor indexing e limites alimenta o renderer com fallback validado no Adreno. Restam banco de GPUs, consulta dos demais recursos avançados e matriz física de fabricantes/perfis. Fallback forçado não equivale a hardware perfil C; ver `EXECUCAO-EDITOR-ANDROID.md`. |
+| 2.1.8 | Política global resolvida (capabilities + calibração + Project Settings + térmica) | não iniciado | Contrato documentado em `ADR-014-POLITICA-GLOBAL-RENDERIZACAO.md`; `DeviceProfile` e `PowerGovernor` ainda são fontes separadas e não existe `ResolvedRenderingPolicy` de produto. |
+| 2.1.9 | Laboratório AVD sintético + matriz física reproduzível | parcial | `Aether-C-Synthetic.json` + `ensure-android-performance-avd.ps1` fixam ARM64/API 35, 2 cores/4 GB/1080×2400 e distinguem GPU acelerada de fallback software; dois testes validam plano/ABI. O AVD foi criado no Device Manager local, mas não iniciado: host x64 não acelera a ABI ARM64 exclusiva do APK. Faltam execução válida, Game Loop e Mali/perfil C físico; AVD não certifica FPS. |
 
 ### Etapa 2.2 — Compilação de shaders
 
@@ -206,10 +208,11 @@ não recebem estado agregado — servem apenas de navegação.
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
 | 2.5.1 | BVH de cena com atualização incremental | não iniciado | Nenhuma implementação de BVH de cena encontrada |
-| 2.5.2 | Frustum + occlusion culling (HZB) | não iniciado | Nenhuma implementação de culling encontrada |
+| 2.5.2 | Frustum + occlusion culling (HZB) | parcial | Frustum CPU backend-independent integrado globalmente por draw: seis planos, bounds expandidos, fallback visível para inválidos e scratch lists sem alocação. Render chunks espaciais persistentes foram integrados globalmente: 27 draws de origem viram 58 chunks conservadores de até 8.192 triângulos, preservando índices/triângulos e blend; testes cobrem preservação e determinismo. Na rota física, a visibilidade chegou a 36/58 e 203.716 triângulos lógicos. HZB, histerese, BVH e rota reproduzível continuam pendentes. `native/renderer/frustum_visibility.*`, `native/renderer/spatial_render_chunks.*` e testes correspondentes. |
 | 2.5.3 | Instancing automático por malha+material | parcial | RenderSceneExtractor extrai MeshRenderer/transform em lote para Vulkan; fixtures cubo/checker e esfera/PBR, cada uma com um par conhecido. IDs persistentes, ABI e validação de matrizes; agrupamento simultâneo de múltiplos pares/GPU-driven pendente. SCENE-RENDER-INTEGRATION.md e MATERIAL-PREVIEW.md |
 | 2.5.4 | Sistema de LOD com transição por dither temporal | não iniciado | Nenhuma implementação encontrada |
-| 2.5.5 | Ordenação de draws por PSO e profundidade | não iniciado | Nenhuma implementação encontrada |
+| 2.5.5 | Ordenação de draws por PSO e profundidade | parcial | Chunks opacos/alpha-mask são ordenados front-to-back, agrupados por material e compactados em `vkCmdDrawIndexedIndirect` quando `multiDrawIndirect` + `drawIndirectFirstInstance` são suportados; transparências permanecem diretas e back-to-front. No Xiaomi, o caminho `indirect=multi-draw` reduziu 82 chamadas CPU para 34 no ponto fixo. Ordenação global por PSO, draw packets persistentes e `DrawIndirectCount` GPU-driven continuam pendentes. |
+| 2.5.6 | Telemetria de visibilidade e fallback por perfil | parcial | `FrameProfileContext` publica chunks candidatos/visíveis/descartados, chamadas realmente submetidas e triângulos lógicos/submetidos, além de cena/hash/câmera e caminho indirect. A v10 mediu 99,46 FPS/9,23 ms GPU no ponto fixo contra 85,86/10,25 ms da v7; em movimento, a pior janela ainda foi 64,39 FPS/13,73 ms com 57/58 chunks. Ainda faltam ocluídos por HZB, LOD por erro, PSO/descriptors e motivo de fallback/perfil resolvido. |
 
 ### Etapa 2.6 — Renderizador 2D
 
@@ -219,7 +222,10 @@ não recebem estado agregado — servem apenas de navegação.
 | 2.6.2 | Tilemap com chunking em GPU | não iniciado | Nenhuma implementação encontrada |
 | 2.6.3 | Iluminação 2D e sombras | não iniciado | Nenhuma implementação encontrada |
 
-> **Gate M2:** não fechado. Nenhuma cena real (Sponza-equivalente) roda no renderizador — o pipeline gráfico direto (2.4), culling/batching (2.5) e 2D (2.6) estão inteiramente não iniciados; apenas RHI básico (2.1, parcial) e Render Graph headless (2.3) existem.
+> **Gate M2:** não fechado. A cena real de floresta já roda no renderer Vulkan com
+> PBR, coverage prepass, frustum, render chunks e multi-draw indirect validados em um
+> Adreno físico. Faltam fechar o pipeline 2.4, HZB/BVH/LOD e batching GPU-driven de
+> 2.5, executar o Render Graph na GPU, implementar 2D e validar a matriz Mali/classe C.
 
 ---
 
@@ -251,7 +257,7 @@ não recebem estado agregado — servem apenas de navegação.
 
 | Item | Descrição curta | Estado | Evidência |
 |---|---|---|---|
-| 3.3.1 | Controle de câmera completo com inércia e limites | parcial | Cena Vulkan com perspectiva e órbita touch, pitch limitado. CameraComponent, pan/zoom, inércia e configuração completa ainda pendentes; SCENE-RENDER-INTEGRATION.md |
+| 3.3.1 | Controle de câmera completo com inércia e limites | parcial | Além da câmera livre, o runtime real possui `FirstPersonController` desacoplado, joystick flutuante multi-touch, look simultâneo, HUD Vulkan e integração com cápsula Jolt. A estrada foi validada com `ground=0` e Y estável no Xiaomi. Ordem/bitmap do FPS foram corrigidos no APK v5, aguardando inspeção final porque o telefone descarregou. CameraComponent refletido, inércia/configuração completa e fluxo de editor ainda pendentes; `samples/dirt-road/README.md` |
 | 3.3.2 | Gimbal de eixos, grade adaptativa, overlays de debug | PoC | Protótipo HTML tem gimbal básico; não é o viewport de produto |
 | 3.3.3 | Gizmos touch-first com HUD numérico, anti-oclusão, lupa | PoC | ESTADO.md linha 78 (item 4.1.3) menciona gizmo de junta adicionado ao protótipo (`jointPoint`/`jointAxis`), reforçando que o gizmo vive só no protótipo HTML, não no viewport Vulkan de produto |
 | 3.3.4 | Seleção: toque, laço, hierarquia, material, realce | PoC | Seleção básica existe no protótipo HTML; não no runtime real |
@@ -311,7 +317,7 @@ não recebem estado agregado — servem apenas de navegação.
 | 4.1.2 | Fachada C# com RigidBody/Collider/Trigger e sync ECS↔Jolt | implementado | `GAP-PHY-02/03/04` fechados: autoridade cinemática, sensor/filtro/eventos/serialização e criação/destruição transacional em lote. `PhysicsSyncSystem` agrega o spawn do Step; telemetria mede crossings/bytes. ✅ 9 testes C++ + 15 C#; escala 100/1.000/10.000 com 1 crossing create + 1 destroy e zero GC dentro do crossing |
 | 4.1.3 | Juntas e motores, com gizmos de edição no viewport | parcial | `GAP-JOINT-01` fechado: Point/Hinge/Slider/Distance usam ABI V2 `World`/`LocalToBody1`/`LocalToBody2`, componente declarativo `Joint`, referências `EntityId`, resolução tardia, sync idempotente, hot-edit e serialização ✅ 11 testes C++ + 13 testes C# de juntas + round-trip binário/texto. O item permanece parcial porque o gizmo existe só no protótipo HTML, não no viewport de produto; SixDOF e juntas especializadas continuam futuras |
 | 4.1.4 | Queries (raycast/shapecast/overlap) expostas a script e a nós | parcial | ESTADO.md linha 79: RayCastAll/ShapeCastClosest/OverlapShape ✅ 10 testes C++ + 9 testes C# (`test_query_bridge.cpp`, `PhysicsQueryTests.cs`) — mas só "script" está feito; "nós" (Flow) não existem (ESTADO.md linha 154: nenhum nó `physics.raycast` etc.) |
-| 4.1.5 | Character Controller: degraus, rampas, plataformas, agachar, correr, deslizar, escalar, nadar | parcial | CharacterVirtual cobre cápsula, degraus, rampas, plataformas e stance; `CharacterMotorSystem` centraliza gravidade/plataforma/stick-to-floor e estados `Grounded/Rising/Falling/Sliding` (`GAP-CHAR-01` fechado). ✅ 11 testes C++ + 17 testes C#. Escalar, nadar e nascer agachado continuam não implementados no item principal |
+| 4.1.5 | Character Controller: degraus, rampas, plataformas, agachar, correr, deslizar, escalar, nadar | parcial | CharacterVirtual cobre cápsula, degraus, rampas, plataformas e stance; `CharacterMotorSystem` centraliza gravidade/plataforma/stick-to-floor e estados (`GAP-CHAR-01`). A fatia Android adiciona `CharacterMotor` reutilizável e malha estática AEMAP em espaço mundial. No Xiaomi: 188.681 vértices/156.119 triângulos físicos; estrada com `ground=0`, sem queda infinita. ✅ regressão de piso/parede + conversão de world transform/BLEND/cutout. Escalar, nadar e nascer agachado continuam não implementados |
 | 4.1.6 | Física 2D (benchmark Jolt-2D vs Box2D v3 → decisão) | parcial | Jolt Plane2D ✅ 7 testes C++ + 6 C#; Box2D v3.1.1 vendorizado só para benchmark. Três runners A/B medem cenário/qualidade equivalente, percentis, RSS isolado, tamanho e estabilidade; host e Android A integrais 50–5.000 verdes. `ADR-013-PHYSICS-2D-BACKEND.md` permanece proposta: faltam perfis Android B/C antes da decisão, portanto Box2D não entrou no runtime |
 | 4.1.7 | Geração automática de colisores (convex decomposition) na importação | não iniciado | ESTADO.md linha 90: bloqueado por dependência real ausente — Jolt só tem `ConvexHullShape` de hull único; decomposição convexa de verdade exigiria V-HACD/CoACD, nunca vendorizado; também não há importador de malha no repositório |
 | 4.1.8 | Determinismo em ponto fixo (modo opcional) e testes de reprodutibilidade | aceito | ESTADO.md linha 81 e linhas 161-162, 364-385: decisão deliberada de implementar `CROSS_PLATFORM_DETERMINISTIC` do Jolt (que usa float, não ponto fixo) em vez do que o nome do item pede — decisão registrada e documentada como divergência aceita, com 3 testes C++ novos (`test_determinism.cpp`) provando determinismo run-to-run (não cross-platform real, que exigiria hardware/SO diferentes) |
@@ -619,8 +625,13 @@ não recebem estado agregado — servem apenas de navegação.
 | 7.6.3 | Benchmark de calibração na primeira execução | não iniciado | Nenhuma implementação encontrada |
 | 7.6.4 | Integração completa com PowerGovernor | não iniciado | `PowerGovernor` existe (3.4/1.1.5) mas sem integração com perfis gráficos S/A/B/C |
 | 7.6.5 | Comparador visual dos 4 perfis lado a lado | não iniciado | Nenhuma implementação encontrada |
+| 7.6.6 | ResolvedRenderingPolicy global e versionada | não iniciado | Decisão proposta no ADR-014; presets/budgets serializados e migração ainda não existem. |
+| 7.6.7 | Percursos determinísticos e manifestos p50/p95/p99 | parcial | A captura schema 2 agora exige sceneId, fingerprint, câmera travada e contagens do runtime, além das distribuições existentes. Falta percurso animado versionado e matriz por perfil/dispositivo. |
+| 7.6.8 | Harness AVD C + Game Loop/laboratório físico | parcial | Perfil AVD C e criador idempotente estão versionados/testados, com aceleração e software separados e proibição explícita de certificação. Faltam instalar/executar a imagem x86_64 nesta máquina, Game Loop e laboratório Mali físico. |
 
-> **Gate M7:** não fechado. Fase 7 inteira não iniciada, exceto a base headless de perfis de dispositivo (7.6.1 parcial), que é compartilhada com 2.1.7.
+> **Gate M7:** não fechado. Há base headless de perfis (7.6.1), identidade de captura
+> (7.6.7) e AVD sintético (7.6.8) parciais. `ResolvedRenderingPolicy`, percurso completo,
+> Game Loop e matriz física continuam pendentes; ADR-014 não conta como implementação.
 
 ---
 

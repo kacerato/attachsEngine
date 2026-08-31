@@ -106,6 +106,28 @@ O frame global segue obrigatoriamente esta sequência:
 draws de CPU não é chunking válido. Subdivisão só entra quando a compactação/indirect
 impede que a granularidade aumente linearmente o custo de CPU.
 
+### 0.5 Contrato global de perfis e validação em hardware
+
+Nenhuma cena possui preset de desempenho próprio. A engine resolve uma única política
+global, serializável e versionada, combinando: capabilities reais, calibração curta de
+desempenho, Project Settings, override Auto/S/A/B/C/Custom e estado térmico com
+histerese. Materiais e luzes descrevem intenção artística; LOD por erro de tela,
+sombras, AO/GI, streaming, render scale, memória e cadência consomem budgets do perfil.
+
+Feature detection e desempenho são eixos separados. Uma GPU não vira perfil A apenas
+por expor mesh shader/VRS, nem perfil C por pertencer a uma marca. A classificação
+final registra GPU, driver, memória, resolução, benchmark e revisão do banco de
+dispositivos. Overrides de teste são identificados na telemetria e jamais falsificam
+as capabilities reais.
+
+O AVD `Aether-C-Synthetic` planejado (2 cores, 4 GB e resolução da faixa alvo) valida
+fallback, lifecycle, memória, imagem e seleção de política no Android Studio. Como o
+Emulator usa GPU/CPU do host ou software renderer, ele não certifica FPS, bandwidth,
+driver ou térmica de um Galaxy A32/Mali. Gates de desempenho exigem aparelho físico e
+o percurso determinístico da mesma cena; Test Lab/Game Loop amplia a matriz. O contrato,
+as limitações e a ordem de execução ficam em
+[`PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md`](PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md).
+
 ---
 
 # PARTE 1 — ANÁLISE COMPETITIVA E TESE DO PRODUTO
@@ -1661,6 +1683,35 @@ Esta fase existe para responder cinco perguntas que, se respondidas "não", muda
 - **2.1.5** Gravação de command buffers multi-thread; timeline semaphores.
 - **2.1.6** Camadas de validação, marcadores de debug (RenderDoc/AGI), captura de frame.
 - **2.1.7** Detecção de capabilities e perfis de dispositivo (base de dados de GPUs conhecidas + fallbacks).
+- **2.1.8** Política global resolvida: separar capabilities, calibração de desempenho,
+  Project Settings e estado térmico; presets versionados e override de teste explícito.
+- **2.1.9** Laboratório reproduzível: AVD C sintético para correção/fallback e matriz
+  física Adreno+Mali+C para FPS/GPU/potência, sempre com cena/câmera/hash registrados.
+
+> **Fatia integrada em 29/08/2026:** `Aether-C-Synthetic` já possui definição JSON e
+> criador PowerShell versionados; o runtime/runner já vinculam sceneId, fingerprint,
+> câmera e contagens ao perfil. O baseline físico Release do mapa real foi fixado no
+> Xiaomi SM8735/Adreno, 2772×1280 e painel efetivamente em 120 Hz: câmera
+> `0,160,-100,0,0.08`, fingerprint `dd907ec34bbebc21`, 78,12 presents/s, CPU média
+> 1,41 ms e GPU média/pior p95 de janela 11,40/18,41 ms. A captura prova gargalo GPU,
+> não fecha ganho A/B nem soak. O coletor SurfaceFlinger passou a rodar concorrentemente
+> para não perder a janela circular, mantém invalidação conservadora e registra sua janela
+> independente das janelas nativas. Um experimento global de backface culling foi retirado
+> porque ainda removeu terreno/folhagem (9,42% dos pixels divergiram do baseline) e o A/B
+> físico regrediu 97,46→86,34 presents/s, com GPU média 9,04→9,98 ms. A decisão
+> evita transformar uma hipótese em preset global; uma nova tentativa depende de captura
+> AGI e semântica de cobertura versionada no AEMAP. Em 30/08, o runner também ganhou
+> isolamento GPU diagnóstico global por variantes de pipeline (`full`, `no-normal`,
+> `no-ibl`, `base-color`), registrado junto da cena. O A/B especializado
+> `full → base-color → full` mediu GPU média 9,72→10,08→11,04 ms e SurfaceFlinger
+> 93,45→88,51→91,61/s: retirar o fragment PBR não provou ganho, logo não virou preset
+> nem redução gráfica. O próximo gate é atribuição física de vertex/raster/tiles,
+> visibilidade e frame pacing. A primeira resposta foi o AEMAP v2 global: stride de
+> vértice 72→48 bytes com posição/UV float32, direções SNORM16, cor UNORM8 e decoder v1
+> preservado. O asset/APK caíram 10,20 MB; o gate visual teve máximo 1/255 e dois runs
+> Adreno mediram GPU 8,89/7,42 ms e SurfaceFlinger 110,20/111,85/s. A matriz Mali,
+> Game Loop, percurso automatizado e política C forçada por interface de teste continuam
+> abertos; portanto 2.1.9 permanece parcial.
 
 ### Etapa 2.2 — Compilação de shaders *(4 semanas)*
 - **2.2.1** Pipeline Slang/HLSL → SPIR-V, com reflexão automática de bindings.
@@ -1695,13 +1746,66 @@ Esta fase existe para responder cinco perguntas que, se respondidas "não", muda
 - **2.5.3** Instancing automático por malha+material; GPU instancing bindless.
 - **2.5.4** Sistema de LOD com transição por dither temporal.
 - **2.5.5** Ordenação de draws por PSO e por profundidade (front-to-back para opacos).
+- **2.5.6** Telemetria de visibilidade por perfil: draws/triângulos submetidos,
+  visíveis e ocluídos, LOD por erro projetado e motivo de fallback, sem regra por cena.
+
+> **Fatia integrada em 30/08/2026:** o runtime Vulkan agora constrói um frustum
+> backend-independent uma vez por frame e filtra bounds esféricos dos draw packets
+> antes de gravar comandos. A política é conservadora (`radius*1,05 + 0,5`), falha
+> aberta para câmera/bounds inválidos, reutiliza listas scratch sem alocação e mantém
+> a ordenação opaca front-to-back/transparente back-to-front somente entre visíveis.
+> A telemetria registra draws candidatos, visíveis, descartados, chamadas realmente
+> submetidas e triângulos visíveis/submetidos. Isso entrega a primeira metade de
+> 2.5.2, 2.5.5 e 2.5.6 sem reduzir resolução, materiais, texturas, iluminação ou
+> distância. Ainda não conclui a etapa: os 27 draws atuais são agrupados por material
+> e possuem bounds grandes; a sequência obrigatória é visualizador de bounds → render
+> chunks espaciais persistentes + `DrawIndexedIndirectCount` → HZB com histerese → LOD
+> por erro projetado. Subdividir em centenas de draws CPU continua proibido.
+> Na primeira execução física, a câmera em movimento variou entre 27/27 e 18/27
+> draw packets visíveis (341.109→325.827 triângulos lógicos). O mecanismo funciona,
+> mas a pequena redução de triângulos confirma que os grupos pesados ainda precisam
+> de render chunks/indirect antes de HZB.
+>
+> O benchmark de aceite passa a ser uma rota móvel determinística de 60 s, não FPS
+> parado. O relato atual (picos de 120, faixa de 60–80 e quedas a ~47 FPS) será
+> capturado com GPU/CPU p95, térmica, ADPF e counters de visibilidade. A estabilização
+> observada com gravador de tela será tratada como experimento A/B de DVFS/compositor;
+> a engine não gera carga artificial nem usa ganchos privados para forçar clocks.
+>
+> **Segunda fatia integrada em 30/08/2026:** a medição física separou ocupação de CPU
+> de throughput. Aproximadamente 7,3% de CPU coexistiu com espera de `acquire` de
+> 9–22 ms e GPU acima do budget de 8,33 ms, portanto elevar carga/clock da CPU não é
+> a correção do gargalo atual. O vertex shader passou a consumir linhas world-to-view
+> calculadas uma vez por frame; o PBR removeu trigonometria, `pow` e normalizações
+> redundantes sem trocar materiais ou iluminação. O mapa agora é repartido de forma
+> determinística em 58 render chunks (máximo 8.192 triângulos), preservando todos os
+> índices/triângulos e a ordem de blend, e os chunks visíveis são compactados por
+> material em multi-draw indirect quando a capability existe. No Xiaomi, o caminho
+> ativo reduziu 82 draws CPU da primeira versão para 34 no ponto fixo e elevou a mesma
+> câmera de 85,86 FPS/10,25 ms GPU (v7) para 99,46 FPS/9,23 ms (v10), com imagem
+> equivalente. Em movimento, as cinco primeiras janelas ficaram em média 98,34 FPS,
+> mas uma janela com 57/58 chunks e 525.704 triângulos ainda caiu a 64,39 FPS/13,73 ms
+> GPU. Assim, render chunks/indirect estão entregues, porém 2.5 continua parcial.
+> A próxima dependência passa a ser rota determinística → HZB conservador com
+> histerese → LOD por erro projetado com coverage/dither; frames em voo só serão
+> ampliados depois de recursos per-frame e latência toque→pixel estarem no gate.
+> A política Android também consulta suporte público a sustained performance; o
+> Xiaomi respondeu `false`, mantendo fallback sem hooks privados ou carga artificial.
+
+> **Correção Android integrada na mesma fatia:** `sensorLandscape` agora trata a
+> troca física entre os dois lados como mudança real de display. Gestos ativos são
+> cancelados na fronteira de configuração, uma Surface Vulkan nova é criada quando
+> `Display.getRotation()` muda (a dimensão WxH pode permanecer idêntica em 180°) e o
+> HUD usa a transformação de eixos do display sem reaplicar o sinal já tratado pelo
+> compositor. Configurações sem rotação continuam no caminho barato de recriação da
+> swapchain.
 
 ### Etapa 2.6 — Renderizador 2D *(3 semanas)*
 - **2.6.1** Sprite batcher, atlas dinâmico, ordenação por camada.
 - **2.6.2** Tilemap com chunking em GPU.
 - **2.6.3** Iluminação 2D e sombras.
 
-> **✅ CRITÉRIO DE SAÍDA (M2):** o **Sponza** (ou uma cena equivalente com ~500k triângulos, 30 luzes dinâmicas, materiais PBR e sombras) roda a **60 fps estáveis** num aparelho classe A, consumindo < 3.5 W, com o render graph provando fusão de subpasses e G-buffer memoryless. Roda também a 30 fps no perfil C com degradação automática.
+> **✅ CRITÉRIO DE SAÍDA (M2):** o **Sponza** (ou uma cena equivalente com ~500k triângulos, 30 luzes dinâmicas, materiais PBR e sombras) roda a **60 fps estáveis** num aparelho classe A, consumindo < 3.5 W, com o render graph provando fusão de subpasses e G-buffer memoryless. Roda também a **30 fps sustentados** no perfil C, com meta evolutiva de 45 fps, sem remover conteúdo: algoritmos/budgets globais podem variar apenas dentro do gate visual automatizado. O AVD C não fecha este critério; exige Mali físico e relatório reproduzível.
 
 ---
 
@@ -1731,6 +1835,18 @@ Esta fase existe para responder cinco perguntas que, se respondidas "não", muda
 - **3.3.4** Seleção: toque, laço, por hierarquia, por material; realce com contorno.
 - **3.3.5** Snap: grade, vértice, superfície, ângulo, com háptico.
 - **3.3.6** Modos de visualização de debug (overdraw, complexidade de shader, mipmaps, densidade de textura).
+
+> **Fatia runtime integrada em 30/08/2026 (3.3.1 + 4.1.5, ainda parcial):** o
+> benchmark da floresta possui `FirstPersonController` desacoplado da câmera,
+> joystick flutuante multi-touch, look por pointer ID, cápsula `CharacterVirtual`,
+> gravidade em fixed step, malha estática mundial e HUD de FPS Vulkan. A conversão
+> AEMAP→colisão vive no módulo `renderer`, aplica a matriz de cada draw e compacta
+> apenas vértices referenciados. Transparência visual e física são contratos
+> separados: BLEND permanece colidível; alpha-mask usa default não físico e aceita
+> `NoCollision`/`ForceCollision` como metadata de importação. No Xiaomi, a revisão
+> da estrada registrou 188.681 vértices/156.119 triângulos físicos e posições Y
+> estáveis com `ground=0`. O HUD final corrige ordem e bitmap dos dígitos, mas seu
+> APK v5 aguarda inspeção no aparelho porque a bateria encerrou a conexão ADB.
 
 ### Etapa 3.4 — Painéis principais *(8 semanas)*
 - **3.4.1** **Hierarquia**: árvore virtualizada, arrastar para reparentar, busca, multi-seleção, favoritos.
@@ -2001,6 +2117,15 @@ Esta fase existe para responder cinco perguntas que, se respondidas "não", muda
 - **7.6.3** Benchmark de calibração na primeira execução (5 s).
 - **7.6.4** Integração completa com o `PowerGovernor`.
 - **7.6.5** **Comparador visual** no editor: ver a cena nos 4 perfis lado a lado.
+- **7.6.6** `ResolvedRenderingPolicy` global e versionada: budgets de cadência,
+  visibilidade, LOD, sombras, GI/AO, pós, streaming, memória e trabalho assíncrono.
+- **7.6.7** Percursos determinísticos de benchmark (incluindo exterior com vegetação),
+  manifestos de APK/cena/câmera/GPU/driver e gates p50/p95/p99 por perfil.
+- **7.6.8** Harness Android: AVD C sintético para regressão e Game Loop/laboratório
+  físico para desempenho; resultado emulado nunca é publicado como FPS de aparelho.
+
+> A infraestrutura inicial compartilhada com 2.1.9 foi integrada em 29/08/2026.
+> O gate M7 continua exigindo hardware físico e os demais itens de escalabilidade.
 
 > **✅ CRITÉRIO DE SAÍDA (M7 — BETA):** uma cena de demonstração (interior arquitetônico + exterior com vegetação) com GI dinâmica, sombras virtuais, MicroMesh e upscaling roda a **60 fps num aparelho classe A** com < 4.5 W. Testadores externos não conseguem distinguir capturas do Aether de capturas de uma engine de desktop com configuração média.
 
@@ -2314,6 +2439,8 @@ aether/
 | ADR-10 | Um único pipeline de renderização escalável | URP/HDRP separados | O maior erro estratégico da Unity; fragmenta assets e conhecimento |
 | ADR-11 | Menu radial como mecanismo primário de comando | Barras de ferramentas; menus hierárquicos | Memória muscular direcional é o substituto touch dos atalhos de teclado |
 | ADR-12 | WAL de edição com recuperação total | Salvamento manual/autosave periódico | O SO mata processos mobile a qualquer momento |
+| ADR-013 | Backend 2D decidido por benchmark físico | Escolher Jolt restrito ou Box2D só por arquitetura/host | CPU, memória e qualidade equivalente precisam ser medidas em perfis B/C |
+| ADR-014 | Política global de renderização orientada por budgets | Tuning por cena/modelo; capabilities como velocidade; AVD como certificação | Uma fonte de verdade escala qualidade/desempenho sem fragmentar renderer e projetos |
 
 ---
 

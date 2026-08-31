@@ -23,6 +23,7 @@ bool readFrameProfilingOption(ANativeActivity *activity) {
 }
 
 void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
+                                  const FrameProfileContext &context,
                                   u32 instances, u32 width, u32 height) {
   if (!enabled_) return;
   profiler::FrameCounters counters{};
@@ -32,6 +33,28 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
     enabled_ = false;
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[FrameProfile] clock_gettime falhou; coleta desativada.");
     return;
+  }
+  if (contextPending_) {
+    const char *scene = context.sceneId != nullptr ? context.sceneId : "unknown";
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+        "[FrameProfileContext] {\"schemaVersion\":2,\"pid\":%d,\"epoch\":%u,"
+        "\"scene\":\"%s\",\"content_fingerprint\":\"%016llx\",\"target_fps\":%u,"
+        "\"gpu_isolation\":\"%s\","
+        "\"camera_locked\":%s,\"camera_pose\":[%.6f,%.6f,%.6f,%.6f,%.6f],"
+        "\"draws\":%u,\"materials\":%u,\"textures\":%u,\"triangles\":%u,"
+        "\"visible_draws\":%u,\"culled_draws\":%u,\"submitted_draw_calls\":%u,"
+        "\"visible_triangles\":%llu,\"submitted_triangles\":%llu,"
+        "\"instances\":%u,\"width\":%u,\"height\":%u}",
+        getpid(), epoch_, scene, static_cast<unsigned long long>(context.contentFingerprint),
+        context.targetFps, context.gpuIsolation != nullptr ? context.gpuIsolation : "full",
+        context.cameraLocked ? "true" : "false",
+        context.cameraPosition[0], context.cameraPosition[1], context.cameraPosition[2],
+        context.cameraYaw, context.cameraPitch, context.drawCount, context.materialCount,
+        context.textureCount, context.triangleCount, context.visibleDrawCount,
+        context.culledDrawCount, context.submittedDrawCallCount,
+        static_cast<unsigned long long>(context.visibleTriangleCount),
+        static_cast<unsigned long long>(context.submittedTriangleCount), instances, width, height);
+    contextPending_ = false;
   }
   const auto result = statistics_.record(counters, phases);
   if (result == profiler::FrameSampleResult::Invalid) {

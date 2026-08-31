@@ -1,0 +1,1 @@
+C:\Users\donod\Downloads\atchengine\android\app\build\intermediates\cxx\RelWithDebInfo\j601e441\obj\arm64-v8a

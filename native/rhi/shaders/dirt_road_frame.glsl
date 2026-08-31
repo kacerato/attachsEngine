@@ -5,7 +5,7 @@ layout(push_constant) uniform DirtRoadPushConstants {
   vec4 baseColorFactor;
   vec4 emissiveFactorStrength;   // rgb, strength
   uvec4 textureIndices;          // base, normal, metallic-roughness, emissive
-  uvec4 materialFlags;           // flags, UV selectors + cutoff8, encode sRGB, far plane bits
+  uvec4 materialFlags;           // flags, UV+cutoff8, output transfer bit0, far bits
   vec4 materialFactors;          // roughness, metallic, normal scale, specular
 } frame;
 

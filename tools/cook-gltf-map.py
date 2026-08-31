@@ -18,9 +18,9 @@ import numpy as np
 from PIL import Image
 
 MAP_MAGIC = 0x504D4541  # AEMP
-MAP_VERSION = 1
+MAP_VERSION = 2
 HEADER_SIZE = 144
-VERTEX_STRIDE = 72
+VERTEX_STRIDE = 48
 INVALID_TEXTURE = 0xFFFFFFFF
 MATERIAL_BLEND = 1 << 0
 MATERIAL_NORMAL_MAP = 1 << 1
@@ -45,6 +45,24 @@ def srgb_encode(value):
 
 def normalized(value):
     return value / np.maximum(np.linalg.norm(value, axis=-1, keepdims=True), 1e-8)
+
+
+def snorm16(values):
+    return np.rint(np.clip(values, -1.0, 1.0) * 32767.0).astype(np.int16)
+
+
+def vertex_record(position, normal, tangent, uv0, uv1, color):
+    """AEMAP v2: compact directions/color, preserve float position and UV.
+
+    UV stays float32 because real imported maps can use large repeating ranges;
+    blindly converting those coordinates to float16 visibly shifts texture phase.
+    """
+    normal4 = np.append(normal, 0.0)
+    packed_normal = snorm16(normal4)
+    packed_tangent = snorm16(tangent)
+    packed_color = np.rint(np.clip(color, 0.0, 1.0) * 255.0).astype(np.uint8)
+    return struct.pack("<3f4h4h2f2f4B", *position, *packed_normal, *packed_tangent,
+                       *uv0, *uv1, *packed_color)
 
 
 def halve(value):
@@ -306,7 +324,7 @@ def main():
                     tangent[:, 3] = 1.0
                 base_vertex = len(vertices)
                 for values in zip(position, normal, tangent, uv0, uv1, color):
-                    vertices.append(struct.pack("<3f3f4f2f2f4f", *np.concatenate(values)))
+                    vertices.append(vertex_record(*values))
                 first_index = len(indices)
                 indices.extend(int(value) + base_vertex for value in local_indices)
                 accessor_bounds = gltf["accessors"][attrs["POSITION"]]
@@ -349,7 +367,7 @@ def main():
 
     outputs = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
                for path in sorted(args.out.iterdir()) if path.is_file()}
-    manifest = {"version": 1, "format": "AEMAP-1", "sourceZip": args.source.name,
+    manifest = {"version": 2, "format": "AEMAP-2", "sourceZip": args.source.name,
                 "sourceSha256": hashlib.sha256(source_bytes).hexdigest(),
                 "license": "CC-BY-4.0", "author": "99.Miles",
                 "source": "https://sketchfab.com/3d-models/update-dirt-road-through-forest-c4676cdf7715484382400ff63faffd45",

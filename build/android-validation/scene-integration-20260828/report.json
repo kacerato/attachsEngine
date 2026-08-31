@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "status": "failed",
-  "device": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
-  "apkSha256": "C4C608A3633549CAE43B92CEB1B1CC36B9642CBBBB9AC30D0B67F2E09BE90958",
-  "cases": [],
-  "error": "Cena estática mudou após retomada; examine as capturas."
-}

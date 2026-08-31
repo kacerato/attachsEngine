@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "status": "failed",
-  "device": "adb-53e1eb7-cDkkst._adb-tls-connect._tcp",
-  "apkSha256": "DB9530C340DBF77938D3CB807CAE8FE036A432E503AD14087831F43A51B74833",
-  "cases": [],
-  "error": "Capturas completas diferem após retomada; examine cena, gestos e overlays do sistema."
-}

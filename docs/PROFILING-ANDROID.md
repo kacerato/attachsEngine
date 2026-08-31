@@ -30,9 +30,18 @@ isso não comprova scanout. O runner também tenta localizar a layer exata da
 NativeActivity e ler `SurfaceFlinger --latency`. Usa a segunda coluna,
 `actualPresentTime`, conforme o [FrameTracker do AOSP](https://android.googlesource.com/platform/frameworks/native/+/master/services/surfaceflinger/FrameTracker.cpp).
 Zeros/fences pendentes são ignorados, timestamps deduplicados e snapshots devem
-se sobrepor: perda de cobertura invalida o FPS, não vira queda de desempenho
-inventada. Layer ausente/ambígua registra indisponibilidade, sem substituir
-frames exibidos por envios Vulkan.
+se sobrepor ou tocar a fronteira dentro da cadência observada: perda de cobertura
+invalida a série, não vira queda de desempenho inventada. A consulta roda em job
+dedicado porque o ring do FrameTracker pode girar enquanto o processo principal
+coleta logcat/potência via ADB. Layer ausente/ambígua registra indisponibilidade,
+sem substituir a série do compositor por envios Vulkan.
+
+`actualPresentTime` mede quando cada frame novo acompanhado para a layer ficou visível;
+o FrameTracker avança quando a layer precisa de latência para um buffer latched, não em
+cada varredura repetida do painel. A janela dessa série, porém, é independente das
+janelas fechadas de 600 frames do runtime. Taxas de durações diferentes não devem ser
+subtraídas como se fossem o mesmo intervalo; o diagnóstico usa em conjunto presents,
+timestamps GPU, frames visíveis e modo físico ativo.
 
 A série do compositor e as janelas de CPU têm intervalos próprios, sobrepostos,
 cada um com duração registrada; não servem para atribuir um spike individual ao
@@ -42,7 +51,7 @@ mesmo frame. O clock do processo/thread segue o [contrato POSIX](https://pubs.op
 
 ```powershell
 .\android\gradlew.bat -p android :app:assembleDebug :app:assembleRelease :app:lintDebug --offline
-.\tools\validate-android-shell.ps1 -ProfileSeconds 60 -LifecycleCycles 0 -AllowScreenshotDifference -PreserveAppData
+.\tools\validate-android-shell.ps1 -Scene dirt-road -ProfileSeconds 60 -LifecycleCycles 0 -AllowScreenshotDifference -PreserveAppData
 .\tests\tools\test-android-frame-profile.ps1
 ```
 
@@ -65,7 +74,11 @@ revisão usaram Build Tools 35.0.0, NDK 27.1.12297006 e RelWithDebInfo no releas
 
 O relatório conserva hash do APK, revisão Git/worktree sujo, PID, build nativa,
 resolução, temperaturas/status térmico inicial/final, distribuições de janelas
-e timestamps de apresentação. O build agora publica C# Release framework-dependent
+e timestamps de apresentação. Para cada PID/epoch, o runtime emite separadamente
+`FrameProfileContext` schema 1 com sceneId autoritativo, fingerprint do pacote,
+câmera/lock, alvo de FPS e contagens de conteúdo. O host persiste esse contrato em
+`frame-contexts.jsonl`; a captura schema 2 falha se o contexto faltar, divergir da
+cena solicitada ou mudar silenciosamente. O build agora publica C# Release framework-dependent
 para `linux-bionic-arm64` automaticamente. Não usa a DLL legada de assets.
 `measurements.managedBuild` registra SHA-256 da DLL no APK e compara o build ID
 do APK com o confirmado pelo processo. `optimized` continua sendo o rótulo nativo;
@@ -90,10 +103,144 @@ não prova a causa de todos os picos. Um minuto não fecha o soak de 30 minutos,
 e um aparelho não fecha a matriz Mali/perfil C.
 
 Testes: 11 C++ para estatísticas, 5 C++ para extração atômica/build ID,
-6 C# para equivalência/ABI/zero alocação do workload, 19 PowerShell para frames,
+6 C# para equivalência/ABI/zero alocação do workload, 25 PowerShell para frames,
 13 para térmica/FPS de janela e 4 verificações dos assets gerados após build.
 
+Para regressão sintética no Android Studio, o perfil versionado não pretende emular
+a GPU nem a térmica do A32:
+
+```powershell
+.\tools\ensure-android-performance-avd.ps1 -PlanOnly
+# Após instalar system-images;android-35;google_apis;arm64-v8a pelo SDK Manager:
+.\tools\ensure-android-performance-avd.ps1 -Launch
+```
+
+O APK/runtime atuais são ARM64-only. Em host x64, WHPX não acelera essa ABI; o plano
+do script expõe `cpuAccelerationExpected=false`. Criar um AVD x86_64 sem antes portar
+NDK + CoreCLR só produziria um ambiente no qual o APK não instala.
+
 ## Resultado no Xiaomi SM8735/Adreno, Android 16
+
+### Cena real da floresta, Release e 120 Hz — 29/08/2026
+
+Captura longa:
+`build/android-validation/dirt-road-close-release-120hz-60s-20260829/report.json`.
+O contexto autoritativo foi `dirt-road`, fingerprint `dd907ec34bbebc21`, câmera
+travada `0,160,-100,0,0.08`, 2772×1280, 27 draws, 26 materiais, 70 texturas e
+341.109 triângulos. O Android confirmou `Surface.setFrameRate(120)` e modo físico
+ativo de 120 Hz.
+
+| Métrica | Resultado |
+|---|---:|
+| Presents concluídos | 78,124/s; pior janela de 600 frames 73,431/s |
+| CPU do processo | 1,408 ms média; 2,643 ms no pior p95; 10,806 ms máximo |
+| Thread de render | 0,849 ms média; 1,356 ms no pior p95 |
+| GPU do frame/geometria | 11,396 ms média; 18,409 ms no pior p95; 20,810 ms máximo |
+| Acquire/fence | 12,007 ms média; 19,654 ms no pior p95 |
+| Temperatura/status | 38,3→40,0 °C; status 0 nas pontas; aparelho alimentado externamente |
+
+A CPU possui folga; a GPU e sua variância dominam. O p95 de 18,409 ms não cabe no
+orçamento de 8,33 ms de 120 Hz e ainda excede o alvo confortável de 60 Hz. A série
+SurfaceFlinger dessa captura foi invalidada porque o coletor sequencial perdeu a
+janela circular; ela não é usada para alegar FPS exibido.
+
+Após mover a leitura para o job dedicado, o smoke
+`dirt-road-close-release-120hz-display-fix-v5-20260829/` obteve 1.710 eventos
+`actualPresentTime` em 16,784 s contínuos (101,82/s) e 2.400 presents da engine em
+27,330 s (87,82/s). As janelas têm início/fim diferentes e atravessam estados de carga
+distintos; essa diferença não mede descarte nem duplicação. O smoke valida a cobertura do coletor, não substitui o
+baseline longo nem fecha um gate de 120 FPS. O parser ADB também aceita o sufixo mDNS
+com espaço que o Android adiciona ao republicar um serviço duplicado.
+
+### A/B de backface culling — rejeitado em 29/08/2026
+
+Foi testada uma política global, sem consulta a nome de cena ou aparelho: opacos e
+blends single-sided usavam backface culling com winding corrigido pela handedness da
+transform; `doubleSided` e `MASK` AEMAP v1 permaneciam dupla face. A exceção conservadora
+para `MASK` reduziu a perda da primeira variante, mas não fechou o gate visual. O runner
+marcou cada execução como estável antes/depois; isso não significa igualdade entre APKs.
+Na comparação cruzada, os hashes diferiram, 334.281 de 3.548.160 pixels (9,42%) mudaram,
+o erro absoluto médio RGB foi 2,536 e ainda havia remoção visível de terreno/folhagem.
+
+O par consecutivo, mesma cena/fingerprint/câmera/resolução/alvo e `thermalStatus=0`, foi:
+
+| Variante | Engine | GPU média | GPU pior p95 | CPU média | SurfaceFlinger | Temperatura |
+|---|---:|---:|---:|---:|---:|---:|
+| baseline sem culling | 97,463 presents/s | 9,035 ms | 9,891 ms | 1,244 ms | 92,047/s | 33,6→33,6 °C |
+| culling conservador | 86,339 presents/s | 9,983 ms | 13,652 ms | 1,548 ms | 88,413/s | 34,2→34,2 °C |
+
+Relatórios: `dirt-road-close-release-ab-baseline-120hz-20260829/report.json` e
+`dirt-road-close-release-ab-culling-120hz-20260829/report.json`. Um smoke anterior da
+variante marcou 90,264 presents/s e GPU média 9,744 ms, confirmando que uma rodada curta
+isolada não basta. Como imagem e caminho crítico pioraram, a implementação foi removida.
+A próxima tentativa exige atribuição AGI e semântica de cobertura versionada no AEMAP;
+estes dados permanecem como regressão negativa, não como benchmark de uma feature integrada.
+
+### Isolamento compilado de custo GPU — 30/08/2026
+
+O runner aceita `-GpuIsolation full|no-normal|no-ibl|base-color` exclusivamente para
+diagnóstico. O runtime valida o valor, publica o modo no `FrameProfileContext` e mantém
+`full` como fallback/default. O modo é uma specialization constant do fragment shader
+na criação do pipeline Vulkan: o compilador pode eliminar o caminho isolado e o passe
+de cobertura, que usa outro shader, não recebe uma constante inexistente. Nenhum desses
+modos é Project Setting, preset de qualidade ou condição por cena.
+
+A primeira matriz usava branch uniforme em push constant. Ela validou automação e
+identidade, mas não permite atribuição fina: o controle `full` caiu de 90,808 para
+70,786 presents/s no começo/fim da sequência, sem troca de APK, cena ou câmera. Os
+resultados intermediários `no-normal`/`no-ibl` não são tratados como custo dessas
+features.
+
+Após converter os modos em variantes compiladas, foi executado o A/B intercalado no
+mesmo APK Release, Xiaomi SM8735/Adreno, 2772×1280, 120 Hz, cena/fingerprint
+`dirt-road`/`dd907ec34bbebc21` e pose `0,160,-100,0,0.08`:
+
+| Execução | Engine | GPU média | pior p95 GPU | CPU média | SurfaceFlinger | Temperatura |
+|---|---:|---:|---:|---:|---:|---:|
+| `full-a` | 92,148/s | 9,715 ms | 9,943 ms | 1,130 ms | 93,446/s | 35,0→36,0 °C |
+| `base-color` | 86,937/s | 10,080 ms | 12,660 ms | 1,510 ms | 88,507/s | 36,3→36,3 °C |
+| `full-b` | 82,124/s | 11,040 ms | 12,770 ms | 1,130 ms | 91,612/s | 37,0→37,0 °C |
+
+Todas tiveram `thermalStatus=0`, 27 draws, 341.109 triângulos e o mesmo fingerprint.
+`base-color` preserva geometria, depth, base texture e cobertura alpha, retirando normal,
+MR, iluminação, IBL, emissivo e tonemap; como ela não superou os controles, não há base
+para degradar materiais nem priorizar micro-otimização PBR. A diferença entre os dois
+controles também impede uma porcentagem causal precisa. A próxima captura deve separar
+vertex/raster/tiles, bandwidth e espera de apresentação com AGI/Android Performance
+Analyzer. Relatórios: `gpu-specialized-full-a-120hz-20260830/`,
+`gpu-specialized-base-color-120hz-20260830/` e
+`gpu-specialized-full-b-120hz-20260830/`.
+
+### AEMAP v2 — compactação de vértices, 30/08/2026
+
+Como o fragment mínimo não trouxe ganho e os 27 bounds grosseiros continuaram todos
+visíveis, o próximo A/B preservou conteúdo e reduziu tráfego de vertex input. O AEMAP
+v2 usa 48 bytes/vértice em vez de 72: posição/UV float32, normal/tangente SNORM16 e cor
+UNORM8. O runtime continua decodificando v1; não há flag de cena ou preset reduzido.
+
+O asset caiu de 34.688.380 para 24.491.996 bytes e o APK de 402.443.803 para
+392.244.763 bytes. A comparação com o último screenshot v1, mesma câmera e resolução,
+teve 523/3.548.160 pixels diferentes (0,0147%), máximo 1/255, p99 zero e erro RGB médio
+0,000049.
+
+| Pacote/run | Engine | pior janela | GPU média | pior p95 GPU | CPU média | SurfaceFlinger | Temperatura |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| v1 `full-a` | 92,148/s | 90,828/s | 9,715 ms | 9,943 ms | 1,130 ms | 93,446/s | 35,0→36,0 °C |
+| v1 `full-b` | 82,124/s | 72,140/s | 11,040 ms | 12,770 ms | 1,130 ms | 91,612/s | 37,0→37,0 °C |
+| v2 `full` | 99,395/s | 88,946/s | 8,887 ms | 10,011 ms | 1,299 ms | 110,202/s | 36,3→36,3 °C |
+| v2 `repeat` | 117,294/s | 116,356/s | 7,420 ms | 8,147 ms | 1,444 ms | 111,855/s | 37,1→37,1 °C |
+
+Todos usaram 120 Hz, 2772×1280, 341.109 triângulos e `thermalStatus=0`. O fingerprint
+mudou de `dd907ec34bbebc21` para `18faf0f1d9d8ee90`, como deve ocorrer quando os bytes
+do asset mudam. As faixas melhoraram sem perder detalhe, mas as janelas Engine e
+SurfaceFlinger são independentes e ainda há variação entre runs; fechar com sequência
+A/B longa, soak e Mali antes de promover o resultado a gate multi-hardware.
+
+Relatórios: `aemap-v2-full-120hz-20260830/` e
+`aemap-v2-full-repeat-120hz-20260830/`. APK SHA-256:
+`8DC0ACE8559EAFA5F70BAE950EDA233119DBE109117D7D4DE9148F26E9BCC375`.
+
+### PoC-A de 5.000 cubos — 28/08/2026
 
 Captura principal: `build/android-validation/poc-a-profile-release-display-20260828/report.json`.
 Nativo otimizado, 2772×1280, PID 21850; 4.200 intervalos CPU em 69,940 s e

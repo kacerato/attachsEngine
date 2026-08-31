@@ -201,6 +201,14 @@ void AetherPhysics_DestroyWorld(AetherPhysicsWorld *world);
 /// os DOFs travados) e esta fronteira recusa a criação em vez de deixar o processo abortar.
 AetherBodyHandle AetherPhysics_CreateBody(AetherPhysicsWorld *world, const AetherBodyDesc *desc);
 
+/// Cria um único corpo estático de triangle mesh a partir de posições e índices
+/// já cozidos. A função copia/otimiza os dados no MeshShape do Jolt; os buffers
+/// do chamador podem ser liberados após o retorno. Destinado a colisão de mundo
+/// estático importada, nunca a meshes dinâmicas. Índices devem formar triângulos.
+AetherBodyHandle AetherPhysics_CreateStaticTriangleMesh(
+    AetherPhysicsWorld *world, const AetherVec3 *vertices, ae::u32 vertexCount,
+    const ae::u32 *indices, ae::u32 indexCount, float friction);
+
 /// Variante versionada que expõe sensor/filtro sem alterar o layout V1. Rejeita
 /// versão, tamanho e bits de filtro desconhecidos devolvendo Invalid.
 AetherBodyHandle AetherPhysics_CreateBodyV2(AetherPhysicsWorld *world, const AetherBodyDescV2 *desc);

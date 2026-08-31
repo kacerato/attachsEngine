@@ -12,10 +12,20 @@
 #pragma clang diagnostic ignored "-Wunused-variable"
 #pragma clang diagnostic ignored "-Wunused-private-field"
 #pragma clang diagnostic ignored "-Wmissing-field-initializers"
+#elif defined(__GNUC__)
+// VMA is vendored third-party code. Keep -Werror for our implementation while
+// preventing compiler-version-specific warnings inside the single-header
+// implementation from breaking the engine build.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #endif
 #include <vk_mem_alloc.h>
 #if defined(__clang__)
 #pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
 #endif
 #include "rhi/memory_allocator.h"
 

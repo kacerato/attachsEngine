@@ -15,6 +15,30 @@ function New-TestWindow {
     }
     return [pscustomobject]$window
 }
+function New-TestContext {
+    param([int]$Epoch = 1, [string]$Scene = 'poc-a-5000-textured-cubes', [int]$Instances = 5000)
+    return [pscustomobject][ordered]@{
+        schemaVersion = 1; pid = 7; epoch = $Epoch; scene = $Scene
+        content_fingerprint = '0123456789abcdef'; target_fps = 60; camera_locked = $true
+        gpu_isolation = 'full'
+        camera_pose = @(1.0, 2.0, 3.0, 0.25, -0.5); draws = $Instances
+        materials = 0; textures = 0; triangles = 0; instances = $Instances
+        width = 2772; height = 1280
+    }
+}
+function Convert-TestContext {
+    param($Context)
+    return '[FrameProfileContext] ' + ($Context | ConvertTo-Json -Depth 5 -Compress)
+}
+function Get-TestCapture {
+    param([object[]]$Windows, [double]$MinimumSeconds,
+          [string]$Scene = 'poc-a-5000-textured-cubes')
+    $latest = @($Windows | Sort-Object window)[-1]
+    $context = New-TestContext -Epoch $latest.epoch -Scene $Scene -Instances $latest.instances
+    $context.width = $latest.width; $context.height = $latest.height
+    return Get-FrameProfileCapture -Windows $Windows -MinimumSeconds $MinimumSeconds `
+        -Scene $Scene -Contexts @($context)
+}
 function Convert-TestWindow {
     param($Window)
     $wire = $Window | ConvertTo-Json -Depth 5 | ConvertFrom-Json
@@ -49,11 +73,30 @@ Test-Profile 'JSON nativo válido' {
 Test-Profile 'não mistura outro processo' {
     Assert-Profile (@(ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow)) 8).Count -eq 0)
 }
+Test-Profile 'contexto nativo válido e idempotente' {
+    $line = Convert-TestContext (New-TestContext)
+    $contexts = @(ConvertFrom-FrameProfileContextLog "$line`n$line" 7)
+    Assert-Profile ($contexts.Count -eq 1 -and $contexts[0].scene -eq 'poc-a-5000-textured-cubes')
+}
+Test-Profile 'contexto valida e preserva isolamento GPU' {
+    $context = New-TestContext
+    $context.gpu_isolation = 'no-ibl'
+    $decoded = @(ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7)
+    Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].gpu_isolation -eq 'no-ibl')
+    $context.gpu_isolation = 'inventado'
+    Assert-Rejected { ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7 }
+}
+Test-Profile 'contexto conflitante no mesmo epoch falha' {
+    $a = New-TestContext
+    $b = New-TestContext
+    $b.content_fingerprint = 'fedcba9876543210'
+    Assert-Rejected { ConvertFrom-FrameProfileContextLog "$(Convert-TestContext $a)`n$(Convert-TestContext $b)" 7 }
+}
 Test-Profile 'aceita contagem explícita da cena real' {
     $window = New-TestWindow
     $window.instances = 27
     $windows = @(ConvertFrom-FrameProfileLog (Convert-TestWindow $window) 7 27)
-    $capture = Get-FrameProfileCapture $windows 10 'dirt-road'
+    $capture = Get-TestCapture $windows 10 'dirt-road'
     Assert-Profile ($capture.scene -eq 'dirt-road' -and $capture.windows[0].instances -eq 27)
 }
 Test-Profile 'duplicatas não aumentam duração' {
@@ -79,17 +122,17 @@ Test-Profile 'métrica nula não vira zero' {
     Assert-Rejected { ConvertFrom-FrameProfileLog (Convert-TestWindow $window) 7 }
 }
 Test-Profile 'captura exige duração e continuidade' {
-    Assert-Profile ($null -eq (Get-FrameProfileCapture @((New-TestWindow)) 20))
-    Assert-Rejected { Get-FrameProfileCapture @((New-TestWindow 1), (New-TestWindow 3)) 20 }
+    Assert-Profile ($null -eq (Get-TestCapture @((New-TestWindow)) 20))
+    Assert-Rejected { Get-TestCapture @((New-TestWindow 1), (New-TestWindow 3)) 20 }
 }
 Test-Profile 'reset de lifecycle não soma epochs' {
-    Assert-Profile ($null -eq (Get-FrameProfileCapture @((New-TestWindow 1 1), (New-TestWindow 2 2)) 20))
+    Assert-Profile ($null -eq (Get-TestCapture @((New-TestWindow 1 1), (New-TestWindow 2 2)) 20))
 }
 Test-Profile 'médias agregadas não fingem percentil global' {
     $a = New-TestWindow 1
     $b = New-TestWindow 2
     $b.process_cpu_ms = [pscustomobject]@{ mean = 2.0; p50 = 2.0; p95 = 3.0; p99 = 4.0; max = 5.0 }
-    $capture = Get-FrameProfileCapture @($a, $b) 20
+    $capture = Get-TestCapture @($a, $b) 20
     Assert-Profile ($capture.metrics.process_cpu_ms.mean -eq 1.5)
     Assert-Profile ($capture.metrics.process_cpu_ms.worstWindowP95 -eq 3)
     Assert-Profile (-not $capture.pocA.cpuBudgetPassed -and -not $capture.pocA.accepted)
@@ -97,21 +140,48 @@ Test-Profile 'médias agregadas não fingem percentil global' {
 Test-Profile 'limite CPU é estritamente menor que 3 ms' {
     $window = New-TestWindow
     $window.process_cpu_ms.max = 3
-    Assert-Profile (-not (Get-FrameProfileCapture @($window) 10).pocA.cpuBudgetPassed)
+    Assert-Profile (-not (Get-TestCapture @($window) 10).pocA.cpuBudgetPassed)
 }
 Test-Profile 'CPU verde não comprova FPS exibido' {
-    $capture = Get-FrameProfileCapture @((New-TestWindow)) 10
+    $capture = Get-TestCapture @((New-TestWindow)) 10
     Assert-Profile ($capture.pocA.cpuBudgetPassed -and -not $capture.pocA.displayedFpsMeasured -and -not $capture.pocA.accepted)
 }
 Test-Profile 'mudança de configuração no primeiro intervalo falha' {
     $first = New-TestWindow 1
     $first.width = 1280
-    Assert-Rejected { Get-FrameProfileCapture @($first, (New-TestWindow 2)) 20 }
+    Assert-Rejected { Get-TestCapture @($first, (New-TestWindow 2)) 20 }
+}
+Test-Profile 'captura rejeita rótulo de cena divergente do runtime' {
+    $window = New-TestWindow
+    $context = New-TestContext -Scene 'dirt-road'
+    Assert-Rejected { Get-FrameProfileCapture @($window) 10 'poc-a-5000-textured-cubes' @($context) }
+}
+Test-Profile 'captura exige contexto nativo correspondente' {
+    Assert-Rejected { Get-FrameProfileCapture @((New-TestWindow)) 10 'poc-a-5000-textured-cubes' @() }
 }
 Test-Profile 'FrameTracker usa segunda coluna e ignora fences pendentes' {
     $text = "16666666`n10 100 20`n11 0 22`n12 9223372036854775807 23`n13 200 24"
     $times = @(ConvertFrom-SurfaceFrameLatency $text)
     Assert-Profile ($times.Count -eq 2 -and $times[0] -eq 100 -and $times[1] -eq 200)
+}
+Test-Profile 'snapshots SurfaceFlinger sobrepostos preservam continuidade' {
+    $state = New-SurfaceFrameCaptureState
+    $first = @(10000000L, 20000000L, 30000000L)
+    $second = @(20000000L, 30000000L, 40000000L)
+    Assert-Profile (@(Merge-SurfaceFrameSnapshot $state $first).Count -eq 3)
+    Assert-Profile (@(Merge-SurfaceFrameSnapshot $state $second).Count -eq 1)
+    Assert-Profile ($state.continuous -and $state.timestamps.Count -eq 4 -and $state.polls -eq 2)
+}
+Test-Profile 'fronteira adjacente é aceita mas perda do buffer é rejeitada' {
+    $adjacent = New-SurfaceFrameCaptureState
+    Merge-SurfaceFrameSnapshot $adjacent @(10000000L, 20000000L, 30000000L) | Out-Null
+    Merge-SurfaceFrameSnapshot $adjacent @(40000000L, 50000000L, 60000000L) | Out-Null
+    Assert-Profile $adjacent.continuous
+
+    $lost = New-SurfaceFrameCaptureState
+    Merge-SurfaceFrameSnapshot $lost @(10000000L, 20000000L, 30000000L) | Out-Null
+    Merge-SurfaceFrameSnapshot $lost @(130000000L, 140000000L, 150000000L) | Out-Null
+    Assert-Profile (-not $lost.continuous)
 }
 Test-Profile 'FPS exibido usa intervalos únicos ordenados' {
     $summary = Get-SurfaceFrameSummary @(30000000, 10000000, 20000000, 20000000)

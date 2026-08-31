@@ -54,7 +54,10 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
             check(actualHash == expectedHash) { "Cooked material asset checksum mismatch: $name" }
         }
         val mapManifest = JsonSlurper().parse(file("../../samples/dirt-road/manifest.json")) as Map<*, *>
-        check(mapManifest["version"] == 1 && mapManifest["format"] == "AEMAP-1") {
+        val mapVersion = (mapManifest["version"] as? Number)?.toInt()
+        val mapFormat = mapManifest["format"] as? String
+        check((mapVersion == 1 && mapFormat == "AEMAP-1") ||
+              (mapVersion == 2 && mapFormat == "AEMAP-2")) {
             "Unsupported dirt road package manifest"
         }
         val mapOutputs = mapManifest["outputs"] as Map<*, *>

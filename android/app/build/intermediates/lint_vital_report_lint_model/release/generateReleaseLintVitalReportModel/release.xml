@@ -26,6 +26,6 @@
       applicationId="dev.aether.editor"
       generatedSourceFolders="build\generated\ap_generated_sources\release\out"
       generatedResourceFolders="build\generated\res\resValues\release"
-      desugaredMethodsFiles="C:\Users\jamaa\.gradle\caches\8.10.2\transforms\fb369a15a261e10bd8dd3a40d0d93654\transformed\D8BackportedDesugaredMethods.txt">
+      desugaredMethodsFiles="C:\Users\donod\.gradle\caches\8.10.2\transforms\fb369a15a261e10bd8dd3a40d0d93654\transformed\D8BackportedDesugaredMethods.txt">
   </artifact>
 </variant>

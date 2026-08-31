@@ -88,4 +88,41 @@ bool readFloatLaunchOption(ANativeActivity *activity, const char *option, float 
   return true;
 }
 
+bool readUnsignedLaunchOption(ANativeActivity *activity, const char *option, u32 &value) {
+  if (activity == nullptr || activity->vm == nullptr || option == nullptr) return false;
+  JNIEnv *env = nullptr;
+  bool attachedHere = false;
+  const jint result = activity->vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
+  if (result == JNI_EDETACHED) {
+    if (activity->vm->AttachCurrentThread(&env, nullptr) != JNI_OK) return false;
+    attachedHere = true;
+  } else if (result != JNI_OK) {
+    return false;
+  }
+  jint decoded = -1;
+  const bool localFrame = env->PushLocalFrame(8) == JNI_OK;
+  const bool ok = localFrame && [&]() {
+    jclass activityClass = env->GetObjectClass(activity->clazz);
+    if (activityClass == nullptr) return false;
+    jmethodID getIntent = env->GetMethodID(activityClass, "getIntent", "()Landroid/content/Intent;");
+    if (getIntent == nullptr) return false;
+    jobject intent = env->CallObjectMethod(activity->clazz, getIntent);
+    if (env->ExceptionCheck() || intent == nullptr) return false;
+    jclass intentClass = env->GetObjectClass(intent);
+    if (intentClass == nullptr) return false;
+    jmethodID getInt = env->GetMethodID(intentClass, "getIntExtra", "(Ljava/lang/String;I)I");
+    if (getInt == nullptr) return false;
+    jstring key = env->NewStringUTF(option);
+    if (key == nullptr) return false;
+    decoded = env->CallIntMethod(intent, getInt, key, static_cast<jint>(-1));
+    return !env->ExceptionCheck();
+  }();
+  if (env->ExceptionCheck()) env->ExceptionClear();
+  if (localFrame) env->PopLocalFrame(nullptr);
+  if (attachedHere) activity->vm->DetachCurrentThread();
+  if (!ok || decoded < 0) return false;
+  value = static_cast<u32>(decoded);
+  return true;
+}
+
 } // namespace ae::platform::android

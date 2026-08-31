@@ -1,6 +1,7 @@
 #include "platform/android/dirt_road_resources.h"
 
 #include "platform/android/android_texture_loader.h"
+#include "renderer/spatial_render_chunks.h"
 
 #include <android/log.h>
 #include <algorithm>
@@ -25,16 +26,48 @@ u32 readWord(const std::vector<u8> &bytes, usize offset) {
 }
 
 bool decodeEnvironment(const std::vector<u8> &bytes, EnvironmentLighting &lighting) {
-  if (bytes.size() != 80 || readWord(bytes, 0) != 0x4E454541 || readWord(bytes, 4) != 1 ||
+  if (bytes.size() < 16 || readWord(bytes, 0) != 0x4E454541 ||
       readWord(bytes, 8) != bytes.size()) return false;
-  float values[16]{};
-  for (usize index = 0; index < 16; ++index)
+  const u32 version = readWord(bytes, 4);
+  const usize valueCount = version == 1 ? 16 : version == 2 ? 32 : 0;
+  if (valueCount == 0 || bytes.size() != 16 + valueCount * sizeof(float)) return false;
+
+  // AEEN v2 owns all global visual parameters. Defaults only keep v1 projects
+  // readable; they are migration data, not per-scene renderer constants.
+  EnvironmentLighting decoded{};
+  const float skyZenithCloudCoverage[4] = {0.08f, 0.30f, 0.72f, 0.46f};
+  const float skyHorizonCloudDensity[4] = {0.62f, 0.79f, 1.08f, 0.88f};
+  const float groundColorSaturation[4] = {0.75f, 0.82f, 0.60f, 1.0f};
+  const float cloudLightWindSpeed[4] = {1.35f, 1.42f, 1.52f, 0.0035f};
+  std::memcpy(decoded.skyZenithCloudCoverage, skyZenithCloudCoverage,
+              sizeof(skyZenithCloudCoverage));
+  std::memcpy(decoded.skyHorizonCloudDensity, skyHorizonCloudDensity,
+              sizeof(skyHorizonCloudDensity));
+  std::memcpy(decoded.groundColorSaturation, groundColorSaturation,
+              sizeof(groundColorSaturation));
+  std::memcpy(decoded.cloudLightWindSpeed, cloudLightWindSpeed,
+              sizeof(cloudLightWindSpeed));
+
+  float values[32]{};
+  for (usize index = 0; index < valueCount; ++index)
     values[index] = std::bit_cast<float>(readWord(bytes, 16 + index * 4));
-  if (!std::all_of(values, values + 16, [](float value) { return std::isfinite(value); })) return false;
-  std::memcpy(&lighting, values, sizeof(values));
-  return
-         lighting.sunDirectionIntensity[3] >= 0 && lighting.ambientColorStrength[3] >= 0 &&
-         lighting.parameters[0] > 0 && lighting.parameters[2] >= 0;
+  if (!std::all_of(values, values + valueCount,
+                   [](float value) { return std::isfinite(value); })) return false;
+  std::memcpy(&decoded, values, valueCount * sizeof(float));
+  if (decoded.sunDirectionIntensity[3] < 0 || decoded.ambientColorStrength[3] < 0 ||
+      decoded.parameters[0] <= 0 || decoded.parameters[2] < 0 ||
+      decoded.groundColorSaturation[3] < 0) return false;
+  const float sunLength = std::sqrt(decoded.sunDirectionIntensity[0] *
+                                        decoded.sunDirectionIntensity[0] +
+                                    decoded.sunDirectionIntensity[1] *
+                                        decoded.sunDirectionIntensity[1] +
+                                    decoded.sunDirectionIntensity[2] *
+                                        decoded.sunDirectionIntensity[2]);
+  if (sunLength < 1.0e-5f) return false;
+  for (u32 axis = 0; axis < 3; ++axis)
+    decoded.sunDirectionIntensity[axis] /= sunLength;
+  lighting = decoded;
+  return true;
 }
 }
 
@@ -54,9 +87,21 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
     return false;
   }
   header_ = package.header;
+  packageFingerprint_ = package.contentFingerprint;
   textureRecords_.assign(package.textures.begin(), package.textures.end());
   materials_.assign(package.materials.begin(), package.materials.end());
-  draws_.assign(package.draws.begin(), package.draws.end());
+  if (!renderer::buildStaticCollisionMesh(package, collisionMesh_)) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag,
+                        "[DirtRoad] falha ao construir colisão estática mundial.");
+    return false;
+  }
+  renderer::SpatialRenderChunks renderChunks;
+  if (!renderer::buildSpatialRenderChunks(package, {}, renderChunks)) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag,
+                        "[DirtRoad] falha ao construir render chunks espaciais.");
+    return false;
+  }
+  draws_ = std::move(renderChunks.draws);
 
   auto &allocator = device.memoryAllocator();
   rhi::BufferDesc buffer{};
@@ -67,10 +112,11 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
   if (!allocator.createBuffer(buffer, &vertices_) ||
       !upload.uploadBuffer(allocator, package.vertices.data(), package.vertices.size(), vertices_,
                            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT)) return false;
-  buffer.sizeBytes = package.indices.size_bytes();
+  buffer.sizeBytes = renderChunks.indices.size() * sizeof(u32);
   buffer.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
   if (!allocator.createBuffer(buffer, &indices_) ||
-      !upload.uploadBuffer(allocator, package.indices.data(), package.indices.size_bytes(), indices_,
+      !upload.uploadBuffer(allocator, renderChunks.indices.data(),
+                           renderChunks.indices.size() * sizeof(u32), indices_,
                            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_ACCESS_INDEX_READ_BIT)) return false;
 
   VkPhysicalDeviceFeatures features{};
@@ -121,8 +167,9 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
                           128 * Megabyte, environmentSampling, environmentImage_,
                           environmentSampler_, cancel, "Environment")) return false;
   __android_log_print(ANDROID_LOG_INFO, LogTag,
-      "[DirtRoad] ready draws=%u materials=%u textures=%u triangles=%u encoding=%s load_ms=%.3f",
-      header_.drawCount, header_.materialCount, header_.textureCount, header_.triangleCount,
+      "[DirtRoad] ready source_draws=%u render_chunks=%zu materials=%u textures=%u triangles=%u encoding=%s load_ms=%.3f",
+      header_.drawCount, draws_.size(), header_.materialCount, header_.textureCount,
+      header_.triangleCount,
       astc ? "ASTC6x6" : "RGBA8-fallback",
       std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
   return true;
@@ -136,10 +183,24 @@ platform::FreeCameraState DirtRoadResources::defaultCamera() const {
   return state;
 }
 
+platform::FreeCameraState DirtRoadResources::defaultGameplayCamera() const {
+  platform::FreeCameraState state{};
+  state.position[0] = (header_.boundsMinimum[0] + header_.boundsMaximum[0]) * 0.5f;
+  // The importer already chooses a useful eye-height from the complete map
+  // bounds. Reuse that authored/global height while moving X/Z into the map;
+  // using boundsMinimum put the player below sloped terrain in this asset.
+  state.position[1] = header_.defaultCameraPosition[1];
+  state.position[2] = (header_.boundsMinimum[2] + header_.boundsMaximum[2]) * 0.5f;
+  state.yaw = header_.defaultCameraYaw;
+  state.pitch = 0.0f;
+  return state;
+}
+
 void DirtRoadResources::shutdown() {
   environmentSampler_.shutdown();
   environmentImage_.reset();
   environmentLighting_ = {};
+  collisionMesh_.clear();
   for (auto &sampler : samplers_) sampler.shutdown();
   for (auto &image : images_) image.reset();
   samplers_.clear();
@@ -150,6 +211,7 @@ void DirtRoadResources::shutdown() {
   materials_.clear();
   textureRecords_.clear();
   header_ = {};
+  packageFingerprint_ = 0;
 }
 
 } // namespace ae::platform::android

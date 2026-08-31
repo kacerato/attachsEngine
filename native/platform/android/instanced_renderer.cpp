@@ -10,6 +10,7 @@
 #include "rhi/shaders/dirt_road_coverage_spirv.h"
 #include "rhi/shaders/dirt_road_coverage_fallback_spirv.h"
 #include "rhi/shaders/dirt_road_sky_spirv.h"
+#include "rhi/shaders/runtime_hud_spirv.h"
 #include "renderer/sphere_mesh.h"
 
 #include <android/log.h>
@@ -61,6 +62,26 @@ struct DirtRoadPushConstants {
   float materialFactors[4];
 };
 static_assert(sizeof(DirtRoadPushConstants) == 128);
+
+// Per-frame data is updated once after the in-flight fence is acquired. Camera
+// trigonometry belongs on the CPU once per frame, not in every vertex
+// invocation. The first 128 bytes intentionally preserve EnvironmentLighting's
+// serialized ABI; the trailing rows are transient runtime data.
+struct DirtRoadFrameUniform {
+  EnvironmentLighting environment{};
+  float worldToViewRow0[4]{1.0f, 0.0f, 0.0f, 0.0f};
+  float worldToViewRow1[4]{0.0f, 1.0f, 0.0f, 0.0f};
+  float worldToViewRow2[4]{0.0f, 0.0f, 1.0f, 0.0f};
+};
+static_assert(sizeof(DirtRoadFrameUniform) == 176);
+
+struct RuntimeHudPushConstants {
+  float centerHalfSize[4];
+  float displaySize[4];
+  float surfaceTransform[4];
+  u32 parameters[4];
+};
+static_assert(sizeof(RuntimeHudPushConstants) == 64);
 
 bool formatSupportsDepthAttachment(VkPhysicalDevice physicalDevice, VkFormat format) {
   VkFormatProperties properties{};
@@ -206,6 +227,21 @@ bool InstancedRenderer::createPipeline() {
   stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
   stages[1].module = fragModule;
   stages[1].pName = "main";
+  // Diagnostic variants are true pipeline variants. A specialization
+  // constant lets the driver eliminate the isolated shader path, avoiding
+  // register pressure and instruction scheduling from a runtime uniform
+  // branch. Normal rendering specializes to Full (zero).
+  const u32 gpuIsolationValue = static_cast<u32>(gpuCostIsolation_);
+  VkSpecializationMapEntry gpuIsolationEntry{};
+  gpuIsolationEntry.constantID = 0;
+  gpuIsolationEntry.offset = 0;
+  gpuIsolationEntry.size = sizeof(gpuIsolationValue);
+  VkSpecializationInfo gpuIsolationInfo{};
+  gpuIsolationInfo.mapEntryCount = 1;
+  gpuIsolationInfo.pMapEntries = &gpuIsolationEntry;
+  gpuIsolationInfo.dataSize = sizeof(gpuIsolationValue);
+  gpuIsolationInfo.pData = &gpuIsolationValue;
+  stages[1].pSpecializationInfo = dirtRoadPreview_ ? &gpuIsolationInfo : nullptr;
 
   // Um binding por instância (VK_VERTEX_INPUT_RATE_INSTANCE) — o cubo em si
   // não tem vertex buffer (gerado por gl_VertexIndex igual ao TriangleRenderer,
@@ -216,7 +252,7 @@ bool InstancedRenderer::createPipeline() {
   binding.stride = instanceStride();
   binding.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 
-  VkVertexInputAttributeDescription attributes[11]{};
+  VkVertexInputAttributeDescription attributes[14]{};
   attributes[0].location = 0;
   attributes[0].binding = 1;
   attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
@@ -230,7 +266,9 @@ bool InstancedRenderer::createPipeline() {
       attributes[i] = {i, 1, VK_FORMAT_R32G32B32A32_SFLOAT, i * 16u};
     }
   }
-  VkVertexInputBindingDescription bindings[2]={binding,{0,static_cast<u32>(materialPreview_?sizeof(renderer::MeshVertex):renderer::MapVertexStride),VK_VERTEX_INPUT_RATE_VERTEX}};
+  const u32 mapVertexStride = dirtRoadPreview_ ? dirtRoadResources_.header().vertexStride
+                                                : renderer::MapVertexStride;
+  VkVertexInputBindingDescription bindings[2]={binding,{0,static_cast<u32>(materialPreview_?sizeof(renderer::MeshVertex):mapVertexStride),VK_VERTEX_INPUT_RATE_VERTEX}};
   if (materialPreview_) {
     attributes[5]={5,0,VK_FORMAT_R32G32B32_SFLOAT,0};
     attributes[6]={6,0,VK_FORMAT_R32G32B32_SFLOAT,12};
@@ -239,19 +277,23 @@ bool InstancedRenderer::createPipeline() {
   }
   if (dirtRoadPreview_) {
     attributes[0]={0,0,VK_FORMAT_R32G32B32_SFLOAT,0};
-    attributes[1]={1,0,VK_FORMAT_R32G32B32_SFLOAT,12};
-    attributes[2]={2,0,VK_FORMAT_R32G32B32A32_SFLOAT,24};
-    attributes[3]={3,0,VK_FORMAT_R32G32_SFLOAT,40};
-    attributes[4]={4,0,VK_FORMAT_R32G32_SFLOAT,48};
-    attributes[5]={5,0,VK_FORMAT_R32G32B32A32_SFLOAT,56};
+    const bool packed = mapVertexStride == renderer::MapVertexStride;
+    attributes[1]={1,0,packed?VK_FORMAT_R16G16B16A16_SNORM:VK_FORMAT_R32G32B32_SFLOAT,12};
+    attributes[2]={2,0,packed?VK_FORMAT_R16G16B16A16_SNORM:VK_FORMAT_R32G32B32A32_SFLOAT,
+                   packed?20u:24u};
+    attributes[3]={3,0,VK_FORMAT_R32G32_SFLOAT,packed?28u:40u};
+    attributes[4]={4,0,VK_FORMAT_R32G32_SFLOAT,packed?36u:48u};
+    attributes[5]={5,0,packed?VK_FORMAT_R8G8B8A8_UNORM:VK_FORMAT_R32G32B32A32_SFLOAT,
+                   packed?44u:56u};
     for(u32 i=0;i<5;++i)attributes[6+i]={6+i,1,VK_FORMAT_R32G32B32A32_SFLOAT,i*16u};
+    for(u32 i=0;i<3;++i)attributes[11+i]={11+i,1,VK_FORMAT_R32G32B32A32_SFLOAT,80u+i*16u};
   }
 
   VkPipelineVertexInputStateCreateInfo vertexInput{};
   vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
   vertexInput.vertexBindingDescriptionCount = (materialPreview_ || dirtRoadPreview_) ? 2 : 1;
   vertexInput.pVertexBindingDescriptions = bindings;
-  vertexInput.vertexAttributeDescriptionCount = dirtRoadPreview_ ? 11 : (materialPreview_ ? 9 : (scenePreview_ ? 5 : 2));
+  vertexInput.vertexAttributeDescriptionCount = dirtRoadPreview_ ? 14 : (materialPreview_ ? 9 : (scenePreview_ ? 5 : 2));
   vertexInput.pVertexAttributeDescriptions = attributes;
 
   VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -341,11 +383,13 @@ bool InstancedRenderer::createPipeline() {
       // na camada visível (EQUAL). Preserva pixels e evita sombrear as muitas
       // folhas ocultas por outras folhas.
       stages[1].module = coverageFragModule;
+      stages[1].pSpecializationInfo = nullptr;
       colorBlendAttachment.colorWriteMask = 0;
       pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                              &coveragePipeline_) == VK_SUCCESS;
 
       stages[1].module = fragModule;
+      stages[1].pSpecializationInfo = &gpuIsolationInfo;
       colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
       depthStencil.depthWriteEnable = VK_FALSE;
@@ -378,12 +422,14 @@ bool InstancedRenderer::createPipeline() {
 bool InstancedRenderer::createEnvironmentDescriptors() {
   if (!dirtRoadPreview_) return true;
   rhi::BufferDesc buffer{};
-  buffer.sizeBytes = sizeof(EnvironmentLighting);
+  buffer.sizeBytes = sizeof(DirtRoadFrameUniform);
   buffer.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
   buffer.cpuAccess = rhi::CpuAccess::SequentialWrite;
   buffer.preferDeviceMemory = false;
   if (!memoryAllocator_->createBuffer(buffer, &environmentUniform_)) return false;
-  std::memcpy(environmentUniform_.mappedData(), &dirtRoadResources_.environmentLighting(), sizeof(EnvironmentLighting));
+  DirtRoadFrameUniform initialFrame{};
+  initialFrame.environment = dirtRoadResources_.environmentLighting();
+  std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
   VkDescriptorSetLayoutBinding bindings[2]{};
@@ -414,7 +460,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   allocation.descriptorSetCount = 1;
   allocation.pSetLayouts = &environmentSetLayout_;
   if (vkAllocateDescriptorSets(device_, &allocation, &environmentSet_) != VK_SUCCESS) return false;
-  VkDescriptorBufferInfo uniform{environmentUniform_.handle(), 0, sizeof(EnvironmentLighting)};
+  VkDescriptorBufferInfo uniform{environmentUniform_.handle(), 0, sizeof(DirtRoadFrameUniform)};
   VkDescriptorImageInfo image{dirtRoadResources_.environmentSampler(), dirtRoadResources_.environmentView(),
                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkWriteDescriptorSet writes[2]{};
@@ -481,7 +527,8 @@ bool InstancedRenderer::createSkyPipeline() {
   VkPipelineDynamicStateCreateInfo dynamic{};
   dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
   dynamic.dynamicStateCount = 2; dynamic.pDynamicStates = states;
-  VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(DirtRoadPushConstants)};
+  VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(DirtRoadPushConstants)};
   VkPipelineLayoutCreateInfo layout{};
   layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   layout.setLayoutCount = 1; layout.pSetLayouts = &environmentSetLayout_;
@@ -497,6 +544,79 @@ bool InstancedRenderer::createSkyPipeline() {
     pipeline.pDynamicState = &dynamic; pipeline.layout = skyPipelineLayout_;
     pipeline.renderPass = renderPass_; pipeline.subpass = 0;
     ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, &skyPipeline_) == VK_SUCCESS;
+  }
+  vkDestroyShaderModule(device_, vert, nullptr);
+  vkDestroyShaderModule(device_, frag, nullptr);
+  return ok;
+}
+
+bool InstancedRenderer::createRuntimeHudPipeline() {
+  if (!runtimeHudEnabled_) return true;
+  VkShaderModule vert = createShaderModule(device_, rhi::shaders::kRuntime_HudVertSpirv,
+                                           rhi::shaders::kRuntime_HudVertSpirvSize);
+  VkShaderModule frag = createShaderModule(device_, rhi::shaders::kRuntime_HudFragSpirv,
+                                           rhi::shaders::kRuntime_HudFragSpirvSize);
+  if (vert == VK_NULL_HANDLE || frag == VK_NULL_HANDLE) {
+    if (vert != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vert, nullptr);
+    if (frag != VK_NULL_HANDLE) vkDestroyShaderModule(device_, frag, nullptr);
+    return false;
+  }
+  VkPipelineShaderStageCreateInfo stages[2]{};
+  stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+               VK_SHADER_STAGE_VERTEX_BIT, vert, "main", nullptr};
+  stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+               VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr};
+  VkPipelineVertexInputStateCreateInfo vertex{};
+  vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  VkPipelineInputAssemblyStateCreateInfo assembly{};
+  assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  VkPipelineViewportStateCreateInfo viewport{};
+  viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewport.viewportCount = 1; viewport.scissorCount = 1;
+  VkPipelineRasterizationStateCreateInfo raster{};
+  raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  raster.polygonMode = VK_POLYGON_MODE_FILL; raster.cullMode = VK_CULL_MODE_NONE; raster.lineWidth = 1.0f;
+  VkPipelineMultisampleStateCreateInfo multisample{};
+  multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+  VkPipelineDepthStencilStateCreateInfo depth{};
+  depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depth.depthTestEnable = VK_FALSE; depth.depthWriteEnable = VK_FALSE;
+  VkPipelineColorBlendAttachmentState attachment{};
+  attachment.blendEnable = VK_TRUE;
+  attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+  attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  attachment.colorBlendOp = VK_BLEND_OP_ADD;
+  attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+  attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  VkPipelineColorBlendStateCreateInfo blend{};
+  blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  blend.attachmentCount = 1; blend.pAttachments = &attachment;
+  VkDynamicState states[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+  VkPipelineDynamicStateCreateInfo dynamic{};
+  dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  dynamic.dynamicStateCount = 2; dynamic.pDynamicStates = states;
+  VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(RuntimeHudPushConstants)};
+  VkPipelineLayoutCreateInfo layout{};
+  layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layout.pushConstantRangeCount = 1; layout.pPushConstantRanges = &push;
+  bool ok = vkCreatePipelineLayout(device_, &layout, nullptr, &runtimeHudPipelineLayout_) == VK_SUCCESS;
+  if (ok) {
+    VkGraphicsPipelineCreateInfo pipeline{};
+    pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipeline.stageCount = 2; pipeline.pStages = stages; pipeline.pVertexInputState = &vertex;
+    pipeline.pInputAssemblyState = &assembly; pipeline.pViewportState = &viewport;
+    pipeline.pRasterizationState = &raster; pipeline.pMultisampleState = &multisample;
+    pipeline.pDepthStencilState = &depth; pipeline.pColorBlendState = &blend;
+    pipeline.pDynamicState = &dynamic; pipeline.layout = runtimeHudPipelineLayout_;
+    pipeline.renderPass = renderPass_; pipeline.subpass = 0;
+    ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr,
+                                   &runtimeHudPipeline_) == VK_SUCCESS;
   }
   vkDestroyShaderModule(device_, vert, nullptr);
   vkDestroyShaderModule(device_, frag, nullptr);
@@ -558,17 +678,37 @@ bool InstancedRenderer::createInstanceBuffer() {
   if (memoryAllocator_ == nullptr || !memoryAllocator_->createBuffer(desc, &instanceBuffer_) ||
       instanceBuffer_.mappedData() == nullptr) return false;
   if (dirtRoadPreview_) {
-    auto *instances = static_cast<renderer::RenderInstance *>(instanceBuffer_.mappedData());
+    auto *instances = static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
     const auto &draws = dirtRoadResources_.draws();
     if (draws.size() != instanceCount_) return false;
+    const float tint[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     for (u32 index = 0; index < instanceCount_; ++index) {
-      std::memcpy(instances[index].model, draws[index].model, sizeof(instances[index].model));
-      instances[index].tint[0] = instances[index].tint[1] = instances[index].tint[2] =
-          instances[index].tint[3] = 1.0f;
-      instances[index].entityIndex = index;
-      instances[index].entityGeneration = 1;
+      // Matriz singular/NaN rejeita o pacote inteiro em vez de escrever um
+      // registro parcial que o shader leria como lixo.
+      if (!renderer::buildGpuMeshInstance(draws[index].model, tint, &instances[index])) return false;
     }
-    return memoryAllocator_->flushBuffer(instanceBuffer_);
+    if (!memoryAllocator_->flushBuffer(instanceBuffer_)) return false;
+    VkPhysicalDeviceFeatures features{};
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceFeatures(physicalDevice_, &features);
+    vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
+    useMultiDrawIndirect_ = features.multiDrawIndirect && features.drawIndirectFirstInstance &&
+                            properties.limits.maxDrawIndirectCount >= instanceCount_;
+    if (useMultiDrawIndirect_) {
+      rhi::BufferDesc indirect{};
+      indirect.sizeBytes = static_cast<u64>(instanceCount_) *
+                           sizeof(VkDrawIndexedIndirectCommand);
+      indirect.usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+      indirect.memoryClass = rhi::MemoryClass::Buffer;
+      indirect.cpuAccess = rhi::CpuAccess::SequentialWrite;
+      indirect.preferDeviceMemory = false;
+      if (!memoryAllocator_->createBuffer(indirect, &indirectBuffer_) ||
+          indirectBuffer_.mappedData() == nullptr) return false;
+      indirectCommands_.reserve(instanceCount_);
+      indirectSolidBatches_.reserve(dirtRoadResources_.materials().size());
+      indirectCoverageBatches_.reserve(dirtRoadResources_.materials().size());
+    }
+    return true;
   }
   return true;
 }
@@ -829,7 +969,7 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   if (dirtRoadPreview_) {
     if (!dirtRoadResources_.initialize(device, uploadContext_, materialAssets,
                                        forceTextureFallback, cancel)) return false;
-    instanceCount_ = dirtRoadResources_.header().drawCount;
+    instanceCount_ = static_cast<u32>(dirtRoadResources_.draws().size());
     for (u32 index = 0; index < instanceCount_; ++index) {
       const u32 material = dirtRoadResources_.draws()[index].materialIndex;
       const u32 flags = dirtRoadResources_.materials()[material].flags;
@@ -840,6 +980,9 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
       else
         solidDrawOrder_.push_back(index);
     }
+    visibleSolidDrawOrder_.reserve(solidDrawOrder_.size());
+    visibleCoverageDrawOrder_.reserve(coverageDrawOrder_.size());
+    visibleTransparentDrawOrder_.reserve(transparentDrawOrder_.size());
   }
   if (!createInstanceBuffer()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o buffer de instâncias.");
@@ -873,6 +1016,10 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   }
   if (!createSkyPipeline()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pipeline do céu HDRI.");
+    return false;
+  }
+  if (!createRuntimeHudPipeline()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pipeline do HUD runtime.");
     return false;
   }
   if (!createFramebuffers()) {
@@ -914,9 +1061,10 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
                       (materialPreview_ ? "material-preview" : (scenePreview_ ? "scene-preview" : "PoC-A")));
   if (dirtRoadPreview_)
     __android_log_print(ANDROID_LOG_INFO, LogTag,
-                        "[DirtRoad] passes solid=%zu coverage=%zu transparent=%zu coverage_prepass=%s; culling desativado por contrato visual.",
+                        "[DirtRoad] passes solid=%zu coverage=%zu transparent=%zu coverage_prepass=%s; frustum_culling=conservador indirect=%s.",
                         solidDrawOrder_.size(), coverageDrawOrder_.size(), transparentDrawOrder_.size(),
-                        coveragePrepassEnabled_ ? "on" : "off");
+                        coveragePrepassEnabled_ ? "on" : "off",
+                        useMultiDrawIndirect_ ? "multi-draw" : "cpu-fallback");
   const rhi::MemoryBudgetSnapshot snapshot = memoryAllocator_->budgetSnapshot();
   for (usize i = 0; i < rhi::MemoryClassCount; ++i) {
     __android_log_print(ANDROID_LOG_INFO, LogTag, "RHI/VMA [%s]: uso=%llu, pico=%llu bytes.",
@@ -953,6 +1101,10 @@ void InstancedRenderer::shutdown() {
     vkDestroyPipeline(device_, skyPipeline_, nullptr);
     skyPipeline_ = VK_NULL_HANDLE;
   }
+  if (runtimeHudPipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, runtimeHudPipeline_, nullptr);
+    runtimeHudPipeline_ = VK_NULL_HANDLE;
+  }
   if (transparentPipeline_ != VK_NULL_HANDLE) {
     vkDestroyPipeline(device_, transparentPipeline_, nullptr);
     transparentPipeline_ = VK_NULL_HANDLE;
@@ -965,6 +1117,10 @@ void InstancedRenderer::shutdown() {
     vkDestroyPipelineLayout(device_, skyPipelineLayout_, nullptr);
     skyPipelineLayout_ = VK_NULL_HANDLE;
   }
+  if (runtimeHudPipelineLayout_ != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(device_, runtimeHudPipelineLayout_, nullptr);
+    runtimeHudPipelineLayout_ = VK_NULL_HANDLE;
+  }
   if (renderPass_ != VK_NULL_HANDLE) {
     vkDestroyRenderPass(device_, renderPass_, nullptr);
     renderPass_ = VK_NULL_HANDLE;
@@ -976,6 +1132,11 @@ void InstancedRenderer::shutdown() {
   environmentSetLayout_ = VK_NULL_HANDLE;
   environmentSet_ = VK_NULL_HANDLE;
   environmentUniform_.reset();
+  indirectBuffer_.reset();
+  indirectCommands_.clear();
+  indirectSolidBatches_.clear();
+  indirectCoverageBatches_.clear();
+  useMultiDrawIndirect_ = false;
   if (texturePool_ != VK_NULL_HANDLE) vkDestroyDescriptorPool(device_, texturePool_, nullptr);
   if (!useBindless_ && textureSetLayout_ != VK_NULL_HANDLE)
     vkDestroyDescriptorSetLayout(device_, textureSetLayout_, nullptr);
@@ -991,6 +1152,11 @@ void InstancedRenderer::shutdown() {
   solidDrawOrder_.clear();
   coverageDrawOrder_.clear();
   transparentDrawOrder_.clear();
+  visibleSolidDrawOrder_.clear();
+  visibleCoverageDrawOrder_.clear();
+  visibleTransparentDrawOrder_.clear();
+  visibilityTelemetry_ = {};
+  renderedFrameCount_ = 0;
   baseSampler_.shutdown();
   baseTexture_.reset();
   dummySampler_.shutdown();
@@ -1023,7 +1189,8 @@ u64 InstancedRenderer::snapshotFingerprint() const {
 }
 
 rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
-                                                  const platform::FreeCameraState &camera) {
+                                                  const platform::FreeCameraState &camera,
+                                                  const renderer::RuntimeHudState &hud) {
   using Clock = std::chrono::steady_clock;
   const auto acquireStart = frameProfilingEnabled_ ? Clock::now() : Clock::time_point{};
   lastFrameTimings_ = {};
@@ -1077,6 +1244,19 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     lastFrameTimings_.interopMs = lastFillMicroseconds_ / 1000.0;
   }
   if (!dirtRoadPreview_ && !memoryAllocator_->flushBuffer(instanceBuffer_)) return rhi::SwapchainStatus::FatalError;
+  if (dirtRoadPreview_) {
+    auto *frame = static_cast<DirtRoadFrameUniform *>(environmentUniform_.mappedData());
+    const float cy = std::cos(camera.yaw), sy = std::sin(camera.yaw);
+    const float cp = std::cos(camera.pitch), sp = std::sin(camera.pitch);
+    const float row0[4] = {cy, 0.0f, -sy, 0.0f};
+    const float row1[4] = {sy * sp, cp, cy * sp, 0.0f};
+    const float row2[4] = {sy * cp, -sp, cy * cp, 0.0f};
+    std::memcpy(frame->worldToViewRow0, row0, sizeof(row0));
+    std::memcpy(frame->worldToViewRow1, row1, sizeof(row1));
+    std::memcpy(frame->worldToViewRow2, row2, sizeof(row2));
+    if (!memoryAllocator_->flushBuffer(environmentUniform_))
+      return rhi::SwapchainStatus::FatalError;
+  }
 
   if (vkResetCommandBuffer(commandBuffer_, 0) != VK_SUCCESS) return rhi::SwapchainStatus::FatalError;
   VkCommandBufferBeginInfo beginInfo{};
@@ -1155,11 +1335,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     vkCmdBindIndexBuffer(commandBuffer_, dirtRoadResources_.indexBuffer(), 0, VK_INDEX_TYPE_UINT32);
     const bool encodeSrgb = swapchain_->imageFormat()!=VK_FORMAT_B8G8R8A8_SRGB &&
                             swapchain_->imageFormat()!=VK_FORMAT_R8G8B8A8_SRGB;
-    auto drawMapPrimitive = [&](u32 drawIndex) {
-      const auto &draw = dirtRoadResources_.draws()[drawIndex];
-      const auto &material = dirtRoadResources_.materials()[draw.materialIndex];
+    visibilityTelemetry_ = {};
+    auto pushMapMaterial = [&](u32 materialIndex) {
+      const auto &material = dirtRoadResources_.materials()[materialIndex];
       if (!useBindless_) {
-        const VkDescriptorSet set = dirtMaterialSets_[draw.materialIndex];
+        const VkDescriptorSet set = dirtMaterialSets_[materialIndex];
         vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
                                 0, 1, &set, 0, nullptr);
       }
@@ -1187,8 +1367,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       push.materialFactors[2]=material.normalScale;push.materialFactors[3]=material.specular;
       vkCmdPushConstants(commandBuffer_,pipelineLayout_,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                          0,sizeof(push),&push);
+    };
+    auto drawMapPrimitive = [&](u32 drawIndex) {
+      const auto &draw = dirtRoadResources_.draws()[drawIndex];
+      pushMapMaterial(draw.materialIndex);
       vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,
                        static_cast<i32>(draw.vertexOffset),drawIndex);
+      ++visibilityTelemetry_.submittedDrawCalls;
+      visibilityTelemetry_.submittedTriangles += draw.indexCount / 3;
     };
     auto nearestBoundsDistanceSquared = [&](u32 drawIndex) {
       const auto &draw=dirtRoadResources_.draws()[drawIndex];float distanceSquared=0;
@@ -1201,18 +1387,93 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     const auto frontToBack = [&](u32 left, u32 right) {
       return nearestBoundsDistanceSquared(left)<nearestBoundsDistanceSquared(right);
     };
-    std::sort(solidDrawOrder_.begin(), solidDrawOrder_.end(), frontToBack);
-    std::sort(coverageDrawOrder_.begin(), coverageDrawOrder_.end(), frontToBack);
-    for (u32 drawIndex : solidDrawOrder_) {
-      drawMapPrimitive(drawIndex);
+    renderer::PerspectiveVisibilitySettings visibilitySettings = visibilitySettings_;
+    visibilitySettings.nearPlane = dirtRoadResources_.header().nearPlane;
+    visibilitySettings.farPlane = dirtRoadResources_.header().farPlane;
+    const renderer::PerspectiveFrustum frustum = renderer::buildPerspectiveFrustum(
+        camera.position, camera.yaw, camera.pitch,
+        static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height),
+        visibilitySettings);
+    visibleSolidDrawOrder_.clear();
+    visibleCoverageDrawOrder_.clear();
+    visibleTransparentDrawOrder_.clear();
+    auto collectVisible = [&](const std::vector<u32> &source, std::vector<u32> &destination) {
+      for (u32 drawIndex : source) {
+        const auto &draw = dirtRoadResources_.draws()[drawIndex];
+        const u64 triangles = draw.indexCount / 3;
+        ++visibilityTelemetry_.candidateDraws;
+        visibilityTelemetry_.candidateTriangles += triangles;
+        if (!renderer::isSphereVisible(frustum, draw.boundsCenter, draw.boundsRadius)) continue;
+        destination.push_back(drawIndex);
+        ++visibilityTelemetry_.visibleDraws;
+        visibilityTelemetry_.visibleTriangles += triangles;
+      }
+    };
+    collectVisible(solidDrawOrder_, visibleSolidDrawOrder_);
+    collectVisible(coverageDrawOrder_, visibleCoverageDrawOrder_);
+    collectVisible(transparentDrawOrder_, visibleTransparentDrawOrder_);
+    visibilityTelemetry_.culledDraws = visibilityTelemetry_.candidateDraws -
+                                       visibilityTelemetry_.visibleDraws;
+
+    std::sort(visibleSolidDrawOrder_.begin(), visibleSolidDrawOrder_.end(), frontToBack);
+    std::sort(visibleCoverageDrawOrder_.begin(), visibleCoverageDrawOrder_.end(), frontToBack);
+    auto buildIndirectBatches = [&](const std::vector<u32> &visible,
+                                    std::vector<IndirectBatch> &batches) {
+      batches.clear();
+      for (u32 drawIndex : visible) {
+        const u32 materialIndex = dirtRoadResources_.draws()[drawIndex].materialIndex;
+        const auto existing = std::find_if(batches.begin(), batches.end(),
+            [&](const IndirectBatch &batch) { return batch.materialIndex == materialIndex; });
+        if (existing == batches.end()) batches.push_back({materialIndex, 0, 0, 0});
+      }
+      for (IndirectBatch &batch : batches) {
+        batch.firstCommand = static_cast<u32>(indirectCommands_.size());
+        for (u32 drawIndex : visible) {
+          const auto &draw = dirtRoadResources_.draws()[drawIndex];
+          if (draw.materialIndex != batch.materialIndex) continue;
+          indirectCommands_.push_back({draw.indexCount, 1, draw.firstIndex,
+                                       static_cast<i32>(draw.vertexOffset), drawIndex});
+          ++batch.commandCount;
+          batch.triangles += draw.indexCount / 3;
+        }
+      }
+    };
+    auto submitIndirectBatches = [&](const std::vector<IndirectBatch> &batches) {
+      for (const IndirectBatch &batch : batches) {
+        pushMapMaterial(batch.materialIndex);
+        vkCmdDrawIndexedIndirect(commandBuffer_, indirectBuffer_.handle(),
+            static_cast<VkDeviceSize>(batch.firstCommand) * sizeof(VkDrawIndexedIndirectCommand),
+            batch.commandCount, sizeof(VkDrawIndexedIndirectCommand));
+        ++visibilityTelemetry_.submittedDrawCalls;
+        visibilityTelemetry_.submittedTriangles += batch.triangles;
+      }
+    };
+    if (useMultiDrawIndirect_) {
+      indirectCommands_.clear();
+      buildIndirectBatches(visibleSolidDrawOrder_, indirectSolidBatches_);
+      buildIndirectBatches(visibleCoverageDrawOrder_, indirectCoverageBatches_);
+      if (!indirectCommands_.empty())
+        std::memcpy(indirectBuffer_.mappedData(), indirectCommands_.data(),
+                    indirectCommands_.size() * sizeof(VkDrawIndexedIndirectCommand));
+      if (!memoryAllocator_->flushBuffer(indirectBuffer_))
+        return rhi::SwapchainStatus::FatalError;
+      submitIndirectBatches(indirectSolidBatches_);
+    } else {
+      for (u32 drawIndex : visibleSolidDrawOrder_) drawMapPrimitive(drawIndex);
     }
-    if (!coverageDrawOrder_.empty()) {
+    if (!visibleCoverageDrawOrder_.empty()) {
       if (coveragePrepassEnabled_)
         vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, coveragePipeline_);
-      for (u32 drawIndex : coverageDrawOrder_) drawMapPrimitive(drawIndex);
+      if (useMultiDrawIndirect_)
+        submitIndirectBatches(indirectCoverageBatches_);
+      else
+        for (u32 drawIndex : visibleCoverageDrawOrder_) drawMapPrimitive(drawIndex);
       if (coveragePrepassEnabled_) {
         vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, coverageShadePipeline_);
-        for (u32 drawIndex : coverageDrawOrder_) drawMapPrimitive(drawIndex);
+        if (useMultiDrawIndirect_)
+          submitIndirectBatches(indirectCoverageBatches_);
+        else
+          for (u32 drawIndex : visibleCoverageDrawOrder_) drawMapPrimitive(drawIndex);
       }
     }
     if (frameProfilingEnabled_)
@@ -1222,32 +1483,35 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     skyPush.cameraFrame[0] = static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height);
     skyPush.cameraFrame[1] = camera.yaw;
     skyPush.cameraFrame[2] = camera.pitch;
+    skyPush.cameraFrame[3] = timeSeconds;
     skyPush.surfaceTransform[0] = surfaceTransform.xx;
     skyPush.surfaceTransform[1] = surfaceTransform.xy;
     skyPush.surfaceTransform[2] = surfaceTransform.yx;
     skyPush.surfaceTransform[3] = surfaceTransform.yy;
+    skyPush.materialFlags[2] = encodeSrgb ? 1u : 0u;
     vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipeline_);
     vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipelineLayout_,
                             0, 1, &environmentSet_, 0, nullptr);
-    vkCmdPushConstants(commandBuffer_, skyPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT,
+    vkCmdPushConstants(commandBuffer_, skyPipelineLayout_,
+                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                        0, sizeof(skyPush), &skyPush);
     vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
     if (frameProfilingEnabled_)
       gpuFrameTimer_.markPassEnd(commandBuffer_, rhi::GpuFramePass::Background);
 
-    std::sort(transparentDrawOrder_.begin(), transparentDrawOrder_.end(), [&](u32 left, u32 right) {
+    std::sort(visibleTransparentDrawOrder_.begin(), visibleTransparentDrawOrder_.end(), [&](u32 left, u32 right) {
       const auto &a=dirtRoadResources_.draws()[left];const auto &b=dirtRoadResources_.draws()[right];
       float da=0,db=0;for(u32 axis=0;axis<3;++axis){const float av=a.boundsCenter[axis]-camera.position[axis];
         const float bv=b.boundsCenter[axis]-camera.position[axis];da+=av*av;db+=bv*bv;}return da>db;
     });
-    if (!transparentDrawOrder_.empty()) {
+    if (!visibleTransparentDrawOrder_.empty()) {
       vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, transparentPipeline_);
       vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
                               1, 1, &environmentSet_, 0, nullptr);
       if (useBindless_)
         vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
                                 0, 1, &textureSet_, 0, nullptr);
-      for (u32 drawIndex : transparentDrawOrder_) {
+      for (u32 drawIndex : visibleTransparentDrawOrder_) {
         drawMapPrimitive(drawIndex);
       }
     }
@@ -1264,6 +1528,37 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     vkCmdDraw(commandBuffer_, 36, drawnInstanceCount_, 0, 0);
     if (frameProfilingEnabled_)
       gpuFrameTimer_.markPassEnd(commandBuffer_, rhi::GpuFramePass::Geometry);
+  }
+
+  if (runtimeHudPipeline_ != VK_NULL_HANDLE && hud.visible) {
+    vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, runtimeHudPipeline_);
+    const float displayWidth = static_cast<float>(displayExtent.width);
+    const float displayHeight = static_cast<float>(displayExtent.height);
+    const float shortEdge = std::min(displayWidth, displayHeight);
+    const float radius = hud.joystickRadiusPixels > 1.0f
+                             ? hud.joystickRadiusPixels : shortEdge * 0.105f;
+    const float centerX = hud.joystickActive ? hud.joystickCenterX : displayWidth * 0.145f;
+    const float centerY = hud.joystickActive ? hud.joystickCenterY : displayHeight * 0.78f;
+    const float knobX = hud.joystickActive ? hud.joystickKnobX : centerX;
+    const float knobY = hud.joystickActive ? hud.joystickKnobY : centerY;
+    auto drawElement = [&](float x, float y, float halfWidth, float halfHeight,
+                           u32 kind, u32 value) {
+      RuntimeHudPushConstants push{};
+      push.centerHalfSize[0]=x; push.centerHalfSize[1]=y;
+      push.centerHalfSize[2]=halfWidth; push.centerHalfSize[3]=halfHeight;
+      push.displaySize[0]=displayWidth; push.displaySize[1]=displayHeight;
+      push.surfaceTransform[0]=surfaceTransform.xx; push.surfaceTransform[1]=surfaceTransform.xy;
+      push.surfaceTransform[2]=surfaceTransform.yx; push.surfaceTransform[3]=surfaceTransform.yy;
+      push.parameters[0]=kind; push.parameters[1]=value;
+      vkCmdPushConstants(commandBuffer_,runtimeHudPipelineLayout_,
+                         VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                         0,sizeof(push),&push);
+      vkCmdDraw(commandBuffer_,6,1,0,0);
+    };
+    drawElement(centerX,centerY,radius,radius,0,0);
+    drawElement(knobX,knobY,radius*.42f,radius*.42f,1,0);
+    drawElement(displayWidth-shortEdge*.105f,shortEdge*.075f,
+                shortEdge*.083f,shortEdge*.040f,2,hud.framesPerSecond);
   }
 
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
@@ -1296,6 +1591,15 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     lastFrameTimings_.presentMs = std::chrono::duration<double, std::milli>(presentEnd - presentStart).count();
   }
   if (presentStatus != rhi::SwapchainStatus::Ok) return presentStatus;
+  if (dirtRoadPreview_ && (++renderedFrameCount_ == 1 || renderedFrameCount_ % 240 == 0)) {
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+        "[Visibility] candidates=%u visible=%u culled=%u submitted_draws=%u triangles_visible=%llu/%llu triangles_submitted=%llu",
+        visibilityTelemetry_.candidateDraws, visibilityTelemetry_.visibleDraws,
+        visibilityTelemetry_.culledDraws, visibilityTelemetry_.submittedDrawCalls,
+        static_cast<unsigned long long>(visibilityTelemetry_.visibleTriangles),
+        static_cast<unsigned long long>(visibilityTelemetry_.candidateTriangles),
+        static_cast<unsigned long long>(visibilityTelemetry_.submittedTriangles));
+  }
   return acquireStatus == rhi::SwapchainStatus::SuboptimalNeedsRecreate
              ? rhi::SwapchainStatus::SuboptimalNeedsRecreate
              : rhi::SwapchainStatus::Ok;

@@ -1,3 +1,0 @@
-
-08-28 08:27:10.731 28139 31426 I Aether.Android: Órbita touch atualizada: yaw=2.802 rad, pitch=-0.777 rad.
-

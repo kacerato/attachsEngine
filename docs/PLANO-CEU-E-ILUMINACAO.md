@@ -11,6 +11,14 @@
 > 7.3.5, 7.4.2–7.4.3, 7.5.1**. Nenhum item é declarado concluído aqui, e **M2
 > continua aberto**.
 
+> **Fatia E2-A/E3-A validada em 30/08/2026:** o fundo fotográfico de árvores foi
+> removido. O céu ativo é uma panorâmica diurna 2:1 com nuvens, pertencente ao
+> projeto e cozida offline em AETX 1024×512 sRGB (mips lineares e seam tratada).
+> A cúpula usa direção da câmera e uma leitura por pixel. AEEN v2 (144 bytes)
+> serializa a configuração global e mantém migração de v1. A irradiância difusa
+> transitória é hemisférica. Esta entrega não fecha atmosfera física, SH, CSM,
+> GTAO, exposição temporal ou o estágio completo.
+
 ---
 
 ## 1. Evidência medida — a base deste plano
@@ -23,12 +31,12 @@ cozidos do repositório. Nada aqui é hipótese.
 |---|---|---|---|
 | 1 | **Normal não é invertida na face traseira.** Inverter com `gl_FrontFacing` devolveu cor natural à folhagem | Build instalado no aparelho, captura antes/depois | **Causa dominante do branco.** Confirmada por correção |
 | 2 | **Nenhum dos 26 materiais tem `doubleSided`** (bit 32 nunca presente), mas o pipeline desenha tudo com `VK_CULL_MODE_NONE` | Leitura dos 26 `MapMaterialRecord` de `scene.aemap`; `instanced_renderer.cpp:275` | Faces traseiras que o autor nunca previu são sombreadas. É o mecanismo por trás do achado 1 |
-| 3 | **Especular de ambiente não é amostrado na folhagem.** O branch `metal>.01 \|\| rough<.65` não dispara para folhagem (`rough≈1.0`) nem estrada (`0.81`); dispara só em materiais tipo poça (`rough 0.42`, 100% dos texels) | Decodificação dos canais G/B das texturas MR | **Especular descartado como causa do branco.** O HDRI de 89,5 MB serve hoje quase só de plano de fundo |
+| 3 | **Especular de ambiente não é amostrado na folhagem.** O branch `metal>.01 \|\| rough<.65` não dispara para folhagem (`rough≈1.0`) nem estrada (`0.81`); dispara só em materiais tipo poça (`rough 0.42`, 100% dos texels) | Decodificação dos canais G/B das texturas MR | **Especular descartado como causa do branco.** Isso permitiu remover o HDRI visível de 89,5 MB nesta fatia |
 | 4 | **Cobertura alpha erode nos mips**: 26,1% → 22,6% (mip 0→4); texels de alpha parcial crescem 22,1% → 57,2% | Decodificação da cadeia de mips de `texture_000-fallback.aetex` | Afinamento e aliasing de silhueta à distância. Real, mas **secundário** |
 | 5 | **Sangramento de RGB para branco: descartado.** Texels transparentes do atlas guardam `[79,82,46]` (verde-oliva escuro), corretamente dilatado | Média de RGB onde `alpha < 8`, todos os mips | Hipótese eliminada. **Registrado para não ser reinvestigada** |
 | 6 | **Não existe oclusão assada.** O canal R de toda textura MR é constante `1.0` | Estatística do canal R | AO precisa ser de runtime; não há AO grátis a recuperar |
 | 7 | **A cena é essencialmente difusa**: `metallic = 0` em todos os materiais, `roughness` entre 0,78 e 1,0 | Registros de material | Iluminação = sol `N·L` + ambiente constante. **Sem sombra e sem AO, achatamento é estrutural, não de calibração** |
-| 8 | **O céu atual é uma foto de pôr do sol amostrada direto**, enquanto o sol da cena é um sol de dia | `dirt_road_sky.frag` (pós-revert) faz `textureLod(environmentMap,…,0)` | É a incoerência relatada: céu e luz vêm de fontes diferentes |
+| 8 | **Antes de E2-A, o céu era uma foto de floresta/pôr do sol amostrada direto**, enquanto o sol da cena era diurno | Captura anterior e asset 4096×2048 RGBA16F | Corrigido em E2-A por panorama diurno e direção solar gravada no mesmo AEEN v2 |
 
 ### 1.1 Diagnóstico consolidado
 
@@ -80,11 +88,12 @@ Mudar a hora move tudo junto, por construção. Esse é o item 1 do O2 do plano 
 otimização, e é pré-requisito de todo o resto — sem ele, cada estágio abaixo
 reintroduz o desequilíbrio que causou o revert.
 
-**Compatibilidade:** `EnvironmentLighting` (hoje 64 bytes, AEEN v1) ganha versão
-nova com `structSize`/`apiVersion`, conforme §3.3 do plano de fechamento de
-lacunas. A ferramenta de HDRI autoral (`cook-hdri-environment.py`) precisa
-acompanhar a versão nova, ou passa a recusar explicitamente — nunca ficar
-escrevendo um formato que o runtime não aceita mais.
+**Compatibilidade já entregue na fatia E2-A:** `EnvironmentLighting` possui 128
+bytes e AEEN v2 possui header de 16 bytes + 32 floats (144 bytes no arquivo).
+O decoder migra AEEN v1/80 bytes preenchendo somente os novos campos com defaults
+globais documentados. A ferramenta ativa `cook-sky-panorama.py` grava v2. O
+importador HDRI fotográfico legado ainda grava v1, aceito apenas pela migração;
+ele não deve sobrescrever o céu padrão do sample.
 
 ---
 
@@ -138,6 +147,15 @@ sem remover geometria válida (contagem por captura, não por impressão).
 
 **Alinha:** 2.4.4, 7.4.2, 7.4.3, O2 itens 2/3/9.
 
+**E2-A implementado:** panorâmica diurna 2:1 assada offline em 1024×512 sRGB,
+cadeia completa de mips construída em linear, borda horizontal mesclada e lookup
+equiretangular por direção de mundo. A panorâmica acompanha yaw/pitch sem ficar
+presa à tela. O recurso caiu de ~89,5 MB para 2,80 MB. Uma implementação anterior
+com três oitavas de ruído por fragmento mediu 84,82 FPS e foi retirada; a versão de
+uma amostra mediu 117,27 FPS quando o governador estava em boost. Esta é a menor
+fatia completa para corrigir o defeito agora; os itens abaixo continuam a evolução
+do mesmo contrato, não uma reescrita.
+
 1. **Atmosfera analítica** (Hosek-Wilkie ou Preetham) no lugar do gradiente
    fixo e da foto. Fórmula fechada, sem LUT, com cor do céu e do sol derivadas
    da elevação solar e da turbidez do `EnvironmentState`. Bruneton (7.4.2) entra
@@ -165,12 +183,19 @@ em fração de céu coberto, não um threshold de ruído.
 
 **Aceite:** nuvens visíveis e legíveis, sem cintilação ao girar a câmera
 (diff quadro a quadro num giro fixo dentro do orçamento); céu custa **menos**
-memória e banda que o HDRI de 89,5 MB atual; sol visível coincide com a direção
+memória e banda que o HDRI anterior de 89,5 MB; sol visível coincide com a direção
 das sombras.
 
 ### E3 — Iluminação coerente
 
 **Alinha:** 2.4.2, 2.4.3, 2.4.4, 2.4.6, 7.2.7, 7.3.5.
+
+**E3-A implementado:** o termo ambiente constante foi substituído por uma
+irradiância hemisférica global (cor do céu ↔ ground bounce), configurada no AEEN
+v2. Exposição, força e tint são dados do resource, não condicionais da floresta.
+Na pose fixa, a luminância média da vegetação subiu 37,34→45,18 (+21%). O custo é
+ALU constante, sem passe/draw/texture fetch adicional. Isso melhora leitura e cor,
+mas é transitório: sem CSM/GTAO ainda não existe o contraste de contato necessário.
 
 Ordem interna importa — cada item depende do anterior:
 

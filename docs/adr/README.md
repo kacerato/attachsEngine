@@ -22,10 +22,14 @@ implementação ainda não começou. ADRs não substituem `docs/ESTADO.md`/
 | [ADR-11](ADR-11-MENU-RADIAL.md) | Menu radial como mecanismo primário de comando | 🟡 validada em protótipo, não em produto |
 | [ADR-12](ADR-12-WAL-EDICAO.md) | WAL de edição com recuperação total | ✅ implementada |
 | [ADR-013](ADR-013-PHYSICS-2D-BACKEND.md) | Backend de física 2D (Jolt restrito vs. Box2D) | 🟡 proposta, aguardando perfis Android B/C |
+| [ADR-014](ADR-014-POLITICA-GLOBAL-RENDERIZACAO.md) | Política global de renderização orientada por budgets | 🟡 proposta, implementação não iniciada |
+| [ADR-015](ADR-015-AEMAP-V2-VERTICES-COMPACTOS.md) | AEMAP v2 com vértices compactos e leitura legada | 🟡 integrada em Adreno; matriz pendente |
 
 **Legenda:** ✅ implementada e testada · 🟡 parcial ou pendente de evidência ·
 ⬜ decisão registrada, sem código ainda.
 
 Numeração ADR-01 a ADR-12 corresponde à tabela original do Apêndice A do
 plano principal. ADR-013 foi aberta posteriormente para uma decisão que não
-constava naquela lista original (por isso o padrão de dígitos difere).
+constava naquela lista original (por isso o padrão de dígitos difere). ADR-014
+registra a política global de rendering/perfis antes da implementação. ADR-015
+versiona a primeira mudança persistente de layout guiada por essa política.

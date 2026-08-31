@@ -15,9 +15,72 @@
 > **Cadência medida em 29/08/2026:** o painel e o Choreographer entregam 120 Hz,
 > mas esta carga apresentou 30,86 FPS ao votar 120. Com Surface/pacer em 60 Hz,
 > a segunda janela aquecida apresentou **54,61 FPS**, CPU média 2,64 ms e espera
-> de acquire média 11,97 ms. O padrão permanece 60 até timestamp GPU + múltiplos
-> frames em voo demonstrarem ganho; 90/120 continuam metas configuráveis, não
-> números declarados sem sustentação.
+> de acquire média 11,97 ms. Esse era o baseline histórico; em 29/08 o teto padrão
+> de 60 foi removido. O modo global `Auto` agora consulta os modos físicos e solicita
+> até 120/90/60 Hz, sem configuração por cena. Sustentação térmica continua sendo
+> gate separado e pode futuramente reduzir a política resolvida com histerese. Em
+> abertura fria normal pelo launcher no Xiaomi conectado, sem extras de benchmark,
+> a engine resolveu/pediu 120 Hz, o Android aceitou e 126 presents recentes mediram
+> **117,30 FPS** no SurfaceFlinger.
+
+> **Baseline Release reproduzível após a primeira otimização, em 29/08/2026:**
+> cena `dirt-road`, fingerprint `dd907ec34bbebc21`, câmera travada em
+> `0,160,-100,0,0.08`, 2772×1280 e voto Android de 120 Hz confirmado. Em 69,121 s,
+> a engine concluiu **78,12 presents/s** (pior janela 73,43), CPU média 1,41 ms e
+> GPU média 11,40 ms, com pior p95 de janela em 18,41 ms. O aparelho aqueceu de
+> 38,3 para 40,0 °C sem aviso térmico. Isso não é A/B da normal matrix nem soak,
+> mas substitui a câmera distante por um baseline autoritativo do hotspot.
+>
+> **Experimento rejeitado em 29/08/2026:** backface culling orientado por
+> `doubleSided`/handedness continuou removendo terreno/folhagem mesmo quando materiais
+> `MASK` legados permaneceram dupla face: 9,42% dos pixels diferiram do baseline. Também
+> perdeu no A/B físico consecutivo: **97,46 → 86,34 presents/s**, GPU média **9,04 →
+> 9,98 ms** e GPU p95 **9,89 → 13,65 ms**, com `thermalStatus=0`. A implementação foi
+> retirada. Culling não será tratado como ganho até AGI atribuir custo e um novo desenho
+> passar desempenho e imagem.
+>
+> **Isolamento de custo em 30/08/2026:** modos diagnósticos globais passaram a ser
+> variantes reais de pipeline Vulkan por specialization constant, sem alterar presets,
+> projeto ou conteúdo. No A/B intercalado `full → base-color → full`, a variante mínima
+> não foi mais rápida: GPU média **9,72 → 10,08 → 11,04 ms** e SurfaceFlinger
+> **93,45 → 88,51 → 91,61/s**, mesma câmera, fingerprint, APK e `thermalStatus=0`.
+> Portanto aritmética PBR/normal/IBL não foi comprovada como o próximo gargalo; o ciclo
+> segue para atribuição de raster/vertex/tiles, visibilidade e frame pacing. Uma matriz
+> anterior com branch dinâmico permanece apenas como smoke metodológico, pois o próprio
+> controle `full` variou de 90,81 para 70,79 presents/s.
+>
+> **Primeiro ganho do ciclo seguinte em 30/08/2026:** AEMAP v2 compactou o layout
+> global de vértices de 72 para 48 bytes, preservando posição/UV em float32 e mantendo
+> leitura do v1. O mapa caiu **34,69→24,49 MB** e o APK **402,44→392,24 MB**. Em dois
+> runs físicos, GPU média ficou em **8,89/7,42 ms**, engine em **99,40/117,29
+> presents/s** e SurfaceFlinger em **110,20/111,85/s**; controles v1 imediatamente
+> anteriores ficaram em 9,72/11,04 ms e 92,15/82,12 presents/s. Apenas 0,0147% dos
+> pixels mudaram, sempre por no máximo 1/255. É ganho inicial em Adreno; A/B longo,
+> soak e Mali continuam gates obrigatórios.
+
+> **Céu e iluminação global em 30/08/2026:** a fotografia `sunset_forest`
+> 4096×2048/RGBA16F deixou de ser o fundo e foi substituída por panorama diurno
+> 2:1 de nuvens, cozido offline em 1024×512/RGBA8 sRGB com mips e seam horizontal.
+> O recurso caiu de ~89,5 MB para **2,80 MB** e o céu voltou a custar uma única
+> amostragem por pixel; a tentativa de ruído procedural por fragmento (84,82 FPS)
+> foi rejeitada. A versão final mediu **117,27 FPS** logo após ativação de boost e
+> ~98,7 FPS depois que o governador relaxou, sem alerta térmico. Iniciar `screenrecord`
+> no mesmo APK/câmera elevou a cadência para **112,04 FPS**, confirmando que a melhora
+> observada pelo usuário vem do voto de energia/compositor do sistema, não de um cap
+> de 60 na engine. A luz difusa agora usa hemisfério global parametrizado em AEEN v2;
+> a vegetação ganhou 21% de luminância média na pose fixa (37,34→45,18) sem passe,
+> draw ou textura extra. CSM/GTAO/SH continuam pendentes e não são declarados prontos.
+
+> **Benchmark navegável e colisão em 30/08/2026:** o controle FPS virou uma fatia
+> global (`FirstPersonController` + input actions + joystick + `CharacterMotor`),
+> sem lógica embutida na câmera ou na cena. A primeira malha física usava posições
+> locais e causava queda infinita; a correção aplica a mesma matriz column-major de
+> cada draw usada pelo shader. A estrada revelou outro contrato: seus materiais são
+> BLEND, portanto alpha visual não pode desativar física. A política final inclui
+> BLEND, exclui cartões alpha-mask por default e expõe flags explícitas de importação.
+> O aparelho registrou 188.681 vértices/156.119 triângulos físicos, Y estável e
+> `ground=0` na estrada. Este recurso melhora a qualidade do benchmark, mas não fecha
+> o gate de desempenho: perfil CPU/GPU longo com gameplay ainda é obrigatório.
 
 ## 1. Objetivo e regra de qualidade
 
@@ -50,17 +113,46 @@ Inspeção no Xiaomi `25053PC47G`, Android 16, resolução 2772×1280:
 |---|---|
 | Cena visual inspecionada | estrada/floresta com 341.109 triângulos, 27 draws, 26 materiais e 70 texturas |
 | Carga da cena | 3.847 ms até `ready`; primeiro frame após ativação em ~4.342 ms |
-| Memória reportada | ~150,7 MB em texturas, ~34,7 MB em buffers e ~14,3 MB em render targets |
-| Ambiente atual | HDRI 4096×2048 RGBA16F, ~89,5 MB, usado simultaneamente como céu visível e fonte de reflexão |
+| Memória reportada | após o céu compacto: ~63,7 MB em texturas, ~24,5 MB em buffers e ~14,3 MB em render targets |
+| Ambiente atual | panorama diurno 1024×512 RGBA8 sRGB, 2,80 MB, direção esférica e mips; AEEN v2 guarda sol, ambiente, exposição e parâmetros globais |
 | Defeito visual reproduzido | grande conjunto de árvores/folhagem opaco e esbranquiçado à direita da imagem |
-| Visibilidade atual | todos os 27 draws são enviados; não há frustum culling, occlusion culling/HZB ou LOD |
+| Visibilidade antes da fatia de 30/08 | todos os 27 draws eram enviados; não havia frustum culling, occlusion culling/HZB ou LOD |
+| Visibilidade integrada em 30/08 | frustum culling CPU conservador por draw, listas scratch sem alocação e telemetria de candidatos/visíveis/descartados/draw calls/triângulos; no aparelho variou de 27/27 a 18/27 draws visíveis durante movimento, ainda sem HZB/LOD/granularidade espacial |
 | Perfil de 30 s | ~59,90 FPS exibidos, mas o runner ativou `poc-a-5000-textured-cubes`, não a cena de floresta |
+| Baseline Release 120 Hz atual | 78,12 presents/s; CPU 1,41 ms; GPU 11,40 ms média e 18,41 ms no pior p95 de janela |
 
 O resultado de ~59,90 FPS não invalida os ~45 FPS percebidos: hoje o perfilador
 troca a carga e rotula a captura como PoC-A. Antes de otimizar, a cena real precisa
 ser perfilável sem mudar de modo.
 
-### 2.1 Causas já demonstráveis no código
+### 2.1.1 Baseline móvel reportado em 30/08/2026
+
+No percurso livre do jogador, o aparelho forte reportou picos de 120 FPS, faixa mais
+frequente de 60–80 FPS e quedas locais até ~47 FPS. Esse dado em movimento substitui
+“FPS parado” como sinal de produto, mas ainda precisa de rota, duração, temperatura e
+perfil v3 registrados para virar comparação aprovada. A aparente estabilização ao
+ligar o gravador de tela é compatível com mudança de política de energia/DVFS e de
+composição, porém ainda é hipótese: a engine não deve manter carga artificial nem
+usar API privada para forçar clocks. O experimento obrigatório compara gravador
+desligado/ligado na mesma rota e registra ADPF, estado térmico, clocks/frequências
+expostos pelo sistema, GPU p95 e SurfaceFlinger.
+
+### 2.1 Baseline de produto reportado em 29/08/2026
+
+O comportamento percebido pelo usuário acrescenta dois pontos de referência que
+precisam ser reproduzidos pelo runner antes de virarem métricas aprovadas:
+
+| Faixa observada | Resultado reportado | Interpretação até existir captura reproduzível |
+|---|---:|---|
+| aparelho forte, painel/limite em 120 Hz | 55–60 FPS | o frame não cabe em 8,33 ms; também não sustenta margem confortável de 60 Hz |
+| Samsung Galaxy A32 ou aparelho equivalente | 20–25 FPS | perfil C está abaixo do piso de 30 FPS definido em M2 |
+
+“Galaxy A32” não pode virar uma condição no código: existem variantes de SoC, GPU,
+memória e resolução. A captura deve registrar modelo/SKU, SoC, GPU, driver, Android,
+resolução, refresh, bateria e estado térmico. Até isso acontecer, os números são
+**baseline de produto reportado**, não benchmark científico nem ganho comprovado.
+
+### 2.2 Causas já demonstráveis no código
 
 - O importador distingue somente `OPAQUE` e `BLEND`. `alphaMode=MASK` é ignorado,
   embora `alphaCutoff` seja serializado. O shader só descarta alpha quase zero para
@@ -71,12 +163,12 @@ ser perfilável sem mudar de modo.
 - Transparência é separada apenas por um bit e ordenada por primitiva. Vegetação
   recortada não deve entrar no caminho blend; transparências reais precisam de
   contrato e ordenação estáveis.
-- A iluminação difusa é um termo ambiente constante, sem sombra, AO ou visibilidade.
-  Regiões atrás de árvores recebem luz ambiente sem oclusão, acentuando a aparência
-  lavada. Exposição e tone mapping são fixos.
-- O céu visível faz uma amostragem por pixel do HDRI 4K e compartilha o mesmo recurso
-  pesado usado pelo IBL. Céu, irradiância difusa e reflexão especular não têm
-  representações independentes.
+- A iluminação difusa agora é hemisférica e global, mas ainda não possui sombra, AO
+  ou visibilidade. CSM/GTAO continuam necessários para contraste sob a copa; a
+  calibração transitória não fecha O2/E3.
+- O céu visível usa panorama 2:1 compacto e direção reconstruída da câmera. Nesta
+  primeira fatia, o mesmo AETX ainda alimenta reflexos seletivos; SH difuso e probe
+  especular pré-filtrado independente permanecem o próximo contrato de ambiente.
 - O renderer recria pipelines/render passes diretamente apesar da infraestrutura de
   `PipelineCache` já conectada ao `VulkanDevice`.
 - O frame ainda não executa o Render Graph real na GPU e usa um command buffer único.
@@ -121,6 +213,63 @@ simulação por necessidade de gameplay; a tela nunca define a velocidade do jog
 O frame mantém folga de GPU para UI, simulação e variação de driver. “16,6 ms exatos”
 na cena vazia não é uma margem aceitável.
 
+### 3.4 Metas por perfil de desempenho
+
+Perfil não é sinônimo de qualidade artística nem de uma lista de modelos de telefone.
+Ele é um orçamento global de frame resolvido a partir de capacidades, calibração,
+preferência do projeto e estado térmico. O mesmo conteúdo, materiais e renderer são
+usados em todas as cenas.
+
+| Perfil | Gate sustentado inicial | Meta evolutiva | Contrato visual |
+|---|---:|---:|---|
+| S | 60 FPS | 90/120 FPS quando p95 e potência permitirem | referência máxima; efeitos avançados opcionais somam detalhe |
+| A | 60 FPS | 60 com folga para editor/gameplay | referência visual de produção |
+| B | 45 FPS, 60 desejável | 60 após visibilidade/indirect | mesma identidade, silhueta, materiais e iluminação; algoritmos equivalentes podem ter budgets menores |
+| C | 30 FPS | 45 FPS como meta de otimização | nenhum asset removido e nenhum material simplificado por cena; menor frequência temporal/LOD por erro de tela somente dentro do gate visual |
+
+O primeiro objetivo para a classe do A32 é sair de 20–25 para **30 FPS estáveis**
+sem corte de conteúdo. Depois de cena GPU persistente, culling, LOD e redução de
+bandwidth, o alvo passa a 45 FPS. Prometer 60 antes da medição física esconderia a
+diferença entre desejo e orçamento real; 60 continua um alvo de pesquisa, não um gate
+de M2 para perfil C.
+
+### 3.5 Fonte única de configurações globais
+
+O sistema final resolve uma política imutável por “época” de configuração:
+
+```text
+DeviceCapabilities (fatos Vulkan/Android)
+        + DevicePerformanceCalibration (medição curta e banco conhecido)
+        + ProjectRenderingSettings (preferência global serializada)
+        + ThermalPowerState (pressão transitória com histerese)
+        = ResolvedRenderingPolicy (budgets consumidos pelo frame inteiro)
+```
+
+Responsabilidades que não podem ser confundidas:
+
+- `DeviceCapabilities` diz somente o que existe; suporte a bindless/mesh shader/VRS
+  não prova que a implementação seja rápida. A classificação atual em
+  `native/rhi/device_profile.*` é uma boa base de capability, mas ainda não é uma
+  classificação de desempenho.
+- `DevicePerformanceCalibration` mede fill rate, bandwidth, custo de shader,
+  throughput de triângulos, upload e CPU de submissão com workloads curtos e
+  determinísticos. Resultado é cacheado por GPU+driver+build do benchmark e pode ser
+  invalidado após atualização de driver/engine.
+- `ProjectRenderingSettings` define globalmente cadência-alvo, política visual,
+  limites de memória e overrides Auto/S/A/B/C/Custom. Nenhuma cena escolhe um perfil.
+- `ThermalPowerState` só reduz o budget resolvido depois de pressão observada. Não
+  altera a configuração autoral nem grava degradação temporária no projeto.
+- `ResolvedRenderingPolicy` é a única entrada do renderer para LOD por erro projetado,
+  sombras, GI/AO, pós, streaming, uploads e trabalho assíncrono. Mudanças são atômicas,
+  têm motivo/telemetria e não podem oscilar a cada frame.
+
+Configurações artísticas continuam data-driven por material/luz/câmera. Por exemplo,
+`alphaMode=Mask` e `doubleSided` descrevem o conteúdo; não são “tuning da floresta”.
+Já budgets como erro máximo de LOD, cascatas de sombra, amostras de AO, tamanho de
+atlas, taxa de atualização de probes, render scale e residência de textura pertencem
+à política global, são refletidos, serializados, versionados e expostos no Project
+Settings/Inspector. Presets são dados, não `if` espalhados pelo renderer.
+
 ## 4. Ordem global de execução
 
 Esta ordem é uma dependência técnica, não uma lista de ideias: **frame policy e
@@ -129,13 +278,16 @@ cena GPU persistente → culling/LOD/compactação GPU → indirect → Render G
 shader/bandwidth → governor térmico**. Pular para subdivisão antes de indirect repete
 o caso medido de 396 draws e aumenta CPU em vez de reduzi-la.
 
-**Estado do ciclo atual:** política portátil 60/90/120 implementada; Surface Android
-recebe voto explícito; Choreographer filtra callbacks pela cadência do projeto; taxa
-VSYNC observada é registrada; alpha-mask, céu procedural, iluminação hemisférica e
+**Estado do ciclo atual:** política portátil 60/90/120 implementada; o Android separa
+capability do painel e preferência global, e `Auto` usa até 120 Hz; Surface Android
+recebe voto explícito; Choreographer filtra callbacks pela cadência resolvida; taxa
+VSYNC observada é registrada; alpha-mask, céu panorâmico compacto, iluminação hemisférica e
 ordenação solid-first estão ativos. Timestamps GPU por pass e o prepass seletivo de
-cobertura estão ativos. Próximo gate obrigatório: reduzir shader/bandwidth e executar
-captura AGI; somente depois reavaliar 2–3 frames em voo sem compartilhar
-depth/command/instance buffers.
+cobertura estão ativos. O isolamento compilado de fragment confirmou que simplesmente
+retirar PBR/normal/IBL não produz ganho mensurável nesta carga. Próximo gate obrigatório:
+atribuir vertex/raster/tiles e frame pacing em captura GPU, depois reduzir trabalho
+invisível por bounds/visibilidade e compactação comprovada. Somente então reavaliar
+2–3 frames em voo sem compartilhar depth/command/instance buffers.
 
 **Diagnóstico GPU de 29/08/2026:** timestamps Vulkan reais mediram 22,41–22,59 ms
 de GPU média no hotspot, contra 4,05–5,07 ms de CPU de processo. A espera de acquire
@@ -176,6 +328,84 @@ bandwidth de materiais/IBL, antes de reavaliar frames em voo.
 **Aceite:** o relatório identifica a floresta, reproduz a faixa percebida e permite
 atribuir cada milissegundo a CPU, GPU, espera do compositor ou thermal governor.
 
+**Progresso em 29/08/2026 (primeira fatia de G0):** o runtime passou a emitir
+`FrameProfileContext` schema 1 com `sceneId`, fingerprint FNV-1a dos bytes AEMAP,
+câmera/lock, alvo de FPS, resolução e contagens de instâncias, draws, materiais,
+texturas e triângulos. O runner salva `frame-contexts.jsonl`, gera captura schema 2
+e rejeita cena pedida diferente da cena realmente carregada, contexto ausente ou
+mudança de identidade no mesmo PID/epoch. Em `-Scene dirt-road`, a câmera inicial é
+travada mesmo sem pose explícita. Ainda faltam percurso animado, contadores
+visível/ocluído/LOD/fallback, captura AGI e baseline em hardware C.
+
+#### O0.1 — Android Studio, AVD sintético e laboratório físico
+
+O Android Emulator usa CPU/GPU do host por aceleração ou um renderer de software;
+portanto ele **não emula o custo real** de uma Mali-G52/G57, a largura de banda do
+SoC, o driver Samsung, o TBDR físico, DVFS, potência ou dissipação térmica. Um AVD
+que mostra 60 FPS não aprova desempenho no A32, e um AVD lento também não reprova o
+renderer móvel.
+
+Ainda assim, deve existir um AVD versionado `Aether-C-Synthetic` para regressão:
+
+1. Perfil de hardware com resolução equivalente à faixa alvo, 2 cores e 4 GB de RAM;
+   imagem Android/ABI e backend gráfico ficam registrados no relatório.
+2. Vulkan com aceleração `host/auto` valida execução e correção; SwiftShader/Lavapipe
+   valida fallback/portabilidade separadamente, nunca números de FPS.
+3. Um override **de teste** força `DeviceProfile::C`/caminhos sem bindless e os budgets
+   C sem falsificar as capabilities reportadas. O relatório marca claramente
+   `syntheticProfile=true`.
+4. O percurso determinístico da floresta roda em 30/45/60 Hz, resolução fixa e câmera
+   idêntica; valida seleção de perfil, serialização, lifecycle, memória, imagem e
+   ausência de dependência por cena.
+5. Pressão de memória/lifecycle e estados térmicos do `PowerGovernor` são injetados
+   por interfaces de teste. Valores artificiais validam transições, não energia real.
+6. Entregáveis: a definição versionada e o comando PowerShell do AVD já existem e são
+   testados; launcher do percurso com `profile/cameraPath` e manifesto completo de
+   captura continuam planejados. Nenhum resultado emulado conta como certificação.
+
+O perfil versionado fica em `tools/android-avd/Aether-C-Synthetic.json`. Ele fixa
+Android 35/ARM64 (mesma ABI do APK), 2 cores, 4 GB, 1080×2400, 60 Hz e renderer
+`auto`, e aparece no Device Manager do Android Studio após criação. Em host x64,
+a CPU ARM64 não recebe aceleração WHPX; o script registra isso e o AVD pode ser lento
+ou indisponível — um AVD x86_64 só entrará quando o runtime inteiro suportar essa ABI:
+
+```powershell
+# Instale antes a imagem system-images;android-35;google_apis;arm64-v8a pelo SDK Manager.
+.\tools\ensure-android-performance-avd.ps1
+# Caminho de portabilidade/fallback, sem comparar FPS:
+.\tools\ensure-android-performance-avd.ps1 -SoftwareRenderer -Launch
+```
+
+O comando é idempotente para um AVD marcado pelo mesmo `profileId` e recusa substituir
+silenciosamente um AVD homônimo do usuário. `-Recreate` é a única operação destrutiva
+e precisa ser solicitada explicitamente.
+
+O gate de desempenho permanece em aparelho físico:
+
+- aparelho forte Adreno já disponível, na resolução nativa e em 60/90/120 Hz;
+- um Mali perfil C físico, preferencialmente o A32 exato usado no relato; se não for
+  possível, registrar o aparelho equivalente sem chamá-lo de A32;
+- pelo menos um Mali intermediário para separar regressão de fabricante de regressão
+  de classe;
+- Firebase Test Lab com **Game Loop** determinístico para ampliar a matriz quando o
+  modelo estiver no catálogo; resultado físico complementa, não substitui, o aparelho
+  local usado para AGI e soak térmico.
+
+Ferramentas por finalidade:
+
+| Ferramenta | Uso válido | Não usar como |
+|---|---|---|
+| Android Studio CPU/Memory Profiler + Perfetto/Simpleperf | threads, JNI, alocações, stalls e scheduling | tempo GPU inferido |
+| AGI System Profiler | CPU/GPU concorrentes, counters, bandwidth, energia suportada | comparador visual isolado |
+| AGI Frame Profiler | passes Vulkan, draws, pipelines, shaders, texturas e framebuffer | soak longo sem overhead |
+| AVD `Aether-C-Synthetic` | fallback, automação, memória, lifecycle e imagem | “emulador de A32” ou certificação de FPS |
+| aparelho físico + runner | FPS exibido, GPU timestamps, driver, potência e térmica | teste manual sem câmera/hash controlados |
+
+Referências operacionais oficiais: [configuração de AVD](https://developer.android.com/studio/run/managing-avds),
+[aceleração do Emulator](https://developer.android.com/studio/run/emulator-acceleration),
+[Android GPU Inspector](https://developer.android.com/agi) e
+[Game Loop no Firebase Test Lab](https://firebase.google.com/docs/test-lab/android/game-loop).
+
 ### O1 — Correção global de materiais e visibilidade
 
 **Alinha:** 2.2.2, 2.2.5, 2.4.2, 2.4.5, 7.3.5.
@@ -203,27 +433,18 @@ mapa; backface culling reduz shading sem remover geometria válida.
 
 **Alinha:** 2.4.3, 2.4.4, 2.4.6, 7.2, 7.3 e 7.4.
 
-**Progresso em 29/08/2026 (itens 1, 5-difusa e 8-tonemap):**
-`tools/cook-procedural-sky.py` bakea a especular (mip chain 128×64, antes
-4096×2048/~89,5 MB) e a irradiância difusa (SH9) da mesma função analítica
-que a cúpula visível usa — item 1 fechado (as três fontes agora são
-literalmente a mesma função, não só "coexistem sem se destruir"). Item 5
-parcial: SH de irradiância substitui o ambiente hemisférico anterior;
-probes de reflexão múltiplas e BRDF multiscatter continuam pendentes. Item 8
-parcial: tonemap trocado de ACES-fit ingênuo para aproximação AgX
-(`native/rhi/shaders/tonemap.glsl`, compartilhado pela cúpula e pelo
-shading); exposição continua um escalar estático em `EnvironmentLighting`,
-sem histograma temporal nem white balance. Item 3 parcial com limitação
-nova: `cook-hdri-environment.py` (HDRI autoral fotográfica) ainda escreve o
-formato AEEN **v1** (80 bytes); `decodeEnvironment` agora exige v2 (224
-bytes, com SH9) sem fallback, então esse tool precisa de uma atualização
-equivalente (SH projetada do panorama real) antes de voltar a ser usável —
-não é um caminho ativo hoje, apenas registrado para não surpreender quem
-tentar cozinhar uma HDRI autoral depois. Itens 6 (CSM), 7 (GTAO/DDGI) e a
-parte de nuvens/disco solar procedurais do item 2/9 permanecem no escopo
-original, não tocados por esta fatia. Confirmação em hardware físico
-pendente (sem aparelho ADB conectado nesta sessão); ver `docs/ESTADO.md`
-§"Ambiente/IBL global — 29/08/2026".
+**Progresso validado em hardware em 30/08/2026 (primeira fatia dos itens 2–5):**
+`tools/cook-sky-panorama.py` transforma um source 2:1 pertencente ao projeto em
+AETX 1024×512 sRGB, cadeia completa de mips em espaço linear e seam horizontal.
+O shader reconstrói a direção do pixel a partir da câmera, portanto o céu gira com
+o mundo e não estica como uma imagem de tela. O runtime aceita AEEN v1 por migração
+e AEEN v2 de 144 bytes, que serializa oito `vec4`: sol, ambiente, exposição e a
+fundação de céu/ground bounce. A luz difusa hemisférica usa esses dados globalmente.
+No Xiaomi físico, a imagem foi validada em yaw 0°/90°, o AETX caiu 89,5→2,80 MB,
+o caminho de uma amostra atingiu 117,27 FPS em estado de boost e a tentativa
+procedural full-screen foi descartada a 84,82 FPS. Ainda não há atmosfera analítica,
+SH9, probe pré-filtrado separado, CSM, GTAO, exposição temporal ou AgX; esses itens
+permanecem abertos e não devem ser inferidos desta fatia.
 
 1. Separar três conceitos: **céu visível**, **irradiância difusa** e **reflexão
    especular**. Trocar a fotografia visível não pode destruir o IBL dos materiais.
@@ -255,7 +476,12 @@ com reflexos/irradiância de qualidade igual ou superior.
 **Alinha:** 2.5.1–2.5.5 e 7.1.1–7.1.6.
 
 1. Construir BVH incremental global com bounds por draw/instância.
-2. Aplicar frustum culling conservador e ordenar opacos front-to-back.
+2. Aplicar frustum culling conservador e ordenar opacos front-to-back. Fatia CPU
+   global integrada em 30/08/2026: seis planos, mesma matriz yaw/pitch do shader,
+   expansão `radius*1,05 + 0,5`, fallback visível para dados inválidos, listas sem
+   alocação por frame e contadores no log/perfil. Os bounds atuais são por draw de
+   material e alguns cobrem grande parte do mapa; portanto esta fatia elimina trabalho
+   seguramente, mas não substitui render chunks espaciais + indirect.
 3. Gerar HZB e occlusion culling de dois passos com histerese; objetos recém-visíveis
    e bounds incertos ficam visíveis, nunca somem por um frame.
 4. Agrupar instâncias automaticamente por malha+material+PSO e emitir draw packets
@@ -355,10 +581,162 @@ stutter ou mudança visual abrupta.
 G1 e G2 podem avançar em paralelo depois de G0. G3 depende da semântica correta de
 alpha; G4 não pode ser aprovado enquanto houver desaparecimentos sem diagnóstico.
 
-## 6. Primeiro ciclo de implementação
+## 6. Ciclos de implementação por retorno e dependência
 
-Ordem recomendada para o primeiro ciclo, sem antecipar sistemas avançados antes da
-medição:
+### 6.1 Ciclo já executado
+
+Alpha-mask, ordenação solid-first, timestamps GPU por pass e prepass seletivo de
+cobertura já demonstraram ganho grande mantendo 99,966% dos pixels idênticos. Esse
+resultado é baseline; não autoriza pular os gates restantes.
+
+### 6.2 Próximo ciclo — custo GPU imediato e verdade no perfil C
+
+1. **Aparelho forte concluído; Mali C pendente.** O Xiaomi foi capturado em Release
+   com APK/hash, fingerprint da cena, câmera, resolução, refresh físico confirmado,
+   temperatura e métricas v3. Repetir o mesmo contrato no Mali C físico.
+2. **Atribuição fina pendente:** AGI não está instalado no host e sua instalação exige
+   aceite explícito da licença do SDK; o Android Emulator também não é alvo suportado
+   para captura AGI. Como diagnóstico intermediário, o runner ganhou variantes globais
+   `full`, `no-normal`, `no-ibl` e `base-color`, resolvidas por specialization constant
+   na criação do pipeline e registradas no `FrameProfileContext`. O A/B especializado
+   `full → base-color → full` não mostrou benefício de fragment: GPU média
+   9,72→10,08→11,04 ms e SurfaceFlinger 93,45→88,51→91,61/s. Fazer a captura física
+   AGI/Android Performance Analyzer do hotspot e ordenar por vertex, raster/tiles,
+   render-target traffic, texture bandwidth, pipeline/descriptor e sincronização.
+3. **Implementado e baseline físico pós-mudança capturado; A/B ainda pendente:**
+   `transpose(inverse(mat3(inModel)))` saiu
+   do vertex shader da floresta. Uma função reutilizável prepara três colunas da normal
+   matrix uma vez por draw/transform, carrega o sinal do determinante para handedness
+   da tangente e rejeita matriz singular/NaN sem escrita parcial. Há testes para escala
+   não uniforme, escala pequena válida e espelhamento. O baseline pós-mudança é 78,12
+   presents/s, CPU 1,41 ms e GPU 11,40/18,41 ms média/pior p95; falta reconstruir uma
+   variante anterior controlada e executar o A/B frio/aquecido para atribuir ganho.
+4. **Tentativa medida e retirada:** o backface culling por `doubleSided` e handedness
+   permaneceu estável dentro de cada execução, mas diferiu do baseline em 9,42% dos
+   pixels e removeu terreno/folhagem mesmo com `MASK` legado dupla face. Também regrediu
+   o A/B físico: 97,46→86,34 presents/s; GPU média 9,04→9,98 ms e p95 9,89→13,65 ms.
+   Não reaplicar por intuição. Antes de uma segunda tentativa,
+   capturar AGI, versionar no AEMAP a proveniência single/double-sided de cutouts e
+   provar ganho em Adreno e Mali sem multiplicação prejudicial de PSOs/buckets.
+5. **AEMAP v2 integrado e v1 compatível:** o layout passou de 72 para 48 bytes por
+   vértice. Posição/UV continuam float32; normal/tangente usam SNORM16 e cor UNORM8.
+   O asset economizou 10,20 MB, o gate visual ficou em máximo 1/255 e dois runs Adreno
+   reduziram GPU para 8,89/7,42 ms. Fechar A/B longo e Mali antes de considerar o gate
+   completo. Fetches de normal/IBL isolados continuam hipóteses secundárias, não ajustes
+   de qualidade autorizados.
+6. **AEEN v2 e céu compacto implementados:** manter migração v1, completar SH de
+   irradiância e probe especular pré-filtrado sobre o mesmo `EnvironmentState`, e
+   depois medir os caminhos independentes. O importador HDRI legado não é o céu ativo.
+7. Fechar com A/B frio e aquecido, captura visual, 60 s e soak físico; o AVD executa a
+   mesma matriz apenas para correção/fallback.
+
+**Saída:** perfil A com GPU p95 ≤14,67 ms e classe C em ≥30 FPS, sem alteração de
+conteúdo ou diferença visual fora do gate. Se shader/bandwidth não entregar isso, os
+counters da captura — e não preferência — escolhem a próxima intervenção.
+
+### 6.3 Ciclo seguinte — cena persistente, visibilidade e complexidade
+
+1. Change tracking ECS e extração incremental por chunk.
+2. Render scene persistente, draw packets por mesh+material+PSO e uploads por dirty
+   range; zero reconstrução estável e zero alocação no frame.
+3. **Primeira fatia entregue:** bounds conservadores por draw, frustum CPU,
+   ordenação front-to-back apenas do conjunto visível e telemetria. O visualizador
+   de bounds e a validação por imagens durante uma rota determinística continuam
+   como instrumentos obrigatórios para HZB/LOD.
+4. **Segunda fatia entregue:** render chunks espaciais persistentes no import/runtime,
+   índice opaco/coverage reordenado sem alterar triângulos e submissão multi-draw
+   indirect agrupada por material. A subdivisão nunca volta ao caminho de dezenas de
+   draws CPU quando `multiDrawIndirect` está disponível; o fallback permanece correto
+   e detectado por capability.
+5. HZB em dois passos com histerese e counters de falso positivo/falso negativo.
+6. LOD gerado no import por erro geométrico, selecionado por erro projetado em pixels,
+   com transição dither temporal e preservação de coverage da vegetação.
+
+**Saída:** custo cresce com draws/triângulos visíveis, e não com tudo que está
+carregado. A cena pode ganhar densidade/complexidade mantendo o mesmo budget.
+
+#### Escopo executável para a regressão 60–80 → 47 FPS em movimento
+
+##### Diagnóstico físico e entrega G4.1 — 30/08/2026
+
+A utilização baixa de CPU não foi tratada como falta de clock. No Xiaomi de referência,
+o processo ficou em aproximadamente 7,3% de CPU enquanto o `acquire` aguardava a GPU por
+9–22 ms; com um frame em voo, a thread naturalmente fica bloqueada quando o frame GPU
+ultrapassa o orçamento de 8,33 ms para 120 Hz. O isolamento na mesma câmera confirmou o
+custo de fragment/texture: PBR completo 85,86 FPS/10,25 ms GPU; sem normal map 101,52
+FPS/8,59 ms; sem IBL 97,54 FPS/8,91 ms; base color diagnóstico 120,11 FPS/6,45 ms. Essas
+variantes continuam apenas como instrumentação e não viraram preset de qualidade.
+
+A correção global manteve a imagem e atacou o trabalho real:
+
+1. yaw/pitch e linhas world-to-view são calculados uma vez por frame na CPU, em vez de
+   repetir trigonometria por vértice; Fresnel `pow5`, TBN e direção solar eliminaram
+   normalizações e `pow` redundantes sem trocar o modelo PBR;
+2. os 27 draws de origem são convertidos deterministicamente em 58 render chunks de até
+   8.192 triângulos; índices e triângulos são preservados, e primitivas blend mantêm
+   integridade e ordem;
+3. chunks visíveis são agrupados por material e enviados com multi-draw indirect. No
+   ponto fixo, 82 chamadas CPU da primeira versão de chunking caíram para 34, com os
+   mesmos 485.139 triângulos submetidos;
+4. no mesmo ponto, a build v7 foi de 85,86 FPS para 99,46 FPS na v10 (+15,8%), com GPU
+   média de 10,25 para 9,23 ms. Na rota manual de 30 s, as cinco primeiras janelas
+   ficaram em média 98,34 FPS; quando a câmera voltou a expor 57/58 chunks e 525.704
+   triângulos, a janela caiu a 64,39 FPS e 13,73 ms GPU. Portanto o ganho é real, mas
+   120 FPS estáveis ainda não estão alcançados.
+
+O modo sustentado público do Android foi integrado como política global e condicionado
+à capability. Este Xiaomi respondeu `supported=false`; nesse caso a engine não força
+estado privado nem cria carga artificial. ADPF/Game State continuam sendo apenas hints,
+e a próxima redução precisa vir de visibilidade e bandwidth medidos.
+
+1. Gravar uma rota determinística de 60 s (posição/yaw/pitch por tick) atravessando os
+   pontos de 120, 60–80 e ~47 FPS; o benchmark parado fica apenas como diagnóstico.
+2. Registrar por janela CPU/GPU p50/p95/p99, acquire/present, temperatura, ADPF,
+   candidatos/visíveis/descartados, draw calls e triângulos submetidos. Executar A/B
+   com gravador desligado/ligado sem alterar cena ou preset.
+3. Visualizar bounds e provar que o frustum atual não cria pop. Medir quantos dos 27
+   draws ele consegue remover em cada trecho; bounds gigantes identificam necessidade
+   de repartição, não autorização para reduzir distância ou geometria.
+   A primeira execução física já confirmou variação de 27/27 para 18/27 draws e
+   341.109 para 325.827 triângulos lógicos visíveis; como o número de triângulos cai
+   muito menos que o de draws, os grupos mais pesados continuam espacialmente amplos.
+4. **Entregue:** render chunks espaciais persistentes e multi-draw indirect, com
+   fallback por capability, testes de preservação geométrica e imagem equivalente.
+5. Gravar/reproduzir a rota determinística antes do próximo A/B e adicionar HZB de
+   dois passos com histerese e estado “incerto = visível”; medir
+   falso positivo/negativo e ganho nas áreas fechadas da floresta.
+6. Só então ativar LOD por erro projetado em pixels, preservação de coverage e dither
+   temporal. Nenhum LOD é escolhido por nome de cena ou modelo de aparelho.
+7. Repetir em Adreno forte, Mali físico classe C e AVD `Aether-C-Synthetic`. O AVD
+   valida rotação, input, lifecycle, fallback e memória; não certifica FPS, clocks,
+   bandwidth ou comportamento térmico do Galaxy A32.
+
+**Próxima ordem aprovada:** rota determinística → HZB conservador com histerese → LOD
+por erro projetado/coverage+dither → nova captura GPU. Dois frames em voo só entram
+depois que recursos por frame forem isolados e o tempo GPU estiver abaixo do budget;
+eles podem esconder espera da CPU, mas não reduzem o custo de 13–19 ms do pior quadro.
+
+### 6.4 Ciclo estrutural — Render Graph móvel e qualidade financiada
+
+1. Pipeline cache persistente/pré-aquecido e nenhum `vkCreate*Pipeline` no frame.
+2. Render Graph real, anexos transient/memoryless, load/store corretos e fusão medida
+   em AGI.
+3. Frames em voo reavaliados só após GPU abaixo do budget; recursos per-frame não são
+   compartilhados indevidamente e latência toque→pixel continua no gate.
+4. Forward+ e sombras CSM cacheadas financiam mais luzes e sombras mais estáveis sem
+   custo linear por luz/caster.
+5. GTAO/bent normals temporal em resolução adequada ao perfil acrescenta contato sob
+   a copa; TAA preserva folhagem e habilita reconstrução quando mensurada.
+6. Streaming por mip, ASTC por semântica e residency budgets permitem mais detalhe de
+   textura sem manter tudo na memória/bandwidth.
+
+**Saída:** captura AGI prova redução de tráfego externo e o ganho é reinvestido em
+sombras, contato, iluminação e densidade, mantendo p99 e potência dentro do perfil.
+
+### 6.5 Backlog original ainda válido
+
+A ordem original permanece como checklist de integração, mas itens já executados não
+devem ser contados novamente:
 
 1. Corrigir o runner para perfilar `dirt-road` sem habilitar PoC-A.
 2. Adicionar timestamp GPU do frame atual e captura AGI marcada por pass.
@@ -402,4 +780,6 @@ e prepara M7 sem inverter dependências. A prioridade imediata permanece nos ite
 2.1.3/2.1.5/2.1.6, 2.2, 2.3 GPU real, 2.4 e 2.5. Os itens 7.1–7.6 entram somente
 quando sua fundação correspondente estiver medida e correta. Céu procedural básico,
 CSM, transparência correta e culling pertencem ao pipeline base; atmosfera Bruneton,
-nuvens volumétricas, DDGI, VSM, AetherSR e VRS continuam evoluções da Fase 7.
+nuvens volumétricas, DDGI, VSM, AetherSR e VRS continuam evoluções da Fase 7. A
+separação entre capabilities, calibração, Project Settings e estado térmico é
+formalizada em [`ADR-014`](adr/ADR-014-POLITICA-GLOBAL-RENDERIZACAO.md).

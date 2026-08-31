@@ -1,60 +1,0 @@
-Performing C++ SOURCE FILE Test CMAKE_HAVE_LIBC_PTHREAD failed with the following output:
-Change Dir: C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/CMakeTmp
-
-Run Build Command(s):C:\Users\jamaa\AppData\Local\Android\Sdk\cmake\3.22.1\bin\ninja.exe cmTC_a60cf && [1/2] Building CXX object CMakeFiles/cmTC_a60cf.dir/src.cxx.o
-FAILED: CMakeFiles/cmTC_a60cf.dir/src.cxx.o 
-C:\Users\jamaa\AppData\Local\Android\Sdk\ndk\27.1.12297006\toolchains\llvm\prebuilt\windows-x86_64\bin\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/jamaa/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -DCMAKE_HAVE_LIBC_PTHREAD  -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20  -fPIE -std=c++20 -MD -MT CMakeFiles/cmTC_a60cf.dir/src.cxx.o -MF CMakeFiles\cmTC_a60cf.dir\src.cxx.o.d -o CMakeFiles/cmTC_a60cf.dir/src.cxx.o -c C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/CMakeTmp/src.cxx
-C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/CMakeTmp/src.cxx:13:3: error: use of undeclared identifier 'pthread_cancel'
-   13 |   pthread_cancel(thread);
-      |   ^
-1 error generated.
-ninja: build stopped: subcommand failed.
-
-
-Source file was:
-#include <pthread.h>
-
-static void* test_func(void* data)
-{
-  return data;
-}
-
-int main(void)
-{
-  pthread_t thread;
-  pthread_create(&thread, NULL, test_func, NULL);
-  pthread_detach(thread);
-  pthread_cancel(thread);
-  pthread_join(thread, NULL);
-  pthread_atfork(NULL, NULL, NULL);
-  pthread_exit(NULL);
-
-  return 0;
-}
-
-Determining if the function pthread_create exists in the pthreads failed with the following output:
-Change Dir: C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/CMakeTmp
-
-Run Build Command(s):C:\Users\jamaa\AppData\Local\Android\Sdk\cmake\3.22.1\bin\ninja.exe cmTC_05b4e && [1/2] Building CXX object CMakeFiles/cmTC_05b4e.dir/CheckFunctionExists.cxx.o
-[2/2] Linking CXX executable cmTC_05b4e
-FAILED: cmTC_05b4e 
-cmd.exe /C "cd . && C:\Users\jamaa\AppData\Local\Android\Sdk\ndk\27.1.12297006\toolchains\llvm\prebuilt\windows-x86_64\bin\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/jamaa/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -DCHECK_FUNCTION_EXISTS=pthread_create -static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments CMakeFiles/cmTC_05b4e.dir/CheckFunctionExists.cxx.o -o cmTC_05b4e  -lpthreads  -latomic -lm && cd ."
-ld.lld: error: unable to find library -lpthreads
-clang++: error: linker command failed with exit code 1 (use -v to see invocation)
-ninja: build stopped: subcommand failed.
-
-
-
-Determining if the function pthread_create exists in the pthread failed with the following output:
-Change Dir: C:/Users/jamaa/Downloads/aether-fase0-1/android/app/.cxx/Debug/6495rmj6/arm64-v8a/CMakeFiles/CMakeTmp
-
-Run Build Command(s):C:\Users\jamaa\AppData\Local\Android\Sdk\cmake\3.22.1\bin\ninja.exe cmTC_6a478 && [1/2] Building CXX object CMakeFiles/cmTC_6a478.dir/CheckFunctionExists.cxx.o
-[2/2] Linking CXX executable cmTC_6a478
-FAILED: cmTC_6a478 
-cmd.exe /C "cd . && C:\Users\jamaa\AppData\Local\Android\Sdk\ndk\27.1.12297006\toolchains\llvm\prebuilt\windows-x86_64\bin\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/jamaa/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -DCHECK_FUNCTION_EXISTS=pthread_create -static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments CMakeFiles/cmTC_6a478.dir/CheckFunctionExists.cxx.o -o cmTC_6a478  -lpthread  -latomic -lm && cd ."
-ld.lld: error: unable to find library -lpthread
-clang++: error: linker command failed with exit code 1 (use -v to see invocation)
-ninja: build stopped: subcommand failed.
-
-
-

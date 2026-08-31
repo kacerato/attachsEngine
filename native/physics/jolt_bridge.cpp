@@ -15,6 +15,7 @@
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
@@ -747,6 +748,41 @@ AetherBodyHandle AetherPhysics_CreateBody(AetherPhysicsWorld *world, const Aethe
   v2.isSensor = 0;
   v2.eventLayerMask = static_cast<ae::u32>(AetherQueryLayerMask::All);
   return CreateBodyInternal(*world, v2);
+}
+
+AetherBodyHandle AetherPhysics_CreateStaticTriangleMesh(
+    AetherPhysicsWorld *world, const AetherVec3 *vertices, ae::u32 vertexCount,
+    const ae::u32 *indices, ae::u32 indexCount, float friction) {
+  if (world == nullptr || vertices == nullptr || indices == nullptr || vertexCount < 3 ||
+      indexCount < 3 || indexCount % 3 != 0 || !std::isfinite(friction) ||
+      friction < 0.0f || friction > 1.0f) return AetherBodyHandle_Invalid;
+
+  JPH::VertexList meshVertices;
+  meshVertices.reserve(vertexCount);
+  for (ae::u32 index = 0; index < vertexCount; ++index) {
+    const AetherVec3 &vertex = vertices[index];
+    if (!std::isfinite(vertex.x) || !std::isfinite(vertex.y) ||
+        !std::isfinite(vertex.z)) return AetherBodyHandle_Invalid;
+    meshVertices.emplace_back(vertex.x,vertex.y,vertex.z);
+  }
+  JPH::IndexedTriangleList triangles;
+  triangles.reserve(indexCount/3);
+  for (ae::u32 index = 0; index < indexCount; index += 3) {
+    if (indices[index] >= vertexCount || indices[index+1] >= vertexCount ||
+        indices[index+2] >= vertexCount) return AetherBodyHandle_Invalid;
+    triangles.emplace_back(indices[index],indices[index+1],indices[index+2],0);
+  }
+  JPH::MeshShapeSettings meshSettings(std::move(meshVertices),std::move(triangles));
+  meshSettings.mBuildQuality = JPH::MeshShapeSettings::EBuildQuality::FavorRuntimePerformance;
+  auto result = meshSettings.Create();
+  if (result.HasError()) return AetherBodyHandle_Invalid;
+
+  JPH::BodyCreationSettings bodySettings(result.Get(),JPH::RVec3::sZero(),
+      JPH::Quat::sIdentity(),JPH::EMotionType::Static,Layers::NonMoving);
+  bodySettings.mFriction = friction;
+  JPH::BodyID id = world->physicsSystem.GetBodyInterface().CreateAndAddBody(
+      bodySettings,JPH::EActivation::DontActivate);
+  return id.IsInvalid() ? AetherBodyHandle_Invalid : id.GetIndexAndSequenceNumber();
 }
 
 AetherBodyHandle AetherPhysics_CreateBodyV2(AetherPhysicsWorld *world,
