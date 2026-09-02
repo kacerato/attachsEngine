@@ -24,6 +24,13 @@
         android:icon="@drawable/ic_aether"
         android:label="Aether"
         android:theme="@style/AetherTheme">
+        <!-- Sem este meta-data o GameManager nao enxerga o game-mode-config e
+             o app fica em STANDARD. A diferenca medida entre STANDARD e
+             PERFORMANCE, mesma cena e mesmo APK, foi 10,204 contra 7,284 ms de
+             frame. Ver res/xml/game_mode_config.xml. -->
+        <meta-data
+            android:name="android.game_mode_config"
+            android:resource="@xml/game_mode_config" />
         <activity
             android:name="android.app.NativeActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"

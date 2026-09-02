@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Contrato de Game Mode (Android 13+).
+
+  A medicao que motivou este arquivo: duas execucoes da MESMA configuracao, na
+  mesma pose e no mesmo APK, mediram 7,284 ms e 10,204 ms de frame. A unica
+  diferenca nos logs foi game_mode=2 contra game_mode=1, ou seja PERFORMANCE
+  contra STANDARD. Quarenta por cento do tempo de frame estava sendo decidido
+  pelo modo de jogo do sistema, e nao pelo renderer.
+
+  android:appCategory="game" sozinho nao basta: sem declarar este config o
+  GameManager nao tem como saber que o app implementa um modo de desempenho, e
+  o sistema fica em STANDARD.
+
+  As tres permissoes de intervencao ficam FALSAS de proposito.
+
+  allowGameDownscaling: o sistema reduziria a resolucao interna pelas nossas
+  costas. A engine ja tem resolucao dinamica governada por tempo de GPU medido,
+  com o HUD em resolucao nativa; duas politicas de escala disputando o mesmo
+  pixel produzem exatamente o tipo de numero que nao se explica.
+
+  allowGameFpsOverride: um teto de quadros imposto por fora derrubaria o clock
+  da GPU pelo mesmo mecanismo que a cadencia adaptativa derrubou quando foi
+  medida e rejeitada (8,90 para 22,11 ms com o aparelho MAIS frio).
+
+  allowGameAngleDriver: o caminho e Vulkan nativo; ANGLE traduziria GL sobre
+  Vulkan sem nada para traduzir.
+
+  supportsBatteryGameMode continua verdadeiro porque a politica de qualidade ja
+  sabe ceder por eixo sob pressao termica ou de energia (ADR-014); recusar o
+  modo bateria nao pouparia energia, so tiraria do usuario a escolha.
+-->
+<game-mode-config xmlns:android="http://schemas.android.com/apk/res/android"
+    android:allowGameAngleDriver="false"
+    android:allowGameDownscaling="false"
+    android:allowGameFpsOverride="false"
+    android:supportsBatteryGameMode="true"
+    android:supportsPerformanceGameMode="true" />

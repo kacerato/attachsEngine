@@ -77,6 +77,14 @@ param(
     [double]$DynamicResolutionMinimumScale = 0.0,
     [ValidateSet(0, 1, 9, 25)]
     [int]$ShadowFarFilterTaps = 0,
+    # Resolucao da cascata e numero de amostras sao eixos OPOSTOS do mesmo
+    # orcamento: com PCF de hardware cada amostra ja e filtrada, entao um
+    # atlas maior compra nitidez que antes so vinha de mais buscas. Trocar
+    # VRAM (que sobra) por trabalho por fragmento (que falta) e o objetivo.
+    [ValidateSet(0, 512, 1024, 1536, 2048, 4096)]
+    [int]$ShadowResolution = 0,
+    [ValidateSet(0, 1, 9, 25)]
+    [int]$ShadowFilterTaps = 0,
     [ValidateRange(0.1, 16.0)]
     [double]$LodPixelErrorBudget = 2.0,
     [ValidateRange(0.1, 128.0)]
@@ -206,6 +214,8 @@ $Report = [ordered]@{
         hzbDepthBias = $HzbDepthBias
         lodOverride = if ($EnableLod) { 'enabled' } elseif ($DisableLod) { 'disabled' } else { 'inherit' }
         shadowStaticCacheEnabled = -not [bool]$DisableShadowStaticCache
+        shadowResolution = $ShadowResolution
+        shadowFilterTaps = $ShadowFilterTaps
         dynamicResolutionOverride = if ($EnableDynamicResolution) { 'enabled' } elseif ($DisableDynamicResolution) { 'disabled' } else { 'inherit' }
         resolutionScale = $ResolutionScale
         dynamicResolutionMinimumScale = $DynamicResolutionMinimumScale
@@ -632,6 +642,12 @@ function Start-AetherActivity {
     if ($DynamicResolutionMinimumScale -gt 0.0) {
         $arguments += @('--ef', 'aether.dynamic_resolution_min_scale',
             $DynamicResolutionMinimumScale.ToString('R', [Globalization.CultureInfo]::InvariantCulture))
+    }
+    if ($ShadowResolution -gt 0) {
+        $arguments += @('--ei', 'aether.shadow_resolution', [string]$ShadowResolution)
+    }
+    if ($ShadowFilterTaps -gt 0) {
+        $arguments += @('--ei', 'aether.shadow_filter_taps', [string]$ShadowFilterTaps)
     }
     if ($ShadowFarFilterTaps -gt 0) {
         $arguments += @('--ei', 'aether.shadow_far_filter_taps', [string]$ShadowFarFilterTaps)
