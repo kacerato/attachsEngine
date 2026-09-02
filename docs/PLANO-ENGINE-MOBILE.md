@@ -747,6 +747,17 @@ Estratégia em três níveis, escolhida automaticamente pelo perfil de hardware:
 - Integração com upscalers do fabricante quando presentes (Snapdragon GSR, MetalFX, FSR 2/3 mobile).
 - **VRS**: taxa reduzida na periferia, atrás de DOF, em superfícies de baixa frequência (dirigido por um buffer de "importância" gerado no frame anterior).
 
+> **Progresso 31/08/2026:** a primeira fatia backend-agnostic está integrada. O
+> controller observa apenas GPU, possui piso/teto/degraus e janelas diferentes para
+> queda e recuperação; o Vulkan Android muda viewport/scissor sem recriar recursos e
+> o pós resolve somente a região ativa. Na floresta Release visualmente validada, o
+> piso 0,58 mediu 96,71 FPS/8,88 ms GPU; a pose fixa chegou a 110,93 FPS com capturas
+> idênticas. O próximo orçamento está em geometria/vertex e picos, não em continuar
+> removendo pixels. O asset atual passou a AEMAP v3 com 245 grupos espaciais,
+> LOD0/colisão preservados e budgets separados para sólido e coverage; o A/B aquecido
+> mediu 109,49 contra 107,78 FPS exibidos. Upscaler temporal, governor térmico,
+> impostors/HLOD e matriz de dispositivos permanecem.
+
 ## 5.9 Renderização 2D (não é um cidadão de segunda classe)
 
 - Sprite batching automático por atlas + material, com ordenação por camada/Y.
@@ -1744,6 +1755,17 @@ Esta fase existe para responder cinco perguntas que, se respondidas "não", muda
 - **2.1.9** Laboratório reproduzível: AVD C sintético para correção/fallback e matriz
   física Adreno+Mali+C para FPS/GPU/potência, sempre com cena/câmera/hash registrados.
 
+> **Fundação compute integrada em 01/09/2026:** o RHI agora possui kernel compute
+> reutilizável, reflexão/validação SPIR-V, descriptors, push constants, dispatch
+> direto/indireto, contexto com fence/semaphore e seleção de fila dedicada com
+> fallback gráfico. O Render Graph distingue passes e acessos compute, deriva
+> barreiras e representa ownership entre famílias; o mapper Vulkan grava essas
+> barreiras reais. O probe ASTC foi migrado do pipeline manual e validado em
+> Adreno com transferência compute→graphics. Essa fundação é C0: HZB same-frame,
+> culling GPU-driven, Forward+, skinning, partículas e compressor de produção são
+> verticais seguintes, não são considerados concluídos pela existência da base.
+> Decisão e contrato: `docs/COMPUTE.md` e ADR-016.
+
 > **Fatia integrada em 29/08/2026:** `Aether-C-Synthetic` já possui definição JSON e
 > criador PowerShell versionados; o runtime/runner já vinculam sceneId, fingerprint,
 > câmera e contagens ao perfil. O baseline físico Release do mapa real foi fixado no
@@ -1784,6 +1806,11 @@ Esta fase existe para responder cinco perguntas que, se respondidas "não", muda
 - **2.3.5** **Fusão de passes em subpasses** e marcação de anexos *memoryless* — a otimização mais importante do mobile.
 - **2.3.6** Visualizador do grafo (base do recurso de inspeção do usuário).
 
+> O compilador já expressa `Raster`/`Compute`/`Transfer`, imagens/buffers,
+> dispatch e fila de execução. A exportação textual permite inspeção, e o mapper
+> Vulkan cobre storage/indirect/transfer e ownership. Ainda faltam o executor
+> integral do grafo e a migração das barreiras legadas para `synchronization2`.
+
 ### Etapa 2.4 — Pipeline de renderização direta *(6 semanas)*
 - **2.4.1** Depth prepass + Forward+ com clusterização de luzes (froxels em compute).
   - Fatura parcial validada em hardware: prepass seletivo de cobertura para materiais
@@ -1792,9 +1819,19 @@ Esta fase existe para responder cinco perguntas que, se respondidas "não", muda
     pendentes, portanto o item não está concluído.
 - **2.4.2** BRDF PBR completo (GGX multiscatter, Burley, Fresnel), com validação contra referência offline.
 - **2.4.3** Sombras: cascaded shadow maps com PCF/PCSS, sombras de spot e point (cubemap com atlas).
+  - **Progresso 31/08/2026:** CSM direcional Android funcional com 1–4 cascatas
+    estabilizadas em atlas, PCF configurável, biases e alpha-mask de vegetação;
+    culling conservador por volume, cache estático por cascata com guard band e
+    invalidação explícita, mais validação Debug/Release físicas. Na rota de 60 s, o
+    cache reduziu sombra de 3,05 para 0,09 ms em média. Separação de casters dinâmicos,
+    granularidade menor, blend/PCSS e spot/point permanecem.
 - **2.4.4** IBL: skybox HDR, pré-filtragem de especular, SH de irradiância, reflection probes.
 - **2.4.5** Transparência ordenada + partículas básicas.
 - **2.4.6** Pós-processamento: exposição automática, bloom (dual-filter), tonemapping AgX, LUT de grading, FXAA→TAA.
+  - **Progresso 31/08/2026:** alvo de cena escalável e passe final Android com
+    upscale, bloom por limiar, FXAA, sharpen, contraste, saturação e vinheta, todos
+    vindos da política global. HDR intermediário, autoexposição, AgX, dual-filter,
+    LUT e TAA permanecem no roadmap.
 
 ### Etapa 2.5 — Culling e batching *(4 semanas)*
 - **2.5.1** BVH de cena com atualização incremental.
@@ -1857,10 +1894,12 @@ Esta fase existe para responder cinco perguntas que, se respondidas "não", muda
 > benchmark da floresta sem pose explícita ou Record/Replay. HZB foi corrigido
 > (depth normalizado, store, pré-rotação e capability), porém o readback CPU só é
 > elegível acima do orçamento global de candidatos e câmera móvel falha aberta;
-> same-frame GPU-driven continua a próxima arquitetura. O agrupador LOD agora
-> preserva múltiplos chunks por nível e o dither é complementar, mas o asset atual
-> é AEMAP v2/zero grupos, logo LOD continua sem ganho físico declarado. O A/B de
-> coverage em 2.048 triângulos/chunk foi rejeitado; 8.192 permanece o default. O
+> same-frame GPU-driven continua a próxima arquitetura. O agrupador LOD preserva
+> múltiplos chunks por nível e o dither é complementar. O asset AEMAP v3 possui
+> 245 grupos: 341.109 triângulos no LOD0, 126.033 no LOD1 e 66.118 no LOD2,
+> reutilizando os vértices de origem. O A/B de coverage em 2.048 triângulos/chunk
+> citado abaixo foi um experimento anterior de granularidade de draw, não o atual
+> particionamento espacial por célula de 64 m. O
 > prepass seletivo `MASK` foi então isolado na mesma rota: ligado 93,61 → desligado
 > 80,89 → ligado 92,45 presents/s, com GPU média 9,32→11,01 ms (+18,1%) e CPU
 > praticamente invariável. Ele permanece habilitado globalmente; a próxima
@@ -1871,7 +1910,42 @@ Esta fase existe para responder cinco perguntas que, se respondidas "não", muda
 > ficou em 83,05–83,65 FPS/~10,38 ms GPU, sem ganho contra v14; o driver já otimizava
 > esse caso. Próxima fatia: separar fetch/TBN/folhagem, integrar compressão e filtragem
 > semântica de normal + material LOD por erro projetado, depois AGI, HZB
-> same-frame/GPU-driven e recook AEMAP v3/LOD.
+> same-frame/GPU-driven, impostors e HLOD/streaming.
+
+> **Revisão/medição de 01/09/2026:** a queda para 80–100 FPS foi separada de CPU,
+> térmica e apresentação pelo `FrameProfile` schema 6. Na pose fixa, thread CPU-p95
+> ficou em 1,67/6,50 ms, mas GPU-p95 chegou a 16,83/7,33 ms; Thermal Status=0 e
+> Headroom=0,46–0,55. ADPF agora reporta `AWorkDuration` CPU+GPU no Android 15+,
+> Game Mode/Thermal viajam na mesma janela e o runtime aplica pressão térmica com
+> histerese sem rebuild. A especialização A/B confirmou fragment shading:
+> full 93,65 FPS, no-normal 113,55, no-IBL 113,80 e base-color 116,43. O perfil B
+> passou a preservar normal até 60 m e IBL até 120 m, com fade configurável de 20%;
+> o shader final mediu 115,19 FPS numa rodada física. O próximo trabalho permanece
+> material LOD/IBL mais barato, AGI, HZB same-frame GPU-driven, impostors/HLOD e
+> soak/Mali; aumentar uso da GPU artificialmente está explicitamente fora da meta.
+
+> **Entrega seguinte de 01/09/2026:** `EnvironmentMap` ganhou formato portátil
+> AEEN v3 e import offline completo: radiância octaédrica RGBA16F com 9 mips GGX,
+> LUT BRDF split-sum e panorama visual separado. O fragmento avançado elimina
+> `atan/acos`; v1/v2 usam fallback compatível. Variantes de normal/MR/emissivo
+> existem, porém são uma configuração global: A/B no Adreno mostrou regressão no
+> perfil B, portanto B/C mantêm o pipeline dinâmico e S/A/custom podem habilitá-las.
+> Em escala fixa 0,58, IBL acrescentou ~0,25 ms de GPU (7,79→8,04 ms), com CPU em
+> ~1,4 ms e 105–107 FPS exibidos. O split-sum não alterou a média além do ruído.
+> Continuam abertos SH9, Asset Database genérico, probes locais, cache/orçamento de
+> variantes, AGI, HLOD/impostors, validação multipose/soak e Mali físico.
+
+> **Hotspot direcional/DVFS de 01/09/2026:** a pose fixa de maior custo confirmou
+> CPU folgada (1,2–1,6 ms) e fragment/texture como pressão. Reduzir o deadline ADPF
+> de 8,333 para 7,333 ms piorou o aparelho e foi rejeitado; o runtime mantém o alvo
+> correto e explicita `prefer_power_efficiency=false` no Android 15. O material LOD
+> agora escolhe pipelines opaque/coverage/transparent compilados sem normal map
+> somente quando o bounds inteiro deixa o alcance global, preservando o primeiro
+> plano. Com gravação — operating point alto do OEM — o renderer sustentou 120,113
+> FPS, GPU média 6,401 ms/p95 7,104 ms; sem gravação, o mesmo APK ainda variou
+> 86–106 FPS. Logo o próximo passo do plano principal é comparar o adaptador atual
+> de `AChoreographer` com Swappy, seguido de material/texture LOD mais granular,
+> impostors/HLOD e soak intercalado. Dummy workload e clocks privados não entram.
 
 > **Correção Android integrada na mesma fatia:** `sensorLandscape` agora trata a
 > troca física entre os dois lados como mudança real de display. Gestos ativos são
@@ -2189,6 +2263,11 @@ Esta fase existe para responder cinco perguntas que, se respondidas "não", muda
 - **7.5.2** **AetherSR**: reconstrução temporal com upscaling 50-70% → nativo.
 - **7.5.3** Integração com GSR/MetalFX/FSR quando presentes.
 - **7.5.4** **Resolução dinâmica** com histerese, guiada por tempo de GPU.
+  - **Progresso 31/08/2026:** controller e integração Vulkan Android funcionais; alvo
+    máximo permanece alocado, a região ativa varia sem recriação e o resolve final
+    evita texels obsoletos. As 19 famílias de SPIR-V possuem verificação agregada para
+    impedir bytecode obsoleto. O item continua parcial até upscaling temporal, integração
+    térmica e validação visual/sustentada na matriz.
 - **7.5.5** **VRS** dirigido por buffer de importância.
 - **7.5.6** Pós avançado: DOF com bokeh separável, motion blur por objeto, aberração, film grain, HDR10 de saída.
 

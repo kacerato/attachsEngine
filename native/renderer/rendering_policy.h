@@ -27,6 +27,7 @@
 
 #include "core/base.h"
 #include "core/frame_policy.h"
+#include "renderer/dynamic_resolution.h"
 #include "rhi/device_profile.h"
 
 namespace ae::renderer {
@@ -84,10 +85,17 @@ enum class TextureQuality : u32 {
 // ainda pode reduzi-los (nunca elevá-los).
 enum class QualityPreset : u32 { Auto = 0, C, B, A, S, Custom };
 
+// Override tri-state para recursos booleanos serializáveis. `bool + hasValue`
+// produziria dois campos capazes de se contradizer no arquivo do projeto.
+enum class FeatureOverride : u32 { Inherit = 0, Disabled, Enabled };
+
+inline constexpr u32 RenderingSettingsSchemaVersion = 6;
+
 // ---------------------------------------------------------------------------
 // Entrada 3 da ADR — escolha global serializada do projeto.
 // ---------------------------------------------------------------------------
 struct ProjectRenderingSettings final {
+  u32 schemaVersion = RenderingSettingsSchemaVersion;
   QualityPreset preset = QualityPreset::Auto;
   // Overrides por eixo. `Inherit` em todos = o preset decide tudo.
   ShadowQuality shadows = ShadowQuality::Inherit;
@@ -98,6 +106,63 @@ struct ProjectRenderingSettings final {
   float resolutionScale = 0.0f;
   // Teto de cadência preferido pelo autor; 0 = herda a política de display.
   u32 maximumRenderHz = 0;
+
+  // Ajustes finos globais. Zero (ou valor negativo, onde indicado) herda o
+  // ponto do preset. Presets continuam sendo atalhos úteis; não são o limite da
+  // configuração nem aparecem como branches dentro do renderer.
+  u32 shadowCascadeCount = 0;
+  u32 shadowCascadeResolution = 0;
+  u32 shadowFilterTaps = 0;
+  // Kernel da cascata distante. Zero herda; permite preservar PCF perto e
+  // remover fetches que já não são distinguíveis no horizonte.
+  u32 shadowFarFilterTaps = 0;
+  float shadowMaximumDistance = 0.0f;
+  float shadowDepthBiasConstant = -1.0f;
+  float shadowDepthBiasSlope = -1.0f;
+  float shadowNormalOffsetTexels = -1.0f;
+  FeatureOverride staticShadowCache = FeatureOverride::Inherit;
+  // Margem espacial da cascata cacheada. 1 = volume exato/sem tolerância;
+  // valores >1 trocam uma pequena fração de resolução por menos atualizações.
+  float shadowCacheGuardBandRatio = 0.0f;
+
+  float lodPixelErrorBudget = 0.0f;
+  // Orçamento próprio para geometria alpha-tested (vegetação/cards). Zero
+  // herda do preset; é independente do LOD de superfícies sólidas.
+  float coverageLodPixelErrorBudget = 0.0f;
+  float lodHysteresisBandRatio = 0.0f;
+  FeatureOverride lodSelection = FeatureOverride::Inherit;
+  // Shader specialization is a capability, not an unconditional optimization:
+  // some mobile drivers regress when many small material pipelines are bound.
+  // Auto follows the measured device-profile policy; projects may override it.
+  FeatureOverride materialShaderVariants = FeatureOverride::Inherit;
+  // Mantém a radiância especular independente da integração BRDF de precisão.
+  // Desligar a LUT preserva reflexos com aproximação analítica e economiza um fetch.
+  FeatureOverride environmentSplitSumBrdf = FeatureOverride::Inherit;
+  // Distância em que detalhe material deixa de ser perceptível. `0` no valor
+  // resolvido significa ilimitado; aqui zero significa herdar.
+  float normalMapMaximumDistance = -1.0f;
+  float specularProbeMaximumDistance = -1.0f;
+  float metallicRoughnessMaximumDistance = -1.0f;
+  float emissiveMaximumDistance = -1.0f;
+  // Fração final do alcance usada para transição suave. 0 permite corte seco;
+  // valor negativo herda o padrão global (20%).
+  float materialDetailFadeBandRatio = -1.0f;
+
+  FeatureOverride postFxaa = FeatureOverride::Inherit;
+  FeatureOverride postVignette = FeatureOverride::Inherit;
+  float bloomThreshold = -1.0f;
+  float bloomIntensity = -1.0f;
+  float postContrast = -1.0f;
+  float postSaturation = -1.0f;
+  float postSharpen = -1.0f;
+
+  FeatureOverride dynamicResolution = FeatureOverride::Inherit;
+  float dynamicResolutionMinimumScale = 0.0f;
+  float dynamicResolutionDecreaseStep = 0.0f;
+  float dynamicResolutionIncreaseStep = 0.0f;
+  float dynamicResolutionRecoveryHeadroomRatio = 0.0f;
+  u32 dynamicResolutionOverloadFrames = 0;
+  u32 dynamicResolutionRecoveryFrames = 0;
 };
 
 // ---------------------------------------------------------------------------
@@ -137,6 +202,9 @@ struct ShadowSettings final {
   u32 cascadeResolution = 0;
   // Amostras do filtro percentage-closer: 1 = duro, 9 = 3×3, 25 = 5×5.
   u32 filterTaps = 1;
+  // Kernel independente para a cascata mais distante; cascatas intermediárias
+  // interpolam os raios. Mantém contato suave perto sem pagar 3×3 no horizonte.
+  u32 farFilterTaps = 1;
   // Distância além da qual o sol deixa de projetar sombra, em unidades de mundo.
   float maximumDistance = 0.0f;
   // Bias em unidades de profundidade e em texels da cascata. O normal-offset é o
@@ -147,19 +215,45 @@ struct ShadowSettings final {
   // Ancorar a matriz da cascata a texels inteiros elimina o "nado" da borda de
   // sombra quando a câmera se move. Custa uma quantização por cascata por frame.
   bool stabilizeTexelSnap = true;
+  // Cenas estáticas podem preservar cascatas enquanto o novo volume receptor
+  // continua contido no volume cacheado. Objetos dinâmicos invalidam via API.
+  bool staticCasterCache = true;
+  float cacheGuardBandRatio = 1.08f;
 };
 
 struct AmbientSettings final {
   bool hemispheric = false;
   bool specularProbe = false;
+  bool splitSumBrdf = false;
 };
 
 struct PostSettings final {
   // Um passe dedicado de pós, em vez do tonemap inline no shading.
   bool dedicatedPass = false;
   bool bloom = false;
+  bool fxaa = false;
+  bool vignette = false;
   float bloomThreshold = 1.0f;
   float bloomIntensity = 0.0f;
+  float contrast = 1.0f;
+  float saturation = 1.0f;
+  float sharpen = 0.0f;
+  float vignetteIntensity = 0.0f;
+};
+
+struct MaterialDistanceSettings final {
+  // Zero = ilimitado. O shader compara distância apenas quando o valor é > 0,
+  // mantendo exatamente o detalhe autoral perto da câmera.
+  float normalMapMaximumDistance = 0.0f;
+  float specularProbeMaximumDistance = 0.0f;
+  float metallicRoughnessMaximumDistance = 0.0f;
+  float emissiveMaximumDistance = 0.0f;
+  float fadeBandRatio = 0.20f;
+};
+
+struct GeometrySettings final {
+  bool lodSelection = true;
+  bool materialShaderVariants = false;
 };
 
 struct TextureSettings final {
@@ -184,7 +278,7 @@ struct PolicyClampRecord final {
 
 // Capacidade fixa: o número de eixos é conhecido em tempo de compilação e a
 // resolução acontece no caminho quente de reconfiguração, sem heap.
-constexpr u32 MaximumPolicyClamps = 8;
+constexpr u32 MaximumPolicyClamps = 16;
 
 struct ResolvedRenderingPolicy final {
   FrameBudget frame{};
@@ -193,6 +287,9 @@ struct ResolvedRenderingPolicy final {
   AmbientSettings ambient{};
   PostSettings post{};
   TextureSettings textures{};
+  MaterialDistanceSettings materialDistance{};
+  GeometrySettings geometry{};
+  DynamicResolutionSettings dynamicResolution{};
   float resolutionScale = 1.0f;
 
   // Perfil efetivamente usado para derivar os padrões. Existe para o relatório de

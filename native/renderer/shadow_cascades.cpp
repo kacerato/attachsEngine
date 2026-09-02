@@ -115,8 +115,10 @@ u32 computeShadowCascades(const ShadowCascadeInput &input, u32 count, float lamb
                                 scale(up, sliceNear * tanHalfVertical));
     // O centro da esfera fica no eixo de visão; o raio cobre os dois cantos.
     const Vec3 axisMidpoint = add(eye, scale(forward, (sliceNear + sliceFar) * 0.5f));
-    const float radius = std::max(length(sub(farCorner, axisMidpoint)),
-                                  length(sub(nearCorner, axisMidpoint)));
+    const float exactRadius = std::max(length(sub(farCorner, axisMidpoint)),
+                                       length(sub(nearCorner, axisMidpoint)));
+    const float guardBand = std::clamp(input.receiverGuardBandRatio, 1.0f, 1.25f);
+    const float radius = exactRadius * guardBand;
     if (!std::isfinite(radius) || radius <= 0.0f) return 0;
 
     Vec3 center = axisMidpoint;
@@ -143,6 +145,8 @@ u32 computeShadowCascades(const ShadowCascadeInput &input, u32 count, float lamb
     // Olho da luz recuado o suficiente para que casters fora do frustum ainda
     // entrem no volume. `casterExtrusion` é política, não constante mágica.
     const float extrusion = std::max(input.casterExtrusion, radius);
+    store(lightDirection, cascade.lightDirection);
+    cascade.casterExtrusionWorld = extrusion;
     const Vec3 lightEye = sub(center, scale(lightDirection, extrusion));
     const float depthRange = extrusion + radius;
 
@@ -181,6 +185,58 @@ u32 computeShadowCascades(const ShadowCascadeInput &input, u32 count, float lamb
     sliceNear = sliceFar;
   }
   return count;
+}
+
+bool isShadowCasterVisible(const ShadowCascade &cascade, const float center[3], float radius) {
+  if (center == nullptr || !std::isfinite(radius) || radius < 0.0f ||
+      !std::isfinite(cascade.radiusWorld) || cascade.radiusWorld <= 0.0f ||
+      !std::isfinite(cascade.casterExtrusionWorld) || cascade.casterExtrusionWorld <= 0.0f) {
+    return true;
+  }
+  const Vec3 casterCenter = load(center);
+  const Vec3 cascadeCenter = load(cascade.centerWorld);
+  Vec3 lightDirection = load(cascade.lightDirection);
+  if (!finite(casterCenter) || !finite(cascadeCenter) || !normalize(lightDirection)) return true;
+
+  const Vec3 delta = sub(casterCenter, cascadeCenter);
+  const float axialDistance = dot(delta, lightDirection);
+  // A esfera inteira está antes do olho da luz ou depois da fatia receptora.
+  if (axialDistance + radius < -cascade.casterExtrusionWorld ||
+      axialDistance - radius > cascade.radiusWorld) {
+    return false;
+  }
+
+  // Raios da luz são paralelos: só casters cuja projeção lateral cruza a esfera
+  // receptora podem lançar sombra nela. O círculo é mais conservador para esse
+  // receptor que testar apenas o frustum da câmera.
+  const float deltaSquared = dot(delta, delta);
+  const float perpendicularSquared = std::max(0.0f, deltaSquared - axialDistance * axialDistance);
+  const float lateralLimit = cascade.radiusWorld + radius;
+  return perpendicularSquared <= lateralLimit * lateralLimit;
+}
+
+bool canReuseStaticShadowCascade(const ShadowCascade &cached, const ShadowCascade &desired,
+                                 float guardBandRatio) {
+  if (!std::isfinite(guardBandRatio) || guardBandRatio < 1.0f ||
+      !std::isfinite(cached.radiusWorld) || !std::isfinite(desired.radiusWorld) ||
+      cached.radiusWorld <= 0.0f || desired.radiusWorld <= 0.0f) return false;
+  Vec3 cachedLight = load(cached.lightDirection);
+  Vec3 desiredLight = load(desired.lightDirection);
+  if (!normalize(cachedLight) || !normalize(desiredLight) || dot(cachedLight, desiredLight) < 0.99999f)
+    return false;
+  if (std::fabs(cached.nearDistance - desired.nearDistance) > 1e-4f ||
+      std::fabs(cached.farDistance - desired.farDistance) > 1e-3f) return false;
+
+  const Vec3 delta = sub(load(desired.centerWorld), load(cached.centerWorld));
+  if (!finite(delta)) return false;
+  const float desiredExactRadius = desired.radiusWorld / guardBandRatio;
+  const float axial = dot(delta, cachedLight);
+  const float perpendicularSquared = std::max(0.0f, dot(delta, delta) - axial * axial);
+  const float lateralAllowance = cached.radiusWorld - desiredExactRadius;
+  if (lateralAllowance < 0.0f || perpendicularSquared > lateralAllowance * lateralAllowance)
+    return false;
+  return axial - desiredExactRadius >= -cached.casterExtrusionWorld &&
+         axial + desiredExactRadius <= cached.radiusWorld;
 }
 
 } // namespace ae::renderer

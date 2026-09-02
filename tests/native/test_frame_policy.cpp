@@ -26,3 +26,21 @@ AE_TEST(frame_policy_entrada_invalida_tem_fallback_seguro) {
   AE_EXPECT_EQ(budget.renderHz, 60u, "fallback de apresentacao");
   AE_EXPECT_EQ(budget.simulationHz, 1u, "tick nunca pode ser zero");
 }
+
+AE_TEST(frame_policy_adpf_usa_intervalo_e_override_diagnostico_seguro) {
+  const auto budget = ae::makeFrameBudget(120.0f, 120.0f, 60);
+  const ae::i64 inherited = ae::performanceHintTargetNanoseconds(budget);
+  const ae::i64 fullInterval = ae::performanceHintTargetNanoseconds(budget, 1.0f);
+  const ae::i64 diagnostic = ae::performanceHintTargetNanoseconds(budget, 0.75f);
+
+  AE_EXPECT_TRUE(inherited >= 8'333'000 && inherited <= 8'334'000,
+                 "ADPF herda o intervalo completo de apresentacao");
+  AE_EXPECT_TRUE(fullInterval >= 8'333'000 && fullInterval <= 8'334'000,
+                 "override 1.0 reproduz o contrato antigo");
+  AE_EXPECT_TRUE(diagnostic >= 6'249'000 && diagnostic <= 6'251'000,
+                 "override de profiling preserva unidade e precisao");
+  AE_EXPECT_EQ(ae::performanceHintTargetNanoseconds(budget, 0.49f), inherited,
+               "override agressivo demais falha para o intervalo global");
+  AE_EXPECT_EQ(ae::performanceHintTargetNanoseconds(budget, 1.01f), inherited,
+               "override acima do intervalo falha para o intervalo global");
+}

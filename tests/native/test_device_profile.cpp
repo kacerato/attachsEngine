@@ -93,3 +93,21 @@ AE_TEST(DeviceProfile_variable_rate_shading_isolado_da_perfil_A) {
   AE_EXPECT_TRUE(profile == DeviceProfile::A, "VRS isolado (sem mesh shader/ray query) ja basta para perfil A");
   AE_EXPECT_TRUE(paths.variableRateShading == true, "VRS deveria estar habilitado");
 }
+
+AE_TEST(DeviceProfile_compute_e_habilitado_por_capacidade_nao_por_preset) {
+  DeviceFeatures f;
+  f.computeShaders = true;
+  f.dedicatedComputeQueue = true;
+  EnabledPaths paths = derivePaths(DeviceProfile::C, f);
+  AE_EXPECT_TRUE(paths.compute, "compute deve funcionar tambem no perfil conservador quando o hardware suporta");
+  AE_EXPECT_TRUE(paths.asyncCompute, "fila compute dedicada habilita o caminho assincrono");
+}
+
+AE_TEST(DeviceProfile_async_compute_nunca_liga_sem_compute) {
+  DeviceFeatures f;
+  f.computeShaders = false;
+  f.dedicatedComputeQueue = true;
+  EnabledPaths paths = derivePaths(DeviceProfile::A, f);
+  AE_EXPECT_TRUE(!paths.compute, "compute ausente deve permanecer desabilitado");
+  AE_EXPECT_TRUE(!paths.asyncCompute, "fila reportada isoladamente nao autoriza async compute");
+}

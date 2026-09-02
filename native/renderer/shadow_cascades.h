@@ -35,6 +35,11 @@ struct ShadowCascade final {
   // Centro e raio da esfera que circunscreve a fatia, em espaço de mundo.
   float centerWorld[3]{};
   float radiusWorld = 0.0f;
+  // Volume conservador de casters: cilindro da esfera receptora extrudado em
+  // direção ao sol. Permite retirar draws que não podem afetar esta cascata
+  // sem usar o frustum da câmera (que removeria casters fora da tela).
+  float lightDirection[3]{0.0f, -1.0f, 0.0f};
+  float casterExtrusionWorld = 0.0f;
   // Matriz de mundo para clip da luz, pronta para o passe de sombra e para a
   // amostragem no shading.
   float viewProjection[16]{};
@@ -62,6 +67,9 @@ struct ShadowCascadeInput final {
   // objetos fora do frustum ainda projetem sombra dentro dele.
   float casterExtrusion = 200.0f;
   u32 cascadeResolution = 1024;
+  // Reserva ao redor do receptor para cache estático. A matriz cobre o raio
+  // exato multiplicado por este valor; [1,1.25] é o intervalo de política.
+  float receiverGuardBandRatio = 1.0f;
 };
 
 // Fator de mistura entre divisão uniforme (0) e logarítmica (1). 0,75 é o ponto que
@@ -81,5 +89,15 @@ u32 computeCascadeSplits(float nearPlane, float shadowDistance, u32 count, float
 // fechada: sem cascata, o chamador desenha sem sombra em vez de com sombra errada.
 u32 computeShadowCascades(const ShadowCascadeInput &input, u32 count, float lambda,
                           ShadowCascade *outCascades);
+
+// Teste conservador de uma bounding sphere contra o volume de caster da
+// cascata. Entrada inválida falha aberta (visível), porque perder uma sombra é
+// pior do que submeter um draw extra.
+bool isShadowCasterVisible(const ShadowCascade &cascade, const float center[3], float radius);
+
+// Verdadeiro quando o receptor desejado permanece totalmente dentro do volume
+// cacheado. Com isso a cascata antiga continua correta e não precisa ser refeita.
+bool canReuseStaticShadowCascade(const ShadowCascade &cached, const ShadowCascade &desired,
+                                 float guardBandRatio);
 
 } // namespace ae::renderer

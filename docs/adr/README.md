@@ -24,6 +24,7 @@ implementação ainda não começou. ADRs não substituem `docs/ESTADO.md`/
 | [ADR-013](ADR-013-PHYSICS-2D-BACKEND.md) | Backend de física 2D (Jolt restrito vs. Box2D) | 🟡 proposta, aguardando perfis Android B/C |
 | [ADR-014](ADR-014-POLITICA-GLOBAL-RENDERIZACAO.md) | Política global de renderização orientada por budgets | 🟡 proposta, implementação não iniciada |
 | [ADR-015](ADR-015-AEMAP-V2-VERTICES-COMPACTOS.md) | AEMAP v2 com vértices compactos e leitura legada | 🟡 integrada em Adreno; matriz pendente |
+| [ADR-016](ADR-016-COMPUTE-RHI-RENDER-GRAPH.md) | Compute como capacidade do RHI e do Render Graph | ✅ fundação implementada e validada em Adreno |
 
 **Legenda:** ✅ implementada e testada · 🟡 parcial ou pendente de evidência ·
 ⬜ decisão registrada, sem código ainda.
@@ -33,3 +34,4 @@ plano principal. ADR-013 foi aberta posteriormente para uma decisão que não
 constava naquela lista original (por isso o padrão de dígitos difere). ADR-014
 registra a política global de rendering/perfis antes da implementação. ADR-015
 versiona a primeira mudança persistente de layout guiada por essa política.
+ADR-016 registra a fundação compute transversal, posterior à lista original.

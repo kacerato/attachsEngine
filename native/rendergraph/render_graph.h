@@ -30,6 +30,18 @@ struct ResourceDesc {
   bool imported = false;
   bool isDepth = false;   // afeta o layout escolhido para barreiras/anexos
   u64 sizeBytes = 0;      // usado para decidir aliasing
+  enum class Kind : u32 { Image, Buffer } kind = Kind::Image;
+};
+
+enum class AccessType : u32 {
+  Automatic,
+  SampledRead,
+  UniformRead,
+  StorageRead,
+  StorageWrite,
+  IndirectRead,
+  TransferRead,
+  TransferWrite,
 };
 
 // Um acesso de leitura ou escrita de um pass a um recurso.
@@ -41,11 +53,20 @@ struct ResourceAccess {
   ResourceId resource = kInvalidResource;
   bool asInputAttachment = false;
   bool fullOverwrite = false;
+  AccessType type = AccessType::Automatic;
 };
 
-// Descrição de um pass declarado pelo usuário. `extentWidth/Height` != 0
-// marca um pass de rasterização com aquele tamanho de render target;
-// == 0 marca um pass de computação (nunca funde em subpass).
+enum class PassKind : u32 { Automatic, Raster, Compute, Transfer };
+enum class ExecutionQueue : u32 { Graphics, Compute };
+
+struct CompileOptions final {
+  // So e verdadeiro quando o RHI detectou uma familia compute distinta e o
+  // backend possui sincronizacao/ownership entre filas.
+  bool asyncComputeAvailable = false;
+};
+
+// Descrição de um pass declarado pelo usuário. Automatic preserva o caminho
+// raster legado; compute e transfer devem ser declarados explicitamente.
 struct PassDesc {
   std::string name;
   u32 extentWidth = 0;
@@ -61,6 +82,13 @@ struct PassDesc {
   // recurso seguem sempre a ordem de declaração dos passes e por isso nunca
   // fecham um ciclo sozinhas.
   std::vector<PassId> explicitDependsOn;
+  PassKind kind = PassKind::Automatic;
+  // Dispatch metadata is inspectable even when execution is supplied by a
+  // backend callback. Zero is invalid for an explicit compute pass.
+  u32 dispatchX = 0;
+  u32 dispatchY = 0;
+  u32 dispatchZ = 0;
+  bool preferAsyncCompute = false;
 };
 
 enum class LoadOp : u32 { Load, Clear, DontCare };
@@ -71,6 +99,7 @@ enum class ResourceLayout : u32 {
   ColorAttachment,
   DepthStencilAttachment,
   ShaderReadOnly,
+  General,
 };
 
 // Barreira mínima entre duas ocorrências consecutivas de acesso ao mesmo
@@ -133,6 +162,8 @@ struct CompiledGraph {
   std::vector<AttachmentUse> attachmentUses;
   std::vector<ResourceId> memorylessResources;
   std::vector<SubpassGroup> subpassGroups;
+  std::vector<PassKind> executionKinds; // parallel to executionOrder
+  std::vector<ExecutionQueue> executionQueues; // parallel to executionOrder
 
   // Serializa o grafo compilado em texto legível — base do "render graph
   // inspecionável pelo usuário" citado no plano, e usado nos testes como
@@ -140,7 +171,7 @@ struct CompiledGraph {
   std::string exportText(const class RenderGraph &graph) const;
 };
 
-// Erro de compilação (hoje só ciclo, mas deixamos extensível).
+// Erro de compilação estrutural ou de dependência.
 struct CompileError {
   std::string message; // em português, pronto para exibir ao usuário
 };
@@ -156,10 +187,11 @@ public:
   usize resourceCount() const { return resources_.size(); }
   usize passCount() const { return passes_.size(); }
 
-  // Compila o grafo. Em caso de ciclo, retorna std::nullopt e preenche
+  // Compila o grafo. Em caso de entrada inválida/ciclo, retorna std::nullopt e preenche
   // `outError` com uma mensagem clara (nunca trava/aborta por grafo
   // inválido — conteúdo de usuário nunca deve derrubar o editor).
-  std::optional<CompiledGraph> compile(CompileError *outError) const;
+  std::optional<CompiledGraph> compile(CompileError *outError,
+                                       CompileOptions options = {}) const;
 
 private:
   std::vector<ResourceDesc> resources_;

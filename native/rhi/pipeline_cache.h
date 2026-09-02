@@ -101,6 +101,9 @@ public:
   VkPipelineLayout getOrCreatePipelineLayout(const PipelineLayoutCacheDesc &desc);
   VkPipeline getOrCreateGraphicsPipeline(const GraphicsPipelineCacheDesc &desc,
                                         const VkGraphicsPipelineCreateInfo &createInfoTemplate);
+  // Cache binario do driver usado por pipelines que continuam com ownership
+  // proprio (compute kernels, por exemplo). Nao transfere ownership.
+  VkPipelineCache driverHandle() const { return driverCache_; }
 
   usize renderPassCount() const;
   usize pipelineLayoutCount() const;
@@ -108,6 +111,7 @@ public:
 
 private:
   VkDevice device_ = VK_NULL_HANDLE;
+  VkPipelineCache driverCache_ = VK_NULL_HANDLE;
 
   // unique_ptr porque DescriptorCache não é copiável/movível de forma
   // trivial (guarda um std::function e um unordered_map) e PipelineCache

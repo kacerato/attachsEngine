@@ -20,6 +20,9 @@ MAGIC_AETX = 0x58544541
 MAGIC_AEEN = 0x4E454541
 OUTPUT_WIDTH = 1024
 OUTPUT_HEIGHT = 512
+SPECULAR_SIZE = 256
+SPECULAR_MIP_LEVELS = 9
+BRDF_SIZE = 128
 
 
 def srgb_to_linear(value):
@@ -99,13 +102,135 @@ def direction_from_uv(u, v):
             math.sin(theta) * math.sin(phi)]
 
 
-def write_texture(path, levels):
+def write_texture(path, levels, width=OUTPUT_WIDTH, height=OUTPUT_HEIGHT, encoding=3):
     payload = b"".join(levels)
-    # Encoding 3 is VK_FORMAT_R8G8B8A8_SRGB. The GPU performs the only sRGB
-    # decode; the swapchain performs the matching display encode.
-    header = struct.pack("<6IQ", MAGIC_AETX, 1, OUTPUT_WIDTH, OUTPUT_HEIGHT,
-                         3, len(levels), len(payload))
+    # Encoding 3 is RGBA8 sRGB; encoding 5 is RGBA16F linear HDR.
+    header = struct.pack("<6IQ", MAGIC_AETX, 1, width, height,
+                         encoding, len(levels), len(payload))
     path.write_bytes(header + payload)
+
+
+def normalize(value):
+    return value / np.maximum(np.linalg.norm(value, axis=-1, keepdims=True), 1e-8)
+
+
+def octahedral_directions(size):
+    """Texel-center directions for the y-up octahedral projection used by GLSL."""
+    coordinate = ((np.arange(size, dtype=np.float32) + 0.5) / size) * 2.0 - 1.0
+    x, z = np.meshgrid(coordinate, coordinate)
+    y = 1.0 - np.abs(x) - np.abs(z)
+    folded_x = (1.0 - np.abs(z)) * np.where(x < 0.0, -1.0, 1.0)
+    folded_z = (1.0 - np.abs(x)) * np.where(z < 0.0, -1.0, 1.0)
+    lower = y < 0.0
+    x = np.where(lower, folded_x, x)
+    z = np.where(lower, folded_z, z)
+    return normalize(np.stack([x, y, z], axis=-1))
+
+
+def sample_equirectangular(image, directions):
+    """Bilinear, horizontally wrapped sampling in linear light (offline only)."""
+    height, width, _ = image.shape
+    u = (np.arctan2(directions[..., 2], directions[..., 0]) /
+         (2.0 * math.pi) + 0.5) * width - 0.5
+    v = (np.arccos(np.clip(directions[..., 1], -1.0, 1.0)) /
+         math.pi) * height - 0.5
+    x0 = np.floor(u).astype(np.int64)
+    y0 = np.floor(v).astype(np.int64)
+    tx = (u - x0)[..., None]
+    ty = (v - y0)[..., None]
+    x0 %= width
+    x1 = (x0 + 1) % width
+    y0 = np.clip(y0, 0, height - 1)
+    y1 = np.clip(y0 + 1, 0, height - 1)
+    top = image[y0, x0] * (1.0 - tx) + image[y0, x1] * tx
+    bottom = image[y1, x0] * (1.0 - tx) + image[y1, x1] * tx
+    return top * (1.0 - ty) + bottom * ty
+
+
+def radical_inverse(index):
+    result, fraction = 0.0, 0.5
+    while index:
+        result += (index & 1) * fraction
+        index >>= 1
+        fraction *= 0.5
+    return result
+
+
+def bake_specular_environment(source):
+    """GGX-prefiltered octahedral radiance; roughness is encoded by mip level."""
+    levels = []
+    for mip_index in range(SPECULAR_MIP_LEVELS):
+        size = max(1, SPECULAR_SIZE >> mip_index)
+        normal = octahedral_directions(size)
+        roughness = mip_index / (SPECULAR_MIP_LEVELS - 1)
+        if mip_index == 0:
+            radiance = sample_equirectangular(source, normal)
+        else:
+            # Robust tangent frame at the poles. Sampling happens at cook time;
+            # no trigonometry or convolution remains in the runtime shader.
+            helper = np.zeros_like(normal)
+            helper[..., 1] = 1.0
+            near_pole = np.abs(normal[..., 1]) > 0.999
+            helper[near_pole] = (1.0, 0.0, 0.0)
+            tangent = normalize(np.cross(helper, normal))
+            bitangent = np.cross(normal, tangent)
+            alpha = max(0.001, roughness * roughness)
+            total = np.zeros_like(normal, dtype=np.float32)
+            weight = np.zeros((*normal.shape[:2], 1), dtype=np.float32)
+            sample_count = 128 if mip_index <= 4 else 64
+            for sample_index in range(sample_count):
+                xi_x = sample_index / sample_count
+                xi_y = radical_inverse(sample_index)
+                cosine = math.sqrt((1.0 - xi_y) /
+                                   (1.0 + (alpha * alpha - 1.0) * xi_y))
+                sine = math.sqrt(max(0.0, 1.0 - cosine * cosine))
+                azimuth = 2.0 * math.pi * xi_x
+                half_vector = (tangent * (math.cos(azimuth) * sine) +
+                               bitangent * (math.sin(azimuth) * sine) +
+                               normal * cosine)
+                light = 2.0 * np.sum(normal * half_vector, axis=-1, keepdims=True) * half_vector - normal
+                no_l = np.maximum(np.sum(normal * light, axis=-1, keepdims=True), 0.0)
+                total += sample_equirectangular(source, light) * no_l
+                weight += no_l
+            radiance = total / np.maximum(weight, 1e-8)
+        rgba = np.concatenate([radiance, np.ones((*radiance.shape[:2], 1), dtype=np.float32)], axis=-1)
+        levels.append(rgba.astype("<f2").tobytes())
+    return levels
+
+
+def bake_brdf_lut(sample_count=512):
+    """Split-sum GGX BRDF integral shared by every material in the scene."""
+    no_v, roughness = np.meshgrid(
+        (np.arange(BRDF_SIZE, dtype=np.float32) + 0.5) / BRDF_SIZE,
+        (np.arange(BRDF_SIZE, dtype=np.float32) + 0.5) / BRDF_SIZE)
+    view = np.stack([np.sqrt(np.maximum(0.0, 1.0 - no_v * no_v)),
+                     np.zeros_like(no_v), no_v], axis=-1)
+    scale = np.zeros_like(no_v)
+    bias = np.zeros_like(no_v)
+    alpha = roughness * roughness
+    alpha_squared = alpha * alpha
+    for sample_index in range(sample_count):
+        xi_x = sample_index / sample_count
+        xi_y = radical_inverse(sample_index)
+        cosine = np.sqrt((1.0 - xi_y) /
+                         (1.0 + (alpha_squared - 1.0) * xi_y))
+        sine = np.sqrt(np.maximum(0.0, 1.0 - cosine * cosine))
+        half_vector = np.stack([math.cos(2.0 * math.pi * xi_x) * sine,
+                                math.sin(2.0 * math.pi * xi_x) * sine,
+                                cosine], axis=-1)
+        vo_h = np.maximum(np.sum(view * half_vector, axis=-1), 0.0)
+        light = 2.0 * vo_h[..., None] * half_vector - view
+        no_l = np.maximum(light[..., 2], 0.0)
+        visibility = 0.5 / np.maximum(
+            no_l * np.sqrt(no_v * no_v * (1.0 - alpha_squared) + alpha_squared) +
+            no_v * np.sqrt(no_l * no_l * (1.0 - alpha_squared) + alpha_squared), 1e-6)
+        weight = 4.0 * visibility * no_l * vo_h / np.maximum(cosine, 1e-6)
+        fresnel = (1.0 - vo_h) ** 5
+        scale += (1.0 - fresnel) * weight
+        bias += fresnel * weight
+    rgba = np.stack([scale / sample_count, bias / sample_count,
+                     np.zeros_like(scale), np.ones_like(scale)], axis=-1)
+    return rgba.astype("<f2").tobytes()
 
 
 def main():
@@ -147,6 +272,11 @@ def main():
         mip = downsample_box(mip)
     environment_path = args.out / "environment.aetex"
     write_texture(environment_path, levels)
+    specular_levels = bake_specular_environment(linear)
+    write_texture(args.out / "environment-specular.aetex", specular_levels,
+                  SPECULAR_SIZE, SPECULAR_SIZE, 5)
+    write_texture(args.out / "environment-brdf.aetex", [bake_brdf_lut()],
+                  BRDF_SIZE, BRDF_SIZE, 5)
 
     row_weight = np.sin((np.arange(OUTPUT_HEIGHT, dtype=np.float32) + 0.5) *
                         math.pi / OUTPUT_HEIGHT)
@@ -165,7 +295,7 @@ def main():
     ground_color_saturation = [0.75, 0.82, 0.60, 1.0]
     cloud_light_wind_speed = [1.35, 1.42, 1.52, 0.0035]
     metadata = struct.pack(
-        "<4I32f", MAGIC_AEEN, 2, 144, 0,
+        "<4I32f8I", MAGIC_AEEN, 3, 176, 0,
         *sun_direction, args.sun_intensity,
         *sun_color, math.radians(0.27),
         *ambient_color, args.ambient_strength,
@@ -174,6 +304,8 @@ def main():
         *sky_horizon_cloud_density,
         *ground_color_saturation,
         *cloud_light_wind_speed,
+        1, SPECULAR_SIZE, SPECULAR_SIZE, SPECULAR_MIP_LEVELS,
+        BRDF_SIZE, BRDF_SIZE, 1, 3,
     )
     metadata_path = args.out / "environment.aeenv"
     metadata_path.write_bytes(metadata)
@@ -195,7 +327,11 @@ def main():
         "exposure": args.exposure,
         "groundBounceColor": ground_color_saturation[:3],
         "saturation": ground_color_saturation[3],
-        "environmentResourceVersion": 2,
+        "environmentResourceVersion": 3,
+        "specularRepresentation": "octahedral-ggx-prefiltered-rgba16f",
+        "specularResolution": [SPECULAR_SIZE, SPECULAR_SIZE],
+        "specularMipLevels": SPECULAR_MIP_LEVELS,
+        "brdfLut": [BRDF_SIZE, BRDF_SIZE],
     }
     manifest["outputs"] = {
         path.name: hashlib.sha256(path.read_bytes()).hexdigest()

@@ -1,5 +1,6 @@
 #include "platform/android/astc_encode_probe.h"
 
+#include "rhi/compute.h"
 #include "rhi/shaders/astc_encode_spirv.h"
 
 #include <android/log.h>
@@ -21,13 +22,14 @@ constexpr const char *LogTag = "Aether.AstcProbe";
 struct ProbeResources {
   VkDevice device = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-  VkQueue queue = VK_NULL_HANDLE;
   u32 queueFamily = 0;
 
-  VkCommandPool commandPool = VK_NULL_HANDLE;
   VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-  VkFence fence = VK_NULL_HANDLE;
   VkQueryPool queryPool = VK_NULL_HANDLE;
+  VkSemaphore computeToGraphics = VK_NULL_HANDLE;
+  rhi::VulkanComputeContext computeContext;
+  rhi::VulkanComputeContext graphicsContext;
+  rhi::VulkanComputeKernel computeKernel;
 
   VkImage sourceImage = VK_NULL_HANDLE;
   VkDeviceMemory sourceImageMemory = VK_NULL_HANDLE;
@@ -36,13 +38,6 @@ struct ProbeResources {
   VkBuffer outputBuffer = VK_NULL_HANDLE;
   VkDeviceMemory outputBufferMemory = VK_NULL_HANDLE;
   void *outputBufferMapped = nullptr;
-
-  VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
-  VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-  VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-  VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
-  VkPipeline pipeline = VK_NULL_HANDLE;
-  VkShaderModule shaderModule = VK_NULL_HANDLE;
 
   // Recursos ASTC para validação por hardware decode (blit ASTC->RGBA8 pelo próprio driver).
   VkImage astcImage = VK_NULL_HANDLE;
@@ -56,8 +51,6 @@ struct ProbeResources {
   VkBuffer stagingBuffer = VK_NULL_HANDLE;
   VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
   void *stagingMapped = nullptr;
-  bool pending = false;
-
   ~ProbeResources() { destroy(); }
 
   bool check(VkResult result, const char *operation) const {
@@ -67,32 +60,19 @@ struct ProbeResources {
   }
 
   bool submitAndWait() {
-    VkSubmitInfo submit{};
-    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &commandBuffer;
-    if (!check(vkQueueSubmit(queue, 1, &submit, fence), "vkQueueSubmit")) return false;
-    pending = true;
-    if (!check(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX), "vkWaitForFences")) return false;
-    pending = false;
-    return true;
+    return computeContext.submit() && computeContext.wait();
   }
 
   void destroy() {
     if (device == VK_NULL_HANDLE) return;
-    // Falha de espera nunca autoriza destruir recursos ainda usados pela GPU.
-    if (pending) check(vkDeviceWaitIdle(device), "vkDeviceWaitIdle/cleanup");
+    graphicsContext.shutdown();
+    computeContext.shutdown();
+    computeKernel.shutdown();
+    if (computeToGraphics != VK_NULL_HANDLE) vkDestroySemaphore(device, computeToGraphics, nullptr);
     if (stagingMapped != nullptr) vkUnmapMemory(device, stagingMemory);
     if (stagingBuffer != VK_NULL_HANDLE) vkDestroyBuffer(device, stagingBuffer, nullptr);
     if (stagingMemory != VK_NULL_HANDLE) vkFreeMemory(device, stagingMemory, nullptr);
-    if (pipeline != VK_NULL_HANDLE) vkDestroyPipeline(device, pipeline, nullptr);
-    if (pipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-    if (shaderModule != VK_NULL_HANDLE) vkDestroyShaderModule(device, shaderModule, nullptr);
-    if (descriptorPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-    if (descriptorSetLayout != VK_NULL_HANDLE) vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
     if (queryPool != VK_NULL_HANDLE) vkDestroyQueryPool(device, queryPool, nullptr);
-    if (fence != VK_NULL_HANDLE) vkDestroyFence(device, fence, nullptr);
-    if (commandPool != VK_NULL_HANDLE) vkDestroyCommandPool(device, commandPool, nullptr);
     if (sourceImageView != VK_NULL_HANDLE) vkDestroyImageView(device, sourceImageView, nullptr);
     if (sourceImage != VK_NULL_HANDLE) vkDestroyImage(device, sourceImage, nullptr);
     if (sourceImageMemory != VK_NULL_HANDLE) vkFreeMemory(device, sourceImageMemory, nullptr);
@@ -207,8 +187,7 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   ProbeResources res;
   res.device = device.handle();
   res.physicalDevice = device.physicalDevice();
-  res.queueFamily = device.graphicsQueueFamily();
-  vkGetDeviceQueue(res.device, res.queueFamily, 0, &res.queue);
+  res.queueFamily = device.computeQueueFamily();
 
   u32 queueCount = 0;
   vkGetPhysicalDeviceQueueFamilyProperties(res.physicalDevice, &queueCount, nullptr);
@@ -231,32 +210,29 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   const VkDeviceSize outputBufferSize = static_cast<VkDeviceSize>(blockCount) * 16; // 16 bytes/bloco ASTC
 
   // ---------------- Comandos e sincronização ----------------
-  VkCommandPoolCreateInfo poolInfo{};
-  poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  poolInfo.queueFamilyIndex = res.queueFamily;
-  poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-  if (vkCreateCommandPool(res.device, &poolInfo, nullptr, &res.commandPool) != VK_SUCCESS) {
-    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar command pool.");
+  if (!res.computeContext.initialize(res.device, device.computeQueue(), res.queueFamily)) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao inicializar contexto compute.");
     res.destroy();
     return result;
   }
-
-  VkCommandBufferAllocateInfo cmdAllocInfo{};
-  cmdAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  cmdAllocInfo.commandPool = res.commandPool;
-  cmdAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  cmdAllocInfo.commandBufferCount = 1;
-  if (vkAllocateCommandBuffers(res.device, &cmdAllocInfo, &res.commandBuffer) != VK_SUCCESS) {
+  const bool separateGraphicsQueue = res.queueFamily != device.graphicsQueueFamily();
+  if (separateGraphicsQueue &&
+      !res.graphicsContext.initialize(res.device, device.graphicsQueue(),
+                                      device.graphicsQueueFamily())) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao inicializar contexto grafico para readback.");
     res.destroy();
     return result;
   }
-
-  VkFenceCreateInfo fenceInfo{};
-  fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  if (vkCreateFence(res.device, &fenceInfo, nullptr, &res.fence) != VK_SUCCESS) {
-    res.destroy();
-    return result;
+  if (separateGraphicsQueue) {
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    if (vkCreateSemaphore(res.device, &semaphoreInfo, nullptr, &res.computeToGraphics) != VK_SUCCESS) {
+      __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar semaforo compute->graphics.");
+      res.destroy();
+      return result;
+    }
   }
+  res.commandBuffer = res.computeContext.commandBuffer();
 
   VkQueryPoolCreateInfo queryPoolInfo{};
   queryPoolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
@@ -310,114 +286,35 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   }
 
   // ---------------- Pipeline de compute ----------------
-  VkShaderModuleCreateInfo shaderInfo{};
-  shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-  shaderInfo.codeSize = rhi::shaders::kAstc_EncodeCompSpirvSize;
-  shaderInfo.pCode = rhi::shaders::kAstc_EncodeCompSpirv;
-  if (vkCreateShaderModule(res.device, &shaderInfo, nullptr, &res.shaderModule) != VK_SUCCESS) {
+  const rhi::ComputeBindingDesc bindings[] = {
+      {0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+      {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
+  };
+  rhi::ComputeKernelDesc kernelDesc;
+  kernelDesc.spirv = rhi::shaders::kAstc_EncodeCompSpirv;
+  kernelDesc.spirvBytes = rhi::shaders::kAstc_EncodeCompSpirvSize;
+  kernelDesc.bindings = bindings;
+  kernelDesc.bindingCount = 2;
+  kernelDesc.pushConstantBytes = sizeof(u32);
+  kernelDesc.debugName = "AstcEncode4x4";
+  if (!res.computeKernel.initialize(res.device, device.computeLimits(), kernelDesc,
+                                    device.pipelineCache().driverHandle()) ||
+      !res.computeKernel.writeImage(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                                    res.sourceImageView, VK_IMAGE_LAYOUT_GENERAL) ||
+      !res.computeKernel.writeBuffer(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                     res.outputBuffer, outputBufferSize)) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar/bindar kernel compute ASTC.");
     res.destroy();
     return result;
   }
-
-  VkDescriptorSetLayoutBinding bindings[2]{};
-  bindings[0].binding = 0;
-  bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-  bindings[0].descriptorCount = 1;
-  bindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-  bindings[1].binding = 1;
-  bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-  bindings[1].descriptorCount = 1;
-  bindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-  VkDescriptorSetLayoutCreateInfo setLayoutInfo{};
-  setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  setLayoutInfo.bindingCount = 2;
-  setLayoutInfo.pBindings = bindings;
-  if (vkCreateDescriptorSetLayout(res.device, &setLayoutInfo, nullptr, &res.descriptorSetLayout) != VK_SUCCESS) {
-    res.destroy();
-    return result;
-  }
-
-  VkPushConstantRange pushConstantRange{};
-  pushConstantRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-  pushConstantRange.offset = 0;
-  pushConstantRange.size = sizeof(u32); // blocksPerRow
-
-  VkPipelineLayoutCreateInfo layoutInfo{};
-  layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  layoutInfo.setLayoutCount = 1;
-  layoutInfo.pSetLayouts = &res.descriptorSetLayout;
-  layoutInfo.pushConstantRangeCount = 1;
-  layoutInfo.pPushConstantRanges = &pushConstantRange;
-  if (vkCreatePipelineLayout(res.device, &layoutInfo, nullptr, &res.pipelineLayout) != VK_SUCCESS) {
-    res.destroy();
-    return result;
-  }
-
-  VkComputePipelineCreateInfo pipelineInfo{};
-  pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-  pipelineInfo.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  pipelineInfo.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-  pipelineInfo.stage.module = res.shaderModule;
-  pipelineInfo.stage.pName = "main";
-  pipelineInfo.layout = res.pipelineLayout;
-  if (vkCreateComputePipelines(res.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &res.pipeline) != VK_SUCCESS) {
-    res.destroy();
-    return result;
-  }
-
-  VkDescriptorPoolSize poolSizes[2]{};
-  poolSizes[0] = {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1};
-  poolSizes[1] = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1};
-  VkDescriptorPoolCreateInfo descPoolInfo{};
-  descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  descPoolInfo.maxSets = 1;
-  descPoolInfo.poolSizeCount = 2;
-  descPoolInfo.pPoolSizes = poolSizes;
-  if (vkCreateDescriptorPool(res.device, &descPoolInfo, nullptr, &res.descriptorPool) != VK_SUCCESS) {
-    res.destroy();
-    return result;
-  }
-
-  VkDescriptorSetAllocateInfo descAllocInfo{};
-  descAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  descAllocInfo.descriptorPool = res.descriptorPool;
-  descAllocInfo.descriptorSetCount = 1;
-  descAllocInfo.pSetLayouts = &res.descriptorSetLayout;
-  if (vkAllocateDescriptorSets(res.device, &descAllocInfo, &res.descriptorSet) != VK_SUCCESS) {
-    res.destroy();
-    return result;
-  }
-
-  VkDescriptorImageInfo imageDescInfo{};
-  imageDescInfo.imageView = res.sourceImageView;
-  imageDescInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-  VkDescriptorBufferInfo bufferDescInfo{};
-  bufferDescInfo.buffer = res.outputBuffer;
-  bufferDescInfo.offset = 0;
-  bufferDescInfo.range = outputBufferSize;
-
-  VkWriteDescriptorSet writes[2]{};
-  writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  writes[0].dstSet = res.descriptorSet;
-  writes[0].dstBinding = 0;
-  writes[0].descriptorCount = 1;
-  writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-  writes[0].pImageInfo = &imageDescInfo;
-  writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  writes[1].dstSet = res.descriptorSet;
-  writes[1].dstBinding = 1;
-  writes[1].descriptorCount = 1;
-  writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-  writes[1].pBufferInfo = &bufferDescInfo;
-  vkUpdateDescriptorSets(res.device, 2, writes, 0, nullptr);
+  device.setObjectName(VK_OBJECT_TYPE_PIPELINE,
+                       reinterpret_cast<u64>(res.computeKernel.handle()), "Compute.AstcEncode4x4");
+  device.setObjectName(VK_OBJECT_TYPE_PIPELINE_LAYOUT,
+                       reinterpret_cast<u64>(res.computeKernel.layout()), "Compute.AstcEncode4x4.Layout");
 
   // ---------------- Gravação e submissão ----------------
-  VkCommandBufferBeginInfo beginInfo{};
-  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-  if (!res.check(vkBeginCommandBuffer(res.commandBuffer, &beginInfo), "vkBeginCommandBuffer")) return result;
+  res.commandBuffer = res.computeContext.begin();
+  if (res.commandBuffer == VK_NULL_HANDLE) return result;
 
   vkCmdResetQueryPool(res.commandBuffer, res.queryPool, 0, 2);
 
@@ -435,22 +332,31 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
 
   vkCmdWriteTimestamp(res.commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, res.queryPool, 0);
 
-  vkCmdBindPipeline(res.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, res.pipeline);
-  vkCmdBindDescriptorSets(res.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, res.pipelineLayout, 0, 1, &res.descriptorSet, 0, nullptr);
-  vkCmdPushConstants(res.commandBuffer, res.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(u32), &blocksX);
   // local_size 8x8 no shader — arredonda para cima o número de grupos de trabalho.
-  vkCmdDispatch(res.commandBuffer, (blocksX + 7) / 8, (blocksY + 7) / 8, 1);
-
-  VkMemoryBarrier computeToHostBarrier{};
-  computeToHostBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-  computeToHostBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-  computeToHostBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-  vkCmdPipelineBarrier(res.commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       0, 1, &computeToHostBarrier, 0, nullptr, 0, nullptr);
+  device.cmdBeginDebugLabel(res.commandBuffer, "Compute/AstcEncode4x4", 0.34f, 0.70f, 0.92f);
+  const bool dispatchRecorded = res.computeKernel.recordDispatch(
+      res.commandBuffer, {(blocksX + 7) / 8, (blocksY + 7) / 8, 1},
+      &blocksX, sizeof(blocksX));
+  device.cmdEndDebugLabel(res.commandBuffer);
+  if (!dispatchRecorded) return result;
+  if (separateGraphicsQueue) {
+    rhi::cmdComputeBufferBarrier(res.commandBuffer, res.outputBuffer, 0, outputBufferSize,
+                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                 VK_ACCESS_SHADER_WRITE_BIT,
+                                 VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
+                                 res.queueFamily, device.graphicsQueueFamily());
+  } else {
+    rhi::cmdComputeMemoryBarrier(res.commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_ACCESS_TRANSFER_READ_BIT);
+  }
 
   vkCmdWriteTimestamp(res.commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, res.queryPool, 1);
 
-  if (!res.check(vkEndCommandBuffer(res.commandBuffer), "vkEndCommandBuffer") || !res.submitAndWait()) return result;
+  if (separateGraphicsQueue) {
+    rhi::VulkanComputeContext::SubmitSync sync{};
+    sync.signalSemaphores = &res.computeToGraphics; sync.signalCount = 1;
+    if (!res.computeContext.submit(sync) || !res.computeContext.wait()) return result;
+  } else if (!res.submitAndWait()) return result;
 
   u64 timestamps[2] = {0, 0};
   VkResult queryResult = vkGetQueryPoolResults(res.device, res.queryPool, 0, 2, sizeof(timestamps), timestamps,
@@ -506,11 +412,19 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
     return result;
   }
 
-  VkCommandBufferBeginInfo beginInfo2{};
-  beginInfo2.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  beginInfo2.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-  if (!res.check(vkResetCommandBuffer(res.commandBuffer, 0), "vkResetCommandBuffer") ||
-      !res.check(vkBeginCommandBuffer(res.commandBuffer, &beginInfo2), "vkBeginCommandBuffer/readback")) return result;
+  rhi::VulkanComputeContext &readbackContext = separateGraphicsQueue
+                                                   ? res.graphicsContext
+                                                   : res.computeContext;
+  res.commandBuffer = readbackContext.begin();
+  if (res.commandBuffer == VK_NULL_HANDLE) return result;
+
+  if (separateGraphicsQueue) {
+    rhi::cmdComputeBufferBarrier(res.commandBuffer, res.outputBuffer, 0, outputBufferSize,
+                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_ACCESS_TRANSFER_READ_BIT,
+                                 res.queueFamily, device.graphicsQueueFamily());
+  }
 
   transitionImageLayout(res.commandBuffer, res.astcImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -548,9 +462,12 @@ AstcEncodeProbeResult runAstcEncodeProbe(rhi::VulkanDevice &device, u32 textureW
   readbackBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
   vkCmdPipelineBarrier(res.commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
                        0, 1, &readbackBarrier, 0, nullptr, 0, nullptr);
-  if (!res.check(vkEndCommandBuffer(res.commandBuffer), "vkEndCommandBuffer/readback") ||
-      !res.check(vkResetFences(res.device, 1, &res.fence), "vkResetFences") ||
-      !res.submitAndWait()) return result;
+  if (separateGraphicsQueue) {
+    const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    rhi::VulkanComputeContext::SubmitSync sync{};
+    sync.waitSemaphores = &res.computeToGraphics; sync.waitStages = &waitStage; sync.waitCount = 1;
+    if (!readbackContext.submit(sync) || !readbackContext.wait()) return result;
+  } else if (!readbackContext.submit() || !readbackContext.wait()) return result;
 
   const auto *decoded = static_cast<const u8 *>(res.readbackBufferMapped);
   u32 maxDifference = 0;

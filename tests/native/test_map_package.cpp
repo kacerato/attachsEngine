@@ -188,3 +188,35 @@ AE_TEST(Static_collision_transforms_world_includes_blend_and_skips_cutout_cards)
   AE_EXPECT_EQ(collision.indices[1], 2u, "winding reversed");
   AE_EXPECT_EQ(collision.indices[2], 1u, "winding reversed");
 }
+
+AE_TEST(Static_collision_uses_only_authoritative_lod_zero_geometry) {
+  std::array<CollisionVertex, 6> vertices{{
+      {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f},
+      {0.0f, 0.1f, 0.0f}, {1.0f, 0.1f, 0.0f}, {0.0f, 0.1f, 1.0f},
+  }};
+  const std::array<u32, 6> indices{0, 1, 2, 3, 4, 5};
+  std::array<MapMaterialRecord, 1> materials{};
+  std::array<MapDrawRecord, 2> draws{};
+  for (MapDrawRecord &draw : draws) {
+    draw.indexCount = 3;
+    draw.model[0] = draw.model[5] = draw.model[10] = draw.model[15] = 1.0f;
+  }
+  draws[1].firstIndex = 3;
+  draws[1].lodLevel = 1;
+  draws[1].geometricError = 1.0f;
+  draws[1].lodGroupId = 0;
+
+  MapPackageView package{};
+  package.header.vertexCount = static_cast<u32>(vertices.size());
+  package.header.vertexStride = sizeof(CollisionVertex);
+  package.header.indexCount = static_cast<u32>(indices.size());
+  package.materials = materials;
+  package.draws.assign(draws.begin(), draws.end());
+  package.vertices = {reinterpret_cast<const u8 *>(vertices.data()), sizeof(vertices)};
+  package.indices = indices;
+
+  StaticCollisionMesh collision;
+  AE_EXPECT_TRUE(buildStaticCollisionMesh(package, collision), "LOD collision build");
+  AE_EXPECT_EQ(collision.vertices.size(), 3u, "coarse render vertices excluded");
+  AE_EXPECT_EQ(collision.indices.size(), 3u, "coarse render triangle excluded");
+}

@@ -99,6 +99,10 @@ android {
     ndkVersion = "27.1.12297006"
     androidResources { noCompress += setOf("aetex", "aemap", "aeenv") }
     sourceSets.getByName("main").assets.setSrcDirs(listOf(generatedAssets))
+    buildFeatures {
+        // AGDK Frame Pacing is consumed as a native Prefab package by CMake.
+        prefab = true
+    }
 
     defaultConfig {
         applicationId = "dev.aether.editor"
@@ -114,6 +118,7 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags += listOf("-std=c++20")
+                arguments += listOf("-DANDROID_STL=c++_shared")
                 targets += listOf("aether_android", "aether_transform")
             }
         }
@@ -160,4 +165,8 @@ android {
         // AGP 8.7 usado neste build reproduzível.
         disable += setOf("ChromeOsAbiSupport", "OldTargetApi")
     }
+}
+
+dependencies {
+    implementation("androidx.games:games-frame-pacing:2.1.3")
 }

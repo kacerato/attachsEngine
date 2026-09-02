@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "format": "AEMAP-2",
+  "version": 3,
+  "format": "AEMAP-3",
   "sourceZip": "update_dirt_road_through_forest.zip",
   "sourceSha256": "069f360d54ec2642f9de74dddcbb0043acfda9e2aa8066a6fe50b303cf944c57",
   "license": "CC-BY-4.0",
@@ -10,9 +10,9 @@
   "statistics": {
     "textures": 70,
     "materials": 26,
-    "draws": 27,
+    "draws": 1118,
     "vertices": 424849,
-    "triangles": 341109,
+    "triangles": 533260,
     "boundsMin": [
       -203.2776699066162,
       96.23909508605564,
@@ -27,7 +27,24 @@
       72.31723022460938,
       160.75257873535156,
       -468.6829528808594
-    ]
+    ],
+    "sourceDraws": 58,
+    "level0Draws": 635,
+    "level0Vertices": 424849,
+    "level0Triangles": 341109,
+    "lodGroups": 245,
+    "lodDrawsByLevel": {
+      "0": 635,
+      "1": 245,
+      "2": 238
+    },
+    "lodTrianglesByLevel": {
+      "0": 341109,
+      "1": 126033,
+      "2": 66118
+    },
+    "lodTrianglesPerGroup": 2048,
+    "lodWorldCellSize": 64.0
   },
   "textures": [
     {
@@ -942,9 +959,11 @@
     }
   ],
   "outputs": {
-    "environment.aeenv": "257715e1bddedacaf3453c5195ce06043faad8efb84e38c7fa17a9d915c95d04",
+    "environment-brdf.aetex": "403e4ff6655d21258354190c80e50c40427351addbba40f10826a0631d891fcd",
+    "environment-specular.aetex": "cc32e9ea74316cdf6b4accb5a12be362f48e7fe03ed03aa0c96c659e4777a128",
+    "environment.aeenv": "30970f2d0570921062c9acdea08528cdafb368570b10f6027ed535fa1cb34a3c",
     "environment.aetex": "216c35ea5c4a0b7b7efa01eb8af501413b34dfc14dcc92e7995913e41eda5a29",
-    "scene.aemap": "7356624d8e72c4fd710dd420004c7d22a2e0cf88b3738d128003bfee51a43586",
+    "scene.aemap": "c2c51d00f5e8369a05f0545f3c331805fb31d68619b2f0fb60782b6bcfcaeee7",
     "texture_000-fallback.aetex": "bf1899635a5400f6d969ede803d01ce54aa2af1c0977876257d6e9aa28909659",
     "texture_000.aetex": "cb46d964b4ac7c9d2752ff860d8d8a370f22ce776aa7b218c1f307c669c9f4eb",
     "texture_001-fallback.aetex": "d81efae4903b06389eb27ac9cab59db08051384296c3a13b42611dd148e3e17d",
@@ -1120,6 +1139,23 @@
       0.6
     ],
     "saturation": 1.0,
-    "environmentResourceVersion": 2
+    "environmentResourceVersion": 3,
+    "specularRepresentation": "octahedral-ggx-prefiltered-rgba16f",
+    "specularResolution": [
+      256,
+      256
+    ],
+    "specularMipLevels": 9,
+    "brdfLut": [
+      128,
+      128
+    ]
+  },
+  "geometryLod": {
+    "version": 1,
+    "sourceFormat": "AEMAP-2",
+    "preservesLevel0": true,
+    "level0Contract": "exact-vertices-and-triangles-spatially-reordered",
+    "strategy": "source-vertex-grid-clustering-v1"
   }
 }

@@ -1,6 +1,6 @@
 # ADR-014 — Política global de renderização orientada por budgets
 
-- **Estado:** aceita; cadência e núcleo de qualidade implementados, consumo pelo renderer parcial
+- **Estado:** aceita; política consumida pelo renderer Android, persistência/calibração/térmica parciais
 - **Data:** 29/08/2026
 - **Itens do plano:** 0.5, 2.1.7–2.1.9, 2.5.6 e 7.6
 - **Decisores:** arquitetura, renderer, Android, editor e performance
@@ -73,25 +73,77 @@ override por eixo, com `Inherit` como sentinela dentro do próprio enum (e não 
 registra eixo e motivo — `capability`, `budget` ou `thermal`. Sem isso, um aparelho que
 silenciosamente desliga sombras vira "bug de iluminação" para quem lê o relatório.
 
-Eixos entregues: sombras (contagem/resolução de cascata, taps de PCF, alcance, bias
-constante/slope/normal-offset, ancoragem em texel), ambiente (constante, hemisfério,
-hemisfério + sonda especular), pós (nenhum, tonemap, tonemap + bloom), texturas (bias
-de residência e anisotropia) e escala de resolução.
+Eixos entregues no schema v4: sombras (contagem/resolução de cascata, taps de PCF próximo/distante, alcance, bias
+constante/slope/normal-offset, ancoragem em texel, cache estático e guard band), ambiente (constante, hemisfério,
+hemisfério + sonda especular), pós (passe, bloom, FXAA, sharpen, contraste, saturação
+e vinheta), texturas (bias de residência e anisotropia), LOD por erro projetado com
+budgets independentes para malha sólida e alpha-coverage,
+distância de detalhe material por mapa e resolução estática/dinâmica com histerese.
+
+O schema v6 adiciona dois eixos que não podem ser inferidos do nome do preset:
+`materialShaderVariants` e `environmentSplitSumBrdf`. O primeiro permite pipelines
+especializados para normal/MR/emissivo, mas o default depende do perfil porque o A/B
+no Adreno mostrou regressão em B. O segundo seleciona a integração BRDF da sonda e
+continua independente de sua disponibilidade: pedir split-sum sem radiância especular
+é resolvido para desligado com motivo auditável. Os recursos AEEN v3 descrevem o que
+existe; a política decide o que usar.
+
+O consumo pelo `InstancedRenderer` Android também foi implementado em 31/08/2026.
+CSM direcional usa 1–4 cascatas em atlas, PCF configurável e alpha-test de vegetação;
+o passe final usa um alvo de cena na escala resolvida e aplica os filtros independentes.
+Normal map, probe especular e seleção de LOD leem seus budgets globais. A seleção usa
+a altura lógica da resolução interna ativa; resolução dinâmica e LOD não mantêm
+estimativas contraditórias do tamanho visível. A cena de
+floresta é somente um consumidor: não há branch por nome de cena, asset ou preset.
+Filtros de reconstrução não são ativados como efeito colateral da escala; o projeto
+decide explicitamente FXAA/sharpen/TAA. O controller dinâmico observa somente tempo de
+GPU para não reagir ao bloqueio de acquire ou ao frame pacing.
+
+Desde o schema 5 de profiling, a decisão fica auditável por janela: p95 da render
+thread e da GPU são comparados aos budgets resolvidos, acquire/present só classificam
+`presentation` quando o intervalo também está atrasado, e a escala dinâmica registra
+mínimo/máximo/final. A política não busca "uso equilibrado" de CPU/GPU; busca ambas as
+trilhas abaixo do deadline com margem. O ADPF da render thread segue o mesmo contrato
+e recebe CPU time, não wall time bloqueado pela GPU. O target do hint permanece o
+intervalo completo do frame (8,33 ms a 120 Hz): reduzir artificialmente esse target
+para 88% piorou o A/B físico e não é um mecanismo legítimo para solicitar clocks.
+O Game Mode e a preferência de eficiência do Android são informados por APIs públicas;
+a engine não tenta controlar frequências privadas de CPU/GPU.
+
+O detalhe material distante tem duas camadas complementares. O shader ainda faz fade
+contínuo das contribuições configuráveis, evitando uma transição visível. Para retirar
+de fato o custo de amostrar o normal map, o renderer também escolhe uma variante
+compilada sem normal somente quando a esfera de bounds inteira do draw está além da
+distância máxima. Bounds inválido ou atravessando a faixa mantém qualidade completa.
+Essa decisão é global, serializável na política e não conhece a cena de stress.
+
+A cadência de apresentação é uma extensão opcional do RHI. No Android, o backend pode
+usar AGDK Frame Pacing/Swappy por swapchain; em falha de capability ou inicialização,
+retorna ao caminho FIFO + AChoreographer. Nenhum tipo genérico do renderer conhece a
+biblioteca Android, e nenhuma cena decide o mecanismo de pacing.
 
 A pressão térmica piora um degrau por nível e **não** grava no projeto: a mesma entrada
-sem pressão devolve exatamente a qualidade original, o que um teste tranca. A
-recuperação com histerese continua pendente e entra junto do soak — histerese sem
-medição reproduziria o laço de realimentação que a cadência adaptativa produziu (ver
-`PROFILING-ANDROID.md`, "Cadência de apresentação e DVFS").
+sem pressão devolve exatamente a qualidade original, o que um teste tranca. O monitor
+NDK entregue amostra no máximo a cada 10 s, piora imediatamente e recupera somente um
+nível após três amostras frias. A política ativa só reduz recursos já criados para a
+época; portanto não recria atlas, pipelines ou assets no frame.
 
 ### Validação em hardware
+
+Em 01/09/2026, o AEMAP v3 de produção passou a fornecer 245 grupos espaciais com
+LOD0/colisão preservados. No A/B aquecido da rota, coverage 32 mediu 109,49 FPS/
+7,45 ms GPU contra LOD0 em 107,78/7,61 ms; coverage 48 mediu 111,01/7,37 ms em
+ordem térmica diferente. O preset B resolve coverage em 48 px, mas o número continua
+um eixo editável até 128 px, não um branch do preset. Uma pose fixa sustentou ~120 FPS
+nos dois modos e passou inspeção visual (MAE 2,00/255); o gate multipose/soak/Mali
+permanece aberto.
 
 No Xiaomi de referência, com Release assinado:
 
 ```
 [RenderPolicy] features: vulkan1_3=1 descriptor_indexing=1 nonuniform=1
                ray_query=0 mesh_shader=0 vrs=0 memoryless=0 -> perfil=1
-[RenderPolicy] preset=auto perfil=1 sombras=on(3 cascatas @1536, 9 taps)
+[RenderPolicy] preset=auto perfil=1 sombras=on(2 cascatas @1024, 9 taps)
                ambiente=hemisferio pos=passe textura_mip_bias=0 aniso=1.0
                escala=1.00 clamps=1
 [RenderPolicy] textures.samplerAnisotropy reduzido por capability.
@@ -110,10 +162,15 @@ essa lacuna em vez de escondê-la.
    forma visível; agora define a qualidade padrão. `memorylessAttachments` reporta
    `false` mesmo no device que comprovadamente concede `LAZILY_ALLOCATED`.
 2. **`samplerAnisotropy` não é habilitada** na criação do device.
-3. **O renderer ainda não consome os eixos.** A política é resolvida, registrada e
-   auditável, mas sombras, pós e escala de resolução ainda não têm implementação de
-   frame que os leia. É o próximo passo, e a matemática de cascata já está pronta e
-   testada em `renderer/shadow_cascades.h`.
+3. **Persistência e calibração continuam incompletas.** O renderer consome os eixos,
+   overrides de lançamento os exercitam e a pressão térmica já troca a policy ativa em
+   fronteira segura de frame; Project Settings ainda não serializa o schema 5 e a
+   calibração curta/banco de aparelhos ainda não existem.
+4. **Cache de sombra está entregue, mas o modelo de caster ainda é parcial.** Culling
+   conservador e cache por cascata com guard band/invalidação explícita reduziram o
+   passe de 3,05 para 0,09 ms em rota Release; os chunks do asset ainda são grossos e
+   o renderer precisa separar casters estáticos de dinâmicos antes de generalizar a
+   atualização incremental para cenas animadas.
 
 ## Alternativas descartadas
 

@@ -20,6 +20,51 @@ PassId RenderGraph::addPass(PassDesc desc) {
 
 namespace {
 
+PassKind effectiveKind(const PassDesc &pass) {
+  if (pass.kind != PassKind::Automatic) return pass.kind;
+  return PassKind::Raster;
+}
+
+const char *kindName(PassKind kind) {
+  switch (kind) {
+    case PassKind::Raster: return "Raster";
+    case PassKind::Compute: return "Compute";
+    case PassKind::Transfer: return "Transfer";
+    case PassKind::Automatic: return "Automatic";
+  }
+  return "?";
+}
+
+const char *queueName(ExecutionQueue queue) {
+  return queue == ExecutionQueue::Compute ? "Compute" : "Graphics";
+}
+
+const char *stageName(PassKind kind) {
+  switch (kind) {
+    case PassKind::Compute: return "ComputeShader";
+    case PassKind::Transfer: return "Transfer";
+    case PassKind::Raster:
+    case PassKind::Automatic:
+    default: return "FragmentShader";
+  }
+}
+
+const char *readAccessName(const ResourceAccess &access) {
+  switch (access.type) {
+    case AccessType::UniformRead: return "UniformRead";
+    case AccessType::StorageRead: return "ShaderStorageRead";
+    case AccessType::IndirectRead: return "IndirectCommandRead";
+    case AccessType::TransferRead: return "TransferRead";
+    default: return "ShaderRead";
+  }
+}
+
+const char *writeAccessName(const ResourceAccess &access) {
+  return access.type == AccessType::TransferWrite ? "TransferWrite" :
+         access.type == AccessType::StorageWrite ? "ShaderStorageWrite" :
+         "ColorAttachmentWrite";
+}
+
 // Uma aresta de dependência entre passes, anotada com o tipo de acesso que a
 // originou. `viaInputAttachment` é o que a fusão de subpasses consulta.
 struct Edge {
@@ -82,8 +127,31 @@ std::vector<Edge> buildEdges(const RenderGraph &graph) {
 
 } // namespace
 
-std::optional<CompiledGraph> RenderGraph::compile(CompileError *outError) const {
+std::optional<CompiledGraph> RenderGraph::compile(CompileError *outError,
+                                                  CompileOptions options) const {
   const u32 n = static_cast<u32>(passes_.size());
+  if (outError) outError->message.clear();
+  auto fail = [&](const std::string &message) -> std::optional<CompiledGraph> {
+    if (outError) outError->message = message;
+    return std::nullopt;
+  };
+  for (PassId p = 0; p < n; ++p) {
+    const PassDesc &pass = passes_[p];
+    if ((pass.extentWidth == 0) != (pass.extentHeight == 0))
+      return fail("pass '" + pass.name + "' possui extent incompleto");
+    if (pass.kind == PassKind::Compute &&
+        (pass.dispatchX == 0 || pass.dispatchY == 0 || pass.dispatchZ == 0))
+      return fail("pass compute '" + pass.name + "' possui dispatch nulo");
+    for (PassId dependency : pass.explicitDependsOn)
+      if (dependency >= n) return fail("pass '" + pass.name + "' referencia dependencia inexistente");
+    auto validateAccesses = [&](const std::vector<ResourceAccess> &accesses) {
+      for (const ResourceAccess &access : accesses)
+        if (access.resource >= resources_.size()) return false;
+      return true;
+    };
+    if (!validateAccesses(pass.reads) || !validateAccesses(pass.writes))
+      return fail("pass '" + pass.name + "' referencia recurso inexistente");
+  }
   std::vector<Edge> edges = buildEdges(*this);
 
   // Adjacência de saída (para topo/BFS) e de entrada (para poda reversa).
@@ -178,6 +246,15 @@ std::optional<CompiledGraph> RenderGraph::compile(CompileError *outError) const 
   CompiledGraph result;
   result.executionOrder = order;
   result.culledPasses = culled;
+  for (PassId pass : order) {
+    const PassKind kind = effectiveKind(passes_[pass]);
+    result.executionKinds.push_back(kind);
+    result.executionQueues.push_back(kind == PassKind::Compute &&
+                                             passes_[pass].preferAsyncCompute &&
+                                             options.asyncComputeAvailable
+                                         ? ExecutionQueue::Compute
+                                         : ExecutionQueue::Graphics);
+  }
 
   // --- 3. Tempo de vida dos recursos transitórios ----------------------
   std::unordered_map<ResourceId, ResourceLifetime> lifetimeMap;
@@ -251,15 +328,15 @@ std::optional<CompiledGraph> RenderGraph::compile(CompileError *outError) const 
   // Para cada recurso, percorremos seus acessos na ordem final de execução
   // e inserimos barreira entre acessos adjacentes exceto read->read.
   {
-    struct AccessRec { u32 pos; PassId pass; bool isWrite; };
+    struct AccessRec { u32 pos; PassId pass; bool isWrite; ResourceAccess access; };
     std::unordered_map<ResourceId, std::vector<AccessRec>> accessesByResource;
     for (u32 pos = 0; pos < order.size(); ++pos) {
       const PassDesc &pass = passes_[order[pos]];
       for (const auto &r : pass.reads) {
-        accessesByResource[r.resource].push_back({pos, order[pos], false});
+        accessesByResource[r.resource].push_back({pos, order[pos], false, r});
       }
       for (const auto &w : pass.writes) {
-        accessesByResource[w.resource].push_back({pos, order[pos], true});
+        accessesByResource[w.resource].push_back({pos, order[pos], true, w});
       }
     }
     for (auto &kv : accessesByResource) {
@@ -278,16 +355,35 @@ std::optional<CompiledGraph> RenderGraph::compile(CompileError *outError) const 
         b.beforePass = prev.pass;
         b.afterPass = cur.pass;
         bool depth = resources_[rid].isDepth;
-        b.oldLayout = prev.isWrite
-                           ? (depth ? ResourceLayout::DepthStencilAttachment : ResourceLayout::ColorAttachment)
-                           : ResourceLayout::ShaderReadOnly;
-        b.newLayout = cur.isWrite
-                           ? (depth ? ResourceLayout::DepthStencilAttachment : ResourceLayout::ColorAttachment)
-                           : ResourceLayout::ShaderReadOnly;
-        b.srcStage = prev.isWrite ? "ColorAttachmentOutput" : "FragmentShader";
-        b.dstStage = cur.isWrite ? "ColorAttachmentOutput" : "FragmentShader";
-        b.srcAccess = prev.isWrite ? "ColorAttachmentWrite" : "ShaderRead";
-        b.dstAccess = cur.isWrite ? "ColorAttachmentWrite" : "ShaderRead";
+        const PassKind previousKind = effectiveKind(passes_[prev.pass]);
+        const PassKind currentKind = effectiveKind(passes_[cur.pass]);
+        const bool previousStorage = prev.access.type == AccessType::StorageWrite ||
+                                     prev.access.type == AccessType::StorageRead;
+        const bool currentStorage = cur.access.type == AccessType::StorageWrite ||
+                                    cur.access.type == AccessType::StorageRead;
+        b.oldLayout = previousStorage ? ResourceLayout::General :
+                      prev.isWrite ? (depth ? ResourceLayout::DepthStencilAttachment
+                                            : ResourceLayout::ColorAttachment)
+                                   : ResourceLayout::ShaderReadOnly;
+        b.newLayout = currentStorage ? ResourceLayout::General :
+                      cur.isWrite ? (depth ? ResourceLayout::DepthStencilAttachment
+                                           : ResourceLayout::ColorAttachment)
+                                  : ResourceLayout::ShaderReadOnly;
+        b.srcStage = prev.isWrite && previousKind == PassKind::Raster
+                         ? (depth ? "LateFragmentTests" : "ColorAttachmentOutput")
+                         : stageName(previousKind);
+        b.dstStage = cur.isWrite && currentKind == PassKind::Raster
+                         ? (depth ? "EarlyFragmentTests" : "ColorAttachmentOutput") :
+                     cur.access.type == AccessType::IndirectRead
+                         ? "DrawIndirect" : stageName(currentKind);
+        b.srcAccess = prev.isWrite
+                          ? (depth && previousKind == PassKind::Raster
+                                 ? "DepthStencilAttachmentWrite" : writeAccessName(prev.access))
+                          : readAccessName(prev.access);
+        b.dstAccess = cur.isWrite
+                          ? (depth && currentKind == PassKind::Raster
+                                 ? "DepthStencilAttachmentWrite" : writeAccessName(cur.access))
+                          : readAccessName(cur.access);
         result.barriers.push_back(b);
       }
     }
@@ -295,25 +391,43 @@ std::optional<CompiledGraph> RenderGraph::compile(CompileError *outError) const 
 
   // --- 6. LoadOp/StoreOp por análise de uso -----------------------------
   {
-    struct FirstLast { PassId firstPass; bool firstIsFullOverwrite; PassId lastPass; bool lastIsWrite; };
+    struct FirstLast {
+      PassId firstPass;
+      bool firstIsFullOverwrite;
+      PassId lastPass;
+      bool lastIsWrite;
+      bool hasRasterAttachmentUse;
+    };
     std::unordered_map<ResourceId, FirstLast> fl;
     for (u32 pos = 0; pos < order.size(); ++pos) {
       PassId pid = order[pos];
       const PassDesc &pass = passes_[pid];
       for (const auto &r : pass.reads) {
+        const bool attachment = effectiveKind(pass) == PassKind::Raster &&
+                                resources_[r.resource].kind == ResourceDesc::Kind::Image &&
+                                r.asInputAttachment;
         auto it = fl.find(r.resource);
-        if (it == fl.end()) fl.emplace(r.resource, FirstLast{pid, false, pid, false});
-        else { it->second.lastPass = pid; it->second.lastIsWrite = false; }
+        if (it == fl.end()) fl.emplace(r.resource, FirstLast{pid, false, pid, false, attachment});
+        else {
+          it->second.lastPass = pid; it->second.lastIsWrite = false;
+          it->second.hasRasterAttachmentUse |= attachment;
+        }
       }
       for (const auto &w : pass.writes) {
+        const bool attachment = effectiveKind(pass) == PassKind::Raster &&
+                                resources_[w.resource].kind == ResourceDesc::Kind::Image;
         auto it = fl.find(w.resource);
-        if (it == fl.end()) fl.emplace(w.resource, FirstLast{pid, w.fullOverwrite, pid, true});
-        else { it->second.lastPass = pid; it->second.lastIsWrite = true; }
+        if (it == fl.end()) fl.emplace(w.resource, FirstLast{pid, w.fullOverwrite, pid, true, attachment});
+        else {
+          it->second.lastPass = pid; it->second.lastIsWrite = true;
+          it->second.hasRasterAttachmentUse |= attachment;
+        }
       }
     }
     for (auto &kv : fl) {
       ResourceId rid = kv.first;
       const FirstLast &f = kv.second;
+      if (!f.hasRasterAttachmentUse) continue;
       AttachmentUse use;
       use.resource = rid;
       use.pass = f.firstPass;
@@ -364,12 +478,13 @@ std::optional<CompiledGraph> RenderGraph::compile(CompileError *outError) const 
       const PassDesc &pd = passes_[p];
       SubpassGroup group;
       group.passes.push_back(p);
-      if (pd.extentWidth != 0 && pd.extentHeight != 0) {
+      if (effectiveKind(pd) == PassKind::Raster && pd.extentWidth != 0 && pd.extentHeight != 0) {
         usize j = i + 1;
         std::unordered_set<PassId> inGroup{p};
         while (j < order.size()) {
           PassId q = order[j];
           const PassDesc &qd = passes_[q];
+          if (effectiveKind(qd) != PassKind::Raster) break;
           if (qd.extentWidth != pd.extentWidth || qd.extentHeight != pd.extentHeight) break;
           // q so pode entrar no grupo se NENHUMA dependencia sua sobre um
           // pass ja fundido no grupo for uma dependencia "comum" (nao via
@@ -420,8 +535,18 @@ std::optional<CompiledGraph> RenderGraph::compile(CompileError *outError) const 
     }
     for (const auto &lt : result.lifetimes) {
       if (resources_[lt.resource].imported) continue;
+      if (resources_[lt.resource].kind != ResourceDesc::Kind::Image) continue;
       PassId firstPass = order[lt.firstUse];
       PassId lastPass = order[lt.lastUse];
+      bool rasterOnly = true;
+      for (u32 positionIndex = lt.firstUse; positionIndex <= lt.lastUse; ++positionIndex) {
+        const PassDesc &candidate = passes_[order[positionIndex]];
+        bool touches = false;
+        for (const auto &r : candidate.reads) if (r.resource == lt.resource) touches = true;
+        for (const auto &w : candidate.writes) if (w.resource == lt.resource) touches = true;
+        if (touches && effectiveKind(candidate) != PassKind::Raster) { rasterOnly = false; break; }
+      }
+      if (!rasterOnly) continue;
       if (groupOf.count(firstPass) == 0 || groupOf.count(lastPass) == 0) continue;
       if (groupOf[firstPass] != groupOf[lastPass]) continue;
       result.memorylessResources.push_back(lt.resource);
@@ -454,6 +579,7 @@ const char *layoutName(ResourceLayout l) {
     case ResourceLayout::ColorAttachment: return "ColorAttachment";
     case ResourceLayout::DepthStencilAttachment: return "DepthStencilAttachment";
     case ResourceLayout::ShaderReadOnly: return "ShaderReadOnly";
+    case ResourceLayout::General: return "General";
   }
   return "?";
 }
@@ -466,7 +592,15 @@ std::string CompiledGraph::exportText(const RenderGraph &graph) const {
   out << "-- Ordem de execucao --\n";
   for (usize i = 0; i < executionOrder.size(); ++i) {
     PassId p = executionOrder[i];
-    out << "  [" << i << "] " << graph.pass(p).name << " (id=" << p << ")\n";
+    const PassDesc &pass = graph.pass(p);
+    const PassKind kind = i < executionKinds.size() ? executionKinds[i] : effectiveKind(pass);
+    const ExecutionQueue queue = i < executionQueues.size() ? executionQueues[i]
+                                                             : ExecutionQueue::Graphics;
+    out << "  [" << i << "] " << pass.name << " (id=" << p << ", kind=" << kindName(kind);
+    if (kind == PassKind::Compute)
+      out << ", dispatch=" << pass.dispatchX << "x" << pass.dispatchY << "x" << pass.dispatchZ
+          << (pass.preferAsyncCompute ? ", async-preferred" : "");
+    out << ", queue=" << queueName(queue) << ")\n";
   }
 
   if (!culledPasses.empty()) {

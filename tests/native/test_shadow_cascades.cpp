@@ -193,3 +193,57 @@ AE_TEST(cascade_sol_a_pino_nao_colapsa_a_base_da_luz) {
     }
   }
 }
+
+AE_TEST(cascade_cula_somente_casters_que_nao_podem_afetar_receptores) {
+  const auto input = baseInput();
+  ShadowCascade cascade{};
+  AE_EXPECT_EQ(computeShadowCascades(input, 1, DefaultCascadeSplitLambda, &cascade), 1u,
+               "cascata resolvida");
+
+  const float inside[3] = {cascade.centerWorld[0], cascade.centerWorld[1],
+                           cascade.centerWorld[2]};
+  AE_EXPECT_TRUE(isShadowCasterVisible(cascade, inside, 1.0f),
+                 "caster dentro do receptor permanece");
+
+  const float lateral[3] = {cascade.centerWorld[0] + cascade.radiusWorld * 3.0f,
+                            cascade.centerWorld[1], cascade.centerWorld[2]};
+  AE_EXPECT_TRUE(!isShadowCasterVisible(cascade, lateral, 1.0f),
+                 "caster lateral remoto nao pode sombrear a cascata");
+
+  const float behindLight[3] = {
+      cascade.centerWorld[0] - cascade.lightDirection[0] * (cascade.casterExtrusionWorld + 10.0f),
+      cascade.centerWorld[1] - cascade.lightDirection[1] * (cascade.casterExtrusionWorld + 10.0f),
+      cascade.centerWorld[2] - cascade.lightDirection[2] * (cascade.casterExtrusionWorld + 10.0f)};
+  AE_EXPECT_TRUE(!isShadowCasterVisible(cascade, behindLight, 1.0f),
+                 "caster atras do olho da luz e removido");
+
+  const float invalid[3] = {NAN, 0.0f, 0.0f};
+  AE_EXPECT_TRUE(isShadowCasterVisible(cascade, invalid, 1.0f),
+                 "bounds invalidos falham abertos");
+}
+
+AE_TEST(cascade_cache_reusa_movimento_dentro_da_margem_e_invalida_fora) {
+  auto input = baseInput();
+  input.receiverGuardBandRatio = 1.10f;
+  ShadowCascade cached{};
+  AE_EXPECT_EQ(computeShadowCascades(input, 1, DefaultCascadeSplitLambda, &cached), 1u,
+               "cascata cacheada");
+
+  input.cameraPosition[0] += cached.radiusWorld * 0.02f;
+  ShadowCascade nearby{};
+  computeShadowCascades(input, 1, DefaultCascadeSplitLambda, &nearby);
+  AE_EXPECT_TRUE(canReuseStaticShadowCascade(cached, nearby, 1.10f),
+                 "movimento pequeno permanece no guard band");
+
+  input.cameraPosition[0] += cached.radiusWorld * 0.20f;
+  ShadowCascade distant{};
+  computeShadowCascades(input, 1, DefaultCascadeSplitLambda, &distant);
+  AE_EXPECT_TRUE(!canReuseStaticShadowCascade(cached, distant, 1.10f),
+                 "movimento alem da margem invalida");
+
+  distant.lightDirection[0] = 1.0f;
+  distant.lightDirection[1] = 0.0f;
+  distant.lightDirection[2] = 0.0f;
+  AE_EXPECT_TRUE(!canReuseStaticShadowCascade(cached, distant, 1.10f),
+                 "mudanca do sol sempre invalida");
+}

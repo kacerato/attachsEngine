@@ -14,6 +14,12 @@ ResourceAccess read(ResourceId r, bool inputAttachment = false) {
 ResourceAccess write(ResourceId r, bool fullOverwrite = false) {
   ResourceAccess a; a.resource = r; a.fullOverwrite = fullOverwrite; return a;
 }
+ResourceAccess typedRead(ResourceId r, AccessType type) {
+  ResourceAccess a; a.resource = r; a.type = type; return a;
+}
+ResourceAccess typedWrite(ResourceId r, AccessType type, bool fullOverwrite = false) {
+  ResourceAccess a; a.resource = r; a.type = type; a.fullOverwrite = fullOverwrite; return a;
+}
 } // namespace
 
 // --- Casos degenerados ------------------------------------------------
@@ -392,4 +398,119 @@ AE_TEST(RenderGraph_exportText_produz_saida_nao_vazia_e_legivel) {
   AE_EXPECT_TRUE(text.find("Produtor") != std::string::npos, "saida precisa citar o nome dos passes");
   AE_EXPECT_TRUE(text.find("Consumidor") != std::string::npos, "saida precisa citar o nome dos passes");
   AE_EXPECT_TRUE(text.find("Mid") != std::string::npos, "saida precisa citar o nome dos recursos");
+}
+
+AE_TEST(RenderGraph_compute_expõe_dispatch_e_barreira_storage) {
+  RenderGraph graph;
+  ResourceDesc storageDesc{"Storage", false, false, 4096};
+  storageDesc.kind = ResourceDesc::Kind::Buffer;
+  ResourceId storage = graph.addResource(storageDesc);
+  ResourceDesc outputDesc{"Output", true, false, 4096};
+  outputDesc.kind = ResourceDesc::Kind::Buffer;
+  ResourceId output = graph.addResource(outputDesc);
+
+  PassDesc producer; producer.name = "ComputeProducer"; producer.kind = PassKind::Compute;
+  producer.dispatchX = 16; producer.dispatchY = 8; producer.dispatchZ = 1;
+  producer.preferAsyncCompute = true;
+  producer.writes.push_back(typedWrite(storage, AccessType::StorageWrite, true));
+  PassDesc consumer; consumer.name = "ComputeConsumer"; consumer.kind = PassKind::Compute;
+  consumer.dispatchX = 4; consumer.dispatchY = 1; consumer.dispatchZ = 1;
+  consumer.reads.push_back(typedRead(storage, AccessType::StorageRead));
+  consumer.writes.push_back(typedWrite(output, AccessType::StorageWrite, true));
+  graph.addPass(producer); graph.addPass(consumer);
+
+  CompileError err;
+  auto compiled = graph.compile(&err);
+  AE_EXPECT_TRUE(compiled.has_value(), "cadeia compute valida deve compilar");
+  AE_EXPECT_TRUE(compiled->executionKinds.size() == 2 &&
+                 compiled->executionKinds[0] == PassKind::Compute &&
+                 compiled->executionKinds[1] == PassKind::Compute,
+                 "backend precisa receber compute como tipo explicito");
+  const Barrier *barrier = nullptr;
+  for (const auto &candidate : compiled->barriers) if (candidate.resource == storage) barrier = &candidate;
+  AE_EXPECT_TRUE(barrier != nullptr, "storage write seguido de storage read exige barreira");
+  AE_EXPECT_TRUE(std::string(barrier->srcStage) == "ComputeShader" &&
+                 std::string(barrier->dstStage) == "ComputeShader",
+                 "barreira compute deve usar estagio compute nos dois lados");
+  AE_EXPECT_TRUE(barrier->oldLayout == ResourceLayout::General &&
+                 barrier->newLayout == ResourceLayout::General,
+                 "storage permanece em layout General");
+  AE_EXPECT_TRUE(compiled->attachmentUses.empty(), "buffers compute nao sao attachments raster");
+  AE_EXPECT_TRUE(compiled->memorylessResources.empty(), "buffers compute nao podem ser memoryless attachments");
+  AE_EXPECT_TRUE(compiled->exportText(graph).find("dispatch=16x8x1, async-preferred") != std::string::npos,
+                 "exportacao deve tornar dispatch e preferencia async inspecionaveis");
+}
+
+AE_TEST(RenderGraph_compute_para_indirect_draw_gera_barreira_correta) {
+  RenderGraph graph;
+  ResourceDesc argsDesc{"IndirectArgs", false, false, 64};
+  argsDesc.kind = ResourceDesc::Kind::Buffer;
+  ResourceId args = graph.addResource(argsDesc);
+  ResourceId backbuffer = graph.addResource({"Backbuffer", true});
+  PassDesc cull; cull.name = "GpuCull"; cull.kind = PassKind::Compute;
+  cull.dispatchX = 32; cull.dispatchY = 1; cull.dispatchZ = 1;
+  cull.writes.push_back(typedWrite(args, AccessType::StorageWrite, true));
+  PassDesc draw; draw.name = "IndirectDraw"; draw.kind = PassKind::Raster;
+  draw.extentWidth = 1280; draw.extentHeight = 720;
+  draw.reads.push_back(typedRead(args, AccessType::IndirectRead));
+  draw.writes.push_back(write(backbuffer, true));
+  graph.addPass(cull); graph.addPass(draw);
+  CompileError err;
+  auto compiled = graph.compile(&err);
+  AE_EXPECT_TRUE(compiled.has_value(), "compute seguido de draw indireto deve compilar");
+  const Barrier *barrier = nullptr;
+  for (const auto &candidate : compiled->barriers) if (candidate.resource == args) barrier = &candidate;
+  AE_EXPECT_TRUE(barrier != nullptr, "argumentos indiretos exigem dependencia visivel");
+  AE_EXPECT_TRUE(std::string(barrier->dstStage) == "DrawIndirect" &&
+                 std::string(barrier->dstAccess) == "IndirectCommandRead",
+                 "consumo indireto precisa de stage/access especificos");
+}
+
+AE_TEST(RenderGraph_compute_explicitamente_nulo_e_rejeitado) {
+  RenderGraph graph;
+  PassDesc pass; pass.name = "InvalidCompute"; pass.kind = PassKind::Compute;
+  graph.addPass(pass);
+  CompileError err;
+  auto compiled = graph.compile(&err);
+  AE_EXPECT_TRUE(!compiled.has_value(), "dispatch zero nao pode chegar ao backend");
+  AE_EXPECT_TRUE(err.message.find("dispatch nulo") != std::string::npos,
+                 "erro deve explicar a causa para editor e debugging");
+}
+
+AE_TEST(RenderGraph_async_compute_so_e_agendado_quando_capability_existe) {
+  RenderGraph graph;
+  ResourceDesc outputDesc{"Output", true, false, 64};
+  outputDesc.kind = ResourceDesc::Kind::Buffer;
+  const ResourceId output = graph.addResource(outputDesc);
+  PassDesc pass; pass.name = "AsyncCandidate"; pass.kind = PassKind::Compute;
+  pass.dispatchX = 1; pass.dispatchY = 1; pass.dispatchZ = 1;
+  pass.preferAsyncCompute = true;
+  pass.writes.push_back(typedWrite(output, AccessType::StorageWrite, true));
+  graph.addPass(pass);
+
+  CompileError err;
+  auto fallback = graph.compile(&err, {.asyncComputeAvailable = false});
+  auto asynchronous = graph.compile(&err, {.asyncComputeAvailable = true});
+  AE_EXPECT_TRUE(fallback.has_value() && asynchronous.has_value(),
+                 "mesmo grafo deve compilar nos dois perfis");
+  AE_EXPECT_TRUE(fallback->executionQueues[0] == ExecutionQueue::Graphics,
+                 "sem fila dedicada compute usa a fila grafica universal");
+  AE_EXPECT_TRUE(asynchronous->executionQueues[0] == ExecutionQueue::Compute,
+                 "capability real e preferencia do pass autorizam fila compute");
+}
+
+AE_TEST(RenderGraph_compute_sem_preferencia_permanece_na_fila_grafica) {
+  RenderGraph graph;
+  ResourceDesc outputDesc{"Output", true, false, 64};
+  outputDesc.kind = ResourceDesc::Kind::Buffer;
+  const ResourceId output = graph.addResource(outputDesc);
+  PassDesc pass; pass.name = "SerialCompute"; pass.kind = PassKind::Compute;
+  pass.dispatchX = 1; pass.dispatchY = 1; pass.dispatchZ = 1;
+  pass.writes.push_back(typedWrite(output, AccessType::StorageWrite, true));
+  graph.addPass(pass);
+  CompileError err;
+  auto compiled = graph.compile(&err, {.asyncComputeAvailable = true});
+  AE_EXPECT_TRUE(compiled.has_value() &&
+                 compiled->executionQueues[0] == ExecutionQueue::Graphics,
+                 "async compute e opt-in por pass, nao uma migracao global perigosa");
 }

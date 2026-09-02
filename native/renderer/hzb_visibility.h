@@ -76,6 +76,14 @@ void computeHzbLevelOffsets(const HzbLevelDims *dims, u32 levelCount, std::vecto
 bool hzbPyramidFromLevels(const float *floatTexels, usize floatCount, const HzbLevelDims *dims,
                           u32 levelCount, HzbPyramid &out);
 
+// Validates the invariant produced by both raster and compute HZB paths:
+// every texel after level zero must be the exact maximum of its clamped 2x2
+// footprint in the previous level. This deliberately does not validate level
+// zero (its arbitrary-resolution depth footprint is validated separately by
+// buildHzbBaseLevelBlockMax). Used by hardware validation readback only; the
+// production GPU-only path never maps the pyramid to the CPU.
+bool validateHzbMaxReductionChain(const HzbPyramid &pyramid, float tolerance = 0.0f);
+
 struct HzbScreenRect final {
   // Normalized [0,1] screen-space rectangle (0,0 = top-left of the frustum's
   // projected view), already clamped to the visible range.

@@ -42,6 +42,23 @@ inline FrameBudget makeFrameBudget(float displayHz, float requestedMaximumHz,
           interval * 0.78f, interval * 0.88f, interval * 0.10f};
 }
 
+// Traduz a cadência portátil para o alvo de trabalho informado ao Android
+// Performance Hint. O alvo padrão é o intervalo de apresentação: o A/B físico
+// mostrou que usar a margem interna da trilha GPU como alvo ADPF pode piorar a
+// seleção de operating point do OEM. targetRatioOverride permanece somente
+// para profiling no mesmo APK; zero, NaN e valores fora da faixa segura herdam
+// o intervalo completo.
+inline i64 performanceHintTargetNanoseconds(const FrameBudget &budget,
+                                            float targetRatioOverride = 0.0f) noexcept {
+  const bool validOverride = std::isfinite(targetRatioOverride) &&
+                             targetRatioOverride >= 0.5f &&
+                             targetRatioOverride <= 1.0f;
+  const float targetMs = validOverride
+                             ? budget.frameIntervalMs * targetRatioOverride
+                             : budget.frameIntervalMs;
+  return std::max<i64>(1, static_cast<i64>(targetMs * 1'000'000.0f + 0.5f));
+}
+
 // Visibility-stage budgets (HZB hysteresis, and future LOD pixel-error/dither
 // budgets -- see docs/adr/ADR-014-POLITICA-GLOBAL-RENDERIZACAO.md, "budgets
 // like LOD max error, shadow cascades, AO samples... belong to global
@@ -67,6 +84,11 @@ struct VisibilityBudget final {
   float hzbNormalizedDepthBias = 1.0e-5f;
   // Projected geometric error allowed for an imported LOD level, in pixels.
   float lodPixelErrorBudget = 2.0f;
+  // Alpha-tested coverage (foliage, grass and card clusters) has a distinct
+  // perceptual/cost curve from closed opaque meshes. Its importer error is
+  // measured in removed coverage-cluster radius, so sharing the opaque budget
+  // would keep distant vegetation at LOD0 almost indefinitely.
+  float coverageLodPixelErrorBudget = 32.0f;
   // A coarser LOD must fit this fraction of the full pixel budget before
   // switching, preventing oscillation at the boundary.
   float lodHysteresisBandRatio = 0.75f;

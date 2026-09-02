@@ -14,7 +14,9 @@ AndroidVulkanSurface::~AndroidVulkanSurface() {
   shutdown();
 }
 
-bool AndroidVulkanSurface::initialize(ANativeWindow *window, bool allowBindless) {
+bool AndroidVulkanSurface::initialize(ANativeActivity *activity, ANativeWindow *window,
+                                      u32 targetFramesPerSecond, bool useSwappy,
+                                      bool allowBindless) {
   if (window == nullptr || isReady()) return false;
 
   const char *extensions[] = {
@@ -26,6 +28,8 @@ bool AndroidVulkanSurface::initialize(ANativeWindow *window, bool allowBindless)
                         "Falha ao criar a instância Vulkan com suporte Android.");
     return false;
   }
+  swappyScheduler_.configure(activity, window, targetFramesPerSecond, useSwappy);
+  device_.setPresentationScheduler(useSwappy ? &swappyScheduler_ : nullptr);
 
   VkAndroidSurfaceCreateInfoKHR createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
@@ -63,7 +67,8 @@ bool AndroidVulkanSurface::initialize(ANativeWindow *window, bool allowBindless)
   if (!swapchain_.initialize(device_.handle(), device_.physicalDevice(), surface_,
                              device_.graphicsQueueFamily(),
                              static_cast<ae::u32>(ANativeWindow_getWidth(window)),
-                             static_cast<ae::u32>(ANativeWindow_getHeight(window)))) {
+                             static_cast<ae::u32>(ANativeWindow_getHeight(window)),
+                             useSwappy ? &swappyScheduler_ : nullptr)) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar a swapchain de apresentação.");
     shutdown();
     return false;
@@ -75,6 +80,7 @@ bool AndroidVulkanSurface::initialize(ANativeWindow *window, bool allowBindless)
 
 bool AndroidVulkanSurface::recreateSwapchain(ANativeWindow *window) {
   if (window == nullptr || !isReady()) return false;
+  swappyScheduler_.setWindow(window);
   return swapchain_.recreate(static_cast<ae::u32>(ANativeWindow_getWidth(window)),
                              static_cast<ae::u32>(ANativeWindow_getHeight(window)));
 }

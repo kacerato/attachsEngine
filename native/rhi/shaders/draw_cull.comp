@@ -1,0 +1,268 @@
+#version 450
+
+// Oclusão GPU-driven: o consumidor da pirâmide que hzb_reduce_compute.comp
+// constrói (ADR-016, consumidor C2). Uma invocação por candidato; a saída é o
+// `instanceCount` do comando indireto que o passe opaco já submete, de modo que
+// nenhum estágio gráfico precisa saber que este kernel existe.
+//
+// Este shader NÃO inventa matemática de visibilidade. Ele é o espelho
+// instrução por instrução de renderer::cullDrawRecordReference, que por sua vez
+// é a composição exata de projectBoundsToHzbScreenRect + isOccludedByHzb +
+// updateHzbHysteresis com guarda de movimento zero. Qualquer divergência entre
+// os dois arquivos é um defeito, não uma otimização.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+#define HZB_MAXIMUM_LEVELS 6
+// Teto duro de varredura. Com a cadeia de seis níveis do runtime o nível
+// escolhido sempre cabe muito abaixo disto; existe para que uma configuração
+// degenerada (um único nível na resolução da base) falhe aberto em vez de
+// travar a GPU num laço de dezenas de milhares de texels. A referência de CPU
+// aplica o mesmo teto.
+#define HZB_MAXIMUM_SCAN_TEXELS 4096u
+
+struct DrawRecord {
+  vec3 boundsCenter;
+  float boundsRadius;
+  uint stateIndex;
+  uint flags;
+  uint reserved0;
+  uint reserved1;
+};
+
+struct DrawIndexedIndirectCommand {
+  uint indexCount;
+  uint instanceCount;
+  uint firstIndex;
+  int vertexOffset;
+  uint firstInstance;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer DrawRecords {
+  DrawRecord records[];
+} drawRecords;
+
+layout(std430, set = 0, binding = 1) buffer IndirectCommands {
+  DrawIndexedIndirectCommand commands[];
+} indirect;
+
+// Estado persistente por draw do pacote (nunca por comando: a histerese precisa
+// sobreviver à reordenação front-to-back e à troca de nível de LOD).
+layout(std430, set = 0, binding = 2) buffer HysteresisState {
+  uint occludedStreak[];
+} state;
+
+// [0]=testados [1]=ocluídos [2]=revividos [3]=visíveis. Diagnóstico: é lido um
+// frame depois e nunca realimenta uma decisão.
+layout(std430, set = 0, binding = 3) buffer Telemetry {
+  uint counters[];
+} telemetry;
+
+layout(set = 0, binding = 4) uniform sampler2D hzbLevel0;
+layout(set = 0, binding = 5) uniform sampler2D hzbLevel1;
+layout(set = 0, binding = 6) uniform sampler2D hzbLevel2;
+layout(set = 0, binding = 7) uniform sampler2D hzbLevel3;
+layout(set = 0, binding = 8) uniform sampler2D hzbLevel4;
+layout(set = 0, binding = 9) uniform sampler2D hzbLevel5;
+
+// Espelho exato de renderer::GpuCullParameters: 28 escalares de 4 bytes, na
+// mesma ordem. Escalares soltos e não vec3/vec4 de propósito — um vec3 alinharia
+// o campo seguinte em 16 bytes e deslocaria silenciosamente o bloco inteiro.
+layout(push_constant) uniform CullPushConstants {
+  float cameraPositionX;
+  float cameraPositionY;
+  float cameraPositionZ;
+  float boundsScale;
+
+  float cosineYaw;
+  float sineYaw;
+  float cosinePitch;
+  float sinePitch;
+
+  float tangentHalfHorizontal;
+  float tangentHalfVertical;
+  float nearPlane;
+  float farPlane;
+
+  float boundsMargin;
+  float normalizedDepthBias;
+  float screenDilation;
+  float viewDepthGuard;
+
+  float surfaceTransformXX;
+  float surfaceTransformXY;
+  float surfaceTransformYX;
+  float surfaceTransformYY;
+
+  uint drawCount;
+  uint hysteresisFrames;
+  uint hzbBaseWidth;
+  uint hzbBaseHeight;
+
+  uint hzbLevelCount;
+  uint maximumScannedTexels;
+  uint flags;
+  float translationDilationScale;
+} pushConstants;
+
+#define GPU_CULL_RECORD_TESTABLE 1u
+#define GPU_CULL_RECORD_PRESENT 2u
+#define GPU_CULL_PYRAMID_USABLE 1u
+
+float hzbFetch(uint level, ivec2 coordinate) {
+  switch (level) {
+    case 0u: return texelFetch(hzbLevel0, coordinate, 0).r;
+    case 1u: return texelFetch(hzbLevel1, coordinate, 0).r;
+    case 2u: return texelFetch(hzbLevel2, coordinate, 0).r;
+    case 3u: return texelFetch(hzbLevel3, coordinate, 0).r;
+    case 4u: return texelFetch(hzbLevel4, coordinate, 0).r;
+    default: return texelFetch(hzbLevel5, coordinate, 0).r;
+  }
+}
+
+uint halveCeiling(uint extent) { return (extent + 1u) / 2u; }
+
+void publish(uint commandIndex, bool visible, bool tested, bool occluded, bool revived) {
+  indirect.commands[commandIndex].instanceCount = visible ? 1u : 0u;
+  if (tested) {
+    atomicAdd(telemetry.counters[0], 1u);
+    if (occluded) atomicAdd(telemetry.counters[1], 1u);
+    if (revived) atomicAdd(telemetry.counters[2], 1u);
+  }
+  if (visible) atomicAdd(telemetry.counters[3], 1u);
+}
+
+void main() {
+  const uint commandIndex = gl_GlobalInvocationID.x;
+  if (commandIndex >= pushConstants.drawCount) return;
+
+  const DrawRecord record = drawRecords.records[commandIndex];
+  // Slot de sobra: o dispatch cobre a capacidade da lista de comandos, não o
+  // número de comandos deste frame. Nenhuma escrita — em particular nenhuma no
+  // estado, cujo índice zerado apagaria a histerese do draw 0.
+  if ((record.flags & GPU_CULL_RECORD_PRESENT) == 0u) return;
+
+  const uint stateIndex = record.stateIndex;
+  const bool testable = (record.flags & GPU_CULL_RECORD_TESTABLE) != 0u;
+  const bool usable = (pushConstants.flags & GPU_CULL_PYRAMID_USABLE) != 0u &&
+                      pushConstants.hzbLevelCount > 0u && pushConstants.hzbBaseWidth > 0u &&
+                      pushConstants.hzbBaseHeight > 0u;
+  if (!testable || !usable) {
+    // Estágio não executado para este candidato: nunca acumula streak e nunca
+    // conta revive — a mesma reinicialização que a CPU faz.
+    state.occludedStreak[stateIndex] = 0u;
+    publish(commandIndex, true, false, false, false);
+    return;
+  }
+
+  const uint previousStreak = state.occludedStreak[stateIndex];
+  // Todo caminho que não conclui oclusão é o caminho de "não ocluído": zera o
+  // streak e conta revive se havia oclusão acumulada.
+  bool concluded = false;
+  bool occluded = false;
+
+  const vec3 delta = record.boundsCenter -
+      vec3(pushConstants.cameraPositionX, pushConstants.cameraPositionY,
+           pushConstants.cameraPositionZ);
+  const float yawX = pushConstants.cosineYaw * delta.x - pushConstants.sineYaw * delta.z;
+  const float yawZ = pushConstants.sineYaw * delta.x + pushConstants.cosineYaw * delta.z;
+  const float viewX = yawX;
+  const float viewY = pushConstants.cosinePitch * delta.y + pushConstants.sinePitch * yawZ;
+  const float viewZ = -pushConstants.sinePitch * delta.y + pushConstants.cosinePitch * yawZ;
+
+  const float expandedRadius = record.boundsRadius * pushConstants.boundsScale +
+                               pushConstants.boundsMargin;
+  // A guarda de aproximação entra antes da projeção: puxar a esfera para perto
+  // aumenta o retângulo e reduz a profundidade testada com uma única subtração.
+  const float nearDepth = viewZ - expandedRadius - pushConstants.viewDepthGuard;
+
+  if (record.boundsRadius >= 0.0 && !isinf(nearDepth) && !isnan(nearDepth) &&
+      nearDepth >= pushConstants.nearPlane) {
+    const float invHorizontal = 1.0 / (nearDepth * pushConstants.tangentHalfHorizontal);
+    const float invVertical = 1.0 / (nearDepth * pushConstants.tangentHalfVertical);
+    const vec2 ndcX = vec2((viewX - expandedRadius) * invHorizontal,
+                           (viewX + expandedRadius) * invHorizontal);
+    const vec2 ndcY = vec2((viewY - expandedRadius) * invVertical,
+                           (viewY + expandedRadius) * invVertical);
+
+    vec2 surfaceMinimum = vec2(3.402823466e+38);
+    vec2 surfaceMaximum = vec2(-3.402823466e+38);
+    for (uint xi = 0u; xi < 2u; ++xi) {
+      for (uint yi = 0u; yi < 2u; ++yi) {
+        const float x = ndcX[xi];
+        const float y = ndcY[yi];
+        const vec2 transformed = vec2(
+            pushConstants.surfaceTransformXX * x + pushConstants.surfaceTransformXY * y,
+            pushConstants.surfaceTransformYX * x + pushConstants.surfaceTransformYY * y);
+        surfaceMinimum = min(surfaceMinimum, transformed);
+        surfaceMaximum = max(surfaceMaximum, transformed);
+      }
+    }
+    surfaceMinimum = clamp(surfaceMinimum, vec2(-1.0), vec2(1.0));
+    surfaceMaximum = clamp(surfaceMaximum, vec2(-1.0), vec2(1.0));
+
+    const float normalizedDepth =
+        (pushConstants.farPlane * nearDepth - pushConstants.nearPlane * pushConstants.farPlane) /
+        ((pushConstants.farPlane - pushConstants.nearPlane) * nearDepth);
+
+    if (surfaceMinimum.x < surfaceMaximum.x && surfaceMinimum.y < surfaceMaximum.y &&
+        !isinf(normalizedDepth) && !isnan(normalizedDepth)) {
+      // Dilatação lateral resolvida por candidato: o deslocamento em tela de uma
+      // translação perpendicular é inversamente proporcional à profundidade.
+      const float dilation = pushConstants.screenDilation +
+                             pushConstants.translationDilationScale / nearDepth;
+      const vec2 minimumUv = clamp(surfaceMinimum * 0.5 + 0.5 - dilation, vec2(0.0), vec2(1.0));
+      const vec2 maximumUv = clamp(surfaceMaximum * 0.5 + 0.5 + dilation, vec2(0.0), vec2(1.0));
+      const float testedDepth = clamp(normalizedDepth, 0.0, 1.0);
+
+      // Escolhe o nível mais fino cujo rastro ainda cabe no orçamento de
+      // varredura. Qualquer nível é correto — a redução por máximo vale em
+      // todos; isto só limita quantos texels uma invocação compara.
+      uint width = pushConstants.hzbBaseWidth;
+      uint height = pushConstants.hzbBaseHeight;
+      uint chosenLevel = 0u;
+      uvec2 minimumTexel = uvec2(0u);
+      uvec2 maximumTexel = uvec2(0u);
+      const uint levelCount = min(pushConstants.hzbLevelCount, uint(HZB_MAXIMUM_LEVELS));
+      for (uint level = 0u; level < levelCount; ++level) {
+        const uint levelMinX = min(uint(minimumUv.x * float(width)), width - 1u);
+        const uint levelMaxX =
+            min(uint(max(ceil(maximumUv.x * float(width)) - 1.0, 0.0)), width - 1u);
+        const uint levelMinY = min(uint(minimumUv.y * float(height)), height - 1u);
+        const uint levelMaxY =
+            min(uint(max(ceil(maximumUv.y * float(height)) - 1.0, 0.0)), height - 1u);
+        const uint texelCount = (levelMaxX - levelMinX + 1u) * (levelMaxY - levelMinY + 1u);
+        minimumTexel = uvec2(levelMinX, levelMinY);
+        maximumTexel = uvec2(levelMaxX, levelMaxY);
+        chosenLevel = level;
+        if (texelCount <= pushConstants.maximumScannedTexels) break;
+        width = halveCeiling(width);
+        height = halveCeiling(height);
+      }
+
+      const uint scanned = (maximumTexel.x - minimumTexel.x + 1u) *
+                           (maximumTexel.y - minimumTexel.y + 1u);
+      if (scanned <= HZB_MAXIMUM_SCAN_TEXELS) {
+        float farthestNearestDepth = -3.402823466e+38;
+        for (uint y = minimumTexel.y; y <= maximumTexel.y; ++y) {
+          for (uint x = minimumTexel.x; x <= maximumTexel.x; ++x) {
+            farthestNearestDepth =
+                max(farthestNearestDepth, hzbFetch(chosenLevel, ivec2(int(x), int(y))));
+          }
+        }
+        concluded = true;
+        occluded = testedDepth > farthestNearestDepth + pushConstants.normalizedDepthBias;
+      }
+    }
+  }
+
+  if (!concluded || !occluded) {
+    state.occludedStreak[stateIndex] = 0u;
+    publish(commandIndex, true, true, false, previousStreak > 0u);
+    return;
+  }
+
+  const uint streak = previousStreak == 0xffffffffu ? previousStreak : previousStreak + 1u;
+  state.occludedStreak[stateIndex] = streak;
+  publish(commandIndex, streak < pushConstants.hysteresisFrames, true, true, false);
+}

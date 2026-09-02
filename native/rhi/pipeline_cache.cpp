@@ -126,23 +126,33 @@ PipelineCache::~PipelineCache() {
 }
 
 void PipelineCache::initialize(VkDevice device) {
+  shutdown();
+  if (device == VK_NULL_HANDLE) return;
   device_ = device;
+  VkPipelineCacheCreateInfo cacheInfo{};
+  cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  if (vkCreatePipelineCache(device_, &cacheInfo, nullptr, &driverCache_) != VK_SUCCESS)
+    driverCache_ = VK_NULL_HANDLE;
   impl_ = new Impl(device);
 }
 
 void PipelineCache::shutdown() {
-  if (impl_ == nullptr) return;
+  if (impl_ == nullptr && driverCache_ == VK_NULL_HANDLE) return;
   // DescriptorCache<Desc,Handle> é agnóstico ao tipo de Handle e não destrói
   // os objetos Vulkan sozinho — precisa ser feito aqui, na ordem correta
   // (pipeline antes de layout/render pass, já que pipelines os referenciam).
-  impl_->pipelines.forEachHandle(
-      [this](VkPipeline pipeline) { vkDestroyPipeline(device_, pipeline, nullptr); });
-  impl_->pipelineLayouts.forEachHandle(
-      [this](VkPipelineLayout layout) { vkDestroyPipelineLayout(device_, layout, nullptr); });
-  impl_->renderPasses.forEachHandle(
-      [this](VkRenderPass renderPass) { vkDestroyRenderPass(device_, renderPass, nullptr); });
-  delete impl_;
+  if (impl_ != nullptr) {
+    impl_->pipelines.forEachHandle(
+        [this](VkPipeline pipeline) { vkDestroyPipeline(device_, pipeline, nullptr); });
+    impl_->pipelineLayouts.forEachHandle(
+        [this](VkPipelineLayout layout) { vkDestroyPipelineLayout(device_, layout, nullptr); });
+    impl_->renderPasses.forEachHandle(
+        [this](VkRenderPass renderPass) { vkDestroyRenderPass(device_, renderPass, nullptr); });
+    delete impl_;
+  }
+  if (driverCache_ != VK_NULL_HANDLE) vkDestroyPipelineCache(device_, driverCache_, nullptr);
   impl_ = nullptr;
+  driverCache_ = VK_NULL_HANDLE;
   device_ = VK_NULL_HANDLE;
 }
 

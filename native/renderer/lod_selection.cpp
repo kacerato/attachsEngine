@@ -166,4 +166,20 @@ bool buildLodRenderGroups(std::span<const MapDrawRecord> draws,
   return true;
 }
 
+void buildLodLevelZeroDrawOrder(std::span<const LodRenderGroup> groups,
+                                std::span<const u32> ungrouped,
+                                std::vector<u32> &outDrawOrder) {
+  std::vector<u32> levelZero;
+  usize groupedDrawCount = 0;
+  for (const LodRenderGroup &group : groups)
+    groupedDrawCount += group.levels[0].drawIndices.size();
+  levelZero.reserve(ungrouped.size() + groupedDrawCount);
+  levelZero.insert(levelZero.end(), ungrouped.begin(), ungrouped.end());
+  for (const LodRenderGroup &group : groups) {
+    const auto &draws = group.levels[0].drawIndices;
+    levelZero.insert(levelZero.end(), draws.begin(), draws.end());
+  }
+  outDrawOrder = std::move(levelZero);
+}
+
 } // namespace ae::renderer

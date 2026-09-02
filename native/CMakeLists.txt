@@ -141,6 +141,7 @@ endif()
 add_library(aether_core STATIC
   core/assert.cpp
   core/job_system.cpp
+  profiler/frame_pressure.cpp
   profiler/frame_statistics.cpp
 )
 target_include_directories(aether_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -167,14 +168,18 @@ target_link_libraries(aether_rendergraph PUBLIC aether_core)
 
 # --- aether_renderer: recursos e conversões independentes do backend -------
 add_library(aether_renderer STATIC
+  renderer/dynamic_resolution.cpp
+  renderer/environment_map.cpp
   renderer/frame_graph.cpp
   renderer/frustum_visibility.cpp
+  renderer/gpu_draw_culling.cpp
   renderer/rendering_policy.cpp
   renderer/shadow_cascades.cpp
   renderer/hzb_visibility.cpp
   renderer/lod_selection.cpp
   renderer/spatial_render_chunks.cpp
   renderer/static_collision_mesh.cpp
+  renderer/thermal_pressure_controller.cpp
 )
 target_include_directories(aether_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # O render graph deixa de ser alvo apenas de teste: a politica de anexos do
@@ -185,6 +190,8 @@ target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 add_library(aether_rhi STATIC
   rhi/bindless_index_allocator.cpp
   rhi/bindless_registry.cpp
+  rhi/compute.cpp
+  rhi/compute_validation.cpp
   rhi/descriptor_cache.cpp
   rhi/device_profile.cpp
   rhi/device.cpp
@@ -194,6 +201,8 @@ add_library(aether_rhi STATIC
   rhi/pipeline_cache.cpp
   rhi/resource.cpp
   rhi/resource_desc.cpp
+  rhi/render_graph_vulkan.cpp
+  rhi/render_graph_vulkan_mapping.cpp
   rhi/upload_context.cpp
 )
 target_include_directories(aether_rhi PUBLIC
@@ -201,9 +210,10 @@ target_include_directories(aether_rhi PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/VulkanMemoryAllocator/include
   ${Vulkan_INCLUDE_DIRS}
 )
-target_link_libraries(aether_rhi PUBLIC aether_core)
+target_link_libraries(aether_rhi PUBLIC aether_core aether_rendergraph)
 
 if(ANDROID)
+  find_package(games-frame-pacing REQUIRED CONFIG)
   target_link_libraries(aether_rhi PUBLIC vulkan)
 
   set(NATIVE_APP_GLUE_DIR ${ANDROID_NDK}/sources/android/native_app_glue)
@@ -218,8 +228,10 @@ if(ANDROID)
     platform/android/dirt_road_resources.cpp
     platform/android/android_launch_options.cpp
     platform/android/android_performance.cpp
+    platform/android/android_thermal_monitor.cpp
     platform/android/android_frame_profiler.cpp
     platform/android/android_frame_pacer.cpp
+    platform/android/android_swappy_scheduler.cpp
     platform/android/android_window.cpp
     platform/android/android_paths.cpp
     platform/android/android_vulkan_surface.cpp
@@ -244,6 +256,7 @@ if(ANDROID)
     log
     vulkan
     dl
+    games-frame-pacing::swappy_static
   )
   # NativeActivity localiza esta função por dlsym; sem a referência explícita
   # o linker pode removê-la por parecer não utilizada.
@@ -323,6 +336,7 @@ if(NOT ANDROID)
     ../tests/native/test_free_camera_controller.cpp
     ../tests/native/test_first_person_controller.cpp
     ../tests/native/test_frustum_visibility.cpp
+    ../tests/native/test_gpu_draw_culling.cpp
     ../tests/native/test_hzb_visibility.cpp
     ../tests/native/test_lod_selection.cpp
     ../tests/native/test_spatial_render_chunks.cpp
@@ -336,15 +350,21 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_descriptor_cache.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_bindless_registry.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_device_profile.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_compute.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph_vulkan.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_descriptor_indexing_support.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_astc_probe_validation.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_memory_budget.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_rhi_resources.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_graph.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_dynamic_resolution.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_environment_map.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_rendering_policy.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_shadow_cascades.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_thermal_pressure_controller.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_pressure.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_statistics.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_policy.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_jolt_bridge.cpp

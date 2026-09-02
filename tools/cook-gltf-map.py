@@ -1,7 +1,7 @@
 """Cook a self-contained glTF ZIP into Aether's Android map package.
 
 The runtime never parses JSON or decodes PNG/JPEG. Geometry is normalized into
-a stable little-endian AEMAP v1 stream and textures into AETX v1 mip chains.
+a stable little-endian AEMAP v3 stream and textures into AETX v1 mip chains.
 Pillow, numpy and astcenc are import-time tools only.
 """
 import argparse
@@ -31,24 +31,46 @@ MATERIAL_ALPHA_MASK = 1 << 4
 MATERIAL_DOUBLE_SIDED = 1 << 5
 
 # LOD generation (item 2.5.4 / 7.1.6 of the plan): up to this many discrete
-# levels per opaque primitive, each a fully separate draw sharing one
-# lodGroupId. Blend and alpha-mask materials are deliberately excluded for
-# this first slice -- see simplify_primitive_levels for why.
+# levels per opaque or alpha-tested primitive, each a fully separate draw
+# sharing one lodGroupId. Blended materials remain excluded because draw order
+# participates in composition; cutout vegetation is specifically a major LOD
+# target and uses the same complementary dither transition as opaque geometry.
 MAX_LOD_LEVELS = 3
 # A primitive below this triangle count is not worth simplifying: the saved
 # triangles would not offset one more draw call/chunk, and small props are
 # the ones most likely to disappear entirely under grid-snap clustering.
-LOD_MINIMUM_TRIANGLES = 256
+# Spatial cells can contain a small stand of cards/branches. 32 triangles is
+# still enough to amortize one indirect command when the accepted level saves
+# >=10%; the reduction gate below prevents metadata-only "LODs".
+LOD_MINIMUM_TRIANGLES = 32
 # Cell size as a fraction of the primitive's bounding-sphere radius, one
 # entry per additional level beyond level 0 (which is always the untouched
 # original). Strictly increasing so geometricError is strictly increasing by
 # construction, matching MapDrawRecord's documented ordering contract.
 LOD_CELL_SIZE_RATIOS = (0.01, 0.03)
-# Vertices only ever merge within one grid cell AND one discretized-normal
-# bucket AND one discretized-UV0 bucket -- never across a hard edge or a UV
-# island seam. See simplify_by_clustering.
+# Vertices only ever merge within one grid cell and one discretized-normal
+# bucket. UV0 contributes a guard only at an actual island seam (two source
+# vertices at the same position with different UVs); using every UV bucket in
+# every key prevents almost all simplification on ordinary continuous meshes.
+# See simplify_by_clustering.
 LOD_NORMAL_BUCKET_COUNT = 6
 LOD_UV_BUCKET_SIZE = 1.0 / 64.0
+# A LOD decision must describe a local part of a large map, not one giant
+# imported primitive whose bounding sphere contains the camera everywhere.
+# This matches SpatialRenderChunkSettings' production default: packages leave
+# the cooker already partitioned, while the runtime remains a compatibility
+# safety net for legacy packages.
+LOD_GROUP_TRIANGLES = 2048
+LOD_GROUP_WORLD_SIZE = 64.0
+# Each emitted level adds draw metadata and can temporarily overlap its
+# neighbor during dither. Tiny reductions lose on mobile; keep scanning coarser
+# ratios, but only persist a level that saves at least this fraction versus the
+# previously accepted level.
+LOD_MINIMUM_TRIANGLE_REDUCTION = 0.10
+# Alpha-tested vegetation is commonly authored as thousands of disconnected
+# quads/cards. Vertex clustering cannot reduce a two-triangle card, so coarse
+# levels reduce card density while retaining larger components first.
+LOD_COVERAGE_COMPONENT_RATIOS = (0.65, 0.35)
 
 
 def align(value, alignment=16):
@@ -87,14 +109,18 @@ def vertex_record(position, normal, tangent, uv0, uv1, color):
 
 
 def simplify_by_clustering(position, normal, tangent, uv0, uv1, color, indices,
-                           cell_size, uv_bucket_size, normal_bucket_count):
+                           cell_size, uv_bucket_size, normal_bucket_count,
+                           return_source_indices=False):
     """Deterministic grid-snap vertex clustering (LOD simplification).
 
-    Vertices merge only when they share the same position grid cell AND the
-    same discretized-normal bucket AND the same discretized-UV0 bucket --
-    never across a hard edge (normal bucket differs) or a UV island seam
-    (UV0 bucket differs), which would otherwise blend one island's texture
-    across another's geometry or flatten a sharp corner's shading. This is a
+    Vertices merge only when they share the same position grid cell and the
+    same discretized-normal bucket.  UV0 is added to the key only for source
+    positions that actually occur with multiple UV buckets: those duplicate
+    vertices mark an island seam and must remain separate.  Continuous UV
+    gradients are averaged like the other attributes; treating every varying
+    UV as a seam would make a textured grid impossible to simplify.  This
+    prevents blending one island across another and keeps hard edges (normal
+    bucket differs). This is a
     deliberately weaker guarantee than quadric-error edge collapse (no
     boundary-preservation reasoning, no legality checks), traded for
     robustness on arbitrary/non-manifold imported geometry and for being
@@ -110,7 +136,10 @@ def simplify_by_clustering(position, normal, tangent, uv0, uv1, color, indices,
     typically a lightmap/secondary channel, less seam-sensitive than uv0.
 
     Returns None (never a degenerate/empty result) if simplification would
-    collapse to zero triangles.
+    collapse to zero triangles. When ``return_source_indices`` is true, an
+    eighth array maps every cluster to the closest source vertex. Legacy
+    package migration uses that mapping to reuse LOD0 vertices instead of
+    duplicating averaged attributes in memory; normal cooking keeps the mean.
     """
     if len(indices) == 0 or cell_size <= 0:
         return None
@@ -118,7 +147,17 @@ def simplify_by_clustering(position, normal, tangent, uv0, uv1, color, indices,
     normal_bucket = np.rint(normal * normal_bucket_count).astype(np.int64)
     cell = np.floor(position / cell_size).astype(np.int64)
     uv_bucket = np.floor(np.asarray(uv0, dtype=np.float64) / uv_bucket_size).astype(np.int64)
-    keys = [(*cell[i], *normal_bucket[i], *uv_bucket[i]) for i in range(len(position))]
+    # A glTF UV seam is represented by duplicate positions with different UVs.
+    # Detect that exact topology signal once; ordinary neighboring vertices on
+    # a continuous chart deliberately receive the same neutral guard.
+    uv_buckets_by_position = {}
+    position_keys = [np.asarray(position[i], dtype=np.float32).tobytes()
+                     for i in range(len(position))]
+    for i, position_key in enumerate(position_keys):
+        uv_buckets_by_position.setdefault(position_key, set()).add(tuple(uv_bucket[i]))
+    seam_guards = [tuple(uv_bucket[i]) if len(uv_buckets_by_position[position_keys[i]]) > 1
+                   else (0, 0) for i in range(len(position))]
+    keys = [(*cell[i], *normal_bucket[i], *seam_guards[i]) for i in range(len(position))]
 
     cluster_of_key = {}
     vertex_cluster = np.empty(len(position), dtype=np.int64)
@@ -144,6 +183,15 @@ def simplify_by_clustering(position, normal, tangent, uv0, uv1, color, indices,
     new_uv1 = average(uv1).astype(np.float32)
     new_color = average(color).astype(np.float32)
 
+    representative_source_indices = np.zeros(cluster_count, dtype=np.uint32)
+    representative_distances = np.full(cluster_count, np.inf, dtype=np.float64)
+    for source_index, cluster_index in enumerate(vertex_cluster):
+        delta = position[source_index] - new_position[cluster_index]
+        distance_squared = float(np.dot(delta, delta))
+        if distance_squared < representative_distances[cluster_index]:
+            representative_distances[cluster_index] = distance_squared
+            representative_source_indices[cluster_index] = source_index
+
     triangles = vertex_cluster[np.asarray(indices, dtype=np.int64)].reshape(-1, 3)
     degenerate = ((triangles[:, 0] == triangles[:, 1]) | (triangles[:, 1] == triangles[:, 2]) |
                  (triangles[:, 0] == triangles[:, 2]))
@@ -151,21 +199,122 @@ def simplify_by_clustering(position, normal, tangent, uv0, uv1, color, indices,
     if len(kept) == 0:
         return None
     new_indices = kept.reshape(-1).astype(np.uint32)
-    return new_position, new_normal, new_tangent, new_uv0, new_uv1, new_color, new_indices
+    result = (new_position, new_normal, new_tangent, new_uv0, new_uv1, new_color, new_indices)
+    if not return_source_indices:
+        return result
+    representative_positions = position[representative_source_indices]
+    displacement = position - representative_positions[vertex_cluster]
+    measured_geometric_error = float(np.linalg.norm(displacement, axis=1).max())
+    return result + (representative_source_indices, measured_geometric_error)
+
+
+def simplify_coverage_component_levels(position, normal, tangent, uv0, uv1, color, indices,
+                                       reuse_source_vertices=False):
+    """Build density LODs for disconnected alpha-tested cards/components.
+
+    Connected components are derived from shared vertex indices. Larger
+    components are retained first; equal-size components use their centroid
+    and source root as a deterministic tiebreaker. The error stored for a
+    level is the largest local-space bounding radius removed at that level,
+    which lets the normal projected-pixel selector defer removal until those
+    cards are small on screen.
+    """
+    indices = np.asarray(indices, dtype=np.uint32)
+    triangle_count = len(indices) // 3
+    if triangle_count < LOD_MINIMUM_TRIANGLES:
+        return []
+    parent = np.arange(len(position), dtype=np.int64)
+
+    def find(vertex):
+        vertex = int(vertex)
+        while parent[vertex] != vertex:
+            parent[vertex] = parent[parent[vertex]]
+            vertex = int(parent[vertex])
+        return vertex
+
+    def union(left, right):
+        left_root, right_root = find(left), find(right)
+        if left_root != right_root:
+            parent[right_root] = left_root
+
+    triangles = indices.reshape((-1, 3))
+    for triangle in triangles:
+        union(triangle[0], triangle[1])
+        union(triangle[1], triangle[2])
+    component_triangles = {}
+    for triangle_index, triangle in enumerate(triangles):
+        component_triangles.setdefault(find(triangle[0]), []).append(triangle_index)
+    if len(component_triangles) < 4:
+        return []
+
+    components = []
+    for root, triangle_indices in component_triangles.items():
+        used = np.unique(triangles[triangle_indices].reshape(-1))
+        component_position = np.asarray(position, dtype=np.float64)[used]
+        minimum = component_position.min(axis=0)
+        maximum = component_position.max(axis=0)
+        center = (minimum + maximum) * 0.5
+        radius = float(np.linalg.norm(component_position - center, axis=1).max())
+        components.append({"root": root, "triangles": triangle_indices,
+                           "triangleCount": len(triangle_indices), "radius": radius,
+                           "center": tuple(float(value) for value in center)})
+    components.sort(key=lambda item: (-item["radius"], item["center"], item["root"]))
+
+    original = {"level": 0, "geometricError": 0.0, "position": position, "normal": normal,
+                "tangent": tangent, "uv0": uv0, "uv1": uv1, "color": color, "indices": indices}
+    if reuse_source_vertices:
+        original["sourceVertexIndices"] = np.arange(len(position), dtype=np.uint32)
+    levels = [original]
+    previous_count = triangle_count
+    previous_error = 0.0
+    for ratio in LOD_COVERAGE_COMPONENT_RATIOS:
+        target_count = max(1, math.ceil(triangle_count * ratio))
+        retained_roots = set()
+        retained_count = 0
+        for component in components:
+            retained_roots.add(component["root"])
+            retained_count += component["triangleCount"]
+            if retained_count >= target_count:
+                break
+        kept_triangle_indices = [triangle_index for root, values in component_triangles.items()
+                                 if root in retained_roots for triangle_index in values]
+        kept_triangle_indices.sort()
+        kept = triangles[kept_triangle_indices].reshape(-1).astype(np.uint32)
+        kept_count = len(kept) // 3
+        minimum_saved = max(1, math.ceil(previous_count * LOD_MINIMUM_TRIANGLE_REDUCTION))
+        if previous_count - kept_count < minimum_saved:
+            continue
+        removed = [component["radius"] for component in components
+                   if component["root"] not in retained_roots]
+        if not removed:
+            continue
+        error = max(removed)
+        if error <= previous_error:
+            error = math.nextafter(previous_error, math.inf)
+        level = {"level": len(levels), "geometricError": error, "position": position,
+                 "normal": normal, "tangent": tangent, "uv0": uv0, "uv1": uv1,
+                 "color": color, "indices": kept}
+        if reuse_source_vertices:
+            level["sourceVertexIndices"] = np.arange(len(position), dtype=np.uint32)
+        levels.append(level)
+        previous_count = kept_count
+        previous_error = error
+        if len(levels) >= MAX_LOD_LEVELS:
+            break
+    return levels if len(levels) > 1 else []
 
 
 def simplify_primitive_levels(position, normal, tangent, uv0, uv1, color, indices,
-                              material_flags, bounds_radius):
+                              material_flags, bounds_radius, reuse_source_vertices=False):
     """Builds the full LOD level chain for one primitive: level 0 (the
     untouched original) plus up to MAX_LOD_LEVELS - 1 progressively coarser
     levels from simplify_by_clustering.
 
-    Blend and alpha-mask materials are excluded from simplification entirely
-    for this first slice (levels stays a single, untouched entry): blend's
-    primitive order participates in alpha compositing (simplifying it risks
-    a visibly wrong composite), and alpha-mask/cutout vegetation is exactly
-    the content most likely to collapse into nothing under grid-snap
-    clustering with no human able to check the result visually this cycle.
+    Blend materials are excluded from simplification entirely (levels stays a
+    single, untouched entry) because primitive order participates in alpha
+    compositing. Alpha-mask/cutout vegetation is allowed: zero-triangle
+    candidates are rejected below, UV islands/hard normals remain guarded,
+    and runtime transitions use complementary screen-space dither.
     Level generation also stops early (yielding fewer than MAX_LOD_LEVELS
     total) the moment a candidate level fails to reduce the triangle count
     versus the previous level -- an unproductive level is never emitted.
@@ -177,27 +326,42 @@ def simplify_primitive_levels(position, normal, tangent, uv0, uv1, color, indice
     """
     original = {"level": 0, "geometricError": 0.0, "position": position, "normal": normal,
                 "tangent": tangent, "uv0": uv0, "uv1": uv1, "color": color, "indices": indices}
+    if reuse_source_vertices:
+        original["sourceVertexIndices"] = np.arange(len(position), dtype=np.uint32)
     levels = [original]
     triangle_count = len(indices) // 3
-    if (material_flags & (MATERIAL_BLEND | MATERIAL_ALPHA_MASK)) != 0:
+    if (material_flags & MATERIAL_BLEND) != 0:
         return levels
     if triangle_count < LOD_MINIMUM_TRIANGLES or bounds_radius <= 0.0:
         return levels
+    if (material_flags & MATERIAL_ALPHA_MASK) != 0:
+        coverage_levels = simplify_coverage_component_levels(
+            position, normal, tangent, uv0, uv1, color, indices, reuse_source_vertices)
+        if coverage_levels:
+            return coverage_levels
 
     original_minimum = np.asarray(position, dtype=np.float64).min(axis=0)
     original_maximum = np.asarray(position, dtype=np.float64).max(axis=0)
     bounds_epsilon = max(bounds_radius * 1.0e-3, 1.0e-4)
     previous_triangle_count = triangle_count
-    for level_index, ratio in enumerate(LOD_CELL_SIZE_RATIOS, start=1):
+    for ratio in LOD_CELL_SIZE_RATIOS:
         cell_size = bounds_radius * ratio
         simplified = simplify_by_clustering(position, normal, tangent, uv0, uv1, color, indices,
-                                            cell_size, LOD_UV_BUCKET_SIZE, LOD_NORMAL_BUCKET_COUNT)
+                                            cell_size, LOD_UV_BUCKET_SIZE, LOD_NORMAL_BUCKET_COUNT,
+                                            return_source_indices=reuse_source_vertices)
         if simplified is None:
             break
-        (s_position, s_normal, s_tangent, s_uv0, s_uv1, s_color, s_indices) = simplified
+        (s_position, s_normal, s_tangent, s_uv0, s_uv1, s_color, s_indices) = simplified[:7]
         new_triangle_count = len(s_indices) // 3
-        if new_triangle_count >= previous_triangle_count:
-            break  # No further win at this or any coarser ratio; stop here.
+        minimum_saved = max(1, math.ceil(previous_triangle_count *
+                                         LOD_MINIMUM_TRIANGLE_REDUCTION))
+        if previous_triangle_count - new_triangle_count < minimum_saved:
+            # A fine grid may preserve every triangle while a later, coarser
+            # grid still produces a useful level.  Skipping this ratio (rather
+            # than terminating the chain) is essential for large imported
+            # primitives whose vertex spacing falls between our two cells.
+            continue
+        level_index = len(levels)
         simplified_minimum = s_position.astype(np.float64).min(axis=0)
         simplified_maximum = s_position.astype(np.float64).max(axis=0)
         if (np.any(simplified_minimum < original_minimum - bounds_epsilon) or
@@ -205,14 +369,22 @@ def simplify_primitive_levels(position, normal, tangent, uv0, uv1, color, indice
             raise AssertionError(
                 f"LOD level {level_index} bounds expanded past the original by more than "
                 f"{bounds_epsilon}; clustering invariant violated")
-        geometric_error = cell_size * math.sqrt(3.0) / 2.0
+        # Packages that reuse source vertices can store the exact maximum
+        # source-to-representative displacement measured by the simplifier.
+        # The cell diagonal remains the conservative bound for averaged output
+        # where no source representative mapping was requested.
+        geometric_error = (simplified[8] if reuse_source_vertices else
+                           cell_size * math.sqrt(3.0) / 2.0)
         if geometric_error <= levels[-1]["geometricError"]:
             raise AssertionError(
                 f"LOD level {level_index} geometricError {geometric_error} did not increase past "
                 f"level {level_index - 1}'s {levels[-1]['geometricError']}")
-        levels.append({"level": level_index, "geometricError": geometric_error, "position": s_position,
-                       "normal": s_normal, "tangent": s_tangent, "uv0": s_uv0, "uv1": s_uv1,
-                       "color": s_color, "indices": s_indices})
+        level = {"level": level_index, "geometricError": geometric_error, "position": s_position,
+                 "normal": s_normal, "tangent": s_tangent, "uv0": s_uv0, "uv1": s_uv1,
+                 "color": s_color, "indices": s_indices}
+        if reuse_source_vertices:
+            level["sourceVertexIndices"] = simplified[7]
+        levels.append(level)
         previous_triangle_count = new_triangle_count
         if len(levels) >= MAX_LOD_LEVELS:
             break
@@ -443,6 +615,66 @@ def transform_bounds(minimum, maximum, matrix):
     return transformed.min(axis=0), transformed.max(axis=0)
 
 
+def transform_positions(position, matrix):
+    mat = np.asarray(matrix, dtype=np.float64).reshape((4, 4), order="F")
+    points = np.concatenate((np.asarray(position, dtype=np.float64),
+                             np.ones((len(position), 1), dtype=np.float64)), axis=1)
+    transformed = (mat @ points.T).T[:, :3]
+    if not np.all(np.isfinite(transformed)):
+        raise ValueError("non-finite transformed map vertex")
+    return transformed
+
+
+def points_bounds(position, matrix):
+    transformed = transform_positions(position, matrix)
+    minimum = transformed.min(axis=0)
+    maximum = transformed.max(axis=0)
+    center = (minimum + maximum) * 0.5
+    radius = float(np.linalg.norm(transformed - center, axis=1).max())
+    return center.astype(np.float32), radius
+
+
+def maximum_world_scale(matrix):
+    linear = np.asarray(matrix, dtype=np.float64).reshape((4, 4), order="F")[:3, :3]
+    if not np.all(np.isfinite(linear)):
+        raise ValueError("non-finite map transform")
+    return float(np.linalg.svd(linear, compute_uv=False)[0])
+
+
+def morton_codes(points):
+    minimum = points.min(axis=0)
+    extent = points.max(axis=0) - minimum
+    normalized_points = np.divide(points - minimum, extent, out=np.zeros_like(points),
+                                  where=extent > 1.0e-9)
+    quantized = np.rint(np.clip(normalized_points, 0.0, 1.0) * 1023.0).astype(np.uint32)
+    codes = np.zeros(len(points), dtype=np.uint32)
+    for bit in range(10):
+        codes |= ((quantized[:, 0] >> bit) & 1) << (bit * 3)
+        codes |= ((quantized[:, 1] >> bit) & 1) << (bit * 3 + 1)
+        codes |= ((quantized[:, 2] >> bit) & 1) << (bit * 3 + 2)
+    return codes
+
+
+def spatial_primitive_chunks(position, indices, matrix, target_triangles=LOD_GROUP_TRIANGLES,
+                             world_cell_size=LOD_GROUP_WORLD_SIZE):
+    triangles = np.asarray(indices, dtype=np.uint32).reshape((-1, 3))
+    centroids = np.asarray(position, dtype=np.float64)[triangles].mean(axis=1)
+    world_centroids = transform_positions(centroids, matrix)
+    cell_coordinates = np.floor(world_centroids / world_cell_size).astype(np.int64)
+    cells = {}
+    for triangle_index, coordinates in enumerate(cell_coordinates):
+        cells.setdefault(tuple(coordinates), []).append(triangle_index)
+    chunks = []
+    for key in sorted(cells):
+        cell_indices = np.asarray(cells[key], dtype=np.int64)
+        if len(cell_indices) > target_triangles:
+            local_order = np.argsort(morton_codes(world_centroids[cell_indices]), kind="stable")
+            cell_indices = cell_indices[local_order]
+        for first in range(0, len(cell_indices), target_triangles):
+            chunks.append(triangles[cell_indices[first:first + target_triangles]].reshape(-1))
+    return chunks
+
+
 def texture_semantics(gltf):
     result = {}
 
@@ -514,7 +746,15 @@ def main():
     parser.add_argument("--cache", type=pathlib.Path, default=pathlib.Path("build/dirt-road/cook"))
     parser.add_argument("--quality", choices=["-fast", "-medium", "-thorough"], default="-medium")
     parser.add_argument("--jobs", type=int, default=4)
+    parser.add_argument("--lod-triangles-per-group", type=int, default=LOD_GROUP_TRIANGLES,
+                        help="spatial LOD cell triangle budget (256..32768)")
+    parser.add_argument("--lod-world-cell-size", type=float, default=LOD_GROUP_WORLD_SIZE,
+                        help="spatial LOD cell size in world units (8..512)")
     args = parser.parse_args()
+    if not 256 <= args.lod_triangles_per_group <= 32768:
+        parser.error("--lod-triangles-per-group must be in [256, 32768]")
+    if not 8.0 <= args.lod_world_cell_size <= 512.0:
+        parser.error("--lod-world-cell-size must be in [8, 512]")
     args.out.mkdir(parents=True, exist_ok=True)
     args.cache.mkdir(parents=True, exist_ok=True)
 
@@ -581,6 +821,8 @@ def main():
                      for material in gltf["materials"]]
         vertices, indices, draws = [], [], []
         lod_level_counts = {}  # For the manifest: level index -> draws generated at that level.
+        lod_triangle_counts = {}
+        lod_group_count = 0
         next_lod_group_id = 0
         world_min = np.array([np.inf, np.inf, np.inf])
         world_max = -world_min
@@ -605,17 +847,6 @@ def main():
                 minimum, maximum = transform_bounds(accessor_bounds["min"], accessor_bounds["max"], world)
                 world_min = np.minimum(world_min, minimum)
                 world_max = np.maximum(world_max, maximum)
-                # World-space bounds are reused unchanged for every LOD level
-                # of this primitive: simplify_by_clustering's mean-based
-                # representative positions can only shrink the local-space
-                # bounds (never expand them, enforced by its own assertion),
-                # so the ORIGINAL (level 0) world bounds remain a valid,
-                # conservative superset for culling every coarser level too.
-                center = (minimum + maximum) * .5
-                radius = float(np.linalg.norm(maximum - minimum) * .5)
-                local_minimum = np.asarray(accessor_bounds["min"], dtype=np.float64)
-                local_maximum = np.asarray(accessor_bounds["max"], dtype=np.float64)
-                local_radius = float(np.linalg.norm(local_maximum - local_minimum) * .5)
                 # MapMaterialRecord.flags sits at byte offset 68 (4 texture
                 # indices + baseColorFactor[4] + emissiveFactorAndStrength[4]
                 # + roughness/metallic/normalScale/specular + alphaCutoff =
@@ -623,22 +854,55 @@ def main():
                 # order and native/renderer/map_package.h's struct layout.
                 material_flags = struct.unpack_from("<I", materials[primitive.get("material", 0)],
                                                     offset=68)[0]
-                lod_levels = simplify_primitive_levels(position, normal, tangent, uv0, uv1, color,
-                                                       local_indices, material_flags, local_radius)
-                lod_group_id = next_lod_group_id
-                next_lod_group_id += 1
-                for entry in lod_levels:
-                    base_vertex = len(vertices)
-                    for values in zip(entry["position"], entry["normal"], entry["tangent"], entry["uv0"],
-                                      entry["uv1"], entry["color"]):
-                        vertices.append(vertex_record(*values))
-                    first_index = len(indices)
-                    indices.extend(int(value) + base_vertex for value in entry["indices"])
-                    draws.append(struct.pack(
-                        "<4I16f4fIfI", first_index, len(entry["indices"]), 0,
-                        primitive.get("material", 0), *world, *center, radius,
-                        entry["level"], entry["geometricError"], lod_group_id))
-                    lod_level_counts[entry["level"]] = lod_level_counts.get(entry["level"], 0) + 1
+                base_vertex = len(vertices)
+                for values in zip(position, normal, tangent, uv0, uv1, color):
+                    vertices.append(vertex_record(*values))
+                # True blend remains one ordered group; opaque and alpha-test
+                # geometry are spatial cells so distance is local to the
+                # camera and far parts of a large primitive can simplify.
+                chunks = ([local_indices] if material_flags & MATERIAL_BLEND else
+                          spatial_primitive_chunks(position, local_indices, world,
+                                                   args.lod_triangles_per_group,
+                                                   args.lod_world_cell_size))
+                world_scale = maximum_world_scale(world)
+                for chunk_indices in chunks:
+                    source_vertices, compact_indices = np.unique(
+                        np.asarray(chunk_indices, dtype=np.uint32), return_inverse=True)
+                    compact_indices = compact_indices.astype(np.uint32)
+                    chunk_position = position[source_vertices]
+                    chunk_normal = normal[source_vertices]
+                    chunk_tangent = tangent[source_vertices]
+                    chunk_uv0 = uv0[source_vertices]
+                    chunk_uv1 = uv1[source_vertices]
+                    chunk_color = color[source_vertices]
+                    center, radius = points_bounds(chunk_position, world)
+                    local_extent = (chunk_position.astype(np.float64).max(axis=0) -
+                                    chunk_position.astype(np.float64).min(axis=0))
+                    local_radius = float(np.linalg.norm(local_extent) * .5)
+                    lod_levels = simplify_primitive_levels(
+                        chunk_position, chunk_normal, chunk_tangent, chunk_uv0, chunk_uv1,
+                        chunk_color, compact_indices, material_flags, local_radius,
+                        reuse_source_vertices=True)
+                    lod_group_id = next_lod_group_id
+                    next_lod_group_id += 1
+                    if len(lod_levels) > 1:
+                        lod_group_count += 1
+                    for entry in lod_levels:
+                        if entry["level"] == 0:
+                            emitted_indices = np.asarray(chunk_indices, dtype=np.uint32) + base_vertex
+                        else:
+                            representatives = source_vertices[entry["sourceVertexIndices"]]
+                            emitted_indices = representatives[entry["indices"]] + base_vertex
+                        first_index = len(indices)
+                        indices.extend(int(value) for value in emitted_indices)
+                        geometric_error = float(entry["geometricError"] * world_scale)
+                        draws.append(struct.pack(
+                            "<4I16f4fIfI", first_index, len(emitted_indices), 0,
+                            primitive.get("material", 0), *world, *center, radius,
+                            entry["level"], geometric_error, lod_group_id))
+                        lod_level_counts[entry["level"]] = lod_level_counts.get(entry["level"], 0) + 1
+                        lod_triangle_counts[entry["level"]] = (
+                            lod_triangle_counts.get(entry["level"], 0) + len(emitted_indices) // 3)
 
         center = (world_min + world_max) * .5
         extent = world_max - world_min
@@ -681,12 +945,17 @@ def main():
                                "triangles": len(indices) // 3,
                                "boundsMin": world_min.tolist(), "boundsMax": world_max.tolist(),
                                "defaultCamera": camera.tolist(),
+                               "lodGroups": lod_group_count,
+                               "lodTrianglesPerGroup": args.lod_triangles_per_group,
+                               "lodWorldCellSize": args.lod_world_cell_size,
                                # Draws generated per LOD level index (0 = original/untouched);
                                # level 0's count also includes every primitive LOD was
-                               # skipped for (blend/alpha-mask materials, primitives below
+                               # skipped for (blend materials and primitives below
                                # LOD_MINIMUM_TRIANGLES). See simplify_primitive_levels.
                                "lodDrawsByLevel": {str(level): count
-                                                   for level, count in sorted(lod_level_counts.items())}},
+                                                   for level, count in sorted(lod_level_counts.items())},
+                               "lodTrianglesByLevel": {str(level): count
+                                                       for level, count in sorted(lod_triangle_counts.items())}},
                 "textures": texture_sources, "outputs": outputs}
     (args.out.parent / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf8")
 

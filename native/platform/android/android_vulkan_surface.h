@@ -1,7 +1,9 @@
 #pragma once
 
 #include "rhi/device.h"
+#include "platform/android/android_swappy_scheduler.h"
 
+struct ANativeActivity;
 struct ANativeWindow;
 
 namespace ae::platform::android {
@@ -23,7 +25,8 @@ public:
   AndroidVulkanSurface(const AndroidVulkanSurface &) = delete;
   AndroidVulkanSurface &operator=(const AndroidVulkanSurface &) = delete;
 
-  bool initialize(ANativeWindow *window, bool allowBindless = true);
+  bool initialize(ANativeActivity *activity, ANativeWindow *window, u32 targetFramesPerSecond,
+                  bool useSwappy, bool allowBindless = true);
   void shutdown();
   bool isReady() const { return surface_ != VK_NULL_HANDLE && swapchain_.isReady(); }
 
@@ -34,8 +37,10 @@ public:
 
   rhi::VulkanDevice &device() { return device_; }
   rhi::VulkanSwapchain &swapchain() { return swapchain_; }
+  bool swappyActive() const { return swappyScheduler_.active(); }
 
 private:
+  AndroidSwappyScheduler swappyScheduler_;
   rhi::VulkanDevice device_;
   VkSurfaceKHR surface_ = VK_NULL_HANDLE;
   rhi::VulkanSwapchain swapchain_;

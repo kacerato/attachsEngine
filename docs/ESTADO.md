@@ -209,50 +209,39 @@ fontes 3×5. O SPIR-V foi validado e o APK assinado, mas a inspeção visual v5 
 pendente porque o aparelho descarregou. A suíte completa anterior passou **185/185**;
 depois da política BLEND/cutout, o teste focal passou **4/4**.
 
-## Rota determinística, HZB e LOD — 31/08/2026
+## Rota determinística, HZB e LOD — 31/08–01/09/2026
 
-Os três itens da "próxima ordem aprovada" de `PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md`
-(rota → HZB → LOD) foram implementados, revisados e compilados no Android. A rota e
-a correção estática do HZB foram validadas no Xiaomi Adreno; isso não promove HZB ou
-LOD a default. O asset de produção continua AEMAP v2 e registra `lod_groups=0`.
+A rota e o HZB conservador continuam disponíveis; HZB permanece diagnóstico opt-in
+porque o readback CPU não é a arquitetura final. O LOD, porém, fechou uma fatia física:
+o asset de produção agora é AEMAP v3, preserva exatamente o LOD0 e a colisão e contém
+245 grupos espaciais. São 635 draws/341.109 triângulos no nível autoral, 245/126.033 no
+nível 1 e 238/66.118 no nível 2. Os níveis derivados reutilizam os 424.849 vértices de
+origem; o pacote inteiro caiu de 800.321 para 533.260 triângulos armazenados.
 
-Os três sistemas compilam de verdade via `assembleDebug` (NDK/Gradle real, três
-rodadas separadas: rota, depois HZB, depois LOD) e passam **271 testes automatizados
-sem GPU** (217 C++ nativos, 21 Python do cooker, 33 PowerShell de frame-profile).
-Dois dos testes escritos nesta sessão pegaram bugs reais antes de qualquer commit: um
-erro de arredondamento de índice de texel na seleção de nível do HZB (faria o teste de
-oclusão escanear o texel vizinho errado) e um offset de byte errado na leitura de
-`MapMaterialRecord.flags` no cooker Python (leria o campo de roughness/metallic em vez
-de flags, quebrando silenciosamente a exclusão de blend/alpha-mask da simplificação de
-LOD). Um bug pré-existente e independente também foi corrigido: o parser
-`tools/android-frame-profile.ps1` validava `schemaVersion` contra `1` enquanto o C++
-já emitia `2` havia um tempo — todo contexto de profiling estava sendo rejeitado antes
-desta correção.
+O cooker particiona por célula mundial de 64 m e teto de 2.048 triângulos, simplifica
+malha sólida por clustering com proteção de normal/UV e trata alpha-mask por densidade
+de componentes desconectados. BLEND mantém ordem autoral e não é simplificado. O runtime
+seleciona sólido e coverage por budgets independentes (`lodPixelErrorBudget` e
+`coverageLodPixelErrorBudget`), aplica histerese/dither antes do frustum e calcula erro
+com a resolução interna ativa, inclusive sob resolução dinâmica. LOD desligado significa
+LOD0, nunca todos os níveis simultâneos. Colisão e sombra também usam somente o LOD0;
+isso remove geometria duplicada dos picos de atualização do cache de sombra.
 
-Todos os três sistemas ficam atrás de flags opt-in desligadas por padrão
-(`aether.camera_route_mode`, `aether.hzb_occlusion`, `aether.lod_selection`), seguindo
-o mesmo padrão já usado para `coveragePrepassEnabled_`/`GpuCostIsolation`. A rota real
-tem 6.611 poses/55,09 s e 487,16 unidades percorridas. O baseline Release completo foi
-95,16 presents/s, pior janela 84,18, CPU 1,34 ms, GPU 9,13 ms e pior GPU-p95 12,93 ms;
-um frame isolado chegou ao equivalente de 53,9 FPS. HZB usa depth normalizado, respeita
-pré-rotação/store/capability e falha aberto ao mover a câmera; `hzbMinimumCandidateDraws`
-evita pagar readback em cargas pequenas. O teste de coverage em 2.048 triângulos/chunk
-foi rejeitado (125 chunks, GPU 9,14 ms) e o default ficou 8.192. O A/B intercalado do
-prepass `MASK` confirmou o default global: ligado 93,61 → desligado 80,89 → ligado
-92,45 presents/s; sem o prepass a GPU média subiu 18,1% (9,32→11,01 ms), sem ganho
-de CPU e com `thermalStatus=0`. Faltam AGI do hotspot, recook AEMAP v3/LOD, SSIM/FLIP,
-soak de 30 min e Mali físico.
+O A/B Release a 120 Hz, na mesma rota/fingerprint, confirmou ganho pequeno mas real no
+par aquecido: coverage 32 ficou em 109,49 FPS exibidos/7,45 ms GPU contra LOD0 em
+107,78/7,61 ms; pior janela 103,11 contra 101,47 FPS. Coverage 48 reduziu mais geometria
+(323.407 contra 381.575 triângulos submetidos no contexto inicial) e mediu 111,01 FPS/
+7,37 ms, mas a ordem térmica impede atribuir toda a diferença ao budget. Uma passada
+menos aquecida em 32 alcançou 118,94 FPS exibidos/6,43 ms GPU; é teto observado, não
+média garantida. `thermalStatus` permaneceu 0.
 
-A pose fixa extraída do fechamento da pior janela (`route_frame≈1734`) atribuiu o
-gargalo: full 83,97–85,92 presents/s e 10,37–10,39 ms GPU; base-color 120,08/6,08 ms;
-no-normal 94,41/9,14 ms; no-IBL 87,47/9,98 ms. CPU permaneceu em 1,28–1,59 ms. Os
-shaders bindless foram então corrigidos para tratar os índices por lote de material
-como dinamicamente uniformes (sem `NonUniform` no SPIR-V). Shaders validaram, 225/225
-testes nativos, 10/10 do cooker/LOD e 35/35 do profiler passaram. O v15 foi assinado,
-instalado e medido diretamente por Logcat: cinco janelas em 83,05–83,65 FPS e ~10,38 ms
-GPU, sem ganho contra v14. A correção permanece por expressar o contrato real, mas não
-é contada como otimização. APK v15 SHA-256:
-`9E66F34F1D92985E63589FDF0DE6C404E4B11243B96BB5EA100C5B77FBCC5951`.
+Na pose fixa do hotspot, LOD0 e coverage 48 sustentaram ~120 FPS e preservaram a imagem
+visualmente; a comparação pixel a pixel teve MAE 2,00/255 e RMSE 5,40/255 (dither/ruído
+temporal impedem igualdade binária). Ainda faltam SSIM/FLIP em várias poses, soak de
+30 minutos e Mali físico antes de transformar esse teste numa matriz de produto. A
+validação corrente passa 267/267 testes nativos, 46/46 testes Python e 44/44 testes do
+FrameProfile. O APK Release validado tem SHA-256
+`5251A387C6CEC81207242AC5A2015BE05B4F5E709288137DB8AC7280C4F86D30`.
 
 ## Regiões de GPU por classe de passe — 31/08/2026
 
@@ -399,12 +388,13 @@ sistematicamente pior. Efeito abaixo de **~0,4 ms** não é distinguível em dua
 rodadas. Os ganhos aceitos (0,44 ms memoryless, 0,61 ms precisão do shading)
 estão acima do piso; a precisão dos varyings não está.
 
-## Política global de qualidade e matemática de sombras — 31/08/2026
+## Política global, sombras direcionais e pós-processamento — 31/08/2026
 
 Núcleo de qualidade da ADR-014 implementado: `renderer/rendering_policy.*` resolve
 uma `ResolvedRenderingPolicy` a partir de perfil de dispositivo, escolha do projeto
-e pressão térmica, com eixos independentes de sombras, ambiente, pós, texturas e
-escala de resolução. Preset é um ponto no espaço de configuração — `QualityPreset`
+e pressão térmica, com eixos independentes de sombras, ambiente, pós, texturas,
+LOD, detalhe de material por distância e escala de resolução. Preset é um ponto no
+espaço de configuração — `QualityPreset`
 não aparece em nenhum campo da política resolvida, de modo que o renderer não pode
 ramificar no nome. Toda redução registra eixo e motivo.
 
@@ -413,30 +403,191 @@ divisão mista uniforme/logarítmica, volume pela esfera circunscrita (invariant
 rotação da câmera) e ancoragem do centro em texels inteiros. Os três artefatos
 clássicos de CSM estão trancados por teste.
 
-Shaders do passe de sombra (`shadow_depth.vert` e as duas variantes de recorte
-alpha) compilam e passam `spirv-val`. **O passe Vulkan ainda não existe**, então
-sombras não desenham: o sol continua iluminando por N·L sem oclusão. A política é
-resolvida e registrada no aparelho, mas o renderer ainda não lê seus eixos.
+O `InstancedRenderer` Android agora consome essa política sem ler nome de preset.
+O sol possui passe Vulkan de CSM com 1–4 cascatas estabilizadas em atlas, PCF
+configurável (1/9/25 amostras), bias constante/slope/normal-offset e variante
+alpha-mask para a folhagem. A seleção de cascata usa profundidade de câmera, não
+distância radial. Quando depth amostrável não existe, a capability desativa sombras
+e registra o fallback em vez de criar recurso inválido.
 
-Validado no Xiaomi: `auto` resolve perfil B com 3 cascatas @1536 e PCF 3×3, e
-reporta corretamente um clamp de anisotropia por capability.
+Pós-processamento deixou de ser apenas tonemap embutido no material: há alvo de cena
+na escala resolvida e passe final configurável com upscale, bloom por limiar, FXAA,
+sharpen, contraste, saturação e vinheta. Distâncias globais independentes desligam
+normal map e probe especular quando o detalhe já não é perceptível; o runtime de LOD
+recebe o budget de erro projetado e a histerese da mesma política. O sample da
+floresta é apenas consumidor/stress test; nenhuma regra consulta seu nome.
+
+Validado no Xiaomi em Debug, nos caminhos bindless e fallback, com camada Khronos:
+`auto` resolve perfil B com 2 cascatas @1024 e PCF 3×3, renderiza sombra de troncos e
+folhagem e executa o passe final sem VUID/crash. O relatório reproduzível é
+`build/android-validation/rendering-20260831-144357/report.json`. Esta validação é de
+correção; custo/FPS sustentado exige perfil separado e não é inferido dela.
+
+O shadow pass ganhou culling conservador próprio e cache de cascatas estáticas por
+tile. Cada cascata reserva uma margem espacial configurável, só é invalidada quando o
+novo receptor sai do volume cacheado e preserva os demais tiles com `loadOp=LOAD`;
+mudança de caster/material/sol possui API explícita de invalidação. O modo sem cache
+continua disponível para diagnóstico. Na pose fixa, as duas saídas foram idênticas
+bit a bit e sombra caiu de 1,82 ms para 0,0006 ms.
+
+Na rota determinística de 60 s/6.611 poses, Release, cache ligado mediu 65,05 FPS,
+pior janela 58,26, GPU 13,80 ms e sombra 0,09 ms média/1,41 ms p95; desligado mediu
+53,21 FPS, pior janela 49,07, GPU 17,11 ms e sombra 3,05/3,85 ms. A ordem foi
+sequencial (cache ligado antes), portanto temperatura ainda impede atribuir toda a
+diferença de FPS; o timestamp isolado do passe comprova o financiamento. O item
+continua parcial: separar casters dinâmicos, granularidade menor dos chunks, blend de
+splits, AEMAP v3/LOD real e otimização do passe opaco seguem necessários. Evidências
+em `shadow-cache-on-route-20260831` e `shadow-cache-off-route-20260831`.
+
+Resolução dinâmica deixou de ser apenas um valor fixo: `DynamicResolutionController`
+usa exclusivamente o timestamp de GPU (não acquire/pacing), cede rápido, recupera
+devagar, possui histerese, piso/teto/degraus configuráveis e muda viewport/scissor sem
+recriar imagens. O passe final restringe a amostragem à região ativa do alvo máximo.
+O schema global v4 também separa taps de sombra próxima/distante, distâncias de
+normal/probe/metallic-roughness/emissivo e budgets de LOD sólido/coverage. Nenhum filtro é ligado
+implicitamente: FXAA, sharpen, bloom, vinheta, contraste e saturação continuam eixos
+autorais independentes.
+
+No mesmo Xiaomi/painel 120 Hz, a rota Release visualmente correta a piso 0,58 mediu
+**96,71 FPS**, GPU **8,88 ms**, opaco **7,40 ms** e pós **1,33 ms**; a melhor janela
+de 600 frames chegou a 107,11 FPS. Em pose fixa, duas capturas foram idênticas e a
+apresentação mediu 110,93 FPS. Logo reduzir pixels sozinho já não financia 120
+sustentados. O sample AEMAP v3 agora publica 245 grupos e o par aquecido ganhou ~2%
+de GPU; a rota ainda fica em ~108–111 FPS exibidos. O próximo ganho estrutural é
+HLOD/impostors, redução de transições/draws e compactação GPU-driven; baixar
+mais a resolução apenas degradaria imagem sem atacar o gargalo geométrico. Um header
+SPIR-V de pós inicialmente obsoleto produziu mosaicos/rastros e invalidou suas medidas;
+foi corrigido e o gerador agora possui `-All -Check` para validar as 19 famílias.
+Relatórios válidos: `dynamic-visual-fix-20260831` e
+`dynamic-correct-route-20260831`.
 
 Três lacunas que esta fatia tornou visíveis: `DeviceFeatures` só preenche quatro
 campos, deixando **os perfis A e S inalcançáveis por detecção**; `samplerAnisotropy`
 nunca é habilitada; e os arquivos de lock do Gradle estavam versionados, causando
 `Failed to release lock` em todo build — corrigido no `.gitignore`.
 
-Verificação: **257/257** C++ (+22), 42/42 PowerShell de FrameProfile, 36/36 Python e
-`assembleRelease` pelo NDK real.
+Verificação: **265/265** C++, 42/42 PowerShell de FrameProfile, SPIR-V reproduzível,
+`assembleDebug` e `assembleRelease` pelo NDK real, smoke físico bindless/fallback com
+validação Vulkan e perfil Release reproduzível.
+
+## EnvironmentMap v3 e IBL móvel — 01/09/2026
+
+O ambiente avançado deixou de depender de amostrar o panorama bruto no fragmento.
+`renderer/environment_map.*` define o contrato portátil AEEN v3 e migração v1/v2; o
+cooker gera `environment-specular.aetex` octaédrico RGBA16F 256²/9 mips GGX e
+`environment-brdf.aetex` RGBA16F 128²/512 amostras. O céu visível continua separado.
+O runtime Android valida metadados, carrega imagens/samplers próprios e usa cinco
+bindings globais. O PBR troca trigonometria esférica por projeção octaédrica.
+
+Há oito variantes compactas de features de material, porém a primeira medição mostrou
+regressão quando foram impostas ao perfil B. A engine agora expõe
+`materialShaderVariants` e `environmentSplitSumBrdf` como overrides globais; B/C não
+especializam por padrão. Isso preserva a possibilidade sem transformar uma hipótese
+de driver em regra universal.
+
+Em Xiaomi 25053PC47G, Release, mesma pose, escala fixa 0,58 e sem pressão térmica:
+controle sem IBL 108,58 FPS/7,79 ms GPU; octaédrico analítico 107,03/8,04 ms;
+octaédrico split-sum 105,04/8,04 ms. CPU média ficou 1,34–1,40 ms. Todas as janelas
+foram GPU-bound e o custo do IBL ficou em ~0,25 ms; a diferença de GPU entre as duas
+BRDFs ficou sob o piso de ruído. A imagem foi inspecionada sem corrupção e o par
+before/after de lifecycle foi idêntico. Relatórios em
+`build/android-validation/advanced-*-fixed-20260901` e contrato em
+`ENVIRONMENT-MAP.md`.
+
+Validação corrente: **281/281 C++**, **48/48 PowerShell FrameProfile**, **46/46 Python
+tools**, 506/506 C#, shader embed reproduzível, lint e `assembleRelease` aprovados. O
+APK final assinado é `build/aether-environment-v3-final-r2-release.apk`. A revisão
+final também suprimiu rebinds redundantes do mesmo pipeline quando variantes estão
+desligadas; o build passou, mas a repetição física posterior ficou bloqueada pelo
+keyguard seguro do aparelho. As métricas acima pertencem à build imediatamente
+anterior, com shaders/resources/política idênticos. Permanecem abertos AGI, SSIM/FLIP
+multipose, rota/soak, Mali físico, SH9 e a migração do resource para Asset Database.
+
+## Fundação compute — 01/09/2026
+
+- RHI compute reutilizável com reflexão SPIR-V, contrato de bindings/local size,
+  buffers/imagens/samplers, push constants e dispatch direto/indireto.
+- Contexto com command buffer reutilizável, fence, wait/signal semaphores e
+  barreiras; não há `queueWaitIdle` por dispatch.
+- `VulkanDevice` detecta limites e topologia, prefere compute-only e mantém
+  fallback graphics+compute.
+- Render Graph possui passes/acessos compute, escolha de fila e mapper Vulkan
+  para barreiras e transferência de ownership.
+- Primeiro consumidor: probe ASTC 4096×4096 no Xiaomi SM8735/Adreno, sucesso em
+  2,233594 ms na primeira validação e 6,525208 ms na repetição final, diferença
+  máxima 7/canal e sem VUID de compute/ownership.
+- Validação desta fatia: 299/299 testes nativos, shaders por geração e
+  `spirv-val`, builds Android Debug/Release e repetição física aprovados.
+- APK Release de desenvolvimento: `build/aether-compute-foundation-r10-release.apk`,
+  SHA-256 `E031F002FA2B75685A6CFB38A33BDEC1B942EFC3044CD1CA0DD85404F823C804`.
+- Pendentes: executor integral do Render Graph, `synchronization2`, timeline
+  semaphores, persistência do cache e consumidores HZB/culling/Forward+/
+  skinning/partículas. Ver `COMPUTE.md` e ADR-016.
+
+## Oclusão GPU-driven — consumidor do HZB em compute — 02/09/2026
+
+A pirâmide já era construída em compute e ficava residente na GPU
+(`[HZB] produtor=compute níveis=6 base=160x346 readback=nao`). **Ninguém a
+consumia.** A medição em Adreno da fatia anterior mostra as duas metades do
+problema na mesma execução: `gpu_hzb_ms` mediano de **1,07 ms** e
+`hzb_tested=0 hzb_occluded=0`. A decisão de oclusão continuava na CPU, que
+tinha acabado de perder o readback; e o depth deixou de ser memoryless enquanto
+o HZB o amostra (`store=sim sampled=sim memoryless=nao`), devolvendo os 0,44 ms
+que P1 havia economizado. C1 sem C2 é custo puro.
+
+Esta fatia entrega o consumidor. `native/rhi/shaders/draw_cull.comp` lê a
+pirâmide residente e escreve o `instanceCount` dos `VkDrawIndexedIndirectCommand`
+que o passe opaco já submete desde o caminho multi-draw; um objeto ocluído vira
+um comando com zero instâncias e nenhum estágio gráfico sabe que o kernel existe.
+
+Três decisões que valem mais que o código:
+
+- **A matemática de visibilidade não é nova.** `renderer::cullDrawRecordReference`
+  é o espelho instrução por instrução do shader, e um teste tranca que ele
+  reproduz `projectBoundsToHzbScreenRect` + `isOccludedByHzb` +
+  `updateHzbHysteresis` candidato a candidato com guarda de movimento zero.
+  Migrar a decisão para a GPU não podia ser a oportunidade de mudar em silêncio
+  o que a engine considera visível.
+- **A guarda de movimento substitui um penhasco por uma rampa.** O caminho de
+  CPU desligava o estágio inteiro assim que a câmera se mexia
+  (`hzb_motion_skip`) — em primeira pessoa, nunca ocluir nada.
+  `buildGpuCullMotionGuard` converte a diferença entre a pose que produziu a
+  pirâmide e a pose atual em três folgas (rotação, aproximação e translação
+  lateral). Não é prova de conservadorismo, e o texto não finge que seja:
+  nenhuma existe para HZB temporal com câmera livre. O que é provado por teste é
+  a monotonicidade — aumentar o movimento nunca aumenta o conjunto cortado.
+- **O dispatch cobre a capacidade da lista, não os comandos do frame.** Ele é
+  gravado antes do render pass e a lista só é construída dentro dele; um
+  dispatch já gravado não relê push constants. Slots de sobra ficam com `flags=0`
+  e o kernel não escreve neles — escrever apagaria a histerese do draw 0, cujo
+  índice um slot zerado carrega.
+
+O frame ganhou a região `GpuPassClass::Culling` entre Shadow e Opaque, com
+marcador de captura e timestamp próprios: sem ela o dispatch cairia no balde do
+passe opaco e o custo do mecanismo de visibilidade ficaria invisível outra vez —
+o mesmo defeito que P0 corrigiu para o HUD e para a própria cadeia do HZB.
+
+Verificação: **310/310** testes nativos (+9), **48/48** de FrameProfile,
+**46/46** Python, Android Debug + Release + lint pelo NDK real e SPIR-V validado
+e reproduzível por `-All -Check`. O contrato de bindings do kernel é refletido do
+binário num teste de host, de modo que uma divergência entre shader e declaração
+falha no build e não no aparelho.
+
+**Nada foi medido em hardware.** Não havia ADB nesta sessão. Nenhum ganho é
+declarado: o estágio permanece opt-in por `aether.hzb_gpu_culling` (que implica
+`aether.hzb_compute`) até existir A/B físico intercalado com gate de imagem na
+rota `forest-walk-v1`. Enquanto isso, o custo de 1,07 ms do produtor continua
+sem contrapartida medida, e desligar `aether.hzb_compute` continua sendo a
+escolha correta para qualquer medição que não seja a validação desta fatia.
 
 ## Resumo
 
 | | |
 |---|---|
 | Testes C# | **506 passando**, 0 falhando, 0 pulados (inclui 5 de material/esfera e 15 de integração cena/render); interop nativo obrigatório na regressão |
-| Verificações das ferramentas Android | FrameProfile **35/35** na verificação corrente; os demais grupos preservam suas suítes próprias |
-| Testes C++ | **225 passando** na suíte Release corrente, 0 falhando. Inclui AEMAP v1/v2/v3, colisão mundial, cápsula, `GpuMeshInstance`, HUD/input, câmera multi-touch, rota determinística, HZB, orçamento de workload e seleção/agregação de LOD |
-| Imports gráficos | **21 testes Python passando**: 6 de material + 5 do mapa/HUD (identidade/hashes, AEMAP, 140 cadeias AETX e orientação de dígitos) + 10 do simplificador de LOD (clustering, guardas de costura UV/normal, histerese, offset de `MapMaterialRecord.flags`) |
+| Verificações das ferramentas Android | FrameProfile **48/48** na verificação corrente; os demais grupos preservam suas suítes próprias |
+| Testes C++ | **299 passando** na suíte corrente, 0 falhando. Inclui AEEN/AEMAP, política/pressão térmica, colisão, câmera/rota, HZB/sombras/LOD e os contratos compute/Render Graph Vulkan |
+| Ferramentas/import gráfico | **46 testes Python passando**: material, pacote/mapa/HUD, AEEN/AETX do ambiente, alpha coverage, câmera e simplificação/upgrade de LOD |
 | Linhas C# | ~11.000 |
 | Linhas C++ (próprias, sem código vendorizado) | ~3.400 |
 | Dependências baixadas no build | **nenhuma** — build e testes rodam offline; Jolt Physics, Box2D, SQLite, runtime .NET e VMA são vendorizados em `native/third_party/`, com versão/licença/hash ou commit registrados |
@@ -626,6 +777,7 @@ para a matriz mínima de 6 aparelhos que o plano pede antes de considerar M0 rep
 | Rotação para além de landscape e matriz de múltiplos aparelhos | ⏳ `uiMode` foi exercitado; rotação fora de landscape é bloqueada por design por `screenOrientation="sensorLandscape"`; só há um aparelho no laboratório (faltam Mali e perfil C) |
 | Revalidação pós-sessão (28/08, tarde) | ✅ `tools/validate-android-shell.ps1` reexecutado no mesmo Xiaomi após os commits desta sessão (extração atômica de assets, `InstancingWorkload`, hot reload): **20 ciclos** background/foreground + mudança de configuração + screen off/on, PID `17496` estável, zero recriações de recurso — confirma que nada regrediu. Profiling de frame separado (`-ProfileSeconds 60`): SurfaceFlinger 60,06 FPS/61,6 s contínuos, `presentFps` 60,06, CPU processo média 2,33 ms (pico 22,1 ms) — consistente com medições anteriores da PoC-A, mesma limitação já documentada (CPU excede o orçamento de 3 ms em picos, matriz de 1 aparelho não fecha o gate). **Achado de ferramental**: rodar os scripts com `powershell` (Windows PowerShell 5.1) corrompe literais de string acentuados no próprio código-fonte `.ps1` (lido com a codepage do sistema, não UTF-8), quebrando o casamento de padrão contra o logcat; `pwsh` (PowerShell 7) também exige forçar `[Console]::OutputEncoding`/`$OutputEncoding` para UTF-8 explicitamente neste ambiente, senão herda `IBM850` do console — documentado aqui para quem for rodar estes scripts localmente fora do CI (que já usa `pwsh` com ambiente configurado) |
 | Otimização móvel v10 (30/08) | ✅ Diagnóstico de variantes na mesma câmera provou gargalo de fragment/texture (PBR completo 85,86 FPS/10,25 ms GPU; base-color apenas diagnóstico 120,11/6,45 ms), não falta de carga CPU. World-to-view por frame e simplificações matemáticas equivalentes reduziram o PBR sem mudar a imagem. O import/runtime cria 58 render chunks determinísticos, preserva geometria/blend e usa multi-draw indirect por material (`indirect=multi-draw` no Xiaomi): 82 chamadas CPU da primeira versão caíram para 34. Ponto fixo v10: 99,46 FPS/9,23 ms GPU; rota manual, primeiras cinco janelas 98,34 FPS em média, pior janela 64,39 FPS/13,73 ms com 57/58 chunks. `PowerManager` informou sustained performance não suportado, então o fallback público permaneceu ativo. APK instalado: `build/aether-spatial-indirect-v10-release.apk`, SHA-256 `30A6A5B5FF0FB0C55D8FF6A8E8B906268F49A5F205138DB4D49CF8DA246D6285`. Suíte nativa Release 190/190 e build Android Release aprovados. Ainda não é 120 FPS estável; HZB/LOD e rota reproduzível são os próximos gates. |
+| Hotspot/DVFS + material LOD (01/09) | ✅ Pose direcional reproduzível confirmou GPU-bound (CPU 1,2–1,6 ms). `screenrecord` leva o mesmo renderer a 120,113 FPS/6,401 ms GPU média/p95 7,104 ms, enquanto sem gravação o OEM alterna operating points e produz 86–106 FPS. ADPF 7,333 ms piorou contra o alvo correto de 8,333 ms e foi rejeitado; Android 15 agora recebe `prefer_power_efficiency=false` explicitamente. Normal mapping foi o maior eixo isolado (`no-normal` 111,90 FPS). Material LOD compilado remove normal/TBN somente quando o bounds inteiro está além do alcance global, preservando detalhe próximo; alpha cutoff também ocorre antes do PBR. APK mais recente instalado: `build/aether-material-distance-adpf-r6-release.apk`, SHA-256 `0EE006319ECCCBBC45969E251A32E57981840BECBCC35533B48B0D07ACE5A0EA`. 284/284 testes nativos e Release aprovados. 120 FPS sem gravação ainda não é declarado estável: próximo gate é AChoreographer × Swappy e soak intercalado, sem clock privado/dummy load. |
 
 O APK é um **shell gráfico de fundação**, não um editor demonstrativo. Ele
 desenha continuamente apenas quando lifecycle está ativo e bloqueia o looper

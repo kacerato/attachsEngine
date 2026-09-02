@@ -1,4 +1,6 @@
 #include "dirt_road_frame.glsl"
+precision mediump int;
+precision highp float;
 // Mesma precisao de varying declarada em dirt_road.vert; divergir aqui faria os
 // dois estagios discordarem sobre a mesma interface.
 layout(location=3) in highp vec2 vUv0;

@@ -112,6 +112,27 @@ class SimplifyByClustering(unittest.TestCase):
         _, _, _, _, _, _, new_indices = result
         self.assertEqual(len(new_indices) // 3, 2, "normal discontinuity prevents cross-corner merging")
 
+    def test_continuous_uv_gradient_does_not_block_geometric_clustering(self):
+        # Four nearby vertices form a continuous UV chart.  The old global UV
+        # bucket key treated all four as unrelated and could never reduce this
+        # geometry.  Only duplicate positions with discontinuous UVs are seams.
+        position = np.array([[0.00, 0, 0], [0.04, 0, 0],
+                             [0.00, 1, 0], [0.04, 1, 0], [1.0, 0.5, 0]], dtype=np.float32)
+        normal = np.tile([0, 0, 1], (5, 1)).astype(np.float32)
+        tangent = np.zeros((5, 4), dtype=np.float32); tangent[:, 0] = 1.0; tangent[:, 3] = 1.0
+        uv0 = np.array([[0.00, 0], [0.04, 0], [0.00, 1], [0.04, 1], [1.0, 0.5]], dtype=np.float32)
+        uv1 = uv0.copy()
+        color = np.ones((5, 4), dtype=np.float32)
+        # Both triangles remain valid after each close vertical pair clusters.
+        indices = np.array([0, 2, 4, 1, 3, 4], dtype=np.uint32)
+        result = cook.simplify_by_clustering(position, normal, tangent, uv0, uv1, color, indices,
+                                             cell_size=0.1, uv_bucket_size=1.0 / 64.0,
+                                             normal_bucket_count=6)
+        self.assertIsNotNone(result)
+        new_position, *_, new_indices = result
+        self.assertEqual(len(new_position), 3)
+        self.assertEqual(len(new_indices) // 3, 2)
+
     def test_collapsing_to_zero_triangles_returns_none(self):
         position = np.array([[0, 0, 0], [0.01, 0, 0], [0, 0.01, 0]], dtype=np.float32)
         normal = np.tile([0, 0, 1], (3, 1)).astype(np.float32)
@@ -158,9 +179,37 @@ class SimplifyPrimitiveLevels(unittest.TestCase):
         self.assertEqual(len(levels), 1, "blend primitives must keep exactly the original level")
         self.assertEqual(levels[0]["level"], 0)
 
-    def test_alpha_mask_material_is_never_simplified(self):
+    def test_alpha_mask_material_can_generate_safe_vegetation_lods(self):
         levels = self.call(material_flags=cook.MATERIAL_ALPHA_MASK)
-        self.assertEqual(len(levels), 1, "alpha-mask/cutout primitives must keep exactly the original level")
+        self.assertGreaterEqual(len(levels), 2)
+        self.assertEqual(levels[0]["level"], 0)
+        self.assertGreater(levels[1]["geometricError"], 0.0)
+
+    def test_alpha_cards_use_deterministic_component_density_levels(self):
+        position, indices = [], []
+        for card in range(20):
+            base = len(position)
+            x = float(card * 3)
+            position.extend(((x, 0, 0), (x + 1, 0, 0),
+                             (x, 1, 0), (x + 1, 1, 0)))
+            indices.extend((base, base + 1, base + 2,
+                            base + 1, base + 3, base + 2))
+        position = np.asarray(position, dtype=np.float32)
+        normal = np.tile([0, 0, 1], (len(position), 1)).astype(np.float32)
+        tangent = np.zeros((len(position), 4), dtype=np.float32)
+        tangent[:, 0] = tangent[:, 3] = 1.0
+        uv0 = np.tile([[0, 0], [1, 0], [0, 1], [1, 1]], (20, 1)).astype(np.float32)
+        color = np.ones((len(position), 4), dtype=np.float32)
+        levels = cook.simplify_primitive_levels(
+            position, normal, tangent, uv0, uv0.copy(), color,
+            np.asarray(indices, dtype=np.uint32), cook.MATERIAL_ALPHA_MASK, 100.0,
+            reuse_source_vertices=True)
+        self.assertEqual(len(levels), 3)
+        triangle_counts = [len(level["indices"]) // 3 for level in levels]
+        self.assertEqual(triangle_counts[0], 40)
+        self.assertLess(triangle_counts[1], triangle_counts[0])
+        self.assertLess(triangle_counts[2], triangle_counts[1])
+        self.assertEqual(levels[1]["sourceVertexIndices"].tolist(), list(range(80)))
 
     def test_small_primitive_is_never_simplified_even_when_opaque(self):
         tiny_position, tiny_normal, tiny_tangent, tiny_uv0, tiny_uv1, tiny_color, tiny_indices = \
@@ -168,6 +217,29 @@ class SimplifyPrimitiveLevels(unittest.TestCase):
         levels = cook.simplify_primitive_levels(tiny_position, tiny_normal, tiny_tangent, tiny_uv0,
                                                 tiny_uv1, tiny_color, tiny_indices, 0, 100.0)
         self.assertEqual(len(levels), 1)
+
+    def test_source_vertex_mode_maps_every_lod_index_back_to_lod_zero(self):
+        levels = cook.simplify_primitive_levels(
+            self.position, self.normal, self.tangent, self.uv0, self.uv1,
+            self.color, self.indices, 0, 100.0, reuse_source_vertices=True)
+        self.assertGreaterEqual(len(levels), 2)
+        for level in levels:
+            representatives = level["sourceVertexIndices"]
+            self.assertTrue(np.all(representatives < len(self.position)))
+            self.assertTrue(np.all(level["indices"] < len(representatives)))
+
+
+class SpatialPrimitiveChunks(unittest.TestCase):
+    def test_chunks_are_bounded_deterministic_and_preserve_complete_triangles(self):
+        position, *_rest, indices = flat_grid(12, 1.0)
+        identity = np.identity(4, dtype=np.float32).reshape(16, order="F")
+        first = cook.spatial_primitive_chunks(position, indices, identity, target_triangles=17)
+        second = cook.spatial_primitive_chunks(position, indices, identity, target_triangles=17)
+        self.assertEqual([chunk.tolist() for chunk in first], [chunk.tolist() for chunk in second])
+        self.assertTrue(all(len(chunk) // 3 <= 17 for chunk in first))
+        source_triangles = sorted(map(tuple, indices.reshape((-1, 3)).tolist()))
+        chunk_triangles = sorted(map(tuple, np.concatenate(first).reshape((-1, 3)).tolist()))
+        self.assertEqual(chunk_triangles, source_triangles)
 
 
 class MaterialFlagsByteOffset(unittest.TestCase):

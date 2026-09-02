@@ -2,6 +2,7 @@
 
 #include "platform/android/android_texture_loader.h"
 #include "renderer/spatial_render_chunks.h"
+#include "renderer/environment_map.h"
 
 #include <android/log.h>
 #include <algorithm>
@@ -25,12 +26,13 @@ u32 readWord(const std::vector<u8> &bytes, usize offset) {
          static_cast<u32>(bytes[offset + 2]) << 16 | static_cast<u32>(bytes[offset + 3]) << 24;
 }
 
-bool decodeEnvironment(const std::vector<u8> &bytes, EnvironmentLighting &lighting) {
+bool decodeEnvironment(const std::vector<u8> &bytes, EnvironmentLighting &lighting,
+                       renderer::EnvironmentMapDescription &mapDescription) {
   if (bytes.size() < 16 || readWord(bytes, 0) != 0x4E454541 ||
       readWord(bytes, 8) != bytes.size()) return false;
   const u32 version = readWord(bytes, 4);
-  const usize valueCount = version == 1 ? 16 : version == 2 ? 32 : 0;
-  if (valueCount == 0 || bytes.size() != 16 + valueCount * sizeof(float)) return false;
+  const usize valueCount = version == 1 ? 16 : (version == 2 || version == 3) ? 32 : 0;
+  if (valueCount == 0 || !renderer::decodeEnvironmentMapDescription(bytes, mapDescription)) return false;
 
   // AEEN v2 owns all global visual parameters. Defaults only keep v1 projects
   // readable; they are migration data, not per-scene renderer constants.
@@ -66,6 +68,11 @@ bool decodeEnvironment(const std::vector<u8> &bytes, EnvironmentLighting &lighti
   if (sunLength < 1.0e-5f) return false;
   for (u32 axis = 0; axis < 3; ++axis)
     decoded.sunDirectionIntensity[axis] /= sunLength;
+  // parameters.w was reserved in AEEN v1/v2. It is runtime-derived instead of
+  // duplicated in the serialized float payload so legacy lighting stays bit-compatible.
+  decoded.parameters[3] = mapDescription.hasPrefilteredSpecular() ? 1.0f : 0.0f;
+  if (mapDescription.hasPrefilteredSpecular())
+    decoded.parameters[2] = static_cast<float>(mapDescription.specularMipLevels - 1);
   lighting = decoded;
   return true;
 }
@@ -153,7 +160,7 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
   }
   std::vector<u8> environmentBytes;
   if (!readAndroidAsset(assets, "dirt_road/environment.aeenv", environmentBytes, cancel) ||
-      !decodeEnvironment(environmentBytes, environmentLighting_)) {
+      !decodeEnvironment(environmentBytes, environmentLighting_, environmentMapDescription_)) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Environment] Metadados AEEN inválidos.");
     return false;
   }
@@ -166,6 +173,38 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
   if (!loadAndroidTexture(device, upload, assets, "dirt_road/environment.aetex", maxDimension,
                           128 * Megabyte, environmentSampling, environmentImage_,
                           environmentSampler_, cancel, "Environment")) return false;
+  if (environmentMapDescription_.hasPrefilteredSpecular()) {
+    rhi::SamplerDesc specularSampling{};
+    specularSampling.minFilter = VK_FILTER_LINEAR;
+    specularSampling.magFilter = VK_FILTER_LINEAR;
+    specularSampling.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    specularSampling.addressU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    specularSampling.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    if (!loadAndroidTexture(device, upload, assets, "dirt_road/environment-specular.aetex",
+                            std::min(maxDimension, environmentMapDescription_.specularWidth),
+                            8 * Megabyte, specularSampling, environmentSpecularImage_,
+                            environmentSpecularSampler_, cancel, "Environment/Specular")) return false;
+  }
+  if (environmentMapDescription_.hasSplitSumBrdf()) {
+    rhi::SamplerDesc brdfSampling{};
+    brdfSampling.minFilter = VK_FILTER_LINEAR;
+    brdfSampling.magFilter = VK_FILTER_LINEAR;
+    brdfSampling.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    brdfSampling.addressU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    brdfSampling.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    if (!loadAndroidTexture(device, upload, assets, "dirt_road/environment-brdf.aetex",
+                            std::min(maxDimension, environmentMapDescription_.brdfWidth),
+                            2 * Megabyte, brdfSampling, environmentBrdfImage_,
+                            environmentBrdfSampler_, cancel, "Environment/BRDF")) return false;
+  }
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[Environment] projection=%s specular=%ux%u/%u brdf=%ux%u split_sum=%s",
+      environmentMapDescription_.specularProjection == renderer::EnvironmentProjection::Octahedral
+          ? "octahedral" : "equirectangular",
+      environmentMapDescription_.specularWidth, environmentMapDescription_.specularHeight,
+      environmentMapDescription_.specularMipLevels, environmentMapDescription_.brdfWidth,
+      environmentMapDescription_.brdfHeight,
+      environmentMapDescription_.hasSplitSumBrdf() ? "true" : "false");
   __android_log_print(ANDROID_LOG_INFO, LogTag,
       "[DirtRoad] ready source_draws=%u render_chunks=%zu materials=%u textures=%u triangles=%u encoding=%s load_ms=%.3f",
       header_.drawCount, draws_.size(), header_.materialCount, header_.textureCount,
@@ -197,9 +236,14 @@ platform::FreeCameraState DirtRoadResources::defaultGameplayCamera() const {
 }
 
 void DirtRoadResources::shutdown() {
+  environmentBrdfSampler_.shutdown();
+  environmentBrdfImage_.reset();
+  environmentSpecularSampler_.shutdown();
+  environmentSpecularImage_.reset();
   environmentSampler_.shutdown();
   environmentImage_.reset();
   environmentLighting_ = {};
+  environmentMapDescription_ = {};
   collisionMesh_.clear();
   for (auto &sampler : samplers_) sampler.shutdown();
   for (auto &image : images_) image.reset();

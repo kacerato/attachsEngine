@@ -5,11 +5,55 @@ param(
     [string[]]$Stages = @("vert", "frag"),
     [string]$OutputHeader,
     [string]$NdkPath,
+    [switch]$All,
     [switch]$Check
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# A mudança em um include GLSL (por exemplo environment_lighting.glsl) pode
+# invalidar várias famílias. O modo agregado impede que o build valide apenas o
+# shader default e embarque silenciosamente um SPIR-V antigo em outra pipeline.
+if ($All) {
+    if ($OutputHeader) { throw '-OutputHeader não pode ser usado com -All.' }
+    $embeddedShaders = [ordered]@{
+        astc_encode = @('comp')
+        dirt_road_coverage_fallback = @('frag')
+        dirt_road_coverage = @('frag')
+        dirt_road_coverage_shade_fallback = @('frag')
+        dirt_road_coverage_shade = @('frag')
+        dirt_road_fallback = @('frag')
+        dirt_road_sky = @('vert', 'frag')
+        dirt_road = @('vert', 'frag')
+        draw_cull = @('comp')
+        hzb_reduce_first = @('vert', 'frag')
+        hzb_reduce = @('vert', 'frag')
+        hzb_reduce_compute = @('comp')
+        instanced_fallback = @('frag')
+        instanced = @('vert', 'frag')
+        material_fallback = @('frag')
+        material_preview = @('vert', 'frag')
+        post_process = @('vert', 'frag')
+        runtime_hud = @('vert', 'frag')
+        scene_preview = @('vert')
+        shadow_depth_masked_fallback = @('frag')
+        shadow_depth_masked = @('frag')
+        shadow_depth = @('vert')
+        triangle = @('vert', 'frag')
+    }
+    foreach ($entry in $embeddedShaders.GetEnumerator()) {
+        $shaderParameters = @{
+            ShaderName = [string]$entry.Key
+            Stages = [string[]]$entry.Value
+        }
+        if ($NdkPath) { $shaderParameters.NdkPath = $NdkPath }
+        if ($Check) { $shaderParameters.Check = $true }
+        & $PSCommandPath @shaderParameters
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+    exit 0
+}
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $shaderDirectory = Join-Path $repositoryRoot "native\rhi\shaders"

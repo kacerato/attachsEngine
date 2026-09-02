@@ -1,6 +1,8 @@
 #version 450
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_GOOGLE_include_directive : require
+precision mediump int;
+precision highp float;
 
 // Recorte de folhagem no mapa de sombra. Sem isto, cada cartao de folha projeta
 // um retangulo solido: a copa vira um bloco preto no chao e a sombra fica pior

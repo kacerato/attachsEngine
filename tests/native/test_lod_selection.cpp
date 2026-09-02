@@ -161,6 +161,14 @@ AE_TEST(Lod_render_groups_keep_every_spatial_chunk_in_its_level_bucket) {
   AE_EXPECT_EQ(ungrouped[0], 4u, "correct legacy draw returned");
   AE_EXPECT_TRUE(groups[0].boundsRadius >= 7.0f,
                  "group bound conservatively encloses separated chunk spheres");
+
+  std::vector<u32> maximumQuality;
+  buildLodLevelZeroDrawOrder(groups, ungrouped, maximumQuality);
+  AE_EXPECT_EQ(maximumQuality.size(), static_cast<usize>(3),
+               "LOD disabled keeps ungrouped plus every level-zero chunk only");
+  AE_EXPECT_EQ(maximumQuality[0], 4u, "ungrouped draw remains a candidate");
+  AE_EXPECT_EQ(maximumQuality[1], 0u, "first level-zero chunk retained");
+  AE_EXPECT_EQ(maximumQuality[2], 1u, "second level-zero chunk retained");
 }
 
 AE_TEST(Lod_render_groups_reject_level_gaps_or_chunk_error_disagreement) {

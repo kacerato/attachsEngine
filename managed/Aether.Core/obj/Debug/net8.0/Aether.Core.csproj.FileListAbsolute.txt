@@ -10,3 +10,15 @@ C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Core\obj\Debug\net8.0\ref
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Core\obj\Debug\net8.0\Aether.Core.pdb
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Core\obj\Debug\net8.0\ref\Aether.Core.dll
 C:\Users\jamaa\Downloads\aether-fase0-1\managed\Aether.Core\obj\Debug\net8.0\Aether.Core.sourcelink.json
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\bin\Debug\net8.0\Aether.Core.deps.json
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\bin\Debug\net8.0\Aether.Core.dll
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\bin\Debug\net8.0\Aether.Core.pdb
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Debug\net8.0\Aether.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Debug\net8.0\Aether.Core.AssemblyInfoInputs.cache
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Debug\net8.0\Aether.Core.AssemblyInfo.cs
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Debug\net8.0\Aether.Core.csproj.CoreCompileInputs.cache
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Debug\net8.0\Aether.Core.sourcelink.json
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Debug\net8.0\Aether.Core.dll
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Debug\net8.0\refint\Aether.Core.dll
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Debug\net8.0\Aether.Core.pdb
+C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Debug\net8.0\ref\Aether.Core.dll

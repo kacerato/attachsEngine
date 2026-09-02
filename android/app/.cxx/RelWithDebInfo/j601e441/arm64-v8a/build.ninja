@@ -100,6 +100,13 @@ build CMakeFiles/aether_core.dir/core/job_system.cpp.o: CXX_COMPILER__aether_cor
   OBJECT_DIR = CMakeFiles\aether_core.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_core.dir\core
 
+build CMakeFiles/aether_core.dir/profiler/frame_pressure.cpp.o: CXX_COMPILER__aether_core_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/profiler/frame_pressure.cpp || cmake_object_order_depends_target_aether_core
+  DEP_FILE = CMakeFiles\aether_core.dir\profiler\frame_pressure.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_core.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_core.dir\profiler
+
 build CMakeFiles/aether_core.dir/profiler/frame_statistics.cpp.o: CXX_COMPILER__aether_core_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/profiler/frame_statistics.cpp || cmake_object_order_depends_target_aether_core
   DEP_FILE = CMakeFiles\aether_core.dir\profiler\frame_statistics.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
@@ -115,7 +122,7 @@ build CMakeFiles/aether_core.dir/profiler/frame_statistics.cpp.o: CXX_COMPILER__
 #############################################
 # Link the static library libaether_core.a
 
-build libaether_core.a: CXX_STATIC_LIBRARY_LINKER__aether_core_RelWithDebInfo CMakeFiles/aether_core.dir/core/assert.cpp.o CMakeFiles/aether_core.dir/core/job_system.cpp.o CMakeFiles/aether_core.dir/profiler/frame_statistics.cpp.o
+build libaether_core.a: CXX_STATIC_LIBRARY_LINKER__aether_core_RelWithDebInfo CMakeFiles/aether_core.dir/core/assert.cpp.o CMakeFiles/aether_core.dir/core/job_system.cpp.o CMakeFiles/aether_core.dir/profiler/frame_pressure.cpp.o CMakeFiles/aether_core.dir/profiler/frame_statistics.cpp.o
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
   OBJECT_DIR = CMakeFiles\aether_core.dir
   POST_BUILD = cd .
@@ -229,10 +236,45 @@ build libaether_rendergraph.a: CXX_STATIC_LIBRARY_LINKER__aether_rendergraph_Rel
 #############################################
 # Order-only phony target for aether_renderer
 
-build cmake_object_order_depends_target_aether_renderer: phony || cmake_object_order_depends_target_aether_core
+build cmake_object_order_depends_target_aether_renderer: phony || cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_rendergraph
+
+build CMakeFiles/aether_renderer.dir/renderer/dynamic_resolution.cpp.o: CXX_COMPILER__aether_renderer_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/renderer/dynamic_resolution.cpp || cmake_object_order_depends_target_aether_renderer
+  DEP_FILE = CMakeFiles\aether_renderer.dir\renderer\dynamic_resolution.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_renderer.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_renderer.dir\renderer
+
+build CMakeFiles/aether_renderer.dir/renderer/environment_map.cpp.o: CXX_COMPILER__aether_renderer_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/renderer/environment_map.cpp || cmake_object_order_depends_target_aether_renderer
+  DEP_FILE = CMakeFiles\aether_renderer.dir\renderer\environment_map.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_renderer.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_renderer.dir\renderer
+
+build CMakeFiles/aether_renderer.dir/renderer/frame_graph.cpp.o: CXX_COMPILER__aether_renderer_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/renderer/frame_graph.cpp || cmake_object_order_depends_target_aether_renderer
+  DEP_FILE = CMakeFiles\aether_renderer.dir\renderer\frame_graph.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_renderer.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_renderer.dir\renderer
 
 build CMakeFiles/aether_renderer.dir/renderer/frustum_visibility.cpp.o: CXX_COMPILER__aether_renderer_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/renderer/frustum_visibility.cpp || cmake_object_order_depends_target_aether_renderer
   DEP_FILE = CMakeFiles\aether_renderer.dir\renderer\frustum_visibility.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_renderer.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_renderer.dir\renderer
+
+build CMakeFiles/aether_renderer.dir/renderer/rendering_policy.cpp.o: CXX_COMPILER__aether_renderer_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/renderer/rendering_policy.cpp || cmake_object_order_depends_target_aether_renderer
+  DEP_FILE = CMakeFiles\aether_renderer.dir\renderer\rendering_policy.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_renderer.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_renderer.dir\renderer
+
+build CMakeFiles/aether_renderer.dir/renderer/shadow_cascades.cpp.o: CXX_COMPILER__aether_renderer_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/renderer/shadow_cascades.cpp || cmake_object_order_depends_target_aether_renderer
+  DEP_FILE = CMakeFiles\aether_renderer.dir\renderer\shadow_cascades.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
   INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
   OBJECT_DIR = CMakeFiles\aether_renderer.dir
@@ -266,6 +308,13 @@ build CMakeFiles/aether_renderer.dir/renderer/static_collision_mesh.cpp.o: CXX_C
   OBJECT_DIR = CMakeFiles\aether_renderer.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_renderer.dir\renderer
 
+build CMakeFiles/aether_renderer.dir/renderer/thermal_pressure_controller.cpp.o: CXX_COMPILER__aether_renderer_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/renderer/thermal_pressure_controller.cpp || cmake_object_order_depends_target_aether_renderer
+  DEP_FILE = CMakeFiles\aether_renderer.dir\renderer\thermal_pressure_controller.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_renderer.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_renderer.dir\renderer
+
 
 # =============================================================================
 # Link build statements for STATIC_LIBRARY target aether_renderer
@@ -274,7 +323,7 @@ build CMakeFiles/aether_renderer.dir/renderer/static_collision_mesh.cpp.o: CXX_C
 #############################################
 # Link the static library libaether_renderer.a
 
-build libaether_renderer.a: CXX_STATIC_LIBRARY_LINKER__aether_renderer_RelWithDebInfo CMakeFiles/aether_renderer.dir/renderer/frustum_visibility.cpp.o CMakeFiles/aether_renderer.dir/renderer/hzb_visibility.cpp.o CMakeFiles/aether_renderer.dir/renderer/lod_selection.cpp.o CMakeFiles/aether_renderer.dir/renderer/spatial_render_chunks.cpp.o CMakeFiles/aether_renderer.dir/renderer/static_collision_mesh.cpp.o || libaether_core.a
+build libaether_renderer.a: CXX_STATIC_LIBRARY_LINKER__aether_renderer_RelWithDebInfo CMakeFiles/aether_renderer.dir/renderer/dynamic_resolution.cpp.o CMakeFiles/aether_renderer.dir/renderer/environment_map.cpp.o CMakeFiles/aether_renderer.dir/renderer/frame_graph.cpp.o CMakeFiles/aether_renderer.dir/renderer/frustum_visibility.cpp.o CMakeFiles/aether_renderer.dir/renderer/rendering_policy.cpp.o CMakeFiles/aether_renderer.dir/renderer/shadow_cascades.cpp.o CMakeFiles/aether_renderer.dir/renderer/hzb_visibility.cpp.o CMakeFiles/aether_renderer.dir/renderer/lod_selection.cpp.o CMakeFiles/aether_renderer.dir/renderer/spatial_render_chunks.cpp.o CMakeFiles/aether_renderer.dir/renderer/static_collision_mesh.cpp.o CMakeFiles/aether_renderer.dir/renderer/thermal_pressure_controller.cpp.o || libaether_core.a libaether_rendergraph.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
   OBJECT_DIR = CMakeFiles\aether_renderer.dir
   POST_BUILD = cd .
@@ -430,7 +479,7 @@ build libaether_native_app_glue.a: C_STATIC_LIBRARY_LINKER__aether_native_app_gl
 #############################################
 # Order-only phony target for aether_android
 
-build cmake_object_order_depends_target_aether_android: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_native_app_glue cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_platform cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rhi
+build cmake_object_order_depends_target_aether_android: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_native_app_glue cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_platform cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph cmake_object_order_depends_target_aether_rhi
 
 build CMakeFiles/aether_android.dir/platform/android/android_main.cpp.o: CXX_COMPILER__aether_android_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/platform/android/android_main.cpp || cmake_object_order_depends_target_aether_android
   DEFINES = -Daether_android_EXPORTS
@@ -467,6 +516,14 @@ build CMakeFiles/aether_android.dir/platform/android/android_launch_options.cpp.
 build CMakeFiles/aether_android.dir/platform/android/android_performance.cpp.o: CXX_COMPILER__aether_android_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/platform/android/android_performance.cpp || cmake_object_order_depends_target_aether_android
   DEFINES = -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_performance.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue
+  OBJECT_DIR = CMakeFiles\aether_android.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
+
+build CMakeFiles/aether_android.dir/platform/android/android_thermal_monitor.cpp.o: CXX_COMPILER__aether_android_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/platform/android/android_thermal_monitor.cpp || cmake_object_order_depends_target_aether_android
+  DEFINES = -Daether_android_EXPORTS
+  DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_thermal_monitor.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
   INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue
   OBJECT_DIR = CMakeFiles\aether_android.dir
@@ -568,10 +625,10 @@ build CMakeFiles/aether_android.dir/platform/android/astc_encode_probe.cpp.o: CX
 #############################################
 # Link the shared library C:\Users\donod\Downloads\atchengine\android\app\build\intermediates\cxx\RelWithDebInfo\j601e441\obj\arm64-v8a\libaether_android.so
 
-build C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/j601e441/obj/arm64-v8a/libaether_android.so: CXX_SHARED_LIBRARY_LINKER__aether_android_RelWithDebInfo CMakeFiles/aether_android.dir/platform/android/android_main.cpp.o CMakeFiles/aether_android.dir/platform/android/android_texture_loader.cpp.o CMakeFiles/aether_android.dir/platform/android/dirt_road_resources.cpp.o CMakeFiles/aether_android.dir/platform/android/android_launch_options.cpp.o CMakeFiles/aether_android.dir/platform/android/android_performance.cpp.o CMakeFiles/aether_android.dir/platform/android/android_frame_profiler.cpp.o CMakeFiles/aether_android.dir/platform/android/android_frame_pacer.cpp.o CMakeFiles/aether_android.dir/platform/android/android_window.cpp.o CMakeFiles/aether_android.dir/platform/android/android_paths.cpp.o CMakeFiles/aether_android.dir/platform/android/android_vulkan_surface.cpp.o CMakeFiles/aether_android.dir/platform/android/android_triangle_renderer.cpp.o CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o CMakeFiles/aether_android.dir/platform/android/material_preview_resources.cpp.o CMakeFiles/aether_android.dir/platform/android/dotnet_host.cpp.o CMakeFiles/aether_android.dir/platform/android/dotnet_assets.cpp.o CMakeFiles/aether_android.dir/platform/android/astc_encode_probe.cpp.o | libaether_core.a libaether_platform.a libaether_renderer.a libaether_rhi.a libaether_native_app_glue.a libaether_physics.a libaether_core.a third_party/JoltPhysics/Build/libJolt.a || libaether_core.a libaether_native_app_glue.a libaether_physics.a libaether_platform.a libaether_renderer.a libaether_rhi.a third_party/JoltPhysics/Build/libJolt.a
+build C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/j601e441/obj/arm64-v8a/libaether_android.so: CXX_SHARED_LIBRARY_LINKER__aether_android_RelWithDebInfo CMakeFiles/aether_android.dir/platform/android/android_main.cpp.o CMakeFiles/aether_android.dir/platform/android/android_texture_loader.cpp.o CMakeFiles/aether_android.dir/platform/android/dirt_road_resources.cpp.o CMakeFiles/aether_android.dir/platform/android/android_launch_options.cpp.o CMakeFiles/aether_android.dir/platform/android/android_performance.cpp.o CMakeFiles/aether_android.dir/platform/android/android_thermal_monitor.cpp.o CMakeFiles/aether_android.dir/platform/android/android_frame_profiler.cpp.o CMakeFiles/aether_android.dir/platform/android/android_frame_pacer.cpp.o CMakeFiles/aether_android.dir/platform/android/android_window.cpp.o CMakeFiles/aether_android.dir/platform/android/android_paths.cpp.o CMakeFiles/aether_android.dir/platform/android/android_vulkan_surface.cpp.o CMakeFiles/aether_android.dir/platform/android/android_triangle_renderer.cpp.o CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o CMakeFiles/aether_android.dir/platform/android/material_preview_resources.cpp.o CMakeFiles/aether_android.dir/platform/android/dotnet_host.cpp.o CMakeFiles/aether_android.dir/platform/android/dotnet_assets.cpp.o CMakeFiles/aether_android.dir/platform/android/astc_encode_probe.cpp.o | libaether_core.a libaether_platform.a libaether_renderer.a libaether_rhi.a libaether_native_app_glue.a libaether_physics.a libaether_rendergraph.a libaether_core.a third_party/JoltPhysics/Build/libJolt.a || libaether_core.a libaether_native_app_glue.a libaether_physics.a libaether_platform.a libaether_renderer.a libaether_rendergraph.a libaether_rhi.a third_party/JoltPhysics/Build/libJolt.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
   LINK_FLAGS = -static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments  -Wl,--gc-sections   -uANativeActivity_onCreate -Wl,-z,max-page-size=16384 -pthread
-  LINK_LIBRARIES = libaether_core.a  libaether_platform.a  libaether_renderer.a  libaether_rhi.a  libaether_native_app_glue.a  -landroid  -llog  -lvulkan  -ldl  libaether_physics.a  libaether_core.a  -pthread  third_party/JoltPhysics/Build/libJolt.a  -latomic -lm
+  LINK_LIBRARIES = libaether_core.a  libaether_platform.a  libaether_renderer.a  libaether_rhi.a  libaether_native_app_glue.a  -landroid  -llog  -lvulkan  -ldl  libaether_physics.a  libaether_rendergraph.a  libaether_core.a  -pthread  third_party/JoltPhysics/Build/libJolt.a  -latomic -lm
   OBJECT_DIR = CMakeFiles\aether_android.dir
   POST_BUILD = cd .
   PRE_LINK = cd .

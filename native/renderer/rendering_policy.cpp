@@ -16,25 +16,45 @@ struct PresetPoint {
   PostQuality post;
   TextureQuality textures;
   float resolutionScale;
+  u32 shadowCascadeCount;
+  u32 shadowCascadeResolution;
+  u32 shadowFilterTaps;
+  u32 shadowFarFilterTaps;
+  float shadowMaximumDistance;
+  float shadowCacheGuardBandRatio;
+  float lodPixelErrorBudget;
+  float coverageLodPixelErrorBudget;
+  float lodHysteresisBandRatio;
+  float normalMapMaximumDistance;
+  float specularProbeMaximumDistance;
+  float metallicRoughnessMaximumDistance;
+  float emissiveMaximumDistance;
+  bool dynamicResolution;
+  float dynamicResolutionMinimumScale;
+  bool materialShaderVariants;
 };
 
 constexpr PresetPoint presetForProfile(rhi::DeviceProfile profile) {
   switch (profile) {
     case rhi::DeviceProfile::S:
       return {ShadowQuality::UltraSoft, AmbientQuality::HemisphericSpecular, PostQuality::Bloom,
-              TextureQuality::Full, 1.0f};
+               TextureQuality::Full, 1.0f, 4, 2048, 25, 9, 320.0f, 1.05f,
+               1.0f, 24.0f, 0.80f, 0.0f, 0.0f, 0.0f, 0.0f, false, 0.85f, true};
     case rhi::DeviceProfile::A:
       return {ShadowQuality::Soft, AmbientQuality::HemisphericSpecular, PostQuality::Bloom,
-              TextureQuality::Full, 1.0f};
+               TextureQuality::Full, 1.0f, 3, 1536, 9, 1, 220.0f, 1.06f,
+               1.5f, 32.0f, 0.78f, 220.0f, 400.0f, 300.0f, 400.0f, false, 0.78f, true};
     case rhi::DeviceProfile::B:
       return {ShadowQuality::Soft, AmbientQuality::Hemispheric, PostQuality::Tonemap,
-              TextureQuality::Full, 1.0f};
+               TextureQuality::Full, 1.0f, 2, 1024, 9, 1, 160.0f, 1.08f,
+               2.5f, 48.0f, 0.75f, 60.0f, 120.0f, 180.0f, 240.0f, false, 0.58f, false};
     case rhi::DeviceProfile::C:
     default:
       // O perfil base não perde direcionalidade do sol: mantém uma cascata dura,
       // que é o que separa "sombra barata" de "sem noção de oclusão".
       return {ShadowQuality::Hard, AmbientQuality::Hemispheric, PostQuality::None,
-              TextureQuality::Half, 0.85f};
+               TextureQuality::Half, 0.85f, 1, 768, 1, 1, 90.0f, 1.10f,
+               4.0f, 64.0f, 0.70f, 60.0f, 120.0f, 90.0f, 120.0f, true, 0.55f, false};
   }
 }
 
@@ -88,15 +108,15 @@ ShadowSettings deriveShadows(ShadowQuality quality, u32 maximumResolution) {
   ShadowSettings settings{};
   switch (quality) {
     case ShadowQuality::UltraSoft:
-      settings = {true, 4, 2048, 25, 320.0f, 1.25f, 2.0f, 2.5f, true};
+      settings = {true, 4, 2048, 25, 9, 320.0f, 1.25f, 2.0f, 2.5f, true, true, 1.05f};
       break;
     case ShadowQuality::Soft:
-      settings = {true, 3, 1536, 9, 220.0f, 1.5f, 2.25f, 2.0f, true};
+      settings = {true, 3, 1536, 9, 1, 220.0f, 1.5f, 2.25f, 2.0f, true, true, 1.08f};
       break;
     case ShadowQuality::Hard:
       // Uma cascata sem filtro ainda dá ao sol uma direção: objetos passam a
       // ocluir uns aos outros. O bias sobe porque, sem PCF, o acne aparece antes.
-      settings = {true, 1, 1024, 1, 120.0f, 2.0f, 3.0f, 1.0f, true};
+      settings = {true, 1, 1024, 1, 1, 120.0f, 2.0f, 3.0f, 1.0f, true, true, 1.10f};
       break;
     case ShadowQuality::Off:
     case ShadowQuality::Inherit:
@@ -109,18 +129,30 @@ ShadowSettings deriveShadows(ShadowQuality quality, u32 maximumResolution) {
 
 AmbientSettings deriveAmbient(AmbientQuality quality) {
   switch (quality) {
-    case AmbientQuality::HemisphericSpecular: return {true, true};
-    case AmbientQuality::Hemispheric: return {true, false};
-    default: return {false, false};
+    case AmbientQuality::HemisphericSpecular: return {true, true, true};
+    case AmbientQuality::Hemispheric: return {true, false, false};
+    default: return {false, false, false};
   }
 }
 
 PostSettings derivePost(PostQuality quality) {
   switch (quality) {
-    case PostQuality::Bloom: return {true, true, 1.15f, 0.35f};
-    case PostQuality::Tonemap: return {true, false, 1.0f, 0.0f};
+    case PostQuality::Bloom:
+      return {true, true, true, true, 1.15f, 0.28f, 1.04f, 1.03f, 0.12f, 0.16f};
+    case PostQuality::Tonemap:
+      return {true, false, true, false, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f};
     default: return {};
   }
+}
+
+bool enabledOverride(FeatureOverride value, bool inheritedValue) {
+  if (value == FeatureOverride::Enabled) return true;
+  if (value == FeatureOverride::Disabled) return false;
+  return inheritedValue;
+}
+
+u32 normalizedShadowFilterTaps(u32 taps) {
+  return taps >= 25u ? 25u : taps >= 9u ? 9u : 1u;
 }
 
 TextureSettings deriveTextures(TextureQuality quality, float maximumAnisotropy) {
@@ -294,6 +326,57 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
   const u32 maximumCascadeResolution =
       std::max(256u, std::min(capabilities.maximumImage2DSize, 4096u));
   ShadowSettings shadowSettings = deriveShadows(shadows, maximumCascadeResolution);
+  if (shadowSettings.enabled) {
+    // A linha do preset também pode escolher números dentro do mesmo algoritmo;
+    // perfis não se resumem a três nomes de shader. Um override semântico
+    // explícito (por exemplo, Ultra sobre perfil B) usa os defaults daquele eixo.
+    if (settings.shadows == ShadowQuality::Inherit && thermalSteps == 0) {
+      shadowSettings.cascadeCount = point.shadowCascadeCount;
+      shadowSettings.cascadeResolution = point.shadowCascadeResolution;
+      shadowSettings.filterTaps = point.shadowFilterTaps;
+      shadowSettings.farFilterTaps = point.shadowFarFilterTaps;
+      shadowSettings.maximumDistance = point.shadowMaximumDistance;
+      shadowSettings.cacheGuardBandRatio = point.shadowCacheGuardBandRatio;
+    }
+    if (settings.shadowCascadeCount != 0)
+      shadowSettings.cascadeCount = std::clamp(settings.shadowCascadeCount, 1u, 4u);
+    if (settings.shadowCascadeResolution != 0)
+      shadowSettings.cascadeResolution = std::clamp(settings.shadowCascadeResolution, 256u,
+                                                     maximumCascadeResolution);
+    if (settings.shadowFilterTaps != 0) {
+      // O shader possui kernels quadrados 1x1, 3x3 e 5x5. Valores intermediários
+      // são normalizados aqui, uma vez por época, nunca por fragmento.
+      shadowSettings.filterTaps = normalizedShadowFilterTaps(settings.shadowFilterTaps);
+    }
+    if (settings.shadowFarFilterTaps != 0)
+      shadowSettings.farFilterTaps = normalizedShadowFilterTaps(settings.shadowFarFilterTaps);
+    shadowSettings.farFilterTaps = std::min(shadowSettings.farFilterTaps,
+                                             shadowSettings.filterTaps);
+    if (std::isfinite(settings.shadowMaximumDistance) && settings.shadowMaximumDistance > 0.0f)
+      shadowSettings.maximumDistance = settings.shadowMaximumDistance;
+    if (std::isfinite(settings.shadowDepthBiasConstant) && settings.shadowDepthBiasConstant >= 0.0f)
+      shadowSettings.depthBiasConstant = settings.shadowDepthBiasConstant;
+    if (std::isfinite(settings.shadowDepthBiasSlope) && settings.shadowDepthBiasSlope >= 0.0f)
+      shadowSettings.depthBiasSlope = settings.shadowDepthBiasSlope;
+    if (std::isfinite(settings.shadowNormalOffsetTexels) && settings.shadowNormalOffsetTexels >= 0.0f)
+      shadowSettings.normalOffsetTexels = settings.shadowNormalOffsetTexels;
+    shadowSettings.staticCasterCache =
+        enabledOverride(settings.staticShadowCache, shadowSettings.staticCasterCache);
+    if (std::isfinite(settings.shadowCacheGuardBandRatio) &&
+        settings.shadowCacheGuardBandRatio >= 1.0f) {
+      shadowSettings.cacheGuardBandRatio =
+          std::clamp(settings.shadowCacheGuardBandRatio, 1.0f, 1.25f);
+    }
+    // O backend móvel atual empacota até quatro cascatas num atlas 2x2. Limitar
+    // aqui preserva a mesma política auditável em vez de deixar vkCreateImage
+    // falhar tarde ou criar uma tabela privada dentro do backend.
+    const u32 atlasGrid = shadowSettings.cascadeCount > 1 ? 2u : 1u;
+    const u32 atlasMaximumCascade = std::max(256u, capabilities.maximumImage2DSize / atlasGrid);
+    if (shadowSettings.cascadeResolution > atlasMaximumCascade) {
+      shadowSettings.cascadeResolution = atlasMaximumCascade;
+      note("shadows.cascadeResolution", PolicyClamp::Capability);
+    }
+  }
   if (shadowSettings.enabled && shadowSettings.cascadeCount > capabilities.maximumImageArrayLayers) {
     shadowSettings.cascadeCount = std::max(1u, capabilities.maximumImageArrayLayers);
     note("shadows.cascadeCount", PolicyClamp::Capability);
@@ -315,11 +398,99 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
   policy.frame = makeFrameBudget(capabilities.displayHz, requestedHz, 60);
 
   policy.visibility = {};
+  policy.visibility.lodPixelErrorBudget =
+      std::isfinite(settings.lodPixelErrorBudget) && settings.lodPixelErrorBudget > 0.0f
+          ? std::clamp(settings.lodPixelErrorBudget, 0.25f, 16.0f)
+          : point.lodPixelErrorBudget;
+  policy.visibility.coverageLodPixelErrorBudget =
+      std::isfinite(settings.coverageLodPixelErrorBudget) &&
+              settings.coverageLodPixelErrorBudget > 0.0f
+          ? std::clamp(settings.coverageLodPixelErrorBudget, 0.25f, 128.0f)
+          : point.coverageLodPixelErrorBudget;
+  policy.visibility.lodHysteresisBandRatio =
+      std::isfinite(settings.lodHysteresisBandRatio) && settings.lodHysteresisBandRatio > 0.0f
+          ? std::clamp(settings.lodHysteresisBandRatio, 0.1f, 0.99f)
+          : point.lodHysteresisBandRatio;
   policy.shadows = shadowSettings;
   policy.ambient = deriveAmbient(ambient);
+  policy.ambient.splitSumBrdf = policy.ambient.specularProbe &&
+      enabledOverride(settings.environmentSplitSumBrdf, policy.ambient.splitSumBrdf);
   policy.post = derivePost(post);
+  policy.post.fxaa = enabledOverride(settings.postFxaa, policy.post.fxaa);
+  policy.post.vignette = enabledOverride(settings.postVignette, policy.post.vignette);
+  if (std::isfinite(settings.bloomThreshold) && settings.bloomThreshold >= 0.0f)
+    policy.post.bloomThreshold = std::clamp(settings.bloomThreshold, 0.0f, 8.0f);
+  if (std::isfinite(settings.bloomIntensity) && settings.bloomIntensity >= 0.0f)
+    policy.post.bloomIntensity = std::clamp(settings.bloomIntensity, 0.0f, 2.0f);
+  if (std::isfinite(settings.postContrast) && settings.postContrast >= 0.0f)
+    policy.post.contrast = std::clamp(settings.postContrast, 0.5f, 2.0f);
+  if (std::isfinite(settings.postSaturation) && settings.postSaturation >= 0.0f)
+    policy.post.saturation = std::clamp(settings.postSaturation, 0.0f, 2.0f);
+  if (std::isfinite(settings.postSharpen) && settings.postSharpen >= 0.0f)
+    policy.post.sharpen = std::clamp(settings.postSharpen, 0.0f, 1.0f);
+  // Qualquer filtro solicitado exige o passe, mesmo quando o preset base usava
+  // tonemap inline. Isto mantém cada eixo independente de nome de preset.
+  if (policy.post.bloom || policy.post.fxaa || policy.post.vignette ||
+      policy.post.sharpen > 0.0f || policy.post.contrast != 1.0f ||
+      policy.post.saturation != 1.0f) {
+    policy.post.dedicatedPass = true;
+  }
   policy.textures = textureSettings;
+  policy.materialDistance.normalMapMaximumDistance =
+      std::isfinite(settings.normalMapMaximumDistance) && settings.normalMapMaximumDistance >= 0.0f
+          ? settings.normalMapMaximumDistance : point.normalMapMaximumDistance;
+  policy.materialDistance.specularProbeMaximumDistance =
+      std::isfinite(settings.specularProbeMaximumDistance) && settings.specularProbeMaximumDistance >= 0.0f
+          ? settings.specularProbeMaximumDistance : point.specularProbeMaximumDistance;
+  policy.materialDistance.metallicRoughnessMaximumDistance =
+      std::isfinite(settings.metallicRoughnessMaximumDistance) &&
+              settings.metallicRoughnessMaximumDistance >= 0.0f
+          ? settings.metallicRoughnessMaximumDistance : point.metallicRoughnessMaximumDistance;
+  policy.materialDistance.emissiveMaximumDistance =
+      std::isfinite(settings.emissiveMaximumDistance) && settings.emissiveMaximumDistance >= 0.0f
+          ? settings.emissiveMaximumDistance : point.emissiveMaximumDistance;
+  policy.materialDistance.fadeBandRatio =
+      std::isfinite(settings.materialDetailFadeBandRatio) &&
+              settings.materialDetailFadeBandRatio >= 0.0f
+          ? std::clamp(settings.materialDetailFadeBandRatio, 0.0f, 0.5f)
+          : 0.20f;
+  policy.geometry.lodSelection = enabledOverride(settings.lodSelection, true);
+  policy.geometry.materialShaderVariants =
+      enabledOverride(settings.materialShaderVariants, point.materialShaderVariants);
   policy.resolutionScale = std::clamp(resolutionScale, 0.5f, 1.0f);
+  policy.dynamicResolution.enabled =
+      enabledOverride(settings.dynamicResolution, point.dynamicResolution);
+  policy.dynamicResolution.maximumScale = policy.resolutionScale;
+  const float requestedMinimumScale =
+      std::isfinite(settings.dynamicResolutionMinimumScale) &&
+              settings.dynamicResolutionMinimumScale > 0.0f
+          ? settings.dynamicResolutionMinimumScale : point.dynamicResolutionMinimumScale;
+  policy.dynamicResolution.minimumScale =
+      std::clamp(requestedMinimumScale, 0.5f, policy.dynamicResolution.maximumScale);
+  if (std::isfinite(settings.dynamicResolutionDecreaseStep) &&
+      settings.dynamicResolutionDecreaseStep > 0.0f)
+    policy.dynamicResolution.decreaseStep =
+        std::clamp(settings.dynamicResolutionDecreaseStep, 0.01f, 0.25f);
+  if (std::isfinite(settings.dynamicResolutionIncreaseStep) &&
+      settings.dynamicResolutionIncreaseStep > 0.0f)
+    policy.dynamicResolution.increaseStep =
+        std::clamp(settings.dynamicResolutionIncreaseStep, 0.005f, 0.25f);
+  if (std::isfinite(settings.dynamicResolutionRecoveryHeadroomRatio) &&
+      settings.dynamicResolutionRecoveryHeadroomRatio > 0.0f)
+    policy.dynamicResolution.recoveryHeadroomRatio =
+        std::clamp(settings.dynamicResolutionRecoveryHeadroomRatio, 0.5f, 0.95f);
+  if (settings.dynamicResolutionOverloadFrames != 0)
+    policy.dynamicResolution.overloadFrames =
+        std::clamp(settings.dynamicResolutionOverloadFrames, 1u, 240u);
+  if (settings.dynamicResolutionRecoveryFrames != 0)
+    policy.dynamicResolution.recoveryFrames =
+        std::clamp(settings.dynamicResolutionRecoveryFrames, 1u, 1200u);
+  // Escala menor que a swapchain precisa de um resolve/upscale; portanto o
+  // passe deixa de ser opcional mesmo se todos os filtros estiverem desligados.
+  if (policy.resolutionScale < 0.999f ||
+      (policy.dynamicResolution.enabled &&
+       policy.dynamicResolution.minimumScale < policy.dynamicResolution.maximumScale - 1.0e-4f))
+    policy.post.dedicatedPass = true;
   return policy;
 }
 

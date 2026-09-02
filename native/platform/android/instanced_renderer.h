@@ -4,6 +4,7 @@
 #include "profiler/frame_statistics.h"
 #include "platform/android/dotnet_host.h"
 #include "rhi/bindless_registry.h"
+#include "rhi/compute.h"
 #include "rhi/device.h"
 #include "rhi/gpu_frame_timer.h"
 #include "rhi/memory_allocator.h"
@@ -13,10 +14,13 @@
 #include "renderer/gpu_cost_isolation.h"
 #include "renderer/frame_graph.h"
 #include "renderer/frustum_visibility.h"
+#include "renderer/gpu_draw_culling.h"
 #include "renderer/hzb_visibility.h"
 #include "renderer/lod_selection.h"
 #include "renderer/render_instance.h"
+#include "renderer/rendering_policy.h"
 #include "renderer/runtime_hud.h"
+#include "renderer/shadow_cascades.h"
 #include "platform/android/material_preview_resources.h"
 #include "platform/android/dirt_road_resources.h"
 #include "platform/free_camera_controller.h"
@@ -97,7 +101,9 @@ public:
   u32 profileRenderDrawCount() const {
     return dirtRoadPreview_ ? static_cast<u32>(dirtRoadResources_.draws().size()) : 0;
   }
-  u32 profileLodGroupCount() const { return static_cast<u32>(lodGroups_.size()); }
+  u32 profileLodGroupCount() const {
+    return static_cast<u32>(lodGroups_.size() + coverageLodGroups_.size());
+  }
   int lastExtractionStatus() const { return lastExtractionStatus_; }
   // Diagnostic only: computed on demand at lifecycle/mutation checkpoints.
   u64 snapshotFingerprint() const;
@@ -112,6 +118,25 @@ public:
   // memoryless entrega; nunca é um preset de qualidade.
   void setDisableTransientDepth(bool disabled) { disableTransientDepth_ = disabled; }
   void setRuntimeHudEnabled(bool enabled) { runtimeHudEnabled_ = enabled; }
+  void setAdpfGpuTimingEnabled(bool enabled) { adpfGpuTimingEnabled_ = enabled; }
+  // Uma cópia imutável por época de renderer. Nenhum passe consulta nome de
+  // preset; todos consomem somente estes budgets já resolvidos.
+  void setRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy) {
+    resourceRenderingPolicy_ = policy;
+    applyRuntimeRenderingPolicy(policy);
+  }
+  // Reconfigura somente eixos que não alteram o layout dos recursos Vulkan.
+  // A política usada na criação permanece em resourceRenderingPolicy_: assim
+  // pressão térmica pode reduzir e depois recuperar qualidade sem reconstruir
+  // atlas, render pass, pipelines, descritores ou assets.
+  void setRuntimeRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy);
+  // Scene/transform systems call this when any static caster, material alpha or
+  // sun configuration changes. A câmera não precisa invalidar manualmente: o
+  // renderer testa contenção de cada cascata antes de reutilizá-la.
+  void invalidateStaticShadowCache() {
+    shadowCacheInitialized_ = false;
+    shadowCascadeDirtyMask_ = 0xffffffffu;
+  }
   // HZB (Hi-Z) conservative occlusion culling -- see native/renderer/
   // hzb_visibility.h for the pure CPU decision layer this feeds, and
   // PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md for the sync/barrier design this
@@ -121,6 +146,27 @@ public:
   // passes, matching every other experimental flag in this renderer.
   void setHzbOcclusionEnabled(bool enabled) { hzbOcclusionEnabled_ = enabled; }
   bool hzbOcclusionEnabled() const { return hzbOcclusionEnabled_; }
+  // GPU-only depth-pyramid producer. This is independent from the legacy
+  // CPU-readback occlusion consumer: C1 can be validated without silently
+  // claiming C2 (GPU culling/indirect compaction) is already delivered.
+  void setHzbComputeEnabled(bool enabled) { hzbComputeEnabled_ = enabled; }
+  bool hzbComputeEnabled() const { return hzbComputeEnabled_; }
+  bool hzbComputeActive() const { return hzbComputeActive_; }
+  // Diagnostic only. Production compute keeps the pyramid resident on GPU;
+  // enabling this copies it back one frame later and validates every 2x2 max.
+  void setHzbComputeReadbackValidationEnabled(bool enabled) {
+    hzbComputeReadbackValidationEnabled_ = enabled;
+  }
+  // C2: o consumidor GPU da pirâmide. Sem ele o produtor compute custa tempo de
+  // GPU medido e não remove um único triângulo, porque a decisão continuava na
+  // CPU e a CPU perdeu o readback. O kernel escreve o instanceCount dos
+  // comandos indiretos que o passe opaco já submete; nenhum estágio gráfico
+  // precisa saber que ele existe. Exige o produtor compute e multi-draw
+  // indirect, e permanece opt-in (aether.hzb_gpu_culling) enquanto não houver
+  // A/B físico com gate de imagem, como todo experimento deste renderer.
+  void setHzbGpuCullingEnabled(bool enabled) { hzbGpuCullingEnabled_ = enabled; }
+  bool hzbGpuCullingEnabled() const { return hzbGpuCullingEnabled_; }
+  bool hzbGpuCullingActive() const { return hzbGpuCullingActive_; }
   // Consecutive occluded frames required before an object is actually culled
   // (grace period; 0 means cull on the first occluded test). See
   // renderer::updateHzbHysteresis for the exact contract.
@@ -131,23 +177,32 @@ public:
   }
   // LOD selection by projected screen-space error -- see
   // native/renderer/lod_selection.h and tools/cook-gltf-map.py's simplifier.
-  // Off by default; opt-in via aether.lod_selection. Also NOT validated on
-  // physical hardware yet -- see setHzbOcclusionEnabled's note, the same
-  // gate applies here.
+  // Policy-controlled and overrideable via aether.lod_selection. Disabling
+  // adaptive selection fixes every group at LOD0; it never submits all stored
+  // levels simultaneously.
   void setLodSelectionEnabled(bool enabled) { lodSelectionEnabled_ = enabled; }
   bool lodSelectionEnabled() const { return lodSelectionEnabled_; }
   // Screen-space error budget in pixels and the hysteresis band ratio (see
   // renderer::selectLodLevel) -- data-driven budgets, never hardcoded
   // per-scene (ADR-014).
   void setLodPixelErrorBudget(float budget) { lodPixelErrorBudget_ = budget; }
+  void setCoverageLodPixelErrorBudget(float budget) {
+    coverageLodPixelErrorBudget_ = budget;
+  }
   void setLodHysteresisBandRatio(float ratio) { lodHysteresisBandRatio_ = ratio; }
+  float lodPixelErrorBudget() const { return lodPixelErrorBudget_; }
+  float coverageLodPixelErrorBudget() const { return coverageLodPixelErrorBudget_; }
   renderer::GpuCostIsolation gpuCostIsolation() const { return gpuCostIsolation_; }
   const renderer::VisibilityTelemetry &visibilityTelemetry() const {
     return visibilityTelemetry_;
   }
   const profiler::RenderPhaseTimings &lastFrameTimings() const { return lastFrameTimings_; }
+  float currentRenderScale() const { return dynamicResolution_.scale(); }
+  u32 currentRenderWidth() const { return renderWidth(); }
+  u32 currentRenderHeight() const { return renderHeight(); }
 
 private:
+  void applyRuntimeRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy);
   bool createRenderPass();
   bool createPipeline();
   bool createFramebuffers();
@@ -161,6 +216,12 @@ private:
   bool createEnvironmentDescriptors();
   bool createSkyPipeline();
   bool createRuntimeHudPipeline();
+  bool createPostResources();
+  void destroyPostResources();
+  void recordPostProcess(u32 imageIndex);
+  bool createShadowResources();
+  void destroyShadowResources();
+  void recordShadowPass(const platform::FreeCameraState &camera);
   bool createHzbResources();
   void destroyHzbResources();
   bool createHzbPipeline(const u32 *vertSpirv, u32 vertSpirvSize, const u32 *fragSpirv, u32 fragSpirvSize,
@@ -177,6 +238,25 @@ private:
   // acquireNextImage fence wait already guarantees that copy fully landed, so
   // this never introduces a new stall (see PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md).
   void readHzbPyramidFromPreviousFrame();
+  // Oclusão GPU-driven (ADR-016, consumidor C2). Os recursos vivem ao lado dos
+  // do HZB porque dependem das mesmas imagens; createHzbResources() chama a
+  // criação no fim, e destroyHzbResources() a destruição no início.
+  bool createDrawCullResources();
+  void destroyDrawCullResources();
+  // Grava o dispatch que escreve o instanceCount dos comandos indiretos. Tem de
+  // ficar FORA de qualquer render pass e ANTES do passe opaco. A contagem
+  // despachada é a capacidade da lista de comandos, não o número de comandos
+  // deste frame: a lista só é construída dentro do render pass, e um dispatch
+  // já gravado não pode reler push constants. Registros de sobra ficam com
+  // flags=0 e o kernel os ignora sem escrever nada.
+  void recordDrawCullDispatch(const platform::FreeCameraState &camera);
+  // Telemetria dos contadores atômicos do kernel, lida um frame depois no mesmo
+  // ponto de collectPrevious(). Diagnóstico: nunca realimenta uma decisão.
+  void readDrawCullTelemetryFromPreviousFrame();
+  // Frustum do frame. Duas etapas o consomem (o dispatch de culling, antes do
+  // render pass, e a seleção de LOD/visibilidade dentro dele) e as duas têm de
+  // enxergar exatamente o mesmo volume.
+  renderer::PerspectiveFrustum buildFrameFrustum(const platform::FreeCameraState &camera) const;
   // Uma região de GPU é sempre marcador de debug + timestamp, nunca um dos
   // dois: um marcador sem métrica é uma captura que não fecha com o relatório,
   // e uma métrica sem marcador é um número que a captura não consegue
@@ -216,6 +296,18 @@ private:
   VkPipeline coveragePipeline_ = VK_NULL_HANDLE;
   VkPipeline coverageShadePipeline_ = VK_NULL_HANDLE;
   VkPipeline transparentPipeline_ = VK_NULL_HANDLE;
+  // Distance-material LOD pipelines. They keep the same geometry/material and
+  // remove only normal-map work after an entire draw bound leaves the global
+  // normal-detail radius.
+  VkPipeline opaqueDistantPipeline_ = VK_NULL_HANDLE;
+  VkPipeline coverageDistantPipeline_ = VK_NULL_HANDLE;
+  VkPipeline transparentDistantPipeline_ = VK_NULL_HANDLE;
+  // Lazily populated only for feature combinations present in the cooked map.
+  // Each specialization removes absent normal/MR/emissive paths before driver
+  // optimization; arrays remain backend implementation detail, not public API.
+  VkPipeline opaqueMaterialPipelines_[renderer::MaterialFeatureVariantCount]{};
+  VkPipeline coverageMaterialPipelines_[renderer::MaterialFeatureVariantCount]{};
+  VkPipeline transparentMaterialPipelines_[renderer::MaterialFeatureVariantCount]{};
   VkDescriptorSetLayout environmentSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorPool environmentPool_ = VK_NULL_HANDLE;
   VkDescriptorSet environmentSet_ = VK_NULL_HANDLE;
@@ -224,10 +316,58 @@ private:
   VkPipeline skyPipeline_ = VK_NULL_HANDLE;
   VkPipelineLayout runtimeHudPipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline runtimeHudPipeline_ = VK_NULL_HANDLE;
-
   static constexpr u32 kMaxFramebuffers = 8;
+  VkRenderPass postRenderPass_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout postSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorPool postDescriptorPool_ = VK_NULL_HANDLE;
+  VkDescriptorSet postDescriptorSet_ = VK_NULL_HANDLE;
+  VkPipelineLayout postPipelineLayout_ = VK_NULL_HANDLE;
+  VkPipeline postPipeline_ = VK_NULL_HANDLE;
+  rhi::VulkanImage postSceneColor_{};
+  rhi::VulkanSampler postSampler_{};
+  VkFramebuffer postFramebuffers_[kMaxFramebuffers]{};
+  VkRenderPass shadowRenderPass_ = VK_NULL_HANDLE;
+  VkRenderPass shadowCachedRenderPass_ = VK_NULL_HANDLE;
+  VkFramebuffer shadowFramebuffer_ = VK_NULL_HANDLE;
+  VkFramebuffer shadowCachedFramebuffer_ = VK_NULL_HANDLE;
+  VkPipelineLayout shadowPipelineLayout_ = VK_NULL_HANDLE;
+  VkPipeline shadowOpaquePipeline_ = VK_NULL_HANDLE;
+  VkPipeline shadowMaskedPipeline_ = VK_NULL_HANDLE;
+  rhi::VulkanImage shadowAtlas_{};
+  rhi::VulkanSampler shadowSampler_{};
+  VkFormat shadowDepthFormat_ = VK_FORMAT_UNDEFINED;
+  renderer::ShadowCascade shadowCascades_[renderer::MaximumShadowCascades]{};
+  u32 shadowCascadeCount_ = 0;
+  u32 shadowCascadeDirtyMask_ = 0xffffffffu;
+  bool shadowCacheInitialized_ = false;
+  u32 shadowCandidateDraws_ = 0;
+  u32 shadowSubmittedDraws_ = 0;
+  u32 shadowRenderedCascades_ = 0;
+  u64 shadowCacheHitFrames_ = 0;
+
   VkFramebuffer framebuffers_[kMaxFramebuffers]{};
   u32 framebufferCount_ = 0;
+
+  u32 renderTargetWidth() const {
+    return std::max(1u, static_cast<u32>(static_cast<float>(swapchain_->width()) *
+                                        renderingPolicy_.resolutionScale));
+  }
+  u32 renderTargetHeight() const {
+    return std::max(1u, static_cast<u32>(static_cast<float>(swapchain_->height()) *
+                                        renderingPolicy_.resolutionScale));
+  }
+  u32 renderWidth() const {
+    return dynamicResolution_.scale() >= renderingPolicy_.resolutionScale - 1.0e-4f
+               ? renderTargetWidth()
+               : std::min(renderTargetWidth(), renderer::scaledRenderExtent(
+                                                   swapchain_->width(), dynamicResolution_.scale()));
+  }
+  u32 renderHeight() const {
+    return dynamicResolution_.scale() >= renderingPolicy_.resolutionScale - 1.0e-4f
+               ? renderTargetHeight()
+               : std::min(renderTargetHeight(), renderer::scaledRenderExtent(
+                                                    swapchain_->height(), dynamicResolution_.scale()));
+  }
 
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
   VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
@@ -265,6 +405,7 @@ private:
     u32 firstCommand = 0;
     u32 commandCount = 0;
     u64 triangles = 0;
+    bool distantMaterial = false;
   };
   std::vector<VkDrawIndexedIndirectCommand> indirectCommands_;
   std::vector<IndirectBatch> indirectSolidBatches_;
@@ -290,7 +431,11 @@ private:
   // Timestamps de GPU acompanham o perfil. Uma tentativa de desacoplar os dois
   // para alimentar cadência adaptativa foi medida e retirada — ver
   // PROFILING-ANDROID.md, "Cadência adaptativa rejeitada".
-  bool gpuTimingEnabled() const { return frameProfilingEnabled_; }
+  bool gpuTimingEnabled() const {
+    return frameProfilingEnabled_ || adpfGpuTimingEnabled_ ||
+           renderingPolicy_.dynamicResolution.enabled;
+  }
+  bool adpfGpuTimingEnabled_ = false;
   bool coveragePrepassEnabled_ = true;
   bool runtimeHudEnabled_ = false;
   renderer::PerspectiveVisibilitySettings visibilitySettings_{};
@@ -298,6 +443,11 @@ private:
   u64 renderedFrameCount_ = 0;
   renderer::GpuCostIsolation gpuCostIsolation_ = renderer::GpuCostIsolation::Full;
   profiler::RenderPhaseTimings lastFrameTimings_{};
+  // Limites para os quais os recursos foram realmente criados. A política
+  // ativa abaixo pode apenas reduzir estes limites durante a época atual.
+  renderer::ResolvedRenderingPolicy resourceRenderingPolicy_{};
+  renderer::ResolvedRenderingPolicy renderingPolicy_{};
+  renderer::DynamicResolutionController dynamicResolution_{};
 
   // HZB (Hi-Z) occlusion culling -- see setHzbOcclusionEnabled() above and
   // native/renderer/hzb_visibility.h. All levels share one small render pass
@@ -306,6 +456,12 @@ private:
   // resources are (createHzbResources()/destroyHzbResources() mirror
   // createDepthImage()/destroyFramebuffers()'s lifecycle exactly).
   bool hzbOcclusionEnabled_ = false;
+  bool hzbComputeEnabled_ = false;
+  bool hzbComputeReadbackValidationEnabled_ = false;
+  bool hzbComputeActive_ = false;
+  bool hzbComputeImagesInitialized_ = false;
+  bool hzbReadbackRecordedThisFrame_ = false;
+  bool hzbComputeValidationLogged_ = false;
   // Static workload gate resolved after render packets are built and before
   // depth/render-pass allocation. Keeps a requested HZB observable while
   // avoiding sampled depth, STORE and reduction resources for small scenes.
@@ -321,6 +477,7 @@ private:
   static constexpr u32 kHzbLevelCount = 6;
   struct HzbLevelResources final {
     rhi::VulkanImage image{};
+    rhi::VulkanComputeKernel computeKernel{};
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
     // Descriptor set bound while PRODUCING this level: level 0's set samples
     // depthImage_; level i>0's set samples hzbLevels_[i-1].image.
@@ -361,6 +518,23 @@ private:
   // Sized/reset in createInstanceBuffer() alongside instanceCount_.
   std::vector<renderer::HzbHysteresisState> hzbHysteresis_;
 
+  // Oclusão GPU-driven (ver setHzbGpuCullingEnabled). Os três buffers são
+  // host-visible pela mesma razão que instanceBuffer_/indirectBuffer_ já são:
+  // a CPU os preenche por frame e o custo de um staging dedicado superaria os
+  // ~20 KiB em jogo. drawCullStateBuffer_ é o único persistente entre frames.
+  bool hzbGpuCullingEnabled_ = false;
+  bool hzbGpuCullingActive_ = false;
+  bool drawCullDispatchedThisFrame_ = false;
+  bool drawCullContractLogged_ = false;
+  rhi::VulkanComputeKernel drawCullKernel_{};
+  rhi::VulkanBuffer drawCullRecordBuffer_{};
+  rhi::VulkanBuffer drawCullStateBuffer_{};
+  rhi::VulkanBuffer drawCullTelemetryBuffer_{};
+  u32 drawCullCapacity_ = 0;
+  // [0]=testados [1]=ocluidos [2]=revividos [3]=visiveis, do dispatch do frame
+  // ANTERIOR. Diagnostico: nunca realimenta uma decisao deste frame.
+  std::array<u32, 4> drawCullTelemetry_{};
+
   // LOD selection (see setLodSelectionEnabled above). Built once at load in
   // initialize() (see the lodGroupId bucketing next to
   // solidDrawOrder_/coverageDrawOrder_'s own construction); lodGroups_[i] is
@@ -369,19 +543,33 @@ private:
   // index-aligned with lodGroups_ (NOT keyed by lodGroupId directly).
   bool lodSelectionEnabled_ = false;
   float lodPixelErrorBudget_ = 2.0f;
+  float coverageLodPixelErrorBudget_ = 32.0f;
   float lodHysteresisBandRatio_ = 0.75f;
   // One imported lodGroupId may contain MANY spatial chunks per LOD level.
   // Grouping levels as buckets (instead of assuming one draw == one level)
   // preserves chunk-level frustum/indirect submission after LOD selection.
   std::vector<renderer::LodRenderGroup> lodGroups_;
+  // Alpha-tested vegetation writes depth and uses the same dither-capable
+  // shader, but remains in a distinct material pipeline.  Keep its LOD
+  // groups separate so filtering never changes opaque/coverage ordering.
+  std::vector<renderer::LodRenderGroup> coverageLodGroups_;
   // Built once at load: the subset of solidDrawOrder_ that belongs to no
   // multi-level group (always a candidate, LOD selection never touches it).
   std::vector<u32> ungroupedSolidDrawOrder_;
+  std::vector<u32> ungroupedCoverageDrawOrder_;
+  // Maximum-quality fallback when adaptive selection is disabled.  A package
+  // stores every discrete level, but "LOD off" must mean LOD0 only -- drawing
+  // all levels simultaneously duplicates the same surface and is never a
+  // legitimate quality mode.
+  std::vector<u32> levelZeroSolidDrawOrder_;
+  std::vector<u32> levelZeroCoverageDrawOrder_;
   // Scratch, rebuilt every frame LOD selection runs: ungroupedSolidDrawOrder_
   // plus each group's currently-active (and, mid-transition, neighbor)
   // draw. Reserved once in initialize(); zero-alloc per frame like the
   // visible*DrawOrder_ scratch lists.
   std::vector<u32> lodFilteredSolidDrawOrder_;
+  std::vector<u32> lodFilteredCoverageDrawOrder_;
+  bool lodSelectionAppliedLastFrame_ = false;
 };
 
 } // namespace ae::platform::android

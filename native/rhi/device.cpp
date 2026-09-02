@@ -62,6 +62,8 @@ void VulkanSwapchain::destroySwapchainObjects() {
   }
   imageCount_ = 0;
   if (swapchain_ != VK_NULL_HANDLE) {
+    if (presentationScheduler_ != nullptr)
+      presentationScheduler_->onSwapchainDestroyed(device_, swapchain_);
     vkDestroySwapchainKHR(device_, swapchain_, nullptr);
     swapchain_ = VK_NULL_HANDLE;
   }
@@ -95,13 +97,15 @@ void VulkanSwapchain::shutdown() {
   physicalDevice_ = VK_NULL_HANDLE;
   surface_ = VK_NULL_HANDLE;
   graphicsQueue_ = VK_NULL_HANDLE;
+  presentationScheduler_ = nullptr;
   format_ = VK_FORMAT_UNDEFINED;
   extent_ = {0, 0};
 }
 
 bool VulkanSwapchain::initialize(VkDevice device, VkPhysicalDevice physicalDevice,
                                  VkSurfaceKHR surface, u32 graphicsQueueFamily,
-                                 u32 width, u32 height) {
+                                 u32 width, u32 height,
+                                 IVulkanPresentationScheduler *presentationScheduler) {
   if (device == VK_NULL_HANDLE || physicalDevice == VK_NULL_HANDLE ||
       surface == VK_NULL_HANDLE) {
     return false;
@@ -110,7 +114,10 @@ bool VulkanSwapchain::initialize(VkDevice device, VkPhysicalDevice physicalDevic
   physicalDevice_ = physicalDevice;
   surface_ = surface;
   graphicsQueueFamily_ = graphicsQueueFamily;
+  presentationScheduler_ = presentationScheduler;
   vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
+  if (presentationScheduler_ != nullptr)
+    presentationScheduler_->onQueueReady(device_, graphicsQueue_, graphicsQueueFamily_);
 
   // renderFinishedSemaphores_ não é criado aqui — depende de imageCount_,
   // só conhecido depois de recreate() (abaixo) consultar a swapchain real.
@@ -335,6 +342,9 @@ bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
     }
   }
 
+  if (presentationScheduler_ != nullptr)
+    presentationScheduler_->onSwapchainCreated(physicalDevice_, device_, swapchain_);
+
   return true;
 }
 
@@ -374,7 +384,9 @@ SwapchainStatus VulkanSwapchain::present(u32 imageIndex) {
   presentInfo.pSwapchains = &swapchain_;
   presentInfo.pImageIndices = &imageIndex;
 
-  const VkResult result = vkQueuePresentKHR(graphicsQueue_, &presentInfo);
+  const VkResult result = presentationScheduler_ != nullptr
+                              ? presentationScheduler_->queuePresent(graphicsQueue_, &presentInfo)
+                              : vkQueuePresentKHR(graphicsQueue_, &presentInfo);
   if (result == VK_ERROR_OUT_OF_DATE_KHR) return SwapchainStatus::OutOfDateMustRecreate;
   if (result == VK_ERROR_SURFACE_LOST_KHR) return SwapchainStatus::SurfaceLost;
   if (result == VK_SUBOPTIMAL_KHR) return SwapchainStatus::SuboptimalNeedsRecreate;
@@ -394,6 +406,8 @@ void VulkanDevice::shutdown() {
     vkDeviceWaitIdle(device_);
     pipelineCache_.shutdown();
     memoryAllocator_.shutdown();
+    if (presentationScheduler_ != nullptr)
+      presentationScheduler_->onDeviceDestroyed(device_);
     vkDestroyDevice(device_, nullptr);
     device_ = VK_NULL_HANDLE;
   }
@@ -413,10 +427,15 @@ void VulkanDevice::shutdown() {
   }
   physicalDevice_ = VK_NULL_HANDLE;
   graphicsQueueFamily_ = 0;
+  graphicsQueue_ = VK_NULL_HANDLE;
+  computeQueueFamily_ = UINT32_MAX;
+  computeQueue_ = VK_NULL_HANDLE;
+  computeLimits_ = {};
   bindlessTextureCapacity_ = 0;
   deviceFeatures_ = {};
   enabledPaths_ = {};
   deviceProfile_ = DeviceProfile::C;
+  presentationScheduler_ = nullptr;
 }
 
 #if AETHER_VULKAN_VALIDATION
@@ -663,12 +682,39 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   }
   if (!found) return false;
 
+  // Prefer a compute-only queue when available, but keep a combined
+  // graphics+compute family as the universal mobile fallback. A separate
+  // family is a capability, never an assumption: Render Graph may schedule
+  // async work only when this selection actually found one.
+  u32 selectedQueueCount = 0;
+  VkQueueFamilyProperties selectedQueues[16]{};
+  vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice_, &selectedQueueCount, nullptr);
+  selectedQueueCount = std::min(selectedQueueCount, 16u);
+  vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice_, &selectedQueueCount, selectedQueues);
+  if ((selectedQueues[graphicsQueueFamily_].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0)
+    computeQueueFamily_ = graphicsQueueFamily_;
+  for (u32 queueIndex = 0; queueIndex < selectedQueueCount; ++queueIndex) {
+    const auto flags = selectedQueues[queueIndex].queueFlags;
+    if ((flags & VK_QUEUE_COMPUTE_BIT) != 0 && (flags & VK_QUEUE_GRAPHICS_BIT) == 0) {
+      computeQueueFamily_ = queueIndex;
+      break;
+    }
+  }
+
   float priority = 1.0f;
-  VkDeviceQueueCreateInfo queueInfo{};
-  queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  queueInfo.queueFamilyIndex = graphicsQueueFamily_;
-  queueInfo.queueCount = 1;
-  queueInfo.pQueuePriorities = &priority;
+  VkDeviceQueueCreateInfo queueInfos[2]{};
+  queueInfos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  queueInfos[0].queueFamilyIndex = graphicsQueueFamily_;
+  queueInfos[0].queueCount = 1;
+  queueInfos[0].pQueuePriorities = &priority;
+  u32 queueCreateCount = 1;
+  if (computeQueueFamily_ != UINT32_MAX && computeQueueFamily_ != graphicsQueueFamily_) {
+    queueInfos[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueInfos[1].queueFamilyIndex = computeQueueFamily_;
+    queueInfos[1].queueCount = 1;
+    queueInfos[1].pQueuePriorities = &priority;
+    queueCreateCount = 2;
+  }
 
   // ASTC é o formato de compressão de textura obrigatório no piso de hardware do plano
   // (RNF-11: "Vulkan 1.1 + ASTC + 6 GB RAM"), então habilitá-lo aqui não é uma feature opcional
@@ -679,6 +725,10 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   vkGetPhysicalDeviceFeatures(physicalDevice_, &supportedFeatures);
   VkPhysicalDeviceFeatures enabledFeatures{};
   enabledFeatures.textureCompressionASTC_LDR = supportedFeatures.textureCompressionASTC_LDR;
+  // Core features still need explicit device enablement. Consumers use the
+  // enabled capability exposed below instead of re-querying physical support.
+  enabledFeatures.multiDrawIndirect = supportedFeatures.multiDrawIndirect;
+  enabledFeatures.drawIndirectFirstInstance = supportedFeatures.drawIndirectFirstInstance;
 
   // Item 2.1.4 (bindless via descriptor_indexing): VK_EXT_descriptor_indexing é core no Vulkan
   // 1.2+, mas continua exigindo consulta explícita de suporte — extensão core não significa
@@ -758,16 +808,27 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   VkDeviceCreateInfo deviceInfo{};
   deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   deviceInfo.pNext = bindlessSupported ? &enabledDescriptorIndexingFeatures : nullptr;
-  deviceInfo.queueCreateInfoCount = 1;
-  deviceInfo.pQueueCreateInfos = &queueInfo;
+  deviceInfo.queueCreateInfoCount = queueCreateCount;
+  deviceInfo.pQueueCreateInfos = queueInfos;
   deviceInfo.pEnabledFeatures = &enabledFeatures;
 
   std::vector<const char *> deviceExtensions;
+  std::vector<std::string> schedulerExtensions;
   if (presentationSurface != VK_NULL_HANDLE) {
     deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
   }
   if (bindlessSupported) {
     deviceExtensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+  }
+  if (presentationScheduler_ != nullptr) {
+    presentationScheduler_->requiredDeviceExtensions(physicalDevice_, schedulerExtensions);
+    for (const auto &extension : schedulerExtensions) {
+      const bool alreadyEnabled = std::any_of(
+          deviceExtensions.begin(), deviceExtensions.end(), [&](const char *name) {
+            return extension == name;
+          });
+      if (!alreadyEnabled) deviceExtensions.push_back(extension.c_str());
+    }
   }
   if (!deviceExtensions.empty()) {
     deviceInfo.enabledExtensionCount = static_cast<u32>(deviceExtensions.size());
@@ -777,6 +838,7 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   if (vkCreateDevice(physicalDevice_, &deviceInfo, nullptr, &device_) != VK_SUCCESS) {
     return false;
   }
+  vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
 
   if (!memoryAllocator_.initialize(instance_, physicalDevice_, device_,
                                    deriveMobileMemoryBudget(physicalDevice_))) {
@@ -791,11 +853,27 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   // a decisão aqui, só alimentamos com dados reais em vez dos valores à mão que os testes usam.
   VkPhysicalDeviceProperties deviceProperties{};
   vkGetPhysicalDeviceProperties(physicalDevice_, &deviceProperties);
+  if (computeQueueFamily_ != UINT32_MAX)
+    vkGetDeviceQueue(device_, computeQueueFamily_, 0, &computeQueue_);
   deviceFeatures_ = DeviceFeatures{};
   deviceFeatures_.vulkan1_3 = deviceProperties.apiVersion >= VK_API_VERSION_1_3;
   deviceFeatures_.descriptorIndexing = descriptorIndexingExtensionSupported;
   deviceFeatures_.bindlessNonUniformIndexing = bindlessSupported;
   deviceFeatures_.maxBoundDescriptorSets = deviceProperties.limits.maxBoundDescriptorSets;
+  deviceFeatures_.computeShaders = computeQueue_ != VK_NULL_HANDLE;
+  deviceFeatures_.dedicatedComputeQueue = computeQueueFamily_ != UINT32_MAX &&
+                                          computeQueueFamily_ != graphicsQueueFamily_;
+  deviceFeatures_.multiDrawIndirect = enabledFeatures.multiDrawIndirect == VK_TRUE;
+  deviceFeatures_.drawIndirectFirstInstance =
+      enabledFeatures.drawIndirectFirstInstance == VK_TRUE;
+  computeLimits_.supported = deviceFeatures_.computeShaders;
+  computeLimits_.dedicatedQueue = deviceFeatures_.dedicatedComputeQueue;
+  for (u32 axis = 0; axis < 3; ++axis) {
+    computeLimits_.maximumWorkGroupCount[axis] = deviceProperties.limits.maxComputeWorkGroupCount[axis];
+    computeLimits_.maximumWorkGroupSize[axis] = deviceProperties.limits.maxComputeWorkGroupSize[axis];
+  }
+  computeLimits_.maximumWorkGroupInvocations = deviceProperties.limits.maxComputeWorkGroupInvocations;
+  computeLimits_.maximumPushConstantBytes = deviceProperties.limits.maxPushConstantsSize;
   maximumImage2DSize_ = deviceProperties.limits.maxImageDimension2D;
   maximumImageArrayLayers_ = deviceProperties.limits.maxImageArrayLayers;
   // samplerAnisotropy é uma feature opcional: sem ela o limite reportado não vale,

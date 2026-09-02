@@ -24,13 +24,44 @@ O critério do plano principal é 60 FPS com CPU abaixo de 3 ms. Sucesso da
   A captura agrega médias ponderadas e **maior percentil de janela**, nunca uma
   média de percentis apresentada como percentil global.
 
-### Regiões de GPU do frame (schema 4)
+### Pressão das trilhas e escala dinâmica (schema 5)
 
-O tempo de GPU é medido em seis regiões declaradas uma única vez em
+Cada janela schema 5 exige um terceiro registro, `[FrameProfilePressure]`, pareado
+por `pid/epoch/window`. Ele classifica o p95 como `within-budget`, `cpu`, `gpu`,
+`mixed`, `presentation` ou `unknown`, publica as razões p95/budget e registra
+`render_scale_min/max/end`. A captura recusa janela schema 5 sem esse par.
+
+A classificação não tenta igualar porcentagens de CPU e GPU. Os dois processadores
+trabalham em pipeline; CPU com folga enquanto a GPU executa é normal. Em 120 Hz, o
+intervalo é 8,33 ms e a política atual reserva 6,50 ms para a trilha CPU e 7,33 ms
+para GPU. Há pressão quando o p95 consome a margem de uma dessas trilhas. Espera de
+acquire/present só vira `presentation` quando CPU e GPU estão abaixo de seus budgets
+e o próprio intervalo está atrasado; VSYNC normal não vira um falso gargalo.
+
+Para CPU, a decisão usa `thread_cpu_ms`, que representa a trilha crítica atual do
+loop nativo. `process_cpu_ms` permanece diagnóstico agregado: com workers paralelos
+ele pode exceder wall time e não pode ser comparado como se fosse uma única trilha.
+Sem timestamp GPU válido o veredito é `unknown`, nunca uma inferência por utilização.
+
+O ADPF Performance Hint usa a mesma disciplina: como a sessão atual contém apenas a
+render thread, `reportActualWorkDuration` recebe `CLOCK_THREAD_CPUTIME_ID`. O wall time
+do frame inclui bloqueio em acquire/present e reportá-lo como CPU faria o Android
+tentar corrigir com clock de CPU um atraso que pode ser inteiramente da GPU.
+
+Na validação física Release de 01/09/2026, a pose fixa da floresta em 120 Hz produziu
+115,92 eventos exibidos/s e foi classificada `gpu`: GPU p95 7,335/7,333 ms, CPU da
+render thread p95 1,397/6,50 ms e escala dinâmica no piso 0,58. O log confirmou ADPF
+ativo com alvo 8,333 ms, e `cmd game list-modes` confirmou o modo atual
+`performance`; não havia intervenção OEM configurada para o pacote.
+
+### Regiões de GPU do frame (schema 5; leitura retrocompatível do schema 4)
+
+O tempo de GPU é medido em oito regiões declaradas uma única vez em
 `native/core/gpu_pass_class.h`, na ordem em que o frame as grava: **Opaque**
 (geometria sólida, incluindo os binds que a precedem), **Coverage** (prepass e
 shade de alpha-mask — a vegetação), **Sky**, **Transparent**, **UI** (HUD) e
-**HZB** (cadeia de redução Hi-Z, fora do render pass principal).
+**HZB** (cadeia de redução Hi-Z, fora do render pass principal), além de **Shadow**
+e **Post**, que possuem passes próprios.
 
 Cada região é gravada como marcador de debug **e** timestamp, sempre em par. Os
 dois falham de formas opostas: um marcador sem métrica dá uma captura AGI que não
@@ -114,8 +145,9 @@ revisão usaram Build Tools 35.0.0, NDK 27.1.12297006 e RelWithDebInfo no releas
 O relatório conserva hash do APK, revisão Git/worktree sujo, PID, build nativa,
 resolução, temperaturas/status térmico inicial/final, distribuições de janelas
 e timestamps de apresentação. Para cada PID/epoch, o runtime emite separadamente
-`FrameProfileContext` schema 3 com sceneId autoritativo, fingerprint do pacote,
-câmera/lock, alvo de FPS e contagens de conteúdo. O host persiste esse contrato em
+`FrameProfileContext` schema 4 com sceneId autoritativo, fingerprint do pacote,
+câmera/lock, alvo de FPS, contagens de conteúdo, escala/extensão interna efetiva e
+budgets resolvidos de LOD sólido/coverage. O host persiste esse contrato em
 `frame-contexts.jsonl`; a captura schema 2 falha se o contexto faltar, divergir da
 cena solicitada ou mudar silenciosamente. O build agora publica C# Release framework-dependent
 para `linux-bionic-arm64` automaticamente. Não usa a DLL legada de assets.
@@ -417,6 +449,23 @@ isolada não basta. Como imagem e caminho crítico pioraram, a implementação f
 A próxima tentativa exige atribuição AGI e semântica de cobertura versionada no AEMAP;
 estes dados permanecem como regressão negativa, não como benchmark de uma feature integrada.
 
+### Schema 6: pressão, ADPF CPU/GPU e térmica no mesmo intervalo
+
+`[FrameProfilePressure]` schema 6 acrescenta `adpf`, `adpf_gpu_work`, `game_mode`,
+`sustained_supported`, `sustained_enabled`, `thermal_api`, `thermal_status`,
+`thermal_headroom_valid`, `thermal_headroom` e `thermal_pressure`. O parser exige todos
+esses campos no schema 6 e continua aceitando schemas 4/5 sem inventar medições.
+
+Em Android 15+, `adpf_gpu_work=true` significa que a sessão usa `AWorkDuration`: o
+tempo de CPU guardado para um frame é pareado no frame seguinte com o timestamp Vulkan
+resolvido após a fence. O total reportado considera a maior cauda CPU/GPU, pois elas
+podem se sobrepor. Sem essa API, o fallback reporta somente CPU da render thread.
+
+Thermal Headroom é consultado no máximo a cada 10 segundos. Valor próximo de 1 indica
+aproximação do throttling; valor inválido é publicado como `-1` e nunca força uma falsa
+recuperação. A classificação de gargalo continua baseada nos tempos medidos, não no
+percentual de utilização mostrado pelo sistema.
+
 ### Isolamento compilado de custo GPU — 30/08/2026
 
 O runner aceita `-GpuIsolation full|no-normal|no-ibl|base-color` exclusivamente para
@@ -562,6 +611,42 @@ Potência amostrada média 2,273 W, pico 4,316 W, status térmico máximo 0;
 duas retomadas passaram. Capturas sequenciais no mesmo aparelho, não ensaio
 controlado de DVFS/temperatura: não garantem ganho universal de 55% no interop
 ou 17% no processo. O orçamento CPU máximo < 3 ms continua aberto.
+
+### ADPF A/B, material LOD e gravação — hotspot de 01/09/2026
+
+O runner expõe `-AdpfTargetRatio 0.5..1.0`; zero herda o intervalo completo.
+Essa opção é apenas de laboratório e viaja no `report.json`. O APK de produto usa
+8,333 ms em 120 Hz. No Xiaomi/API 35 a sessão também chama publicamente
+`APerformanceHint_setPreferPowerEfficiency(session, false)`, reporta o resultado e
+continua enviando `AWorkDuration` com CPU/GPU. Não existe chamada para clock privado.
+
+Com cena `dirt-road`, câmera `-19.04,143.47,-43.73,13.109,0.087`, escala fixa 0,58
+e dinâmica desligada, os controles ADPF 1,0 deram 87,83 e 86,02 FPS; razão 0,88 deu
+64,63 FPS. O alvo menor foi rejeitado. `coverageLodPixelErrorBudget=96` removeu cerca
+de 9,4% dos triângulos submetidos (317.419→287.545), mas a GPU ficou em ~10,1 ms:
+redução de geometria não resolve o fill/texture hotspot sozinha.
+
+O isolamento compilado `no-normal` chegou a 111,90 FPS, contra 84–88 no caminho
+completo sob operating point semelhante. Isso motivou material-detail LOD por bounds:
+somente packets totalmente além do alcance de normal usam a variante compilada sem
+normal map. O branch por distância permanece para o fade dentro do packet; a variante
+remove de fato sample/TBN/registradores quando todo ele já teria peso zero.
+
+Uma coleta com `screenrecord` temporário confirmou 120,113 presents/s, GPU média
+6,401 ms, p95 7,104 ms e CPU média 1,221 ms. Sem gravação o mesmo APK variou entre
+86,31 e 106,52 FPS, mesmo com status térmico 0; o R6 com preferência ADPF explícita
+registrou 96,24 FPS e GPU média 8,885 ms já sob pressão térmica interna `light`.
+Esses números provam que a cena cabe no budget no operating point alto, mas não que
+o app controla o governador. Promoção exige runs frios/aquecidos intercalados e
+Swappy como próximo experimento de frame pacing.
+
+Artefatos principais:
+
+- `build/adpf-hotspot-control-100*/report.json`;
+- `build/adpf-hotspot-margin-088/report.json`;
+- `build/hotspot-no-normal-r4/report.json`;
+- `build/hotspot-material-distance-lod-r5*/report.json`;
+- `build/hotspot-material-distance-adpf-r6/report.json`.
 
 ### Soak contínuo e critérios
 

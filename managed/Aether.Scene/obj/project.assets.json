@@ -12,18 +12,6 @@
           "bin/placeholder/Aether.Core.dll": {}
         }
       }
-    },
-    "net8.0/linux-bionic-arm64": {
-      "Aether.Core/1.0.0": {
-        "type": "project",
-        "framework": ".NETCoreApp,Version=v8.0",
-        "compile": {
-          "bin/placeholder/Aether.Core.dll": {}
-        },
-        "runtime": {
-          "bin/placeholder/Aether.Core.dll": {}
-        }
-      }
     }
   },
   "libraries": {
@@ -99,11 +87,6 @@
           }
         },
         "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
-      }
-    },
-    "runtimes": {
-      "linux-bionic-arm64": {
-        "#import": []
       }
     }
   }

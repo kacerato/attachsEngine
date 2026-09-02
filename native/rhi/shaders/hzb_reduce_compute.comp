@@ -1,0 +1,55 @@
+#version 450
+
+// Generic maximum-depth reduction used for every HZB level. For level zero
+// sourceSize is the full-resolution depth target and destinationSize is the
+// coarse base. Later levels use the same exact integer-footprint mapping,
+// which becomes the usual clamped 2x2 reduction. Keeping one kernel avoids
+// shader variants and guarantees the first/subsequent passes share semantics.
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D sourceDepth;
+layout(r32f, set = 0, binding = 1) uniform writeonly image2D destinationDepth;
+
+layout(push_constant) uniform HzbReduceComputePushConstants {
+  uint sourceWidth;
+  uint sourceHeight;
+  uint destinationWidth;
+  uint destinationHeight;
+  uint firstLevel;
+} pushConstants;
+
+void main() {
+  const uvec2 destination = gl_GlobalInvocationID.xy;
+  if (destination.x >= pushConstants.destinationWidth ||
+      destination.y >= pushConstants.destinationHeight) return;
+
+  const bool firstLevel = pushConstants.firstLevel != 0u;
+  const uint x0 = firstLevel
+      ? (destination.x * pushConstants.sourceWidth) /
+        pushConstants.destinationWidth
+      : destination.x * 2u;
+  const uint x1 = firstLevel
+      ? min(pushConstants.sourceWidth,
+            max(x0 + 1u, ((destination.x + 1u) * pushConstants.sourceWidth) /
+                         pushConstants.destinationWidth))
+      : min(x0 + 2u, pushConstants.sourceWidth);
+  const uint y0 = firstLevel
+      ? (destination.y * pushConstants.sourceHeight) /
+        pushConstants.destinationHeight
+      : destination.y * 2u;
+  const uint y1 = firstLevel
+      ? min(pushConstants.sourceHeight,
+            max(y0 + 1u, ((destination.y + 1u) * pushConstants.sourceHeight) /
+                         pushConstants.destinationHeight))
+      : min(y0 + 2u, pushConstants.sourceHeight);
+
+  float maximumDepth = texelFetch(sourceDepth, ivec2(x0, y0), 0).r;
+  for (uint y = y0; y < y1; ++y) {
+    for (uint x = x0; x < x1; ++x) {
+      maximumDepth = max(maximumDepth,
+                         texelFetch(sourceDepth, ivec2(x, y), 0).r);
+    }
+  }
+  imageStore(destinationDepth, ivec2(destination),
+             vec4(maximumDepth, 0.0, 0.0, 0.0));
+}

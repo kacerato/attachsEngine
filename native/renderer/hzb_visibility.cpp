@@ -143,6 +143,38 @@ bool hzbPyramidFromLevels(const float *floatTexels, usize floatCount, const HzbL
   return true;
 }
 
+bool validateHzbMaxReductionChain(const HzbPyramid &pyramid, float tolerance) {
+  if (!pyramid.valid || pyramid.mips.empty() || !std::isfinite(tolerance) || tolerance < 0.0f)
+    return false;
+  for (usize level = 0; level < pyramid.mips.size(); ++level) {
+    const HzbMipLevel &mip = pyramid.mips[level];
+    const usize texelCount = static_cast<usize>(mip.width) * mip.height;
+    if (mip.width == 0 || mip.height == 0 || mip.offset > pyramid.texels.size() ||
+        texelCount > pyramid.texels.size() - mip.offset) return false;
+    for (usize texel = 0; texel < texelCount; ++texel)
+      if (!std::isfinite(pyramid.texels[mip.offset + texel])) return false;
+    if (level == 0) continue;
+    const HzbMipLevel &previous = pyramid.mips[level - 1];
+    if (mip.width != (previous.width + 1) / 2 || mip.height != (previous.height + 1) / 2)
+      return false;
+    for (u32 y = 0; y < mip.height; ++y) {
+      for (u32 x = 0; x < mip.width; ++x) {
+        const u32 x0 = x * 2;
+        const u32 y0 = y * 2;
+        const u32 x1 = std::min(x0 + 1, previous.width - 1);
+        const u32 y1 = std::min(y0 + 1, previous.height - 1);
+        float expected = pyramid.texels[previous.offset + pixelIndex(x0, y0, previous.width)];
+        expected = std::max(expected, pyramid.texels[previous.offset + pixelIndex(x1, y0, previous.width)]);
+        expected = std::max(expected, pyramid.texels[previous.offset + pixelIndex(x0, y1, previous.width)]);
+        expected = std::max(expected, pyramid.texels[previous.offset + pixelIndex(x1, y1, previous.width)]);
+        const float actual = pyramid.texels[mip.offset + pixelIndex(x, y, mip.width)];
+        if (std::abs(actual - expected) > tolerance) return false;
+      }
+    }
+  }
+  return true;
+}
+
 HzbScreenRect projectBoundsToHzbScreenRect(const PerspectiveFrustum &frustum, const float center[3],
                                            float radius,
                                            const HzbScreenTransform &screenTransform) {

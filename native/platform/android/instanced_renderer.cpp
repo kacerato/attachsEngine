@@ -9,17 +9,27 @@
 #include "rhi/shaders/dirt_road_fallback_spirv.h"
 #include "rhi/shaders/dirt_road_coverage_spirv.h"
 #include "rhi/shaders/dirt_road_coverage_fallback_spirv.h"
+#include "rhi/shaders/dirt_road_coverage_shade_spirv.h"
+#include "rhi/shaders/dirt_road_coverage_shade_fallback_spirv.h"
 #include "rhi/shaders/dirt_road_sky_spirv.h"
 #include "rhi/shaders/runtime_hud_spirv.h"
+#include "rhi/shaders/post_process_spirv.h"
+#include "rhi/shaders/shadow_depth_spirv.h"
+#include "rhi/shaders/shadow_depth_masked_spirv.h"
+#include "rhi/shaders/shadow_depth_masked_fallback_spirv.h"
 #include "rhi/shaders/hzb_reduce_first_spirv.h"
 #include "rhi/shaders/hzb_reduce_spirv.h"
+#include "rhi/shaders/draw_cull_spirv.h"
+#include "rhi/shaders/hzb_reduce_compute_spirv.h"
 #include "renderer/sphere_mesh.h"
+#include "renderer/material_distance.h"
 
 #include <android/log.h>
 #include <algorithm>
 #include <array>
 #include <bit>
 #include <chrono>
+#include <cstddef>
 #include <cmath>
 #include <cstring>
 
@@ -74,8 +84,24 @@ struct DirtRoadFrameUniform {
   float worldToViewRow0[4]{1.0f, 0.0f, 0.0f, 0.0f};
   float worldToViewRow1[4]{0.0f, 1.0f, 0.0f, 0.0f};
   float worldToViewRow2[4]{0.0f, 0.0f, 1.0f, 0.0f};
+  // Budgets resolvidos, nunca nomes de preset: normal distance, specular
+  // distance, ambiente hemisférico e sonda especular.
+  float quality[4]{};
+  float shadowViewProjection[renderer::MaximumShadowCascades][16]{};
+  float shadowSplitDepths[4]{};
+  float shadowParameters[4]{}; // inv atlas, cascade count, PCF radius, normal offset
+  float shadowWorldUnitsPerTexel[4]{};
+  float shadowFilterParameters[4]{}; // near radius, far radius, reserved
+  float materialDistanceParameters[4]{}; // MR map, emissive map, reserved
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 176);
+static_assert(sizeof(DirtRoadFrameUniform) == 528);
+
+struct ShadowPushConstants {
+  float lightViewProjection[16]{};
+  float alphaCutoffUvSlot[4]{};
+  u32 baseTextureIndex[4]{};
+};
+static_assert(sizeof(ShadowPushConstants) == 96);
 
 struct RuntimeHudPushConstants {
   float centerHalfSize[4];
@@ -84,6 +110,14 @@ struct RuntimeHudPushConstants {
   u32 parameters[4];
 };
 static_assert(sizeof(RuntimeHudPushConstants) == 64);
+
+struct PostPushConstants {
+  float texelFlags[4]{};
+  float bloom[4]{};
+  float grade[4]{};
+  float sourceTransform[4]{}; // active UV scale, active render scale, reserved
+};
+static_assert(sizeof(PostPushConstants) == 64);
 
 bool formatSupportsDepthAttachment(VkPhysicalDevice physicalDevice, VkFormat format,
                                    bool requireSampling) {
@@ -138,6 +172,50 @@ InstancedRenderer::~InstancedRenderer() {
   shutdown();
 }
 
+void InstancedRenderer::applyRuntimeRenderingPolicy(
+    const renderer::ResolvedRenderingPolicy &policy) {
+  renderingPolicy_ = policy;
+  dynamicResolution_.reset(policy.dynamicResolution, policy.frame.gpuLaneBudgetMs);
+  invalidateStaticShadowCache();
+  lodSelectionEnabled_ = policy.geometry.lodSelection;
+  lodPixelErrorBudget_ = policy.visibility.lodPixelErrorBudget;
+  coverageLodPixelErrorBudget_ = policy.visibility.coverageLodPixelErrorBudget;
+  lodHysteresisBandRatio_ = policy.visibility.lodHysteresisBandRatio;
+}
+
+void InstancedRenderer::setRuntimeRenderingPolicy(
+    const renderer::ResolvedRenderingPolicy &policy) {
+  renderer::ResolvedRenderingPolicy active = policy;
+
+  // Render-pass topology and immutable sampler/atlas allocation belong to the
+  // resource epoch. Runtime pressure may consume less, never request resources
+  // that were not built. Keeping the dedicated post pass alive while all its
+  // optional filters are off makes recovery allocation-free.
+  active.post.dedicatedPass = resourceRenderingPolicy_.post.dedicatedPass;
+  if (!resourceRenderingPolicy_.post.dedicatedPass) {
+    active.post.bloom = false;
+    active.post.fxaa = false;
+    active.post.vignette = false;
+    active.post.sharpen = 0.0f;
+    active.post.contrast = 1.0f;
+    active.post.saturation = 1.0f;
+  }
+  active.textures = resourceRenderingPolicy_.textures;
+  active.shadows.enabled = active.shadows.enabled && resourceRenderingPolicy_.shadows.enabled;
+  active.shadows.cascadeCount =
+      std::min(active.shadows.cascadeCount, resourceRenderingPolicy_.shadows.cascadeCount);
+  active.shadows.cascadeResolution =
+      std::min(active.shadows.cascadeResolution, resourceRenderingPolicy_.shadows.cascadeResolution);
+  active.resolutionScale = std::min(active.resolutionScale,
+                                    resourceRenderingPolicy_.resolutionScale);
+  active.dynamicResolution.maximumScale =
+      std::min(active.dynamicResolution.maximumScale, active.resolutionScale);
+  active.dynamicResolution.minimumScale =
+      std::min(active.dynamicResolution.minimumScale,
+               active.dynamicResolution.maximumScale);
+  applyRuntimeRenderingPolicy(active);
+}
+
 bool InstancedRenderer::createRenderPass() {
   VkAttachmentDescription colorAttachment{};
   colorAttachment.format = swapchain_->imageFormat();
@@ -147,7 +225,9 @@ bool InstancedRenderer::createRenderPass() {
   colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
   colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  colorAttachment.finalLayout = renderingPolicy_.post.dedicatedPass
+                                    ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                    : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
   VkAttachmentReference colorRef{};
   colorRef.attachment = 0;
@@ -198,8 +278,19 @@ bool InstancedRenderer::createRenderPass() {
   info.pAttachments = attachments;
   info.subpassCount = 1;
   info.pSubpasses = &subpass;
-  info.dependencyCount = 1;
-  info.pDependencies = &dependency;
+  VkSubpassDependency dependencies[2] = {dependency, {}};
+  u32 dependencyCount = 1;
+  if (renderingPolicy_.post.dedicatedPass) {
+    dependencies[1].srcSubpass = 0;
+    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    dependencyCount = 2;
+  }
+  info.dependencyCount = dependencyCount;
+  info.pDependencies = dependencies;
 
   return vkCreateRenderPass(device_, &info, nullptr, &renderPass_) == VK_SUCCESS;
 }
@@ -232,12 +323,23 @@ bool InstancedRenderer::createPipeline() {
           : createShaderModule(device_, rhi::shaders::kDirt_Road_Coverage_FallbackFragSpirv,
                                rhi::shaders::kDirt_Road_Coverage_FallbackFragSpirvSize))
       : VK_NULL_HANDLE;
+  VkShaderModule coverageShadeFragModule = dirtRoadPreview_
+      ? (useBindless_
+          ? createShaderModule(device_, rhi::shaders::kDirt_Road_Coverage_ShadeFragSpirv,
+                               rhi::shaders::kDirt_Road_Coverage_ShadeFragSpirvSize)
+          : createShaderModule(device_,
+                               rhi::shaders::kDirt_Road_Coverage_Shade_FallbackFragSpirv,
+                               rhi::shaders::kDirt_Road_Coverage_Shade_FallbackFragSpirvSize))
+      : VK_NULL_HANDLE;
   if (vertModule == VK_NULL_HANDLE || fragModule == VK_NULL_HANDLE ||
-      (dirtRoadPreview_ && coverageFragModule == VK_NULL_HANDLE)) {
+      (dirtRoadPreview_ &&
+       (coverageFragModule == VK_NULL_HANDLE || coverageShadeFragModule == VK_NULL_HANDLE))) {
     if (vertModule != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vertModule, nullptr);
     if (fragModule != VK_NULL_HANDLE) vkDestroyShaderModule(device_, fragModule, nullptr);
     if (coverageFragModule != VK_NULL_HANDLE)
       vkDestroyShaderModule(device_, coverageFragModule, nullptr);
+    if (coverageShadeFragModule != VK_NULL_HANDLE)
+      vkDestroyShaderModule(device_, coverageShadeFragModule, nullptr);
     return false;
   }
 
@@ -254,16 +356,21 @@ bool InstancedRenderer::createPipeline() {
   // constant lets the driver eliminate the isolated shader path, avoiding
   // register pressure and instruction scheduling from a runtime uniform
   // branch. Normal rendering specializes to Full (zero).
-  const u32 gpuIsolationValue = static_cast<u32>(gpuCostIsolation_);
-  VkSpecializationMapEntry gpuIsolationEntry{};
-  gpuIsolationEntry.constantID = 0;
-  gpuIsolationEntry.offset = 0;
-  gpuIsolationEntry.size = sizeof(gpuIsolationValue);
+  struct MaterialSpecialization final { u32 isolation; u32 featureMask; };
+  MaterialSpecialization materialSpecialization{
+      static_cast<u32>(gpuCostIsolation_), renderer::DynamicMaterialFeatureMask};
+  VkSpecializationMapEntry specializationEntries[2]{};
+  specializationEntries[0].constantID = 0;
+  specializationEntries[0].offset = offsetof(MaterialSpecialization, isolation);
+  specializationEntries[0].size = sizeof(u32);
+  specializationEntries[1].constantID = 1;
+  specializationEntries[1].offset = offsetof(MaterialSpecialization, featureMask);
+  specializationEntries[1].size = sizeof(u32);
   VkSpecializationInfo gpuIsolationInfo{};
-  gpuIsolationInfo.mapEntryCount = 1;
-  gpuIsolationInfo.pMapEntries = &gpuIsolationEntry;
-  gpuIsolationInfo.dataSize = sizeof(gpuIsolationValue);
-  gpuIsolationInfo.pData = &gpuIsolationValue;
+  gpuIsolationInfo.mapEntryCount = 2;
+  gpuIsolationInfo.pMapEntries = specializationEntries;
+  gpuIsolationInfo.dataSize = sizeof(materialSpecialization);
+  gpuIsolationInfo.pData = &materialSpecialization;
   stages[1].pSpecializationInfo = dirtRoadPreview_ ? &gpuIsolationInfo : nullptr;
 
   // Um binding por instância (VK_VERTEX_INPUT_RATE_INSTANCE) — o cubo em si
@@ -411,7 +518,7 @@ bool InstancedRenderer::createPipeline() {
       pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                              &coveragePipeline_) == VK_SUCCESS;
 
-      stages[1].module = fragModule;
+      stages[1].module = coverageShadeFragModule;
       stages[1].pSpecializationInfo = &gpuIsolationInfo;
       colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -432,6 +539,67 @@ bool InstancedRenderer::createPipeline() {
       if (pipelineOk)
         pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                                &transparentPipeline_) == VK_SUCCESS;
+
+      // Material detail LOD is a compiled pipeline choice, not merely a
+      // per-fragment branch. Draw bounds wholly past the configured normal-map
+      // radius use these variants; nearby bounds remain on the full pipeline.
+      // Three state families are sufficient and avoid a combinatorial set per
+      // distance × material.
+      auto createDistantPipeline = [&](u32 family, VkPipeline *destination) {
+        materialSpecialization.isolation =
+            static_cast<u32>(renderer::GpuCostIsolation::NoNormalMap);
+        materialSpecialization.featureMask = renderer::DynamicMaterialFeatureMask;
+        stages[1].module = family == 1 ? coverageShadeFragModule : fragModule;
+        stages[1].pSpecializationInfo = &gpuIsolationInfo;
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = family == 2 ? VK_TRUE : VK_FALSE;
+        depthStencil.depthWriteEnable = family == 0 ? VK_TRUE : VK_FALSE;
+        depthStencil.depthCompareOp = family == 1 ? VK_COMPARE_OP_EQUAL : VK_COMPARE_OP_LESS;
+        return vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+                                         destination) == VK_SUCCESS;
+      };
+      if (gpuCostIsolation_ == renderer::GpuCostIsolation::Full &&
+          resourceRenderingPolicy_.materialDistance.normalMapMaximumDistance > 0.0f) {
+        if (pipelineOk) pipelineOk = createDistantPipeline(0, &opaqueDistantPipeline_);
+        if (pipelineOk) pipelineOk = createDistantPipeline(1, &coverageDistantPipeline_);
+        if (pipelineOk) pipelineOk = createDistantPipeline(2, &transparentDistantPipeline_);
+      }
+      materialSpecialization.isolation = static_cast<u32>(gpuCostIsolation_);
+      materialSpecialization.featureMask = renderer::DynamicMaterialFeatureMask;
+
+      // Build only combinations actually referenced by this package. The key
+      // excludes alpha mode, so the same compact feature space serves opaque,
+      // coverage and transparent state families without a combinatorial cache.
+      bool used[3][renderer::MaterialFeatureVariantCount]{};
+      for (const auto &material : dirtRoadResources_.materials()) {
+        const u32 variant = renderer::materialFeatureVariant(material.flags);
+        const u32 family = (material.flags & renderer::MapMaterialAlphaMask) != 0 ? 1u
+                           : (material.flags & renderer::MapMaterialBlend) != 0 ? 2u : 0u;
+        used[family][variant] = true;
+      }
+      auto createMaterialVariants = [&](u32 family, VkPipeline *destination) {
+        stages[1].module = family == 1 ? coverageShadeFragModule : fragModule;
+        stages[1].pSpecializationInfo = &gpuIsolationInfo;
+        colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = family == 2 ? VK_TRUE : VK_FALSE;
+        depthStencil.depthWriteEnable = family == 0 ? VK_TRUE : VK_FALSE;
+        depthStencil.depthCompareOp = family == 1 ? VK_COMPARE_OP_EQUAL : VK_COMPARE_OP_LESS;
+        for (u32 variant = 0; variant < renderer::MaterialFeatureVariantCount; ++variant) {
+          if (!used[family][variant]) continue;
+          materialSpecialization.featureMask = renderer::materialFeatureMaskForVariant(variant);
+          if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+                                        &destination[variant]) != VK_SUCCESS) return false;
+        }
+        materialSpecialization.featureMask = renderer::DynamicMaterialFeatureMask;
+        return true;
+      };
+      if (resourceRenderingPolicy_.geometry.materialShaderVariants) {
+        if (pipelineOk) pipelineOk = createMaterialVariants(0, opaqueMaterialPipelines_);
+        if (pipelineOk) pipelineOk = createMaterialVariants(1, coverageMaterialPipelines_);
+        if (pipelineOk) pipelineOk = createMaterialVariants(2, transparentMaterialPipelines_);
+      }
     }
   }
 
@@ -439,6 +607,8 @@ bool InstancedRenderer::createPipeline() {
   vkDestroyShaderModule(device_, fragModule, nullptr);
   if (coverageFragModule != VK_NULL_HANDLE)
     vkDestroyShaderModule(device_, coverageFragModule, nullptr);
+  if (coverageShadeFragModule != VK_NULL_HANDLE)
+    vkDestroyShaderModule(device_, coverageShadeFragModule, nullptr);
   return layoutOk && pipelineOk;
 }
 
@@ -452,10 +622,22 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   if (!memoryAllocator_->createBuffer(buffer, &environmentUniform_)) return false;
   DirtRoadFrameUniform initialFrame{};
   initialFrame.environment = dirtRoadResources_.environmentLighting();
+  if (initialFrame.environment.parameters[3] > 0.5f)
+    initialFrame.environment.parameters[3] = renderingPolicy_.ambient.splitSumBrdf ? 3.0f : 1.0f;
+  initialFrame.quality[0] = renderingPolicy_.materialDistance.normalMapMaximumDistance;
+  initialFrame.quality[1] = renderingPolicy_.materialDistance.specularProbeMaximumDistance;
+  initialFrame.quality[2] = renderingPolicy_.ambient.hemispheric ? 1.0f : 0.0f;
+  initialFrame.quality[3] = renderingPolicy_.ambient.specularProbe ? 1.0f : 0.0f;
+  initialFrame.materialDistanceParameters[0] =
+      renderingPolicy_.materialDistance.metallicRoughnessMaximumDistance;
+  initialFrame.materialDistanceParameters[1] =
+      renderingPolicy_.materialDistance.emissiveMaximumDistance;
+  initialFrame.materialDistanceParameters[2] =
+      renderingPolicy_.materialDistance.fadeBandRatio;
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[2]{};
+  VkDescriptorSetLayoutBinding bindings[5]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -464,13 +646,21 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   bindings[1].descriptorCount = 1;
   bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  bindings[2].binding = 2;
+  bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  bindings[2].descriptorCount = 1;
+  bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  bindings[3] = bindings[1];
+  bindings[3].binding = 3;
+  bindings[4] = bindings[1];
+  bindings[4].binding = 4;
   VkDescriptorSetLayoutCreateInfo layout{};
   layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  layout.bindingCount = 2;
+  layout.bindingCount = 5;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
-                                   {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}};
+                                   {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool.maxSets = 1;
@@ -486,7 +676,17 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   VkDescriptorBufferInfo uniform{environmentUniform_.handle(), 0, sizeof(DirtRoadFrameUniform)};
   VkDescriptorImageInfo image{dirtRoadResources_.environmentSampler(), dirtRoadResources_.environmentView(),
                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  VkWriteDescriptorSet writes[2]{};
+  VkDescriptorImageInfo shadow{
+      shadowSampler_.isReady() ? shadowSampler_.handle() : dirtRoadResources_.environmentSampler(),
+      shadowAtlas_.isReady() ? shadowAtlas_.view() : dirtRoadResources_.environmentView(),
+      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkDescriptorImageInfo specular{dirtRoadResources_.environmentSpecularSampler(),
+                                 dirtRoadResources_.environmentSpecularView(),
+                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkDescriptorImageInfo brdf{dirtRoadResources_.environmentBrdfSampler(),
+                             dirtRoadResources_.environmentBrdfView(),
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet writes[5]{};
   writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   writes[0].dstSet = environmentSet_;
   writes[0].dstBinding = 0;
@@ -499,7 +699,25 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   writes[1].descriptorCount = 1;
   writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[1].pImageInfo = &image;
-  vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
+  writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  writes[2].dstSet = environmentSet_;
+  writes[2].dstBinding = 2;
+  writes[2].descriptorCount = 1;
+  writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  writes[2].pImageInfo = &shadow;
+  writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  writes[3].dstSet = environmentSet_;
+  writes[3].dstBinding = 3;
+  writes[3].descriptorCount = 1;
+  writes[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  writes[3].pImageInfo = &specular;
+  writes[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  writes[4].dstSet = environmentSet_;
+  writes[4].dstBinding = 4;
+  writes[4].descriptorCount = 1;
+  writes[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  writes[4].pImageInfo = &brdf;
+  vkUpdateDescriptorSets(device_, 5, writes, 0, nullptr);
   return true;
 }
 
@@ -646,20 +864,551 @@ bool InstancedRenderer::createRuntimeHudPipeline() {
   return ok;
 }
 
+bool InstancedRenderer::createPostResources() {
+  if (!renderingPolicy_.post.dedicatedPass) return true;
+
+  rhi::ImageDesc image{};
+  image.width = renderTargetWidth();
+  image.height = renderTargetHeight();
+  image.format = swapchain_->imageFormat();
+  image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  image.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  image.memoryClass = rhi::MemoryClass::RenderTarget;
+  if (!memoryAllocator_->createImage(image, &postSceneColor_)) return false;
+
+  rhi::SamplerDesc sampler{};
+  sampler.addressU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler.addressW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  if (!postSampler_.initialize(device_, sampler)) return false;
+
+  VkAttachmentDescription attachment{};
+  attachment.format = swapchain_->imageFormat();
+  attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+  attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  VkAttachmentReference color{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkSubpassDescription subpass{};
+  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  subpass.colorAttachmentCount = 1;
+  subpass.pColorAttachments = &color;
+  VkSubpassDependency dependency{};
+  dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+  dependency.dstSubpass = 0;
+  dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  dependency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  dependency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  VkRenderPassCreateInfo renderPass{};
+  renderPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  renderPass.attachmentCount = 1;
+  renderPass.pAttachments = &attachment;
+  renderPass.subpassCount = 1;
+  renderPass.pSubpasses = &subpass;
+  renderPass.dependencyCount = 1;
+  renderPass.pDependencies = &dependency;
+  if (vkCreateRenderPass(device_, &renderPass, nullptr, &postRenderPass_) != VK_SUCCESS) return false;
+
+  VkDescriptorSetLayoutBinding binding{};
+  binding.binding = 0;
+  binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  binding.descriptorCount = 1;
+  binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  VkDescriptorSetLayoutCreateInfo setLayout{};
+  setLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  setLayout.bindingCount = 1;
+  setLayout.pBindings = &binding;
+  if (vkCreateDescriptorSetLayout(device_, &setLayout, nullptr, &postSetLayout_) != VK_SUCCESS)
+    return false;
+  VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1};
+  VkDescriptorPoolCreateInfo pool{};
+  pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  pool.maxSets = 1;
+  pool.poolSizeCount = 1;
+  pool.pPoolSizes = &poolSize;
+  if (vkCreateDescriptorPool(device_, &pool, nullptr, &postDescriptorPool_) != VK_SUCCESS)
+    return false;
+  VkDescriptorSetAllocateInfo allocate{};
+  allocate.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  allocate.descriptorPool = postDescriptorPool_;
+  allocate.descriptorSetCount = 1;
+  allocate.pSetLayouts = &postSetLayout_;
+  if (vkAllocateDescriptorSets(device_, &allocate, &postDescriptorSet_) != VK_SUCCESS) return false;
+  VkDescriptorImageInfo source{postSampler_.handle(), postSceneColor_.view(),
+                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet write{};
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.dstSet = postDescriptorSet_;
+  write.dstBinding = 0;
+  write.descriptorCount = 1;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  write.pImageInfo = &source;
+  vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+
+  VkShaderModule vert = createShaderModule(device_, rhi::shaders::kPost_ProcessVertSpirv,
+                                            rhi::shaders::kPost_ProcessVertSpirvSize);
+  VkShaderModule frag = createShaderModule(device_, rhi::shaders::kPost_ProcessFragSpirv,
+                                            rhi::shaders::kPost_ProcessFragSpirvSize);
+  if (vert == VK_NULL_HANDLE || frag == VK_NULL_HANDLE) {
+    if (vert != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vert, nullptr);
+    if (frag != VK_NULL_HANDLE) vkDestroyShaderModule(device_, frag, nullptr);
+    return false;
+  }
+  VkPipelineShaderStageCreateInfo stages[2] = {
+      {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+       VK_SHADER_STAGE_VERTEX_BIT, vert, "main", nullptr},
+      {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+       VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr}};
+  VkPushConstantRange push{VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PostPushConstants)};
+  VkPipelineLayoutCreateInfo pipelineLayout{};
+  pipelineLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineLayout.setLayoutCount = 1;
+  pipelineLayout.pSetLayouts = &postSetLayout_;
+  pipelineLayout.pushConstantRangeCount = 1;
+  pipelineLayout.pPushConstantRanges = &push;
+  bool ok = vkCreatePipelineLayout(device_, &pipelineLayout, nullptr, &postPipelineLayout_) == VK_SUCCESS;
+
+  VkPipelineVertexInputStateCreateInfo vertex{};
+  vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  VkPipelineInputAssemblyStateCreateInfo assembly{};
+  assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  VkPipelineViewportStateCreateInfo viewport{};
+  viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewport.viewportCount = 1; viewport.scissorCount = 1;
+  VkPipelineRasterizationStateCreateInfo raster{};
+  raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  raster.polygonMode = VK_POLYGON_MODE_FILL;
+  raster.cullMode = VK_CULL_MODE_NONE;
+  raster.lineWidth = 1.0f;
+  VkPipelineMultisampleStateCreateInfo multisample{};
+  multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+  VkPipelineDepthStencilStateCreateInfo depth{};
+  depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+  colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  VkPipelineColorBlendStateCreateInfo colorBlend{};
+  colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  colorBlend.attachmentCount = 1;
+  colorBlend.pAttachments = &colorBlendAttachment;
+  const VkDynamicState dynamicStates[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+  VkPipelineDynamicStateCreateInfo dynamic{};
+  dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  dynamic.dynamicStateCount = 2;
+  dynamic.pDynamicStates = dynamicStates;
+  if (ok) {
+    VkGraphicsPipelineCreateInfo pipeline{};
+    pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipeline.stageCount = 2; pipeline.pStages = stages;
+    pipeline.pVertexInputState = &vertex; pipeline.pInputAssemblyState = &assembly;
+    pipeline.pViewportState = &viewport; pipeline.pRasterizationState = &raster;
+    pipeline.pMultisampleState = &multisample; pipeline.pDepthStencilState = &depth;
+    pipeline.pColorBlendState = &colorBlend; pipeline.pDynamicState = &dynamic;
+    pipeline.layout = postPipelineLayout_; pipeline.renderPass = postRenderPass_;
+    ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr,
+                                   &postPipeline_) == VK_SUCCESS;
+  }
+  vkDestroyShaderModule(device_, vert, nullptr);
+  vkDestroyShaderModule(device_, frag, nullptr);
+  return ok;
+}
+
+void InstancedRenderer::recordPostProcess(u32 imageIndex) {
+  if (!renderingPolicy_.post.dedicatedPass || postPipeline_ == VK_NULL_HANDLE) return;
+  VkRenderPassBeginInfo begin{};
+  begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  begin.renderPass = postRenderPass_;
+  begin.framebuffer = postFramebuffers_[imageIndex];
+  begin.renderArea.extent = {swapchain_->width(), swapchain_->height()};
+  vkCmdBeginRenderPass(commandBuffer_, &begin, VK_SUBPASS_CONTENTS_INLINE);
+  VkViewport viewport{0.0f, 0.0f, static_cast<float>(swapchain_->width()),
+                      static_cast<float>(swapchain_->height()), 0.0f, 1.0f};
+  VkRect2D scissor{{0, 0}, {swapchain_->width(), swapchain_->height()}};
+  vkCmdSetViewport(commandBuffer_, 0, 1, &viewport);
+  vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
+  vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, postPipeline_);
+  vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, postPipelineLayout_,
+                          0, 1, &postDescriptorSet_, 0, nullptr);
+  PostPushConstants push{};
+  push.texelFlags[0] = 1.0f / static_cast<float>(renderTargetWidth());
+  push.texelFlags[1] = 1.0f / static_cast<float>(renderTargetHeight());
+  push.texelFlags[2] = renderingPolicy_.post.bloom ? 1.0f : 0.0f;
+  push.texelFlags[3] = renderingPolicy_.post.fxaa ? 1.0f : 0.0f;
+  push.bloom[0] = renderingPolicy_.post.bloomThreshold;
+  push.bloom[1] = renderingPolicy_.post.bloomIntensity;
+  push.bloom[2] = renderingPolicy_.post.sharpen;
+  push.bloom[3] = renderingPolicy_.post.vignette ? renderingPolicy_.post.vignetteIntensity : 0.0f;
+  push.grade[0] = renderingPolicy_.post.contrast;
+  push.grade[1] = renderingPolicy_.post.saturation;
+  push.grade[2] = (swapchain_->imageFormat() == VK_FORMAT_B8G8R8A8_SRGB ||
+                   swapchain_->imageFormat() == VK_FORMAT_R8G8B8A8_SRGB) ? 0.0f : 1.0f;
+  push.sourceTransform[0] = static_cast<float>(renderWidth()) /
+                            static_cast<float>(renderTargetWidth());
+  push.sourceTransform[1] = static_cast<float>(renderHeight()) /
+                            static_cast<float>(renderTargetHeight());
+  push.sourceTransform[2] = dynamicResolution_.scale();
+  vkCmdPushConstants(commandBuffer_, postPipelineLayout_, VK_SHADER_STAGE_FRAGMENT_BIT,
+                     0, sizeof(push), &push);
+  vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
+  vkCmdEndRenderPass(commandBuffer_);
+}
+
+void InstancedRenderer::destroyPostResources() {
+  if (postPipeline_ != VK_NULL_HANDLE) vkDestroyPipeline(device_, postPipeline_, nullptr);
+  if (postPipelineLayout_ != VK_NULL_HANDLE)
+    vkDestroyPipelineLayout(device_, postPipelineLayout_, nullptr);
+  if (postDescriptorPool_ != VK_NULL_HANDLE)
+    vkDestroyDescriptorPool(device_, postDescriptorPool_, nullptr);
+  if (postSetLayout_ != VK_NULL_HANDLE)
+    vkDestroyDescriptorSetLayout(device_, postSetLayout_, nullptr);
+  if (postRenderPass_ != VK_NULL_HANDLE) vkDestroyRenderPass(device_, postRenderPass_, nullptr);
+  postPipeline_ = VK_NULL_HANDLE;
+  postPipelineLayout_ = VK_NULL_HANDLE;
+  postDescriptorPool_ = VK_NULL_HANDLE;
+  postDescriptorSet_ = VK_NULL_HANDLE;
+  postSetLayout_ = VK_NULL_HANDLE;
+  postRenderPass_ = VK_NULL_HANDLE;
+  postSampler_.shutdown();
+  postSceneColor_.reset();
+}
+
+bool InstancedRenderer::createShadowResources() {
+  if (!dirtRoadPreview_) return true;
+  shadowDepthFormat_ = chooseDepthFormat(physicalDevice_, true);
+  if (shadowDepthFormat_ == VK_FORMAT_UNDEFINED) {
+    renderingPolicy_.shadows = {};
+    __android_log_print(ANDROID_LOG_WARN, LogTag,
+                        "[Shadow] depth amostrável indisponível; sol mantém N.L sem oclusão.");
+    return true;
+  }
+  const u32 grid = renderingPolicy_.shadows.enabled &&
+                           renderingPolicy_.shadows.cascadeCount > 1 ? 2u : 1u;
+  const u32 resolution = renderingPolicy_.shadows.enabled
+                             ? renderingPolicy_.shadows.cascadeResolution : 1u;
+  rhi::ImageDesc image{};
+  image.width = resolution * grid;
+  image.height = resolution * grid;
+  image.format = shadowDepthFormat_;
+  image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  image.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+  image.memoryClass = rhi::MemoryClass::RenderTarget;
+  if (!memoryAllocator_->createImage(image, &shadowAtlas_)) return false;
+  rhi::SamplerDesc sampler{};
+  sampler.minFilter = VK_FILTER_NEAREST;
+  sampler.magFilter = VK_FILTER_NEAREST;
+  sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+  sampler.addressU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler.addressW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  if (!shadowSampler_.initialize(device_, sampler)) return false;
+
+  VkAttachmentReference depthReference{0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+  VkSubpassDescription subpass{};
+  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  subpass.pDepthStencilAttachment = &depthReference;
+  const VkImageView atlasView = shadowAtlas_.view();
+  const auto createPassAndFramebuffer = [&](bool preserve, VkRenderPass &outPass,
+                                             VkFramebuffer &outFramebuffer) {
+    VkAttachmentDescription attachment{};
+    attachment.format = shadowDepthFormat_;
+    attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment.loadOp = preserve ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment.initialLayout = preserve ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                        : VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkSubpassDependency dependencies[2]{};
+    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[0].dstSubpass = 0;
+    dependencies[0].srcStageMask = preserve ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+                                            : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependencies[0].srcAccessMask = preserve ? VK_ACCESS_SHADER_READ_BIT : 0;
+    dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependencies[1].srcSubpass = 0;
+    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[1].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    VkRenderPassCreateInfo pass{};
+    pass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    pass.attachmentCount = 1; pass.pAttachments = &attachment;
+    pass.subpassCount = 1; pass.pSubpasses = &subpass;
+    pass.dependencyCount = 2; pass.pDependencies = dependencies;
+    if (vkCreateRenderPass(device_, &pass, nullptr, &outPass) != VK_SUCCESS) return false;
+    VkFramebufferCreateInfo framebuffer{};
+    framebuffer.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebuffer.renderPass = outPass;
+    framebuffer.attachmentCount = 1;
+    framebuffer.pAttachments = &atlasView;
+    framebuffer.width = image.width; framebuffer.height = image.height; framebuffer.layers = 1;
+    return vkCreateFramebuffer(device_, &framebuffer, nullptr, &outFramebuffer) == VK_SUCCESS;
+  };
+  if (!createPassAndFramebuffer(false, shadowRenderPass_, shadowFramebuffer_) ||
+      !createPassAndFramebuffer(true, shadowCachedRenderPass_, shadowCachedFramebuffer_))
+    return false;
+  invalidateStaticShadowCache();
+
+  // Mesmo quando a sombra está desligada, o atlas 1x1 acima é limpo uma vez por
+  // frame e mantém o descriptor sempre válido. Pipelines de caster só existem
+  // quando há trabalho de fato.
+  if (!renderingPolicy_.shadows.enabled) return true;
+  VkShaderModule vert = createShaderModule(device_, rhi::shaders::kShadow_DepthVertSpirv,
+                                            rhi::shaders::kShadow_DepthVertSpirvSize);
+  VkShaderModule masked = useBindless_
+      ? createShaderModule(device_, rhi::shaders::kShadow_Depth_MaskedFragSpirv,
+                           rhi::shaders::kShadow_Depth_MaskedFragSpirvSize)
+      : createShaderModule(device_, rhi::shaders::kShadow_Depth_Masked_FallbackFragSpirv,
+                           rhi::shaders::kShadow_Depth_Masked_FallbackFragSpirvSize);
+  if (vert == VK_NULL_HANDLE || masked == VK_NULL_HANDLE) {
+    if (vert != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vert, nullptr);
+    if (masked != VK_NULL_HANDLE) vkDestroyShaderModule(device_, masked, nullptr);
+    return false;
+  }
+  VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(ShadowPushConstants)};
+  VkPipelineLayoutCreateInfo layout{};
+  layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layout.setLayoutCount = 1;
+  layout.pSetLayouts = &textureSetLayout_;
+  layout.pushConstantRangeCount = 1;
+  layout.pPushConstantRanges = &push;
+  bool ok = vkCreatePipelineLayout(device_, &layout, nullptr, &shadowPipelineLayout_) == VK_SUCCESS;
+
+  VkVertexInputBindingDescription bindings[2] = {
+      {0, dirtRoadResources_.header().vertexStride, VK_VERTEX_INPUT_RATE_VERTEX},
+      {1, sizeof(renderer::GpuMeshInstance), VK_VERTEX_INPUT_RATE_INSTANCE}};
+  VkVertexInputAttributeDescription attributes[14]{};
+  const bool packed = dirtRoadResources_.header().vertexStride == renderer::MapVertexStride;
+  attributes[0]={0,0,VK_FORMAT_R32G32B32_SFLOAT,0};
+  attributes[1]={1,0,packed?VK_FORMAT_R16G16B16A16_SNORM:VK_FORMAT_R32G32B32_SFLOAT,12};
+  attributes[2]={2,0,packed?VK_FORMAT_R16G16B16A16_SNORM:VK_FORMAT_R32G32B32A32_SFLOAT,packed?20u:24u};
+  attributes[3]={3,0,VK_FORMAT_R32G32_SFLOAT,packed?28u:40u};
+  attributes[4]={4,0,VK_FORMAT_R32G32_SFLOAT,packed?36u:48u};
+  attributes[5]={5,0,packed?VK_FORMAT_R8G8B8A8_UNORM:VK_FORMAT_R32G32B32A32_SFLOAT,packed?44u:56u};
+  for(u32 i=0;i<5;++i) attributes[6+i]={6+i,1,VK_FORMAT_R32G32B32A32_SFLOAT,i*16u};
+  for(u32 i=0;i<3;++i) attributes[11+i]={11+i,1,VK_FORMAT_R32G32B32A32_SFLOAT,80u+i*16u};
+  VkPipelineVertexInputStateCreateInfo vertexInput{};
+  vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  vertexInput.vertexBindingDescriptionCount = 2; vertexInput.pVertexBindingDescriptions = bindings;
+  vertexInput.vertexAttributeDescriptionCount = 14; vertexInput.pVertexAttributeDescriptions = attributes;
+  VkPipelineInputAssemblyStateCreateInfo assembly{};
+  assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  VkPipelineViewportStateCreateInfo viewport{};
+  viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewport.viewportCount = 1; viewport.scissorCount = 1;
+  VkPipelineRasterizationStateCreateInfo raster{};
+  raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  raster.polygonMode = VK_POLYGON_MODE_FILL; raster.cullMode = VK_CULL_MODE_NONE;
+  raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; raster.lineWidth = 1.0f;
+  raster.depthBiasEnable = VK_TRUE;
+  VkPipelineMultisampleStateCreateInfo multisample{};
+  multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+  VkPipelineDepthStencilStateCreateInfo depth{};
+  depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depth.depthTestEnable = VK_TRUE; depth.depthWriteEnable = VK_TRUE;
+  depth.depthCompareOp = VK_COMPARE_OP_LESS;
+  const VkDynamicState states[3] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                    VK_DYNAMIC_STATE_DEPTH_BIAS};
+  VkPipelineDynamicStateCreateInfo dynamic{};
+  dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  dynamic.dynamicStateCount = 3; dynamic.pDynamicStates = states;
+  VkPipelineColorBlendStateCreateInfo blend{};
+  blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  VkPipelineShaderStageCreateInfo stages[2] = {
+      {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_VERTEX_BIT,
+       vert,"main",nullptr},
+      {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_FRAGMENT_BIT,
+       masked,"main",nullptr}};
+  if (ok) {
+    VkGraphicsPipelineCreateInfo pipeline{};
+    pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipeline.stageCount = 1; pipeline.pStages = stages;
+    pipeline.pVertexInputState=&vertexInput; pipeline.pInputAssemblyState=&assembly;
+    pipeline.pViewportState=&viewport; pipeline.pRasterizationState=&raster;
+    pipeline.pMultisampleState=&multisample; pipeline.pDepthStencilState=&depth;
+    pipeline.pColorBlendState=&blend; pipeline.pDynamicState=&dynamic;
+    pipeline.layout=shadowPipelineLayout_; pipeline.renderPass=shadowRenderPass_;
+    ok = vkCreateGraphicsPipelines(device_,VK_NULL_HANDLE,1,&pipeline,nullptr,
+                                   &shadowOpaquePipeline_)==VK_SUCCESS;
+    pipeline.stageCount = 2;
+    if (ok) ok = vkCreateGraphicsPipelines(device_,VK_NULL_HANDLE,1,&pipeline,nullptr,
+                                           &shadowMaskedPipeline_)==VK_SUCCESS;
+  }
+  vkDestroyShaderModule(device_, vert, nullptr);
+  vkDestroyShaderModule(device_, masked, nullptr);
+  return ok;
+}
+
+void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
+  shadowCandidateDraws_ = 0;
+  shadowSubmittedDraws_ = 0;
+  shadowRenderedCascades_ = 0;
+  if (!dirtRoadPreview_ || shadowRenderPass_ == VK_NULL_HANDLE) return;
+  const u32 activeMask = shadowCascadeCount_ == 0 ? 0u : (1u << shadowCascadeCount_) - 1u;
+  const bool initializeAtlas = !shadowCacheInitialized_;
+  const u32 dirtyMask = initializeAtlas ? activeMask : (shadowCascadeDirtyMask_ & activeMask);
+  if (!initializeAtlas && dirtyMask == 0) {
+    ++shadowCacheHitFrames_;
+    return;
+  }
+  VkClearValue clear{}; clear.depthStencil = {1.0f, 0};
+  VkRenderPassBeginInfo begin{};
+  begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  begin.renderPass = initializeAtlas ? shadowRenderPass_ : shadowCachedRenderPass_;
+  begin.framebuffer = initializeAtlas ? shadowFramebuffer_ : shadowCachedFramebuffer_;
+  begin.renderArea.extent = {shadowAtlas_.width(), shadowAtlas_.height()};
+  begin.clearValueCount = initializeAtlas ? 1u : 0u;
+  begin.pClearValues = initializeAtlas ? &clear : nullptr;
+  vkCmdBeginRenderPass(commandBuffer_, &begin, VK_SUBPASS_CONTENTS_INLINE);
+  if (shadowCascadeCount_ == 0 || shadowOpaquePipeline_ == VK_NULL_HANDLE) {
+    vkCmdEndRenderPass(commandBuffer_);
+    shadowCacheInitialized_ = true;
+    shadowCascadeDirtyMask_ = 0;
+    return;
+  }
+  VkDeviceSize offset = 0;
+  const VkBuffer mesh = dirtRoadResources_.vertexBuffer();
+  const VkBuffer instances = instanceBuffer_.handle();
+  vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);
+  vkCmdBindVertexBuffers(commandBuffer_,1,1,&instances,&offset);
+  vkCmdBindIndexBuffer(commandBuffer_,dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
+  const u32 resolution = renderingPolicy_.shadows.cascadeResolution;
+  if (!initializeAtlas) {
+    VkClearAttachment depthClear{};
+    depthClear.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    depthClear.clearValue.depthStencil = {1.0f, 0};
+    for (u32 cascade = 0; cascade < shadowCascadeCount_; ++cascade) {
+      if ((dirtyMask & (1u << cascade)) == 0) continue;
+      VkClearRect rect{};
+      rect.rect.offset = {static_cast<i32>((cascade & 1u) * resolution),
+                          static_cast<i32>((cascade >> 1u) * resolution)};
+      rect.rect.extent = {resolution, resolution};
+      rect.baseArrayLayer = 0;
+      rect.layerCount = 1;
+      vkCmdClearAttachments(commandBuffer_, 1, &depthClear, 1, &rect);
+    }
+  }
+  auto pushAndDraw = [&](u32 cascade, u32 drawIndex, bool masked) {
+    const auto &draw=dirtRoadResources_.draws()[drawIndex];
+    ++shadowCandidateDraws_;
+    if (!renderer::isShadowCasterVisible(shadowCascades_[cascade], draw.boundsCenter,
+                                         draw.boundsRadius)) return;
+    const auto &material=dirtRoadResources_.materials()[draw.materialIndex];
+    if (masked && !useBindless_) {
+      const VkDescriptorSet set=dirtMaterialSets_[draw.materialIndex];
+      vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              shadowPipelineLayout_,0,1,&set,0,nullptr);
+    }
+    ShadowPushConstants push{};
+    std::memcpy(push.lightViewProjection,shadowCascades_[cascade].viewProjection,
+                sizeof(push.lightViewProjection));
+    push.alphaCutoffUvSlot[0]=material.alphaCutoff;
+    push.alphaCutoffUvSlot[1]=(material.textureCoordinates&3u)==1u?1.0f:0.0f;
+    const u32 texture=material.textureIndices[0];
+    push.baseTextureIndex[0]=useBindless_ && texture!=renderer::InvalidMapTexture
+                                 ? dirtTextureSlots_[texture] : baseTextureIndex_;
+    vkCmdPushConstants(commandBuffer_,shadowPipelineLayout_,
+                       VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0,sizeof(push),&push);
+    vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,
+                     static_cast<i32>(draw.vertexOffset),drawIndex);
+    ++shadowSubmittedDraws_;
+  };
+  for(u32 cascade=0;cascade<shadowCascadeCount_;++cascade) {
+    if ((dirtyMask & (1u << cascade)) == 0) continue;
+    ++shadowRenderedCascades_;
+    VkViewport viewport{static_cast<float>((cascade&1u)*resolution),
+                        static_cast<float>((cascade>>1u)*resolution),
+                        static_cast<float>(resolution),static_cast<float>(resolution),0.0f,1.0f};
+    VkRect2D scissor{{static_cast<i32>((cascade&1u)*resolution),
+                      static_cast<i32>((cascade>>1u)*resolution)}, {resolution,resolution}};
+    vkCmdSetViewport(commandBuffer_,0,1,&viewport);
+    vkCmdSetScissor(commandBuffer_,0,1,&scissor);
+    vkCmdSetDepthBias(commandBuffer_,renderingPolicy_.shadows.depthBiasConstant,0.0f,
+                      renderingPolicy_.shadows.depthBiasSlope);
+    vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,shadowOpaquePipeline_);
+    // Packages store every discrete LOD as draw records. Shadowing all stored
+    // levels would duplicate the same caster and turn a content optimization
+    // into a shadow spike. Until shadow LOD gets its own stable selection
+    // epoch, use the authoritative LOD0 set: correct silhouettes, no duplicate
+    // geometry, and deterministic static-cache invalidation.
+    const std::vector<u32> &shadowSolidDraws =
+        lodGroups_.empty() ? solidDrawOrder_ : levelZeroSolidDrawOrder_;
+    const std::vector<u32> &shadowCoverageDraws =
+        coverageLodGroups_.empty() ? coverageDrawOrder_ : levelZeroCoverageDrawOrder_;
+    for(u32 drawIndex:shadowSolidDraws) pushAndDraw(cascade,drawIndex,false);
+    if(!shadowCoverageDraws.empty()) {
+      vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,shadowMaskedPipeline_);
+      if(useBindless_)
+        vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                shadowPipelineLayout_,0,1,&textureSet_,0,nullptr);
+      for(u32 drawIndex:shadowCoverageDraws) pushAndDraw(cascade,drawIndex,true);
+    }
+  }
+  vkCmdEndRenderPass(commandBuffer_);
+  shadowCacheInitialized_ = true;
+  shadowCascadeDirtyMask_ = 0;
+}
+
+void InstancedRenderer::destroyShadowResources() {
+  if (shadowOpaquePipeline_ != VK_NULL_HANDLE) vkDestroyPipeline(device_,shadowOpaquePipeline_,nullptr);
+  if (shadowMaskedPipeline_ != VK_NULL_HANDLE) vkDestroyPipeline(device_,shadowMaskedPipeline_,nullptr);
+  if (shadowPipelineLayout_ != VK_NULL_HANDLE) vkDestroyPipelineLayout(device_,shadowPipelineLayout_,nullptr);
+  if (shadowFramebuffer_ != VK_NULL_HANDLE) vkDestroyFramebuffer(device_,shadowFramebuffer_,nullptr);
+  if (shadowCachedFramebuffer_ != VK_NULL_HANDLE)
+    vkDestroyFramebuffer(device_,shadowCachedFramebuffer_,nullptr);
+  if (shadowRenderPass_ != VK_NULL_HANDLE) vkDestroyRenderPass(device_,shadowRenderPass_,nullptr);
+  if (shadowCachedRenderPass_ != VK_NULL_HANDLE)
+    vkDestroyRenderPass(device_,shadowCachedRenderPass_,nullptr);
+  shadowOpaquePipeline_=VK_NULL_HANDLE; shadowMaskedPipeline_=VK_NULL_HANDLE;
+  shadowPipelineLayout_=VK_NULL_HANDLE; shadowFramebuffer_=VK_NULL_HANDLE;
+  shadowCachedFramebuffer_=VK_NULL_HANDLE; shadowRenderPass_=VK_NULL_HANDLE;
+  shadowCachedRenderPass_=VK_NULL_HANDLE; shadowCascadeCount_=0;
+  shadowCacheInitialized_=false; shadowCascadeDirtyMask_=0xffffffffu;
+  shadowCacheHitFrames_=0;
+  shadowSampler_.shutdown(); shadowAtlas_.reset(); shadowDepthFormat_=VK_FORMAT_UNDEFINED;
+}
+
 bool InstancedRenderer::createFramebuffers() {
   framebufferCount_ = swapchain_->imageCount();
   for (u32 i = 0; i < framebufferCount_; ++i) {
-    const VkImageView attachments[] = {swapchain_->imageView(i), depthImage_.view()};
+    const VkImageView colorView = renderingPolicy_.post.dedicatedPass
+                                      ? postSceneColor_.view() : swapchain_->imageView(i);
+    const VkImageView attachments[] = {colorView, depthImage_.view()};
     VkFramebufferCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     info.renderPass = renderPass_;
     info.attachmentCount = 2;
     info.pAttachments = attachments;
-    info.width = swapchain_->width();
-    info.height = swapchain_->height();
+    info.width = renderTargetWidth();
+    info.height = renderTargetHeight();
     info.layers = 1;
     if (vkCreateFramebuffer(device_, &info, nullptr, &framebuffers_[i]) != VK_SUCCESS) {
       return false;
+    }
+    if (renderingPolicy_.post.dedicatedPass) {
+      const VkImageView presentView = swapchain_->imageView(i);
+      info.renderPass = postRenderPass_;
+      info.attachmentCount = 1;
+      info.pAttachments = &presentView;
+      info.width = swapchain_->width();
+      info.height = swapchain_->height();
+      if (vkCreateFramebuffer(device_, &info, nullptr, &postFramebuffers_[i]) != VK_SUCCESS)
+        return false;
     }
   }
   return true;
@@ -686,6 +1435,10 @@ void InstancedRenderer::destroyFramebuffers() {
     if (framebuffers_[i] != VK_NULL_HANDLE) {
       vkDestroyFramebuffer(device_, framebuffers_[i], nullptr);
       framebuffers_[i] = VK_NULL_HANDLE;
+    }
+    if (postFramebuffers_[i] != VK_NULL_HANDLE) {
+      vkDestroyFramebuffer(device_, postFramebuffers_[i], nullptr);
+      postFramebuffers_[i] = VK_NULL_HANDLE;
     }
   }
   framebufferCount_ = 0;
@@ -715,17 +1468,21 @@ bool InstancedRenderer::createInstanceBuffer() {
       if (!renderer::buildGpuMeshInstance(draws[index].model, tint, &instances[index])) return false;
     }
     if (!memoryAllocator_->flushBuffer(instanceBuffer_)) return false;
-    VkPhysicalDeviceFeatures features{};
     VkPhysicalDeviceProperties properties{};
-    vkGetPhysicalDeviceFeatures(physicalDevice_, &features);
     vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
-    useMultiDrawIndirect_ = features.multiDrawIndirect && features.drawIndirectFirstInstance &&
+    const auto &enabledFeatures = rhiDevice_->deviceFeatures();
+    useMultiDrawIndirect_ = enabledFeatures.multiDrawIndirect &&
+                            enabledFeatures.drawIndirectFirstInstance &&
                             properties.limits.maxDrawIndirectCount >= instanceCount_;
     if (useMultiDrawIndirect_) {
       rhi::BufferDesc indirect{};
       indirect.sizeBytes = static_cast<u64>(instanceCount_) *
                            sizeof(VkDrawIndexedIndirectCommand);
-      indirect.usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+      // STORAGE alem de INDIRECT: o kernel de oclusao escreve o instanceCount
+      // destes mesmos comandos (ver createDrawCullResources). Declarar o usage
+      // sempre mantem um unico buffer para os dois caminhos.
+      indirect.usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+                       VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
       indirect.memoryClass = rhi::MemoryClass::Buffer;
       indirect.cpuAccess = rhi::CpuAccess::SequentialWrite;
       indirect.preferDeviceMemory = false;
@@ -744,8 +1501,8 @@ bool InstancedRenderer::createDepthImage() {
   // Resolvida uma vez por (re)criação de recursos, antes de qualquer decisão de
   // formato/usage/anexo, para que todas as três leiam o mesmo resultado.
   renderer::FrameGraphInputs graphInputs{};
-  graphInputs.width = swapchain_->width();
-  graphInputs.height = swapchain_->height();
+  graphInputs.width = renderTargetWidth();
+  graphInputs.height = renderTargetHeight();
   graphInputs.hzbEnabled = hzbWorkloadEligible_;
   frameAttachmentPolicy_ = renderer::resolveFrameAttachmentPolicy(graphInputs);
   if (!frameAttachmentPolicy_.valid) {
@@ -770,8 +1527,8 @@ bool InstancedRenderer::createDepthImage() {
   }
   if (depthFormat_ == VK_FORMAT_UNDEFINED) return false;
   rhi::ImageDesc desc{};
-  desc.width = swapchain_->width();
-  desc.height = swapchain_->height();
+  desc.width = renderTargetWidth();
+  desc.height = renderTargetHeight();
   desc.format = depthFormat_;
   desc.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
                (frameAttachmentPolicy_.depthSampled ? VK_IMAGE_USAGE_SAMPLED_BIT : 0u);
@@ -810,6 +1567,13 @@ struct HzbReduceFirstPushConstants {
 struct HzbReducePushConstants {
   u32 previousWidth;
   u32 previousHeight;
+};
+struct HzbReduceComputePushConstants {
+  u32 sourceWidth;
+  u32 sourceHeight;
+  u32 destinationWidth;
+  u32 destinationHeight;
+  u32 firstLevel;
 };
 } // namespace
 
@@ -890,7 +1654,10 @@ bool InstancedRenderer::createHzbPipeline(const u32 *vertSpirv, u32 vertSpirvSiz
 }
 
 void InstancedRenderer::destroyHzbResources() {
+  // O consumidor referencia as imagens e o sampler destruidos abaixo.
+  destroyDrawCullResources();
   for (HzbLevelResources &level : hzbLevels_) {
+    level.computeKernel.shutdown();
     if (level.framebuffer != VK_NULL_HANDLE) {
       vkDestroyFramebuffer(device_, level.framebuffer, nullptr);
       level.framebuffer = VK_NULL_HANDLE;
@@ -932,6 +1699,10 @@ void InstancedRenderer::destroyHzbResources() {
     hzbRenderPass_ = VK_NULL_HANDLE;
   }
   hzbResourcesReady_ = false;
+  hzbComputeActive_ = false;
+  hzbComputeImagesInitialized_ = false;
+  hzbReadbackRecordedThisFrame_ = false;
+  hzbComputeValidationLogged_ = false;
   hzbPyramid_ = renderer::HzbPyramid{};
   hzbPyramidValid_ = false;
   hzbRecordedCameraValid_ = false;
@@ -949,8 +1720,8 @@ bool InstancedRenderer::createHzbResources() {
   // later level halves via ceiling-divide, the exact reduction
   // hzb_reduce.frag/renderer::buildHzbPyramid implement, so the GPU chain's
   // shape always matches what the CPU pure layer expects/validates.
-  u32 width = std::max(swapchain_->width() / 8u, 4u);
-  u32 height = std::max(swapchain_->height() / 8u, 4u);
+  u32 width = std::max(renderTargetWidth() / 8u, 4u);
+  u32 height = std::max(renderTargetHeight() / 8u, 4u);
   u32 readbackOffsetFloats = 0;
   for (u32 level = 0; level < kHzbLevelCount; ++level) {
     hzbLevels_[level].width = width;
@@ -963,7 +1734,19 @@ bool InstancedRenderer::createHzbResources() {
   }
 
   constexpr VkFormat kHzbFormat = VK_FORMAT_R32_SFLOAT;
-  {
+  VkFormatProperties hzbFormatProperties{};
+  vkGetPhysicalDeviceFormatProperties(physicalDevice_, kHzbFormat, &hzbFormatProperties);
+  const bool storageImageSupported =
+      (hzbFormatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0;
+  hzbComputeActive_ = hzbComputeEnabled_ && rhiDevice_ != nullptr &&
+                      rhiDevice_->computeLimits().supported && storageImageSupported;
+  if (hzbComputeEnabled_ && !hzbComputeActive_) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag,
+        "[HZB/Compute] indisponível: compute=%s R32_SFLOAT_storage=%s; fallback raster preservado.",
+        rhiDevice_ != nullptr && rhiDevice_->computeLimits().supported ? "sim" : "nao",
+        storageImageSupported ? "sim" : "nao");
+  }
+  if (!hzbComputeActive_) {
     VkAttachmentDescription attachment{};
     attachment.format = kHzbFormat;
     attachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -1018,7 +1801,7 @@ bool InstancedRenderer::createHzbResources() {
     if (vkCreateRenderPass(device_, &info, nullptr, &hzbRenderPass_) != VK_SUCCESS) return false;
   }
 
-  {
+  if (!hzbComputeActive_) {
     VkDescriptorSetLayoutBinding binding{};
     binding.binding = 0;
     binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1031,7 +1814,7 @@ bool InstancedRenderer::createHzbResources() {
     if (vkCreateDescriptorSetLayout(device_, &info, nullptr, &hzbDescriptorSetLayout_) != VK_SUCCESS)
       return false;
   }
-  {
+  if (!hzbComputeActive_) {
     VkDescriptorPoolSize poolSize{};
     poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     poolSize.descriptorCount = kHzbLevelCount;
@@ -1057,14 +1840,20 @@ bool InstancedRenderer::createHzbResources() {
   // Nearest is chosen only so the sampler object's own intent is unambiguous.
   if (!hzbSampler_.initialize(device_, samplerDesc)) return false;
 
-  if (!createHzbPipeline(rhi::shaders::kHzb_Reduce_FirstVertSpirv, rhi::shaders::kHzb_Reduce_FirstVertSpirvSize,
-                         rhi::shaders::kHzb_Reduce_FirstFragSpirv, rhi::shaders::kHzb_Reduce_FirstFragSpirvSize,
-                         sizeof(HzbReduceFirstPushConstants), hzbFirstPipelineLayout_, hzbFirstPipeline_))
-    return false;
-  if (!createHzbPipeline(rhi::shaders::kHzb_ReduceVertSpirv, rhi::shaders::kHzb_ReduceVertSpirvSize,
-                         rhi::shaders::kHzb_ReduceFragSpirv, rhi::shaders::kHzb_ReduceFragSpirvSize,
-                         sizeof(HzbReducePushConstants), hzbReducePipelineLayout_, hzbReducePipeline_))
-    return false;
+  if (!hzbComputeActive_) {
+    if (!createHzbPipeline(rhi::shaders::kHzb_Reduce_FirstVertSpirv,
+                           rhi::shaders::kHzb_Reduce_FirstVertSpirvSize,
+                           rhi::shaders::kHzb_Reduce_FirstFragSpirv,
+                           rhi::shaders::kHzb_Reduce_FirstFragSpirvSize,
+                           sizeof(HzbReduceFirstPushConstants), hzbFirstPipelineLayout_,
+                           hzbFirstPipeline_)) return false;
+    if (!createHzbPipeline(rhi::shaders::kHzb_ReduceVertSpirv,
+                           rhi::shaders::kHzb_ReduceVertSpirvSize,
+                           rhi::shaders::kHzb_ReduceFragSpirv,
+                           rhi::shaders::kHzb_ReduceFragSpirvSize,
+                           sizeof(HzbReducePushConstants), hzbReducePipelineLayout_,
+                           hzbReducePipeline_)) return false;
+  }
 
   const usize readbackFloats = readbackOffsetFloats;
   rhi::BufferDesc readbackDesc{};
@@ -1073,9 +1862,10 @@ bool InstancedRenderer::createHzbResources() {
   readbackDesc.memoryClass = rhi::MemoryClass::RenderTarget;
   readbackDesc.cpuAccess = rhi::CpuAccess::Random; // GPU writes, CPU reads repeatedly -- see invalidateBuffer.
   readbackDesc.preferDeviceMemory = false;
-  if (!memoryAllocator_->createBuffer(readbackDesc, &hzbReadbackBuffer_) ||
-      hzbReadbackBuffer_.mappedData() == nullptr)
-    return false;
+  if (!hzbComputeActive_ || hzbComputeReadbackValidationEnabled_) {
+    if (!memoryAllocator_->createBuffer(readbackDesc, &hzbReadbackBuffer_) ||
+        hzbReadbackBuffer_.mappedData() == nullptr) return false;
+  }
 
   for (u32 level = 0; level < kHzbLevelCount; ++level) {
     HzbLevelResources &resources = hzbLevels_[level];
@@ -1083,51 +1873,95 @@ bool InstancedRenderer::createHzbResources() {
     imageDesc.width = resources.width;
     imageDesc.height = resources.height;
     imageDesc.format = kHzbFormat;
-    imageDesc.usage =
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    imageDesc.usage = VK_IMAGE_USAGE_SAMPLED_BIT |
+        (hzbComputeActive_ ? VK_IMAGE_USAGE_STORAGE_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) |
+        ((!hzbComputeActive_ || hzbComputeReadbackValidationEnabled_)
+             ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0u);
     imageDesc.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     imageDesc.memoryClass = rhi::MemoryClass::RenderTarget;
     if (!memoryAllocator_->createImage(imageDesc, &resources.image)) return false;
 
-    const VkImageView ownView = resources.image.view();
-    VkFramebufferCreateInfo fbInfo{};
-    fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    fbInfo.renderPass = hzbRenderPass_;
-    fbInfo.attachmentCount = 1;
-    fbInfo.pAttachments = &ownView;
-    fbInfo.width = resources.width;
-    fbInfo.height = resources.height;
-    fbInfo.layers = 1;
-    if (vkCreateFramebuffer(device_, &fbInfo, nullptr, &resources.framebuffer) != VK_SUCCESS) return false;
+    const VkImageView sourceView = level == 0 ? depthImage_.view()
+                                              : hzbLevels_[level - 1].image.view();
+    if (hzbComputeActive_) {
+      const rhi::ComputeBindingDesc bindings[] = {
+          {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
+          {1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+      };
+      rhi::ComputeKernelDesc kernelDesc{};
+      kernelDesc.spirv = rhi::shaders::kHzb_Reduce_ComputeCompSpirv;
+      kernelDesc.spirvBytes = rhi::shaders::kHzb_Reduce_ComputeCompSpirvSize;
+      kernelDesc.bindings = bindings;
+      kernelDesc.bindingCount = 2;
+      kernelDesc.pushConstantBytes = sizeof(HzbReduceComputePushConstants);
+      kernelDesc.debugName = "HZB/ReduceCompute";
+      if (!resources.computeKernel.initialize(
+              device_, rhiDevice_->computeLimits(), kernelDesc,
+              rhiDevice_->pipelineCache().driverHandle()) ||
+          !resources.computeKernel.writeImage(
+              0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, sourceView,
+              level == 0 ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                         : VK_IMAGE_LAYOUT_GENERAL,
+              hzbSampler_.handle()) ||
+          !resources.computeKernel.writeImage(
+              1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, resources.image.view(),
+              VK_IMAGE_LAYOUT_GENERAL)) return false;
+      rhiDevice_->setObjectName(
+          VK_OBJECT_TYPE_PIPELINE,
+          reinterpret_cast<u64>(resources.computeKernel.handle()),
+          "HZB/ReduceComputePipeline");
+      rhiDevice_->setObjectName(VK_OBJECT_TYPE_IMAGE,
+          reinterpret_cast<u64>(resources.image.handle()), "HZB/ComputeLevel");
+    } else {
+      const VkImageView ownView = resources.image.view();
+      VkFramebufferCreateInfo fbInfo{};
+      fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+      fbInfo.renderPass = hzbRenderPass_;
+      fbInfo.attachmentCount = 1;
+      fbInfo.pAttachments = &ownView;
+      fbInfo.width = resources.width;
+      fbInfo.height = resources.height;
+      fbInfo.layers = 1;
+      if (vkCreateFramebuffer(device_, &fbInfo, nullptr, &resources.framebuffer) != VK_SUCCESS)
+        return false;
 
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = hzbDescriptorPool_;
-    allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &hzbDescriptorSetLayout_;
-    if (vkAllocateDescriptorSets(device_, &allocInfo, &resources.descriptorSet) != VK_SUCCESS) return false;
-
-    const VkImageView sourceView = level == 0 ? depthImage_.view() : hzbLevels_[level - 1].image.view();
-    VkDescriptorImageInfo imageInfo{};
-    imageInfo.sampler = hzbSampler_.handle();
-    imageInfo.imageView = sourceView;
-    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = resources.descriptorSet;
-    write.dstBinding = 0;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    write.pImageInfo = &imageInfo;
-    vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+      VkDescriptorSetAllocateInfo allocInfo{};
+      allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+      allocInfo.descriptorPool = hzbDescriptorPool_;
+      allocInfo.descriptorSetCount = 1;
+      allocInfo.pSetLayouts = &hzbDescriptorSetLayout_;
+      if (vkAllocateDescriptorSets(device_, &allocInfo, &resources.descriptorSet) != VK_SUCCESS)
+        return false;
+      VkDescriptorImageInfo imageInfo{};
+      imageInfo.sampler = hzbSampler_.handle();
+      imageInfo.imageView = sourceView;
+      imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+      VkWriteDescriptorSet write{};
+      write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+      write.dstSet = resources.descriptorSet;
+      write.dstBinding = 0;
+      write.descriptorCount = 1;
+      write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+      write.pImageInfo = &imageInfo;
+      vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+    }
   }
 
   hzbResourcesReady_ = true;
+  // O consumidor GPU e criado por ultimo: ele precisa das imagens, do sampler e
+  // do buffer indireto ja prontos, e nunca falha a inicializacao do renderer.
+  if (!createDrawCullResources()) return false;
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[HZB] produtor=%s níveis=%u base=%ux%u readback=%s.",
+      hzbComputeActive_ ? "compute" : "raster", kHzbLevelCount,
+      hzbLevels_[0].width, hzbLevels_[0].height,
+      (!hzbComputeActive_ || hzbComputeReadbackValidationEnabled_) ? "sim" : "nao");
   return true;
 }
 
 void InstancedRenderer::recordHzbReductionPass(const platform::FreeCameraState &camera) {
   if (!hzbResourcesReady_) return;
+  hzbReadbackRecordedThisFrame_ = false;
 
   // depthImage_ just finished being written by the main pass's LATE fragment
   // tests -- transition it for sampling before the first reduction pass
@@ -1146,7 +1980,94 @@ void InstancedRenderer::recordHzbReductionPass(const platform::FreeCameraState &
   depthToSampled.image = depthImage_.handle();
   depthToSampled.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
   vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-                       VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &depthToSampled);
+                       hzbComputeActive_ ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+                                         : VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                       0, 0, nullptr, 0, nullptr, 1, &depthToSampled);
+
+  if (hzbComputeActive_) {
+    constexpr u32 localSize = 8;
+    for (u32 level = 0; level < kHzbLevelCount; ++level) {
+      HzbLevelResources &resources = hzbLevels_[level];
+      const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+      rhi::cmdComputeImageBarrier(
+          commandBuffer_, resources.image.handle(), range,
+          hzbComputeImagesInitialized_ ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_UNDEFINED,
+          VK_IMAGE_LAYOUT_GENERAL,
+          hzbComputeImagesInitialized_ ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+                                       : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+          hzbComputeImagesInitialized_ ? (VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT)
+                                       : 0,
+          VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
+      const u32 sourceWidth = level == 0 ? renderWidth() : hzbLevels_[level - 1].width;
+      const u32 sourceHeight = level == 0 ? renderHeight() : hzbLevels_[level - 1].height;
+      const HzbReduceComputePushConstants push{
+          sourceWidth, sourceHeight, resources.width, resources.height,
+          level == 0 ? 1u : 0u};
+      const rhi::ComputeDispatch dispatch{
+          (resources.width + localSize - 1) / localSize,
+          (resources.height + localSize - 1) / localSize, 1};
+      if (!resources.computeKernel.recordDispatch(commandBuffer_, dispatch, &push,
+                                                   sizeof(push))) {
+        __android_log_print(ANDROID_LOG_ERROR, LogTag,
+                            "[HZB/Compute] dispatch inválido no nível %u.", level);
+        hzbComputeActive_ = false;
+        hzbFrameEligible_ = false;
+        return;
+      }
+      // The next level samples this image in the same queue. GENERAL avoids a
+      // layout round-trip; the explicit write->read dependency is the actual
+      // correctness requirement.
+      rhi::cmdComputeImageBarrier(
+          commandBuffer_, resources.image.handle(), range,
+          VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+          VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+          VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+    }
+    hzbComputeImagesInitialized_ = true;
+
+    if (hzbComputeReadbackValidationEnabled_) {
+      VkImageMemoryBarrier toTransfer[kHzbLevelCount]{};
+      for (u32 level = 0; level < kHzbLevelCount; ++level) {
+        VkImageMemoryBarrier &barrier = toTransfer[level];
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = hzbLevels_[level].image.handle();
+        barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+      }
+      vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                           VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr,
+                           kHzbLevelCount, toTransfer);
+      for (u32 level = 0; level < kHzbLevelCount; ++level) {
+        VkBufferImageCopy region{};
+        region.bufferOffset = static_cast<VkDeviceSize>(
+            hzbLevels_[level].readbackOffsetFloats) * sizeof(float);
+        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        region.imageExtent = {hzbLevels_[level].width, hzbLevels_[level].height, 1};
+        vkCmdCopyImageToBuffer(commandBuffer_, hzbLevels_[level].image.handle(),
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               hzbReadbackBuffer_.handle(), 1, &region);
+      }
+      for (u32 level = 0; level < kHzbLevelCount; ++level) {
+        VkImageMemoryBarrier &barrier = toTransfer[level];
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+      }
+      vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                           VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr,
+                           kHzbLevelCount, toTransfer);
+      hzbReadbackRecordedThisFrame_ = true;
+    }
+    hzbRecordedCamera_ = camera;
+    hzbRecordedCameraValid_ = true;
+    return;
+  }
 
   for (u32 level = 0; level < kHzbLevelCount; ++level) {
     const HzbLevelResources &resources = hzbLevels_[level];
@@ -1167,7 +2088,7 @@ void InstancedRenderer::recordHzbReductionPass(const platform::FreeCameraState &
       vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, hzbFirstPipeline_);
       vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, hzbFirstPipelineLayout_, 0, 1,
                               &resources.descriptorSet, 0, nullptr);
-      const HzbReduceFirstPushConstants push{swapchain_->width(), swapchain_->height(), resources.width,
+      const HzbReduceFirstPushConstants push{renderWidth(), renderHeight(), resources.width,
                                              resources.height};
       vkCmdPushConstants(commandBuffer_, hzbFirstPipelineLayout_, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push),
                          &push);
@@ -1217,6 +2138,7 @@ void InstancedRenderer::recordHzbReductionPass(const platform::FreeCameraState &
   }
   hzbRecordedCamera_ = camera;
   hzbRecordedCameraValid_ = true;
+  hzbReadbackRecordedThisFrame_ = true;
 }
 
 void InstancedRenderer::readHzbPyramidFromPreviousFrame() {
@@ -1232,8 +2154,232 @@ void InstancedRenderer::readHzbPyramidFromPreviousFrame() {
   hzbPyramidValid_ = renderer::hzbPyramidFromLevels(static_cast<const float *>(hzbReadbackBuffer_.mappedData()),
                                                     floatCount, hzbLevelDims_.data(), kHzbLevelCount,
                                                     hzbPyramid_);
+  if (hzbPyramidValid_ && hzbComputeActive_) {
+    hzbPyramidValid_ = renderer::validateHzbMaxReductionChain(hzbPyramid_);
+    if (!hzbComputeValidationLogged_) {
+      __android_log_print(hzbPyramidValid_ ? ANDROID_LOG_INFO : ANDROID_LOG_ERROR,
+          LogTag, "[HZB/ComputeValidation] cadeia_max_2x2=%s texels=%zu níveis=%u.",
+          hzbPyramidValid_ ? "valida" : "invalida", floatCount, kHzbLevelCount);
+      hzbComputeValidationLogged_ = true;
+    }
+  }
   hzbPyramidCameraValid_ = hzbPyramidValid_ && hzbRecordedCameraValid_;
   if (hzbPyramidCameraValid_) hzbPyramidCamera_ = hzbRecordedCamera_;
+}
+
+renderer::PerspectiveFrustum InstancedRenderer::buildFrameFrustum(
+    const platform::FreeCameraState &camera) const {
+  renderer::PerspectiveVisibilitySettings settings = visibilitySettings_;
+  settings.nearPlane = dirtRoadResources_.header().nearPlane;
+  settings.farPlane = dirtRoadResources_.header().farPlane;
+  const VkExtent2D displayExtent = swapchain_->displayExtent();
+  return renderer::buildPerspectiveFrustum(
+      camera.position, camera.yaw, camera.pitch,
+      static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height),
+      settings);
+}
+
+void InstancedRenderer::destroyDrawCullResources() {
+  drawCullKernel_.shutdown();
+  drawCullRecordBuffer_.reset();
+  drawCullStateBuffer_.reset();
+  drawCullTelemetryBuffer_.reset();
+  drawCullCapacity_ = 0;
+  hzbGpuCullingActive_ = false;
+  drawCullDispatchedThisFrame_ = false;
+  drawCullContractLogged_ = false;
+  drawCullTelemetry_ = {};
+}
+
+bool InstancedRenderer::createDrawCullResources() {
+  // draw_cull.comp declara um binding por nivel porque a reflexao do RHI so
+  // aceita descriptorCount 1 (ver rhi/compute_validation.cpp). Mudar a altura da
+  // piramide sem mudar o shader ficaria silencioso sem esta assercao.
+  static_assert(kHzbLevelCount == 6, "draw_cull.comp declara exatamente seis niveis de HZB.");
+  destroyDrawCullResources();
+  if (!hzbGpuCullingEnabled_) return true;
+  // O consumidor e opcional: sua ausencia nao invalida o produtor. Qualquer
+  // pre-requisito faltando desliga so o culling, e o frame continua correto
+  // desenhando tudo o que sobreviveu ao frustum na CPU.
+  if (!hzbComputeActive_ || !useMultiDrawIndirect_ || !dirtRoadPreview_ ||
+      instanceCount_ == 0 || !indirectBuffer_.isReady() ||
+      rhiDevice_ == nullptr || !rhiDevice_->computeLimits().supported) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag,
+        "[Culling] indisponivel: produtor_compute=%s multi_draw=%s mapa=%s draws=%u.",
+        hzbComputeActive_ ? "sim" : "nao", useMultiDrawIndirect_ ? "sim" : "nao",
+        dirtRoadPreview_ ? "sim" : "nao", instanceCount_);
+    return true;
+  }
+
+  const u32 capacity = instanceCount_;
+  rhi::BufferDesc recordDesc{};
+  recordDesc.sizeBytes = static_cast<u64>(capacity) * sizeof(renderer::GpuCullDrawRecord);
+  recordDesc.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+  recordDesc.memoryClass = rhi::MemoryClass::Buffer;
+  recordDesc.cpuAccess = rhi::CpuAccess::SequentialWrite;
+  recordDesc.preferDeviceMemory = false;
+
+  rhi::BufferDesc stateDesc = recordDesc;
+  stateDesc.sizeBytes = static_cast<u64>(capacity) * sizeof(u32);
+  // A histerese e lida e escrita pela GPU todo frame e zerada pela CPU quando o
+  // estagio sai do ar; Random e o acesso honesto, nao SequentialWrite.
+  stateDesc.cpuAccess = rhi::CpuAccess::Random;
+
+  rhi::BufferDesc telemetryDesc = recordDesc;
+  telemetryDesc.sizeBytes = sizeof(u32) * 4;
+  telemetryDesc.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  telemetryDesc.cpuAccess = rhi::CpuAccess::Random;
+
+  const bool buffersReady =
+      memoryAllocator_->createBuffer(recordDesc, &drawCullRecordBuffer_) &&
+      drawCullRecordBuffer_.mappedData() != nullptr &&
+      memoryAllocator_->createBuffer(stateDesc, &drawCullStateBuffer_) &&
+      drawCullStateBuffer_.mappedData() != nullptr &&
+      memoryAllocator_->createBuffer(telemetryDesc, &drawCullTelemetryBuffer_) &&
+      drawCullTelemetryBuffer_.mappedData() != nullptr;
+  if (!buffersReady) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag,
+        "[Culling] falha ao alocar buffers do kernel; oclusao GPU permanece desligada.");
+    destroyDrawCullResources();
+    return true;
+  }
+  // Estado e registros comecam zerados: nenhum objeto entra com streak herdado
+  // de uma epoca anterior, e nenhum slot de sobra entra marcado como presente.
+  std::memset(drawCullStateBuffer_.mappedData(), 0, static_cast<usize>(stateDesc.sizeBytes));
+  std::memset(drawCullRecordBuffer_.mappedData(), 0, static_cast<usize>(recordDesc.sizeBytes));
+  if (!memoryAllocator_->flushBuffer(drawCullStateBuffer_) ||
+      !memoryAllocator_->flushBuffer(drawCullRecordBuffer_)) {
+    destroyDrawCullResources();
+    return true;
+  }
+
+  rhi::ComputeBindingDesc bindings[4 + kHzbLevelCount]{};
+  for (u32 index = 0; index < 4; ++index)
+    bindings[index] = {index, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1};
+  for (u32 level = 0; level < kHzbLevelCount; ++level)
+    bindings[4 + level] = {4 + level, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1};
+
+  rhi::ComputeKernelDesc kernelDesc{};
+  kernelDesc.spirv = rhi::shaders::kDraw_CullCompSpirv;
+  kernelDesc.spirvBytes = rhi::shaders::kDraw_CullCompSpirvSize;
+  kernelDesc.bindings = bindings;
+  kernelDesc.bindingCount = 4 + kHzbLevelCount;
+  kernelDesc.pushConstantBytes = sizeof(renderer::GpuCullParameters);
+  kernelDesc.debugName = "Culling/DrawCull";
+  bool ready = drawCullKernel_.initialize(device_, rhiDevice_->computeLimits(), kernelDesc,
+                                          rhiDevice_->pipelineCache().driverHandle()) &&
+      drawCullKernel_.writeBuffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, drawCullRecordBuffer_) &&
+      drawCullKernel_.writeBuffer(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, indirectBuffer_) &&
+      drawCullKernel_.writeBuffer(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, drawCullStateBuffer_) &&
+      drawCullKernel_.writeBuffer(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, drawCullTelemetryBuffer_);
+  for (u32 level = 0; ready && level < kHzbLevelCount; ++level) {
+    // GENERAL e nao SHADER_READ_ONLY_OPTIMAL: e o layout em que a cadeia de
+    // reducao em compute deixa cada nivel, e uma ida e volta de layout por
+    // frame custaria mais do que a amostragem em GENERAL.
+    ready = drawCullKernel_.writeImage(4 + level, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                       hzbLevels_[level].image.view(), VK_IMAGE_LAYOUT_GENERAL,
+                                       hzbSampler_.handle());
+  }
+  if (!ready) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag,
+        "[Culling] contrato do kernel recusado; oclusao GPU permanece desligada.");
+    destroyDrawCullResources();
+    return true;
+  }
+  rhiDevice_->setObjectName(VK_OBJECT_TYPE_PIPELINE,
+      reinterpret_cast<u64>(drawCullKernel_.handle()), "Culling/DrawCullPipeline");
+  rhiDevice_->setObjectName(VK_OBJECT_TYPE_BUFFER,
+      reinterpret_cast<u64>(drawCullRecordBuffer_.handle()), "Culling/DrawRecords");
+  drawCullCapacity_ = capacity;
+  hzbGpuCullingActive_ = true;
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[Culling] consumidor=compute capacidade=%u histerese=%u bias=%.6f base=%ux%u niveis=%u.",
+      drawCullCapacity_, hzbHysteresisFrames_, static_cast<double>(hzbNormalizedDepthBias_),
+      hzbLevels_[0].width, hzbLevels_[0].height, kHzbLevelCount);
+  return true;
+}
+
+void InstancedRenderer::recordDrawCullDispatch(const platform::FreeCameraState &camera) {
+  drawCullDispatchedThisFrame_ = false;
+  if (!hzbGpuCullingActive_ || !hzbComputeImagesInitialized_) return;
+
+  // A view descreve a FORMA da piramide, nao seu conteudo: os texels vivem em
+  // seis imagens da GPU e nunca sao mapeados neste caminho. O ponteiro nulo e
+  // deliberado -- so a referencia de CPU (teste e validacao) o le.
+  renderer::GpuCullHzbView hzbView{};
+  hzbView.baseWidth = hzbLevels_[0].width;
+  hzbView.baseHeight = hzbLevels_[0].height;
+  hzbView.levelCount = kHzbLevelCount;
+
+  const rhi::SurfaceTransform &surfaceTransform = swapchain_->surfaceTransform();
+  const renderer::HzbScreenTransform screenTransform{
+      surfaceTransform.xx, surfaceTransform.xy, surfaceTransform.yx, surfaceTransform.yy};
+  const renderer::PerspectiveFrustum frustum = buildFrameFrustum(camera);
+  // A piramide foi construida no fim de um frame anterior, com a pose gravada
+  // em hzbRecordedCamera_. A guarda converte a diferenca entre as duas poses em
+  // folga; ela nunca torna o teste mais agressivo.
+  const renderer::GpuCullMotionGuard guard = renderer::buildGpuCullMotionGuard(
+      frustum, hzbRecordedCamera_.position, hzbRecordedCamera_.yaw, hzbRecordedCamera_.pitch);
+  renderer::GpuCullParameters parameters{};
+  if (!renderer::buildGpuCullParameters(frustum, screenTransform, hzbView, guard,
+                                        hzbNormalizedDepthBias_, hzbHysteresisFrames_,
+                                        drawCullCapacity_, hzbRecordedCameraValid_, parameters)) {
+    return;
+  }
+
+  // Contadores zerados na GPU: le-los na CPU exigiria um ponto de sincronismo
+  // que este caminho existe justamente para nao ter.
+  vkCmdFillBuffer(commandBuffer_, drawCullTelemetryBuffer_.handle(), 0, VK_WHOLE_SIZE, 0);
+  rhi::cmdComputeBufferBarrier(commandBuffer_, drawCullTelemetryBuffer_.handle(), 0, VK_WHOLE_SIZE,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+      VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+
+  // Os niveis foram escritos pela reducao do frame anterior, em outra submissao
+  // da mesma fila: a ordem esta garantida, a visibilidade da memoria nao.
+  const VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  for (u32 level = 0; level < kHzbLevelCount; ++level) {
+    rhi::cmdComputeImageBarrier(commandBuffer_, hzbLevels_[level].image.handle(), range,
+        VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+  }
+  // O passe opaco do frame anterior leu este buffer como argumentos indiretos;
+  // escreve-lo agora e um hazard write-after-read, nao read-after-write.
+  rhi::cmdComputeBufferBarrier(commandBuffer_, indirectBuffer_.handle(), 0, VK_WHOLE_SIZE,
+      VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
+
+  const rhi::ComputeDispatch dispatch{renderer::gpuCullGroupCount(drawCullCapacity_), 1, 1};
+  if (!drawCullKernel_.recordDispatch(commandBuffer_, dispatch, &parameters, sizeof(parameters))) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag,
+        "[Culling] dispatch invalido para %u candidatos; estagio desligado.", drawCullCapacity_);
+    hzbGpuCullingActive_ = false;
+    return;
+  }
+  rhi::cmdComputeBufferBarrier(commandBuffer_, indirectBuffer_.handle(), 0, VK_WHOLE_SIZE,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+      VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
+  drawCullDispatchedThisFrame_ = true;
+  if (!drawCullContractLogged_) {
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+        "[Culling] primeiro dispatch: grupos=%u guarda_tela=%.5f guarda_profundidade=%.3f "
+        "piramide_utilizavel=%s.",
+        dispatch.x, static_cast<double>(parameters.screenDilation),
+        static_cast<double>(parameters.viewDepthGuard),
+        (parameters.flags & renderer::GpuCullPyramidUsable) != 0 ? "sim" : "nao");
+    drawCullContractLogged_ = true;
+  }
+}
+
+void InstancedRenderer::readDrawCullTelemetryFromPreviousFrame() {
+  if (!hzbGpuCullingActive_ || !drawCullTelemetryBuffer_.isReady()) return;
+  // Mesmo raciocinio de collectPrevious(): a espera de fence do acquire ja
+  // garantiu que o dispatch do frame anterior terminou. Nenhum stall novo.
+  if (!memoryAllocator_->invalidateBuffer(drawCullTelemetryBuffer_)) return;
+  const auto *counters = static_cast<const u32 *>(drawCullTelemetryBuffer_.mappedData());
+  if (counters == nullptr) return;
+  for (u32 index = 0; index < 4; ++index) drawCullTelemetry_[index] = counters[index];
 }
 
 bool InstancedRenderer::createTextureResources() {
@@ -1498,17 +2644,28 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     // would select arbitrary level-0 chunks and silently drop the rest.
     if (!renderer::buildLodRenderGroups(dirtRoadResources_.draws(), solidDrawOrder_,
                                         lodGroups_, ungroupedSolidDrawOrder_)) {
-      __android_log_print(ANDROID_LOG_ERROR, LogTag, "[LOD] grupos de runtime inválidos.");
+      __android_log_print(ANDROID_LOG_ERROR, LogTag, "[LOD] grupos opacos de runtime inválidos.");
       return false;
     }
+    if (!renderer::buildLodRenderGroups(dirtRoadResources_.draws(), coverageDrawOrder_,
+                                        coverageLodGroups_, ungroupedCoverageDrawOrder_)) {
+      __android_log_print(ANDROID_LOG_ERROR, LogTag, "[LOD] grupos alpha-test de runtime inválidos.");
+      return false;
+    }
+    renderer::buildLodLevelZeroDrawOrder(lodGroups_, ungroupedSolidDrawOrder_,
+                                         levelZeroSolidDrawOrder_);
+    renderer::buildLodLevelZeroDrawOrder(coverageLodGroups_, ungroupedCoverageDrawOrder_,
+                                         levelZeroCoverageDrawOrder_);
     // Every frame contributes chunks for one active level and optionally
     // one neighbor, still a subset of all levels already in solidDrawOrder_.
     lodFilteredSolidDrawOrder_.reserve(solidDrawOrder_.size());
+    lodFilteredCoverageDrawOrder_.reserve(coverageDrawOrder_.size());
     const u32 maximumHzbCandidates = static_cast<u32>(
         solidDrawOrder_.size() + coverageDrawOrder_.size());
-    hzbWorkloadEligible_ = hzbOcclusionEnabled_ &&
+    hzbWorkloadEligible_ = (hzbOcclusionEnabled_ || hzbComputeEnabled_) &&
+        !renderingPolicy_.dynamicResolution.enabled &&
         renderer::shouldRunHzb(maximumHzbCandidates, hzbMinimumCandidateDraws_);
-    if (hzbOcclusionEnabled_ && !hzbWorkloadEligible_) {
+    if ((hzbOcclusionEnabled_ || hzbComputeEnabled_) && !hzbWorkloadEligible_) {
       __android_log_print(ANDROID_LOG_INFO, LogTag,
           "[HZB] solicitado, mas dispensado antes da alocação: candidatos máximos=%u limiar=%u.",
           maximumHzbCandidates, hzbMinimumCandidateDraws_);
@@ -1532,6 +2689,10 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar os descritores de textura.");
     return false;
   }
+  if (!createShadowResources()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar recursos de sombra direcional.");
+    return false;
+  }
   if (!createEnvironmentDescriptors()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar descritores do ambiente HDRI.");
     return false;
@@ -1546,6 +2707,10 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   }
   if (!createSkyPipeline()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pipeline do céu HDRI.");
+    return false;
+  }
+  if (!createPostResources()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pós-processamento.");
     return false;
   }
   if (!createRuntimeHudPipeline()) {
@@ -1623,6 +2788,8 @@ void InstancedRenderer::shutdown() {
   }
   destroyFramebuffers();
   destroyHzbResources();
+  destroyPostResources();
+  destroyShadowResources();
   hzbHysteresis_.clear();
   hzbWorkloadEligible_ = false;
   lodGroups_.clear();
@@ -1651,6 +2818,29 @@ void InstancedRenderer::shutdown() {
   if (transparentPipeline_ != VK_NULL_HANDLE) {
     vkDestroyPipeline(device_, transparentPipeline_, nullptr);
     transparentPipeline_ = VK_NULL_HANDLE;
+  }
+  if (opaqueDistantPipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, opaqueDistantPipeline_, nullptr);
+    opaqueDistantPipeline_ = VK_NULL_HANDLE;
+  }
+  if (coverageDistantPipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, coverageDistantPipeline_, nullptr);
+    coverageDistantPipeline_ = VK_NULL_HANDLE;
+  }
+  if (transparentDistantPipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, transparentDistantPipeline_, nullptr);
+    transparentDistantPipeline_ = VK_NULL_HANDLE;
+  }
+  for (u32 variant = 0; variant < renderer::MaterialFeatureVariantCount; ++variant) {
+    if (opaqueMaterialPipelines_[variant] != VK_NULL_HANDLE)
+      vkDestroyPipeline(device_, opaqueMaterialPipelines_[variant], nullptr);
+    if (coverageMaterialPipelines_[variant] != VK_NULL_HANDLE)
+      vkDestroyPipeline(device_, coverageMaterialPipelines_[variant], nullptr);
+    if (transparentMaterialPipelines_[variant] != VK_NULL_HANDLE)
+      vkDestroyPipeline(device_, transparentMaterialPipelines_[variant], nullptr);
+    opaqueMaterialPipelines_[variant] = VK_NULL_HANDLE;
+    coverageMaterialPipelines_[variant] = VK_NULL_HANDLE;
+    transparentMaterialPipelines_[variant] = VK_NULL_HANDLE;
   }
   if (pipelineLayout_ != VK_NULL_HANDLE) {
     vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
@@ -1764,16 +2954,28 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     if (gpuFrameTimer_.collectPrevious(gpuTimings)) {
       lastFrameTimings_.gpuFrameMs = gpuTimings.frameMs;
       lastFrameTimings_.gpuPassMs = gpuTimings.passesMs;
+      const renderer::DynamicResolutionUpdate resolution =
+          dynamicResolution_.observe(static_cast<float>(gpuTimings.frameMs));
+      if (resolution.changed) {
+        hzbPyramidValid_ = false;
+        hzbPyramidCameraValid_ = false;
+        __android_log_print(ANDROID_LOG_INFO, LogTag,
+            "[DynamicResolution] scale=%.3f render=%ux%u gpu=%.3fms budget=%.3fms.",
+            static_cast<double>(resolution.scale), renderWidth(), renderHeight(),
+            gpuTimings.frameMs, static_cast<double>(dynamicResolution_.targetGpuMilliseconds()));
+      }
     }
   }
   // Same "safe without a new stall" reasoning as collectPrevious() above --
   // see readHzbPyramidFromPreviousFrame()'s own comment.
+  readDrawCullTelemetryFromPreviousFrame();
   if (hzbPreviousFrameEligible_) readHzbPyramidFromPreviousFrame();
   else {
     hzbPyramidValid_ = false;
     hzbPyramidCameraValid_ = false;
   }
   hzbFrameEligible_ = false;
+  hzbReadbackRecordedThisFrame_ = false;
 
   // O crossing C++→C# medido isoladamente: só o tempo de FillInstanceBuffer,
   // não o frame Vulkan inteiro — a pergunta da PoC-A é sobre o custo da
@@ -1816,6 +3018,81 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     std::memcpy(frame->worldToViewRow0, row0, sizeof(row0));
     std::memcpy(frame->worldToViewRow1, row1, sizeof(row1));
     std::memcpy(frame->worldToViewRow2, row2, sizeof(row2));
+    // Estes eixos podem mudar em runtime por pressão térmica. Atualizar o UBO
+    // já mapeado evita recriar descritores/pipelines e mantém custo O(1).
+    frame->quality[0] = renderingPolicy_.materialDistance.normalMapMaximumDistance;
+    frame->quality[1] = renderingPolicy_.materialDistance.specularProbeMaximumDistance;
+    frame->quality[2] = renderingPolicy_.ambient.hemispheric ? 1.0f : 0.0f;
+    frame->quality[3] = renderingPolicy_.ambient.specularProbe ? 1.0f : 0.0f;
+    if (frame->environment.parameters[3] > 0.5f)
+      frame->environment.parameters[3] = renderingPolicy_.ambient.splitSumBrdf ? 3.0f : 1.0f;
+    frame->materialDistanceParameters[0] =
+        renderingPolicy_.materialDistance.metallicRoughnessMaximumDistance;
+    frame->materialDistanceParameters[1] =
+        renderingPolicy_.materialDistance.emissiveMaximumDistance;
+    frame->materialDistanceParameters[2] =
+        renderingPolicy_.materialDistance.fadeBandRatio;
+    frame->shadowParameters[0] = shadowAtlas_.width() > 0
+                                     ? 1.0f / static_cast<float>(shadowAtlas_.width()) : 1.0f;
+    frame->shadowParameters[1] = 0.0f;
+    frame->shadowParameters[2] = renderingPolicy_.shadows.filterTaps >= 25u ? 2.0f
+                                  : renderingPolicy_.shadows.filterTaps >= 9u ? 1.0f : 0.0f;
+    frame->shadowParameters[3] = renderingPolicy_.shadows.normalOffsetTexels;
+    frame->shadowFilterParameters[0] = frame->shadowParameters[2];
+    frame->shadowFilterParameters[1] = renderingPolicy_.shadows.farFilterTaps >= 25u ? 2.0f
+                                          : renderingPolicy_.shadows.farFilterTaps >= 9u ? 1.0f
+                                                                                       : 0.0f;
+    const u32 previousShadowCascadeCount = shadowCascadeCount_;
+    shadowCascadeCount_ = 0;
+    if (renderingPolicy_.shadows.enabled) {
+      renderer::ShadowCascadeInput input{};
+      std::memcpy(input.cameraPosition, camera.position, sizeof(input.cameraPosition));
+      std::memcpy(input.cameraForward, row2, sizeof(input.cameraForward));
+      std::memcpy(input.cameraUp, row1, sizeof(input.cameraUp));
+      input.aspectRatio = static_cast<float>(swapchain_->displayExtent().width) /
+                          static_cast<float>(swapchain_->displayExtent().height);
+      input.nearPlane = dirtRoadResources_.header().nearPlane;
+      input.shadowDistance = std::min(renderingPolicy_.shadows.maximumDistance,
+                                      dirtRoadResources_.header().farPlane);
+      const auto &environment = frame->environment;
+      input.lightDirection[0] = -environment.sunDirectionIntensity[0];
+      input.lightDirection[1] = -environment.sunDirectionIntensity[1];
+      input.lightDirection[2] = -environment.sunDirectionIntensity[2];
+      input.casterExtrusion = input.shadowDistance;
+      input.cascadeResolution = renderingPolicy_.shadows.cascadeResolution;
+      input.receiverGuardBandRatio = renderingPolicy_.shadows.cacheGuardBandRatio;
+      renderer::ShadowCascade desiredCascades[renderer::MaximumShadowCascades]{};
+      const u32 desiredCascadeCount = renderer::computeShadowCascades(
+          input, renderingPolicy_.shadows.cascadeCount, renderer::DefaultCascadeSplitLambda,
+          desiredCascades);
+
+      const bool topologyChanged = desiredCascadeCount != previousShadowCascadeCount;
+      if (topologyChanged) invalidateStaticShadowCache();
+      const u32 activeMask = desiredCascadeCount == 0 ? 0u : (1u << desiredCascadeCount) - 1u;
+      if (!renderingPolicy_.shadows.staticCasterCache || !shadowCacheInitialized_ ||
+          topologyChanged) {
+        std::memcpy(shadowCascades_, desiredCascades,
+                    sizeof(renderer::ShadowCascade) * desiredCascadeCount);
+        shadowCascadeDirtyMask_ |= activeMask;
+      } else {
+        for (u32 cascade = 0; cascade < desiredCascadeCount; ++cascade) {
+          if (!renderer::canReuseStaticShadowCascade(
+                  shadowCascades_[cascade], desiredCascades[cascade],
+                  renderingPolicy_.shadows.cacheGuardBandRatio)) {
+            shadowCascades_[cascade] = desiredCascades[cascade];
+            shadowCascadeDirtyMask_ |= 1u << cascade;
+          }
+        }
+      }
+      shadowCascadeCount_ = desiredCascadeCount;
+      for (u32 cascade = 0; cascade < shadowCascadeCount_; ++cascade) {
+        std::memcpy(frame->shadowViewProjection[cascade], shadowCascades_[cascade].viewProjection,
+                    sizeof(shadowCascades_[cascade].viewProjection));
+        frame->shadowSplitDepths[cascade] = shadowCascades_[cascade].farDistance;
+        frame->shadowWorldUnitsPerTexel[cascade] = shadowCascades_[cascade].worldUnitsPerTexel;
+      }
+      frame->shadowParameters[1] = static_cast<float>(shadowCascadeCount_);
+    }
     if (!memoryAllocator_->flushBuffer(environmentUniform_))
       return rhi::SwapchainStatus::FatalError;
   }
@@ -1828,6 +3105,18 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   }
   if (gpuTimingEnabled()) gpuFrameTimer_.begin(commandBuffer_);
 
+  beginGpuRegion(GpuPassClass::Shadow);
+  recordShadowPass(camera);
+  endGpuRegion(GpuPassClass::Shadow);
+
+  // Oclusao GPU-driven: tem de ficar fora de qualquer render pass e antes do
+  // passe opaco que consome os argumentos indiretos que ela escreve. No-op
+  // quando o consumidor nao esta ativo -- a regiao ainda e fechada para que a
+  // classe seguinte nao absorva o custo dela.
+  beginGpuRegion(GpuPassClass::Culling);
+  recordDrawCullDispatch(camera);
+  endGpuRegion(GpuPassClass::Culling);
+
   VkClearValue clearValues[2]{};
   clearValues[0].color = {{0.02f, 0.02f, 0.05f, 1.0f}};
   clearValues[1].depthStencil = {1.0f, 0};
@@ -1836,7 +3125,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   renderPassInfo.renderPass = renderPass_;
   renderPassInfo.framebuffer = framebuffers_[imageIndex];
-  renderPassInfo.renderArea.extent = {swapchain_->width(), swapchain_->height()};
+  renderPassInfo.renderArea.extent = {renderWidth(), renderHeight()};
   renderPassInfo.clearValueCount = 2;
   renderPassInfo.pClearValues = clearValues;
   vkCmdBeginRenderPass(commandBuffer_, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -1864,8 +3153,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       surfaceTransform.xx, surfaceTransform.xy, surfaceTransform.yx, surfaceTransform.yy,
       baseTextureIndex_,
       1.15f, materialParameters_.roughness, materialParameters_.metallic,
-      (swapchain_->imageFormat()==VK_FORMAT_B8G8R8A8_SRGB ||
-       swapchain_->imageFormat()==VK_FORMAT_R8G8B8A8_SRGB) ? 0u : 1u,
+      (!renderingPolicy_.post.dedicatedPass &&
+       (swapchain_->imageFormat()==VK_FORMAT_B8G8R8A8_SRGB ||
+        swapchain_->imageFormat()==VK_FORMAT_R8G8B8A8_SRGB)) ? 0u : 1u,
       materialParameters_.normalScale,
       {},
   };
@@ -1874,14 +3164,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                        0, sizeof(pushConstants), &pushConstants);
 
   VkViewport viewport{};
-  viewport.width = static_cast<float>(swapchain_->width());
-  viewport.height = static_cast<float>(swapchain_->height());
+  viewport.width = static_cast<float>(renderWidth());
+  viewport.height = static_cast<float>(renderHeight());
   viewport.minDepth = 0.0f;
   viewport.maxDepth = 1.0f;
   vkCmdSetViewport(commandBuffer_, 0, 1, &viewport);
 
   VkRect2D scissor{};
-  scissor.extent = {swapchain_->width(), swapchain_->height()};
+  scissor.extent = {renderWidth(), renderHeight()};
   vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
 
   if (dirtRoadPreview_) {
@@ -1899,7 +3189,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     const VkBuffer mesh = dirtRoadResources_.vertexBuffer();
     vkCmdBindVertexBuffers(commandBuffer_, 0, 1, &mesh, &offset);
     vkCmdBindIndexBuffer(commandBuffer_, dirtRoadResources_.indexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-    const bool encodeSrgb = swapchain_->imageFormat()!=VK_FORMAT_B8G8R8A8_SRGB &&
+    const bool encodeSrgb = !renderingPolicy_.post.dedicatedPass &&
+                            swapchain_->imageFormat()!=VK_FORMAT_B8G8R8A8_SRGB &&
                             swapchain_->imageFormat()!=VK_FORMAT_R8G8B8A8_SRGB;
     visibilityTelemetry_ = {};
     auto pushMapMaterial = [&](u32 materialIndex) {
@@ -1934,8 +3225,38 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       vkCmdPushConstants(commandBuffer_,pipelineLayout_,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                          0,sizeof(push),&push);
     };
-    auto drawMapPrimitive = [&](u32 drawIndex) {
+    auto materialPipeline = [&](u32 materialIndex, const VkPipeline *variants,
+                                VkPipeline fallback) {
+      if (variants == nullptr) return fallback;
+      const u32 variant = renderer::materialFeatureVariant(
+          dirtRoadResources_.materials()[materialIndex].flags);
+      return variants[variant] != VK_NULL_HANDLE ? variants[variant] : fallback;
+    };
+    // The generic pipeline was bound immediately before entering the map path.
+    // Keep a command-buffer-local state cache so disabling material variants is
+    // actually zero extra pipeline binds. With variants enabled this also
+    // avoids rebinding when consecutive material batches share the same key.
+    VkPipeline boundMapPipeline = pipeline_;
+    auto bindMapPipeline = [&](VkPipeline pipeline) {
+      if (pipeline == boundMapPipeline) return;
+      vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+      boundMapPipeline = pipeline;
+    };
+    auto usesDistantMaterialPipeline = [&](u32 drawIndex) {
       const auto &draw = dirtRoadResources_.draws()[drawIndex];
+      const auto &material = dirtRoadResources_.materials()[draw.materialIndex];
+      return (material.flags & renderer::MapMaterialNormalMap) != 0 &&
+             renderer::boundsEntirelyPastDistance(
+                 camera.position, draw.boundsCenter, draw.boundsRadius,
+                 renderingPolicy_.materialDistance.normalMapMaximumDistance);
+    };
+    auto drawMapPrimitive = [&](u32 drawIndex, const VkPipeline *variants, VkPipeline fallback,
+                                VkPipeline distantFallback) {
+      const auto &draw = dirtRoadResources_.draws()[drawIndex];
+      const bool distant = distantFallback != VK_NULL_HANDLE &&
+                           usesDistantMaterialPipeline(drawIndex);
+      bindMapPipeline(distant ? distantFallback
+                              : materialPipeline(draw.materialIndex, variants, fallback));
       pushMapMaterial(draw.materialIndex);
       vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,
                        static_cast<i32>(draw.vertexOffset),drawIndex);
@@ -1956,10 +3277,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     renderer::PerspectiveVisibilitySettings visibilitySettings = visibilitySettings_;
     visibilitySettings.nearPlane = dirtRoadResources_.header().nearPlane;
     visibilitySettings.farPlane = dirtRoadResources_.header().farPlane;
-    const renderer::PerspectiveFrustum frustum = renderer::buildPerspectiveFrustum(
-        camera.position, camera.yaw, camera.pitch,
-        static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height),
-        visibilitySettings);
+    // Mesmo volume que recordDrawCullDispatch ja usou antes do render pass: as
+    // duas etapas nao podem enxergar frustums diferentes no mesmo frame.
+    const renderer::PerspectiveFrustum frustum = buildFrameFrustum(camera);
     visibleSolidDrawOrder_.clear();
     visibleCoverageDrawOrder_.clear();
     visibleTransparentDrawOrder_.clear();
@@ -1967,59 +3287,93 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // LOD selection (opt-in, see setLodSelectionEnabled): runs before
     // frustum culling because it decides WHICH draws are even candidates
     // this frame -- only the active level's chunks (plus, mid-transition,
-    // the neighbor level fading in/out) enter lodFilteredSolidDrawOrder_,
-    // never every level of every group at once. Blend/coverage draws are
-    // never grouped (the cooker excludes them from simplification), so they
-    // are untouched here.
-    const std::vector<u32> *solidCandidates = &solidDrawOrder_;
-    if (lodSelectionEnabled_ && !lodGroups_.empty()) {
-      lodFilteredSolidDrawOrder_.clear();
-      lodFilteredSolidDrawOrder_.insert(lodFilteredSolidDrawOrder_.end(),
-                                        ungroupedSolidDrawOrder_.begin(), ungroupedSolidDrawOrder_.end());
+    // the neighbor level fading in/out) enter their pipeline-specific scratch
+    // list, never every level of every group at once. Alpha-tested vegetation
+    // writes depth and uses the same dither contract, so it is filtered here
+    // independently from opaque geometry. True blend remains untouched.
+    const std::vector<u32> *solidCandidates = lodGroups_.empty()
+        ? &solidDrawOrder_ : &levelZeroSolidDrawOrder_;
+    const std::vector<u32> *coverageCandidates = coverageLodGroups_.empty()
+        ? &coverageDrawOrder_ : &levelZeroCoverageDrawOrder_;
+    if (lodSelectionEnabled_ && (!lodGroups_.empty() || !coverageLodGroups_.empty())) {
       auto *instances = static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
-      for (renderer::LodRenderGroup &group : lodGroups_) {
-        renderer::LodLevelInfo levelInfos[renderer::LodMaximumLevelsPerGroup]{};
-        const u32 levelCount = group.levelCount;
-        for (u32 level = 0; level < levelCount; ++level)
-          levelInfos[level] = group.levels[level].selection;
-        float distanceSquared = 0.0f;
-        for (u32 axis = 0; axis < 3; ++axis) {
-          const float delta = group.boundsCenter[axis] - camera.position[axis];
-          distanceSquared += delta * delta;
+      // `displayExtent` is already in the logical post-transform orientation.
+      // Dynamic resolution scales the underlying rotated target by the same
+      // absolute factor, so this is the vertical pixel count that can actually
+      // display projected geometric error.
+      const float activeVerticalPixels = std::max(
+          1.0f, static_cast<float>(displayExtent.height) * dynamicResolution_.scale());
+      auto selectGroups = [&](std::vector<renderer::LodRenderGroup> &groups,
+                              const std::vector<u32> &ungrouped,
+                              std::vector<u32> &filtered,
+                              float pixelErrorBudget) {
+        filtered.clear();
+        filtered.insert(filtered.end(), ungrouped.begin(), ungrouped.end());
+        for (renderer::LodRenderGroup &group : groups) {
+          renderer::LodLevelInfo levelInfos[renderer::LodMaximumLevelsPerGroup]{};
+          const u32 levelCount = group.levelCount;
+          for (u32 level = 0; level < levelCount; ++level)
+            levelInfos[level] = group.levels[level].selection;
+          float distanceSquared = 0.0f;
+          for (u32 axis = 0; axis < 3; ++axis) {
+            const float delta = group.boundsCenter[axis] - camera.position[axis];
+            distanceSquared += delta * delta;
+          }
+          // Nearest point of the conservative group sphere, not its center:
+          // screen-space error must never underestimate a large object that
+          // reaches close to the camera.
+          const float distance = std::max(std::sqrt(distanceSquared) - group.boundsRadius, 1.0e-3f);
+          const renderer::LodSelection selection = renderer::selectLodLevel(
+              levelInfos, levelCount, distance, visibilitySettings.verticalFieldOfViewRadians,
+              activeVerticalPixels, pixelErrorBudget, lodHysteresisBandRatio_,
+              group.hysteresis);
+          // Clear every draw in every level so a group leaving a transition
+          // cannot retain stale coverage in its instance record.
+          for (u32 level = 0; level < levelCount; ++level)
+            for (u32 drawIndex : group.levels[level].drawIndices)
+              instances[drawIndex].normalColumns[7] = 0.0f;
+          const renderer::LodRenderLevel &active = group.levels[selection.level];
+          filtered.insert(filtered.end(), active.drawIndices.begin(), active.drawIndices.end());
+          if (selection.ditherToCoarserFactor > 0.0f && selection.level + 1 < levelCount) {
+            const renderer::LodRenderLevel &neighbor = group.levels[selection.level + 1];
+            const renderer::LodDitherPair dither =
+                renderer::encodeLodDither(selection.ditherToCoarserFactor);
+            for (u32 drawIndex : active.drawIndices)
+              instances[drawIndex].normalColumns[7] = dither.outgoing;
+            // Negative means incoming: keep the exact pixels the positive
+            // outgoing mask discards, including in alpha-tested vegetation.
+            for (u32 drawIndex : neighbor.drawIndices)
+              instances[drawIndex].normalColumns[7] = dither.incoming;
+            filtered.insert(filtered.end(), neighbor.drawIndices.begin(), neighbor.drawIndices.end());
+          }
         }
-        // Nearest point of the conservative group sphere, not its center:
-        // screen-space error must never underestimate a large object that
-        // reaches close to the camera.
-        const float distance = std::max(std::sqrt(distanceSquared) - group.boundsRadius, 1.0e-3f);
-        const renderer::LodSelection selection = renderer::selectLodLevel(
-            levelInfos, levelCount, distance, visibilitySettings.verticalFieldOfViewRadians,
-            static_cast<float>(displayExtent.height), lodPixelErrorBudget_, lodHysteresisBandRatio_,
-            group.hysteresis);
-        // Clear every chunk in every level so a group leaving a transition
-        // cannot retain stale coverage in its instance record.
-        for (u32 level = 0; level < levelCount; ++level)
-          for (u32 drawIndex : group.levels[level].drawIndices)
-            instances[drawIndex].normalColumns[7] = 0.0f;
-        const renderer::LodRenderLevel &active = group.levels[selection.level];
-        lodFilteredSolidDrawOrder_.insert(lodFilteredSolidDrawOrder_.end(),
-                                          active.drawIndices.begin(), active.drawIndices.end());
-        if (selection.ditherToCoarserFactor > 0.0f && selection.level + 1 < levelCount) {
-          const renderer::LodRenderLevel &neighbor = group.levels[selection.level + 1];
-          const renderer::LodDitherPair dither =
-              renderer::encodeLodDither(selection.ditherToCoarserFactor);
-          for (u32 drawIndex : active.drawIndices)
-            instances[drawIndex].normalColumns[7] = dither.outgoing;
-          // Negative sign means "incoming": shader keeps the exact pixels
-          // the positive outgoing mask discards. 1-factor produced overlap,
-          // not complementary coverage.
-          for (u32 drawIndex : neighbor.drawIndices)
-            instances[drawIndex].normalColumns[7] = dither.incoming;
-          lodFilteredSolidDrawOrder_.insert(lodFilteredSolidDrawOrder_.end(),
-                                            neighbor.drawIndices.begin(), neighbor.drawIndices.end());
-        }
+      };
+      if (!lodGroups_.empty()) {
+        selectGroups(lodGroups_, ungroupedSolidDrawOrder_, lodFilteredSolidDrawOrder_,
+                     lodPixelErrorBudget_);
+        solidCandidates = &lodFilteredSolidDrawOrder_;
+      }
+      if (!coverageLodGroups_.empty()) {
+        selectGroups(coverageLodGroups_, ungroupedCoverageDrawOrder_,
+                     lodFilteredCoverageDrawOrder_, coverageLodPixelErrorBudget_);
+        coverageCandidates = &lodFilteredCoverageDrawOrder_;
       }
       if (!memoryAllocator_->flushBuffer(instanceBuffer_)) return rhi::SwapchainStatus::FatalError;
-      solidCandidates = &lodFilteredSolidDrawOrder_;
+      lodSelectionAppliedLastFrame_ = true;
+    } else if (lodSelectionAppliedLastFrame_) {
+      // Runtime/project settings may disable LOD after a transition. Clear the
+      // signed coverage factors once so LOD0 cannot inherit a stale fade mask.
+      auto *instances = static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
+      auto clearDither = [&](const std::vector<renderer::LodRenderGroup> &groups) {
+        for (const renderer::LodRenderGroup &group : groups)
+          for (u32 level = 0; level < group.levelCount; ++level)
+            for (u32 drawIndex : group.levels[level].drawIndices)
+              instances[drawIndex].normalColumns[7] = 0.0f;
+      };
+      clearDither(lodGroups_);
+      clearDither(coverageLodGroups_);
+      if (!memoryAllocator_->flushBuffer(instanceBuffer_)) return rhi::SwapchainStatus::FatalError;
+      lodSelectionAppliedLastFrame_ = false;
     }
 
     auto collectVisible = [&](const std::vector<u32> &source, std::vector<u32> &destination) {
@@ -2032,14 +3386,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       }
     };
     collectVisible(*solidCandidates, visibleSolidDrawOrder_);
-    collectVisible(coverageDrawOrder_, visibleCoverageDrawOrder_);
+    collectVisible(*coverageCandidates, visibleCoverageDrawOrder_);
     collectVisible(transparentDrawOrder_, visibleTransparentDrawOrder_);
 
     const u32 hzbCandidateDraws = static_cast<u32>(
         visibleSolidDrawOrder_.size() + visibleCoverageDrawOrder_.size());
-    hzbFrameEligible_ = hzbOcclusionEnabled_ &&
+    hzbFrameEligible_ = (hzbOcclusionEnabled_ || hzbComputeEnabled_) &&
         renderer::shouldRunHzb(hzbCandidateDraws, hzbMinimumCandidateDraws_);
-    if (hzbOcclusionEnabled_ && !hzbFrameEligible_) {
+    if ((hzbOcclusionEnabled_ || hzbComputeEnabled_) && !hzbFrameEligible_) {
       visibilityTelemetry_.hzbSkippedBudgetDraws = hzbCandidateDraws;
       for (u32 drawIndex : visibleSolidDrawOrder_) hzbHysteresis_[drawIndex] = {};
       for (u32 drawIndex : visibleCoverageDrawOrder_) hzbHysteresis_[drawIndex] = {};
@@ -2050,7 +3404,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // Blend/transparent draws are never tested here -- their back-to-front
     // ordering and visibility contract stay exactly as O1 defined them.
     auto filterByHzb = [&](std::vector<u32> &visible) {
-      if (!hzbFrameEligible_ || !hzbPyramidValid_) return;
+      if (!hzbOcclusionEnabled_ || !hzbFrameEligible_ || !hzbPyramidValid_) return;
       if (!hzbPyramidCameraValid_ || !sameCameraPose(camera, hzbPyramidCamera_)) {
         visibilityTelemetry_.hzbSkippedCameraMotionDraws += static_cast<u32>(visible.size());
         // A draw culled from an older viewpoint must revive immediately when
@@ -2107,15 +3461,21 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       batches.clear();
       for (u32 drawIndex : visible) {
         const u32 materialIndex = dirtRoadResources_.draws()[drawIndex].materialIndex;
+        const bool distantMaterial = usesDistantMaterialPipeline(drawIndex);
         const auto existing = std::find_if(batches.begin(), batches.end(),
-            [&](const IndirectBatch &batch) { return batch.materialIndex == materialIndex; });
-        if (existing == batches.end()) batches.push_back({materialIndex, 0, 0, 0});
+            [&](const IndirectBatch &batch) {
+              return batch.materialIndex == materialIndex &&
+                     batch.distantMaterial == distantMaterial;
+            });
+        if (existing == batches.end())
+          batches.push_back({materialIndex, 0, 0, 0, distantMaterial});
       }
       for (IndirectBatch &batch : batches) {
         batch.firstCommand = static_cast<u32>(indirectCommands_.size());
         for (u32 drawIndex : visible) {
           const auto &draw = dirtRoadResources_.draws()[drawIndex];
-          if (draw.materialIndex != batch.materialIndex) continue;
+          if (draw.materialIndex != batch.materialIndex ||
+              usesDistantMaterialPipeline(drawIndex) != batch.distantMaterial) continue;
           indirectCommands_.push_back({draw.indexCount, 1, draw.firstIndex,
                                        static_cast<i32>(draw.vertexOffset), drawIndex});
           ++batch.commandCount;
@@ -2123,8 +3483,13 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         }
       }
     };
-    auto submitIndirectBatches = [&](const std::vector<IndirectBatch> &batches) {
+    auto submitIndirectBatches = [&](const std::vector<IndirectBatch> &batches,
+                                     const VkPipeline *variants, VkPipeline fallback,
+                                     VkPipeline distantFallback) {
       for (const IndirectBatch &batch : batches) {
+        bindMapPipeline(batch.distantMaterial && distantFallback != VK_NULL_HANDLE
+                            ? distantFallback
+                            : materialPipeline(batch.materialIndex, variants, fallback));
         pushMapMaterial(batch.materialIndex);
         vkCmdDrawIndexedIndirect(commandBuffer_, indirectBuffer_.handle(),
             static_cast<VkDeviceSize>(batch.firstCommand) * sizeof(VkDrawIndexedIndirectCommand),
@@ -2133,6 +3498,35 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         visibilityTelemetry_.submittedTriangles += batch.triangles;
       }
     };
+    // Registros do kernel de oclusao, um por slot de comando e na MESMA ordem.
+    // Escritos aqui, depois do dispatch ja gravado: o que importa e a ordem dos
+    // comandos na GPU, nao a ordem das escritas da CPU, e todas elas terminam
+    // antes do vkQueueSubmit deste frame.
+    auto publishDrawCullRecords = [&]() {
+      if (!hzbGpuCullingActive_ || drawCullRecordBuffer_.mappedData() == nullptr) return true;
+      auto *records =
+          static_cast<renderer::GpuCullDrawRecord *>(drawCullRecordBuffer_.mappedData());
+      const u32 published =
+          std::min(static_cast<u32>(indirectCommands_.size()), drawCullCapacity_);
+      for (u32 slot = 0; slot < published; ++slot) {
+        // firstInstance carrega o drawIndex desde que o caminho indireto existe
+        // (e o mesmo valor que o caminho direto passa a vkCmdDrawIndexed), o que
+        // torna a lista de comandos a unica fonte da correspondencia slot->draw.
+        const u32 drawIndex = indirectCommands_[slot].firstInstance;
+        const auto &draw = dirtRoadResources_.draws()[drawIndex];
+        renderer::GpuCullDrawRecord record{};
+        std::memcpy(record.boundsCenter, draw.boundsCenter, sizeof(record.boundsCenter));
+        record.boundsRadius = draw.boundsRadius;
+        record.stateIndex = drawIndex;
+        record.flags = renderer::GpuCullRecordPresent | renderer::GpuCullRecordTestable;
+        records[slot] = record;
+      }
+      // Sobras marcadas ausentes: o dispatch cobre a capacidade inteira e um
+      // slot com lixo do frame anterior escreveria estado de outro draw.
+      for (u32 slot = published; slot < drawCullCapacity_; ++slot)
+        records[slot] = renderer::GpuCullDrawRecord{};
+      return memoryAllocator_->flushBuffer(drawCullRecordBuffer_);
+    };
     if (useMultiDrawIndirect_) {
       indirectCommands_.clear();
       buildIndirectBatches(visibleSolidDrawOrder_, indirectSolidBatches_);
@@ -2140,11 +3534,13 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       if (!indirectCommands_.empty())
         std::memcpy(indirectBuffer_.mappedData(), indirectCommands_.data(),
                     indirectCommands_.size() * sizeof(VkDrawIndexedIndirectCommand));
-      if (!memoryAllocator_->flushBuffer(indirectBuffer_))
+      if (!memoryAllocator_->flushBuffer(indirectBuffer_) || !publishDrawCullRecords())
         return rhi::SwapchainStatus::FatalError;
-      submitIndirectBatches(indirectSolidBatches_);
+      submitIndirectBatches(indirectSolidBatches_, opaqueMaterialPipelines_, pipeline_,
+                            opaqueDistantPipeline_);
     } else {
-      for (u32 drawIndex : visibleSolidDrawOrder_) drawMapPrimitive(drawIndex);
+      for (u32 drawIndex : visibleSolidDrawOrder_)
+        drawMapPrimitive(drawIndex, opaqueMaterialPipelines_, pipeline_, opaqueDistantPipeline_);
     }
     // Vegetação alpha-mask sai do mesmo balde que os opacos sólidos. As duas
     // classes têm custo de fragment muito diferente e o programa de margem
@@ -2153,18 +3549,26 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     endGpuRegion(GpuPassClass::Opaque);
     beginGpuRegion(GpuPassClass::Coverage);
     if (!visibleCoverageDrawOrder_.empty()) {
-      if (coveragePrepassEnabled_)
-        vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, coveragePipeline_);
-      if (useMultiDrawIndirect_)
-        submitIndirectBatches(indirectCoverageBatches_);
-      else
-        for (u32 drawIndex : visibleCoverageDrawOrder_) drawMapPrimitive(drawIndex);
       if (coveragePrepassEnabled_) {
-        vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, coverageShadePipeline_);
+        bindMapPipeline(coveragePipeline_);
         if (useMultiDrawIndirect_)
-          submitIndirectBatches(indirectCoverageBatches_);
+          submitIndirectBatches(indirectCoverageBatches_, nullptr, coveragePipeline_,
+                                VK_NULL_HANDLE);
         else
-          for (u32 drawIndex : visibleCoverageDrawOrder_) drawMapPrimitive(drawIndex);
+          for (u32 drawIndex : visibleCoverageDrawOrder_)
+            drawMapPrimitive(drawIndex, nullptr, coveragePipeline_, VK_NULL_HANDLE);
+        if (useMultiDrawIndirect_)
+          submitIndirectBatches(indirectCoverageBatches_, coverageMaterialPipelines_,
+                                coverageShadePipeline_, coverageDistantPipeline_);
+        else
+          for (u32 drawIndex : visibleCoverageDrawOrder_)
+            drawMapPrimitive(drawIndex, coverageMaterialPipelines_, coverageShadePipeline_,
+                             coverageDistantPipeline_);
+      } else if (useMultiDrawIndirect_) {
+        submitIndirectBatches(indirectCoverageBatches_, nullptr, pipeline_, opaqueDistantPipeline_);
+      } else {
+        for (u32 drawIndex : visibleCoverageDrawOrder_)
+          drawMapPrimitive(drawIndex, nullptr, pipeline_, opaqueDistantPipeline_);
       }
     }
     endGpuRegion(GpuPassClass::Coverage);
@@ -2181,6 +3585,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     skyPush.surfaceTransform[3] = surfaceTransform.yy;
     skyPush.materialFlags[2] = encodeSrgb ? 1u : 0u;
     vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipeline_);
+    boundMapPipeline = VK_NULL_HANDLE;
     vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipelineLayout_,
                             0, 1, &environmentSet_, 0, nullptr);
     vkCmdPushConstants(commandBuffer_, skyPipelineLayout_,
@@ -2196,14 +3601,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         const float bv=b.boundsCenter[axis]-camera.position[axis];da+=av*av;db+=bv*bv;}return da>db;
     });
     if (!visibleTransparentDrawOrder_.empty()) {
-      vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, transparentPipeline_);
       vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
                               1, 1, &environmentSet_, 0, nullptr);
       if (useBindless_)
         vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
                                 0, 1, &textureSet_, 0, nullptr);
       for (u32 drawIndex : visibleTransparentDrawOrder_) {
-        drawMapPrimitive(drawIndex);
+        drawMapPrimitive(drawIndex, transparentMaterialPipelines_, transparentPipeline_,
+                         transparentDistantPipeline_);
       }
     }
     endGpuRegion(GpuPassClass::Transparent);
@@ -2258,13 +3663,16 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
 
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
   vkCmdEndRenderPass(commandBuffer_);
+  beginGpuRegion(GpuPassClass::Post);
+  recordPostProcess(imageIndex);
+  endGpuRegion(GpuPassClass::Post);
   // Must run after the main pass ends (depthImage_ needs its final write
   // landed, in DEPTH_STENCIL_ATTACHMENT_OPTIMAL) and before submit; a no-op
   // when HZB occlusion is disabled or its resources failed to initialize.
   beginGpuRegion(GpuPassClass::Hzb);
   if (hzbFrameEligible_) recordHzbReductionPass(camera);
   endGpuRegion(GpuPassClass::Hzb);
-  hzbPreviousFrameEligible_ = hzbFrameEligible_;
+  hzbPreviousFrameEligible_ = hzbFrameEligible_ && hzbReadbackRecordedThisFrame_;
   if (gpuTimingEnabled()) gpuFrameTimer_.end(commandBuffer_);
   if (vkEndCommandBuffer(commandBuffer_) != VK_SUCCESS) return rhi::SwapchainStatus::FatalError;
 
@@ -2295,16 +3703,26 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if (presentStatus != rhi::SwapchainStatus::Ok) return presentStatus;
   if (dirtRoadPreview_ && (++renderedFrameCount_ == 1 || renderedFrameCount_ % 240 == 0)) {
     __android_log_print(ANDROID_LOG_INFO, LogTag,
-        "[Visibility] candidates=%u visible=%u culled=%u submitted_draws=%u triangles_visible=%llu/%llu triangles_submitted=%llu hzb_tested=%u hzb_occluded=%u hzb_revived=%u hzb_motion_skip=%u hzb_budget_skip=%u",
+        "[Visibility] render=%ux%u scale=%.3f candidates=%u visible=%u culled=%u submitted_draws=%u triangles_visible=%llu/%llu triangles_submitted=%llu shadow_draws=%u/%u shadow_cascades=%u/%u shadow_cache_hit_frames=%llu hzb_tested=%u hzb_occluded=%u hzb_revived=%u hzb_motion_skip=%u hzb_budget_skip=%u gpu_cull=%s gpu_cull_tested=%u gpu_cull_occluded=%u gpu_cull_revived=%u gpu_cull_visible=%u",
+        renderWidth(), renderHeight(), static_cast<double>(dynamicResolution_.scale()),
         visibilityTelemetry_.candidateDraws, visibilityTelemetry_.visibleDraws,
         visibilityTelemetry_.culledDraws, visibilityTelemetry_.submittedDrawCalls,
         static_cast<unsigned long long>(visibilityTelemetry_.visibleTriangles),
         static_cast<unsigned long long>(visibilityTelemetry_.candidateTriangles),
         static_cast<unsigned long long>(visibilityTelemetry_.submittedTriangles),
+        shadowSubmittedDraws_, shadowCandidateDraws_, shadowRenderedCascades_,
+        shadowCascadeCount_, static_cast<unsigned long long>(shadowCacheHitFrames_),
         visibilityTelemetry_.hzbTestedDraws, visibilityTelemetry_.hzbOccludedDraws,
         visibilityTelemetry_.hzbRevivedDraws,
         visibilityTelemetry_.hzbSkippedCameraMotionDraws,
-        visibilityTelemetry_.hzbSkippedBudgetDraws);
+        visibilityTelemetry_.hzbSkippedBudgetDraws,
+        // Os quatro contadores abaixo vem do dispatch do frame ANTERIOR e sao
+        // os unicos numeros validos quando o consumidor GPU esta ativo:
+        // submitted_draws/submitted_triangles contam o que a CPU submeteu, que
+        // por construcao ainda inclui o que a GPU zerou.
+        hzbGpuCullingActive_ ? (drawCullDispatchedThisFrame_ ? "ativo" : "inativo") : "off",
+        drawCullTelemetry_[0], drawCullTelemetry_[1], drawCullTelemetry_[2],
+        drawCullTelemetry_[3]);
   }
   return acquireStatus == rhi::SwapchainStatus::SuboptimalNeedsRecreate
              ? rhi::SwapchainStatus::SuboptimalNeedsRecreate

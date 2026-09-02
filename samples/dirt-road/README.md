@@ -55,7 +55,9 @@ python tools/cook-sky-panorama.py
 
 A ferramenta gera `Imported/environment.aetex` em 1024×512 RGBA8 sRGB, com
 mipmaps filtrados em espaço linear e borda horizontal tratada, e
-`Imported/environment.aeenv` v2 com sol, ambiente, exposição e parâmetros de
+`Imported/environment-specular.aetex` octahedral RGBA16F pré-filtrado por GGX,
+`Imported/environment-brdf.aetex` com a LUT split-sum compartilhada e
+`Imported/environment.aeenv` v3 com sol, ambiente, exposição, descrição de projeção e parâmetros de
 iluminação globais. O runtime aceita AEEN v1 apenas como migração. O shader usa a
 direção da câmera para amostrar a esfera, por isso o céu gira com o mundo sem
 esticamento de imagem de tela. A imagem source foi gerada com a ferramenta de

@@ -71,6 +71,7 @@ public:
   VkBuffer handle() const { return buffer_; }
   void *mappedData() const { return mappedData_; }
   u64 sizeBytes() const { return sizeBytes_; }
+  VkBufferUsageFlags usage() const { return usage_; }
 
 private:
   friend class VulkanMemoryAllocator;
@@ -80,6 +81,7 @@ private:
   VmaAllocation allocation_ = VK_NULL_HANDLE;
   void *mappedData_ = nullptr;
   u64 sizeBytes_ = 0;
+  VkBufferUsageFlags usage_ = 0;
   u64 accountedBytes_ = 0;
   MemoryClass memoryClass_ = MemoryClass::Buffer;
 };

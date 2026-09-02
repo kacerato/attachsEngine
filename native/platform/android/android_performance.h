@@ -31,9 +31,17 @@ public:
   void shutdown();
   void setActive(bool active, bool loading);
   void updateTargetFrameDuration(i64 targetFrameDurationNs);
-  void reportFrameDuration(i64 actualFrameDurationNs);
+  // A sessão contém apenas a render thread. Portanto o valor reportado é CPU
+  // executada por essa thread, nunca wall time com acquire/present bloqueado.
+  void reportThreadWorkDuration(i64 actualThreadCpuDurationNs);
+  // API 35+: reporta o mesmo ciclo com decomposição CPU/GPU. O timestamp usa
+  // CLOCK_MONOTONIC; total inclui a maior cauda observada porque CPU e GPU se
+  // sobrepõem. Em plataformas antigas há fallback para a duração de CPU.
+  void reportFrameWorkDuration(i64 workPeriodStartNs, i64 actualTotalDurationNs,
+                               i64 actualCpuDurationNs, i64 actualGpuDurationNs);
 
   bool hintSessionAvailable() const { return hintSession_ != nullptr; }
+  bool detailedWorkDurationAvailable() const { return workDuration_ != nullptr; }
   bool sustainedPerformanceSupported() const { return sustainedPerformanceSupported_; }
   bool sustainedPerformanceEnabled() const { return sustainedPerformanceEnabled_; }
   i32 gameMode() const { return gameMode_; }
@@ -45,6 +53,11 @@ private:
   using UpdateTargetFn = int (*)(void *, i64);
   using ReportActualFn = int (*)(void *, i64);
   using CloseSessionFn = void (*)(void *);
+  using CreateWorkDurationFn = void *(*)();
+  using ReleaseWorkDurationFn = void (*)(void *);
+  using SetWorkDurationValueFn = void (*)(void *, i64);
+  using ReportActual2Fn = int (*)(void *, void *);
+  using SetPreferPowerEfficiencyFn = int (*)(void *, bool);
 
   bool publishGameState(bool active, bool loading);
   bool querySustainedPerformanceSupport();
@@ -60,6 +73,15 @@ private:
   UpdateTargetFn updateTarget_ = nullptr;
   ReportActualFn reportActual_ = nullptr;
   CloseSessionFn closeSession_ = nullptr;
+  CreateWorkDurationFn createWorkDuration_ = nullptr;
+  ReleaseWorkDurationFn releaseWorkDuration_ = nullptr;
+  SetWorkDurationValueFn setWorkStart_ = nullptr;
+  SetWorkDurationValueFn setWorkTotal_ = nullptr;
+  SetWorkDurationValueFn setWorkCpu_ = nullptr;
+  SetWorkDurationValueFn setWorkGpu_ = nullptr;
+  ReportActual2Fn reportActual2_ = nullptr;
+  SetPreferPowerEfficiencyFn setPreferPowerEfficiency_ = nullptr;
+  void *workDuration_ = nullptr;
   i64 targetFrameDurationNs_ = 0;
   i64 preferredUpdateRateNs_ = 0;
   i32 gameMode_ = 0;

@@ -44,6 +44,8 @@ EnabledPaths derivePaths(DeviceProfile profile, const DeviceFeatures &f) {
   // independente do perfil — mesmo um dispositivo perfil C pode suportar
   // TRANSIENT_ATTACHMENT (é um recurso comum em TBDR mobile).
   paths.memorylessGBuffer = f.memorylessAttachments;
+  paths.compute = f.computeShaders;
+  paths.asyncCompute = f.computeShaders && f.dedicatedComputeQueue;
 
   return paths;
 }

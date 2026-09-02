@@ -10,6 +10,7 @@ namespace ae::platform::android {
 namespace {
 constexpr const char *LogTag = "Aether.Android";
 constexpr i32 Android13Api = 33;
+constexpr i32 Android15Api = 35;
 constexpr i32 Android7Api = 24;
 constexpr i32 GameModeUnsupported = 0;
 constexpr i32 GameStateModeNone = 1;
@@ -60,6 +61,9 @@ bool AndroidPerformance::initialize(ANativeActivity *activity,
   androidLibrary_ = dlopen("libandroid.so", RTLD_NOW | RTLD_LOCAL);
   if (androidLibrary_ == nullptr) return false;
   const auto releaseHintApi = [this]() {
+    if (workDuration_ != nullptr && releaseWorkDuration_ != nullptr)
+      releaseWorkDuration_(workDuration_);
+    workDuration_ = nullptr;
     if (hintSession_ != nullptr && closeSession_ != nullptr) closeSession_(hintSession_);
     hintSession_ = nullptr;
     hintManager_ = nullptr;
@@ -68,6 +72,14 @@ bool AndroidPerformance::initialize(ANativeActivity *activity,
     preferredRate_ = nullptr;
     updateTarget_ = nullptr;
     reportActual_ = nullptr;
+    createWorkDuration_ = nullptr;
+    releaseWorkDuration_ = nullptr;
+    setWorkStart_ = nullptr;
+    setWorkTotal_ = nullptr;
+    setWorkCpu_ = nullptr;
+    setWorkGpu_ = nullptr;
+    reportActual2_ = nullptr;
+    setPreferPowerEfficiency_ = nullptr;
     closeSession_ = nullptr;
     if (androidLibrary_ != nullptr) dlclose(androidLibrary_);
     androidLibrary_ = nullptr;
@@ -101,14 +113,45 @@ bool AndroidPerformance::initialize(ANativeActivity *activity,
     return false;
   }
   preferredUpdateRateNs_ = preferredRate_(hintManager_);
+  if (android_get_device_api_level() >= Android15Api) {
+    setPreferPowerEfficiency_ = loadSymbol<SetPreferPowerEfficiencyFn>(
+        androidLibrary_, "APerformanceHint_setPreferPowerEfficiency");
+    if (setPreferPowerEfficiency_ != nullptr) {
+      const int result = setPreferPowerEfficiency_(hintSession_, false);
+      __android_log_print(
+          result == 0 ? ANDROID_LOG_INFO : ANDROID_LOG_WARN, LogTag,
+          "[PerformancePolicy] ADPF prefer_power_efficiency=false resultado=%d.", result);
+    }
+    createWorkDuration_ = loadSymbol<CreateWorkDurationFn>(androidLibrary_, "AWorkDuration_create");
+    releaseWorkDuration_ = loadSymbol<ReleaseWorkDurationFn>(androidLibrary_, "AWorkDuration_release");
+    setWorkStart_ = loadSymbol<SetWorkDurationValueFn>(
+        androidLibrary_, "AWorkDuration_setWorkPeriodStartTimestampNanos");
+    setWorkTotal_ = loadSymbol<SetWorkDurationValueFn>(
+        androidLibrary_, "AWorkDuration_setActualTotalDurationNanos");
+    setWorkCpu_ = loadSymbol<SetWorkDurationValueFn>(
+        androidLibrary_, "AWorkDuration_setActualCpuDurationNanos");
+    setWorkGpu_ = loadSymbol<SetWorkDurationValueFn>(
+        androidLibrary_, "AWorkDuration_setActualGpuDurationNanos");
+    reportActual2_ = loadSymbol<ReportActual2Fn>(
+        androidLibrary_, "APerformanceHint_reportActualWorkDuration2");
+    if (createWorkDuration_ != nullptr && releaseWorkDuration_ != nullptr &&
+        setWorkStart_ != nullptr && setWorkTotal_ != nullptr && setWorkCpu_ != nullptr &&
+        setWorkGpu_ != nullptr && reportActual2_ != nullptr) {
+      workDuration_ = createWorkDuration_();
+    }
+  }
   __android_log_print(ANDROID_LOG_INFO, LogTag,
-      "[PerformancePolicy] ADPF ativo thread=%d target_ms=%.3f update_ms=%.3f game_mode=%d.",
+      "[PerformancePolicy] ADPF ativo thread=%d target_ms=%.3f update_ms=%.3f game_mode=%d gpu_work=%s.",
       renderThread, static_cast<double>(targetFrameDurationNs_) / 1e6,
-      static_cast<double>(preferredUpdateRateNs_) / 1e6, gameMode_);
+      static_cast<double>(preferredUpdateRateNs_) / 1e6, gameMode_,
+      workDuration_ != nullptr ? "true" : "false");
   return true;
 }
 
 void AndroidPerformance::shutdown() {
+  if (workDuration_ != nullptr && releaseWorkDuration_ != nullptr)
+    releaseWorkDuration_(workDuration_);
+  workDuration_ = nullptr;
   if (sustainedPerformanceEnabled_) setSustainedPerformance(false);
   if (hintSession_ != nullptr && closeSession_ != nullptr) closeSession_(hintSession_);
   hintSession_ = nullptr;
@@ -118,6 +161,14 @@ void AndroidPerformance::shutdown() {
   preferredRate_ = nullptr;
   updateTarget_ = nullptr;
   reportActual_ = nullptr;
+  createWorkDuration_ = nullptr;
+  releaseWorkDuration_ = nullptr;
+  setWorkStart_ = nullptr;
+  setWorkTotal_ = nullptr;
+  setWorkCpu_ = nullptr;
+  setWorkGpu_ = nullptr;
+  reportActual2_ = nullptr;
+  setPreferPowerEfficiency_ = nullptr;
   closeSession_ = nullptr;
   if (androidLibrary_ != nullptr) dlclose(androidLibrary_);
   androidLibrary_ = nullptr;
@@ -142,9 +193,9 @@ void AndroidPerformance::updateTargetFrameDuration(i64 targetFrameDurationNs) {
     updateTarget_(hintSession_, targetFrameDurationNs_);
 }
 
-void AndroidPerformance::reportFrameDuration(i64 actualFrameDurationNs) {
-  if (hintSession_ == nullptr || reportActual_ == nullptr || actualFrameDurationNs <= 0) return;
-  const int result = reportActual_(hintSession_, actualFrameDurationNs);
+void AndroidPerformance::reportThreadWorkDuration(i64 actualThreadCpuDurationNs) {
+  if (hintSession_ == nullptr || reportActual_ == nullptr || actualThreadCpuDurationNs <= 0) return;
+  const int result = reportActual_(hintSession_, actualThreadCpuDurationNs);
   if (result == 0) {
     reportFailures_ = 0;
     return;
@@ -152,6 +203,34 @@ void AndroidPerformance::reportFrameDuration(i64 actualFrameDurationNs) {
   if (++reportFailures_ == 3) {
     __android_log_print(ANDROID_LOG_WARN, LogTag,
                         "[PerformancePolicy] ADPF report falhou repetidamente: errno=%d.", result);
+  }
+}
+
+void AndroidPerformance::reportFrameWorkDuration(i64 workPeriodStartNs,
+                                                 i64 actualTotalDurationNs,
+                                                 i64 actualCpuDurationNs,
+                                                 i64 actualGpuDurationNs) {
+  if (workDuration_ == nullptr || reportActual2_ == nullptr) {
+    reportThreadWorkDuration(actualCpuDurationNs);
+    return;
+  }
+  if (hintSession_ == nullptr || workPeriodStartNs <= 0 || actualTotalDurationNs <= 0 ||
+      actualCpuDurationNs < 0 || actualGpuDurationNs < 0 ||
+      (actualCpuDurationNs == 0 && actualGpuDurationNs == 0)) return;
+  setWorkStart_(workDuration_, workPeriodStartNs);
+  setWorkTotal_(workDuration_, actualTotalDurationNs);
+  setWorkCpu_(workDuration_, actualCpuDurationNs);
+  setWorkGpu_(workDuration_, actualGpuDurationNs);
+  const int result = reportActual2_(hintSession_, workDuration_);
+  if (result == 0) {
+    reportFailures_ = 0;
+    return;
+  }
+  if (++reportFailures_ == 3) {
+    __android_log_print(
+        ANDROID_LOG_WARN, LogTag,
+        "[PerformancePolicy] ADPF WorkDuration CPU/GPU falhou repetidamente: errno=%d.",
+        result);
   }
 }
 

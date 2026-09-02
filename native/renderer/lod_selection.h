@@ -101,4 +101,11 @@ bool buildLodRenderGroups(std::span<const MapDrawRecord> draws,
                           std::vector<LodRenderGroup> &outGroups,
                           std::vector<u32> &outUngrouped);
 
+// Builds the maximum-quality candidate list for a package containing multiple
+// discrete levels. Disabling adaptive LOD selects this list; it must never
+// fall back to every package draw, which would render duplicate surfaces.
+void buildLodLevelZeroDrawOrder(std::span<const LodRenderGroup> groups,
+                                std::span<const u32> ungrouped,
+                                std::vector<u32> &outDrawOrder);
+
 } // namespace ae::renderer

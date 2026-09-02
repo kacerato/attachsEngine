@@ -9,9 +9,10 @@ bool gpuPassAttributionCollapsed(const std::array<double, GpuPassClassCount> &pa
   // Frame sem tempo medido não afirma nada sobre atribuição.
   if (!(frameMs > 0.0)) return false;
   const auto intraPass = [](GpuPassClass pass) {
-    // Tudo que é gravado dentro do render pass principal. HZB fica de fora: é
-    // uma cadeia de passes própria e é legitimamente medida em separado.
-    return pass != GpuPassClass::Hzb;
+    // Só classes gravadas dentro do render pass principal. Shadow, Post e HZB
+    // têm passes próprios e são legitimamente medidos em separado.
+    return pass != GpuPassClass::Shadow && pass != GpuPassClass::Post &&
+           pass != GpuPassClass::Hzb;
   };
   double dominant = 0.0;
   double others = 0.0;

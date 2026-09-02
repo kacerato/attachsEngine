@@ -13,6 +13,11 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   vec4 worldToViewRow0;
   vec4 worldToViewRow1;
   vec4 worldToViewRow2;
+  vec4 quality;
+  mat4 shadowViewProjection[4];
+  vec4 shadowSplitDepths;
+  vec4 shadowParameters;
+  vec4 shadowWorldUnitsPerTexel;
 } environment;
 layout(location=0) in vec3 inPosition;
 layout(location=1) in vec3 inNormal;

@@ -2,6 +2,8 @@
 #include "platform/android/android_launch_options.h"
 #include <android/log.h>
 #include <android/native_activity.h>
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <time.h>
 #include <unistd.h>
@@ -37,7 +39,7 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
   if (contextPending_) {
     const char *scene = context.sceneId != nullptr ? context.sceneId : "unknown";
     __android_log_print(ANDROID_LOG_INFO, LogTag,
-        "[FrameProfileContext] {\"schemaVersion\":3,\"pid\":%d,\"epoch\":%u,"
+        "[FrameProfileContext] {\"schemaVersion\":6,\"pid\":%d,\"epoch\":%u,"
         "\"scene\":\"%s\",\"content_fingerprint\":\"%016llx\",\"target_fps\":%u,"
         "\"gpu_isolation\":\"%s\","
         "\"camera_locked\":%s,\"camera_mode\":\"%s\","
@@ -47,6 +49,8 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
         "\"draws\":%u,\"materials\":%u,\"textures\":%u,\"triangles\":%u,"
         "\"package_version\":%u,\"render_draws\":%u,\"lod_groups\":%u,"
         "\"hzb_enabled\":%s,\"lod_enabled\":%s,"
+        "\"lod_error_px\":%.3f,\"coverage_lod_error_px\":%.3f,"
+        "\"render_scale\":%.3f,\"render_width\":%u,\"render_height\":%u,"
         "\"visible_draws\":%u,\"culled_draws\":%u,\"submitted_draw_calls\":%u,"
         "\"visible_triangles\":%llu,\"submitted_triangles\":%llu,"
         "\"hzb_tested_draws\":%u,\"hzb_occluded_draws\":%u,\"hzb_revived_draws\":%u,"
@@ -64,6 +68,8 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
         context.textureCount, context.triangleCount, context.packageVersion,
         context.renderDrawCount, context.lodGroupCount,
         context.hzbEnabled ? "true" : "false", context.lodEnabled ? "true" : "false",
+        context.lodPixelErrorBudget, context.coverageLodPixelErrorBudget,
+        context.renderScale, context.renderWidth, context.renderHeight,
         context.visibleDrawCount,
         context.culledDrawCount, context.submittedDrawCallCount,
         static_cast<unsigned long long>(context.visibleTriangleCount),
@@ -86,6 +92,21 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[FrameProfile] Amostra inválida; janela descartada.");
     return;
   }
+  if (result == profiler::FrameSampleResult::Collecting ||
+      result == profiler::FrameSampleResult::WindowReady) {
+    const float scale = std::isfinite(context.renderScale)
+                            ? std::clamp(context.renderScale, 0.0f, 1.0f)
+                            : 0.0f;
+    if (renderScaleSamples_ == 0) {
+      renderScaleMinimum_ = scale;
+      renderScaleMaximum_ = scale;
+    } else {
+      renderScaleMinimum_ = std::min(renderScaleMinimum_, scale);
+      renderScaleMaximum_ = std::max(renderScaleMaximum_, scale);
+    }
+    renderScaleLast_ = scale;
+    ++renderScaleSamples_;
+  }
   if (result != profiler::FrameSampleResult::WindowReady) return;
   profiler::FrameProfileSummary summary{};
   if (!statistics_.summarize(summary)) return;
@@ -96,7 +117,7 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
 #endif
   char json[3072];
   int used = std::snprintf(json, sizeof(json),
-      "{\"schemaVersion\":4,\"pid\":%d,\"epoch\":%u,\"window\":%llu,\"build\":\"%s\","
+      "{\"schemaVersion\":6,\"pid\":%d,\"epoch\":%u,\"window\":%llu,\"build\":\"%s\","
       "\"instances\":%u,\"width\":%u,\"height\":%u,\"frames\":%u,\"elapsed_ms\":%.6f,"
       "\"present_fps\":%.6f,\"warmup_samples\":%u,\"warmup_process_cpu_max_ms\":%.6f,"
       "\"route_frame\":%llu,\"visible_draws\":%u,\"visible_triangles\":%llu",
@@ -150,7 +171,7 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
           ? "tile-deferred"
           : "resolved";
   int passesUsed = std::snprintf(passes, sizeof(passes),
-      "{\"schemaVersion\":4,\"pid\":%d,\"epoch\":%u,\"window\":%llu,"
+      "{\"schemaVersion\":6,\"pid\":%d,\"epoch\":%u,\"window\":%llu,"
       "\"attribution\":\"%s\",\"collapsed_frames\":%u,\"attribution_samples\":%u",
       getpid(), epoch_, static_cast<unsigned long long>(window_), attribution,
       collapsedAttributionFrames_, attributionSampleFrames_);
@@ -163,8 +184,44 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
     return;
   }
   __android_log_print(ANDROID_LOG_INFO, LogTag, "[FrameProfilePasses] %s", passes);
+
+  // Registro separado para manter cada entrada abaixo do limite do Logcat. A
+  // classificação compara p95 com budgets; ela nunca preenche CPU ociosa nem
+  // reduz resolução por uma espera normal de VSYNC.
+  const profiler::FramePressureResult pressure =
+      profiler::classifyFramePressure(summary, context.frameBudget);
+  __android_log_print(
+      ANDROID_LOG_INFO, LogTag,
+      "[FrameProfilePressure] {\"schemaVersion\":6,\"pid\":%d,\"epoch\":%u,"
+      "\"window\":%llu,\"classification\":\"%s\",\"cpu_p95_ratio\":%.4f,"
+      "\"gpu_p95_ratio\":%.4f,\"interval_p95_ratio\":%.4f,"
+      "\"presentation_wait_p95_ms\":%.4f,\"frame_budget_ms\":%.4f,"
+      "\"cpu_budget_ms\":%.4f,\"gpu_budget_ms\":%.4f,"
+      "\"render_scale_min\":%.3f,\"render_scale_max\":%.3f,"
+      "\"render_scale_end\":%.3f,\"adpf\":%s,\"adpf_gpu_work\":%s,\"game_mode\":%d,"
+      "\"sustained_supported\":%s,\"sustained_enabled\":%s,"
+      "\"thermal_api\":%s,\"thermal_status\":%d,"
+      "\"thermal_headroom_valid\":%s,\"thermal_headroom\":%.3f,"
+      "\"thermal_pressure\":\"%s\"}",
+      getpid(), epoch_, static_cast<unsigned long long>(window_),
+      profiler::framePressureKindName(pressure.kind), pressure.cpuP95BudgetRatio,
+      pressure.gpuP95BudgetRatio, pressure.intervalP95BudgetRatio,
+      pressure.presentationWaitP95Ms,
+      static_cast<double>(context.frameBudget.frameIntervalMs),
+      static_cast<double>(context.frameBudget.cpuLaneBudgetMs),
+      static_cast<double>(context.frameBudget.gpuLaneBudgetMs),
+      static_cast<double>(renderScaleMinimum_), static_cast<double>(renderScaleMaximum_),
+      static_cast<double>(renderScaleLast_), context.adpfAvailable ? "true" : "false",
+      context.adpfGpuWorkAvailable ? "true" : "false", context.gameMode,
+      context.sustainedPerformanceSupported ? "true" : "false",
+      context.sustainedPerformanceEnabled ? "true" : "false",
+      context.thermalApiAvailable ? "true" : "false", context.thermalStatus,
+      context.thermalHeadroomValid ? "true" : "false",
+      static_cast<double>(context.thermalHeadroom),
+      context.thermalPressure != nullptr ? context.thermalPressure : "none");
   collapsedAttributionFrames_ = 0;
   attributionSampleFrames_ = 0;
+  renderScaleSamples_ = 0;
 }
 
 } // namespace ae::platform::android

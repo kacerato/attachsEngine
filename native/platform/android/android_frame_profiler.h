@@ -1,4 +1,6 @@
 #pragma once
+#include "core/frame_policy.h"
+#include "profiler/frame_pressure.h"
 #include "profiler/frame_statistics.h"
 
 struct ANativeActivity;
@@ -14,6 +16,19 @@ struct FrameProfileContext final {
   const char *sceneId = "unknown";
   u64 contentFingerprint = 0;
   u32 targetFps = 0;
+  // Publicado na linha FrameProfilePressure, não duplicado no contexto longo.
+  // O profiler recebe o budget resolvido em vez de reconstruí-lo pelo FPS.
+  FrameBudget frameBudget{};
+  bool adpfAvailable = false;
+  bool adpfGpuWorkAvailable = false;
+  i32 gameMode = 0;
+  bool sustainedPerformanceSupported = false;
+  bool sustainedPerformanceEnabled = false;
+  bool thermalApiAvailable = false;
+  bool thermalHeadroomValid = false;
+  float thermalHeadroom = -1.0f;
+  i32 thermalStatus = -1;
+  const char *thermalPressure = "none";
   const char *gpuIsolation = "full";
   bool cameraLocked = false;
   // "free" | "locked" | "route" -- route implies a CameraRoutePlayer is
@@ -36,6 +51,11 @@ struct FrameProfileContext final {
   u32 lodGroupCount = 0;
   bool hzbEnabled = false;
   bool lodEnabled = false;
+  float lodPixelErrorBudget = 0.0f;
+  float coverageLodPixelErrorBudget = 0.0f;
+  float renderScale = 1.0f;
+  u32 renderWidth = 0;
+  u32 renderHeight = 0;
   u32 visibleDrawCount = 0;
   u32 culledDrawCount = 0;
   u32 submittedDrawCallCount = 0;
@@ -61,6 +81,10 @@ public:
     contextPending_ = true;
     collapsedAttributionFrames_ = 0;
     attributionSampleFrames_ = 0;
+    renderScaleSamples_ = 0;
+    renderScaleMinimum_ = 1.0f;
+    renderScaleMaximum_ = 1.0f;
+    renderScaleLast_ = 1.0f;
   }
   void record(const profiler::RenderPhaseTimings &phases, const FrameProfileContext &context,
               u32 instances, u32 width, u32 height);
@@ -75,6 +99,10 @@ private:
   // que ninguém otimize em cima de uma divisão que o hardware não fez.
   u32 collapsedAttributionFrames_ = 0;
   u32 attributionSampleFrames_ = 0;
+  u32 renderScaleSamples_ = 0;
+  float renderScaleMinimum_ = 1.0f;
+  float renderScaleMaximum_ = 1.0f;
+  float renderScaleLast_ = 1.0f;
   profiler::FrameStatistics statistics_{};
 };
 

@@ -48,6 +48,12 @@ bool buildStaticCollisionMesh(const MapPackageView &package, StaticCollisionMesh
         draw.indexCount > package.indices.size() - draw.firstIndex) {
       return false;
     }
+    // LOD geometry is a render-only representation of the same physical
+    // surface.  Feeding levels 1+ into collision would duplicate triangles,
+    // increase build time/memory and make ray/shape queries report stacked
+    // copies of one surface.  Level 0 is the importer's untouched source and
+    // therefore remains the single authoritative collision representation.
+    if (draw.lodLevel != 0) continue;
     const u32 flags = package.materials[draw.materialIndex].flags;
     const bool explicitlyDisabled = (flags & MapMaterialNoCollision) != 0;
     const bool nonPhysicalCutout = (flags & MapMaterialAlphaMask) != 0 &&

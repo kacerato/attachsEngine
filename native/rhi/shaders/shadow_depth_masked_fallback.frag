@@ -1,5 +1,7 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
+precision mediump int;
+precision highp float;
 layout(set=0,binding=0) uniform sampler2D baseMap;
 layout(push_constant) uniform ShadowPushConstants {
   mat4 lightViewProjection;

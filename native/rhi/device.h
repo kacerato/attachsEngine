@@ -16,11 +16,14 @@
 
 #include "core/base.h"
 #include "rhi/device_profile.h"
+#include "rhi/compute.h"
 #include "rhi/memory_allocator.h"
 #include "rhi/pipeline_cache.h"
 #include "rhi/surface_transform.h"
 
 #include <vulkan/vulkan.h>
+#include <string>
+#include <vector>
 
 // Item 2.1.6 do plano ("camadas de validação, marcadores de debug"): só
 // existe fora de __ANDROID__ com build debug (!NDEBUG) real — esta máquina
@@ -35,6 +38,22 @@
 #endif
 
 namespace ae::rhi {
+
+// Optional platform presentation policy. The Vulkan RHI exposes lifecycle and
+// queue hooks without depending on Android/Swappy; unsupported platforms leave
+// it null and retain direct vkQueuePresentKHR.
+class IVulkanPresentationScheduler {
+public:
+  virtual ~IVulkanPresentationScheduler() = default;
+  virtual void requiredDeviceExtensions(VkPhysicalDevice physicalDevice,
+                                        std::vector<std::string> &extensions) = 0;
+  virtual void onQueueReady(VkDevice device, VkQueue queue, u32 queueFamilyIndex) = 0;
+  virtual void onSwapchainCreated(VkPhysicalDevice physicalDevice, VkDevice device,
+                                  VkSwapchainKHR swapchain) = 0;
+  virtual VkResult queuePresent(VkQueue queue, const VkPresentInfoKHR *presentInfo) = 0;
+  virtual void onSwapchainDestroyed(VkDevice device, VkSwapchainKHR swapchain) = 0;
+  virtual void onDeviceDestroyed(VkDevice device) = 0;
+};
 
 // Resultado de uma tentativa de aquisição/apresentação de swapchain. Modela
 // explicitamente os estados que forçam recriação, porque esse é o ponto
@@ -107,7 +126,8 @@ public:
   // tipo só guarda os handles que ele mesmo cria (swapchain, image views,
   // sync objects), nunca os que recebeu de fora.
   bool initialize(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
-                  u32 graphicsQueueFamily, u32 width, u32 height);
+                  u32 graphicsQueueFamily, u32 width, u32 height,
+                  IVulkanPresentationScheduler *presentationScheduler = nullptr);
   void shutdown();
 
   bool recreate(u32 newWidth, u32 newHeight) override;
@@ -166,6 +186,7 @@ private:
   VkSemaphore imageAvailableSemaphore_ = VK_NULL_HANDLE;
   VkSemaphore renderFinishedSemaphores_[kMaxSwapchainImages]{};
   VkFence inFlightFence_ = VK_NULL_HANDLE;
+  IVulkanPresentationScheduler *presentationScheduler_ = nullptr;
 };
 
 // Implementação real sobre a API Vulkan. Não instanciada em nenhum teste
@@ -189,12 +210,19 @@ public:
                           const char *const *requiredExtensions,
                           u32 requiredExtensionCount);
   bool initializeDevice(VkSurfaceKHR presentationSurface, bool allowBindless = true);
+  void setPresentationScheduler(IVulkanPresentationScheduler *scheduler) {
+    presentationScheduler_ = scheduler;
+  }
   void shutdown();
 
   VkDevice handle() const override { return device_; }
   VkPhysicalDevice physicalDevice() const override { return physicalDevice_; }
   VkInstance instance() const { return instance_; }
   u32 graphicsQueueFamily() const { return graphicsQueueFamily_; }
+  VkQueue graphicsQueue() const { return graphicsQueue_; }
+  u32 computeQueueFamily() const { return computeQueueFamily_; }
+  VkQueue computeQueue() const { return computeQueue_; }
+  const ComputeLimits &computeLimits() const { return computeLimits_; }
   VulkanMemoryAllocator &memoryAllocator() { return memoryAllocator_; }
   const VulkanMemoryAllocator &memoryAllocator() const { return memoryAllocator_; }
 
@@ -243,6 +271,10 @@ private:
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
   VkDevice device_ = VK_NULL_HANDLE;
   u32 graphicsQueueFamily_ = 0;
+  VkQueue graphicsQueue_ = VK_NULL_HANDLE;
+  u32 computeQueueFamily_ = UINT32_MAX;
+  VkQueue computeQueue_ = VK_NULL_HANDLE;
+  ComputeLimits computeLimits_{};
   VulkanMemoryAllocator memoryAllocator_{};
   PipelineCache pipelineCache_{};
   DeviceFeatures deviceFeatures_{};
@@ -252,6 +284,7 @@ private:
   u32 maximumImage2DSize_ = 4096;
   u32 maximumImageArrayLayers_ = 256;
   float maximumSamplerAnisotropy_ = 1.0f;
+  IVulkanPresentationScheduler *presentationScheduler_ = nullptr;
 
 #if AETHER_VULKAN_VALIDATION
   VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;

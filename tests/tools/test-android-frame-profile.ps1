@@ -6,7 +6,7 @@ function Assert-Profile { param([bool]$Value); if (-not $Value) { throw 'Asserç
 function Test-Profile { param([string]$Name, [scriptblock]$Body); & $Body; ++$script:count; Write-Host "PASS: $Name" }
 function New-TestWindow {
     param([int]$Index = 1, [int]$Epoch = 1)
-    $window = [ordered]@{ schemaVersion = 4; pid = 7; epoch = $Epoch; window = $Index; build = 'debug';
+    $window = [ordered]@{ schemaVersion = 6; pid = 7; epoch = $Epoch; window = $Index; build = 'debug';
         instances = 5000; width = 2772; height = 1280; frames = 600; elapsed_ms = 10000.0;
         present_fps = 60.0; warmup_samples = 300; warmup_process_cpu_max_ms = 4.0 }
     foreach ($metric in $FrameProfileMetricNames) {
@@ -48,7 +48,7 @@ function Convert-TestWindow {
     # Espelha o emissor nativo: a janela leva as metricas de frame, e as regioes
     # de GPU saem numa segunda entrada de Logcat pareada por epoch/window.
     $wire = $Window | ConvertTo-Json -Depth 5 | ConvertFrom-Json
-    $passes = [ordered]@{ schemaVersion = 4; pid = $wire.pid; epoch = $wire.epoch; window = $wire.window
+    $passes = [ordered]@{ schemaVersion = $wire.schemaVersion; pid = $wire.pid; epoch = $wire.epoch; window = $wire.window
                           attribution = $Attribution; collapsed_frames = 0; attribution_samples = 600 }
     foreach ($metric in $FrameProfilePassMetricNames) {
         $d = $wire.$metric
@@ -61,7 +61,30 @@ function Convert-TestWindow {
     }
     $line = '[FrameProfile] ' + ($wire | ConvertTo-Json -Depth 5 -Compress)
     if ($OmitPasses) { return $line }
-    return $line + "`n" + '[FrameProfilePasses] ' + ([pscustomobject]$passes | ConvertTo-Json -Depth 5 -Compress)
+    $result = $line + "`n" + '[FrameProfilePasses] ' + ([pscustomobject]$passes | ConvertTo-Json -Depth 5 -Compress)
+    if ($wire.schemaVersion -ge 5) {
+        $pressure = [pscustomobject][ordered]@{
+            schemaVersion = $wire.schemaVersion; pid = $wire.pid; epoch = $wire.epoch; window = $wire.window
+            classification = 'within-budget'; cpu_p95_ratio = 0.1; gpu_p95_ratio = 0.1
+            interval_p95_ratio = 1.0; presentation_wait_p95_ms = 0.1
+            frame_budget_ms = 16.6667; cpu_budget_ms = 13.0; gpu_budget_ms = 14.6667
+            render_scale_min = 1.0; render_scale_max = 1.0; render_scale_end = 1.0
+        }
+        if ($wire.schemaVersion -ge 6) {
+            $pressure | Add-Member -NotePropertyName adpf -NotePropertyValue $true
+            $pressure | Add-Member -NotePropertyName adpf_gpu_work -NotePropertyValue $true
+            $pressure | Add-Member -NotePropertyName game_mode -NotePropertyValue 2
+            $pressure | Add-Member -NotePropertyName sustained_supported -NotePropertyValue $false
+            $pressure | Add-Member -NotePropertyName sustained_enabled -NotePropertyValue $false
+            $pressure | Add-Member -NotePropertyName thermal_api -NotePropertyValue $true
+            $pressure | Add-Member -NotePropertyName thermal_status -NotePropertyValue 0
+            $pressure | Add-Member -NotePropertyName thermal_headroom_valid -NotePropertyValue $true
+            $pressure | Add-Member -NotePropertyName thermal_headroom -NotePropertyValue 0.42
+            $pressure | Add-Member -NotePropertyName thermal_pressure -NotePropertyValue 'none'
+        }
+        $result += "`n" + '[FrameProfilePressure] ' + ($pressure | ConvertTo-Json -Compress)
+    }
+    return $result
 }
 function Assert-Rejected {
     param([scriptblock]$Body)
@@ -128,6 +151,51 @@ Test-Profile 'contexto schema v3 aceita camera_mode route com fingerprint válid
     $decoded = @(ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7)
     Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].camera_mode -eq 'route' -and
         $decoded[0].camera_route_frame_ordinal -eq 42)
+}
+Test-Profile 'schema 6 exige e preserva pressão e estado operacional' {
+    $decoded = @(ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow)) 7)
+    Assert-Profile ($decoded[0].classification -eq 'within-budget' -and
+        $decoded[0].gpu_budget_ms -eq 14.6667 -and $decoded[0].render_scale_min -eq 1.0 -and
+        $decoded[0].adpf -and $decoded[0].adpf_gpu_work -and $decoded[0].game_mode -eq 2 -and
+        $decoded[0].thermal_headroom -eq 0.42)
+}
+Test-Profile 'schema 6 sem registro de pressão é recusado' {
+    $text = Convert-TestWindow (New-TestWindow)
+    $withoutPressure = (($text -split "`n") | Where-Object { $_ -notmatch '\[FrameProfilePressure\]' }) -join "`n"
+    Assert-Rejected { ConvertFrom-FrameProfileLog $withoutPressure 7 }
+}
+Test-Profile 'schema 5 de pressão permanece retrocompatível' {
+    $window = New-TestWindow
+    $window.schemaVersion = 5
+    $decoded = @(ConvertFrom-FrameProfileLog (Convert-TestWindow $window) 7)
+    Assert-Profile ($decoded.Count -eq 1 -and -not $decoded[0].adpf -and
+        $decoded[0].thermal_status -eq -1)
+}
+Test-Profile 'schema 6 recusa telemetria térmica ausente' {
+    $text = Convert-TestWindow (New-TestWindow)
+    $text = $text -replace ',\"thermal_pressure\":\"none\"', ''
+    Assert-Rejected { ConvertFrom-FrameProfileLog $text 7 }
+}
+Test-Profile 'contexto schema v4 preserva budgets de LOD e resolução ativa' {
+    $context = New-TestContext
+    $context.schemaVersion = 4
+    $context | Add-Member -NotePropertyName camera_mode -NotePropertyValue 'locked'
+    $context | Add-Member -NotePropertyName camera_route_fingerprint -NotePropertyValue '0000000000000000'
+    $context | Add-Member -NotePropertyName camera_route_frame_ordinal -NotePropertyValue 0
+    $context | Add-Member -NotePropertyName camera_route_tick_count -NotePropertyValue 0
+    $context | Add-Member -NotePropertyName lod_error_px -NotePropertyValue 1.5
+    $context | Add-Member -NotePropertyName coverage_lod_error_px -NotePropertyValue 32.0
+    $context | Add-Member -NotePropertyName render_scale -NotePropertyValue 0.75
+    $context | Add-Member -NotePropertyName render_width -NotePropertyValue 960
+    $context | Add-Member -NotePropertyName render_height -NotePropertyValue 2080
+    $decoded = @(ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7)
+    Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].coverage_lod_error_px -eq 32.0 -and
+        $decoded[0].render_width -eq 960)
+}
+Test-Profile 'contexto schema v4 exige todos os campos resolvidos' {
+    $context = New-TestContext
+    $context.schemaVersion = 4
+    Assert-Rejected { ConvertFrom-FrameProfileContextLog (Convert-TestContext $context) 7 }
 }
 Test-Profile 'contexto route sem fingerprint válido é rejeitado' {
     $context = New-TestContext

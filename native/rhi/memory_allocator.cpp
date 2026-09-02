@@ -74,6 +74,7 @@ VulkanBuffer &VulkanBuffer::operator=(VulkanBuffer &&other) noexcept {
   allocation_ = other.allocation_;
   mappedData_ = other.mappedData_;
   sizeBytes_ = other.sizeBytes_;
+  usage_ = other.usage_;
   accountedBytes_ = other.accountedBytes_;
   memoryClass_ = other.memoryClass_;
   other.owner_ = nullptr;
@@ -81,6 +82,7 @@ VulkanBuffer &VulkanBuffer::operator=(VulkanBuffer &&other) noexcept {
   other.allocation_ = VK_NULL_HANDLE;
   other.mappedData_ = nullptr;
   other.sizeBytes_ = 0;
+  other.usage_ = 0;
   other.accountedBytes_ = 0;
   return *this;
 }
@@ -209,6 +211,7 @@ bool VulkanMemoryAllocator::createBuffer(const BufferDesc &desc, VulkanBuffer *o
   outBuffer->allocation_ = allocation;
   outBuffer->mappedData_ = createdInfo.pMappedData;
   outBuffer->sizeBytes_ = desc.sizeBytes;
+  outBuffer->usage_ = desc.usage;
   outBuffer->accountedBytes_ = allocationBytes;
   outBuffer->memoryClass_ = desc.memoryClass;
   return true;
@@ -227,6 +230,7 @@ void VulkanMemoryAllocator::destroyBuffer(VulkanBuffer &buffer) {
   buffer.allocation_ = VK_NULL_HANDLE;
   buffer.mappedData_ = nullptr;
   buffer.sizeBytes_ = 0;
+  buffer.usage_ = 0;
   buffer.accountedBytes_ = 0;
 }
 

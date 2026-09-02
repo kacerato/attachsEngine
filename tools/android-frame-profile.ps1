@@ -111,8 +111,9 @@ $FrameProfileFrameMetricNames = @('interval_ms', 'process_cpu_ms', 'thread_cpu_m
 # Regioes de GPU: viajam em [FrameProfilePasses], porque a linha da janela ja
 # ocupava 937 dos ~1023 bytes que o Logcat entrega antes de truncar em silencio.
 # A ordem espelha ae::GpuPassClass em native/core/gpu_pass_class.h.
-$FrameProfilePassMetricNames = @('gpu_opaque_ms', 'gpu_coverage_ms', 'gpu_sky_ms',
-    'gpu_transparent_ms', 'gpu_ui_ms', 'gpu_hzb_ms')
+$FrameProfilePassMetricNames = @('gpu_shadow_ms', 'gpu_culling_ms', 'gpu_opaque_ms',
+    'gpu_coverage_ms', 'gpu_sky_ms',
+    'gpu_transparent_ms', 'gpu_ui_ms', 'gpu_post_ms', 'gpu_hzb_ms')
 $FrameProfileMetricNames = $FrameProfileFrameMetricNames + $FrameProfilePassMetricNames
 
 # Converte os vetores compactos [mean,p50,p95,p99,max] em objetos e valida
@@ -142,6 +143,64 @@ function ConvertTo-FrameProfileDistributions {
     }
 }
 
+# Classificação por budget emitida separadamente para não estourar a entrada do
+# Logcat. Existe desde o schema 5; o schema 6 acrescenta ADPF/Game Mode/Thermal
+# no mesmo instante da janela. Schema 4 permanece legível e explicitamente sem
+# diagnóstico de pressão.
+function ConvertFrom-FrameProfilePressureLog {
+    param([string]$Text, [string]$ExpectedPid)
+    $pressures = @{}
+    foreach ($line in ($Text -split "`n")) {
+        if ($line -notmatch '\[FrameProfilePressure\] (\{.*)$') { continue }
+        $record = $Matches[1] | ConvertFrom-Json
+        if ([string]$record.pid -ne $ExpectedPid) { continue }
+        if ($record.schemaVersion -notin @(5, 6) -or $record.epoch -lt 1 -or $record.window -lt 1 -or
+            $record.classification -notin @('unknown', 'within-budget', 'cpu', 'gpu', 'mixed', 'presentation')) {
+            throw 'Registro FrameProfilePressure incompatível ou incompleto.'
+        }
+        foreach ($field in @('cpu_p95_ratio', 'gpu_p95_ratio', 'interval_p95_ratio',
+                              'presentation_wait_p95_ms', 'frame_budget_ms', 'cpu_budget_ms',
+                              'gpu_budget_ms', 'render_scale_min', 'render_scale_max',
+                              'render_scale_end')) {
+            $value = $record.$field
+            if ($null -eq $value -or [double]::IsNaN([double]$value) -or
+                [double]::IsInfinity([double]$value) -or [double]$value -lt 0) {
+                throw "FrameProfilePressure inválido: $field."
+            }
+        }
+        if ($record.frame_budget_ms -le 0 -or $record.cpu_budget_ms -le 0 -or
+            $record.gpu_budget_ms -le 0 -or $record.render_scale_min -lt 0.5 -or
+            $record.render_scale_max -gt 1.0 -or
+            $record.render_scale_min -gt $record.render_scale_max -or
+            $record.render_scale_end -lt $record.render_scale_min -or
+            $record.render_scale_end -gt $record.render_scale_max) {
+            throw 'FrameProfilePressure contém budget ou escala inválida.'
+        }
+        if ($record.schemaVersion -ge 6) {
+            foreach ($field in @('adpf', 'adpf_gpu_work', 'game_mode', 'sustained_supported', 'sustained_enabled',
+                                  'thermal_api', 'thermal_status', 'thermal_headroom_valid',
+                                  'thermal_headroom', 'thermal_pressure')) {
+                if ($record.PSObject.Properties.Name -notcontains $field) {
+                    throw "FrameProfilePressure schema 6 sem $field."
+                }
+            }
+            if ($record.game_mode -lt 0 -or $record.game_mode -gt 4 -or
+                $record.thermal_status -lt -1 -or $record.thermal_status -gt 6 -or
+                $record.thermal_pressure -notin @('none', 'light', 'severe') -or
+                [double]::IsNaN([double]$record.thermal_headroom) -or
+                [double]::IsInfinity([double]$record.thermal_headroom) -or
+                ($record.thermal_headroom_valid -and $record.thermal_headroom -lt 0) -or
+                (-not $record.thermal_headroom_valid -and $record.thermal_headroom -ne -1)) {
+                throw 'FrameProfilePressure contém estado ADPF/térmico inválido.'
+            }
+        }
+        $key = "$($record.epoch):$($record.window)"
+        if ($pressures.ContainsKey($key)) { throw "Registro FrameProfilePressure duplicado: $key." }
+        $pressures[$key] = $record
+    }
+    return $pressures
+}
+
 # Regioes de GPU por janela, indexadas por "epoch:window". Emitidas logo apos a
 # janela correspondente; ConvertFrom-FrameProfileLog exige o par.
 function ConvertFrom-FrameProfilePassLog {
@@ -151,7 +210,7 @@ function ConvertFrom-FrameProfilePassLog {
         if ($line -notmatch '\[FrameProfilePasses\] (\{.*)$') { continue }
         $record = $Matches[1] | ConvertFrom-Json
         if ([string]$record.pid -ne $ExpectedPid) { continue }
-        if ($record.schemaVersion -ne 4 -or $record.epoch -lt 1 -or $record.window -lt 1) {
+        if ($record.schemaVersion -notin @(4, 5, 6) -or $record.epoch -lt 1 -or $record.window -lt 1) {
             throw 'Registro FrameProfilePasses incompativel ou incompleto.'
         }
         if ($record.PSObject.Properties.Name -notcontains 'attribution') {
@@ -175,7 +234,7 @@ function ConvertFrom-FrameProfileContextLog {
         if ($line -notmatch '\[FrameProfileContext\] (\{.*)$') { continue }
         $context = $Matches[1] | ConvertFrom-Json
         if ([string]$context.pid -ne $ExpectedPid) { continue }
-        if ($context.schemaVersion -notin @(2, 3) -or $context.epoch -lt 1 -or
+        if ($context.schemaVersion -notin @(2, 3, 4, 5, 6) -or $context.epoch -lt 1 -or
             -not $context.scene -or $context.scene -notmatch '^[a-z0-9-]+$' -or
             $context.content_fingerprint -notmatch '^[0-9a-f]{16}$' -or
             $context.target_fps -lt 1 -or $context.instances -lt 1 -or
@@ -231,6 +290,34 @@ function ConvertFrom-FrameProfileContextLog {
             $context | Add-Member -NotePropertyName render_draws -NotePropertyValue $context.draws
             $context | Add-Member -NotePropertyName lod_groups -NotePropertyValue 0
         }
+        if ($context.schemaVersion -ge 4) {
+            foreach ($field in @('lod_error_px', 'coverage_lod_error_px', 'render_scale',
+                                  'render_width', 'render_height')) {
+                if ($context.PSObject.Properties.Name -notcontains $field) {
+                    throw "FrameProfileContext schema 4 sem $field."
+                }
+            }
+            if ([double]::IsNaN([double]$context.lod_error_px) -or
+                [double]::IsInfinity([double]$context.lod_error_px) -or
+                $context.lod_error_px -le 0 -or
+                [double]::IsNaN([double]$context.coverage_lod_error_px) -or
+                [double]::IsInfinity([double]$context.coverage_lod_error_px) -or
+                $context.coverage_lod_error_px -le 0 -or
+                [double]::IsNaN([double]$context.render_scale) -or
+                [double]::IsInfinity([double]$context.render_scale) -or
+                $context.render_scale -lt 0.5 -or $context.render_scale -gt 1.0 -or
+                $context.render_width -lt 1 -or $context.render_height -lt 1) {
+                throw 'FrameProfileContext schema 4 contém política de resolução/LOD inválida.'
+            }
+        } else {
+            # Campos introduzidos no schema 4. Mantêm capturas antigas
+            # comparáveis sem fingir que conhecemos os budgets que as geraram.
+            $context | Add-Member -NotePropertyName lod_error_px -NotePropertyValue 0.0
+            $context | Add-Member -NotePropertyName coverage_lod_error_px -NotePropertyValue 0.0
+            $context | Add-Member -NotePropertyName render_scale -NotePropertyValue 1.0
+            $context | Add-Member -NotePropertyName render_width -NotePropertyValue $context.width
+            $context | Add-Member -NotePropertyName render_height -NotePropertyValue $context.height
+        }
         if ($context.hzb_tested_draws -lt 0 -or $context.hzb_occluded_draws -lt 0 -or
             $context.hzb_revived_draws -lt 0 -or $context.hzb_motion_skipped_draws -lt 0 -or
             $context.hzb_budget_skipped_draws -lt 0 -or
@@ -258,6 +345,7 @@ function ConvertFrom-FrameProfileLog {
     param([string]$Text, [string]$ExpectedPid, [Nullable[int]]$ExpectedInstances = 5000)
     $seen = @{}
     $passes = ConvertFrom-FrameProfilePassLog -Text $Text -ExpectedPid $ExpectedPid
+    $pressures = ConvertFrom-FrameProfilePressureLog -Text $Text -ExpectedPid $ExpectedPid
     foreach ($line in ($Text -split "`n")) {
         if ($line -notmatch '\[FrameProfile\] (\{.*)$') { continue }
         $window = $Matches[1] | ConvertFrom-Json
@@ -269,7 +357,7 @@ function ConvertFrom-FrameProfileLog {
                 throw "FrameProfile inválido: $field."
             }
         }
-        if ($window.schemaVersion -ne 4 -or
+        if ($window.schemaVersion -notin @(4, 5, 6) -or
             ($null -ne $ExpectedInstances -and $window.instances -ne $ExpectedInstances) -or
             $window.frames -ne 600 -or $window.elapsed_ms -le 0 -or
             $window.width -le 0 -or $window.height -le 0 -or $window.epoch -lt 1 -or $window.window -lt 1) {
@@ -295,6 +383,9 @@ function ConvertFrom-FrameProfileLog {
             throw "Janela FrameProfile sem regioes de GPU correspondentes: $passKey."
         }
         $passRecord = $passes[$passKey]
+        if ($passRecord.schemaVersion -ne $window.schemaVersion) {
+            throw "Schemas de FrameProfile e FrameProfilePasses divergem: $passKey."
+        }
         foreach ($metric in $FrameProfilePassMetricNames) {
             $window | Add-Member -NotePropertyName $metric -NotePropertyValue $passRecord.$metric
         }
@@ -304,6 +395,47 @@ function ConvertFrom-FrameProfileLog {
         # hardware devolveu, mas viajam marcados -- consumir uma divisao que o
         # hardware nao fez enviaria o ciclo de otimizacao atras do alvo errado.
         $window | Add-Member -NotePropertyName gpuPassAttribution -NotePropertyValue $passRecord.attribution
+        if ($window.schemaVersion -ge 5) {
+            if (-not $pressures.ContainsKey($passKey)) {
+                throw "Janela FrameProfile sem pressão correspondente: $passKey."
+            }
+            $pressure = $pressures[$passKey]
+            foreach ($field in @('classification', 'cpu_p95_ratio', 'gpu_p95_ratio',
+                                  'interval_p95_ratio', 'presentation_wait_p95_ms',
+                                  'frame_budget_ms', 'cpu_budget_ms', 'gpu_budget_ms',
+                                  'render_scale_min', 'render_scale_max', 'render_scale_end')) {
+                $window | Add-Member -NotePropertyName $field -NotePropertyValue $pressure.$field
+            }
+            if ($window.schemaVersion -ge 6) {
+                foreach ($field in @('adpf', 'adpf_gpu_work', 'game_mode', 'sustained_supported',
+                                      'sustained_enabled', 'thermal_api', 'thermal_status',
+                                      'thermal_headroom_valid', 'thermal_headroom',
+                                      'thermal_pressure')) {
+                    $window | Add-Member -NotePropertyName $field -NotePropertyValue $pressure.$field
+                }
+            } else {
+                $window | Add-Member -NotePropertyName adpf -NotePropertyValue $false
+                $window | Add-Member -NotePropertyName adpf_gpu_work -NotePropertyValue $false
+                $window | Add-Member -NotePropertyName game_mode -NotePropertyValue 0
+                $window | Add-Member -NotePropertyName sustained_supported -NotePropertyValue $false
+                $window | Add-Member -NotePropertyName sustained_enabled -NotePropertyValue $false
+                $window | Add-Member -NotePropertyName thermal_api -NotePropertyValue $false
+                $window | Add-Member -NotePropertyName thermal_status -NotePropertyValue -1
+                $window | Add-Member -NotePropertyName thermal_headroom_valid -NotePropertyValue $false
+                $window | Add-Member -NotePropertyName thermal_headroom -NotePropertyValue -1.0
+                $window | Add-Member -NotePropertyName thermal_pressure -NotePropertyValue 'none'
+            }
+        } else {
+            $window | Add-Member -NotePropertyName classification -NotePropertyValue 'unknown'
+            foreach ($field in @('cpu_p95_ratio', 'gpu_p95_ratio', 'interval_p95_ratio',
+                                  'presentation_wait_p95_ms', 'frame_budget_ms', 'cpu_budget_ms',
+                                  'gpu_budget_ms')) {
+                $window | Add-Member -NotePropertyName $field -NotePropertyValue 0.0
+            }
+            $window | Add-Member -NotePropertyName render_scale_min -NotePropertyValue 1.0
+            $window | Add-Member -NotePropertyName render_scale_max -NotePropertyValue 1.0
+            $window | Add-Member -NotePropertyName render_scale_end -NotePropertyValue 1.0
+        }
         # As regioes particionam o frame: somadas nao podem exceder o tempo total
         # de GPU alem da tolerancia de arredondamento de 4 casas por metrica.
         $passSum = 0.0
@@ -334,6 +466,34 @@ function Get-FrameProfileCapture {
     $ordered = @($Windows | Sort-Object window)
     $latest = $ordered[-1]
     $selected = @($ordered | Where-Object { $_.epoch -eq $latest.epoch })
+    # Entradas construídas por consumidores antigos (ou por testes unitários)
+    # podem não ter passado pelo parser schema 5. Preservamos a captura, mas a
+    # ausência de evidência permanece unknown/zero em vez de ser inferida.
+    foreach ($window in $selected) {
+        if ($window.PSObject.Properties.Name -notcontains 'classification') {
+            $window | Add-Member -NotePropertyName classification -NotePropertyValue 'unknown'
+            foreach ($field in @('cpu_p95_ratio', 'gpu_p95_ratio', 'interval_p95_ratio',
+                                  'presentation_wait_p95_ms', 'frame_budget_ms', 'cpu_budget_ms',
+                                  'gpu_budget_ms')) {
+                $window | Add-Member -NotePropertyName $field -NotePropertyValue 0.0
+            }
+            $window | Add-Member -NotePropertyName render_scale_min -NotePropertyValue 1.0
+            $window | Add-Member -NotePropertyName render_scale_max -NotePropertyValue 1.0
+            $window | Add-Member -NotePropertyName render_scale_end -NotePropertyValue 1.0
+        }
+        if ($window.PSObject.Properties.Name -notcontains 'thermal_pressure') {
+            $window | Add-Member -NotePropertyName adpf -NotePropertyValue $false
+            $window | Add-Member -NotePropertyName adpf_gpu_work -NotePropertyValue $false
+            $window | Add-Member -NotePropertyName game_mode -NotePropertyValue 0
+            $window | Add-Member -NotePropertyName sustained_supported -NotePropertyValue $false
+            $window | Add-Member -NotePropertyName sustained_enabled -NotePropertyValue $false
+            $window | Add-Member -NotePropertyName thermal_api -NotePropertyValue $false
+            $window | Add-Member -NotePropertyName thermal_status -NotePropertyValue -1
+            $window | Add-Member -NotePropertyName thermal_headroom_valid -NotePropertyValue $false
+            $window | Add-Member -NotePropertyName thermal_headroom -NotePropertyValue -1.0
+            $window | Add-Member -NotePropertyName thermal_pressure -NotePropertyValue 'none'
+        }
+    }
     $matchingContexts = @($Contexts | Where-Object { $_.pid -eq $latest.pid -and $_.epoch -eq $latest.epoch })
     if ($matchingContexts.Count -ne 1) {
         throw "Captura exige exatamente um FrameProfileContext para PID/epoch; encontrados $($matchingContexts.Count)."
@@ -381,8 +541,15 @@ function Get-FrameProfileCapture {
     $captureAttribution = if ($attributions -contains 'tile-deferred') { 'tile-deferred' }
                           elseif ($attributions -contains 'unknown') { 'unknown' }
                           else { 'resolved' }
+    $pressureCounts = [ordered]@{}
+    foreach ($kind in @('within-budget', 'cpu', 'gpu', 'mixed', 'presentation', 'unknown')) {
+        $pressureCounts[$kind] = @($selected | Where-Object classification -eq $kind).Count
+    }
+    $dominantPressure = @($pressureCounts.GetEnumerator() |
+        Sort-Object -Property @{ Expression = 'Value'; Descending = $true },
+                              @{ Expression = 'Name'; Descending = $false })[0].Name
     return [ordered]@{
-        schemaVersion = 2
+        schemaVersion = 3
         scene = $context.scene
         # 'tile-deferred': o hardware resolveu os timestamps do render pass no
         # fim do tile e as metricas gpu_*_ms abaixo NAO atribuem custo por
@@ -396,6 +563,26 @@ function Get-FrameProfileCapture {
         elapsedSeconds = $elapsedMs / 1000.0
         presentFps = 1000.0 * $frames / $elapsedMs
         minimumWindowPresentFps = ($selected | Measure-Object present_fps -Minimum).Minimum
+        pressure = [ordered]@{
+            dominant = $dominantPressure
+            windows = $pressureCounts
+            worstCpuP95BudgetRatio = ($selected | Measure-Object cpu_p95_ratio -Maximum).Maximum
+            worstGpuP95BudgetRatio = ($selected | Measure-Object gpu_p95_ratio -Maximum).Maximum
+            worstIntervalP95BudgetRatio = ($selected | Measure-Object interval_p95_ratio -Maximum).Maximum
+            minimumRenderScale = ($selected | Measure-Object render_scale_min -Minimum).Minimum
+            maximumRenderScale = ($selected | Measure-Object render_scale_max -Maximum).Maximum
+            endingRenderScale = $latest.render_scale_end
+            adpf = [bool]$latest.adpf
+            adpfGpuWork = [bool]$latest.adpf_gpu_work
+            gameMode = [int]$latest.game_mode
+            sustainedPerformanceSupported = [bool]$latest.sustained_supported
+            sustainedPerformanceEnabled = [bool]$latest.sustained_enabled
+            thermalApi = [bool]$latest.thermal_api
+            thermalStatus = [int]$latest.thermal_status
+            thermalHeadroomValid = [bool]$latest.thermal_headroom_valid
+            thermalHeadroom = [double]$latest.thermal_headroom
+            thermalPressure = [string]$latest.thermal_pressure
+        }
         metrics = $metrics
         pocA = [ordered]@{
             cpuLimitMsExclusive = 3.0

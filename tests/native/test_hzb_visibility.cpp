@@ -100,6 +100,21 @@ AE_TEST(Hzb_pyramid_from_levels_round_trips_gpu_readback_layout) {
   AE_EXPECT_TRUE(!hzbPyramidFromLevels(nullptr, 5, dims, 2, pyramid), "ponteiro nulo rejeitado");
 }
 
+AE_TEST(Hzb_reduction_chain_valida_maximo_2x2_e_detecta_corrupcao) {
+  const float base[] = {
+      0.1f, 0.7f, 0.2f, 0.3f,
+      0.4f, 0.5f, 0.9f, 0.1f,
+      0.2f, 0.6f, 0.3f, 0.8f,
+  };
+  HzbPyramid pyramid{};
+  AE_EXPECT_TRUE(buildHzbPyramid(base, 4, 3, pyramid), "referencia HZB deve ser criada");
+  AE_EXPECT_TRUE(validateHzbMaxReductionChain(pyramid),
+                 "cadeia produzida pela referencia deve obedecer max 2x2");
+  pyramid.texels[pyramid.mips[1].offset] -= 0.25f;
+  AE_EXPECT_TRUE(!validateHzbMaxReductionChain(pyramid),
+                 "um texel reduzido incorreto precisa invalidar a cadeia");
+}
+
 AE_TEST(Hzb_screen_rect_centers_forward_sphere_and_rejects_near_plane_straddle) {
   const float camera[3]{0.0f, 0.0f, 0.0f};
   PerspectiveVisibilitySettings settings{};

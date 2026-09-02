@@ -22,11 +22,14 @@ namespace ae {
 // Uma classe sem trabalho no frame permanece com duração zero — nunca some do
 // relatório. Zero é um dado ("não custou nada nesta pose"); ausência não é.
 enum class GpuPassClass : u32 {
+  Shadow,      // atlas CSM do sol, fora do render pass principal
+  Culling,     // oclusão GPU-driven: dispatch que escreve os argumentos indiretos
   Opaque,      // geometria opaca sólida (depth write, front-to-back)
   Coverage,    // prepass + shade de alpha-mask: a vegetação da cena-base
   Sky,         // céu em um triângulo fullscreen
   Transparent, // BLEND ordenado traseira→frontal
   Ui,          // HUD/joystick, dentro do render pass principal
+  Post,        // upscale, AA e filtros de pós sobre a cor da cena
   Hzb,         // cadeia de redução Hi-Z, fora do render pass principal
   Count
 };
@@ -35,21 +38,24 @@ constexpr u32 GpuPassClassCount = static_cast<u32>(GpuPassClass::Count);
 // Nome curto do marcador de debug. É o texto que aparece na árvore de uma
 // captura AGI/RenderDoc; sem ele a captura é um bloco único e não atribui
 // custo a nada.
-constexpr const char *GpuPassClassLabels[] = {"Opaque", "Coverage", "Sky",
-                                              "Transparent", "UI",   "HZB"};
+constexpr const char *GpuPassClassLabels[] = {"Shadow", "Culling", "Opaque", "Coverage", "Sky",
+                                              "Transparent", "UI", "Post", "HZB"};
 
 // Nome da métrica no relatório de perfil. Fica ao lado do rótulo de propósito:
 // a captura e o relatório precisam usar o mesmo vocabulário para que um possa
 // verificar o outro.
 constexpr const char *GpuPassClassMetricNames[] = {
-    "gpu_opaque_ms", "gpu_coverage_ms", "gpu_sky_ms",
-    "gpu_transparent_ms", "gpu_ui_ms", "gpu_hzb_ms"};
+    "gpu_shadow_ms", "gpu_culling_ms", "gpu_opaque_ms", "gpu_coverage_ms", "gpu_sky_ms",
+    "gpu_transparent_ms", "gpu_ui_ms", "gpu_post_ms", "gpu_hzb_ms"};
 
 // Cor do marcador, só para leitura humana da captura. Opacos frios, vegetação
-// verde, céu azul claro, transparência âmbar, UI cinza, HZB roxo.
+// verde, céu azul claro, transparência âmbar, UI cinza, HZB roxo. Culling
+// compartilha a família roxa do HZB porque é o consumidor da mesma pirâmide.
 constexpr float GpuPassClassLabelColors[][3] = {
-    {0.24f, 0.52f, 0.86f}, {0.35f, 0.72f, 0.36f}, {0.52f, 0.78f, 0.95f},
-    {0.93f, 0.68f, 0.24f}, {0.66f, 0.66f, 0.70f}, {0.62f, 0.40f, 0.85f}};
+    {0.24f, 0.20f, 0.32f}, {0.45f, 0.30f, 0.78f}, {0.24f, 0.52f, 0.86f},
+    {0.35f, 0.72f, 0.36f}, {0.52f, 0.78f, 0.95f},
+    {0.93f, 0.68f, 0.24f}, {0.66f, 0.66f, 0.70f}, {0.88f, 0.36f, 0.72f},
+    {0.62f, 0.40f, 0.85f}};
 
 static_assert(sizeof(GpuPassClassLabels) / sizeof(GpuPassClassLabels[0]) ==
                   GpuPassClassCount,

@@ -32,8 +32,25 @@ param(
     [string]$CameraPose,
     [ValidateSet(30, 60, 90, 120)]
     [int]$TargetFps = 60,
+    [double]$AdpfTargetRatio = 0.0,
+    [switch]$EnableSwappy,
+    [switch]$DisableSwappy,
     [ValidateSet('full', 'no-normal', 'no-ibl', 'base-color')]
     [string]$GpuIsolation = 'full',
+    [ValidateSet('auto', 'c', 'b', 'a', 's', 'custom')]
+    [string]$QualityPreset = 'auto',
+    [ValidateSet('inherit', 'off', 'hard', 'soft', 'ultra-soft')]
+    [string]$QualityShadows = 'inherit',
+    [ValidateSet('inherit', 'constant', 'hemispheric', 'specular')]
+    [string]$QualityAmbient = 'inherit',
+    [ValidateSet('inherit', 'none', 'tonemap', 'bloom')]
+    [string]$QualityPost = 'inherit',
+    [ValidateSet('inherit', 'quarter', 'half', 'full')]
+    [string]$QualityTextures = 'inherit',
+    [switch]$EnableMaterialShaderVariants,
+    [switch]$DisableMaterialShaderVariants,
+    [switch]$EnableEnvironmentSplitSum,
+    [switch]$DisableEnvironmentSplitSum,
     [switch]$DisableCoveragePrepass,
     [ValidateSet('Off', 'Record', 'Replay')]
     [string]$CameraRouteMode = 'Off',
@@ -46,10 +63,30 @@ param(
     [ValidateRange(0.0, 0.1)]
     [double]$HzbDepthBias = 0.00001,
     [switch]$EnableLod,
+    [switch]$DisableLod,
+    [switch]$DisableShadowStaticCache,
+    [switch]$EnableDynamicResolution,
+    [switch]$DisableDynamicResolution,
+    [double]$ResolutionScale = 0.0,
+    [double]$DynamicResolutionMinimumScale = 0.0,
+    [ValidateSet(0, 1, 9, 25)]
+    [int]$ShadowFarFilterTaps = 0,
     [ValidateRange(0.1, 16.0)]
     [double]$LodPixelErrorBudget = 2.0,
+    [ValidateRange(0.1, 128.0)]
+    [double]$CoverageLodPixelErrorBudget = 32.0,
     [ValidateRange(0.1, 1.0)]
     [double]$LodHysteresisBandRatio = 0.75,
+    [ValidateRange(0.0, 10000.0)]
+    [double]$NormalMapMaximumDistance = 0.0,
+    [ValidateRange(0.0, 10000.0)]
+    [double]$SpecularProbeMaximumDistance = 0.0,
+    [ValidateRange(0.0, 10000.0)]
+    [double]$MetallicRoughnessMaximumDistance = 0.0,
+    [ValidateRange(0.0, 10000.0)]
+    [double]$EmissiveMaximumDistance = 0.0,
+    [ValidateRange(-1.0, 0.5)]
+    [double]$MaterialDetailFadeBandRatio = -1.0,
     [string]$OutputDirectory
 )
 
@@ -60,6 +97,27 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "android-soak-profile.ps1")
 if ($RequireSoakBudget -and $SoakMinutes -lt 30) { throw '-RequireSoakBudget exige pelo menos 30 minutos.' }
 if ($RequirePowerBudget -and $SoakMinutes -eq 0) { throw '-RequirePowerBudget exige -SoakMinutes para coletar potência contínua.' }
+if ($EnableLod -and $DisableLod) { throw '-EnableLod e -DisableLod são mutuamente exclusivos.' }
+if ($EnableSwappy -and $DisableSwappy) { throw '-EnableSwappy e -DisableSwappy são mutuamente exclusivos.' }
+if ($EnableMaterialShaderVariants -and $DisableMaterialShaderVariants) {
+    throw '-EnableMaterialShaderVariants e -DisableMaterialShaderVariants são mutuamente exclusivos.'
+}
+if ($EnableEnvironmentSplitSum -and $DisableEnvironmentSplitSum) {
+    throw '-EnableEnvironmentSplitSum e -DisableEnvironmentSplitSum são mutuamente exclusivos.'
+}
+if ($EnableDynamicResolution -and $DisableDynamicResolution) {
+    throw '-EnableDynamicResolution e -DisableDynamicResolution são mutuamente exclusivos.'
+}
+if ($ResolutionScale -ne 0.0 -and ($ResolutionScale -lt 0.5 -or $ResolutionScale -gt 1.0)) {
+    throw '-ResolutionScale deve ser zero (herdar) ou estar em [0.5, 1.0].'
+}
+if ($DynamicResolutionMinimumScale -ne 0.0 -and
+    ($DynamicResolutionMinimumScale -lt 0.5 -or $DynamicResolutionMinimumScale -gt 1.0)) {
+    throw '-DynamicResolutionMinimumScale deve ser zero (herdar) ou estar em [0.5, 1.0].'
+}
+if ($AdpfTargetRatio -ne 0.0 -and ($AdpfTargetRatio -lt 0.5 -or $AdpfTargetRatio -gt 1.0)) {
+    throw '-AdpfTargetRatio deve ser zero (herdar o intervalo) ou estar em [0.5, 1.0].'
+}
 $CaptureSeconds = [Math]::Max($ProfileSeconds, $SoakMinutes * 60)
 $ParsedCameraPose = $null
 if ($CameraPose) {
@@ -120,7 +178,16 @@ $Report = [ordered]@{
         scene = $Scene
         cameraPose = $CameraPose
         targetFps = $TargetFps
+        adpfTargetRatio = $AdpfTargetRatio
+        swappyEnabled = -not [bool]$DisableSwappy
         gpuIsolation = $GpuIsolation
+        qualityPreset = $QualityPreset
+        qualityShadows = $QualityShadows
+        qualityAmbient = $QualityAmbient
+        qualityPost = $QualityPost
+        qualityTextures = $QualityTextures
+        materialShaderVariants = if ($EnableMaterialShaderVariants) { 'enabled' } elseif ($DisableMaterialShaderVariants) { 'disabled' } else { 'inherit' }
+        environmentSplitSum = if ($EnableEnvironmentSplitSum) { 'enabled' } elseif ($DisableEnvironmentSplitSum) { 'disabled' } else { 'inherit' }
         coveragePrepassEnabled = -not [bool]$DisableCoveragePrepass
         cameraRouteMode = $CameraRouteMode
         cameraRoutePath = $CameraRoutePath
@@ -128,9 +195,20 @@ $Report = [ordered]@{
         hzbHysteresisFrames = $HzbHysteresisFrames
         hzbMinimumCandidateDraws = $HzbMinimumCandidateDraws
         hzbDepthBias = $HzbDepthBias
-        lodEnabled = [bool]$EnableLod
+        lodOverride = if ($EnableLod) { 'enabled' } elseif ($DisableLod) { 'disabled' } else { 'inherit' }
+        shadowStaticCacheEnabled = -not [bool]$DisableShadowStaticCache
+        dynamicResolutionOverride = if ($EnableDynamicResolution) { 'enabled' } elseif ($DisableDynamicResolution) { 'disabled' } else { 'inherit' }
+        resolutionScale = $ResolutionScale
+        dynamicResolutionMinimumScale = $DynamicResolutionMinimumScale
+        shadowFarFilterTaps = $ShadowFarFilterTaps
         lodPixelErrorBudget = $LodPixelErrorBudget
+        coverageLodPixelErrorBudget = $CoverageLodPixelErrorBudget
         lodHysteresisBandRatio = $LodHysteresisBandRatio
+        normalMapMaximumDistance = $NormalMapMaximumDistance
+        specularProbeMaximumDistance = $SpecularProbeMaximumDistance
+        metallicRoughnessMaximumDistance = $MetallicRoughnessMaximumDistance
+        emissiveMaximumDistance = $EmissiveMaximumDistance
+        materialDetailFadeBandRatio = $MaterialDetailFadeBandRatio
         powerBudgetWatts = $PowerBudgetWatts
         requirePowerBudget = [bool]$RequirePowerBudget
         requireSoakBudget = [bool]$RequireSoakBudget
@@ -454,6 +532,15 @@ function Start-AetherActivity {
     }
     $arguments += @("--ez", $sceneExtra, "true")
     $arguments += @("--ef", "aether.target_fps", $TargetFps.ToString([Globalization.CultureInfo]::InvariantCulture))
+    if ($AdpfTargetRatio -gt 0.0) {
+        $arguments += @('--ef', 'aether.adpf_target_ratio',
+            $AdpfTargetRatio.ToString('R', [Globalization.CultureInfo]::InvariantCulture))
+    }
+    if ($EnableSwappy) {
+        $arguments += @('--ez', 'aether.swappy', 'true')
+    } elseif ($DisableSwappy) {
+        $arguments += @('--ez', 'aether.disable_swappy', 'true')
+    }
     $gpuIsolationValue = switch ($GpuIsolation) {
         'full' { 0 }
         'no-normal' { 1 }
@@ -461,6 +548,21 @@ function Start-AetherActivity {
         'base-color' { 3 }
     }
     $arguments += @('--ei', 'aether.gpu_isolation', [string]$gpuIsolationValue)
+    $arguments += @('--es', 'aether.quality_preset', $QualityPreset)
+    if ($QualityShadows -ne 'inherit') { $arguments += @('--es', 'aether.quality_shadows', $QualityShadows) }
+    if ($QualityAmbient -ne 'inherit') { $arguments += @('--es', 'aether.quality_ambient', $QualityAmbient) }
+    if ($QualityPost -ne 'inherit') { $arguments += @('--es', 'aether.quality_post', $QualityPost) }
+    if ($QualityTextures -ne 'inherit') { $arguments += @('--es', 'aether.quality_textures', $QualityTextures) }
+    if ($EnableMaterialShaderVariants) {
+        $arguments += @('--ez', 'aether.material_shader_variants', 'true')
+    } elseif ($DisableMaterialShaderVariants) {
+        $arguments += @('--ez', 'aether.disable_material_shader_variants', 'true')
+    }
+    if ($EnableEnvironmentSplitSum) {
+        $arguments += @('--ez', 'aether.environment_split_sum', 'true')
+    } elseif ($DisableEnvironmentSplitSum) {
+        $arguments += @('--ez', 'aether.disable_environment_split_sum', 'true')
+    }
     if ($DisableCoveragePrepass) {
         $arguments += @('--ez', 'aether.disable_coverage_prepass', 'true')
     }
@@ -486,8 +588,47 @@ function Start-AetherActivity {
         $arguments += @('--ez', 'aether.lod_selection', 'true')
         $arguments += @('--ef', 'aether.lod_pixel_error_budget',
             $LodPixelErrorBudget.ToString('R', [Globalization.CultureInfo]::InvariantCulture))
+        $arguments += @('--ef', 'aether.coverage_lod_pixel_error_budget',
+            $CoverageLodPixelErrorBudget.ToString('R', [Globalization.CultureInfo]::InvariantCulture))
         $arguments += @('--ef', 'aether.lod_hysteresis_band_ratio',
             $LodHysteresisBandRatio.ToString('R', [Globalization.CultureInfo]::InvariantCulture))
+    } elseif ($DisableLod) {
+        $arguments += @('--ez', 'aether.disable_lod_selection', 'true')
+    }
+    if ($DisableShadowStaticCache) {
+        $arguments += @('--ez', 'aether.disable_shadow_static_cache', 'true')
+    }
+    if ($EnableDynamicResolution) {
+        $arguments += @('--ez', 'aether.dynamic_resolution', 'true')
+    } elseif ($DisableDynamicResolution) {
+        $arguments += @('--ez', 'aether.disable_dynamic_resolution', 'true')
+    }
+    if ($ResolutionScale -gt 0.0) {
+        $arguments += @('--ef', 'aether.resolution_scale',
+            $ResolutionScale.ToString('R', [Globalization.CultureInfo]::InvariantCulture))
+    }
+    if ($DynamicResolutionMinimumScale -gt 0.0) {
+        $arguments += @('--ef', 'aether.dynamic_resolution_min_scale',
+            $DynamicResolutionMinimumScale.ToString('R', [Globalization.CultureInfo]::InvariantCulture))
+    }
+    if ($ShadowFarFilterTaps -gt 0) {
+        $arguments += @('--ei', 'aether.shadow_far_filter_taps', [string]$ShadowFarFilterTaps)
+    }
+    foreach ($distanceOverride in @(
+        @('aether.normal_map_distance', $NormalMapMaximumDistance),
+        @('aether.specular_probe_distance', $SpecularProbeMaximumDistance),
+        @('aether.metallic_roughness_distance', $MetallicRoughnessMaximumDistance),
+        @('aether.emissive_distance', $EmissiveMaximumDistance))) {
+        if ([double]$distanceOverride[1] -gt 0.0) {
+            $arguments += @('--ef', [string]$distanceOverride[0],
+                ([double]$distanceOverride[1]).ToString(
+                    'R', [Globalization.CultureInfo]::InvariantCulture))
+        }
+    }
+    if ($MaterialDetailFadeBandRatio -ge 0.0) {
+        $arguments += @('--ef', 'aether.material_detail_fade_ratio',
+            $MaterialDetailFadeBandRatio.ToString(
+                'R', [Globalization.CultureInfo]::InvariantCulture))
     }
     if ($CaptureSeconds -gt 0) {
         $arguments += @("--ez", "aether.profile_frames", "true")
@@ -793,8 +934,11 @@ try {
         if ([bool]$capture.context.hzb_enabled -ne [bool]$EnableHzb) {
             throw "Runtime aplicou hzb_enabled '$($capture.context.hzb_enabled)', esperado '$([bool]$EnableHzb)'."
         }
-        if ([bool]$capture.context.lod_enabled -ne [bool]$EnableLod) {
-            throw "Runtime aplicou lod_enabled '$($capture.context.lod_enabled)', esperado '$([bool]$EnableLod)'."
+        if ($EnableLod -and -not [bool]$capture.context.lod_enabled) {
+            throw "Runtime não aplicou o override global -EnableLod."
+        }
+        if ($DisableLod -and [bool]$capture.context.lod_enabled) {
+            throw "Runtime não aplicou o override global -DisableLod."
         }
         Assert-NoRuntimeFailure
         $Report.measurements.profileEnvironmentEnd = Get-PowerSample
@@ -819,10 +963,15 @@ try {
         Add-PassedCheck -Name "frame-profile-capture" -Details ([ordered]@{
             frames = $capture.frames
             elapsedSeconds = $capture.elapsedSeconds
+            dominantPressure = $capture.pressure.dominant
+            worstCpuP95BudgetRatio = $capture.pressure.worstCpuP95BudgetRatio
+            worstGpuP95BudgetRatio = $capture.pressure.worstGpuP95BudgetRatio
+            minimumRenderScale = $capture.pressure.minimumRenderScale
             cpuBudgetPassed = $capture.pocA.cpuBudgetPassed
             pocAAccepted = $false
         })
         Write-Host "FrameProfile: $($capture.presentFps) presents/s; CPU processo média=$($capture.metrics.process_cpu_ms.mean) ms; máximo=$($capture.metrics.process_cpu_ms.max) ms."
+        Write-Host "Pressão: $($capture.pressure.dominant); CPU p95/budget=$($capture.pressure.worstCpuP95BudgetRatio); GPU p95/budget=$($capture.pressure.worstGpuP95BudgetRatio); escala mínima=$($capture.pressure.minimumRenderScale)."
         # Sucesso da coleta não significa aprovação do orçamento nem FPS exibido comprovado.
         if ($SoakMinutes -gt 0) {
             $sample = Get-PowerSample

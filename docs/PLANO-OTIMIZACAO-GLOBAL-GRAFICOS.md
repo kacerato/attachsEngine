@@ -71,6 +71,38 @@
 > a vegetação ganhou 21% de luminância média na pose fixa (37,34→45,18) sem passe,
 > draw ou textura extra. CSM/GTAO/SH continuam pendentes e não são declarados prontos.
 
+> **Política granular, CSM e pós em 31/08/2026:** a policy global deixou de ser
+> apenas seleção de três/quatro nomes e passou a expor budgets independentes de
+> cascatas/resolução/filtro/bias/alcance, LOD por erro projetado e histerese,
+> distâncias de normal/probe, escala de render e filtros de pós. Presets S/A/B/C são
+> somente pontos iniciais; cada eixo pode herdar ou ser sobrescrito sem criar branch
+> por cena. O Android consome a policy: CSM direcional estabilizada em atlas com
+> alpha-test e PCF, além de alvo escalável e passe final com bloom/FXAA/sharpen/
+> contraste/saturação/vinheta. Debug bindless/fallback passou Khronos no Xiaomi.
+> Culling conservador e cache estático por cascata financiam a sombra. Na rota
+> determinística Release de 60 s, cache ligado/desligado mediu sombra 0,09/3,05 ms
+> média e 1,41/3,85 ms p95; FPS 65,05/53,21 e pior janela 58,26/49,07. A ordem foi
+> sequencial, então o timestamp isolado do passe — não toda a diferença de FPS — é a
+> evidência causal. A pose fixa foi idêntica bit a bit. LOD só reduz geometria quando
+> o importador fornece AEMAP v3; atlas/
+> arrays por família de material e mips semânticos continuam sendo pipeline de
+> importação — nunca um PNG gigante único do mapa.
+
+> **Fatia 120 Hz em 31/08/2026:** entrou resolução dinâmica backend-agnostic guiada
+> por timestamp GPU, com piso/teto/degraus e histerese assimétrica; o Android altera a
+> região ativa sem recriar os alvos e o pós não amostra a área inativa. O schema v4
+> separa PCF próximo/distante, alcance de normal/probe/metallic-roughness/emissivo e
+> budgets distintos de LOD para malha sólida e coverage.
+> Filtros permanecem opt-in: o sharpen automático foi removido depois de medir custo,
+> preservando a decisão autoral. Após corrigir o SPIR-V obsoleto do resolve e validar
+> a tela inteira, a rota Release a piso 0,58 mediu 96,71 FPS, GPU 8,88 ms (opaco 7,40;
+> pós 1,33); a pose fixa mediu 110,93 FPS e screenshots idênticas. O gerador agora
+> verifica em lote as 19 famílias de shader. O AEMAP v3 atual preserva LOD0 e expõe
+> 245 grupos espaciais; o A/B aquecido mediu 109,49 contra 107,78 FPS exibidos e
+> 7,45 contra 7,61 ms GPU. A meta continua 120 Hz com margem de 7,33 ms; não será
+> declarada sustentada até ampliar LOD/HLOD/impostors,
+> controle dos picos p95 e soak térmico.
+
 > **Benchmark navegável e colisão em 30/08/2026:** o controle FPS virou uma fatia
 > global (`FirstPersonController` + input actions + joystick + `CharacterMotor`),
 > sem lógica embutida na câmera ou na cena. A primeira malha física usava posições
@@ -85,9 +117,9 @@
 > **Rota determinística, HZB com histerese e LOD por erro projetado — revisão
 > e primeira validação Adreno em 31/08/2026.** Os três sistemas da "próxima
 > ordem aprovada" (seção 6.3) foram integrados e revisados antes do A/B físico.
-> Nenhum ganho de HZB/LOD é declarado e as duas flags continuam desligadas por
-> padrão: a rota foi validada; HZB só fechou correção estática; o asset entregue
-> ainda é AEMAP v2 e portanto não contém grupos de LOD.
+> HZB continua opt-in e sem ganho declarado; o LOD discreto passou a ser política
+> global ativa quando o pacote contém níveis válidos. O asset entregue é AEMAP v3,
+> preserva LOD0 e contém 245 grupos medidos em hardware.
 >
 > **Rota de câmera** (`native/platform/camera_route.h/.cpp`, formato
 > `.aeroute`): indexada por *ordinal de frame renderizado*, nunca por tempo —
@@ -134,10 +166,10 @@
 > com LOD default (nível 0, erro 0, grupo = o próprio índice), permanecendo
 > 100% legíveis. Simplificador do cooker é *vertex clustering* determinístico
 > (grid-snap por posição + guarda de descontinuidade de normal + guarda de
-> ilha de UV, nunca funde através de uma costura), com blend e alpha-mask
-> **excluídos da simplificação nesta fatia** — vegetação/cutout é exatamente
-> o conteúdo mais arriscado de colapsar sem alguém checando visualmente, e
-> blend tem ordem de primitiva que participa da composição. Build falha se
+> ilha de UV, nunca funde através de uma costura). Alpha-mask usa redução de
+> densidade por componentes desconectados, preservando cards inteiros em vez de
+> deformá-los; BLEND continua excluído porque a ordem de primitiva participa da
+> composição. Build falha se
 > `geometricError` não crescer estritamente por nível ou se os bounds do
 > nível simplificado ultrapassarem os originais além de um épsilon. Dither de
 > transição usa o slot `normalColumns[7]` de `GpuMeshInstance` — sempre zero
@@ -146,12 +178,16 @@
 > contra uma matriz Bayer 4×4 no shading compartilhado de
 > `dirt_road.frag`/`dirt_road_fallback.frag`. Seleção por `lodGroupId` roda
 > por frame, antes do frustum culling, decidindo quais chunks entram como
-> candidatos. Opt-in via `aether.lod_selection`
-> (`aether.lod_pixel_error_budget`, `aether.lod_hysteresis_band_ratio`). 6
-> testes nativos (fórmula, seleção, histerese, dither) + 10 testes Python do
-> simplificador — um deles pegou um bug real de offset de byte na leitura de
+> candidatos. A política global decide o estado; launch options de diagnóstico são
+> `aether.lod_selection`, `aether.lod_pixel_error_budget`,
+> `aether.coverage_lod_pixel_error_budget` e
+> `aether.lod_hysteresis_band_ratio`. O erro projetado usa a altura lógica já
+> multiplicada pela resolução interna ativa. A seleção separa sólido/coverage,
+> e LOD desativado fixa LOD0 em vez de desenhar níveis sobrepostos. Testes nativos e
+> Python cobrem fórmula, agrupamento espacial, histerese, dither, UV/normal e density LOD.
+> Um deles pegou um bug real de offset de byte na leitura de
 > `MapMaterialRecord.flags` (lia o campo errado, quebrando silenciosamente a
-> exclusão de blend/alpha-mask).
+> política por material).
 >
 > **Correção paralela:** `tools/android-frame-profile.ps1` validava
 > `schemaVersion` contra `1` enquanto o C++ já emitia `2` — todo contexto de
@@ -767,8 +803,10 @@ permanecem abertos e não devem ser inferidos desta fatia.
    Alterar hora/sol atualiza todos os consumidores de forma coerente.
 5. Substituir ambiente difuso constante por SH de irradiância; adicionar probes de
    reflexão pré-filtradas e BRDF multiscatter.
-6. Implementar CSM para o sol com splits estabilizados, atlas, PCF inicialmente e
-   cache de casters estáticos. Vegetação usa alpha-test no shadow pass.
+6. CSM do sol possui splits estabilizados, atlas, PCF, alpha-test de vegetação,
+   culling conservador e cache estático por cascata com guard band. Completar com
+   separação de casters dinâmicos, chunks mais finos, blend entre splits e margem
+   sustentada por perfil/matriz.
 7. Adicionar oclusão de contato eficiente: primeiro GTAO/bent normals temporal;
    depois DDGI/GlowField conforme 7.2. Isso corrige áreas atrás de árvores sem
    falsificar cor por material.
@@ -978,6 +1016,72 @@ Fontes: [Unreal mobile performance](https://dev.epicgames.com/documentation/unre
 [Android AGI](https://developer.android.com/agi/frame-trace/frame-profiler?authuser=14) e
 [Android Frame Pacing](https://developer.android.com/games/sdk/frame-pacing?authuser=77&hl=en).
 
+#### Plano Android de pressão, ADPF e 120 Hz — execução iniciada em 01/09/2026
+
+1. **Entregue — verdade por trilha:** o schema 5 classifica cada janela como dentro
+   do budget, CPU, GPU, mista ou apresentação e registra p95/budget e a escala dinâmica
+   mínima/máxima/final. Em 120 Hz, 8,33 ms é o deadline; 6,50 ms CPU e 7,33 ms GPU são
+   budgets com margem, não metas de utilização igual.
+2. **Entregue — ADPF semanticamente correto:** NDK Performance Hint já existia, mas a
+   sessão de uma única render thread recebia wall time incluindo bloqueios de GPU.
+   Agora ela recebe CPU time da própria thread. Game State continua informando
+   loading/gameplay e o app continua `appCategory=game` sem APIs privadas.
+3. **Entregue — Thermal Headroom:** fonte Android NDK modular amostra no máximo a
+   cada 10 s, publica disponibilidade/headroom/status e alimenta uma máquina de
+   estados com piora rápida e recuperação lenta. Ela altera eixos independentes da
+   `ResolvedRenderingPolicy`; não troca um preset inteiro nem grava no projeto.
+4. **Próximo — Frame Pacing:** comparar o `AChoreographer` atual com AGDK Swappy em
+   Vulkan. Swappy entra atrás de interface/fallback e só é promovido se reduzir
+   buffer stuffing, p95/p99 e latência em 60/90/120 Hz sem regressão de GPU.
+5. **Hotspot GPU:** capturar o ponto de ~80 FPS com rota/pose reproduzível. Se o schema
+   5 confirmar GPU, atacar nesta ordem: overdraw/coverage e sombra distante, render
+   scale, material LOD, mip/residency, attachments/bandwidth e HLOD/impostor. CPU livre
+   não será ocupada artificialmente.
+6. **Hotspot CPU/misto:** se a evidência apontar CPU, capturar Simpleperf/Perfetto e
+   reduzir extração, submissão, scripts, física e alocações; depois introduzir jobs
+   apenas em trabalho independente. Reduzir resolução não corrige CPU-bound.
+7. **Promoção:** três runs frios e três aquecidos, rota completa, janela móvel mínima,
+   60 s por A/B e soak de 30 min; Adreno e Mali físicos. Meta da cena de stress:
+   média próxima de 120 FPS, p95/p99 dentro do budget e margem térmica sustentável.
+
+#### Hotspot direcional e efeito da gravação — 01/09/2026
+
+A pose reproduzível `(-19,04; 143,47; -43,73; yaw 13,109; pitch 0,087)`, escala
+fixa 0,58 e 120 Hz confirmou duas causas independentes. O enquadramento aumenta os
+visíveis para 379–386 draws e aproximadamente 317 mil triângulos submetidos, mas o
+processo continua com apenas 1,2–1,6 ms de CPU: a pressão é GPU. Sem gravação, o
+mesmo conteúdo oscilou entre 84 e 106 FPS conforme o operating point do OEM; com
+`screenrecord`, ficou em 120,113 presents/s, GPU média 6,401 ms e p95 7,104 ms.
+Logo, gravar não reduz o trabalho da cena: ele mantém um estado de clock/governador
+que o app não pode solicitar por API privada.
+
+O A/B de ADPF no mesmo APK rejeitou usar o budget GPU como deadline da sessão:
+8,333 ms produziu 87,83/86,02 FPS nos dois controles; 7,333 ms caiu para 64,63 FPS.
+O padrão permanece o intervalo completo. `-AdpfTargetRatio` existe somente para
+diagnóstico, e Android 15 agora recebe explicitamente
+`prefer_power_efficiency=false` pela API pública. Sustained Performance continua
+não suportado neste Xiaomi e Game Mode permanece observado, não forçado pelo app.
+
+O material LOD agora possui uma variante compilada sem normal map para cada família
+opaque/coverage/transparent. Um draw só entra nela quando a esfera de bounds inteira
+está além de `normalMapMaximumDistance`; entrada inválida falha para qualidade cheia.
+Isso preserva detalhe próximo e remove TBN/sample/register pressure distante, em vez
+de depender de um branch que o driver ainda precisa compilar. O diagnóstico global
+`no-normal` atingiu 111,90 FPS e isolou normal mapping como maior eixo de fragment;
+o material LOD elevou uma rodada sem gravação a 106,52 FPS, porém repetiu 86,31 FPS
+sob outro estado DVFS. Portanto a arquitetura foi integrada, mas ganho sustentado
+sem gravação ainda exige o gate intercalado/soak e a comparação AChoreographer ×
+Swappy; não se declara 120 estável com uma única rodada favorecida.
+
+Validação física da primeira fatia: Release, pose fixa dentro da floresta e alvo de
+120 Hz entregaram 115,92 eventos exibidos/s (pior janela 114,26). O schema 5 marcou
+`gpu`: GPU p95 7,335 ms / budget 7,333 ms, enquanto a render thread ficou em
+1,397/6,50 ms. A resolução dinâmica já havia alcançado o piso 0,58; portanto o número
+não autoriza reinvestir qualidade ainda. ADPF abriu sessão com alvo 8,333 ms, Game
+Mode consultado estava em `performance`, o modo sustentado público reportou
+`supported=false`, e a bateria variou 37,5→38,3 °C com thermal status 0. O próximo A/B
+precisa remover custo GPU real antes de elevar o piso da escala.
+
 ### 6.1 Ciclo já executado
 
 Alpha-mask, ordenação solid-first, timestamps GPU por pass e prepass seletivo de
@@ -1123,12 +1227,73 @@ soak → reinvestimento visual. Dois frames em voo só entram depois que recurso
 frame forem isolados e o tempo GPU estiver abaixo do budget; eles podem esconder espera
 da CPU, mas não reduzem o custo do pior quadro.
 
-**Status em 31/08/2026:** rota e correção estática do HZB foram validadas no Xiaomi
-físico; LOD compilou e foi testado, mas não pode atuar porque o asset empacotado ainda
-é AEMAP v2/zero grupos. A rota completa mediu 95,16 presents/s e expôs uma janela
-isolada equivalente a 53,9 FPS. O prepass `MASK` também foi confirmado por A/B móvel:
+**Status em 01/09/2026:** rota e correção estática do HZB foram validadas no Xiaomi
+físico; o LOD atua sobre AEMAP v3/245 grupos com LOD0 preservado. No par aquecido,
+coverage 32 mediu 109,49 FPS/7,45 ms GPU contra LOD0 em 107,78/7,61 ms; coverage 48
+reduziu mais triângulos e mediu 111,01/7,37 ms em ordem térmica diferente. Uma rota
+anterior mediu 95,16 presents/s e expôs uma janela isolada equivalente a 53,9 FPS.
+O prepass `MASK` também foi confirmado por A/B móvel:
 desligá-lo perdeu 13,0% de presents/s e adicionou 18,1% de GPU. Permanecem pendentes
-AGI no hotspot, recook v3, SSIM/FLIP, soak de 30 min e Mali físico.
+AGI no hotspot, SSIM/FLIP multipose, soak de 30 min, HLOD/impostors e Mali físico.
+
+### 6.3.1 Diagnóstico de 80–100 FPS, ADPF GPU e detalhe por distância — 01/09/2026
+
+A pose fixa `-15.71,145.27,-25.72,2.75,0.11` eliminou a hipótese de CPU bound:
+a render thread mediu p95 de 1,67 ms para budget de 6,50 ms, enquanto a GPU alternou
+entre aproximadamente 7,2 e 16,8 ms. Thermal Status permaneceu 0 e Thermal Headroom
+0,46–0,55. A queda não era CPU “renderizando pixels”; era fragment shading/GPU e
+espera em acquire acompanhando a cauda da GPU.
+
+Entregas desta fatia:
+
+1. monitor NDK Thermal por carregamento dinâmico (minSdk 26 preservado), headroom a
+   cada 10 s, piora imediata e recuperação de um nível após três amostras frias;
+2. política ativa reconfigurável sem rebuild: LOD, sombras, ambiente, pós e resolução
+   podem ceder dentro dos recursos criados para a época e recuperar sem recompilar;
+3. `FrameProfile` schema 6 pareia classificação CPU/GPU/apresentação com ADPF, Game
+   Mode, sustained performance, Thermal Status/Headroom e pressão aplicada;
+4. Android 15+ usa `AWorkDuration` e `reportActualWorkDuration2`: CPU e timestamp GPU
+   do mesmo ciclo são pareados; aparelhos antigos mantêm o hint de CPU;
+5. alcances independentes de normal, IBL, metallic/roughness e emissivo agora possuem
+   faixa de fade configurável. Perfil B usa 60 m para normal e 120 m para IBL; perfis
+   A/S e overrides de projeto preservam seus próprios valores.
+
+O A/B físico especializado confirmou o hotspot: `full` mediu 93,65 FPS exibidos,
+`no-normal` 113,55, `no-ibl` 113,80 e `base-color` 116,43. A política 60/120 sem
+desligar os recursos chegou a 120,05 FPS numa rodada; o shader final com fade de 20%
+mediu 115,19 FPS em outra condição de DVFS, contra 93,65 do controle anterior. Isto é
+ganho real, mas ainda não fecha 120 estáveis: próximo alvo é reduzir custo opaco/IBL
+por amostra e fechar frame pacing/soak, não transferir mais trabalho da CPU para a GPU.
+
+### 6.3.2 EnvironmentMap pré-filtrado e variantes com gate — 01/09/2026
+
+O próximo corte de IBL foi implementado como recurso reutilizável, não como ajuste da
+floresta. AEEN v3 descreve a projeção e os níveis; o cooker gera offline radiância
+octaédrica RGBA16F com 9 mips GGX e LUT BRDF split-sum. O sky visual permanece em sua
+textura equiretangular. No fragmento PBR, a sonda octaédrica substitui `atan/acos` por
+mapeamento homogêneo; AEEN v1/v2 continuam no fallback legado.
+
+Variantes de material para normal/MR/emissivo também entraram, mas o A/B físico
+rejeitou sua ativação universal: a combinação especializada regrediu o perfil B no
+Adreno. `materialShaderVariants` tornou-se um eixo global independente, desligado por
+padrão em B/C e disponível em S/A/custom. `environmentSplitSumBrdf` é outro eixo e
+não depende do primeiro.
+
+Medição controlada na mesma pose, escala 0,58 fixa, 120 Hz, LOD ligado, Release e
+sem variantes de material:
+
+| Caminho | FPS exibido | GPU média / p95 | Opaco médio | CPU média / p95 |
+|---|---:|---:|---:|---:|
+| sem IBL | 108,58 | 7,79 / 7,99 ms | 6,50 ms | 1,40 / 2,12 ms |
+| octaédrico + BRDF analítica | 107,03 | 8,04 / 8,31 ms | 6,75 ms | 1,40 / 2,42 ms |
+| octaédrico + split-sum | 105,04 | 8,04 / 8,38 ms | 6,76 ms | 1,34 / 2,23 ms |
+
+Assim, IBL custa aproximadamente 0,25 ms de GPU nesta pose e o fetch adicional da
+LUT ficou dentro do ruído na média. O frame permanece GPU-bound: não há trabalho de
+render a “mover da CPU”, que já está muito abaixo do budget. O objetivo seguinte é
+reduzir o custo opaco comprovado por AGI, HLOD/impostors e foliage/overdraw, preservando
+esta iluminação avançada como possibilidade configurável. Contrato detalhado em
+[`ENVIRONMENT-MAP.md`](ENVIRONMENT-MAP.md).
 
 ### 6.4 Ciclo estrutural — Render Graph móvel e qualidade financiada
 
@@ -1186,6 +1351,8 @@ devem ser contados novamente:
 - Chamar acquire/present/CPU de “tempo GPU”.
 - Declarar ganho usando PoC-A quando o problema reportado está em outra cena.
 - Somar efeitos de Fase 7 antes de fechar o pipeline base M2 e seus budgets.
+- Buscar “uso equilibrado” artificialmente: todo frame terá um limitante; a meta é
+  manter CPU e GPU abaixo de seus budgets com margem, não ocupar unidades ociosas.
 
 ## 9. Relação com o plano principal
 

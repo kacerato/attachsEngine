@@ -5,6 +5,7 @@
 // transitória, e toda degradação fica registrada com motivo.
 #include "harness.h"
 #include "renderer/rendering_policy.h"
+#include "renderer/material_distance.h"
 
 using namespace ae;
 using namespace ae::test;
@@ -53,7 +54,9 @@ AE_TEST(policy_auto_deriva_do_perfil_detectado) {
   AE_EXPECT_TRUE(c.shadows.enabled, "perfil C mantem sombra direcional");
   AE_EXPECT_EQ(c.shadows.cascadeCount, 1u, "perfil C usa uma cascata");
   AE_EXPECT_EQ(c.shadows.filterTaps, 1u, "perfil C nao filtra");
-  AE_EXPECT_TRUE(!c.post.dedicatedPass, "perfil C nao paga passe de pos");
+  AE_EXPECT_TRUE(c.post.dedicatedPass, "escala reduzida do perfil C exige passe de upscale");
+  AE_EXPECT_TRUE(!c.post.bloom && !c.post.fxaa,
+                 "perfil C nao paga filtros adicionais no passe de upscale");
 }
 
 AE_TEST(policy_eixo_sobrescrito_nao_arrasta_os_outros) {
@@ -64,8 +67,114 @@ AE_TEST(policy_eixo_sobrescrito_nao_arrasta_os_outros) {
   settings.shadows = ShadowQuality::UltraSoft;
   const auto policy = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
   AE_EXPECT_EQ(policy.shadows.cascadeCount, 4u, "override de sombra vale sobre o preset");
-  AE_EXPECT_TRUE(!policy.post.dedicatedPass, "override de sombra nao liga pos");
+  AE_EXPECT_TRUE(policy.post.dedicatedPass, "escala do preset C preserva seu upscale");
+  AE_EXPECT_TRUE(!policy.post.bloom, "override de sombra nao liga bloom");
   AE_EXPECT_EQ(policy.textures.residencyMipBias, 1u, "override de sombra nao muda textura");
+}
+
+AE_TEST(policy_shader_variants_sao_capacidade_configuravel_e_nao_suposta_otimizacao) {
+  ProjectRenderingSettings settings{};
+  RenderingCapabilities capabilities{};
+  capabilities.profile = rhi::DeviceProfile::B;
+  auto policy = resolveRenderingPolicy(settings, capabilities, ThermalPressure::None);
+  AE_EXPECT_TRUE(!policy.geometry.materialShaderVariants,
+                 "perfil B evita variantes que regrediram no Adreno medido");
+  capabilities.profile = rhi::DeviceProfile::A;
+  policy = resolveRenderingPolicy(settings, capabilities, ThermalPressure::None);
+  AE_EXPECT_TRUE(policy.geometry.materialShaderVariants, "perfil A pode especializar materiais");
+  settings.materialShaderVariants = FeatureOverride::Disabled;
+  policy = resolveRenderingPolicy(settings, capabilities, ThermalPressure::None);
+  AE_EXPECT_TRUE(!policy.geometry.materialShaderVariants, "projeto controla o eixo independentemente");
+}
+
+AE_TEST(policy_split_sum_e_independente_mas_exige_sonda_especular) {
+  ProjectRenderingSettings settings{};
+  RenderingCapabilities capabilities{};
+  capabilities.profile = rhi::DeviceProfile::A;
+  auto policy = resolveRenderingPolicy(settings, capabilities, ThermalPressure::None);
+  AE_EXPECT_TRUE(policy.ambient.specularProbe && policy.ambient.splitSumBrdf,
+                 "ambiente avançado herda integração exata");
+  settings.environmentSplitSumBrdf = FeatureOverride::Disabled;
+  policy = resolveRenderingPolicy(settings, capabilities, ThermalPressure::None);
+  AE_EXPECT_TRUE(policy.ambient.specularProbe && !policy.ambient.splitSumBrdf,
+                 "radiância continua disponível sem LUT");
+  settings.ambient = AmbientQuality::Hemispheric;
+  settings.environmentSplitSumBrdf = FeatureOverride::Enabled;
+  policy = resolveRenderingPolicy(settings, capabilities, ThermalPressure::None);
+  AE_EXPECT_TRUE(!policy.ambient.specularProbe && !policy.ambient.splitSumBrdf,
+                 "LUT isolada sem radiância não cria caminho inválido");
+}
+
+AE_TEST(policy_ajustes_finos_nao_dependem_do_nome_do_preset) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::C;
+  settings.shadowCascadeCount = 3;
+  settings.shadowCascadeResolution = 1792;
+  settings.shadowFilterTaps = 25;
+  settings.shadowFarFilterTaps = 9;
+  settings.lodPixelErrorBudget = 1.25f;
+  settings.coverageLodPixelErrorBudget = 37.0f;
+  settings.lodSelection = FeatureOverride::Enabled;
+  settings.normalMapMaximumDistance = 180.0f;
+  settings.metallicRoughnessMaximumDistance = 260.0f;
+  settings.postFxaa = FeatureOverride::Enabled;
+  settings.postContrast = 1.08f;
+  settings.dynamicResolution = FeatureOverride::Enabled;
+  settings.dynamicResolutionMinimumScale = 0.72f;
+  const auto policy = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(policy.shadows.cascadeCount, 3u, "cascatas sao um eixo numerico");
+  AE_EXPECT_EQ(policy.shadows.cascadeResolution, 1792u, "resolucao nao fica presa ao preset");
+  AE_EXPECT_EQ(policy.shadows.filterTaps, 25u, "kernel de sombra e independente");
+  AE_EXPECT_EQ(policy.shadows.farFilterTaps, 9u, "kernel distante e independente");
+  AE_EXPECT_EQ(policy.visibility.lodPixelErrorBudget, 1.25f, "erro de LOD e global");
+  AE_EXPECT_EQ(policy.visibility.coverageLodPixelErrorBudget, 37.0f,
+               "vegetacao possui budget de LOD independente");
+  AE_EXPECT_EQ(policy.materialDistance.normalMapMaximumDistance, 180.0f,
+               "detalhe material preserva alcance autoral configurado");
+  AE_EXPECT_EQ(policy.materialDistance.metallicRoughnessMaximumDistance, 260.0f,
+               "MR distante possui budget proprio");
+  AE_EXPECT_TRUE(policy.post.fxaa && policy.post.dedicatedPass,
+                 "filtro isolado ativa o passe sem trocar preset");
+  AE_EXPECT_TRUE(policy.dynamicResolution.enabled, "resolucao dinamica e eixo global");
+  AE_EXPECT_EQ(policy.dynamicResolution.minimumScale, 0.72f, "piso autoral preservado");
+}
+
+AE_TEST(policy_detalhe_material_tem_alcance_e_faixa_de_fade_independentes) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::B;
+  const auto inherited = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(inherited.materialDistance.normalMapMaximumDistance, 60.0f,
+               "perfil B preserva normal perto e remove trabalho distante");
+  AE_EXPECT_EQ(inherited.materialDistance.specularProbeMaximumDistance, 120.0f,
+               "IBL tem alcance independente");
+  AE_EXPECT_EQ(inherited.materialDistance.fadeBandRatio, 0.20f,
+               "detalhe desaparece gradualmente");
+
+  settings.normalMapMaximumDistance = 180.0f;
+  settings.specularProbeMaximumDistance = 320.0f;
+  settings.materialDetailFadeBandRatio = 0.35f;
+  const auto custom = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(custom.materialDistance.normalMapMaximumDistance, 180.0f,
+               "autor controla alcance de normal");
+  AE_EXPECT_EQ(custom.materialDistance.specularProbeMaximumDistance, 320.0f,
+               "autor controla alcance de IBL");
+  AE_EXPECT_EQ(custom.materialDistance.fadeBandRatio, 0.35f,
+               "autor controla a faixa de transicao");
+}
+
+AE_TEST(policy_lod_de_coverage_herda_por_perfil_e_tem_limite_seguro) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::A;
+  const auto inherited = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(inherited.visibility.coverageLodPixelErrorBudget, 32.0f,
+               "perfil A herda budget de coverage sem afetar malha solida");
+  AE_EXPECT_EQ(inherited.visibility.lodPixelErrorBudget, 1.5f,
+               "budget solido permanece independente");
+
+  settings.coverageLodPixelErrorBudget = 1000.0f;
+  const auto clamped = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(clamped.visibility.coverageLodPixelErrorBudget, 128.0f,
+               "override extremo e limitado pela API global");
 }
 
 AE_TEST(policy_preset_explicito_ignora_o_perfil_detectado) {
@@ -78,13 +187,48 @@ AE_TEST(policy_preset_explicito_ignora_o_perfil_detectado) {
   AE_EXPECT_EQ(policy.shadows.cascadeCount, 4u, "preset explicito eleva a qualidade");
 }
 
+AE_TEST(policy_perfil_b_tem_budget_de_sombra_mobile_sem_limitar_overrides) {
+  auto capabilities = strongDevice();
+  capabilities.profile = rhi::DeviceProfile::B;
+  const auto automatic = resolveRenderingPolicy({}, capabilities, ThermalPressure::None);
+  AE_EXPECT_EQ(automatic.shadows.cascadeCount, 2u, "perfil B financia duas cascatas");
+  AE_EXPECT_EQ(automatic.shadows.cascadeResolution, 1024u, "perfil B usa atlas mobile");
+  AE_EXPECT_EQ(automatic.shadows.filterTaps, 9u, "perfil B preserva PCF 3x3");
+  AE_EXPECT_EQ(automatic.shadows.farFilterTaps, 1u,
+               "perfil B nao paga PCF onde o kernel nao e perceptivel");
+  AE_EXPECT_TRUE(automatic.shadows.staticCasterCache, "perfil B cacheia casters estaticos");
+  AE_EXPECT_EQ(automatic.shadows.cacheGuardBandRatio, 1.08f,
+               "margem do cache e um budget independente");
+  AE_EXPECT_TRUE(!automatic.dynamicResolution.enabled,
+                 "perfil B preserva resolucao nativa por default");
+  AE_EXPECT_EQ(automatic.dynamicResolution.minimumScale, 0.58f,
+               "piso dinamico continua configuravel");
+  AE_EXPECT_EQ(automatic.post.sharpen, 0.0f,
+               "resolucao dinamica nao liga sharpen sem decisao autoral");
+
+  ProjectRenderingSettings custom{};
+  custom.preset = QualityPreset::B;
+  custom.shadowCascadeCount = 4;
+  custom.shadowCascadeResolution = 2048;
+  custom.staticShadowCache = FeatureOverride::Disabled;
+  custom.shadowCacheGuardBandRatio = 1.20f;
+  const auto overridden = resolveRenderingPolicy(custom, capabilities, ThermalPressure::None);
+  AE_EXPECT_EQ(overridden.shadows.cascadeCount, 4u, "autor pode elevar cascatas independentemente");
+  AE_EXPECT_EQ(overridden.shadows.cascadeResolution, 2048u,
+               "autor pode elevar resolucao independentemente");
+  AE_EXPECT_TRUE(!overridden.shadows.staticCasterCache, "autor pode desligar cache independentemente");
+  AE_EXPECT_EQ(overridden.shadows.cacheGuardBandRatio, 1.20f,
+               "autor controla a margem do cache sem novo preset");
+}
+
 AE_TEST(policy_capability_reduz_mas_nunca_eleva) {
   ProjectRenderingSettings settings{};
   settings.preset = QualityPreset::S;
   auto capabilities = strongDevice();
   capabilities.maximumImage2DSize = 1024;
   const auto policy = resolveRenderingPolicy(settings, capabilities, ThermalPressure::None);
-  AE_EXPECT_EQ(policy.shadows.cascadeResolution, 1024u, "resolucao de cascata limitada");
+  AE_EXPECT_EQ(policy.shadows.cascadeResolution, 512u,
+               "atlas 2x2 limita cada cascata ao tamanho suportado");
   AE_EXPECT_TRUE(hasClamp(policy, "shadows.cascadeResolution", PolicyClamp::Capability),
                  "reducao por capability precisa ficar registrada");
 }
@@ -198,4 +342,28 @@ AE_TEST(policy_nome_invalido_herda_em_vez_de_derrubar) {
   AE_EXPECT_EQ(parseShadowQuality(nullptr), ShadowQuality::Inherit, "ponteiro nulo");
   AE_EXPECT_EQ(parsePostQuality(""), PostQuality::Inherit, "string vazia");
   AE_EXPECT_EQ(parseQualityPreset("ultra"), QualityPreset::Auto, "preset desconhecido vira auto");
+}
+
+AE_TEST(material_distance_so_reduz_quando_bounds_inteiro_esta_distante) {
+  const float camera[3]{0.0f, 0.0f, 0.0f};
+  const float centerNearBoundary[3]{65.0f, 0.0f, 0.0f};
+  const float centerPastBoundary[3]{71.0f, 0.0f, 0.0f};
+  AE_EXPECT_TRUE(!boundsEntirelyPastDistance(camera, centerNearBoundary, 10.0f, 60.0f),
+                 "esfera que ainda toca a faixa conserva qualidade completa");
+  AE_EXPECT_TRUE(boundsEntirelyPastDistance(camera, centerPastBoundary, 10.0f, 60.0f),
+                 "esfera totalmente distante aceita variante reduzida");
+  AE_EXPECT_TRUE(!boundsEntirelyPastDistance(camera, centerPastBoundary, 10.0f, 0.0f),
+                 "distancia desligada nunca reduz material");
+}
+
+AE_TEST(material_distance_invalida_falha_para_qualidade_completa) {
+  const float camera[3]{0.0f, 0.0f, 0.0f};
+  const float center[3]{100.0f, 0.0f, 0.0f};
+  const float invalidCenter[3]{NAN, 0.0f, 0.0f};
+  AE_EXPECT_TRUE(!boundsEntirelyPastDistance(nullptr, center, 1.0f, 60.0f),
+                 "camera nula falha conservadoramente");
+  AE_EXPECT_TRUE(!boundsEntirelyPastDistance(camera, invalidCenter, 1.0f, 60.0f),
+                 "bounds nao finito falha conservadoramente");
+  AE_EXPECT_TRUE(!boundsEntirelyPastDistance(camera, center, -1.0f, 60.0f),
+                 "raio invalido falha conservadoramente");
 }

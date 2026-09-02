@@ -194,16 +194,21 @@ das sombras.
 irradiância hemisférica global (cor do céu ↔ ground bounce), configurada no AEEN
 v2. Exposição, força e tint são dados do resource, não condicionais da floresta.
 Na pose fixa, a luminância média da vegetação subiu 37,34→45,18 (+21%). O custo é
-ALU constante, sem passe/draw/texture fetch adicional. Isso melhora leitura e cor,
-mas é transitório: sem CSM/GTAO ainda não existe o contraste de contato necessário.
+ALU constante, sem passe/draw/texture fetch adicional. Essa foi a base transitória;
+CSM direcional já entrou, enquanto GTAO ainda falta para o contato de pequena escala.
 
 Ordem interna importa — cada item depende do anterior:
 
-1. **Sombras direcionais (CSM)** — item 2.4.3, hoje **não iniciado**, e o maior
-   ganho visual isolado disponível. Sem sombra de copa não existe floresta
-   crível, e é a ausência dela que força o ambiente para cima (achado 7). 4
-   cascatas estabilizadas (snap por texel), PCF, **alpha-test da vegetação no
-   shadow pass** (7.3.5), cache de casters estáticos.
+1. **Sombras direcionais (CSM) — segunda fatia implementada em 31/08/2026.** O
+   renderer Android executa 1–4 cascatas estabilizadas (snap por texel) em atlas,
+   PCF 1/9/25, bias configurável e **alpha-test da vegetação no shadow pass**
+   (7.3.5). Bindless e fallback passaram em hardware com Khronos ativa. O culling
+   conservador por volume e o cache estático por cascata também entraram. Guard band,
+   invalidação por tile e API para mudança de caster/material/sol são globais e
+   configuráveis. Em rota Release de 60 s, sombra caiu de 3,05 para 0,09 ms média e
+   de 3,85 para 1,41 ms p95; a pose fixa ligada/desligada foi bit a bit idêntica.
+   Permanecem separação de casters dinâmicos, chunks mais finos, blend entre splits e
+   margem sustentada em matriz; por isso 2.4.3 segue parcial.
 2. **Oclusão de contato (GTAO)** — item 7.2.7. Escurece base de tronco,
    vãos e sub-copa. Meia resolução + upsample bilateral + filtro temporal.
    Necessário porque não há AO assado (achado 6).
@@ -211,10 +216,14 @@ Ordem interna importa — cada item depende do anterior:
    (wrap diffuse + transmissão por trás). É o que faz folha acender em
    contraluz, e é a resposta *correta* para face dupla — de onde E1 item 2 sai
    de "inverter a normal" para "modelo de dois lados de verdade".
-4. **IBL derivado do céu** — SH9 difuso + especular pré-filtrado, ambos do
-   cubemap de E2. É o trabalho revertido, refeito sobre unidades físicas e
-   depois de existirem sombra e AO. Observação do achado 3: nesta cena o que
-   pesa é o **difuso**; o especular só aparece em poças e material molhado.
+4. **IBL derivado do céu — especular offline entregue, difuso ainda parcial.**
+   AEEN v3 referencia radiância octaédrica RGBA16F pré-filtrada em 9 mips GGX e
+   LUT BRDF split-sum; a foto visível continua separada. O caminho PBR não usa
+   mais `atan/acos`, e v1/v2 conservam fallback equiretangular. Falta derivar SH9
+   difuso da mesma fonte, unificar isto ao `EnvironmentState` físico e adicionar
+   probes locais. Observação do achado 3: nesta cena o que pesa é o **difuso**;
+   o especular aparece sobretudo em poças e material molhado. Ver
+   [`ENVIRONMENT-MAP.md`](ENVIRONMENT-MAP.md).
 5. **Exposição e tonemap** — item 2.4.6. EV100 → AgX, calibrado contra a carta
    de E0. Auto-exposição por histograma com taxa de adaptação limitada, para
    não bombear ao atravessar copa/clareira.

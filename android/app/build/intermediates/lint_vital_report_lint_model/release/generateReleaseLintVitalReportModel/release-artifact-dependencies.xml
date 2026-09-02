@@ -1,2 +1,14 @@
 <dependencies>
+  <compile
+      roots="androidx.games:games-frame-pacing:2.1.3@aar">
+    <dependency
+        name="androidx.games:games-frame-pacing:2.1.3@aar"
+        simpleName="androidx.games:games-frame-pacing"/>
+  </compile>
+  <package
+      roots="androidx.games:games-frame-pacing:2.1.3@aar">
+    <dependency
+        name="androidx.games:games-frame-pacing:2.1.3@aar"
+        simpleName="androidx.games:games-frame-pacing"/>
+  </package>
 </dependencies>

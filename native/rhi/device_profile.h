@@ -26,6 +26,10 @@ struct DeviceFeatures {
   bool meshShader = false;           // VK_EXT_mesh_shader
   bool variableRateShading = false;  // VRS / fragment shading rate
   bool memorylessAttachments = false; // lazily-allocated (TRANSIENT_ATTACHMENT)
+  bool computeShaders = false;
+  bool dedicatedComputeQueue = false;
+  bool multiDrawIndirect = false;
+  bool drawIndirectFirstInstance = false;
 
   // Limites relevantes.
   u32 maxBoundDescriptorSets = 4;
@@ -52,6 +56,8 @@ struct EnabledPaths {
   bool meshShaderPipeline = false;
   bool variableRateShading = false;
   bool memorylessGBuffer = false; // anexos memoryless para o G-buffer
+  bool compute = false;
+  bool asyncCompute = false;
 };
 
 // Decide o perfil a partir das features reportadas. Puramente combinacional

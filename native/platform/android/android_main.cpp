@@ -5,6 +5,7 @@
 #include "renderer/rendering_policy.h"
 #include "platform/android/android_frame_pacer.h"
 #include "platform/android/android_performance.h"
+#include "platform/android/android_thermal_monitor.h"
 #include "platform/android/android_vulkan_surface.h"
 #include "platform/android/android_window.h"
 #include "platform/android/dotnet_assets.h"
@@ -24,9 +25,11 @@
 #include <android_native_app_glue.h>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <future>
 #include <atomic>
+#include <time.h>
 
 namespace {
 
@@ -39,16 +42,41 @@ constexpr ae::u32 ScenePreviewCapacity = 256;
 constexpr ae::u64 SceneValidationIntervalFrames = 180;
 constexpr ae::u64 PocAReportIntervalFrames = 300; // ~5s a 60fps — log periódico, não por frame
 
+ae::u64 currentThreadCpuNanoseconds() {
+  timespec value{};
+  if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &value) != 0) return 0;
+  return static_cast<ae::u64>(value.tv_sec) * 1'000'000'000ULL +
+         static_cast<ae::u64>(value.tv_nsec);
+}
+
+ae::u64 currentMonotonicNanoseconds() {
+  timespec value{};
+  if (clock_gettime(CLOCK_MONOTONIC, &value) != 0) return 0;
+  return static_cast<ae::u64>(value.tv_sec) * 1'000'000'000ULL +
+         static_cast<ae::u64>(value.tv_nsec);
+}
+
 struct AndroidShell final {
+  struct AdpfFrameSample final {
+    ae::u64 workStartNs = 0;
+    ae::u64 totalNs = 0;
+    ae::u64 threadCpuNs = 0;
+    bool valid = false;
+  };
   android_app *app = nullptr;
   ae::platform::AppLifecycle lifecycle;
   ae::platform::android::AndroidFrameProfiler frameProfiler;
   ae::platform::android::AndroidFramePacer framePacer;
   ae::platform::android::AndroidPerformance performance;
+  AdpfFrameSample pendingAdpfFrame{};
+  ae::platform::android::AndroidThermalMonitor thermalMonitor;
   ae::platform::android::AndroidVulkanSurface vulkanSurface;
   ae::platform::android::InstancedRenderer instancedRenderer;
   bool instancedRendererReady = false;
   bool forceDescriptorFallback = false;
+  // Public Android frame pacing is the production default. Diagnostics can
+  // explicitly disable it to retain a reproducible FIFO/Choreographer control.
+  bool useSwappy = true;
   bool pocABenchmark = false;
   bool scenePreview = false;
   bool materialPreview = false;
@@ -92,7 +120,12 @@ struct AndroidShell final {
   // Escolha global do projeto e política resolvida (ADR-014). Uma única
   // resolução por época de configuração; nenhuma cena tem perfil próprio.
   ae::renderer::ProjectRenderingSettings renderingSettings{};
+  ae::renderer::RenderingCapabilities renderingCapabilities{};
   ae::renderer::ResolvedRenderingPolicy renderingPolicy{};
+  ae::renderer::ResolvedRenderingPolicy activeRenderingPolicy{};
+  ae::renderer::ThermalPressure appliedThermalPressure = ae::renderer::ThermalPressure::None;
+  bool renderingCapabilitiesReady = false;
+  bool thermalPolicyApplied = false;
   float maximumDisplayHz = 60.0f;
   int displayRotation = -1;
 
@@ -107,6 +140,8 @@ struct AndroidShell final {
   // matches the map actually running -- never trust a stale/foreign route.
   bool cameraRouteReplayActive = false;
 };
+
+void applyThermalRenderingPolicy(AndroidShell &shell, bool force);
 
 // Atomic-writes any pending recorded samples to disk. Safe to call repeatedly
 // (each call re-writes the full route atomically, so it is called from every
@@ -256,6 +291,7 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
           "[CameraRoute] gravação ativa, será escrita em '%s' ao encerrar.", shell.cameraRoutePath);
     }
   }
+  if (shell.instancedRendererReady) applyThermalRenderingPolicy(shell, true);
   if (!shell.instancedRendererReady) shell.instancedRenderer.shutdown();
   if (shell.instancedRendererReady && shell.lifecycle.isActive())
     shell.performance.setActive(true, false);
@@ -271,7 +307,8 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
 void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
   const auto &device = shell.vulkanSurface.device();
   const auto &features = device.deviceFeatures();
-  ae::renderer::RenderingCapabilities capabilities{};
+  auto &capabilities = shell.renderingCapabilities;
+  capabilities = {};
   capabilities.profile = device.deviceProfile();
   capabilities.maximumImage2DSize = device.maximumImage2DSize();
   capabilities.maximumImageArrayLayers = device.maximumImageArrayLayers();
@@ -280,11 +317,23 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
   capabilities.supportsDepthSampling = true;
   capabilities.maximumSamplerAnisotropy = device.maximumSamplerAnisotropy();
   capabilities.displayHz = displayHz;
-  // Pressão térmica entra como `None` nesta fatia. O governador já é lido pelo
-  // runner, mas realimentá-lo exige a histerese de recuperação que a ADR pede, e
-  // histerese sem medição reproduz o laço que a cadência adaptativa produziu.
+  shell.renderingCapabilitiesReady = true;
+  // Recursos são sempre criados a partir da escolha do projeto sem pressão.
+  // A política térmica ativa só reduz o uso destes recursos e pode recuperar
+  // sem rebuild quando a histerese do monitor autorizar.
   shell.renderingPolicy = ae::renderer::resolveRenderingPolicy(
       shell.renderingSettings, capabilities, ae::renderer::ThermalPressure::None);
+  shell.activeRenderingPolicy = shell.renderingPolicy;
+  shell.thermalPolicyApplied = false;
+  // VisibilityBudget also carries HZB knobs that are not part of the rendering
+  // policy yet. Synchronize only the resolved LOD axes so diagnostics and the
+  // renderer consume the same values without maintaining a second preset table.
+  shell.visibilityBudget.lodPixelErrorBudget =
+      shell.renderingPolicy.visibility.lodPixelErrorBudget;
+  shell.visibilityBudget.coverageLodPixelErrorBudget =
+      shell.renderingPolicy.visibility.coverageLodPixelErrorBudget;
+  shell.visibilityBudget.lodHysteresisBandRatio =
+      shell.renderingPolicy.visibility.lodHysteresisBandRatio;
 
   // Os fatos que produziram o perfil ficam ao lado da política: sem eles,
   // "auto escolheu C" é indistinguível de um bug da política.
@@ -296,27 +345,80 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
       features.meshShader ? 1 : 0, features.variableRateShading ? 1 : 0,
       features.memorylessAttachments ? 1 : 0, static_cast<int>(device.deviceProfile()));
   __android_log_print(ANDROID_LOG_INFO, LogTag,
-      "[RenderPolicy] preset=%s perfil=%d sombras=%s(%u cascatas @%u, %u taps) "
-      "ambiente=%s%s pos=%s%s textura_mip_bias=%u aniso=%.1f escala=%.2f clamps=%u",
+      "[RenderPolicy] preset=%s perfil=%d sombras=%s(%u cascatas @%u, %u/%u taps, cache=%s margem=%.2f) "
+      "ambiente=%s%s%s pos=%s%s textura_mip_bias=%u aniso=%.1f escala=%.2f dinamica=%s[%.2f,%.2f] clamps=%u",
       ae::renderer::qualityPresetName(shell.renderingSettings.preset),
       static_cast<int>(shell.renderingPolicy.effectiveProfile),
       shell.renderingPolicy.shadows.enabled ? "on" : "off",
       shell.renderingPolicy.shadows.cascadeCount,
       shell.renderingPolicy.shadows.cascadeResolution,
       shell.renderingPolicy.shadows.filterTaps,
+      shell.renderingPolicy.shadows.farFilterTaps,
+      shell.renderingPolicy.shadows.staticCasterCache ? "static" : "off",
+      static_cast<double>(shell.renderingPolicy.shadows.cacheGuardBandRatio),
       shell.renderingPolicy.ambient.hemispheric ? "hemisferio" : "constante",
       shell.renderingPolicy.ambient.specularProbe ? "+especular" : "",
+      shell.renderingPolicy.ambient.splitSumBrdf ? "+split-sum" : "",
       shell.renderingPolicy.post.dedicatedPass ? "passe" : "inline",
       shell.renderingPolicy.post.bloom ? "+bloom" : "",
       shell.renderingPolicy.textures.residencyMipBias,
       static_cast<double>(shell.renderingPolicy.textures.samplerAnisotropy),
       static_cast<double>(shell.renderingPolicy.resolutionScale),
+      shell.renderingPolicy.dynamicResolution.enabled ? "on" : "off",
+      static_cast<double>(shell.renderingPolicy.dynamicResolution.minimumScale),
+      static_cast<double>(shell.renderingPolicy.dynamicResolution.maximumScale),
       shell.renderingPolicy.clampCount);
   for (ae::u32 index = 0; index < shell.renderingPolicy.clampCount; ++index) {
     const auto &clamp = shell.renderingPolicy.clamps[index];
     __android_log_print(ANDROID_LOG_INFO, LogTag, "[RenderPolicy] %s reduzido por %s.",
                         clamp.axis, ae::renderer::policyClampName(clamp.reason));
   }
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[RenderPolicy] lod=%s erro_solido=%.2fpx erro_coverage=%.2fpx histerese=%.2f "
+      "normal_ate=%.1f specular_ate=%.1f "
+      "mr_ate=%.1f emissive_ate=%.1f variantes_material=%s fxaa=%d bloom=%d sharpen=%.2f contraste=%.2f saturacao=%.2f",
+      shell.renderingPolicy.geometry.lodSelection ? "on" : "off",
+      static_cast<double>(shell.renderingPolicy.visibility.lodPixelErrorBudget),
+      static_cast<double>(shell.renderingPolicy.visibility.coverageLodPixelErrorBudget),
+      static_cast<double>(shell.renderingPolicy.visibility.lodHysteresisBandRatio),
+      static_cast<double>(shell.renderingPolicy.materialDistance.normalMapMaximumDistance),
+      static_cast<double>(shell.renderingPolicy.materialDistance.specularProbeMaximumDistance),
+      static_cast<double>(shell.renderingPolicy.materialDistance.metallicRoughnessMaximumDistance),
+      static_cast<double>(shell.renderingPolicy.materialDistance.emissiveMaximumDistance),
+      shell.renderingPolicy.geometry.materialShaderVariants ? "on" : "off",
+      shell.renderingPolicy.post.fxaa ? 1 : 0, shell.renderingPolicy.post.bloom ? 1 : 0,
+      static_cast<double>(shell.renderingPolicy.post.sharpen),
+      static_cast<double>(shell.renderingPolicy.post.contrast),
+      static_cast<double>(shell.renderingPolicy.post.saturation));
+}
+
+void applyThermalRenderingPolicy(AndroidShell &shell, bool force) {
+  if (!shell.instancedRendererReady || !shell.renderingCapabilitiesReady) return;
+  const auto pressure = shell.thermalMonitor.state().pressure;
+  if (!force && shell.thermalPolicyApplied && pressure == shell.appliedThermalPressure) return;
+
+  shell.activeRenderingPolicy = ae::renderer::resolveRenderingPolicy(
+      shell.renderingSettings, shell.renderingCapabilities, pressure);
+  shell.instancedRenderer.setRuntimeRenderingPolicy(shell.activeRenderingPolicy);
+  shell.appliedThermalPressure = pressure;
+  shell.thermalPolicyApplied = true;
+  shell.frameProfiler.reset();
+  __android_log_print(
+      ANDROID_LOG_INFO, LogTag,
+      "[ThermalPolicy] applied=%s lod=%.2f/%.2f shadow=%s/%uc@%u/%ut "
+      "post=%s%s scale=%.2f dynamic=[%.2f,%.2f]",
+      ae::renderer::thermalPressureName(pressure),
+      static_cast<double>(shell.activeRenderingPolicy.visibility.lodPixelErrorBudget),
+      static_cast<double>(shell.activeRenderingPolicy.visibility.coverageLodPixelErrorBudget),
+      shell.activeRenderingPolicy.shadows.enabled ? "on" : "off",
+      shell.activeRenderingPolicy.shadows.cascadeCount,
+      shell.activeRenderingPolicy.shadows.cascadeResolution,
+      shell.activeRenderingPolicy.shadows.filterTaps,
+      shell.activeRenderingPolicy.post.dedicatedPass ? "pass" : "inline",
+      shell.activeRenderingPolicy.post.bloom ? "+bloom" : "",
+      static_cast<double>(shell.activeRenderingPolicy.resolutionScale),
+      static_cast<double>(shell.activeRenderingPolicy.dynamicResolution.minimumScale),
+      static_cast<double>(shell.activeRenderingPolicy.dynamicResolution.maximumScale));
 }
 
 bool rebuildInstancedRenderer(AndroidShell &shell) {
@@ -329,6 +431,7 @@ bool rebuildInstancedRenderer(AndroidShell &shell) {
     return false;
   }
   shell.instancedRendererReady = false;
+  shell.instancedRenderer.setRenderingPolicy(shell.renderingPolicy);
   if (shell.materialPreview || shell.dirtRoadPreview) {
     shell.cancelRendererInitialization.store(false);
     shell.rendererInitialization=std::async(std::launch::async,[&shell] {
@@ -344,7 +447,8 @@ bool rebuildInstancedRenderer(AndroidShell &shell) {
       shell.vulkanSurface.device(), shell.vulkanSurface.swapchain(), shell.dotNetHost,
       shell.scenePreview ? ScenePreviewCapacity : PocAInstanceCount, shell.scenePreview,
       shell.materialPreview ? shell.app->activity->assetManager : nullptr, shell.forceTextureFallback);
-  if (!shell.instancedRendererReady) shell.instancedRenderer.shutdown();
+  if (shell.instancedRendererReady) applyThermalRenderingPolicy(shell, true);
+  else shell.instancedRenderer.shutdown();
   return shell.instancedRendererReady;
 }
 
@@ -368,7 +472,10 @@ bool recreateSurfaceAndRenderer(AndroidShell &shell) {
   shell.instancedRenderer.shutdown();
   shell.instancedRendererReady = false;
   shell.vulkanSurface.shutdown();
-  if (shell.app->window == nullptr || !shell.vulkanSurface.initialize(shell.app->window, !shell.forceDescriptorFallback)) {
+  if (shell.app->window == nullptr ||
+      !shell.vulkanSurface.initialize(shell.app->activity, shell.app->window,
+                                      shell.frameBudget.renderHz, shell.useSwappy,
+                                      !shell.forceDescriptorFallback)) {
     return false;
   }
   resolveRenderingPolicyForDevice(shell, shell.maximumDisplayHz);
@@ -381,7 +488,9 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     ae::platform::android::ScopedLifecycleStage trace("create-surface-renderer");
     ae::platform::android::requestRenderFrameRate(shell.app->window,
                                                    static_cast<float>(shell.frameBudget.renderHz));
-    if (!shell.vulkanSurface.initialize(shell.app->window, !shell.forceDescriptorFallback)) {
+    if (!shell.vulkanSurface.initialize(shell.app->activity, shell.app->window,
+                                        shell.frameBudget.renderHz, shell.useSwappy,
+                                        !shell.forceDescriptorFallback)) {
       __android_log_print(ANDROID_LOG_ERROR, LogTag,
                           "O shell continuará ativo sem GPU; uma nova janela tentará novamente.");
     } else if (resolveRenderingPolicyForDevice(shell, shell.maximumDisplayHz),
@@ -408,6 +517,7 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     shell.firstFrameAfterActivationPending = true;
     shell.lastPresentedAt = {};
     shell.smoothedFps = 0.0f;
+    shell.pendingAdpfFrame = {};
     shell.performance.setActive(true, !shell.instancedRendererReady);
     __android_log_print(ANDROID_LOG_INFO, LogTag, "Aplicativo ativo.");
   }
@@ -637,13 +747,29 @@ void android_main(android_app *app) {
       app->activity, "aether.target_fps", requestedMaximumRenderHz);
   shell.frameBudget = ae::makeFrameBudget(maximumDisplayHz, requestedMaximumRenderHz, 60);
   shell.maximumDisplayHz = maximumDisplayHz;
+  // Direct FIFO + Android VSYNC is the validated default. Swappy 2.1.3 is
+  // retained as an explicit experiment, but its queuePresent path inserts
+  // extra Vulkan work and, on the current Adreno driver, kept the app's
+  // binary render-finished semaphore alive after the image was reacquired
+  // (VUID-vkQueueSubmit-pSignalSemaphores-00067). Correct synchronization
+  // outranks speculative pacing; never silently enable the invalid path.
+  shell.useSwappy = ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.enable_swappy") &&
+      !ae::platform::android::readBooleanLaunchOption(
+          app->activity, "aether.disable_swappy");
+  float performanceHintTargetRatio = 0.0f;
+  ae::platform::android::readFloatLaunchOption(
+      app->activity, "aether.adpf_target_ratio", performanceHintTargetRatio);
   ae::platform::android::AndroidPerformancePolicy performancePolicy{};
   performancePolicy.targetFrameDurationNs =
-      static_cast<ae::i64>(1'000'000'000ULL / shell.frameBudget.renderHz);
+      ae::performanceHintTargetNanoseconds(shell.frameBudget, performanceHintTargetRatio);
   performancePolicy.preferSustainedPerformance =
       !ae::platform::android::readBooleanLaunchOption(
           app->activity, "aether.disable_sustained_performance");
   shell.performance.initialize(app->activity, performancePolicy);
+  shell.thermalMonitor.initialize();
+  shell.instancedRenderer.setAdpfGpuTimingEnabled(
+      shell.performance.detailedWorkDurationAvailable());
   shell.framePacer.setTargetFrameRate(shell.frameBudget.renderHz);
   shell.scenePreview = shell.scenePreview || shell.materialPreview;
   shell.sceneValidation = shell.scenePreview &&
@@ -690,6 +816,92 @@ void android_main(android_app *app) {
                                                       buffer, sizeof(buffer))) {
       shell.renderingSettings.textures = ae::renderer::parseTextureQuality(buffer);
     }
+    ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.shadow_cascades",
+                                                     shell.renderingSettings.shadowCascadeCount);
+    ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.shadow_resolution",
+                                                     shell.renderingSettings.shadowCascadeResolution);
+    ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.shadow_filter_taps",
+                                                     shell.renderingSettings.shadowFilterTaps);
+    ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.shadow_far_filter_taps",
+                                                     shell.renderingSettings.shadowFarFilterTaps);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.shadow_distance",
+                                                  shell.renderingSettings.shadowMaximumDistance);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.shadow_bias_constant",
+                                                  shell.renderingSettings.shadowDepthBiasConstant);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.shadow_bias_slope",
+                                                  shell.renderingSettings.shadowDepthBiasSlope);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.shadow_normal_offset",
+                                                  shell.renderingSettings.shadowNormalOffsetTexels);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.shadow_cache_guard_band",
+                                                  shell.renderingSettings.shadowCacheGuardBandRatio);
+    if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.shadow_static_cache"))
+      shell.renderingSettings.staticShadowCache = ae::renderer::FeatureOverride::Enabled;
+    if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.disable_shadow_static_cache"))
+      shell.renderingSettings.staticShadowCache = ae::renderer::FeatureOverride::Disabled;
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.normal_map_distance",
+                                                  shell.renderingSettings.normalMapMaximumDistance);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.specular_probe_distance",
+                                                  shell.renderingSettings.specularProbeMaximumDistance);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.metallic_roughness_distance",
+        shell.renderingSettings.metallicRoughnessMaximumDistance);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.emissive_distance",
+                                                  shell.renderingSettings.emissiveMaximumDistance);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.material_detail_fade_ratio",
+        shell.renderingSettings.materialDetailFadeBandRatio);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.bloom_threshold",
+                                                  shell.renderingSettings.bloomThreshold);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.bloom_intensity",
+                                                  shell.renderingSettings.bloomIntensity);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.post_contrast",
+                                                  shell.renderingSettings.postContrast);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.post_saturation",
+                                                  shell.renderingSettings.postSaturation);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.post_sharpen",
+                                                  shell.renderingSettings.postSharpen);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.lod_pixel_error_budget",
+                                                  shell.renderingSettings.lodPixelErrorBudget);
+    ae::platform::android::readFloatLaunchOption(
+        app->activity, "aether.coverage_lod_pixel_error_budget",
+        shell.renderingSettings.coverageLodPixelErrorBudget);
+    ae::platform::android::readFloatLaunchOption(
+        app->activity, "aether.lod_hysteresis_band_ratio",
+        shell.renderingSettings.lodHysteresisBandRatio);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.resolution_scale",
+                                                  shell.renderingSettings.resolutionScale);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.dynamic_resolution_min_scale",
+                                                  shell.renderingSettings.dynamicResolutionMinimumScale);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.dynamic_resolution_down_step",
+                                                  shell.renderingSettings.dynamicResolutionDecreaseStep);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.dynamic_resolution_up_step",
+                                                  shell.renderingSettings.dynamicResolutionIncreaseStep);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.dynamic_resolution_headroom",
+        shell.renderingSettings.dynamicResolutionRecoveryHeadroomRatio);
+    ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.dynamic_resolution_overload_frames",
+        shell.renderingSettings.dynamicResolutionOverloadFrames);
+    ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.dynamic_resolution_recovery_frames",
+        shell.renderingSettings.dynamicResolutionRecoveryFrames);
+    if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.dynamic_resolution"))
+      shell.renderingSettings.dynamicResolution = ae::renderer::FeatureOverride::Enabled;
+    if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.disable_dynamic_resolution"))
+      shell.renderingSettings.dynamicResolution = ae::renderer::FeatureOverride::Disabled;
+    if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.post_fxaa"))
+      shell.renderingSettings.postFxaa = ae::renderer::FeatureOverride::Enabled;
+    if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.post_vignette"))
+      shell.renderingSettings.postVignette = ae::renderer::FeatureOverride::Enabled;
+    if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.lod_selection"))
+      shell.renderingSettings.lodSelection = ae::renderer::FeatureOverride::Enabled;
+    if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.disable_lod_selection"))
+      shell.renderingSettings.lodSelection = ae::renderer::FeatureOverride::Disabled;
+    if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.material_shader_variants"))
+      shell.renderingSettings.materialShaderVariants = ae::renderer::FeatureOverride::Enabled;
+    if (ae::platform::android::readBooleanLaunchOption(
+            app->activity, "aether.disable_material_shader_variants"))
+      shell.renderingSettings.materialShaderVariants = ae::renderer::FeatureOverride::Disabled;
+    if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.environment_split_sum"))
+      shell.renderingSettings.environmentSplitSumBrdf = ae::renderer::FeatureOverride::Enabled;
+    if (ae::platform::android::readBooleanLaunchOption(
+            app->activity, "aether.disable_environment_split_sum"))
+      shell.renderingSettings.environmentSplitSumBrdf = ae::renderer::FeatureOverride::Disabled;
   }
   shell.instancedRenderer.setCoveragePrepassEnabled(
       !ae::platform::android::readBooleanLaunchOption(app->activity,
@@ -700,6 +912,19 @@ void android_main(android_app *app) {
   // PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md.
   shell.instancedRenderer.setHzbOcclusionEnabled(
       ae::platform::android::readBooleanLaunchOption(app->activity, "aether.hzb_occlusion"));
+  const bool hzbComputeValidation = ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.hzb_compute_validation");
+  shell.instancedRenderer.setHzbComputeEnabled(
+      hzbComputeValidation || ae::platform::android::readBooleanLaunchOption(
+          app->activity, "aether.hzb_compute"));
+  shell.instancedRenderer.setHzbComputeReadbackValidationEnabled(hzbComputeValidation);
+  // Consumidor GPU da piramide (ADR-016 C2). Implica o produtor compute: sem
+  // ele nao ha piramide residente para consumir, e pedir culling sem produtor
+  // seria uma opcao que nao faz nada em silencio.
+  const bool hzbGpuCulling = ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.hzb_gpu_culling");
+  if (hzbGpuCulling) shell.instancedRenderer.setHzbComputeEnabled(true);
+  shell.instancedRenderer.setHzbGpuCullingEnabled(hzbGpuCulling);
   ae::u32 requestedHysteresisFrames = shell.visibilityBudget.hzbHysteresisFrames;
   if (ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.hzb_hysteresis_frames",
                                                        requestedHysteresisFrames)) {
@@ -720,24 +945,10 @@ void android_main(android_app *app) {
   }
   shell.instancedRenderer.setHzbNormalizedDepthBias(
       shell.visibilityBudget.hzbNormalizedDepthBias);
-  // LOD selection: same opt-in-and-off-by-default discipline as HZB above.
-  // See InstancedRenderer::setLodSelectionEnabled and
-  // PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md.
-  shell.instancedRenderer.setLodSelectionEnabled(
-      ae::platform::android::readBooleanLaunchOption(app->activity, "aether.lod_selection"));
-  float lodPixelErrorBudget = shell.visibilityBudget.lodPixelErrorBudget;
-  if (ae::platform::android::readFloatLaunchOption(app->activity, "aether.lod_pixel_error_budget",
-                                                    lodPixelErrorBudget)) {
-    shell.visibilityBudget.lodPixelErrorBudget = lodPixelErrorBudget;
-  }
-  shell.instancedRenderer.setLodPixelErrorBudget(shell.visibilityBudget.lodPixelErrorBudget);
-  float lodHysteresisBandRatio = shell.visibilityBudget.lodHysteresisBandRatio;
-  if (ae::platform::android::readFloatLaunchOption(app->activity, "aether.lod_hysteresis_band_ratio",
-                                                    lodHysteresisBandRatio)) {
-    shell.visibilityBudget.lodHysteresisBandRatio = lodHysteresisBandRatio;
-  }
-  shell.instancedRenderer.setLodHysteresisBandRatio(
-      shell.visibilityBudget.lodHysteresisBandRatio);
+  // LOD overrides were parsed into ProjectRenderingSettings above. Applying
+  // them only through the resolved policy avoids a second default path that
+  // previously disabled policy-driven LOD whenever no explicit launch flag
+  // was present.
   if (shell.frameProfiler.enabled()) {
     // A long benchmark must not time out into the keyguard. This window flag
     // only keeps an already-unlocked foreground window awake; it changes no
@@ -793,7 +1004,9 @@ void android_main(android_app *app) {
     const bool shouldDraw = shell.lifecycle.isActive() && shell.instancedRendererReady;
     android_poll_source *source = nullptr;
     int events = 0;
-    const int pollTimeout = shell.lifecycle.isActive() && shell.framePacer.available()
+    const bool choreographerAdmission = shell.framePacer.available() &&
+                                        !shell.vulkanSurface.swappyActive();
+    const int pollTimeout = shell.lifecycle.isActive() && choreographerAdmission
                                 ? -1
                                 : (shouldDraw ? 0 : (shell.rendererInitialization.valid() ? 16 : -1));
     const int result = ALooper_pollOnce(pollTimeout, nullptr, &events,
@@ -805,11 +1018,14 @@ void android_main(android_app *app) {
       continue;
     }
     collectRendererInitialization(shell,false);
+    if (shell.thermalMonitor.poll()) applyThermalRenderingPolicy(shell, false);
 
     // O evento processado acima pode ter destruído o renderer/janela.
-    const bool frameAdmitted = !shell.framePacer.available() || shell.framePacer.consumeFrame();
+    const bool frameAdmitted = !choreographerAdmission || shell.framePacer.consumeFrame();
     if (shell.lifecycle.isActive() && shell.instancedRendererReady && frameAdmitted) {
       const auto frameWorkStarted = std::chrono::steady_clock::now();
+      const ae::u64 frameMonotonicStarted = currentMonotonicNanoseconds();
+      const ae::u64 frameThreadCpuStarted = currentThreadCpuNanoseconds();
       if (shell.cameraRouteReplayActive) {
         // Determinism comes from indexing by frame ordinal, never by wall
         // clock -- see camera_route.h. Looping by modulo lets a short route
@@ -859,8 +1075,31 @@ void android_main(android_app *app) {
       }
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, shell.cameraController.state(), hud);
-      shell.performance.reportFrameDuration(std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::steady_clock::now() - frameWorkStarted).count());
+      const ae::u64 frameThreadCpuFinished = currentThreadCpuNanoseconds();
+      const ae::u64 frameMonotonicFinished = currentMonotonicNanoseconds();
+      const ae::u64 threadCpuNs = frameThreadCpuFinished > frameThreadCpuStarted
+                                      ? frameThreadCpuFinished - frameThreadCpuStarted : 0;
+      const ae::u64 totalNs = frameMonotonicFinished > frameMonotonicStarted
+                                  ? frameMonotonicFinished - frameMonotonicStarted : 0;
+      if (shell.performance.detailedWorkDurationAvailable()) {
+        // O timer Vulkan devolve aqui a GPU do frame anterior, depois da fence.
+        // Pareamos com CPU/start guardados daquele mesmo ciclo; nunca atribuímos
+        // o timestamp atrasado ao frame atual.
+        const double gpuMs = shell.instancedRenderer.lastFrameTimings().gpuFrameMs;
+        const ae::u64 gpuNs = std::isfinite(gpuMs) && gpuMs > 0.0
+                                  ? static_cast<ae::u64>(gpuMs * 1'000'000.0) : 0;
+        if (shell.pendingAdpfFrame.valid && gpuNs > 0) {
+          shell.performance.reportFrameWorkDuration(
+              static_cast<ae::i64>(shell.pendingAdpfFrame.workStartNs),
+              static_cast<ae::i64>(std::max(shell.pendingAdpfFrame.totalNs, gpuNs)),
+              static_cast<ae::i64>(shell.pendingAdpfFrame.threadCpuNs),
+              static_cast<ae::i64>(gpuNs));
+        }
+        shell.pendingAdpfFrame = {frameMonotonicStarted, totalNs, threadCpuNs,
+                                  frameMonotonicStarted > 0 && totalNs > 0 && threadCpuNs > 0};
+      } else if (threadCpuNs > 0) {
+        shell.performance.reportThreadWorkDuration(static_cast<ae::i64>(threadCpuNs));
+      }
       if (frameStatus == ae::rhi::SwapchainStatus::Ok ||
           frameStatus == ae::rhi::SwapchainStatus::SuboptimalNeedsRecreate) {
         const auto presentedAt = std::chrono::steady_clock::now();
@@ -936,6 +1175,22 @@ void android_main(android_app *app) {
         context.sceneId = profileSceneId(shell);
         context.contentFingerprint = shell.instancedRenderer.contentFingerprint();
         context.targetFps = shell.frameBudget.renderHz;
+        context.frameBudget = shell.frameBudget;
+        context.adpfAvailable = shell.performance.hintSessionAvailable();
+        context.adpfGpuWorkAvailable =
+            shell.performance.detailedWorkDurationAvailable();
+        context.gameMode = shell.performance.gameMode();
+        context.sustainedPerformanceSupported =
+            shell.performance.sustainedPerformanceSupported();
+        context.sustainedPerformanceEnabled =
+            shell.performance.sustainedPerformanceEnabled();
+        const auto &thermal = shell.thermalMonitor.state();
+        context.thermalApiAvailable = thermal.apiAvailable;
+        context.thermalHeadroomValid = thermal.headroomValid;
+        context.thermalHeadroom = thermal.headroom;
+        context.thermalStatus = thermal.status;
+        context.thermalPressure =
+            ae::renderer::thermalPressureName(thermal.pressure);
         context.gpuIsolation = ae::renderer::gpuCostIsolationName(shell.gpuCostIsolation);
         context.cameraLocked = shell.lockCamera;
         context.cameraMode = shell.cameraRouteReplayActive ? "route" : (shell.lockCamera ? "locked" : "free");
@@ -958,6 +1213,12 @@ void android_main(android_app *app) {
         context.lodGroupCount = shell.instancedRenderer.profileLodGroupCount();
         context.hzbEnabled = shell.instancedRenderer.hzbOcclusionEnabled();
         context.lodEnabled = shell.instancedRenderer.lodSelectionEnabled();
+        context.lodPixelErrorBudget = shell.instancedRenderer.lodPixelErrorBudget();
+        context.coverageLodPixelErrorBudget =
+            shell.instancedRenderer.coverageLodPixelErrorBudget();
+        context.renderScale = shell.instancedRenderer.currentRenderScale();
+        context.renderWidth = shell.instancedRenderer.currentRenderWidth();
+        context.renderHeight = shell.instancedRenderer.currentRenderHeight();
         const auto &visibility = shell.instancedRenderer.visibilityTelemetry();
         context.visibleDrawCount = visibility.visibleDraws;
         context.culledDrawCount = visibility.culledDraws;
@@ -998,6 +1259,7 @@ void android_main(android_app *app) {
   collectRendererInitialization(shell,true);
   shell.characterMotor.shutdown();
   shell.performance.setActive(false, false);
+  shell.thermalMonitor.shutdown();
   shell.performance.shutdown();
   if (shell.shutdownScene != nullptr) shell.shutdownScene();
   __android_log_print(ANDROID_LOG_INFO, LogTag, "Shell nativo encerrado.");
