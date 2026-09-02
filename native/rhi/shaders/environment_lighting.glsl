@@ -38,8 +38,13 @@ highp vec2 environmentUv(highp vec3 direction) {
   return vec2(fract(phi/(2.0*PI)+.5),acos(clamp(direction.y,-1.0,1.0))/PI);
 }
 
+// ENVIRONMENT_PROJECTION: 0 = decide em runtime (legado), 1 = sempre
+// equiretangular, 2 = sempre octaedrico. Ver a declaracao em
+// dirt_road_shading.glsl -- a constante existe para que o ramo nao usado saia
+// do binario em vez de custar registradores em todo fragmento.
 mediump vec3 environmentRadiance(highp vec3 direction,mediump float lod) {
-  if(environment.parameters.w<0.5)
+  if(ENVIRONMENT_PROJECTION==1u ||
+     (ENVIRONMENT_PROJECTION==0u && environment.parameters.w<0.5))
     return textureLod(environmentMap,environmentUv(direction),
                       clamp(lod,0.0,environment.parameters.z)).rgb;
   // Octahedral projection is homogeneous: reflect() already returns a unit

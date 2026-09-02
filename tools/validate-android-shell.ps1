@@ -61,7 +61,7 @@ param(
     # medir os dois juntos como uma coisa so impediria atribuir o custo.
     [switch]$EnableHzbCompute,
     [switch]$EnableHzbGpuCulling,
-    [switch]$EnableDepthOrderedBatches,
+    [switch]$DisableDepthOrderedBatches,
     [ValidateRange(0, 120)]
     [int]$HzbHysteresisFrames = 3,
     [ValidateRange(0, 1000000)]
@@ -200,7 +200,7 @@ $Report = [ordered]@{
         hzbEnabled = [bool]$EnableHzb
         hzbComputeProducerEnabled = [bool]($EnableHzbCompute -or $EnableHzbGpuCulling)
         hzbGpuCullingEnabled = [bool]$EnableHzbGpuCulling
-        depthOrderedBatchesEnabled = [bool]$EnableDepthOrderedBatches
+        depthOrderedBatchesEnabled = -not [bool]$DisableDepthOrderedBatches
         hzbHysteresisFrames = $HzbHysteresisFrames
         hzbMinimumCandidateDraws = $HzbMinimumCandidateDraws
         hzbDepthBias = $HzbDepthBias
@@ -591,8 +591,8 @@ function Start-AetherActivity {
     if ($EnableHzbGpuCulling) {
         $arguments += @('--ez', 'aether.hzb_gpu_culling', 'true')
     }
-    if ($EnableDepthOrderedBatches) {
-        $arguments += @('--ez', 'aether.depth_ordered_batches', 'true')
+    if ($DisableDepthOrderedBatches) {
+        $arguments += @('--ez', 'aether.disable_depth_ordered_batches', 'true')
     }
     if ($EnableHzb -or $EnableHzbGpuCulling) {
         # Histerese, limiar e bias sao do ESTAGIO de oclusao, nao do caminho de

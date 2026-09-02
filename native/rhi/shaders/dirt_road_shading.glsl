@@ -12,6 +12,12 @@ layout(location=6) in mediump float vDither;
 layout(location=0) out vec4 outColor;
 layout(constant_id=0) const uint GPU_COST_ISOLATION=0u;
 layout(constant_id=1) const uint MATERIAL_FEATURE_MASK=0xffffffffu;
+// Projecao da sonda de ambiente resolvida em tempo de compilacao de pipeline.
+// O ramo legado equirect custa atan/acos/fract e, sobretudo, registradores em
+// TODO fragmento enquanto for um uniform -- o driver nao pode provar que ele e
+// morto. Como spec constant ele desaparece do binario do perfil que usa AEEN v3.
+// Zero e "decidir em runtime", preservando o comportamento anterior.
+layout(constant_id=2) const uint ENVIRONMENT_PROJECTION=0u;
 const float PI=3.141592653589793;
 #include "environment_lighting.glsl"
 // LOD cross-fade (see renderer::selectLodLevel): vDither==0 for every draw
@@ -65,7 +71,13 @@ highp float visibility(highp float nv,highp float nl,highp float alpha) {
 mediump vec3 directLight(mediump vec3 n,mediump vec3 v,mediump vec3 l,mediump vec3 radiance,
                          mediump vec3 base,mediump vec3 f0,mediump float metal,
                          mediump float rough) {
-  highp float nv=max(dot(n,v),1e-4),nl=max(dot(n,l),0);mediump vec3 h=normalize(v+l);
+  // O hemisferio oposto contribui exatamente zero: o retorno inteiro e
+  // multiplicado por nl. Sair aqui poupa normalize(v+l), GGX, visibilidade e
+  // Fresnel numa fracao grande dos fragmentos de uma floresta, onde metade das
+  // folhas esta de costas para o sol -- e nao muda um unico valor final.
+  highp float nl=dot(n,l);
+  if(nl<=0.0) return vec3(0.0);
+  highp float nv=max(dot(n,v),1e-4);mediump vec3 h=normalize(v+l);
   highp float nh=max(dot(n,h),0);mediump float lh=max(dot(l,h),0);
   mediump vec3 f=fresnel(f0,lh);highp float alpha=rough*rough;
   mediump float fd90=.5+2*rough*lh*lh;

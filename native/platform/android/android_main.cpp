@@ -925,9 +925,10 @@ void android_main(android_app *app) {
       app->activity, "aether.hzb_gpu_culling");
   if (hzbGpuCulling) shell.instancedRenderer.setHzbComputeEnabled(true);
   shell.instancedRenderer.setHzbGpuCullingEnabled(hzbGpuCulling);
+  // Padrao ligado (ganho medido); a opcao existe para desligar num A/B.
   shell.instancedRenderer.setDepthOrderedBatchesEnabled(
-      ae::platform::android::readBooleanLaunchOption(app->activity,
-                                                     "aether.depth_ordered_batches"));
+      !ae::platform::android::readBooleanLaunchOption(
+          app->activity, "aether.disable_depth_ordered_batches"));
   ae::u32 requestedHysteresisFrames = shell.visibilityBudget.hzbHysteresisFrames;
   if (ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.hzb_hysteresis_frames",
                                                        requestedHysteresisFrames)) {

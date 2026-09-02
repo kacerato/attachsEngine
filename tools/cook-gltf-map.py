@@ -566,6 +566,208 @@ def cook_texture(astcenc, cache, output, name, source, srgb, normal_map, quality
     return width, height, len(levels), coverage_by_mip
 
 
+
+def read_glb(data):
+    """Split a binary glTF container into its JSON and BIN chunks.
+
+    A .glb carries the same glTF the ZIP export carries, but with the buffer
+    and every image inlined instead of sitting next to a scene.gltf. Supporting
+    it is not a convenience: the .glb is frequently the only form of an asset
+    that is actually redistributable, and refusing it would mean the cooker can
+    only ever improve assets whose loose export someone kept.
+    """
+    if len(data) < 12:
+        raise ValueError("GLB shorter than its header")
+    magic, version, total = struct.unpack_from("<III", data, 0)
+    if magic != 0x46546C67:
+        raise ValueError("not a GLB container")
+    if version != 2:
+        raise ValueError(f"unsupported GLB version {version}")
+    if total > len(data):
+        raise ValueError("GLB length field exceeds the file")
+    offset = 12
+    json_chunk = None
+    binary_chunk = b""
+    while offset + 8 <= total:
+        length, kind = struct.unpack_from("<II", data, offset)
+        payload = data[offset + 8:offset + 8 + length]
+        if len(payload) != length:
+            raise ValueError("truncated GLB chunk")
+        if kind == 0x4E4F534A and json_chunk is None:
+            json_chunk = payload
+        elif kind == 0x004E4942 and not binary_chunk:
+            binary_chunk = payload
+        # Chunk payloads are already padded to four bytes by the spec.
+        offset += 8 + length
+    if json_chunk is None:
+        raise ValueError("GLB without a JSON chunk")
+    return json.loads(json_chunk.decode("utf-8")), binary_chunk
+
+
+def buffer_view_bytes(gltf, binary, view_index):
+    view = gltf["bufferViews"][view_index]
+    if view.get("buffer", 0) != 0:
+        raise ValueError("only the first glTF buffer is supported")
+    start = view.get("byteOffset", 0)
+    end = start + view["byteLength"]
+    if end > len(binary):
+        raise ValueError("bufferView out of range")
+    return binary[start:end]
+
+
+def alpha_card_trim_box(alpha, cutoff, uv_minimum, uv_maximum):
+    """Tightest UV box of the card that still contains every covered texel.
+
+    Returns None when nothing can be trimmed -- either the card is already
+    tight, or it is entirely transparent (which is a content bug this function
+    refuses to "fix" by deleting geometry). Erring toward the original box is
+    the safe direction: a card that stays too large only costs fragments.
+    """
+    height, width = alpha.shape
+    if width == 0 or height == 0:
+        return None
+    # Half-open texel span of the card, clamped into the image. UV outside
+    # [0,1] means the card tiles or mirrors; trimming would then move geometry
+    # against a repeat that this function cannot see, so it declines.
+    if uv_minimum[0] < -1e-4 or uv_minimum[1] < -1e-4:
+        return None
+    if uv_maximum[0] > 1.0 + 1e-4 or uv_maximum[1] > 1.0 + 1e-4:
+        return None
+    x0 = max(0, min(width - 1, int(math.floor(uv_minimum[0] * width))))
+    x1 = max(x0 + 1, min(width, int(math.ceil(uv_maximum[0] * width))))
+    y0 = max(0, min(height - 1, int(math.floor(uv_minimum[1] * height))))
+    y1 = max(y0 + 1, min(height, int(math.ceil(uv_maximum[1] * height))))
+    window = alpha[y0:y1, x0:x1]
+    covered = window >= cutoff
+    if not covered.any():
+        return None
+    rows = np.flatnonzero(covered.any(axis=1))
+    columns = np.flatnonzero(covered.any(axis=0))
+    # One texel of guard on each side so bilinear filtering at the new edge
+    # still reads the original transparent neighbour instead of clamping a
+    # covered texel outward, which would fatten the silhouette.
+    left = max(x0 + int(columns[0]) - 1, 0)
+    right = min(x0 + int(columns[-1]) + 2, width)
+    top = max(y0 + int(rows[0]) - 1, 0)
+    bottom = min(y0 + int(rows[-1]) + 2, height)
+    return (left / width, top / height, right / width, bottom / height)
+
+
+def trim_alpha_cards(position, uv0, indices, alpha, cutoff, minimum_gain=0.02):
+    """Shrink alpha-tested quads to the silhouette of their own texture region.
+
+    A leaf card is a rectangle whose texture is mostly transparent. The GPU
+    rasterizes the whole rectangle and the shader discards most of it, so those
+    fragments cost binning, interpolation, a texture fetch and a discard while
+    contributing nothing. Pulling the four corners in to the covered box removes
+    them before rasterization -- the cheapest fragment is the one never
+    generated.
+
+    The map from UV to position is recovered as an AFFINE map per triangle, not
+    as a bilinear patch over the UV bounding box. That distinction is the whole
+    correctness of this function: foliage atlases rotate their cards, so the
+    four corners of a card are generally NOT at the corners of their own UV
+    bounding box, and fitting a bilinear patch there is ill-conditioned -- it
+    reproduces the input exactly (the system is square) while producing control
+    points that explode the moment a corner is moved.
+
+    Three guards keep this conservative, because a wrong trim deletes visible
+    geometry while a refused trim only costs the fragments it already costs:
+
+      * only exact quads (two triangles, four unique vertices);
+      * the affine map has to reproduce the fourth corner, proving the card is
+        planar and consistently parameterized;
+      * a vertex is trimmed at most once, so cards welded to a shared vertex are
+        left alone instead of being dragged by their neighbour.
+
+    Returns (position, uv0, trimmed_quads, examined_quads); the arrays are
+    copies only when something was actually trimmed.
+    """
+    triangles = np.asarray(indices, dtype=np.uint32).reshape(-1, 3)
+    if len(triangles) < 2:
+        return position, uv0, 0, 0
+    examined = 0
+    trimmed = 0
+    out_position = None
+    out_uv = None
+    moved = np.zeros(len(position), dtype=bool)
+    for pair in range(len(triangles) // 2):
+        first = triangles[pair * 2]
+        corners = np.unique(triangles[pair * 2:pair * 2 + 2].reshape(-1))
+        if len(corners) != 4:
+            continue
+        examined += 1
+        if moved[corners].any():
+            continue
+        card_uv = uv0[corners]
+        uv_minimum = card_uv.min(axis=0)
+        uv_maximum = card_uv.max(axis=0)
+        extent = uv_maximum - uv_minimum
+        if extent[0] <= 1e-6 or extent[1] <= 1e-6:
+            continue
+
+        # Affine UV -> position from the first triangle. Its UV basis must be
+        # non-degenerate, otherwise the card has no usable parameterization.
+        origin_uv = uv0[first[0]]
+        basis_uv = np.stack([uv0[first[1]] - origin_uv, uv0[first[2]] - origin_uv]).astype(np.float64)
+        determinant = basis_uv[0, 0] * basis_uv[1, 1] - basis_uv[0, 1] * basis_uv[1, 0]
+        if abs(determinant) < 1e-12 * max(1.0, float(np.abs(basis_uv).max()) ** 2):
+            continue
+        basis_position = np.stack([position[first[1]] - position[first[0]],
+                                   position[first[2]] - position[first[0]]]).astype(np.float64)
+        try:
+            jacobian = np.linalg.solve(basis_uv, basis_position)  # 2x3: d(position)/d(uv)
+        except np.linalg.LinAlgError:
+            continue
+
+        def evaluate(uv):
+            return position[first[0]].astype(np.float64) + (np.asarray(uv, dtype=np.float64) -
+                                                            origin_uv.astype(np.float64)) @ jacobian
+
+        # The map came from one triangle; the other corners prove the card is
+        # planar and shares the parameterization.
+        scale = max(1.0, float(np.abs(position[corners]).max()))
+        if float(np.abs(evaluate(card_uv) - position[corners].astype(np.float64)).max()) > 1e-3 * scale:
+            continue
+
+        box = alpha_card_trim_box(alpha, cutoff, uv_minimum, uv_maximum)
+        if box is None:
+            continue
+        new_minimum = np.array([max(box[0], float(uv_minimum[0])),
+                                max(box[1], float(uv_minimum[1]))], dtype=np.float32)
+        new_maximum = np.array([min(box[2], float(uv_maximum[0])),
+                                min(box[3], float(uv_maximum[1]))], dtype=np.float32)
+        new_extent = new_maximum - new_minimum
+        if new_extent[0] <= 1e-6 or new_extent[1] <= 1e-6:
+            continue
+        gain = 1.0 - float(new_extent[0] * new_extent[1]) / float(extent[0] * extent[1])
+        if gain < minimum_gain:
+            continue
+
+        # Each corner slides to the trimmed edge on the axes where it sits on
+        # the original edge. A corner that is interior on an axis (a rotated
+        # card touching the box only at one point) keeps its coordinate there,
+        # so the quad never turns inside out.
+        target = card_uv.astype(np.float32).copy()
+        for axis in range(2):
+            on_minimum = card_uv[:, axis] <= uv_minimum[axis] + extent[axis] * 1e-3
+            on_maximum = card_uv[:, axis] >= uv_maximum[axis] - extent[axis] * 1e-3
+            target[on_minimum, axis] = new_minimum[axis]
+            target[on_maximum, axis] = new_maximum[axis]
+        if np.allclose(target, card_uv, atol=1e-7):
+            continue
+
+        if out_position is None:
+            out_position = position.copy()
+            out_uv = uv0.copy()
+        out_position[corners] = evaluate(target).astype(np.float32)
+        out_uv[corners] = target
+        moved[corners] = True
+        trimmed += 1
+    if out_position is None:
+        return position, uv0, 0, examined
+    return out_position, out_uv, trimmed, examined
+
 def accessor(gltf, binary, index):
     item = gltf["accessors"][index]
     if "sparse" in item:

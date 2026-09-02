@@ -426,7 +426,11 @@ private:
   std::vector<IndirectBatch> indirectSolidBatches_;
   std::vector<IndirectBatch> indirectCoverageBatches_;
   bool useMultiDrawIndirect_ = false;
-  bool depthOrderedBatches_ = false;
+  // Ligado por padrao desde o A/B intercalado de 02/09: com PCF de hardware, a
+  // ordem preservada vale -2,14 ms na pose do hotspot (controles reproduzindo
+  // em 0,049 e 0,062 ms). aether.disable_depth_ordered_batches desliga para
+  // A/B; nao existe caminho de qualidade dependendo disto.
+  bool depthOrderedBatches_ = true;
   struct MaterialParameters { float roughness=1, metallic=1, normalScale=1; };
   MaterialParameters materialParameters_;
   int lastExtractionStatus_ = 0;

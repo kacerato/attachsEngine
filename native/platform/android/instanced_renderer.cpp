@@ -356,18 +356,34 @@ bool InstancedRenderer::createPipeline() {
   // constant lets the driver eliminate the isolated shader path, avoiding
   // register pressure and instruction scheduling from a runtime uniform
   // branch. Normal rendering specializes to Full (zero).
-  struct MaterialSpecialization final { u32 isolation; u32 featureMask; };
+  struct MaterialSpecialization final {
+    u32 isolation;
+    u32 featureMask;
+    // 0 = decide em runtime, 1 = equiretangular, 2 = octaedrica. Resolver a
+    // projecao aqui apaga o ramo nao usado do binario: enquanto era um uniform,
+    // o atan/acos/fract do caminho legado custava registradores em TODO
+    // fragmento, mesmo com o pacote octaedrico carregado. Uma spec constant
+    // deixa o compilador do driver eliminar o ramo morto (ver o guia de boas
+    // praticas do Adreno sobre GPR e ocupacao de wave).
+    u32 environmentProjection;
+  };
   MaterialSpecialization materialSpecialization{
-      static_cast<u32>(gpuCostIsolation_), renderer::DynamicMaterialFeatureMask};
-  VkSpecializationMapEntry specializationEntries[2]{};
+      static_cast<u32>(gpuCostIsolation_), renderer::DynamicMaterialFeatureMask,
+      dirtRoadPreview_ && dirtRoadResources_.environmentMapDescription().specularProjection ==
+              renderer::EnvironmentProjection::Octahedral
+          ? 2u : 1u};
+  VkSpecializationMapEntry specializationEntries[3]{};
   specializationEntries[0].constantID = 0;
   specializationEntries[0].offset = offsetof(MaterialSpecialization, isolation);
   specializationEntries[0].size = sizeof(u32);
   specializationEntries[1].constantID = 1;
   specializationEntries[1].offset = offsetof(MaterialSpecialization, featureMask);
   specializationEntries[1].size = sizeof(u32);
+  specializationEntries[2].constantID = 2;
+  specializationEntries[2].offset = offsetof(MaterialSpecialization, environmentProjection);
+  specializationEntries[2].size = sizeof(u32);
   VkSpecializationInfo gpuIsolationInfo{};
-  gpuIsolationInfo.mapEntryCount = 2;
+  gpuIsolationInfo.mapEntryCount = 3;
   gpuIsolationInfo.pMapEntries = specializationEntries;
   gpuIsolationInfo.dataSize = sizeof(materialSpecialization);
   gpuIsolationInfo.pData = &materialSpecialization;
@@ -3475,6 +3491,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
 
     std::sort(visibleSolidDrawOrder_.begin(), visibleSolidDrawOrder_.end(), frontToBack);
     std::sort(visibleCoverageDrawOrder_.begin(), visibleCoverageDrawOrder_.end(), frontToBack);
+
     auto buildIndirectBatches = [&](const std::vector<u32> &visible,
                                     std::vector<IndirectBatch> &batches) {
       batches.clear();
