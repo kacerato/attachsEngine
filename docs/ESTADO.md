@@ -573,12 +573,33 @@ e reproduzível por `-All -Check`. O contrato de bindings do kernel é refletido
 binário num teste de host, de modo que uma divergência entre shader e declaração
 falha no build e não no aparelho.
 
-**Nada foi medido em hardware.** Não havia ADB nesta sessão. Nenhum ganho é
-declarado: o estágio permanece opt-in por `aether.hzb_gpu_culling` (que implica
-`aether.hzb_compute`) até existir A/B físico intercalado com gate de imagem na
-rota `forest-walk-v1`. Enquanto isso, o custo de 1,07 ms do produtor continua
-sem contrapartida medida, e desligar `aether.hzb_compute` continua sendo a
-escolha correta para qualquer medição que não seja a validação desta fatia.
+### Medido no aparelho no mesmo dia — e rejeitado
+
+A/B intercalado no Xiaomi SM8735/Adreno, Release assinado, pose fixa do hotspot,
+**1280×2772 nativo**, 30 s por rodada, `Thermal Status: 0`, com os dois controles
+reproduzindo em **0,031 ms** de tempo de frame. Tabela completa em
+`PROFILING-ANDROID.md`.
+
+**O kernel funciona:** `gpu_cull_tested=244 gpu_cull_occluded=28`, com
+`screenshot idêntica=True` contra o controle. A oclusão em compute remove draws
+reais sem mudar um pixel.
+
+**E ainda assim não paga.** O produtor custa **+0,99 ms** de frame e o consumidor
+não devolve isso: com culling ligado o frame fica **+1,28 ms**. Ocluir 28 de 244
+draws — os pequenos e distantes — não move o passe principal o bastante para
+pagar a cadeia de redução. Mesmo veredito da cadência adaptativa e do backface
+culling: implementado, medido, não aceito. Continua opt-in e desligado por
+padrão; o código fica porque a fatia seguinte (produtor mais barato, ou
+candidatos maiores via HLOD) muda só um dos dois lados da conta.
+
+**O resultado que importa veio junto.** Dois pontos de resolução e as variantes
+de isolamento decompõem o passe opaco nesta pose: **custo fixo ≈ 4,8 ms**
+(geometria/binning) e **custo por pixel ≈ 9,1 ms**, dos quais **5,1 ms** são
+material completo menos `base-color` (2,1 ms só de IBL). Como 120 Hz exige
+8,33 ms de frame e o opaco **só com base color** já custa 8,811 ms, fica provado
+por aritmética que **nenhum ajuste de shading leva esta pose a 120 Hz na
+resolução nativa**. O próximo alvo tem de ser quantas vezes cada pixel é
+sombreado — overdraw e shading por fragmento — e não o custo de cada amostra.
 
 ## Resumo
 

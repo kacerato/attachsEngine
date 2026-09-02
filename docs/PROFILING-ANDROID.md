@@ -697,3 +697,85 @@ CPU média 2,260 ms/máximo 4,059 ms. Não incluiu soak nem valida persistência
 de potência em hardware; essa parte permanece coberta pelos testes do coletor.
 Ao terminar, o app foi novamente iniciado no modo normal, sem extras de profiling.
 O teste formal de 30 minutos permanece aberto por decisão do usuário; M0 não foi fechado.
+
+## Oclusão GPU-driven e decomposição do frame no hotspot — 02/09/2026
+
+Primeiro A/B físico do consumidor C2. Xiaomi `25053PC47G`/SM8735/Adreno,
+Android 16, Release assinado (`build/gpu-cull-c2-release.apk`, SHA-256
+`897E460DEE346396A5E906E85810109E4807FD5D9EACACBC5536C955024FA288`), cena
+`dirt-road` na pose fixa do hotspot `-15.71,145.27,-25.72,2.75,0.11`,
+**1280×2772 nativo, escala 1,00**, alvo 120 Hz, 30 s por rodada,
+`Thermal Status: 0` do início ao fim.
+
+| Variante | frame ms | opaque ms | post ms | hzb ms | culling ms | presents/s |
+|---|---:|---:|---:|---:|---:|---:|
+| controle A | 15,270 | 14,014 | 1,252 | — | — | 56,95 |
+| C1+C2 (culling GPU) | 16,530 | 13,449 | 1,482 | 1,505 | 0,090 | 54,65 |
+| C1 só (produtor) | 16,240 | 13,238 | 1,439 | 1,560 | — | 52,51 |
+| controle B | 15,239 | 13,927 | 1,308 | — | — | 59,62 |
+| `no-ibl` | 13,138 | 11,859 | 1,274 | — | — | 76,02 |
+| `base-color` | 10,839 | 8,811 | 2,020 | — | — | 90,03 |
+| escala 0,75 | 11,335 | 9,932 | 1,397 | — | — | 70,93 |
+| `post=none` (tonemap inline) | 21,222 | 21,207 | 0,007 | — | — | 42,85 |
+
+Os dois controles reproduziram em **0,031 ms** de tempo de frame (15,270 e
+15,239). O piso de ruído desta bancada é ~0,4 ms; a bancada estava
+excepcionalmente estável nesta sessão, e todo efeito abaixo de 0,4 ms continua
+não sendo distinguível.
+
+**O kernel funciona.** `gpu_cull=ativo gpu_cull_tested=244 gpu_cull_occluded=28
+gpu_cull_visible=216`, com `screenshot idêntica=True` contra o controle: a
+oclusão em compute remove draws reais sem mudar a imagem.
+
+**E mesmo assim é rejeitado nesta pose.** O produtor custa **+0,99 ms** de frame
+(16,240 contra 15,255 de média dos controles) e o consumidor não devolve isso:
+com culling ligado o frame é **+1,28 ms**, não menos. Ocluir 28 de 244 draws —
+os pequenos e distantes — não move o passe principal o bastante para pagar a
+cadeia de redução. É o mesmo veredito que a cadência adaptativa e o backface
+culling por semântica já receberam: implementado, medido, não aceito. O estágio
+permanece opt-in e desligado por padrão; o código fica porque a fatia seguinte
+(produtor mais barato, ou candidatos maiores via HLOD) muda só um dos dois lados
+da conta.
+
+**A decomposição do opaco é o resultado que importa.** Com dois pontos de
+resolução na mesma pose (13,927 ms a 1,00 e 9,932 ms a 0,75, ou seja 56,25% dos
+pixels), o passe separa em:
+
+- **custo fixo ≈ 4,8 ms** — geometria, binning e o que não escala com pixel;
+- **custo por pixel ≈ 9,1 ms** a 1280×2772.
+
+E as variantes de isolamento dividem o termo por pixel: material completo menos
+`base-color` = **5,1 ms** (dos quais IBL responde por 2,1 ms), sobrando ~4,0 ms
+de base color, depth e overdraw.
+
+Isso fecha a pergunta de viabilidade com aritmética, não com opinião: 120 Hz
+exige 8,33 ms de frame; nesta pose o opaco **só com base color** já custa
+8,811 ms, com pós ainda por cima. **Nenhum ajuste de shading leva esta pose a
+120 Hz na resolução nativa.** O caminho tem de reduzir fragmentos sombreados
+(overdraw) ou o número de vezes que cada pixel é sombreado — não o custo de cada
+amostra.
+
+**O passe de pós dedicado não é custo, é economia.** Trocá-lo por tonemap inline
+(`-QualityPost none`, desenhando direto na imagem do swapchain) piorou o frame de
+15,24 para **21,22 ms**. A hipótese de trabalho é a pré-rotação da surface: com
+alvo offscreen o tiler trabalha na orientação nativa e o pós resolve a rotação
+uma vez. Ainda **não** está provado — exige captura AGI antes de virar regra —
+mas remover o pós "para economizar" está medido como errado neste aparelho.
+
+Capabilities relevantes deste device, do próprio log: `vrs=0` e `memoryless=0`.
+VRS não é opção aqui, e `LAZILY_ALLOCATED` nunca é concedido — a política P1 de
+depth memoryless continua correta, mas não tem efeito neste hardware.
+
+Reprodução:
+
+```powershell
+.\tools\validate-android-shell.ps1 -ApkPath build/gpu-cull-c2-release.apk -Scene dirt-road `
+  -CameraPose "-15.71,145.27,-25.72,2.75,0.11" -ProfileSeconds 30 -LifecycleCycles 0 `
+  -TargetFps 120 -EnableHzbGpuCulling -AllowScreenshotDifference -PreserveAppData `
+  -OutputDirectory build/android-validation/c2-pose-gpucull
+```
+
+`-EnableHzbCompute` liga só o produtor e `-EnableHzbGpuCulling` liga produtor e
+consumidor; os dois viajam em `configuration.hzbComputeProducerEnabled` e
+`configuration.hzbGpuCullingEnabled` do relatório, para que nenhuma rodada possa
+ser reinterpretada depois como se fosse a outra.

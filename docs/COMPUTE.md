@@ -145,18 +145,27 @@ um comando com zero instâncias.
   marcador de captura e timestamp. Sem ela o dispatch cairia dentro do balde do
   passe opaco e o custo do mecanismo de visibilidade ficaria invisível de novo.
 
-Estado: compila em Android Debug/Release, SPIR-V validado e reproduzível,
-contrato de bindings refletido em teste de host, 310/310 nativos, 48/48
-FrameProfile e 46/46 Python. **Nada foi medido em hardware** — a fatia foi
-escrita sem ADB na sessão. Continua opt-in por `aether.hzb_gpu_culling` (que
-implica `aether.hzb_compute`) até existir A/B físico com gate de imagem.
+Estado: **medido e rejeitado na pose do hotspot.** O kernel funciona
+(`gpu_cull_tested=244 gpu_cull_occluded=28`, `screenshot idêntica=True`), mas o
+produtor custa +0,99 ms de frame e o consumidor não devolve isso — com culling
+ligado o frame fica +1,28 ms. Ocluir 28 draws pequenos e distantes não move o
+passe principal o bastante para pagar a cadeia de redução. Continua opt-in e
+desligado por padrão; o código fica porque a fatia seguinte muda só um dos dois
+lados da conta (produtor mais barato, ou candidatos maiores via HLOD/impostors).
+Tabela completa do A/B em `PROFILING-ANDROID.md`.
 
 ## Ordem dos próximos consumidores
 
 1. **C0 — fundação + ASTC técnico:** entregue.
 2. **C1 — pirâmide em compute:** entregue e medida (1,07 ms, sem consumidor).
-3. **C2 — culling GPU-driven:** implementado; falta A/B físico, gate de imagem
-   na rota e decisão sobre compactação de comandos.
+3. **C2 — culling GPU-driven:** implementado e medido; rejeitado por saldo
+   negativo na pose do hotspot. Retomar exige produtor mais barato ou candidatos
+   maiores, não ajuste de parâmetro.
+4. **Próximo alvo medido:** o passe opaco tem ~4,8 ms fixos e ~9,1 ms por pixel
+   a 1280×2772, dos quais 5,1 ms são material acima de `base-color`. O que paga
+   é reduzir **quantas vezes cada pixel é sombreado** — overdraw de folhagem e
+   shading por fragmento —, não o custo por amostra. É aí que o próximo
+   consumidor compute (shading deferido/visibility buffer) tem base medida.
 4. **C3 — Forward+:** froxels, light lists e limites por perfil; depende do
    grafo e de buffers storage confiáveis, não de C2.
 5. **C4 — compute skinning:** pose/skin buffers e fallback vertex shader.

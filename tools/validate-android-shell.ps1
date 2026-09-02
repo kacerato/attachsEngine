@@ -56,6 +56,11 @@ param(
     [string]$CameraRouteMode = 'Off',
     [string]$CameraRoutePath = '/data/user/0/dev.aether.editor/files/frame-profile.aeroute',
     [switch]$EnableHzb,
+    # Produtor GPU da piramide (ADR-016 C1) e seu consumidor (C2). Sao eixos
+    # separados de proposito: C1 sozinho custa tempo de GPU e nao corta nada, e
+    # medir os dois juntos como uma coisa so impediria atribuir o custo.
+    [switch]$EnableHzbCompute,
+    [switch]$EnableHzbGpuCulling,
     [ValidateRange(0, 120)]
     [int]$HzbHysteresisFrames = 3,
     [ValidateRange(0, 1000000)]
@@ -192,6 +197,8 @@ $Report = [ordered]@{
         cameraRouteMode = $CameraRouteMode
         cameraRoutePath = $CameraRoutePath
         hzbEnabled = [bool]$EnableHzb
+        hzbComputeProducerEnabled = [bool]($EnableHzbCompute -or $EnableHzbGpuCulling)
+        hzbGpuCullingEnabled = [bool]$EnableHzbGpuCulling
         hzbHysteresisFrames = $HzbHysteresisFrames
         hzbMinimumCandidateDraws = $HzbMinimumCandidateDraws
         hzbDepthBias = $HzbDepthBias
@@ -576,13 +583,23 @@ function Start-AetherActivity {
         $arguments += @('--es', 'aether.camera_route_path', $CameraRoutePath)
 
     }
-    if ($EnableHzb) {
-        $arguments += @('--ez', 'aether.hzb_occlusion', 'true')
+    if ($EnableHzbCompute -or $EnableHzbGpuCulling) {
+        $arguments += @('--ez', 'aether.hzb_compute', 'true')
+    }
+    if ($EnableHzbGpuCulling) {
+        $arguments += @('--ez', 'aether.hzb_gpu_culling', 'true')
+    }
+    if ($EnableHzb -or $EnableHzbGpuCulling) {
+        # Histerese, limiar e bias sao do ESTAGIO de oclusao, nao do caminho de
+        # CPU: o kernel le exatamente os mesmos tres numeros.
         $arguments += @('--ei', 'aether.hzb_hysteresis_frames', [string]$HzbHysteresisFrames)
         $arguments += @('--ei', 'aether.hzb_minimum_candidate_draws',
             [string]$HzbMinimumCandidateDraws)
         $arguments += @('--ef', 'aether.hzb_depth_bias',
             $HzbDepthBias.ToString('R', [Globalization.CultureInfo]::InvariantCulture))
+    }
+    if ($EnableHzb) {
+        $arguments += @('--ez', 'aether.hzb_occlusion', 'true')
     }
     if ($EnableLod) {
         $arguments += @('--ez', 'aether.lod_selection', 'true')
