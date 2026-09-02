@@ -458,15 +458,48 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
   policy.geometry.materialShaderVariants =
       enabledOverride(settings.materialShaderVariants, point.materialShaderVariants);
   policy.resolutionScale = std::clamp(resolutionScale, 0.5f, 1.0f);
+  // --- cadência alta: o preset foi autorado para 60 Hz ------------------------
+  //
+  // Os pontos de preset acima descrevem o que o perfil sustenta em 60 Hz. Pedir
+  // 120 Hz corta o orçamento pela metade sem mudar uma linha do preset, e o
+  // resultado medido no perfil B é o app perder a cadência em silêncio: a pose
+  // do hotspot da floresta mede 84,7 FPS em escala nativa e 97,6 FPS com o piso
+  // de 0,58 que o preset traz. Com o piso em 0,50 -- o limite do controlador --
+  // a mesma pose mede 111,1 FPS. A folga não estava faltando, estava proibida
+  // por um número autorado para outra cadência.
+  //
+  // Então acima de 60 Hz a resolução dinâmica deixa de ser opcional e o piso é
+  // interpolado entre o valor do preset (em 60 Hz) e o limite do controlador
+  // (em 120 Hz). Continua sendo política, não heurística de runtime: o autor que
+  // define os campos explicitamente continua mandando, e o motivo entra em
+  // `clamps` para aparecer no relatório de perfil em vez de virar mágica.
+  const bool highCadence = policy.frame.renderHz > 60;
+  const bool dynamicResolutionByCadence =
+      highCadence && settings.dynamicResolution == FeatureOverride::Inherit;
   policy.dynamicResolution.enabled =
-      enabledOverride(settings.dynamicResolution, point.dynamicResolution);
+      enabledOverride(settings.dynamicResolution, point.dynamicResolution || highCadence);
   policy.dynamicResolution.maximumScale = policy.resolutionScale;
-  const float requestedMinimumScale =
+  float requestedMinimumScale =
       std::isfinite(settings.dynamicResolutionMinimumScale) &&
               settings.dynamicResolutionMinimumScale > 0.0f
           ? settings.dynamicResolutionMinimumScale : point.dynamicResolutionMinimumScale;
-  policy.dynamicResolution.minimumScale =
-      std::clamp(requestedMinimumScale, 0.5f, policy.dynamicResolution.maximumScale);
+  bool minimumScaleByCadence = false;
+  if (highCadence && !(std::isfinite(settings.dynamicResolutionMinimumScale) &&
+                       settings.dynamicResolutionMinimumScale > 0.0f)) {
+    // 60 Hz mantém o piso do preset; 120 Hz chega ao limite do controlador.
+    // Entre os dois, interpolação linear na cadência -- 90 Hz fica no meio.
+    const float cadenceRatio =
+        std::clamp((static_cast<float>(policy.frame.renderHz) - 60.0f) / 60.0f, 0.0f, 1.0f);
+    const float cadenceMinimumScale =
+        requestedMinimumScale + (DynamicResolutionFloor - requestedMinimumScale) * cadenceRatio;
+    minimumScaleByCadence = cadenceMinimumScale < requestedMinimumScale - 1.0e-4f;
+    requestedMinimumScale = cadenceMinimumScale;
+  }
+  policy.dynamicResolution.minimumScale = std::clamp(
+      requestedMinimumScale, DynamicResolutionFloor, policy.dynamicResolution.maximumScale);
+  if (dynamicResolutionByCadence && policy.dynamicResolution.enabled && !point.dynamicResolution)
+    note("dynamicResolution.enabled", PolicyClamp::Budget);
+  if (minimumScaleByCadence) note("dynamicResolution.minimumScale", PolicyClamp::Budget);
   if (std::isfinite(settings.dynamicResolutionDecreaseStep) &&
       settings.dynamicResolutionDecreaseStep > 0.0f)
     policy.dynamicResolution.decreaseStep =

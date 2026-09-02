@@ -8,7 +8,7 @@ namespace ae::renderer {
 void DynamicResolutionController::reset(const DynamicResolutionSettings &settings,
                                         float targetGpuMilliseconds) {
   settings_ = settings;
-  settings_.minimumScale = std::clamp(settings_.minimumScale, 0.5f, 1.0f);
+  settings_.minimumScale = std::clamp(settings_.minimumScale, DynamicResolutionFloor, 1.0f);
   settings_.maximumScale = std::clamp(settings_.maximumScale, settings_.minimumScale, 1.0f);
   settings_.decreaseStep = std::clamp(settings_.decreaseStep, 0.01f, 0.25f);
   settings_.increaseStep = std::clamp(settings_.increaseStep, 0.005f, 0.25f);
@@ -63,7 +63,7 @@ u32 scaledRenderExtent(u32 fullExtent, float scale) {
   if (!std::isfinite(scale) || scale <= 0.0f) return fullExtent;
   if (scale >= 0.999f) return fullExtent;
   const u32 raw = std::max(1u, static_cast<u32>(static_cast<float>(fullExtent) *
-                                                std::clamp(scale, 0.5f, 1.0f)));
+                                                std::clamp(scale, DynamicResolutionFloor, 1.0f)));
   if (raw < 8u) return raw;
   return std::max(8u, raw & ~7u);
 }

@@ -4,6 +4,13 @@
 
 namespace ae::renderer {
 
+// Piso duro da escala interna, e o único lugar onde esse número existe: o
+// controlador, o cálculo de extensão e a política de qualidade precisam
+// concordar, e antes disso o 0,5 estava escrito três vezes. Abaixo disto um
+// pixel interno cobre mais de quatro pixels de tela e o upscale deixa de ser
+// uma troca de qualidade por cadência -- vira borrão.
+inline constexpr float DynamicResolutionFloor = 0.5f;
+
 // Política resolvida por projeto/dispositivo. O controlador trabalha somente
 // com tempo de GPU: acquire, compositor e pacing não podem formar um laço de
 // realimentação com a resolução interna.

@@ -199,10 +199,20 @@ AE_TEST(policy_perfil_b_tem_budget_de_sombra_mobile_sem_limitar_overrides) {
   AE_EXPECT_TRUE(automatic.shadows.staticCasterCache, "perfil B cacheia casters estaticos");
   AE_EXPECT_EQ(automatic.shadows.cacheGuardBandRatio, 1.08f,
                "margem do cache e um budget independente");
-  AE_EXPECT_TRUE(!automatic.dynamicResolution.enabled,
-                 "perfil B preserva resolucao nativa por default");
-  AE_EXPECT_EQ(automatic.dynamicResolution.minimumScale, 0.58f,
+  // `strongDevice()` declara painel de 120 Hz, e o ponto do preset B foi
+  // autorado para 60. A cadencia pedida e que decide: em 60 Hz o perfil B
+  // preserva a resolucao nativa e o piso do preset; em 120 Hz nao cabe, e a
+  // regra de cadencia alta assume (ver os testes policy_120hz_* no fim do
+  // arquivo). Fixar o caso de 60 Hz aqui mantem a asercao original honesta.
+  auto sixtyHz = capabilities;
+  sixtyHz.displayHz = 60.0f;
+  const auto atSixty = resolveRenderingPolicy({}, sixtyHz, ThermalPressure::None);
+  AE_EXPECT_TRUE(!atSixty.dynamicResolution.enabled,
+                 "perfil B preserva resolucao nativa por default em 60 Hz");
+  AE_EXPECT_EQ(atSixty.dynamicResolution.minimumScale, 0.58f,
                "piso dinamico continua configuravel");
+  AE_EXPECT_TRUE(automatic.dynamicResolution.enabled,
+                 "em 120 Hz o mesmo perfil precisa da escala interna variavel");
   AE_EXPECT_EQ(automatic.post.sharpen, 0.0f,
                "resolucao dinamica nao liga sharpen sem decisao autoral");
 
@@ -366,4 +376,82 @@ AE_TEST(material_distance_invalida_falha_para_qualidade_completa) {
                  "bounds nao finito falha conservadoramente");
   AE_EXPECT_TRUE(!boundsEntirelyPastDistance(camera, center, -1.0f, 60.0f),
                  "raio invalido falha conservadoramente");
+}
+
+// --- cadência alta -----------------------------------------------------------
+//
+// Os pontos de preset descrevem o que cada perfil sustenta em 60 Hz. Pedir
+// 120 Hz corta o orçamento pela metade sem mudar o preset, e no perfil B isso
+// media 84,7 FPS em escala nativa contra 111,1 FPS com o piso da escala interna
+// em 0,50 (docs/ORCAMENTO-120HZ.md §9). Estes testes protegem a regra que
+// converte o pedido de cadência em configuração, e o limite dela.
+
+namespace {
+RenderingCapabilities midDevice(float displayHz) {
+  RenderingCapabilities capabilities{};
+  capabilities.profile = rhi::DeviceProfile::B;
+  capabilities.maximumImage2DSize = 8192;
+  capabilities.maximumImageArrayLayers = 256;
+  capabilities.supportsDepthSampling = true;
+  capabilities.maximumSamplerAnisotropy = 16.0f;
+  capabilities.displayHz = displayHz;
+  return capabilities;
+}
+}
+
+AE_TEST(policy_120hz_liga_resolucao_dinamica_que_o_preset_de_60hz_deixava_desligada) {
+  const auto sessenta = resolveRenderingPolicy({}, midDevice(60.0f), ThermalPressure::None);
+  AE_EXPECT_EQ(sessenta.frame.renderHz, 60u, "60 Hz de painel resolve 60 Hz");
+  AE_EXPECT_TRUE(!sessenta.dynamicResolution.enabled,
+                 "em 60 Hz o perfil B mantem a escala nativa, como o preset pede");
+
+  const auto centoEVinte = resolveRenderingPolicy({}, midDevice(120.0f), ThermalPressure::None);
+  AE_EXPECT_EQ(centoEVinte.frame.renderHz, 120u, "120 Hz de painel resolve 120 Hz");
+  AE_EXPECT_TRUE(centoEVinte.dynamicResolution.enabled,
+                 "120 Hz nao cabe no preset de 60 Hz sem resolucao dinamica");
+  AE_EXPECT_TRUE(hasClamp(centoEVinte, "dynamicResolution.enabled", PolicyClamp::Budget),
+                 "a mudanca aparece no relatorio de perfil, com motivo");
+  AE_EXPECT_TRUE(centoEVinte.post.dedicatedPass,
+                 "escala interna variavel exige o passe de upscale");
+}
+
+AE_TEST(policy_piso_da_escala_interna_acompanha_a_cadencia_ate_o_limite_do_controlador) {
+  const auto noventa = resolveRenderingPolicy({}, midDevice(90.0f), ThermalPressure::None);
+  const auto centoEVinte = resolveRenderingPolicy({}, midDevice(120.0f), ThermalPressure::None);
+  AE_EXPECT_EQ(noventa.frame.renderHz, 90u, "90 Hz resolve 90 Hz");
+  // Preset B tem piso 0,58 em 60 Hz; 90 Hz fica na metade do caminho ate 0,50.
+  AE_EXPECT_TRUE(noventa.dynamicResolution.minimumScale > 0.53f &&
+                     noventa.dynamicResolution.minimumScale < 0.55f,
+                 "90 Hz interpola entre o piso do preset e o limite do controlador");
+  AE_EXPECT_TRUE(centoEVinte.dynamicResolution.minimumScale <= DynamicResolutionFloor + 1.0e-4f,
+                 "120 Hz chega ao limite do controlador");
+  AE_EXPECT_TRUE(centoEVinte.dynamicResolution.minimumScale >= DynamicResolutionFloor,
+                 "e nunca passa dele: abaixo de 0,50 o upscale vira borrao");
+  AE_EXPECT_TRUE(hasClamp(centoEVinte, "dynamicResolution.minimumScale", PolicyClamp::Budget),
+                 "baixar o piso e degradacao registrada, nao efeito colateral");
+}
+
+AE_TEST(policy_cadencia_alta_nao_atropela_a_escolha_explicita_do_autor) {
+  ProjectRenderingSettings settings{};
+  settings.dynamicResolution = FeatureOverride::Disabled;
+  settings.dynamicResolutionMinimumScale = 0.9f;
+  const auto policy = resolveRenderingPolicy(settings, midDevice(120.0f), ThermalPressure::None);
+  AE_EXPECT_TRUE(!policy.dynamicResolution.enabled,
+                 "quem desliga explicitamente continua desligado em 120 Hz");
+  AE_EXPECT_TRUE(policy.dynamicResolution.minimumScale > 0.89f &&
+                     policy.dynamicResolution.minimumScale < 0.91f,
+                 "piso explicito do autor nao e reduzido pela cadencia");
+  AE_EXPECT_TRUE(!hasClamp(policy, "dynamicResolution.minimumScale", PolicyClamp::Budget),
+                 "sem mudanca, sem registro de degradacao");
+}
+
+AE_TEST(policy_perfil_que_ja_pede_resolucao_dinamica_nao_registra_clamp_por_cadencia) {
+  // O perfil C ja liga resolucao dinamica no proprio preset: em 120 Hz o piso
+  // desce, mas ligar nao e uma degradacao nova e nao pode aparecer como tal.
+  auto capabilities = midDevice(120.0f);
+  capabilities.profile = rhi::DeviceProfile::C;
+  const auto policy = resolveRenderingPolicy({}, capabilities, ThermalPressure::None);
+  AE_EXPECT_TRUE(policy.dynamicResolution.enabled, "perfil C ja usa resolucao dinamica");
+  AE_EXPECT_TRUE(!hasClamp(policy, "dynamicResolution.enabled", PolicyClamp::Budget),
+                 "nao registra como degradacao o que o preset ja pedia");
 }
