@@ -123,6 +123,19 @@ AE_TEST(Map_package_rejects_invalid_lod_contract_fields) {
       "finest LOD must have zero geometric error");
 }
 
+AE_TEST(Map_package_accepts_the_baked_impostor_level_above_the_cooker_levels) {
+  // O cooker gera tres niveis de simplificacao; o quarto e o impostor que
+  // tools/bake-foliage-impostors.py emenda depois. Sem este caso, subir
+  // MapMaximumLodLevels ficaria coberto so pelo teste de rejeicao acima, que
+  // passa igual se o limite estiver alto demais.
+  MapPackageView view;
+  AE_EXPECT_TRUE(decodeMapPackage(
+      packageFixture(MapPackageVersion, MapVertexStride, MapMaximumLodLevels - 1, 16.0f, 0), view),
+      "coarsest legal level decodes");
+  AE_EXPECT_EQ(view.draws[0].lodLevel, MapMaximumLodLevels - 1, "impostor level round-trips");
+  AE_EXPECT_TRUE(view.draws[0].geometricError == 16.0f, "impostor geometric error round-trips");
+}
+
 AE_TEST(Map_package_keeps_legacy_v1_readable_and_rejects_mixed_layouts) {
   MapPackageView view;
   auto legacy = packageFixture(1, MapVertexStrideV1);

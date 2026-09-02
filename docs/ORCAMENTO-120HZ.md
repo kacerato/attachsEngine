@@ -82,6 +82,13 @@ GPU rasterizando menos.
 
 Memória unificada; não há VRAM separada neste SoC.
 
+Desde o FrameProfile schema 7 essa afirmação deixa de depender de uma leitura
+pontual do log: cada janela registra RSS/RAM disponível e o heap Vulkan como
+memória unificada ou dedicada, com budget/uso do driver quando
+`VK_EXT_memory_budget` existe e uso/pico/limite da engine por classe sempre.
+Isso permite verificar crescimento e pressão ao longo da rota/soak; os 173 MiB
+abaixo continuam sendo a medição histórica anterior a esse contrato.
+
 | Categoria | MiB | Origem |
 |---|---:|---|
 | Texturas do mapa residentes | 112,6 | 146 imagens, ASTC 6×6 com cadeias completas de mip |
@@ -150,16 +157,91 @@ O runner precisa gravar GameTurbo, Game Mode e estado de gravação de tela como
 contexto e recusar a janela quando divergirem — hoje ele produz números que
 parecem válidos.
 
-## 8. Caminho restante até 115–120 de média
+## 8. Impostores de folhagem — implementados e medidos (02/09/2026)
 
-Faltam 1,83 ms nesta pose. Em ordem de valor esperado:
+O item 1 da lista anterior saiu do papel: `tools/bake-foliage-impostors.py`
+rasteriza offline cada grupo de LOD alpha-tested num tile e o emenda no AEMAP v3
+como o nível mais grosseiro do grupo. `MapMaximumLodLevels` subiu de 3 para 4
+(três níveis do cooker mais o impostor) e `dirt_road.vert` gira posição, normal e
+tangente em torno de Y para o quad encarar a câmera.
 
-1. **Impostores de folhagem distante.** Único item que ataca os 4,8 ms fixos e o
-   overdraw ao mesmo tempo, e a troca de memória que a §4 mostra ter espaço. O
-   cooker já lê GLB, então o caminho está aberto.
+**O que está no pacote:** 212 impostores, atlas 2048×2048 R8G8B8A8_SRGB com 12
+mips (21,33 MiB) mais fallback 512² (1,33 MiB); +212 draws, +848 vértices,
++1 textura, +1 material. RGBA8 e não ASTC porque `astcenc` não está disponível
+nesta máquina; trocar divide esses bytes por ~4 e nada mais muda.
+
+**A primeira versão não funcionava, e o motivo importa.** Ela cobrava o raio do
+grupo como erro geométrico — o quad achata tudo num plano, então "erra por isso".
+Medido, esse número torna o impostor **inalcançável**: com raio mediano de 32,9
+num mapa de 551 unidades, a distância de troca cai em 2.470 unidades e **zero
+impostores são selecionados em qualquer pose deste mapa**. E é cobrar errado, não
+só cobrar caro: o erro que a seleção de LOD modela é desvio de silhueta, e um
+quad que gira para encarar a câmera reproduz exatamente a silhueta assada. O
+achatamento produz parallax errada quando a câmera anda de lado — um erro que não
+escala com 1/distância e que essa métrica não representa. O que ela representa é
+a resolução do impostor: um texel do tile vale N unidades de mundo. O erro passou
+a ser 1,25× o nível anterior com piso no texel do atlas (min 1,417, p50 3,843,
+máx 19,616), e aí o impostor entra.
+
+**Onde ele demonstravelmente age:** numa pose de borda o pool de triângulos
+selecionado por LOD cai de 229.502 para 172.921 (**−24,7%**), com 665 candidatos
+contra 651.
+
+**Onde ele não age, e por quê:** na pose do hotspot, **nenhum** impostor é
+selecionado — a cadeia de cobertura inteira fica no nível 0 ali. O nível 1
+exigiria 44–76 px de erro projetado contra 24 px de orçamento efetivo. Não é o
+orçamento que está apertado: a folhagem do hotspot está **perto** (distância
+mediana do ponto mais próximo: 77 unidades). Trocar a distância da esfera pela
+distância da AABB do grupo foi verificado e não muda um único grupo. A hipótese
+da revisão anterior — "impostores atacam os 4,8 ms fixos do hotspot" — está
+**medida e refutada**: o que enche aquela tela é folhagem de perto, que nenhum
+impostor pode substituir.
+
+**A/B em hardware,** pose de vista de floresta `307.9,160,-308.1,5.236,0`, oito
+rodadas intercaladas de 30 s: GPU p95/budget com impostores {1,313 1,316 1,700
+1,169} contra {1,519 1,124 1,165} sem. Os dois controles discordam entre si em
+2,9 ms — maior que o efeito procurado. **O ganho de triângulos é real e medido; a
+conversão em tempo de GPU fica dentro do ruído de estado de clock nesta sessão.**
+`aether.disable_foliage_impostors` (e `-DisableFoliageImpostors` no runner)
+devolvem o pacote sem impostores no mesmo binário, para o A/B não exigir dois
+APKs de 334 MiB.
+
+## 9. Onde os 120 Hz fecham hoje
+
+Pose do hotspot, mesma sessão, Release assinado, `game_mode=performance`,
+`Thermal Status 0`:
+
+| Configuração | FPS apresentado | GPU p95 | Escala |
+|---|---:|---:|---:|
+| Escala nativa 1,00 | 84,7 | 11,22 ms | 1,00 |
+| Resolução dinâmica, piso do perfil (0,58) | 97,6 | 8,67 ms | 0,58 |
+| **Resolução dinâmica, piso 0,50** | **111,1** | **7,68 ms** | **0,50** |
+| Piso 0,50 + orçamento de cobertura 64 px | 111,1 | 7,68 ms | 0,50 |
+
+Decomposição no piso 0,50: opaco **5,68 ms**, pós **1,72 ms**, frame **7,41 ms**
+de média contra 7,333 de orçamento. O pós custa 23% do frame e **não encolhe com
+a escala** — ele lê o alvo reduzido e escreve o swapchain inteiro (3,55 Mpx). Sem
+FXAA nem bloom nem sharpen, é uma busca de textura por pixel: o custo é banda,
+não ALU. Remover o passe já foi medido e é pior (§6).
+
+Subir o orçamento de LOD de cobertura de 32 para 64 px não move nada
+(1,0476 contra 1,0145): a folhagem perto continua sendo desenhada.
+
+**Conclusão medida: 120 Hz nesta pose não existe em 1280×2772.** O passe opaco só
+com base color custa 8,811 ms contra 8,333 ms de frame inteiro. O que existe é
+110–111 FPS com a resolução interna em 0,50, e é isso que uma política
+`Mobile120` deve resolver sozinha — não uma flag de linha de comando.
+
+## 10. Caminho restante
+
+1. **Piso de resolução por perfil de dispositivo.** O controlador trava o piso em
+   0,50 (`dynamic_resolution.cpp`); o perfil deste aparelho pede 0,58 e mede 97,6
+   FPS, contra 111,1 no piso 0,50. É o único eixo que mediu ganho de dois dígitos.
 2. **Rota gravada e medição de média.** O alvo do produto é a média, e hoje só
    existe a pior pose. Sem isso não há gate.
 3. **Baking de iluminação estática.** Troca os 2,15 ms de sombra por fragmento
    por uma busca.
 4. **Budget `Mobile120` no CI**, reprovando commit que ultrapasse GPU p95 de
    7,2 ms — para não perder o que já foi ganho.
+5. **ASTC no atlas de impostores**, quando `astcenc` estiver disponível: 21,33
+   MiB viram ~5,3 MiB sem mudar mais nada.

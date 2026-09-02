@@ -9,9 +9,11 @@
 
 namespace ae::renderer {
 
-// Matches tools/cook-gltf-map.py's MAX_LOD_LEVELS: the most levels one
-// lodGroupId can ever have. Callers size fixed-capacity per-group buffers
-// (LodLevelInfo arrays, etc.) with this instead of allocating per frame.
+// The most levels one lodGroupId can ever have: tools/cook-gltf-map.py's
+// MAX_LOD_LEVELS simplification levels plus the baked impostor level that
+// tools/bake-foliage-impostors.py appends (see MapMaximumLodLevels). Callers
+// size fixed-capacity per-group buffers (LodLevelInfo arrays, etc.) with this
+// instead of allocating per frame.
 inline constexpr u32 LodMaximumLevelsPerGroup = MapMaximumLodLevels;
 
 // LOD selection by projected screen-space error -- the same metric used by

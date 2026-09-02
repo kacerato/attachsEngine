@@ -62,6 +62,9 @@ param(
     [switch]$EnableHzbCompute,
     [switch]$EnableHzbGpuCulling,
     [switch]$DisableDepthOrderedBatches,
+    # Devolve o pacote sem os impostores de folhagem no MESMO binario e na
+    # mesma sessao: e o controle do A/B de tools/bake-foliage-impostors.py.
+    [switch]$DisableFoliageImpostors,
     [ValidateRange(0, 120)]
     [int]$HzbHysteresisFrames = 3,
     [ValidateRange(0, 1000000)]
@@ -209,6 +212,7 @@ $Report = [ordered]@{
         hzbComputeProducerEnabled = [bool]($EnableHzbCompute -or $EnableHzbGpuCulling)
         hzbGpuCullingEnabled = [bool]$EnableHzbGpuCulling
         depthOrderedBatchesEnabled = -not [bool]$DisableDepthOrderedBatches
+        foliageImpostorsEnabled = -not [bool]$DisableFoliageImpostors
         hzbHysteresisFrames = $HzbHysteresisFrames
         hzbMinimumCandidateDraws = $HzbMinimumCandidateDraws
         hzbDepthBias = $HzbDepthBias
@@ -603,6 +607,9 @@ function Start-AetherActivity {
     }
     if ($DisableDepthOrderedBatches) {
         $arguments += @('--ez', 'aether.disable_depth_ordered_batches', 'true')
+    }
+    if ($DisableFoliageImpostors) {
+        $arguments += @('--ez', 'aether.disable_foliage_impostors', 'true')
     }
     if ($EnableHzb -or $EnableHzbGpuCulling) {
         # Histerese, limiar e bias sao do ESTAGIO de oclusao, nao do caminho de

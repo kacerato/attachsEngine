@@ -22,7 +22,12 @@ inline constexpr u32 MapVertexStride = 48;
 // struct across this boundary -- see decodeMapPackage's per-version unpack.
 inline constexpr u32 MapDrawRecordStrideV1V2 = 96;
 inline constexpr u32 MapDrawRecordStride = 108;
-inline constexpr u32 MapMaximumLodLevels = 3;
+// Tres niveis de simplificacao geometrica saem do cooker (MAX_LOD_LEVELS em
+// tools/cook-gltf-map.py) e o quarto slot fica reservado ao impostor assado que
+// tools/bake-foliage-impostors.py acrescenta depois, como nivel mais grosseiro
+// do grupo. Sao limites diferentes de proposito: o cooker nao sabe assar um
+// impostor e o baker nao simplifica malha; quem os junta e a cadeia de LOD.
+inline constexpr u32 MapMaximumLodLevels = 4;
 inline constexpr u32 InvalidMapTexture = 0xFFFFFFFFu;
 
 // Material flags are shared by the offline glTF cooker and the Vulkan shader.
@@ -39,6 +44,12 @@ inline constexpr u32 MapMaterialDoubleSided = 1u << 5;
 // mesh (for example, a gameplay fence) back into collision.
 inline constexpr u32 MapMaterialNoCollision = 1u << 6;
 inline constexpr u32 MapMaterialForceCollision = 1u << 7;
+// Impostor de folhagem distante: um quad assado offline que substitui centenas
+// de cards alfa como ultimo nivel da cadeia de LOD do grupo. O vertice e local e
+// centrado na origem, e o shader o gira em torno de Y para encarar a camera --
+// sem isso o quad so ficaria correto visto da direcao em que foi assado.
+// Ver tools/bake-foliage-impostors.py.
+inline constexpr u32 MapMaterialImpostor = 1u << 8;
 
 struct MapTextureRecord {
   u32 flags;

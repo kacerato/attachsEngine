@@ -179,6 +179,14 @@ public:
   // muda um pixel -- opaco e alpha-mask sao independentes de ordem.
   void setDepthOrderedBatchesEnabled(bool enabled) { depthOrderedBatches_ = enabled; }
   bool depthOrderedBatchesEnabled() const { return depthOrderedBatches_; }
+  // Impostores de folhagem distante (renderer::MapMaterialImpostor). Desligado,
+  // os draws marcados nao entram em nenhuma fila e o grupo volta a terminar no
+  // nivel simplificado mais grosseiro que o cooker gerou -- e exatamente o
+  // pacote de antes do baker, no MESMO binario e na MESMA sessao. Sem isso o
+  // A/B exigiria dois APKs de 334 MiB e duas instalacoes entre as amostras,
+  // que e o oposto da comparacao intercalada que docs/ORCAMENTO-120HZ.md exige.
+  void setFoliageImpostorsEnabled(bool enabled) { foliageImpostors_ = enabled; }
+  bool foliageImpostorsEnabled() const { return foliageImpostors_; }
   void setHzbGpuCullingEnabled(bool enabled) { hzbGpuCullingEnabled_ = enabled; }
   bool hzbGpuCullingEnabled() const { return hzbGpuCullingEnabled_; }
   bool hzbGpuCullingActive() const { return hzbGpuCullingActive_; }
@@ -431,6 +439,8 @@ private:
   // em 0,049 e 0,062 ms). aether.disable_depth_ordered_batches desliga para
   // A/B; nao existe caminho de qualidade dependendo disto.
   bool depthOrderedBatches_ = true;
+  // aether.disable_foliage_impostors desliga; ver setFoliageImpostorsEnabled.
+  bool foliageImpostors_ = true;
   struct MaterialParameters { float roughness=1, metallic=1, normalScale=1; };
   MaterialParameters materialParameters_;
   int lastExtractionStatus_ = 0;

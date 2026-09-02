@@ -8,11 +8,11 @@
   "source": "https://sketchfab.com/3d-models/update-dirt-road-through-forest-c4676cdf7715484382400ff63faffd45",
   "encoder": "astcenc 5.7.0 -medium 6x6",
   "statistics": {
-    "textures": 70,
-    "materials": 26,
-    "draws": 1118,
-    "vertices": 424849,
-    "triangles": 533260,
+    "textures": 71,
+    "materials": 27,
+    "draws": 1330,
+    "vertices": 425697,
+    "triangles": 533684,
     "boundsMin": [
       -203.2776699066162,
       96.23909508605564,
@@ -36,7 +36,8 @@
     "lodDrawsByLevel": {
       "0": 635,
       "1": 245,
-      "2": 238
+      "2": 239,
+      "3": 211
     },
     "lodTrianglesByLevel": {
       "0": 341109,
@@ -963,7 +964,7 @@
     "environment-specular.aetex": "cc32e9ea74316cdf6b4accb5a12be362f48e7fe03ed03aa0c96c659e4777a128",
     "environment.aeenv": "30970f2d0570921062c9acdea08528cdafb368570b10f6027ed535fa1cb34a3c",
     "environment.aetex": "216c35ea5c4a0b7b7efa01eb8af501413b34dfc14dcc92e7995913e41eda5a29",
-    "scene.aemap": "c2c51d00f5e8369a05f0545f3c331805fb31d68619b2f0fb60782b6bcfcaeee7",
+    "scene.aemap": "ff8116ad1cdcd10250b255044ccae7e77cb43e4393a24540cb1fc4ff1ecfaa27",
     "texture_000-fallback.aetex": "bf1899635a5400f6d969ede803d01ce54aa2af1c0977876257d6e9aa28909659",
     "texture_000.aetex": "cb46d964b4ac7c9d2752ff860d8d8a370f22ce776aa7b218c1f307c669c9f4eb",
     "texture_001-fallback.aetex": "d81efae4903b06389eb27ac9cab59db08051384296c3a13b42611dd148e3e17d",
@@ -1103,7 +1104,9 @@
     "texture_068-fallback.aetex": "f09b7aad30a6f7b59b2752a05f73fb7093444944e11f63eda1b362df74704d94",
     "texture_068.aetex": "b65d7b51e256f0f54f2ad094d6662f3a0849fa19cc94f7e1b3c6aab148496a6d",
     "texture_069-fallback.aetex": "b63a8ae108bc588ff23c34200d320ac0427fe505c3a12c0beacbd85b9bdf6229",
-    "texture_069.aetex": "9635b9f3510f1dffb613faa9b5c7af7fc9c5402d3804355263146dae90b498b7"
+    "texture_069.aetex": "9635b9f3510f1dffb613faa9b5c7af7fc9c5402d3804355263146dae90b498b7",
+    "texture_070-fallback.aetex": "93bc4e35cf6f93436ee53e1f9d3e872b0acf6649217222d4021ffa79e77758bd",
+    "texture_070.aetex": "17013f4d40222887a5bcf96d2f6210e65370261b28956fe9d2973e8f4c036fb3"
   },
   "environment": {
     "asset": "day-clouds-panorama-v1",
@@ -1157,5 +1160,22 @@
     "preservesLevel0": true,
     "level0Contract": "exact-vertices-and-triangles-spatially-reordered",
     "strategy": "source-vertex-grid-clustering-v1"
+  },
+  "impostors": {
+    "version": 1,
+    "tool": "tools/bake-foliage-impostors.py",
+    "groups": 212,
+    "atlas": "texture_070.aetex",
+    "atlasFallback": "texture_070-fallback.aetex",
+    "atlasSize": [
+      2048,
+      2048
+    ],
+    "tile": 128,
+    "errorScale": 1.25,
+    "encoding": "R8G8B8A8_SRGB",
+    "atlasBytes": 22369620,
+    "impostorVertices": 848,
+    "impostorTriangles": 424
   }
 }

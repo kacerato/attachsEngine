@@ -2663,6 +2663,10 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     for (u32 index = 0; index < instanceCount_; ++index) {
       const u32 material = dirtRoadResources_.draws()[index].materialIndex;
       const u32 flags = dirtRoadResources_.materials()[material].flags;
+      // Um impostor descartado aqui some da cadeia inteira: sem draw nas filas,
+      // buildLodRenderGroups nunca ve o nivel e o grupo termina no nivel
+      // simplificado anterior. E o controle do A/B, nao um caminho de qualidade.
+      if (!foliageImpostors_ && (flags & renderer::MapMaterialImpostor) != 0) continue;
       if ((flags & renderer::MapMaterialBlend) != 0)
         transparentDrawOrder_.push_back(index);
       else if ((flags & renderer::MapMaterialAlphaMask) != 0)

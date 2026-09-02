@@ -56,12 +56,31 @@ void main() {
   // Posicao, view e clip permanecem highp em toda a cadeia: fp16 em coordenada
   // de mundo ou de clip produz tremor de vertice e z-fighting visiveis, e a
   // subtracao relativa a camera e exatamente o caso de cancelamento catastrofico.
-  highp vec3 worldPosition=(inModel*vec4(inPosition,1)).xyz;
+  // Impostor de folhagem: o quad chega em espaco local, centrado na origem, e
+  // gira em torno de Y para encarar a camera ANTES da matriz de mundo. Assar uma
+  // unica direcao e barato; o giro e o que torna o impostor valido de qualquer
+  // angulo horizontal. O bit e MapMaterialImpostor (renderer/map_package.h).
+  //
+  // Normal e tangente giram com a posicao. Sem isso o quad encararia a camera
+  // mas continuaria iluminado como se ainda encarasse a direcao em que foi
+  // assado, e a folhagem distante alternaria entre clara e escura conforme o
+  // giro -- defeito mais visivel que a troca de LOD que o impostor resolve.
+  highp vec3 modelPosition=inPosition;
+  highp vec3 modelNormal=inNormal;
+  highp vec3 modelTangent=inTangent.xyz;
+  if((frame.materialFlags.x & 256u)!=0u) {
+    highp float cosineYaw=cos(frame.cameraFrame.y), sineYaw=sin(frame.cameraFrame.y);
+    highp mat3 faceCamera=mat3(cosineYaw,0,-sineYaw,0,1,0,sineYaw,0,cosineYaw);
+    modelPosition=faceCamera*inPosition;
+    modelNormal=faceCamera*inNormal;
+    modelTangent=faceCamera*inTangent.xyz;
+  }
+  highp vec3 worldPosition=(inModel*vec4(modelPosition,1)).xyz;
   vPosition=worldPosition;
   highp mat3 linear=mat3(inModel);
   highp mat3 normalMatrix=mat3(inNormalColumn0.xyz,inNormalColumn1.xyz,inNormalColumn2.xyz);
-  vNormal=normalize(normalMatrix*inNormal);
-  vTangent=vec4(normalize(linear*inTangent.xyz),inTangent.w*inNormalColumn0.w);
+  vNormal=normalize(normalMatrix*modelNormal);
+  vTangent=vec4(normalize(linear*modelTangent),inTangent.w*inNormalColumn0.w);
   vUv0=inUv0; vUv1=inUv1; vColor=inColor*inTint; vDither=inNormalColumn1.w;
   highp vec3 relative=worldPosition-frame.cameraPositionNear.xyz;
   highp vec3 view=vec3(dot(environment.worldToViewRow0.xyz,relative),

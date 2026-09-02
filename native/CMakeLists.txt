@@ -335,6 +335,7 @@ if(NOT ANDROID)
     ../tests/native/test_camera_route.cpp
     ../tests/native/test_free_camera_controller.cpp
     ../tests/native/test_first_person_controller.cpp
+    ../tests/native/test_foliage_impostors.cpp
     ../tests/native/test_frustum_visibility.cpp
     ../tests/native/test_gpu_draw_culling.cpp
     ../tests/native/test_hzb_visibility.cpp

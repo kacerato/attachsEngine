@@ -929,6 +929,11 @@ void android_main(android_app *app) {
   shell.instancedRenderer.setDepthOrderedBatchesEnabled(
       !ae::platform::android::readBooleanLaunchOption(
           app->activity, "aether.disable_depth_ordered_batches"));
+  // Idem para os impostores de folhagem assados no pacote: o padrao usa o que
+  // esta no asset, e a opcao devolve o pacote sem impostores no mesmo binario.
+  shell.instancedRenderer.setFoliageImpostorsEnabled(
+      !ae::platform::android::readBooleanLaunchOption(
+          app->activity, "aether.disable_foliage_impostors"));
   ae::u32 requestedHysteresisFrames = shell.visibilityBudget.hzbHysteresisFrames;
   if (ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.hzb_hysteresis_frames",
                                                        requestedHysteresisFrames)) {
