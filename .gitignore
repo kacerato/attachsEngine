@@ -10,3 +10,6 @@ android/.gradle/
 # __pycache__/
 
 android/local.properties
+
+__pycache__/
+*.pyc
