@@ -2,6 +2,7 @@
 #include "core/frame_policy.h"
 #include "profiler/frame_pressure.h"
 #include "profiler/frame_statistics.h"
+#include "rhi/memory_budget.h"
 
 struct ANativeActivity;
 
@@ -69,6 +70,10 @@ struct FrameProfileContext final {
   u32 hzbRevivedDrawCount = 0;
   u32 hzbSkippedCameraMotionDrawCount = 0;
   u32 hzbSkippedBudgetDrawCount = 0;
+  // Snapshot do allocator/driver no fechamento da janela. Em Android UMA,
+  // deviceMemory.unifiedMemory impede interpretar o heap Vulkan como VRAM
+  // fisicamente adicional à RAM do sistema.
+  rhi::DeviceMemorySnapshot deviceMemory{};
 };
 
 class AndroidFrameProfiler final {

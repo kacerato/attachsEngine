@@ -737,6 +737,7 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   // 1.1 (RNF-11) — em 1.1/1.2 sem a extensão explícita, bindless simplesmente fica desligado e o
   // dispositivo cai para DeviceProfile::C (ver device_profile.cpp), não é um erro fatal.
   bool descriptorIndexingExtensionSupported = false;
+  bool memoryBudgetExtensionSupported = false;
   {
     u32 extensionCount = 0;
     vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extensionCount, nullptr);
@@ -746,8 +747,9 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
       for (const auto &ext : extensions) {
         if (std::strcmp(ext.extensionName, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) == 0) {
           descriptorIndexingExtensionSupported = true;
-          break;
         }
+        if (std::strcmp(ext.extensionName, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) == 0)
+          memoryBudgetExtensionSupported = true;
       }
     }
   }
@@ -820,6 +822,8 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   if (bindlessSupported) {
     deviceExtensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
   }
+  if (memoryBudgetExtensionSupported)
+    deviceExtensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
   if (presentationScheduler_ != nullptr) {
     presentationScheduler_->requiredDeviceExtensions(physicalDevice_, schedulerExtensions);
     for (const auto &extension : schedulerExtensions) {
@@ -841,7 +845,8 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
 
   if (!memoryAllocator_.initialize(instance_, physicalDevice_, device_,
-                                   deriveMobileMemoryBudget(physicalDevice_))) {
+                                   deriveMobileMemoryBudget(physicalDevice_),
+                                   memoryBudgetExtensionSupported)) {
     vkDestroyDevice(device_, nullptr);
     device_ = VK_NULL_HANDLE;
     return false;

@@ -140,7 +140,8 @@ VulkanMemoryAllocator::~VulkanMemoryAllocator() {
 
 bool VulkanMemoryAllocator::initialize(VkInstance instance, VkPhysicalDevice physicalDevice,
                                        VkDevice device,
-                                       const MemoryBudgetConfig &budgetConfig) {
+                                       const MemoryBudgetConfig &budgetConfig,
+                                       bool memoryBudgetExtensionEnabled) {
   if (allocator_ != VK_NULL_HANDLE || instance == VK_NULL_HANDLE ||
       physicalDevice == VK_NULL_HANDLE || device == VK_NULL_HANDLE) {
     return false;
@@ -155,8 +156,13 @@ bool VulkanMemoryAllocator::initialize(VkInstance instance, VkPhysicalDevice phy
   info.device = device;
   info.vulkanApiVersion = VK_API_VERSION_1_1;
   info.pVulkanFunctions = &functions;
+  if (memoryBudgetExtensionEnabled)
+    info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
   if (vmaCreateAllocator(&info, &allocator_) != VK_SUCCESS) return false;
+  instance_ = instance;
+  physicalDevice_ = physicalDevice;
   device_ = device;
+  memoryBudgetExtensionEnabled_ = memoryBudgetExtensionEnabled;
   budget_.configure(budgetConfig);
   return true;
 }
@@ -166,7 +172,59 @@ void VulkanMemoryAllocator::shutdown() {
     vmaDestroyAllocator(allocator_);
     allocator_ = VK_NULL_HANDLE;
   }
+  instance_ = VK_NULL_HANDLE;
+  physicalDevice_ = VK_NULL_HANDLE;
   device_ = VK_NULL_HANDLE;
+  memoryBudgetExtensionEnabled_ = false;
+}
+
+DeviceMemorySnapshot VulkanMemoryAllocator::deviceMemorySnapshot() const {
+  DeviceMemorySnapshot snapshot{};
+  snapshot.allocationBudget = budget_.snapshot();
+  if (physicalDevice_ == VK_NULL_HANDLE) return snapshot;
+
+  VkPhysicalDeviceMemoryProperties properties{};
+  vkGetPhysicalDeviceMemoryProperties(physicalDevice_, &properties);
+  std::array<bool, VK_MAX_MEMORY_HEAPS> heapHasHostVisibleType{};
+  for (u32 type = 0; type < properties.memoryTypeCount; ++type) {
+    const u32 heap = properties.memoryTypes[type].heapIndex;
+    if ((properties.memoryTypes[type].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0)
+      heapHasHostVisibleType[heap] = true;
+  }
+  bool hasDeviceLocalHeap = false;
+  bool allDeviceLocalHeapsHostVisible = true;
+  for (u32 heap = 0; heap < properties.memoryHeapCount; ++heap) {
+    if ((properties.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0) continue;
+    hasDeviceLocalHeap = true;
+    snapshot.deviceLocalHeapBytes += static_cast<u64>(properties.memoryHeaps[heap].size);
+    allDeviceLocalHeapsHostVisible &= heapHasHostVisibleType[heap];
+  }
+  snapshot.unifiedMemory = hasDeviceLocalHeap && allDeviceLocalHeapsHostVisible;
+  if (!memoryBudgetExtensionEnabled_ || instance_ == VK_NULL_HANDLE) return snapshot;
+
+  auto getProperties2 = reinterpret_cast<PFN_vkGetPhysicalDeviceMemoryProperties2KHR>(
+      vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceMemoryProperties2KHR"));
+  if (getProperties2 == nullptr) {
+    getProperties2 = reinterpret_cast<PFN_vkGetPhysicalDeviceMemoryProperties2KHR>(
+        vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceMemoryProperties2"));
+  }
+  if (getProperties2 == nullptr) return snapshot;
+
+  VkPhysicalDeviceMemoryBudgetPropertiesEXT budget{};
+  budget.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
+  VkPhysicalDeviceMemoryProperties2 properties2{};
+  properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+  properties2.pNext = &budget;
+  getProperties2(physicalDevice_, &properties2);
+  for (u32 heap = 0; heap < properties2.memoryProperties.memoryHeapCount; ++heap) {
+    if ((properties2.memoryProperties.memoryHeaps[heap].flags &
+         VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) == 0)
+      continue;
+    snapshot.deviceLocalBudgetBytes += static_cast<u64>(budget.heapBudget[heap]);
+    snapshot.deviceLocalUsageBytes += static_cast<u64>(budget.heapUsage[heap]);
+  }
+  snapshot.driverBudgetAvailable = snapshot.deviceLocalBudgetBytes > 0;
+  return snapshot;
 }
 
 bool VulkanMemoryAllocator::createBuffer(const BufferDesc &desc, VulkanBuffer *outBuffer) {

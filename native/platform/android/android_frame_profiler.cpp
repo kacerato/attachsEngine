@@ -1,22 +1,60 @@
 #include "platform/android/android_frame_profiler.h"
 #include "platform/android/android_launch_options.h"
+#include "platform/process_memory.h"
 #include <android/log.h>
 #include <android/native_activity.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <time.h>
 #include <unistd.h>
 
 namespace ae::platform::android {
 namespace {
 constexpr const char *LogTag = "Aether.Android";
+constexpr u32 ProfileSchemaVersion = 7;
 
 bool readClock(clockid_t clock, u64 &out) {
   timespec value{};
   if (clock_gettime(clock, &value) != 0) return false;
   out = static_cast<u64>(value.tv_sec) * 1'000'000'000ULL + static_cast<u64>(value.tv_nsec);
   return true;
+}
+
+double ratioOrUnavailable(u64 numerator, u64 denominator) {
+  return denominator > 0 ? static_cast<double>(numerator) / static_cast<double>(denominator)
+                         : -1.0;
+}
+
+const char *memoryPressureName(const platform::SystemMemorySnapshot &system,
+                               const rhi::DeviceMemorySnapshot &device,
+                               double &outSystemAvailableRatio,
+                               double &outDriverUsageRatio,
+                               double &outEngineClassRatio) {
+  outSystemAvailableRatio = system.valid
+                                ? ratioOrUnavailable(system.availableBytes, system.totalBytes)
+                                : -1.0;
+  outDriverUsageRatio = device.driverBudgetAvailable
+                            ? ratioOrUnavailable(device.deviceLocalUsageBytes,
+                                                 device.deviceLocalBudgetBytes)
+                            : -1.0;
+  outEngineClassRatio = -1.0;
+  for (const auto &entry : device.allocationBudget.entries) {
+    if (entry.limitBytes == 0 || entry.limitBytes == std::numeric_limits<u64>::max()) continue;
+    outEngineClassRatio = std::max(outEngineClassRatio,
+                                   ratioOrUnavailable(entry.usedBytes, entry.limitBytes));
+  }
+  const bool hasSignal = outSystemAvailableRatio >= 0.0 || outDriverUsageRatio >= 0.0 ||
+                         outEngineClassRatio >= 0.0;
+  if (!hasSignal) return "unknown";
+  if ((outSystemAvailableRatio >= 0.0 && outSystemAvailableRatio <= 0.05) ||
+      outDriverUsageRatio >= 0.90 || outEngineClassRatio >= 0.90)
+    return "critical";
+  if ((outSystemAvailableRatio >= 0.0 && outSystemAvailableRatio <= 0.10) ||
+      outDriverUsageRatio >= 0.75 || outEngineClassRatio >= 0.75)
+    return "warning";
+  return "normal";
 }
 } // namespace
 
@@ -39,7 +77,7 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
   if (contextPending_) {
     const char *scene = context.sceneId != nullptr ? context.sceneId : "unknown";
     __android_log_print(ANDROID_LOG_INFO, LogTag,
-        "[FrameProfileContext] {\"schemaVersion\":6,\"pid\":%d,\"epoch\":%u,"
+        "[FrameProfileContext] {\"schemaVersion\":%u,\"pid\":%d,\"epoch\":%u,"
         "\"scene\":\"%s\",\"content_fingerprint\":\"%016llx\",\"target_fps\":%u,"
         "\"gpu_isolation\":\"%s\","
         "\"camera_locked\":%s,\"camera_mode\":\"%s\","
@@ -56,7 +94,8 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
         "\"hzb_tested_draws\":%u,\"hzb_occluded_draws\":%u,\"hzb_revived_draws\":%u,"
         "\"hzb_motion_skipped_draws\":%u,\"hzb_budget_skipped_draws\":%u,"
         "\"instances\":%u,\"width\":%u,\"height\":%u}",
-        getpid(), epoch_, scene, static_cast<unsigned long long>(context.contentFingerprint),
+        ProfileSchemaVersion, getpid(), epoch_, scene,
+        static_cast<unsigned long long>(context.contentFingerprint),
         context.targetFps, context.gpuIsolation != nullptr ? context.gpuIsolation : "full",
         context.cameraLocked ? "true" : "false",
         context.cameraMode != nullptr ? context.cameraMode : "free",
@@ -117,11 +156,12 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
 #endif
   char json[3072];
   int used = std::snprintf(json, sizeof(json),
-      "{\"schemaVersion\":6,\"pid\":%d,\"epoch\":%u,\"window\":%llu,\"build\":\"%s\","
+      "{\"schemaVersion\":%u,\"pid\":%d,\"epoch\":%u,\"window\":%llu,\"build\":\"%s\","
       "\"instances\":%u,\"width\":%u,\"height\":%u,\"frames\":%u,\"elapsed_ms\":%.6f,"
       "\"present_fps\":%.6f,\"warmup_samples\":%u,\"warmup_process_cpu_max_ms\":%.6f,"
       "\"route_frame\":%llu,\"visible_draws\":%u,\"visible_triangles\":%llu",
-      getpid(), epoch_, static_cast<unsigned long long>(++window_), build, instances, width, height,
+      ProfileSchemaVersion, getpid(), epoch_, static_cast<unsigned long long>(++window_), build,
+      instances, width, height,
       summary.samples, summary.elapsedMs, summary.presentFps, summary.warmupSamples,
       summary.warmupProcessCpuMaxMs,
       static_cast<unsigned long long>(context.cameraRouteFrameOrdinal),
@@ -171,9 +211,9 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
           ? "tile-deferred"
           : "resolved";
   int passesUsed = std::snprintf(passes, sizeof(passes),
-      "{\"schemaVersion\":6,\"pid\":%d,\"epoch\":%u,\"window\":%llu,"
+      "{\"schemaVersion\":%u,\"pid\":%d,\"epoch\":%u,\"window\":%llu,"
       "\"attribution\":\"%s\",\"collapsed_frames\":%u,\"attribution_samples\":%u",
-      getpid(), epoch_, static_cast<unsigned long long>(window_), attribution,
+      ProfileSchemaVersion, getpid(), epoch_, static_cast<unsigned long long>(window_), attribution,
       collapsedAttributionFrames_, attributionSampleFrames_);
   if (passesUsed < 0 || static_cast<size_t>(passesUsed) >= sizeof(passes)) return;
   passesUsed = appendMetrics(passes, sizeof(passes), passesUsed,
@@ -192,7 +232,7 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
       profiler::classifyFramePressure(summary, context.frameBudget);
   __android_log_print(
       ANDROID_LOG_INFO, LogTag,
-      "[FrameProfilePressure] {\"schemaVersion\":6,\"pid\":%d,\"epoch\":%u,"
+      "[FrameProfilePressure] {\"schemaVersion\":%u,\"pid\":%d,\"epoch\":%u,"
       "\"window\":%llu,\"classification\":\"%s\",\"cpu_p95_ratio\":%.4f,"
       "\"gpu_p95_ratio\":%.4f,\"interval_p95_ratio\":%.4f,"
       "\"presentation_wait_p95_ms\":%.4f,\"frame_budget_ms\":%.4f,"
@@ -203,7 +243,7 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
       "\"thermal_api\":%s,\"thermal_status\":%d,"
       "\"thermal_headroom_valid\":%s,\"thermal_headroom\":%.3f,"
       "\"thermal_pressure\":\"%s\"}",
-      getpid(), epoch_, static_cast<unsigned long long>(window_),
+      ProfileSchemaVersion, getpid(), epoch_, static_cast<unsigned long long>(window_),
       profiler::framePressureKindName(pressure.kind), pressure.cpuP95BudgetRatio,
       pressure.gpuP95BudgetRatio, pressure.intervalP95BudgetRatio,
       pressure.presentationWaitP95Ms,
@@ -219,6 +259,69 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
       context.thermalHeadroomValid ? "true" : "false",
       static_cast<double>(context.thermalHeadroom),
       context.thermalPressure != nullptr ? context.thermalPressure : "none");
+
+  // RAM e memória gráfica compartilham a mesma chave pid/epoch/window das
+  // métricas temporais. Arrays compactos mantêm a entrada inteira abaixo do
+  // limite do Logcat sem omitir classes: ram=[virtual,rss,pico,anon,file,
+  // shmem,swap], system=[total,disponível], heap=[tamanho,budget,uso driver],
+  // engine=[uso,pico], classes=[uso,pico,limite] em MemoryClass order.
+  platform::ProcessMemorySnapshot processMemory{};
+  platform::SystemMemorySnapshot systemMemory{};
+  platform::readProcessMemorySnapshot(processMemory);
+  platform::readSystemMemorySnapshot(systemMemory);
+  double systemAvailableRatio = -1.0;
+  double driverUsageRatio = -1.0;
+  double engineClassRatio = -1.0;
+  const char *memoryPressure = memoryPressureName(
+      systemMemory, context.deviceMemory, systemAvailableRatio, driverUsageRatio,
+      engineClassRatio);
+  const auto &allocation = context.deviceMemory.allocationBudget;
+  const auto &buffer = allocation.entries[static_cast<usize>(rhi::MemoryClass::Buffer)];
+  const auto &texture = allocation.entries[static_cast<usize>(rhi::MemoryClass::Texture)];
+  const auto &target = allocation.entries[static_cast<usize>(rhi::MemoryClass::RenderTarget)];
+  const auto &staging = allocation.entries[static_cast<usize>(rhi::MemoryClass::Staging)];
+  __android_log_print(
+      ANDROID_LOG_INFO, LogTag,
+      "[FrameProfileMemory] {\"schemaVersion\":%u,\"pid\":%d,\"epoch\":%u,"
+      "\"window\":%llu,\"classification\":\"%s\",\"ram_valid\":%s,"
+      "\"ram_bytes\":[%llu,%llu,%llu,%llu,%llu,%llu,%llu],"
+      "\"system_ram_valid\":%s,\"system_ram_bytes\":[%llu,%llu],"
+      "\"gpu_budget_supported\":%s,\"gpu_unified\":%s,"
+      "\"gpu_heap_bytes\":[%llu,%llu,%llu],\"gpu_engine_bytes\":[%llu,%llu],"
+      "\"gpu_classes\":[[%llu,%llu,%llu],[%llu,%llu,%llu],"
+      "[%llu,%llu,%llu],[%llu,%llu,%llu]],\"ratios\":[%.6f,%.6f,%.6f]}",
+      ProfileSchemaVersion, getpid(), epoch_, static_cast<unsigned long long>(window_),
+      memoryPressure, processMemory.valid ? "true" : "false",
+      static_cast<unsigned long long>(processMemory.virtualBytes),
+      static_cast<unsigned long long>(processMemory.residentBytes),
+      static_cast<unsigned long long>(processMemory.peakResidentBytes),
+      static_cast<unsigned long long>(processMemory.anonymousBytes),
+      static_cast<unsigned long long>(processMemory.fileBytes),
+      static_cast<unsigned long long>(processMemory.sharedBytes),
+      static_cast<unsigned long long>(processMemory.swapBytes),
+      systemMemory.valid ? "true" : "false",
+      static_cast<unsigned long long>(systemMemory.totalBytes),
+      static_cast<unsigned long long>(systemMemory.availableBytes),
+      context.deviceMemory.driverBudgetAvailable ? "true" : "false",
+      context.deviceMemory.unifiedMemory ? "true" : "false",
+      static_cast<unsigned long long>(context.deviceMemory.deviceLocalHeapBytes),
+      static_cast<unsigned long long>(context.deviceMemory.deviceLocalBudgetBytes),
+      static_cast<unsigned long long>(context.deviceMemory.deviceLocalUsageBytes),
+      static_cast<unsigned long long>(allocation.totalUsedBytes()),
+      static_cast<unsigned long long>(allocation.totalPeakBytes()),
+      static_cast<unsigned long long>(buffer.usedBytes),
+      static_cast<unsigned long long>(buffer.peakBytes),
+      static_cast<unsigned long long>(buffer.limitBytes),
+      static_cast<unsigned long long>(texture.usedBytes),
+      static_cast<unsigned long long>(texture.peakBytes),
+      static_cast<unsigned long long>(texture.limitBytes),
+      static_cast<unsigned long long>(target.usedBytes),
+      static_cast<unsigned long long>(target.peakBytes),
+      static_cast<unsigned long long>(target.limitBytes),
+      static_cast<unsigned long long>(staging.usedBytes),
+      static_cast<unsigned long long>(staging.peakBytes),
+      static_cast<unsigned long long>(staging.limitBytes),
+      systemAvailableRatio, driverUsageRatio, engineClassRatio);
   collapsedAttributionFrames_ = 0;
   attributionSampleFrames_ = 0;
   renderScaleSamples_ = 0;

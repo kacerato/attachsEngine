@@ -6,7 +6,7 @@ function Assert-Profile { param([bool]$Value); if (-not $Value) { throw 'Asserç
 function Test-Profile { param([string]$Name, [scriptblock]$Body); & $Body; ++$script:count; Write-Host "PASS: $Name" }
 function New-TestWindow {
     param([int]$Index = 1, [int]$Epoch = 1)
-    $window = [ordered]@{ schemaVersion = 6; pid = 7; epoch = $Epoch; window = $Index; build = 'debug';
+    $window = [ordered]@{ schemaVersion = 7; pid = 7; epoch = $Epoch; window = $Index; build = 'debug';
         instances = 5000; width = 2772; height = 1280; frames = 600; elapsed_ms = 10000.0;
         present_fps = 60.0; warmup_samples = 300; warmup_process_cpu_max_ms = 4.0 }
     foreach ($metric in $FrameProfileMetricNames) {
@@ -83,6 +83,23 @@ function Convert-TestWindow {
             $pressure | Add-Member -NotePropertyName thermal_pressure -NotePropertyValue 'none'
         }
         $result += "`n" + '[FrameProfilePressure] ' + ($pressure | ConvertTo-Json -Compress)
+    }
+    if ($wire.schemaVersion -ge 7) {
+        $memory = [pscustomobject][ordered]@{
+            schemaVersion = 7; pid = $wire.pid; epoch = $wire.epoch; window = $wire.window
+            classification = 'normal'; ram_valid = $true
+            ram_bytes = @(500000000, 200000000, 220000000, 150000000, 45000000, 5000000, 0)
+            system_ram_valid = $true; system_ram_bytes = @(8000000000, 3000000000)
+            gpu_budget_supported = $true; gpu_unified = $true
+            gpu_heap_bytes = @(8000000000, 6000000000, 1000000000)
+            gpu_engine_bytes = @(100000000, 120000000)
+            gpu_classes = @(@(20000000, 25000000, 500000000),
+                            @(60000000, 70000000, 2000000000),
+                            @(15000000, 18000000, 500000000),
+                            @(5000000, 7000000, 250000000))
+            ratios = @(0.375, 0.166667, 0.04)
+        }
+        $result += "`n" + '[FrameProfileMemory] ' + ($memory | ConvertTo-Json -Depth 5 -Compress)
     }
     return $result
 }
@@ -163,6 +180,34 @@ Test-Profile 'schema 6 sem registro de pressão é recusado' {
     $text = Convert-TestWindow (New-TestWindow)
     $withoutPressure = (($text -split "`n") | Where-Object { $_ -notmatch '\[FrameProfilePressure\]' }) -join "`n"
     Assert-Rejected { ConvertFrom-FrameProfileLog $withoutPressure 7 }
+}
+Test-Profile 'schema 7 preserva RAM, heap Vulkan e classes de alocação' {
+    $decoded = @(ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow)) 7)
+    Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].memory_classification -eq 'normal' -and
+        $decoded[0].ram_rss_bytes -eq 200000000 -and $decoded[0].gpu_unified -and
+        $decoded[0].gpu_engine_used_bytes -eq 100000000 -and
+        $decoded[0].gpu_texture_used_bytes -eq 60000000)
+    $capture = Get-TestCapture $decoded 10
+    Assert-Profile ($capture.schemaVersion -eq 4 -and $capture.memory.available -and
+        $capture.memory.maximumRssBytes -eq 200000000 -and
+        $capture.memory.endingClasses.texture.usedBytes -eq 60000000)
+}
+Test-Profile 'schema 7 sem registro de memória é recusado' {
+    $text = Convert-TestWindow (New-TestWindow)
+    $withoutMemory = (($text -split "`n") | Where-Object { $_ -notmatch '\[FrameProfileMemory\]' }) -join "`n"
+    Assert-Rejected { ConvertFrom-FrameProfileLog $withoutMemory 7 }
+}
+Test-Profile 'schema 7 recusa total gráfico divergente das classes' {
+    $text = Convert-TestWindow (New-TestWindow)
+    $text = $text -replace '"gpu_engine_bytes":\[100000000,120000000\]', '"gpu_engine_bytes":[100000001,120000000]'
+    Assert-Rejected { ConvertFrom-FrameProfileLog $text 7 }
+}
+Test-Profile 'schema 6 continua legível sem telemetria de memória' {
+    $window = New-TestWindow
+    $window.schemaVersion = 6
+    $decoded = @(ConvertFrom-FrameProfileLog (Convert-TestWindow $window) 7)
+    Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].memory_classification -eq 'unknown' -and
+        -not $decoded[0].ram_valid -and -not $decoded[0].gpu_budget_supported)
 }
 Test-Profile 'schema 5 de pressão permanece retrocompatível' {
     $window = New-TestWindow

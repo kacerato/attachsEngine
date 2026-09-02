@@ -1239,6 +1239,7 @@ void android_main(android_app *app) {
         context.hzbRevivedDrawCount = visibility.hzbRevivedDraws;
         context.hzbSkippedCameraMotionDrawCount = visibility.hzbSkippedCameraMotionDraws;
         context.hzbSkippedBudgetDrawCount = visibility.hzbSkippedBudgetDraws;
+        context.deviceMemory = shell.instancedRenderer.deviceMemorySnapshot();
         shell.frameProfiler.record(shell.instancedRenderer.lastFrameTimings(), context,
                                     shell.instancedRenderer.drawnInstanceCount(), display.width, display.height);
       } else {

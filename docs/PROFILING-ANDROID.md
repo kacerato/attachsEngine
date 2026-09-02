@@ -54,6 +54,32 @@ render thread p95 1,397/6,50 ms e escala dinâmica no piso 0,58. O log confirmou
 ativo com alvo 8,333 ms, e `cmd game list-modes` confirmou o modo atual
 `performance`; não havia intervenção OEM configurada para o pacote.
 
+### RAM e memória gráfica (schema 7)
+
+Cada janela schema 7 exige também um `[FrameProfileMemory]` com a mesma chave
+`pid/epoch/window`. A leitura de `/proc/self/status` e `/proc/meminfo` acontece
+somente no fechamento da janela de 600 frames; ela não adiciona IO ao hot path.
+O registro contém memória virtual, RSS atual/pico, anônima, arquivos, compartilhada
+e swap do processo, além da RAM total/disponível do sistema.
+
+O RHI habilita `VK_EXT_memory_budget` apenas quando o physical device a anuncia.
+Quando disponível, o relatório separa tamanho do heap device-local, budget atual e
+uso global observado pelo driver. Independentemente da extensão, o allocator publica
+uso, pico e limite pertencentes à engine para buffers, texturas, render targets e
+staging. Assim, ausência da extensão não vira uso de driver igual a zero.
+
+`gpu_unified=true` significa que todos os heaps device-local possuem tipo
+host-visible: nesse caso, típico de SoCs Android, a memória Vulkan compartilha a RAM
+física e não deve ser somada à RAM como uma VRAM separada. A classificação
+`normal/warning/critical` usa RAM disponível, uso/budget do driver e a classe da
+engine mais próxima do limite; serve como sinal para streaming/quality policy, não
+reduz resolução ou descarrega assets silenciosamente durante a medição.
+
+O coletor converte os arrays compactos do wire em campos nomeados, recusa totais
+inconsistentes e publica no relatório schema 4 máximos de RSS, swap, uso do driver,
+alocações da engine e o estado final de cada classe. Capturas schema 4–6 continuam
+legíveis, mas expõem `memory.available=false` em vez de dados inferidos.
+
 ### Regiões de GPU do frame (schema 5; leitura retrocompatível do schema 4)
 
 O tempo de GPU é medido em oito regiões declaradas uma única vez em

@@ -154,6 +154,7 @@ add_library(aether_platform STATIC
   platform/camera_route.cpp
   platform/first_person_controller.cpp
   platform/free_camera_controller.cpp
+  platform/process_memory.cpp
   platform/virtual_joystick.cpp
 )
 target_include_directories(aether_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -345,6 +346,7 @@ if(NOT ANDROID)
     ../tests/native/test_map_package.cpp
     ../tests/native/test_material_preview.cpp
     ../tests/native/test_normal_matrix.cpp
+    ../tests/native/test_process_memory.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/main.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_allocators.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_job_system.cpp

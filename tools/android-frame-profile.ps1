@@ -154,7 +154,7 @@ function ConvertFrom-FrameProfilePressureLog {
         if ($line -notmatch '\[FrameProfilePressure\] (\{.*)$') { continue }
         $record = $Matches[1] | ConvertFrom-Json
         if ([string]$record.pid -ne $ExpectedPid) { continue }
-        if ($record.schemaVersion -notin @(5, 6) -or $record.epoch -lt 1 -or $record.window -lt 1 -or
+        if ($record.schemaVersion -notin @(5, 6, 7) -or $record.epoch -lt 1 -or $record.window -lt 1 -or
             $record.classification -notin @('unknown', 'within-budget', 'cpu', 'gpu', 'mixed', 'presentation')) {
             throw 'Registro FrameProfilePressure incompatível ou incompleto.'
         }
@@ -201,6 +201,91 @@ function ConvertFrom-FrameProfilePressureLog {
     return $pressures
 }
 
+# RAM + memória gráfica do mesmo instante em que a janela temporal fecha.
+# O wire usa arrays para permanecer abaixo do limite de uma entrada Logcat;
+# aqui eles voltam a nomes explícitos antes de chegar ao relatório JSONL.
+function ConvertFrom-FrameProfileMemoryLog {
+    param([string]$Text, [string]$ExpectedPid)
+    $records = @{}
+    foreach ($line in ($Text -split "`n")) {
+        if ($line -notmatch '\[FrameProfileMemory\] (\{.*)$') { continue }
+        $record = $Matches[1] | ConvertFrom-Json
+        if ([string]$record.pid -ne $ExpectedPid) { continue }
+        if ($record.schemaVersion -ne 7 -or $record.epoch -lt 1 -or $record.window -lt 1 -or
+            $record.classification -notin @('unknown', 'normal', 'warning', 'critical')) {
+            throw 'Registro FrameProfileMemory incompatível ou incompleto.'
+        }
+        $ram = @($record.ram_bytes)
+        $system = @($record.system_ram_bytes)
+        $heap = @($record.gpu_heap_bytes)
+        $engine = @($record.gpu_engine_bytes)
+        $classes = @($record.gpu_classes)
+        $ratios = @($record.ratios)
+        if ($ram.Count -ne 7 -or $system.Count -ne 2 -or $heap.Count -ne 3 -or
+            $engine.Count -ne 2 -or $classes.Count -ne 4 -or $ratios.Count -ne 3) {
+            throw 'FrameProfileMemory contém vetores com layout inválido.'
+        }
+        foreach ($vector in @($ram, $system, $heap, $engine)) {
+            foreach ($value in $vector) {
+                if ($null -eq $value -or [decimal]$value -lt 0) {
+                    throw 'FrameProfileMemory contém bytes inválidos.'
+                }
+            }
+        }
+        foreach ($class in $classes) {
+            $values = @($class)
+            if ($values.Count -ne 3 -or [decimal]$values[0] -lt 0 -or
+                [decimal]$values[1] -lt [decimal]$values[0] -or
+                [decimal]$values[2] -lt [decimal]$values[0]) {
+                throw 'FrameProfileMemory contém classe Vulkan inválida.'
+            }
+        }
+        foreach ($ratio in $ratios) {
+            if ($null -eq $ratio -or [double]::IsNaN([double]$ratio) -or
+                [double]::IsInfinity([double]$ratio) -or $ratio -lt -1) {
+                throw 'FrameProfileMemory contém razão inválida.'
+            }
+        }
+        if (($record.ram_valid -and $ram[1] -le 0) -or
+            ($record.system_ram_valid -and ($system[0] -le 0 -or $system[1] -gt $system[0])) -or
+            ($record.gpu_budget_supported -and $heap[1] -le 0) -or
+            $engine[0] -ne (($classes | ForEach-Object { @($_)[0] } | Measure-Object -Sum).Sum) -or
+            $engine[1] -ne (($classes | ForEach-Object { @($_)[1] } | Measure-Object -Sum).Sum)) {
+            throw 'FrameProfileMemory contém totais inconsistentes.'
+        }
+        $names = @('buffer', 'texture', 'render_target', 'staging')
+        $record | Add-Member -NotePropertyName ram_virtual_bytes -NotePropertyValue $ram[0]
+        $record | Add-Member -NotePropertyName ram_rss_bytes -NotePropertyValue $ram[1]
+        $record | Add-Member -NotePropertyName ram_peak_rss_bytes -NotePropertyValue $ram[2]
+        $record | Add-Member -NotePropertyName ram_anon_bytes -NotePropertyValue $ram[3]
+        $record | Add-Member -NotePropertyName ram_file_bytes -NotePropertyValue $ram[4]
+        $record | Add-Member -NotePropertyName ram_shmem_bytes -NotePropertyValue $ram[5]
+        $record | Add-Member -NotePropertyName ram_swap_bytes -NotePropertyValue $ram[6]
+        $record | Add-Member -NotePropertyName system_ram_total_bytes -NotePropertyValue $system[0]
+        $record | Add-Member -NotePropertyName system_ram_available_bytes -NotePropertyValue $system[1]
+        $record | Add-Member -NotePropertyName gpu_heap_size_bytes -NotePropertyValue $heap[0]
+        $record | Add-Member -NotePropertyName gpu_heap_budget_bytes -NotePropertyValue $heap[1]
+        $record | Add-Member -NotePropertyName gpu_driver_usage_bytes -NotePropertyValue $heap[2]
+        $record | Add-Member -NotePropertyName gpu_engine_used_bytes -NotePropertyValue $engine[0]
+        $record | Add-Member -NotePropertyName gpu_engine_peak_bytes -NotePropertyValue $engine[1]
+        for ($i = 0; $i -lt $names.Count; ++$i) {
+            $values = @($classes[$i])
+            foreach ($slot in 0..2) {
+                $suffix = @('used_bytes', 'peak_bytes', 'limit_bytes')[$slot]
+                $record | Add-Member -NotePropertyName ("gpu_{0}_{1}" -f $names[$i], $suffix) `
+                    -NotePropertyValue $values[$slot]
+            }
+        }
+        $record | Add-Member -NotePropertyName system_ram_available_ratio -NotePropertyValue $ratios[0]
+        $record | Add-Member -NotePropertyName gpu_driver_usage_ratio -NotePropertyValue $ratios[1]
+        $record | Add-Member -NotePropertyName gpu_engine_class_ratio -NotePropertyValue $ratios[2]
+        $key = "$($record.epoch):$($record.window)"
+        if ($records.ContainsKey($key)) { throw "Registro FrameProfileMemory duplicado: $key." }
+        $records[$key] = $record
+    }
+    return $records
+}
+
 # Regioes de GPU por janela, indexadas por "epoch:window". Emitidas logo apos a
 # janela correspondente; ConvertFrom-FrameProfileLog exige o par.
 function ConvertFrom-FrameProfilePassLog {
@@ -210,7 +295,7 @@ function ConvertFrom-FrameProfilePassLog {
         if ($line -notmatch '\[FrameProfilePasses\] (\{.*)$') { continue }
         $record = $Matches[1] | ConvertFrom-Json
         if ([string]$record.pid -ne $ExpectedPid) { continue }
-        if ($record.schemaVersion -notin @(4, 5, 6) -or $record.epoch -lt 1 -or $record.window -lt 1) {
+        if ($record.schemaVersion -notin @(4, 5, 6, 7) -or $record.epoch -lt 1 -or $record.window -lt 1) {
             throw 'Registro FrameProfilePasses incompativel ou incompleto.'
         }
         if ($record.PSObject.Properties.Name -notcontains 'attribution') {
@@ -234,7 +319,7 @@ function ConvertFrom-FrameProfileContextLog {
         if ($line -notmatch '\[FrameProfileContext\] (\{.*)$') { continue }
         $context = $Matches[1] | ConvertFrom-Json
         if ([string]$context.pid -ne $ExpectedPid) { continue }
-        if ($context.schemaVersion -notin @(2, 3, 4, 5, 6) -or $context.epoch -lt 1 -or
+        if ($context.schemaVersion -notin @(2, 3, 4, 5, 6, 7) -or $context.epoch -lt 1 -or
             -not $context.scene -or $context.scene -notmatch '^[a-z0-9-]+$' -or
             $context.content_fingerprint -notmatch '^[0-9a-f]{16}$' -or
             $context.target_fps -lt 1 -or $context.instances -lt 1 -or
@@ -346,6 +431,7 @@ function ConvertFrom-FrameProfileLog {
     $seen = @{}
     $passes = ConvertFrom-FrameProfilePassLog -Text $Text -ExpectedPid $ExpectedPid
     $pressures = ConvertFrom-FrameProfilePressureLog -Text $Text -ExpectedPid $ExpectedPid
+    $memories = ConvertFrom-FrameProfileMemoryLog -Text $Text -ExpectedPid $ExpectedPid
     foreach ($line in ($Text -split "`n")) {
         if ($line -notmatch '\[FrameProfile\] (\{.*)$') { continue }
         $window = $Matches[1] | ConvertFrom-Json
@@ -357,7 +443,7 @@ function ConvertFrom-FrameProfileLog {
                 throw "FrameProfile inválido: $field."
             }
         }
-        if ($window.schemaVersion -notin @(4, 5, 6) -or
+        if ($window.schemaVersion -notin @(4, 5, 6, 7) -or
             ($null -ne $ExpectedInstances -and $window.instances -ne $ExpectedInstances) -or
             $window.frames -ne 600 -or $window.elapsed_ms -le 0 -or
             $window.width -le 0 -or $window.height -le 0 -or $window.epoch -lt 1 -or $window.window -lt 1) {
@@ -395,6 +481,36 @@ function ConvertFrom-FrameProfileLog {
         # hardware devolveu, mas viajam marcados -- consumir uma divisao que o
         # hardware nao fez enviaria o ciclo de otimizacao atras do alvo errado.
         $window | Add-Member -NotePropertyName gpuPassAttribution -NotePropertyValue $passRecord.attribution
+        if ($window.schemaVersion -ge 7) {
+            if (-not $memories.ContainsKey($passKey)) {
+                throw "Janela FrameProfile sem memória correspondente: $passKey."
+            }
+            $memory = $memories[$passKey]
+            if ($memory.schemaVersion -ne $window.schemaVersion) {
+                throw "Schemas de FrameProfile e FrameProfileMemory divergem: $passKey."
+            }
+            foreach ($field in @('classification', 'ram_valid', 'ram_virtual_bytes', 'ram_rss_bytes',
+                                  'ram_peak_rss_bytes', 'ram_anon_bytes', 'ram_file_bytes',
+                                  'ram_shmem_bytes', 'ram_swap_bytes', 'system_ram_valid',
+                                  'system_ram_total_bytes', 'system_ram_available_bytes',
+                                  'gpu_budget_supported', 'gpu_unified', 'gpu_heap_size_bytes',
+                                  'gpu_heap_budget_bytes', 'gpu_driver_usage_bytes',
+                                  'gpu_engine_used_bytes', 'gpu_engine_peak_bytes',
+                                  'gpu_buffer_used_bytes', 'gpu_buffer_peak_bytes', 'gpu_buffer_limit_bytes',
+                                  'gpu_texture_used_bytes', 'gpu_texture_peak_bytes', 'gpu_texture_limit_bytes',
+                                  'gpu_render_target_used_bytes', 'gpu_render_target_peak_bytes',
+                                  'gpu_render_target_limit_bytes', 'gpu_staging_used_bytes',
+                                  'gpu_staging_peak_bytes', 'gpu_staging_limit_bytes',
+                                  'system_ram_available_ratio', 'gpu_driver_usage_ratio',
+                                  'gpu_engine_class_ratio')) {
+                $targetName = if ($field -eq 'classification') { 'memory_classification' } else { $field }
+                $window | Add-Member -NotePropertyName $targetName -NotePropertyValue $memory.$field
+            }
+        } else {
+            $window | Add-Member -NotePropertyName memory_classification -NotePropertyValue 'unknown'
+            $window | Add-Member -NotePropertyName ram_valid -NotePropertyValue $false
+            $window | Add-Member -NotePropertyName gpu_budget_supported -NotePropertyValue $false
+        }
         if ($window.schemaVersion -ge 5) {
             if (-not $pressures.ContainsKey($passKey)) {
                 throw "Janela FrameProfile sem pressão correspondente: $passKey."
@@ -493,6 +609,11 @@ function Get-FrameProfileCapture {
             $window | Add-Member -NotePropertyName thermal_headroom -NotePropertyValue -1.0
             $window | Add-Member -NotePropertyName thermal_pressure -NotePropertyValue 'none'
         }
+        if ($window.PSObject.Properties.Name -notcontains 'memory_classification') {
+            $window | Add-Member -NotePropertyName memory_classification -NotePropertyValue 'unknown'
+            $window | Add-Member -NotePropertyName ram_valid -NotePropertyValue $false
+            $window | Add-Member -NotePropertyName gpu_budget_supported -NotePropertyValue $false
+        }
     }
     $matchingContexts = @($Contexts | Where-Object { $_.pid -eq $latest.pid -and $_.epoch -eq $latest.epoch })
     if ($matchingContexts.Count -ne 1) {
@@ -548,8 +669,41 @@ function Get-FrameProfileCapture {
     $dominantPressure = @($pressureCounts.GetEnumerator() |
         Sort-Object -Property @{ Expression = 'Value'; Descending = $true },
                               @{ Expression = 'Name'; Descending = $false })[0].Name
+    $memoryAvailable = $latest.PSObject.Properties.Name -contains 'gpu_engine_used_bytes'
+    $memoryPressureCounts = [ordered]@{}
+    foreach ($kind in @('normal', 'warning', 'critical', 'unknown')) {
+        $memoryPressureCounts[$kind] = @($selected | Where-Object memory_classification -eq $kind).Count
+    }
+    $memorySummary = if ($memoryAvailable) {
+        [ordered]@{
+            available = $true
+            classifications = $memoryPressureCounts
+            ramValid = [bool]$latest.ram_valid
+            maximumRssBytes = ($selected | Measure-Object ram_rss_bytes -Maximum).Maximum
+            peakRssBytes = ($selected | Measure-Object ram_peak_rss_bytes -Maximum).Maximum
+            maximumSwapBytes = ($selected | Measure-Object ram_swap_bytes -Maximum).Maximum
+            minimumSystemAvailableBytes = ($selected | Measure-Object system_ram_available_bytes -Minimum).Minimum
+            minimumSystemAvailableRatio = ($selected | Measure-Object system_ram_available_ratio -Minimum).Minimum
+            gpuUnifiedMemory = [bool]$latest.gpu_unified
+            gpuDriverBudgetSupported = [bool]$latest.gpu_budget_supported
+            gpuHeapSizeBytes = [decimal]$latest.gpu_heap_size_bytes
+            gpuHeapBudgetBytes = [decimal]$latest.gpu_heap_budget_bytes
+            maximumGpuDriverUsageBytes = ($selected | Measure-Object gpu_driver_usage_bytes -Maximum).Maximum
+            maximumGpuDriverUsageRatio = ($selected | Measure-Object gpu_driver_usage_ratio -Maximum).Maximum
+            maximumEngineAllocationBytes = ($selected | Measure-Object gpu_engine_used_bytes -Maximum).Maximum
+            peakEngineAllocationBytes = ($selected | Measure-Object gpu_engine_peak_bytes -Maximum).Maximum
+            endingClasses = [ordered]@{
+                buffer = [ordered]@{ usedBytes = $latest.gpu_buffer_used_bytes; peakBytes = $latest.gpu_buffer_peak_bytes; limitBytes = $latest.gpu_buffer_limit_bytes }
+                texture = [ordered]@{ usedBytes = $latest.gpu_texture_used_bytes; peakBytes = $latest.gpu_texture_peak_bytes; limitBytes = $latest.gpu_texture_limit_bytes }
+                renderTarget = [ordered]@{ usedBytes = $latest.gpu_render_target_used_bytes; peakBytes = $latest.gpu_render_target_peak_bytes; limitBytes = $latest.gpu_render_target_limit_bytes }
+                staging = [ordered]@{ usedBytes = $latest.gpu_staging_used_bytes; peakBytes = $latest.gpu_staging_peak_bytes; limitBytes = $latest.gpu_staging_limit_bytes }
+            }
+        }
+    } else {
+        [ordered]@{ available = $false; classifications = $memoryPressureCounts }
+    }
     return [ordered]@{
-        schemaVersion = 3
+        schemaVersion = 4
         scene = $context.scene
         # 'tile-deferred': o hardware resolveu os timestamps do render pass no
         # fim do tile e as metricas gpu_*_ms abaixo NAO atribuem custo por
@@ -583,6 +737,7 @@ function Get-FrameProfileCapture {
             thermalHeadroom = [double]$latest.thermal_headroom
             thermalPressure = [string]$latest.thermal_pressure
         }
+        memory = $memorySummary
         metrics = $metrics
         pocA = [ordered]@{
             cpuLimitMsExclusive = 3.0

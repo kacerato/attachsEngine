@@ -7,6 +7,25 @@ O plano de resolução das lacunas deste instantâneo está em
 `PLANO-FECHAMENTO-LACUNAS.md`. Ele define prioridades, dependências, migrações,
 testes em hardware e critérios de aceite sem substituir o roadmap principal.
 
+## FrameProfile CPU/GPU/RAM/memória Vulkan — 02/09/2026
+
+O FrameProfile schema 7 fecha CPU, GPU e memória na mesma chave
+`pid/epoch/window`. RAM do processo inclui virtual, RSS atual/pico, anônima,
+arquivo, compartilhada e swap; RAM do sistema inclui total/disponível. O RHI
+habilita `VK_EXT_memory_budget` por capability e separa heap/budget/uso global do
+driver das alocações pertencentes à engine, divididas em buffer, textura, render
+target e staging com uso/pico/limite. Memória unificada é reportada explicitamente.
+Leituras `/proc` acontecem somente a cada 600 frames, fora do hot path.
+
+O coletor host exige o registro de memória em schema 7, valida totais e publica
+resumo de captura; schemas 4–6 continuam legíveis sem inferir valores ausentes.
+Validação: **313/313** testes C++ Release, **52/52** contratos PowerShell e Android
+Release montado offline. Smoke físico no Xiaomi `25053PC47G`: schema 7 parseado,
+96,50 FPS, CPU da render thread p95 2,00 ms, GPU p95 8,57 ms, RSS 249,96 MiB,
+swap 37,61 MiB, alocações Vulkan da engine 130,70 MiB e pressão de memória
+`normal`. O driver não anunciou `VK_EXT_memory_budget`, portanto budget/uso global
+permaneceram corretamente indisponíveis. A janela foi `gpu` e não prova 120 FPS.
+
 ## Estabilização gráfica — 28/08/2026
 
 Contrato bindless/fallback corrigido e validado no Adreno com Khronos validation

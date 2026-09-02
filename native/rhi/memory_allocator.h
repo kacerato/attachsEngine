@@ -146,7 +146,8 @@ public:
   VulkanMemoryAllocator &operator=(const VulkanMemoryAllocator &) = delete;
 
   bool initialize(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device,
-                  const MemoryBudgetConfig &budgetConfig);
+                  const MemoryBudgetConfig &budgetConfig,
+                  bool memoryBudgetExtensionEnabled = false);
   void shutdown();
 
   bool createBuffer(const BufferDesc &desc, VulkanBuffer *outBuffer);
@@ -165,10 +166,14 @@ public:
   bool isReady() const { return allocator_ != VK_NULL_HANDLE; }
   VkDevice device() const { return device_; }
   MemoryBudgetSnapshot budgetSnapshot() const { return budget_.snapshot(); }
+  DeviceMemorySnapshot deviceMemorySnapshot() const;
 
 private:
   VmaAllocator allocator_ = VK_NULL_HANDLE;
+  VkInstance instance_ = VK_NULL_HANDLE;
+  VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
   VkDevice device_ = VK_NULL_HANDLE;
+  bool memoryBudgetExtensionEnabled_ = false;
   MemoryBudgetTracker budget_{};
 };
 

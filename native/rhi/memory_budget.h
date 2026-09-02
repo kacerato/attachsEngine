@@ -39,6 +39,22 @@ struct MemoryBudgetSnapshot {
   u64 totalPeakBytes() const;
 };
 
+// Visão completa da memória gráfica. allocationBudget contém somente recursos
+// pertencentes à engine e é sempre preciso. Os campos deviceLocal* descrevem o
+// heap inteiro visto pelo driver (engine + compositor + outros consumidores) e
+// só budget/usage são válidos quando VK_EXT_memory_budget foi habilitada.
+// Em Android/UMA o heap device-local pode ser a própria RAM compartilhada;
+// unifiedMemory torna essa distinção explícita para o profiler não somar RAM e
+// "VRAM" como se fossem dispositivos físicos separados.
+struct DeviceMemorySnapshot final {
+  MemoryBudgetSnapshot allocationBudget{};
+  bool driverBudgetAvailable = false;
+  bool unifiedMemory = false;
+  u64 deviceLocalHeapBytes = 0;
+  u64 deviceLocalBudgetBytes = 0;
+  u64 deviceLocalUsageBytes = 0;
+};
+
 // Tracker pequeno e independente de Vulkan/VMA. É thread-safe porque IO e
 // upload de assets passarão a reservar memória em workers nas próximas fases.
 class MemoryBudgetTracker final {

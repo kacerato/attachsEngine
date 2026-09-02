@@ -223,6 +223,10 @@ public:
   float currentRenderScale() const { return dynamicResolution_.scale(); }
   u32 currentRenderWidth() const { return renderWidth(); }
   u32 currentRenderHeight() const { return renderHeight(); }
+  rhi::DeviceMemorySnapshot deviceMemorySnapshot() const {
+    return memoryAllocator_ != nullptr ? memoryAllocator_->deviceMemorySnapshot()
+                                       : rhi::DeviceMemorySnapshot{};
+  }
 
 private:
   void applyRuntimeRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy);
