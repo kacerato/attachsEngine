@@ -601,6 +601,53 @@ por aritmética que **nenhum ajuste de shading leva esta pose a 120 Hz na
 resolução nativa**. O próximo alvo tem de ser quantas vezes cada pixel é
 sombreado — overdraw e shading por fragmento — e não o custo de cada amostra.
 
+## Sombra por fragmento e ordem de profundidade — 02/09/2026
+
+Primeiro ganho aceito desde a precisão explícita no PBR, e o maior deles: **−2,14 ms
+(−17,4%)** na pose do hotspot, de 81,2 para 98,2 quadros por segundo equivalentes,
+**sem tocar em resolução, LOD, sombras ou qualquer eixo de qualidade**. Controles
+reproduzindo em 0,049 ms de um lado e 0,062 ms do outro, contra uma diferença de
+2,139 ms — trinta vezes o espalhamento interno.
+
+Duas correções, medidas juntas porque só se compõem:
+
+**O PCF era feito à mão dentro de um laço 5x5 fixo.** 25 iterações para tomar 9
+amostras, com desvio dinâmico que o compilador só podia predicar, amostrando um
+`sampler2D` comum e comparando profundidade no shader. O Adreno tem PCF em
+hardware: uma busca resolve compare e filtro bilinear 2x2 de uma vez. Com cada
+busca já filtrada, quatro amostras cobrem a vizinhança que nove buscas não
+filtradas cobriam. A sombra por fragmento caiu de **3,53 para 2,15 ms** — de
++34,7% para +23,8% do frame sem sombra.
+
+**Os lotes indiretos desmanchavam a ordem de profundidade.** O agrupamento por
+material submetia todos os draws de um material antes de qualquer draw do
+próximo, inclusive os distantes antes dos próximos, depois de a lista já ter
+sido ordenada front-to-back — exatamente o que o early-Z/LRZ do tiler precisa
+que não aconteça. Agora o lote fecha por run-length ao longo da lista ordenada.
+
+O controle cruzado é o que prova a composição: o PCF de hardware **sozinho**
+mediu 13,081 ms, **pior** que a base de 12,322. Buscas de sombra mais baratas só
+rendem depois que o early-Z removeu os fragmentos escondidos.
+
+Um resultado negativo importante ficou registrado no caminho: trocar o laço 5x5
+predicado por um laço de **limites dinâmicos** foi pior que o original. A
+contagem de voltas deixa de ser conhecida, o compilador não desenrola, e buscas
+de textura dependentes serializam.
+
+**O frame é 100% GPU-bound.** `acquire_wall_ms` (12,99 base / 10,80 novo)
+acompanha `gpu_frame_ms` quase exatamente, enquanto a CPU trabalha 2,5 ms: ela já
+está ociosa 84% do frame. Aumentar frames em voo não criaria vazão onde não há
+trabalho de CPU para sobrepor.
+
+Uma bateria intermediária foi invalidada e o motivo ficou documentado: o
+**overlay GameTurbo do Xiaomi** abriu sobre o app com "Wild Boost" ativo,
+compondo camada extra e mexendo no DVFS. A mesma configuração passou a variar
+6 ms e `sombra off` chegou a medir mais lento que `sombra on`. O runner precisa
+gravar esse estado como contexto e recusar a janela, em vez de produzir números
+que parecem válidos.
+
+Detalhamento e tabelas em `PROFILING-ANDROID.md`.
+
 ## Resumo
 
 | | |

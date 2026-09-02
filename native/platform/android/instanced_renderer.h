@@ -164,6 +164,21 @@ public:
   // precisa saber que ele existe. Exige o produtor compute e multi-draw
   // indirect, e permanece opt-in (aether.hzb_gpu_culling) enquanto não houver
   // A/B físico com gate de imagem, como todo experimento deste renderer.
+  // Lotes indiretos que preservam a ordem de profundidade.
+  //
+  // O agrupamento por material submete TODOS os draws de um material antes de
+  // qualquer draw do proximo -- inclusive os mais distantes antes dos mais
+  // proximos. A lista ja chega ordenada front-to-back e o agrupamento a
+  // desmancha, o que e exatamente o que o early-Z/LRZ do tiler precisa que
+  // nao aconteca: um fragmento distante sombreado antes do proximo que o
+  // esconde nao pode ser rejeitado depois.
+  //
+  // Ligado, o lote fecha por RUN-LENGTH: um lote novo a cada troca de material
+  // ao longo da lista ordenada. Custa mais lotes (push constants e um
+  // vkCmdDrawIndexedIndirect por lote, na CPU, que tem folga medida) e nao
+  // muda um pixel -- opaco e alpha-mask sao independentes de ordem.
+  void setDepthOrderedBatchesEnabled(bool enabled) { depthOrderedBatches_ = enabled; }
+  bool depthOrderedBatchesEnabled() const { return depthOrderedBatches_; }
   void setHzbGpuCullingEnabled(bool enabled) { hzbGpuCullingEnabled_ = enabled; }
   bool hzbGpuCullingEnabled() const { return hzbGpuCullingEnabled_; }
   bool hzbGpuCullingActive() const { return hzbGpuCullingActive_; }
@@ -411,6 +426,7 @@ private:
   std::vector<IndirectBatch> indirectSolidBatches_;
   std::vector<IndirectBatch> indirectCoverageBatches_;
   bool useMultiDrawIndirect_ = false;
+  bool depthOrderedBatches_ = false;
   struct MaterialParameters { float roughness=1, metallic=1, normalScale=1; };
   MaterialParameters materialParameters_;
   int lastExtractionStatus_ = 0;

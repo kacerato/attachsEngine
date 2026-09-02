@@ -779,3 +779,99 @@ Reprodução:
 consumidor; os dois viajam em `configuration.hzbComputeProducerEnabled` e
 `configuration.hzbGpuCullingEnabled` do relatório, para que nenhuma rodada possa
 ser reinterpretada depois como se fosse a outra.
+
+## Sombra por fragmento e ordem de profundidade — ganho aceito em 02/09/2026
+
+Mesma bancada e mesma pose do hotspot da seção anterior. Duas mudanças, medidas
+juntas porque a segunda só rende com a primeira (ver o controle cruzado abaixo).
+
+**1. PCF de hardware com kernel de quatro buscas.** `directionalShadow` amostrava
+um `sampler2D` comum e comparava a profundidade à mão, dentro de um laço 5x5
+fixo com `continue`: **25 iteracoes para tomar 9 amostras** na cascata próxima e
+1 na distante, com desvio dinâmico que o compilador só podia predicar. O Adreno
+tem PCF em hardware — uma busca resolve compare e filtro bilinear 2x2 de uma vez.
+Com cada busca já filtrada, quatro amostras em ±0,5 texel cobrem a mesma
+vizinhança que nove buscas não filtradas cobriam, com pesos bilineares em vez de
+degraus. Menos da metade das buscas para a mesma suavidade.
+
+Uma tentativa intermediária ficou registrada porque ensina: trocar o 5x5 por um
+laço de **limites dinâmicos** (`for(y=-radius;y<=radius;...)`) foi pior que o
+5x5 predicado. A contagem de voltas deixa de ser conhecida, o compilador não
+desenrola, e buscas de textura dependentes serializam.
+
+**2. Lotes indiretos que preservam a ordem de profundidade.** `buildIndirectBatches`
+agrupava por material: todos os draws de um material antes de qualquer draw do
+próximo, inclusive os distantes antes dos próximos. A lista chega ordenada
+front-to-back e o agrupamento a desmanchava — exatamente o que o early-Z/LRZ do
+tiler precisa que não aconteça. Agora o lote fecha por run-length, a cada troca
+de material ao longo da lista já ordenada.
+
+### A/B intercalado, controles reproduzindo dos dois lados
+
+| Rodada | frame ms | opaque ms | post ms |
+|---|---:|---:|---:|
+| base 1 | 12,297 | 11,210 | 1,082 |
+| base 2 | 12,346 | 11,245 | 1,096 |
+| base 3 | 12,324 | 11,257 | 1,062 |
+| **base (média)** | **12,322** | 11,237 | 1,080 |
+| novo 1 | 10,211 | 9,118 | 1,089 |
+| novo 3 | 10,149 | 9,059 | 1,085 |
+| novo 4 | 10,189 | 9,107 | 1,077 |
+| **novo (média)** | **10,183** | 9,095 | 1,084 |
+| novo, sem ordem de profundidade | 13,081 | 11,696 | 1,379 |
+
+Espalhamento dentro do controle: **0,049 ms**. Dentro da variante nova:
+**0,062 ms**. A diferença entre variantes é **2,139 ms**, mais de trinta vezes o
+espalhamento interno — muito acima do piso de ruído de ~0,4 ms desta bancada.
+Uma quarta rodada da variante nova mediu 12,863 ms e está registrada como
+outlier isolado; as três que reproduzem entre si são a medida.
+
+**Ganho aceito: −2,14 ms (−17,4%) na pose do hotspot**, de 81,2 para 98,2 quadros
+por segundo equivalentes. Sem tocar em resolução, LOD, sombras ou qualquer eixo
+de qualidade.
+
+A linha "novo, sem ordem de profundidade" é o controle cruzado que importa: o
+PCF de hardware **sozinho** mediu 13,081 ms, pior que a base. As duas mudanças se
+compõem — buscas de sombra mais baratas rendem quando o early-Z já removeu os
+fragmentos escondidos, e não antes.
+
+### Custo da sombra por fragmento, medido por build
+
+O atlas de sombra fica em cache (`gpu_shadow_ms` = 0,001 e
+`shadow_cache_hit_frames` alto), então este custo é inteiramente amostragem no
+fragmento:
+
+| Build | com sombra | sem sombra | custo | razão |
+|---|---:|---:|---:|---:|
+| laço 5x5, 9 buscas não filtradas | 13,716 | 10,184 | 3,53 ms | 1,347 |
+| PCF hardware, 9 buscas filtradas | 13,631 | 10,480 | 3,15 ms | 1,301 |
+| PCF hardware, 4 buscas filtradas | 11,18 | 9,03 | 2,15 ms | 1,238 |
+
+A razão é a leitura robusta à deriva: a sombra saiu de +34,7% para +23,8% do
+frame sem sombra.
+
+### O frame é 100% GPU-bound — mais frames em voo não ajudariam
+
+| Rodada | gpu_frame | acquire_wall | record_submit | present | cpu |
+|---|---:|---:|---:|---:|---:|
+| base | 12,322 | 12,988 | 0,525 | 0,314 | 1,685 |
+| novo | 10,183 | 10,798 | 0,563 | 0,319 | 1,710 |
+
+`acquire_wall_ms` acompanha `gpu_frame_ms` quase exatamente: a CPU passa ~13 ms
+bloqueada em `acquireNextImage` e trabalha ~2,5 ms. Ela já está ociosa 84% do
+frame. Aumentar frames em voo não cria vazão onde não há trabalho de CPU para
+sobrepor — só adiciona latência de toque→pixel. Enquanto `acquire_wall` for
+essencialmente `gpu_frame`, esse eixo não é o gargalo.
+
+### Contaminação encontrada: overlay GameTurbo
+
+Uma bateria intermediária ficou inutilizável — a mesma configuração variou 6 ms
+e `sombra off` chegou a medir mais lento que `sombra on`, o que é fisicamente
+impossível. A captura de tela explicou: o **overlay GameTurbo do Xiaomi abriu por
+cima do app**, com "Wild Boost" ativo, compondo uma camada extra e mexendo no
+DVFS. A diferença de 78% dos pixels contra o controle era o painel, não a cena —
+a floresta visível ao lado do painel está idêntica.
+
+Isso confirma a pendência já registrada: o runner precisa gravar estado de
+GameTurbo/gravação de tela como contexto e recusar a janela quando o overlay
+estiver presente, em vez de produzir números que parecem válidos.

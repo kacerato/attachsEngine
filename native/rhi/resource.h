@@ -17,6 +17,12 @@ struct SamplerDesc {
   float maxLod = 0.0f;
   bool enableAnisotropy = false;
   float maxAnisotropy = 1.0f;
+  // Amostragem de comparacao (sampler2DShadow). O Adreno tem PCF em hardware:
+  // uma unica busca faz o compare E o filtro bilinear 2x2. Comparar a mao no
+  // shader gasta quatro buscas para o mesmo resultado e ainda interpola
+  // profundidades ANTES de comparar, o que nem sequer e o filtro correto.
+  bool enableCompare = false;
+  VkCompareOp compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 };
 
 bool isSamplerDescValid(const SamplerDesc &desc);

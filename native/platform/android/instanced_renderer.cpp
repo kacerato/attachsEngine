@@ -1101,13 +1101,32 @@ bool InstancedRenderer::createShadowResources() {
   image.memoryClass = rhi::MemoryClass::RenderTarget;
   if (!memoryAllocator_->createImage(image, &shadowAtlas_)) return false;
   rhi::SamplerDesc sampler{};
-  sampler.minFilter = VK_FILTER_NEAREST;
-  sampler.magFilter = VK_FILTER_NEAREST;
+  // PCF por hardware: o Adreno resolve compare + bilinear 2x2 numa busca so.
+  // Exige filtro LINEAR e o feature bit correspondente para o formato de
+  // profundidade escolhido; sem ele, NEAREST ainda entrega o compare em
+  // hardware (uma amostra por busca, sem o filtro), que continua sendo melhor
+  // que comparar a mao no shader.
+  VkFormatProperties shadowFormatProperties{};
+  vkGetPhysicalDeviceFormatProperties(physicalDevice_, shadowDepthFormat_,
+                                      &shadowFormatProperties);
+  const bool linearShadowFilter =
+      (shadowFormatProperties.optimalTilingFeatures &
+       VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
+  const VkFilter shadowFilter = linearShadowFilter ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+  sampler.minFilter = shadowFilter;
+  sampler.magFilter = shadowFilter;
   sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
   sampler.addressU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   sampler.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   sampler.addressW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler.enableCompare = true;
+  // O shader comparava `projected.z <= stored`; LESS_OR_EQUAL preserva
+  // exatamente essa semantica, inclusive na igualdade.
+  sampler.compareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
   if (!shadowSampler_.initialize(device_, sampler)) return false;
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[Shadow] PCF de hardware ativo: filtro=%s compare=LESS_OR_EQUAL.",
+      linearShadowFilter ? "linear" : "nearest");
 
   VkAttachmentReference depthReference{0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
   VkSubpassDescription subpass{};
@@ -3459,6 +3478,27 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     auto buildIndirectBatches = [&](const std::vector<u32> &visible,
                                     std::vector<IndirectBatch> &batches) {
       batches.clear();
+      if (depthOrderedBatches_) {
+        // Run-length sobre a lista JA ordenada front-to-back: fecha um lote a
+        // cada troca de material. A ordem de profundidade chega intacta ao
+        // tiler, que e a condicao para o early-Z rejeitar o fragmento distante
+        // antes de sombra-lo. Ver setDepthOrderedBatchesEnabled.
+        for (u32 drawIndex : visible) {
+          const auto &draw = dirtRoadResources_.draws()[drawIndex];
+          const bool distantMaterial = usesDistantMaterialPipeline(drawIndex);
+          if (batches.empty() || batches.back().materialIndex != draw.materialIndex ||
+              batches.back().distantMaterial != distantMaterial) {
+            batches.push_back({draw.materialIndex,
+                               static_cast<u32>(indirectCommands_.size()), 0, 0,
+                               distantMaterial});
+          }
+          indirectCommands_.push_back({draw.indexCount, 1, draw.firstIndex,
+                                       static_cast<i32>(draw.vertexOffset), drawIndex});
+          ++batches.back().commandCount;
+          batches.back().triangles += draw.indexCount / 3;
+        }
+        return;
+      }
       for (u32 drawIndex : visible) {
         const u32 materialIndex = dirtRoadResources_.draws()[drawIndex].materialIndex;
         const bool distantMaterial = usesDistantMaterialPipeline(drawIndex);

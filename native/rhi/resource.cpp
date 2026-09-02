@@ -39,6 +39,8 @@ bool VulkanSampler::initialize(VkDevice device, const SamplerDesc &desc) {
   info.maxLod = desc.maxLod;
   info.anisotropyEnable = desc.enableAnisotropy ? VK_TRUE : VK_FALSE;
   info.maxAnisotropy = desc.maxAnisotropy;
+  info.compareEnable = desc.enableCompare ? VK_TRUE : VK_FALSE;
+  info.compareOp = desc.compareOp;
   info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
   info.unnormalizedCoordinates = VK_FALSE;
 

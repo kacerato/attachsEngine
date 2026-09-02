@@ -21,7 +21,10 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   vec4 materialDistanceParameters; // MR map, emissive map, fade-band ratio, reserved
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
-layout(set=1,binding=2) uniform sampler2D shadowAtlas;
+// sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de
+// hardware. Ver createShadowResources -- o sampler correspondente e criado com
+// compareEnable e filtro linear; sem isso este declarador seria invalido.
+layout(set=1,binding=2) uniform sampler2DShadow shadowAtlas;
 layout(set=1,binding=3) uniform sampler2D environmentSpecularMap;
 layout(set=1,binding=4) uniform sampler2D environmentBrdfLut;
 
@@ -84,13 +87,33 @@ mediump float directionalShadow(highp vec3 worldPosition, mediump vec3 normal,
   highp float cascadeRatio=cascadeCount>1?float(cascade)/float(cascadeCount-1):0.0;
   int radius=int(mix(environment.shadowFilterParameters.x,
                      environment.shadowFilterParameters.y,cascadeRatio)+0.5);
-  mediump float visible=0.0;
-  mediump float samples=0.0;
-  for(int y=-2;y<=2;++y) for(int x=-2;x<=2;++x) {
-    if(abs(x)>radius || abs(y)>radius) continue;
-    highp float stored=texture(shadowAtlas,atlasUv+vec2(x,y)*environment.shadowParameters.x).r;
-    visible+=projected.z<=stored?1.0:0.0;
-    samples+=1.0;
+  highp float texel=environment.shadowParameters.x;
+  // Nenhum laco de contagem dinamica, e nenhum grid 5x5 com `continue`.
+  //
+  // O corpo anterior percorria 25 iteracoes para tomar 9 amostras na cascata
+  // proxima e 1 na distante, com desvio dinamico que o compilador so podia
+  // predicar. Trocar por um laco de limites dinamicos foi pior ainda: a
+  // contagem de voltas deixa de ser conhecida e o compilador nao desenrola, o
+  // que serializa buscas de textura dependentes.
+  //
+  // Cada busca agora e um PCF 2x2 de hardware, ja filtrado. Isso muda o
+  // calculo do kernel: quatro buscas em +-0,5 texel cobrem a mesma vizinhanca
+  // 3x3 que nove buscas NAO filtradas cobriam, com pesos bilineares em vez de
+  // degraus. Menos da metade das buscas para a mesma suavidade -- nao e perda
+  // de qualidade, e a qualidade que o hardware ja estava pronto para dar.
+  if(radius<=0) return texture(shadowAtlas,vec3(atlasUv,projected.z));
+  if(radius==1) {
+    highp vec2 offset=vec2(texel*0.5);
+    mediump float sum=texture(shadowAtlas,vec3(atlasUv+vec2(-offset.x,-offset.y),projected.z));
+    sum+=texture(shadowAtlas,vec3(atlasUv+vec2( offset.x,-offset.y),projected.z));
+    sum+=texture(shadowAtlas,vec3(atlasUv+vec2(-offset.x, offset.y),projected.z));
+    sum+=texture(shadowAtlas,vec3(atlasUv+vec2( offset.x, offset.y),projected.z));
+    return sum*0.25;
   }
-  return visible/max(samples,1.0);
+  // Kernel largo (UltraSoft): grid 3x3 de buscas filtradas, espacadas de um
+  // texel, cobrindo a vizinhanca 4x4 que o 5x5 nao filtrado cobria.
+  mediump float visible=0.0;
+  for(int y=-1;y<=1;++y) for(int x=-1;x<=1;++x)
+    visible+=texture(shadowAtlas,vec3(atlasUv+vec2(x,y)*texel,projected.z));
+  return visible*(1.0/9.0);
 }

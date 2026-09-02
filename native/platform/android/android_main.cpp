@@ -925,6 +925,9 @@ void android_main(android_app *app) {
       app->activity, "aether.hzb_gpu_culling");
   if (hzbGpuCulling) shell.instancedRenderer.setHzbComputeEnabled(true);
   shell.instancedRenderer.setHzbGpuCullingEnabled(hzbGpuCulling);
+  shell.instancedRenderer.setDepthOrderedBatchesEnabled(
+      ae::platform::android::readBooleanLaunchOption(app->activity,
+                                                     "aether.depth_ordered_batches"));
   ae::u32 requestedHysteresisFrames = shell.visibilityBudget.hzbHysteresisFrames;
   if (ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.hzb_hysteresis_frames",
                                                        requestedHysteresisFrames)) {
