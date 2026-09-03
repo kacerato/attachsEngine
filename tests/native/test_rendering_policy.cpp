@@ -55,7 +55,7 @@ AE_TEST(policy_auto_deriva_do_perfil_detectado) {
   AE_EXPECT_EQ(c.shadows.cascadeCount, 1u, "perfil C usa uma cascata");
   AE_EXPECT_EQ(c.shadows.filterTaps, 1u, "perfil C nao filtra");
   AE_EXPECT_TRUE(c.post.dedicatedPass, "escala reduzida do perfil C exige passe de upscale");
-  AE_EXPECT_TRUE(!c.post.bloom && !c.post.fxaa,
+  AE_EXPECT_TRUE(!c.post.bloom && c.post.antiAliasing == AntiAliasingMode::Off,
                  "perfil C nao paga filtros adicionais no passe de upscale");
 }
 
@@ -133,7 +133,8 @@ AE_TEST(policy_ajustes_finos_nao_dependem_do_nome_do_preset) {
                "detalhe material preserva alcance autoral configurado");
   AE_EXPECT_EQ(policy.materialDistance.metallicRoughnessMaximumDistance, 260.0f,
                "MR distante possui budget proprio");
-  AE_EXPECT_TRUE(policy.post.fxaa && policy.post.dedicatedPass,
+  AE_EXPECT_TRUE(policy.post.antiAliasing == AntiAliasingMode::Fxaa &&
+                     policy.post.dedicatedPass,
                  "filtro isolado ativa o passe sem trocar preset");
   AE_EXPECT_TRUE(policy.dynamicResolution.enabled, "resolucao dinamica e eixo global");
   AE_EXPECT_EQ(policy.dynamicResolution.minimumScale, 0.72f, "piso autoral preservado");
@@ -333,6 +334,12 @@ AE_TEST(policy_parsing_round_trip_de_todos_os_eixos) {
   for (auto value : posts) {
     AE_EXPECT_EQ(parsePostQuality(postQualityName(value)), value, "round-trip de pos");
   }
+  const AntiAliasingMode antiAliasingModes[] = {
+      AntiAliasingMode::Off, AntiAliasingMode::Fxaa, AntiAliasingMode::Temporal};
+  for (auto value : antiAliasingModes) {
+    AE_EXPECT_EQ(parseAntiAliasingMode(antiAliasingModeName(value)), value,
+                 "round-trip de anti-aliasing");
+  }
   const AmbientQuality ambients[] = {AmbientQuality::Constant, AmbientQuality::Hemispheric,
                                      AmbientQuality::HemisphericSpecular};
   for (auto value : ambients) {
@@ -351,7 +358,28 @@ AE_TEST(policy_nome_invalido_herda_em_vez_de_derrubar) {
   AE_EXPECT_EQ(parseShadowQuality("inventado"), ShadowQuality::Inherit, "sombra desconhecida");
   AE_EXPECT_EQ(parseShadowQuality(nullptr), ShadowQuality::Inherit, "ponteiro nulo");
   AE_EXPECT_EQ(parsePostQuality(""), PostQuality::Inherit, "string vazia");
+  AE_EXPECT_EQ(parseAntiAliasingMode("inventado"), AntiAliasingMode::Inherit,
+               "anti-aliasing desconhecido herda");
+  AE_EXPECT_EQ(parseAntiAliasingMode("taa"), AntiAliasingMode::Temporal,
+               "alias curto de temporal permanece aceito");
   AE_EXPECT_EQ(parseQualityPreset("ultra"), QualityPreset::Auto, "preset desconhecido vira auto");
+}
+
+AE_TEST(policy_anti_aliasing_novo_prevalece_sobre_compatibilidade_fxaa) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::B;
+  settings.antiAliasing = AntiAliasingMode::Temporal;
+  settings.postFxaa = FeatureOverride::Disabled;
+  const auto temporal = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(temporal.post.antiAliasing, AntiAliasingMode::Temporal,
+               "schema novo prevalece sobre booleano legado");
+  AE_EXPECT_TRUE(temporal.post.dedicatedPass,
+                 "qualquer modo temporal requer compositor dedicado");
+
+  settings.antiAliasing = AntiAliasingMode::Inherit;
+  const auto migrated = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(migrated.post.antiAliasing, AntiAliasingMode::Off,
+               "booleano legado ainda migra projetos schema 6");
 }
 
 AE_TEST(material_distance_so_reduz_quando_bounds_inteiro_esta_distante) {

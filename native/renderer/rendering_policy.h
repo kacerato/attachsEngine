@@ -80,6 +80,16 @@ enum class TextureQuality : u32 {
   Full,   // resolução autoral completa
 };
 
+// Anti-aliasing is independent from tonemapping/bloom. `Temporal` is a real
+// renderer mode, never an alias for FXAA; backends that cannot allocate its
+// history/depth resources must explicitly clamp it and report that decision.
+enum class AntiAliasingMode : u32 {
+  Inherit = 0,
+  Off,
+  Fxaa,
+  Temporal,
+};
+
 // Preset é um ponto nomeado no espaço acima. `Auto` deriva do perfil de dispositivo
 // detectado; os demais fixam o ponto independentemente do hardware, e a capability
 // ainda pode reduzi-los (nunca elevá-los).
@@ -89,7 +99,7 @@ enum class QualityPreset : u32 { Auto = 0, C, B, A, S, Custom };
 // produziria dois campos capazes de se contradizer no arquivo do projeto.
 enum class FeatureOverride : u32 { Inherit = 0, Disabled, Enabled };
 
-inline constexpr u32 RenderingSettingsSchemaVersion = 6;
+inline constexpr u32 RenderingSettingsSchemaVersion = 7;
 
 // ---------------------------------------------------------------------------
 // Entrada 3 da ADR — escolha global serializada do projeto.
@@ -148,6 +158,10 @@ struct ProjectRenderingSettings final {
   // valor negativo herda o padrão global (20%).
   float materialDetailFadeBandRatio = -1.0f;
 
+  AntiAliasingMode antiAliasing = AntiAliasingMode::Inherit;
+  // Schema <= 6 compatibility. New serialized settings must use
+  // `antiAliasing`; this field remains so old projects and launch tooling do
+  // not silently change appearance during migration.
   FeatureOverride postFxaa = FeatureOverride::Inherit;
   FeatureOverride postVignette = FeatureOverride::Inherit;
   float bloomThreshold = -1.0f;
@@ -231,7 +245,7 @@ struct PostSettings final {
   // Um passe dedicado de pós, em vez do tonemap inline no shading.
   bool dedicatedPass = false;
   bool bloom = false;
-  bool fxaa = false;
+  AntiAliasingMode antiAliasing = AntiAliasingMode::Off;
   bool vignette = false;
   float bloomThreshold = 1.0f;
   float bloomIntensity = 0.0f;
@@ -316,11 +330,13 @@ ShadowQuality parseShadowQuality(const char *name);
 AmbientQuality parseAmbientQuality(const char *name);
 PostQuality parsePostQuality(const char *name);
 TextureQuality parseTextureQuality(const char *name);
+AntiAliasingMode parseAntiAliasingMode(const char *name);
 
 const char *shadowQualityName(ShadowQuality quality);
 const char *ambientQualityName(AmbientQuality quality);
 const char *postQualityName(PostQuality quality);
 const char *textureQualityName(TextureQuality quality);
+const char *antiAliasingModeName(AntiAliasingMode mode);
 
 // Resolve a política. Determinística e sem estado: as mesmas quatro entradas
 // produzem sempre a mesma saída, que é o que permite reproduzir uma captura.

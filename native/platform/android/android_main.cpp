@@ -376,7 +376,7 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
   __android_log_print(ANDROID_LOG_INFO, LogTag,
       "[RenderPolicy] lod=%s erro_solido=%.2fpx erro_coverage=%.2fpx histerese=%.2f "
       "normal_ate=%.1f specular_ate=%.1f "
-      "mr_ate=%.1f emissive_ate=%.1f variantes_material=%s fxaa=%d bloom=%d sharpen=%.2f contraste=%.2f saturacao=%.2f",
+      "mr_ate=%.1f emissive_ate=%.1f variantes_material=%s aa=%s bloom=%d sharpen=%.2f contraste=%.2f saturacao=%.2f",
       shell.renderingPolicy.geometry.lodSelection ? "on" : "off",
       static_cast<double>(shell.renderingPolicy.visibility.lodPixelErrorBudget),
       static_cast<double>(shell.renderingPolicy.visibility.coverageLodPixelErrorBudget),
@@ -386,7 +386,8 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
       static_cast<double>(shell.renderingPolicy.materialDistance.metallicRoughnessMaximumDistance),
       static_cast<double>(shell.renderingPolicy.materialDistance.emissiveMaximumDistance),
       shell.renderingPolicy.geometry.materialShaderVariants ? "on" : "off",
-      shell.renderingPolicy.post.fxaa ? 1 : 0, shell.renderingPolicy.post.bloom ? 1 : 0,
+      ae::renderer::antiAliasingModeName(shell.renderingPolicy.post.antiAliasing),
+      shell.renderingPolicy.post.bloom ? 1 : 0,
       static_cast<double>(shell.renderingPolicy.post.sharpen),
       static_cast<double>(shell.renderingPolicy.post.contrast),
       static_cast<double>(shell.renderingPolicy.post.saturation));
@@ -815,6 +816,10 @@ void android_main(android_app *app) {
     if (ae::platform::android::readStringLaunchOption(app->activity, "aether.quality_textures",
                                                       buffer, sizeof(buffer))) {
       shell.renderingSettings.textures = ae::renderer::parseTextureQuality(buffer);
+    }
+    if (ae::platform::android::readStringLaunchOption(app->activity, "aether.anti_aliasing",
+                                                      buffer, sizeof(buffer))) {
+      shell.renderingSettings.antiAliasing = ae::renderer::parseAntiAliasingMode(buffer);
     }
     ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.shadow_cascades",
                                                      shell.renderingSettings.shadowCascadeCount);

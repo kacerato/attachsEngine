@@ -194,7 +194,7 @@ void InstancedRenderer::setRuntimeRenderingPolicy(
   active.post.dedicatedPass = resourceRenderingPolicy_.post.dedicatedPass;
   if (!resourceRenderingPolicy_.post.dedicatedPass) {
     active.post.bloom = false;
-    active.post.fxaa = false;
+    active.post.antiAliasing = renderer::AntiAliasingMode::Off;
     active.post.vignette = false;
     active.post.sharpen = 0.0f;
     active.post.contrast = 1.0f;
@@ -1056,7 +1056,8 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex) {
   push.texelFlags[0] = 1.0f / static_cast<float>(renderTargetWidth());
   push.texelFlags[1] = 1.0f / static_cast<float>(renderTargetHeight());
   push.texelFlags[2] = renderingPolicy_.post.bloom ? 1.0f : 0.0f;
-  push.texelFlags[3] = renderingPolicy_.post.fxaa ? 1.0f : 0.0f;
+  push.texelFlags[3] =
+      renderingPolicy_.post.antiAliasing == renderer::AntiAliasingMode::Fxaa ? 1.0f : 0.0f;
   push.bloom[0] = renderingPolicy_.post.bloomThreshold;
   push.bloom[1] = renderingPolicy_.post.bloomIntensity;
   push.bloom[2] = renderingPolicy_.post.sharpen;

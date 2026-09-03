@@ -138,9 +138,11 @@ AmbientSettings deriveAmbient(AmbientQuality quality) {
 PostSettings derivePost(PostQuality quality) {
   switch (quality) {
     case PostQuality::Bloom:
-      return {true, true, true, true, 1.15f, 0.28f, 1.04f, 1.03f, 0.12f, 0.16f};
+      return {true, true, AntiAliasingMode::Fxaa, true,
+              1.15f, 0.28f, 1.04f, 1.03f, 0.12f, 0.16f};
     case PostQuality::Tonemap:
-      return {true, false, true, false, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f};
+      return {true, false, AntiAliasingMode::Fxaa, false,
+              1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f};
     default: return {};
   }
 }
@@ -208,6 +210,14 @@ TextureQuality parseTextureQuality(const char *name) {
   return TextureQuality::Inherit;
 }
 
+AntiAliasingMode parseAntiAliasingMode(const char *name) {
+  if (matches(name, "off")) return AntiAliasingMode::Off;
+  if (matches(name, "fxaa")) return AntiAliasingMode::Fxaa;
+  if (matches(name, "temporal") || matches(name, "taa"))
+    return AntiAliasingMode::Temporal;
+  return AntiAliasingMode::Inherit;
+}
+
 const char *shadowQualityName(ShadowQuality quality) {
   switch (quality) {
     case ShadowQuality::Off: return "off";
@@ -240,6 +250,15 @@ const char *textureQualityName(TextureQuality quality) {
   switch (quality) {
     case TextureQuality::Half: return "half";
     case TextureQuality::Full: return "full";
+    default: return "inherit";
+  }
+}
+
+const char *antiAliasingModeName(AntiAliasingMode mode) {
+  switch (mode) {
+    case AntiAliasingMode::Off: return "off";
+    case AntiAliasingMode::Fxaa: return "fxaa";
+    case AntiAliasingMode::Temporal: return "temporal";
     default: return "inherit";
   }
 }
@@ -416,7 +435,13 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
   policy.ambient.splitSumBrdf = policy.ambient.specularProbe &&
       enabledOverride(settings.environmentSplitSumBrdf, policy.ambient.splitSumBrdf);
   policy.post = derivePost(post);
-  policy.post.fxaa = enabledOverride(settings.postFxaa, policy.post.fxaa);
+  if (settings.antiAliasing != AntiAliasingMode::Inherit) {
+    policy.post.antiAliasing = settings.antiAliasing;
+  } else if (settings.postFxaa != FeatureOverride::Inherit) {
+    policy.post.antiAliasing = settings.postFxaa == FeatureOverride::Enabled
+                                   ? AntiAliasingMode::Fxaa
+                                   : AntiAliasingMode::Off;
+  }
   policy.post.vignette = enabledOverride(settings.postVignette, policy.post.vignette);
   if (std::isfinite(settings.bloomThreshold) && settings.bloomThreshold >= 0.0f)
     policy.post.bloomThreshold = std::clamp(settings.bloomThreshold, 0.0f, 8.0f);
@@ -430,7 +455,8 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
     policy.post.sharpen = std::clamp(settings.postSharpen, 0.0f, 1.0f);
   // Qualquer filtro solicitado exige o passe, mesmo quando o preset base usava
   // tonemap inline. Isto mantém cada eixo independente de nome de preset.
-  if (policy.post.bloom || policy.post.fxaa || policy.post.vignette ||
+  if (policy.post.bloom || policy.post.antiAliasing != AntiAliasingMode::Off ||
+      policy.post.vignette ||
       policy.post.sharpen > 0.0f || policy.post.contrast != 1.0f ||
       policy.post.saturation != 1.0f) {
     policy.post.dedicatedPass = true;
