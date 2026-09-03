@@ -1,8 +1,8 @@
 {
   "version": 3,
   "format": "AEMAP-3",
-  "sourceZip": "update_dirt_road_through_forest.zip",
-  "sourceSha256": "069f360d54ec2642f9de74dddcbb0043acfda9e2aa8066a6fe50b303cf944c57",
+  "sourceZip": "update_dirt_road_through_forest.glb",
+  "sourceSha256": "508b50ff8c41671e65822c829971209d0480ebfdcf41e76035f3f4dfdcb954b6",
   "license": "CC-BY-4.0",
   "author": "99.Miles",
   "source": "https://sketchfab.com/3d-models/update-dirt-road-through-forest-c4676cdf7715484382400ff63faffd45",
@@ -10,9 +10,9 @@
   "statistics": {
     "textures": 71,
     "materials": 27,
-    "draws": 1330,
-    "vertices": 425697,
-    "triangles": 533684,
+    "draws": 1029,
+    "vertices": 425549,
+    "triangles": 534985,
     "boundsMin": [
       -203.2776699066162,
       96.23909508605564,
@@ -28,43 +28,57 @@
       160.75257873535156,
       -468.6829528808594
     ],
-    "sourceDraws": 58,
-    "level0Draws": 635,
+    "sourceDraws": 27,
+    "level0Draws": 482,
     "level0Vertices": 424849,
     "level0Triangles": 341109,
-    "lodGroups": 245,
+    "lodGroups": 190,
+    "lodTrianglesPerGroup": 2048,
+    "lodWorldCellSize": 64.0,
     "lodDrawsByLevel": {
-      "0": 635,
-      "1": 245,
-      "2": 239,
-      "3": 211
+      "0": 482,
+      "1": 190,
+      "2": 183,
+      "3": 174
     },
     "lodTrianglesByLevel": {
       "0": 341109,
-      "1": 126033,
-      "2": 66118
-    },
-    "lodTrianglesPerGroup": 2048,
-    "lodWorldCellSize": 64.0
+      "1": 127808,
+      "2": 65718
+    }
   },
   "textures": [
     {
       "cookedIndex": 0,
       "gltfTexture": 0,
-      "image": "textures/Background_Tree_Atlas_baseColor.png",
+      "image": "image_000.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
         2048,
         2048,
-        12
+        10
       ],
-      "sha256": "eb06b627092e9c41940bdb868f74be0470dce7fc8f706c22c05c85212acf774b"
+      "sha256": "eb06b627092e9c41940bdb868f74be0470dce7fc8f706c22c05c85212acf774b",
+      "alphaSemantics": "coverage",
+      "coverageCutoff": 0.5,
+      "coverageByMip": [
+        0.25544,
+        0.255496,
+        0.255497,
+        0.255478,
+        0.255493,
+        0.255615,
+        0.255859,
+        0.257812,
+        0.265625,
+        0.3125
+      ]
     },
     {
       "cookedIndex": 1,
       "gltfTexture": 2,
-      "image": "textures/Background_Tree_Atlas_emissive.png",
+      "image": "image_002.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -77,7 +91,7 @@
     {
       "cookedIndex": 2,
       "gltfTexture": 3,
-      "image": "textures/Background_Tree_Atlas_normal.png",
+      "image": "image_003.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -90,7 +104,7 @@
     {
       "cookedIndex": 3,
       "gltfTexture": 1,
-      "image": "textures/Background_Tree_Atlas_metallicRoughness.png",
+      "image": "image_001.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -103,20 +117,32 @@
     {
       "cookedIndex": 4,
       "gltfTexture": 4,
-      "image": "textures/Metal_Fence_baseColor.png",
+      "image": "image_004.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
         1024,
         512,
-        11
+        8
       ],
-      "sha256": "fccc1496e89136da31904ca4c0921ca88587be20be25dd808904903db1adde9f"
+      "sha256": "fccc1496e89136da31904ca4c0921ca88587be20be25dd808904903db1adde9f",
+      "alphaSemantics": "coverage",
+      "coverageCutoff": 0.5,
+      "coverageByMip": [
+        0.143373,
+        0.16349,
+        0.143677,
+        0.144775,
+        0.144531,
+        0.144531,
+        0.148438,
+        0.15625
+      ]
     },
     {
       "cookedIndex": 5,
       "gltfTexture": 6,
-      "image": "textures/Metal_Fence_normal.png",
+      "image": "image_006.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -129,7 +155,7 @@
     {
       "cookedIndex": 6,
       "gltfTexture": 5,
-      "image": "textures/Metal_Fence_metallicRoughness.png",
+      "image": "image_005.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -142,7 +168,7 @@
     {
       "cookedIndex": 7,
       "gltfTexture": 7,
-      "image": "textures/Dirt_Road_Bare_baseColor.png",
+      "image": "image_007.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -155,7 +181,7 @@
     {
       "cookedIndex": 8,
       "gltfTexture": 9,
-      "image": "textures/Dirt_Road_Bare_normal.png",
+      "image": "image_009.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -168,7 +194,7 @@
     {
       "cookedIndex": 9,
       "gltfTexture": 8,
-      "image": "textures/Dirt_Road_Bare_metallicRoughness.png",
+      "image": "image_008.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -181,7 +207,7 @@
     {
       "cookedIndex": 10,
       "gltfTexture": 10,
-      "image": "textures/Trunk_Birch_baseColor.png",
+      "image": "image_010.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -194,7 +220,7 @@
     {
       "cookedIndex": 11,
       "gltfTexture": 12,
-      "image": "textures/Trunk_Birch_normal.png",
+      "image": "image_012.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -207,7 +233,7 @@
     {
       "cookedIndex": 12,
       "gltfTexture": 11,
-      "image": "textures/Trunk_Birch_metallicRoughness.png",
+      "image": "image_011.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -220,7 +246,7 @@
     {
       "cookedIndex": 13,
       "gltfTexture": 13,
-      "image": "textures/Wood_Log_baseColor.png",
+      "image": "image_013.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -233,7 +259,7 @@
     {
       "cookedIndex": 14,
       "gltfTexture": 14,
-      "image": "textures/Trunk_Oak_baseColor.png",
+      "image": "image_014.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -246,7 +272,7 @@
     {
       "cookedIndex": 15,
       "gltfTexture": 16,
-      "image": "textures/Trunk_Oak_normal.png",
+      "image": "image_016.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -259,7 +285,7 @@
     {
       "cookedIndex": 16,
       "gltfTexture": 15,
-      "image": "textures/Trunk_Oak_metallicRoughness.png",
+      "image": "image_015.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -272,20 +298,31 @@
     {
       "cookedIndex": 17,
       "gltfTexture": 17,
-      "image": "textures/Fallen_Generic_Leaves_baseColor.png",
+      "image": "image_017.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
         512,
         512,
-        10
+        7
       ],
-      "sha256": "5d0a6fdba464c4aa7be86eed15a7bf1e3071767d5e8b7ed751af908e579ead22"
+      "sha256": "5d0a6fdba464c4aa7be86eed15a7bf1e3071767d5e8b7ed751af908e579ead22",
+      "alphaSemantics": "coverage",
+      "coverageCutoff": 0.5,
+      "coverageByMip": [
+        0.043758,
+        0.043777,
+        0.043762,
+        0.043945,
+        0.043945,
+        0.046875,
+        0.03125
+      ]
     },
     {
       "cookedIndex": 18,
       "gltfTexture": 19,
-      "image": "textures/Fallen_Generic_Leaves_normal.png",
+      "image": "image_019.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -298,7 +335,7 @@
     {
       "cookedIndex": 19,
       "gltfTexture": 18,
-      "image": "textures/Fallen_Generic_Leaves_metallicRoughness.png",
+      "image": "image_018.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -311,7 +348,7 @@
     {
       "cookedIndex": 20,
       "gltfTexture": 20,
-      "image": "textures/Ground_Dirt_baseColor.jpeg",
+      "image": "image_020.jpg",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -324,7 +361,7 @@
     {
       "cookedIndex": 21,
       "gltfTexture": 22,
-      "image": "textures/Ground_Dirt_normal.jpeg",
+      "image": "image_022.jpg",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -337,7 +374,7 @@
     {
       "cookedIndex": 22,
       "gltfTexture": 21,
-      "image": "textures/Ground_Dirt_metallicRoughness.png",
+      "image": "image_021.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -350,20 +387,31 @@
     {
       "cookedIndex": 23,
       "gltfTexture": 23,
-      "image": "textures/Forest_Bush_baseColor.png",
+      "image": "image_023.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
         256,
         256,
-        9
+        7
       ],
-      "sha256": "5c8acdad5f3e04100f837c385918b950f159d932c5f8311630f71d7290b94a74"
+      "sha256": "5c8acdad5f3e04100f837c385918b950f159d932c5f8311630f71d7290b94a74",
+      "alphaSemantics": "coverage",
+      "coverageCutoff": 0.5,
+      "coverageByMip": [
+        0.102875,
+        0.103149,
+        0.103027,
+        0.103516,
+        0.105469,
+        0.109375,
+        0.125
+      ]
     },
     {
       "cookedIndex": 24,
       "gltfTexture": 24,
-      "image": "textures/Forest_Bush_normal.png",
+      "image": "image_024.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -376,20 +424,32 @@
     {
       "cookedIndex": 25,
       "gltfTexture": 25,
-      "image": "textures/Grass_Vegetation_Dry_baseColor.png",
+      "image": "image_025.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
         256,
         256,
-        9
+        8
       ],
-      "sha256": "e8ec5c19a0ae32688dffe58202bac09044d7ee6dd9969626ba878ef7d0cede13"
+      "sha256": "e8ec5c19a0ae32688dffe58202bac09044d7ee6dd9969626ba878ef7d0cede13",
+      "alphaSemantics": "coverage",
+      "coverageCutoff": 0.5,
+      "coverageByMip": [
+        0.224411,
+        0.224426,
+        0.224609,
+        0.224609,
+        0.226562,
+        0.234375,
+        0.25,
+        0.25
+      ]
     },
     {
       "cookedIndex": 26,
       "gltfTexture": 27,
-      "image": "textures/Grass_Vegetation_Dry_normal.png",
+      "image": "image_027.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -402,7 +462,7 @@
     {
       "cookedIndex": 27,
       "gltfTexture": 26,
-      "image": "textures/Grass_Vegetation_Dry_metallicRoughness.png",
+      "image": "image_026.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -415,33 +475,57 @@
     {
       "cookedIndex": 28,
       "gltfTexture": 28,
-      "image": "textures/Grass_Vegetation_Green_baseColor.png",
+      "image": "image_028.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
         256,
         256,
-        9
+        8
       ],
-      "sha256": "9e1095a312c21728d5e35a0c0141ad6c529845f38261f22489f451357cf4d763"
+      "sha256": "9e1095a312c21728d5e35a0c0141ad6c529845f38261f22489f451357cf4d763",
+      "alphaSemantics": "coverage",
+      "coverageCutoff": 0.5,
+      "coverageByMip": [
+        0.224411,
+        0.224426,
+        0.224609,
+        0.224609,
+        0.226562,
+        0.234375,
+        0.25,
+        0.25
+      ]
     },
     {
       "cookedIndex": 29,
       "gltfTexture": 29,
-      "image": "textures/Fallen_Maple_Leaves_baseColor.png",
+      "image": "image_029.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
         1024,
         1024,
-        11
+        8
       ],
-      "sha256": "b075a0b0e3306058fb0752c1e232b5cbd7007a7aa4b069daca49c32b9fa744d3"
+      "sha256": "b075a0b0e3306058fb0752c1e232b5cbd7007a7aa4b069daca49c32b9fa744d3",
+      "alphaSemantics": "coverage",
+      "coverageCutoff": 0.5,
+      "coverageByMip": [
+        0.090667,
+        0.093803,
+        0.093506,
+        0.090698,
+        0.09082,
+        0.09082,
+        0.09375,
+        0.09375
+      ]
     },
     {
       "cookedIndex": 30,
       "gltfTexture": 31,
-      "image": "textures/Fallen_Maple_Leaves_normal.png",
+      "image": "image_031.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -454,7 +538,7 @@
     {
       "cookedIndex": 31,
       "gltfTexture": 30,
-      "image": "textures/Fallen_Maple_Leaves_metallicRoughness.png",
+      "image": "image_030.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -467,20 +551,34 @@
     {
       "cookedIndex": 32,
       "gltfTexture": 32,
-      "image": "textures/Rock_Decal_baseColor.png",
+      "image": "image_032.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
         1024,
         1024,
-        11
+        10
       ],
-      "sha256": "cb743ce9baebc82874247a4a93fc8df991928a297edb8bf39f3b7bf8afec0cb5"
+      "sha256": "cb743ce9baebc82874247a4a93fc8df991928a297edb8bf39f3b7bf8afec0cb5",
+      "alphaSemantics": "coverage",
+      "coverageCutoff": 0.5,
+      "coverageByMip": [
+        0.211402,
+        0.211491,
+        0.211441,
+        0.211426,
+        0.211426,
+        0.211914,
+        0.214844,
+        0.21875,
+        0.25,
+        0.25
+      ]
     },
     {
       "cookedIndex": 33,
       "gltfTexture": 34,
-      "image": "textures/Rock_Decal_normal.png",
+      "image": "image_034.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -493,7 +591,7 @@
     {
       "cookedIndex": 34,
       "gltfTexture": 33,
-      "image": "textures/Rock_Decal_metallicRoughness.png",
+      "image": "image_033.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -506,7 +604,7 @@
     {
       "cookedIndex": 35,
       "gltfTexture": 35,
-      "image": "textures/Mud_Pile_baseColor.png",
+      "image": "image_035.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -519,7 +617,7 @@
     {
       "cookedIndex": 36,
       "gltfTexture": 37,
-      "image": "textures/Mud_Pile_normal.png",
+      "image": "image_037.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -532,7 +630,7 @@
     {
       "cookedIndex": 37,
       "gltfTexture": 36,
-      "image": "textures/Mud_Pile_metallicRoughness.png",
+      "image": "image_036.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -545,7 +643,7 @@
     {
       "cookedIndex": 38,
       "gltfTexture": 38,
-      "image": "textures/Dirt_Road_Trails_baseColor.png",
+      "image": "image_038.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -558,7 +656,7 @@
     {
       "cookedIndex": 39,
       "gltfTexture": 40,
-      "image": "textures/Dirt_Road_Trails_normal.png",
+      "image": "image_040.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -571,7 +669,7 @@
     {
       "cookedIndex": 40,
       "gltfTexture": 39,
-      "image": "textures/Dirt_Road_Trails_metallicRoughness.png",
+      "image": "image_039.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -584,7 +682,7 @@
     {
       "cookedIndex": 41,
       "gltfTexture": 41,
-      "image": "textures/Road_Edge_Gravel_Dusty_baseColor.png",
+      "image": "image_041.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -597,7 +695,7 @@
     {
       "cookedIndex": 42,
       "gltfTexture": 43,
-      "image": "textures/Road_Edge_Gravel_Dusty_normal.png",
+      "image": "image_043.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -610,7 +708,7 @@
     {
       "cookedIndex": 43,
       "gltfTexture": 42,
-      "image": "textures/Road_Edge_Gravel_Dusty_metallicRoughness.png",
+      "image": "image_042.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -623,7 +721,7 @@
     {
       "cookedIndex": 44,
       "gltfTexture": 44,
-      "image": "textures/Puddle_Streaks_baseColor.png",
+      "image": "image_044.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -636,7 +734,7 @@
     {
       "cookedIndex": 45,
       "gltfTexture": 46,
-      "image": "textures/Puddle_Streaks_normal.png",
+      "image": "image_046.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -649,7 +747,7 @@
     {
       "cookedIndex": 46,
       "gltfTexture": 45,
-      "image": "textures/Puddle_Streaks_metallicRoughness.png",
+      "image": "image_045.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -662,7 +760,7 @@
     {
       "cookedIndex": 47,
       "gltfTexture": 47,
-      "image": "textures/Wood_Fence_baseColor.png",
+      "image": "image_047.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -675,7 +773,7 @@
     {
       "cookedIndex": 48,
       "gltfTexture": 48,
-      "image": "textures/Sloped_Rock_baseColor.png",
+      "image": "image_048.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -688,7 +786,7 @@
     {
       "cookedIndex": 49,
       "gltfTexture": 50,
-      "image": "textures/Sloped_Rock_normal.png",
+      "image": "image_050.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -701,7 +799,7 @@
     {
       "cookedIndex": 50,
       "gltfTexture": 49,
-      "image": "textures/Sloped_Rock_metallicRoughness.png",
+      "image": "image_049.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -714,7 +812,7 @@
     {
       "cookedIndex": 51,
       "gltfTexture": 51,
-      "image": "textures/Terrain_Far_baseColor.jpeg",
+      "image": "image_051.jpg",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -727,7 +825,7 @@
     {
       "cookedIndex": 52,
       "gltfTexture": 52,
-      "image": "textures/Aerial_Grass_baseColor.jpeg",
+      "image": "image_052.jpg",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -740,7 +838,7 @@
     {
       "cookedIndex": 53,
       "gltfTexture": 54,
-      "image": "textures/Aerial_Grass_normal.jpeg",
+      "image": "image_054.jpg",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -753,7 +851,7 @@
     {
       "cookedIndex": 54,
       "gltfTexture": 53,
-      "image": "textures/Aerial_Grass_metallicRoughness.png",
+      "image": "image_053.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -766,7 +864,7 @@
     {
       "cookedIndex": 55,
       "gltfTexture": 55,
-      "image": "textures/Tall_Cliff_baseColor.jpeg",
+      "image": "image_055.jpg",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -779,7 +877,7 @@
     {
       "cookedIndex": 56,
       "gltfTexture": 57,
-      "image": "textures/Tall_Cliff_normal.png",
+      "image": "image_057.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -792,7 +890,7 @@
     {
       "cookedIndex": 57,
       "gltfTexture": 56,
-      "image": "textures/Tall_Cliff_metallicRoughness.png",
+      "image": "image_056.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -805,7 +903,7 @@
     {
       "cookedIndex": 58,
       "gltfTexture": 58,
-      "image": "textures/Cobblestone_baseColor.jpeg",
+      "image": "image_058.jpg",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -818,7 +916,7 @@
     {
       "cookedIndex": 59,
       "gltfTexture": 60,
-      "image": "textures/Cobblestone_normal.jpeg",
+      "image": "image_060.jpg",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -831,7 +929,7 @@
     {
       "cookedIndex": 60,
       "gltfTexture": 59,
-      "image": "textures/Cobblestone_metallicRoughness.png",
+      "image": "image_059.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -844,7 +942,7 @@
     {
       "cookedIndex": 61,
       "gltfTexture": 61,
-      "image": "textures/Grass_Close_baseColor.png",
+      "image": "image_061.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -857,7 +955,7 @@
     {
       "cookedIndex": 62,
       "gltfTexture": 63,
-      "image": "textures/Grass_Close_normal.jpeg",
+      "image": "image_063.jpg",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -870,7 +968,7 @@
     {
       "cookedIndex": 63,
       "gltfTexture": 62,
-      "image": "textures/Grass_Close_metallicRoughness.png",
+      "image": "image_062.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -883,7 +981,7 @@
     {
       "cookedIndex": 64,
       "gltfTexture": 64,
-      "image": "textures/Dirt_Road_baseColor.png",
+      "image": "image_064.png",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -896,7 +994,7 @@
     {
       "cookedIndex": 65,
       "gltfTexture": 66,
-      "image": "textures/Dirt_Road_normal.png",
+      "image": "image_066.png",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -909,7 +1007,7 @@
     {
       "cookedIndex": 66,
       "gltfTexture": 65,
-      "image": "textures/Dirt_Road_metallicRoughness.png",
+      "image": "image_065.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -922,7 +1020,7 @@
     {
       "cookedIndex": 67,
       "gltfTexture": 67,
-      "image": "textures/Broken_Rocks_baseColor.jpeg",
+      "image": "image_067.jpg",
       "srgb": true,
       "normalMap": false,
       "dimensions": [
@@ -935,7 +1033,7 @@
     {
       "cookedIndex": 68,
       "gltfTexture": 69,
-      "image": "textures/Broken_Rocks_normal.jpeg",
+      "image": "image_069.jpg",
       "srgb": false,
       "normalMap": true,
       "dimensions": [
@@ -948,7 +1046,7 @@
     {
       "cookedIndex": 69,
       "gltfTexture": 68,
-      "image": "textures/Broken_Rocks_metallicRoughness.png",
+      "image": "image_068.png",
       "srgb": false,
       "normalMap": false,
       "dimensions": [
@@ -964,17 +1062,17 @@
     "environment-specular.aetex": "cc32e9ea74316cdf6b4accb5a12be362f48e7fe03ed03aa0c96c659e4777a128",
     "environment.aeenv": "30970f2d0570921062c9acdea08528cdafb368570b10f6027ed535fa1cb34a3c",
     "environment.aetex": "216c35ea5c4a0b7b7efa01eb8af501413b34dfc14dcc92e7995913e41eda5a29",
-    "scene.aemap": "ff8116ad1cdcd10250b255044ccae7e77cb43e4393a24540cb1fc4ff1ecfaa27",
-    "texture_000-fallback.aetex": "bf1899635a5400f6d969ede803d01ce54aa2af1c0977876257d6e9aa28909659",
-    "texture_000.aetex": "cb46d964b4ac7c9d2752ff860d8d8a370f22ce776aa7b218c1f307c669c9f4eb",
+    "scene.aemap": "82f6041bff54327abc074ab94d91e0b202260b94c78ac0f39b15092724f3d374",
+    "texture_000-fallback.aetex": "9b06d079833e153e9a7b0cf973df5346d572a87c34dd6a2b879c74f300092245",
+    "texture_000.aetex": "e32b0ceab57e800f69e582fc2f65d0418efb274c1219d540aed280833ea308f0",
     "texture_001-fallback.aetex": "d81efae4903b06389eb27ac9cab59db08051384296c3a13b42611dd148e3e17d",
     "texture_001.aetex": "4361f0212bb4a747209067a5d00f72ff3aebdeac448463f934b8a444f8522647",
     "texture_002-fallback.aetex": "fe947bc8073d501829a36cec446eacc7858e10a48677c2d3875446a6e1574729",
     "texture_002.aetex": "bd130e8fcd87eeda566f9ffa4e415759ddf3a02bc5b3a940a7fa6da181373d95",
     "texture_003-fallback.aetex": "3ec7c11b8047c26a828cb32650007b71dae10ae5648240fec459eed83c46f00a",
     "texture_003.aetex": "b681d292ef94d56a201699e6df33ae48b37598194918d96fd23057c9d5262bd2",
-    "texture_004-fallback.aetex": "fa68013f305b5c2eae2273517d66def17c0de80688ec353287367ecef23cb209",
-    "texture_004.aetex": "2b7447205a3567e1aa077b923fd3fabdf791d77f53fa7c3d3c8999edb8263015",
+    "texture_004-fallback.aetex": "eb5de1d10e952db51401a57c0223dd8f669e535e8eeb21862359045127b0d65b",
+    "texture_004.aetex": "970e063f93a99eb8216da5d3ff42b648fdcfb52efc21ac68b7ae4c63f6ad8ae0",
     "texture_005-fallback.aetex": "515575be6bca814e23ea2e78180ed1cb65b50e21d38947cb984693b96aea2957",
     "texture_005.aetex": "b1e3ef3e62e098a16b22bce4dd64926b29be1a3e21878c72258096afad38e23f",
     "texture_006-fallback.aetex": "fcd656cd47d3aec29ffa09645729fb9c7140f9afc605c5a639ed1022a6c28bb4",
@@ -999,8 +1097,8 @@
     "texture_015.aetex": "bc00b11af33c92f7e0b1bbbfce7ab283f178c72a8fca613d615433583b521804",
     "texture_016-fallback.aetex": "db33ec8549a6b1a4eb6bf13c9839cc61279594e853a3a32a97bea203fa7f28f0",
     "texture_016.aetex": "39763c4e030313132287d467422fcaffe6b7fd0dadebe7a8b45e4d8371dd0f75",
-    "texture_017-fallback.aetex": "9e1d030250b835f4b19b77fc4b25fdeb82249a54f5e2784d240fa13be4d4c66c",
-    "texture_017.aetex": "cdab51ea8f89194390e146bf9fb488a9e6544c16268c5bdda3dbff0aa0f1ec28",
+    "texture_017-fallback.aetex": "cf89c97c2a95b5e3c7291ebce84ca729d289d172930e83f731134b6daa5d2375",
+    "texture_017.aetex": "1fc946766ac2640fa38469fe2c1f49e433485beed4aeae1769c6d4e3939ec92d",
     "texture_018-fallback.aetex": "4c74643974282a86ff7df6ac92cbd1023b7163e3a050efe3bee006f6f98dee5d",
     "texture_018.aetex": "dc05a292818ebcdc0728e72cfc62fcb1efc5afab7adfb24b2153fd8bb01bc9f2",
     "texture_019-fallback.aetex": "6fffd3bc1f5e0ded45deda1ecf166a57a83217aedf22fc7918e1805fd5dab2e7",
@@ -1011,26 +1109,26 @@
     "texture_021.aetex": "299e9ddc7c64713e86894fde5a1eb81049cdd047db21873a64808c56f3710491",
     "texture_022-fallback.aetex": "2fcc174c365e62d4a9b4be7c8175e20b48b1c7f1c3e8f20491e422cbb5a38ce2",
     "texture_022.aetex": "b553aaaf7526327f89ad174ba7a293e6c9ebe296ccf4ddcd84bd83e88c9a20bb",
-    "texture_023-fallback.aetex": "2eb36b97828b21605534cbb5bf52f9c3735a0e51d6af8178dc8086ba2393760d",
-    "texture_023.aetex": "b6dd06664897cdda2482c261ef6307ef6d7e3da8fe073946f59be78f40c4f3c2",
+    "texture_023-fallback.aetex": "8707f05b2041e3e3a2a51c3dcec5934aa7dd745dc58ca976698bbd0a01b82883",
+    "texture_023.aetex": "8e3fa9cc179741b969296be88f10db05497e96da923a4743361ee2669e5292f3",
     "texture_024-fallback.aetex": "07db5ec5a8d908791c05687663ab2b6b062bbfb5c15c08e94df04bc13a53d5a6",
     "texture_024.aetex": "f3208dd7d8de90dfa3a6706c673e44a80536ec584a23d08a863bd0be8bc27e32",
-    "texture_025-fallback.aetex": "14a8fa2d7c0e6ba02131bc83a367ec29b8f4780a73ba7a077637787edf61af79",
-    "texture_025.aetex": "d1790df61b79402936adf49d6b5fbb4e2d54910ab3d327b138ef8c0dcf94875f",
+    "texture_025-fallback.aetex": "c4f39a8a328ff04d1d48b007272bd18bf80cfb26a5729f93de337362d2492e3f",
+    "texture_025.aetex": "da689fc1d01ccd1cf3c451e9b47e72dffda99af01ea25417c72e60fc139b65b9",
     "texture_026-fallback.aetex": "6135ac96b55bb13e71f032ce99fc4a2a0864bbbc653a131c9a4519fe8e379f4c",
     "texture_026.aetex": "d7796a9060399937cfdc72160422ad2fac5e9dfc5fd2ec4bc2209897fe3b0c9a",
     "texture_027-fallback.aetex": "98919241a465a3f4e46d39a8420d803bc9133c97afc09687ccb31803205ab0b0",
     "texture_027.aetex": "2779329719c7c632e1d33a10554623ecb6fc459030d191e55ed2b14bcfef09c6",
-    "texture_028-fallback.aetex": "0dfa20a6793ec9995831d07e235e078f0b271fdf1be17281c77f5295f8bd5f21",
-    "texture_028.aetex": "ed64446a21689653ca247f832c1e680fc64fd15e3a61c1cd5c130706fb568666",
-    "texture_029-fallback.aetex": "7ae41d7d704c19cd1a489f6c05ff17e6fe589a67f6fdbe60bf6915da04b16a8b",
-    "texture_029.aetex": "f29ae2733837b5891350e0b2a63fcdc4e22e57cdc47cb12613713888e24f4214",
+    "texture_028-fallback.aetex": "6081de054c4a916bbe8b388ea0ec8fe916abd3519da7a984de29e932d1ba4b0d",
+    "texture_028.aetex": "3c7fabc1fe97dae1716f531aa9b2993861f8215064618aae114af5c5eeaeddf3",
+    "texture_029-fallback.aetex": "47fe40716055d2ed6d82aae78a02108a70a1ad59f795b8bcc5185f9441e85ab4",
+    "texture_029.aetex": "1777319c762c7b5007c6a2fe7d7e900585a3a37a50a0360dfb76f15674d27896",
     "texture_030-fallback.aetex": "3155a3641cd91af662b6ed91d9cdddafc77108f9e27086f4fca59ed5d5003ea1",
     "texture_030.aetex": "2a85f3ac81ffcb5b16784aa95dcab5f34cdbe40930af60aa9d5a7e96844b8dcc",
     "texture_031-fallback.aetex": "ce8c982e67872fa78a3aa66cd93f98054f42316f3f90b047f467c40e8e2f9e12",
     "texture_031.aetex": "a7e70e77681f39ef12ecf7b8e5cf61a1af6775b3f0cf7aada53c18e11b3b246d",
-    "texture_032-fallback.aetex": "312eb0eef0cfd3cb5bfcad21d3df552687283ba5f5b0835ee52d64c79880b351",
-    "texture_032.aetex": "c038934263e3a80ad4943d5c97ec555f3a422ac356ae5b655b33caf66b30cc19",
+    "texture_032-fallback.aetex": "917524b160fc0b61ba3b05881908be0f8fb39aca6d74007238603d9b77b3bb1e",
+    "texture_032.aetex": "a4ae90f87eb17f3423f2d911d0da2cf0f1063f6002fd9b624d0c0850c6237e8d",
     "texture_033-fallback.aetex": "be3a6e11b4215d89ab32c3f45771afb17afe298e85ff7c1e205b9412db689822",
     "texture_033.aetex": "24d2879da92f3008ecfa158e191290a333480f9bb6adbe97309753330e67fe27",
     "texture_034-fallback.aetex": "ba0e71a90c828f038d38b30fb9f7aa6b5b435a8e3e33b64376e0207e56e6b2aa",
@@ -1105,8 +1203,15 @@
     "texture_068.aetex": "b65d7b51e256f0f54f2ad094d6662f3a0849fa19cc94f7e1b3c6aab148496a6d",
     "texture_069-fallback.aetex": "b63a8ae108bc588ff23c34200d320ac0427fe505c3a12c0beacbd85b9bdf6229",
     "texture_069.aetex": "9635b9f3510f1dffb613faa9b5c7af7fc9c5402d3804355263146dae90b498b7",
-    "texture_070-fallback.aetex": "93bc4e35cf6f93436ee53e1f9d3e872b0acf6649217222d4021ffa79e77758bd",
-    "texture_070.aetex": "17013f4d40222887a5bcf96d2f6210e65370261b28956fe9d2973e8f4c036fb3"
+    "texture_070-fallback.aetex": "de6b536aa4c042cd7be6446dcae2b804ed03a538dafa08001ba833ec6fa80efc",
+    "texture_070.aetex": "38d4af022d45e5e5c27924af7f8d757e64ec732b42dbe68fe478ce52093733aa"
+  },
+  "geometryLod": {
+    "version": 1,
+    "sourceFormat": "glTF-2.0",
+    "preservesLevel0": true,
+    "level0Contract": "exact-vertices-and-triangles-spatially-reordered",
+    "strategy": "source-vertex-grid-clustering-v1"
   },
   "environment": {
     "asset": "day-clouds-panorama-v1",
@@ -1154,17 +1259,10 @@
       128
     ]
   },
-  "geometryLod": {
-    "version": 1,
-    "sourceFormat": "AEMAP-2",
-    "preservesLevel0": true,
-    "level0Contract": "exact-vertices-and-triangles-spatially-reordered",
-    "strategy": "source-vertex-grid-clustering-v1"
-  },
   "impostors": {
     "version": 1,
     "tool": "tools/bake-foliage-impostors.py",
-    "groups": 212,
+    "groups": 175,
     "atlas": "texture_070.aetex",
     "atlasFallback": "texture_070-fallback.aetex",
     "atlasSize": [
@@ -1173,9 +1271,12 @@
     ],
     "tile": 128,
     "errorScale": 1.25,
+    "mipIsolation": "per-tile-alpha-weighted",
+    "maximumSafeLod": 4,
+    "minimumMipTile": 8,
     "encoding": "R8G8B8A8_SRGB",
-    "atlasBytes": 22369620,
-    "impostorVertices": 848,
-    "impostorTriangles": 424
+    "atlasBytes": 22347776,
+    "impostorVertices": 700,
+    "impostorTriangles": 350
   }
 }

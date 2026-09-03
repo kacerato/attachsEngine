@@ -119,9 +119,14 @@ class DirtRoadAssetsTests(unittest.TestCase):
                 self.assertEqual(encoding, 3, path.name)
                 self.assertEqual(width & (width - 1), 0, path.name)
                 self.assertEqual(height & (height - 1), 0, path.name)
-                # Cadeia completa até 1x1: um impostor sem mip cintila justamente
-                # na distância em que ele é o único nível desenhado.
-                self.assertEqual(mip_count, max(width, height).bit_length(), path.name)
+                # O tail 2x2/1x1 não representa uma copa esparsa e a converte
+                # em card opaco. Cada tile termina no nível seguro declarado.
+                self.assertEqual(mip_count, impostors["maximumSafeLod"] + 1,
+                                 path.name)
+                self.assertEqual(impostors["tile"] >> impostors["maximumSafeLod"],
+                                 impostors["minimumMipTile"], path.name)
+                self.assertEqual(impostors["mipIsolation"],
+                                 "per-tile-alpha-weighted", path.name)
                 self.assertEqual(payload_size, impostors["atlasBytes"], path.name)
                 tiles = (width // impostors["tile"]) * (height // impostors["tile"])
                 self.assertGreaterEqual(tiles, impostors["groups"], path.name)

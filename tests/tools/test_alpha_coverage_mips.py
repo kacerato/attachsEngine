@@ -108,6 +108,22 @@ class AlphaCoverageTest(unittest.TestCase):
             result = cook.scale_alpha_to_coverage(alpha, CUTOFF, target)
             np.testing.assert_array_equal(result, alpha)
 
+    def test_filtro_alpha_weighted_nao_vaza_cor_do_fundo_transparente(self):
+        image = np.zeros((2, 2, 4), dtype=np.float32)
+        image[..., :3] = [1.0, 1.0, 1.0]
+        image[0, 0] = [0.1, 0.6, 0.2, 1.0]
+
+        reduced = cook.halve_alpha_weighted(image)
+
+        np.testing.assert_allclose(reduced[0, 0, :3], [0.1, 0.6, 0.2], atol=1e-6)
+        self.assertAlmostEqual(float(reduced[0, 0, 3]), 0.25)
+
+    def test_tail_de_cobertura_inrepresentavel_e_rejeitado(self):
+        target = 0.25
+        self.assertTrue(cook.coverage_mip_is_representable(target, 5 / 16))
+        self.assertFalse(cook.coverage_mip_is_representable(target, 2 / 4))
+        self.assertFalse(cook.coverage_mip_is_representable(target, 1.0))
+
 
 class CoverageSemanticsTest(unittest.TestCase):
     """A semântica vem do material, nunca do nome da textura ou da cena."""
@@ -225,15 +241,24 @@ class CookTextureIntegrationTest(unittest.TestCase):
                         "a correção precisa alterar algum mip, senão não está ligada")
 
 
-    def test_cozimento_falha_se_um_mip_de_cobertura_zerar(self):
-        # Gate, não aviso: o defeito original chegou ao APK justamente por ser
-        # silencioso. Uma textura de faixas de 1 px some rápido demais para
-        # qualquer escala recuperar nos níveis minúsculos.
+    def test_cozimento_interrompe_antes_de_publicar_mip_sem_cobertura(self):
+        # Uma textura de faixas de 1 px torna-se irrepresentavel cedo. O cooker
+        # conserva o ultimo mip valido; falhar o import inteiro impediria um
+        # fallback seguro que a amostragem Vulkan oferece por maxLod.
         alpha = np.zeros((64, 64), dtype=np.float32)
         alpha[::16, :] = 1.0
-        with self.assertRaises(ValueError) as raised:
-            self.cook(alpha, 0.95)
-        self.assertIn("cobertura alpha", str(raised.exception))
+        _, _, levels, coverage_by_mip = self.cook(alpha, 0.95)
+        self.assertEqual(levels, len(coverage_by_mip))
+        self.assertGreaterEqual(levels, 1)
+        self.assertTrue(all(value > 0.0 for value in coverage_by_mip))
+
+    def test_cadeia_para_no_ultimo_mip_com_cobertura_representavel(self):
+        alpha = np.zeros((64, 64), dtype=np.float32)
+        alpha[:, :16] = 1.0
+        _, _, levels, coverage_by_mip = self.cook(alpha, CUTOFF)
+        self.assertGreater(levels, 1)
+        self.assertLess(levels, 7, "o tail 1x1 nao pode virar um card opaco")
+        self.assertLessEqual(abs(coverage_by_mip[-1] - 0.25), 0.25 * 0.35)
 
 
 if __name__ == "__main__":

@@ -482,26 +482,77 @@ def halve(value):
     return value.reshape(height // 2, 2, width // 2, 2, channels).mean(axis=(1, 3))
 
 
+def halve_alpha_weighted(value):
+    """Reduz RGBA sem deixar o RGB invisivel contaminar a silhueta.
+
+    Exportadores podem conservar qualquer cor em texels totalmente
+    transparentes. Uma media comum mistura essa cor com folhas visiveis e cria
+    halos claros; nos mips menores, o halo vira um card plano. O RGB e filtrado
+    premultiplicado por alpha e o alpha conserva o box filter usado pela
+    preservacao de cobertura.
+    """
+    alpha = value[..., 3:4]
+    reduced_alpha = halve(alpha)
+    reduced_premultiplied = halve(value[..., :3] * alpha)
+    reduced_rgb = np.divide(
+        reduced_premultiplied,
+        reduced_alpha,
+        out=np.zeros_like(reduced_premultiplied),
+        where=reduced_alpha > 1e-8,
+    )
+    return np.concatenate((reduced_rgb, reduced_alpha), axis=-1)
+
+
+def coverage_mip_is_representable(target, observed,
+                                  relative_tolerance=.35,
+                                  absolute_tolerance=.02):
+    """Retorna se a cobertura discretizada ainda representa o original."""
+    tolerance = max(absolute_tolerance, target * relative_tolerance)
+    return abs(observed - target) <= tolerance
+
+
 def write_aetx(path, width, height, encoding, levels):
     payload = b"".join(levels)
     path.write_bytes(struct.pack("<6IQ", 0x58544541, 1, width, height,
                                  encoding, len(levels), len(payload)) + payload)
 
 
+def validate_aetx(path, width, height, encoding, mip_count):
+    """Valida o envelope antes de reutilizar um payload ja comprimido."""
+    if not path.is_file() or path.stat().st_size < 32:
+        return False
+    header = path.read_bytes()[:32]
+    magic, version, stored_width, stored_height, stored_encoding, stored_mips, payload = (
+        struct.unpack("<6IQ", header)
+    )
+    return (magic == 0x58544541 and version == 1 and
+            stored_width == width and stored_height == height and
+            stored_encoding == encoding and stored_mips == mip_count and
+            path.stat().st_size == 32 + payload)
+
+
 def astc_level(astcenc, cache, name, mip, rgba, srgb, quality, jobs):
     png = cache / f"{name}-{mip}.png"
     encoded = png.with_suffix(".astc")
-    Image.fromarray(rgba, "RGBA").save(png, compress_level=1)
-    subprocess.run([str(astcenc), "-cs" if srgb else "-cl", str(png), str(encoded),
-                    "6x6", quality, "-j", str(jobs), "-silent"], check=True)
-    blob = encoded.read_bytes()
-    if len(blob) < 16 or blob[:4] != bytes.fromhex("13aba15c"):
-        raise ValueError(f"invalid ASTC payload for {name} mip {mip}")
-    return blob[16:]
+    try:
+        Image.fromarray(rgba, "RGBA").save(png, compress_level=1)
+        subprocess.run([str(astcenc), "-cs" if srgb else "-cl", str(png), str(encoded),
+                        "6x6", quality, "-j", str(jobs), "-silent"], check=True)
+        blob = encoded.read_bytes()
+        if len(blob) < 16 or blob[:4] != bytes.fromhex("13aba15c"):
+            raise ValueError(f"invalid ASTC payload for {name} mip {mip}")
+        return blob[16:]
+    finally:
+        # Estes arquivos sao workspace do encoder, nao cache: a chave nao
+        # inclui fonte/qualidade e a funcao sempre reencoda. Conserva-los
+        # enche o armazenamento durante um unico mapa e ainda permite que uma
+        # escrita interrompida seja confundida com dado aproveitavel.
+        png.unlink(missing_ok=True)
+        encoded.unlink(missing_ok=True)
 
 
 def cook_texture(astcenc, cache, output, name, source, srgb, normal_map, quality, jobs,
-                 coverage_cutoff=None):
+                 coverage_cutoff=None, reuse_existing=False):
     pixels = np.asarray(Image.open(io.BytesIO(source)).convert("RGBA"), dtype=np.float32) / 255.0
     width, height = pixels.shape[1], pixels.shape[0]
     if width == 0 or height == 0 or width & (width - 1) or height & (height - 1):
@@ -512,6 +563,8 @@ def cook_texture(astcenc, cache, output, name, source, srgb, normal_map, quality
         pixels[..., :3] = pixels[..., :3] * 2.0 - 1.0
 
     levels, fallback = [], []
+    level_count = 0
+    fallback_level_count = 0
     fallback_width = fallback_height = 0
     coverage_target = (alpha_coverage(pixels[..., 3], coverage_cutoff)
                        if coverage_cutoff is not None else None)
@@ -531,20 +584,31 @@ def cook_texture(astcenc, cache, output, name, source, srgb, normal_map, quality
                                                       coverage_target)
         rgba = np.rint(np.clip(display, 0, 1) * 255).astype(np.uint8)
         if coverage_target is not None:
-            coverage_by_mip.append(round(alpha_coverage(rgba[..., 3] / 255.0, coverage_cutoff), 6))
+            observed_coverage = alpha_coverage(rgba[..., 3] / 255.0, coverage_cutoff)
+            # O tail e quantizado em passos grandes. Nao publicamos um nivel
+            # que transforma uma copa esparsa em 2x2/1x1 opaco: o sampler
+            # prende no ultimo mip real, cuja silhueta continua representavel.
+            if mip > 0 and not coverage_mip_is_representable(
+                    coverage_target, observed_coverage):
+                break
+            coverage_by_mip.append(round(observed_coverage, 6))
         current_height, current_width = rgba.shape[:2]
-        levels.append(astc_level(astcenc, cache, name, mip, rgba, srgb, quality, jobs))
+        if not reuse_existing:
+            levels.append(astc_level(astcenc, cache, name, mip, rgba, srgb, quality, jobs))
+        level_count += 1
         # Development fallback stays bounded: ASTC retains the full source;
         # devices without ASTC receive at most 512 px per axis instead of
         # multiplying APK and runtime memory by the complete RGBA8 corpus.
         if current_width <= 512 and current_height <= 512:
-            if not fallback:
+            if fallback_level_count == 0:
                 fallback_width, fallback_height = current_width, current_height
-            fallback.append(rgba.tobytes())
+            if not reuse_existing:
+                fallback.append(rgba.tobytes())
+            fallback_level_count += 1
         print(f"{name}: mip {mip} {current_width}x{current_height}", flush=True)
         if current_width == 1 and current_height == 1:
             break
-        pixels = halve(pixels)
+        pixels = halve_alpha_weighted(pixels) if coverage_target is not None else halve(pixels)
         if normal_map:
             pixels[..., :3] = normalized(pixels[..., :3])
         mip += 1
@@ -560,10 +624,19 @@ def cook_texture(astcenc, cache, output, name, source, srgb, normal_map, quality
                     f"{name}: mip {mip_index} perdeu toda a cobertura alpha "
                     f"(alvo {coverage_target:.4f}, cutoff {coverage_cutoff:.3f})")
 
-    write_aetx(output / f"{name}.aetex", width, height, 1 if srgb else 2, levels)
-    write_aetx(output / f"{name}-fallback.aetex", fallback_width, fallback_height,
-               3 if srgb else 4, fallback)
-    return width, height, len(levels), coverage_by_mip
+    main_path = output / f"{name}.aetex"
+    fallback_path = output / f"{name}-fallback.aetex"
+    if reuse_existing:
+        if not validate_aetx(main_path, width, height, 1 if srgb else 2, level_count):
+            raise ValueError(f"{name}: AETX principal ausente ou incompativel para reuso")
+        if not validate_aetx(fallback_path, fallback_width, fallback_height,
+                             3 if srgb else 4, fallback_level_count):
+            raise ValueError(f"{name}: fallback AETX ausente ou incompativel para reuso")
+    else:
+        write_aetx(main_path, width, height, 1 if srgb else 2, levels)
+        write_aetx(fallback_path, fallback_width, fallback_height,
+                   3 if srgb else 4, fallback)
+    return width, height, level_count, coverage_by_mip
 
 
 
@@ -613,6 +686,48 @@ def buffer_view_bytes(gltf, binary, view_index):
     if end > len(binary):
         raise ValueError("bufferView out of range")
     return binary[start:end]
+
+
+def glb_as_source_zip(data, license_bytes):
+    """Normaliza GLB para o mesmo contrato interno do export ZIP legado.
+
+    O restante do cooker continua consumindo `scene.gltf`, `scene.bin` e URIs
+    de imagem. Fazer a conversao somente em memoria evita dois importadores
+    divergentes e preserva exatamente a mesma geracao de material, LOD e
+    manifesto para as duas formas do glTF.
+    """
+    gltf, binary = read_glb(data)
+    gltf.setdefault("buffers", [{}])
+    if len(gltf["buffers"]) != 1:
+        raise ValueError("GLB com mais de um buffer ainda nao e suportado")
+    gltf["buffers"][0]["uri"] = "scene.bin"
+    gltf["buffers"][0]["byteLength"] = len(binary)
+
+    images = []
+    extensions = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/webp": ".webp",
+        "image/ktx2": ".ktx2",
+    }
+    for index, image in enumerate(gltf.get("images", [])):
+        if "bufferView" not in image:
+            raise ValueError(f"GLB image {index} nao possui bufferView")
+        mime = image.get("mimeType", "application/octet-stream")
+        name = f"image_{index:03d}{extensions.get(mime, '.bin')}"
+        images.append((name, buffer_view_bytes(gltf, binary, image["bufferView"])))
+        image.pop("bufferView")
+        image.pop("mimeType", None)
+        image["uri"] = name
+
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("scene.gltf", json.dumps(gltf, separators=(",", ":")))
+        archive.writestr("scene.bin", binary)
+        archive.writestr("license.txt", license_bytes)
+        for name, payload in images:
+            archive.writestr(name, payload)
+    return output.getvalue()
 
 
 def alpha_card_trim_box(alpha, cutoff, uv_minimum, uv_maximum):
@@ -948,6 +1063,8 @@ def main():
     parser.add_argument("--cache", type=pathlib.Path, default=pathlib.Path("build/dirt-road/cook"))
     parser.add_argument("--quality", choices=["-fast", "-medium", "-thorough"], default="-medium")
     parser.add_argument("--jobs", type=int, default=4)
+    parser.add_argument("--reuse-textures", action="store_true",
+                        help="reutiliza AETX validados e recozinha apenas metadata/geometria")
     parser.add_argument("--lod-triangles-per-group", type=int, default=LOD_GROUP_TRIANGLES,
                         help="spatial LOD cell triangle budget (256..32768)")
     parser.add_argument("--lod-world-cell-size", type=float, default=LOD_GROUP_WORLD_SIZE,
@@ -957,11 +1074,20 @@ def main():
         parser.error("--lod-triangles-per-group must be in [256, 32768]")
     if not 8.0 <= args.lod_world_cell_size <= 512.0:
         parser.error("--lod-world-cell-size must be in [8, 512]")
+    manifest_path = args.out.parent / "manifest.json"
+    previous_manifest = (json.loads(manifest_path.read_text(encoding="utf8"))
+                         if manifest_path.is_file() else {})
     args.out.mkdir(parents=True, exist_ok=True)
     args.cache.mkdir(parents=True, exist_ok=True)
 
     source_bytes = args.source.read_bytes()
-    with zipfile.ZipFile(io.BytesIO(source_bytes)) as archive:
+    archive_bytes = source_bytes
+    if source_bytes[:4] == b"glTF":
+        license_path = args.out.parent / "LICENSE.txt"
+        if not license_path.is_file():
+            raise ValueError("importar GLB exige LICENSE.txt ao lado do pacote de destino")
+        archive_bytes = glb_as_source_zip(source_bytes, license_path.read_bytes())
+    with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
         names = set(archive.namelist())
         if not {"scene.gltf", "scene.bin", "license.txt"}.issubset(names):
             raise ValueError("expected scene.gltf, scene.bin and license.txt at ZIP root")
@@ -998,7 +1124,7 @@ def main():
             coverage_cutoff = coverage_cutoffs.get(texture_index) if srgb else None
             *dimensions, coverage_by_mip = cook_texture(
                 args.astcenc, args.cache, args.out, f"texture_{cooked_index:03d}", source, srgb,
-                normal_map, args.quality, args.jobs, coverage_cutoff)
+                normal_map, args.quality, args.jobs, coverage_cutoff, args.reuse_textures)
             sampler = gltf.get("samplers", [{}])[texture.get("sampler", 0)]
             flags = (1 if sampler.get("magFilter", 9729) == 9729 else 0)
             flags |= (2 if sampler.get("minFilter", 9987) in (9987, 9985) else 0)
@@ -1022,6 +1148,7 @@ def main():
         materials = [material_record(material, texture_map, inferred_cutouts)
                      for material in gltf["materials"]]
         vertices, indices, draws = [], [], []
+        source_draw_count = 0
         lod_level_counts = {}  # For the manifest: level index -> draws generated at that level.
         lod_triangle_counts = {}
         lod_group_count = 0
@@ -1033,6 +1160,7 @@ def main():
             if "mesh" not in node:
                 continue
             for primitive in gltf["meshes"][node["mesh"]]["primitives"]:
+                source_draw_count += 1
                 attrs = primitive["attributes"]
                 position = accessor(gltf, binary, attrs["POSITION"]).astype(np.float32)
                 normal = accessor(gltf, binary, attrs["NORMAL"]).astype(np.float32)
@@ -1132,8 +1260,11 @@ def main():
         package[vertex_offset:vertex_offset + len(vertices) * VERTEX_STRIDE] = b"".join(vertices)
         package[index_offset:] = struct.pack(f"<{len(indices)}I", *indices)
         (args.out / "scene.aemap").write_bytes(package)
-        license_text = archive.read("license.txt").decode("utf-8-sig")
-        (args.out.parent / "LICENSE.txt").write_text(license_text, encoding="utf8")
+        # License text is an authored/legal asset, not normalized cooker output.
+        # Writing through TextIO on Windows translates every existing LF and
+        # compounds CRLF into CRCRLF on each recook. Preserve its exact bytes so
+        # repeated GLB/ZIP imports are idempotent and attribution stays readable.
+        (args.out.parent / "LICENSE.txt").write_bytes(archive.read("license.txt"))
 
     outputs = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
                for path in sorted(args.out.iterdir()) if path.is_file()}
@@ -1147,6 +1278,10 @@ def main():
                                "triangles": len(indices) // 3,
                                "boundsMin": world_min.tolist(), "boundsMax": world_max.tolist(),
                                "defaultCamera": camera.tolist(),
+                               "sourceDraws": source_draw_count,
+                               "level0Draws": lod_level_counts.get(0, 0),
+                               "level0Vertices": len(vertices),
+                               "level0Triangles": lod_triangle_counts.get(0, 0),
                                "lodGroups": lod_group_count,
                                "lodTrianglesPerGroup": args.lod_triangles_per_group,
                                "lodWorldCellSize": args.lod_world_cell_size,
@@ -1158,7 +1293,18 @@ def main():
                                                    for level, count in sorted(lod_level_counts.items())},
                                "lodTrianglesByLevel": {str(level): count
                                                        for level, count in sorted(lod_triangle_counts.items())}},
-                "textures": texture_sources, "outputs": outputs}
+                "textures": texture_sources, "outputs": outputs,
+                "geometryLod": {
+                    "version": 1,
+                    "sourceFormat": "glTF-2.0",
+                    "preservesLevel0": True,
+                    "level0Contract": "exact-vertices-and-triangles-spatially-reordered",
+                    "strategy": "source-vertex-grid-clustering-v1",
+                }}
+    # O ambiente e um asset independente do modelo. Recozinhar geometria e
+    # texturas nao pode apagar a autoria do ceu/IBL nem seu contrato binario.
+    if "environment" in previous_manifest:
+        manifest["environment"] = previous_manifest["environment"]
     (args.out.parent / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf8")
 
 
