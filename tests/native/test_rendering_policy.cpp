@@ -223,13 +223,39 @@ AE_TEST(policy_perfil_b_tem_budget_de_sombra_mobile_sem_limitar_overrides) {
   custom.shadowCascadeResolution = 2048;
   custom.staticShadowCache = FeatureOverride::Disabled;
   custom.shadowCacheGuardBandRatio = 1.20f;
+  custom.shadowCascadeBlendRatio = 0.18f;
+  custom.shadowDistanceFadeRatio = 0.24f;
   const auto overridden = resolveRenderingPolicy(custom, capabilities, ThermalPressure::None);
   AE_EXPECT_EQ(overridden.shadows.cascadeCount, 4u, "autor pode elevar cascatas independentemente");
   AE_EXPECT_EQ(overridden.shadows.cascadeResolution, 2048u,
                "autor pode elevar resolucao independentemente");
   AE_EXPECT_TRUE(!overridden.shadows.staticCasterCache, "autor pode desligar cache independentemente");
   AE_EXPECT_EQ(overridden.shadows.cacheGuardBandRatio, 1.20f,
-               "autor controla a margem do cache sem novo preset");
+                "autor controla a margem do cache sem novo preset");
+  AE_EXPECT_EQ(overridden.shadows.cascadeBlendRatio, 0.18f,
+               "autor controla a transicao entre cascatas");
+  AE_EXPECT_EQ(overridden.shadows.distanceFadeRatio, 0.24f,
+               "autor controla o fim suave do alcance de sombra");
+}
+
+AE_TEST(policy_transicoes_de_sombra_sao_limitadas_independentemente) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::B;
+  settings.shadowCascadeBlendRatio = 0.9f;
+  settings.shadowDistanceFadeRatio = 0.9f;
+  const auto policy = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(policy.shadows.cascadeBlendRatio, 0.30f,
+               "blend nao pode consumir uma cascata inteira");
+  AE_EXPECT_EQ(policy.shadows.distanceFadeRatio, 0.50f,
+               "fade final preserva pelo menos metade do ultimo intervalo");
+
+  settings.shadowCascadeBlendRatio = 0.0f;
+  settings.shadowDistanceFadeRatio = 0.0f;
+  const auto disabled = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(disabled.shadows.cascadeBlendRatio, 0.0f,
+               "zero desliga somente o blend de cascata");
+  AE_EXPECT_EQ(disabled.shadows.distanceFadeRatio, 0.0f,
+               "zero desliga somente o fade de distancia");
 }
 
 AE_TEST(policy_capability_reduz_mas_nunca_eleva) {

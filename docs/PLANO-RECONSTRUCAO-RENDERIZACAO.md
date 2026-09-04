@@ -139,7 +139,11 @@ Implementado e validado no host nesta etapa:
   previews de cena e material;
 - a pressão térmica reduz apenas detalhe distante (erro de LOD e alcance de
   variantes de material), e reconfigurar a política não restaura a resolução
-  dinâmica ao máximo no instante em que os clocks já estão caindo.
+  dinâmica ao máximo no instante em que os clocks já estão caindo;
+- R3 confina todo footprint PCF ao tile da própria cascata, mistura cascatas
+  numa faixa configurável e desvanece a última sombra antes do fim do alcance;
+  isso remove leitura cruzada do atlas e as duas linhas duras de transição sem
+  aumentar o kernel fora dessas faixas.
 
 As portas de host estão verdes: shaders reproduzíveis e válidos, 329 testes
 nativos e APK Debug compilado. R1/R2 continuam sem aprovação física nesta

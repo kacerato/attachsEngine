@@ -345,7 +345,7 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
       features.meshShader ? 1 : 0, features.variableRateShading ? 1 : 0,
       features.memorylessAttachments ? 1 : 0, static_cast<int>(device.deviceProfile()));
   __android_log_print(ANDROID_LOG_INFO, LogTag,
-      "[RenderPolicy] preset=%s perfil=%d sombras=%s(%u cascatas @%u, %u/%u taps, cache=%s margem=%.2f) "
+      "[RenderPolicy] preset=%s perfil=%d sombras=%s(%u cascatas @%u, %u/%u taps, cache=%s margem=%.2f blend=%.2f fade=%.2f) "
       "ambiente=%s%s%s pos=%s%s textura_mip_bias=%u aniso=%.1f escala=%.2f dinamica=%s[%.2f,%.2f] clamps=%u",
       ae::renderer::qualityPresetName(shell.renderingSettings.preset),
       static_cast<int>(shell.renderingPolicy.effectiveProfile),
@@ -356,6 +356,8 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
       shell.renderingPolicy.shadows.farFilterTaps,
       shell.renderingPolicy.shadows.staticCasterCache ? "static" : "off",
       static_cast<double>(shell.renderingPolicy.shadows.cacheGuardBandRatio),
+      static_cast<double>(shell.renderingPolicy.shadows.cascadeBlendRatio),
+      static_cast<double>(shell.renderingPolicy.shadows.distanceFadeRatio),
       shell.renderingPolicy.ambient.hemispheric ? "hemisferio" : "constante",
       shell.renderingPolicy.ambient.specularProbe ? "+especular" : "",
       shell.renderingPolicy.ambient.splitSumBrdf ? "+split-sum" : "",
@@ -839,6 +841,10 @@ void android_main(android_app *app) {
                                                   shell.renderingSettings.shadowNormalOffsetTexels);
     ae::platform::android::readFloatLaunchOption(app->activity, "aether.shadow_cache_guard_band",
                                                   shell.renderingSettings.shadowCacheGuardBandRatio);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.shadow_cascade_blend_ratio",
+                                                  shell.renderingSettings.shadowCascadeBlendRatio);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.shadow_distance_fade_ratio",
+                                                  shell.renderingSettings.shadowDistanceFadeRatio);
     if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.shadow_static_cache"))
       shell.renderingSettings.staticShadowCache = ae::renderer::FeatureOverride::Enabled;
     if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.disable_shadow_static_cache"))

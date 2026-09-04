@@ -386,6 +386,16 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
       shadowSettings.cacheGuardBandRatio =
           std::clamp(settings.shadowCacheGuardBandRatio, 1.0f, 1.25f);
     }
+    if (std::isfinite(settings.shadowCascadeBlendRatio) &&
+        settings.shadowCascadeBlendRatio >= 0.0f) {
+      shadowSettings.cascadeBlendRatio =
+          std::clamp(settings.shadowCascadeBlendRatio, 0.0f, 0.30f);
+    }
+    if (std::isfinite(settings.shadowDistanceFadeRatio) &&
+        settings.shadowDistanceFadeRatio >= 0.0f) {
+      shadowSettings.distanceFadeRatio =
+          std::clamp(settings.shadowDistanceFadeRatio, 0.0f, 0.50f);
+    }
     // O backend móvel atual empacota até quatro cascatas num atlas 2x2. Limitar
     // aqui preserva a mesma política auditável em vez de deixar vkCreateImage
     // falhar tarde ou criar uma tabela privada dentro do backend.

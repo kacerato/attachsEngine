@@ -90,12 +90,13 @@ struct DirtRoadFrameUniform {
   float quality[4]{};
   float shadowViewProjection[renderer::MaximumShadowCascades][16]{};
   float shadowSplitDepths[4]{};
-  float shadowParameters[4]{}; // inv atlas, cascade count, PCF radius, normal offset
+  float shadowParameters[4]{}; // inv atlas, cascade count, reserved, normal offset
   float shadowWorldUnitsPerTexel[4]{};
   float shadowFilterParameters[4]{}; // near radius, far radius, reserved
+  float shadowTransitionParameters[4]{}; // cascade blend, distance fade, reserved
   float materialDistanceParameters[4]{}; // MR map, emissive map, reserved
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 528);
+static_assert(sizeof(DirtRoadFrameUniform) == 544);
 
 struct ShadowPushConstants {
   float lightViewProjection[16]{};
@@ -3353,15 +3354,17 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     frame->shadowParameters[0] = shadowAtlas_.width() > 0
                                      ? 1.0f / static_cast<float>(shadowAtlas_.width()) : 1.0f;
     frame->shadowParameters[1] = 0.0f;
-    frame->shadowParameters[2] = renderingPolicy_.shadows.filterTaps >= 25u ? 2.0f
-                                  : renderingPolicy_.shadows.filterTaps >= 9u ? 1.0f : 0.0f;
     frame->shadowParameters[3] = renderingPolicy_.shadows.normalOffsetTexels;
-    frame->shadowFilterParameters[0] = frame->shadowParameters[2];
+    frame->shadowFilterParameters[0] = renderingPolicy_.shadows.filterTaps >= 25u ? 2.0f
+                                           : renderingPolicy_.shadows.filterTaps >= 9u ? 1.0f
+                                                                                        : 0.0f;
     frame->shadowFilterParameters[1] = renderingPolicy_.shadows.farFilterTaps >= 25u ? 2.0f
                                           : renderingPolicy_.shadows.farFilterTaps >= 9u ? 1.0f
                                                                                        : 0.0f;
     frame->shadowFilterParameters[2] = temporalCurrentJitter_[0];
     frame->shadowFilterParameters[3] = temporalCurrentJitter_[1];
+    frame->shadowTransitionParameters[0] = renderingPolicy_.shadows.cascadeBlendRatio;
+    frame->shadowTransitionParameters[1] = renderingPolicy_.shadows.distanceFadeRatio;
     const u32 previousShadowCascadeCount = shadowCascadeCount_;
     shadowCascadeCount_ = 0;
     if (renderingPolicy_.shadows.enabled) {

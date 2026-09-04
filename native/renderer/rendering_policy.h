@@ -134,6 +134,11 @@ struct ProjectRenderingSettings final {
   // Margem espacial da cascata cacheada. 1 = volume exato/sem tolerância;
   // valores >1 trocam uma pequena fração de resolução por menos atualizações.
   float shadowCacheGuardBandRatio = 0.0f;
+  // Frações da extensão em profundidade usadas para esconder a troca de
+  // cascata e o fim do alcance. Valor negativo herda o padrão do renderer;
+  // zero desliga somente a respectiva transição.
+  float shadowCascadeBlendRatio = -1.0f;
+  float shadowDistanceFadeRatio = -1.0f;
 
   float lodPixelErrorBudget = 0.0f;
   // Orçamento próprio para geometria alpha-tested (vegetação/cards). Zero
@@ -236,6 +241,11 @@ struct ShadowSettings final {
   // continua contido no volume cacheado. Objetos dinâmicos invalidam via API.
   bool staticCasterCache = true;
   float cacheGuardBandRatio = 1.08f;
+  // Blend é calculado no fim de cada intervalo de cascata; fade transforma a
+  // última sombra gradualmente em iluminação direta, evitando a linha dura do
+  // maximumDistance. São eixos independentes de resolução e PCF.
+  float cascadeBlendRatio = 0.10f;
+  float distanceFadeRatio = 0.12f;
 };
 
 struct AmbientSettings final {
