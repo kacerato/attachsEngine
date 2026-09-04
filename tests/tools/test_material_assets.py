@@ -1,5 +1,5 @@
 """Host-side verification of cooked assets and offline mip/lighting contracts."""
-import importlib.util, pathlib, unittest, hashlib, json, struct
+import importlib.util, pathlib, unittest, hashlib, json, struct, re
 import numpy as np
 ROOT=pathlib.Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location("cook",ROOT/"tools/cook-material-preview.py")
@@ -50,5 +50,20 @@ class MaterialAssets(unittest.TestCase):
         # At +X, phi=0 -> u=.5; light values retain HDR dynamic range.
         direction=cook.normalize(np.array([-1.,1.,-1.]))
         self.assertGreater(float(cook.studio(direction).max()),5)
+
+    def test_runtime_specular_zero_disables_the_entire_dielectric_lobe(self):
+        shader=(ROOT/"native/rhi/shaders/dirt_road_shading.glsl").read_text()
+        # This is a shader/source contract check. The SPIR-V compilation in the
+        # Android build independently validates the executable shader.
+        self.assertIn("vec3(f90)-f0",shader)
+        self.assertIn("f90=mix(dielectricSpecular,1.0,metal)",shader)
+        self.assertNotIn("f0+(1-f0)*pow5",shader)
+        self.assertNotIn("frame.materialFactors.w*specularDetailWeight",shader)
+        def fresnel(f0,f90,cosine):
+            return f0+(f90-f0)*(1.0-max(0.0,min(1.0,cosine)))**5
+        for cosine in (0.0,0.01,0.25,0.75,1.0):
+            self.assertEqual(fresnel(0.0,0.0,cosine),0.0)
+        # Metallic response is intentionally unaffected by dielectric weight.
+        self.assertAlmostEqual(fresnel(.65,1.0,0.0),1.0)
 
 if __name__=="__main__":unittest.main()

@@ -859,6 +859,8 @@ void android_main(android_app *app) {
                                                   shell.renderingSettings.emissiveMaximumDistance);
     ae::platform::android::readFloatLaunchOption(app->activity, "aether.material_detail_fade_ratio",
         shell.renderingSettings.materialDetailFadeBandRatio);
+    if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.thermal_distance_scaling"))
+      shell.renderingSettings.thermalDistanceScaling = ae::renderer::FeatureOverride::Enabled;
     ae::platform::android::readFloatLaunchOption(app->activity, "aether.bloom_threshold",
                                                   shell.renderingSettings.bloomThreshold);
     ae::platform::android::readFloatLaunchOption(app->activity, "aether.bloom_intensity",
@@ -1113,7 +1115,9 @@ void android_main(android_app *app) {
         if (shell.pendingAdpfFrame.valid && gpuNs > 0) {
           shell.performance.reportFrameWorkDuration(
               static_cast<ae::i64>(shell.pendingAdpfFrame.workStartNs),
-              static_cast<ae::i64>(std::max(shell.pendingAdpfFrame.totalNs, gpuNs)),
+              ae::performanceHintActualTotalNanoseconds(
+                  static_cast<ae::i64>(shell.pendingAdpfFrame.threadCpuNs),
+                  static_cast<ae::i64>(gpuNs)),
               static_cast<ae::i64>(shell.pendingAdpfFrame.threadCpuNs),
               static_cast<ae::i64>(gpuNs));
         }

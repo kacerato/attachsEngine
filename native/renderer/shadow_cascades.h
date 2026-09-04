@@ -70,6 +70,9 @@ struct ShadowCascadeInput final {
   // Reserva ao redor do receptor para cache estático. A matriz cobre o raio
   // exato multiplicado por este valor; [1,1.25] é o intervalo de política.
   float receiverGuardBandRatio = 1.0f;
+  // A cascata seguinte também cobre a faixa anterior usada pelo crossfade.
+  // Deve ser o mesmo valor enviado ao shader, independente do guard band do cache.
+  float cascadeBlendRatio = 0.0f;
 };
 
 // Fator de mistura entre divisão uniforme (0) e logarítmica (1). 0,75 é o ponto que

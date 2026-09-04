@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace ae {
 
@@ -57,6 +58,19 @@ inline i64 performanceHintTargetNanoseconds(const FrameBudget &budget,
                              ? budget.frameIntervalMs * targetRatioOverride
                              : budget.frameIntervalMs;
   return std::max<i64>(1, static_cast<i64>(targetMs * 1'000'000.0f + 0.5f));
+}
+
+// Android 15's detailed ADPF report treats CPU and GPU as components of the
+// same frame workload. Reporting only max(CPU,GPU) hides render-thread work
+// from the governor and can select an operating point below the requested
+// cadence. Keep the sum saturating because it crosses a platform ABI.
+inline i64 performanceHintActualTotalNanoseconds(i64 cpuNanoseconds,
+                                                 i64 gpuNanoseconds) noexcept {
+  const i64 cpu = std::max<i64>(cpuNanoseconds, 0);
+  const i64 gpu = std::max<i64>(gpuNanoseconds, 0);
+  if (cpu > std::numeric_limits<i64>::max() - gpu)
+    return std::numeric_limits<i64>::max();
+  return std::max<i64>(cpu + gpu, 1);
 }
 
 // Visibility-stage budgets (HZB hysteresis, and future LOD pixel-error/dither

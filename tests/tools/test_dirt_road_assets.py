@@ -108,7 +108,8 @@ class DirtRoadAssetsTests(unittest.TestCase):
                 self.assertTrue(np.isfinite(values).all(), path.name)
                 self.assertTrue(np.all(values[:, :2] >= 0.0), path.name)
                 self.assertTrue(np.all(values[:, :2] <= 1.1), path.name)
-            elif path.name == self.manifest["impostors"]["atlas"]:
+            elif path.name in (self.manifest["impostors"]["atlas"],
+                                self.manifest["impostors"].get("normalAtlas")):
                 # Único atlas RGBA8 do caminho principal, e de propósito: o
                 # astcenc que comprime as outras 70 texturas não está
                 # disponível na máquina que assa impostores, e o AETX já aceita
@@ -116,20 +117,23 @@ class DirtRoadAssetsTests(unittest.TestCase):
                 # 6x6 dividiria estes bytes por ~4 e nada mais muda.
                 impostors = self.manifest["impostors"]
                 self.assertEqual([width, height], impostors["atlasSize"], path.name)
-                self.assertEqual(encoding, 3, path.name)
+                normal = path.name == impostors.get("normalAtlas")
+                self.assertEqual(encoding, 4 if normal else 3, path.name)
                 self.assertEqual(width & (width - 1), 0, path.name)
                 self.assertEqual(height & (height - 1), 0, path.name)
                 # O tail 2x2/1x1 não representa uma copa esparsa e a converte
                 # em card opaco. Cada tile termina no nível seguro declarado.
                 self.assertEqual(mip_count, impostors["maximumSafeLod"] + 1,
                                  path.name)
-                self.assertEqual(impostors["tile"] >> impostors["maximumSafeLod"],
+                tile = impostors.get("viewTile", impostors.get("tile"))
+                self.assertEqual(tile >> impostors["maximumSafeLod"],
                                  impostors["minimumMipTile"], path.name)
                 self.assertEqual(impostors["mipIsolation"],
+                                 "per-view-alpha-weighted" if impostors["version"] == 2 else
                                  "per-tile-alpha-weighted", path.name)
-                self.assertEqual(payload_size, impostors["atlasBytes"], path.name)
-                tiles = (width // impostors["tile"]) * (height // impostors["tile"])
-                self.assertGreaterEqual(tiles, impostors["groups"], path.name)
+                self.assertEqual(payload_size, impostors["normalAtlasBytes" if normal else "atlasBytes"], path.name)
+                tiles = (width // tile) * (height // tile)
+                self.assertGreaterEqual(tiles, impostors["groups"] * impostors.get("views", 1), path.name)
             else:
                 self.assertLessEqual(max(width, height), 4096, path.name)
                 self.assertIn(encoding, (1, 2), path.name)
@@ -152,9 +156,15 @@ class DirtRoadAssetsTests(unittest.TestCase):
                               if material[-3] & (1 << 8)]
         self.assertEqual(len(impostor_materials), 1, "um único material de impostor")
         material = materials[impostor_materials[0]]
-        self.assertEqual(material[-3], (1 << 4) | (1 << 5) | (1 << 8),
+        multiview = impostors["version"] == 2
+        self.assertEqual(material[-3], (1 << 4) | (1 << 5) | (1 << 8) | (2 if multiview else 0),
                          "alpha mask + double sided + impostor, nunca blend")
-        self.assertEqual(material[0], header[4] - 1, "usa o último registro de textura (o atlas)")
+        self.assertEqual(material[0], header[4] - (2 if multiview else 1), "base atlas index")
+        if multiview:
+            self.assertEqual(material[1], header[4] - 1)
+            self.assertEqual(material[15], 0.0, "no artificial specular")
+            self.assertEqual((material[19] >> 8) & 15, impostors["viewGrid"][0])
+            self.assertEqual((material[19] >> 12) & 15, impostors["viewGrid"][1])
         self.assertEqual(material[13], 0.0, "folhagem é dielétrica: metallic = 0")
         self.assertEqual(material[16], 0.5, "cutoff do recorte por alfa")
 
@@ -187,7 +197,7 @@ class DirtRoadAssetsTests(unittest.TestCase):
         """Girar só a posição deixaria o quad encarando a câmera enquanto a
         iluminação continuaria vinda da direção em que ele foi assado."""
         vertex = (ROOT / "native" / "rhi" / "shaders" / "dirt_road.vert").read_text(encoding="utf8")
-        self.assertIn("frame.materialFlags.x & 256u", vertex)
+        self.assertIn("frame.materialFlags.x&MATERIAL_IMPOSTOR", vertex)
         for rotated in ("modelPosition=faceCamera*inPosition",
                         "modelNormal=faceCamera*inNormal",
                         "modelTangent=faceCamera*inTangent.xyz"):
@@ -204,7 +214,7 @@ class DirtRoadAssetsTests(unittest.TestCase):
         values = struct.unpack_from("<32f", payload, 16)
         self.assertGreater(values[3], 0.0)   # sun intensity
         self.assertGreater(values[11], 0.0)  # ambient strength
-        self.assertGreaterEqual(values[27], 1.0)  # neutral-or-vibrant grade
+        self.assertGreaterEqual(values[27], 0.0)  # authored irradiance saturation
         description = struct.unpack_from("<8I", payload, 144)
         self.assertEqual(description, (1, 256, 256, 9, 128, 128, 1, 3))
         self.assertEqual(self.manifest["environment"]["environmentResourceVersion"], 3)

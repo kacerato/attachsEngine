@@ -167,7 +167,7 @@ AE_TEST(policy_lod_de_coverage_herda_por_perfil_e_tem_limite_seguro) {
   ProjectRenderingSettings settings{};
   settings.preset = QualityPreset::A;
   const auto inherited = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
-  AE_EXPECT_EQ(inherited.visibility.coverageLodPixelErrorBudget, 32.0f,
+  AE_EXPECT_EQ(inherited.visibility.coverageLodPixelErrorBudget, 3.0f,
                "perfil A herda budget de coverage sem afetar malha solida");
   AE_EXPECT_EQ(inherited.visibility.lodPixelErrorBudget, 1.5f,
                "budget solido permanece independente");
@@ -301,6 +301,7 @@ AE_TEST(policy_termica_severa_cede_ambiente_e_resolucao) {
 AE_TEST(policy_termica_gasta_menos_apenas_no_detalhe_distante) {
   ProjectRenderingSettings settings{};
   settings.preset = QualityPreset::B;
+  settings.thermalDistanceScaling = FeatureOverride::Enabled;
   const auto normal = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
   const auto light = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::Light);
   const auto severe = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::Severe);
@@ -322,6 +323,25 @@ AE_TEST(policy_termica_gasta_menos_apenas_no_detalhe_distante) {
                  "adaptacao geometrica fica auditavel");
   AE_EXPECT_TRUE(hasClamp(light, "materialDistance", PolicyClamp::Thermal),
                  "adaptacao material fica auditavel");
+}
+
+AE_TEST(policy_thermal_preserves_visibility_and_shadow_horizon_by_default) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::B;
+  const auto normal = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  const auto hot = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::Severe);
+  AE_EXPECT_EQ(hot.visibility.coverageLodPixelErrorBudget,
+               normal.visibility.coverageLodPixelErrorBudget, "coverage threshold remains stable");
+  AE_EXPECT_EQ(hot.visibility.lodPixelErrorBudget, normal.visibility.lodPixelErrorBudget,
+               "solid threshold remains stable");
+  AE_EXPECT_EQ(hot.materialDistance.normalMapMaximumDistance,
+               normal.materialDistance.normalMapMaximumDistance, "material range remains stable");
+  AE_EXPECT_TRUE(hot.shadows.enabled, "thermal pressure never erases all sun occlusion");
+  AE_EXPECT_EQ(hot.shadows.maximumDistance, normal.shadows.maximumDistance,
+               "thermal pressure does not move the shadow horizon");
+  settings.shadowMaximumDistance = 300.0f;
+  const auto custom = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::Severe);
+  AE_EXPECT_EQ(custom.shadows.maximumDistance, 300.0f, "explicit shadow range remains authoritative");
 }
 
 AE_TEST(policy_termica_nao_altera_a_escolha_do_projeto) {

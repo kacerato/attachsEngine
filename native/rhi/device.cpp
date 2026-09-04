@@ -5,6 +5,7 @@
 // lacunas) foi validada em execução real no shell Android — ver
 // docs/ESTADO.md.
 #include "rhi/device.h"
+#include "rhi/surface_format.h"
 
 #include <algorithm>
 #include <cstring>
@@ -170,18 +171,8 @@ bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
   const VkResult formatsResult =
       vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice_, surface_, &formatCount, formats);
   if (formatsResult != VK_SUCCESS && formatsResult != VK_INCOMPLETE) return false;
-  VkSurfaceFormatKHR chosen = formats[0];
-  if (formatCount == 1 && chosen.format == VK_FORMAT_UNDEFINED) {
-    chosen.format = VK_FORMAT_B8G8R8A8_SRGB;
-    chosen.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-  }
-  for (u32 i = 0; i < formatCount; ++i) {
-    if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
-        formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-      chosen = formats[i];
-      break;
-    }
-  }
+  VkSurfaceFormatKHR chosen{};
+  if (!chooseSurfaceFormat({formats, formatCount}, chosen)) return false;
 
   // currentExtent == 0xFFFFFFFF é o sinal (spec Vulkan) de que a surface
   // permite ao app escolher o extent dentro de min/max — acontece em vários

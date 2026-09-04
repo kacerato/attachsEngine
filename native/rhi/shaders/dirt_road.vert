@@ -59,9 +59,9 @@ void main() {
   // de mundo ou de clip produz tremor de vertice e z-fighting visiveis, e a
   // subtracao relativa a camera e exatamente o caso de cancelamento catastrofico.
   // Impostor de folhagem: o quad chega em espaco local, centrado na origem, e
-  // gira em torno de Y para encarar a camera ANTES da matriz de mundo. Assar uma
-  // unica direcao e barato; o giro e o que torna o impostor valido de qualquer
-  // angulo horizontal. O bit e MapMaterialImpostor (renderer/map_package.h).
+  // gira em torno de Y para encarar a camera ANTES da matriz de mundo. O bake
+  // v2 guarda varias vistas azimutais; os 16 bits superiores de materialFlags.y
+  // descrevem o macro-tile e UV1 guarda sua origem no atlas.
   //
   // Normal e tangente giram com a posicao. Sem isso o quad encararia a camera
   // mas continuaria iluminado como se ainda encarasse a direcao em que foi
@@ -70,12 +70,43 @@ void main() {
   highp vec3 modelPosition=inPosition;
   highp vec3 modelNormal=inNormal;
   highp vec3 modelTangent=inTangent.xyz;
-  if((frame.materialFlags.x & MATERIAL_IMPOSTOR)!=0u) {
-    highp float cosineYaw=cos(frame.cameraFrame.y), sineYaw=sin(frame.cameraFrame.y);
-    highp mat3 faceCamera=mat3(cosineYaw,0,-sineYaw,0,1,0,sineYaw,0,cosineYaw);
+  highp vec2 resolvedUv0=inUv0;
+  highp vec2 resolvedUv1=inUv1;
+  mediump float impostorViewBlend=0.0;
+  bool impostor=(frame.materialFlags.x&MATERIAL_IMPOSTOR)!=0u;
+  if(impostor) {
+    highp vec3 worldCenter=inModel[3].xyz;
+    highp vec2 planarToObject=worldCenter.xz-frame.cameraPositionNear.xz;
+    highp float planarLength=length(planarToObject);
+    highp vec2 forward=planarLength>1.0e-5?planarToObject/planarLength:
+        vec2(sin(frame.cameraFrame.y),cos(frame.cameraFrame.y));
+    highp vec3 worldForward=vec3(forward.x,0.0,forward.y);
+    highp vec3 worldRight=vec3(forward.y,0.0,-forward.x);
+    highp mat3 faceCamera=mat3(worldRight,vec3(0.0,1.0,0.0),worldForward);
     modelPosition=faceCamera*inPosition;
     modelNormal=faceCamera*inNormal;
     modelTangent=faceCamera*inTangent.xyz;
+
+    uint metadata=frame.materialFlags.y>>16u;
+    uint viewColumns=(metadata>>8u)&15u;
+    uint viewRows=(metadata>>12u)&15u;
+    if(viewColumns>0u && viewRows>0u) {
+      highp vec2 macroScale=exp2(-vec2(float(metadata&15u),float((metadata>>4u)&15u)));
+      uint viewCount=viewColumns*viewRows;
+      highp float azimuth=atan(worldForward.x,worldForward.z);
+      highp float viewPosition=fract(azimuth/6.28318530718+1.0)*float(viewCount);
+      uint firstView=uint(floor(viewPosition))%viewCount;
+      uint secondView=(firstView+1u)%viewCount;
+      highp vec2 frameScale=macroScale/vec2(float(viewColumns),float(viewRows));
+      highp vec2 firstCell=vec2(float(firstView%viewColumns),float(firstView/viewColumns));
+      highp vec2 secondCell=vec2(float(secondView%viewColumns),float(secondView/viewColumns));
+      // Keep exact-edge fragments in this view's cell when the fragment shader
+      // clamps the footprint at the chosen resident mip level.
+      highp vec2 localUv=clamp(inUv0,vec2(0.00001),vec2(0.99999));
+      resolvedUv0=inUv1+(firstCell+localUv)*frameScale;
+      resolvedUv1=inUv1+(secondCell+localUv)*frameScale;
+      impostorViewBlend=fract(viewPosition);
+    }
   }
   highp vec3 worldPosition=(inModel*vec4(modelPosition,1)).xyz;
   vPosition=worldPosition;
@@ -83,7 +114,9 @@ void main() {
   highp mat3 normalMatrix=mat3(inNormalColumn0.xyz,inNormalColumn1.xyz,inNormalColumn2.xyz);
   vNormal=normalize(normalMatrix*modelNormal);
   vTangent=vec4(normalize(linear*modelTangent),inTangent.w*inNormalColumn0.w);
-  vUv0=inUv0; vUv1=inUv1; vColor=inColor*inTint; vDither=inNormalColumn1.w;
+  vUv0=resolvedUv0; vUv1=resolvedUv1; vColor=inColor*inTint;
+  if(impostor && (frame.materialFlags.y>>16u)!=0u) vColor.a=impostorViewBlend;
+  vDither=inNormalColumn1.w;
   highp vec3 relative=worldPosition-frame.cameraPositionNear.xyz;
   highp vec3 view=vec3(dot(environment.worldToViewRow0.xyz,relative),
                  dot(environment.worldToViewRow1.xyz,relative),

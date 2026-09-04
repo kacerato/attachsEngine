@@ -44,3 +44,13 @@ AE_TEST(frame_policy_adpf_usa_intervalo_e_override_diagnostico_seguro) {
   AE_EXPECT_EQ(ae::performanceHintTargetNanoseconds(budget, 1.01f), inherited,
                "override acima do intervalo falha para o intervalo global");
 }
+
+AE_TEST(frame_policy_adpf_detailed_total_reports_cpu_and_gpu_work) {
+  AE_EXPECT_EQ(ae::performanceHintActualTotalNanoseconds(1'500'000, 6'500'000),
+               8'000'000, "component sum");
+  AE_EXPECT_EQ(ae::performanceHintActualTotalNanoseconds(-1, 0), 1,
+               "empty report remains ABI-positive");
+  AE_EXPECT_EQ(ae::performanceHintActualTotalNanoseconds(
+                   std::numeric_limits<ae::i64>::max(), 1),
+               std::numeric_limits<ae::i64>::max(), "saturating ABI value");
+}

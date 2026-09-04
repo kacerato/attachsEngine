@@ -8,7 +8,7 @@
   "source": "https://sketchfab.com/3d-models/update-dirt-road-through-forest-c4676cdf7715484382400ff63faffd45",
   "encoder": "astcenc 5.7.0 -medium 6x6",
   "statistics": {
-    "textures": 71,
+    "textures": 72,
     "materials": 27,
     "draws": 1029,
     "vertices": 425549,
@@ -1062,7 +1062,7 @@
     "environment-specular.aetex": "cc32e9ea74316cdf6b4accb5a12be362f48e7fe03ed03aa0c96c659e4777a128",
     "environment.aeenv": "086fff14628d0f6e85a7febb74a8ab6be3e7eb03ef03df0d800f7adba702ee24",
     "environment.aetex": "216c35ea5c4a0b7b7efa01eb8af501413b34dfc14dcc92e7995913e41eda5a29",
-    "scene.aemap": "82f6041bff54327abc074ab94d91e0b202260b94c78ac0f39b15092724f3d374",
+    "scene.aemap": "5a3ffd266f14e911d45233c3713c63a7ccedfd36e0c3e6c8639007424bb8cf5b",
     "texture_000-fallback.aetex": "9b06d079833e153e9a7b0cf973df5346d572a87c34dd6a2b879c74f300092245",
     "texture_000.aetex": "e32b0ceab57e800f69e582fc2f65d0418efb274c1219d540aed280833ea308f0",
     "texture_001-fallback.aetex": "d81efae4903b06389eb27ac9cab59db08051384296c3a13b42611dd148e3e17d",
@@ -1203,8 +1203,10 @@
     "texture_068.aetex": "b65d7b51e256f0f54f2ad094d6662f3a0849fa19cc94f7e1b3c6aab148496a6d",
     "texture_069-fallback.aetex": "b63a8ae108bc588ff23c34200d320ac0427fe505c3a12c0beacbd85b9bdf6229",
     "texture_069.aetex": "9635b9f3510f1dffb613faa9b5c7af7fc9c5402d3804355263146dae90b498b7",
-    "texture_070-fallback.aetex": "de6b536aa4c042cd7be6446dcae2b804ed03a538dafa08001ba833ec6fa80efc",
-    "texture_070.aetex": "38d4af022d45e5e5c27924af7f8d757e64ec732b42dbe68fe478ce52093733aa"
+    "texture_070-fallback.aetex": "2b13799eee24d971abf45f206fdd7647bb690e78f22029c8ef8f1db86bf82466",
+    "texture_070.aetex": "8e38d7626b6dee2d049f2fcc29d00aec8ab631097274cff3e3a5b5c9912d4b09",
+    "texture_071-fallback.aetex": "9d577906d1b3fbaf910771becbf941495ae0a2ec30d43a3c5f3b1545ba69d195",
+    "texture_071.aetex": "26bb83bfe2f30e130d3a13922aac1e6578e711094c4ea2a8f7391e1409b58be6"
   },
   "geometryLod": {
     "version": 1,
@@ -1260,22 +1262,33 @@
     ]
   },
   "impostors": {
-    "version": 1,
+    "version": 2,
     "tool": "tools/bake-foliage-impostors.py",
     "groups": 175,
     "atlas": "texture_070.aetex",
     "atlasFallback": "texture_070-fallback.aetex",
+    "normalAtlas": "texture_071.aetex",
+    "normalAtlasFallback": "texture_071-fallback.aetex",
     "atlasSize": [
       2048,
       2048
     ],
-    "tile": 128,
+    "viewTile": 32,
+    "viewGrid": [
+      4,
+      2
+    ],
+    "views": 8,
     "errorScale": 1.25,
-    "mipIsolation": "per-tile-alpha-weighted",
-    "maximumSafeLod": 4,
-    "minimumMipTile": 8,
+    "mipIsolation": "per-view-alpha-weighted",
+    "viewTransition": "single-sample-bayer",
+    "normalEncoding": "world-space-rgba8-unorm",
+    "maximumSafeLod": 3,
+    "minimumMipTile": 4,
     "encoding": "R8G8B8A8_SRGB",
-    "atlasBytes": 22347776,
+    "normalEncodingFormat": "R8G8B8A8_UNORM",
+    "atlasBytes": 22282240,
+    "normalAtlasBytes": 22282240,
     "impostorVertices": 700,
     "impostorTriangles": 350
   }

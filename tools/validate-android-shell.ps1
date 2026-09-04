@@ -88,12 +88,14 @@ param(
     [int]$ShadowResolution = 0,
     [ValidateSet(0, 1, 9, 25)]
     [int]$ShadowFilterTaps = 0,
-    [ValidateRange(0.1, 16.0)]
-    [double]$LodPixelErrorBudget = 2.0,
-    [ValidateRange(0.1, 128.0)]
-    [double]$CoverageLodPixelErrorBudget = 32.0,
-    [ValidateRange(0.1, 1.0)]
-    [double]$LodHysteresisBandRatio = 0.75,
+    # Zero inherits the engine policy; the runner must not silently restore
+    # historical LOD thresholds when validating a new default configuration.
+    [ValidateRange(0.0, 16.0)]
+    [double]$LodPixelErrorBudget = 0.0,
+    [ValidateRange(0.0, 128.0)]
+    [double]$CoverageLodPixelErrorBudget = 0.0,
+    [ValidateRange(0.0, 1.0)]
+    [double]$LodHysteresisBandRatio = 0.0,
     [ValidateRange(0.0, 10000.0)]
     [double]$NormalMapMaximumDistance = 0.0,
     [ValidateRange(0.0, 10000.0)]

@@ -51,8 +51,23 @@ TEXTURE_STRIDE = 16
 MATERIAL_ALPHA_MASK = 1 << 4
 MATERIAL_DOUBLE_SIDED = 1 << 5
 MATERIAL_IMPOSTOR = 1 << 8
+MATERIAL_NORMAL_MAP = 1 << 1
 AETX_MAGIC = 0x58544541
 AETX_RGBA8_SRGB = 3
+AETX_RGBA8_UNORM = 4
+
+
+def normalized(value):
+    return value / np.maximum(np.linalg.norm(value, axis=-1, keepdims=True), 1e-8)
+
+
+def srgb_to_linear(value):
+    return np.where(value <= 0.04045, value / 12.92, ((value + 0.055) / 1.055) ** 2.4)
+
+
+def linear_to_srgb(value):
+    value = np.maximum(value, 0.0)
+    return np.where(value <= 0.0031308, value * 12.92, 1.055 * value ** (1.0 / 2.4) - 0.055)
 
 
 def load_cooker():
@@ -117,6 +132,54 @@ class Package:
     def vertex_uv0(self, index):
         return struct.unpack_from('<2f', self.vertices, index * VERTEX_STRIDE + 28)
 
+    def vertex_uv(self, index, slot):
+        return struct.unpack_from('<2f', self.vertices, index * VERTEX_STRIDE + 28 + slot * 8)
+
+    def vertex_color(self, index):
+        return np.asarray(struct.unpack_from('<4B', self.vertices, index * VERTEX_STRIDE + 44)) / 255.0
+
+    def remove_baked_suffix(self):
+        """Remove only the baker-owned appended suffix; reject mixed ownership."""
+        material_indices = [i for i in range(self.material_count)
+                            if self.material_flags(i) & MATERIAL_IMPOSTOR]
+        if not material_indices:
+            return
+        if material_indices != [self.material_count - 1]:
+            raise ValueError('impostor material is not a single appended suffix')
+        first_material = material_indices[0]
+        first_draw = next(i for i in range(self.draw_count)
+                          if self.draw_fields(i)['materialIndex'] == first_material)
+        if any(self.draw_fields(i)['materialIndex'] != first_material
+               for i in range(first_draw, self.draw_count)):
+            raise ValueError('impostor draws are not an appended suffix')
+        first_index = self.draw_fields(first_draw)['firstIndex']
+        first_vertex = min(self.indices[first_index:])
+        first_texture = self.material_base_texture(first_material)
+        for i in range(first_draw):
+            draw = self.draw_fields(i)
+            end = draw['firstIndex'] + draw['indexCount']
+            if end > first_index or any(index + draw['vertexOffset'] >= first_vertex
+                                        for index in self.indices[draw['firstIndex']:end]):
+                raise ValueError('source geometry references baked suffix')
+        for material in self.materials[:first_material]:
+            if any(t != 0xffffffff and t >= first_texture
+                   for t in struct.unpack_from('<4I', material)):
+                raise ValueError('source material references baked texture suffix')
+        self.draws = self.draws[:first_draw]
+        self.indices = self.indices[:first_index]
+        self.vertices = self.vertices[:first_vertex * VERTEX_STRIDE]
+        self.materials = self.materials[:first_material]
+        self.textures = self.textures[:first_texture]
+        self.draw_count, self.index_count = len(self.draws), len(self.indices)
+        self.vertex_count = first_vertex
+        self.material_count, self.texture_count = len(self.materials), len(self.textures)
+
+    def vertex_normal(self, index):
+        packed = np.asarray(struct.unpack_from('<3h', self.vertices,
+                                               index * VERTEX_STRIDE + 12),
+                            dtype=np.float64)
+        return tuple(np.clip(packed / 32767.0, -1.0, 1.0))
+
     def serialize(self):
         texture_offset = HEADER_SIZE
         material_offset = align(texture_offset + len(self.textures) * TEXTURE_STRIDE)
@@ -149,23 +212,27 @@ def align(value, alignment=16):
     return (value + alignment - 1) // alignment * alignment
 
 
-def rasterize_impostor(positions, uvs, triangles, albedo, cutoff, size, right, up, forward):
-    """Rasteriza ortograficamente um grupo num tile RGBA com teste de alfa.
+def rasterize_impostor(positions, normals, uvs, triangles, albedo, cutoff, size,
+                       right, up, forward, extent_x, extent_y, colors=None, factor=None):
+    """Rasteriza cor e normal ortograficas de uma vista do grupo.
 
     Um z-buffer por tile resolve a ordem entre cards: o texel que fica e o do
     card mais proximo do observador que passou no teste de alfa, que e
     exatamente o que o alpha-test faz em tempo real. Sem isso o impostor
-    misturaria folhas de tras com folhas da frente.
+    misturaria folhas de tras com folhas da frente. Normais geometricas sao
+    armazenadas em espaco de mundo: girar a camera nao deve girar a iluminacao.
+    O normal map de detalhe da fonte nao e incorporado neste bake.
     """
-    tile = np.zeros((size, size, 4), dtype=np.float32)
+    color_tile = np.zeros((size, size, 4), dtype=np.float32)
+    normal_tile = np.zeros((size, size, 4), dtype=np.float32)
     depth = np.full((size, size), np.inf, dtype=np.float32)
     local = positions - positions.mean(axis=0)
     plane_x = local @ right
     plane_y = local @ up
     plane_z = local @ forward
-    extent_x = max(float(np.abs(plane_x).max()), 1e-6)
-    extent_y = max(float(np.abs(plane_y).max()), 1e-6)
-    # Meio texel de margem para que o card mais externo nao encoste na borda do
+    extent_x = max(float(extent_x), 1e-6)
+    extent_y = max(float(extent_y), 1e-6)
+    # Um texel de margem para que o card mais externo nao encoste na borda do
     # tile: o atlas e amostrado com filtro bilinear e uma folha colada na borda
     # sangraria para o tile vizinho.
     scale_x = (size * 0.5 - 1.0) / extent_x
@@ -173,6 +240,8 @@ def rasterize_impostor(positions, uvs, triangles, albedo, cutoff, size, right, u
     screen_x = plane_x * scale_x + size * 0.5
     screen_y = size * 0.5 - plane_y * scale_y
     height, width = albedo.shape[:2]
+    colors = np.ones((len(positions), 4)) if colors is None else colors
+    factor = np.ones(4) if factor is None else factor
 
     for triangle in triangles:
         xs = screen_x[triangle]
@@ -199,7 +268,12 @@ def rasterize_impostor(positions, uvs, triangles, albedo, cutoff, size, right, u
         v = w0 * uvs[triangle[0], 1] + w1 * uvs[triangle[1], 1] + w2 * uvs[triangle[2], 1]
         texel_x = np.clip((u % 1.0) * width, 0, width - 1).astype(np.int32)
         texel_y = np.clip((v % 1.0) * height, 0, height - 1).astype(np.int32)
-        sample = albedo[texel_y, texel_x]
+        sample = albedo[texel_y, texel_x].copy()
+        vertex_color = (w0[..., None]*colors[triangle[0]] +
+                        w1[..., None]*colors[triangle[1]] + w2[..., None]*colors[triangle[2]])
+        sample[..., :3] = linear_to_srgb(srgb_to_linear(sample[..., :3]) *
+                                         vertex_color[..., :3] * factor[:3])
+        sample[..., 3] *= vertex_color[..., 3] * factor[3]
         covered = inside & (sample[..., 3] >= cutoff)
         if not covered.any():
             continue
@@ -208,8 +282,30 @@ def rasterize_impostor(positions, uvs, triangles, albedo, cutoff, size, right, u
         if not nearer.any():
             continue
         window[nearer] = z[nearer]
-        tile[minimum_y:maximum_y, minimum_x:maximum_x][nearer] = sample[nearer]
-    return tile
+        interpolated_normal = normalized(
+            w0[..., None] * normals[triangle[0]] +
+            w1[..., None] * normals[triangle[1]] +
+            w2[..., None] * normals[triangle[2]])
+        color_tile[minimum_y:maximum_y, minimum_x:maximum_x][nearer] = sample[nearer]
+        normal_window = normal_tile[minimum_y:maximum_y, minimum_x:maximum_x]
+        normal_window[nearer, :3] = interpolated_normal[nearer]
+        normal_window[nearer, 3] = sample[..., 3][nearer]
+    return color_tile, normal_tile
+
+
+def corrected_coverage_alpha(alpha, target_coverage, cutoff):
+    """Corrige cobertura sem contaminar a imagem usada pelo mip seguinte."""
+    if target_coverage <= 0.0:
+        return alpha
+    low, high = 0.0, 8.0
+    for _ in range(16):
+        middle = (low + high) * 0.5
+        coverage = float((np.clip(alpha * middle, 0, 1) >= cutoff).mean())
+        if coverage < target_coverage:
+            low = middle
+        else:
+            high = middle
+    return np.clip(alpha * high, 0.0, 1.0)
 
 
 def build_mip_chain(atlas, tile_size, minimum_tile=8, cutoff=0.5):
@@ -226,7 +322,8 @@ def build_mip_chain(atlas, tile_size, minimum_tile=8, cutoff=0.5):
             tile_size % minimum_tile or minimum_tile & (minimum_tile - 1)):
         raise ValueError('minimum_tile precisa ser potencia de dois e dividir tile_size')
     levels = []
-    image = atlas
+    image = atlas.copy()
+    image[..., :3] = srgb_to_linear(image[..., :3])
     rows = atlas.shape[0] // tile_size
     columns = atlas.shape[1] // tile_size
     base_coverage = np.zeros((rows, columns), dtype=np.float32)
@@ -246,15 +343,8 @@ def build_mip_chain(atlas, tile_size, minimum_tile=8, cutoff=0.5):
                         continue
                     tile = display[row * current_tile:(row + 1) * current_tile,
                                    column * current_tile:(column + 1) * current_tile]
-                    low, high = 0.0, 8.0
-                    for _ in range(16):
-                        middle = (low + high) * 0.5
-                        coverage = float((np.clip(tile[..., 3] * middle, 0, 1) >= cutoff).mean())
-                        if coverage < target:
-                            low = middle
-                        else:
-                            high = middle
-                    tile[..., 3] = np.clip(tile[..., 3] * high, 0.0, 1.0)
+                    tile[..., 3] = corrected_coverage_alpha(tile[..., 3], target, cutoff)
+        display[..., :3] = linear_to_srgb(display[..., :3])
         rgba = np.clip(display * 255.0 + 0.5, 0, 255).astype(np.uint8)
         levels.append((rgba.shape[1], rgba.shape[0], rgba.tobytes()))
         if current_tile == minimum_tile:
@@ -282,6 +372,69 @@ def build_mip_chain(atlas, tile_size, minimum_tile=8, cutoff=0.5):
     return levels
 
 
+def build_normal_mip_chain(atlas, tile_size, minimum_tile=4, cutoff=0.5):
+    """Reduz normais lineares por tile, ponderadas pela cobertura.
+
+    `atlas.rgb` permanece em [-1,1] durante toda a reducao. Renormalizar antes
+    de codificar RGBA8 UNORM evita que mips distantes puxem a copa para a normal
+    neutra ou para o branco escondido em texels transparentes.
+    """
+    if tile_size <= 0 or atlas.shape[0] % tile_size or atlas.shape[1] % tile_size:
+        raise ValueError('tile nao divide o atlas de normais')
+    if (minimum_tile < 1 or minimum_tile > tile_size or
+            tile_size % minimum_tile or minimum_tile & (minimum_tile - 1)):
+        raise ValueError('minimum_tile precisa ser potencia de dois e dividir tile_size')
+    levels = []
+    image = atlas
+    rows = atlas.shape[0] // tile_size
+    columns = atlas.shape[1] // tile_size
+    base_coverage = np.zeros((rows, columns), dtype=np.float32)
+    for row in range(rows):
+        for column in range(columns):
+            tile = atlas[row * tile_size:(row + 1) * tile_size,
+                         column * tile_size:(column + 1) * tile_size]
+            base_coverage[row, column] = float((tile[..., 3] >= cutoff).mean())
+    current_tile = tile_size
+    while True:
+        display = image.copy()
+        if current_tile != tile_size:
+            for row in range(rows):
+                for column in range(columns):
+                    target_coverage = float(base_coverage[row, column])
+                    if target_coverage <= 0.0:
+                        continue
+                    tile = display[row * current_tile:(row + 1) * current_tile,
+                                   column * current_tile:(column + 1) * current_tile]
+                    tile[..., 3] = corrected_coverage_alpha(
+                        tile[..., 3], target_coverage, cutoff)
+        encoded = np.zeros_like(display)
+        covered = display[..., 3] > 1.0e-8
+        encoded[..., :3] = 0.5
+        encoded[..., 2] = 1.0
+        encoded[covered, :3] = normalized(display[covered, :3]) * 0.5 + 0.5
+        encoded[..., 3] = display[..., 3]
+        rgba = np.clip(encoded * 255.0 + 0.5, 0, 255).astype(np.uint8)
+        levels.append((rgba.shape[1], rgba.shape[0], rgba.tobytes()))
+        if current_tile == minimum_tile:
+            break
+        next_tile = current_tile // 2
+        reduced = np.zeros((rows * next_tile, columns * next_tile, 4), dtype=np.float32)
+        for row in range(rows):
+            for column in range(columns):
+                source = image[row * current_tile:(row + 1) * current_tile,
+                               column * current_tile:(column + 1) * current_tile]
+                blocks = source.reshape(next_tile, 2, next_tile, 2, 4)
+                alpha = blocks[..., 3].mean(axis=(1, 3))
+                normal_sum = (blocks[..., :3] * blocks[..., 3:4]).sum(axis=(1, 3))
+                target = reduced[row * next_tile:(row + 1) * next_tile,
+                                 column * next_tile:(column + 1) * next_tile]
+                target[..., :3] = normalized(normal_sum)
+                target[..., 3] = alpha
+        image = reduced
+        current_tile = next_tile
+    return levels
+
+
 def write_aetx(path, width, height, encoding, levels):
     """AETX v1: cabecalho explicito little-endian + cadeia de mip concatenada."""
     payload = b''.join(level[2] for level in levels)
@@ -303,9 +456,10 @@ def fallback_chain(levels, limit=512):
     return levels[-1:]
 
 
-def refresh_manifest(manifest_path, package_directory, package, baked, atlas_name,
-                     atlas_width, atlas_height, tile, atlas_bytes, error_scale,
-                     mip_count, minimum_mip_tile):
+def refresh_manifest(manifest_path, package_directory, package, baked, color_atlas_name,
+                     normal_atlas_name, atlas_width, atlas_height, view_tile,
+                     view_columns, view_rows, color_atlas_bytes, normal_atlas_bytes,
+                     error_scale, mip_count, minimum_mip_tile):
     """Reescreve estatisticas e hashes do manifesto sobre o pacote ja gravado.
 
     O Gradle confere SHA-256 de cada entrada de `outputs` contra o arquivo
@@ -331,22 +485,30 @@ def refresh_manifest(manifest_path, package_directory, package, baked, atlas_nam
     statistics['lodDrawsByLevel'] = {str(level): count for level, count in sorted(levels.items())}
     statistics['lodGroups'] = sum(1 for count in groups.values() if count > 1)
     manifest['impostors'] = {
-        'version': 1,
+        'version': 2,
         'tool': 'tools/bake-foliage-impostors.py',
         'groups': baked,
-        'atlas': f'{atlas_name}.aetex',
-        'atlasFallback': f'{atlas_name}-fallback.aetex',
+        'atlas': f'{color_atlas_name}.aetex',
+        'atlasFallback': f'{color_atlas_name}-fallback.aetex',
+        'normalAtlas': f'{normal_atlas_name}.aetex',
+        'normalAtlasFallback': f'{normal_atlas_name}-fallback.aetex',
         'atlasSize': [atlas_width, atlas_height],
-        'tile': tile,
+        'viewTile': view_tile,
+        'viewGrid': [view_columns, view_rows],
+        'views': view_columns * view_rows,
         'errorScale': error_scale,
-        'mipIsolation': 'per-tile-alpha-weighted',
+        'mipIsolation': 'per-view-alpha-weighted',
+        'viewTransition': 'single-sample-bayer',
+        'normalEncoding': 'world-space-rgba8-unorm',
         'maximumSafeLod': mip_count - 1,
         'minimumMipTile': minimum_mip_tile,
         # RGBA8 e nao ASTC porque astcenc nao esta disponivel nesta maquina; o
         # AETX ja aceita encoding 3 e o runtime o decodifica sem caminho
         # especial. Trocar por ASTC 6x6 dividiria estes bytes por ~4.
         'encoding': 'R8G8B8A8_SRGB',
-        'atlasBytes': atlas_bytes,
+        'normalEncodingFormat': 'R8G8B8A8_UNORM',
+        'atlasBytes': color_atlas_bytes,
+        'normalAtlasBytes': normal_atlas_bytes,
         'impostorVertices': baked * 4,
         'impostorTriangles': baked * 2,
     }
@@ -361,9 +523,14 @@ def main():
     parser.add_argument('--package', type=pathlib.Path, required=True, help='scene.aemap')
     parser.add_argument('--manifest', type=pathlib.Path, required=True)
     parser.add_argument('--out', type=pathlib.Path, required=True, help='diretorio de saida')
-    parser.add_argument('--tile', type=int, default=128)
-    parser.add_argument('--minimum-mip-tile', type=int, default=8,
-                        help='menor tile publicado por impostor (potencia de dois, 4..tile)')
+    parser.add_argument('--view-tile', type=int, default=32,
+                        help='resolucao quadrada de cada vista (potencia de dois, 16..128)')
+    parser.add_argument('--view-columns', type=int, default=4,
+                        help='colunas de vistas azimutais no macro-tile')
+    parser.add_argument('--view-rows', type=int, default=2,
+                        help='linhas de vistas azimutais no macro-tile')
+    parser.add_argument('--minimum-mip-tile', type=int, default=4,
+                        help='menor vista publicada (potencia de dois, 4..view-tile)')
     parser.add_argument('--minimum-triangles', type=int, default=64,
                         help='grupos menores que isto nao valem um impostor')
     parser.add_argument('--error-scale', type=float, default=1.25,
@@ -371,13 +538,22 @@ def main():
     parser.add_argument('--update-manifest', action='store_true',
                         help='reescreve estatisticas e hashes do manifesto a partir de --out; '
                              'exige que --out seja o diretorio final do pacote')
+    parser.add_argument('--replace-baked', action='store_true',
+                        help='replace only a validated baker-owned appended suffix')
     args = parser.parse_args()
-    if args.tile < 16 or args.tile > 256 or args.tile & (args.tile - 1):
-        parser.error('--tile deve ser potencia de dois em [16, 256]')
-    if (args.minimum_mip_tile < 4 or args.minimum_mip_tile > args.tile or
+    if args.view_tile < 16 or args.view_tile > 128 or args.view_tile & (args.view_tile - 1):
+        parser.error('--view-tile deve ser potencia de dois em [16, 128]')
+    if (args.view_columns < 1 or args.view_rows < 1 or
+            args.view_columns > 8 or args.view_rows > 8 or
+            args.view_columns & (args.view_columns - 1) or
+            args.view_rows & (args.view_rows - 1)):
+        parser.error('--view-columns/--view-rows devem ser potencias de dois em [1, 8]')
+    if args.view_columns * args.view_rows < 4:
+        parser.error('o impostor multivista exige pelo menos quatro vistas')
+    if (args.minimum_mip_tile < 4 or args.minimum_mip_tile > args.view_tile or
             args.minimum_mip_tile & (args.minimum_mip_tile - 1) or
-            args.tile % args.minimum_mip_tile):
-        parser.error('--minimum-mip-tile deve ser potencia de dois em [4, tile] e dividir tile')
+            args.view_tile % args.minimum_mip_tile):
+        parser.error('--minimum-mip-tile deve ser potencia de dois em [4, view-tile] e dividir view-tile')
 
     cooker = load_cooker()
     read_glb = cooker['read_glb']
@@ -387,6 +563,8 @@ def main():
     gltf, binary = read_glb(args.source.read_bytes())
     manifest = json.loads(args.manifest.read_text(encoding='utf-8'))
     package = Package(args.package.read_bytes())
+    if args.replace_baked:
+        package.remove_baked_suffix()
     print(f'pacote: {package.texture_count} texturas, {package.material_count} materiais, '
           f'{package.draw_count} draws, {package.vertex_count} vertices')
     # Assar duas vezes sobre o mesmo pacote empilharia um segundo conjunto de
@@ -437,23 +615,25 @@ def main():
     candidates = [(gid, entry) for gid, entry in sorted(groups.items()) if 'draw' in entry]
     if not candidates:
         raise SystemExit('nenhum grupo alpha-tested elegivel')
-    columns = int(math.ceil(math.sqrt(len(candidates))))
+    macro_width = args.view_columns * args.view_tile
+    macro_height = args.view_rows * args.view_tile
+    columns = int(math.ceil(math.sqrt(len(candidates) * macro_height / macro_width)))
     rows = int(math.ceil(len(candidates) / columns))
-    atlas_width = columns * args.tile
-    atlas_height = rows * args.tile
+    atlas_width = columns * macro_width
+    atlas_height = rows * macro_height
     # Potencia de dois nos dois eixos: a cadeia de mip do AETX reduz por metade
     # ate 1x1, e um atlas nao-potencia produziria niveis com tiles cortados ao
     # meio, sangrando um impostor no vizinho.
     atlas_width = 1 << (atlas_width - 1).bit_length()
     atlas_height = 1 << (atlas_height - 1).bit_length()
-    columns = atlas_width // args.tile
+    columns = atlas_width // macro_width
     print(f'{len(candidates)} grupos elegiveis -> atlas {atlas_width}x{atlas_height} '
-          f'com tiles de {args.tile}px')
+          f'com {args.view_columns * args.view_rows} vistas de {args.view_tile}px')
 
-    atlas = np.zeros((atlas_height, atlas_width, 4), dtype=np.float32)
-    right = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+    color_atlas = np.zeros((atlas_height, atlas_width, 4), dtype=np.float32)
+    normal_atlas = np.zeros((atlas_height, atlas_width, 4), dtype=np.float32)
     up = np.array([0.0, 1.0, 0.0], dtype=np.float64)
-    forward = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+    view_count = args.view_columns * args.view_rows
 
     new_vertices = bytearray()
     new_indices = []
@@ -467,77 +647,93 @@ def main():
             continue
         cutoff = package.material_alpha_cutoff(draw['materialIndex'])
         first = draw['firstIndex']
-        used = package.indices[first:first + draw['indexCount']]
+        used = [index + draw['vertexOffset'] for index in
+                package.indices[first:first + draw['indexCount']]]
         unique, compact = np.unique(np.asarray(used, dtype=np.uint32), return_inverse=True)
         positions = np.array([package.vertex_position(int(v)) for v in unique], dtype=np.float64)
-        uvs = np.array([package.vertex_uv0(int(v)) for v in unique], dtype=np.float64)
+        normals = np.array([package.vertex_normal(int(v)) for v in unique], dtype=np.float64)
+        uv_slot = struct.unpack_from('<I', package.materials[draw['materialIndex']], 72)[0] & 3
+        if uv_slot > 1:
+            raise ValueError('unsupported base color UV channel')
+        uvs = np.array([package.vertex_uv(int(v), uv_slot) for v in unique], dtype=np.float64)
+        colors = np.array([package.vertex_color(int(v)) for v in unique])
+        factor = np.asarray(struct.unpack_from('<4f', package.materials[draw['materialIndex']], 16))
         triangles = compact.reshape(-1, 3)
-        tile = rasterize_impostor(positions, uvs, triangles, albedo, cutoff, args.tile,
-                                  right, up, forward)
-        if float((tile[..., 3] >= cutoff).mean()) <= 0.0:
-            continue
-        tile_x = (slot % columns) * args.tile
-        tile_y = (slot // columns) * args.tile
-        atlas[tile_y:tile_y + args.tile, tile_x:tile_x + args.tile] = tile
 
-        centre = positions.mean(axis=0)
-        local = positions - centre
-        half_width = max(float(np.abs(local @ right).max()), 1e-3)
-        half_height = max(float(np.abs(local @ up).max()), 1e-3)
-        # O quad e local e centrado na origem; a matriz de mundo do draw o
-        # coloca no lugar. Assim o vertex shader pode gira-lo para encarar a
-        # camera sem precisar do centro do grupo como uniform.
-        world = list(draw['world'])
-        offset = centre @ np.array(world, dtype=np.float64).reshape(4, 4)[:3, :3]
-        world[12] += float(offset[0])
-        world[13] += float(offset[1])
-        world[14] += float(offset[2])
-        margin_x = 0.5 / (args.tile * 0.5 - 1.0) * half_width
-        margin_y = 0.5 / (args.tile * 0.5 - 1.0) * half_height
+        # O AEMAP mantem vertices locais e matriz column-major. Converter a
+        # geometria fonte para mundo antes do bake remove a suposicao fragil de
+        # que toda arvore usa matriz identidade/sem escala. O impostor publicado
+        # volta a ter matriz apenas de translacao, e seu yaw passa a ser mundial.
+        model_columns = np.asarray(draw['world'], dtype=np.float64).reshape(4, 4)
+        homogeneous = np.concatenate((positions, np.ones((len(positions), 1))), axis=1)
+        world_positions = (homogeneous @ model_columns)[:, :3]
+        linear = model_columns[:3, :3].T
+        try:
+            normal_matrix = np.linalg.inv(linear).T
+        except np.linalg.LinAlgError:
+            continue
+        world_normals = normalized(normals @ normal_matrix.T)
+        centre = world_positions.mean(axis=0)
+        local = world_positions - centre
+        half_width = max(float(np.linalg.norm(local[:, (0, 2)], axis=1).max()), 1e-3)
+        half_height = max(float(np.abs(local[:, 1]).max()), 1e-3)
+
+        macro_x = (slot % columns) * macro_width
+        macro_y = (slot // columns) * macro_height
+        visible_pixels = 0
+        for view in range(view_count):
+            angle = 2.0 * math.pi * view / view_count
+            right = np.array([math.cos(angle), 0.0, -math.sin(angle)], dtype=np.float64)
+            forward = np.array([math.sin(angle), 0.0, math.cos(angle)], dtype=np.float64)
+            color_tile, normal_tile = rasterize_impostor(
+                world_positions, world_normals, uvs, triangles, albedo, cutoff,
+                args.view_tile, right, up, forward, half_width, half_height, colors, factor)
+            view_x = macro_x + (view % args.view_columns) * args.view_tile
+            view_y = macro_y + (view // args.view_columns) * args.view_tile
+            color_atlas[view_y:view_y + args.view_tile,
+                        view_x:view_x + args.view_tile] = color_tile
+            normal_atlas[view_y:view_y + args.view_tile,
+                         view_x:view_x + args.view_tile] = normal_tile
+            visible_pixels += int((color_tile[..., 3] >= cutoff).sum())
+        if visible_pixels == 0:
+            continue
+
+        world = [1.0, 0.0, 0.0, 0.0,
+                 0.0, 1.0, 0.0, 0.0,
+                 0.0, 0.0, 1.0, 0.0,
+                 float(centre[0]), float(centre[1]), float(centre[2]), 1.0]
+        # Inverse of raster scale for UV endpoints 0..1 (not texel centers).
+        margin_x = 1.0 / (args.view_tile * 0.5 - 1.0) * half_width
+        margin_y = 1.0 / (args.view_tile * 0.5 - 1.0) * half_height
         span_x = half_width + margin_x
         span_y = half_height + margin_y
-        u0 = (tile_x + 0.5) / atlas_width
-        v0 = (tile_y + 0.5) / atlas_height
-        u1 = (tile_x + args.tile - 0.5) / atlas_width
-        v1 = (tile_y + args.tile - 0.5) / atlas_height
-        corners = [((-span_x, -span_y, 0.0), (u0, v1)),
-                   ((span_x, -span_y, 0.0), (u1, v1)),
-                   ((span_x, span_y, 0.0), (u1, v0)),
-                   ((-span_x, span_y, 0.0), (u0, v0))]
-        for local_position, uv in corners:
+        macro_origin = np.array([macro_x / atlas_width, macro_y / atlas_height],
+                                dtype=np.float32)
+        corners = [((-span_x, -span_y, 0.0), (0.0, 1.0)),
+                   ((span_x, -span_y, 0.0), (1.0, 1.0)),
+                   ((span_x, span_y, 0.0), (1.0, 0.0)),
+                   ((-span_x, span_y, 0.0), (0.0, 0.0))]
+        for local_position, local_uv in corners:
             new_vertices += vertex_record(np.array(local_position, dtype=np.float32),
                                           np.array([0.0, 0.0, 1.0], dtype=np.float32),
                                           np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float32),
-                                          np.array(uv, dtype=np.float32),
-                                          np.array(uv, dtype=np.float32),
+                                          np.array(local_uv, dtype=np.float32),
+                                          macro_origin,
                                           np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32))
         quad = base_vertex + baked * 4
         first_index = package.index_count + len(new_indices)
         new_indices.extend([quad, quad + 1, quad + 2, quad, quad + 2, quad + 3])
-        # Erro geometrico do impostor.
-        #
-        # A tentacao e cobrar a extensao em profundidade do grupo (o raio):
-        # o quad achata tudo num plano, entao "erra" por isso. Medido, esse
-        # numero torna o impostor INALCANCAVEL -- com raio mediano de 32,9 num
-        # mapa de 551 unidades, a distancia de troca cai em 2.470 unidades, e
-        # zero impostores sao selecionados em qualquer pose deste mapa.
-        #
-        # E cobrar errado, nao so cobrar caro. O erro de tela que a selecao de
-        # LOD modela e desvio de SILHUETA, e um quad que gira para encarar a
-        # camera nao tem desvio de silhueta nenhum: ele reproduz exatamente a
-        # silhueta assada. O que o achatamento produz e parallax errada quando
-        # a camera anda de lado -- um erro que nao escala com 1/distancia e que
-        # esta metrica nao representa. O que ela representa e a resolucao do
-        # impostor: um texel do tile vale `texel` unidades de mundo, e e esse o
-        # detalhe que ele deixa de resolver.
-        #
-        # O multiplo do nivel anterior existe porque a cadeia exige erro
-        # estritamente crescente e porque `texel` sozinho e menor que o erro do
-        # nivel anterior (0,4 contra 3,1 medianos) -- o impostor entraria antes
-        # da malha simplificada, o que inverteria a ordem da cadeia.
-        texel = 2.0 * max(span_x, span_y) / args.tile
-        error = max(entry['maximumError'] * args.error_scale, texel)
-        new_draws.append((first_index, 6, world, draw['center'], draw['radius'],
+        # Preserve strict LOD ordering while accounting for atlas resolution
+        # and angular displacement between views. Never force early selection
+        # by pretending a flattened crown has zero geometric error.
+        texel = 2.0 * max(span_x, span_y) / args.view_tile
+        # Angular/parallax displacement is real error, not just atlas texel size.
+        error = max(entry['maximumError'] * args.error_scale, texel,
+                    half_width * math.sin(math.pi / view_count))
+        quad_radius = math.sqrt(span_x * span_x + span_y * span_y)
+        centre_offset = float(np.linalg.norm(centre - np.asarray(draw['center'])))
+        conservative_radius = max(float(draw['radius']), centre_offset + quad_radius)
+        new_draws.append((first_index, 6, world, draw['center'], conservative_radius,
                           entry['maximumLevel'] + 1, error, group_id))
         baked += 1
         if baked % 25 == 0:
@@ -547,12 +743,15 @@ def main():
         raise SystemExit('nenhum impostor produzido')
 
     args.out.mkdir(parents=True, exist_ok=True)
-    levels = build_mip_chain(atlas, args.tile, args.minimum_mip_tile)
-    atlas_name = f'texture_{package.texture_count:03d}'
-    atlas_bytes = write_aetx(args.out / f'{atlas_name}.aetex', atlas_width, atlas_height,
-                             AETX_RGBA8_SRGB, levels)
-    reduced = fallback_chain(levels)
-    write_aetx(args.out / f'{atlas_name}-fallback.aetex', reduced[0][0], reduced[0][1],
+    color_levels = build_mip_chain(color_atlas, args.view_tile, args.minimum_mip_tile)
+    normal_levels = build_normal_mip_chain(normal_atlas, args.view_tile,
+                                           args.minimum_mip_tile)
+    color_atlas_name = f'texture_{package.texture_count:03d}'
+    color_atlas_bytes = write_aetx(args.out / f'{color_atlas_name}.aetex',
+                                   atlas_width, atlas_height, AETX_RGBA8_SRGB,
+                                   color_levels)
+    reduced = fallback_chain(color_levels)
+    write_aetx(args.out / f'{color_atlas_name}-fallback.aetex', reduced[0][0], reduced[0][1],
                AETX_RGBA8_SRGB, reduced)
 
     # Registro de textura: filtro linear e mip linear (um impostor distante ocupa
@@ -562,14 +761,34 @@ def main():
     package.textures.append(struct.pack('<4I', 1 | 2 | 4 | 8 | 16, 0, 0, 0))
     impostor_texture = package.texture_count
     package.texture_count += 1
+    normal_atlas_name = f'texture_{package.texture_count:03d}'
+    normal_atlas_bytes = write_aetx(args.out / f'{normal_atlas_name}.aetex',
+                                    atlas_width, atlas_height, AETX_RGBA8_UNORM,
+                                    normal_levels)
+    normal_reduced = fallback_chain(normal_levels)
+    write_aetx(args.out / f'{normal_atlas_name}-fallback.aetex',
+               normal_reduced[0][0], normal_reduced[0][1], AETX_RGBA8_UNORM,
+               normal_reduced)
+    package.textures.append(struct.pack('<4I', 1 | 2 | 4 | 8, 0, 0, 0))
+    impostor_normal_texture = package.texture_count
+    package.texture_count += 1
 
-    # roughness=1, metallic=0: folhagem e dieletrica. O tile ja carrega a cor
-    # sombreada do LOD0, entao o especular so acrescentaria brilho que a
-    # geometria substituida nao tinha.
-    flags = MATERIAL_ALPHA_MASK | MATERIAL_DOUBLE_SIDED | MATERIAL_IMPOSTOR
+    # Distant diffuse foliage approximation: albedo remains unlit and receives
+    # runtime lighting from the geometric normal atlas. Specular/MR/emissive
+    # detail is not represented; geometric error keeps this LOD far away.
+    flags = (MATERIAL_ALPHA_MASK | MATERIAL_DOUBLE_SIDED | MATERIAL_IMPOSTOR |
+             MATERIAL_NORMAL_MAP)
+    macro_columns = atlas_width // macro_width
+    macro_rows = atlas_height // macro_height
+    metadata = (int(math.log2(macro_columns)) |
+                int(math.log2(macro_rows)) << 4 |
+                args.view_columns << 8 |
+                args.view_rows << 12)
     package.materials.append(struct.pack(
-        '<4I4f4f4ff3I', impostor_texture, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF,
-        1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.5, flags, 0, 0))
+        '<4I4f4f4ff3I', impostor_texture, impostor_normal_texture,
+        0xFFFFFFFF, 0xFFFFFFFF,
+        1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0,
+        1.0, 0.0, 1.0, 0.0, 0.5, flags, 0, metadata))
     impostor_material = package.material_count
     package.material_count += 1
 
@@ -583,14 +802,17 @@ def main():
     package.index_count = len(package.indices)
 
     (args.out / 'scene.aemap').write_bytes(package.serialize())
-    print(f'{baked} impostores assados; atlas {atlas_name}.aetex '
-          f'({atlas_bytes / 2**20:.1f} MiB, {len(levels)} mips) + fallback '
+    print(f'{baked} impostores multivista assados; atlas {color_atlas_name}.aetex '
+          f'({color_atlas_bytes / 2**20:.1f} MiB, {len(color_levels)} mips) + fallback '
           f'{reduced[0][0]}x{reduced[0][1]}')
-    print(f'pacote: +{baked} draws, +{baked * 4} vertices, +1 textura, +1 material')
+    print(f'normais: {normal_atlas_name}.aetex ({normal_atlas_bytes / 2**20:.1f} MiB)')
+    print(f'pacote: +{baked} draws, +{baked * 4} vertices, +2 texturas, +1 material')
     if args.update_manifest:
-        refresh_manifest(args.manifest, args.out, package, baked, atlas_name,
-                         atlas_width, atlas_height, args.tile, atlas_bytes, args.error_scale,
-                         len(levels), args.minimum_mip_tile)
+        refresh_manifest(args.manifest, args.out, package, baked, color_atlas_name,
+                         normal_atlas_name, atlas_width, atlas_height, args.view_tile,
+                         args.view_columns, args.view_rows, color_atlas_bytes,
+                         normal_atlas_bytes, args.error_scale, len(color_levels),
+                         args.minimum_mip_tile)
         print(f'manifesto atualizado: {args.manifest}')
 
 

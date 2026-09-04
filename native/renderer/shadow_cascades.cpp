@@ -97,24 +97,32 @@ u32 computeShadowCascades(const ShadowCascadeInput &input, u32 count, float lamb
   if (!normalize(lightUp)) return 0;
 
   float sliceNear = input.nearPlane;
+  const float blendRatio = std::isfinite(input.cascadeBlendRatio)
+                               ? std::clamp(input.cascadeBlendRatio, 0.0f, 0.5f) : 0.0f;
   for (u32 index = 0; index < count; ++index) {
     const float sliceFar = splits[index];
     ShadowCascade &cascade = outCascades[index];
     cascade = {};
     cascade.nearDistance = sliceNear;
     cascade.farDistance = sliceFar;
+    // Shading blends BEFORE the nominal split. Fit both receivers, otherwise
+    // the next lookup can read outside its projection while its weight is nonzero.
+    const float previousStart = index > 1 ? splits[index - 2] : 0.0f;
+    const float receiverNear = index > 0
+        ? std::max(input.nearPlane, sliceNear - (sliceNear - previousStart) * blendRatio)
+        : sliceNear;
 
     // Esfera que circunscreve a fatia do frustum. Usar a esfera, e não a caixa
     // alinhada à luz, é o que mantém o volume invariante à rotação da câmera: o
     // jogador olhar em volta não pode mudar a resolução efetiva da sombra.
-    const Vec3 nearCenter = add(eye, scale(forward, sliceNear));
+    const Vec3 nearCenter = add(eye, scale(forward, receiverNear));
     const Vec3 farCenter = add(eye, scale(forward, sliceFar));
     const Vec3 farCorner = add(add(farCenter, scale(right, sliceFar * tanHalfHorizontal)),
                                scale(up, sliceFar * tanHalfVertical));
-    const Vec3 nearCorner = add(add(nearCenter, scale(right, sliceNear * tanHalfHorizontal)),
-                                scale(up, sliceNear * tanHalfVertical));
+    const Vec3 nearCorner = add(add(nearCenter, scale(right, receiverNear * tanHalfHorizontal)),
+                                scale(up, receiverNear * tanHalfVertical));
     // O centro da esfera fica no eixo de visão; o raio cobre os dois cantos.
-    const Vec3 axisMidpoint = add(eye, scale(forward, (sliceNear + sliceFar) * 0.5f));
+    const Vec3 axisMidpoint = add(eye, scale(forward, (receiverNear + sliceFar) * 0.5f));
     const float exactRadius = std::max(length(sub(farCorner, axisMidpoint)),
                                        length(sub(nearCorner, axisMidpoint)));
     const float guardBand = std::clamp(input.receiverGuardBandRatio, 1.0f, 1.25f);

@@ -48,6 +48,31 @@ class ImpostorMipChainTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             BAKER.build_mip_chain(atlas, tile_size=16, minimum_tile=6)
 
+    def test_normal_mips_preservam_direcao_cobertura_e_formato_linear(self):
+        atlas = np.zeros((16, 16, 4), dtype=np.float32)
+        atlas[:, :8, :3] = [0.0, 1.0, 0.0]
+        atlas[:, :8, 3] = 1.0
+
+        levels = BAKER.build_normal_mip_chain(atlas, tile_size=16, minimum_tile=4)
+
+        self.assertEqual([(width, height) for width, height, _ in levels],
+                         [(16, 16), (8, 8), (4, 4)])
+        tail = np.frombuffer(levels[-1][2], dtype=np.uint8).reshape(4, 4, 4)
+        self.assertAlmostEqual(float((tail[..., 3] >= 128).mean()), 0.5)
+        covered = tail[..., 3] >= 128
+        decoded = tail[covered, :3].astype(np.float32) / 255.0 * 2.0 - 1.0
+        decoded /= np.maximum(np.linalg.norm(decoded, axis=1, keepdims=True), 1e-8)
+        self.assertTrue(np.all(decoded[:, 1] > 0.999))
+        self.assertTrue(np.all(np.abs(decoded[:, (0, 2)]) < 0.01))
+
+    def test_normal_tile_vazio_codifica_neutro_com_alpha_zero(self):
+        atlas = np.zeros((16, 16, 4), dtype=np.float32)
+        levels = BAKER.build_normal_mip_chain(atlas, tile_size=16, minimum_tile=4)
+        base = np.frombuffer(levels[0][2], dtype=np.uint8).reshape(16, 16, 4)
+        self.assertTrue(np.all(base[..., 3] == 0))
+        self.assertTrue(np.all(base[..., 0:2] == 128))
+        self.assertTrue(np.all(base[..., 2] == 255))
+
 
 if __name__ == "__main__":
     unittest.main()

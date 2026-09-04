@@ -120,6 +120,39 @@ AE_TEST(cascade_mantem_o_volume_quando_a_camera_apenas_gira) {
   }
 }
 
+AE_TEST(cascade_crossfade_covers_previous_receiver_slice) {
+  auto input = baseInput();
+  input.verticalFovRadians = 0.08f;
+  input.aspectRatio = 1.0f;
+  input.cascadeBlendRatio = 0.5f;
+  input.lightDirection[0] = 1.0f;
+  input.lightDirection[1] = input.lightDirection[2] = 0.0f;
+  ShadowCascade cascades[MaximumShadowCascades]{};
+  AE_EXPECT_EQ(computeShadowCascades(input, 4, .75f, cascades), 4u, "four cascades");
+  for (u32 index = 1; index < 4; ++index) {
+    const float previousStart = index > 1 ? cascades[index - 2].farDistance : 0.0f;
+    const float split = cascades[index - 1].farDistance;
+    const float start = split - (split - previousStart) * input.cascadeBlendRatio;
+    for (int step = 0; step <= 8; ++step) {
+      const float depth = start + (split - start) * static_cast<float>(step) / 8.0f;
+      const float halfWidth = depth * std::tan(input.verticalFovRadians * 0.5f);
+      for (int x = -1; x <= 1; x += 2) {
+        for (int y = -1; y <= 1; y += 2) {
+          const float point[3] = {input.cameraPosition[0] + x * halfWidth,
+                                 input.cameraPosition[1] + y * halfWidth,
+                                 input.cameraPosition[2] + depth};
+          float clip[4]{};
+          transform(cascades[index].viewProjection, point, clip);
+          AE_EXPECT_TRUE(std::fabs(clip[0]) <= 1.002f && std::fabs(clip[1]) <= 1.002f &&
+                         clip[2] >= -0.002f && clip[2] <= 1.002f,
+                         "the incoming cascade covers every blended receiver");
+        }
+      }
+    }
+    AE_EXPECT_EQ(cascades[index].nearDistance, split, "nominal split stays unchanged");
+  }
+}
+
 AE_TEST(cascade_ancora_o_centro_em_texels_inteiros) {
   // Sem ancoragem, cada movimento sub-texel reamostra a sombra num ponto diferente
   // e a borda ferve. O teste move a câmera menos de um texel e exige que o centro

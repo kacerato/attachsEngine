@@ -364,6 +364,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_environment_map.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_rendering_policy.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_shadow_cascades.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_surface_format.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_thermal_pressure_controller.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp

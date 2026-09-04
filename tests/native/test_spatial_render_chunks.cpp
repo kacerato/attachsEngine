@@ -2,9 +2,39 @@
 #include "renderer/spatial_render_chunks.h"
 
 #include <array>
+#include <cmath>
 
 using namespace ae;
 using namespace ae::renderer;
+
+AE_TEST(Spatial_chunks_bound_shader_rotations_under_nonuniform_scale) {
+  std::array<float, 12> vertices{-2,-3,0, 2,-3,0, 2,3,0, -2,3,0};
+  std::array<u32, 6> indices{0,1,2,0,2,3};
+  std::array<MapMaterialRecord, 1> materials{};
+  materials[0].flags = MapMaterialAlphaMask | MapMaterialImpostor;
+  MapDrawRecord draw{};
+  draw.indexCount = 6;
+  draw.model[0]=1; draw.model[5]=2; draw.model[10]=5; draw.model[15]=1;
+  draw.model[12]=50;
+  MapPackageView package{};
+  package.header.vertexCount=4; package.header.vertexStride=12;
+  package.header.triangleCount=2;
+  package.vertices={reinterpret_cast<const u8*>(vertices.data()), sizeof(vertices)};
+  package.indices=indices; package.materials=materials; package.draws.push_back(draw);
+  SpatialRenderChunks chunks;
+  AE_EXPECT_TRUE(buildSpatialRenderChunks(package, {}, chunks), "rotating bounds built");
+  for (u32 step=0; step<64; ++step) {
+    const float angle=static_cast<float>(step)*6.2831853f/64.0f;
+    for (u32 vertex=0; vertex<4; ++vertex) {
+      const float x=vertices[vertex*3]*std::cos(angle);
+      const float y=vertices[vertex*3+1]*2;
+      const float z=-vertices[vertex*3]*std::sin(angle)*5;
+      AE_EXPECT_TRUE(std::sqrt(x*x+y*y+z*z)<=chunks.draws[0].boundsRadius+0.0001f,
+                     "all shader orientations stay inside cull bounds");
+    }
+  }
+  AE_EXPECT_EQ(chunks.draws[0].boundsCenter[0], 50.0f, "world-space rotation centre");
+}
 
 namespace {
 MapPackageView fixture(std::array<float, 36> &vertices, std::array<u32, 12> &indices,

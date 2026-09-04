@@ -3384,6 +3384,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       input.casterExtrusion = input.shadowDistance;
       input.cascadeResolution = renderingPolicy_.shadows.cascadeResolution;
       input.receiverGuardBandRatio = renderingPolicy_.shadows.cacheGuardBandRatio;
+      input.cascadeBlendRatio = renderingPolicy_.shadows.cascadeBlendRatio;
       renderer::ShadowCascade desiredCascades[renderer::MaximumShadowCascades]{};
       const u32 desiredCascadeCount = renderer::computeShadowCascades(
           input, renderingPolicy_.shadows.cascadeCount, renderer::DefaultCascadeSplitLambda,
@@ -3540,7 +3541,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       }
       push.materialFlags[0]=material.flags;
       const u32 alphaCutoff = static_cast<u32>(std::clamp(material.alphaCutoff, 0.0f, 1.0f) * 255.0f + .5f);
-      push.materialFlags[1]=material.textureCoordinates | (alphaCutoff << 8u);
+      // High 16 bits carry optional material-class metadata. Multi-view
+      // impostors use it for atlas/grid layout; legacy materials keep zero and
+      // therefore preserve the old push-constant bit pattern.
+      push.materialFlags[1]=material.textureCoordinates | (alphaCutoff << 8u) |
+                            ((material.reserved & 0xffffu) << 16u);
       push.materialFlags[2]=encodeSrgb?1u:0u;
       push.materialFlags[3]=std::bit_cast<u32>(dirtRoadResources_.header().farPlane);
       push.materialFactors[0]=material.roughness;push.materialFactors[1]=material.metallic;
@@ -3568,7 +3573,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     auto usesDistantMaterialPipeline = [&](u32 drawIndex) {
       const auto &draw = dirtRoadResources_.draws()[drawIndex];
       const auto &material = dirtRoadResources_.materials()[draw.materialIndex];
+      // The impostor normal atlas is replacement geometry, not optional
+      // high-frequency material detail. Stripping it in the distant pipeline
+      // recreates the white camera-facing cards the multiview bake removes.
       return (material.flags & renderer::MapMaterialNormalMap) != 0 &&
+             (material.flags & renderer::MapMaterialImpostor) == 0 &&
              renderer::boundsEntirelyPastDistance(
                  camera.position, draw.boundsCenter, draw.boundsRadius,
                  renderingPolicy_.materialDistance.normalMapMaximumDistance);
@@ -3620,12 +3629,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         ? &coverageDrawOrder_ : &levelZeroCoverageDrawOrder_;
     if (lodSelectionEnabled_ && (!lodGroups_.empty() || !coverageLodGroups_.empty())) {
       auto *instances = static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
-      // `displayExtent` is already in the logical post-transform orientation.
-      // Dynamic resolution scales the underlying rotated target by the same
-      // absolute factor, so this is the vertical pixel count that can actually
-      // display projected geometric error.
+      // Error budgets describe final display pixels. Internal resolution here
+      // allowed a DRS change to remove geometry with a stationary camera.
       const float activeVerticalPixels = std::max(
-          1.0f, static_cast<float>(displayExtent.height) * dynamicResolution_.scale());
+          1.0f, static_cast<float>(displayExtent.height));
       auto selectGroups = [&](std::vector<renderer::LodRenderGroup> &groups,
                               const std::vector<u32> &ungrouped,
                               std::vector<u32> &filtered,

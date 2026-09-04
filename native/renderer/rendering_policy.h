@@ -141,6 +141,7 @@ struct ProjectRenderingSettings final {
   float shadowDistanceFadeRatio = -1.0f;
 
   float lodPixelErrorBudget = 0.0f;
+  // Error budgets are in final display pixels, never internal DRS pixels.
   // Orçamento próprio para geometria alpha-tested (vegetação/cards). Zero
   // herda do preset; é independente do LOD de superfícies sólidas.
   float coverageLodPixelErrorBudget = 0.0f;
@@ -162,6 +163,9 @@ struct ProjectRenderingSettings final {
   // Fração final do alcance usada para transição suave. 0 permite corte seco;
   // valor negativo herda o padrão global (20%).
   float materialDetailFadeBandRatio = -1.0f;
+  // Opt-in: moving visibility thresholds under thermal pressure changes scene
+  // appearance even with a stationary camera. Inherit preserves authored ranges.
+  FeatureOverride thermalDistanceScaling = FeatureOverride::Inherit;
 
   AntiAliasingMode antiAliasing = AntiAliasingMode::Inherit;
   // Schema <= 6 compatibility. New serialized settings must use

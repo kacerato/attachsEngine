@@ -67,6 +67,8 @@ struct MapMaterialRecord {
   float alphaCutoff;
   u32 flags;
   u32 textureCoordinates;
+  // Optional multiview impostor layout (zero = legacy single view):
+  // macro columns/rows log2 in bits 0..7, view columns/rows in bits 8..15.
   u32 reserved;
 };
 
@@ -274,6 +276,18 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
   for (const auto &material : decoded.materials) {
     for (u32 texture : material.textureIndices) {
       if (texture != InvalidMapTexture && texture >= decoded.header.textureCount) return false;
+    }
+    if ((material.flags & MapMaterialImpostor) != 0 && material.reserved != 0) {
+      const u32 columns = (material.reserved >> 8u) & 15u;
+      const u32 rows = (material.reserved >> 12u) & 15u;
+      // Zero dimensions would divide by zero in atlas addressing. Require the
+      // replacement-normal resource and supported power-of-two layout at import,
+      // not after malformed metadata has reached a fragment shader.
+      if ((material.reserved >> 16u) != 0 || columns == 0 || rows == 0 ||
+          (columns & (columns - 1u)) != 0 || (rows & (rows - 1u)) != 0 ||
+          (material.flags & MapMaterialNormalMap) == 0 ||
+          material.textureIndices[0] == InvalidMapTexture ||
+          material.textureIndices[1] == InvalidMapTexture) return false;
     }
   }
   u64 fingerprint = 14695981039346656037ull;

@@ -73,8 +73,9 @@ bool AndroidVulkanSurface::initialize(ANativeActivity *activity, ANativeWindow *
     shutdown();
     return false;
   }
-  __android_log_print(ANDROID_LOG_INFO, LogTag, "Swapchain pronta: %ux%u, %u imagens.",
-                      swapchain_.width(), swapchain_.height(), swapchain_.imageCount());
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "Swapchain pronta: %ux%u, %u imagens, formato=%u.",
+                      swapchain_.width(), swapchain_.height(), swapchain_.imageCount(),
+                      static_cast<unsigned>(swapchain_.imageFormat()));
   return true;
 }
 

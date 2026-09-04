@@ -39,22 +39,22 @@ constexpr PresetPoint presetForProfile(rhi::DeviceProfile profile) {
     case rhi::DeviceProfile::S:
       return {ShadowQuality::UltraSoft, AmbientQuality::HemisphericSpecular, PostQuality::Bloom,
                TextureQuality::Full, 1.0f, 4, 2048, 25, 9, 320.0f, 1.05f,
-               1.0f, 24.0f, 0.80f, 0.0f, 0.0f, 0.0f, 0.0f, false, 0.85f, true};
+               1.0f, 2.0f, 0.80f, 0.0f, 0.0f, 0.0f, 0.0f, false, 0.85f, true};
     case rhi::DeviceProfile::A:
       return {ShadowQuality::Soft, AmbientQuality::HemisphericSpecular, PostQuality::Bloom,
                TextureQuality::Full, 1.0f, 3, 1536, 9, 1, 220.0f, 1.06f,
-               1.5f, 32.0f, 0.78f, 220.0f, 400.0f, 300.0f, 400.0f, false, 0.78f, true};
+               1.5f, 3.0f, 0.78f, 220.0f, 400.0f, 300.0f, 400.0f, false, 0.78f, true};
     case rhi::DeviceProfile::B:
       return {ShadowQuality::Soft, AmbientQuality::Hemispheric, PostQuality::Tonemap,
                TextureQuality::Full, 1.0f, 2, 1024, 9, 1, 160.0f, 1.08f,
-               2.5f, 48.0f, 0.75f, 60.0f, 120.0f, 180.0f, 240.0f, false, 0.58f, false};
+               2.5f, 4.0f, 0.75f, 60.0f, 120.0f, 180.0f, 240.0f, false, 0.58f, false};
     case rhi::DeviceProfile::C:
     default:
       // O perfil base não perde direcionalidade do sol: mantém uma cascata dura,
       // que é o que separa "sombra barata" de "sem noção de oclusão".
       return {ShadowQuality::Hard, AmbientQuality::Hemispheric, PostQuality::None,
                TextureQuality::Half, 0.85f, 1, 768, 1, 1, 90.0f, 1.10f,
-               4.0f, 64.0f, 0.70f, 60.0f, 120.0f, 90.0f, 120.0f, true, 0.55f, false};
+               4.0f, 6.0f, 0.70f, 60.0f, 120.0f, 90.0f, 120.0f, true, 0.55f, false};
   }
 }
 
@@ -83,7 +83,7 @@ constexpr ShadowQuality degrade(ShadowQuality value) {
   switch (value) {
     case ShadowQuality::UltraSoft: return ShadowQuality::Soft;
     case ShadowQuality::Soft: return ShadowQuality::Hard;
-    case ShadowQuality::Hard: return ShadowQuality::Off;
+    case ShadowQuality::Hard: return ShadowQuality::Hard;
     default: return ShadowQuality::Off;
   }
 }
@@ -298,6 +298,9 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
 
   // --- eixos pedidos: preset, depois override explícito do autor --------------
   ShadowQuality shadows = inherited(settings.shadows, point.shadows);
+  const float authoredShadowDistance = settings.shadows == ShadowQuality::Inherit
+      ? point.shadowMaximumDistance
+      : deriveShadows(shadows, capabilities.maximumImage2DSize).maximumDistance;
   AmbientQuality ambient = inherited(settings.ambient, point.ambient);
   PostQuality post = inherited(settings.post, point.post);
   TextureQuality textures = inherited(settings.textures, point.textures);
@@ -312,7 +315,7 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
                            : thermal == ThermalPressure::Light ? 1u
                                                                : 0u;
   for (u32 step = 0; step < thermalSteps; ++step) {
-    if (shadows != ShadowQuality::Off) {
+    if (shadows != ShadowQuality::Off && shadows != ShadowQuality::Hard) {
       shadows = degrade(shadows);
       note("shadows", PolicyClamp::Thermal);
     }
@@ -346,6 +349,9 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
       std::max(256u, std::min(capabilities.maximumImage2DSize, 4096u));
   ShadowSettings shadowSettings = deriveShadows(shadows, maximumCascadeResolution);
   if (shadowSettings.enabled) {
+    // Thermal response may lower sampling quality, but must not move the
+    // shadow horizon toward a stationary viewer.
+    shadowSettings.maximumDistance = authoredShadowDistance;
     // A linha do preset também pode escolher números dentro do mesmo algoritmo;
     // perfis não se resumem a três nomes de shader. Um override semântico
     // explícito (por exemplo, Ultra sobre perfil B) usa os defaults daquele eixo.
@@ -440,7 +446,7 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
       std::isfinite(settings.lodHysteresisBandRatio) && settings.lodHysteresisBandRatio > 0.0f
           ? std::clamp(settings.lodHysteresisBandRatio, 0.1f, 0.99f)
           : point.lodHysteresisBandRatio;
-  if (thermalSteps != 0) {
+  if (thermalSteps != 0 && enabledOverride(settings.thermalDistanceScaling, false)) {
     // Preserve authored geometry near the camera and spend less only where its
     // projected difference is already small. The symmetric dither transition
     // keeps this pressure response from turning into LOD popping.
@@ -507,7 +513,7 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
               settings.materialDetailFadeBandRatio >= 0.0f
           ? std::clamp(settings.materialDetailFadeBandRatio, 0.0f, 0.5f)
           : 0.20f;
-  if (thermalSteps != 0) {
+  if (thermalSteps != 0 && enabledOverride(settings.thermalDistanceScaling, false)) {
     // These are distance gates with a fade band, not global feature switches.
     // Zero means unlimited and remains untouched; finite authored ranges shrink
     // only under transient pressure and recover through the thermal controller's

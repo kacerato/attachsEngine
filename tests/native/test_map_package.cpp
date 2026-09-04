@@ -87,6 +87,25 @@ AE_TEST(Map_package_decodes_bounded_versioned_sections) {
   AE_EXPECT_TRUE(view.contentFingerprint != changed.contentFingerprint, "content change identity");
 }
 
+AE_TEST(Map_package_validates_multiview_layout_and_preserves_legacy_impostors) {
+  auto bytes = packageFixture();
+  auto *material = reinterpret_cast<MapMaterialRecord *>(bytes.data() + 160);
+  material->flags = MapMaterialImpostor | MapMaterialAlphaMask;
+  MapPackageView view;
+  AE_EXPECT_TRUE(decodeMapPackage(bytes, view), "legacy zero-metadata impostor remains valid");
+  material->reserved = 4u | (5u << 4u) | (4u << 8u) | (2u << 12u);
+  AE_EXPECT_TRUE(!decodeMapPackage(bytes, view), "multiview requires replacement normal");
+  material->flags |= MapMaterialNormalMap;
+  material->textureIndices[0] = material->textureIndices[1] = 0;
+  AE_EXPECT_TRUE(decodeMapPackage(bytes, view), "valid eight-view material");
+  material->reserved &= ~(15u << 12u);
+  AE_EXPECT_TRUE(!decodeMapPackage(bytes, view), "zero rows rejected before GPU use");
+  material->reserved |= 3u << 12u;
+  AE_EXPECT_TRUE(!decodeMapPackage(bytes, view), "non-power-of-two rows unsupported");
+  material->reserved = 0x10000u;
+  AE_EXPECT_TRUE(!decodeMapPackage(bytes, view), "truncated push-constant metadata rejected");
+}
+
 AE_TEST(Map_package_rejects_version_ranges_and_material_references) {
   auto bytes = packageFixture();
   MapPackageView view;

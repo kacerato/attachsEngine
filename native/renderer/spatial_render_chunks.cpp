@@ -87,6 +87,29 @@ bool appendChunk(const MapPackageView &package, const MapDrawRecord &source,
     radiusSquared = std::max(radiusSquared, dx * dx + dy * dy + dz * dz);
   }
   chunk.boundsRadius = std::sqrt(radiusSquared);
+  if ((package.materials[source.materialIndex].flags & MapMaterialImpostor) != 0) {
+    // Shader-rotated geometry needs swept bounds, including nonuniform scale.
+    float localRadiusSquared = 0.0f;
+    for (u32 index = firstIndex; index < result.indices.size(); ++index) {
+      const u64 vertex = static_cast<u64>(result.indices[index]) + source.vertexOffset;
+      float p[3]{};
+      std::memcpy(p, package.vertices.data() + vertex * package.header.vertexStride, sizeof(p));
+      localRadiusSquared = std::max(localRadiusSquared, p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+    }
+    // sqrt(||M||_1 * ||M||_inf) bounds the spectral norm, even with shear.
+    float maximumRow = 0.0f, maximumColumn = 0.0f;
+    for (u32 axis = 0; axis < 3; ++axis) {
+      float row = 0.0f, column = 0.0f;
+      for (u32 other = 0; other < 3; ++other) {
+        row += std::abs(source.model[other * 4 + axis]);
+        column += std::abs(source.model[axis * 4 + other]);
+      }
+      maximumRow = std::max(maximumRow, row);
+      maximumColumn = std::max(maximumColumn, column);
+      chunk.boundsCenter[axis] = source.model[12 + axis];
+    }
+    chunk.boundsRadius = std::sqrt(localRadiusSquared * maximumRow * maximumColumn);
+  }
   result.draws.push_back(chunk);
   return true;
 }

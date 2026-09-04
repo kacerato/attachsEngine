@@ -29,6 +29,7 @@ const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
 // threshold<factor. The prior `1-factor` encoding made one mask a subset of
 // the other, causing double shading/overdraw instead of a cross-fade.
 #include "lod_dither.glsl"
+#include "impostor_view.glsl"
 highp vec2 selectedUv(uint slot) { return ((frame.materialFlags.y>>(slot*2))&3u)==1u?vUv1:vUv0; }
 bool hasMaterialFeature(uint flags,uint feature) {
   uint selected=MATERIAL_FEATURE_MASK==0xffffffffu?flags:MATERIAL_FEATURE_MASK;
@@ -53,14 +54,18 @@ mediump float materialDetailWeight(highp float cameraDistance, highp float maxim
 // os produtos escalares que as alimentam permanecem highp.
 mediump float pow5(mediump float value) {
   mediump float squared=value*value;return squared*squared*value; }
-mediump vec3 fresnel(mediump vec3 f0,mediump float vh) { return f0+(1-f0)*pow5(1-vh); }
+// KHR_materials_specular weights the entire dielectric lobe, including F90.
+// Weighting only F0 resurrects white grazing reflections on specular=0 assets.
+mediump vec3 fresnel(mediump vec3 f0,mediump float f90,mediump float vh) {
+  return f0+(vec3(f90)-f0)*pow5(1-clamp(vh,0.0,1.0));
+}
 highp float distribution(highp float nh,highp float alpha) {
   highp float a2=alpha*alpha,d=nh*nh*(a2-1)+1;return a2/(PI*d*d); }
 highp float visibility(highp float nv,highp float nl,highp float alpha) {
   highp float a2=alpha*alpha;return .5/max(
   nl*sqrt(nv*nv*(1-a2)+a2)+nv*sqrt(nl*nl*(1-a2)+a2),1e-6); }
 mediump vec3 directLight(mediump vec3 n,mediump vec3 v,mediump vec3 l,mediump vec3 radiance,
-                         mediump vec3 base,mediump vec3 f0,mediump float metal,
+                         mediump vec3 base,mediump vec3 f0,mediump float f90,mediump float metal,
                          mediump float rough) {
   // O hemisferio oposto contribui exatamente zero: o retorno inteiro e
   // multiplicado por nl. Sair aqui poupa normalize(v+l), GGX, visibilidade e
@@ -70,18 +75,31 @@ mediump vec3 directLight(mediump vec3 n,mediump vec3 v,mediump vec3 l,mediump ve
   if(nl<=0.0) return vec3(0.0);
   highp float nv=max(dot(n,v),1e-4);mediump vec3 h=normalize(v+l);
   highp float nh=max(dot(n,h),0);mediump float lh=max(dot(l,h),0);
-  mediump vec3 f=fresnel(f0,lh);highp float alpha=rough*rough;
+  mediump vec3 f=fresnel(f0,f90,lh);highp float alpha=rough*rough;
   mediump float fd90=.5+2*rough*lh*lh;
   mediump float fd=(1+(fd90-1)*pow5(1-float(nl)))*(1+(fd90-1)*pow5(1-float(nv)))/PI;
-  mediump float specular=float(distribution(nh,alpha)*visibility(nv,nl,alpha));
+  mediump float specular=f90>0.0?
+      float(distribution(nh,alpha)*visibility(nv,nl,alpha)):0.0;
   return ((1-f)*(1-metal)*base*fd+specular*f)*radiance*float(nl);
 }
 void main() {
+  // Compute derivatives before any lane can discard at an alpha/LOD edge.
+  highp vec2 impostorDx=dFdx(vUv0),impostorDy=dFdy(vUv0);
   if(aetherLodDitherDiscard(gl_FragCoord.xy,vDither)) discard;
   uint flags=frame.materialFlags.x;
   uint isolation=GPU_COST_ISOLATION;
-  mediump vec4 baseSample=texture(BASE_MAP,selectedUv(0));
-  mediump vec4 base=baseSample*frame.baseColorFactor*vColor;
+  bool impostor=(flags&MATERIAL_IMPOSTOR)!=0u && (frame.materialFlags.y>>16u)!=0u;
+  highp vec2 impostorUv=vUv0;
+  if(impostor) {
+    impostorUv=aetherImpostorViewUv(flags,vUv0,vUv1,vColor.a,gl_FragCoord.xy);
+    impostorUv=aetherImpostorSafeUv(impostorUv,impostorDx,impostorDy,
+        vec2(textureSize(BASE_MAP,0)),frame.materialFlags.y>>16u,
+        float(textureQueryLevels(BASE_MAP)-1));
+  }
+  mediump vec4 baseSample=impostor?
+      textureGrad(BASE_MAP,impostorUv,impostorDx,impostorDy):texture(BASE_MAP,selectedUv(0));
+  mediump vec4 vertexColor=impostor?vec4(vColor.rgb,1.0):vColor;
+  mediump vec4 base=baseSample*frame.baseColorFactor*vertexColor;
   // O depth-only de coverage já descartou estes texels, mas discard no shader
   // impede early-Z em parte dos drivers tile-based. Reaplicar o mesmo cutoff
   // imediatamente após o único sample obrigatório evita executar normal, MR,
@@ -115,29 +133,31 @@ void main() {
   mediump float rough=clamp(mr.g*frame.materialFactors.x,.07,1);
   mediump float metal=clamp(mr.b*frame.materialFactors.y,0,1);
   mediump vec3 n=normalize(vNormal);
-  // A single-view foliage impostor has no per-pixel normal field: using the
-  // camera-facing quad normal directly makes the entire distant crown brighten
-  // and darken as the camera yaws. Treat it as a coarse canopy volume instead.
-  // The small view-facing contribution retains shape while world-up dominates,
-  // producing stable distant lighting without an extra texture fetch.
-  if((flags&MATERIAL_IMPOSTOR)!=0u)
-    n=normalize(mix(vec3(0.0,1.0,0.0),n,0.18));
-  mediump float normalDetailWeight=materialDetailWeight(cameraDistance,environment.quality.x);
+  // For regular materials this is optional high-frequency detail. For an
+  // impostor the atlas stores the geometry's replacement normal field, so it
+  // remains at full weight at distance and prevents a whole crown from sharing
+  // one upward-facing, over-bright normal.
+  mediump float normalDetailWeight=impostor?1.0:
+      materialDetailWeight(cameraDistance,environment.quality.x);
   if(hasMaterialFeature(flags,2u) && isolation!=1u && normalDetailWeight>0.0) {
     mediump vec3 t=normalize(vTangent.xyz-n*dot(n,vTangent.xyz));
-    mediump vec3 b=cross(n,t)*vTangent.w;
-    mediump vec3 detail=texture(NORMAL_MAP,selectedUv(1)).xyz*2-1;
+    mediump vec3 b=cross(n,t)*(impostor?1.0:vTangent.w);
+    mediump vec3 detail=(impostor?
+        textureGrad(NORMAL_MAP,impostorUv,impostorDx,impostorDy):
+        texture(NORMAL_MAP,selectedUv(1))).xyz*2-1;
     // Normalizing before and after an orthonormal TBN is redundant. Keep the
     // final normalization (same direction, one fewer reciprocal sqrt).
     detail=vec3(detail.xy*frame.materialFactors.z*normalDetailWeight,
                 mix(1.0,detail.z,normalDetailWeight));
-    n=normalize(mat3(t,b,n)*detail);
+    n=impostor?normalize(detail):normalize(mat3(t,b,n)*detail);
   }
   // A subtração fica em highp: `eye` e `vPosition` são coordenadas de mundo e o
   // mapa se estende por centenas de unidades, onde fp16 já perde resolução. Só
   // o resultado normalizado, que vive em [-1,1], desce para mediump.
   mediump vec3 v=normalize(eye-vPosition);
-  mediump vec3 f0=mix(vec3(.04*frame.materialFactors.w),base.rgb,metal);
+  mediump float dielectricSpecular=clamp(frame.materialFactors.w,0.0,1.0);
+  mediump vec3 f0=mix(vec3(.04*dielectricSpecular),base.rgb,metal);
+  mediump float f90=mix(dielectricSpecular,1.0,metal);
   mediump vec3 sunRadiance=environment.sunColorAngularRadius.rgb*environment.sunDirectionIntensity.w;
   highp float viewDepth=max(dot(environment.worldToViewRow2.xyz,vPosition-eye),0.0);
   // A luz direta é exatamente zero no hemisfério oposto. Consultar 1/9/25
@@ -146,7 +166,7 @@ void main() {
   mediump float sunVisibility=dot(n,environment.sunDirectionIntensity.xyz)>0.0?
       directionalShadow(vPosition,n,viewDepth):1.0;
   mediump vec3 color=directLight(n,v,environment.sunDirectionIntensity.xyz,sunRadiance,
-                         base.rgb,f0,metal,rough)*sunVisibility;
+                         base.rgb,f0,f90,metal,rough)*sunVisibility;
   mediump float nv=max(dot(n,v),0.0);
   // A single global hemispherical irradiance keeps upward-facing foliage tied
   // to the sky while giving downward/vertical surfaces a neutral ground bounce.
@@ -167,13 +187,17 @@ void main() {
   // on wet, polished and metallic surfaces.
   mediump float specularDetailWeight=environment.quality.w>0.5?
       materialDetailWeight(cameraDistance,environment.quality.y):0.0;
-  if(isolation!=2u && specularDetailWeight>0.0 && (metal>.01 || rough<.65)) {
+  if(isolation!=2u && f90>0.0 && specularDetailWeight>0.0 && (metal>.01 || rough<.65)) {
     mediump vec3 reflection=reflect(-v,n);
     mediump vec3 specularEnvironment=environmentRadiance(reflection,rough*environment.parameters.z);
-    mediump vec3 environmentFresnel=fresnel(f0,nv);
     mediump vec2 integratedBrdf=environmentBrdf(nv,rough);
-    color+=specularEnvironment*(environmentFresnel*integratedBrdf.x+integratedBrdf.y)*
-        frame.materialFactors.w*specularDetailWeight;
+    // The split-sum LUT already integrates Schlick's angular term. Applying
+    // Fresnel again double-counted it; scaling the result by the dielectric
+    // weight a second time also incorrectly extinguished metallic reflections.
+    mediump vec3 integratedSpecular=environment.parameters.w>1.5?
+        f0*integratedBrdf.x+vec3(f90*integratedBrdf.y):
+        fresnel(f0,f90,nv)*integratedBrdf.x;
+    color+=specularEnvironment*integratedSpecular*specularDetailWeight;
   }
   mediump float emissiveDetailWeight=materialDetailWeight(
       cameraDistance,environment.materialDistanceParameters.y);
