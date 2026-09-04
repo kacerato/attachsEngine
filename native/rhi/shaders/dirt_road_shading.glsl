@@ -19,6 +19,7 @@ layout(constant_id=1) const uint MATERIAL_FEATURE_MASK=0xffffffffu;
 // Zero e "decidir em runtime", preservando o comportamento anterior.
 layout(constant_id=2) const uint ENVIRONMENT_PROJECTION=0u;
 const float PI=3.141592653589793;
+const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
 #include "environment_lighting.glsl"
 // LOD cross-fade (see renderer::selectLodLevel): vDither==0 for every draw
 // outside an active transition, so this is a no-op discard everywhere LOD is
@@ -27,17 +28,7 @@ const float PI=3.141592653589793;
 // +factor and keeps threshold>=factor; incoming uses -factor and keeps
 // threshold<factor. The prior `1-factor` encoding made one mask a subset of
 // the other, causing double shading/overdraw instead of a cross-fade.
-const float BAYER4X4[16]=float[16](
-  0.0/16.0,8.0/16.0,2.0/16.0,10.0/16.0,
-  12.0/16.0,4.0/16.0,14.0/16.0,6.0/16.0,
-  3.0/16.0,11.0/16.0,1.0/16.0,9.0/16.0,
-  15.0/16.0,7.0/16.0,13.0/16.0,5.0/16.0);
-bool ditherDiscard(highp vec2 fragCoord,mediump float dither) {
-  if(dither==0.0) return false;
-  ivec2 cell=ivec2(fragCoord)&3;
-  mediump float threshold=BAYER4X4[cell.y*4+cell.x];
-  return dither>0.0?threshold<dither:threshold>=-dither;
-}
+#include "lod_dither.glsl"
 highp vec2 selectedUv(uint slot) { return ((frame.materialFlags.y>>(slot*2))&3u)==1u?vUv1:vUv0; }
 bool hasMaterialFeature(uint flags,uint feature) {
   uint selected=MATERIAL_FEATURE_MASK==0xffffffffu?flags:MATERIAL_FEATURE_MASK;
@@ -86,7 +77,7 @@ mediump vec3 directLight(mediump vec3 n,mediump vec3 v,mediump vec3 l,mediump ve
   return ((1-f)*(1-metal)*base*fd+specular*f)*radiance*float(nl);
 }
 void main() {
-  if(ditherDiscard(gl_FragCoord.xy,vDither)) discard;
+  if(aetherLodDitherDiscard(gl_FragCoord.xy,vDither)) discard;
   uint flags=frame.materialFlags.x;
   uint isolation=GPU_COST_ISOLATION;
   mediump vec4 baseSample=texture(BASE_MAP,selectedUv(0));
@@ -124,6 +115,13 @@ void main() {
   mediump float rough=clamp(mr.g*frame.materialFactors.x,.07,1);
   mediump float metal=clamp(mr.b*frame.materialFactors.y,0,1);
   mediump vec3 n=normalize(vNormal);
+  // A single-view foliage impostor has no per-pixel normal field: using the
+  // camera-facing quad normal directly makes the entire distant crown brighten
+  // and darken as the camera yaws. Treat it as a coarse canopy volume instead.
+  // The small view-facing contribution retains shape while world-up dominates,
+  // producing stable distant lighting without an extra texture fetch.
+  if((flags&MATERIAL_IMPOSTOR)!=0u)
+    n=normalize(mix(vec3(0.0,1.0,0.0),n,0.18));
   mediump float normalDetailWeight=materialDetailWeight(cameraDistance,environment.quality.x);
   if(hasMaterialFeature(flags,2u) && isolation!=1u && normalDetailWeight>0.0) {
     mediump vec3 t=normalize(vTangent.xyz-n*dot(n,vTangent.xyz));
@@ -155,7 +153,14 @@ void main() {
   // This is constant-time ALU: no extra pass, draw call or texture fetch.
   mediump float skyWeight=environment.quality.z>0.5?clamp(n.y*.5+.5,0.0,1.0):1.0;
   mediump vec3 ambientIrradiance=mix(environment.groundColorSaturation.rgb,
-                             environment.ambientColorStrength.rgb,skyWeight);
+                              environment.ambientColorStrength.rgb,skyWeight);
+  // AEEN has carried this authored control since v3. Applying it to irradiance
+  // (rather than grading the final image) removes colored shadow casts while
+  // preserving direct-sun and material color. Values above one deliberately
+  // allow stylized environments.
+  mediump float ambientLuminance=dot(ambientIrradiance,vec3(.2126,.7152,.0722));
+  ambientIrradiance=mix(vec3(ambientLuminance),ambientIrradiance,
+                        clamp(environment.groundColorSaturation.w,0.0,2.0));
   color+=(1-metal)*base.rgb*ambientIrradiance*environment.ambientColorStrength.w;
   // Rough dielectrics carry almost no readable high-frequency reflection.
   // Skip that fetch coherently per material while retaining HDR reflections

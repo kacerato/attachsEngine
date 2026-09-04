@@ -141,10 +141,14 @@ public:
   // porque ISwapchain não deveria expor detalhe de formato/view a quem só
   // quer orquestrar frames — RenderGraph e afins consomem só a interface).
   VkImageView imageView(u32 index) const { return imageViews_[index]; }
+  VkImage image(u32 index) const { return index < imageCount_ ? images_[index] : VK_NULL_HANDLE; }
   VkFormat imageFormat() const { return format_; }
   u32 imageCount() const { return imageCount_; }
   const SurfaceTransform &surfaceTransform() const { return surfaceTransform_; }
   VkExtent2D displayExtent() const { return transformSurfaceExtent(extent_, surfaceTransform_); }
+  // Temporal resolve can preserve its output with a transfer copy only when
+  // the surface explicitly advertised TRANSFER_SRC for swapchain images.
+  bool supportsTransferSource() const { return transferSourceSupported_; }
   bool isReady() const { return swapchain_ != VK_NULL_HANDLE && imageCount_ > 0; }
   VkSemaphore imageAvailableSemaphore() const { return imageAvailableSemaphore_; }
   // Item 2.1.6 (achado via validation layer em hardware real): o semáforo de
@@ -178,6 +182,7 @@ private:
   VkImage images_[kMaxSwapchainImages]{};
   VkImageView imageViews_[kMaxSwapchainImages]{};
   u32 imageCount_ = 0;
+  bool transferSourceSupported_ = false;
 
   // Sincronização de um frame em voo só na CPU (a fence abaixo — suficiente
   // para o item 5.2, múltiplos frames em voo é otimização do RHI completo,

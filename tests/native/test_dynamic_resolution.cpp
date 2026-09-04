@@ -44,6 +44,29 @@ AE_TEST(dynamic_resolution_recupera_so_com_headroom_sustentado) {
   AE_EXPECT_EQ(controller.scale(), 0.95f, "headroom sustentado recupera um degrau");
 }
 
+AE_TEST(dynamic_resolution_reconfiguracao_termica_nao_salta_para_o_teto) {
+  DynamicResolutionSettings settings{};
+  settings.enabled = true;
+  settings.minimumScale = 0.5f;
+  settings.maximumScale = 1.0f;
+  settings.decreaseStep = 0.25f;
+  settings.overloadFrames = 1;
+  DynamicResolutionController controller;
+  controller.reset(settings, 7.0f);
+  controller.observe(9.0f);
+  controller.observe(9.0f);
+  AE_EXPECT_EQ(controller.scale(), 0.5f, "carga levou a escala ao piso");
+
+  settings.maximumScale = 0.75f;
+  controller.reconfigure(settings, 7.0f);
+  AE_EXPECT_EQ(controller.scale(), 0.5f,
+               "pressao termica preserva a escala ja reduzida em vez de subir");
+
+  settings.minimumScale = 0.6f;
+  controller.reconfigure(settings, 7.0f);
+  AE_EXPECT_EQ(controller.scale(), 0.6f, "novos limites ainda sao respeitados");
+}
+
 AE_TEST(dynamic_resolution_ignora_amostra_invalida_e_modo_desligado) {
   DynamicResolutionController controller;
   auto config = settings();

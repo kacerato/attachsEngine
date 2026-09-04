@@ -169,6 +169,9 @@ struct ProjectRenderingSettings final {
   float postContrast = -1.0f;
   float postSaturation = -1.0f;
   float postSharpen = -1.0f;
+  // Peso máximo do frame anterior após reprojeção/clipping. Valores menores
+  // respondem mais rápido; maiores convergem melhor em superfícies estáticas.
+  float temporalHistoryWeight = -1.0f;
 
   FeatureOverride dynamicResolution = FeatureOverride::Inherit;
   float dynamicResolutionMinimumScale = 0.0f;
@@ -253,6 +256,7 @@ struct PostSettings final {
   float saturation = 1.0f;
   float sharpen = 0.0f;
   float vignetteIntensity = 0.0f;
+  float temporalHistoryWeight = 0.88f;
 };
 
 struct MaterialDistanceSettings final {

@@ -35,6 +35,7 @@ if ($All) {
         material_fallback = @('frag')
         material_preview = @('vert', 'frag')
         post_process = @('vert', 'frag')
+        post_process_temporal = @('frag')
         runtime_hud = @('vert', 'frag')
         scene_preview = @('vert')
         shadow_depth_masked_fallback = @('frag')

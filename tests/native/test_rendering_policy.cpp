@@ -272,6 +272,32 @@ AE_TEST(policy_termica_severa_cede_ambiente_e_resolucao) {
   AE_EXPECT_TRUE(hasClamp(severe, "resolutionScale", PolicyClamp::Thermal), "motivo registrado");
 }
 
+AE_TEST(policy_termica_gasta_menos_apenas_no_detalhe_distante) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::B;
+  const auto normal = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  const auto light = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::Light);
+  const auto severe = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::Severe);
+
+  AE_EXPECT_TRUE(light.visibility.lodPixelErrorBudget > normal.visibility.lodPixelErrorBudget,
+                 "pressao leve permite LOD solido mais distante");
+  AE_EXPECT_TRUE(light.visibility.coverageLodPixelErrorBudget >
+                     normal.visibility.coverageLodPixelErrorBudget,
+                 "folhagem distante tambem reduz geometria sob pressao");
+  AE_EXPECT_TRUE(severe.visibility.lodPixelErrorBudget > light.visibility.lodPixelErrorBudget,
+                 "pressao severa amplia gradualmente o budget, sem salto de preset");
+  AE_EXPECT_TRUE(light.materialDistance.normalMapMaximumDistance <
+                     normal.materialDistance.normalMapMaximumDistance,
+                 "normal map continua intacto perto e termina antes a distancia");
+  AE_EXPECT_TRUE(severe.materialDistance.specularProbeMaximumDistance <
+                     light.materialDistance.specularProbeMaximumDistance,
+                 "sonda especular distante cede mais sob pressao severa");
+  AE_EXPECT_TRUE(hasClamp(light, "visibility.lodPixelErrorBudget", PolicyClamp::Thermal),
+                 "adaptacao geometrica fica auditavel");
+  AE_EXPECT_TRUE(hasClamp(light, "materialDistance", PolicyClamp::Thermal),
+                 "adaptacao material fica auditavel");
+}
+
 AE_TEST(policy_termica_nao_altera_a_escolha_do_projeto) {
   // A pressão é transitória: as mesmas configurações de projeto, sem pressão,
   // precisam devolver exatamente a qualidade original. Degradação que "gruda"
@@ -379,7 +405,26 @@ AE_TEST(policy_anti_aliasing_novo_prevalece_sobre_compatibilidade_fxaa) {
   settings.antiAliasing = AntiAliasingMode::Inherit;
   const auto migrated = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
   AE_EXPECT_EQ(migrated.post.antiAliasing, AntiAliasingMode::Off,
-               "booleano legado ainda migra projetos schema 6");
+                "booleano legado ainda migra projetos schema 6");
+}
+
+AE_TEST(policy_peso_temporal_e_independente_e_limitado) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::B;
+  settings.temporalHistoryWeight = 0.72f;
+  const auto custom = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(custom.post.temporalHistoryWeight, 0.72f,
+               "autor controla resposta temporal sem trocar outros eixos");
+
+  settings.temporalHistoryWeight = 1.0f;
+  const auto clamped = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(clamped.post.temporalHistoryWeight, 0.97f,
+               "histórico nunca pode congelar a resposta do frame atual");
+
+  settings.temporalHistoryWeight = -1.0f;
+  const auto inherited = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(inherited.post.temporalHistoryWeight, 0.88f,
+               "sentinela negativa mantém o valor herdado do perfil");
 }
 
 AE_TEST(material_distance_so_reduz_quando_bounds_inteiro_esta_distante) {

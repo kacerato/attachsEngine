@@ -49,6 +49,8 @@ struct LodHysteresisState final {
 };
 
 struct LodSelection final {
+  // Finer member of the rendered pair. During reverse travel this may be one
+  // below state.currentLevel so both directions use the same continuous pair.
   u32 level = 0;
   // [0,1] blend factor toward levels[selectedIndex + 1] (the next coarser
   // neighbor), 0 when not near a transition. The caller encodes +factor on
@@ -74,9 +76,10 @@ LodDitherPair encodeLodDither(float factor);
 // the candidate's error to fit within
 // pixelErrorBudget * hysteresisBandRatio (hysteresisBandRatio in (0,1]) --
 // extra margin that prevents flicker exactly at the switch distance.
-// Mutates state.currentLevel to persist the selection across frames; the
-// same state must be reused for the same lodGroupId every frame (see
-// MapDrawRecord::lodGroupId).
+// Mutates state.currentLevel to persist the hysteresis decision. The returned
+// level can be the finer neighbor while that state remains coarse, allowing a
+// symmetric cross-fade instead of a one-frame pop on approach. The same state
+// must be reused for the same lodGroupId every frame (see MapDrawRecord::lodGroupId).
 LodSelection selectLodLevel(const LodLevelInfo *levels, u32 levelCount, float distance,
                             float fovYRadians, float viewportHeightPx, float pixelErrorBudget,
                             float hysteresisBandRatio, LodHysteresisState &state);

@@ -71,6 +71,21 @@ FrameAttachmentPolicy resolveFrameAttachmentPolicy(const FrameGraphInputs &input
     graph.addPass(hzb);
   }
 
+  if (inputs.temporalAaEnabled) {
+    // O resolve temporal é um consumidor próprio, em resolução de apresentação.
+    // Modelá-lo separadamente evita que a topologia minta quando HZB e TAA estão
+    // ativos juntos e prepara o caminho para o backend gravar ambos via grafo.
+    PassDesc temporal;
+    temporal.name = "TemporalResolve";
+    temporal.extentWidth = inputs.width;
+    temporal.extentHeight = inputs.height;
+    temporal.reads.push_back(read(depth));
+    const ResourceId history = graph.addResource(
+        ResourceDesc{"Temporal.History", /*imported=*/true, /*isDepth=*/false, 0});
+    temporal.writes.push_back(fullWrite(history));
+    graph.addPass(temporal);
+  }
+
   rendergraph::CompileError error{};
   const auto compiled = graph.compile(&error);
   if (!compiled.has_value()) return policy;
@@ -83,8 +98,8 @@ FrameAttachmentPolicy resolveFrameAttachmentPolicy(const FrameGraphInputs &input
   policy.depthMemoryless = std::find(compiled->memorylessResources.begin(),
                                      compiled->memorylessResources.end(),
                                      depth) != compiled->memorylessResources.end();
-  // Amostrar é o que o pass de HZB faz com o depth; o grafo já provou que ele
-  // sobrevive ao pass principal quando isso acontece.
+  // Amostrar é o que os passes de HZB/TAA fazem com o depth; o grafo já provou
+  // que ele sobrevive ao pass principal quando algum deles existe.
   policy.depthSampled = policy.depthStored;
   // Invariante do Vulkan, não preferência: TRANSIENT_ATTACHMENT proíbe SAMPLED.
   // Se as duas saíssem verdadeiras, a criação da imagem falharia no device.

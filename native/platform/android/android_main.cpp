@@ -863,6 +863,8 @@ void android_main(android_app *app) {
                                                   shell.renderingSettings.postSaturation);
     ae::platform::android::readFloatLaunchOption(app->activity, "aether.post_sharpen",
                                                   shell.renderingSettings.postSharpen);
+    ae::platform::android::readFloatLaunchOption(app->activity, "aether.taa_history_weight",
+                                                  shell.renderingSettings.temporalHistoryWeight);
     ae::platform::android::readFloatLaunchOption(app->activity, "aether.lod_pixel_error_budget",
                                                   shell.renderingSettings.lodPixelErrorBudget);
     ae::platform::android::readFloatLaunchOption(

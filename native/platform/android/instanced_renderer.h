@@ -123,7 +123,7 @@ public:
   // preset; todos consomem somente estes budgets já resolvidos.
   void setRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy) {
     resourceRenderingPolicy_ = policy;
-    applyRuntimeRenderingPolicy(policy);
+    applyRuntimeRenderingPolicy(policy, false);
   }
   // Reconfigura somente eixos que não alteram o layout dos recursos Vulkan.
   // A política usada na criação permanece em resourceRenderingPolicy_: assim
@@ -229,7 +229,8 @@ public:
   }
 
 private:
-  void applyRuntimeRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy);
+  void applyRuntimeRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy,
+                                   bool preserveDynamicScale);
   bool createRenderPass();
   bool createPipeline();
   bool createFramebuffers();
@@ -245,7 +246,8 @@ private:
   bool createRuntimeHudPipeline();
   bool createPostResources();
   void destroyPostResources();
-  void recordPostProcess(u32 imageIndex);
+  void recordPostProcess(u32 imageIndex, const platform::FreeCameraState &camera);
+  bool recordTemporalHistoryCopy(u32 imageIndex);
   bool createShadowResources();
   void destroyShadowResources();
   void recordShadowPass(const platform::FreeCameraState &camera);
@@ -256,8 +258,8 @@ private:
   // Records the full reduction chain (depth -> base level -> coarser levels)
   // into commandBuffer_. Must be called after the main render pass's
   // vkCmdEndRenderPass and before the frame's vkQueueSubmit; depthImage_ must
-  // already be in VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL (its state
-  // right after the main pass, before this function transitions it).
+  // already be in VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL (the shared
+  // final state used by HZB and temporal resolve after the main pass).
   void recordHzbReductionPass(const platform::FreeCameraState &camera);
   // Reads back the pyramid built by the PREVIOUS frame's recordHzbReductionPass
   // into hzbPyramid_. Called once near the top of drawFrame, at the same point
@@ -351,8 +353,20 @@ private:
   VkPipelineLayout postPipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline postPipeline_ = VK_NULL_HANDLE;
   rhi::VulkanImage postSceneColor_{};
+  rhi::VulkanImage postHistory_{};
   rhi::VulkanSampler postSampler_{};
+  rhi::VulkanSampler postDepthSampler_{};
   VkFramebuffer postFramebuffers_[kMaxFramebuffers]{};
+  bool temporalAaActive_ = false;
+  // Image layout and color validity are separate states. The descriptor is
+  // statically used by the temporal shader even on its first-frame branch, so
+  // the image must already be shader-readable before it contains history.
+  bool temporalHistoryLayoutInitialized_ = false;
+  bool temporalHistoryInitialized_ = false;
+  platform::FreeCameraState temporalPreviousCamera_{};
+  float temporalCurrentJitter_[2]{};
+  float temporalPreviousJitter_[2]{};
+  u64 temporalFrameIndex_ = 0;
   VkRenderPass shadowRenderPass_ = VK_NULL_HANDLE;
   VkRenderPass shadowCachedRenderPass_ = VK_NULL_HANDLE;
   VkFramebuffer shadowFramebuffer_ = VK_NULL_HANDLE;

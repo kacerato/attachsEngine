@@ -1060,7 +1060,7 @@
   "outputs": {
     "environment-brdf.aetex": "403e4ff6655d21258354190c80e50c40427351addbba40f10826a0631d891fcd",
     "environment-specular.aetex": "cc32e9ea74316cdf6b4accb5a12be362f48e7fe03ed03aa0c96c659e4777a128",
-    "environment.aeenv": "30970f2d0570921062c9acdea08528cdafb368570b10f6027ed535fa1cb34a3c",
+    "environment.aeenv": "086fff14628d0f6e85a7febb74a8ab6be3e7eb03ef03df0d800f7adba702ee24",
     "environment.aetex": "216c35ea5c4a0b7b7efa01eb8af501413b34dfc14dcc92e7995913e41eda5a29",
     "scene.aemap": "82f6041bff54327abc074ab94d91e0b202260b94c78ac0f39b15092724f3d374",
     "texture_000-fallback.aetex": "9b06d079833e153e9a7b0cf973df5346d572a87c34dd6a2b879c74f300092245",
@@ -1246,7 +1246,7 @@
       0.82,
       0.6
     ],
-    "saturation": 1.0,
+    "saturation": 0.62,
     "environmentResourceVersion": 3,
     "specularRepresentation": "octahedral-ggx-prefiltered-rgba16f",
     "specularResolution": [

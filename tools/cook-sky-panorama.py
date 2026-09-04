@@ -244,8 +244,18 @@ def main():
     parser.add_argument("--sun-v", type=float, default=0.274)
     parser.add_argument("--sun-intensity", type=float, default=2.6)
     parser.add_argument("--ambient-strength", type=float, default=0.56)
+    parser.add_argument("--ambient-saturation", type=float, default=0.62,
+                        help="saturacao cromatica da irradiancia global (0..2)")
+    parser.add_argument("--ground-bounce", type=float, nargs=3,
+                        default=(0.75, 0.82, 0.60), metavar=("R", "G", "B"),
+                        help="cor linear RGB da irradiancia vinda do solo")
     parser.add_argument("--exposure", type=float, default=1.0)
     args = parser.parse_args()
+
+    if not 0.0 <= args.ambient_saturation <= 2.0:
+        raise ValueError("ambient saturation must be between 0 and 2")
+    if any(not math.isfinite(value) or value < 0.0 for value in args.ground_bounce):
+        raise ValueError("ground bounce must contain three finite non-negative values")
 
     if not args.source.is_file():
         raise FileNotFoundError(args.source)
@@ -292,7 +302,7 @@ def main():
     sun_color = [1.08, 0.99, 0.88]
     sky_zenith_cloud_coverage = [0.08, 0.30, 0.72, 0.46]
     sky_horizon_cloud_density = [0.62, 0.79, 1.08, 0.88]
-    ground_color_saturation = [0.75, 0.82, 0.60, 1.0]
+    ground_color_saturation = [*args.ground_bounce, args.ambient_saturation]
     cloud_light_wind_speed = [1.35, 1.42, 1.52, 0.0035]
     metadata = struct.pack(
         "<4I32f8I", MAGIC_AEEN, 3, 176, 0,

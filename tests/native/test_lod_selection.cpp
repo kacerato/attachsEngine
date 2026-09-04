@@ -70,7 +70,11 @@ AE_TEST(Lod_selection_hysteresis_keeps_current_level_inside_the_band) {
   // hysteresis must keep it at level 1 rather than flicker back to 0.
   const LodSelection stillCoarse =
       selectLodLevel(kThreeLevels, 3, 60.0f, kHalfPi, kViewportHeight, kBudget, kHysteresisRatio, state);
-  AE_EXPECT_EQ(stillCoarse.level, 1u, "hysteresis band prevents flicker back to finer");
+  AE_EXPECT_EQ(state.currentLevel, 1u, "hysteresis state remains coarse inside the band");
+  AE_EXPECT_EQ(stillCoarse.level, 0u, "render pair begins at the finer neighbor");
+  AE_EXPECT_TRUE(stillCoarse.ditherToCoarserFactor > 0.3f &&
+                     stillCoarse.ditherToCoarserFactor < 0.4f,
+                 "reverse travel renders the same continuous fine/coarse blend");
 
   // Move closer still to 45: level 1's error (500/45 ≈ 11.1) now exceeds the
   // FULL budget -- refinement is immediate, no hysteresis on the way finer.
@@ -95,8 +99,40 @@ AE_TEST(Lod_selection_dither_ramps_toward_the_coarser_neighbor_and_resets_after_
 
   const LodSelection switched =
       selectLodLevel(kThreeLevels, 3, 400.0f, kHalfPi, kViewportHeight, kBudget, kHysteresisRatio, state);
-  AE_EXPECT_EQ(switched.level, 2u, "distance 400 is exactly level 2's switch point");
-  AE_EXPECT_TRUE(switched.ditherToCoarserFactor == 0.0f, "no coarser neighbor exists past the last level");
+  AE_EXPECT_EQ(state.currentLevel, 2u, "distance 400 commits hysteresis state to level 2");
+  AE_EXPECT_EQ(switched.level, 1u, "boundary frame retains the same fine/coarse pair");
+  AE_EXPECT_TRUE(switched.ditherToCoarserFactor == 1.0f,
+                 "boundary is continuous: outgoing gone and incoming complete");
+
+  const LodSelection settled =
+      selectLodLevel(kThreeLevels, 3, 450.0f, kHalfPi, kViewportHeight, kBudget, kHysteresisRatio, state);
+  AE_EXPECT_EQ(settled.level, 2u, "past the band only the coarsest level remains");
+  AE_EXPECT_TRUE(settled.ditherToCoarserFactor == 0.0f,
+                 "settled coarsest level has no neighbor transition");
+}
+
+AE_TEST(Lod_selection_reverse_transition_is_continuous_at_both_band_edges) {
+  LodHysteresisState state{};
+  selectLodLevel(kThreeLevels, 3, 450.0f, kHalfPi, kViewportHeight,
+                 kBudget, kHysteresisRatio, state);
+  AE_EXPECT_EQ(state.currentLevel, 2u, "start fully coarse");
+
+  const LodSelection inside =
+      selectLodLevel(kThreeLevels, 3, 250.0f, kHalfPi, kViewportHeight,
+                     kBudget, kHysteresisRatio, state);
+  AE_EXPECT_EQ(state.currentLevel, 2u, "coarse state survives inside reverse band");
+  AE_EXPECT_EQ(inside.level, 1u, "reverse blend exposes adjacent finer level");
+  AE_EXPECT_TRUE(inside.ditherToCoarserFactor > 0.3f &&
+                     inside.ditherToCoarserFactor < 0.5f,
+                 "reverse blend factor follows projected error continuously");
+
+  const LodSelection refined =
+      selectLodLevel(kThreeLevels, 3, 199.0f, kHalfPi, kViewportHeight,
+                     kBudget, kHysteresisRatio, state);
+  AE_EXPECT_EQ(state.currentLevel, 1u, "crossing high edge refines the stable state");
+  AE_EXPECT_EQ(refined.level, 1u, "high edge lands on the same visible fine level");
+  AE_EXPECT_TRUE(refined.ditherToCoarserFactor == 0.0f,
+                 "coarse coverage reaches zero without a one-frame pop");
 }
 
 AE_TEST(Lod_dither_encoding_is_signed_and_complementary) {

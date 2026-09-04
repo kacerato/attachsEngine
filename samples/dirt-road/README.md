@@ -53,6 +53,11 @@ deve permanecer fora do caminho de runtime. Para reproduzir os recursos:
 python tools/cook-sky-panorama.py
 ```
 
+O cooker também expõe `--ambient-saturation` e `--ground-bounce R G B`. Esses
+valores pertencem ao recurso global de ambiente, não a um ajuste específico do
+shader ou da cena; assim outros projetos podem escolher uma resposta neutra ou
+estilizada sem recompilar o renderer.
+
 A ferramenta gera `Imported/environment.aetex` em 1024×512 RGBA8 sRGB, com
 mipmaps filtrados em espaço linear e borda horizontal tratada, e
 `Imported/environment-specular.aetex` octahedral RGBA16F pré-filtrado por GGX,

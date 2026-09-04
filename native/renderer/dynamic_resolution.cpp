@@ -23,6 +23,13 @@ void DynamicResolutionController::reset(const DynamicResolutionSettings &setting
   recoveryStreak_ = 0;
 }
 
+void DynamicResolutionController::reconfigure(const DynamicResolutionSettings &settings,
+                                              float targetGpuMilliseconds) {
+  const float previousScale = scale_;
+  reset(settings, targetGpuMilliseconds);
+  scale_ = std::clamp(previousScale, settings_.minimumScale, settings_.maximumScale);
+}
+
 DynamicResolutionUpdate DynamicResolutionController::observe(float gpuMilliseconds) {
   if (!settings_.enabled || targetGpuMilliseconds_ <= 0.0f ||
       !std::isfinite(gpuMilliseconds) || gpuMilliseconds <= 0.0f) {

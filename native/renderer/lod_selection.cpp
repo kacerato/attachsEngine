@@ -72,6 +72,24 @@ LodSelection selectLodLevel(const LodLevelInfo *levels, u32 levelCount, float di
   }
   state.currentLevel = nextLevel;
   result.level = nextLevel;
+  const float bandLow = pixelErrorBudget * hysteresisBandRatio;
+  const float bandHigh = pixelErrorBudget;
+  const float span = std::max(bandHigh - bandLow, 1.0e-6f);
+
+  // When moving closer, hysteresis intentionally keeps a coarse level active
+  // until its own error reaches bandHigh. Rendering only that coarse level in
+  // the band made the reverse transition pop in one frame. Represent the same
+  // fine/coarse pair and the same blend factor in either travel direction;
+  // state.currentLevel still retains the hysteresis decision.
+  if (nextLevel > 0) {
+    const float selectedError = errorAt(nextLevel);
+    if (selectedError >= bandLow && selectedError <= bandHigh) {
+      result.level = nextLevel - 1;
+      result.ditherToCoarserFactor =
+          std::clamp((bandHigh - selectedError) / span, 0.0f, 1.0f);
+      return result;
+    }
+  }
 
   if (nextLevel + 1 < levelCount) {
     // The neighbor becomes the active level once its OWN error drops to (or
@@ -83,9 +101,6 @@ LodSelection selectLodLevel(const LodLevelInfo *levels, u32 levelCount, float di
     // that the switch is about to happen or just did) means "fully
     // committed to the neighbor" (1).
     const float neighborError = errorAt(nextLevel + 1);
-    const float bandLow = pixelErrorBudget * hysteresisBandRatio;
-    const float bandHigh = pixelErrorBudget;
-    const float span = std::max(bandHigh - bandLow, 1.0e-6f);
     result.ditherToCoarserFactor = std::clamp((bandHigh - neighborError) / span, 0.0f, 1.0f);
   }
   return result;

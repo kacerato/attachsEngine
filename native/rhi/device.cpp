@@ -61,6 +61,7 @@ void VulkanSwapchain::destroySwapchainObjects() {
     }
   }
   imageCount_ = 0;
+  transferSourceSupported_ = false;
   if (swapchain_ != VK_NULL_HANDLE) {
     if (presentationScheduler_ != nullptr)
       presentationScheduler_->onSwapchainDestroyed(device_, swapchain_);
@@ -247,7 +248,12 @@ bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
   swapchainInfo.imageColorSpace = chosen.colorSpace;
   swapchainInfo.imageExtent = extent;
   swapchainInfo.imageArrayLayers = 1;
-  swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  const bool transferSourceSupported =
+      (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
+  swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+      (transferSourceSupported
+           ? static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
+           : VkImageUsageFlags{0});
   swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
   swapchainInfo.preTransform = preTransform;
   swapchainInfo.compositeAlpha = compositeAlpha;
@@ -316,6 +322,7 @@ bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
   extent_ = extent;
   surfaceTransform_ = transform;
   imageCount_ = actualImageCount;
+  transferSourceSupported_ = transferSourceSupported;
   for (u32 i = 0; i < imageCount_; ++i) {
     images_[i] = newImages[i];
     imageViews_[i] = newImageViews[i];

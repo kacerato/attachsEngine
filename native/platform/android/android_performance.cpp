@@ -48,9 +48,11 @@ bool AndroidPerformance::initialize(ANativeActivity *activity,
       preferSustainedPerformance_ ? "true" : "false",
       sustainedPerformanceSupported_ ? "true" : "false");
 
-  // Querying Game Mode does not opt out of OEM interventions. In particular we
-  // intentionally do not declare game_mode_config, because doing so would reset
-  // vendor interventions that currently help the connected Xiaomi.
+  // The manifest declares support for Performance/Battery modes and explicitly
+  // opts out of hidden OEM downscale/FPS/ANGLE interventions. Query the selected
+  // mode and publish workload state here; Android does not let an app silently
+  // switch the user's Game Mode. Keeping this boundary explicit is essential
+  // when comparing normal runs with screen recording/Game Turbo sessions.
   publishGameState(false, true);
 
   if (android_get_device_api_level() < Android13Api) {

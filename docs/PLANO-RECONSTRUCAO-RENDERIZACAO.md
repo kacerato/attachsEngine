@@ -118,3 +118,30 @@ Cada etapa precisa passar, nesta ordem:
 
 Se uma etapa falhar, ela permanece opt-in e o Auto continua no último ponto
 aprovado. Código existir não significa que o aparelho precise pagá-lo.
+
+## Checkpoint da reconstrução
+
+Implementado e validado no host nesta etapa:
+
+- R1 usa a mesma função de dither no prepass de cobertura e no shading com
+  `depth EQUAL`; aproximação e afastamento retornam o mesmo par fino/grosso e
+  a mesma transição complementar;
+- o impostor distante recebe uma normal volumétrica de copa, estável em relação
+  ao yaw da câmera, em vez de iluminar a árvore inteira como uma placa;
+- a saturação da irradiância de ambiente do AEEN v3 passou a ser realmente
+  consumida pelo shader; o recurso expõe saturação e cor de rebatimento do solo
+  sem alterar a cor do sol ou do material;
+- R2 possui FXAA espacial como fallback universal e TAA próprio opt-in, com
+  jitter Halton, reprojeção por profundidade, corte de câmera, clipping local,
+  rejeição por movimento e invalidação em mudança de escala;
+- o TAA só é ativado no pipeline que implementa o contrato completo de câmera e
+  jitter. Falta generalizar matrizes atual/anterior antes de habilitá-lo nos
+  previews de cena e material;
+- a pressão térmica reduz apenas detalhe distante (erro de LOD e alcance de
+  variantes de material), e reconfigurar a política não restaura a resolução
+  dinâmica ao máximo no instante em que os clocks já estão caindo.
+
+As portas de host estão verdes: shaders reproduzíveis e válidos, 329 testes
+nativos e APK Debug compilado. R1/R2 continuam sem aprovação física nesta
+revisão: ainda são obrigatórias a rota de aproximação/afastamento, as poses da
+mancha branca/sombra roxa, zero VUID e o soak térmico com ADB reconectado.

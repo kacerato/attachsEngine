@@ -36,6 +36,10 @@ struct DynamicResolutionUpdate final {
 class DynamicResolutionController final {
 public:
   void reset(const DynamicResolutionSettings &settings, float targetGpuMilliseconds);
+  // Runtime policy changes (for example thermal pressure) must not jump back to
+  // maximum resolution. Preserves the current scale inside the new bounds and
+  // clears only the decision streaks.
+  void reconfigure(const DynamicResolutionSettings &settings, float targetGpuMilliseconds);
   DynamicResolutionUpdate observe(float gpuMilliseconds);
 
   float scale() const { return scale_; }

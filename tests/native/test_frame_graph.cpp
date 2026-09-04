@@ -45,6 +45,32 @@ AE_TEST(frame_graph_leitor_fora_do_pass_obriga_store) {
   AE_EXPECT_TRUE(!policy.depthMemoryless, "conteudo lido fora do pass nao pode ser memoryless");
 }
 
+AE_TEST(frame_graph_taa_sozinho_preserva_depth_amostravel) {
+  FrameGraphInputs input{};
+  input.width = 1920;
+  input.height = 1080;
+  input.temporalAaEnabled = true;
+  const auto policy = resolveFrameAttachmentPolicy(input);
+  AE_EXPECT_TRUE(policy.valid, "grafo temporal compila");
+  AE_EXPECT_TRUE(policy.depthStored, "reprojecao temporal preserva depth");
+  AE_EXPECT_TRUE(policy.depthSampled, "reprojecao temporal exige usage sampled");
+  AE_EXPECT_TRUE(!policy.depthMemoryless, "depth lido fora do tile nao e memoryless");
+}
+
+AE_TEST(frame_graph_hzb_e_taa_compartilham_o_mesmo_depth_preservado) {
+  FrameGraphInputs input{};
+  input.width = 1920;
+  input.height = 1080;
+  input.hzbEnabled = true;
+  input.temporalAaEnabled = true;
+  const auto policy = resolveFrameAttachmentPolicy(input);
+  AE_EXPECT_TRUE(policy.valid, "os dois consumidores coexistem no grafo");
+  AE_EXPECT_TRUE(policy.depthStored && policy.depthSampled,
+                 "um unico depth atende HZB e TAA sem copia intermediaria");
+  AE_EXPECT_TRUE(!policy.depthMemoryless,
+                 "depth compartilhado nao pode usar memoria transitoria");
+}
+
 AE_TEST(frame_graph_nunca_pede_memoryless_e_sampled_juntos) {
   // Invariante do Vulkan, não preferência: VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT
   // proíbe SAMPLED. Se a política emitisse os dois, a criação da imagem

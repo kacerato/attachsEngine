@@ -14,6 +14,7 @@
 #include "rhi/shaders/dirt_road_sky_spirv.h"
 #include "rhi/shaders/runtime_hud_spirv.h"
 #include "rhi/shaders/post_process_spirv.h"
+#include "rhi/shaders/post_process_temporal_spirv.h"
 #include "rhi/shaders/shadow_depth_spirv.h"
 #include "rhi/shaders/shadow_depth_masked_spirv.h"
 #include "rhi/shaders/shadow_depth_masked_fallback_spirv.h"
@@ -116,8 +117,48 @@ struct PostPushConstants {
   float bloom[4]{};
   float grade[4]{};
   float sourceTransform[4]{}; // active UV scale, active render scale, reserved
+  float currentCamera[4]{};
+  float currentPositionNear[4]{};
+  float previousCamera[4]{};
+  float previousPositionFar[4]{};
 };
-static_assert(sizeof(PostPushConstants) == 64);
+static_assert(sizeof(PostPushConstants) == 128);
+
+float halton(u64 index, u32 base) {
+  float result = 0.0f;
+  float fraction = 1.0f;
+  while (index > 0) {
+    fraction /= static_cast<float>(base);
+    result += fraction * static_cast<float>(index % base);
+    index /= base;
+  }
+  return result;
+}
+
+u32 packSurfaceTransform(const rhi::SurfaceTransform &transform) {
+  const auto component = [](float value) -> u32 {
+    return static_cast<u32>(std::clamp(std::lround(value), -1l, 1l) + 1l);
+  };
+  return component(transform.xx) | (component(transform.xy) << 2u) |
+         (component(transform.yx) << 4u) | (component(transform.yy) << 6u);
+}
+
+float wrappedAngleDistance(float left, float right) {
+  return std::abs(std::remainder(left - right, 6.28318530718f));
+}
+
+bool temporalCameraCut(const platform::FreeCameraState &current,
+                       const platform::FreeCameraState &previous) {
+  constexpr float MaximumPositionDeltaSquared = 25.0f;
+  constexpr float MaximumAngularDelta = 0.45f;
+  const float dx = current.position[0] - previous.position[0];
+  const float dy = current.position[1] - previous.position[1];
+  const float dz = current.position[2] - previous.position[2];
+  return !std::isfinite(dx) || !std::isfinite(dy) || !std::isfinite(dz) ||
+         dx * dx + dy * dy + dz * dz > MaximumPositionDeltaSquared ||
+         wrappedAngleDistance(current.yaw, previous.yaw) > MaximumAngularDelta ||
+         wrappedAngleDistance(current.pitch, previous.pitch) > MaximumAngularDelta;
+}
 
 bool formatSupportsDepthAttachment(VkPhysicalDevice physicalDevice, VkFormat format,
                                    bool requireSampling) {
@@ -173,9 +214,12 @@ InstancedRenderer::~InstancedRenderer() {
 }
 
 void InstancedRenderer::applyRuntimeRenderingPolicy(
-    const renderer::ResolvedRenderingPolicy &policy) {
+    const renderer::ResolvedRenderingPolicy &policy, bool preserveDynamicScale) {
   renderingPolicy_ = policy;
-  dynamicResolution_.reset(policy.dynamicResolution, policy.frame.gpuLaneBudgetMs);
+  if (preserveDynamicScale)
+    dynamicResolution_.reconfigure(policy.dynamicResolution, policy.frame.gpuLaneBudgetMs);
+  else
+    dynamicResolution_.reset(policy.dynamicResolution, policy.frame.gpuLaneBudgetMs);
   invalidateStaticShadowCache();
   lodSelectionEnabled_ = policy.geometry.lodSelection;
   lodPixelErrorBudget_ = policy.visibility.lodPixelErrorBudget;
@@ -213,7 +257,7 @@ void InstancedRenderer::setRuntimeRenderingPolicy(
   active.dynamicResolution.minimumScale =
       std::min(active.dynamicResolution.minimumScale,
                active.dynamicResolution.maximumScale);
-  applyRuntimeRenderingPolicy(active);
+  applyRuntimeRenderingPolicy(active, true);
 }
 
 bool InstancedRenderer::createRenderPass() {
@@ -247,7 +291,9 @@ bool InstancedRenderer::createRenderPass() {
   depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
   depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+  depthAttachment.finalLayout = frameAttachmentPolicy_.depthSampled
+                                    ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                                    : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
   VkAttachmentReference depthRef{};
   depthRef.attachment = 1;
@@ -280,12 +326,24 @@ bool InstancedRenderer::createRenderPass() {
   info.pSubpasses = &subpass;
   VkSubpassDependency dependencies[2] = {dependency, {}};
   u32 dependencyCount = 1;
-  if (renderingPolicy_.post.dedicatedPass) {
+  if (renderingPolicy_.post.dedicatedPass || frameAttachmentPolicy_.depthSampled) {
     dependencies[1].srcSubpass = 0;
     dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[1].srcStageMask =
+        (renderingPolicy_.post.dedicatedPass
+             ? static_cast<VkPipelineStageFlags>(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+             : VkPipelineStageFlags{0}) |
+        (frameAttachmentPolicy_.depthSampled
+             ? static_cast<VkPipelineStageFlags>(VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)
+             : VkPipelineStageFlags{0});
     dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[1].srcAccessMask =
+        (renderingPolicy_.post.dedicatedPass
+             ? static_cast<VkAccessFlags>(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+             : VkAccessFlags{0}) |
+        (frameAttachmentPolicy_.depthSampled
+             ? static_cast<VkAccessFlags>(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
+             : VkAccessFlags{0});
     dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     dependencyCount = 2;
   }
@@ -892,11 +950,41 @@ bool InstancedRenderer::createPostResources() {
   image.memoryClass = rhi::MemoryClass::RenderTarget;
   if (!memoryAllocator_->createImage(image, &postSceneColor_)) return false;
 
+  if (temporalAaActive_) {
+    rhi::ImageDesc history{};
+    history.width = swapchain_->width();
+    history.height = swapchain_->height();
+    history.format = swapchain_->imageFormat();
+    history.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    history.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    history.memoryClass = rhi::MemoryClass::RenderTarget;
+    if (!memoryAllocator_->createImage(history, &postHistory_)) {
+      temporalAaActive_ = false;
+      renderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
+      resourceRenderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
+      __android_log_print(ANDROID_LOG_WARN, LogTag,
+                          "[TAA] histórico não pôde ser alocado; fallback FXAA ativo.");
+    }
+  }
+
   rhi::SamplerDesc sampler{};
   sampler.addressU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   sampler.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   sampler.addressW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   if (!postSampler_.initialize(device_, sampler)) return false;
+  if (temporalAaActive_) {
+    rhi::SamplerDesc depthSampler = sampler;
+    depthSampler.minFilter = VK_FILTER_NEAREST;
+    depthSampler.magFilter = VK_FILTER_NEAREST;
+    if (!postDepthSampler_.initialize(device_, depthSampler)) {
+      temporalAaActive_ = false;
+      postHistory_.reset();
+      renderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
+      resourceRenderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
+      __android_log_print(ANDROID_LOG_WARN, LogTag,
+                          "[TAA] sampler de depth indisponível; fallback FXAA ativo.");
+    }
+  }
 
   VkAttachmentDescription attachment{};
   attachment.format = swapchain_->imageFormat();
@@ -915,10 +1003,18 @@ bool InstancedRenderer::createPostResources() {
   VkSubpassDependency dependency{};
   dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
   dependency.dstSubpass = 0;
-  dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            (temporalAaActive_
+                                 ? static_cast<VkPipelineStageFlags>(
+                                       VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)
+                                 : VkPipelineStageFlags{0});
   dependency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
                             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                             (temporalAaActive_
+                                  ? static_cast<VkAccessFlags>(
+                                        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
+                                  : VkAccessFlags{0});
   dependency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
   VkRenderPassCreateInfo renderPass{};
   renderPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -930,18 +1026,21 @@ bool InstancedRenderer::createPostResources() {
   renderPass.pDependencies = &dependency;
   if (vkCreateRenderPass(device_, &renderPass, nullptr, &postRenderPass_) != VK_SUCCESS) return false;
 
-  VkDescriptorSetLayoutBinding binding{};
-  binding.binding = 0;
-  binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  binding.descriptorCount = 1;
-  binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  VkDescriptorSetLayoutBinding bindings[3]{};
+  const u32 bindingCount = temporalAaActive_ ? 3u : 1u;
+  for (u32 index = 0; index < bindingCount; ++index) {
+    bindings[index].binding = index;
+    bindings[index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[index].descriptorCount = 1;
+    bindings[index].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  }
   VkDescriptorSetLayoutCreateInfo setLayout{};
   setLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  setLayout.bindingCount = 1;
-  setLayout.pBindings = &binding;
+  setLayout.bindingCount = bindingCount;
+  setLayout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &setLayout, nullptr, &postSetLayout_) != VK_SUCCESS)
     return false;
-  VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1};
+  VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, bindingCount};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool.maxSets = 1;
@@ -955,21 +1054,33 @@ bool InstancedRenderer::createPostResources() {
   allocate.descriptorSetCount = 1;
   allocate.pSetLayouts = &postSetLayout_;
   if (vkAllocateDescriptorSets(device_, &allocate, &postDescriptorSet_) != VK_SUCCESS) return false;
-  VkDescriptorImageInfo source{postSampler_.handle(), postSceneColor_.view(),
-                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  VkWriteDescriptorSet write{};
-  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  write.dstSet = postDescriptorSet_;
-  write.dstBinding = 0;
-  write.descriptorCount = 1;
-  write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  write.pImageInfo = &source;
-  vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+  VkDescriptorImageInfo images[3]{};
+  images[0] = {postSampler_.handle(), postSceneColor_.view(),
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  if (temporalAaActive_) {
+    images[1] = {postSampler_.handle(), postHistory_.view(),
+                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    images[2] = {postDepthSampler_.handle(), depthImage_.view(),
+                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
+  }
+  VkWriteDescriptorSet writes[3]{};
+  for (u32 index = 0; index < bindingCount; ++index) {
+    writes[index].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[index].dstSet = postDescriptorSet_;
+    writes[index].dstBinding = index;
+    writes[index].descriptorCount = 1;
+    writes[index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[index].pImageInfo = &images[index];
+  }
+  vkUpdateDescriptorSets(device_, bindingCount, writes, 0, nullptr);
 
   VkShaderModule vert = createShaderModule(device_, rhi::shaders::kPost_ProcessVertSpirv,
                                             rhi::shaders::kPost_ProcessVertSpirvSize);
-  VkShaderModule frag = createShaderModule(device_, rhi::shaders::kPost_ProcessFragSpirv,
-                                            rhi::shaders::kPost_ProcessFragSpirvSize);
+  VkShaderModule frag = temporalAaActive_
+      ? createShaderModule(device_, rhi::shaders::kPost_Process_TemporalFragSpirv,
+                           rhi::shaders::kPost_Process_TemporalFragSpirvSize)
+      : createShaderModule(device_, rhi::shaders::kPost_ProcessFragSpirv,
+                           rhi::shaders::kPost_ProcessFragSpirvSize);
   if (vert == VK_NULL_HANDLE || frag == VK_NULL_HANDLE) {
     if (vert != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vert, nullptr);
     if (frag != VK_NULL_HANDLE) vkDestroyShaderModule(device_, frag, nullptr);
@@ -1036,8 +1147,29 @@ bool InstancedRenderer::createPostResources() {
   return ok;
 }
 
-void InstancedRenderer::recordPostProcess(u32 imageIndex) {
+void InstancedRenderer::recordPostProcess(u32 imageIndex,
+                                           const platform::FreeCameraState &camera) {
   if (!renderingPolicy_.post.dedicatedPass || postPipeline_ == VK_NULL_HANDLE) return;
+  if (temporalAaActive_ && !temporalHistoryLayoutInitialized_) {
+    // The temporal descriptor is statically referenced by the shader. Dynamic
+    // control flow that rejects an invalid first-frame history does not make an
+    // UNDEFINED descriptor layout legal, so establish the sampled layout once
+    // before the first post draw without pretending its pixels are valid.
+    VkImageMemoryBarrier historyReady{};
+    historyReady.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    historyReady.srcAccessMask = 0;
+    historyReady.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    historyReady.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    historyReady.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    historyReady.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    historyReady.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    historyReady.image = postHistory_.handle();
+    historyReady.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+                         0, nullptr, 1, &historyReady);
+    temporalHistoryLayoutInitialized_ = true;
+  }
   VkRenderPassBeginInfo begin{};
   begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   begin.renderPass = postRenderPass_;
@@ -1056,8 +1188,14 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex) {
   push.texelFlags[0] = 1.0f / static_cast<float>(renderTargetWidth());
   push.texelFlags[1] = 1.0f / static_cast<float>(renderTargetHeight());
   push.texelFlags[2] = renderingPolicy_.post.bloom ? 1.0f : 0.0f;
-  push.texelFlags[3] =
-      renderingPolicy_.post.antiAliasing == renderer::AntiAliasingMode::Fxaa ? 1.0f : 0.0f;
+  if (temporalAaActive_ && temporalHistoryInitialized_ &&
+      temporalCameraCut(camera, temporalPreviousCamera_)) {
+    temporalHistoryInitialized_ = false;
+  }
+  push.texelFlags[3] = temporalAaActive_
+                           ? (temporalHistoryInitialized_ ? 3.0f : 2.0f)
+                           : renderingPolicy_.post.antiAliasing ==
+                                     renderer::AntiAliasingMode::Fxaa ? 1.0f : 0.0f;
   push.bloom[0] = renderingPolicy_.post.bloomThreshold;
   push.bloom[1] = renderingPolicy_.post.bloomIntensity;
   push.bloom[2] = renderingPolicy_.post.sharpen;
@@ -1066,15 +1204,108 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex) {
   push.grade[1] = renderingPolicy_.post.saturation;
   push.grade[2] = (swapchain_->imageFormat() == VK_FORMAT_B8G8R8A8_SRGB ||
                    swapchain_->imageFormat() == VK_FORMAT_R8G8B8A8_SRGB) ? 0.0f : 1.0f;
+  const rhi::SurfaceTransform &surfaceTransform = swapchain_->surfaceTransform();
+  push.grade[3] = static_cast<float>(packSurfaceTransform(surfaceTransform)) +
+                  renderingPolicy_.post.temporalHistoryWeight;
   push.sourceTransform[0] = static_cast<float>(renderWidth()) /
                             static_cast<float>(renderTargetWidth());
   push.sourceTransform[1] = static_cast<float>(renderHeight()) /
                             static_cast<float>(renderTargetHeight());
   push.sourceTransform[2] = dynamicResolution_.scale();
+  const VkExtent2D displayExtent = swapchain_->displayExtent();
+  push.sourceTransform[3] = static_cast<float>(displayExtent.width) /
+                            static_cast<float>(displayExtent.height);
+  push.currentCamera[0] = camera.yaw;
+  push.currentCamera[1] = camera.pitch;
+  push.currentCamera[2] = temporalCurrentJitter_[0];
+  push.currentCamera[3] = temporalCurrentJitter_[1];
+  std::memcpy(push.currentPositionNear, camera.position, sizeof(camera.position));
+  push.currentPositionNear[3] = dirtRoadPreview_ ? dirtRoadResources_.header().nearPlane : 0.1f;
+  const platform::FreeCameraState &previous = temporalHistoryInitialized_
+                                                   ? temporalPreviousCamera_ : camera;
+  push.previousCamera[0] = previous.yaw;
+  push.previousCamera[1] = previous.pitch;
+  push.previousCamera[2] = temporalHistoryInitialized_ ? temporalPreviousJitter_[0]
+                                                       : temporalCurrentJitter_[0];
+  push.previousCamera[3] = temporalHistoryInitialized_ ? temporalPreviousJitter_[1]
+                                                       : temporalCurrentJitter_[1];
+  std::memcpy(push.previousPositionFar, previous.position, sizeof(previous.position));
+  push.previousPositionFar[3] = dirtRoadPreview_ ? dirtRoadResources_.header().farPlane : 1000.0f;
   vkCmdPushConstants(commandBuffer_, postPipelineLayout_, VK_SHADER_STAGE_FRAGMENT_BIT,
                      0, sizeof(push), &push);
   vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
   vkCmdEndRenderPass(commandBuffer_);
+  if (temporalAaActive_) {
+    if (recordTemporalHistoryCopy(imageIndex)) {
+      temporalPreviousCamera_ = camera;
+      temporalPreviousJitter_[0] = temporalCurrentJitter_[0];
+      temporalPreviousJitter_[1] = temporalCurrentJitter_[1];
+      temporalHistoryInitialized_ = true;
+      ++temporalFrameIndex_;
+    } else {
+      temporalHistoryInitialized_ = false;
+    }
+  }
+}
+
+bool InstancedRenderer::recordTemporalHistoryCopy(u32 imageIndex) {
+  if (!temporalAaActive_ || !postHistory_.isReady() ||
+      swapchain_->image(imageIndex) == VK_NULL_HANDLE ||
+      !temporalHistoryLayoutInitialized_) return false;
+
+  VkImageMemoryBarrier toTransfer[2]{};
+  toTransfer[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  toTransfer[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  toTransfer[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  toTransfer[0].oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  toTransfer[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  toTransfer[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  toTransfer[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  toTransfer[0].image = swapchain_->image(imageIndex);
+  toTransfer[0].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  toTransfer[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  toTransfer[1].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  toTransfer[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  toTransfer[1].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  toTransfer[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  toTransfer[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  toTransfer[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  toTransfer[1].image = postHistory_.handle();
+  toTransfer[1].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  vkCmdPipelineBarrier(commandBuffer_,
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 2, toTransfer);
+
+  VkImageCopy copy{};
+  copy.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  copy.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+  copy.extent = {swapchain_->width(), swapchain_->height(), 1};
+  vkCmdCopyImage(commandBuffer_, swapchain_->image(imageIndex),
+                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, postHistory_.handle(),
+                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+
+  VkImageMemoryBarrier fromTransfer[2]{};
+  fromTransfer[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  fromTransfer[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  fromTransfer[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  fromTransfer[0].newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  fromTransfer[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  fromTransfer[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  fromTransfer[0].image = swapchain_->image(imageIndex);
+  fromTransfer[0].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  fromTransfer[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  fromTransfer[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  fromTransfer[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  fromTransfer[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  fromTransfer[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  fromTransfer[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  fromTransfer[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  fromTransfer[1].image = postHistory_.handle();
+  fromTransfer[1].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TRANSFER_BIT,
+      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+      0, 0, nullptr, 0, nullptr, 2, fromTransfer);
+  return true;
 }
 
 void InstancedRenderer::destroyPostResources() {
@@ -1092,8 +1323,16 @@ void InstancedRenderer::destroyPostResources() {
   postDescriptorSet_ = VK_NULL_HANDLE;
   postSetLayout_ = VK_NULL_HANDLE;
   postRenderPass_ = VK_NULL_HANDLE;
+  postDepthSampler_.shutdown();
   postSampler_.shutdown();
+  postHistory_.reset();
   postSceneColor_.reset();
+  temporalHistoryLayoutInitialized_ = false;
+  temporalHistoryInitialized_ = false;
+  temporalAaActive_ = false;
+  temporalFrameIndex_ = 0;
+  temporalCurrentJitter_[0] = temporalCurrentJitter_[1] = 0.0f;
+  temporalPreviousJitter_[0] = temporalPreviousJitter_[1] = 0.0f;
 }
 
 bool InstancedRenderer::createShadowResources() {
@@ -1540,12 +1779,13 @@ bool InstancedRenderer::createDepthImage() {
   graphInputs.width = renderTargetWidth();
   graphInputs.height = renderTargetHeight();
   graphInputs.hzbEnabled = hzbWorkloadEligible_;
+  graphInputs.temporalAaEnabled = temporalAaActive_;
   frameAttachmentPolicy_ = renderer::resolveFrameAttachmentPolicy(graphInputs);
   if (!frameAttachmentPolicy_.valid) {
     // Falha aberta: sem política compilada, armazenar é o comportamento que
     // nunca produz conteúdo indefinido.
     frameAttachmentPolicy_.depthStored = true;
-    frameAttachmentPolicy_.depthSampled = hzbWorkloadEligible_;
+    frameAttachmentPolicy_.depthSampled = hzbWorkloadEligible_ || temporalAaActive_;
     frameAttachmentPolicy_.depthMemoryless = false;
     __android_log_print(ANDROID_LOG_WARN, LogTag,
         "[FrameGraph] política de anexos não compilou; usando store conservador.");
@@ -1553,11 +1793,17 @@ bool InstancedRenderer::createDepthImage() {
   depthFormat_ = chooseDepthFormat(physicalDevice_, frameAttachmentPolicy_.depthSampled);
   if (depthFormat_ == VK_FORMAT_UNDEFINED && frameAttachmentPolicy_.depthSampled) {
     // Optional capability failure must not take the renderer down. Fall back
-    // to the ordinary depth attachment and keep HZB disabled for this device.
+    // to ordinary depth, disable HZB and replace temporal AA with FXAA.
     __android_log_print(ANDROID_LOG_WARN, LogTag,
-                        "[HZB] nenhum formato depth sampled suportado; fallback visível ativo.");
+                        "[FrameGraph] nenhum depth sampled; HZB off e TAA usa FXAA.");
     hzbWorkloadEligible_ = false;
     graphInputs.hzbEnabled = false;
+    temporalAaActive_ = false;
+    graphInputs.temporalAaEnabled = false;
+    if (renderingPolicy_.post.antiAliasing == renderer::AntiAliasingMode::Temporal) {
+      renderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
+      resourceRenderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
+    }
     frameAttachmentPolicy_ = renderer::resolveFrameAttachmentPolicy(graphInputs);
     depthFormat_ = chooseDepthFormat(physicalDevice_, false);
   }
@@ -1936,7 +2182,7 @@ bool InstancedRenderer::createHzbResources() {
               rhiDevice_->pipelineCache().driverHandle()) ||
           !resources.computeKernel.writeImage(
               0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, sourceView,
-              level == 0 ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+              level == 0 ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
                          : VK_IMAGE_LAYOUT_GENERAL,
               hzbSampler_.handle()) ||
           !resources.computeKernel.writeImage(
@@ -1971,7 +2217,9 @@ bool InstancedRenderer::createHzbResources() {
       VkDescriptorImageInfo imageInfo{};
       imageInfo.sampler = hzbSampler_.handle();
       imageInfo.imageView = sourceView;
-      imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+      imageInfo.imageLayout = level == 0
+                                  ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                                  : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
       VkWriteDescriptorSet write{};
       write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
       write.dstSet = resources.descriptorSet;
@@ -1999,28 +2247,28 @@ void InstancedRenderer::recordHzbReductionPass(const platform::FreeCameraState &
   if (!hzbResourcesReady_) return;
   hzbReadbackRecordedThisFrame_ = false;
 
-  // depthImage_ just finished being written by the main pass's LATE fragment
-  // tests -- transition it for sampling before the first reduction pass
-  // reads it. See PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md for why LATE (not
-  // EARLY) fragment tests is the correct source stage here: LATE is where
-  // the final depth *write* actually lands, and this barrier depends on that
-  // write, not on the early depth *test*.
-  VkImageMemoryBarrier depthToSampled{};
-  depthToSampled.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  depthToSampled.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  depthToSampled.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-  depthToSampled.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-  depthToSampled.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  depthToSampled.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  depthToSampled.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  depthToSampled.image = depthImage_.handle();
-  depthToSampled.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
-  vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-                       hzbComputeActive_ ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
-                                         : VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                       0, 0, nullptr, 0, nullptr, 1, &depthToSampled);
+  // The frame graph selected STORE+SAMPLED before render-pass creation, so the
+  // main pass already ends in DEPTH_STENCIL_READ_ONLY_OPTIMAL and publishes
+  // its LATE_FRAGMENT_TESTS writes. TAA may have sampled the same immutable
+  // depth immediately before this pass; read->read needs no second transition.
 
   if (hzbComputeActive_) {
+    // A render-pass external dependency targets fragment consumers (TAA and
+    // raster HZB). Compute is recorded outside render passes, so publish the
+    // same immutable depth explicitly to its own stage without a layout turn.
+    VkImageMemoryBarrier depthReady{};
+    depthReady.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    depthReady.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    depthReady.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    depthReady.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    depthReady.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    depthReady.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    depthReady.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    depthReady.image = depthImage_.handle();
+    depthReady.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
+    vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr,
+                         0, nullptr, 1, &depthReady);
     constexpr u32 localSize = 8;
     for (u32 level = 0; level < kHzbLevelCount; ++level) {
       HzbLevelResources &resources = hzbLevels_[level];
@@ -2615,11 +2863,31 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   useBindless_ = device.enabledPaths().bindless;
   memoryAllocator_ = &device.memoryAllocator();
   swapchain_ = &swapchain;
-  graphicsQueueFamily_ = device.graphicsQueueFamily();
-  instanceCount_ = instanceCount;
   dirtRoadPreview_ = dirtRoadPreview;
   materialPreview_ = materialAssets != nullptr && !dirtRoadPreview_;
   scenePreview_ = !dirtRoadPreview_ && (scenePreview || materialPreview_);
+
+  // The temporal shader reprojects from FreeCameraState and the matching
+  // projection jitter is currently part of the packaged-world vertex path.
+  // Other scene pipelines do not yet expose that camera-matrix contract, so
+  // enabling history there would accumulate an unjittered/mismatched image.
+  temporalAaActive_ =
+      renderingPolicy_.post.antiAliasing == renderer::AntiAliasingMode::Temporal &&
+      dirtRoadPreview_ && swapchain.supportsTransferSource();
+  if (renderingPolicy_.post.antiAliasing == renderer::AntiAliasingMode::Temporal &&
+      !temporalAaActive_) {
+    // History is copied from the resolved swapchain image. Surfaces that do
+    // not expose TRANSFER_SRC cannot execute that contract; degrade visibly
+    // and explicitly to the universal spatial path.
+    renderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
+    resourceRenderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
+    __android_log_print(
+        ANDROID_LOG_WARN, LogTag,
+        dirtRoadPreview_ ? "[TAA] swapchain sem TRANSFER_SRC; fallback FXAA ativo."
+                         : "[TAA] pipeline sem contrato temporal de camera; fallback FXAA ativo.");
+  }
+  graphicsQueueFamily_ = device.graphicsQueueFamily();
+  instanceCount_ = instanceCount;
   drawnInstanceCount_ = 0;
   lastExtractionStatus_ = 0;
   vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
@@ -2999,6 +3267,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       if (resolution.changed) {
         hzbPyramidValid_ = false;
         hzbPyramidCameraValid_ = false;
+        temporalHistoryInitialized_ = false;
         __android_log_print(ANDROID_LOG_INFO, LogTag,
             "[DynamicResolution] scale=%.3f render=%ux%u gpu=%.3fms budget=%.3fms.",
             static_cast<double>(resolution.scale), renderWidth(), renderHeight(),
@@ -3016,6 +3285,15 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   }
   hzbFrameEligible_ = false;
   hzbReadbackRecordedThisFrame_ = false;
+  if (temporalAaActive_) {
+    const u64 sample = temporalFrameIndex_ % 8u + 1u;
+    temporalCurrentJitter_[0] =
+        (halton(sample, 2u) - 0.5f) * 2.0f / static_cast<float>(renderWidth());
+    temporalCurrentJitter_[1] =
+        (halton(sample, 3u) - 0.5f) * 2.0f / static_cast<float>(renderHeight());
+  } else {
+    temporalCurrentJitter_[0] = temporalCurrentJitter_[1] = 0.0f;
+  }
 
   // O crossing C++→C# medido isoladamente: só o tempo de FillInstanceBuffer,
   // não o frame Vulkan inteiro — a pergunta da PoC-A é sobre o custo da
@@ -3082,6 +3360,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     frame->shadowFilterParameters[1] = renderingPolicy_.shadows.farFilterTaps >= 25u ? 2.0f
                                           : renderingPolicy_.shadows.farFilterTaps >= 9u ? 1.0f
                                                                                        : 0.0f;
+    frame->shadowFilterParameters[2] = temporalCurrentJitter_[0];
+    frame->shadowFilterParameters[3] = temporalCurrentJitter_[1];
     const u32 previousShadowCascadeCount = shadowCascadeCount_;
     shadowCascadeCount_ = 0;
     if (renderingPolicy_.shadows.enabled) {
@@ -3726,10 +4006,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
   vkCmdEndRenderPass(commandBuffer_);
   beginGpuRegion(GpuPassClass::Post);
-  recordPostProcess(imageIndex);
+  recordPostProcess(imageIndex, camera);
   endGpuRegion(GpuPassClass::Post);
   // Must run after the main pass ends (depthImage_ needs its final write
-  // landed, in DEPTH_STENCIL_ATTACHMENT_OPTIMAL) and before submit; a no-op
+  // landed, in DEPTH_STENCIL_READ_ONLY_OPTIMAL) and before submit; a no-op
   // when HZB occlusion is disabled or its resources failed to initialize.
   beginGpuRegion(GpuPassClass::Hzb);
   if (hzbFrameEligible_) recordHzbReductionPass(camera);

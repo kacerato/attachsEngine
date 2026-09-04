@@ -430,6 +430,18 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
       std::isfinite(settings.lodHysteresisBandRatio) && settings.lodHysteresisBandRatio > 0.0f
           ? std::clamp(settings.lodHysteresisBandRatio, 0.1f, 0.99f)
           : point.lodHysteresisBandRatio;
+  if (thermalSteps != 0) {
+    // Preserve authored geometry near the camera and spend less only where its
+    // projected difference is already small. The symmetric dither transition
+    // keeps this pressure response from turning into LOD popping.
+    const float thermalLodRatio = thermal == ThermalPressure::Severe ? 1.25f : 1.125f;
+    policy.visibility.lodPixelErrorBudget =
+        std::min(16.0f, policy.visibility.lodPixelErrorBudget * thermalLodRatio);
+    policy.visibility.coverageLodPixelErrorBudget =
+        std::min(128.0f, policy.visibility.coverageLodPixelErrorBudget * thermalLodRatio);
+    note("visibility.lodPixelErrorBudget", PolicyClamp::Thermal);
+    note("visibility.coverageLodPixelErrorBudget", PolicyClamp::Thermal);
+  }
   policy.shadows = shadowSettings;
   policy.ambient = deriveAmbient(ambient);
   policy.ambient.splitSumBrdf = policy.ambient.specularProbe &&
@@ -453,6 +465,11 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
     policy.post.saturation = std::clamp(settings.postSaturation, 0.0f, 2.0f);
   if (std::isfinite(settings.postSharpen) && settings.postSharpen >= 0.0f)
     policy.post.sharpen = std::clamp(settings.postSharpen, 0.0f, 1.0f);
+  if (std::isfinite(settings.temporalHistoryWeight) &&
+      settings.temporalHistoryWeight >= 0.0f) {
+    policy.post.temporalHistoryWeight =
+        std::clamp(settings.temporalHistoryWeight, 0.0f, 0.97f);
+  }
   // Qualquer filtro solicitado exige o passe, mesmo quando o preset base usava
   // tonemap inline. Isto mantém cada eixo independente de nome de preset.
   if (policy.post.bloom || policy.post.antiAliasing != AntiAliasingMode::Off ||
@@ -480,6 +497,21 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
               settings.materialDetailFadeBandRatio >= 0.0f
           ? std::clamp(settings.materialDetailFadeBandRatio, 0.0f, 0.5f)
           : 0.20f;
+  if (thermalSteps != 0) {
+    // These are distance gates with a fade band, not global feature switches.
+    // Zero means unlimited and remains untouched; finite authored ranges shrink
+    // only under transient pressure and recover through the thermal controller's
+    // existing hysteresis.
+    const float thermalMaterialRatio = thermal == ThermalPressure::Severe ? 0.60f : 0.80f;
+    const auto reduceFiniteDistance = [thermalMaterialRatio](float &distance) {
+      if (distance > 0.0f) distance *= thermalMaterialRatio;
+    };
+    reduceFiniteDistance(policy.materialDistance.normalMapMaximumDistance);
+    reduceFiniteDistance(policy.materialDistance.specularProbeMaximumDistance);
+    reduceFiniteDistance(policy.materialDistance.metallicRoughnessMaximumDistance);
+    reduceFiniteDistance(policy.materialDistance.emissiveMaximumDistance);
+    note("materialDistance", PolicyClamp::Thermal);
+  }
   policy.geometry.lodSelection = enabledOverride(settings.lodSelection, true);
   policy.geometry.materialShaderVariants =
       enabledOverride(settings.materialShaderVariants, point.materialShaderVariants);

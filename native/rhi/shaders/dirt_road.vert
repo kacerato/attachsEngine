@@ -18,6 +18,7 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   vec4 shadowSplitDepths;
   vec4 shadowParameters;
   vec4 shadowWorldUnitsPerTexel;
+  vec4 shadowFilterParameters; // xy=PCF radii, zw=temporal jitter in physical NDC
 } environment;
 layout(location=0) in vec3 inPosition;
 layout(location=1) in vec3 inNormal;
@@ -52,6 +53,7 @@ layout(location=5) out mediump vec4 vColor;
 // one carrying real data (tangent handedness sign), so this slot never grew
 // the 128-byte instance struct or its vertex binding stride.
 layout(location=6) out mediump float vDither;
+const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
 void main() {
   // Posicao, view e clip permanecem highp em toda a cadeia: fp16 em coordenada
   // de mundo ou de clip produz tremor de vertice e z-fighting visiveis, e a
@@ -68,7 +70,7 @@ void main() {
   highp vec3 modelPosition=inPosition;
   highp vec3 modelNormal=inNormal;
   highp vec3 modelTangent=inTangent.xyz;
-  if((frame.materialFlags.x & 256u)!=0u) {
+  if((frame.materialFlags.x & MATERIAL_IMPOSTOR)!=0u) {
     highp float cosineYaw=cos(frame.cameraFrame.y), sineYaw=sin(frame.cameraFrame.y);
     highp mat3 faceCamera=mat3(cosineYaw,0,-sineYaw,0,1,0,sineYaw,0,cosineYaw);
     modelPosition=faceCamera*inPosition;
@@ -89,6 +91,9 @@ void main() {
   highp float farPlane=uintBitsToFloat(frame.materialFlags.w);
   highp float nearPlane=frame.cameraPositionNear.w;
   highp vec2 xy=vec2(view.x*1.732050808/frame.cameraFrame.x,-view.y*1.732050808);
-  gl_Position=vec4(dot(frame.surfaceTransform.xy,xy),dot(frame.surfaceTransform.zw,xy),
+  highp vec2 projected=vec2(dot(frame.surfaceTransform.xy,xy),
+                            dot(frame.surfaceTransform.zw,xy));
+  projected += environment.shadowFilterParameters.zw * view.z;
+  gl_Position=vec4(projected,
       (farPlane*view.z-nearPlane*farPlane)/(farPlane-nearPlane),view.z);
 }

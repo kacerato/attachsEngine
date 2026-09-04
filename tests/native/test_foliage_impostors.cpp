@@ -40,12 +40,12 @@ std::vector<MapDrawRecord> impostorChain() {
 
 AE_TEST(Impostor_material_bit_never_collides_with_the_flags_the_renderer_already_branches_on) {
   // O bit entra em `materialFlags.x` do push constant e o vertex shader testa
-  // 256u literal (rhi/shaders/dirt_road.vert). Se alguem reutilizar 1u<<8 para
+  // MATERIAL_IMPOSTOR=256u (rhi/shaders/dirt_road.vert). Se alguem reutilizar 1u<<8 para
   // outra coisa, a folhagem distante passa a girar sozinha na tela.
   const u32 existing = MapMaterialBlend | MapMaterialNormalMap | MapMaterialMetallicRoughnessMap |
                        MapMaterialEmissiveMap | MapMaterialAlphaMask | MapMaterialDoubleSided |
                        MapMaterialNoCollision | MapMaterialForceCollision;
-  AE_EXPECT_EQ(MapMaterialImpostor, 256u, "o shader testa o literal 256u");
+  AE_EXPECT_EQ(MapMaterialImpostor, 256u, "o contrato GLSL usa MATERIAL_IMPOSTOR=256u");
   AE_EXPECT_EQ(MapMaterialImpostor & existing, 0u, "bit exclusivo");
 
   // A combinacao que o baker grava: recorte por alfa (passe opaco, escreve

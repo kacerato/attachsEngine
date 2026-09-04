@@ -23,8 +23,12 @@ struct FrameGraphInputs {
   u32 width = 0;
   u32 height = 0;
   // Quando verdadeiro, a cadeia de redução Hi-Z amostra o depth depois que o
-  // render pass principal termina. É o único leitor do depth fora do pass.
+  // render pass principal termina.
   bool hzbEnabled = false;
+  // TAA reconstrói a posição do fragmento a partir do depth para reprojetar o
+  // histórico. É um consumidor independente de HZB e precisa produzir a mesma
+  // política STORE+SAMPLED quando HZB está desligado.
+  bool temporalAaEnabled = false;
 };
 
 // Política resolvida para o anexo de profundidade. O anexo de cor é sempre
