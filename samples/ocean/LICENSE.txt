@@ -1,0 +1,5 @@
+Aether native ocean validation scene and procedural water normal spectrum:
+Copyright (c) the Aether project owner.
+
+Sky environment: "Hausdorf Clear Sky" by Grzegorz Wronkowski, downloaded from
+Poly Haven (https://polyhaven.com/a/hausdorf_clear_sky), licensed CC0 1.0.

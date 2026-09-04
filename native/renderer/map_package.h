@@ -50,6 +50,11 @@ inline constexpr u32 MapMaterialForceCollision = 1u << 7;
 // sem isso o quad so ficaria correto visto da direcao em que foi assado.
 // Ver tools/bake-foliage-impostors.py.
 inline constexpr u32 MapMaterialImpostor = 1u << 8;
+// Procedural water surface. Geometry remains a regular cooked mesh, while the
+// shared WaterProfile drives displacement and optical shading entirely on the
+// GPU. It is deliberately independent from alpha blending: mobile ocean water
+// writes depth and composes reflection/absorption as an opaque surface.
+inline constexpr u32 MapMaterialWater = 1u << 9;
 
 struct MapTextureRecord {
   u32 flags;

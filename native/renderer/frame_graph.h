@@ -29,6 +29,10 @@ struct FrameGraphInputs {
   // histórico. É um consumidor independente de HZB e precisa produzir a mesma
   // política STORE+SAMPLED quando HZB está desligado.
   bool temporalAaEnabled = false;
+  // A água é um segundo subpass fundido ao pass de cena e lê o depth do pixel
+  // corrente como input attachment. Diferente de HZB/TAA, essa leitura não
+  // escapa do tile: exige INPUT_ATTACHMENT, mas não STORE nem SAMPLED.
+  bool waterDepthInputEnabled = false;
 };
 
 // Política resolvida para o anexo de profundidade. O anexo de cor é sempre
@@ -41,6 +45,9 @@ struct FrameAttachmentPolicy {
   // A imagem precisa de VK_IMAGE_USAGE_SAMPLED_BIT (e de um formato que
   // suporte amostragem).
   bool depthSampled = false;
+  // A imagem precisa de VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT. Pode coexistir
+  // com depthMemoryless porque o consumidor está no mesmo render pass/tile.
+  bool depthInputAttachment = false;
   // A imagem pode ser VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT com memória
   // LAZILY_ALLOCATED: numa GPU TBDR ela vive só na memória do tile e nunca
   // recebe lastro em DRAM. Nunca é verdadeiro junto com depthSampled —

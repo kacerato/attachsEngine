@@ -80,11 +80,15 @@ bool decodeEnvironment(const std::vector<u8> &bytes, EnvironmentLighting &lighti
 
 bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload,
                                    AAssetManager *assets, bool forceTextureFallback,
-                                   const std::atomic<bool> *cancel) {
-  if (assets == nullptr || !images_.empty()) return false;
+                                   float waterDisplacementAllowance,
+                                   const std::atomic<bool> *cancel,
+                                   const char *assetRoot) {
+  if (assets == nullptr || assetRoot == nullptr || assetRoot[0] == '\0' || !images_.empty()) return false;
   const auto started = std::chrono::steady_clock::now();
   std::vector<u8> packageBytes;
-  if (!readAndroidAsset(assets, "dirt_road/scene.aemap", packageBytes, cancel)) {
+  char assetPath[160]{};
+  std::snprintf(assetPath, sizeof(assetPath), "%s/scene.aemap", assetRoot);
+  if (!readAndroidAsset(assets, assetPath, packageBytes, cancel)) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[DirtRoad] scene.aemap ausente ou truncado.");
     return false;
   }
@@ -103,7 +107,9 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
     return false;
   }
   renderer::SpatialRenderChunks renderChunks;
-  if (!renderer::buildSpatialRenderChunks(package, {}, renderChunks)) {
+  renderer::SpatialRenderChunkSettings chunkSettings{};
+  chunkSettings.waterDisplacementAllowance = waterDisplacementAllowance;
+  if (!renderer::buildSpatialRenderChunks(package, chunkSettings, renderChunks)) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag,
                         "[DirtRoad] falha ao construir render chunks espaciais.");
     return false;
@@ -145,8 +151,8 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
   for (u32 index = 0; index < header_.textureCount; ++index) {
     if (cancel != nullptr && cancel->load()) return false;
     char name[96];
-    std::snprintf(name, sizeof(name), astc ? "dirt_road/texture_%03u.aetex"
-                                           : "dirt_road/texture_%03u-fallback.aetex", index);
+    std::snprintf(name, sizeof(name), astc ? "%s/texture_%03u.aetex"
+                                           : "%s/texture_%03u-fallback.aetex", assetRoot, index);
     const u32 flags = textureRecords_[index].flags;
     rhi::SamplerDesc sampling{};
     sampling.minFilter = (flags & 1u) != 0 ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
@@ -159,7 +165,8 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
                             sampling, images_[index], samplers_[index], cancel, "DirtRoad")) return false;
   }
   std::vector<u8> environmentBytes;
-  if (!readAndroidAsset(assets, "dirt_road/environment.aeenv", environmentBytes, cancel) ||
+  std::snprintf(assetPath, sizeof(assetPath), "%s/environment.aeenv", assetRoot);
+  if (!readAndroidAsset(assets, assetPath, environmentBytes, cancel) ||
       !decodeEnvironment(environmentBytes, environmentLighting_, environmentMapDescription_)) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Environment] Metadados AEEN inválidos.");
     return false;
@@ -170,7 +177,8 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
   environmentSampling.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
   environmentSampling.addressU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
   environmentSampling.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  if (!loadAndroidTexture(device, upload, assets, "dirt_road/environment.aetex", maxDimension,
+  std::snprintf(assetPath, sizeof(assetPath), "%s/environment.aetex", assetRoot);
+  if (!loadAndroidTexture(device, upload, assets, assetPath, maxDimension,
                           128 * Megabyte, environmentSampling, environmentImage_,
                           environmentSampler_, cancel, "Environment")) return false;
   if (environmentMapDescription_.hasPrefilteredSpecular()) {
@@ -180,7 +188,8 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
     specularSampling.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     specularSampling.addressU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     specularSampling.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    if (!loadAndroidTexture(device, upload, assets, "dirt_road/environment-specular.aetex",
+    std::snprintf(assetPath, sizeof(assetPath), "%s/environment-specular.aetex", assetRoot);
+    if (!loadAndroidTexture(device, upload, assets, assetPath,
                             std::min(maxDimension, environmentMapDescription_.specularWidth),
                             8 * Megabyte, specularSampling, environmentSpecularImage_,
                             environmentSpecularSampler_, cancel, "Environment/Specular")) return false;
@@ -192,7 +201,8 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
     brdfSampling.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
     brdfSampling.addressU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     brdfSampling.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    if (!loadAndroidTexture(device, upload, assets, "dirt_road/environment-brdf.aetex",
+    std::snprintf(assetPath, sizeof(assetPath), "%s/environment-brdf.aetex", assetRoot);
+    if (!loadAndroidTexture(device, upload, assets, assetPath,
                             std::min(maxDimension, environmentMapDescription_.brdfWidth),
                             2 * Megabyte, brdfSampling, environmentBrdfImage_,
                             environmentBrdfSampler_, cancel, "Environment/BRDF")) return false;

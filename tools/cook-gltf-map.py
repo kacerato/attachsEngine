@@ -29,6 +29,7 @@ MATERIAL_METALLIC_ROUGHNESS_MAP = 1 << 2
 MATERIAL_EMISSIVE_MAP = 1 << 3
 MATERIAL_ALPHA_MASK = 1 << 4
 MATERIAL_DOUBLE_SIDED = 1 << 5
+MATERIAL_WATER = 1 << 9
 
 # LOD generation (item 2.5.4 / 7.1.6 of the plan): up to this many discrete
 # levels per opaque or alpha-tested primitive, each a fully separate draw
@@ -1045,6 +1046,10 @@ def material_record(material, texture_map, inferred_cutouts=frozenset()):
     if infos[2]: flags |= MATERIAL_METALLIC_ROUGHNESS_MAP
     if infos[3]: flags |= MATERIAL_EMISSIVE_MAP
     if material.get("doubleSided", False): flags |= MATERIAL_DOUBLE_SIDED
+    # Aether-specific authoring metadata lives in glTF extras, never in a
+    # material name heuristic. This keeps imports deterministic and lets DCC
+    # exporters preserve a backend-neutral water classification.
+    if material.get("extras", {}).get("aetherWater", False): flags |= MATERIAL_WATER
     base = pbr.get("baseColorFactor", [1, 1, 1, 1])
     emissive = material.get("emissiveFactor", [0, 0, 0])
     specular = material.get("extensions", {}).get("KHR_materials_specular", {}).get("specularFactor", 1.0)

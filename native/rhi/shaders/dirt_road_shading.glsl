@@ -20,6 +20,7 @@ layout(constant_id=1) const uint MATERIAL_FEATURE_MASK=0xffffffffu;
 layout(constant_id=2) const uint ENVIRONMENT_PROJECTION=0u;
 const float PI=3.141592653589793;
 const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
+const uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
 #include "environment_lighting.glsl"
 // LOD cross-fade (see renderer::selectLodLevel): vDither==0 for every draw
 // outside an active transition, so this is a no-op discard everywhere LOD is
@@ -82,12 +83,60 @@ mediump vec3 directLight(mediump vec3 n,mediump vec3 v,mediump vec3 l,mediump ve
       float(distribution(nh,alpha)*visibility(nv,nl,alpha)):0.0;
   return ((1-f)*(1-metal)*base*fd+specular*f)*radiance*float(nl);
 }
+mediump vec3 shadeWater(highp vec3 position,mediump vec3 n) {
+  highp vec3 eye=frame.cameraPositionNear.xyz;
+  mediump vec3 v=normalize(eye-position);
+  mediump float nv=max(dot(n,v),0.001);
+  mediump float ior=clamp(environment.waterOptics.x,1.0,2.0);
+  mediump float f0=(ior-1.0)/(ior+1.0); f0*=f0;
+  mediump float fresnelWeight=f0+(1.0-f0)*pow5(1.0-nv);
+  mediump float rough=clamp(environment.waterOptics.y,0.025,1.0);
+  mediump vec3 reflected=environmentRadiance(reflect(-v,n),
+      rough*environment.parameters.z);
+
+  // Beer-Lambert attenuation is evaluated from a bounded optical path. Until
+  // scene depth is available this is an explicit deep-water approximation,
+  // not a fake screen grab. Turbidity controls in-scattering independently.
+  mediump float opticalPath=mix(0.45,4.0,1.0-nv);
+  mediump vec3 transmission=exp(-environment.waterAbsorption.rgb*opticalPath);
+  mediump vec3 body=mix(environment.waterDeepColorFoam.rgb,
+                        environment.waterShallowColorDistance.rgb,transmission);
+  body=mix(body,environment.waterShallowColorDistance.rgb,
+           clamp(environment.waterOptics.z,0.0,1.0)*0.35);
+  mediump vec3 color=mix(body,reflected,fresnelWeight);
+
+  mediump vec3 l=environment.sunDirectionIntensity.xyz;
+  mediump float nl=max(dot(n,l),0.0);
+  mediump vec3 h=normalize(v+l);
+  mediump float sunPower=mix(384.0,18.0,rough);
+  mediump float sunSpec=pow(max(dot(n,h),0.0),sunPower)*nl;
+  mediump vec3 sunRadiance=environment.sunColorAngularRadius.rgb*
+                           environment.sunDirectionIntensity.w;
+  highp float viewDepth=max(dot(environment.worldToViewRow2.xyz,position-eye),0.0);
+  mediump float visibility=nl>0.0?directionalShadow(position,n,viewDepth):1.0;
+  color+=sunRadiance*sunSpec*visibility;
+
+  mediump float slope=length(n.xz)/max(n.y,0.05);
+  mediump float foam=smoothstep(environment.waterOptics.w,
+      min(environment.waterOptics.w+0.22,1.0),clamp(slope,0.0,1.0));
+  foam*=clamp(environment.waterDeepColorFoam.w,0.0,1.0);
+  return mix(color,vec3(0.92,0.97,1.0),foam);
+}
 void main() {
-  // Compute derivatives before any lane can discard at an alpha/LOD edge.
-  highp vec2 impostorDx=dFdx(vUv0),impostorDy=dFdy(vUv0);
   if(aetherLodDitherDiscard(gl_FragCoord.xy,vDither)) discard;
   uint flags=frame.materialFlags.x;
   uint isolation=GPU_COST_ISOLATION;
+  if((flags&MATERIAL_WATER)!=0u) {
+    mediump vec3 color=toneMapEnvironment(shadeWater(vPosition,normalize(vNormal)));
+    if((frame.materialFlags.z&1u)!=0u)
+      color=mix(12.92*color,1.055*pow(color,vec3(1.0/2.4))-.055,
+                greaterThan(color,vec3(.0031308)));
+    outColor=vec4(color,1.0);
+    return;
+  }
+  // Compute derivatives before any lane can discard at an alpha edge. Water
+  // returned above without touching material textures or their derivatives.
+  highp vec2 impostorDx=dFdx(vUv0),impostorDy=dFdy(vUv0);
   bool impostor=(flags&MATERIAL_IMPOSTOR)!=0u && (frame.materialFlags.y>>16u)!=0u;
   highp vec2 impostorUv=vUv0;
   if(impostor) {

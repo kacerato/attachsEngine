@@ -44,7 +44,7 @@ AE_TEST(Impostor_material_bit_never_collides_with_the_flags_the_renderer_already
   // outra coisa, a folhagem distante passa a girar sozinha na tela.
   const u32 existing = MapMaterialBlend | MapMaterialNormalMap | MapMaterialMetallicRoughnessMap |
                        MapMaterialEmissiveMap | MapMaterialAlphaMask | MapMaterialDoubleSided |
-                       MapMaterialNoCollision | MapMaterialForceCollision;
+                       MapMaterialNoCollision | MapMaterialForceCollision | MapMaterialWater;
   AE_EXPECT_EQ(MapMaterialImpostor, 256u, "o contrato GLSL usa MATERIAL_IMPOSTOR=256u");
   AE_EXPECT_EQ(MapMaterialImpostor & existing, 0u, "bit exclusivo");
 

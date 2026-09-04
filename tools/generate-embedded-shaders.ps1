@@ -42,6 +42,7 @@ if ($All) {
         shadow_depth_masked = @('frag')
         shadow_depth = @('vert')
         triangle = @('vert', 'frag')
+        water_surface = @('frag')
     }
     foreach ($entry in $embeddedShaders.GetEnumerator()) {
         $shaderParameters = @{

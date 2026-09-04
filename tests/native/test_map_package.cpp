@@ -219,6 +219,11 @@ AE_TEST(Static_collision_transforms_world_includes_blend_and_skips_cutout_cards)
   AE_EXPECT_EQ(collision.indices[0], 0u, "first index");
   AE_EXPECT_EQ(collision.indices[1], 2u, "winding reversed");
   AE_EXPECT_EQ(collision.indices[2], 1u, "winding reversed");
+
+  for (auto &material : materials) material.flags = MapMaterialWater;
+  AE_EXPECT_TRUE(buildStaticCollisionMesh(package, collision),
+                 "render-only water package is a valid empty collision world");
+  AE_EXPECT_TRUE(collision.empty(), "water uses analytic queries, not static triangles");
 }
 
 AE_TEST(Static_collision_uses_only_authoritative_lod_zero_geometry) {

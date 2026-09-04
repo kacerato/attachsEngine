@@ -22,7 +22,7 @@ visual no aparelho. A captura `build/android-validation/aether-current-artifact.
 
 ## Pacote inspecionado
 
-`C:/Users/donod/Downloads/Assets/Assets/KriptoFX/WaterSystem/WaterResources`
+`C:/Users/donod/Downloads/extracted/extracted/Assets/KriptoFX/WaterSystem/WaterResources`
 identifica versão 1.4.03 no README. Há `SimpleDemo.unity`; a documentação requer
 espaço linear, Cinemachine e Post Processing. Scripts usam UnityEngine,
 ScriptableObject e CommandBuffer; shaders usam o pipeline Unity. Não há
@@ -32,7 +32,10 @@ seu uso no projeto; licença não é bloqueio desta tarefa. A incompatibilidade
 técnica permanece: a integração Aether será nativa e data-driven, sem carregar
 tipos UnityEngine no runtime.
 
-## Matriz funcional da água (pendente, não implementada)
+O mapeamento completo, decisões mobile e gates por capacidade estão em
+`docs/adr/ADR-017-AGUA-NATIVA-MOBILE.md`.
+
+## Matriz funcional da água (implementação incremental)
 
 | Área | Recursos observados | Integração Aether necessária |
 | --- | --- | --- |

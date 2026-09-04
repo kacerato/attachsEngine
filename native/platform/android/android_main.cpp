@@ -1,5 +1,6 @@
 #include "platform/android/android_paths.h"
 #include "platform/android/android_launch_options.h"
+#include "platform/android/android_runtime_controls.h"
 #include "platform/android/astc_encode_probe.h"
 #include "platform/android/android_frame_profiler.h"
 #include "renderer/rendering_policy.h"
@@ -81,6 +82,7 @@ struct AndroidShell final {
   bool scenePreview = false;
   bool materialPreview = false;
   bool dirtRoadPreview = false;
+  bool oceanPreview = false;
   bool forceTextureFallback = false;
   bool lockCamera = false;
   std::future<bool> rendererInitialization;
@@ -128,6 +130,14 @@ struct AndroidShell final {
   bool thermalPolicyApplied = false;
   float maximumDisplayHz = 60.0f;
   int displayRotation = -1;
+  ae::u64 runtimeControlsRevision = ~ae::u64{0};
+  float waterInteractionStrength = 0.65f;
+  float waterTimeSeconds = 0.0f;
+  bool waterTapTracking = false;
+  bool waterTapMoved = false;
+  int32_t waterTapPointer = -1;
+  float waterTapX = 0.0f;
+  float waterTapY = 0.0f;
 
   // Deterministic camera route (benchmark A/B tooling, see camera_route.h).
   // Off by default; a launch option must explicitly opt in.
@@ -142,6 +152,86 @@ struct AndroidShell final {
 };
 
 void applyThermalRenderingPolicy(AndroidShell &shell, bool force);
+
+void applyRuntimeControls(AndroidShell &shell) {
+  const auto controls = ae::platform::android::runtimeControlsSnapshot();
+  if (controls.revision == shell.runtimeControlsRevision) return;
+  shell.waterInteractionStrength = controls.interactionStrength;
+
+  auto water = ae::renderer::defaultOceanWaterProfile();
+  for (ae::u32 index = 0; index < water.waveCount; ++index) {
+    water.waves[index].amplitude *= controls.waveHeight;
+    water.waves[index].speed *= controls.waveSpeed;
+    water.waves[index].steepness = std::clamp(
+        water.waves[index].steepness * controls.waveSteepness, 0.0f, 1.0f);
+  }
+  water.microWaveStrength = controls.microWaves;
+  water.surfaceOpacity = controls.surfaceOpacity;
+  water.absorption.x *= controls.absorption;
+  water.absorption.y *= controls.absorption;
+  water.absorption.z *= controls.absorption;
+  water.foamDecay = controls.foam;
+  if (!shell.instancedRenderer.setWaterProfile(water))
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[RuntimeControls] perfil de água recusado.");
+
+  if (!shell.renderingCapabilitiesReady || !shell.instancedRendererReady) return;
+  auto policy = ae::renderer::resolveRenderingPolicy(
+      shell.renderingSettings, shell.renderingCapabilities, shell.thermalMonitor.state().pressure);
+  policy.resolutionScale = std::min(policy.resolutionScale, controls.renderScale);
+  policy.dynamicResolution.maximumScale = std::min(policy.dynamicResolution.maximumScale,
+                                                   policy.resolutionScale);
+  policy.dynamicResolution.enabled = controls.dynamicResolution;
+  if (!controls.dynamicResolution) {
+    policy.dynamicResolution.minimumScale = policy.resolutionScale;
+    policy.dynamicResolution.maximumScale = policy.resolutionScale;
+  } else {
+    policy.dynamicResolution.minimumScale = std::min(
+        policy.dynamicResolution.minimumScale, policy.dynamicResolution.maximumScale);
+  }
+  if (controls.shadowQuality == 0) {
+    policy.shadows.enabled = false; policy.shadows.cascadeCount = 0;
+  } else if (controls.shadowQuality == 1) {
+    policy.shadows.cascadeCount = std::min(policy.shadows.cascadeCount, 1u);
+    policy.shadows.filterTaps = policy.shadows.farFilterTaps = 1;
+  } else if (controls.shadowQuality == 2) {
+    policy.shadows.cascadeCount = std::min(policy.shadows.cascadeCount, 2u);
+    policy.shadows.filterTaps = std::min(policy.shadows.filterTaps, 9u);
+    policy.shadows.farFilterTaps = 1;
+  }
+  policy.post.bloom = controls.bloomIntensity > 0.001f;
+  policy.post.bloomIntensity = controls.bloomIntensity;
+  policy.post.sharpen = controls.sharpen;
+  shell.activeRenderingPolicy = policy;
+  shell.instancedRenderer.setRuntimeRenderingPolicy(policy);
+  shell.runtimeControlsRevision = controls.revision;
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[RuntimeControls] scale=%.2f dynamic=%d shadows=%u water=[height %.2f speed %.2f opacity %.2f].",
+      static_cast<double>(controls.renderScale), controls.dynamicResolution ? 1 : 0,
+      controls.shadowQuality, static_cast<double>(controls.waveHeight),
+      static_cast<double>(controls.waveSpeed), static_cast<double>(controls.surfaceOpacity));
+}
+
+bool waterHitFromScreen(const AndroidShell &shell, float x, float y, float width,
+                        float height, ae::renderer::WaterVec2 &hit) {
+  if (width <= 0.0f || height <= 0.0f) return false;
+  const auto &camera = shell.cameraController.state();
+  const float ndcX = x * 2.0f / width - 1.0f;
+  const float ndcY = 1.0f - y * 2.0f / height;
+  const float aspect = width / height;
+  const float viewX = ndcX * aspect / 1.732050808f;
+  const float viewY = -ndcY / 1.732050808f;
+  const float cy = std::cos(camera.yaw), sy = std::sin(camera.yaw);
+  const float cp = std::cos(camera.pitch), sp = std::sin(camera.pitch);
+  const float directionX = cy * viewX + sy * sp * viewY + sy * cp;
+  const float directionY = cp * viewY - sp;
+  const float directionZ = -sy * viewX + cy * sp * viewY + cy * cp;
+  if (std::abs(directionY) < 1.0e-5f) return false;
+  const float distance = -camera.position[1] / directionY;
+  if (!(distance > 0.0f) || distance > 2000.0f) return false;
+  hit = {camera.position[0] + directionX * distance,
+         camera.position[2] + directionZ * distance};
+  return std::isfinite(hit.x) && std::isfinite(hit.y);
+}
 
 // Atomic-writes any pending recorded samples to disk. Safe to call repeatedly
 // (each call re-writes the full route atomically, so it is called from every
@@ -160,6 +250,7 @@ void flushCameraRouteRecordingIfNeeded(AndroidShell &shell) {
 }
 
 const char *profileSceneId(const AndroidShell &shell) {
+  if (shell.oceanPreview) return "ocean";
   if (shell.dirtRoadPreview) return "dirt-road";
   if (shell.materialPreview) return "material-preview";
   if (shell.scenePreview) return "scene-preview";
@@ -440,7 +531,8 @@ bool rebuildInstancedRenderer(AndroidShell &shell) {
     shell.rendererInitialization=std::async(std::launch::async,[&shell] {
       return shell.instancedRenderer.initialize(shell.vulkanSurface.device(),shell.vulkanSurface.swapchain(),
           shell.dotNetHost,ScenePreviewCapacity,!shell.dirtRoadPreview,shell.app->activity->assetManager,
-          shell.forceTextureFallback,&shell.cancelRendererInitialization,shell.dirtRoadPreview);
+          shell.forceTextureFallback,&shell.cancelRendererInitialization,shell.dirtRoadPreview,
+          shell.oceanPreview ? "ocean" : "dirt_road");
     });
     __android_log_print(ANDROID_LOG_INFO,LogTag,"[%s] initialization=loading",
                         shell.dirtRoadPreview?"DirtRoad":"MaterialPreview");
@@ -631,6 +723,43 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
   const int32_t width = std::max(bufferWidth, bufferHeight);
   const int32_t height = std::min(bufferWidth, bufferHeight);
   if (width <= 0 || height <= 0) return 0;
+  if (shell.oceanPreview) {
+    if (actionType == AMOTION_EVENT_ACTION_DOWN) {
+      shell.waterTapTracking = true;
+      shell.waterTapMoved = false;
+      shell.waterTapPointer = AMotionEvent_getPointerId(event, actionIndex);
+      shell.waterTapX = AMotionEvent_getX(event, actionIndex);
+      shell.waterTapY = AMotionEvent_getY(event, actionIndex);
+    } else if (actionType == AMOTION_EVENT_ACTION_MOVE && shell.waterTapTracking) {
+      const size_t count = AMotionEvent_getPointerCount(event);
+      for (size_t index = 0; index < count; ++index) {
+        if (AMotionEvent_getPointerId(event, index) != shell.waterTapPointer) continue;
+        const float dx = AMotionEvent_getX(event, index) - shell.waterTapX;
+        const float dy = AMotionEvent_getY(event, index) - shell.waterTapY;
+        if (dx * dx + dy * dy > 24.0f * 24.0f) shell.waterTapMoved = true;
+      }
+    } else if (actionType == AMOTION_EVENT_ACTION_UP && shell.waterTapTracking) {
+      if (!shell.waterTapMoved) {
+        ae::renderer::WaterVec2 hit{};
+        if (waterHitFromScreen(shell, AMotionEvent_getX(event, actionIndex),
+                               AMotionEvent_getY(event, actionIndex),
+                               static_cast<float>(width), static_cast<float>(height), hit)) {
+          ae::renderer::WaterImpulse impulse{};
+          impulse.center = hit;
+          impulse.startTime = shell.waterTimeSeconds;
+          impulse.amplitude = shell.waterInteractionStrength;
+          shell.instancedRenderer.addWaterImpulse(impulse);
+          __android_log_print(ANDROID_LOG_INFO, LogTag,
+              "[WaterInteraction] impulse=(%.2f,%.2f) amplitude=%.2f.",
+              static_cast<double>(hit.x), static_cast<double>(hit.y),
+              static_cast<double>(impulse.amplitude));
+        }
+      }
+      shell.waterTapTracking = false;
+    } else if (actionType == AMOTION_EVENT_ACTION_CANCEL) {
+      shell.waterTapTracking = false;
+    }
+  }
   if (shell.firstPersonEnabled) {
     if (actionType == AMOTION_EVENT_ACTION_CANCEL) {
       shell.firstPersonTouches.cancel();
@@ -703,10 +832,12 @@ void android_main(android_app *app) {
   const bool benchmarkPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.poc_a");
   shell.pocABenchmark = benchmarkPreview;
   shell.materialPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.material_preview");
+  shell.oceanPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.ocean_preview");
   const bool explicitMap = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.map_preview");
   // The launcher opens the production-test map. Diagnostic fixtures remain
   // explicit so benchmark numbers can never silently include the full scene.
-  shell.dirtRoadPreview = explicitMap || (!shell.scenePreview && !benchmarkPreview && !shell.materialPreview);
+  shell.dirtRoadPreview = shell.oceanPreview || explicitMap ||
+      (!shell.scenePreview && !benchmarkPreview && !shell.materialPreview);
   shell.forceTextureFallback = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.force_texture_fallback");
   shell.lockCamera = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.lock_camera");
   ae::u32 requestedCameraRouteMode = 0;
@@ -731,7 +862,7 @@ void android_main(android_app *app) {
   // Controller mode is a global runtime policy. Diagnostic fixtures and locked
   // camera captures remain deterministic; `aether.free_camera` explicitly
   // selects the editor navigation controller instead.
-  shell.firstPersonEnabled = shell.dirtRoadPreview && !shell.lockCamera &&
+  shell.firstPersonEnabled = shell.dirtRoadPreview && !shell.oceanPreview && !shell.lockCamera &&
       !ae::platform::android::readBooleanLaunchOption(app->activity, "aether.free_camera");
   shell.instancedRenderer.setRuntimeHudEnabled(shell.firstPersonEnabled);
   shell.hasLaunchCamera =
@@ -792,6 +923,7 @@ void android_main(android_app *app) {
     shell.gpuCostIsolation = ae::renderer::sanitizeGpuCostIsolation(requestedIsolation);
   }
   shell.instancedRenderer.setGpuCostIsolation(shell.gpuCostIsolation);
+  applyRuntimeControls(shell);
 
   // --- Política global de renderização (ADR-014) ---------------------------
   // As opções de lançamento são o override de diagnóstico do que, no produto,
@@ -1042,6 +1174,7 @@ void android_main(android_app *app) {
       continue;
     }
     collectRendererInitialization(shell,false);
+    applyRuntimeControls(shell);
     if (shell.thermalMonitor.poll()) applyThermalRenderingPolicy(shell, false);
 
     // O evento processado acima pode ter destruído o renderer/janela.
@@ -1085,6 +1218,7 @@ void android_main(android_app *app) {
       const float timeSeconds = std::chrono::duration<float>(
                                     std::chrono::steady_clock::now() - shell.shellStartTime)
                                     .count();
+      shell.waterTimeSeconds = timeSeconds;
       ae::renderer::RuntimeHudState hud{};
       hud.visible = shell.firstPersonEnabled;
       if (shell.firstPersonEnabled) {

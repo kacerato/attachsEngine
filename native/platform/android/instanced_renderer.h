@@ -21,6 +21,7 @@
 #include "renderer/rendering_policy.h"
 #include "renderer/runtime_hud.h"
 #include "renderer/shadow_cascades.h"
+#include "renderer/water_surface.h"
 #include "platform/android/material_preview_resources.h"
 #include "platform/android/dirt_road_resources.h"
 #include "platform/free_camera_controller.h"
@@ -52,7 +53,8 @@ public:
   bool initialize(rhi::VulkanDevice &device, rhi::VulkanSwapchain &swapchain,
                   DotNetHost &dotNetHost, u32 instanceCount, bool scenePreview = false,
                   AAssetManager *materialAssets = nullptr, bool forceTextureFallback = false,
-                  const std::atomic<bool> *cancel = nullptr, bool dirtRoadPreview = false);
+                  const std::atomic<bool> *cancel = nullptr, bool dirtRoadPreview = false,
+                  const char *mapAssetRoot = "dirt_road");
   void shutdown();
 
   // Os ângulos de órbita vêm da camada de input, em radianos. O renderer
@@ -119,6 +121,27 @@ public:
   void setDisableTransientDepth(bool disabled) { disableTransientDepth_ = disabled; }
   void setRuntimeHudEnabled(bool enabled) { runtimeHudEnabled_ = enabled; }
   void setAdpfGpuTimingEnabled(bool enabled) { adpfGpuTimingEnabled_ = enabled; }
+  // Water authoring remains a backend-neutral Resource. The Vulkan renderer
+  // only retains its validated value representation and uploads it once per
+  // frame with the other scene globals.
+  bool setWaterProfile(const renderer::WaterProfile &profile, float baseHeight = 0.0f) {
+    if (renderer::validateWaterProfile(profile) != renderer::WaterValidationError::None ||
+        !std::isfinite(baseHeight) ||
+        renderer::maximumWaterDisplacement(profile) > waterDisplacementCapacity_) return false;
+    waterProfile_ = profile;
+    waterBaseHeight_ = baseHeight;
+    return true;
+  }
+  bool addWaterImpulse(const renderer::WaterImpulse &impulse) {
+    if (std::abs(impulse.amplitude) + renderer::maximumWaterDisplacement(waterProfile_) >
+        waterDisplacementCapacity_) return false;
+    return waterInteractions_.addImpulse(impulse);
+  }
+  // Resource-epoch visibility budget. Raising it later requires rebuilding
+  // spatial chunks; profile/touch edits inside it remain allocation-free.
+  void setWaterDisplacementCapacity(float capacity) {
+    if (std::isfinite(capacity) && capacity >= 0.0f) waterDisplacementCapacity_ = capacity;
+  }
   // Uma cópia imutável por época de renderer. Nenhum passe consulta nome de
   // preset; todos consomem somente estes budgets já resolvidos.
   void setRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy) {
@@ -325,6 +348,10 @@ private:
   VkPipeline coveragePipeline_ = VK_NULL_HANDLE;
   VkPipeline coverageShadePipeline_ = VK_NULL_HANDLE;
   VkPipeline transparentPipeline_ = VK_NULL_HANDLE;
+  // Água usa um subpass próprio: lê o depth opaco como input attachment e
+  // compõe transmissão/reflexão sem uma cópia full-resolution da cena.
+  VkPipeline waterPipeline_ = VK_NULL_HANDLE;
+  bool waterSubpassActive_ = false;
   // Distance-material LOD pipelines. They keep the same geometry/material and
   // remove only normal-map work after an entire draw bound leaves the global
   // normal-detail radius.
@@ -436,6 +463,7 @@ private:
   std::vector<u32> solidDrawOrder_;
   std::vector<u32> coverageDrawOrder_;
   std::vector<u32> transparentDrawOrder_;
+  std::vector<u32> waterDrawOrder_;
   // Scratch lists retain capacity across frames. Visibility must never allocate
   // in drawFrame(), particularly while the player is moving through the map.
   std::vector<u32> visibleSolidDrawOrder_;
@@ -495,6 +523,10 @@ private:
   // ativa abaixo pode apenas reduzir estes limites durante a época atual.
   renderer::ResolvedRenderingPolicy resourceRenderingPolicy_{};
   renderer::ResolvedRenderingPolicy renderingPolicy_{};
+  renderer::WaterProfile waterProfile_ = renderer::defaultOceanWaterProfile();
+  renderer::WaterInteractionField waterInteractions_{};
+  float waterDisplacementCapacity_ = 5.0f;
+  float waterBaseHeight_ = 0.0f;
   renderer::DynamicResolutionController dynamicResolution_{};
 
   // HZB (Hi-Z) occlusion culling -- see setHzbOcclusionEnabled() above and

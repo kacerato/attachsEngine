@@ -91,6 +91,7 @@ FrameAttachmentPolicy resolveFrameAttachmentPolicy(const FrameGraphInputs &input
   if (!compiled.has_value()) return policy;
 
   policy.valid = true;
+  policy.depthInputAttachment = inputs.waterDepthInputEnabled;
   for (const auto &use : compiled->attachmentUses) {
     if (use.resource != depth) continue;
     policy.depthStored = use.storeOp == rendergraph::StoreOp::Store;

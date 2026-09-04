@@ -104,3 +104,21 @@ AE_TEST(Spatial_render_chunks_use_finer_global_budget_for_alpha_coverage) {
   for (const MapDrawRecord &draw : chunks.draws)
     AE_EXPECT_EQ(draw.indexCount, 3u, "cada chunk respeita orçamento coverage");
 }
+
+AE_TEST(Spatial_water_chunks_include_shader_displacement_in_bounds) {
+  std::array<float, 36> vertices{}; std::array<u32, 12> indices{};
+  std::array<MapMaterialRecord, 1> materials{}; std::array<MapDrawRecord, 1> draws{};
+  MapPackageView package = fixture(vertices, indices, materials, draws);
+  materials[0].flags = MapMaterialWater;
+  SpatialRenderChunks staticChunks, animatedChunks;
+  AE_EXPECT_TRUE(buildSpatialRenderChunks(package, {2, 2, 0.0f}, staticChunks),
+                 "static water bounds");
+  AE_EXPECT_TRUE(buildSpatialRenderChunks(package, {2, 2, 1.75f}, animatedChunks),
+                 "animated water bounds");
+  AE_EXPECT_EQ(animatedChunks.draws.size(), staticChunks.draws.size(),
+               "allowance does not change spatial partition");
+  for (u32 index = 0; index < animatedChunks.draws.size(); ++index)
+    AE_EXPECT_TRUE(std::abs(animatedChunks.draws[index].boundsRadius -
+                            staticChunks.draws[index].boundsRadius - 1.75f) < 1.0e-5f,
+                   "each chunk encloses the complete wave envelope");
+}

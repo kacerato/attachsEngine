@@ -20,6 +20,16 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   vec4 shadowFilterParameters; // near PCF radius, far PCF radius, reserved
   vec4 shadowTransitionParameters; // cascade blend, final distance fade, reserved
   vec4 materialDistanceParameters; // MR map, emissive map, fade-band ratio, reserved
+  vec4 waterParameters; // wave count, base height, time, reserved
+  vec4 waterOptics; // IOR, roughness, turbidity, foam threshold
+  vec4 waterDeepColorFoam;
+  vec4 waterShallowColorDistance;
+  vec4 waterAbsorption;
+  vec4 waterWaveShape[8]; // direction.xz, amplitude, wave number
+  vec4 waterWaveMotion[8]; // speed, steepness, phase, reserved
+  vec4 waterInteractionParameters; // active count, reserved
+  vec4 waterInteractionShape[8]; // center.xz, start time, amplitude
+  vec4 waterInteractionMotion[8]; // wavelength, speed, decay, duration
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 // sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de

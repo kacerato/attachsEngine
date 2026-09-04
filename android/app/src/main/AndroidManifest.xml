@@ -20,7 +20,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:extractNativeLibs="true"
         android:fullBackupContent="@xml/backup_rules"
-        android:hasCode="false"
+        android:hasCode="true"
         android:icon="@drawable/ic_aether"
         android:label="Aether"
         android:theme="@style/AetherTheme">
@@ -32,7 +32,16 @@
             android:name="android.game_mode_config"
             android:resource="@xml/game_mode_config" />
         <activity
-            android:name="android.app.NativeActivity"
+            android:name=".SceneLauncherActivity"
+            android:exported="true"
+            android:screenOrientation="sensorLandscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".AetherActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
@@ -41,10 +50,6 @@
             <meta-data
                 android:name="android.app.lib_name"
                 android:value="aether_android" />
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
         </activity>
     </application>
 </manifest>

@@ -181,6 +181,7 @@ add_library(aether_renderer STATIC
   renderer/spatial_render_chunks.cpp
   renderer/static_collision_mesh.cpp
   renderer/thermal_pressure_controller.cpp
+  renderer/water_surface.cpp
 )
 target_include_directories(aether_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # O render graph deixa de ser alvo apenas de teste: a politica de anexos do
@@ -225,6 +226,7 @@ if(ANDROID)
 
   add_library(aether_android SHARED
     platform/android/android_main.cpp
+    platform/android/android_runtime_controls.cpp
     platform/android/android_texture_loader.cpp
     platform/android/dirt_road_resources.cpp
     platform/android/android_launch_options.cpp
@@ -366,6 +368,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_shadow_cascades.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_surface_format.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_thermal_pressure_controller.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_water_surface.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_pressure.cpp

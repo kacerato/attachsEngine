@@ -34,7 +34,9 @@ class DirtRoadResources final {
 public:
   bool initialize(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload,
                   AAssetManager *assets, bool forceTextureFallback,
-                  const std::atomic<bool> *cancel = nullptr);
+                  float waterDisplacementAllowance,
+                  const std::atomic<bool> *cancel = nullptr,
+                  const char *assetRoot = "dirt_road");
   void shutdown();
 
   VkBuffer vertexBuffer() const { return vertices_.handle(); }

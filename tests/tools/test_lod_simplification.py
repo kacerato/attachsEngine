@@ -257,6 +257,17 @@ class MaterialFlagsByteOffset(unittest.TestCase):
             (flags,) = struct.unpack_from("<I", record, offset=68)
             self.assertEqual(flags, expected_flag, alpha_mode)
 
+    def test_water_is_authored_by_explicit_gltf_metadata(self):
+        material = {"pbrMetallicRoughness": {}, "extras": {"aetherWater": True}}
+        record = cook.material_record(material, {}, frozenset())
+        (flags,) = struct.unpack_from("<I", record, offset=68)
+        self.assertEqual(flags, cook.MATERIAL_WATER)
+
+        ordinary = cook.material_record({"name": "Water but not classified",
+                                         "pbrMetallicRoughness": {}}, {}, frozenset())
+        (ordinary_flags,) = struct.unpack_from("<I", ordinary, offset=68)
+        self.assertEqual(ordinary_flags & cook.MATERIAL_WATER, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

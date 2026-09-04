@@ -19,6 +19,18 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   vec4 shadowParameters;
   vec4 shadowWorldUnitsPerTexel;
   vec4 shadowFilterParameters; // xy=PCF radii, zw=temporal jitter in physical NDC
+  vec4 shadowTransitionParameters;
+  vec4 materialDistanceParameters;
+  vec4 waterParameters;
+  vec4 waterOptics;
+  vec4 waterDeepColorFoam;
+  vec4 waterShallowColorDistance;
+  vec4 waterAbsorption;
+  vec4 waterWaveShape[8];
+  vec4 waterWaveMotion[8];
+  vec4 waterInteractionParameters;
+  vec4 waterInteractionShape[8];
+  vec4 waterInteractionMotion[8];
 } environment;
 layout(location=0) in vec3 inPosition;
 layout(location=1) in vec3 inNormal;
@@ -54,6 +66,7 @@ layout(location=5) out mediump vec4 vColor;
 // the 128-byte instance struct or its vertex binding stride.
 layout(location=6) out mediump float vDither;
 const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
+const uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
 void main() {
   // Posicao, view e clip permanecem highp em toda a cadeia: fp16 em coordenada
   // de mundo ou de clip produz tremor de vertice e z-fighting visiveis, e a
@@ -109,11 +122,54 @@ void main() {
     }
   }
   highp vec3 worldPosition=(inModel*vec4(modelPosition,1)).xyz;
-  vPosition=worldPosition;
   highp mat3 linear=mat3(inModel);
   highp mat3 normalMatrix=mat3(inNormalColumn0.xyz,inNormalColumn1.xyz,inNormalColumn2.xyz);
-  vNormal=normalize(normalMatrix*modelNormal);
-  vTangent=vec4(normalize(linear*modelTangent),inTangent.w*inNormalColumn0.w);
+  if((frame.materialFlags.x&MATERIAL_WATER)!=0u) {
+    // The mesh is immutable. Only this shader evaluates the spectrum for every
+    // visible vertex; the CPU counterpart is reserved for sparse gameplay and
+    // buoyancy queries. Keeping world XZ unchanged also makes adjacent clipmap
+    // patches mathematically watertight.
+    highp float height=environment.waterParameters.y;
+    highp vec2 slope=vec2(0.0);
+    int waveCount=clamp(int(environment.waterParameters.x+0.5),0,8);
+    for(int waveIndex=0;waveIndex<8;++waveIndex) {
+      if(waveIndex>=waveCount) break;
+      highp vec4 shape=environment.waterWaveShape[waveIndex];
+      highp vec4 motion=environment.waterWaveMotion[waveIndex];
+      highp float angle=shape.w*dot(shape.xy,worldPosition.xz)-
+                         motion.x*environment.waterParameters.z+motion.z;
+      height+=shape.z*sin(angle);
+      slope+=shape.xy*(shape.z*shape.w*cos(angle));
+    }
+    int interactionCount=clamp(int(environment.waterInteractionParameters.x+0.5),0,8);
+    for(int interactionIndex=0;interactionIndex<interactionCount;++interactionIndex) {
+      highp vec4 shape=environment.waterInteractionShape[interactionIndex];
+      highp vec4 motion=environment.waterInteractionMotion[interactionIndex];
+      highp float age=environment.waterParameters.z-shape.z;
+      if(shape.w==0.0||age<0.0||age>motion.w) continue;
+      highp vec2 delta=worldPosition.xz-shape.xy;
+      highp float distance=length(delta);
+      highp float waveNumber=6.28318530718/max(motion.x,0.1);
+      highp float radial=distance-motion.y*age;
+      highp float width=max(0.35,motion.x*0.55);
+      highp float gaussian=exp(-(radial*radial)/(width*width));
+      highp float envelope=shape.w*gaussian*exp(-motion.z*age);
+      highp float angle=waveNumber*radial;
+      height+=envelope*sin(angle);
+      if(distance>1.0e-5) {
+        highp float derivative=envelope*(waveNumber*cos(angle)-
+            2.0*radial/(width*width)*sin(angle));
+        slope+=delta/distance*derivative;
+      }
+    }
+    worldPosition.y=height;
+    vNormal=normalize(vec3(-slope.x,1.0,-slope.y));
+    vTangent=vec4(normalize(vec3(1.0,slope.x,0.0)),1.0);
+  } else {
+    vNormal=normalize(normalMatrix*modelNormal);
+    vTangent=vec4(normalize(linear*modelTangent),inTangent.w*inNormalColumn0.w);
+  }
+  vPosition=worldPosition;
   vUv0=resolvedUv0; vUv1=resolvedUv1; vColor=inColor*inTint;
   if(impostor && (frame.materialFlags.y>>16u)!=0u) vColor.a=impostorViewBlend;
   vDither=inNormalColumn1.w;

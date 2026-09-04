@@ -11,6 +11,7 @@ import json
 import math
 import pathlib
 import struct
+import subprocess
 
 import numpy as np
 from PIL import Image
@@ -34,6 +35,37 @@ def linear_to_srgb(value):
     value = np.clip(value, 0.0, 1.0)
     return np.where(value <= 0.0031308, value * 12.92,
                     1.055 * value ** (1.0 / 2.4) - 0.055)
+
+
+def load_linear_source(path, ffmpeg="ffmpeg", ffprobe="ffprobe"):
+    """Load LDR through Pillow or HDR/EXR through the offline FFmpeg toolchain."""
+    if path.suffix.lower() not in (".hdr", ".exr"):
+        with Image.open(path) as source_image:
+            source_image.load()
+            if source_image.width != source_image.height * 2:
+                raise ValueError("Sky source must use an exact 2:1 equirectangular aspect")
+            source_srgb = np.asarray(source_image.convert("RGB"), dtype=np.float32) / 255.0
+        return srgb_to_linear(source_srgb)
+
+    probe = subprocess.run(
+        [ffprobe, "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", str(path)],
+        check=True, capture_output=True, text=True)
+    width, height = (int(value) for value in probe.stdout.strip().split("x"))
+    if width != height * 2:
+        raise ValueError("Sky source must use an exact 2:1 equirectangular aspect")
+    decoded = subprocess.run(
+        [ffmpeg, "-v", "error", "-i", str(path), "-frames:v", "1",
+         "-f", "rawvideo", "-pix_fmt", "gbrpf32le", "pipe:1"],
+        check=True, capture_output=True).stdout
+    expected = width * height * 3 * 4
+    if len(decoded) != expected:
+        raise ValueError(f"Unexpected decoded HDR size: {len(decoded)}, expected {expected}")
+    planes = np.frombuffer(decoded, dtype="<f4").reshape(3, height, width)
+    linear = np.stack([planes[2], planes[0], planes[1]], axis=-1)
+    if not np.isfinite(linear).all() or linear.min() < 0.0:
+        raise ValueError("Sky source contains invalid radiance")
+    return linear
 
 
 def resize_linear(image, width, height):
@@ -243,6 +275,8 @@ def main():
     parser.add_argument("--sun-u", type=float, default=0.786)
     parser.add_argument("--sun-v", type=float, default=0.274)
     parser.add_argument("--sun-intensity", type=float, default=2.6)
+    parser.add_argument("--detect-sun", action="store_true",
+                        help="derive sun direction/color from the broadest HDR highlight")
     parser.add_argument("--ambient-strength", type=float, default=0.56)
     parser.add_argument("--ambient-saturation", type=float, default=0.62,
                         help="saturacao cromatica da irradiancia global (0..2)")
@@ -250,6 +284,12 @@ def main():
                         default=(0.75, 0.82, 0.60), metavar=("R", "G", "B"),
                         help="cor linear RGB da irradiancia vinda do solo")
     parser.add_argument("--exposure", type=float, default=1.0)
+    parser.add_argument("--ffmpeg", default="ffmpeg")
+    parser.add_argument("--ffprobe", default="ffprobe")
+    parser.add_argument("--asset", default="day-clouds-panorama-v1")
+    parser.add_argument("--authoring", default="Aether project-owned source")
+    parser.add_argument("--license", default="Project owned")
+    parser.add_argument("--source-url", default="")
     args = parser.parse_args()
 
     if not 0.0 <= args.ambient_saturation <= 2.0:
@@ -261,13 +301,8 @@ def main():
         raise FileNotFoundError(args.source)
     args.out.mkdir(parents=True, exist_ok=True)
     source_hash = hashlib.sha256(args.source.read_bytes()).hexdigest()
-    with Image.open(args.source) as source_image:
-        source_image.load()
-        if source_image.width * 2 != source_image.height * 4:
-            raise ValueError("Sky source must use an exact 2:1 equirectangular aspect")
-        source_srgb = np.asarray(source_image.convert("RGB"), dtype=np.float32) / 255.0
-
-    linear = resize_linear(srgb_to_linear(source_srgb), OUTPUT_WIDTH, OUTPUT_HEIGHT)
+    linear = resize_linear(load_linear_source(args.source, args.ffmpeg, args.ffprobe),
+                           OUTPUT_WIDTH, OUTPUT_HEIGHT)
     linear = make_horizontal_seam_safe(linear)
     linear = make_poles_spherical(linear)
     if not np.isfinite(linear).all():
@@ -298,8 +333,19 @@ def main():
     # shadowed vegetation monochromatically blue. This is an irradiance color,
     # not an arbitrary scene-specific post-process grade.
     ambient_color = np.clip((average / luminance) * 0.6 + 0.4, 0.15, 4.0)
-    sun_direction = direction_from_uv(args.sun_u, args.sun_v)
-    sun_color = [1.08, 0.99, 0.88]
+    if args.detect_sun:
+        probe = linear.reshape(OUTPUT_HEIGHT // 4, 4, OUTPUT_WIDTH // 4, 4, 3).mean(axis=(1, 3))
+        probe_luminance = probe @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
+        sun_y, sun_x = np.unravel_index(int(np.argmax(probe_luminance)), probe_luminance.shape)
+        sun_u = (sun_x + .5) / probe.shape[1]
+        sun_v = (sun_y + .5) / probe.shape[0]
+        sun_rgb = probe[sun_y, sun_x]
+        sun_luminance = max(float(probe_luminance[sun_y, sun_x]), 1e-5)
+        sun_color = np.clip(sun_rgb / sun_luminance, .15, 4.0).tolist()
+    else:
+        sun_u, sun_v = args.sun_u, args.sun_v
+        sun_color = [1.08, 0.99, 0.88]
+    sun_direction = direction_from_uv(sun_u, sun_v)
     sky_zenith_cloud_coverage = [0.08, 0.30, 0.72, 0.46]
     sky_horizon_cloud_density = [0.62, 0.79, 1.08, 0.88]
     ground_color_saturation = [*args.ground_bounce, args.ambient_saturation]
@@ -323,8 +369,10 @@ def main():
     manifest_path = args.out.parent / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf8"))
     manifest["environment"] = {
-        "asset": "day-clouds-panorama-v1",
-        "authoring": "OpenAI image generation, curated for Aether",
+        "asset": args.asset,
+        "authoring": args.authoring,
+        "license": args.license,
+        "sourceUrl": args.source_url,
         "sourcePath": args.source.as_posix(),
         "sourceSha256": source_hash,
         "resolution": [OUTPUT_WIDTH, OUTPUT_HEIGHT],

@@ -71,6 +71,19 @@ AE_TEST(frame_graph_hzb_e_taa_compartilham_o_mesmo_depth_preservado) {
                  "depth compartilhado nao pode usar memoria transitoria");
 }
 
+AE_TEST(frame_graph_agua_le_depth_no_tile_sem_forcar_store_ou_sampled) {
+  FrameGraphInputs input{};
+  input.width = 1920;
+  input.height = 1080;
+  input.waterDepthInputEnabled = true;
+  const auto policy = resolveFrameAttachmentPolicy(input);
+  AE_EXPECT_TRUE(policy.valid, "grafo com subpass de agua compila");
+  AE_EXPECT_TRUE(policy.depthInputAttachment, "depth declara uso como input attachment");
+  AE_EXPECT_TRUE(!policy.depthStored, "leitura fundida nao exporta depth do tile");
+  AE_EXPECT_TRUE(!policy.depthSampled, "input attachment nao e textura sampled");
+  AE_EXPECT_TRUE(policy.depthMemoryless, "depth continua elegivel a memoria transitoria");
+}
+
 AE_TEST(frame_graph_nunca_pede_memoryless_e_sampled_juntos) {
   // Invariante do Vulkan, não preferência: VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT
   // proíbe SAMPLED. Se a política emitisse os dois, a criação da imagem

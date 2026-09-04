@@ -55,7 +55,7 @@ bool buildStaticCollisionMesh(const MapPackageView &package, StaticCollisionMesh
     // therefore remains the single authoritative collision representation.
     if (draw.lodLevel != 0) continue;
     const u32 flags = package.materials[draw.materialIndex].flags;
-    const bool explicitlyDisabled = (flags & MapMaterialNoCollision) != 0;
+    const bool explicitlyDisabled = (flags & (MapMaterialNoCollision | MapMaterialWater)) != 0;
     const bool nonPhysicalCutout = (flags & MapMaterialAlphaMask) != 0 &&
                                    (flags & MapMaterialForceCollision) == 0;
     if (explicitlyDisabled || nonPhysicalCutout) continue;
@@ -102,7 +102,9 @@ bool buildStaticCollisionMesh(const MapPackageView &package, StaticCollisionMesh
     }
   }
 
-  if (built.empty()) return false;
+  // A renderable scene may intentionally contain no physical triangles (for
+  // example an ocean whose interaction is analytic). Empty is a valid built
+  // result after every draw and index range above has passed validation.
   out = std::move(built);
   return true;
 }

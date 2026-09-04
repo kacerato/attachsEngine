@@ -56,7 +56,7 @@ void expand(Point point, Point &minimum, Point &maximum) {
 
 bool appendChunk(const MapPackageView &package, const MapDrawRecord &source,
                  const TriangleRef *triangles, u32 triangleCount,
-                 SpatialRenderChunks &result) {
+                 float waterDisplacementAllowance, SpatialRenderChunks &result) {
   const u32 firstIndex = static_cast<u32>(result.indices.size());
   Point minimum{std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
                 std::numeric_limits<float>::max()};
@@ -87,7 +87,10 @@ bool appendChunk(const MapPackageView &package, const MapDrawRecord &source,
     radiusSquared = std::max(radiusSquared, dx * dx + dy * dy + dz * dz);
   }
   chunk.boundsRadius = std::sqrt(radiusSquared);
-  if ((package.materials[source.materialIndex].flags & MapMaterialImpostor) != 0) {
+  const u32 materialFlags = package.materials[source.materialIndex].flags;
+  if ((materialFlags & MapMaterialWater) != 0)
+    chunk.boundsRadius += waterDisplacementAllowance;
+  if ((materialFlags & MapMaterialImpostor) != 0) {
     // Shader-rotated geometry needs swept bounds, including nonuniform scale.
     float localRadiusSquared = 0.0f;
     for (u32 index = firstIndex; index < result.indices.size(); ++index) {
@@ -120,6 +123,8 @@ bool buildSpatialRenderChunks(const MapPackageView &package,
                               const SpatialRenderChunkSettings &settings,
                               SpatialRenderChunks &out) {
   if (settings.opaqueTrianglesPerChunk == 0 || settings.coverageTrianglesPerChunk == 0 ||
+      !std::isfinite(settings.waterDisplacementAllowance) ||
+      settings.waterDisplacementAllowance < 0.0f ||
       package.draws.empty() ||
       package.indices.empty() || package.vertices.empty()) return false;
   SpatialRenderChunks prepared;
@@ -171,7 +176,8 @@ bool buildSpatialRenderChunks(const MapPackageView &package,
     for (u32 first = 0; first < triangleCount;) {
       const u32 count = blended ? triangleCount :
           std::min(targetTriangles, triangleCount - first);
-      if (!appendChunk(package, draw, triangles.data() + first, count, prepared)) return false;
+      if (!appendChunk(package, draw, triangles.data() + first, count,
+                       settings.waterDisplacementAllowance, prepared)) return false;
       first += count;
     }
   }

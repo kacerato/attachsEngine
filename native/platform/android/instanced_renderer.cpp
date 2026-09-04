@@ -22,6 +22,7 @@
 #include "rhi/shaders/hzb_reduce_spirv.h"
 #include "rhi/shaders/draw_cull_spirv.h"
 #include "rhi/shaders/hzb_reduce_compute_spirv.h"
+#include "rhi/shaders/water_surface_spirv.h"
 #include "renderer/sphere_mesh.h"
 #include "renderer/material_distance.h"
 
@@ -95,8 +96,18 @@ struct DirtRoadFrameUniform {
   float shadowFilterParameters[4]{}; // near radius, far radius, reserved
   float shadowTransitionParameters[4]{}; // cascade blend, distance fade, reserved
   float materialDistanceParameters[4]{}; // MR map, emissive map, reserved
+  float waterParameters[4]{}; // wave count, base height, time, reserved
+  float waterOptics[4]{}; // IOR, roughness, turbidity, foam threshold
+  float waterDeepColorFoam[4]{}; // linear RGB, foam decay
+  float waterShallowColorDistance[4]{}; // linear RGB, maximum distance
+  float waterAbsorption[4]{}; // Beer-Lambert coefficients, reserved
+  float waterWaveShape[renderer::MaximumWaterWaves][4]{}; // dir.xy, amplitude, wave number
+  float waterWaveMotion[renderer::MaximumWaterWaves][4]{}; // speed, steepness, phase, reserved
+  float waterInteractionParameters[4]{}; // active count, reserved
+  float waterInteractionShape[renderer::MaximumWaterInteractions][4]{}; // center.xy, start, amplitude
+  float waterInteractionMotion[renderer::MaximumWaterInteractions][4]{}; // wavelength, speed, decay, duration
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 544);
+static_assert(sizeof(DirtRoadFrameUniform) == 1152);
 
 struct ShadowPushConstants {
   float lightViewProjection[16]{};
@@ -300,11 +311,26 @@ bool InstancedRenderer::createRenderPass() {
   depthRef.attachment = 1;
   depthRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+  VkAttachmentReference waterDepthInput{};
+  waterDepthInput.attachment = 1;
+  waterDepthInput.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+  VkAttachmentReference waterDepthRef = waterDepthInput;
+
   VkSubpassDescription subpass{};
   subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
   subpass.colorAttachmentCount = 1;
   subpass.pColorAttachments = &colorRef;
   subpass.pDepthStencilAttachment = &depthRef;
+
+  VkSubpassDescription subpasses[2] = {subpass, {}};
+  if (waterSubpassActive_) {
+    subpasses[1].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpasses[1].inputAttachmentCount = 1;
+    subpasses[1].pInputAttachments = &waterDepthInput;
+    subpasses[1].colorAttachmentCount = 1;
+    subpasses[1].pColorAttachments = &colorRef;
+    subpasses[1].pDepthStencilAttachment = &waterDepthRef;
+  }
 
   VkSubpassDependency dependency{};
   dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -323,30 +349,42 @@ bool InstancedRenderer::createRenderPass() {
   info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   info.attachmentCount = 2;
   info.pAttachments = attachments;
-  info.subpassCount = 1;
-  info.pSubpasses = &subpass;
-  VkSubpassDependency dependencies[2] = {dependency, {}};
+  info.subpassCount = waterSubpassActive_ ? 2u : 1u;
+  info.pSubpasses = subpasses;
+  VkSubpassDependency dependencies[3] = {dependency, {}, {}};
   u32 dependencyCount = 1;
+  if (waterSubpassActive_) {
+    dependencies[dependencyCount].srcSubpass = 0;
+    dependencies[dependencyCount].dstSubpass = 1;
+    dependencies[dependencyCount].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    dependencies[dependencyCount].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependencies[dependencyCount].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                                 VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependencies[dependencyCount].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT |
+                                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+    dependencies[dependencyCount].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    ++dependencyCount;
+  }
   if (renderingPolicy_.post.dedicatedPass || frameAttachmentPolicy_.depthSampled) {
-    dependencies[1].srcSubpass = 0;
-    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[1].srcStageMask =
+    VkSubpassDependency &exit = dependencies[dependencyCount++];
+    exit.srcSubpass = waterSubpassActive_ ? 1u : 0u;
+    exit.dstSubpass = VK_SUBPASS_EXTERNAL;
+    exit.srcStageMask =
         (renderingPolicy_.post.dedicatedPass
              ? static_cast<VkPipelineStageFlags>(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
              : VkPipelineStageFlags{0}) |
         (frameAttachmentPolicy_.depthSampled
              ? static_cast<VkPipelineStageFlags>(VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)
              : VkPipelineStageFlags{0});
-    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    dependencies[1].srcAccessMask =
+    exit.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    exit.srcAccessMask =
         (renderingPolicy_.post.dedicatedPass
              ? static_cast<VkAccessFlags>(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
              : VkAccessFlags{0}) |
         (frameAttachmentPolicy_.depthSampled
              ? static_cast<VkAccessFlags>(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
              : VkAccessFlags{0});
-    dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    dependencyCount = 2;
+    exit.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
   }
   info.dependencyCount = dependencyCount;
   info.pDependencies = dependencies;
@@ -390,15 +428,22 @@ bool InstancedRenderer::createPipeline() {
                                rhi::shaders::kDirt_Road_Coverage_Shade_FallbackFragSpirv,
                                rhi::shaders::kDirt_Road_Coverage_Shade_FallbackFragSpirvSize))
       : VK_NULL_HANDLE;
+  VkShaderModule waterFragModule = waterSubpassActive_
+      ? createShaderModule(device_, rhi::shaders::kWater_SurfaceFragSpirv,
+                           rhi::shaders::kWater_SurfaceFragSpirvSize)
+      : VK_NULL_HANDLE;
   if (vertModule == VK_NULL_HANDLE || fragModule == VK_NULL_HANDLE ||
       (dirtRoadPreview_ &&
-       (coverageFragModule == VK_NULL_HANDLE || coverageShadeFragModule == VK_NULL_HANDLE))) {
+       (coverageFragModule == VK_NULL_HANDLE || coverageShadeFragModule == VK_NULL_HANDLE)) ||
+      (waterSubpassActive_ && waterFragModule == VK_NULL_HANDLE)) {
     if (vertModule != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vertModule, nullptr);
     if (fragModule != VK_NULL_HANDLE) vkDestroyShaderModule(device_, fragModule, nullptr);
     if (coverageFragModule != VK_NULL_HANDLE)
       vkDestroyShaderModule(device_, coverageFragModule, nullptr);
     if (coverageShadeFragModule != VK_NULL_HANDLE)
       vkDestroyShaderModule(device_, coverageShadeFragModule, nullptr);
+    if (waterFragModule != VK_NULL_HANDLE)
+      vkDestroyShaderModule(device_, waterFragModule, nullptr);
     return false;
   }
 
@@ -611,9 +656,11 @@ bool InstancedRenderer::createPipeline() {
       colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
       colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
       colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+      pipelineInfo.subpass = waterSubpassActive_ ? 1u : 0u;
       if (pipelineOk)
         pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                                &transparentPipeline_) == VK_SUCCESS;
+      pipelineInfo.subpass = 0;
 
       // Material detail LOD is a compiled pipeline choice, not merely a
       // per-fragment branch. Draw bounds wholly past the configured normal-map
@@ -631,8 +678,11 @@ bool InstancedRenderer::createPipeline() {
         colorBlendAttachment.blendEnable = family == 2 ? VK_TRUE : VK_FALSE;
         depthStencil.depthWriteEnable = family == 0 ? VK_TRUE : VK_FALSE;
         depthStencil.depthCompareOp = family == 1 ? VK_COMPARE_OP_EQUAL : VK_COMPARE_OP_LESS;
-        return vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+        pipelineInfo.subpass = family == 2 && waterSubpassActive_ ? 1u : 0u;
+        const bool created = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                          destination) == VK_SUCCESS;
+        pipelineInfo.subpass = 0;
+        return created;
       };
       if (gpuCostIsolation_ == renderer::GpuCostIsolation::Full &&
           resourceRenderingPolicy_.materialDistance.normalMapMaximumDistance > 0.0f) {
@@ -661,12 +711,17 @@ bool InstancedRenderer::createPipeline() {
         colorBlendAttachment.blendEnable = family == 2 ? VK_TRUE : VK_FALSE;
         depthStencil.depthWriteEnable = family == 0 ? VK_TRUE : VK_FALSE;
         depthStencil.depthCompareOp = family == 1 ? VK_COMPARE_OP_EQUAL : VK_COMPARE_OP_LESS;
+        pipelineInfo.subpass = family == 2 && waterSubpassActive_ ? 1u : 0u;
         for (u32 variant = 0; variant < renderer::MaterialFeatureVariantCount; ++variant) {
           if (!used[family][variant]) continue;
           materialSpecialization.featureMask = renderer::materialFeatureMaskForVariant(variant);
           if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
-                                        &destination[variant]) != VK_SUCCESS) return false;
+                                        &destination[variant]) != VK_SUCCESS) {
+            pipelineInfo.subpass = 0;
+            return false;
+          }
         }
+        pipelineInfo.subpass = 0;
         materialSpecialization.featureMask = renderer::DynamicMaterialFeatureMask;
         return true;
       };
@@ -674,6 +729,23 @@ bool InstancedRenderer::createPipeline() {
         if (pipelineOk) pipelineOk = createMaterialVariants(0, opaqueMaterialPipelines_);
         if (pipelineOk) pipelineOk = createMaterialVariants(1, coverageMaterialPipelines_);
         if (pipelineOk) pipelineOk = createMaterialVariants(2, transparentMaterialPipelines_);
+      }
+      if (pipelineOk && waterSubpassActive_) {
+        stages[1].module = waterFragModule;
+        stages[1].pSpecializationInfo = &gpuIsolationInfo;
+        pipelineInfo.subpass = 1;
+        depthStencil.depthWriteEnable = VK_FALSE;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+        colorBlendAttachment.blendEnable = VK_TRUE;
+        // water_surface.frag returns premultiplied radiance. The destination
+        // already contains opaque/sky color from subpass 0.
+        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+                                               &waterPipeline_) == VK_SUCCESS;
+        pipelineInfo.subpass = 0;
       }
     }
   }
@@ -684,6 +756,8 @@ bool InstancedRenderer::createPipeline() {
     vkDestroyShaderModule(device_, coverageFragModule, nullptr);
   if (coverageShadeFragModule != VK_NULL_HANDLE)
     vkDestroyShaderModule(device_, coverageShadeFragModule, nullptr);
+  if (waterFragModule != VK_NULL_HANDLE)
+    vkDestroyShaderModule(device_, waterFragModule, nullptr);
   return layoutOk && pipelineOk;
 }
 
@@ -712,7 +786,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[5]{};
+  VkDescriptorSetLayoutBinding bindings[7]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -729,17 +803,27 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   bindings[3].binding = 3;
   bindings[4] = bindings[1];
   bindings[4].binding = 4;
+  if (waterSubpassActive_) {
+    bindings[5].binding = 5;
+    bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    bindings[5].descriptorCount = 1;
+    bindings[5].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[6] = bindings[1];
+    bindings[6].binding = 6;
+  }
   VkDescriptorSetLayoutCreateInfo layout{};
   layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  layout.bindingCount = 5;
+  layout.bindingCount = waterSubpassActive_ ? 7u : 5u;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
-  VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
-                                   {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4}};
+  VkDescriptorPoolSize sizes[3] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+                                   {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                    waterSubpassActive_ ? 5u : 4u},
+                                   {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool.maxSets = 1;
-  pool.poolSizeCount = 2;
+  pool.poolSizeCount = waterSubpassActive_ ? 3u : 2u;
   pool.pPoolSizes = sizes;
   if (vkCreateDescriptorPool(device_, &pool, nullptr, &environmentPool_) != VK_SUCCESS) return false;
   VkDescriptorSetAllocateInfo allocation{};
@@ -761,7 +845,21 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   VkDescriptorImageInfo brdf{dirtRoadResources_.environmentBrdfSampler(),
                              dirtRoadResources_.environmentBrdfView(),
                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  VkWriteDescriptorSet writes[5]{};
+  VkDescriptorImageInfo sceneDepth{VK_NULL_HANDLE, depthImage_.view(),
+                                    VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
+  VkDescriptorImageInfo waterNormal{baseSampler_.handle(), baseTexture_.view(),
+                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  if (waterSubpassActive_) {
+    for (const auto &material : dirtRoadResources_.materials()) {
+      if ((material.flags & renderer::MapMaterialWater) == 0 ||
+          material.textureIndices[0] == renderer::InvalidMapTexture) continue;
+      const u32 texture = material.textureIndices[0];
+      waterNormal = {dirtRoadResources_.sampler(texture), dirtRoadResources_.view(texture),
+                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+      break;
+    }
+  }
+  VkWriteDescriptorSet writes[7]{};
   writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   writes[0].dstSet = environmentSet_;
   writes[0].dstBinding = 0;
@@ -792,7 +890,21 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   writes[4].descriptorCount = 1;
   writes[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[4].pImageInfo = &brdf;
-  vkUpdateDescriptorSets(device_, 5, writes, 0, nullptr);
+  if (waterSubpassActive_) {
+    writes[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[5].dstSet = environmentSet_;
+    writes[5].dstBinding = 5;
+    writes[5].descriptorCount = 1;
+    writes[5].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    writes[5].pImageInfo = &sceneDepth;
+    writes[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[6].dstSet = environmentSet_;
+    writes[6].dstBinding = 6;
+    writes[6].descriptorCount = 1;
+    writes[6].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[6].pImageInfo = &waterNormal;
+  }
+  vkUpdateDescriptorSets(device_, waterSubpassActive_ ? 7u : 5u, writes, 0, nullptr);
   return true;
 }
 
@@ -930,7 +1042,7 @@ bool InstancedRenderer::createRuntimeHudPipeline() {
     pipeline.pRasterizationState = &raster; pipeline.pMultisampleState = &multisample;
     pipeline.pDepthStencilState = &depth; pipeline.pColorBlendState = &blend;
     pipeline.pDynamicState = &dynamic; pipeline.layout = runtimeHudPipelineLayout_;
-    pipeline.renderPass = renderPass_; pipeline.subpass = 0;
+    pipeline.renderPass = renderPass_; pipeline.subpass = waterSubpassActive_ ? 1u : 0u;
     ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr,
                                    &runtimeHudPipeline_) == VK_SUCCESS;
   }
@@ -1580,10 +1692,14 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
   }
   auto pushAndDraw = [&](u32 cascade, u32 drawIndex, bool masked) {
     const auto &draw=dirtRoadResources_.draws()[drawIndex];
+    const auto &material=dirtRoadResources_.materials()[draw.materialIndex];
+    // The animated receiver must not enter the static-caster cache. Ocean
+    // self-shadowing is represented by its analytic normal; terrain and props
+    // can still cast onto the water through the same cascade atlas.
+    if ((material.flags & renderer::MapMaterialWater) != 0) return;
     ++shadowCandidateDraws_;
     if (!renderer::isShadowCasterVisible(shadowCascades_[cascade], draw.boundsCenter,
                                          draw.boundsRadius)) return;
-    const auto &material=dirtRoadResources_.materials()[draw.materialIndex];
     if (masked && !useBindless_) {
       const VkDescriptorSet set=dirtMaterialSets_[draw.materialIndex];
       vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1781,6 +1897,7 @@ bool InstancedRenderer::createDepthImage() {
   graphInputs.height = renderTargetHeight();
   graphInputs.hzbEnabled = hzbWorkloadEligible_;
   graphInputs.temporalAaEnabled = temporalAaActive_;
+  graphInputs.waterDepthInputEnabled = waterSubpassActive_;
   frameAttachmentPolicy_ = renderer::resolveFrameAttachmentPolicy(graphInputs);
   if (!frameAttachmentPolicy_.valid) {
     // Falha aberta: sem política compilada, armazenar é o comportamento que
@@ -1814,7 +1931,9 @@ bool InstancedRenderer::createDepthImage() {
   desc.height = renderTargetHeight();
   desc.format = depthFormat_;
   desc.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
-               (frameAttachmentPolicy_.depthSampled ? VK_IMAGE_USAGE_SAMPLED_BIT : 0u);
+               (frameAttachmentPolicy_.depthSampled ? VK_IMAGE_USAGE_SAMPLED_BIT : 0u) |
+               (frameAttachmentPolicy_.depthInputAttachment
+                    ? VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT : 0u);
   desc.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
   if (hasStencil(depthFormat_)) desc.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
   desc.memoryClass = rhi::MemoryClass::RenderTarget;
@@ -2855,7 +2974,8 @@ bool InstancedRenderer::createTextureDescriptors() {
 bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapchain &swapchain,
                                    DotNetHost &dotNetHost, u32 instanceCount, bool scenePreview,
                                    AAssetManager *materialAssets, bool forceTextureFallback,
-                                   const std::atomic<bool> *cancel, bool dirtRoadPreview) {
+                                   const std::atomic<bool> *cancel, bool dirtRoadPreview,
+                                   const char *mapAssetRoot) {
   if (instanceCount == 0 || (!dotNetHost.isReady() && !dirtRoadPreview)) return false;
 
   device_ = device.handle();
@@ -2928,7 +3048,9 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   }
   if (dirtRoadPreview_) {
     if (!dirtRoadResources_.initialize(device, uploadContext_, materialAssets,
-                                       forceTextureFallback, cancel)) return false;
+                                       forceTextureFallback,
+                                       waterDisplacementCapacity_,
+                                       cancel, mapAssetRoot)) return false;
     instanceCount_ = static_cast<u32>(dirtRoadResources_.draws().size());
     for (u32 index = 0; index < instanceCount_; ++index) {
       const u32 material = dirtRoadResources_.draws()[index].materialIndex;
@@ -2937,16 +3059,19 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
       // buildLodRenderGroups nunca ve o nivel e o grupo termina no nivel
       // simplificado anterior. E o controle do A/B, nao um caminho de qualidade.
       if (!foliageImpostors_ && (flags & renderer::MapMaterialImpostor) != 0) continue;
-      if ((flags & renderer::MapMaterialBlend) != 0)
+      if ((flags & renderer::MapMaterialWater) != 0)
+        waterDrawOrder_.push_back(index);
+      else if ((flags & renderer::MapMaterialBlend) != 0)
         transparentDrawOrder_.push_back(index);
       else if ((flags & renderer::MapMaterialAlphaMask) != 0)
         coverageDrawOrder_.push_back(index);
       else
         solidDrawOrder_.push_back(index);
     }
+    waterSubpassActive_ = !waterDrawOrder_.empty();
     visibleSolidDrawOrder_.reserve(solidDrawOrder_.size());
     visibleCoverageDrawOrder_.reserve(coverageDrawOrder_.size());
-    visibleTransparentDrawOrder_.reserve(transparentDrawOrder_.size());
+    visibleTransparentDrawOrder_.reserve(transparentDrawOrder_.size() + waterDrawOrder_.size());
     // LOD groups (see renderer::selectLodLevel): spatial chunking happens
     // after import and can produce MANY draws for each imported LOD level.
     // Bucket by (lodGroupId,lodLevel); treating group.size() as level count
@@ -3128,6 +3253,10 @@ void InstancedRenderer::shutdown() {
     vkDestroyPipeline(device_, transparentPipeline_, nullptr);
     transparentPipeline_ = VK_NULL_HANDLE;
   }
+  if (waterPipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, waterPipeline_, nullptr);
+    waterPipeline_ = VK_NULL_HANDLE;
+  }
   if (opaqueDistantPipeline_ != VK_NULL_HANDLE) {
     vkDestroyPipeline(device_, opaqueDistantPipeline_, nullptr);
     opaqueDistantPipeline_ = VK_NULL_HANDLE;
@@ -3194,9 +3323,11 @@ void InstancedRenderer::shutdown() {
   solidDrawOrder_.clear();
   coverageDrawOrder_.clear();
   transparentDrawOrder_.clear();
+  waterDrawOrder_.clear();
   visibleSolidDrawOrder_.clear();
   visibleCoverageDrawOrder_.clear();
   visibleTransparentDrawOrder_.clear();
+  waterSubpassActive_ = false;
   visibilityTelemetry_ = {};
   renderedFrameCount_ = 0;
   baseSampler_.shutdown();
@@ -3351,6 +3482,55 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         renderingPolicy_.materialDistance.emissiveMaximumDistance;
     frame->materialDistanceParameters[2] =
         renderingPolicy_.materialDistance.fadeBandRatio;
+    frame->waterParameters[0] = static_cast<float>(waterProfile_.waveCount);
+    frame->waterParameters[1] = waterBaseHeight_;
+    frame->waterParameters[2] = timeSeconds;
+    frame->waterParameters[3] = waterProfile_.microWaveStrength;
+    frame->waterOptics[0] = waterProfile_.refractiveIndex;
+    frame->waterOptics[1] = waterProfile_.roughness;
+    frame->waterOptics[2] = waterProfile_.turbidity;
+    frame->waterOptics[3] = waterProfile_.foamThreshold;
+    frame->waterDeepColorFoam[0] = waterProfile_.deepColor.x;
+    frame->waterDeepColorFoam[1] = waterProfile_.deepColor.y;
+    frame->waterDeepColorFoam[2] = waterProfile_.deepColor.z;
+    frame->waterDeepColorFoam[3] = waterProfile_.foamDecay;
+    frame->waterShallowColorDistance[0] = waterProfile_.shallowColor.x;
+    frame->waterShallowColorDistance[1] = waterProfile_.shallowColor.y;
+    frame->waterShallowColorDistance[2] = waterProfile_.shallowColor.z;
+    frame->waterShallowColorDistance[3] = waterProfile_.maximumDistance;
+    frame->waterAbsorption[0] = waterProfile_.absorption.x;
+    frame->waterAbsorption[1] = waterProfile_.absorption.y;
+    frame->waterAbsorption[2] = waterProfile_.absorption.z;
+    frame->waterAbsorption[3] = waterProfile_.surfaceOpacity;
+    for (u32 waveIndex = 0; waveIndex < renderer::MaximumWaterWaves; ++waveIndex) {
+      const auto &wave = waterProfile_.waves[waveIndex];
+      frame->waterWaveShape[waveIndex][0] = wave.direction.x;
+      frame->waterWaveShape[waveIndex][1] = wave.direction.y;
+      frame->waterWaveShape[waveIndex][2] = wave.amplitude;
+      frame->waterWaveShape[waveIndex][3] = 6.28318530718f / wave.wavelength;
+      frame->waterWaveMotion[waveIndex][0] = wave.speed;
+      frame->waterWaveMotion[waveIndex][1] = wave.steepness;
+      frame->waterWaveMotion[waveIndex][2] = wave.phase;
+    }
+    const auto &waterImpulses = waterInteractions_.impulses();
+    u32 activeWaterInteractionCount = 0;
+    for (u32 index = 0; index < renderer::MaximumWaterInteractions; ++index) {
+      const auto &impulse = waterImpulses[index];
+      const float age = timeSeconds - impulse.startTime;
+      if (impulse.amplitude == 0.0f || age < 0.0f || age > impulse.duration) {
+        continue;
+      }
+      const u32 packedIndex = activeWaterInteractionCount++;
+      frame->waterInteractionShape[packedIndex][0] = impulse.center.x;
+      frame->waterInteractionShape[packedIndex][1] = impulse.center.y;
+      frame->waterInteractionShape[packedIndex][2] = impulse.startTime;
+      frame->waterInteractionShape[packedIndex][3] = impulse.amplitude;
+      frame->waterInteractionMotion[packedIndex][0] = impulse.wavelength;
+      frame->waterInteractionMotion[packedIndex][1] = impulse.speed;
+      frame->waterInteractionMotion[packedIndex][2] = impulse.decay;
+      frame->waterInteractionMotion[packedIndex][3] = impulse.duration;
+    }
+    frame->waterInteractionParameters[0] = static_cast<float>(activeWaterInteractionCount);
     frame->shadowParameters[0] = shadowAtlas_.width() > 0
                                      ? 1.0f / static_cast<float>(shadowAtlas_.width()) : 1.0f;
     frame->shadowParameters[1] = 0.0f;
@@ -3526,7 +3706,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       }
       DirtRoadPushConstants push{};
       push.cameraFrame[0] = static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height);
-      push.cameraFrame[1] = camera.yaw; push.cameraFrame[2] = camera.pitch; push.cameraFrame[3] = 1.25f;
+      push.cameraFrame[1] = camera.yaw; push.cameraFrame[2] = camera.pitch;
+      push.cameraFrame[3] = timeSeconds;
       push.surfaceTransform[0]=surfaceTransform.xx;push.surfaceTransform[1]=surfaceTransform.xy;
       push.surfaceTransform[2]=surfaceTransform.yx;push.surfaceTransform[3]=surfaceTransform.yy;
       std::memcpy(push.cameraPositionNear, camera.position, sizeof(camera.position));
@@ -3718,6 +3899,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     collectVisible(*solidCandidates, visibleSolidDrawOrder_);
     collectVisible(*coverageCandidates, visibleCoverageDrawOrder_);
     collectVisible(transparentDrawOrder_, visibleTransparentDrawOrder_);
+    collectVisible(waterDrawOrder_, visibleTransparentDrawOrder_);
 
     const u32 hzbCandidateDraws = static_cast<u32>(
         visibleSolidDrawOrder_.size() + visibleCoverageDrawOrder_.size());
@@ -3947,6 +4129,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     endGpuRegion(GpuPassClass::Sky);
     beginGpuRegion(GpuPassClass::Transparent);
 
+    if (waterSubpassActive_) {
+      vkCmdNextSubpass(commandBuffer_, VK_SUBPASS_CONTENTS_INLINE);
+      boundMapPipeline = VK_NULL_HANDLE;
+    }
+
     std::sort(visibleTransparentDrawOrder_.begin(), visibleTransparentDrawOrder_.end(), [&](u32 left, u32 right) {
       const auto &a=dirtRoadResources_.draws()[left];const auto &b=dirtRoadResources_.draws()[right];
       float da=0,db=0;for(u32 axis=0;axis<3;++axis){const float av=a.boundsCenter[axis]-camera.position[axis];
@@ -3959,8 +4146,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
                                 0, 1, &textureSet_, 0, nullptr);
       for (u32 drawIndex : visibleTransparentDrawOrder_) {
-        drawMapPrimitive(drawIndex, transparentMaterialPipelines_, transparentPipeline_,
-                         transparentDistantPipeline_);
+        const auto &draw = dirtRoadResources_.draws()[drawIndex];
+        const bool water = (dirtRoadResources_.materials()[draw.materialIndex].flags &
+                            renderer::MapMaterialWater) != 0;
+        if (water)
+          drawMapPrimitive(drawIndex, nullptr, waterPipeline_, VK_NULL_HANDLE);
+        else
+          drawMapPrimitive(drawIndex, transparentMaterialPipelines_, transparentPipeline_,
+                           transparentDistantPipeline_);
       }
     }
     endGpuRegion(GpuPassClass::Transparent);

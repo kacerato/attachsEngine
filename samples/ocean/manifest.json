@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "format": "AEMAP-3",
+  "scene": "ocean-gpu",
+  "grid": {
+    "segments": 256,
+    "extent": 384.0
+  },
+  "bathymetry": {
+    "segments": 96,
+    "depthRange": [
+      2.25,
+      32.0
+    ]
+  },
+  "outputs": {
+    "environment-brdf.aetex": "403e4ff6655d21258354190c80e50c40427351addbba40f10826a0631d891fcd",
+    "environment-specular.aetex": "97455d34d92ca3d7fb9e9684e23361fd0f02efea985f3b02670206042a5fa42e",
+    "environment.aeenv": "1f66112f9a409c86ec71afa502d2f743100f01bd74b3d2a8dbab2f851ed831cf",
+    "environment.aetex": "d25ca872a98c5bffd6cc0048eb89b6866900bff936afdc9cb372a12fe8dd5131",
+    "scene.aemap": "c1ca193c63b34acf99a431a19e84e3aee6b9760529dace9d4404bd04cada33a0",
+    "texture_000-fallback.aetex": "2f765d5e3bee50c6e11383a422764c1693a2a8c79c8adfb781ea78163e21124b",
+    "texture_000.aetex": "c0504076008bb206226f5f5156010ec65bb926d037e2649fd4cf58493dc39267"
+  },
+  "environment": {
+    "asset": "hausdorf_clear_sky",
+    "authoring": "Poly Haven / Grzegorz Wronkowski",
+    "license": "CC0-1.0",
+    "sourceUrl": "https://polyhaven.com/a/hausdorf_clear_sky",
+    "sourcePath": "samples/ocean/Source/hausdorf_clear_sky_1k.hdr",
+    "sourceSha256": "984f8f676008a4678e3c47f20f6f2c2f5644a41c9aca2077f7ff1862cddbd6b9",
+    "resolution": [
+      1024,
+      512
+    ],
+    "encoding": "RGBA8 sRGB, seam/pole-safe equirectangular full mip chain",
+    "sunDirection": [
+      0.7525144365408206,
+      0.3713171939518376,
+      0.5439168725764855
+    ],
+    "sunColor": [
+      1.0397979021072388,
+      0.9900141954421997,
+      0.9817292094230652
+    ],
+    "sunIntensity": 2.35,
+    "ambientColor": [
+      0.9738235473632812,
+      1.0006678104400635,
+      1.0704646110534668
+    ],
+    "ambientStrength": 0.5,
+    "exposure": 0.82,
+    "groundBounceColor": [
+      0.58,
+      0.66,
+      0.7
+    ],
+    "saturation": 0.72,
+    "environmentResourceVersion": 3,
+    "specularRepresentation": "octahedral-ggx-prefiltered-rgba16f",
+    "specularResolution": [
+      256,
+      256
+    ],
+    "specularMipLevels": 9,
+    "brdfLut": [
+      128,
+      128
+    ]
+  }
+}

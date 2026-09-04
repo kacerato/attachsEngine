@@ -35,6 +35,7 @@ public static class RenderingComponents
             if (_registered) return;
             ComponentRegistryBootstrap.RegisterBuiltins();
             ComponentRegistry.Register<MeshRenderer>("Aether.Rendering.MeshRenderer", schemaVersion: 1);
+            ComponentRegistry.Register<WaterSurface>("Aether.Rendering.WaterSurface", schemaVersion: 1);
             _registered = true;
         }
     }

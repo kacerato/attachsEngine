@@ -14,6 +14,10 @@ struct SpatialRenderChunkSettings final {
   // the production default remains equal to opaque instead of guessing.
   u32 opaqueTrianglesPerChunk = 8192;
   u32 coverageTrianglesPerChunk = 8192;
+  // Maximum shader-driven motion outside the source mesh. Kept in the
+  // backend-neutral build settings so animated surfaces remain cullable
+  // without encoding a scene-specific constant in this module.
+  float waterDisplacementAllowance = 0.0f;
 };
 
 struct SpatialRenderChunks final {
