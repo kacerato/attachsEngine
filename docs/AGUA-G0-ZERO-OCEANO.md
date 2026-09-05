@@ -109,13 +109,44 @@ rodada, `thermal_pressure=none`, `game_mode=2` (GameBooster ativo nas duas).
 
 ---
 
+## 3.1 O clock do aparelho move o resultado em 30% dentro da mesma sessão
+
+Quatro rodadas intercaladas do **mesmo APK**, mesma pose, mesma escala, pressão
+térmica `none` em todas, separadas por cerca de 40 s cada:
+
+| Rodada | FPS | GPU média | `gpu_opaque_ms` | `gpu_post_ms` |
+| --- | ---: | ---: | ---: | ---: |
+| ab-wide-1 | 69,22 | 12,549 ms | 9,102 | 2,420 |
+| ab-narrow-1 | 69,76 | 12,519 ms | 9,098 | 2,419 |
+| ab-wide-2 | 87,67 | 9,739 ms | 7,174 | 1,887 |
+| ab-narrow-2 | 89,20 | 9,743 ms | 7,184 | 1,888 |
+
+Entre a primeira e a segunda rodada o mesmo trabalho ficou **22% mais barato**,
+sem mudança de código, de cena ou de estado térmico reportado. Somando a
+captura da seção 3 (8,44 ms), o intervalo observado para o mesmo binário e a
+mesma pose vai de 8,4 a 12,5 ms.
+
+**Consequência metodológica:** nenhum número absoluto de GPU deste aparelho vale
+como comparação entre rodadas separadas. Só o par intercalado dentro da mesma
+rodada mede uma mudança. Toda otimização daqui em diante precisa desse formato.
+
+## 3.2 Formato da textura de inclinação: neutro
+
+O par intercalado acima é exatamente o A/B de RGBA32F contra RG16F. A diferença
+em `gpu_opaque_ms` é de 0,004 ms na primeira rodada e 0,010 ms na segunda — ou
+seja, **nenhuma**. As quatro buscas por pixel não estavam limitadas por banda.
+
+A mudança fica assim mesmo, justificada por memória e não por velocidade:
+192 KiB em vez de 768 KiB para três cascatas de 128². Alegar ganho de quadro
+aqui seria ler ruído de clock como resultado.
+
 ## 4. Déficit e para onde ele vai
 
 Para 120 FPS sustentados em escala 1,0 é preciso tirar ~1,8 ms do p95 espectral.
 
 | Alvo | Custo hoje | Ação | Etapa |
 | --- | ---: | --- | --- |
-| Amostragem de inclinação por fragmento | dentro de `gpu_opaque_ms` | quatro buscas RGBA32F por pixel viraram RG16F: mesma faixa, um quarto da banda | G1.3 |
+| Amostragem de inclinação por fragmento | neutro (medido) | RG16F entregue: −576 KiB, sem ganho de tempo | G1.3 |
 | Pós-processamento | 1,108–1,663 ms | rever AA e nitidez em resolução nativa | G7 |
 | Simulação espectral | 0,585 ms | fila assíncrona; hoje grava na fila gráfica | G1.7 |
 | Sombra na água | dentro de `gpu_opaque_ms` | 9 taps por pixel de água próxima, sem projetor de sombra no oceano aberto | G3 |
