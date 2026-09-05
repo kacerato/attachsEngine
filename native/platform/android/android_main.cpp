@@ -2,6 +2,7 @@
 #include "platform/android/android_launch_options.h"
 #include "platform/android/android_runtime_controls.h"
 #include "platform/android/astc_encode_probe.h"
+#include "platform/android/water_spectral_probe.h"
 #include "platform/android/android_frame_profiler.h"
 #include "renderer/rendering_policy.h"
 #include "platform/android/android_frame_pacer.h"
@@ -159,7 +160,12 @@ void applyRuntimeControls(AndroidShell &shell) {
   shell.waterInteractionStrength = controls.interactionStrength;
 
   auto water = ae::renderer::defaultOceanWaterProfile();
+  const float direction = controls.waveDirectionDegrees * 0.017453292519943295f;
+  const float rotationCos = std::cos(direction), rotationSin = std::sin(direction);
   for (ae::u32 index = 0; index < water.waveCount; ++index) {
+    const auto original = water.waves[index].direction;
+    water.waves[index].direction = {original.x * rotationCos - original.y * rotationSin,
+                                    original.x * rotationSin + original.y * rotationCos};
     water.waves[index].amplitude *= controls.waveHeight;
     water.waves[index].speed *= controls.waveSpeed;
     water.waves[index].steepness = std::clamp(
@@ -171,17 +177,37 @@ void applyRuntimeControls(AndroidShell &shell) {
   water.absorption.y *= controls.absorption;
   water.absorption.z *= controls.absorption;
   water.foamDecay = controls.foam;
+  water.roughness = controls.waterRoughness;
+  water.turbidity = controls.waterTurbidity;
+  water.refractiveIndex = controls.waterIor;
+  ae::renderer::WaterSpectralControls spectral;
+  spectral.displacement=controls.waveHeight; spectral.choppiness=controls.waveSteepness;
+  spectral.timeScale=controls.waveSpeed; spectral.directionRadians=direction;
+  spectral.foam={controls.foamCompression,controls.foamGrowth,controls.foamDecay};
+  spectral.overrideFoam=true;
+  if(!shell.instancedRenderer.setWaterSpectralControls(spectral))
+    __android_log_print(ANDROID_LOG_ERROR,LogTag,"[RuntimeControls] controles espectrais recusados.");
   if (!shell.instancedRenderer.setWaterProfile(water))
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[RuntimeControls] perfil de água recusado.");
 
   if (!shell.renderingCapabilitiesReady || !shell.instancedRendererReady) return;
   auto policy = ae::renderer::resolveRenderingPolicy(
       shell.renderingSettings, shell.renderingCapabilities, shell.thermalMonitor.state().pressure);
-  policy.resolutionScale = std::min(policy.resolutionScale, controls.renderScale);
+  // Uma opção de lançamento é override de diagnóstico: se o painel puder
+  // sobrescrevê-la, toda medição feita com ela é inválida sem aviso. Foi
+  // exatamente assim que as capturas do oceano ficaram presas em escala 0,5,
+  // com o padrão do painel (dinâmica ligada) anulando o pedido explícito.
+  const bool scaleFromLaunchOption = shell.renderingSettings.resolutionScale > 0.0f;
+  if (!scaleFromLaunchOption)
+    policy.resolutionScale = std::min(policy.resolutionScale, controls.renderScale);
   policy.dynamicResolution.maximumScale = std::min(policy.dynamicResolution.maximumScale,
                                                    policy.resolutionScale);
-  policy.dynamicResolution.enabled = controls.dynamicResolution;
-  if (!controls.dynamicResolution) {
+  const bool dynamicFromLaunchOption =
+      shell.renderingSettings.dynamicResolution != ae::renderer::FeatureOverride::Inherit;
+  const bool dynamicEnabled = dynamicFromLaunchOption ? policy.dynamicResolution.enabled
+                                                      : controls.dynamicResolution;
+  policy.dynamicResolution.enabled = dynamicEnabled;
+  if (!dynamicEnabled) {
     policy.dynamicResolution.minimumScale = policy.resolutionScale;
     policy.dynamicResolution.maximumScale = policy.resolutionScale;
   } else {
@@ -204,9 +230,15 @@ void applyRuntimeControls(AndroidShell &shell) {
   shell.activeRenderingPolicy = policy;
   shell.instancedRenderer.setRuntimeRenderingPolicy(policy);
   shell.runtimeControlsRevision = controls.revision;
+  // A escala efetiva e a origem dela aparecem juntas: sem a origem, uma captura
+  // presa numa escala não distingue decisão de política de override ignorado.
   __android_log_print(ANDROID_LOG_INFO, LogTag,
-      "[RuntimeControls] scale=%.2f dynamic=%d shadows=%u water=[height %.2f speed %.2f opacity %.2f].",
-      static_cast<double>(controls.renderScale), controls.dynamicResolution ? 1 : 0,
+      "[RuntimeControls] scale=%.2f(%s) dynamic=%d(%s)[%.2f,%.2f] shadows=%u "
+      "water=[height %.2f speed %.2f opacity %.2f].",
+      static_cast<double>(policy.resolutionScale), scaleFromLaunchOption ? "launch" : "painel",
+      dynamicEnabled ? 1 : 0, dynamicFromLaunchOption ? "launch" : "painel",
+      static_cast<double>(policy.dynamicResolution.minimumScale),
+      static_cast<double>(policy.dynamicResolution.maximumScale),
       controls.shadowQuality, static_cast<double>(controls.waveHeight),
       static_cast<double>(controls.waveSpeed), static_cast<double>(controls.surfaceOpacity));
 }
@@ -865,6 +897,10 @@ void android_main(android_app *app) {
   shell.firstPersonEnabled = shell.dirtRoadPreview && !shell.oceanPreview && !shell.lockCamera &&
       !ae::platform::android::readBooleanLaunchOption(app->activity, "aether.free_camera");
   shell.instancedRenderer.setRuntimeHudEnabled(shell.firstPersonEnabled);
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[SceneSelection] assets=%s controller=%s hud=%d",
+      shell.oceanPreview ? "ocean" : (shell.dirtRoadPreview ? "dirt_road" : "other"),
+      shell.firstPersonEnabled ? "first-person" : "free/locked", shell.firstPersonEnabled ? 1 : 0);
   shell.hasLaunchCamera =
       ae::platform::android::readFloatLaunchOption(app->activity, "aether.camera_x", shell.launchCamera.position[0]) &&
       ae::platform::android::readFloatLaunchOption(app->activity, "aether.camera_y", shell.launchCamera.position[1]) &&
@@ -1065,6 +1101,8 @@ void android_main(android_app *app) {
       hzbComputeValidation || ae::platform::android::readBooleanLaunchOption(
           app->activity, "aether.hzb_compute"));
   shell.instancedRenderer.setHzbComputeReadbackValidationEnabled(hzbComputeValidation);
+  shell.instancedRenderer.setSpectralWaterEnabled(ae::platform::android::readBooleanLaunchOption(
+      app->activity,"aether.water_fft"));
   // Consumidor GPU da piramide (ADR-016 C2). Implica o produtor compute: sem
   // ele nao ha piramide residente para consumir, e pedir culling sem produtor
   // seria uma opcao que nao faz nada em silencio.
@@ -1130,6 +1168,16 @@ void android_main(android_app *app) {
   // Diagnóstico opt-in, fora da thread de eventos/render. Device e fila são
   // exclusivos do worker: não há vkQueueSubmit concorrente na fila do shell.
   std::future<void> astcProbe;
+  std::future<void> waterProbe;
+  if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.water_fft_probe")) {
+    waterProbe = std::async(std::launch::async, [] {
+      ae::rhi::VulkanDevice probeDevice;
+      const bool passed=probeDevice.initialize("Aether water FFT diagnostic") &&
+          ae::platform::android::runWaterSpectralProbe(probeDevice);
+      __android_log_print(passed?ANDROID_LOG_INFO:ANDROID_LOG_ERROR,"Aether.WaterProbe",
+          "[WaterFFT] complete passed=%s",passed?"true":"false");
+    });
+  }
   if (ae::platform::android::readBooleanLaunchOption(app->activity, "aether.astc_probe")) {
     astcProbe = std::async(std::launch::async, [] {
       const auto start = std::chrono::steady_clock::now();
@@ -1174,6 +1222,8 @@ void android_main(android_app *app) {
       continue;
     }
     collectRendererInitialization(shell,false);
+    ae::platform::android::publishWaterProviderStatus(shell.instancedRendererReady?
+        shell.instancedRenderer.waterProviderStatus():0);
     applyRuntimeControls(shell);
     if (shell.thermalMonitor.poll()) applyThermalRenderingPolicy(shell, false);
 

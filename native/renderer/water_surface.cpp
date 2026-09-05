@@ -68,21 +68,34 @@ WaterSample sampleWaterSurface(const WaterProfile &p, WaterVec2 position,
   WaterSample result{};
   if(validateWaterProfile(p)!=WaterValidationError::None || !finite(position.x) ||
      !finite(position.y) || !finite(timeSeconds)) return result;
-  float dx=0.0f,dz=0.0f,dyDt=0.0f,breaking=0.0f;
+  float dx=0.0f,dz=0.0f,dyDt=0.0f,breaking=0.0f,orbitalX=0.0f,orbitalZ=0.0f;
   for(u32 i=0;i<p.waveCount;++i) {
     const auto &wave=p.waves[i];
     const float k=2.0f*Pi/wave.wavelength;
     const float angle=k*(wave.direction.x*position.x+wave.direction.y*position.y)-
                       wave.speed*timeSeconds+wave.phase;
     const float sine=std::sin(angle),cosine=std::cos(angle);
-    result.height+=wave.amplitude*sine;
-    const float slope=wave.amplitude*k*cosine;
+    // A bounded second harmonic sharpens crests without horizontal folding.
+    // The same function and derivative are evaluated in the vertex shader.
+    const float crest = 0.25f * wave.steepness;
+    const float normalization = 1.0f + crest;
+    const float shape = (sine + crest * (2.0f*sine*sine-1.0f)) / normalization;
+    const float derivative = cosine * (1.0f+4.0f*crest*sine) / normalization;
+    const float elevation=wave.amplitude*shape;
+    result.height+=elevation;
+    const float slope=wave.amplitude*k*derivative;
     dx+=slope*wave.direction.x; dz+=slope*wave.direction.y;
-    dyDt-=wave.amplitude*wave.speed*cosine;
+    dyDt-=wave.amplitude*wave.speed*derivative;
+    // Linear deep-water theory puts horizontal orbital velocity in phase with
+    // the elevation of the same component: u = omega * eta along the direction.
+    // Drag on a floating body needs this; using only the vertical component
+    // leaves a hull motionless in a swell that should be pushing it.
+    orbitalX+=wave.speed*elevation*wave.direction.x;
+    orbitalZ+=wave.speed*elevation*wave.direction.y;
     breaking+=std::abs(wave.amplitude*k*wave.steepness*sine);
   }
   result.normal=normalized({-dx,1.0f,-dz});
-  result.velocity={0.0f,dyDt,0.0f};
+  result.velocity={orbitalX,dyDt,orbitalZ};
   result.breaking=clamp01(breaking);
   return result;
 }

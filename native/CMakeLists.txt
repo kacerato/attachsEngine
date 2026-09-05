@@ -182,6 +182,10 @@ add_library(aether_renderer STATIC
   renderer/static_collision_mesh.cpp
   renderer/thermal_pressure_controller.cpp
   renderer/water_surface.cpp
+  renderer/water_field.cpp
+  renderer/water_fft.cpp
+  renderer/water_spectrum.cpp
+  renderer/water_cascades.cpp
 )
 target_include_directories(aether_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # O render graph deixa de ser alvo apenas de teste: a politica de anexos do
@@ -193,6 +197,7 @@ add_library(aether_rhi STATIC
   rhi/bindless_index_allocator.cpp
   rhi/bindless_registry.cpp
   rhi/compute.cpp
+  rhi/water_spectral_compute.cpp
   rhi/compute_validation.cpp
   rhi/descriptor_cache.cpp
   rhi/device_profile.cpp
@@ -240,10 +245,12 @@ if(ANDROID)
     platform/android/android_vulkan_surface.cpp
     platform/android/android_triangle_renderer.cpp
     platform/android/instanced_renderer.cpp
+    platform/android/instanced_renderer_water.cpp
     platform/android/material_preview_resources.cpp
     platform/android/dotnet_host.cpp
     platform/android/dotnet_assets.cpp
     platform/android/astc_encode_probe.cpp
+    platform/android/water_spectral_probe.cpp
   )
   target_include_directories(aether_android PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -369,6 +376,8 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_surface_format.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_thermal_pressure_controller.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_water_surface.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_water_field.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_water_fft.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_frame_pressure.cpp
