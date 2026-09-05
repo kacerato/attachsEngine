@@ -41,7 +41,7 @@ bool InstancedRenderer::createSpectralWaterResources() {
     spectralWaterBoundsExpansion_+=static_cast<float>(heightBound*settings.displacementScale*3*
       std::sqrt(1.0+8.0*settings.choppiness*settings.choppiness));
     ready=waterSpectralCompute_[cascade].initialize(*memoryAllocator_,rhiDevice_->computeLimits(),
-      properties.limits,s.resolution,s.patchLength,modes,rhiDevice_->physicalDevice());
+      properties.limits,s.resolution,s.patchLength,modes,rhiDevice_->physicalDevice(),wideWaterSlopes_);
   }
   if(!ready) {
     for(auto &cascade:waterSpectralCompute_) cascade.shutdown();

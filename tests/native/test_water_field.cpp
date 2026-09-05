@@ -1,5 +1,6 @@
 #include "harness.h"
 #include "renderer/water_field.h"
+#include "renderer/water_spectral_mirror.h"
 
 #include <array>
 #include <cmath>
@@ -207,4 +208,46 @@ AE_TEST(Water_field_unconfigured_reports_nothing_valid) {
   std::array<WaterFieldSample, 1> sample{};
   AE_EXPECT_TRUE(!field.sample(position, 0.0, sample), "unconfigured field refuses to answer");
   AE_EXPECT_TRUE(sample[0].flags == 0, "no flag is raised when nothing was sampled");
+}
+
+AE_TEST(Water_field_resolves_the_cpu_mirror_and_reports_what_it_cannot_compute) {
+  WaterMirrorSettings mirrorSettings{};
+  mirrorSettings.spectrum.resolution = 32;
+  mirrorSettings.spectrum.patchLength = 64.0f;
+  mirrorSettings.spectrum.depth = 40.0f;
+  mirrorSettings.spectrum.windSpeed = 9.0f;
+  mirrorSettings.spectrum.seed = 3;
+  WaterSpectralMirror mirror;
+  AE_EXPECT_TRUE(mirror.initialize(mirrorSettings), "mirror initializes");
+
+  WaterFieldSetup setup = baseSetup();
+  setup.requested = WaterFieldProvider::SpectralCpu;
+  setup.mirror = &mirror;
+  WaterField field;
+
+  // An un-evaluated mirror is not a provider: resolving to it would hand the
+  // caller a flat sea while claiming the spectral path is running.
+  AE_EXPECT_TRUE(field.configure(setup), "configure before the first update");
+  AE_EXPECT_EQ(field.status().resolved, WaterFieldProvider::Analytic, "falls back before update");
+  AE_EXPECT_TRUE(field.status().fallbackReason != nullptr, "and says why");
+
+  AE_EXPECT_TRUE(mirror.update(2.0), "evaluate the mirror");
+  AE_EXPECT_TRUE(field.configure(setup), "configure again");
+  const WaterFieldStatus status = field.status();
+  AE_EXPECT_EQ(status.resolved, WaterFieldProvider::SpectralCpu, "mirror is resolved");
+  AE_EXPECT_TRUE(status.fallbackReason == nullptr, "no fallback when resolved");
+  AE_EXPECT_EQ(status.cascadeResolution, 32u, "resolution is reported, not guessed");
+  AE_EXPECT_TRUE(status.ageFrames == 0u, "the mirror has no age: it is evaluated at the query time");
+
+  std::array<WaterVec2, 3> positions{{{0.0f, 0.0f}, {13.0f, -5.0f}, {-21.0f, 8.0f}}};
+  std::array<WaterFieldSample, 3> samples{};
+  AE_EXPECT_TRUE(field.sample(positions, 2.0, samples), "sample");
+  bool anyDisplacement = false;
+  for (const auto &sample : samples) {
+    AE_EXPECT_TRUE(std::isfinite(sample.height), "mirror height is finite");
+    AE_EXPECT_TRUE(!ae::renderer::hasWaterFieldFlag(sample.flags, WaterFieldFlag::JacobianKnown),
+                   "the mirror does not compute the determinant and must not claim it");
+    if (std::abs(sample.height - setup.baseHeight) > 1.0e-6f) anyDisplacement = true;
+  }
+  AE_EXPECT_TRUE(anyDisplacement, "a resolved mirror must actually move the surface");
 }

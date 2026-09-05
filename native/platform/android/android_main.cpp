@@ -1103,6 +1103,8 @@ void android_main(android_app *app) {
   shell.instancedRenderer.setHzbComputeReadbackValidationEnabled(hzbComputeValidation);
   shell.instancedRenderer.setSpectralWaterEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity,"aether.water_fft"));
+  shell.instancedRenderer.setWideWaterSlopes(ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.water_slope_wide"));
   // Consumidor GPU da piramide (ADR-016 C2). Implica o produtor compute: sem
   // ele nao ha piramide residente para consumir, e pedir culling sem produtor
   // seria uma opcao que nao faz nada em silencio.

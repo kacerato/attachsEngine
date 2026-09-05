@@ -5,6 +5,8 @@
 #include "platform/android/dotnet_host.h"
 #include "rhi/bindless_registry.h"
 #include "rhi/compute.h"
+#include "rhi/water_spectral_compute.h"
+#include "renderer/water_cascades.h"
 #include "rhi/device.h"
 #include "rhi/gpu_frame_timer.h"
 #include "rhi/memory_allocator.h"
@@ -120,6 +122,27 @@ public:
   // memoryless entrega; nunca é um preset de qualidade.
   void setDisableTransientDepth(bool disabled) { disableTransientDepth_ = disabled; }
   void setRuntimeHudEnabled(bool enabled) { runtimeHudEnabled_ = enabled; }
+  void setSpectralWaterEnabled(bool enabled) { spectralWaterEnabled_ = enabled; }
+  // Diagnóstico de atribuição: força o formato largo de inclinação para que o
+  // A/B do formato caiba num único APK e possa ser intercalado no mesmo estado
+  // de clock. Comparar dois APKs instalados em momentos diferentes mede o
+  // aparelho, não a mudança.
+  void setWideWaterSlopes(bool wide) { wideWaterSlopes_ = wide; }
+  // UI protocol: 0 inactive, 1 analytical, 2 spectral, 3 analytical fallback.
+  u32 waterProviderStatus() const noexcept {
+    if(!waterSubpassActive_) return 0;
+    return spectralWaterCount_>0?2u:(spectralWaterEnabled_?3u:1u);
+  }
+  bool setWaterSpectralControls(const renderer::WaterSpectralControls &controls) {
+    if(!renderer::validateWaterSpectralControls(controls)) return false;
+    waterSpectralControls_=controls; return true;
+  }
+  bool setWaterCascades(std::span<const renderer::WaterCascadeSettings> settings, u64 bufferBudget) {
+    if(device_!=VK_NULL_HANDLE || renderer::validateWaterCascades(settings,bufferBudget)!=renderer::WaterCascadeError::None) return false;
+    waterCascadeSettings_.assign(settings.begin(),settings.end());
+    waterCascadeBufferBudget_=bufferBudget;
+    return true;
+  }
   void setAdpfGpuTimingEnabled(bool enabled) { adpfGpuTimingEnabled_ = enabled; }
   // Water authoring remains a backend-neutral Resource. The Vulkan renderer
   // only retains its validated value representation and uploads it once per
@@ -265,6 +288,7 @@ private:
   bool createBindlessRegistry();
   bool createTextureDescriptors();
   bool createEnvironmentDescriptors();
+  bool createSpectralWaterResources();
   bool createSkyPipeline();
   bool createRuntimeHudPipeline();
   bool createPostResources();
@@ -524,6 +548,15 @@ private:
   renderer::ResolvedRenderingPolicy resourceRenderingPolicy_{};
   renderer::ResolvedRenderingPolicy renderingPolicy_{};
   renderer::WaterProfile waterProfile_ = renderer::defaultOceanWaterProfile();
+  bool spectralWaterEnabled_=false;
+  bool wideWaterSlopes_=false;
+  renderer::WaterSpectralControls waterSpectralControls_{};
+  renderer::WaterSpectralClock waterSpectralClock_{};
+  u32 spectralWaterCount_=0;
+  float spectralWaterBoundsExpansion_=0;
+  u64 waterCascadeBufferBudget_=4ull*1024*1024;
+  std::vector<renderer::WaterCascadeSettings> waterCascadeSettings_;
+  std::array<rhi::VulkanWaterSpectralCompute,renderer::MaximumWaterCascades> waterSpectralCompute_;
   renderer::WaterInteractionField waterInteractions_{};
   float waterDisplacementCapacity_ = 5.0f;
   float waterBaseHeight_ = 0.0f;

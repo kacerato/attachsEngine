@@ -11,6 +11,9 @@ param(
     [switch]$DynamicResolution,
     [switch]$SpectralWater,
     [switch]$LockCamera,
+    # Opções booleanas extras, aplicadas como `--ez <nome> true`. Existe para que
+    # um A/B caiba num APK só: reinstalar entre as pontas mede o aparelho.
+    [string[]]$ExtraBooleans = @(),
     [int]$DurationSeconds = 90,
     [string]$AdbPath = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe",
     [string]$OutputRoot = (Join-Path $PSScriptRoot '..\build\android-validation')
@@ -48,6 +51,7 @@ if ($DynamicResolution) { $arguments += @('--ez', 'aether.dynamic_resolution', '
 else { $arguments += @('--ez', 'aether.disable_dynamic_resolution', 'true') }
 if ($SpectralWater) { $arguments += @('--ez', 'aether.water_fft', 'true') }
 if ($LockCamera) { $arguments += @('--ez', 'aether.lock_camera', 'true') }
+foreach ($option in $ExtraBooleans) { $arguments += @('--ez', $option, 'true') }
 
 $thermalBefore = Get-ThermalSnapshot
 Invoke-Adb @('logcat', '-c') | Out-Null
@@ -87,6 +91,7 @@ $summary = [ordered]@{
         dynamicResolution = [bool]$DynamicResolution
         spectralWater     = [bool]$SpectralWater
         lockCamera        = [bool]$LockCamera
+        extraBooleans     = $ExtraBooleans
         durationSeconds   = $DurationSeconds
     }
     thermalBefore    = $thermalBefore

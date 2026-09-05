@@ -31,12 +31,21 @@ bool WaterField::configure(const WaterFieldSetup &setup) noexcept {
   if (setup.hasBathymetry && !(setup.bottomHeight < setup.baseHeight)) return false;
 
   setup_ = setup;
-  status_.resolved = WaterFieldProvider::Analytic;
   status_.configured = true;
-  if (setup.requested != WaterFieldProvider::Analytic) {
-    // The spectral providers arrive in F1 and F0.4. Reporting them as resolved
-    // before they exist is the failure mode this status field exists to stop.
-    status_.fallbackReason = "provedor espectral ainda nao implementado";
+  status_.resolved = WaterFieldProvider::Analytic;
+  if (setup.requested == WaterFieldProvider::SpectralCpu) {
+    if (setup.mirror == nullptr) status_.fallbackReason = "nenhum espelho espectral fornecido";
+    else if (!setup.mirror->isReady()) status_.fallbackReason = "espelho espectral sem avaliacao";
+    else {
+      status_.resolved = WaterFieldProvider::SpectralCpu;
+      status_.cascadesActive = 1;
+      status_.cascadeResolution = setup.mirror->resolution();
+      status_.simulationTime = setup.mirror->simulationTime();
+    }
+  } else if (setup.requested == WaterFieldProvider::SpectralGpu) {
+    // The readback provider is deliberately absent: physics reads the mirror,
+    // which has no frame-dependent age. Saying so beats reporting it resolved.
+    status_.fallbackReason = "leitura de GPU nao e provedor de fisica";
   }
   return true;
 }
@@ -54,20 +63,33 @@ WaterFieldSample WaterField::sampleOne(WaterVec2 position, float timeSeconds) co
   result.flags = static_cast<u32>(WaterFieldFlag::Valid);
   if (coverage <= 0.0f) result.flags |= static_cast<u32>(WaterFieldFlag::Excluded);
 
-  const WaterSample spectrum = sampleWaterSurface(setup_.profile, position, timeSeconds);
   const WaterSample impulse = setup_.interaction.sample(position, timeSeconds);
-
-  result.height = setup_.baseHeight + spectrum.height + impulse.height;
-  const WaterVec2 slope = slopeOf(spectrum.normal);
   const WaterVec2 impulseSlope = slopeOf(impulse.normal);
-  result.normal = normalized({-(slope.x + impulseSlope.x), 1.0f, -(slope.y + impulseSlope.y)});
-  result.velocity = {spectrum.velocity.x, spectrum.velocity.y + impulse.velocity.y,
-                     spectrum.velocity.z};
-  result.foam = std::clamp(spectrum.breaking + impulse.breaking, 0.0f, 1.0f);
-  // The analytic profile displaces vertically only, so the horizontal mapping
-  // is the identity and its determinant is exactly one. Reporting anything
-  // else would invent folding that this provider cannot produce.
-  result.jacobian = 1.0f;
+
+  if (status_.resolved == WaterFieldProvider::SpectralCpu) {
+    const WaterMirrorSample mirror = setup_.mirror->sample(position);
+    result.height = setup_.baseHeight + mirror.height + impulse.height;
+    result.normal = normalized({-(mirror.slope.x + impulseSlope.x), 1.0f,
+                                -(mirror.slope.y + impulseSlope.y)});
+    result.velocity = {mirror.velocity.x, mirror.velocity.y + impulse.velocity.y,
+                       mirror.velocity.z};
+    result.foam = std::clamp(impulse.breaking, 0.0f, 1.0f);
+    // The mirror does not evaluate the horizontal derivative fields, so the
+    // determinant is unknown here rather than one: with choppy displacement the
+    // mapping is not the identity, and claiming one would be a fabrication.
+  } else {
+    const WaterSample spectrum = sampleWaterSurface(setup_.profile, position, timeSeconds);
+    result.height = setup_.baseHeight + spectrum.height + impulse.height;
+    const WaterVec2 slope = slopeOf(spectrum.normal);
+    result.normal = normalized({-(slope.x + impulseSlope.x), 1.0f, -(slope.y + impulseSlope.y)});
+    result.velocity = {spectrum.velocity.x, spectrum.velocity.y + impulse.velocity.y,
+                       spectrum.velocity.z};
+    result.foam = std::clamp(spectrum.breaking + impulse.breaking, 0.0f, 1.0f);
+    // The analytic profile displaces vertically only, so the horizontal mapping
+    // is the identity and its determinant is exactly one.
+    result.jacobian = 1.0f;
+    result.flags |= static_cast<u32>(WaterFieldFlag::JacobianKnown);
+  }
 
   if (setup_.hasBathymetry) {
     result.depth = setup_.baseHeight - setup_.bottomHeight;

@@ -10,7 +10,8 @@
 namespace ae::rhi {
 bool VulkanWaterSpectralCompute::initialize(VulkanMemoryAllocator &allocator,
     const ComputeLimits &limits, const VkPhysicalDeviceLimits &physicalLimits,
-    u32 resolution, float patchLength, std::span<const WaterSpectralMode> modes,VkPhysicalDevice physicalDevice) {
+    u32 resolution, float patchLength, std::span<const WaterSpectralMode> modes,VkPhysicalDevice physicalDevice,
+    bool preferWideSlopes) {
   shutdown();
   if(physicalDevice==VK_NULL_HANDLE) return false;
   constexpr VkFormatFeatureFlags required=VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT|
@@ -23,7 +24,7 @@ bool VulkanWaterSpectralCompute::initialize(VulkanMemoryAllocator &allocator,
   // Two slope scalars per texel, read once per cascade per water fragment. The
   // narrow format is preferred for bandwidth; the wide one is a real fallback
   // with its own kernel, not a silent quality change.
-  const bool narrowSlopes=supports(VK_FORMAT_R16G16_SFLOAT);
+  const bool narrowSlopes=!preferWideSlopes && supports(VK_FORMAT_R16G16_SFLOAT);
   if(!narrowSlopes && !supports(VK_FORMAT_R32G32B32A32_SFLOAT)) return false;
   const u64 count=static_cast<u64>(resolution)*resolution;
   if(!allocator.isReady() || resolution<8 || resolution>256 ||

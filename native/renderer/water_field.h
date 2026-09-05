@@ -1,5 +1,6 @@
 #pragma once
 
+#include "renderer/water_spectral_mirror.h"
 #include "renderer/water_surface.h"
 
 #include <array>
@@ -20,6 +21,7 @@ enum class WaterFieldFlag : u32 {
   Excluded = 1u << 1,      // coverage collapsed to zero at this position
   DepthKnown = 1u << 2,    // bathymetry configured; depth is not a guess
   Extrapolated = 1u << 3,  // provider data older than the requested time
+  JacobianKnown = 1u << 4, // the horizontal mapping determinant was computed
 };
 
 inline constexpr bool hasWaterFieldFlag(u32 flags, WaterFieldFlag flag) noexcept {
@@ -33,7 +35,7 @@ struct WaterFieldSample final {
   WaterVec2 flow{};            // current and flow map, m/s
   float coverage = 1.0f;       // 0 removes water, 1 keeps it
   float foam = 0.0f;
-  float jacobian = 1.0f;       // below one compresses, below zero folds
+  float jacobian = 1.0f;       // only meaningful with JacobianKnown
   float depth = 0.0f;          // still surface down to the bottom, metres
   u32 flags = 0;
 };
@@ -63,6 +65,9 @@ struct WaterFieldSetup final {
   std::array<WaterExclusionVolume, MaximumWaterExclusionVolumes> exclusions{};
   u32 exclusionCount = 0;
   WaterFieldProvider requested = WaterFieldProvider::Analytic;
+  // Borrowed, not copied: a mirror owns megabytes of spectral fields. It must
+  // outlive the field, and update() must never run while sample() is in flight.
+  const WaterSpectralMirror *mirror = nullptr;
 };
 
 // Deterministic and reentrant: a query is a pure function of position, time and

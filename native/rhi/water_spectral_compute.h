@@ -21,7 +21,7 @@ public:
   bool initialize(VulkanMemoryAllocator &allocator, const ComputeLimits &limits,
                   const VkPhysicalDeviceLimits &physicalLimits, u32 resolution,
                   float patchLength, std::span<const WaterSpectralMode> modes,
-                  VkPhysicalDevice physicalDevice);
+                  VkPhysicalDevice physicalDevice, bool preferWideSlopes = false);
   void shutdown();
   bool record(VkCommandBuffer commandBuffer, float timeSeconds,
               const WaterFoamComputeParameters &foam = {});
