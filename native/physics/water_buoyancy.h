@@ -79,3 +79,33 @@ BuoyancyForces evaluateBuoyancy(const BuoyancyInput &input,
                                 const BuoyancySettings &settings) noexcept;
 
 } // namespace ae::physics
+
+extern "C" {
+
+// One entry per buoyant body. The caller fills the water terms from WaterField
+// in a single batched query, so the whole fleet costs one boundary crossing per
+// step instead of one per body.
+struct AetherWaterBodySample {
+  AetherBodyHandle body;
+  ae::u32 shapeKind;          // ae::physics::BuoyantShapeKind
+  AetherVec3 halfExtent;
+  AetherVec3 planeNormal;     // local water plane fitted at the body
+  float planeOffset;
+  AetherVec3 waterVelocity;   // orbital plus flow at the body
+  float referenceArea;
+};
+
+struct AetherWaterForceStats {
+  ae::u32 bodiesConsidered;
+  ae::u32 bodiesSubmerged;
+  ae::u32 bodiesClamped;      // saturation is a tuning failure, so it is counted
+  float submergedVolume;
+};
+
+// Returns the number of bodies that received a force, or -1 on a rejected call.
+ae::i32 AetherPhysics_ApplyWaterForces(AetherPhysicsWorld *world,
+                                       const AetherWaterBodySample *samples, ae::i32 count,
+                                       const ae::physics::BuoyancySettings *settings,
+                                       AetherWaterForceStats *outStats);
+
+} // extern "C"

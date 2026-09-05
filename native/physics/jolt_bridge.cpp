@@ -1,6 +1,7 @@
 // Implementação de jolt_bridge.h. Ver o comentário de topo do header para o
 // escopo desta fatia vertical (item 4.1.1 do plano) e o que fica para depois.
 #include "physics/jolt_bridge.h"
+#include "physics/water_buoyancy.h"
 
 // O próprio Jolt pede para Jolt.h vir antes de qualquer outro header do Jolt.
 #include <Jolt/Jolt.h>
@@ -1475,3 +1476,84 @@ ae::i32 AetherPhysics_SetCharacterCrouching(AetherPhysicsWorld *world, AetherCha
 }
 
 } // extern "C"
+
+ae::i32 AetherPhysics_ApplyWaterForces(AetherPhysicsWorld *world,
+                                       const AetherWaterBodySample *samples, ae::i32 count,
+                                       const ae::physics::BuoyancySettings *settings,
+                                       AetherWaterForceStats *outStats) {
+  if (outStats != nullptr) *outStats = {};
+  if (world == nullptr || settings == nullptr) return -1;
+  if (count < 0 || (count > 0 && samples == nullptr)) return -1;
+  if (!ae::physics::validateBuoyancySettings(*settings)) return -1;
+
+  const JPH::BodyLockInterfaceLocking &lockInterface = world->physicsSystem.GetBodyLockInterface();
+  const JPH::Vec3 gravity = world->physicsSystem.GetGravity();
+  ae::i32 applied = 0;
+  AetherWaterForceStats stats{};
+  for (ae::i32 index = 0; index < count; ++index) {
+    const AetherWaterBodySample &sample = samples[index];
+    if (sample.body == AetherBodyHandle_Invalid) continue;
+    // Um lock por corpo cobre posição, rotação, massa, velocidades e a própria
+    // aplicação da força. Passar pela BodyInterface faria seis locks separados
+    // para o mesmo corpo no mesmo passo.
+    JPH::BodyLockWrite lock(lockInterface, JPH::BodyID(sample.body));
+    if (!lock.Succeeded()) continue;
+    JPH::Body &body = lock.GetBody();
+    if (!body.IsDynamic()) continue;
+    ++stats.bodiesConsidered;
+    // Corpo dormindo permanece dormindo: acordar a frota inteira a cada onda
+    // drena bateria e é o modo de falha clássico de água em jogo. Quem deve
+    // acordar um corpo é contato, entrada ou uma política explícita de despertar.
+    if (!body.IsActive()) continue;
+
+    ae::physics::BuoyantShape shape{};
+    shape.kind = sample.shapeKind == 0 ? ae::physics::BuoyantShapeKind::Sphere
+                                       : ae::physics::BuoyantShapeKind::Box;
+    shape.halfExtent = sample.halfExtent;
+    const JPH::RVec3 position = body.GetPosition();
+    const JPH::Quat rotation = body.GetRotation();
+    const ae::physics::WaterPlane plane{sample.planeNormal, sample.planeOffset};
+    const ae::physics::SubmergedVolume submerged = ae::physics::submergedVolume(
+        shape,
+        {static_cast<float>(position.GetX()), static_cast<float>(position.GetY()),
+         static_cast<float>(position.GetZ())},
+        {rotation.GetX(), rotation.GetY(), rotation.GetZ(), rotation.GetW()}, plane);
+    if (submerged.volume <= 0.0f) continue;
+    ++stats.bodiesSubmerged;
+    stats.submergedVolume += submerged.volume;
+
+    // A velocidade lida é a do centro de carena, não a do centro de massa: um
+    // casco jogando tem água passando pelo lado molhado mesmo com o centro
+    // parado, e é essa diferença que amortece o balanço.
+    const JPH::RVec3 centre(submerged.centroid.x, submerged.centroid.y, submerged.centroid.z);
+    const JPH::MotionProperties *motion = body.GetMotionProperties();
+    const float inverseMass = motion != nullptr ? motion->GetInverseMass() : 0.0f;
+    if (!(inverseMass > 0.0f)) continue;
+    const float mass = 1.0f / inverseMass;
+    const JPH::Vec3 pointVelocity = body.GetPointVelocity(centre);
+    const JPH::Vec3 angular = body.GetAngularVelocity();
+
+    ae::physics::BuoyancyInput input{};
+    input.submerged = submerged;
+    input.mass = mass;
+    input.bodyVelocity = {pointVelocity.GetX(), pointVelocity.GetY(), pointVelocity.GetZ()};
+    input.waterVelocity = sample.waterVelocity;
+    input.angularVelocity = {angular.GetX(), angular.GetY(), angular.GetZ()};
+    input.referenceArea = sample.referenceArea;
+    const ae::physics::BuoyancyForces forces = ae::physics::evaluateBuoyancy(input, *settings);
+    if (forces.clamped) ++stats.bodiesClamped;
+
+    // Massa adicionada não é expressável como força, então entra na razão pela
+    // qual o solver vai dividir. O Jolt integra (F + m*g)/m; o resultado
+    // desejado é (F + m*g)/m_efetiva, e o termo de gravidade abaixo é o que faz
+    // os dois coincidirem em vez de deixar a massa adicionada fora da queda.
+    const float ratio = mass / JPH::max(forces.effectiveMass, 1.0e-6f);
+    const JPH::Vec3 force(forces.force.x, forces.force.y, forces.force.z);
+    body.AddForce(force * ratio + gravity * (mass * (ratio - 1.0f)), centre);
+    if (forces.torque.x != 0.0f || forces.torque.y != 0.0f || forces.torque.z != 0.0f)
+      body.AddTorque(JPH::Vec3(forces.torque.x, forces.torque.y, forces.torque.z));
+    ++applied;
+  }
+  if (outStats != nullptr) *outStats = stats;
+  return applied;
+}

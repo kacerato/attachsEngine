@@ -192,3 +192,77 @@ AE_TEST(Buoyancy_settings_outside_their_envelope_produce_no_force) {
   AE_EXPECT_TRUE(forces.force.y == 0.0f, "invalid settings apply nothing at all");
   AE_EXPECT_TRUE(forces.effectiveMass == input.mass, "and leave the integrator's mass untouched");
 }
+
+namespace {
+AetherWaterBodySample boxSample(AetherBodyHandle body, AetherVec3 halfExtent) {
+  AetherWaterBodySample sample{};
+  sample.body = body;
+  sample.shapeKind = static_cast<ae::u32>(BuoyantShapeKind::Box);
+  sample.halfExtent = halfExtent;
+  sample.planeNormal = {0.0f, 1.0f, 0.0f};
+  sample.planeOffset = 0.0f;
+  sample.referenceArea = 1.0f;
+  return sample;
+}
+} // namespace
+
+AE_TEST(Water_forces_boundary_rejects_a_call_it_cannot_honour) {
+  BuoyancySettings settings{};
+  AetherWaterForceStats stats{};
+  stats.bodiesConsidered = 7;
+  AE_EXPECT_TRUE(AetherPhysics_ApplyWaterForces(nullptr, nullptr, 0, &settings, &stats) == -1,
+                 "no world, no forces");
+  AE_EXPECT_TRUE(stats.bodiesConsidered == 0, "a rejected call still clears the statistics");
+
+  AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0.0f, -9.81f, 0.0f}, 8);
+  AE_EXPECT_TRUE(world != nullptr, "world");
+  AetherWaterBodySample sample = boxSample(AetherBodyHandle_Invalid, {0.5f, 0.5f, 0.5f});
+  AE_EXPECT_TRUE(AetherPhysics_ApplyWaterForces(world, &sample, -1, &settings, nullptr) == -1,
+                 "a negative count is a programming error, not an empty batch");
+  AE_EXPECT_TRUE(AetherPhysics_ApplyWaterForces(world, nullptr, 3, &settings, nullptr) == -1,
+                 "a null batch with a positive count is rejected");
+  settings.fluidDensity = 0.0f;
+  AE_EXPECT_TRUE(AetherPhysics_ApplyWaterForces(world, &sample, 1, &settings, nullptr) == -1,
+                 "invalid settings apply nothing");
+  AetherPhysics_DestroyWorld(world);
+}
+
+AE_TEST(Water_forces_float_a_body_at_its_density_draught_and_let_it_sleep) {
+  AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0.0f, -9.81f, 0.0f}, 8);
+  AE_EXPECT_TRUE(world != nullptr, "world");
+
+  // Jolt derives mass from the shape at 1000 kg/m^3, so a fluid at 2000 makes
+  // the body half as dense as the water and it must settle half submerged.
+  AetherBodyDesc desc{};
+  desc.shape.kind = AetherShapeKind::Box;
+  desc.shape.boxHalfExtent = {0.5f, 0.5f, 0.5f};
+  desc.position = {0.0f, 4.0f, 0.0f};
+  desc.rotation = {0.0f, 0.0f, 0.0f, 1.0f};
+  desc.motionType = AetherMotionType::Dynamic;
+  desc.friction = 0.5f;
+  const AetherBodyHandle body = AetherPhysics_CreateBody(world, &desc);
+  AE_EXPECT_TRUE(body != AetherBodyHandle_Invalid, "body");
+
+  BuoyancySettings settings{};
+  settings.fluidDensity = 2000.0f;
+  AetherWaterBodySample sample = boxSample(body, desc.shape.boxHalfExtent);
+  AetherWaterForceStats stats{};
+  bool everSubmerged = false;
+  for (int tick = 0; tick < 900; ++tick) {
+    AetherPhysics_ApplyWaterForces(world, &sample, 1, &settings, &stats);
+    if (stats.bodiesSubmerged > 0) everSubmerged = true;
+    AetherPhysics_Step(world, 1.0f / 60.0f, 1);
+  }
+  AE_EXPECT_TRUE(everSubmerged, "the body must actually reach the water");
+  AE_EXPECT_TRUE(stats.bodiesClamped == 0, "a plausible body never saturates the clamp");
+
+  AetherVec3 position{};
+  AetherPhysics_GetTransform(world, body, &position, nullptr);
+  AE_EXPECT_TRUE(std::abs(position.y) < 0.05f,
+                 "a body half the density of the fluid floats with half its height wet");
+  // Water that keeps every floating body awake is a battery drain, and it is
+  // why the boundary skips sleeping bodies instead of forcing them active.
+  AE_EXPECT_TRUE(AetherPhysics_IsActive(world, body) == 0,
+                 "a settled body is allowed to sleep");
+  AetherPhysics_DestroyWorld(world);
+}
