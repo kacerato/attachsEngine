@@ -257,10 +257,11 @@ AE_TEST(Water_field_resolves_the_cpu_mirror_and_reports_what_it_cannot_compute) 
 AE_TEST(Water_cost_isolation_falls_back_to_full_instead_of_reading_past_the_enum) {
   using ae::renderer::WaterCostIsolation;
   AE_EXPECT_EQ(ae::renderer::sanitizeWaterCostIsolation(0), WaterCostIsolation::Full, "zero is production");
-  AE_EXPECT_EQ(ae::renderer::sanitizeWaterCostIsolation(6), WaterCostIsolation::SkipDraw, "last mode is valid");
+  AE_EXPECT_EQ(ae::renderer::sanitizeWaterCostIsolation(7), WaterCostIsolation::NoVertexSpectral,
+               "last mode is valid");
   // An out-of-range diagnostic value must not select a mode by index arithmetic:
   // a shader branching on garbage would silently draw something else.
-  AE_EXPECT_EQ(ae::renderer::sanitizeWaterCostIsolation(7), WaterCostIsolation::Full, "past the end is full");
+  AE_EXPECT_EQ(ae::renderer::sanitizeWaterCostIsolation(8), WaterCostIsolation::Full, "past the end is full");
   AE_EXPECT_EQ(ae::renderer::sanitizeWaterCostIsolation(4000000000u), WaterCostIsolation::Full, "huge is full");
   AE_EXPECT_TRUE(std::string_view(ae::renderer::waterCostIsolationName(WaterCostIsolation::NoShadow)) ==
                      "no-shadow",

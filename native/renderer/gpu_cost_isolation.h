@@ -46,7 +46,8 @@ enum class WaterCostIsolation : u32 {
   NoReflection = 4,         // skip environment radiance and the BRDF lookup
   Flat = 5,                 // constant colour: geometry and blending only
   SkipDraw = 6,             // the water is not submitted at all
-  Count = 7,
+  NoVertexSpectral = 7,     // skip the per-vertex cascade sampling; grid stays flat
+  Count = 8,
 };
 
 inline constexpr WaterCostIsolation sanitizeWaterCostIsolation(u32 value) noexcept {
@@ -64,6 +65,7 @@ inline constexpr const char *waterCostIsolationName(WaterCostIsolation mode) noe
     case WaterCostIsolation::NoReflection: return "no-reflection";
     case WaterCostIsolation::Flat: return "flat";
     case WaterCostIsolation::SkipDraw: return "skip-draw";
+    case WaterCostIsolation::NoVertexSpectral: return "no-vertex-spectral";
     case WaterCostIsolation::Count: break;
   }
   return "full";

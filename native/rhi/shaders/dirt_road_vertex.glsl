@@ -1,0 +1,230 @@
+#include "dirt_road_frame.glsl"
+layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
+  vec4 sunDirectionIntensity;
+  vec4 sunColorAngularRadius;
+  vec4 ambientColorStrength;
+  vec4 parameters;
+  vec4 skyZenithCloudCoverage;
+  vec4 skyHorizonCloudDensity;
+  vec4 groundColorSaturation;
+  vec4 cloudLightWindSpeed;
+  vec4 worldToViewRow0;
+  vec4 worldToViewRow1;
+  vec4 worldToViewRow2;
+  vec4 quality;
+  mat4 shadowViewProjection[4];
+  vec4 shadowSplitDepths;
+  vec4 shadowParameters;
+  vec4 shadowWorldUnitsPerTexel;
+  vec4 shadowFilterParameters; // xy=PCF radii, zw=temporal jitter in physical NDC
+  vec4 shadowTransitionParameters;
+  vec4 materialDistanceParameters;
+  vec4 waterParameters;
+  vec4 waterOptics;
+  vec4 waterDeepColorFoam;
+  vec4 waterShallowColorDistance;
+  vec4 waterAbsorption;
+  vec4 waterWaveShape[8];
+  vec4 waterWaveMotion[8];
+  vec4 waterInteractionParameters;
+  vec4 waterInteractionShape[8];
+  vec4 waterInteractionMotion[8];
+} environment;
+#ifdef AETHER_SPECTRAL_WATER
+#include "water_spectral_sampling.glsl"
+#endif
+layout(location=0) in vec3 inPosition;
+layout(location=1) in vec3 inNormal;
+layout(location=2) in vec4 inTangent;
+layout(location=3) in vec2 inUv0;
+layout(location=4) in vec2 inUv1;
+layout(location=5) in vec4 inColor;
+layout(location=6) in mat4 inModel;
+layout(location=10) in vec4 inTint;
+layout(location=11) in vec4 inNormalColumn0;
+layout(location=12) in vec4 inNormalColumn1;
+layout(location=13) in vec4 inNormalColumn2;
+// Precisao dos varyings (item 2.2.5). Cada varying e gravado na memoria de tile
+// e reinterpolado por fragmento: em fp16 esse trafego cai pela metade, e sao 12
+// floats por pixel entre normal, tangente, cor e dither.
+//
+// vPosition e vUv permanecem highp e nao por simetria: vPosition alimenta o
+// vetor de visao em coordenadas de mundo, num mapa de centenas de unidades, e as
+// UV enderecam texturas de ate 4096 px, onde a mantissa do fp16 (~2048 passos em
+// [0,1]) ja nao resolve um texel.
+layout(location=0) out highp vec3 vPosition;
+layout(location=1) out mediump vec3 vNormal;
+layout(location=2) out mediump vec4 vTangent;
+layout(location=3) out highp vec2 vUv0;
+layout(location=4) out highp vec2 vUv1;
+layout(location=5) out mediump vec4 vColor;
+// LOD dither cross-fade factor (see renderer::selectLodLevel /
+// PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md): [-1,1], 0 = fully opaque, positive =
+// outgoing mask, negative = incoming complementary mask. Piggybacks
+// on GpuMeshInstance.normalColumns[7] (column 1's .w), which
+// buildNormalMatrix leaves at 0 unconditionally -- column 0's .w is the only
+// one carrying real data (tangent handedness sign), so this slot never grew
+// the 128-byte instance struct or its vertex binding stride.
+layout(location=6) out mediump float vDither;
+#ifdef AETHER_SPECTRAL_WATER
+layout(location=7) out mediump float vSpectralFoam;
+layout(location=8) out highp vec3 vSpectralCoordinates; // undisplaced XZ and mesh spacing
+#endif
+const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
+const uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
+void main() {
+#ifdef AETHER_SPECTRAL_WATER
+  vSpectralFoam=0;
+  vSpectralCoordinates=vec3(0);
+#endif
+  // Posicao, view e clip permanecem highp em toda a cadeia: fp16 em coordenada
+  // de mundo ou de clip produz tremor de vertice e z-fighting visiveis, e a
+  // subtracao relativa a camera e exatamente o caso de cancelamento catastrofico.
+  // Impostor de folhagem: o quad chega em espaco local, centrado na origem, e
+  // gira em torno de Y para encarar a camera ANTES da matriz de mundo. O bake
+  // v2 guarda varias vistas azimutais; os 16 bits superiores de materialFlags.y
+  // descrevem o macro-tile e UV1 guarda sua origem no atlas.
+  //
+  // Normal e tangente giram com a posicao. Sem isso o quad encararia a camera
+  // mas continuaria iluminado como se ainda encarasse a direcao em que foi
+  // assado, e a folhagem distante alternaria entre clara e escura conforme o
+  // giro -- defeito mais visivel que a troca de LOD que o impostor resolve.
+  highp vec3 modelPosition=inPosition;
+  highp vec3 modelNormal=inNormal;
+  highp vec3 modelTangent=inTangent.xyz;
+  highp vec2 resolvedUv0=inUv0;
+  highp vec2 resolvedUv1=inUv1;
+  mediump float impostorViewBlend=0.0;
+  bool impostor=(frame.materialFlags.x&MATERIAL_IMPOSTOR)!=0u;
+  if(impostor) {
+    highp vec3 worldCenter=inModel[3].xyz;
+    highp vec2 planarToObject=worldCenter.xz-frame.cameraPositionNear.xz;
+    highp float planarLength=length(planarToObject);
+    highp vec2 forward=planarLength>1.0e-5?planarToObject/planarLength:
+        vec2(sin(frame.cameraFrame.y),cos(frame.cameraFrame.y));
+    highp vec3 worldForward=vec3(forward.x,0.0,forward.y);
+    highp vec3 worldRight=vec3(forward.y,0.0,-forward.x);
+    highp mat3 faceCamera=mat3(worldRight,vec3(0.0,1.0,0.0),worldForward);
+    modelPosition=faceCamera*inPosition;
+    modelNormal=faceCamera*inNormal;
+    modelTangent=faceCamera*inTangent.xyz;
+
+    uint metadata=frame.materialFlags.y>>16u;
+    uint viewColumns=(metadata>>8u)&15u;
+    uint viewRows=(metadata>>12u)&15u;
+    if(viewColumns>0u && viewRows>0u) {
+      highp vec2 macroScale=exp2(-vec2(float(metadata&15u),float((metadata>>4u)&15u)));
+      uint viewCount=viewColumns*viewRows;
+      highp float azimuth=atan(worldForward.x,worldForward.z);
+      highp float viewPosition=fract(azimuth/6.28318530718+1.0)*float(viewCount);
+      uint firstView=uint(floor(viewPosition))%viewCount;
+      uint secondView=(firstView+1u)%viewCount;
+      highp vec2 frameScale=macroScale/vec2(float(viewColumns),float(viewRows));
+      highp vec2 firstCell=vec2(float(firstView%viewColumns),float(firstView/viewColumns));
+      highp vec2 secondCell=vec2(float(secondView%viewColumns),float(secondView/viewColumns));
+      // Keep exact-edge fragments in this view's cell when the fragment shader
+      // clamps the footprint at the chosen resident mip level.
+      highp vec2 localUv=clamp(inUv0,vec2(0.00001),vec2(0.99999));
+      resolvedUv0=inUv1+(firstCell+localUv)*frameScale;
+      resolvedUv1=inUv1+(secondCell+localUv)*frameScale;
+      impostorViewBlend=fract(viewPosition);
+    }
+  }
+  highp vec3 worldPosition=(inModel*vec4(modelPosition,1)).xyz;
+  highp mat3 linear=mat3(inModel);
+  highp mat3 normalMatrix=mat3(inNormalColumn0.xyz,inNormalColumn1.xyz,inNormalColumn2.xyz);
+  if((frame.materialFlags.x&MATERIAL_WATER)!=0u) {
+    highp float waterCellSize=0.0;
+    if((frame.materialFlags.x&1024u)!=0u) { // MapMaterialWaterCameraGrid
+      highp float gridScale=environment.waterShallowColorDistance.w/max(inUv1.y,1.0);
+      worldPosition.xz=frame.cameraPositionNear.xz+inPosition.xz*gridScale;
+      waterCellSize=inUv1.x*gridScale;
+    }
+    // The mesh is immutable. Only this shader evaluates the spectrum for every
+    // visible vertex; the CPU counterpart is reserved for sparse gameplay and
+    // buoyancy queries. Keeping world XZ unchanged also makes adjacent clipmap
+    // patches mathematically watertight.
+    highp float height=environment.waterParameters.y;
+    highp vec2 slope=vec2(0.0);
+#ifdef AETHER_SPECTRAL_WATER
+    highp vec2 horizontal=vec2(0.0);
+    highp vec3 horizontalDerivative=vec3(0.0);
+    vSpectralFoam=0.0;
+    vSpectralCoordinates=vec3(worldPosition.xz,waterCellSize);
+    // Modo 7 de WaterCostIsolation: separa o custo de vértice (leituras de
+    // storage buffer por cascata) do custo de rasterização da mesma malha.
+    if(int(environment.waterInteractionParameters.y+0.5)!=7)
+      addWaterSpectrum(worldPosition.xz,waterCellSize,height,slope,horizontal,horizontalDerivative,vSpectralFoam);
+#else
+    int waveCount=clamp(int(environment.waterParameters.x+0.5),0,8);
+    for(int waveIndex=0;waveIndex<8;++waveIndex) {
+      if(waveIndex>=waveCount) break;
+      highp vec4 shape=environment.waterWaveShape[waveIndex];
+      highp vec4 motion=environment.waterWaveMotion[waveIndex];
+      // Filter geometry below the grid's representable wavelength. This is
+      // continuous, avoiding rings of popping waves as the camera moves.
+      highp float wavelength=6.28318530718/max(shape.w,1.0e-6);
+      shape.z*=smoothstep(2.0,5.0,wavelength/max(waterCellSize,0.001));
+      highp float angle=shape.w*dot(shape.xy,worldPosition.xz)-
+                         motion.x*environment.waterParameters.z+motion.z;
+      highp float sine=sin(angle),cosine=cos(angle);
+      highp float crest=0.25*motion.y;
+      highp float normalization=1.0+crest;
+      height+=shape.z*(sine+crest*(2.0*sine*sine-1.0))/normalization;
+      slope+=shape.xy*(shape.z*shape.w*cosine*(1.0+4.0*crest*sine)/normalization);
+    }
+#endif
+    int interactionCount=clamp(int(environment.waterInteractionParameters.x+0.5),0,8);
+    for(int interactionIndex=0;interactionIndex<interactionCount;++interactionIndex) {
+      highp vec4 shape=environment.waterInteractionShape[interactionIndex];
+      highp vec4 motion=environment.waterInteractionMotion[interactionIndex];
+      highp float age=environment.waterParameters.z-shape.z;
+      if(shape.w==0.0||age<0.0||age>motion.w) continue;
+      highp vec2 delta=worldPosition.xz-shape.xy;
+      highp float distance=length(delta);
+      highp float waveNumber=6.28318530718/max(motion.x,0.1);
+      highp float radial=distance-motion.y*age;
+      highp float width=max(0.35,motion.x*0.55);
+      highp float gaussian=exp(-(radial*radial)/(width*width));
+      highp float envelope=shape.w*gaussian*exp(-motion.z*age);
+      highp float angle=waveNumber*radial;
+      height+=envelope*sin(angle);
+      if(distance>1.0e-5) {
+        highp float derivative=envelope*(waveNumber*cos(angle)-
+            2.0*radial/(width*width)*sin(angle));
+        slope+=delta/distance*derivative;
+      }
+    }
+    worldPosition.y=height;
+#ifdef AETHER_SPECTRAL_WATER
+    worldPosition.xz+=horizontal;
+    highp vec3 tangentX=vec3(1.0+horizontalDerivative.x,slope.x,horizontalDerivative.y);
+    highp vec3 tangentZ=vec3(horizontalDerivative.y,slope.y,1.0+horizontalDerivative.z);
+    highp vec3 surfaceNormal=cross(tangentZ,tangentX);
+    vNormal=dot(surfaceNormal,surfaceNormal)>1.0e-12?normalize(surfaceNormal):vec3(0,1,0);
+    vTangent=vec4(dot(tangentX,tangentX)>1.0e-12?normalize(tangentX):vec3(1,0,0),1.0);
+#else
+    vNormal=normalize(vec3(-slope.x,1.0,-slope.y));
+    vTangent=vec4(normalize(vec3(1.0,slope.x,0.0)),1.0);
+#endif
+  } else {
+    vNormal=normalize(normalMatrix*modelNormal);
+    vTangent=vec4(normalize(linear*modelTangent),inTangent.w*inNormalColumn0.w);
+  }
+  vPosition=worldPosition;
+  vUv0=resolvedUv0; vUv1=resolvedUv1; vColor=inColor*inTint;
+  if(impostor && (frame.materialFlags.y>>16u)!=0u) vColor.a=impostorViewBlend;
+  vDither=inNormalColumn1.w;
+  highp vec3 relative=worldPosition-frame.cameraPositionNear.xyz;
+  highp vec3 view=vec3(dot(environment.worldToViewRow0.xyz,relative),
+                 dot(environment.worldToViewRow1.xyz,relative),
+                 dot(environment.worldToViewRow2.xyz,relative));
+  highp float farPlane=uintBitsToFloat(frame.materialFlags.w);
+  highp float nearPlane=frame.cameraPositionNear.w;
+  highp vec2 xy=vec2(view.x*1.732050808/frame.cameraFrame.x,-view.y*1.732050808);
+  highp vec2 projected=vec2(dot(frame.surfaceTransform.xy,xy),
+                            dot(frame.surfaceTransform.zw,xy));
+  projected += environment.shadowFilterParameters.zw * view.z;
+  gl_Position=vec4(projected,
+      (farPlane*view.z-nearPlane*farPlane)/(farPlane-nearPlane),view.z);
+}
