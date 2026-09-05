@@ -43,6 +43,12 @@ if ($All) {
         shadow_depth = @('vert')
         triangle = @('vert', 'frag')
         water_surface = @('frag')
+        water_spectrum_evolve = @('comp')
+        water_fft_inverse = @('comp')
+        water_spectral = @('vert', 'frag')
+        water_foam_update = @('comp')
+        water_slope_pack = @('comp')
+        water_slope_pack_wide = @('comp')
     }
     foreach ($entry in $embeddedShaders.GetEnumerator()) {
         $shaderParameters = @{

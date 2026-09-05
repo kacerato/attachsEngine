@@ -1,0 +1,12 @@
+#version 450
+layout(local_size_x=8,local_size_y=8) in;
+layout(std430,set=0,binding=0) readonly buffer Surface { float values[]; };
+// Fallback for devices without half-float storage images. Identical result,
+// four times the bandwidth; selected only when the narrow format is absent.
+layout(rgba32f,set=0,binding=1) writeonly uniform image2D slopeImage;
+void main() {
+  ivec2 p=ivec2(gl_GlobalInvocationID.xy),size=imageSize(slopeImage);
+  if(any(greaterThanEqual(p,size))) return;
+  uint i=uint(p.y*size.x+p.x);
+  imageStore(slopeImage,p,vec4(values[8*i+3],values[8*i+4],0,0));
+}

@@ -183,6 +183,7 @@ add_library(aether_renderer STATIC
   renderer/thermal_pressure_controller.cpp
   renderer/water_surface.cpp
   renderer/water_field.cpp
+  renderer/water_spectral_mirror.cpp
   renderer/water_fft.cpp
   renderer/water_spectrum.cpp
   renderer/water_cascades.cpp
@@ -377,6 +378,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_thermal_pressure_controller.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_water_surface.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_water_field.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_water_spectral_mirror.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_water_fft.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp
