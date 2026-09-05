@@ -1105,6 +1105,14 @@ void android_main(android_app *app) {
       app->activity,"aether.water_fft"));
   shell.instancedRenderer.setWideWaterSlopes(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.water_slope_wide"));
+  ae::u32 requestedWaterIsolation = 0;
+  if (ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.water_isolation",
+                                                      requestedWaterIsolation)) {
+    const auto mode = ae::renderer::sanitizeWaterCostIsolation(requestedWaterIsolation);
+    shell.instancedRenderer.setWaterCostIsolation(mode);
+    __android_log_print(ANDROID_LOG_INFO, LogTag, "[WaterIsolation] modo=%s (%u solicitado).",
+                        ae::renderer::waterCostIsolationName(mode), requestedWaterIsolation);
+  }
   // Consumidor GPU da piramide (ADR-016 C2). Implica o produtor compute: sem
   // ele nao ha piramide residente para consumir, e pedir culling sem produtor
   // seria uma opcao que nao faz nada em silencio.

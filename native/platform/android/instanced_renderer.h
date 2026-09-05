@@ -128,6 +128,7 @@ public:
   // de clock. Comparar dois APKs instalados em momentos diferentes mede o
   // aparelho, não a mudança.
   void setWideWaterSlopes(bool wide) { wideWaterSlopes_ = wide; }
+  void setWaterCostIsolation(renderer::WaterCostIsolation mode) { waterCostIsolation_ = mode; }
   // UI protocol: 0 inactive, 1 analytical, 2 spectral, 3 analytical fallback.
   u32 waterProviderStatus() const noexcept {
     if(!waterSubpassActive_) return 0;
@@ -550,6 +551,7 @@ private:
   renderer::WaterProfile waterProfile_ = renderer::defaultOceanWaterProfile();
   bool spectralWaterEnabled_=false;
   bool wideWaterSlopes_=false;
+  renderer::WaterCostIsolation waterCostIsolation_=renderer::WaterCostIsolation::Full;
   renderer::WaterSpectralControls waterSpectralControls_{};
   renderer::WaterSpectralClock waterSpectralClock_{};
   u32 spectralWaterCount_=0;

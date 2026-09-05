@@ -14,6 +14,8 @@ param(
     # Opções booleanas extras, aplicadas como `--ez <nome> true`. Existe para que
     # um A/B caiba num APK só: reinstalar entre as pontas mede o aparelho.
     [string[]]$ExtraBooleans = @(),
+    # Modo de WaterCostIsolation; -1 não envia a opção.
+    [int]$WaterIsolation = -1,
     [int]$DurationSeconds = 90,
     [string]$AdbPath = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe",
     [string]$OutputRoot = (Join-Path $PSScriptRoot '..\build\android-validation')
@@ -52,6 +54,7 @@ else { $arguments += @('--ez', 'aether.disable_dynamic_resolution', 'true') }
 if ($SpectralWater) { $arguments += @('--ez', 'aether.water_fft', 'true') }
 if ($LockCamera) { $arguments += @('--ez', 'aether.lock_camera', 'true') }
 foreach ($option in $ExtraBooleans) { $arguments += @('--ez', $option, 'true') }
+if ($WaterIsolation -ge 0) { $arguments += @('--ei', 'aether.water_isolation', $WaterIsolation) }
 
 $thermalBefore = Get-ThermalSnapshot
 Invoke-Adb @('logcat', '-c') | Out-Null
@@ -92,10 +95,13 @@ $summary = [ordered]@{
         spectralWater     = [bool]$SpectralWater
         lockCamera        = [bool]$LockCamera
         extraBooleans     = $ExtraBooleans
+        waterIsolation    = $WaterIsolation
         durationSeconds   = $DurationSeconds
     }
     thermalBefore    = $thermalBefore
     thermalAfter     = $thermalAfter
+    waterIsolationLog = @($lines | Select-String -Pattern '\[WaterIsolation\]' |
+        Select-Object -First 1 | ForEach-Object { $_.Line.Trim() })
     runtimeControls  = @($lines | Select-String -Pattern '\[RuntimeControls\]' |
         Select-Object -Last 1 | ForEach-Object { $_.Line.Trim() })
     renderPolicy     = @($lines | Select-String -Pattern '\[RenderPolicy\] preset=' |

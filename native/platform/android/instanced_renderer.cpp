@@ -23,6 +23,7 @@
 #include "rhi/shaders/draw_cull_spirv.h"
 #include "rhi/shaders/hzb_reduce_compute_spirv.h"
 #include "rhi/shaders/water_surface_spirv.h"
+#include "rhi/shaders/water_spectral_spirv.h"
 #include "renderer/sphere_mesh.h"
 #include "renderer/material_distance.h"
 
@@ -429,8 +430,10 @@ bool InstancedRenderer::createPipeline() {
                                rhi::shaders::kDirt_Road_Coverage_Shade_FallbackFragSpirvSize))
       : VK_NULL_HANDLE;
   VkShaderModule waterFragModule = waterSubpassActive_
-      ? createShaderModule(device_, rhi::shaders::kWater_SurfaceFragSpirv,
-                           rhi::shaders::kWater_SurfaceFragSpirvSize)
+      ? (spectralWaterCount_>0
+         ? createShaderModule(device_,rhi::shaders::kWater_SpectralFragSpirv,rhi::shaders::kWater_SpectralFragSpirvSize)
+         : createShaderModule(device_, rhi::shaders::kWater_SurfaceFragSpirv,
+                           rhi::shaders::kWater_SurfaceFragSpirvSize))
       : VK_NULL_HANDLE;
   if (vertModule == VK_NULL_HANDLE || fragModule == VK_NULL_HANDLE ||
       (dirtRoadPreview_ &&
@@ -731,6 +734,13 @@ bool InstancedRenderer::createPipeline() {
         if (pipelineOk) pipelineOk = createMaterialVariants(2, transparentMaterialPipelines_);
       }
       if (pipelineOk && waterSubpassActive_) {
+        VkShaderModule spectralVertex=VK_NULL_HANDLE;
+        if(spectralWaterCount_>0) {
+          spectralVertex=createShaderModule(device_,rhi::shaders::kWater_SpectralVertSpirv,
+              rhi::shaders::kWater_SpectralVertSpirvSize);
+          if(spectralVertex==VK_NULL_HANDLE) pipelineOk=false;
+          else stages[0].module=spectralVertex;
+        }
         stages[1].module = waterFragModule;
         stages[1].pSpecializationInfo = &gpuIsolationInfo;
         pipelineInfo.subpass = 1;
@@ -743,8 +753,10 @@ bool InstancedRenderer::createPipeline() {
         colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
         colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
+        pipelineOk = pipelineOk && vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                                &waterPipeline_) == VK_SUCCESS;
+        if(spectralVertex!=VK_NULL_HANDLE) vkDestroyShaderModule(device_,spectralVertex,nullptr);
+        stages[0].module=vertModule;
         pipelineInfo.subpass = 0;
       }
     }
@@ -786,7 +798,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[7]{};
+  VkDescriptorSetLayoutBinding bindings[15]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -813,17 +825,22 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   }
   VkDescriptorSetLayoutCreateInfo layout{};
   layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  layout.bindingCount = waterSubpassActive_ ? 7u : 5u;
+  if(spectralWaterCount_>0) for(u32 i=7;i<11;++i)
+    bindings[i]={i,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,nullptr};
+  if(spectralWaterCount_>0) for(u32 i=11;i<15;++i)
+    bindings[i]={i,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  layout.bindingCount = spectralWaterCount_>0 ? 15u : (waterSubpassActive_ ? 7u : 5u);
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
-  VkDescriptorPoolSize sizes[3] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+  VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
                                    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                    waterSubpassActive_ ? 5u : 4u},
-                                   {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1}};
+                                    spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)},
+                                   {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
+                                   {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,4}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool.maxSets = 1;
-  pool.poolSizeCount = waterSubpassActive_ ? 3u : 2u;
+  pool.poolSizeCount = spectralWaterCount_>0 ? 4u : (waterSubpassActive_ ? 3u : 2u);
   pool.pPoolSizes = sizes;
   if (vkCreateDescriptorPool(device_, &pool, nullptr, &environmentPool_) != VK_SUCCESS) return false;
   VkDescriptorSetAllocateInfo allocation{};
@@ -859,7 +876,9 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
       break;
     }
   }
-  VkWriteDescriptorSet writes[7]{};
+  VkWriteDescriptorSet writes[15]{};
+  VkDescriptorImageInfo spectralImages[4]{};
+  VkDescriptorBufferInfo spectralBuffers[4]{};
   writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   writes[0].dstSet = environmentSet_;
   writes[0].dstBinding = 0;
@@ -904,7 +923,23 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
     writes[6].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     writes[6].pImageInfo = &waterNormal;
   }
-  vkUpdateDescriptorSets(device_, waterSubpassActive_ ? 7u : 5u, writes, 0, nullptr);
+  if(spectralWaterCount_>0) for(u32 i=0;i<4;++i) {
+    // Unused statically declared bindings share cascade zero; never read when
+    // count excludes them, but Vulkan descriptors remain fully valid.
+    const auto &buffer=waterSpectralCompute_[i<spectralWaterCount_?i:0].output();
+    spectralBuffers[i]={buffer.handle(),0,buffer.sizeBytes()};
+    writes[7+i].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[7+i].dstSet=environmentSet_; writes[7+i].dstBinding=7+i;
+    writes[7+i].descriptorCount=1; writes[7+i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[7+i].pBufferInfo=&spectralBuffers[i];
+    const auto &cascade=waterSpectralCompute_[i<spectralWaterCount_?i:0];
+    spectralImages[i]={cascade.slopeSampler(),cascade.slopeView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    writes[11+i].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[11+i].dstSet=environmentSet_; writes[11+i].dstBinding=11+i;
+    writes[11+i].descriptorCount=1; writes[11+i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[11+i].pImageInfo=&spectralImages[i];
+  }
+  vkUpdateDescriptorSets(device_, spectralWaterCount_>0 ? 15u : (waterSubpassActive_ ? 7u : 5u), writes, 0, nullptr);
   return true;
 }
 
@@ -2815,9 +2850,11 @@ bool InstancedRenderer::createTextureResources() {
     for (u32 x = 0; x < kTextureSize; ++x) {
       const bool light = ((x / 8u) + (y / 8u)) % 2u == 0;
       const usize offset = static_cast<usize>(y * kTextureSize + x) * 4;
-      pixels[offset + 0] = light ? 220 : 24;
-      pixels[offset + 1] = light ? 245 : 76;
-      pixels[offset + 2] = light ? 245 : 86;
+      // Untextured map materials multiply their authored color by neutral white.
+      // Keep the checker solely for the standalone diagnostic cube.
+      pixels[offset + 0] = dirtRoadPreview_ ? 255 : (light ? 220 : 24);
+      pixels[offset + 1] = dirtRoadPreview_ ? 255 : (light ? 245 : 76);
+      pixels[offset + 2] = dirtRoadPreview_ ? 255 : (light ? 245 : 86);
       pixels[offset + 3] = 255;
     }
   }
@@ -3127,6 +3164,7 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar recursos de sombra direcional.");
     return false;
   }
+  if (!createSpectralWaterResources()) return false;
   if (!createEnvironmentDescriptors()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar descritores do ambiente HDRI.");
     return false;
@@ -3214,6 +3252,8 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
 void InstancedRenderer::shutdown() {
   if (device_ == VK_NULL_HANDLE) return;
   vkDeviceWaitIdle(device_);
+  for(auto &cascade:waterSpectralCompute_) cascade.shutdown();
+  spectralWaterCount_=0; spectralWaterBoundsExpansion_=0;
 
   if (commandPool_ != VK_NULL_HANDLE) {
     vkDestroyCommandPool(device_, commandPool_, nullptr);
@@ -3513,6 +3553,19 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       frame->waterWaveMotion[waveIndex][2] = wave.phase;
     }
     const auto &waterImpulses = waterInteractions_.impulses();
+    if(spectralWaterCount_>0) {
+      frame->waterParameters[0]=static_cast<float>(spectralWaterCount_);
+      for(u32 i=0;i<spectralWaterCount_;++i) {
+        const auto &c=waterCascadeSettings_[i];
+        frame->waterWaveShape[i][0]=static_cast<float>(c.spectrum.resolution);
+        frame->waterWaveShape[i][1]=c.spectrum.patchLength;
+        frame->waterWaveShape[i][2]=c.displacementScale*waterSpectralControls_.displacement;
+        frame->waterWaveShape[i][3]=c.choppiness*waterSpectralControls_.choppiness;
+        frame->waterWaveMotion[i][0]=c.spectrum.minimumWavelength;
+        frame->waterWaveMotion[i][1]=std::cos(waterSpectralControls_.directionRadians);
+        frame->waterWaveMotion[i][2]=std::sin(waterSpectralControls_.directionRadians);
+      }
+    }
     u32 activeWaterInteractionCount = 0;
     for (u32 index = 0; index < renderer::MaximumWaterInteractions; ++index) {
       const auto &impulse = waterImpulses[index];
@@ -3531,6 +3584,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       frame->waterInteractionMotion[packedIndex][3] = impulse.duration;
     }
     frame->waterInteractionParameters[0] = static_cast<float>(activeWaterInteractionCount);
+    frame->waterInteractionParameters[1] = static_cast<float>(waterCostIsolation_);
     frame->shadowParameters[0] = shadowAtlas_.width() > 0
                                      ? 1.0f / static_cast<float>(shadowAtlas_.width()) : 1.0f;
     frame->shadowParameters[1] = 0.0f;
@@ -3608,7 +3662,19 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     return rhi::SwapchainStatus::FatalError;
   }
   if (gpuTimingEnabled()) gpuFrameTimer_.begin(commandBuffer_);
+  beginGpuRegion(GpuPassClass::WaterSimulation);
+  const float spectralTime=spectralWaterCount_>0?
+    static_cast<float>(waterSpectralClock_.advance(timeSeconds,waterSpectralControls_.timeScale)):0;
+  for(u32 cascade=0;cascade<spectralWaterCount_;++cascade) {
+    const auto &c=waterCascadeSettings_[cascade];
+    const auto &foamSettings=waterSpectralControls_.overrideFoam?waterSpectralControls_.foam:c.foam;
+    const rhi::WaterFoamComputeParameters foam{c.displacementScale*c.choppiness*
+      waterSpectralControls_.displacement*waterSpectralControls_.choppiness,
+      foamSettings.compressionThreshold,foamSettings.growth,foamSettings.decay};
+    if(!waterSpectralCompute_[cascade].record(commandBuffer_,spectralTime,foam)) return rhi::SwapchainStatus::FatalError;
+  }
 
+  endGpuRegion(GpuPassClass::WaterSimulation);
   beginGpuRegion(GpuPassClass::Shadow);
   recordShadowPass(camera);
   endGpuRegion(GpuPassClass::Shadow);
@@ -3892,7 +3958,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         const auto &draw = dirtRoadResources_.draws()[drawIndex];
         ++visibilityTelemetry_.candidateDraws;
         visibilityTelemetry_.candidateTriangles += draw.indexCount / 3;
-        if (!renderer::isSphereVisible(frustum, draw.boundsCenter, draw.boundsRadius)) continue;
+        const bool cameraWater = (dirtRoadResources_.materials()[draw.materialIndex].flags &
+            (renderer::MapMaterialWater | renderer::MapMaterialWaterCameraGrid)) ==
+            (renderer::MapMaterialWater | renderer::MapMaterialWaterCameraGrid);
+        // Camera-relative water cannot be culled by its original world bounds.
+        // A single bounded grid is conservatively submitted, clipped by the GPU.
+        const bool water=(dirtRoadResources_.materials()[draw.materialIndex].flags&renderer::MapMaterialWater)!=0;
+        const float spectralExpansion=water?spectralWaterBoundsExpansion_:0;
+        if (!cameraWater && !renderer::isSphereVisible(frustum, draw.boundsCenter, draw.boundsRadius+spectralExpansion)) continue;
         destination.push_back(drawIndex);
       }
     };
@@ -4149,11 +4222,16 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         const auto &draw = dirtRoadResources_.draws()[drawIndex];
         const bool water = (dirtRoadResources_.materials()[draw.materialIndex].flags &
                             renderer::MapMaterialWater) != 0;
-        if (water)
-          drawMapPrimitive(drawIndex, nullptr, waterPipeline_, VK_NULL_HANDLE);
-        else
+        if (water) {
+          // SkipDraw remove a água inteira: é a única forma de saber quanto do
+          // passe é água num GPU que colapsa timestamps por subpasse.
+          if (waterCostIsolation_ != renderer::WaterCostIsolation::SkipDraw)
+            drawMapPrimitive(drawIndex, nullptr, waterPipeline_, VK_NULL_HANDLE);
+        }
+        else {
           drawMapPrimitive(drawIndex, transparentMaterialPipelines_, transparentPipeline_,
                            transparentDistantPipeline_);
+        }
       }
     }
     endGpuRegion(GpuPassClass::Transparent);

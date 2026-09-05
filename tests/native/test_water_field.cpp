@@ -1,9 +1,11 @@
 #include "harness.h"
 #include "renderer/water_field.h"
+#include "renderer/gpu_cost_isolation.h"
 #include "renderer/water_spectral_mirror.h"
 
 #include <array>
 #include <cmath>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -250,4 +252,17 @@ AE_TEST(Water_field_resolves_the_cpu_mirror_and_reports_what_it_cannot_compute) 
     if (std::abs(sample.height - setup.baseHeight) > 1.0e-6f) anyDisplacement = true;
   }
   AE_EXPECT_TRUE(anyDisplacement, "a resolved mirror must actually move the surface");
+}
+
+AE_TEST(Water_cost_isolation_falls_back_to_full_instead_of_reading_past_the_enum) {
+  using ae::renderer::WaterCostIsolation;
+  AE_EXPECT_EQ(ae::renderer::sanitizeWaterCostIsolation(0), WaterCostIsolation::Full, "zero is production");
+  AE_EXPECT_EQ(ae::renderer::sanitizeWaterCostIsolation(6), WaterCostIsolation::SkipDraw, "last mode is valid");
+  // An out-of-range diagnostic value must not select a mode by index arithmetic:
+  // a shader branching on garbage would silently draw something else.
+  AE_EXPECT_EQ(ae::renderer::sanitizeWaterCostIsolation(7), WaterCostIsolation::Full, "past the end is full");
+  AE_EXPECT_EQ(ae::renderer::sanitizeWaterCostIsolation(4000000000u), WaterCostIsolation::Full, "huge is full");
+  AE_EXPECT_TRUE(std::string_view(ae::renderer::waterCostIsolationName(WaterCostIsolation::NoShadow)) ==
+                     "no-shadow",
+                 "every mode reports a name the capture can be labelled with");
 }
