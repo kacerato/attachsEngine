@@ -140,6 +140,47 @@ A mudança fica assim mesmo, justificada por memória e não por velocidade:
 192 KiB em vez de 768 KiB para três cascatas de 128². Alegar ganho de quadro
 aqui seria ler ruído de clock como resultado.
 
+## 3.3 Onde o custo da água realmente está
+
+Primeira varredura de isolamento, com o aparelho ainda frio (as duas primeiras
+medições da sessão; as seguintes ficaram inutilizáveis, ver 3.4):
+
+| Modo | O que sai | Δ GPU | Δ opaco | FPS |
+| --- | --- | ---: | ---: | --- |
+| 6 — `skip-draw` | a água inteira | **2,70 ms** | **3,46 ms** | 87,7 → **116,5** |
+| 5 — `flat` | só o sombreamento; geometria, profundidade e blend ficam | 0,51 ms | 1,26 ms | 87,5 → 89,3 |
+
+**O fragmento da água não é o gargalo.** Remover todo o sombreamento devolve
+0,51 dos 2,70 ms. Os ~2,2 ms restantes são vértice, rasterização e blend da
+malha de 149.504 triângulos em tela cheia.
+
+Isso muda a prioridade: o alvo passa a ser o estágio de vértice, que amostra as
+cascatas por vértice lendo storage buffers, e a política de submissão da malha —
+não a óptica do fragmento. O modo 7 (`no-vertex-spectral`) foi acrescentado para
+separar esses dois, com uma leitura parcial de 18,20 → 11,64 ms que **não é
+publicável** pelo motivo da seção seguinte.
+
+## 3.4 A varredura completa foi invalidada pelo aquecimento
+
+A varredura de seis modos produziu deltas negativos — trabalho removido
+"custando mais" — e rodadas completas entre 10 e 18 ms. `thermal_status`
+permaneceu 0 o tempo todo, mas `dumpsys battery` mostrou **42,1 °C** ao fim,
+contra 32,3 °C no início da sessão.
+
+Ou seja: a API térmica do Android não sinalizou nada enquanto o SoC reduzia
+clock. Duas consequências permanentes:
+
+1. `thermal_pressure=none` **não** é prova de rodada válida. A temperatura de
+   bateria de `dumpsys battery` entra na evidência.
+2. Uma varredura longa aquece o próprio instrumento. Medições de atribuição
+   precisam de sessões curtas com intervalo de resfriamento, ou os números
+   descrevem a temperatura, não a mudança.
+
+O script agora mede cada configuração várias vezes, alternando com a referência
+completa, e diferencia **mínimos** em vez de médias, publicando a dispersão
+entre repetições ao lado: um delta menor que a dispersão fica visivelmente sem
+valor.
+
 ## 4. Déficit e para onde ele vai
 
 Para 120 FPS sustentados em escala 1,0 é preciso tirar ~1,8 ms do p95 espectral.
@@ -147,6 +188,7 @@ Para 120 FPS sustentados em escala 1,0 é preciso tirar ~1,8 ms do p95 espectral
 | Alvo | Custo hoje | Ação | Etapa |
 | --- | ---: | --- | --- |
 | Amostragem de inclinação por fragmento | neutro (medido) | RG16F entregue: −576 KiB, sem ganho de tempo | G1.3 |
+| **Vértice da água** | dentro dos ~2,2 ms não-sombreamento | amostragem espectral por vértice lendo storage buffer; medir com o modo 7 e trocar por textura de altura se confirmar | G1/G2 |
 | Pós-processamento | 1,108–1,663 ms | rever AA e nitidez em resolução nativa | G7 |
 | Simulação espectral | 0,585 ms | fila assíncrona; hoje grava na fila gráfica | G1.7 |
 | Sombra na água | dentro de `gpu_opaque_ms` | 9 taps por pixel de água próxima, sem projetor de sombra no oceano aberto | G3 |
