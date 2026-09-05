@@ -33,10 +33,16 @@ function Invoke-Adb { param([string[]]$Arguments) & $AdbPath @Arguments 2>&1 }
 function Get-ThermalSnapshot {
     $dump = Invoke-Adb @('shell', 'dumpsys', 'thermalservice')
     $status = ($dump | Select-String -Pattern 'Thermal Status:\s*(\d+)' | Select-Object -First 1)
-    $battery = ($dump | Select-String -Pattern 'mName=battery' | Select-Object -First 1)
+    # A API térmica do Android reportou status 0 durante toda uma sessão em que o
+    # mesmo trabalho variou de 10 a 18 ms e a bateria subiu de 32 para 42 graus.
+    # Portanto o status sozinho não qualifica uma rodada: a temperatura entra.
+    $battery = Invoke-Adb @('shell', 'dumpsys', 'battery')
+    $celsius = ($battery | Select-String -Pattern '^\s*temperature:\s*(\d+)' | Select-Object -First 1)
+    $level = ($battery | Select-String -Pattern '^\s*level:\s*(\d+)' | Select-Object -First 1)
     return [ordered]@{
-        thermalStatus = if ($status) { [int]$status.Matches[0].Groups[1].Value } else { $null }
-        batteryLine   = if ($battery) { $battery.Line.Trim() } else { $null }
+        thermalStatus     = if ($status) { [int]$status.Matches[0].Groups[1].Value } else { $null }
+        batteryCelsius    = if ($celsius) { [double]$celsius.Matches[0].Groups[1].Value / 10.0 } else { $null }
+        batteryLevel      = if ($level) { [int]$level.Matches[0].Groups[1].Value } else { $null }
     }
 }
 
@@ -125,5 +131,6 @@ $lastPressure = if ($pressure.Count -gt 0) { $pressure[-1] } else { $null }
     escalaRender  = if ($lastPressure) { $lastPressure.render_scale_end } else { $null }
     gameMode      = if ($lastPressure) { $lastPressure.game_mode } else { $null }
     termico       = if ($lastPressure) { $lastPressure.thermal_pressure } else { $null }
+    bateriaC      = "$($thermalBefore.batteryCelsius) -> $($thermalAfter.batteryCelsius)"
     resumo        = $summaryPath
 } | Format-List
