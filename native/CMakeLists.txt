@@ -285,6 +285,7 @@ endif()
 add_library(aether_physics STATIC
   physics/character_motor.cpp
   physics/jolt_bridge.cpp
+  physics/water_buoyancy.cpp
 )
 target_include_directories(aether_physics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_physics PUBLIC aether_core PRIVATE Jolt)
@@ -379,6 +380,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_water_surface.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_water_field.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_water_spectral_mirror.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_water_buoyancy.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_water_fft.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_render_graph.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_app_lifecycle.cpp
