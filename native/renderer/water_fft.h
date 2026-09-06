@@ -8,6 +8,32 @@
 
 namespace ae::renderer {
 
+// Segundo trem de ondas, com direção e origem próprias.
+//
+// Mar real quase nunca tem um sistema só: o swell que viajou de uma tempestade
+// distante chega numa direção, e o vento local levanta outra. É o cruzamento dos
+// dois que produz o padrão de losango do mar confuso — com um sistema apenas, a
+// superfície fica com aparência de esteira penteada, por mais cascatas que se
+// empilhem.
+//
+// A energia dos dois soma em densidade e uma única realização aleatória é
+// sorteada sobre a soma. Sortear duas realizações e somá-las produziria o dobro
+// da variância e dois campos descorrelacionados sobrepostos, que é ruído, não
+// mar cruzado.
+struct WaterSwellSystem final {
+  // Zero desliga o sistema por completo e devolve, bit a bit, o espectro de um
+  // trem só. É o padrão porque nenhuma cena existente pediu o segundo.
+  float windSpeed = 0.0f;
+  float directionRadians = 0.0f;
+  float fetch = 100000.0f;
+  float swell = 1.0f;   // swell distante chega mais organizado que vento local
+  float spread = 0.1f;
+  // Fração da energia deste sistema. Não normaliza o outro: um mar cruzado tem
+  // mais energia total que qualquer um dos dois sozinho, e fingir o contrário
+  // faria ligar o segundo trem baixar a altura significativa.
+  float weight = 1.0f;
+};
+
 struct WaterSpectrumSettings final {
   u32 resolution = 128;
   u32 seed = 1;
@@ -21,6 +47,7 @@ struct WaterSpectrumSettings final {
   float shortWaveDamping = 0.1f; // metres
   float minimumWavelength = 0.0f;
   float maximumWavelength = 10000.0f;
+  WaterSwellSystem crossSwell{};
 };
 
 bool validateWaterSpectrum(const WaterSpectrumSettings &settings) noexcept;

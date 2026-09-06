@@ -2,6 +2,8 @@
 #include "renderer/water_fft.h"
 #include "renderer/water_cascades.h"
 #include <cmath>
+#include <complex>
+#include <vector>
 
 using namespace ae::renderer;
 
@@ -211,4 +213,139 @@ AE_TEST(Water_fft_rejects_bad_sizes_without_losing_plan) {
   AE_EXPECT_EQ(plan.size(),8u,"previous plan preserved");
   AE_EXPECT_TRUE(plan.transform(values,false),"still usable");
   AE_EXPECT_TRUE(!plan.transform2D(values,true),"reject mismatched field");
+}
+
+namespace {
+
+// Energia total do campo. Parseval: a soma dos módulos ao quadrado dos modos é
+// proporcional à variância da superfície, que é o que "quanto mar existe" quer
+// dizer fisicamente.
+double spectralEnergy(const std::vector<std::complex<float>> &amplitudes) {
+  double total = 0.0;
+  for (const auto &mode : amplitudes) {
+    total += static_cast<double>(mode.real()) * mode.real() +
+             static_cast<double>(mode.imag()) * mode.imag();
+  }
+  return total;
+}
+
+// Energia contida num setor angular em torno de uma direção, para responder
+// "de onde vem a onda" sem depender de inspeção visual.
+double energyTowards(const std::vector<std::complex<float>> &amplitudes, ae::u32 resolution,
+                     double directionRadians, double halfWidthRadians) {
+  double total = 0.0;
+  for (ae::u32 y = 0; y < resolution; ++y) {
+    for (ae::u32 x = 0; x < resolution; ++x) {
+      const int kx = x < resolution / 2 ? static_cast<int>(x)
+                                        : static_cast<int>(x) - static_cast<int>(resolution);
+      const int kz = y < resolution / 2 ? static_cast<int>(y)
+                                        : static_cast<int>(y) - static_cast<int>(resolution);
+      if (kx == 0 && kz == 0) continue;
+      double delta = std::atan2(static_cast<double>(kz), static_cast<double>(kx)) - directionRadians;
+      while (delta > 3.14159265358979323846) delta -= 2.0 * 3.14159265358979323846;
+      while (delta < -3.14159265358979323846) delta += 2.0 * 3.14159265358979323846;
+      if (std::fabs(delta) > halfWidthRadians) continue;
+      const auto &mode = amplitudes[y * resolution + x];
+      total += static_cast<double>(mode.real()) * mode.real() +
+               static_cast<double>(mode.imag()) * mode.imag();
+    }
+  }
+  return total;
+}
+
+} // namespace
+
+AE_TEST(Water_cross_swell_off_reproduces_the_single_train_bit_for_bit) {
+  // A garantia que sustenta as outras: nenhuma cena existente pode mudar por
+  // este trabalho ter entrado. O padrão desliga o segundo trem, e desligado
+  // significa idêntico, não parecido.
+  WaterSpectrumSettings settings{};
+  settings.resolution = 64;
+  std::vector<std::complex<float>> baseline, unchanged;
+  AE_EXPECT_TRUE(generateWaterSpectrum(settings, baseline), "baseline spectrum");
+
+  settings.crossSwell = WaterSwellSystem{};  // explicitamente o padrão
+  AE_EXPECT_TRUE(generateWaterSpectrum(settings, unchanged), "explicit default spectrum");
+  AE_EXPECT_EQ(baseline.size(), unchanged.size(), "same mode count");
+  for (ae::usize index = 0; index < baseline.size(); ++index) {
+    AE_EXPECT_EQ(baseline[index].real(), unchanged[index].real(), "identical real part");
+    AE_EXPECT_EQ(baseline[index].imag(), unchanged[index].imag(), "identical imaginary part");
+  }
+
+  // Peso zero também desliga, mesmo com vento configurado: é como um autor
+  // silencia o sistema sem perder os parâmetros que ajustou.
+  settings.crossSwell.windSpeed = 12.0f;
+  settings.crossSwell.weight = 0.0f;
+  std::vector<std::complex<float>> silenced;
+  AE_EXPECT_TRUE(generateWaterSpectrum(settings, silenced), "silenced spectrum");
+  for (ae::usize index = 0; index < baseline.size(); ++index) {
+    AE_EXPECT_EQ(baseline[index].real(), silenced[index].real(), "zero weight changes nothing");
+  }
+}
+
+AE_TEST(Water_cross_swell_adds_energy_from_its_own_direction) {
+  WaterSpectrumSettings settings{};
+  settings.resolution = 64;
+  settings.windDirection = 0.0f;          // trem principal ao longo de +X
+  std::vector<std::complex<float>> single;
+  AE_EXPECT_TRUE(generateWaterSpectrum(settings, single), "single train");
+
+  settings.crossSwell.windSpeed = 10.0f;
+  settings.crossSwell.directionRadians = 1.5707963f;  // cruzado a 90 graus
+  settings.crossSwell.weight = 1.0f;
+  std::vector<std::complex<float>> crossed;
+  AE_EXPECT_TRUE(generateWaterSpectrum(settings, crossed), "crossed sea");
+
+  // Mar cruzado tem mais energia que qualquer um dos trens sozinho. Normalizar
+  // para manter a energia constante faria ligar o segundo trem baixar a altura
+  // significativa, que é o oposto do que acontece no mar.
+  AE_EXPECT_TRUE(spectralEnergy(crossed) > spectralEnergy(single) * 1.05,
+                 "the crossed sea carries more energy");
+
+  // E a energia nova chega da direção do segundo trem, não espalhada.
+  const double quarter = 0.7853981634;  // 45 graus de meia largura
+  const double alongCross = energyTowards(crossed, settings.resolution, 1.5707963, quarter) -
+                            energyTowards(single, settings.resolution, 1.5707963, quarter);
+  const double alongMain = energyTowards(crossed, settings.resolution, 0.0, quarter) -
+                           energyTowards(single, settings.resolution, 0.0, quarter);
+  AE_EXPECT_TRUE(alongCross > 0.0, "energy grows towards the cross swell");
+  AE_EXPECT_TRUE(alongCross > alongMain * 4.0, "and grows far more there than along the main train");
+}
+
+AE_TEST(Water_cross_swell_alone_still_makes_a_sea) {
+  // Vento local parado com swell chegando de longe é situação real, e é o
+  // caso em que um espectro de trem único devolve mar de vidro.
+  WaterSpectrumSettings settings{};
+  settings.resolution = 64;
+  settings.windSpeed = 0.0f;
+  settings.crossSwell.windSpeed = 9.0f;
+  settings.crossSwell.directionRadians = 2.0f;
+  std::vector<std::complex<float>> swellOnly;
+  AE_EXPECT_TRUE(generateWaterSpectrum(settings, swellOnly), "swell without local wind");
+  AE_EXPECT_TRUE(spectralEnergy(swellOnly) > 0.0, "distant swell still raises a sea");
+
+  settings.crossSwell.windSpeed = 0.0f;
+  std::vector<std::complex<float>> flat;
+  AE_EXPECT_TRUE(generateWaterSpectrum(settings, flat), "both trains calm");
+  AE_EXPECT_EQ(spectralEnergy(flat), 0.0, "no wind anywhere is a flat sea");
+}
+
+AE_TEST(Water_cross_swell_obeys_the_same_limits_as_the_main_train) {
+  WaterSpectrumSettings settings{};
+  settings.resolution = 32;
+  AE_EXPECT_TRUE(validateWaterSpectrum(settings), "defaults are valid");
+
+  // Mesmo modelo físico, mesmas faixas: aceitar 200 m/s só no segundo trem
+  // seria uma porta lateral para a mesma instabilidade numérica.
+  settings.crossSwell.windSpeed = 200.0f;
+  AE_EXPECT_TRUE(!validateWaterSpectrum(settings), "wind speed is bounded");
+  settings.crossSwell = WaterSwellSystem{};
+  settings.crossSwell.weight = 1.5f;
+  AE_EXPECT_TRUE(!validateWaterSpectrum(settings), "weight is a fraction");
+  settings.crossSwell = WaterSwellSystem{};
+  settings.crossSwell.spread = -0.1f;
+  AE_EXPECT_TRUE(!validateWaterSpectrum(settings), "spread is bounded");
+  settings.crossSwell = WaterSwellSystem{};
+  settings.crossSwell.fetch = 0.0f;
+  AE_EXPECT_TRUE(!validateWaterSpectrum(settings), "fetch has a floor");
 }
