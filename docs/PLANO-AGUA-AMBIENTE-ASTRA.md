@@ -534,11 +534,12 @@ exatamente por que um barco adorna para o lado errado.
 2. **Plano ajustado por mínimos quadrados**, com 3 a 5 amostras do `WaterField`
    por corpo em vez de uma. Um casco longo numa onda curta sente um plano
    inclinado; com uma amostra só, sente a média e não balança.
-3. **Reação do corpo na água.** Hoje a água empurra o corpo e o corpo não
-   empurra a água. Fechar o laço com o sistema (3) da §4: a região submersa
-   injeta altura na textura dinâmica. É o que produz esteira e ondulação de
-   impacto — e não custa quase nada, porque a injeção é um desenho na textura
-   que já vai existir.
+3. **Reação do corpo na água — parcial e funcional no analítico.** O laboratório
+   já injeta volume molhado e velocidade vertical num campo dinâmico com ganho e
+   amplitude configuráveis. CPU e shaders analítico/espectral compartilham
+   amostragem, filtragem e borda sem costura. Falta a física consumir o provedor
+   FFT e falta distribuir a reação pelo casco/painéis para produzir uma esteira
+   naval direcional; o proxy atual não encerra este item.
 4. **Arrasto por painel** para cascos, no lugar de um coeficiente global: força
    normal proporcional à área projetada de cada face contra o fluxo relativo. É
    o que faz um leme funcionar e um casco planar.
@@ -604,6 +605,11 @@ escala 1,00, ≤ 16,6 ms de GPU na mesma pose.*
 Refração, espuma direcional, ondas dinâmicas com esteira, subsurface de crista,
 casco real. *Portão: ≤ 16,6 ms mantidos; o barco gera esteira visível; o casco
 adorna na direção certa numa onda lateral.*
+
+Estado em 2026-09-06: a ondulação dinâmica já é visível no caminho analítico,
+limitada e configurável, e ambos os shaders conseguem compô-la sem emenda de
+grade. O portão continua aberto: ainda faltam reação distribuída/esteira do
+casco, consulta física FFT e a prova de ≤16,6 ms na mesma condição térmica.
 
 **Fase 3 — ambiente** (§6, itens 1 a 4). Atmosfera, névoa, exposição
 automática, sol especular. *Portão: ≤ 16,6 ms mantidos; horizonte sem degrau.*

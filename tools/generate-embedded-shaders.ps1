@@ -42,7 +42,7 @@ if ($All) {
         shadow_depth_masked = @('frag')
         shadow_depth = @('vert')
         triangle = @('vert', 'frag')
-        water_surface = @('frag')
+        water_surface = @('vert', 'frag')
         water_spectrum_evolve = @('comp')
         water_fft_inverse = @('comp')
         water_spectral = @('vert', 'frag')

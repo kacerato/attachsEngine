@@ -34,6 +34,9 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   // o bloco e declarado uma vez por estagio e as tres descrevem a mesma memoria.
   vec4 waterRippleArea;
 } environment;
+#ifdef AETHER_WATER_RIPPLES
+#include "water_ripple_sampling.glsl"
+#endif
 #ifdef AETHER_SPECTRAL_WATER
 #include "water_spectral_sampling.glsl"
 #endif
@@ -199,22 +202,20 @@ void main() {
         slope+=delta/distance*derivative;
       }
     }
-    worldPosition.y=height;
-#ifdef AETHER_SPECTRAL_WATER
+#ifdef AETHER_WATER_RIPPLES
     // A ondulacao dinamica soma na mesma altura do espectro, e sua inclinacao
-    // na mesma normal. Ela e deslocamento vertical puro: nao entra em
-    // `horizontal` nem nas derivadas do mapeamento, que continuam do espectro.
+    // na mesma normal, independentemente de o provedor global ser analitico ou
+    // espectral. Ela e deslocamento vertical puro.
     highp float rippleHeight=sampleWaterRipple(worldPosition.xz);
     if(rippleHeight!=0.0) {
       height+=rippleHeight;
-      // Diferenca central no espacamento da celula da malha: barato e continuo
-      // entre celulas, que e o que evita facetas na crista da ondulacao.
-      highp float rippleStep=max(waterCellSize,0.25);
-      slope+=vec2(sampleWaterRipple(worldPosition.xz+vec2(rippleStep,0.0))-
-                  sampleWaterRipple(worldPosition.xz-vec2(rippleStep,0.0)),
-                  sampleWaterRipple(worldPosition.xz+vec2(0.0,rippleStep))-
-                  sampleWaterRipple(worldPosition.xz-vec2(0.0,rippleStep)))/(2.0*rippleStep);
+      // No espacamento da propria malha: abaixo dele a geometria nao carrega o
+      // detalhe de qualquer forma, e o fragmento e quem o mostra.
+      slope+=sampleWaterRippleSlope(worldPosition.xz,max(waterCellSize,0.25));
     }
+#endif
+    worldPosition.y=height;
+#ifdef AETHER_SPECTRAL_WATER
     worldPosition.xz+=horizontal;
     highp vec3 tangentX=vec3(1.0+horizontalDerivative.x,slope.x,horizontalDerivative.y);
     highp vec3 tangentZ=vec3(horizontalDerivative.y,slope.y,1.0+horizontalDerivative.z);

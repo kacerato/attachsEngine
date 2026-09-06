@@ -31,7 +31,18 @@ void main() {
   // visible sky to one filtered lookup avoids the full-screen procedural-cloud
   // cost measured on mobile. Only world direction is used: camera translation
   // cannot move the infinitely distant sky or introduce parallax.
-  vec3 color=textureLod(environmentMap,environmentUv(vDirection),0.0).rgb;
+  vec3 visibleDirection=vDirection;
+  if((frame.materialFlags.x&1u)!=0u && visibleDirection.y<0.0) {
+    // A grade oceanica acompanha XZ da camera, mas continua finita. Raios
+    // quase paralelos podem passar alem da ultima aresta e revelar a metade
+    // inferior do panorama como uma faixa horizontal. Nessa cunha, refletir a
+    // direcao acima do horizonte e a continuacao optica correta do ambiente
+    // que a superficie distante representaria. O bit so e publicado quando a
+    // cena possui MapMaterialWaterCameraGrid; lagos finitos e cenas terrestres
+    // continuam usando o panorama integral.
+    visibleDirection.y=-visibleDirection.y;
+  }
+  vec3 color=textureLod(environmentMap,environmentUv(visibleDirection),0.0).rgb;
   if((frame.materialFlags.z&1u)!=0u) color=linearToSrgb(color);
   outColor=vec4(color,1);
 }

@@ -26,6 +26,9 @@ const float PI=3.141592653589793;
 layout(constant_id=2) const uint ENVIRONMENT_PROJECTION=0u;
 #include "environment_lighting.glsl"
 #include "microfacet_brdf.glsl"
+#ifdef AETHER_WATER_RIPPLES
+#include "water_ripple_sampling.glsl"
+#endif
 #ifdef AETHER_SPECTRAL_WATER
 #define AETHER_SPECTRAL_FRAGMENT 1
 #include "water_spectral_sampling.glsl"
@@ -42,14 +45,18 @@ highp float viewDepthFromDevice(highp float depth,highp float nearPlane,highp fl
 // Frequências menores que um vértice são detalhe de normal, não geometria. A
 // cadeia mip filtra automaticamente o espectro; duas projeções giradas quebram
 // repetição sem o custo e o aliasing de vários sin/cos por fragmento.
-mediump vec2 microSlope(highp vec2 xz,highp float timeSeconds,highp float cameraDistance) {
+mediump vec2 microSlope(highp vec2 xz,highp float timeSeconds) {
   const highp mat2 rotation=mat2(0.819152,0.573576,-0.573576,0.819152);
   highp vec2 uv0=xz*0.031+vec2(0.021,-0.014)*timeSeconds;
   highp vec2 uv1=rotation*xz*0.057+vec2(-0.017,0.026)*timeSeconds;
   mediump vec2 first=texture(waterNormalTexture,uv0).rg*2.0-1.0;
   mediump vec2 second=rotation*(texture(waterNormalTexture,uv1).rg*2.0-1.0);
-  mediump float distanceFade=1.0-smoothstep(260.0,1300.0,cameraDistance);
-  return (first*0.105+second*0.065)*distanceFade*environment.waterParameters.w;
+  // Nao existe corte por distancia: a cadeia mip completa do asset ja integra
+  // frequencias menores que o footprint do pixel ate a inclinacao media zero.
+  // Um fade metrico fixo formava uma faixa lisa no horizonte e ainda mudava de
+  // tamanho aparente com FOV/resolucao. A intensidade continua sendo o eixo
+  // global e serializavel WaterProfile::microWaveStrength.
+  return (first*0.105+second*0.065)*environment.waterParameters.w;
 }
 
 // Atribuição de custo: um GPU tile-deferred colapsa timestamps por subpasse, e a
@@ -83,7 +90,7 @@ void main() {
       (cameraDistance/max(waterDepth,nearPlane));
   thickness=min(thickness,farPlane);
   mediump vec2 micro=isolation==WATER_ISOLATION_NO_MICRO_NORMAL?vec2(0.0):
-      microSlope(vPosition.xz,environment.waterParameters.z,cameraDistance);
+      microSlope(vPosition.xz,environment.waterParameters.z);
 #ifdef AETHER_SPECTRAL_WATER
   if(isolation!=WATER_ISOLATION_NO_SPECTRAL_DETAIL) {
     // Geometry filtering must not erase wavelengths still resolvable by pixels.
@@ -102,6 +109,19 @@ void main() {
       highp vec2 uv=transpose(rotation)*vSpectralCoordinates.xy/parameters.y;
       micro+=rotation*sampleWaterSlope(cascade,uv,uint(parameters.x))*weight;
     }
+  }
+#endif
+#ifdef AETHER_WATER_RIPPLES
+  // A ondulacao dinamica entra como inclinacao, no mesmo acumulador das
+  // cascatas. A malha nao consegue mostra-la como geometria -- seu passo no
+  // centro e de metros, e o campo resolve meio metro -- mas o pixel consegue.
+  // O passo da diferenca acompanha o footprint do pixel: amostrar mais fino que
+  // isso so produz cintilacao no horizonte, sem detalhe que se veja.
+  if(isolation!=WATER_ISOLATION_NO_SPECTRAL_DETAIL) {
+    highp float rippleCell=environment.waterRippleArea.z/
+        max(environment.waterRippleArea.w,1.0);
+    highp float rippleFootprint=max(length(dFdx(vPosition.xz)),length(dFdy(vPosition.xz)));
+    micro+=sampleWaterRippleSlope(vPosition.xz,max(rippleCell,rippleFootprint));
   }
 #endif
   mediump vec3 n=normalize(vec3(vNormal.x-micro.x,vNormal.y,vNormal.z-micro.y));

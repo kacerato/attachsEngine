@@ -22,6 +22,9 @@ struct AndroidRuntimeControls final {
   float absorption = 1.0f;
   float foam = 0.65f;
   float interactionStrength = 0.65f;
+  // Ganho corpo->grade. Independente da onda analítica de toque: um autor
+  // pode querer interação tátil forte sem fazer cada casco abrir uma cratera.
+  float bodyRippleGain = 0.75f;
   float waterRoughness = 0.22f;
   float waterTurbidity = 0.10f;
   float waterIor = 1.333f;

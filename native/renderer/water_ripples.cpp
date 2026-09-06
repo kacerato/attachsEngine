@@ -19,11 +19,12 @@ bool finite(float value) noexcept { return std::isfinite(value); }
 
 bool validateWaterRipples(const WaterRippleSettings &settings) noexcept {
   if (!finite(settings.areaSize) || !finite(settings.propagationSpeed) ||
-      !finite(settings.damping)) return false;
+      !finite(settings.damping) || !finite(settings.maximumAmplitude)) return false;
   return settings.areaSize > 0.0f && settings.areaSize <= 1024.0f &&
          settings.resolution >= 8u && settings.resolution <= 1024u &&
          settings.propagationSpeed > 0.0f && settings.propagationSpeed <= 100.0f &&
-         settings.damping >= 0.0f && settings.damping <= 100.0f;
+         settings.damping >= 0.0f && settings.damping <= 100.0f &&
+         settings.maximumAmplitude > 0.0f && settings.maximumAmplitude <= 20.0f;
 }
 
 float waterRippleMaximumStep(const WaterRippleSettings &settings) noexcept {
@@ -94,8 +95,10 @@ void WaterRippleField::addImpulse(float x, float z, float radius, float amplitud
       // empurrada e solta do repouso. Somar só no atual diz ao integrador que
       // ela chegou ali em um passo, o que é uma velocidade enorme, e a
       // amplitude cresce sozinha nos primeiros quadros.
-      current_[cell] += delta;
-      previous_[cell] += delta;
+      current_[cell] = std::clamp(current_[cell] + delta, -settings_.maximumAmplitude,
+                                  settings_.maximumAmplitude);
+      previous_[cell] = std::clamp(previous_[cell] + delta, -settings_.maximumAmplitude,
+                                   settings_.maximumAmplitude);
     }
   }
 }
@@ -118,7 +121,9 @@ void WaterRippleField::stepOnce(float seconds) noexcept {
       // Amortecimento exponencial exato para o passo, em vez de subtrair uma
       // fração: assim o decaimento não muda quando o passo é subdividido.
       next *= std::exp(-settings_.damping * seconds);
-      scratch_[here] = finite(next) ? next : 0.0f;
+      scratch_[here] = finite(next)
+          ? std::clamp(next, -settings_.maximumAmplitude, settings_.maximumAmplitude)
+          : 0.0f;
     }
   }
 
@@ -136,7 +141,9 @@ void WaterRippleField::stepOnce(float seconds) noexcept {
   const float mur = (courant - 1.0f) / (courant + 1.0f);
   const auto radiate = [&](usize border, usize inner) {
     const float value = current_[inner] + mur * (scratch_[inner] - current_[border]);
-    scratch_[border] = finite(value) ? value : 0.0f;
+    scratch_[border] = finite(value)
+        ? std::clamp(value, -settings_.maximumAmplitude, settings_.maximumAmplitude)
+        : 0.0f;
   };
   for (u32 row = 1; row < last; ++row) {
     radiate(index(0u, row), index(1u, row));
@@ -176,24 +183,39 @@ bool WaterRippleField::advance(float seconds) noexcept {
 float WaterRippleField::height(float x, float z) const noexcept {
   if (resolution_ == 0 || !finite(x) || !finite(z)) return 0.0f;
   const float half = settings_.areaSize * 0.5f;
+  const float edgeDistance = std::min(half - std::abs(x - centreX_),
+                                      half - std::abs(z - centreZ_));
+  if (edgeDistance <= 0.0f) return 0.0f;
   const float column = (x - centreX_ + half) / cellSize_ - 0.5f;
   const float row = (z - centreZ_ + half) / cellSize_ - 0.5f;
   const float flooredColumn = std::floor(column), flooredRow = std::floor(row);
   const int baseColumn = static_cast<int>(flooredColumn);
   const int baseRow = static_cast<int>(flooredRow);
-  if (baseColumn < 0 || baseRow < 0 ||
-      baseColumn + 1 >= static_cast<int>(resolution_) ||
-      baseRow + 1 >= static_cast<int>(resolution_)) return 0.0f;
 
   const float fractionColumn = column - flooredColumn;
   const float fractionRow = row - flooredRow;
-  const float topLeft = current_[index(static_cast<u32>(baseColumn), static_cast<u32>(baseRow))];
-  const float topRight = current_[index(static_cast<u32>(baseColumn + 1), static_cast<u32>(baseRow))];
-  const float bottomLeft = current_[index(static_cast<u32>(baseColumn), static_cast<u32>(baseRow + 1))];
-  const float bottomRight = current_[index(static_cast<u32>(baseColumn + 1), static_cast<u32>(baseRow + 1))];
+  // A moldura virtual fora da grade vale zero. Isso permite interpolar até a
+  // borda em vez de saltar do primeiro texel para zero, que desenharia um
+  // quadrado na normal da água.
+  const float topLeft = rawHeight(baseColumn, baseRow);
+  const float topRight = rawHeight(baseColumn + 1, baseRow);
+  const float bottomLeft = rawHeight(baseColumn, baseRow + 1);
+  const float bottomRight = rawHeight(baseColumn + 1, baseRow + 1);
   const float top = topLeft + (topRight - topLeft) * fractionColumn;
   const float bottom = bottomLeft + (bottomRight - bottomLeft) * fractionColumn;
-  return top + (bottom - top) * fractionRow;
+  const float sampled = top + (bottom - top) * fractionRow;
+  // Dois texels de feather casam com a borda absorvente do solver. A função
+  // cúbica tem derivada zero nas duas pontas, portanto altura e normal chegam a
+  // zero sem costura quando a área local encontra o oceano global.
+  const float normalized = std::clamp(edgeDistance / (2.0f * cellSize_), 0.0f, 1.0f);
+  const float edgeFade = normalized * normalized * (3.0f - 2.0f * normalized);
+  return sampled * edgeFade;
+}
+
+float WaterRippleField::rawHeight(int column, int row) const noexcept {
+  if (column < 0 || row < 0 || column >= static_cast<int>(resolution_) ||
+      row >= static_cast<int>(resolution_)) return 0.0f;
+  return current_[index(static_cast<u32>(column), static_cast<u32>(row))];
 }
 
 void WaterRippleField::slope(float x, float z, float &slopeX, float &slopeZ) const noexcept {
@@ -205,6 +227,12 @@ void WaterRippleField::slope(float x, float z, float &slopeX, float &slopeZ) con
   const float step = cellSize_;
   slopeX = (height(x + step, z) - height(x - step, z)) / (2.0f * step);
   slopeZ = (height(x, z + step) - height(x, z - step)) / (2.0f * step);
+}
+
+bool WaterRippleField::copyHeightsTo(std::span<float> destination) const noexcept {
+  if (resolution_ == 0 || destination.size() < current_.size()) return false;
+  std::copy(current_.begin(), current_.end(), destination.begin());
+  return true;
 }
 
 double WaterRippleField::totalEnergy() const noexcept {

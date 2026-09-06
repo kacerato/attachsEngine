@@ -20,6 +20,7 @@ struct SharedControls final {
   std::atomic<float> absorption{1.0f};
   std::atomic<float> foam{0.65f};
   std::atomic<float> interactionStrength{0.65f};
+  std::atomic<float> bodyRippleGain{0.75f};
   std::atomic<float> waterRoughness{0.22f};
   std::atomic<float> waterTurbidity{0.10f};
   std::atomic<float> waterIor{1.333f};
@@ -63,6 +64,7 @@ AndroidRuntimeControls runtimeControlsSnapshot() noexcept {
     snapshot.absorption = controls.absorption.load(std::memory_order_relaxed);
     snapshot.foam = controls.foam.load(std::memory_order_relaxed);
     snapshot.interactionStrength = controls.interactionStrength.load(std::memory_order_relaxed);
+    snapshot.bodyRippleGain = controls.bodyRippleGain.load(std::memory_order_relaxed);
     snapshot.waterRoughness = controls.waterRoughness.load(std::memory_order_relaxed);
     snapshot.waterTurbidity = controls.waterTurbidity.load(std::memory_order_relaxed);
     snapshot.waterIor = controls.waterIor.load(std::memory_order_relaxed);
@@ -97,7 +99,7 @@ Java_dev_aether_editor_AetherActivity_nativeApplyControls(
     JNIEnv *, jclass, jfloat renderScale, jint shadowQuality, jboolean dynamicResolution,
     jfloat bloomIntensity, jfloat sharpen, jfloat waveHeight, jfloat waveSpeed,
     jfloat waveSteepness, jfloat microWaves, jfloat surfaceOpacity, jfloat absorption,
-    jfloat foam, jfloat interactionStrength, jfloat waterRoughness,
+    jfloat foam, jfloat interactionStrength, jfloat bodyRippleGain, jfloat waterRoughness,
     jfloat waterTurbidity, jfloat waterIor, jfloat waveDirectionDegrees,
     jfloat foamCompression,jfloat foamGrowth,jfloat foamDecay,
     jfloat specularAntialiasing,jfloat contactFoamWidth,jfloat fluidDensity,jboolean waterPaused,
@@ -122,6 +124,8 @@ Java_dev_aether_editor_AetherActivity_nativeApplyControls(
   controls.foam.store(bounded(foam, 0.0f, 2.0f, 0.65f), std::memory_order_relaxed);
   controls.interactionStrength.store(bounded(interactionStrength, 0.0f, 2.0f, 0.65f),
                                      std::memory_order_relaxed);
+  controls.bodyRippleGain.store(bounded(bodyRippleGain, 0.0f, 4.0f, 0.75f),
+                                std::memory_order_relaxed);
   controls.waterRoughness.store(bounded(waterRoughness, 0.025f, 1.0f, 0.22f), std::memory_order_relaxed);
   controls.waterTurbidity.store(bounded(waterTurbidity, 0.0f, 1.0f, 0.10f), std::memory_order_relaxed);
   controls.waterIor.store(bounded(waterIor, 1.0f, 2.0f, 1.333f), std::memory_order_relaxed);

@@ -1316,7 +1316,7 @@ void android_main(android_app *app) {
                                     .count();
       const auto waterControls=ae::platform::android::runtimeControlsSnapshot();
       if (shell.oceanPreview && !shell.oceanValidation.update(shell.instancedRenderer,timeSeconds,timeSeconds,
-          waterControls.fluidDensity,waterControls.waterPaused)) {
+          waterControls.fluidDensity,waterControls.waterPaused,waterControls.bodyRippleGain)) {
         __android_log_print(ANDROID_LOG_ERROR,LogTag,"[OceanValidation] simulation update failed");
       }
       shell.waterTimeSeconds = timeSeconds;

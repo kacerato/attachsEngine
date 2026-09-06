@@ -438,10 +438,18 @@ bool InstancedRenderer::createPipeline() {
          : createShaderModule(device_, rhi::shaders::kWater_SurfaceFragSpirv,
                            rhi::shaders::kWater_SurfaceFragSpirvSize))
       : VK_NULL_HANDLE;
+  VkShaderModule waterVertModule = waterSubpassActive_
+      ? (spectralWaterCount_ > 0
+         ? createShaderModule(device_, rhi::shaders::kWater_SpectralVertSpirv,
+                              rhi::shaders::kWater_SpectralVertSpirvSize)
+         : createShaderModule(device_, rhi::shaders::kWater_SurfaceVertSpirv,
+                              rhi::shaders::kWater_SurfaceVertSpirvSize))
+      : VK_NULL_HANDLE;
   if (vertModule == VK_NULL_HANDLE || fragModule == VK_NULL_HANDLE ||
       (dirtRoadPreview_ &&
        (coverageFragModule == VK_NULL_HANDLE || coverageShadeFragModule == VK_NULL_HANDLE)) ||
-      (waterSubpassActive_ && waterFragModule == VK_NULL_HANDLE)) {
+      (waterSubpassActive_ &&
+       (waterFragModule == VK_NULL_HANDLE || waterVertModule == VK_NULL_HANDLE))) {
     if (vertModule != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vertModule, nullptr);
     if (fragModule != VK_NULL_HANDLE) vkDestroyShaderModule(device_, fragModule, nullptr);
     if (coverageFragModule != VK_NULL_HANDLE)
@@ -450,6 +458,8 @@ bool InstancedRenderer::createPipeline() {
       vkDestroyShaderModule(device_, coverageShadeFragModule, nullptr);
     if (waterFragModule != VK_NULL_HANDLE)
       vkDestroyShaderModule(device_, waterFragModule, nullptr);
+    if (waterVertModule != VK_NULL_HANDLE)
+      vkDestroyShaderModule(device_, waterVertModule, nullptr);
     return false;
   }
 
@@ -737,13 +747,11 @@ bool InstancedRenderer::createPipeline() {
         if (pipelineOk) pipelineOk = createMaterialVariants(2, transparentMaterialPipelines_);
       }
       if (pipelineOk && waterSubpassActive_) {
-        VkShaderModule spectralVertex=VK_NULL_HANDLE;
-        if(spectralWaterCount_>0) {
-          spectralVertex=createShaderModule(device_,rhi::shaders::kWater_SpectralVertSpirv,
-              rhi::shaders::kWater_SpectralVertSpirvSize);
-          if(spectralVertex==VK_NULL_HANDLE) pipelineOk=false;
-          else stages[0].module=spectralVertex;
-        }
+        // Água tem vertex shader próprio mesmo no provedor analítico: é ele
+        // que declara a grade de ondulação. Reusar o vertex geral obrigava a
+        // declarar o binding 15 em todas as pipelines da cena ou fazia a
+        // interação simplesmente desaparecer quando FFT estava desligada.
+        stages[0].module = waterVertModule;
         stages[1].module = waterFragModule;
         stages[1].pSpecializationInfo = &gpuIsolationInfo;
         pipelineInfo.subpass = 1;
@@ -758,7 +766,6 @@ bool InstancedRenderer::createPipeline() {
         colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         pipelineOk = pipelineOk && vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                                &waterPipeline_) == VK_SUCCESS;
-        if(spectralVertex!=VK_NULL_HANDLE) vkDestroyShaderModule(device_,spectralVertex,nullptr);
         stages[0].module=vertModule;
         pipelineInfo.subpass = 0;
       }
@@ -773,6 +780,8 @@ bool InstancedRenderer::createPipeline() {
     vkDestroyShaderModule(device_, coverageShadeFragModule, nullptr);
   if (waterFragModule != VK_NULL_HANDLE)
     vkDestroyShaderModule(device_, waterFragModule, nullptr);
+  if (waterVertModule != VK_NULL_HANDLE)
+    vkDestroyShaderModule(device_, waterVertModule, nullptr);
   return layoutOk && pipelineOk;
 }
 
@@ -781,20 +790,12 @@ bool InstancedRenderer::setWaterRipples(const renderer::WaterRippleField &field)
   const u32 resolution = field.settings().resolution;
   if (resolution == 0 || resolution > renderer::MaximumWaterGridSegments) return false;
 
-  // A cópia é ponto a ponto porque o campo não expõe o vetor interno: ele é
-  // dele, e abrir o armazenamento para o renderer trocaria uma cópia barata por
-  // um acoplamento que amarra os dois a um layout de memória.
+  // Snapshot em lote: o campo preserva ownership e o renderer não paga quatro
+  // amostras bilineares para reconstruir valores que já existem na grade.
   auto *destination = static_cast<float *>(waterRippleBuffer_.mappedData());
   const float area = field.settings().areaSize;
-  const float cell = area / static_cast<float>(resolution);
-  const float origin = -area * 0.5f + cell * 0.5f;
-  for (u32 row = 0; row < resolution; ++row) {
-    const float z = field.centreZ() + origin + static_cast<float>(row) * cell;
-    for (u32 column = 0; column < resolution; ++column) {
-      const float x = field.centreX() + origin + static_cast<float>(column) * cell;
-      destination[row * resolution + column] = field.height(x, z);
-    }
-  }
+  const usize cellCount = static_cast<usize>(resolution) * resolution;
+  if (!field.copyHeightsTo(std::span<float>(destination, cellCount))) return false;
   if (!memoryAllocator_->flushBuffer(waterRippleBuffer_)) return false;
 
   waterRippleResolution_ = resolution;
@@ -802,6 +803,22 @@ bool InstancedRenderer::setWaterRipples(const renderer::WaterRippleField &field)
   waterRippleCentre_[1] = field.centreZ();
   waterRippleArea_ = area;
   waterRippleGain_ = 1.0f;
+
+  // Um relato periódico do que foi publicado. Sem ele, "a ondulação não
+  // aparece" não distingue campo vazio de campo que o vértice não leu.
+  static u32 reportCountdown = 0;
+  if (reportCountdown == 0) {
+    reportCountdown = 120;
+    float peak = 0.0f;
+    for (usize cell = 0; cell < cellCount; ++cell)
+      peak = std::max(peak, std::abs(destination[cell]));
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+        "[WaterRipple] %ux%u area=%.0f m centro=(%.1f,%.1f) pico=%.4f m.",
+        resolution, resolution, static_cast<double>(area),
+        static_cast<double>(waterRippleCentre_[0]), static_cast<double>(waterRippleCentre_[1]),
+        static_cast<double>(peak));
+  }
+  --reportCountdown;
   return true;
 }
 
@@ -876,7 +893,8 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
     bindings[i]={i,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   u32 bindingCount = spectralWaterCount_>0 ? 15u : (waterSubpassActive_ ? 7u : 5u);
   if (waterSubpassActive_)
-    bindings[bindingCount++]={15,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,nullptr};
+    bindings[bindingCount++]={15,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,
+     VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   layout.bindingCount = bindingCount;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
@@ -3165,9 +3183,12 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
       // buildLodRenderGroups nunca ve o nivel e o grupo termina no nivel
       // simplificado anterior. E o controle do A/B, nao um caminho de qualidade.
       if (!foliageImpostors_ && (flags & renderer::MapMaterialImpostor) != 0) continue;
-      if ((flags & renderer::MapMaterialWater) != 0)
+      if ((flags & renderer::MapMaterialWater) != 0) {
         waterDrawOrder_.push_back(index);
-      else if ((flags & renderer::MapMaterialBlend) != 0)
+        const u32 cameraWater = renderer::MapMaterialWater |
+                                renderer::MapMaterialWaterCameraGrid;
+        cameraWaterHorizonFillActive_ |= (flags & cameraWater) == cameraWater;
+      } else if ((flags & renderer::MapMaterialBlend) != 0)
         transparentDrawOrder_.push_back(index);
       else if ((flags & renderer::MapMaterialAlphaMask) != 0)
         coverageDrawOrder_.push_back(index);
@@ -3438,6 +3459,7 @@ void InstancedRenderer::shutdown() {
   visibleCoverageDrawOrder_.clear();
   visibleTransparentDrawOrder_.clear();
   waterSubpassActive_ = false;
+  cameraWaterHorizonFillActive_ = false;
   visibilityTelemetry_ = {};
   renderedFrameCount_ = 0;
   baseSampler_.shutdown();
@@ -4326,6 +4348,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     skyPush.surfaceTransform[1] = surfaceTransform.xy;
     skyPush.surfaceTransform[2] = surfaceTransform.yx;
     skyPush.surfaceTransform[3] = surfaceTransform.yy;
+    skyPush.materialFlags[0] = cameraWaterHorizonFillActive_ ? 1u : 0u;
     skyPush.materialFlags[2] = encodeSrgb ? 1u : 0u;
     vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipeline_);
     boundMapPipeline = VK_NULL_HANDLE;

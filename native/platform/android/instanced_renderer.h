@@ -407,6 +407,11 @@ private:
   // compõe transmissão/reflexão sem uma cópia full-resolution da cena.
   VkPipeline waterPipeline_ = VK_NULL_HANDLE;
   bool waterSubpassActive_ = false;
+  // Uma grade de agua camera-relative e finita por construcao. Quando a
+  // camera olha quase paralela ao plano, a cunha entre sua ultima aresta e o
+  // horizonte geometrico deve receber o prolongamento refletido do ceu, nao a
+  // metade inferior do panorama HDRI (que aparece como uma faixa chapada).
+  bool cameraWaterHorizonFillActive_ = false;
   // Distance-material LOD pipelines. They keep the same geometry/material and
   // remove only normal-map work after an entire draw bound leaves the global
   // normal-detail radius.

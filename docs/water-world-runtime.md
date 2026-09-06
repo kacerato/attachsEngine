@@ -166,3 +166,56 @@ Interpolação de transforms entre passos e múltiplos pontos de casco são pend
   sono com igualdade numérica entre timesteps.
 - Sem instalação, captura ou medição no aparelho nesta rodada. Qualidade visual,
   custo do filtro e FPS continuam aguardando validação autorizada no hardware.
+
+### Ondulação bidirecional e continuidade visual (2026-09-06)
+
+O laboratório analítico fecha agora o primeiro laço corpo -> água -> renderer.
+Cada corpo submerso injeta no `WaterRippleField` uma perturbação proporcional à
+velocidade vertical e ao volume molhado. O ganho desta reação é independente do
+controle de interação por toque: `bodyRippleGain` percorre painel Android,
+snapshot JNI e `OceanValidation`, com faixa 0–4 e padrão 0,75. Zero desliga a
+reação sem desligar boiância, ondas globais ou impulsos manuais.
+
+O campo usa 96x96 amostras em 48 m no demo, timestep fixo e borda absorvente.
+`maximumAmplitude` é uma propriedade do solver (padrão global 2 m; 1,5 m no
+laboratório) e limita tanto injeções quanto integração e contorno. O limite evita
+que uma configuração extrema acumule energia não física sem transformar o valor
+em constante de shader. A leitura fora da grade usa texel virtual zero e uma
+transição cúbica nos dois últimos texels; CPU e GPU usam a mesma regra, portanto
+a área móvel não desenha um retângulo no oceano.
+
+`copyHeightsTo` publica um snapshot contíguo no SSBO de binding 15 sem executar
+uma interpolação CPU por texel. O mesmo sampler GLSL compõe altura no vertex e
+inclinação no fragment tanto no provedor analítico quanto no espectral. A
+diferença central acompanha o maior entre célula do campo e footprint do pixel,
+evitando cintilação subpixel. Os shaders de água têm módulos vertex próprios;
+alterar o fragment sem regenerar o vertex não deixa mais o pipeline parcialmente
+atualizado. Os headers embarcados são reproduzíveis por
+`tools/generate-embedded-shaders.ps1` e validados com `spirv-val`.
+
+O detalhe microscópico deixou de desaparecer numa distância fixa de 1.300 m.
+A cadeia mip do normal map agora decide continuamente o que o pixel resolve;
+`WaterProfile::microWaveStrength` continua sendo o eixo global de intensidade.
+Para `MapMaterialWaterCameraGrid`, a cunha eventualmente descoberta além da
+última aresta recebe a direção refletida do ambiente; superfícies finitas e
+cenas sem oceano continuam amostrando o panorama completo.
+
+Validação desta integração:
+
+- 456/456 testes nativos no host, incluindo saturação do solver, snapshot e
+  continuidade de borda;
+- build Android Release (`assembleRelease`) concluído;
+- APK instalado no Xiaomi 25053PC47G, 2772x1280, escala 1,0 e DRS desligada;
+- provedor analítico: pico observado 0,1142 m, com decaimento para 0,0099 m,
+  sem explosão, emenda retangular, VUID ou falha do processo Aether;
+- provedor FFT: três cascatas, 3.342.336 bytes e slopes RG16F, inicializado e
+  renderizado sem VUID;
+- capturas em `build/android-validation/water-ripple-integration/analytical-final.png`
+  e `spectral-final.png`.
+
+Limite preservado: `OceanValidation` ainda suspende a simulação física quando o
+provedor FFT está ativo. O pipeline espectral já consegue ler o SSBO, mas os
+corpos do laboratório ainda não consultam nem injetam no campo multicascata.
+A faixa atmosférica clara visível no horizonte pertence ao HDRI autorado e não é
+uma costura da água; sua substituição por atmosfera/aerial perspective permanece
+no portão da Fase 3 do plano ASTRA.

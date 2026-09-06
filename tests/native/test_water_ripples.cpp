@@ -14,6 +14,7 @@ WaterRippleSettings settings() {
   value.resolution = 64;
   value.propagationSpeed = 4.0f;
   value.damping = 0.5f;
+  value.maximumAmplitude = 2.0f;
   return value;
 }
 
@@ -30,6 +31,8 @@ AE_TEST(WaterRipples_reject_configurations_the_solver_cannot_integrate) {
   AE_EXPECT_TRUE(!validateWaterRipples(broken), "a wave that does not travel is not a wave");
   broken = settings(); broken.damping = -1.0f;
   AE_EXPECT_TRUE(!validateWaterRipples(broken), "negative damping would inject energy");
+  broken = settings(); broken.maximumAmplitude = 0.0f;
+  AE_EXPECT_TRUE(!validateWaterRipples(broken), "amplitude envelope must be positive");
   broken = settings(); broken.areaSize = std::nanf("");
   AE_EXPECT_TRUE(!validateWaterRipples(broken), "non finite area");
 }
@@ -141,6 +144,37 @@ AE_TEST(WaterRipples_sample_outside_the_area_reads_flat_water) {
   AE_EXPECT_EQ(slopeZ, 0.0f, "on either axis");
 }
 
+AE_TEST(WaterRipples_fade_to_the_local_grid_edge_without_a_normal_seam) {
+  WaterRippleField field;
+  AE_EXPECT_TRUE(field.initialize(settings()), "initialize");
+  // A perturbação toca a moldura para tornar uma descontinuidade observável.
+  field.addImpulse(-15.5f, 0.0f, 2.0f, 1.0f);
+  const float boundary = -settings().areaSize * 0.5f;
+  AE_EXPECT_EQ(field.height(boundary, 0.0f), 0.0f, "the exact boundary is flat");
+  AE_EXPECT_EQ(field.height(boundary - 0.001f, 0.0f), 0.0f, "outside remains flat");
+  const float near = field.height(boundary + 0.01f, 0.0f);
+  const float inward = field.height(boundary + 0.50f, 0.0f);
+  AE_EXPECT_TRUE(std::fabs(near) < std::fabs(inward) * 0.01f,
+                 "the edge approaches zero continuously");
+  float slopeX = 0.0f, slopeZ = 0.0f;
+  field.slope(boundary, 0.0f, slopeX, slopeZ);
+  AE_EXPECT_TRUE(std::isfinite(slopeX) && std::isfinite(slopeZ), "edge normal stays finite");
+}
+
+AE_TEST(WaterRipples_copy_snapshot_is_exact_and_does_not_expose_ownership) {
+  WaterRippleField field;
+  AE_EXPECT_TRUE(field.initialize(settings()), "initialize");
+  field.addImpulse(0.0f, 0.0f, 2.0f, 0.5f);
+  std::vector<float> snapshot(static_cast<ae::usize>(settings().resolution) * settings().resolution);
+  AE_EXPECT_TRUE(field.copyHeightsTo(snapshot), "complete destination accepted");
+  AE_EXPECT_TRUE(std::any_of(snapshot.begin(), snapshot.end(), [](float value) { return value != 0.0f; }),
+                 "snapshot contains the disturbance");
+  std::vector<float> tooSmall(snapshot.size() - 1u);
+  AE_EXPECT_TRUE(!field.copyHeightsTo(tooSmall), "short destination rejected");
+  snapshot.assign(snapshot.size(), 0.0f);
+  AE_EXPECT_TRUE(field.totalEnergy() > 0.0, "caller changes do not mutate the field");
+}
+
 AE_TEST(WaterRipples_slope_points_away_from_a_bump) {
   WaterRippleField field;
   AE_EXPECT_TRUE(field.initialize(settings()), "initialize");
@@ -184,4 +218,23 @@ AE_TEST(WaterRipples_refuse_garbage_without_corrupting_the_surface) {
   field.addImpulse(0.0f, 0.0f, 1.0f, std::nanf(""));
   AE_EXPECT_EQ(field.totalEnergy(), 0.0, "no bad impulse reached the grid");
   AE_EXPECT_TRUE(field.advance(1.0f / 60.0f), "and the field still works");
+}
+
+AE_TEST(WaterRipples_bound_overlapping_sources_before_they_become_geometry_artifacts) {
+  WaterRippleField field;
+  auto configuration = settings();
+  configuration.maximumAmplitude = 0.75f;
+  AE_EXPECT_TRUE(field.initialize(configuration), "initialize");
+  for (int impulse = 0; impulse < 100; ++impulse)
+    field.addImpulse(0.0f, 0.0f, 3.0f, 10.0f);
+  AE_EXPECT_TRUE(field.height(0.0f, 0.0f) <= configuration.maximumAmplitude,
+                 "overlapping impulses obey the authored envelope");
+  for (int step = 0; step < 120; ++step)
+    AE_EXPECT_TRUE(field.advance(1.0f / 120.0f), "advance saturated field");
+  std::vector<float> snapshot(static_cast<ae::usize>(configuration.resolution) *
+                              configuration.resolution);
+  AE_EXPECT_TRUE(field.copyHeightsTo(snapshot), "snapshot");
+  AE_EXPECT_TRUE(std::all_of(snapshot.begin(), snapshot.end(), [&](float value) {
+                   return std::isfinite(value) && std::fabs(value) <= configuration.maximumAmplitude;
+                 }), "every cell remains finite and inside the envelope");
 }

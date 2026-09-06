@@ -11,38 +11,9 @@ vec2 sampleWaterSlope(int cascade,vec2 position,uint n) {
   if(cascade==2) return textureLod(slope2,uv,0).rg;
   return textureLod(slope3,uv,0).rg;
 }
-#else
-// Alturas da ondulacao dinamica, escritas pela CPU a cada quadro. Storage
-// buffer e nao textura pelo mesmo motivo das cascatas: o vertice interpola a
-// mao de qualquer forma, e uma imagem exigiria staging e barreira por quadro.
-layout(std430,set=1,binding=15) readonly buffer WaterRipples { float rippleHeights[]; };
+#endif
 
-float readRippleHeight(int column,int row,int resolution) {
-  int c=clamp(column,0,resolution-1),r=clamp(row,0,resolution-1);
-  return rippleHeights[r*resolution+c];
-}
-
-// Altura da ondulacao em coordenadas de mundo, com a mesma bilinear da CPU.
-// Fora da area devolve zero, e somar zero e o que mantem a fronteira sem degrau.
-float sampleWaterRipple(vec2 world) {
-  int resolution=int(environment.waterRippleArea.w+0.5);
-  if(resolution<2) return 0.0;
-  float area=environment.waterRippleArea.z;
-  if(area<=0.0) return 0.0;
-  float cell=area/float(resolution);
-  vec2 local=(world-environment.waterRippleArea.xy+vec2(area*0.5))/cell-vec2(0.5);
-  vec2 base=floor(local);
-  if(base.x<0.0||base.y<0.0||base.x+1.0>=float(resolution)||base.y+1.0>=float(resolution))
-    return 0.0;
-  vec2 fraction=local-base;
-  int column=int(base.x),row=int(base.y);
-  float topLeft=readRippleHeight(column,row,resolution);
-  float topRight=readRippleHeight(column+1,row,resolution);
-  float bottomLeft=readRippleHeight(column,row+1,resolution);
-  float bottomRight=readRippleHeight(column+1,row+1,resolution);
-  return mix(mix(topLeft,topRight,fraction.x),mix(bottomLeft,bottomRight,fraction.x),fraction.y);
-}
-
+#ifndef AETHER_SPECTRAL_FRAGMENT
 layout(std430,set=1,binding=7) readonly buffer Cascade0 { vec4 cascade0[]; };
 layout(std430,set=1,binding=8) readonly buffer Cascade1 { vec4 cascade1[]; };
 layout(std430,set=1,binding=9) readonly buffer Cascade2 { vec4 cascade2[]; };

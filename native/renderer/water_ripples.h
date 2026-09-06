@@ -2,6 +2,7 @@
 
 #include "core/base.h"
 
+#include <span>
 #include <vector>
 
 namespace ae::renderer {
@@ -34,6 +35,10 @@ struct WaterRippleSettings final {
   // Fração da amplitude perdida por segundo. Sem isso a energia injetada nunca
   // sai e a área vira ruído acumulado depois de alguns minutos.
   float damping = 0.75f;
+  // Envelope local em metros. Interações podem chegar de vários corpos no
+  // mesmo texel; limitar no solver impede que uma configuração autoral extrema
+  // produza picos fora dos bounds de render/física ou uma serra numérica.
+  float maximumAmplitude = 2.0f;
 };
 
 bool validateWaterRipples(const WaterRippleSettings &settings) noexcept;
@@ -75,6 +80,11 @@ public:
   // Inclinação da superfície, para compor com a normal do espectro.
   void slope(float x, float z, float &slopeX, float &slopeZ) const noexcept;
 
+  // Copia o snapshot lógico, em linhas consecutivas, sem expor ownership nem
+  // o vetor interno. O renderer usa esta fronteira para publicar a grade à GPU
+  // em um único passe, sem fazer quatro leituras bilineares por célula.
+  bool copyHeightsTo(std::span<float> destination) const noexcept;
+
   // Soma dos quadrados — proporcional à energia da superfície. Existe para os
   // testes provarem que a energia injetada de fato sai da grade.
   //
@@ -88,6 +98,7 @@ private:
   usize index(u32 column, u32 row) const noexcept {
     return static_cast<usize>(row) * resolution_ + column;
   }
+  float rawHeight(int column, int row) const noexcept;
   void stepOnce(float seconds) noexcept;
 
   WaterRippleSettings settings_{};

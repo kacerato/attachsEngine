@@ -21,7 +21,7 @@ public:
     boatDraws_.clear();
   }
   bool update(InstancedRenderer &renderer, double wallTime, float &renderTime,
-              float density, bool paused) {
+              float density, bool paused, float bodyRippleGain) {
     // Do not float bodies on an unrelated analytic approximation to FFT.
     if (renderer.waterProviderStatus() == 2) return true;
     if (!physics_) {
@@ -61,6 +61,7 @@ public:
       rippleSettings.resolution = 96;
       rippleSettings.propagationSpeed = 4.0f;
       rippleSettings.damping = 0.6f;
+      rippleSettings.maximumAmplitude = 1.5f;
       if (!ripples_.initialize(rippleSettings)) return false;
     }
     auto setup=renderer.waterQuerySetup();
@@ -68,7 +69,7 @@ public:
     if (!water_.setVolume(1,setup)) return false;
     physics::WaterRuntimeSettings runtimeSettings;
     runtimeSettings.forces.fluidDensity=density;
-    runtimeSettings.rippleGain=1.0f;
+    runtimeSettings.rippleGain=bodyRippleGain;
     if (!simulation_.setWaterSettings(runtimeSettings)) return false;
     const double delta=previous_<0?0:std::max(0.0,wallTime-previous_);
     previous_=wallTime;

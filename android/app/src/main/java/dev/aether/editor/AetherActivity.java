@@ -19,7 +19,7 @@ public final class AetherActivity extends NativeActivity {
     private static native void nativeApplyControls(float renderScale, int shadowQuality,
         boolean dynamicResolution, float bloomIntensity, float sharpen, float waveHeight,
         float waveSpeed, float waveSteepness, float microWaves, float surfaceOpacity,
-        float absorption, float foam, float interactionStrength, float roughness,
+        float absorption, float foam, float interactionStrength, float bodyRippleGain, float roughness,
         float turbidity, float ior, float direction, float foamCompression,float foamGrowth,float foamDecay,
         float specularAntialiasing,float contactFoamWidth,float fluidDensity,boolean waterPaused,
         float swellLength,float directionalSpread,float crossSwell,
@@ -27,6 +27,7 @@ public final class AetherActivity extends NativeActivity {
 
     private float renderScale=1, bloom=.08f, sharpen=.12f, waveHeight=1, waveSpeed=1;
     private float steepness=1, micro=1, opacity=.72f, absorption=1, foam=.65f, interaction=.65f;
+    private float bodyRippleGain=.75f;
     private int shadows=3; private boolean dynamic=true;
     private float roughness=.22f, turbidity=.10f, ior=1.333f, direction=0;
     private float foamCompression=.8f,foamGrowth=4,foamDecay=.5f;
@@ -88,7 +89,7 @@ public final class AetherActivity extends NativeActivity {
     }
     private void apply() {
         nativeApplyControls(renderScale,shadows,dynamic,bloom,sharpen,waveHeight,waveSpeed,
-                            steepness,micro,opacity,absorption,foam,interaction,
+                            steepness,micro,opacity,absorption,foam,interaction,bodyRippleGain,
                             roughness,turbidity,ior,direction,foamCompression,foamGrowth,foamDecay,
                             specularAntialiasing,contactFoamWidth,fluidDensity,waterPaused,
                             swellLength,directionalSpread,crossSwell,
@@ -204,6 +205,8 @@ public final class AetherActivity extends NativeActivity {
             panel.addView(spectralFoamControls);
         }
         panel.addView(slider("Força da interação",0,2,interaction,v->interaction=v));
+        panel.addView(slider("Resposta da água aos corpos",0,4,bodyRippleGain,
+            v->bodyRippleGain=v));
         TextView hint=heading("Toque curto na água gera uma onda local.");
         panel.addView(hint);
         }
