@@ -8,6 +8,8 @@ Ver `docs/PLANO-FECHAMENTO-LACUNAS.md` para a ordem executável de fechamento
 dos itens parciais, limitações conhecidas e critérios de validação M0–M9.
 Ver `docs/PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md` para a ordem global de desempenho,
 correção visual, céu/iluminação e evolução do renderer sem reduzir qualidade.
+Ver `docs/design/ASTRA-SHELL-UI.md` para o shell do editor — marca ASTRA, splash,
+prateleira de projetos, criação e carregamento — e de onde vêm suas medidas.
 
 ## Estado atual: Fase 1 (Núcleo) em execução
 
@@ -24,6 +26,7 @@ físico e as medições sustentadas de hardware ainda precisam produzir evidênc
 | `native/rendergraph` — compilador de render graph (testável headless) | em construção |
 | `android/app` — shell NativeActivity ARM64 + frame Vulkan | triângulo validado em 1 aparelho físico; matriz de GPUs pendente |
 | `prototype/` — protótipo do editor landscape | em construção |
+| `android/app/.../shell` — shell ASTRA: splash, projetos, criação, carregamento | validado em aparelho físico |
 
 ## Build
 
@@ -55,6 +58,12 @@ executada da raiz do repositório:
 
 O gate prolongado usa `-LifecycleCycles 100 -ExerciseConfigurationChange` e
 gera evidências em `build/android-validation/`.
+
+O aplicativo abre no shell ASTRA (`AstraShellActivity`): splash da marca,
+prateleira de projetos, criação com escolha de cena inicial e tela de
+carregamento. Dali ele entra nos previews nativos existentes. O antigo seletor
+técnico de cenas continua no APK, sem ícone, acessível por
+`adb shell am start -n dev.aether.editor/.SceneLauncherActivity`.
 
 O APK atual é o shell gráfico técnico da Fase 0. Ele cria surface, swapchain,
 pipeline e apresenta um triângulo RGB em Vulkan. A regressão atual cobre 1.000

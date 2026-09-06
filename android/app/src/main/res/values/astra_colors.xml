@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Verde de marca amostrado do master em assets/astra-visual/brand. -->
+    <color name="astra_accent">#CAFB04</color>
+    <color name="astra_void">#000000</color>
+</resources>

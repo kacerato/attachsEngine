@@ -1,0 +1,58 @@
+{
+  "$description": "Sistema visual ASTRA. Valores amostrados dos masters em assets/astra-visual/reference — não são estimativas de olho.",
+  "canvas": { "width": 1672, "height": 941, "aspect": "16:9" },
+  "color": {
+    "void":        "#000000",
+    "canvas":      "#050505",
+    "silhouette":  "#101010",
+    "surface":     "#0F0F0F",
+    "raised":      "#141414",
+    "line":        "#1E1E1E",
+    "lineSoft":    "#131313",
+    "track":       "#3D3D3D",
+    "text":        "#FFFFFF",
+    "textDim":     "#9A9A9A",
+    "textMuted":   "#6E6E6E",
+    "textFaint":   "#4A4A4A",
+    "accent":      "#CAFB04",
+    "accentInk":   "#050505",
+    "accentWash":  "rgba(202,251,4,0.09)"
+  },
+  "radius": { "card": 16, "thumb": 8, "control": 10, "mark": 24, "bar": 5 },
+  "type": {
+    "family": "Inter, 'Segoe UI', Roboto, system-ui, sans-serif",
+    "label":   { "size": 11, "weight": 500, "tracking": 0.22, "case": "upper" },
+    "labelWide": { "size": 11, "weight": 500, "tracking": 0.34, "case": "upper" },
+    "body":    { "size": 15, "weight": 400 },
+    "title":   { "size": 38, "weight": 700 },
+    "cardName":{ "size": 17, "weight": 500 }
+  },
+  "chrome": {
+    "bracket":      { "x": 35, "y": 36, "w": 25, "h": 45, "stroke": 1 },
+    "bracketEnd":   { "x": 1590, "y": 857, "w": 44, "h": 45 },
+    "tag":          { "x": 68, "line1Y": 60, "line2Y": 80, "capHeight": 10 },
+    "statusSquares":{ "x": 1572, "y": 37, "size": 13, "gap": 11.5, "count": 3 },
+    "footer":       { "x": 51, "y": 852 }
+  },
+  "splash": {
+    "lockup":   { "x": 385, "y": 376, "w": 892, "h": 156 },
+    "bar":      { "x": 571, "y": 777, "w": 529, "h": 9 },
+    "caption":  { "y": 814 }
+  },
+  "loading": {
+    "lockup":   { "x": 634, "y": 184, "w": 385, "h": 63 },
+    "card":     { "x": 389, "y": 314, "w": 892, "h": 351, "padding": 18 },
+    "thumb":    { "w": 440, "h": 315 },
+    "bar":      { "x": 534, "y": 731, "w": 603, "h": 10 },
+    "caption":  { "y": 768 }
+  },
+  "projects": {
+    "lockup":   { "x": 69, "y": 45, "w": 372, "h": 63 },
+    "sidebar":  { "width": 263, "itemHeight": 75, "itemPitch": 80, "firstItemY": 216,
+                  "railX": 14, "railWidth": 4, "iconX": 48, "labelX": 110, "footerY": 863 },
+    "sectionLabel": { "x": 296, "y": 317 },
+    "newButton":{ "x": 1362, "y": 234, "w": 264, "h": 66 },
+    "card":     { "y": 344, "w": 317, "h": 353, "pitch": 339, "firstX": 295,
+                  "thumbH": 296, "footerH": 57 }
+  }
+}

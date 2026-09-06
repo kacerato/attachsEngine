@@ -21,8 +21,8 @@
         android:extractNativeLibs="true"
         android:fullBackupContent="@xml/backup_rules"
         android:hasCode="true"
-        android:icon="@drawable/ic_aether"
-        android:label="Aether"
+        android:icon="@mipmap/ic_astra"
+        android:label="Astra"
         android:theme="@style/AetherTheme">
         <!-- Sem este meta-data o GameManager nao enxerga o game-mode-config e
              o app fica em STANDARD. A diferenca medida entre STANDARD e
@@ -31,15 +31,24 @@
         <meta-data
             android:name="android.game_mode_config"
             android:resource="@xml/game_mode_config" />
+        <!-- O shell do ASTRA e a unica porta de entrada: ele decide qual
+             projeto o editor abre. -->
         <activity
-            android:name=".SceneLauncherActivity"
+            android:name=".shell.AstraShellActivity"
             android:exported="true"
-            android:screenOrientation="sensorLandscape">
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/AstraShellTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Seletor tecnico de cenas de validacao. Sai do menu do aparelho mas
+             continua acessivel por adb para as medicoes de regressao. -->
+        <activity
+            android:name=".SceneLauncherActivity"
+            android:exported="true"
+            android:screenOrientation="sensorLandscape" />
         <activity
             android:name=".AetherActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"

@@ -1,0 +1,92 @@
+{
+  "project-new": {
+    "source": [
+      111,
+      135,
+      357,
+      411
+    ],
+    "square": 274
+  },
+  "project-open": {
+    "source": [
+      459,
+      159,
+      798,
+      408
+    ],
+    "square": 338
+  },
+  "project-import": {
+    "source": [
+      876,
+      132,
+      1170,
+      417
+    ],
+    "square": 293
+  },
+  "history-revert": {
+    "source": [
+      102,
+      516,
+      390,
+      801
+    ],
+    "square": 287
+  },
+  "search": {
+    "source": [
+      492,
+      519,
+      765,
+      801
+    ],
+    "square": 281
+  },
+  "settings": {
+    "source": [
+      867,
+      519,
+      1158,
+      807
+    ],
+    "square": 289
+  },
+  "asset-mesh": {
+    "source": [
+      63,
+      879,
+      306,
+      1146
+    ],
+    "square": 266
+  },
+  "play": {
+    "source": [
+      396,
+      909,
+      588,
+      1131
+    ],
+    "square": 222
+  },
+  "capture-export": {
+    "source": [
+      654,
+      885,
+      939,
+      1134
+    ],
+    "square": 283
+  },
+  "back": {
+    "source": [
+      978,
+      936,
+      1203,
+      1134
+    ],
+    "square": 223
+  }
+}

@@ -1,0 +1,507 @@
+<meta charset="utf-8">
+<title>ASTRA Shell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap">
+
+<!--
+  Shell do ASTRA: splash, projetos, criacao e carregamento.
+
+  O palco tem 1672x941 porque essa e a resolucao dos masters em
+  assets/astra-visual/reference; toda coordenada aqui foi medida naqueles
+  arquivos, nao estimada. A tela real so escala o palco, entao a fidelidade nao
+  depende do aparelho.
+
+  Tecla R sobrepoe o master da tela atual; [ e ] ajustam a opacidade.
+-->
+
+<style>
+:root {
+  --void:       #000000;
+  --canvas:     #050505;
+  --silhouette: #101010;
+  --surface:    #0F0F0F;
+  --raised:     #141414;
+  --line:       #1E1E1E;
+  --line-soft:  #131313;
+  --track:      #3D3D3D;
+  --text:       #FFFFFF;
+  --dim:        #9A9A9A;
+  --muted:      #6E6E6E;
+  --faint:      #4A4A4A;
+  --accent:     #CAFB04;
+  --accent-ink: #050505;
+  --wash:       rgba(202, 251, 4, .09);
+  --ui: Poppins, Inter, "Segoe UI", Roboto, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--void); overflow: hidden; }
+body { display: grid; place-items: center; font-family: var(--ui); color: var(--text); }
+
+#viewport { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+
+#stage {
+  position: absolute; left: 50%; top: 50%;
+  width: 1672px; height: 941px;
+  transform-origin: center;
+  background: var(--canvas);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* A silhueta e o mesmo cometa do mark, ampliado. Ela nao e decoracao solta:
+   ancora o canto direito das tres telas nos masters. */
+/* Posicao derivada do master: o planeta do glifo tem centro (1470,168) e raio
+   92 na tela, o que fixa escala e origem sem chute. */
+#silhouette {
+  position: absolute; left: 594px; top: -12px;
+  width: 1012px; height: 784px;
+  background: var(--silhouette);
+  -webkit-mask: url(../assets/astra-visual/brand/astra-glyph-1024.png) no-repeat center / contain;
+  mask: url(../assets/astra-visual/brand/astra-glyph-1024.png) no-repeat center / contain;
+  pointer-events: none;
+}
+#vignette {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 45%, rgba(255,255,255,.018), transparent 62%);
+}
+
+.screen { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity .32s ease; }
+.screen.on { opacity: 1; pointer-events: auto; }
+
+/* ---------- chrome comum ---------- */
+.bracket { position: absolute; border: 1px solid #3A3A3A; }
+.bracket.tl { left: 35px; top: 36px; width: 30px; height: 44px; border-right: 0; border-bottom: 0; }
+.bracket.br { left: 1590px; top: 857px; width: 43px; height: 44px; border-left: 0; border-top: 0; }
+#projects .bracket.br { left: 1585px; top: 847px; width: 44px; height: 51px; }
+
+.tag { position: absolute; font-size: 13px; font-weight: 400; letter-spacing: .22em; color: #B8B8B8; line-height: 1; }
+.tag.l1 { left: 68px; top: 57px; }
+.tag.l2 { left: 68px; top: 77px; }
+.tag.r1 { left: 1323px; top: 45px; }
+.tag.r2 { left: 1323px; top: 65px; }
+.tag.end1 { right: 95px; top: 845px; text-align: right; }
+.tag.end2 { right: 95px; top: 865px; text-align: right; }
+
+.squares { position: absolute; left: 1572px; top: 37px; display: flex; gap: 11.5px; }
+#projects .squares { left: 1562px; top: 45px; gap: 13px; }
+.squares i { width: 13px; height: 13px; background: var(--track); display: block; }
+.squares i:first-child { background: var(--accent); }
+
+.stamp { position: absolute; left: 51px; top: 849px; font-size: 13px; letter-spacing: .18em; color: var(--faint); line-height: 1.55; }
+
+/* ---------- barra de progresso ---------- */
+.bar { position: absolute; border-radius: 5px; background: var(--track); overflow: hidden; }
+.bar > span { display: block; height: 100%; width: 0; border-radius: 5px; background: var(--accent); transition: width .18s linear; }
+.caption { position: absolute; width: 100%; text-align: center; font-size: 13px; font-weight: 400; letter-spacing: .34em; color: var(--dim); line-height: 1; }
+
+/* ---------- splash ---------- */
+#splash .lockup { position: absolute; left: 385px; top: 376px; width: 892px; height: 156px; }
+#splash .bar { left: 571px; top: 777px; width: 529px; height: 9px; }
+#splash .caption { top: 811px; }
+
+/* ---------- carregamento de projeto ---------- */
+#loading .lockup { position: absolute; left: 634px; top: 184px; width: 385px; height: 63px; }
+#loading .card {
+  position: absolute; left: 389px; top: 314px; width: 892px; height: 351px;
+  border-radius: 16px; background: var(--surface); border: 1px solid var(--line);
+  padding: 18px; display: flex; gap: 43px;
+}
+#loading .thumb { width: 440px; height: 315px; border-radius: 8px; object-fit: cover; background: var(--raised); flex: none; }
+#loading .meta { flex: 1; padding-top: 54px; }
+#loading .bar { left: 534px; top: 731px; width: 603px; height: 10px; }
+#loading .caption { top: 765px; }
+
+.field-label { font-size: 13px; font-weight: 400; letter-spacing: .28em; color: var(--muted); line-height: 1; }
+.project-title { font-size: 44px; font-weight: 600; letter-spacing: -.01em; margin: 16px 0 24px; }
+.path { display: flex; align-items: center; gap: 14px; font-size: 19px; color: var(--dim); }
+.path img { width: 24px; height: 24px; opacity: .85; }
+.rule { height: 1px; background: var(--line); margin: 26px 0 22px; }
+.stats { display: flex; align-items: center; gap: 30px; }
+.stat { display: flex; align-items: center; gap: 13px; }
+.stat img { width: 22px; height: 22px; opacity: .85; }
+.stat b { display: block; font-size: 22px; font-weight: 500; margin-top: 8px; }
+.stat-divider { width: 1px; height: 42px; background: var(--line); }
+
+/* ---------- projetos ---------- */
+#projects .lockup { position: absolute; left: 69px; top: 45px; width: 372px; height: 63px; }
+
+#sidebar { position: absolute; left: 0; top: 0; width: 263px; height: 941px; border-right: 1px solid var(--line-soft); }
+.nav-item {
+  position: absolute; left: 14px; width: 249px; height: 75px;
+  display: flex; align-items: center; gap: 33px; padding-left: 38px;
+  background: none; border: 0; cursor: pointer;
+  font: inherit; font-size: 21px; font-weight: 400; color: var(--dim); text-align: left;
+}
+/* Os icones da navegacao sao de contorno, nao os solidos da folha: e assim que
+   aparecem no master, e so o contorno aceita tingir com o estado do item. */
+.nav-item svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.nav-item:hover { color: #D8D8D8; }
+.nav-item.on { background: var(--wash); color: var(--text); }
+.nav-item.on svg { stroke: var(--accent); }
+.nav-item.on::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--accent); }
+
+.section-label { position: absolute; left: 296px; top: 306px; font-size: 15px; font-weight: 400; letter-spacing: .28em; color: var(--muted); line-height: 1; }
+
+.primary {
+  position: absolute; left: 1362px; top: 234px; width: 264px; height: 66px;
+  border: 0; border-radius: 14px; background: var(--accent); color: var(--accent-ink);
+  font: 400 22px var(--ui); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 20px;
+}
+.primary:hover { filter: brightness(1.06); }
+.primary svg { width: 26px; height: 26px; }
+
+#grid { position: absolute; left: 295px; top: 344px; display: flex; gap: 22px; }
+.project-card {
+  width: 317px; height: 353px; border-radius: 12px; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--line);
+  cursor: pointer; padding: 0; text-align: left; font: inherit; color: inherit;
+  display: block; position: relative; transition: border-color .16s, transform .16s;
+}
+.project-card:hover { border-color: #2E2E2E; transform: translateY(-2px); }
+.project-card .cover { position: relative; height: 284px; background: var(--raised); }
+.project-card .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.project-card .kicker {
+  position: absolute; left: 21px; top: 20px; font-size: 13px; font-weight: 400;
+  letter-spacing: .26em; line-height: 1.45; color: rgba(255,255,255,.92);
+  text-shadow: 0 1px 6px rgba(0,0,0,.75);
+}
+.project-card .foot { height: 69px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; }
+.project-card .foot span { font-size: 20px; font-weight: 400; }
+.project-card .foot svg { width: 19px; height: 19px; stroke: #7E7E7E; fill: none; stroke-width: 1.6; }
+.project-card.empty { display: grid; place-items: center; border-style: dashed; border-color: #232323; background: transparent; }
+.project-card.empty div { text-align: center; color: var(--muted); font-size: 14px; letter-spacing: .1em; }
+.project-card.empty b { display: block; font-size: 34px; color: #2E2E2E; margin-bottom: 10px; }
+
+/* ---------- modal ---------- */
+#veil { position: absolute; inset: 0; background: rgba(0,0,0,.72); opacity: 0; pointer-events: none; transition: opacity .22s; }
+#veil.on { opacity: 1; pointer-events: auto; }
+#modal {
+  position: absolute; left: 336px; top: 96px; width: 1000px; height: 750px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+  padding: 40px 44px; display: flex; flex-direction: column;
+}
+#modal h2 { font-size: 30px; font-weight: 700; margin: 12px 0 4px; }
+#modal .hint { font-size: 14px; color: var(--muted); margin-bottom: 26px; }
+.input { width: 100%; height: 58px; border-radius: 10px; background: #0A0A0A; border: 1px solid var(--line); color: var(--text); font: 500 18px var(--ui); padding: 0 20px; margin-bottom: 18px; }
+.input:focus { outline: 0; border-color: var(--accent); }
+.input::placeholder { color: #3D3D3D; }
+.templates { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 8px; }
+.tpl {
+  position: relative; height: 132px; border-radius: 10px; background: #0A0A0A;
+  border: 1px solid var(--line); cursor: pointer; font: inherit; color: var(--dim);
+  padding: 16px; text-align: left; transition: border-color .16s;
+}
+.tpl:hover { border-color: #333; }
+.tpl.on { border-color: var(--accent); color: var(--text); background: var(--wash); }
+.tpl b { display: block; font-size: 15px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+.tpl small { font-size: 12px; line-height: 1.5; color: var(--muted); }
+.tpl.soon { opacity: .48; cursor: not-allowed; }
+.tpl .soon-flag {
+  position: absolute; right: 12px; top: 12px; font-size: 9px; letter-spacing: .18em;
+  color: var(--accent-ink); background: var(--accent); border-radius: 3px; padding: 3px 6px; font-weight: 600;
+}
+#modal .actions { margin-top: auto; display: flex; justify-content: flex-end; gap: 14px; }
+.ghost { height: 54px; padding: 0 30px; border-radius: 10px; background: none; border: 1px solid var(--line); color: var(--dim); font: 500 17px var(--ui); cursor: pointer; }
+.ghost:hover { color: var(--text); border-color: #333; }
+.solid { height: 54px; padding: 0 38px; border-radius: 10px; background: var(--accent); border: 0; color: var(--accent-ink); font: 600 17px var(--ui); cursor: pointer; }
+.solid:disabled { opacity: .35; cursor: not-allowed; }
+
+/* ---------- editor provisorio ---------- */
+#editor .center { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 22px; }
+#editor h1 { font-size: 44px; font-weight: 700; letter-spacing: -.01em; }
+#editor p { font-size: 15px; color: var(--muted); letter-spacing: .06em; text-align: center; line-height: 1.9; }
+.soon-pill { font-size: 11px; font-weight: 600; letter-spacing: .3em; color: var(--accent-ink); background: var(--accent); padding: 7px 16px; border-radius: 4px; }
+
+/* ---------- calibracao ---------- */
+#ref { position: absolute; inset: 0; background-size: 1672px 941px; opacity: 0; pointer-events: none; mix-blend-mode: difference; }
+#hud { position: fixed; left: 12px; bottom: 10px; font: 11px/1.7 ui-monospace, monospace; color: #5A5A5A; letter-spacing: .08em; }
+</style>
+
+<div id="viewport">
+  <div id="stage">
+    <div id="silhouette"></div>
+    <div id="vignette"></div>
+
+    <!-- SPLASH -->
+    <section class="screen" id="splash">
+      <div class="bracket tl"></div><div class="bracket br"></div>
+      <div class="tag l1">CREATE</div><div class="tag l2">WITHOUT LIMITS</div>
+      <div class="squares"><i></i><i></i><i></i></div>
+      <img class="lockup" src="../assets/astra-visual/brand/astra-lockup-1024.png" alt="ASTRA">
+      <div class="bar"><span></span></div>
+      <div class="caption">INITIALIZING WORKSPACE</div>
+      <div class="stamp">ASTRA ENGINE<br>v1.0</div>
+    </section>
+
+    <!-- CARREGAMENTO DE PROJETO -->
+    <section class="screen" id="loading">
+      <div class="bracket tl"></div><div class="bracket br"></div>
+      <div class="tag l1">CREATE</div><div class="tag l2">WITHOUT LIMITS</div>
+      <div class="squares"><i></i><i></i><i></i></div>
+      <img class="lockup" src="../assets/astra-visual/brand/astra-lockup-1024.png" alt="ASTRA">
+      <div class="card">
+        <img class="thumb" id="load-thumb" alt="">
+        <div class="meta">
+          <div class="field-label">PROJECT</div>
+          <div class="project-title" id="load-name">&mdash;</div>
+          <div class="path">
+            <img src="../assets/astra-visual/icons/png/project-open-32.png" alt="">
+            <span id="load-path">&mdash;</span>
+          </div>
+          <div class="rule"></div>
+          <div class="stats">
+            <div class="stat">
+              <img src="../assets/astra-visual/icons/png/asset-mesh-32.png" alt="">
+              <div><div class="field-label">SCENE</div><b id="load-scenes">1</b></div>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat">
+              <img src="../assets/astra-visual/icons/png/capture-export-32.png" alt="">
+              <div><div class="field-label">ASSETS</div><b id="load-assets">0</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bar"><span></span></div>
+      <div class="caption">LOADING PROJECT ASSETS</div>
+      <div class="stamp">ASTRA ENGINE<br>v1.0</div>
+    </section>
+
+    <!-- PROJETOS -->
+    <section class="screen" id="projects">
+      <img class="lockup" src="../assets/astra-visual/brand/astra-lockup-1024.png" alt="ASTRA">
+      <div class="tag r1">CREATE</div><div class="tag r2">WITHOUT LIMITS</div>
+      <div class="squares"><i></i><i></i><i></i></div>
+      <div class="bracket br"></div>
+      <div class="tag end1">READY FOR</div><div class="tag end2">WHAT&rsquo;S NEXT</div>
+
+      <nav id="sidebar">
+        <button class="nav-item on" style="top:216px" data-nav="projects">
+          <svg viewBox="0 0 24 24"><path d="M3 7.2a1.2 1.2 0 0 1 1.2-1.2h4.3l1.9 2.2h8.4A1.2 1.2 0 0 1 20 9.4v8.4a1.2 1.2 0 0 1-1.2 1.2H4.2A1.2 1.2 0 0 1 3 17.8z"/></svg>Projects</button>
+        <button class="nav-item" style="top:296px" data-nav="new">
+          <svg viewBox="0 0 24 24"><path d="M12 3.6v16.8M3.6 12h16.8"/></svg>New</button>
+        <button class="nav-item" style="top:376px" data-nav="import">
+          <svg viewBox="0 0 24 24"><path d="M12 3.4v10.8M7.4 9.8 12 14.4l4.6-4.6M5 19.4h14"/></svg>Import</button>
+        <button class="nav-item" style="top:456px" data-nav="settings">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.1"/><path d="M19.1 14.2a1.4 1.4 0 0 0 .3 1.6l.1.1a1.7 1.7 0 1 1-2.4 2.4l-.1-.1a1.4 1.4 0 0 0-1.6-.3 1.4 1.4 0 0 0-.9 1.3v.2a1.7 1.7 0 1 1-3.4 0v-.1a1.4 1.4 0 0 0-.9-1.3 1.4 1.4 0 0 0-1.6.3l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1a1.4 1.4 0 0 0 .3-1.6 1.4 1.4 0 0 0-1.3-.9h-.2a1.7 1.7 0 1 1 0-3.4h.1a1.4 1.4 0 0 0 1.3-.9 1.4 1.4 0 0 0-.3-1.6l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.4 1.4 0 0 0 1.6.3h.1a1.4 1.4 0 0 0 .9-1.3v-.2a1.7 1.7 0 1 1 3.4 0v.1a1.4 1.4 0 0 0 .9 1.3 1.4 1.4 0 0 0 1.6-.3l.1-.1a1.7 1.7 0 1 1 2.4 2.4l-.1.1a1.4 1.4 0 0 0-.3 1.6v.1a1.4 1.4 0 0 0 1.3.9h.2a1.7 1.7 0 1 1 0 3.4h-.1a1.4 1.4 0 0 0-1.3.9z"/></svg>Settings</button>
+        <div class="stamp" style="top:861px">ASTRA ENGINE<br>v1.0.0</div>
+      </nav>
+
+      <div class="section-label">PROJECTS</div>
+      <button class="primary" id="new-project">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+          <path d="M12 3.6v16.8M3.6 12h16.8"/></svg>
+        New Project
+      </button>
+      <div id="grid"></div>
+    </section>
+
+    <!-- EDITOR (provisorio) -->
+    <section class="screen" id="editor">
+      <div class="bracket tl"></div><div class="bracket br"></div>
+      <div class="center">
+        <span class="soon-pill">EM BREVE</span>
+        <h1 id="editor-name">&mdash;</h1>
+        <p>O editor de cena entra na proxima parte da construcao.<br>
+           O shell ja abre, resolve e carrega o projeto ate aqui.</p>
+        <button class="ghost" id="editor-back">Voltar aos projetos</button>
+      </div>
+      <div class="stamp">ASTRA ENGINE<br>v1.0</div>
+    </section>
+
+    <!-- NOVO PROJETO -->
+    <div id="veil">
+      <div id="modal">
+        <div class="field-label">NEW PROJECT</div>
+        <h2>Nomeie e escolha o ponto de partida</h2>
+        <div class="hint">Cenas marcadas EM BREVE ainda nao existem na engine; o shell as mantem visiveis para nao esconder o roteiro.</div>
+        <input class="input" id="np-name" placeholder="Nome do projeto" autocomplete="off">
+        <input class="input" id="np-path" placeholder="C:\Projects" autocomplete="off">
+        <div class="field-label" style="margin:14px 0 12px">SCENE TEMPLATE</div>
+        <div class="templates" id="np-templates"></div>
+        <div class="actions">
+          <button class="ghost" id="np-cancel">Cancelar</button>
+          <button class="solid" id="np-create" disabled>Criar projeto</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="ref"></div>
+  </div>
+</div>
+<div id="hud">R referencia &middot; [ ] opacidade &middot; ESC volta</div>
+
+<script type="module">
+const $ = (s, r = document) => r.querySelector(s);
+const stage = $('#stage');
+
+function fit() {
+  const k = Math.min(innerWidth / 1672, innerHeight / 941);
+  stage.style.transform = `translate(-50%,-50%) scale(${k})`;
+}
+addEventListener('resize', fit); fit();
+
+// ---------------------------------------------------------------- dados
+const SAMPLES = '../assets/astra-visual/samples/';
+const TEMPLATES = [
+  { id: 'empty',    name: 'Empty Scene',      note: 'Camera, luz direcional e nada mais.', ready: true,  cover: null },
+  { id: 'ocean',    name: 'Ocean Lab',        note: 'Cascatas FFT, espuma e corpos Jolt.', ready: true,  cover: 'thumb-water-lab.png' },
+  { id: 'forest',   name: 'Forest Road',      note: 'Estrada de terra, LOD e sombras.',    ready: true,  cover: 'thumb-forest-test.png' },
+  { id: 'boat',     name: 'Boat On Water',    note: 'Casco flutuante sobre o oceano.',     ready: true,  cover: null },
+  { id: 'material', name: 'Material Preview', note: 'Esfera PBR e mapa de ambiente.',      ready: true,  cover: null },
+  { id: 'backroom', name: 'Backroom Demo',    note: 'Interior com GI e reflexos.',         ready: false, cover: 'thumb-backroom-demo.png' },
+  { id: 'vehicle',  name: 'Vehicle Sandbox',  note: 'Suspensao e pneus sobre pista.',      ready: false, cover: 'thumb-vehicle-sandbox.png' },
+  { id: 'river',    name: 'River Valley',     note: 'Rio com fluxo e correnteza.',         ready: false, cover: null },
+];
+
+const SEED = [
+  { name: 'Forest Test',     path: 'C:\\Projects\\Forest Test',     cover: 'thumb-forest-test.png',     scenes: 1, assets: 214, template: 'forest' },
+  { name: 'Water Lab',       path: 'C:\\Projects\\Water Lab',       cover: 'thumb-water-lab.png',       scenes: 2, assets: 96,  template: 'ocean' },
+  { name: 'Backroom Demo',   path: 'C:\\Projects\\Backroom Demo',   cover: 'thumb-backroom-demo.png',   scenes: 1, assets: 357, template: 'backroom' },
+  { name: 'Vehicle Sandbox', path: 'C:\\Projects\\Vehicle Sandbox', cover: 'thumb-vehicle-sandbox.png', scenes: 1, assets: 128, template: 'vehicle' },
+];
+
+const store = {
+  read() {
+    try { const raw = localStorage.getItem('astra.projects'); if (raw) return JSON.parse(raw); } catch {}
+    return SEED.slice();
+  },
+  write(list) { try { localStorage.setItem('astra.projects', JSON.stringify(list)); } catch {} },
+};
+let projects = store.read();
+
+// ---------------------------------------------------------------- telas
+let current = 'splash';
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+  current = id;
+  refresh();
+}
+
+function runBar(screen, ms, done) {
+  const fill = $('.bar > span', $('#' + screen));
+  fill.style.width = '0%';
+  const t0 = performance.now();
+  (function step(now) {
+    const p = Math.min(1, (now - t0) / ms);
+    // Carregamento nao e linear: o final sempre custa mais que o comeco.
+    fill.style.width = (100 * (1 - Math.pow(1 - p, 2.1))).toFixed(1) + '%';
+    if (p < 1) requestAnimationFrame(step); else setTimeout(done, 220);
+  })(t0);
+}
+
+// ---------------------------------------------------------------- projetos
+function renderGrid() {
+  const grid = $('#grid');
+  grid.innerHTML = '';
+  projects.slice(0, 4).forEach((p) => {
+    const card = document.createElement('button');
+    card.className = 'project-card';
+    card.innerHTML = `
+      <div class="cover">
+        ${p.cover ? `<img src="${SAMPLES}${p.cover}" alt="">` : ''}
+        <div class="kicker">ASTRA<br>PROJECT</div>
+      </div>
+      <div class="foot">
+        <span></span>
+        <svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+      </div>`;
+    $('.foot span', card).textContent = p.name;
+    card.onclick = () => openProject(p);
+    grid.appendChild(card);
+  });
+  if (projects.length < 4) {
+    const slot = document.createElement('button');
+    slot.className = 'project-card empty';
+    slot.innerHTML = '<div><b>+</b>NOVO PROJETO</div>';
+    slot.onclick = openModal;
+    grid.appendChild(slot);
+  }
+}
+
+function openProject(p) {
+  $('#load-name').textContent = p.name;
+  $('#load-path').textContent = p.path;
+  $('#load-scenes').textContent = p.scenes;
+  $('#load-assets').textContent = p.assets;
+  const thumb = $('#load-thumb');
+  if (p.cover) { thumb.src = SAMPLES + p.cover; thumb.style.visibility = 'visible'; }
+  else thumb.style.visibility = 'hidden';
+  show('loading');
+  runBar('loading', 2200, () => { $('#editor-name').textContent = p.name; show('editor'); });
+}
+
+// ---------------------------------------------------------------- modal
+let picked = null;
+function renderTemplates() {
+  const host = $('#np-templates');
+  host.innerHTML = '';
+  TEMPLATES.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'tpl' + (t.ready ? '' : ' soon');
+    b.innerHTML = `${t.ready ? '' : '<span class="soon-flag">EM BREVE</span>'}<b></b><small></small>`;
+    $('b', b).textContent = t.name;
+    $('small', b).textContent = t.note;
+    if (t.ready) b.onclick = () => { picked = t; renderTemplates(); validate(); };
+    if (picked && picked.id === t.id) b.classList.add('on');
+    host.appendChild(b);
+  });
+}
+function validate() { $('#np-create').disabled = !($('#np-name').value.trim() && picked); }
+function openModal() { $('#veil').classList.add('on'); $('#np-name').focus(); }
+function closeModal() { $('#veil').classList.remove('on'); }
+
+$('#new-project').onclick = openModal;
+$('#np-cancel').onclick = closeModal;
+$('#np-name').oninput = validate;
+$('#np-create').onclick = () => {
+  const name = $('#np-name').value.trim();
+  const root = $('#np-path').value.trim() || 'C:\\Projects';
+  const project = {
+    name, path: `${root}\\${name}`, cover: picked.cover, scenes: 1,
+    assets: picked.id === 'empty' ? 0 : 24, template: picked.id,
+  };
+  projects = [project, ...projects].slice(0, 4);
+  store.write(projects);
+  closeModal(); renderGrid(); openProject(project);
+};
+
+document.querySelectorAll('[data-nav]').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('[data-nav]').forEach(o => o.classList.toggle('on', o === b));
+    if (b.dataset.nav === 'new') openModal();
+  };
+});
+$('#editor-back').onclick = () => show('projects');
+
+// ---------------------------------------------------------------- calibracao
+const REFS = {
+  splash:   'screen-01-splash.png',
+  loading:  'screen-02-project-loading.png',
+  projects: 'screen-03-projects.png',
+};
+let refOn = false, refAlpha = .5;
+function refresh() {
+  const file = REFS[current];
+  const ref = $('#ref');
+  ref.style.backgroundImage = file ? `url(../assets/astra-visual/reference/${file})` : 'none';
+  ref.style.opacity = refOn && file ? refAlpha : 0;
+  $('#hud').textContent = refOn
+    ? `referencia ${file || '-'} - opacidade ${refAlpha.toFixed(2)} - [ ] ajusta - R desliga`
+    : 'R referencia - [ ] opacidade - ESC volta';
+}
+addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') { refOn = !refOn; refresh(); }
+  if (e.key === '[') { refAlpha = Math.max(0, refAlpha - .1); refresh(); }
+  if (e.key === ']') { refAlpha = Math.min(1, refAlpha + .1); refresh(); }
+  if (e.key === 'Escape') { closeModal(); if (current === 'editor') show('projects'); }
+});
+
+// ---------------------------------------------------------------- partida
+renderGrid(); renderTemplates();
+show('splash');
+runBar('splash', 2600, () => show('projects'));
+</script>
