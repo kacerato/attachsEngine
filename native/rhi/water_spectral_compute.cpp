@@ -76,7 +76,8 @@ bool VulkanWaterSpectralCompute::initialize(VulkanMemoryAllocator &allocator,
   slopeMipLevels_=image.mipLevels;
   SamplerDesc sampler{}; sampler.maxLod=static_cast<float>(image.mipLevels-1);
   if(!allocator.createImage(image,&slopes_) || !slopeSampler_.initialize(allocator.device(),sampler)) { shutdown(); return false; }
-  VkImageViewCreateInfo storageView{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+  VkImageViewCreateInfo storageView{};
+  storageView.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   storageView.image=slopes_.handle(); storageView.viewType=VK_IMAGE_VIEW_TYPE_2D;
   storageView.format=image.format;
   storageView.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
