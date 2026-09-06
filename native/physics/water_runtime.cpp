@@ -15,9 +15,13 @@ bool validBinding(const WaterBodyBinding &binding) noexcept {
 }
 
 bool validateWaterRuntimeSettings(const WaterRuntimeSettings &settings) noexcept {
+  // O ganho da ondulação entra na validação como qualquer outro: um valor não
+  // finito aqui chegaria ao campo como amplitude não finita, e uma célula NaN
+  // se espalha pela grade inteira em poucos passos.
   return validateBuoyancySettings(settings.forces) && std::isfinite(settings.enterFraction) &&
       std::isfinite(settings.exitFraction) && settings.exitFraction >= 0 &&
-      settings.enterFraction > settings.exitFraction && settings.enterFraction <= 1;
+      settings.enterFraction > settings.exitFraction && settings.enterFraction <= 1 &&
+      std::isfinite(settings.rippleGain) && settings.rippleGain >= 0 && settings.rippleGain <= 100;
 }
 
 bool WaterRuntime::bind(const WaterBodyBinding &binding) noexcept {
@@ -46,7 +50,8 @@ void WaterRuntime::clear() noexcept {
 }
 
 bool WaterRuntime::apply(AetherPhysicsWorld *physics, const renderer::WaterWorld &water,
-                         double time, const WaterRuntimeSettings &settings) noexcept {
+                         double time, const WaterRuntimeSettings &settings,
+                         renderer::WaterRippleField *ripples) noexcept {
   if (physics == nullptr || !std::isfinite(time) || time < 0 ||
       time > std::numeric_limits<float>::max() || (applied_ && time <= lastTime_) ||
       !validateWaterRuntimeSettings(settings)) return false;
@@ -125,6 +130,27 @@ bool WaterRuntime::apply(AetherPhysicsWorld *physics, const renderer::WaterWorld
                                              {force.planeNormal, force.planeOffset});
       fraction = std::clamp(submerged.volume / buoyantShapeVolume(slot.binding.shape), 0.0f, 1.0f);
       forces_[forceCount++] = force;
+
+      // O corpo empurra a água de volta. A taxa é a velocidade vertical: é ela
+      // que mede quanto volume está sendo deslocado por segundo, e é o que
+      // separa um casco batendo na onda de um casco parado boiando.
+      //
+      // Usar o calado em vez da velocidade faria a água afundar sob um corpo
+      // imóvel para sempre, porque a depressão estática já é responsabilidade
+      // da flutuação — este campo existe para o que é transitório.
+      if (ripples != nullptr && ripples->isReady() && settings.rippleGain > 0.0f &&
+          fraction > 0.0f && applied_) {
+        const auto velocity = AetherPhysics_GetLinearVelocity(physics, slot.binding.body);
+        const float elapsed = static_cast<float>(time - lastTime_);
+        if (std::isfinite(velocity.y) && elapsed > 0.0f) {
+          const auto &extent = slot.binding.shape.halfExtent;
+          const float radius = (slot.binding.shape.kind == BuoyantShapeKind::Sphere)
+                                   ? extent.x
+                                   : std::max(extent.x, extent.z);
+          ripples->addImpulse(bodyPositions_[i].x, bodyPositions_[i].z, radius,
+                              -velocity.y * fraction * settings.rippleGain * elapsed);
+        }
+      }
     }
     const bool sameVolume = slot.wetVolume != renderer::InvalidWaterVolume && slot.wetVolume == query.volume;
     const bool wet = query.volume != renderer::InvalidWaterVolume &&

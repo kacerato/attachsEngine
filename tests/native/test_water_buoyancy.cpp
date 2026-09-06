@@ -2,6 +2,7 @@
 #include "physics/water_buoyancy.h"
 #include "physics/water_field_adapter.h"
 #include "physics/water_runtime.h"
+#include "renderer/water_ripples.h"
 #include "physics/water_simulation.h"
 
 #include <algorithm>
@@ -595,5 +596,59 @@ AE_TEST(Water_runtime_probes_the_hull_footprint_and_makes_a_long_body_pitch) {
   AE_EXPECT_TRUE(std::fabs(finalRotation.z) > 1e-3f, "the fitted plane produces pitch");
 
   AE_EXPECT_TRUE(runtime.unbind(hull), "unbind");
+  AetherPhysics_DestroyWorld(physics);
+}
+
+AE_TEST(Water_runtime_closes_the_loop_by_pushing_the_water_back) {
+  // A água empurra o corpo pelas forças; sem este laço o corpo não empurra a
+  // água de volta, e a superfície ignora quem flutua nela.
+  AetherPhysicsWorld *physics = AetherPhysics_CreateWorld({0, -9.81f, 0}, 8);
+  AE_EXPECT_TRUE(physics != nullptr, "physics world");
+  AetherBodyDesc desc{};
+  desc.shape.kind = AetherShapeKind::Box;
+  desc.shape.boxHalfExtent = {1.0f, 1.0f, 1.0f};
+  desc.rotation = {0, 0, 0, 1};
+  desc.motionType = AetherMotionType::Dynamic;
+  desc.position = {0, 2.0f, 0};  // solto acima da água, para bater nela caindo
+  const auto body = AetherPhysics_CreateBody(physics, &desc);
+
+  ae::renderer::WaterWorld water;
+  ae::renderer::WaterFieldSetup setup{};
+  AE_EXPECT_TRUE(water.setVolume(55, setup), "water volume");
+
+  ae::renderer::WaterRippleField ripples;
+  ae::renderer::WaterRippleSettings rippleSettings{};
+  rippleSettings.areaSize = 24.0f;
+  rippleSettings.resolution = 48;
+  AE_EXPECT_TRUE(ripples.initialize(rippleSettings), "ripple field");
+
+  WaterRuntime runtime;
+  AE_EXPECT_TRUE(runtime.bind({body, {BuoyantShapeKind::Box, {1.0f, 1.0f, 1.0f}}, 4.0f}), "bind");
+  AE_EXPECT_TRUE(runtime.apply(physics, water, 0.0, {}, &ripples), "first tick");
+  // O primeiro tique não tem passo anterior de onde tirar o intervalo, então
+  // nada é injetado — e injetar com intervalo indefinido seria pior.
+  AE_EXPECT_EQ(ripples.totalEnergy(), 0.0, "no injection without an elapsed step");
+
+  for (int step = 1; step <= 90; ++step) {
+    AetherPhysics_Step(physics, 1.0f / 60, 1);
+    AE_EXPECT_TRUE(runtime.apply(physics, water, step / 60.0, {}, &ripples), "tick");
+  }
+  AE_EXPECT_TRUE(ripples.totalEnergy() > 0.0, "the falling body disturbed the surface");
+  AE_EXPECT_TRUE(std::isfinite(ripples.totalEnergy()), "and did not corrupt the grid");
+
+  // Ganho zero desliga o laço sem desligar a flutuação: a água continua
+  // segurando o corpo, e só deixa de saber que ele existe.
+  ae::renderer::WaterRippleField quiet;
+  AE_EXPECT_TRUE(quiet.initialize(rippleSettings), "second field");
+  WaterRuntimeSettings silent{};
+  silent.rippleGain = 0.0f;
+  for (int step = 91; step <= 150; ++step) {
+    AetherPhysics_Step(physics, 1.0f / 60, 1);
+    AE_EXPECT_TRUE(runtime.apply(physics, water, step / 60.0, silent, &quiet), "quiet tick");
+  }
+  AE_EXPECT_EQ(quiet.totalEnergy(), 0.0, "zero gain injects nothing");
+  AE_EXPECT_TRUE(runtime.stats().forces.bodiesSubmerged > 0, "while buoyancy keeps working");
+
+  AE_EXPECT_TRUE(runtime.unbind(body), "unbind");
   AetherPhysics_DestroyWorld(physics);
 }

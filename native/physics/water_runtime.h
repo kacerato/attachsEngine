@@ -1,6 +1,7 @@
 #pragma once
 
 #include "physics/water_field_adapter.h"
+#include "renderer/water_ripples.h"
 #include "renderer/water_world.h"
 
 namespace ae::physics {
@@ -25,6 +26,10 @@ struct WaterRuntimeSettings final {
   u32 layers = ~0u;
   float enterFraction = .02f;
   float exitFraction = .005f;
+  // Quanto do movimento vertical do corpo vira ondulação. Zero desliga o laço
+  // de volta e a água deixa de saber que o corpo existe — que é o estado
+  // anterior a este campo.
+  float rippleGain = 1.0f;
 };
 bool validateWaterRuntimeSettings(const WaterRuntimeSettings &settings) noexcept;
 
@@ -45,8 +50,12 @@ public:
   bool bind(const WaterBodyBinding &binding) noexcept;
   bool unbind(AetherBodyHandle body) noexcept;
   void clear() noexcept;
+  // `ripples` fecha o laço: a água empurra o corpo pelas forças, e o corpo
+  // empurra a água de volta injetando o próprio deslocamento. Nulo mantém o
+  // comportamento anterior, em que a superfície ignora quem flutua nela.
   bool apply(AetherPhysicsWorld *physics, const renderer::WaterWorld &water,
-             double simulationTime, const WaterRuntimeSettings &settings = {}) noexcept;
+             double simulationTime, const WaterRuntimeSettings &settings = {},
+             renderer::WaterRippleField *ripples = nullptr) noexcept;
   std::span<const WaterContactEvent> events() const noexcept { return {events_.data(), eventCount_}; }
   WaterRuntimeStats stats() const noexcept { return stats_; }
 
