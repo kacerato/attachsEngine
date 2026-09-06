@@ -58,10 +58,17 @@ private:
   std::array<Slot, Capacity> slots_{};
   // Switching volumes can generate an exit and an enter for each body.
   std::array<WaterContactEvent, Capacity * 2> events_{};
-  std::array<renderer::WaterVec2, Capacity> positions_{};
-  std::array<renderer::WaterVolumeQuery, Capacity> queries_{};
+  // Cinco sondagens por corpo: o centro e as quatro pontas da sua pegada. O
+  // centro sozinho não determina inclinação alguma, e é ele que existia antes.
+  // Quatro pontas bastam para o ajuste por mínimos quadrados e mantêm a consulta
+  // ao campo num lote só — a alternativa, uma consulta por ponta, gastaria o
+  // orçamento inteiro de travessia de fronteira em flutuação.
+  static constexpr u32 ProbesPerBody = 5;
+  std::array<renderer::WaterVec2, Capacity * ProbesPerBody> positions_{};
+  std::array<renderer::WaterVolumeQuery, Capacity * ProbesPerBody> queries_{};
   std::array<AetherVec3, Capacity> bodyPositions_{};
   std::array<AetherQuat, Capacity> rotations_{};
+  std::array<WaterPlaneSample, ProbesPerBody> planeSamples_{};
   std::array<u32, Capacity> indices_{};
   std::array<AetherWaterBodySample, Capacity> forces_{};
   u32 eventCount_ = 0;

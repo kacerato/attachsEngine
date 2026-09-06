@@ -549,3 +549,51 @@ AE_TEST(WaterPlane_tilt_is_what_makes_a_long_hull_pitch) {
   // a popa em x positivo é a que afunda.
   AE_EXPECT_TRUE(leaning.centroid.x > 0.1f, "buoyancy shifts towards the submerged end");
 }
+
+AE_TEST(Water_runtime_probes_the_hull_footprint_and_makes_a_long_body_pitch) {
+  // O caminho completo: cinco sondagens por corpo, plano ajustado, e o casco
+  // recebendo momento em vez de subir e descer plano. Uma onda longa e lenta
+  // garante inclinação estável durante o passo, em vez de ruído de crista.
+  AetherPhysicsWorld *physics = AetherPhysics_CreateWorld({0, -9.81f, 0}, 8);
+  AE_EXPECT_TRUE(physics != nullptr, "physics world");
+
+  AetherBodyDesc desc{};
+  desc.shape.kind = AetherShapeKind::Box;
+  desc.shape.boxHalfExtent = {6.0f, 0.6f, 1.2f};  // casco longo: 12 m de proa a popa
+  desc.rotation = {0, 0, 0, 1};
+  desc.motionType = AetherMotionType::Dynamic;
+  desc.position = {0, 0, 0};
+  const auto hull = AetherPhysics_CreateBody(physics, &desc);
+
+  ae::renderer::WaterWorld water;
+  ae::renderer::WaterFieldSetup setup{};
+  setup.profile = ae::renderer::defaultOceanWaterProfile();
+  setup.profile.waveCount = 1;
+  // Comprimento muito maior que o casco: a proa e a popa ficam em alturas
+  // claramente diferentes, que é a condição que o ajuste existe para captar.
+  setup.profile.waves[0] = {{1.0f, 0.0f}, 1.5f, 60.0f, 1.0f, 0.2f, 0.0f};
+  AE_EXPECT_TRUE(water.setVolume(91, setup), "wave volume");
+
+  WaterRuntime runtime;
+  AE_EXPECT_TRUE(runtime.bind({hull, {BuoyantShapeKind::Box, {6.0f, 0.6f, 1.2f}}, 14.4f}),
+                 "bind the hull");
+  AE_EXPECT_TRUE(runtime.apply(physics, water, 0.0), "first tick");
+  AE_EXPECT_TRUE(runtime.stats().forces.bodiesSubmerged == 1, "the hull is in the water");
+
+  // Deixa alguns passos correrem para o momento se acumular em rotação.
+  for (int step = 1; step <= 30; ++step) {
+    AetherPhysics_Step(physics, 1.0f / 60, 1);
+    AE_EXPECT_TRUE(runtime.apply(physics, water, step / 60.0), "tick");
+  }
+  AetherVec3 finalPosition{};
+  AetherQuat finalRotation{};
+  AE_EXPECT_TRUE(AetherPhysics_TryGetBodyPoseV2(physics, hull, &finalPosition, &finalRotation),
+                 "pose readable");
+  // Onda ao longo de +X num casco alinhado a X: a inclinação da superfície gera
+  // arfagem em torno de Z. Com plano horizontal esse termo fica exatamente zero,
+  // e o casco só sobe e desce — que era o comportamento anterior.
+  AE_EXPECT_TRUE(std::fabs(finalRotation.z) > 1e-3f, "the fitted plane produces pitch");
+
+  AE_EXPECT_TRUE(runtime.unbind(hull), "unbind");
+  AetherPhysics_DestroyWorld(physics);
+}

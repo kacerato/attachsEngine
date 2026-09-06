@@ -64,22 +64,63 @@ bool WaterRuntime::apply(AetherPhysicsWorld *physics, const renderer::WaterWorld
       ++stats.unavailableBodies;
       continue;
     }
-    positions_[count] = {position.x, position.z};
+    // A pegada é o raio horizontal da forma, girado pela orientação do corpo:
+    // um casco de proa para o norte precisa das sondagens ao longo do casco, não
+    // dos eixos do mundo.
+    const auto &extent = binding.shape.halfExtent;
+    const float reach = (binding.shape.kind == BuoyantShapeKind::Sphere)
+                            ? extent.x
+                            : std::max(extent.x, extent.z);
+    const float forwardX = 1.0f - 2.0f * (rotation.y * rotation.y + rotation.z * rotation.z);
+    const float forwardZ = 2.0f * (rotation.x * rotation.y + rotation.w * rotation.z);
+    const float scale = std::hypot(forwardX, forwardZ);
+    // Quaternion degenerado cai nos eixos do mundo em vez de propagar NaN.
+    const float axisX = scale > 1e-4f ? forwardX / scale : 1.0f;
+    const float axisZ = scale > 1e-4f ? forwardZ / scale : 0.0f;
+
+    const u32 base = count * ProbesPerBody;
+    positions_[base + 0] = {position.x, position.z};
+    positions_[base + 1] = {position.x + axisX * reach, position.z + axisZ * reach};
+    positions_[base + 2] = {position.x - axisX * reach, position.z - axisZ * reach};
+    positions_[base + 3] = {position.x - axisZ * reach, position.z + axisX * reach};
+    positions_[base + 4] = {position.x + axisZ * reach, position.z - axisX * reach};
     bodyPositions_[count] = position;
     rotations_[count] = rotation;
     indices_[count++] = i;
   }
-  if (!water.sample({positions_.data(), count}, time, settings.layers, {queries_.data(), count})) return false;
+  const u32 probeCount = count * ProbesPerBody;
+  if (!water.sample({positions_.data(), probeCount}, time, settings.layers,
+                    {queries_.data(), probeCount})) return false;
   eventCount_ = 0;
   u32 forceCount = 0;
   for (u32 i = 0; i < count; ++i) {
     auto &slot = slots_[indices_[i]];
-    const auto &query = queries_[i];
+    const u32 base = i * ProbesPerBody;
+    // O volume e o resto do estado saem da sondagem central: as pontas existem
+    // para inclinar o plano, não para trocar o corpo de volume d'água.
+    const auto &query = queries_[base];
     float fraction = 0;
     AetherWaterBodySample force{};
     if (query.volume != renderer::InvalidWaterVolume &&
-        makeWaterBodySample(slot.binding.body, slot.binding.shape, positions_[i],
+        makeWaterBodySample(slot.binding.body, slot.binding.shape, positions_[base],
                             query.surface, slot.binding.referenceArea, force)) {
+      // Só as pontas que caíram no mesmo volume entram no ajuste. Uma ponta
+      // fora d'água, ou noutro volume, descreve outra superfície e inclinaria o
+      // plano na direção errada exatamente na borda, que é onde importa.
+      u32 probeCount = 0;
+      for (u32 probe = 0; probe < ProbesPerBody; ++probe) {
+        const auto &sample = queries_[base + probe];
+        if (sample.volume != query.volume) continue;
+        if (!renderer::hasWaterFieldFlag(sample.surface.flags, renderer::WaterFieldFlag::Valid))
+          continue;
+        planeSamples_[probeCount++] = {positions_[base + probe].x, positions_[base + probe].y,
+                                       sample.surface.height};
+      }
+      WaterPlane fitted{};
+      if (fitWaterPlane(planeSamples_.data(), probeCount, fitted)) {
+        force.planeNormal = fitted.normal;
+        force.planeOffset = fitted.offset;
+      }
       const auto submerged = submergedVolume(slot.binding.shape, bodyPositions_[i], rotations_[i],
                                              {force.planeNormal, force.planeOffset});
       fraction = std::clamp(submerged.volume / buoyantShapeVolume(slot.binding.shape), 0.0f, 1.0f);
