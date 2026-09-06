@@ -2,6 +2,12 @@
 #include "platform/android/instanced_renderer.h"
 #include "physics/water_simulation.h"
 
+#include <algorithm>
+#include <cmath>
+#include <span>
+
+#include <android/log.h>
+
 namespace ae::platform::android {
 // Sample owner only. Engine physics and renderer do not know these bodies.
 class OceanValidation final {
@@ -54,7 +60,14 @@ public:
     if (!simulation_.setWaterSettings(runtimeSettings)) return false;
     const double delta=previous_<0?0:std::max(0.0,wallTime-previous_);
     previous_=wallTime;
-    const auto frame=simulation_.advance(physics_,water_,delta,1,paused);
+    // O corpo que entra na água passa a levantar onda visível. Antes só o toque
+    // do usuário gerava impulso, e um casco caindo do alto não deixava marca
+    // nenhuma na superfície — a água ignorava quem flutuava nela.
+    impactContext_={this,&renderer};
+    physics::WaterSimulationHooks hooks{};
+    hooks.context=&impactContext_;
+    hooks.afterStep=&OceanValidation::onContact;
+    const auto frame=simulation_.advance(physics_,water_,delta,1,paused,hooks);
     if (frame.error!=physics::WaterSimulationError::None) return false;
     renderTime=static_cast<float>(frame.simulationTime);
     for (u32 i=0;i<4;++i) {
@@ -92,6 +105,49 @@ private:
   physics::WaterSimulation simulation_;
   renderer::WaterWorld water_;
   std::array<AetherBodyHandle,4> bodies_{};
+  // Contexto do hook: ele é um ponteiro de função C, e precisa alcançar tanto
+  // os corpos quanto o renderer que desenha o impulso.
+  struct ImpactContext final {
+    OceanValidation *owner = nullptr;
+    InstancedRenderer *renderer = nullptr;
+  };
+  ImpactContext impactContext_{};
+
+  static void onContact(void *context, std::span<const physics::WaterContactEvent> events) {
+    auto *impact = static_cast<ImpactContext *>(context);
+    if (impact == nullptr || impact->owner == nullptr || impact->renderer == nullptr) return;
+    for (const auto &event : events) {
+      // Só a entrada. A saída de um corpo também mexe na água, mas com uma
+      // fração da energia, e gastar um dos oito impulsos com ela deixaria menos
+      // para os impactos que se veem.
+      if (event.phase != physics::WaterContactPhase::Enter) continue;
+      AetherVec3 position{}; AetherQuat rotation{};
+      if (!AetherPhysics_TryGetBodyPoseV2(impact->owner->physics_, event.body, &position, &rotation))
+        continue;
+      const auto velocity = AetherPhysics_GetLinearVelocity(impact->owner->physics_, event.body);
+      if (!std::isfinite(velocity.y) || velocity.y >= 0.0f) continue;
+
+      renderer::WaterImpulse impulse{};
+      impulse.center = {position.x, position.z};
+      impulse.startTime = static_cast<float>(event.simulationTime);
+      // A amplitude sai da velocidade de entrada: um corpo pousando de leve
+      // ondula de leve. O teto existe porque a soma dos impulsos entra no
+      // envelope de deslocamento que a visibilidade usa para cullar a água, e
+      // estourá-lo faria a superfície sumir em vez de ondular mais.
+      impulse.amplitude = std::min(-velocity.y * 0.08f, 0.35f);
+      if (impulse.amplitude <= 0.01f) continue;
+      const bool accepted = impact->renderer->addWaterImpulse(impulse);
+      // O envelope de deslocamento que a visibilidade usa para cullar a água
+      // pode recusar o impulso. Recusa silenciosa aqui viraria "a onda de
+      // impacto não funciona" sem nenhuma pista de por quê.
+      __android_log_print(ANDROID_LOG_INFO, "Aether.Android",
+          "[WaterImpact] entrada v=%.2f m/s amplitude=%.3f em (%.1f,%.1f) %s.",
+          static_cast<double>(velocity.y), static_cast<double>(impulse.amplitude),
+          static_cast<double>(position.x), static_cast<double>(position.z),
+          accepted ? "aceito" : "RECUSADO pelo envelope");
+    }
+  }
+
   std::array<AetherVec3,4> extents_{};
   struct BoatDraw { u32 index=0; float center[3]{}; float radius=0; };
   std::vector<BoatDraw> boatDraws_;
