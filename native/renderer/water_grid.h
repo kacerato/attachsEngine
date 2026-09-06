@@ -84,4 +84,39 @@ inline constexpr float MaximumWaterGridWindSpeed = 15.0f;
 WaterGridSettings selectWaterGrid(WaterMeshQuality quality, float windSpeed,
                                   float farExtent) noexcept;
 
+// ---------------------------------------------------------------------------
+// Construção da malha
+// ---------------------------------------------------------------------------
+//
+// Enquanto a grade vier assada num .aemap, escolher densidade em runtime não
+// muda nada: o arquivo já tem os 256 segmentos dentro. Este construtor é o que
+// fecha o ciclo — a partir daqui a densidade escolhida pela política vira
+// geometria de verdade, sem passar pelo disco.
+//
+// Formato deliberadamente agnóstico: posição, uv e limite de banda. O
+// empacotamento para o vértice do renderer (normal e tangente em snorm, cor)
+// pertence a quem consome, e a água não tem normal de vértice útil de qualquer
+// forma — ela vem do espectro, por fragmento.
+struct WaterGridVertex final {
+  // y é sempre zero: a altura é deslocamento de shader, e assá-la aqui
+  // congelaria a onda na malha.
+  float position[3];
+  float uv[2];
+  // Espaçamento incidente conservador, em metros. É o que um limitador de banda
+  // precisa para não pedir ao espectro uma frequência que a malha não resolve —
+  // sem isso, a cascata curta vira ruído de alta frequência ao longe.
+  float bandLimit;
+};
+
+inline constexpr usize waterGridIndexCount(const WaterGridSettings &settings) noexcept {
+  return static_cast<usize>(settings.segments) * settings.segments * 6u;
+}
+
+// Preenche buffers do chamador; não aloca. Devolve false — sem escrever nada —
+// quando o contrato falha ou os buffers não comportam a grade pedida, porque
+// uma malha meio escrita é pior que nenhuma: ela desenha.
+bool buildWaterGrid(const WaterGridSettings &settings,
+                    WaterGridVertex *vertices, usize vertexCapacity,
+                    u32 *indices, usize indexCapacity) noexcept;
+
 } // namespace ae::renderer

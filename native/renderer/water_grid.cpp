@@ -104,4 +104,57 @@ WaterGridSettings selectWaterGrid(WaterMeshQuality quality, float windSpeed,
   return settings;
 }
 
+bool buildWaterGrid(const WaterGridSettings &settings,
+                    WaterGridVertex *vertices, usize vertexCapacity,
+                    u32 *indices, usize indexCapacity) noexcept {
+  if (!validateWaterGrid(settings) || vertices == nullptr || indices == nullptr) return false;
+  if (vertexCapacity < waterGridVertexCount(settings)) return false;
+  if (indexCapacity < waterGridIndexCount(settings)) return false;
+
+  const u32 stride = settings.segments + 1u;
+  const float span = settings.farExtent * 2.0f;
+
+  // O eixo é o mesmo nas duas direções, então calculá-lo uma vez por índice e
+  // reusar evita repetir a cúbica 66 mil vezes. Cabe na pilha: 513 floats no
+  // maior caso permitido.
+  float axis[MaximumWaterGridSegments + 1u];
+  float spacing[MaximumWaterGridSegments + 1u];
+  for (u32 index = 0; index < stride; ++index) {
+    axis[index] = axisPosition(settings, index);
+  }
+  for (u32 index = 0; index < stride; ++index) {
+    const float before = axis[index == 0u ? 0u : index - 1u];
+    const float after = axis[index + 1u >= stride ? settings.segments : index + 1u];
+    spacing[index] = std::max(axis[index] - before, after - axis[index]);
+  }
+
+  for (u32 row = 0; row < stride; ++row) {
+    for (u32 column = 0; column < stride; ++column) {
+      WaterGridVertex &vertex = vertices[row * stride + column];
+      vertex.position[0] = axis[column];
+      vertex.position[1] = 0.0f;
+      vertex.position[2] = axis[row];
+      vertex.uv[0] = axis[column] / span + 0.5f;
+      vertex.uv[1] = axis[row] / span + 0.5f;
+      // O maior dos dois eixos: um vértice na borda de uma linha densa e de uma
+      // coluna esparsa é limitado pela esparsa, não pela média das duas.
+      vertex.bandLimit = std::max(spacing[row], spacing[column]);
+    }
+  }
+
+  usize cursor = 0;
+  for (u32 row = 0; row < settings.segments; ++row) {
+    for (u32 column = 0; column < settings.segments; ++column) {
+      const u32 a = row * stride + column;
+      const u32 b = a + 1u, c = a + stride, d = c + 1u;
+      // Ordem a,c,b / b,c,d: com x e z crescendo, o produto vetorial aponta
+      // para +Y. Uma malha de água virada para baixo desaparece no backface
+      // culling e o sintoma é "a água sumiu", não "a normal inverteu".
+      indices[cursor++] = a; indices[cursor++] = c; indices[cursor++] = b;
+      indices[cursor++] = b; indices[cursor++] = c; indices[cursor++] = d;
+    }
+  }
+  return true;
+}
+
 } // namespace ae::renderer

@@ -1,7 +1,9 @@
 #include "harness.h"
 #include "renderer/water_grid.h"
 
+#include <algorithm>
 #include <cmath>
+#include <vector>
 
 using namespace ae::renderer;
 
@@ -160,4 +162,113 @@ AE_TEST(WaterGrid_lower_profiles_cut_real_triangles) {
   AE_EXPECT_EQ(waterGridTriangleCount(ultra), 131072u, "baked mesh cost");
   AE_EXPECT_TRUE(waterGridTriangleCount(veryLow) * 10u < waterGridTriangleCount(ultra),
                  "the cheapest profile is an order of magnitude lighter");
+}
+
+namespace {
+
+// A maior grade permitida tem 513x513 vértices; alocar no heap evita estourar
+// a pilha do runner de testes, que é modesta no Windows.
+struct GridBuffers final {
+  std::vector<WaterGridVertex> vertices;
+  std::vector<ae::u32> indices;
+  explicit GridBuffers(const WaterGridSettings &settings)
+      : vertices(waterGridVertexCount(settings)), indices(waterGridIndexCount(settings)) {}
+  bool build(const WaterGridSettings &settings) {
+    return buildWaterGrid(settings, vertices.data(), vertices.size(),
+                          indices.data(), indices.size());
+  }
+};
+
+} // namespace
+
+AE_TEST(WaterGrid_build_fills_positions_uvs_and_band_limits) {
+  const WaterGridSettings settings{32, 50.0f, 500.0f};
+  GridBuffers buffers(settings);
+  AE_EXPECT_TRUE(buffers.build(settings), "build succeeds with exact buffers");
+
+  const ae::u32 stride = settings.segments + 1u;
+  for (ae::u32 row = 0; row <= settings.segments; ++row) {
+    for (ae::u32 column = 0; column <= settings.segments; ++column) {
+      const auto &vertex = buffers.vertices[row * stride + column];
+      AE_EXPECT_TRUE(std::fabs(vertex.position[0] - waterGridAxisPosition(settings, column)) <= 1e-4f,
+                     "x follows the axis");
+      AE_EXPECT_TRUE(std::fabs(vertex.position[2] - waterGridAxisPosition(settings, row)) <= 1e-4f,
+                     "z follows the axis");
+      // A altura é deslocamento de shader: assá-la aqui congelaria a onda.
+      AE_EXPECT_EQ(vertex.position[1], 0.0f, "the grid is flat");
+      // O limite de banda é o maior dos dois eixos, não a média: a coluna
+      // esparsa limita o vértice mesmo quando a linha é densa.
+      const float expected = std::max(waterGridAxisSpacing(settings, row),
+                                      waterGridAxisSpacing(settings, column));
+      AE_EXPECT_TRUE(std::fabs(vertex.bandLimit - expected) <= 1e-3f, "band limit is conservative");
+    }
+  }
+  // UV cobre [0,1] de ponta a ponta do alcance.
+  AE_EXPECT_TRUE(std::fabs(buffers.vertices.front().uv[0]) <= 1e-4f, "uv starts at zero");
+  AE_EXPECT_TRUE(std::fabs(buffers.vertices.back().uv[1] - 1.0f) <= 1e-4f, "uv ends at one");
+}
+
+AE_TEST(WaterGrid_build_is_watertight_and_faces_up) {
+  const WaterGridSettings settings{16, 40.0f, 400.0f};
+  GridBuffers buffers(settings);
+  AE_EXPECT_TRUE(buffers.build(settings), "build succeeds");
+  AE_EXPECT_EQ(buffers.indices.size(), waterGridIndexCount(settings), "index count");
+
+  const auto vertexCount = static_cast<ae::u32>(buffers.vertices.size());
+  for (ae::u32 index : buffers.indices) {
+    AE_EXPECT_TRUE(index < vertexCount, "every index addresses a real vertex");
+  }
+
+  // Estanqueidade por construção: os quatro cantos de cada quad são vértices
+  // compartilhados da grade, então costura só apareceria se um triângulo
+  // referenciasse um vértice fora do seu próprio quad.
+  for (ae::usize triangle = 0; triangle + 2 < buffers.indices.size(); triangle += 3) {
+    const auto &a = buffers.vertices[buffers.indices[triangle]];
+    const auto &b = buffers.vertices[buffers.indices[triangle + 1]];
+    const auto &c = buffers.vertices[buffers.indices[triangle + 2]];
+    const float ux = b.position[0] - a.position[0], uz = b.position[2] - a.position[2];
+    const float vx = c.position[0] - a.position[0], vz = c.position[2] - a.position[2];
+    // Componente Y do produto vetorial. Uma malha de água virada para baixo
+    // some no backface culling, e o sintoma é "a água sumiu".
+    const float normalY = uz * vx - ux * vz;
+    AE_EXPECT_TRUE(normalY > 0.0f, "winding keeps the surface facing up");
+  }
+}
+
+AE_TEST(WaterGrid_build_refuses_short_buffers_instead_of_writing_half_a_mesh) {
+  const WaterGridSettings settings{16, 40.0f, 400.0f};
+  GridBuffers buffers(settings);
+
+  AE_EXPECT_TRUE(!buildWaterGrid(settings, buffers.vertices.data(), buffers.vertices.size() - 1,
+                                 buffers.indices.data(), buffers.indices.size()),
+                 "short vertex buffer is refused");
+  AE_EXPECT_TRUE(!buildWaterGrid(settings, buffers.vertices.data(), buffers.vertices.size(),
+                                 buffers.indices.data(), buffers.indices.size() - 1),
+                 "short index buffer is refused");
+  AE_EXPECT_TRUE(!buildWaterGrid(settings, nullptr, buffers.vertices.size(),
+                                 buffers.indices.data(), buffers.indices.size()),
+                 "null vertex buffer is refused");
+  // Uma malha meio escrita é pior que nenhuma, porque ela desenha.
+  const WaterGridSettings broken{7, 40.0f, 400.0f};
+  AE_EXPECT_TRUE(!buildWaterGrid(broken, buffers.vertices.data(), buffers.vertices.size(),
+                                 buffers.indices.data(), buffers.indices.size()),
+                 "invalid settings are refused before any write");
+}
+
+AE_TEST(WaterGrid_build_reproduces_the_baked_ocean_vertex_for_vertex) {
+  // O ponto do exercício: a malha gerada precisa poder substituir a assada sem
+  // que nada na cena perceba. Os valores conferidos aqui são os mesmos que
+  // tools/build-ocean-demo.py escreve no .aemap.
+  const WaterGridSettings baked{256, 384.0f, 8000.0f};
+  GridBuffers buffers(baked);
+  AE_EXPECT_TRUE(buffers.build(baked), "the full ocean grid builds");
+
+  const ae::u32 stride = baked.segments + 1u;
+  const auto &centre = buffers.vertices[128u * stride + 128u];
+  AE_EXPECT_TRUE(std::fabs(centre.position[0]) <= 1e-3f, "centre sits on the camera");
+  AE_EXPECT_TRUE(std::fabs(centre.bandLimit - 3.0f) <= 1e-3f, "three metres per vertex at the centre");
+
+  const auto &corner = buffers.vertices[0];
+  AE_EXPECT_TRUE(std::fabs(corner.position[0] + 8000.0f) <= 1e-2f, "corner reaches the far extent");
+  AE_EXPECT_TRUE(std::fabs(corner.bandLimit - 354.4509f) <= 1e-2f, "and carries the coarse band limit");
 }
