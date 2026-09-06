@@ -12,6 +12,13 @@
 # dentro do par. O desvio entre as réplicas de A é o ruído da bancada, e nenhuma
 # diferença menor que ele deve ser reivindicada como ganho.
 #
+# O pareamento cancela deriva linear, não transiente. Uma série iniciada com o
+# aparelho frio mediu desvio de 6,058 ms entre réplicas da mesma configuração,
+# contra 0,039 ms numa série já em regime — porque durante o aquecimento o clock
+# não varia de forma linear no tempo. Por isso existe o aquecimento antes da
+# primeira rodada válida, e por isso a faixa térmica da série entra no relatório
+# e no veredito: uma série que aqueceu demais no meio não conclui nada.
+#
 #   ./tools/measure-ocean-paired.ps1 -Name espectral -IsolationB 2 -Repeats 3
 param(
     [Parameter(Mandatory = $true)][string]$Name,
@@ -21,6 +28,12 @@ param(
     [int]$IsolationA = -1,
     [int]$Repeats = 3,
     [int]$DurationSeconds = 50,
+    # Rodada descartada que leva o aparelho ao regime antes da primeira medida.
+    # Zero desliga, para quem já sabe que a série anterior deixou o aparelho quente.
+    [int]$WarmupSeconds = 60,
+    # Faixa térmica tolerada dentro da série, em graus. Acima disso o relatório
+    # sai marcado como não confiável, mesmo que os números pareçam bons.
+    [double]$MaximumThermalRangeCelsius = 1.5,
     [double]$TargetFps = 120.0,
     [switch]$NoSpectralWater,
     # Aplicadas nas duas pontas: é o que mantém o par comparável quando o
@@ -66,6 +79,23 @@ function Invoke-Run {
     }
 }
 
+if ($WarmupSeconds -gt 0) {
+    Write-Host "aquecendo por $WarmupSeconds s (rodada descartada)..."
+    $warmupName = "$Name-warmup"
+    $warmupArguments = @{
+        Name            = $warmupName
+        TargetFps       = $TargetFps
+        DurationSeconds = $WarmupSeconds
+        AdbPath         = $AdbPath
+        OutputRoot      = $OutputRoot
+        LockCamera      = $true
+    }
+    if (-not $NoSpectralWater) { $warmupArguments['SpectralWater'] = $true }
+    if ($IsolationA -ge 0) { $warmupArguments['WaterIsolation'] = $IsolationA }
+    if ($ExtraStrings.Count -gt 0) { $warmupArguments['ExtraStrings'] = $ExtraStrings }
+    & $measure @warmupArguments *>&1 | Out-Null
+}
+
 $runs = @()
 for ($i = 1; $i -le $Repeats; $i++) {
     $runs += Invoke-Run -RunName "$Name-A$i" -Isolation $IsolationA
@@ -95,6 +125,10 @@ function Get-Stats {
 $baseline = Get-Stats -Values (@($aRuns | ForEach-Object { $_.gpuMs }))
 $effect = Get-Stats -Values $deltas
 
+$temperatures = @($runs | ForEach-Object { $_.celsius })
+$thermalRange = ($temperatures | Measure-Object -Maximum).Maximum - ($temperatures | Measure-Object -Minimum).Minimum
+$thermallyStable = ($thermalRange -le $MaximumThermalRangeCelsius)
+
 $report = [ordered]@{
     name            = $Name
     capturedAt      = (Get-Date).ToString('o')
@@ -107,8 +141,13 @@ $report = [ordered]@{
     baselineSdMs    = [Math]::Round($baseline.sd, 3)
     pairedDeltaMs   = [Math]::Round($effect.mean, 3)
     pairedDeltaSdMs = [Math]::Round($effect.sd, 3)
-    # Uma diferença menor que o ruído da própria referência não é resultado.
-    conclusive      = ([Math]::Abs($effect.mean) -gt (2.0 * $baseline.sd))
+    warmupSeconds   = $WarmupSeconds
+    thermalRangeCelsius = [Math]::Round($thermalRange, 1)
+    thermallyStable = $thermallyStable
+    # Duas condições, e as duas são necessárias: o efeito precisa superar o ruído
+    # da própria referência, e a série precisa ter corrido em regime térmico. Um
+    # número limpo obtido durante aquecimento é limpo por acaso.
+    conclusive      = (([Math]::Abs($effect.mean) -gt (2.0 * $baseline.sd)) -and $thermallyStable)
 }
 
 $reportPath = Join-Path $OutputRoot "$Name-paired.json"
@@ -120,5 +159,12 @@ $runs | ForEach-Object {
 ''
 'referência A : {0:N3} ms  (desvio entre {1} réplicas: {2:N3} ms)' -f $baseline.mean, $aRuns.Count, $baseline.sd
 'efeito B-A   : {0:N3} ms  (desvio entre {1} pares: {2:N3} ms)' -f $effect.mean, $deltas.Count, $effect.sd
-'conclusivo   : {0}' -f $(if ($report.conclusive) { 'sim' } else { 'NÃO — o efeito não supera o ruído da bancada' })
+'térmico     : {0:N1} C de faixa na série  ({1})' -f $thermalRange, $(if ($thermallyStable) { 'regime' } else { 'INSTÁVEL' })
+'conclusivo   : {0}' -f $(if ($report.conclusive) {
+    'sim'
+} elseif (-not $thermallyStable) {
+    'NÃO — a série aqueceu {0:N1} C; refaça com o aparelho já em regime' -f $thermalRange
+} else {
+    'NÃO — o efeito ({0:N3} ms) não supera o ruído da bancada ({1:N3} ms)' -f $effect.mean, (2.0 * $baseline.sd)
+})
 'relatório    : {0}' -f $reportPath
