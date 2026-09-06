@@ -445,3 +445,40 @@ AE_TEST(Water_cost_isolation_falls_back_to_full_instead_of_reading_past_the_enum
                      "no-shadow",
                  "every mode reports a name the capture can be labelled with");
 }
+
+AE_TEST(Water_field_sums_the_ripple_field_into_the_shared_query) {
+  // O ponto de junção: quem pergunta a altura da água recebe o mar, a interação
+  // e a ondulação somados, sem saber que são três sistemas diferentes.
+  WaterRippleField ripples;
+  WaterRippleSettings rippleSettings{};
+  rippleSettings.areaSize = 20.0f;
+  rippleSettings.resolution = 40;
+  AE_EXPECT_TRUE(ripples.initialize(rippleSettings), "ripple field");
+  ripples.addImpulse(0.0f, 0.0f, 2.0f, 0.5f);
+
+  WaterFieldSetup setup{};
+  setup.profile = defaultOceanWaterProfile();
+  setup.profile.waveCount = 0;  // isola a ondulação do espectro
+  WaterField without;
+  AE_EXPECT_TRUE(without.configure(setup), "configure without ripples");
+  const float flat = without.heightOnly({0.0f, 0.0f}, 0.0);
+
+  setup.ripples = &ripples;
+  WaterField with;
+  AE_EXPECT_TRUE(with.configure(setup), "configure with ripples");
+  const float raised = with.heightOnly({0.0f, 0.0f}, 0.0);
+  AE_EXPECT_TRUE(raised > flat + 0.1f, "the ripple lifts the surface");
+
+  // Fora da área simulada a ondulação devolve zero, e somar zero é exatamente o
+  // que se quer na fronteira: sem degrau entre o que é simulado e o que não é.
+  const float outside = with.heightOnly({500.0f, 0.0f}, 0.0);
+  const float outsideWithout = without.heightOnly({500.0f, 0.0f}, 0.0);
+  AE_EXPECT_TRUE(std::fabs(outside - outsideWithout) < 1e-5f, "no step at the boundary");
+
+  // A inclinação da ondulação chega na normal, senão a física sente uma
+  // superfície plana onde a geometria mostra um monte.
+  WaterVec2 probe{2.0f, 0.0f};
+  WaterFieldSample sample{};
+  AE_EXPECT_TRUE(with.sample({&probe, 1}, 0.0, {&sample, 1}), "sample");
+  AE_EXPECT_TRUE(std::fabs(sample.normal.x) > 1e-3f, "the ripple tilts the normal");
+}

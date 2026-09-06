@@ -1,5 +1,6 @@
 #pragma once
 
+#include "renderer/water_ripples.h"
 #include "renderer/water_spectral_mirror.h"
 #include "renderer/water_surface.h"
 
@@ -109,6 +110,12 @@ struct WaterFieldSetup final {
   // Borrowed, not copied: a mirror owns megabytes of spectral fields. It must
   // outlive the field, and update() must never run while sample() is in flight.
   const WaterSpectralMirror *mirror = nullptr;
+  // Ondulação dinâmica, também emprestada e pelas mesmas razões. Ela entra aqui,
+  // e não em cada consumidor, porque este é o ponto onde os sistemas de onda se
+  // somam: quem pergunta a altura da água recebe o mar, a interação e a
+  // ondulação juntos, sem saber que são três coisas. Nulo mantém o
+  // comportamento anterior.
+  const WaterRippleField *ripples = nullptr;
 };
 
 // Deterministic and reentrant: a query is a pure function of position, time and

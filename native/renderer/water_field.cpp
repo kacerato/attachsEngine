@@ -176,11 +176,22 @@ WaterFieldSample WaterField::sampleOne(WaterVec2 position, float timeSeconds) co
   if (coverage <= 0.0f) result.flags |= static_cast<u32>(WaterFieldFlag::Excluded);
 
   const WaterSample impulse = setup_.interaction.sample(position, timeSeconds);
-  const WaterVec2 impulseSlope = slopeOf(impulse.normal);
+  WaterVec2 impulseSlope = slopeOf(impulse.normal);
+  // A ondulação soma na mesma conta dos impulsos analíticos: altura sobre a
+  // superfície e inclinação sobre a normal. Fora da área simulada ela devolve
+  // zero, e somar zero é exatamente o que se quer na fronteira — sem degrau.
+  float rippleHeight = 0.0f;
+  if (setup_.ripples != nullptr && setup_.ripples->isReady() && coverage > 0.0f) {
+    rippleHeight = setup_.ripples->height(position.x, position.y);
+    float rippleSlopeX = 0.0f, rippleSlopeZ = 0.0f;
+    setup_.ripples->slope(position.x, position.y, rippleSlopeX, rippleSlopeZ);
+    impulseSlope.x += rippleSlopeX;
+    impulseSlope.y += rippleSlopeZ;
+  }
 
   if (status_.resolved == WaterFieldProvider::SpectralCpu) {
     const WaterMirrorSample mirror = setup_.mirror->sample(position);
-    result.height = setup_.baseHeight + mirror.height + impulse.height;
+    result.height = setup_.baseHeight + mirror.height + impulse.height + rippleHeight;
     result.normal = normalized({-(mirror.slope.x + impulseSlope.x), 1.0f,
                                 -(mirror.slope.y + impulseSlope.y)});
     result.velocity = {mirror.velocity.x, mirror.velocity.y + impulse.velocity.y,
@@ -191,14 +202,15 @@ WaterFieldSample WaterField::sampleOne(WaterVec2 position, float timeSeconds) co
     // mapping is not the identity, and claiming one would be a fabrication.
   } else {
     const WaterSample spectrum = sampleWaterSurface(setup_.profile, position, timeSeconds);
-    result.height = setup_.baseHeight + spectrum.height + impulse.height;
+    result.height = setup_.baseHeight + spectrum.height + impulse.height + rippleHeight;
     const WaterVec2 slope = slopeOf(spectrum.normal);
     result.normal = normalized({-(slope.x + impulseSlope.x), 1.0f, -(slope.y + impulseSlope.y)});
     result.velocity = {spectrum.velocity.x, spectrum.velocity.y + impulse.velocity.y,
                        spectrum.velocity.z};
     result.foam = std::clamp(spectrum.breaking + impulse.breaking, 0.0f, 1.0f);
     // The analytic profile displaces vertically only, so the horizontal mapping
-    // is the identity and its determinant is exactly one.
+    // is the identity and its determinant is exactly one. A ondulação também é
+    // deslocamento vertical puro, então não muda essa conta.
     result.jacobian = 1.0f;
     result.flags |= static_cast<u32>(WaterFieldFlag::JacobianKnown);
   }
