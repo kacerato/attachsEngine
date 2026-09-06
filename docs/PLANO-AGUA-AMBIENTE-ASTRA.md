@@ -64,18 +64,33 @@ O que ele resolve, e como — lido no código, não na página de venda:
   — **Shallow Water Equations** em grade 2D: altura + velocidade, propagação,
   refração e fusão de ondas. Heightfield, não volume: não faz respingo vertical.
 
-### 1.4 Licença — o que pode ser copiado e o que não pode
+### 1.4 Licença — o que pode ser copiado
 
-Isto não é rodapé, é restrição de projeto:
-
-- **KWS2 não traz licença no pacote.** É um asset da Unity Asset Store, sob a
-  EULA padrão: uso dentro de projetos Unity, **sem redistribuição do fonte**.
-  Copiar HLSL ou C# dele para esta engine seria violação. O que se usa dele são
-  as **técnicas e as constantes de tuning**, que são conhecimento público de
-  gráficos — e é assim que este plano o trata.
-- **GodotOceanWaves é MIT**: dá para adaptar código de verdade, mantendo o aviso
-  de copyright. É a fonte recomendada para o espectro e para a FFT.
+- **KWS2 é licenciado ao autor deste projeto.** A cópia em
+  `Downloads/extracted` não traz arquivo de licença porque a Asset Store não
+  põe um em cada pacote — a licença é da conta, não do diretório. O acesso ao
+  fonte é legítimo e o código pode ser lido, adaptado e usado nos produtos do
+  licenciado.
+- **GodotOceanWaves é MIT** (Ethan Truong, 2024): adaptar mantendo o aviso de
+  copyright. É a fonte recomendada para o espectro e para a FFT, e por um motivo
+  técnico antes de qualquer outro — o TMA dele é melhor que o Pierson-Moskowitz
+  do KWS2, e é o mesmo modelo que a ASTRA já implementa.
 - **Waterways é MIT**: idem, para o assamento de rio.
+
+**A distinção que continua valendo** não é sobre ler o código, é sobre *para
+onde ele vai*: usar KWS2 nos jogos do licenciado é uso normal; embutir o fonte
+dele numa engine que outras pessoas vão usar para fazer os jogos delas é
+redistribuição de asset, que é o que a EULA da Asset Store restringe. Como a
+ASTRA é uma engine com launcher e criação de projeto — feita para terceiros
+criarem —, essa fronteira é do produto, não do desenvolvimento.
+
+Isso não muda a §9 na prática. Onde ela diz "reimplementar pela técnica", a
+razão é técnica antes de jurídica: o KWS2 é HLSL sobre o pipeline da Unity, com
+`CommandBuffer`, `RTHandle`, `multi_compile` e macros de SRP. Traduzir isso para
+GLSL sobre o frame graph Vulkan desta engine não é copiar — é reescrever com o
+algoritmo à vista, que é exatamente o que o plano descreve. Ter a licença
+significa que o algoritmo pode ser lido de perto, e é o que torna a §9
+executável em vez de adivinhação.
 
 ---
 
@@ -456,8 +471,10 @@ exatamente por que um barco adorna para o lado errado.
 ## 9. Adaptação direta dos plugins
 
 O mapeamento pedido, técnica por técnica, com o destino dentro desta engine.
-Onde a fonte é MIT, é adaptação de código; onde é KWS2, é reimplementação a
-partir da técnica (§1.4).
+Onde a fonte é MIT, é adaptação de código com atribuição. Onde é KWS2, é
+reescrita a partir do algoritmo lido — o fonte é acessível pela licença do
+autor (§1.4), mas é HLSL sobre o pipeline da Unity e não tem para onde ser
+colado dentro de um frame graph Vulkan.
 
 | Origem | Arquivo de origem | Destino na ASTRA | Forma |
 |---|---|---|---|
@@ -466,11 +483,11 @@ partir da técnica (§1.4).
 | GodotOceanWaves | filtragem bicúbica/bilinear por densidade | `water_spectral_sampling.glsl` | adaptar código (MIT) |
 | GodotOceanWaves | presets de vento/fetch/profundidade | `assets/.../water/*.aewr` | usar como valores |
 | Waterways | assamento de flow/foam map por Bézier | ferramenta de rio + `WaterCurrentSettings` | adaptar código (MIT) |
-| KWS2 | diferenças finitas de onda dinâmica | novo `renderer/water_dynamic.cpp` + `.comp` | reimplementar pela técnica |
-| KWS2 | LOD de chunk relativo ao vento | `planWaterClipmap` | reimplementar (é uma tabela de escalas) |
-| KWS2 | arrebentação instanciada e pré-assada | novo `renderer/water_shoreline.cpp` | reimplementar pela arquitetura |
-| KWS2 | cáustica por depth ortográfico | novo passe no frame graph | reimplementar pela técnica |
-| KWS2 | SSR em fração da resolução, com preenchimento | `WaterReflection::ScreenSpace` | reimplementar pela técnica |
+| KWS2 | diferenças finitas de onda dinâmica | novo `renderer/water_dynamic.cpp` + `.comp` | reescrever para compute (o original é um blit de fragment shader) |
+| KWS2 | LOD de chunk relativo ao vento | `planWaterClipmap` | usar as tabelas direto (§1.1 tem os valores) |
+| KWS2 | arrebentação instanciada e pré-assada | novo `renderer/water_shoreline.cpp` | copiar a arquitetura; as malhas assadas são conteúdo, não código |
+| KWS2 | cáustica por depth ortográfico | novo passe no frame graph | reescrever (depende de `CommandBuffer` e decal da Unity) |
+| KWS2 | SSR em fração da resolução, com preenchimento | `WaterReflection::ScreenSpace` | reescrever (depende de `RTHandle` e do SRP) |
 | KWS2 | perfis de qualidade por plataforma | `rendering_policy.cpp` | reimplementar (é política) |
 | Crest | *wave splines* | domínio `RiverSpline` | conceito |
 | Fluid Flux | SWE em grade | fora de escopo por orçamento | registrado, não adotado |
@@ -523,8 +540,11 @@ um com perfil por dispositivo, como todo plugin da §1 faz.
    tempo negativo. GameTurbo, Game Mode, governor de GPU e janela térmica
    invalidam rodadas. Enquanto a Fase 0 não fechar, **nenhum ganho reivindicado
    por este plano deve ser aceito sem duas execuções concordantes.**
-4. **Copiar KWS2 não é opção.** Se em algum momento o caminho mais rápido
-   parecer "traduzir o HLSL do KWS2", a resposta é não — pelo motivo da §1.4.
+4. **KWS2 é referência de leitura, não fonte de arquivo.** O código dele é
+   HLSL acoplado ao pipeline da Unity; e, se a ASTRA for distribuída para
+   terceiros criarem jogos, embutir o fonte dele cruza a linha de
+   redistribuição de asset da §1.4. As duas razões apontam para o mesmo
+   caminho: ler de perto, reescrever para o frame graph desta engine.
 5. **Diversidade de ondas custa memória, não só ms.** Seis sistemas somados
    significam texturas dinâmicas, mapas de fluxo e malhas de arrebentação
    residentes. O orçamento de VRAM precisa entrar na Fase 0 junto com o de ms.
