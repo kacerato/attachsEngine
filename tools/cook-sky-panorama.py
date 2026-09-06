@@ -290,7 +290,11 @@ def main():
     parser.add_argument("--authoring", default="Aether project-owned source")
     parser.add_argument("--license", default="Project owned")
     parser.add_argument("--source-url", default="")
+    parser.add_argument("--width", type=int, default=OUTPUT_WIDTH,
+                        choices=(512, 1024, 2048, 4096),
+                        help="panorama width; reflection probe resolution stays independent")
     args = parser.parse_args()
+    width, height = args.width, args.width // 2
 
     if not 0.0 <= args.ambient_saturation <= 2.0:
         raise ValueError("ambient saturation must be between 0 and 2")
@@ -302,7 +306,7 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     source_hash = hashlib.sha256(args.source.read_bytes()).hexdigest()
     linear = resize_linear(load_linear_source(args.source, args.ffmpeg, args.ffprobe),
-                           OUTPUT_WIDTH, OUTPUT_HEIGHT)
+                           width, height)
     linear = make_horizontal_seam_safe(linear)
     linear = make_poles_spherical(linear)
     if not np.isfinite(linear).all():
@@ -316,17 +320,17 @@ def main():
             break
         mip = downsample_box(mip)
     environment_path = args.out / "environment.aetex"
-    write_texture(environment_path, levels)
+    write_texture(environment_path, levels, width, height)
     specular_levels = bake_specular_environment(linear)
     write_texture(args.out / "environment-specular.aetex", specular_levels,
                   SPECULAR_SIZE, SPECULAR_SIZE, 5)
     write_texture(args.out / "environment-brdf.aetex", [bake_brdf_lut()],
                   BRDF_SIZE, BRDF_SIZE, 5)
 
-    row_weight = np.sin((np.arange(OUTPUT_HEIGHT, dtype=np.float32) + 0.5) *
-                        math.pi / OUTPUT_HEIGHT)
+    row_weight = np.sin((np.arange(height, dtype=np.float32) + 0.5) *
+                        math.pi / height)
     average = ((linear * row_weight[:, None, None]).sum(axis=(0, 1)) /
-               (row_weight.sum() * OUTPUT_WIDTH))
+               (row_weight.sum() * width))
     luminance = max(float(average @ np.array([0.2126, 0.7152, 0.0722],
                                              dtype=np.float32)), 1e-5)
     # Preserve the panorama's daylight tint without letting a blue sky turn all
@@ -334,7 +338,7 @@ def main():
     # not an arbitrary scene-specific post-process grade.
     ambient_color = np.clip((average / luminance) * 0.6 + 0.4, 0.15, 4.0)
     if args.detect_sun:
-        probe = linear.reshape(OUTPUT_HEIGHT // 4, 4, OUTPUT_WIDTH // 4, 4, 3).mean(axis=(1, 3))
+        probe = linear.reshape(height // 4, 4, width // 4, 4, 3).mean(axis=(1, 3))
         probe_luminance = probe @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
         sun_y, sun_x = np.unravel_index(int(np.argmax(probe_luminance)), probe_luminance.shape)
         sun_u = (sun_x + .5) / probe.shape[1]
@@ -375,7 +379,7 @@ def main():
         "sourceUrl": args.source_url,
         "sourcePath": args.source.as_posix(),
         "sourceSha256": source_hash,
-        "resolution": [OUTPUT_WIDTH, OUTPUT_HEIGHT],
+        "resolution": [width, height],
         "encoding": "RGBA8 sRGB, seam/pole-safe equirectangular full mip chain",
         "sunDirection": sun_direction,
         "sunColor": sun_color,

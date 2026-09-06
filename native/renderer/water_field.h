@@ -9,11 +9,33 @@
 namespace ae::renderer {
 
 inline constexpr u32 MaximumWaterExclusionVolumes = 8;
+inline constexpr u32 MaximumWaterCurrentSources = 16;
 
-// The single surface every consumer reads: physics, gameplay, audio, particles
-// and rendering. Providers differ in how the surface is produced; none of them
-// changes what a caller receives, so a body never floats on a surface the
-// renderer is not drawing.
+enum class WaterCurrentKind : u32 { Directional = 0, Radial = 1, Vortex = 2 };
+struct WaterCurrentSource final {
+  WaterCurrentKind kind = WaterCurrentKind::Directional;
+  WaterVec2 center{};
+  WaterVec2 direction{1.0f, 0.0f}; // unit vector for directional sources
+  float radius = 10.0f;
+  // Signed velocity scale (m/s), not the peak speed of radial/vortex sources:
+  // their linear core multiplies it by distance/radius before boundary falloff.
+  float speed = 1.0f;
+};
+
+// Value-owned, bounded current field. Orbital velocity remains separate so
+// consumers add the current exactly once. This is not a fluid solver.
+struct WaterCurrentSettings final {
+  WaterVec2 uniform{};
+  std::array<WaterCurrentSource, MaximumWaterCurrentSources> sources{};
+  u32 count = 0;
+  float maximumSpeed = 30.0f;
+};
+bool validateWaterCurrents(const WaterCurrentSettings &settings) noexcept;
+WaterVec2 sampleWaterCurrent(const WaterCurrentSettings &settings, WaterVec2 position) noexcept;
+
+// Shared query contract for physics/gameplay. Matching the renderer's spectrum,
+// domain and clock is the integration owner's responsibility, not a guarantee
+// made by selecting a provider here.
 enum class WaterFieldProvider : u32 { Analytic = 0, SpectralCpu = 1, SpectralGpu = 2 };
 
 enum class WaterFieldFlag : u32 {
@@ -54,6 +76,19 @@ struct WaterFieldStatus final {
   bool configured = false;
 };
 
+// Small value-owned bathymetry tile; importers may resample larger terrain into
+// tiles. Width/height zero disables the tile. Outside it depth stays unknown
+// unless the caller also supplies a flat-bottom fallback.
+struct WaterBathymetry final {
+  static constexpr u32 MaximumDimension = 32;
+  u32 width = 0, height = 0;
+  WaterVec2 origin{};
+  WaterVec2 spacing{1.0f, 1.0f};
+  std::array<float, MaximumDimension * MaximumDimension> bottomHeights{};
+};
+bool validateWaterBathymetry(const WaterBathymetry &data) noexcept;
+bool sampleWaterBottom(const WaterBathymetry &data, WaterVec2 position, float &height) noexcept;
+
 // Copied wholesale on configure. Holding pointers would make a query depend on
 // the lifetime of scene objects, and the field is read from jobs.
 struct WaterFieldSetup final {
@@ -61,7 +96,13 @@ struct WaterFieldSetup final {
   float baseHeight = 0.0f;
   float bottomHeight = 0.0f;
   bool hasBathymetry = false;
+  WaterBathymetry bathymetry{};
+  bool bounded = false;
+  // Uses the same rotated box/circle and feather contract as exclusions,
+  // inverted to retain water inside instead of outside.
+  WaterExclusionVolume boundary{};
   WaterInteractionField interaction{};
+  WaterCurrentSettings currents{};
   std::array<WaterExclusionVolume, MaximumWaterExclusionVolumes> exclusions{};
   u32 exclusionCount = 0;
   WaterFieldProvider requested = WaterFieldProvider::Analytic;
@@ -86,7 +127,7 @@ public:
   // camera height probe. Not exposed across the managed boundary.
   float heightOnly(WaterVec2 position, double timeSeconds) const noexcept;
 
-  WaterFieldStatus status() const noexcept { return status_; }
+  WaterFieldStatus status() const noexcept;
 
 private:
   WaterFieldSample sampleOne(WaterVec2 position, float timeSeconds) const noexcept;

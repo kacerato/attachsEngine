@@ -1,0 +1,168 @@
+# Volumes, contato físico e filtragem de água
+
+## Ownership e integração
+
+`WaterWorld` guarda até 16 campos por valor, identificados por IDs não nulos
+fornecidos pela cena. O ID não é índice de slot. Alterar/remover volumes acontece
+entre jobs; consultas simultâneas são permitidas enquanto configuração e espelhos
+espectrais emprestados não mudam. A cena continua responsável por manter o espelho
+vivo. Não há GPU readback neste sistema.
+
+`setVolume` valida antes de substituir. Um erro preserva o volume anterior.
+Consulta sem resultado retorna volume zero, não altura zero como água implícita.
+Ordem de seleção: camada compatível, cobertura molhada, maior prioridade, maior
+altura, menor ID. Consultas são por coluna XZ: não representam ainda cavernas com
+vários volumes verticais ou pressão hidrostática em volumes fechados.
+
+`WaterRuntime` pertence à instância da cena física e registra até 128 corpos.
+É uma camada de integração separada (`aether_water_runtime`), sem dependência
+inversa do renderer sobre Jolt. Não cria corpos nem avança o mundo por conta própria.
+
+Sequência por passo físico:
+
+1. Atualizar os provedores espectrais para o tempo de simulação.
+2. Chamar `WaterRuntime::apply(physics, water, simulationTime, settings)`.
+3. Chamar `AetherPhysics_Step` com o timestep fixo da engine.
+4. Consumir eventos e estatísticas; sincronizar transforms com a cena.
+
+O tempo deve crescer estritamente: um segundo apply no mesmo tempo é recusado,
+evitando duplicar forças. O caller não deve executar várias chamadas apply sem
+o Step correspondente. `clear` reinicia registros e relógio para outra cena.
+Ao destruir um corpo, chamar `unbind` antes; handles destruídos são detectados
+pela leitura de pose com lock e contados como indisponíveis se ainda registrados.
+`unbind` não sintetiza eventos. Eventos sobrevivem até o próximo apply bem-sucedido
+ou clear; não guardar o span depois disso. O sistema não é thread-safe para escrita.
+
+## Física e eventos
+
+Consulta de todas as posições em lote, conversão para plano local, forças em lote.
+Volume submerso exato de caixa/esfera contra esse plano; ondas curvas sobre um
+casco grande continuam uma aproximação planar, não integração completa do casco.
+Entrar e sair usam frações diferentes por histerese (2% / 0,5% por padrão).
+Trocar de volume emite saída do anterior e entrada do novo, nessa ordem.
+Capacidade de eventos é duas vezes a de corpos, sem descarte silencioso.
+
+Corrente e velocidade orbital são somadas uma vez. Arrasto/empuxo consomem a
+mesma consulta. Corpos em repouso continuam sujeitos à política existente de
+sono: não são acordados automaticamente por mudança de corrente. Forças usam
+um perfil de fluido por apply; fluidos com densidades distintas por volume,
+casco composto e política explícita de despertar são trabalhos pendentes.
+
+Nenhuma alocação é feita pelos registros/consultas/apply após construção. O
+solver Jolt tem seus próprios recursos. Custo máximo da seleção é corpos ×
+volumes; volume submerso é avaliado para contato e novamente para forças. Não
+há promessa de custo constante ou de 120 FPS sem medição no hardware.
+
+## Gráficos e controles efetivamente conectados
+
+`WaterShadingSettings` possui dois eixos independentes, sem alterar o formato
+serializado do WaterProfile existente:
+
+- Specular AA: 0–1, padrão 0,5. Derivadas da normal ampliam a distribuição GGX
+  quando a variação não cabe no pixel; a rugosidade autorada é o piso. Zero pula
+  o filtro. Não é antialiasing de silhueta e não substitui AA temporal/MSAA.
+- Espuma de contato: 0–10 m ao longo do raio de visão, padrão 1,35. Zero desliga.
+  Não equivale à distância horizontal da costa nem a um solver de arrebentação.
+
+Ambos percorrem UI Android -> snapshot JNI -> setter validado -> UBO -> shader
+analítico/espectral. Nenhuma textura, descriptor ou passe novo; reutilizam dois
+componentes antes reservados. O contrato binário da UBO mantém o mesmo tamanho.
+A persistência desses novos eixos em recursos/Inspector não está implementada.
+
+## Limite da entrega
+
+Os gráficos estão ligados ao demo existente. O WaterRuntime está compilado como
+módulo Android/host e é exercitado com Jolt real nos testes, mas o demo oceânico
+ainda não registra corpos nele. Multiágua visual, bathymetry no shader, reflexos
+HDR/refração, authoring persistente e equivalência de todos os espectros entre
+CPU/GPU não estão concluídos. Não apresentar esses módulos como paridade KWS.
+
+## Evidência local desta rodada
+
+### Agendamento adicionado depois da rodada inicial
+
+`WaterSimulation` oferece o caminho completo apply -> Jolt StepV2 para o dono
+da cena. Possui timestep fixo de 1/240 a 1/30 s, limite de 1 a 32 subpassos,
+limite de delta aceito, time scale 0–4 e pausa. Default: 60 Hz, 8 subpassos,
+250 ms por frame. Relata separadamente tempo efetivamente simulado, fração
+restante para interpolação e tempo descartado; não esconde a perda de tempo
+quando o dispositivo não acompanha. Pausa não acumula tempo de parede.
+
+O callback beforeStep pode atualizar os provedores para o tempo exato antes
+das consultas. Se falhar, nenhuma força é aplicada e o passo pode ser repetido.
+O afterStep entrega os eventos de cada subpasso, evitando perder Enter/Exit
+quando um frame realiza vários passos. Erros Jolt são preservados na máscara
+de retorno e exigem reset explícito; não se repete um passo já executado.
+Reset remove bindings e permite trocar de mundo. Não chamar Physics_Step por
+fora quando WaterSimulation controla esse mundo. Os callbacks são síncronos
+no thread dono e não podem reentrar nem destruir o mundo durante advance.
+
+Configuração de forças pode mudar por setWaterSettings entre frames; timestep
+fica fixo até reset. A fração retornada não interpola transforms sozinha.
+O mapa Android ainda é estático: antes de mostrar corpos, é necessário adicionar
+atualização coordenada de matrizes, bounds, sombras, HZB e registros de culling.
+Não foi contornado esse contrato escrevendo diretamente no buffer de instâncias.
+
+### Caminho de atualização dinâmica adicionado em seguida
+
+`queueMapDrawPose` agora prepara matriz de instância/normal e bounds a partir
+da esfera LOCAL da malha. Aceita até 64 draws distintos por frame, coalescendo
+edições do mesmo draw, sem alocar. Commit acontece depois da aquisição/fence,
+antes de sombras e culling. Sombras ficam dirty; histórico HZB é invalidado
+porque um occluder movido poderia esconder outros draws na posição antiga.
+Draws dinâmicos deixam de usar HZB histórico individual; frustum e sombras
+continuam usando os novos bounds. Isso tem custo explícito, sobretudo quando
+há movimento contínuo e o cache de sombras deixa de ser reutilizável.
+
+Transformações singulares/projetivas são rejeitadas, identidade de geometria e
+material é preservada. Raio usa limite conservador válido para escala e shear.
+Água e grupos com vários LODs não são aceitos neste caminho inicial. O owner
+deve chamar na thread de render, sem concorrer com load/shutdown. Ainda falta
+ligar entidades do demo e seus meshes a essa API; não há corpos flutuantes
+visíveis adicionados por esta alteração.
+
+Sem vetores de movimento por objeto, atualizações também invalidam o histórico
+temporal de cor para evitar ghosts. Isso reduz reaproveitamento temporal durante
+movimento; não equivale a suporte completo de motion vectors. A malha de colisão
+estática do pacote não acompanha poses dinâmicas: corpos móveis precisam de
+colliders próprios, gerenciados pela cena física.
+
+### Teste Android autorizado
+
+410/410 testes host e build Release passaram. APK instalado no Xiaomi 25053PC47G.
+FFT confirmou três cascatas e textura de slopes RG16F. Medição PID 8349, epoch 4,
+janela 1: resolução 2772x1280, escala fixa 1,0, DRS desligada, 600 frames,
+48,73 FPS; GPU média 18,42 ms e p95 18,60 ms. Bateria em torno de 37 graus C.
+Uma tentativa anterior manteve DRS ativa e caiu para escala 0,5; não é evidência
+de desempenho nativo. O painel foi corrigido para refletir overrides de launch.
+Logs: `build/android-validation/water-runtime-native.log`. Capturas confirmam
+que clareamento e faixa de horizonte ainda persistem; qualidade não aprovada.
+
+### Laboratório físico visível (incremento posterior)
+
+O pacote oceânico agora contém três caixas de dimensões distintas, com materiais
+próprios e flag NoCollision para não duplicar colliders estáticos. OceanValidation
+é o owner de demonstração: cria mundo Jolt e fundo estático, registra caixas em
+WaterSimulation e publica poses por queueMapDrawPose. A correspondência por
+material é convenção explícita deste asset de teste, não identidade pública da
+engine. Substituir por referências de entidade ao integrar o authoring de cenas.
+
+No modo analítico, renderer e consulta usam o mesmo perfil, impulsos e relógio
+fixo. O painel oferece densidade 500–2000 kg/m³ e pausa. As caixas têm a densidade
+padrão Jolt de 1000 kg/m³; mudando a do fluido, flutuam ou afundam até o fundo.
+O laboratório desativa sono apenas nesses três corpos para reagirem às mudanças.
+Reset da surface/renderer destrói esse mundo de teste. A cena floresta não o cria.
+
+FFT ainda não aciona essa física: as caixas permanecem estáticas nesse modo até
+as consultas multicascata serem integradas. O launcher padrão abre o laboratório
+analítico; o modo FFT continua opt-in. Não declarar isso como flutuação espectral.
+Interpolação de transforms entre passos e múltiplos pontos de casco são pendentes.
+
+- 406/406 testes nativos; 7/7 testes Python de geometria/assets.
+- Shaders analítico/espectral compilados, SPIR-V validado e headers reproduzíveis.
+- Android Release compilado, incluindo painel/JNI/shader atualizados.
+- Convergência 60/120 testada com sono desativado explicitamente; o teste de
+  repouso com política default continua passando. Não confundir tolerância de
+  sono com igualdade numérica entre timesteps.
+- Sem instalação, captura ou medição no aparelho nesta rodada. Qualidade visual,
+  custo do filtro e FPS continuam aguardando validação autorizada no hardware.

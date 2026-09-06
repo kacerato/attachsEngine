@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "scope": "offline-authoring-not-android-runtime",
+  "blender": {
+    "version": "4.5.0",
+    "platform": "windows-x64",
+    "url": "https://download.blender.org/release/Blender4.5/blender-4.5.0-windows-x64.zip",
+    "sha256": "2ee75e9466d293a784fdf020f60fe1309c1e0610ecf73c64f1fc09b01e5eec56",
+    "license": "GPL-3.0-or-later; see bundled copyright notices",
+    "usage": "separate process; FBX to GLB through versioned asset recipes"
+  },
+  "astcenc": {
+    "version": "5.6.0",
+    "license": "Apache-2.0",
+    "usage": "offline ASTC texture encoding; existing project dependency"
+  }
+}

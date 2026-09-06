@@ -56,6 +56,22 @@ struct WaterProfile final {
 // It is ordinary replaceable data; no wave constant is embedded in a shader.
 WaterProfile defaultOceanWaterProfile() noexcept;
 
+// Composable authoring operation; leaves the destination untouched on error.
+// Length changes preserve deep-water dispersion. Spread is relative to +X;
+// a caller may rotate the complete result to its authored wind direction.
+struct WaterWaveAuthoring final {
+  float lengthScale = 1.0f;
+  float directionalSpread = 1.0f;
+  float crossSwell = 0.0f;
+};
+bool authorWaterWaves(const WaterProfile &source, const WaterWaveAuthoring &settings,
+                      WaterProfile &destination) noexcept;
+
+// Linear finite-depth long wave for stress testing, not coastal inundation.
+// Caller reserves a slot explicitly; existing waves are never overwritten.
+bool appendLongWaterWave(WaterProfile &profile, float amplitude, float wavelength,
+                         float depth, WaterVec2 direction) noexcept;
+
 enum class WaterValidationError : u32 {
   None = 0, Schema, Domain, Reflection, WaveCount, Wave, Optical, Distance, Clipmap
 };

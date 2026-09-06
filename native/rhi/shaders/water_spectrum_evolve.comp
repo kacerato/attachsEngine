@@ -1,0 +1,25 @@
+#version 450
+layout(local_size_x=64) in;
+layout(std430,set=0,binding=0) readonly buffer Initial { vec4 initial[]; };
+// Two vec4 per sample: four packed complex transforms yield eight real fields.
+layout(std430,set=0,binding=1) writeonly buffer Surface { vec4 surface[]; };
+layout(push_constant) uniform Parameters { uint size; float time; float patchLength; uint unused; } pc;
+vec2 multiplyComplex(vec2 a,vec2 b) { return vec2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x); }
+vec2 timesI(vec2 a) { return vec2(-a.y,a.x); }
+void main() {
+  uint index=gl_GlobalInvocationID.x,n=pc.size;
+  if(index>=n*n) return;
+  uint x=index%n,z=index/n,opposite=((n-z)%n)*n+(n-x)%n;
+  float phase=initial[index].z*pc.time;
+  vec2 rotation=vec2(cos(phase),sin(phase));
+  vec2 h=multiplyComplex(initial[index].xy,rotation)+
+    multiplyComplex(initial[opposite].xy*vec2(1,-1),rotation*vec2(1,-1));
+  vec2 k=vec2(x==n/2?0:(x<n/2?int(x):int(x)-int(n)),
+              z==n/2?0:(z<n/2?int(z):int(z)-int(n)))*6.283185307179586/pc.patchLength;
+  float inverseK=length(k)>0?1/length(k):0;
+  vec2 ih=timesI(h),dx=ih*k.x*inverseK,dz=ih*k.y*inverseK;
+  vec2 sx=ih*k.x,sz=ih*k.y;
+  vec2 dxx=-h*k.x*k.x*inverseK,dxz=-h*k.x*k.y*inverseK,dzz=-h*k.y*k.y*inverseK;
+  surface[index*2]=vec4(h+timesI(dx),dz+timesI(sx));
+  surface[index*2+1]=vec4(sz+timesI(dxx),dxz+timesI(dzz));
+}

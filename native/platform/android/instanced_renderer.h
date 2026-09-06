@@ -1,5 +1,9 @@
 #pragma once
 
+#include "renderer/water_shading.h"
+#include "renderer/water_field.h"
+#include "renderer/map_draw_update.h"
+
 #include "core/base.h"
 #include "profiler/frame_statistics.h"
 #include "platform/android/dotnet_host.h"
@@ -58,6 +62,11 @@ public:
                   const std::atomic<bool> *cancel = nullptr, bool dirtRoadPreview = false,
                   const char *mapAssetRoot = "dirt_road");
   void shutdown();
+  // Single render-owner thread. Queues up to 64 distinct draw poses per frame;
+  // GPU writes happen after acquire/fence, before shadows and culling. Dynamic
+  // LOD groups and water camera grids are not accepted by this initial path.
+  bool queueMapDrawPose(u32 drawIndex, const float *model, const float *localCenter,
+                        float localRadius);
 
   // Os ângulos de órbita vêm da camada de input, em radianos. O renderer
   // permanece independente de AInputEvent/touch IDs e pode futuramente
@@ -73,6 +82,14 @@ public:
     return dirtRoadResources_.staticCollisionMesh();
   }
   void releaseStaticCollisionCpuData(){dirtRoadResources_.releaseStaticCollisionCpuData();}
+  const std::vector<renderer::MapDrawRecord> &mapDraws() const { return dirtRoadResources_.draws(); }
+  renderer::WaterFieldSetup waterQuerySetup() const {
+    renderer::WaterFieldSetup setup;
+    setup.profile = waterProfile_;
+    setup.baseHeight = waterBaseHeight_;
+    setup.interaction = waterInteractions_;
+    return setup;
+  }
 
   // Microssegundos de wall time no crossing C++→C# de FillInstanceBuffer do frame
   // mais recente (só o crossing + preenchimento, não o frame Vulkan inteiro
@@ -151,15 +168,20 @@ public:
   bool setWaterProfile(const renderer::WaterProfile &profile, float baseHeight = 0.0f) {
     if (renderer::validateWaterProfile(profile) != renderer::WaterValidationError::None ||
         !std::isfinite(baseHeight) ||
-        renderer::maximumWaterDisplacement(profile) > waterDisplacementCapacity_) return false;
+        std::abs(baseHeight)+renderer::maximumWaterDisplacement(profile) > waterDisplacementCapacity_) return false;
     waterProfile_ = profile;
     waterBaseHeight_ = baseHeight;
     return true;
   }
   bool addWaterImpulse(const renderer::WaterImpulse &impulse) {
-    if (std::abs(impulse.amplitude) + renderer::maximumWaterDisplacement(waterProfile_) >
+    if (std::abs(waterBaseHeight_)+std::abs(impulse.amplitude) + renderer::maximumWaterDisplacement(waterProfile_) >
         waterDisplacementCapacity_) return false;
     return waterInteractions_.addImpulse(impulse);
+  }
+  bool setWaterShading(const renderer::WaterShadingSettings &settings) noexcept {
+    if (!renderer::validateWaterShading(settings)) return false;
+    waterShading_ = settings;
+    return true;
   }
   // Resource-epoch visibility budget. Raising it later requires rebuilding
   // spatial chunks; profile/touch edits inside it remain allocation-free.
@@ -549,6 +571,10 @@ private:
   renderer::ResolvedRenderingPolicy resourceRenderingPolicy_{};
   renderer::ResolvedRenderingPolicy renderingPolicy_{};
   renderer::WaterProfile waterProfile_ = renderer::defaultOceanWaterProfile();
+  renderer::WaterShadingSettings waterShading_{};
+  std::array<renderer::MapDrawUpdate, 64> pendingMapPoses_{};
+  u32 pendingMapPoseCount_ = 0;
+  std::vector<u8> dynamicMapDraws_;
   bool spectralWaterEnabled_=false;
   bool wideWaterSlopes_=false;
   renderer::WaterCostIsolation waterCostIsolation_=renderer::WaterCostIsolation::Full;

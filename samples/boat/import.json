@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "model": "source/Boat.fbx",
+  "targetHorizontalLength": 10,
+  "pivot": "bottomCenter",
+  "materials": {
+    "Boat": {"textures": {
+      "Base_color": "textures/Boat_Base_color.png",
+      "Roughness": "textures/Boat_Roughness.png",
+      "Metallic": "textures/Boat_Metallic.png",
+      "Normal_OpenGL": "textures/Boat_Normal_OpenGL.png"
+    }},
+    "Ropes": {"textures": {
+      "Base_color": "textures/Ropes_Base_color.png",
+      "Roughness": "textures/Ropes_Roughness.png",
+      "Normal_OpenGL": "textures/Ropes_Normal_OpenGL.png"
+    }},
+    "Curtains": {"doubleSided": true, "textures": {
+      "Base_color": "textures/Curtains_Base_color.png",
+      "Roughness": "textures/Curtains_Roughness.png",
+      "Metallic": "textures/Curtains_Metallic.png",
+      "Normal_OpenGL": "textures/Curtains_Normal_OpenGL.png",
+      "Opacity": "textures/Curtains_Opacity.png",
+      "Emissive": "textures/Curtains_Emissive.png"
+    }}
+  }
+}

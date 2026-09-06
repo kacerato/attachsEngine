@@ -34,6 +34,54 @@ AE_TEST(Water_sampling_is_deterministic_unit_normal_and_time_variant) {
                  "visibility extent is the sum of authored amplitudes");
 }
 
+AE_TEST(Water_crest_shape_preserves_bounds_and_analytic_derivatives) {
+  auto p=profile();
+  p.waveCount=1;
+  p.waves[0].steepness=1.0f;
+  constexpr float delta=0.001f;
+  for(int step=0;step<100;++step) {
+    WaterVec2 position{step*0.13f,0};
+    const auto sample=sampleWaterSurface(p,position,0.7f);
+    const float slope=(sampleWaterSurface(p,{position.x+delta,0},0.7f).height-
+                       sampleWaterSurface(p,{position.x-delta,0},0.7f).height)/(2*delta);
+    const float velocity=(sampleWaterSurface(p,position,0.7f+delta).height-
+                          sampleWaterSurface(p,position,0.7f-delta).height)/(2*delta);
+    AE_EXPECT_TRUE(std::abs(sample.height)<=maximumWaterDisplacement(p),"culling bound");
+    AE_EXPECT_TRUE(std::abs(slope+sample.normal.x/sample.normal.y)<0.001f,"normal derivative");
+    AE_EXPECT_TRUE(std::abs(velocity-sample.velocity.y)<0.001f,"buoyancy velocity");
+  }
+  const float crested=sampleWaterSurface(p,{1,0},0).height;
+  p.waves[0].steepness=0;
+  AE_EXPECT_TRUE(std::abs(crested-sampleWaterSurface(p,{1,0},0).height)>0.01f,"shape changes");
+}
+
+AE_TEST(Water_authoring_composes_cross_swell_and_preserves_dispersion) {
+  const auto source=defaultOceanWaterProfile();
+  WaterProfile result;
+  AE_EXPECT_TRUE(authorWaterWaves(source,{4,0,.5f},result),"authoring succeeds");
+  AE_EXPECT_EQ(result.waveCount,8u,"independent crossing swell fills available slots");
+  AE_EXPECT_TRUE(std::abs(result.waves[0].speed-source.waves[0].speed*.5f)<1e-6f,"dispersion");
+  AE_EXPECT_EQ(result.waves[0].direction.x,1.0f,"zero spread aligns original train");
+  AE_EXPECT_TRUE(std::abs(result.waves[5].direction.y-1.0f)<1e-6f,"cross train perpendicular");
+  const auto count=result.waveCount;
+  AE_EXPECT_TRUE(!authorWaterWaves(source,{0,1,0},result),"reject invalid length");
+  AE_EXPECT_EQ(result.waveCount,count,"transactional failure");
+  AE_EXPECT_TRUE(authorWaterWaves(source,{},result),"identity");
+  AE_EXPECT_EQ(result.waveCount,source.waveCount,"default adds no waves");
+}
+
+AE_TEST(Water_long_wave_stress_is_bounded_and_reserves_a_real_slot) {
+  auto p=defaultOceanWaterProfile();
+  AE_EXPECT_TRUE(appendLongWaterWave(p,20,320,30,{1,0}),"20 metre stress amplitude");
+  AE_EXPECT_EQ(p.waveCount,6u,"appended component");
+  AE_EXPECT_TRUE(maximumWaterDisplacement(p)>20,"conservative bound includes background sea");
+  const auto sample=sampleWaterSurface(p,{30,0},10);
+  AE_EXPECT_TRUE(std::isfinite(sample.height)&&std::isfinite(sample.velocity.y),"finite stress sample");
+  AE_EXPECT_TRUE(!appendLongWaterWave(p,21,320,30,{1,0}),"amplitude contract");
+  AE_EXPECT_EQ(p.waveCount,6u,"failed operation preserves profile");
+  AE_EXPECT_TRUE(!appendLongWaterWave(p,1,320,0,{1,0}),"positive depth required");
+}
+
 AE_TEST(Water_exclusion_supports_feathered_circle_and_rotated_box) {
   WaterExclusionVolume circle{};circle.halfExtent={2,2};circle.feather=1;
   AE_EXPECT_EQ(waterCoverage(circle,{0,0}),0.0f,"circle interior");

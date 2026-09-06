@@ -4,7 +4,9 @@
   "scene": "ocean-gpu",
   "grid": {
     "segments": 256,
-    "extent": 384.0
+    "extent": 8000.0,
+    "nearExtent": 384.0,
+    "topology": "graded-camera-grid-v1"
   },
   "bathymetry": {
     "segments": 96,
@@ -13,51 +15,131 @@
       32.0
     ]
   },
+  "validationBodies": [
+    {
+      "id": 1,
+      "materialIndex": 2,
+      "halfExtent": [
+        1.0,
+        0.75,
+        1.0
+      ],
+      "position": [
+        -5,
+        2,
+        -10
+      ]
+    },
+    {
+      "id": 2,
+      "materialIndex": 3,
+      "halfExtent": [
+        1.5,
+        0.5,
+        1.0
+      ],
+      "position": [
+        0,
+        2,
+        -10
+      ]
+    },
+    {
+      "id": 3,
+      "materialIndex": 4,
+      "halfExtent": [
+        0.75,
+        1.0,
+        0.75
+      ],
+      "position": [
+        5,
+        2,
+        -10
+      ]
+    }
+  ],
+  "boat": {
+    "source": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\samples\\boat\\Imported\\scene.aemap",
+    "drawCount": 9,
+    "position": [
+      0,
+      2,
+      10
+    ],
+    "pivot": [
+      0,
+      0.6,
+      0
+    ],
+    "scale": 2,
+    "collision": "box-proxy"
+  },
   "outputs": {
     "environment-brdf.aetex": "403e4ff6655d21258354190c80e50c40427351addbba40f10826a0631d891fcd",
-    "environment-specular.aetex": "97455d34d92ca3d7fb9e9684e23361fd0f02efea985f3b02670206042a5fa42e",
-    "environment.aeenv": "1f66112f9a409c86ec71afa502d2f743100f01bd74b3d2a8dbab2f851ed831cf",
-    "environment.aetex": "d25ca872a98c5bffd6cc0048eb89b6866900bff936afdc9cb372a12fe8dd5131",
-    "scene.aemap": "c1ca193c63b34acf99a431a19e84e3aee6b9760529dace9d4404bd04cada33a0",
+    "environment-specular.aetex": "2322feb34abd2fedece9cff0b8fd3338cb6b0361707c65670b9009026b583c26",
+    "environment.aeenv": "6e5f2834794884bc50663fc2371c75a84e2ba05de44e3dd3c81576c98921782d",
+    "environment.aetex": "b3ba412215277c67a132af1b2d1a0b4e3b5ba0daef037053983c9b92174a80e0",
+    "scene.aemap": "7df9914d7062dfaac082c003694b705bf604d96975b2220aa0c4bd0c66ac06f9",
     "texture_000-fallback.aetex": "2f765d5e3bee50c6e11383a422764c1693a2a8c79c8adfb781ea78163e21124b",
-    "texture_000.aetex": "c0504076008bb206226f5f5156010ec65bb926d037e2649fd4cf58493dc39267"
+    "texture_000.aetex": "c0504076008bb206226f5f5156010ec65bb926d037e2649fd4cf58493dc39267",
+    "texture_001-fallback.aetex": "5b30cf6f2f794f3f417e14d65fc71095433cd184efc8c754149b3091ea5a5664",
+    "texture_001.aetex": "cb10bcabfcf16888d52d3e69748e0a427181e7f5aac678215122260439234b4f",
+    "texture_002-fallback.aetex": "47a5668d3204d7cbd790b094d39c4c115d454b2d198f54474444a69b3eec4dd4",
+    "texture_002.aetex": "896f9ab5f395a77374dd8ad7e2e1bb439996e82d975b327bc007699ba00005bd",
+    "texture_003-fallback.aetex": "3d7f6dc9b47e84e3eb28c03c604749587750baeb838879e1ee287bef4c8cdcd4",
+    "texture_003.aetex": "94001e419a3017ef3e7e4724990e9cc5b951908db5a5afd525bcc739b7554f07",
+    "texture_004-fallback.aetex": "cfd61b9de03acf13c5d26360f30b3456fa29afe9ec084b00578b047d984d8fb1",
+    "texture_004.aetex": "dfd4bc525e63faae1bc57ad80ee030b9d4446ea4fd4ff7aa860c5932d465cb6e",
+    "texture_005-fallback.aetex": "6eb48811166e583633bc0a450a4bb097cd3625e78c6984080b3516ad65e0bd4b",
+    "texture_005.aetex": "0af5c64a3615173332474c19fd2c0346924bde149f1e5fe3bb337669a6a642d5",
+    "texture_006-fallback.aetex": "e8cb133c8263251bbdd6a20592d0c94db10e5f9c7067b394a6e334636b2e3613",
+    "texture_006.aetex": "bbe939e44a503ab6baeda445e1c4d31e22b8ec39a68def170c23a6e684854a74",
+    "texture_007-fallback.aetex": "4e30cfbdd9e578a30729615de3efcc0d73a722201a17711ad27e1d59374d7d62",
+    "texture_007.aetex": "44bc98ff54e84faefced3ead6d44836962bc12f87ba892d46b1081ce56c9284e",
+    "texture_008-fallback.aetex": "929fb689aa59aa8bdfe1326e65125aa122515e3f4f36b7106d07fb3fc9c2c938",
+    "texture_008.aetex": "f3120cc38dd087efde0cf8567404f4140aeb2fb4a806f06f0eba73f366aa7497",
+    "texture_009-fallback.aetex": "867b769654a421e74a795a5458b0dba43ee74b5cf6996c5b05e0284fc32a3cdd",
+    "texture_009.aetex": "10d47071e573349befe674a387370cd3e1748fdc6c3a2a8b7ce33df9e34769ba",
+    "texture_010-fallback.aetex": "a008022691f2c9ae918e650cb13081ed8de8bda4048658fc60e7ea6d2611c47f",
+    "texture_010.aetex": "5fd3cfc389bb10abd505c57048fe35d8d3222d32032398b7060449b1e8937af9"
   },
   "environment": {
-    "asset": "hausdorf_clear_sky",
-    "authoring": "Poly Haven / Grzegorz Wronkowski",
+    "asset": "kloppenheim_03_puresky",
+    "authoring": "Greg Zaal / Jarod Guest (Poly Haven)",
     "license": "CC0-1.0",
-    "sourceUrl": "https://polyhaven.com/a/hausdorf_clear_sky",
-    "sourcePath": "samples/ocean/Source/hausdorf_clear_sky_1k.hdr",
-    "sourceSha256": "984f8f676008a4678e3c47f20f6f2c2f5644a41c9aca2077f7ff1862cddbd6b9",
+    "sourceUrl": "https://polyhaven.com/a/kloppenheim_03_puresky",
+    "sourcePath": "samples/ocean/Source/kloppenheim_03_puresky_2k.hdr",
+    "sourceSha256": "cf28b37889826b2c9af5059b67110d11fff159d6cef31226ba117034e27c7287",
     "resolution": [
-      1024,
-      512
+      2048,
+      1024
     ],
     "encoding": "RGBA8 sRGB, seam/pole-safe equirectangular full mip chain",
     "sunDirection": [
-      0.7525144365408206,
-      0.3713171939518376,
-      0.5439168725764855
+      0.4190411100834235,
+      0.8545579883654005,
+      0.30681458990884414
     ],
     "sunColor": [
-      1.0397979021072388,
-      0.9900141954421997,
-      0.9817292094230652
+      0.9823433756828308,
+      1.0049160718917847,
+      1.0032941102981567
     ],
-    "sunIntensity": 2.35,
+    "sunIntensity": 2.6,
     "ambientColor": [
-      0.9738235473632812,
-      1.0006678104400635,
-      1.0704646110534668
+      0.9885859489440918,
+      1.0002796649932861,
+      1.030840516090393
     ],
-    "ambientStrength": 0.5,
-    "exposure": 0.82,
+    "ambientStrength": 0.56,
+    "exposure": 1.0,
     "groundBounceColor": [
-      0.58,
-      0.66,
-      0.7
+      0.08,
+      0.14,
+      0.18
     ],
-    "saturation": 0.72,
+    "saturation": 0.62,
     "environmentResourceVersion": 3,
     "specularRepresentation": "octahedral-ggx-prefiltered-rgba16f",
     "specularResolution": [

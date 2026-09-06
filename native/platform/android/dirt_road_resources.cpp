@@ -216,8 +216,8 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
       environmentMapDescription_.brdfHeight,
       environmentMapDescription_.hasSplitSumBrdf() ? "true" : "false");
   __android_log_print(ANDROID_LOG_INFO, LogTag,
-      "[DirtRoad] ready source_draws=%u render_chunks=%zu materials=%u textures=%u triangles=%u encoding=%s load_ms=%.3f",
-      header_.drawCount, draws_.size(), header_.materialCount, header_.textureCount,
+      "[DirtRoad] ready assets=%s source_draws=%u render_chunks=%zu materials=%u textures=%u triangles=%u encoding=%s load_ms=%.3f",
+      assetRoot, header_.drawCount, draws_.size(), header_.materialCount, header_.textureCount,
       header_.triangleCount,
       astc ? "ASTC6x6" : "RGBA8-fallback",
       std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());

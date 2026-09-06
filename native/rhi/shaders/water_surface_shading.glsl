@@ -111,6 +111,14 @@ void main() {
   mediump float f0=(ior-1.0)/(ior+1.0); f0*=f0;
   mediump float fresnelWeight=f0+(1.0-f0)*pow5(1.0-nv);
   mediump float rough=clamp(environment.waterOptics.y,0.025,1.0);
+  // Filter the GGX lobe rather than suppressing normal detail. Derivatives are
+  // evaluated uniformly before lighting branches; no extra texture or pass.
+  highp float specularAA=clamp(environment.waterInteractionParameters.z,0.0,1.0);
+  if(specularAA>0.0) { // uniform draw setting: derivatives remain well-defined
+    highp vec3 normalDx=dFdx(n),normalDy=dFdy(n);
+    highp float normalVariance=min(0.25,(dot(normalDx,normalDx)+dot(normalDy,normalDy))*specularAA);
+    rough=sqrt(sqrt(min(1.0,rough*rough*rough*rough+normalVariance)));
+  }
   if(environment.parameters.w>1.5 && isolation!=WATER_ISOLATION_NO_REFLECTION) {
     mediump vec2 integratedBrdf=environmentBrdf(nv,rough);
     fresnelWeight=clamp(f0*integratedBrdf.x+integratedBrdf.y,0.0,1.0);
@@ -140,6 +148,16 @@ void main() {
       directionalShadow(vPosition,n,waterDepth):1.0;
   mediump vec3 sun=environment.sunColorAngularRadius.rgb*
                    environment.sunDirectionIntensity.w*sunSpec*shadow;
+  // In-scattering is illuminated, not an emissive flat tint. The phase term
+  // favours transmitted sunlight in backlit waves without whitening the whole
+  // surface. Turbidity remains the independent authoring axis for this energy.
+  mediump float forwardScatter=pow(max(dot(-l,v),0.0),4.0);
+  mediump vec3 waterIrradiance=environment.ambientColorStrength.rgb*
+      environment.ambientColorStrength.w + environment.sunColorAngularRadius.rgb*
+      environment.sunDirectionIntensity.w*max(l.y,0.0)*shadow/PI;
+  body*=waterIrradiance*(0.35+0.65*environment.waterOptics.z);
+  body+=environment.waterShallowColorDistance.rgb*forwardScatter*nl*
+      environment.waterOptics.z*shadow;
 
 #ifdef AETHER_SPECTRAL_WATER
   mediump float crestFoam=clamp(vSpectralFoam,0.0,1.0);
@@ -150,15 +168,21 @@ void main() {
 #endif
   // A interseção com terreno/objetos nasce da espessura real. Não depende de
   // nome de cena nem de uma textura pintada para esconder o encontro.
-  mediump float shoreFoam=(1.0-smoothstep(0.06,1.35,thickness))*
-                          step(opaqueDeviceDepth,0.99999);
+  highp float contactWidth=environment.waterInteractionParameters.w;
+  mediump float shoreFoam=contactWidth>0.0?
+      (1.0-smoothstep(0.0,max(contactWidth,0.001),thickness))*step(opaqueDeviceDepth,0.99999):0.0;
   mediump float foam=clamp(max(crestFoam,shoreFoam)*environment.waterDeepColorFoam.w,0.0,1.0);
+  // Mip-filtered multiscale breakup avoids a solid white contact ribbon. Uses
+  // the existing periodic normal asset; no random per-frame noise or aliasing.
+  highp vec2 foamUv=vPosition.xz*.09+vec2(.007,-.011)*environment.waterParameters.z;
+  mediump float foamPattern=texture(waterNormalTexture,foamUv).r;
+  foam*=smoothstep(.28,.68,foamPattern);
 
   mediump float opacity=clamp(1.0-transmissionLuma,0.0,1.0);
   mediump float compositeAlpha=clamp(max(opacity+fresnelWeight*(1.0-opacity),foam),0.0,1.0);
   mediump vec3 premultiplied=body*opacity*(1.0-fresnelWeight)+
                              reflected*fresnelWeight+sun;
-  premultiplied=mix(premultiplied,vec3(0.92,0.97,1.0)*compositeAlpha,foam);
+  premultiplied=mix(premultiplied,vec3(0.92,0.97,1.0)*waterIrradiance*compositeAlpha,foam);
   // Nonlinear transfer functions act on straight color. Applying them to
   // premultiplied radiance makes a thin surface brighter as alpha decreases.
   mediump vec3 surfaceColor=toneMapEnvironment(premultiplied/max(compositeAlpha,1.0e-5));

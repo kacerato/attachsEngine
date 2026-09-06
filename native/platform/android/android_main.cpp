@@ -13,6 +13,7 @@
 #include "platform/android/dotnet_assets.h"
 #include "platform/android/dotnet_host.h"
 #include "platform/android/instanced_renderer.h"
+#include "platform/android/ocean_validation.h"
 #include "platform/android/lifecycle_trace.h"
 #include "platform/app_lifecycle.h"
 #include "platform/camera_route.h"
@@ -84,6 +85,7 @@ struct AndroidShell final {
   bool materialPreview = false;
   bool dirtRoadPreview = false;
   bool oceanPreview = false;
+  ae::platform::android::OceanValidation oceanValidation;
   bool forceTextureFallback = false;
   bool lockCamera = false;
   std::future<bool> rendererInitialization;
@@ -160,6 +162,11 @@ void applyRuntimeControls(AndroidShell &shell) {
   shell.waterInteractionStrength = controls.interactionStrength;
 
   auto water = ae::renderer::defaultOceanWaterProfile();
+  if (!ae::renderer::authorWaterWaves(water,
+      {controls.swellLength,controls.directionalSpread,controls.crossSwell},water)) {
+    __android_log_print(ANDROID_LOG_ERROR,"Aether.Android","[Water] invalid wave authoring settings");
+    return;
+  }
   const float direction = controls.waveDirectionDegrees * 0.017453292519943295f;
   const float rotationCos = std::cos(direction), rotationSin = std::sin(direction);
   for (ae::u32 index = 0; index < water.waveCount; ++index) {
@@ -172,6 +179,16 @@ void applyRuntimeControls(AndroidShell &shell) {
         water.waves[index].steepness * controls.waveSteepness, 0.0f, 1.0f);
   }
   water.microWaveStrength = controls.microWaves;
+  if(controls.longWaveAmplitude>0) {
+    // The laboratory explicitly trades the last cross-swell component for a
+    // long-wave slot; the reusable authoring API never overwrites silently.
+    if(water.waveCount==ae::renderer::MaximumWaterWaves) --water.waveCount;
+    if(!ae::renderer::appendLongWaterWave(water,controls.longWaveAmplitude,
+         controls.longWaveLength,30,{rotationCos,rotationSin})) {
+      __android_log_print(ANDROID_LOG_ERROR,"Aether.Android","[Water] invalid long-wave settings");
+      return;
+    }
+  }
   water.surfaceOpacity = controls.surfaceOpacity;
   water.absorption.x *= controls.absorption;
   water.absorption.y *= controls.absorption;
@@ -181,14 +198,16 @@ void applyRuntimeControls(AndroidShell &shell) {
   water.turbidity = controls.waterTurbidity;
   water.refractiveIndex = controls.waterIor;
   ae::renderer::WaterSpectralControls spectral;
-  spectral.displacement=controls.waveHeight; spectral.choppiness=controls.waveSteepness;
+  spectral.displacement=std::min(controls.waveHeight,3.0f); spectral.choppiness=controls.waveSteepness;
   spectral.timeScale=controls.waveSpeed; spectral.directionRadians=direction;
   spectral.foam={controls.foamCompression,controls.foamGrowth,controls.foamDecay};
   spectral.overrideFoam=true;
   if(!shell.instancedRenderer.setWaterSpectralControls(spectral))
     __android_log_print(ANDROID_LOG_ERROR,LogTag,"[RuntimeControls] controles espectrais recusados.");
-  if (!shell.instancedRenderer.setWaterProfile(water))
+  if (!shell.instancedRenderer.setWaterProfile(water,controls.waterLevel))
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[RuntimeControls] perfil de água recusado.");
+  if (!shell.instancedRenderer.setWaterShading({controls.specularAntialiasing, controls.contactFoamWidth}))
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[RuntimeControls] shading de água recusado.");
 
   if (!shell.renderingCapabilitiesReady || !shell.instancedRendererReady) return;
   auto policy = ae::renderer::resolveRenderingPolicy(
@@ -549,6 +568,7 @@ void applyThermalRenderingPolicy(AndroidShell &shell, bool force) {
 
 bool rebuildInstancedRenderer(AndroidShell &shell) {
   collectRendererInitialization(shell,true);
+  shell.oceanValidation.shutdown();
   shell.frameProfiler.reset();
   ae::platform::android::ScopedLifecycleStage trace("rebuild-renderer");
   shell.instancedRenderer.shutdown();
@@ -581,6 +601,7 @@ bool rebuildInstancedRenderer(AndroidShell &shell) {
 
 bool recreateSwapchainAndRenderer(AndroidShell &shell) {
   collectRendererInitialization(shell,true);
+  shell.oceanValidation.shutdown();
   ae::platform::android::ScopedLifecycleStage trace("recreate-swapchain-renderer");
   // Framebuffers precisam morrer ANTES das image views da swapchain antiga.
   // Inverter esta ordem viola o lifetime Vulkan mesmo depois de wait-idle.
@@ -630,6 +651,7 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     collectRendererInitialization(shell,true);
     flushCameraRouteRecordingIfNeeded(shell);
     ae::platform::android::ScopedLifecycleStage trace("destroy-surface-renderer");
+    shell.oceanValidation.shutdown();
     shell.instancedRenderer.shutdown();
     shell.instancedRendererReady = false;
     shell.vulkanSurface.shutdown();
@@ -1101,6 +1123,7 @@ void android_main(android_app *app) {
       hzbComputeValidation || ae::platform::android::readBooleanLaunchOption(
           app->activity, "aether.hzb_compute"));
   shell.instancedRenderer.setHzbComputeReadbackValidationEnabled(hzbComputeValidation);
+  shell.instancedRenderer.setWaterDisplacementCapacity(shell.oceanPreview?128.0f:5.0f);
   shell.instancedRenderer.setSpectralWaterEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity,"aether.water_fft"));
   shell.instancedRenderer.setWideWaterSlopes(ae::platform::android::readBooleanLaunchOption(
@@ -1275,9 +1298,14 @@ void android_main(android_app *app) {
           ++shell.sceneStep;
         }
       }
-      const float timeSeconds = std::chrono::duration<float>(
+      float timeSeconds = std::chrono::duration<float>(
                                     std::chrono::steady_clock::now() - shell.shellStartTime)
                                     .count();
+      const auto waterControls=ae::platform::android::runtimeControlsSnapshot();
+      if (shell.oceanPreview && !shell.oceanValidation.update(shell.instancedRenderer,timeSeconds,timeSeconds,
+          waterControls.fluidDensity,waterControls.waterPaused)) {
+        __android_log_print(ANDROID_LOG_ERROR,LogTag,"[OceanValidation] simulation update failed");
+      }
       shell.waterTimeSeconds = timeSeconds;
       ae::renderer::RuntimeHudState hud{};
       hud.visible = shell.firstPersonEnabled;

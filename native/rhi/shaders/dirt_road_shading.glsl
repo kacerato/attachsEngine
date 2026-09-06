@@ -60,11 +60,11 @@ mediump float pow5(mediump float value) {
 mediump vec3 fresnel(mediump vec3 f0,mediump float f90,mediump float vh) {
   return f0+(vec3(f90)-f0)*pow5(1-clamp(vh,0.0,1.0));
 }
+#include "microfacet_brdf.glsl"
 highp float distribution(highp float nh,highp float alpha) {
-  highp float a2=alpha*alpha,d=nh*nh*(a2-1)+1;return a2/(PI*d*d); }
+  return distributionGGX(nh,alpha); }
 highp float visibility(highp float nv,highp float nl,highp float alpha) {
-  highp float a2=alpha*alpha;return .5/max(
-  nl*sqrt(nv*nv*(1-a2)+a2)+nv*sqrt(nl*nl*(1-a2)+a2),1e-6); }
+  return visibilitySmithGGX(nv,nl,alpha); }
 mediump vec3 directLight(mediump vec3 n,mediump vec3 v,mediump vec3 l,mediump vec3 radiance,
                          mediump vec3 base,mediump vec3 f0,mediump float f90,mediump float metal,
                          mediump float rough) {

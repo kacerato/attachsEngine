@@ -1,0 +1,35 @@
+#version 450
+// One group owns a complete row/column. No cross-workgroup dependencies.
+layout(local_size_x=128) in;
+layout(std430,set=0,binding=0) buffer Surface { vec4 surface[]; };
+layout(push_constant) uniform Parameters { uint size; uint axis; } pc;
+shared vec4 first[256];
+shared vec4 second[256];
+vec2 multiplyComplex(vec2 a,vec2 b) { return vec2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x); }
+vec4 rotatePair(vec4 a,vec2 root) { return vec4(multiplyComplex(a.xy,root),multiplyComplex(a.zw,root)); }
+uint address(uint i) { return pc.axis==0?gl_WorkGroupID.x*pc.size+i:i*pc.size+gl_WorkGroupID.x; }
+void main() {
+  uint lane=gl_LocalInvocationID.x,n=pc.size,bits=uint(findMSB(n));
+  for(uint i=lane;i<n;i+=128) {
+    uint reversed=bitfieldReverse(i)>>(32-bits);
+    first[reversed]=surface[address(i)*2];
+    second[reversed]=surface[address(i)*2+1];
+  }
+  barrier();
+  for(uint width=2;width<=n;width*=2) {
+    if(lane<n/2) {
+      uint halfWidth=width/2,j=lane%halfWidth,a=(lane/halfWidth)*width+j,b=a+halfWidth;
+      float angle=6.283185307179586*float(j)/float(width);
+      vec2 root=vec2(cos(angle),sin(angle));
+      vec4 even=first[a],odd=rotatePair(first[b],root);
+      first[a]=even+odd; first[b]=even-odd;
+      even=second[a]; odd=rotatePair(second[b],root);
+      second[a]=even+odd; second[b]=even-odd;
+    }
+    barrier();
+  }
+  for(uint i=lane;i<n;i+=128) {
+    surface[address(i)*2]=first[i]/float(n);
+    surface[address(i)*2+1]=second[i]/float(n);
+  }
+}

@@ -939,6 +939,28 @@ void AetherPhysics_GetTransform(AetherPhysicsWorld *world, AetherBodyHandle hand
   if (outRotation != nullptr) *outRotation = FromJolt(bodyInterface.GetRotation(id));
 }
 
+ae::i32 AetherPhysics_SetAllowSleepingV2(AetherPhysicsWorld *world, AetherBodyHandle handle,
+                                         ae::u32 allowed) {
+  if (world == nullptr || handle == AetherBodyHandle_Invalid || allowed > 1) return 0;
+  JPH::BodyLockWrite lock(world->physicsSystem.GetBodyLockInterface(), JPH::BodyID(handle));
+  if (!lock.Succeeded() || !lock.GetBody().IsDynamic()) return 0;
+  lock.GetBody().SetAllowSleeping(allowed != 0);
+  return 1;
+}
+
+ae::i32 AetherPhysics_TryGetBodyPoseV2(AetherPhysicsWorld *world, AetherBodyHandle handle,
+                                      AetherVec3 *position, AetherQuat *rotation) {
+  if (world == nullptr || handle == AetherBodyHandle_Invalid) return 0;
+  JPH::BodyLockRead lock(world->physicsSystem.GetBodyLockInterface(), JPH::BodyID(handle));
+  if (!lock.Succeeded()) return 0;
+  const auto &body = lock.GetBody();
+  const auto p = body.GetPosition();
+  const auto q = body.GetRotation();
+  if (position) *position = {static_cast<float>(p.GetX()), static_cast<float>(p.GetY()), static_cast<float>(p.GetZ())};
+  if (rotation) *rotation = {q.GetX(), q.GetY(), q.GetZ(), q.GetW()};
+  return 1;
+}
+
 void AetherPhysics_SetLinearVelocity(AetherPhysicsWorld *world, AetherBodyHandle handle, AetherVec3 velocity) {
   if (world == nullptr || handle == AetherBodyHandle_Invalid) return;
   world->physicsSystem.GetBodyInterface().SetLinearVelocity(JPH::BodyID(handle), ToJolt(velocity));

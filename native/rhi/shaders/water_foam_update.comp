@@ -1,0 +1,18 @@
+#version 450
+layout(local_size_x=64) in;
+// Eight spatial floats per sample followed by N*N persistent foam floats.
+layout(std430,set=0,binding=0) buffer Surface { float values[]; };
+layout(push_constant) uniform Parameters {
+  uint count; float dt; float choppiness; float threshold;
+  float growth; float decay; uint reset; uint unused;
+} pc;
+void main() {
+  uint i=gl_GlobalInvocationID.x;
+  if(i>=pc.count) return;
+  float xx=values[8*i+5]*pc.choppiness,xz=values[8*i+6]*pc.choppiness,zz=values[8*i+7]*pc.choppiness;
+  float jacobian=(1+xx)*(1+zz)-xz*xz;
+  float previous=pc.reset!=0?0:clamp(values[8*pc.count+i],0,1);
+  float source=pc.growth*clamp(pc.threshold-jacobian,0,1),rate=source+pc.decay;
+  float equilibrium=rate>0?source/rate:0;
+  values[8*pc.count+i]=rate>0?clamp(equilibrium+(previous-equilibrium)*exp(-rate*pc.dt),0,1):previous;
+}

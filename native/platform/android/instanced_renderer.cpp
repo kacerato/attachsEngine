@@ -1888,6 +1888,8 @@ bool InstancedRenderer::createInstanceBuffer() {
     // chunks are built once at load and never reordered, so this stays
     // stable across every frame this renderer instance is alive.
     hzbHysteresis_.assign(instanceCount_, renderer::HzbHysteresisState{});
+    dynamicMapDraws_.assign(instanceCount_, 0);
+    pendingMapPoseCount_ = 0;
     const float tint[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     for (u32 index = 0; index < instanceCount_; ++index) {
       // Matriz singular/NaN rejeita o pacote inteiro em vez de escrever um
@@ -3417,6 +3419,31 @@ void InstancedRenderer::endGpuRegion(GpuPassClass pass) {
   if (gpuTimingEnabled()) gpuFrameTimer_.markPassEnd(commandBuffer_, pass);
 }
 
+bool InstancedRenderer::queueMapDrawPose(u32 drawIndex, const float *model,
+                                        const float *localCenter, float localRadius) {
+  if (!dirtRoadPreview_ || drawIndex >= dirtRoadResources_.draws().size() ||
+      drawIndex >= dynamicMapDraws_.size()) return false;
+  const auto &draw = dirtRoadResources_.draws()[drawIndex];
+  if ((dirtRoadResources_.materials()[draw.materialIndex].flags & renderer::MapMaterialWater) != 0)
+    return false;
+  auto belongsToLod = [&](const auto &groups) {
+    for (const auto &group : groups) if (group.levelCount > 1)
+      for (u32 level = 0; level < group.levelCount; ++level)
+        for (u32 index : group.levels[level].drawIndices) if (index == drawIndex) return true;
+    return false;
+  };
+  if (belongsToLod(lodGroups_) || belongsToLod(coverageLodGroups_)) return false;
+  renderer::MapDrawUpdate update;
+  if (!renderer::prepareMapDrawUpdate(drawIndex, draw, model, localCenter, localRadius, update)) return false;
+  for (u32 i = 0; i < pendingMapPoseCount_; ++i) if (pendingMapPoses_[i].drawIndex == drawIndex) {
+    pendingMapPoses_[i] = update;
+    return true;
+  }
+  if (pendingMapPoseCount_ == pendingMapPoses_.size()) return false;
+  pendingMapPoses_[pendingMapPoseCount_++] = update;
+  return true;
+}
+
 rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                                                   const platform::FreeCameraState &camera,
                                                   const renderer::RuntimeHudState &hud) {
@@ -3450,12 +3477,38 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // Same "safe without a new stall" reasoning as collectPrevious() above --
   // see readHzbPyramidFromPreviousFrame()'s own comment.
   readDrawCullTelemetryFromPreviousFrame();
+  const bool mapPosesChanged = pendingMapPoseCount_ != 0;
+  if (pendingMapPoseCount_ != 0) {
+    auto *instances = static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
+    if (instances == nullptr) return rhi::SwapchainStatus::FatalError;
+    for (u32 i = 0; i < pendingMapPoseCount_; ++i) {
+      const auto &update = pendingMapPoses_[i];
+      if (!dirtRoadResources_.updateDrawPose(update.drawIndex, update.draw))
+        return rhi::SwapchainStatus::FatalError;
+      instances[update.drawIndex] = update.instance;
+      dynamicMapDraws_[update.drawIndex] = 1;
+      hzbHysteresis_[update.drawIndex] = {};
+    }
+    if (!memoryAllocator_->flushBuffer(instanceBuffer_)) return rhi::SwapchainStatus::FatalError;
+    pendingMapPoseCount_ = 0;
+    shadowCascadeDirtyMask_ = 0xffffffffu;
+  }
   if (hzbPreviousFrameEligible_) readHzbPyramidFromPreviousFrame();
   else {
     hzbPyramidValid_ = false;
     hzbPyramidCameraValid_ = false;
   }
   hzbFrameEligible_ = false;
+  if (mapPosesChanged) {
+    // Old occluders can hide OTHER draws at their previous position. Discard
+    // that frame's history, not only the moving draw's hysteresis.
+    hzbPyramidValid_ = false;
+    hzbPyramidCameraValid_ = false;
+    hzbRecordedCameraValid_ = false;
+    // No per-object velocity buffer in this path yet: old temporal color
+    // would ghost behind moving objects. Fail open until motion is available.
+    temporalHistoryInitialized_ = false;
+  }
   hzbReadbackRecordedThisFrame_ = false;
   if (temporalAaActive_) {
     const u64 sample = temporalFrameIndex_ % 8u + 1u;
@@ -3585,6 +3638,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     }
     frame->waterInteractionParameters[0] = static_cast<float>(activeWaterInteractionCount);
     frame->waterInteractionParameters[1] = static_cast<float>(waterCostIsolation_);
+    frame->waterInteractionParameters[2] = waterShading_.specularAntialiasing;
+    frame->waterInteractionParameters[3] = waterShading_.contactFoamWidth;
     frame->shadowParameters[0] = shadowAtlas_.width() > 0
                                      ? 1.0f / static_cast<float>(shadowAtlas_.width()) : 1.0f;
     frame->shadowParameters[1] = 0.0f;
@@ -4005,6 +4060,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       usize writeIndex = 0;
       for (usize readIndex = 0; readIndex < visible.size(); ++readIndex) {
         const u32 drawIndex = visible[readIndex];
+        if (dynamicMapDraws_[drawIndex]) {
+          visible[writeIndex++] = drawIndex;
+          continue;
+        }
         const auto &draw = dirtRoadResources_.draws()[drawIndex];
         const renderer::HzbScreenRect rect =
             renderer::projectBoundsToHzbScreenRect(frustum, draw.boundsCenter, draw.boundsRadius,
@@ -4125,7 +4184,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         std::memcpy(record.boundsCenter, draw.boundsCenter, sizeof(record.boundsCenter));
         record.boundsRadius = draw.boundsRadius;
         record.stateIndex = drawIndex;
-        record.flags = renderer::GpuCullRecordPresent | renderer::GpuCullRecordTestable;
+        record.flags = renderer::GpuCullRecordPresent |
+            (dynamicMapDraws_[drawIndex] ? 0u : renderer::GpuCullRecordTestable);
         records[slot] = record;
       }
       // Sobras marcadas ausentes: o dispatch cobre a capacidade inteira e um

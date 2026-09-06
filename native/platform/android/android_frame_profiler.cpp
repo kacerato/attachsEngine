@@ -13,7 +13,7 @@
 namespace ae::platform::android {
 namespace {
 constexpr const char *LogTag = "Aether.Android";
-constexpr u32 ProfileSchemaVersion = 7;
+constexpr u32 ProfileSchemaVersion = 8;
 
 bool readClock(clockid_t clock, u64 &out) {
   timespec value{};

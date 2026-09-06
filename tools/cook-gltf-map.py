@@ -890,13 +890,19 @@ def accessor(gltf, binary, index):
         raise ValueError("sparse accessors are not supported by AEMAP v1")
     view = gltf["bufferViews"][item["bufferView"]]
     components = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}[item["type"]]
-    dtype = {5125: np.dtype("<u4"), 5126: np.dtype("<f4")}.get(item["componentType"])
+    dtype = {5120: np.dtype('i1'), 5121: np.dtype('u1'),
+             5122: np.dtype('<i2'), 5123: np.dtype('<u2'),
+             5125: np.dtype("<u4"), 5126: np.dtype("<f4")}.get(item["componentType"])
     if dtype is None:
         raise ValueError(f"unsupported accessor component type {item['componentType']}")
     offset = view.get("byteOffset", 0) + item.get("byteOffset", 0)
     stride = view.get("byteStride", dtype.itemsize * components)
     array = np.ndarray((item["count"], components), dtype=dtype, buffer=binary,
                        offset=offset, strides=(stride, dtype.itemsize)).copy()
+    if item.get('normalized', False):
+        if dtype.kind not in 'iu' or item['componentType'] == 5125:
+            raise ValueError('invalid normalized accessor type')
+        array = np.maximum(array.astype(np.float32)/np.iinfo(dtype).max, -1.0)
     return array[:, 0] if components == 1 else array
 
 
@@ -1068,6 +1074,9 @@ def main():
     parser.add_argument("--cache", type=pathlib.Path, default=pathlib.Path("build/dirt-road/cook"))
     parser.add_argument("--quality", choices=["-fast", "-medium", "-thorough"], default="-medium")
     parser.add_argument("--jobs", type=int, default=4)
+    parser.add_argument("--source-author", default="99.Miles")
+    parser.add_argument("--source-license", default="CC-BY-4.0")
+    parser.add_argument("--source-url", default="https://sketchfab.com/3d-models/update-dirt-road-through-forest-c4676cdf7715484382400ff63faffd45")
     parser.add_argument("--reuse-textures", action="store_true",
                         help="reutiliza AETX validados e recozinha apenas metadata/geometria")
     parser.add_argument("--lod-triangles-per-group", type=int, default=LOD_GROUP_TRIANGLES,
@@ -1075,6 +1084,8 @@ def main():
     parser.add_argument("--lod-world-cell-size", type=float, default=LOD_GROUP_WORLD_SIZE,
                         help="spatial LOD cell size in world units (8..512)")
     args = parser.parse_args()
+    encoder_version = subprocess.run([str(args.astcenc), '-version'], check=True,
+                                     capture_output=True, text=True).stdout.splitlines()[0]
     if not 256 <= args.lod_triangles_per_group <= 32768:
         parser.error("--lod-triangles-per-group must be in [256, 32768]")
     if not 8.0 <= args.lod_world_cell_size <= 512.0:
@@ -1172,7 +1183,8 @@ def main():
                 tangent = accessor(gltf, binary, attrs["TANGENT"]).astype(np.float32) if "TANGENT" in attrs else None
                 uv0 = accessor(gltf, binary, attrs["TEXCOORD_0"]).astype(np.float32)
                 uv1 = accessor(gltf, binary, attrs.get("TEXCOORD_1", attrs["TEXCOORD_0"])).astype(np.float32)
-                color = accessor(gltf, binary, attrs["COLOR_0"]).astype(np.float32)
+                color = (accessor(gltf, binary, attrs["COLOR_0"]).astype(np.float32)
+                         if "COLOR_0" in attrs else np.ones((len(position),4), dtype=np.float32))
                 local_indices = accessor(gltf, binary, primitive["indices"]).astype(np.uint32)
                 if tangent is None:
                     tangent = np.zeros((len(position), 4), dtype=np.float32)
@@ -1275,9 +1287,9 @@ def main():
                for path in sorted(args.out.iterdir()) if path.is_file()}
     manifest = {"version": 3, "format": "AEMAP-3", "sourceZip": args.source.name,
                 "sourceSha256": hashlib.sha256(source_bytes).hexdigest(),
-                "license": "CC-BY-4.0", "author": "99.Miles",
-                "source": "https://sketchfab.com/3d-models/update-dirt-road-through-forest-c4676cdf7715484382400ff63faffd45",
-                "encoder": f"astcenc 5.7.0 {args.quality} 6x6",
+                "license": args.source_license, "author": args.source_author,
+                "source": args.source_url,
+                "encoder": f"{encoder_version} {args.quality} 6x6",
                 "statistics": {"textures": len(texture_records), "materials": len(materials),
                                "draws": len(draws), "vertices": len(vertices),
                                "triangles": len(indices) // 3,

@@ -32,8 +32,9 @@ public final class SceneLauncherActivity extends Activity {
         button.setBackground(panel(Color.rgb(31, 39, 43), 12));
         button.setOnClickListener(view -> {
             Intent intent = new Intent(this, AetherActivity.class);
-            intent.putExtra(ocean ? "aether.ocean_preview" : "aether.map_preview", true);
-            intent.putExtra("aether.free_camera", true);
+            intent.putExtra("aether.ocean_preview", ocean);
+            intent.putExtra("aether.map_preview", !ocean);
+            intent.putExtra("aether.free_camera", ocean);
             intent.putExtra("aether.target_fps", 120.0f);
             startActivity(intent);
         });
@@ -47,8 +48,6 @@ public final class SceneLauncherActivity extends Activity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setStatusBarColor(Color.rgb(13, 17, 19));
         getWindow().setNavigationBarColor(Color.rgb(13, 17, 19));
-        if (android.os.Build.VERSION.SDK_INT >= 30)
-            getWindow().getInsetsController().hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL); root.setGravity(Gravity.CENTER);
@@ -63,7 +62,20 @@ public final class SceneLauncherActivity extends Activity {
         help.setTextColor(Color.rgb(148, 164, 170)); help.setTextSize(13);
         help.setPadding(0, dp(8), 0, dp(10)); root.addView(help);
         root.addView(sceneButton("Floresta", "LOD, iluminação, sombras e estabilidade", false));
-        root.addView(sceneButton("Oceano interativo", "Profundidade, ondas GPU e resposta ao toque", true));
+        root.addView(sceneButton("Oceano · laboratório físico", "3 corpos Jolt · ondas analíticas GPU · toque", true));
+        TextView build=new TextView(this);
+        build.setText("Água · integração física 2026-09-05");
+        build.setTextColor(Color.rgb(148,164,170)); build.setPadding(0,dp(14),0,0);
+        root.addView(build);
         setContentView(root);
+    }
+
+    @Override public void onWindowFocusChanged(boolean focused) {
+        super.onWindowFocusChanged(focused);
+        if (focused && android.os.Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController controller = getWindow().getDecorView().getWindowInsetsController();
+            if (controller != null)
+                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+        }
     }
 }

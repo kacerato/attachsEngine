@@ -66,6 +66,16 @@ public:
   const EnvironmentLighting &environmentLighting() const { return environmentLighting_; }
   const std::vector<renderer::MapMaterialRecord> &materials() const { return materials_; }
   const std::vector<renderer::MapDrawRecord> &draws() const { return draws_; }
+  // Renderer-owned pose commit; immutable geometry/material identity is checked.
+  bool updateDrawPose(u32 index, const renderer::MapDrawRecord &draw) {
+    if (index >= draws_.size()) return false;
+    const auto &old = draws_[index];
+    if (old.firstIndex != draw.firstIndex || old.indexCount != draw.indexCount ||
+        old.vertexOffset != draw.vertexOffset || old.materialIndex != draw.materialIndex ||
+        old.lodGroupId != draw.lodGroupId || old.lodLevel != draw.lodLevel) return false;
+    draws_[index] = draw;
+    return true;
+  }
   const renderer::MapPackageHeader &header() const { return header_; }
   u64 packageFingerprint() const { return packageFingerprint_; }
   platform::FreeCameraState defaultCamera() const;

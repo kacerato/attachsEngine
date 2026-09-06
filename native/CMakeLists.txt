@@ -183,6 +183,7 @@ add_library(aether_renderer STATIC
   renderer/thermal_pressure_controller.cpp
   renderer/water_surface.cpp
   renderer/water_field.cpp
+  renderer/water_world.cpp
   renderer/water_spectral_mirror.cpp
   renderer/water_fft.cpp
   renderer/water_spectrum.cpp
@@ -289,8 +290,11 @@ add_library(aether_physics STATIC
 )
 target_include_directories(aether_physics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_physics PUBLIC aether_core PRIVATE Jolt)
+add_library(aether_water_runtime STATIC physics/water_runtime.cpp physics/water_simulation.cpp)
+target_include_directories(aether_water_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(aether_water_runtime PUBLIC aether_physics aether_renderer)
 if(ANDROID)
-  target_link_libraries(aether_android PRIVATE aether_physics)
+  target_link_libraries(aether_android PRIVATE aether_physics aether_water_runtime)
 endif()
 # O Jolt foi compilado com CPP_RTTI_ENABLED/CPP_EXCEPTIONS_ENABLED=OFF (ver acima), então o
 # link é consistente com -fno-rtti -fno-exceptions do resto do nosso código nativo.
@@ -304,6 +308,7 @@ endif()
 if(NOT ANDROID)
   add_library(aether_physics_shared SHARED
     physics/jolt_bridge.cpp
+    physics/water_buoyancy.cpp
   )
   # .NET resolve [LibraryImport("aether_physics")] para "aether_physics.dll" no Windows
   # (sem prefixo) e "libaether_physics.so" no Linux (com prefixo) — são convenções de
@@ -400,7 +405,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_transform_bridge.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
-  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_physics aether_transform aether_resources)
+  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_physics aether_water_runtime aether_transform aether_resources)
 
   # Probe separado porque induzir overflow em Debug dispara corretamente o
   # assert fail-fast do próprio Jolt. Em Release este binário valida a outra

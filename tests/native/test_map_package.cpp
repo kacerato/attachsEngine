@@ -87,6 +87,23 @@ AE_TEST(Map_package_decodes_bounded_versioned_sections) {
   AE_EXPECT_TRUE(view.contentFingerprint != changed.contentFingerprint, "content change identity");
 }
 
+AE_TEST(Map_camera_water_rejects_incompatible_or_invalid_vertex_contract) {
+  auto bytes = packageFixture();
+  MapPackageView view;
+  AE_EXPECT_TRUE(decodeMapPackage(bytes, view), "base fixture");
+  const usize vertex = static_cast<usize>(view.header.vertexOffset);
+  auto *material = reinterpret_cast<MapMaterialRecord *>(bytes.data() + 160);
+  material->flags = MapMaterialWaterCameraGrid;
+  AE_EXPECT_TRUE(!decodeMapPackage(bytes, view), "requires water shading");
+  material->flags |= MapMaterialWater;
+  AE_EXPECT_TRUE(!decodeMapPackage(bytes, view), "zero grid metadata rejected");
+  setFloat(bytes, vertex + 36, 3.0f);
+  setFloat(bytes, vertex + 40, 8000.0f);
+  AE_EXPECT_TRUE(decodeMapPackage(bytes, view), "valid camera grid");
+  setFloat(bytes, vertex + 36, std::numeric_limits<float>::quiet_NaN());
+  AE_EXPECT_TRUE(!decodeMapPackage(bytes, view), "nonfinite spacing rejected");
+}
+
 AE_TEST(Map_package_validates_multiview_layout_and_preserves_legacy_impostors) {
   auto bytes = packageFixture();
   auto *material = reinterpret_cast<MapMaterialRecord *>(bytes.data() + 160);

@@ -1,0 +1,211 @@
+{
+  "version": 3,
+  "format": "AEMAP-3",
+  "sourceZip": "boat.glb",
+  "sourceSha256": "c68377a6bd952fe6b417878d6af85a6e89cd60a427a907656a619f8bf9c0fdc7",
+  "license": "Not provided; verify before redistribution",
+  "author": "User supplied; author unspecified",
+  "source": "boat.zip",
+  "encoder": "astcenc v5.6.0, 64-bit avx2+popcnt+f16c -fast 6x6",
+  "statistics": {
+    "textures": 10,
+    "materials": 3,
+    "draws": 23,
+    "vertices": 20163,
+    "triangles": 43976,
+    "boundsMin": [
+      -1.345082402229309,
+      3.99129930883646e-07,
+      -4.999999523162842
+    ],
+    "boundsMax": [
+      1.345082402229309,
+      3.7880754470825195,
+      5.000000476837158
+    ],
+    "defaultCamera": [
+      0.0,
+      7.89403772354126,
+      -23.0
+    ],
+    "sourceDraws": 3,
+    "level0Draws": 9,
+    "level0Vertices": 20163,
+    "level0Triangles": 19189,
+    "lodGroups": 8,
+    "lodTrianglesPerGroup": 32768,
+    "lodWorldCellSize": 64.0,
+    "lodDrawsByLevel": {
+      "0": 9,
+      "1": 8,
+      "2": 6
+    },
+    "lodTrianglesByLevel": {
+      "0": 19189,
+      "1": 15274,
+      "2": 9513
+    }
+  },
+  "textures": [
+    {
+      "cookedIndex": 0,
+      "gltfTexture": 1,
+      "image": "image_001.png",
+      "srgb": true,
+      "normalMap": false,
+      "dimensions": [
+        2048,
+        2048,
+        12
+      ],
+      "sha256": "76890a66d09504147164d85f33832e9f84f039eb3984577b13611bf205882a45"
+    },
+    {
+      "cookedIndex": 1,
+      "gltfTexture": 0,
+      "image": "image_000.png",
+      "srgb": false,
+      "normalMap": true,
+      "dimensions": [
+        2048,
+        2048,
+        12
+      ],
+      "sha256": "8caed8240df4fb34d918a508aedce11b453ceba845d365c2cb526461e6cdf9b5"
+    },
+    {
+      "cookedIndex": 2,
+      "gltfTexture": 2,
+      "image": "image_002.png",
+      "srgb": false,
+      "normalMap": false,
+      "dimensions": [
+        2048,
+        2048,
+        12
+      ],
+      "sha256": "8e14cf5d909be8636b58e892925370493b035476d3bf921b0ef0a1506f025f46"
+    },
+    {
+      "cookedIndex": 3,
+      "gltfTexture": 5,
+      "image": "image_005.png",
+      "srgb": true,
+      "normalMap": false,
+      "dimensions": [
+        2048,
+        2048,
+        12
+      ],
+      "sha256": "74936a1ef8b1aa1668549b3a24b00385bb9d198a3772350bbba2aeacb7761da3"
+    },
+    {
+      "cookedIndex": 4,
+      "gltfTexture": 3,
+      "image": "image_003.png",
+      "srgb": true,
+      "normalMap": false,
+      "dimensions": [
+        2048,
+        2048,
+        12
+      ],
+      "sha256": "c21caa09fecc0250d82de08632a626519cd97ff7a6e539dbb4e5005c75893600"
+    },
+    {
+      "cookedIndex": 5,
+      "gltfTexture": 4,
+      "image": "image_004.png",
+      "srgb": false,
+      "normalMap": true,
+      "dimensions": [
+        2048,
+        2048,
+        12
+      ],
+      "sha256": "4588c85dd5ba823f2fd8c89051d2ada46b12151e2940c687a594009a068b796b"
+    },
+    {
+      "cookedIndex": 6,
+      "gltfTexture": 6,
+      "image": "image_006.png",
+      "srgb": false,
+      "normalMap": false,
+      "dimensions": [
+        2048,
+        2048,
+        12
+      ],
+      "sha256": "b83d4bf0a2e12eeac53a0d4947c9125dbd32ef0a83ac5265c7b55e1ff318d439"
+    },
+    {
+      "cookedIndex": 7,
+      "gltfTexture": 8,
+      "image": "image_008.png",
+      "srgb": true,
+      "normalMap": false,
+      "dimensions": [
+        2048,
+        2048,
+        12
+      ],
+      "sha256": "56b8264d9b68b36167ff7e5e6f35570141c38ce359b52ec7edca345350f8ea3b"
+    },
+    {
+      "cookedIndex": 8,
+      "gltfTexture": 7,
+      "image": "image_007.png",
+      "srgb": false,
+      "normalMap": true,
+      "dimensions": [
+        2048,
+        2048,
+        12
+      ],
+      "sha256": "5ad55b233300b2c7f260befc5c33e9af2f45641d4ca180ad15ab35891dc8c404"
+    },
+    {
+      "cookedIndex": 9,
+      "gltfTexture": 9,
+      "image": "image_009.png",
+      "srgb": false,
+      "normalMap": false,
+      "dimensions": [
+        2048,
+        2048,
+        12
+      ],
+      "sha256": "76026d71c7ea49c5293280a37cf3e00e021a08177b30be0b477632f7748cfd8d"
+    }
+  ],
+  "outputs": {
+    "scene.aemap": "645fc91f82e8f85a74a94c6e54d372b119518bbe89c9b4809d0ff0fe35ffc401",
+    "texture_000-fallback.aetex": "5b30cf6f2f794f3f417e14d65fc71095433cd184efc8c754149b3091ea5a5664",
+    "texture_000.aetex": "cb10bcabfcf16888d52d3e69748e0a427181e7f5aac678215122260439234b4f",
+    "texture_001-fallback.aetex": "47a5668d3204d7cbd790b094d39c4c115d454b2d198f54474444a69b3eec4dd4",
+    "texture_001.aetex": "896f9ab5f395a77374dd8ad7e2e1bb439996e82d975b327bc007699ba00005bd",
+    "texture_002-fallback.aetex": "3d7f6dc9b47e84e3eb28c03c604749587750baeb838879e1ee287bef4c8cdcd4",
+    "texture_002.aetex": "94001e419a3017ef3e7e4724990e9cc5b951908db5a5afd525bcc739b7554f07",
+    "texture_003-fallback.aetex": "cfd61b9de03acf13c5d26360f30b3456fa29afe9ec084b00578b047d984d8fb1",
+    "texture_003.aetex": "dfd4bc525e63faae1bc57ad80ee030b9d4446ea4fd4ff7aa860c5932d465cb6e",
+    "texture_004-fallback.aetex": "6eb48811166e583633bc0a450a4bb097cd3625e78c6984080b3516ad65e0bd4b",
+    "texture_004.aetex": "0af5c64a3615173332474c19fd2c0346924bde149f1e5fe3bb337669a6a642d5",
+    "texture_005-fallback.aetex": "e8cb133c8263251bbdd6a20592d0c94db10e5f9c7067b394a6e334636b2e3613",
+    "texture_005.aetex": "bbe939e44a503ab6baeda445e1c4d31e22b8ec39a68def170c23a6e684854a74",
+    "texture_006-fallback.aetex": "4e30cfbdd9e578a30729615de3efcc0d73a722201a17711ad27e1d59374d7d62",
+    "texture_006.aetex": "44bc98ff54e84faefced3ead6d44836962bc12f87ba892d46b1081ce56c9284e",
+    "texture_007-fallback.aetex": "929fb689aa59aa8bdfe1326e65125aa122515e3f4f36b7106d07fb3fc9c2c938",
+    "texture_007.aetex": "f3120cc38dd087efde0cf8567404f4140aeb2fb4a806f06f0eba73f366aa7497",
+    "texture_008-fallback.aetex": "867b769654a421e74a795a5458b0dba43ee74b5cf6996c5b05e0284fc32a3cdd",
+    "texture_008.aetex": "10d47071e573349befe674a387370cd3e1748fdc6c3a2a8b7ce33df9e34769ba",
+    "texture_009-fallback.aetex": "a008022691f2c9ae918e650cb13081ed8de8bda4048658fc60e7ea6d2611c47f",
+    "texture_009.aetex": "5fd3cfc389bb10abd505c57048fe35d8d3222d32032398b7060449b1e8937af9"
+  },
+  "geometryLod": {
+    "version": 1,
+    "sourceFormat": "glTF-2.0",
+    "preservesLevel0": true,
+    "level0Contract": "exact-vertices-and-triangles-spatially-reordered",
+    "strategy": "source-vertex-grid-clustering-v1"
+  }
+}

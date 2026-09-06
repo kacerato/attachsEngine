@@ -1,0 +1,4 @@
+User-supplied asset: C:\Users\donod\Downloads\boat.zip
+Imported at the user's request for their project. No redistribution licence was
+included in the archive. This notice does not grant redistribution rights or
+attribute the model to the engine authors. Verify rights before distribution.

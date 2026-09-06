@@ -105,6 +105,21 @@ AE_TEST(Spatial_render_chunks_use_finer_global_budget_for_alpha_coverage) {
     AE_EXPECT_EQ(draw.indexCount, 3u, "cada chunk respeita orçamento coverage");
 }
 
+AE_TEST(Spatial_camera_water_stays_contiguous_but_finite_water_splits) {
+  std::array<float, 36> vertices{}; std::array<u32, 12> indices{};
+  std::array<MapMaterialRecord, 1> materials{}; std::array<MapDrawRecord, 1> draws{};
+  MapPackageView package = fixture(vertices, indices, materials, draws);
+  materials[0].flags = MapMaterialWater | MapMaterialWaterCameraGrid;
+  SpatialRenderChunks chunks;
+  AE_EXPECT_TRUE(buildSpatialRenderChunks(package, {1, 1}, chunks), "camera water build");
+  AE_EXPECT_EQ(chunks.draws.size(), 1u, "camera-relative geometry stays one draw");
+  for (u32 index = 0; index < indices.size(); ++index)
+    AE_EXPECT_EQ(chunks.indices[index], indices[index], "grid triangle order preserved");
+  materials[0].flags = MapMaterialWater;
+  AE_EXPECT_TRUE(buildSpatialRenderChunks(package, {1, 1}, chunks), "finite water build");
+  AE_EXPECT_EQ(chunks.draws.size(), 4u, "finite water retains spatial culling granularity");
+}
+
 AE_TEST(Spatial_water_chunks_include_shader_displacement_in_bounds) {
   std::array<float, 36> vertices{}; std::array<u32, 12> indices{};
   std::array<MapMaterialRecord, 1> materials{}; std::array<MapDrawRecord, 1> draws{};

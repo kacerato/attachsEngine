@@ -1,10 +1,186 @@
 #include "harness.h"
 #include "physics/water_buoyancy.h"
+#include "physics/water_field_adapter.h"
+#include "physics/water_runtime.h"
+#include "physics/water_simulation.h"
 
 #include <algorithm>
 #include <cmath>
 
 using namespace ae::physics;
+
+AE_TEST(Water_simulation_runs_the_same_fixed_clock_at_different_render_rates) {
+  for (int rate : {30, 60, 120}) {
+    AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0, -9.81f, 0}, 8);
+    AE_EXPECT_TRUE(world != nullptr, "world");
+    ae::renderer::WaterWorld water;
+    WaterSimulation simulation;
+    ae::u32 steps = 0;
+    WaterSimulationFrame result;
+    for (int frame = 0; frame < rate; ++frame) {
+      result = simulation.advance(world, water, 1.0 / rate);
+      AE_EXPECT_TRUE(result.error == WaterSimulationError::None, "frame");
+      steps += result.steps;
+    }
+    AE_EXPECT_TRUE(steps == 60 && std::abs(result.simulationTime - 1) < 1e-9, "same clock");
+    AE_EXPECT_TRUE(result.interpolation < 1e-8, "no remainder drift");
+    AetherPhysics_DestroyWorld(world);
+  }
+}
+
+AE_TEST(Water_simulation_pause_slow_motion_and_catch_up_have_explicit_budgets) {
+  AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0, -9.81f, 0}, 8);
+  ae::renderer::WaterWorld water;
+  WaterSimulation simulation;
+  AE_EXPECT_TRUE(simulation.advance(world, water, 10, 1, true).steps == 0, "paused time not accumulated");
+  auto frame = simulation.advance(world, water, 1.0 / 60, .5);
+  AE_EXPECT_TRUE(frame.steps == 0 && std::abs(frame.interpolation - .5) < 1e-8, "half speed");
+  frame = simulation.advance(world, water, 1.0 / 60, .5);
+  AE_EXPECT_TRUE(frame.steps == 1, "second half completes step");
+  frame = simulation.advance(world, water, 1);
+  AE_EXPECT_TRUE(frame.steps == 8, "catch-up limited");
+  AE_EXPECT_TRUE(frame.droppedSimulationTime > .8, "time loss is reported");
+  const double time = frame.simulationTime;
+  frame = simulation.advance(world, water, std::nan(""));
+  AE_EXPECT_TRUE(frame.error == WaterSimulationError::InvalidInput && frame.simulationTime == time,
+                 "bad frame preserves clock");
+  AE_EXPECT_TRUE(!simulation.configure({}), "fixed clock cannot change while running");
+  simulation.reset();
+  AE_EXPECT_TRUE(simulation.configure({}), "reset permits configuration");
+  AetherPhysics_DestroyWorld(world);
+}
+
+AE_TEST(Water_simulation_consumes_events_per_substep_and_retries_failed_provider) {
+  AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0, -9.81f, 0}, 8);
+  ae::renderer::WaterWorld water;
+  AE_EXPECT_TRUE(water.setVolume(1, {}), "water");
+  AetherBodyDesc desc{};
+  desc.shape.kind = AetherShapeKind::Box;
+  desc.shape.boxHalfExtent = {.5f, .5f, .5f};
+  desc.position = {0, -.25f, 0};
+  desc.rotation = {0, 0, 0, 1};
+  desc.motionType = AetherMotionType::Dynamic;
+  const auto body = AetherPhysics_CreateBody(world, &desc);
+  WaterSimulation simulation;
+  AE_EXPECT_TRUE(simulation.bind({body, {}, 1}), "body");
+  struct Observer { bool ready = false; ae::u32 steps = 0, entries = 0; } observer;
+  WaterSimulationHooks hooks;
+  hooks.context = &observer;
+  hooks.beforeStep = [](void *context, double) { return static_cast<Observer *>(context)->ready; };
+  hooks.afterStep = [](void *context, std::span<const WaterContactEvent> events) {
+    auto &state = *static_cast<Observer *>(context);
+    ++state.steps;
+    for (auto &event : events) if (event.phase == WaterContactPhase::Enter) ++state.entries;
+  };
+  auto result = simulation.advance(world, water, 1.0 / 30, 1, false, hooks);
+  AE_EXPECT_TRUE(result.error == WaterSimulationError::Provider && result.steps == 0, "provider not ready");
+  observer.ready = true;
+  result = simulation.advance(world, water, 0, 1, false, hooks);
+  AE_EXPECT_TRUE(result.steps == 2 && observer.steps == 2, "retry both pending steps");
+  AE_EXPECT_TRUE(observer.entries == 1, "entry not lost to second substep");
+  AetherPhysics_DestroyWorld(world);
+}
+
+AE_TEST(Water_runtime_queries_applies_and_emits_contact_with_real_jolt_bodies) {
+  AetherPhysicsWorld *physics = AetherPhysics_CreateWorld({0, -9.81f, 0}, 8);
+  AE_EXPECT_TRUE(physics != nullptr, "physics world");
+  AetherBodyDesc desc{};
+  desc.shape.kind = AetherShapeKind::Box;
+  desc.shape.boxHalfExtent = {.5f, .5f, .5f};
+  desc.rotation = {0, 0, 0, 1};
+  desc.motionType = AetherMotionType::Dynamic;
+  desc.position = {0, -.25f, 0};
+  const auto body = AetherPhysics_CreateBody(physics, &desc);
+  ae::renderer::WaterWorld water;
+  ae::renderer::WaterFieldSetup setup{};
+  setup.currents.uniform = {2, 0};
+  AE_EXPECT_TRUE(water.setVolume(77, setup), "water");
+  WaterRuntime runtime;
+  AE_EXPECT_TRUE(runtime.bind({body, {}, 1}), "bind body");
+  AE_EXPECT_TRUE(runtime.apply(physics, water, 0), "apply first fixed tick");
+  AE_EXPECT_TRUE(runtime.events().size() == 1 && runtime.events()[0].phase == WaterContactPhase::Enter,
+                 "entry event");
+  AE_EXPECT_TRUE(runtime.stats().forces.bodiesSubmerged == 1, "force submitted");
+  AE_EXPECT_TRUE(!runtime.apply(physics, water, 0), "reject duplicate tick before adding forces twice");
+  AetherPhysics_Step(physics, 1.0f / 60, 1);
+  AE_EXPECT_TRUE(AetherPhysics_GetLinearVelocity(physics, body).x > 0, "current accelerates real body");
+  AE_EXPECT_TRUE(runtime.apply(physics, water, 1.0 / 60), "next tick");
+  AE_EXPECT_TRUE(runtime.events().empty(), "no repeated enter");
+  AetherPhysics_Step(physics, 1.0f / 60, 1);
+  water.clear();
+  AE_EXPECT_TRUE(runtime.apply(physics, water, 2.0 / 60), "water unload");
+  AE_EXPECT_TRUE(runtime.events().size() == 1 && runtime.events()[0].phase == WaterContactPhase::Exit,
+                 "unload exits contact");
+  AE_EXPECT_TRUE(runtime.stats().forces.bodiesSubmerged == 0, "unloaded water applies no force");
+  AE_EXPECT_TRUE(runtime.unbind(body), "scene lifecycle unbind");
+  AetherPhysics_DestroyWorld(physics);
+}
+
+AE_TEST(Water_runtime_equilibrium_is_consistent_at_60_and_120_fixed_steps) {
+  float finalHeight[2]{};
+  for (int run = 0; run < 2; ++run) {
+    const int frequency = run == 0 ? 60 : 120;
+    AetherPhysicsWorld *physics = AetherPhysics_CreateWorld({0, -9.81f, 0}, 8);
+    AE_EXPECT_TRUE(physics != nullptr, "world");
+    AetherBodyDesc desc{};
+    desc.shape.kind = AetherShapeKind::Box;
+    desc.shape.boxHalfExtent = {.5f, .5f, .5f};
+    desc.rotation = {0, 0, 0, 1};
+    desc.position = {0, 1, 0};
+    desc.motionType = AetherMotionType::Dynamic;
+    const auto body = AetherPhysics_CreateBody(physics, &desc);
+    // Convergence and sleeping are independent contracts. The existing sleep
+    // regression stays enabled; here prevent the solver from freezing an early
+    // low-velocity pose on opposite sides of equilibrium at different dt.
+    AE_EXPECT_TRUE(AetherPhysics_SetAllowSleepingV2(physics, body, 0), "disable sleep for convergence");
+    ae::renderer::WaterWorld water;
+    AE_EXPECT_TRUE(water.setVolume(1, {}), "water");
+    WaterRuntime runtime;
+    AE_EXPECT_TRUE(runtime.bind({body, {}, 1}), "body");
+    WaterRuntimeSettings settings;
+    settings.forces.fluidDensity = 2000;
+    for (int tick = 0; tick < frequency * 12; ++tick) {
+      AE_EXPECT_TRUE(runtime.apply(physics, water, static_cast<double>(tick) / frequency, settings), "tick");
+      AetherPhysics_Step(physics, 1.0f / frequency, 1);
+    }
+    AetherVec3 position{};
+    AE_EXPECT_TRUE(AetherPhysics_TryGetBodyPoseV2(physics, body, &position, nullptr), "pose");
+    finalHeight[run] = position.y;
+    AE_EXPECT_TRUE(std::abs(position.y) < .05f, "physical equilibrium");
+    AE_EXPECT_TRUE(runtime.stats().forces.bodiesClamped == 0, "no saturation");
+    AetherPhysics_DestroyBody(physics, body);
+    position.y = 123;
+    AE_EXPECT_TRUE(!AetherPhysics_TryGetBodyPoseV2(physics, body, &position, nullptr), "stale handle");
+    AE_EXPECT_TRUE(position.y == 123, "failure preserves output");
+    AE_EXPECT_TRUE(runtime.apply(physics, water, 13, settings), "stale binding safely skipped");
+    AE_EXPECT_TRUE(runtime.stats().unavailableBodies == 1, "observable stale binding");
+    AetherPhysics_DestroyWorld(physics);
+  }
+  if (std::abs(finalHeight[0] - finalHeight[1]) >= .05f)
+    std::fprintf(stderr, "Water equilibrium: 60Hz=%f 120Hz=%f\n", finalHeight[0], finalHeight[1]);
+  AE_EXPECT_TRUE(std::abs(finalHeight[0] - finalHeight[1]) < .05f, "timestep convergence");
+}
+
+AE_TEST(Water_field_adapter_drives_buoyancy_with_current_and_orbital_velocity) {
+  ae::renderer::WaterFieldSetup setup{};
+  setup.currents.uniform = {2, 0};
+  ae::renderer::WaterField field;
+  AE_EXPECT_TRUE(field.configure(setup), "field configured");
+  const ae::renderer::WaterVec2 position{0, 0};
+  ae::renderer::WaterFieldSample sampled{};
+  AE_EXPECT_TRUE(field.sample({&position, 1}, 0, {&sampled, 1}), "field queried");
+  AetherWaterBodySample body{};
+  AE_EXPECT_TRUE(makeWaterBodySample(1, {}, position, sampled, 1, body), "adapter");
+  BuoyancyInput input{};
+  input.mass = 1000;
+  input.submerged = submergedVolume({}, {0, -.25f, 0}, {0, 0, 0, 1},
+                                    {body.planeNormal, body.planeOffset});
+  input.waterVelocity = body.waterVelocity;
+  AE_EXPECT_TRUE(evaluateBuoyancy(input, {}).force.x > 0, "current pushes body");
+  sampled.flags |= static_cast<ae::u32>(ae::renderer::WaterFieldFlag::Excluded);
+  AE_EXPECT_TRUE(!makeWaterBodySample(2, {}, position, sampled, 1, body), "dry region rejected");
+  AE_EXPECT_TRUE(body.body == 1, "failed conversion preserves output");
+}
 
 namespace {
 constexpr float Pi = 3.14159265358979323846f;

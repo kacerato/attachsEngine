@@ -11,7 +11,8 @@ bool gpuPassAttributionCollapsed(const std::array<double, GpuPassClassCount> &pa
   const auto intraPass = [](GpuPassClass pass) {
     // Só classes gravadas dentro do render pass principal. Shadow, Post e HZB
     // têm passes próprios e são legitimamente medidos em separado.
-    return pass != GpuPassClass::Shadow && pass != GpuPassClass::Post &&
+    return pass != GpuPassClass::WaterSimulation && pass != GpuPassClass::Culling &&
+           pass != GpuPassClass::Shadow && pass != GpuPassClass::Post &&
            pass != GpuPassClass::Hzb;
   };
   double dominant = 0.0;

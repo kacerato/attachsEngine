@@ -55,6 +55,11 @@ inline constexpr u32 MapMaterialImpostor = 1u << 8;
 // GPU. It is deliberately independent from alpha blending: mobile ocean water
 // writes depth and composes reflection/absorption as an opaque surface.
 inline constexpr u32 MapMaterialWater = 1u << 9;
+// Opt-in world-horizontal camera grid. Position.xz are authored offsets;
+// UV1.x is maximum incident edge spacing, UV1.y is authored half-extent.
+// The renderer scales to WaterProfile.maximumDistance and anchors to camera XZ.
+// Requires MapMaterialWater. Ordinary finite water meshes retain their transform.
+inline constexpr u32 MapMaterialWaterCameraGrid = 1u << 10;
 
 struct MapTextureRecord {
   u32 flags;
@@ -279,6 +284,9 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
         (draw.lodLevel == 0 && draw.geometricError != 0.0f)) return false;
   }
   for (const auto &material : decoded.materials) {
+    if ((material.flags & MapMaterialWaterCameraGrid) != 0 &&
+        ((material.flags & MapMaterialWater) == 0 ||
+         (material.flags & MapMaterialImpostor) != 0 || version < 3)) return false;
     for (u32 texture : material.textureIndices) {
       if (texture != InvalidMapTexture && texture >= decoded.header.textureCount) return false;
     }
@@ -293,6 +301,17 @@ inline bool decodeMapPackage(std::span<const u8> bytes, MapPackageView &out) {
           (material.flags & MapMaterialNormalMap) == 0 ||
           material.textureIndices[0] == InvalidMapTexture ||
           material.textureIndices[1] == InvalidMapTexture) return false;
+    }
+  }
+  for (const auto &draw : decoded.draws) {
+    if ((decoded.materials[draw.materialIndex].flags & MapMaterialWaterCameraGrid) == 0) continue;
+    for (u32 index = 0; index < draw.indexCount; ++index) {
+      const u64 vertex = static_cast<u64>(decoded.indices[draw.firstIndex + index]) + draw.vertexOffset;
+      if (vertex >= decoded.header.vertexCount) return false;
+      const usize base = static_cast<usize>(decoded.header.vertexOffset + vertex * vertexStride);
+      const float spacing = real(base + 36), extent = real(base + 40);
+      if (!std::isfinite(spacing) || !std::isfinite(extent) || spacing <= 0.0f ||
+          extent <= 0.0f || spacing > 2.0f * extent) return false;
     }
   }
   u64 fingerprint = 14695981039346656037ull;

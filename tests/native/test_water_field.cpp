@@ -1,5 +1,8 @@
 #include "harness.h"
 #include "renderer/water_field.h"
+#include "renderer/water_world.h"
+#include "renderer/water_shading.h"
+#include "renderer/map_draw_update.h"
 #include "renderer/gpu_cost_isolation.h"
 #include "renderer/water_spectral_mirror.h"
 
@@ -10,6 +13,181 @@
 #include <vector>
 
 using namespace ae::renderer;
+
+AE_TEST(Map_dynamic_pose_updates_matrix_and_bounds_transactionally) {
+  MapDrawRecord source{};
+  source.indexCount = 36;
+  source.materialIndex = 4;
+  const float model[16] = {2,0,0,0, 0,3,0,0, 0,0,1,0, 10,20,30,1};
+  const float center[3] = {1,2,3};
+  MapDrawUpdate update{};
+  AE_EXPECT_TRUE(prepareMapDrawUpdate(2, source, model, center, 1, update), "valid transform");
+  AE_EXPECT_TRUE(update.draw.boundsCenter[0] == 12 && update.draw.boundsCenter[1] == 26 &&
+                 update.draw.boundsCenter[2] == 33, "bounds transformed from local space");
+  AE_EXPECT_TRUE(update.draw.boundsRadius == 3, "conservative scale");
+  AE_EXPECT_TRUE(update.instance.model[12] == 10 && update.draw.materialIndex == 4 &&
+                 update.draw.indexCount == 36, "instance and immutable geometry");
+  float invalid[16]{};
+  AE_EXPECT_TRUE(!prepareMapDrawUpdate(7, source, invalid, center, 1, update), "singular rejected");
+  AE_EXPECT_TRUE(update.drawIndex == 2 && update.draw.boundsRadius == 3, "old result preserved");
+}
+
+AE_TEST(Water_shading_variance_preserves_flat_normals_and_bounds_broadening) {
+  AE_EXPECT_TRUE(validateWaterShading({}), "defaults valid");
+  AE_EXPECT_TRUE(!validateWaterShading({2, 1}), "AA envelope");
+  AE_EXPECT_TRUE(!validateWaterShading({.5f, -1}), "foam envelope");
+  AE_EXPECT_TRUE(std::abs(filteredWaterRoughness(.2f, 0, 1) - .2f) < 1e-6f, "flat floor");
+  AE_EXPECT_TRUE(std::abs(filteredWaterRoughness(.2f, 1, 0) - .2f) < 1e-6f, "disabled");
+  const float filtered = filteredWaterRoughness(.2f, .1f, .5f);
+  AE_EXPECT_TRUE(filtered > .2f && filtered < 1, "roughen unresolved variation");
+  AE_EXPECT_TRUE(filteredWaterRoughness(1, 1, 1) == 1, "bounded maximum");
+}
+
+AE_TEST(Water_field_live_invalid_edit_and_invalid_batch_are_transactional) {
+  WaterField field;
+  WaterFieldSetup setup{};
+  setup.baseHeight = 7;
+  AE_EXPECT_TRUE(field.configure(setup), "valid field");
+  setup.requested = static_cast<WaterFieldProvider>(99);
+  AE_EXPECT_TRUE(!field.configure(setup), "unknown provider rejected");
+  AE_EXPECT_TRUE(field.heightOnly({}, 0) == 7, "old field remains");
+  std::array<WaterVec2, 2> positions{{{0, 0}, {std::nanf(""), 0}}};
+  std::array<WaterFieldSample, 2> output{};
+  output[0].height = 99;
+  AE_EXPECT_TRUE(!field.sample(positions, 0, output), "whole batch rejected");
+  AE_EXPECT_TRUE(output[0].height == 99, "no partial overwrite");
+}
+
+AE_TEST(Water_world_resolves_layers_priority_height_and_stable_id) {
+  WaterWorld world;
+  WaterFieldSetup low{}, high{};
+  high.baseHeight = 4;
+  AE_EXPECT_TRUE(world.setVolume(20, low, 0, 1), "first volume");
+  AE_EXPECT_TRUE(world.setVolume(10, high, 0, 2), "second volume");
+  const WaterVec2 position{};
+  WaterVolumeQuery result{};
+  AE_EXPECT_TRUE(world.sample({&position, 1}, 0, 3, {&result, 1}) && result.volume == 10, "highest");
+  AE_EXPECT_TRUE(world.sample({&position, 1}, 0, 1, {&result, 1}) && result.volume == 20, "layers");
+  AE_EXPECT_TRUE(world.setVolume(20, low, 2, 1), "raise priority");
+  AE_EXPECT_TRUE(world.sample({&position, 1}, 0, 3, {&result, 1}) && result.volume == 20, "priority");
+  AE_EXPECT_TRUE(world.setVolume(5, low, 2, 1), "tie");
+  AE_EXPECT_TRUE(world.sample({&position, 1}, 0, 3, {&result, 1}) && result.volume == 5, "stable id");
+  AE_EXPECT_TRUE(world.removeVolume(5), "unload");
+  AE_EXPECT_TRUE(world.volumeCount() == 2, "count");
+  world.clear();
+  AE_EXPECT_TRUE(world.sample({&position, 1}, 0, 3, {&result, 1}) && result.volume == 0, "empty world");
+}
+
+AE_TEST(Water_world_failed_edits_preserve_previous_volume_and_query_output) {
+  WaterWorld world;
+  WaterFieldSetup setup{};
+  AE_EXPECT_TRUE(world.setVolume(1, setup), "valid volume");
+  setup.currents.maximumSpeed = -1;
+  AE_EXPECT_TRUE(!world.setVolume(1, setup), "reject invalid edit");
+  const WaterVec2 position{};
+  WaterVolumeQuery result{};
+  AE_EXPECT_TRUE(world.sample({&position, 1}, 0, ~0u, {&result, 1}) && result.volume == 1, "old preserved");
+  AE_EXPECT_TRUE(!world.sample({&position, 1}, std::nan(""), ~0u, {&result, 1}), "invalid time");
+  AE_EXPECT_TRUE(result.volume == 1, "output preserved");
+  AE_EXPECT_TRUE(!world.setVolume(0, {}), "reserved id");
+}
+
+AE_TEST(Water_bathymetry_interpolates_and_preserves_unknown_outside_tile) {
+  WaterBathymetry grid{};
+  grid.width = grid.height = 2;
+  grid.bottomHeights[0] = -2; grid.bottomHeights[1] = -4;
+  grid.bottomHeights[2] = -6; grid.bottomHeights[3] = -8;
+  float bottom = 99;
+  AE_EXPECT_TRUE(sampleWaterBottom(grid, {.5f, .5f}, bottom), "inside tile");
+  AE_EXPECT_TRUE(std::abs(bottom + 5) < 1e-5f, "bilinear bottom");
+  AE_EXPECT_TRUE(!sampleWaterBottom(grid, {2, 0}, bottom), "unknown outside");
+  AE_EXPECT_TRUE(bottom == -5, "failed query leaves output unchanged");
+  AE_EXPECT_TRUE(sampleWaterBottom(grid, {1, 1}, bottom) && bottom == -8, "last corner");
+  grid.spacing.x = 0;
+  AE_EXPECT_TRUE(!validateWaterBathymetry(grid), "invalid spacing");
+}
+
+AE_TEST(Water_field_handles_bounded_domains_and_dry_bathymetry) {
+  WaterFieldSetup setup{};
+  setup.bounded = true;
+  setup.boundary.halfExtent = {10, 10};
+  setup.bathymetry.width = setup.bathymetry.height = 2;
+  setup.bathymetry.bottomHeights[0] = 1;
+  setup.bathymetry.bottomHeights[1] = -3;
+  setup.bathymetry.bottomHeights[2] = -3;
+  setup.bathymetry.bottomHeights[3] = -3;
+  WaterField field;
+  AE_EXPECT_TRUE(field.configure(setup), "bounded field");
+  std::array<WaterVec2, 3> positions{{{0, 0}, {1, 1}, {20, 0}}};
+  std::array<WaterFieldSample, 3> samples{};
+  AE_EXPECT_TRUE(field.sample(positions, 0, samples), "sample batch");
+  AE_EXPECT_TRUE(samples[0].coverage == 0 && samples[0].depth == 0, "land is dry");
+  AE_EXPECT_TRUE(samples[1].coverage > 0 && samples[1].depth == 3, "local depth");
+  AE_EXPECT_TRUE(samples[2].coverage == 0, "outside domain");
+  AE_EXPECT_TRUE(!hasWaterFieldFlag(samples[2].flags, WaterFieldFlag::DepthKnown), "no invented depth");
+}
+
+AE_TEST(Water_currents_have_finite_core_smooth_boundary_and_speed_budget) {
+  WaterCurrentSettings settings{};
+  settings.count = 1;
+  settings.sources[0].kind = WaterCurrentKind::Vortex;
+  settings.sources[0].speed = 8.0f;
+  AE_EXPECT_TRUE(validateWaterCurrents(settings), "valid current");
+  const auto center = sampleWaterCurrent(settings, {0, 0});
+  const auto middle = sampleWaterCurrent(settings, {5, 0});
+  const auto edge = sampleWaterCurrent(settings, {10, 0});
+  AE_EXPECT_TRUE(center.x == 0 && center.y == 0, "no singular core");
+  AE_EXPECT_TRUE(middle.x == 0 && std::abs(middle.y - 2.0f) < 1e-5f, "tangential flow");
+  AE_EXPECT_TRUE(edge.x == 0 && edge.y == 0, "compact support");
+  settings.uniform = {20, 20};
+  settings.maximumSpeed = 3;
+  const auto capped = sampleWaterCurrent(settings, {5, 0});
+  AE_EXPECT_TRUE(std::abs(std::hypot(capped.x, capped.y) - 3.0f) < 1e-5f, "global budget");
+  settings.sources[0].radius = 0;
+  AE_EXPECT_TRUE(!validateWaterCurrents(settings), "reject zero radius");
+}
+
+AE_TEST(Water_field_exposes_current_separately_from_orbital_velocity) {
+  WaterFieldSetup setup{};
+  setup.currents.uniform = {2, -3};
+  WaterField field;
+  AE_EXPECT_TRUE(field.configure(setup), "configure flat water with current");
+  std::array<WaterVec2, 1> positions{{{0, 0}}};
+  std::array<WaterFieldSample, 1> samples{};
+  AE_EXPECT_TRUE(field.sample(positions, 0, samples), "batched query");
+  AE_EXPECT_TRUE(samples[0].flow.x == 2 && samples[0].flow.y == -3, "current exposed");
+  AE_EXPECT_TRUE(samples[0].velocity.x == 0, "do not double count current");
+}
+
+AE_TEST(Water_currents_reverse_radial_flow_and_validate_directional_sources) {
+  WaterCurrentSettings settings{};
+  settings.count = 1;
+  auto &source = settings.sources[0];
+  source.kind = WaterCurrentKind::Radial;
+  source.speed = -4;
+  const auto flow = sampleWaterCurrent(settings, {5, 0});
+  AE_EXPECT_TRUE(std::abs(flow.x + 1.0f) < 1e-5f && flow.y == 0, "inward radial flow");
+  source.kind = WaterCurrentKind::Directional;
+  source.direction = {0, 0};
+  AE_EXPECT_TRUE(!validateWaterCurrents(settings), "direction must be normalized");
+  source.direction = {0, 1};
+  AE_EXPECT_TRUE(validateWaterCurrents(settings), "unit direction");
+  source.kind = static_cast<WaterCurrentKind>(99);
+  AE_EXPECT_TRUE(!validateWaterCurrents(settings), "unknown source type rejected");
+}
+
+AE_TEST(Water_field_exclusion_disables_currents_inside_dry_volumes) {
+  WaterFieldSetup setup{};
+  setup.currents.uniform = {4, 2};
+  setup.exclusionCount = 1;
+  WaterField field;
+  AE_EXPECT_TRUE(field.configure(setup), "configure");
+  std::array<WaterVec2, 1> positions{{{0, 0}}};
+  std::array<WaterFieldSample, 1> samples{};
+  AE_EXPECT_TRUE(field.sample(positions, 0, samples), "query");
+  AE_EXPECT_TRUE(hasWaterFieldFlag(samples[0].flags, WaterFieldFlag::Excluded), "dry interior");
+  AE_EXPECT_TRUE(samples[0].flow.x == 0 && samples[0].flow.y == 0, "no current in dry interior");
+}
 
 namespace {
 WaterProfile twoWaveProfile() {

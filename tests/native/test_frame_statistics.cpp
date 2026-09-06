@@ -2,6 +2,7 @@
 #include "profiler/frame_statistics.h"
 #include <cmath>
 #include <limits>
+#include <string_view>
 
 using namespace ae::profiler;
 using ae::u64;
@@ -146,6 +147,14 @@ AE_TEST(atribuicao_ignora_o_hzb_que_e_medido_fora_do_render_pass) {
 AE_TEST(atribuicao_nao_afirma_nada_sem_tempo_de_gpu) {
   std::array<double, ae::GpuPassClassCount> passes{};
   AE_EXPECT_TRUE(!gpuPassAttributionCollapsed(passes, 0.0), "frame sem GPU medida nao decide");
+}
+
+AE_TEST(water_simulation_is_independent_of_tile_pass_attribution) {
+  std::array<double, ae::GpuPassClassCount> passes{};
+  passes[static_cast<ae::u32>(ae::GpuPassClass::WaterSimulation)]=7;
+  AE_EXPECT_TRUE(!gpuPassAttributionCollapsed(passes,7),"compute-only cost is not a collapsed raster pass");
+  AE_EXPECT_TRUE(std::string_view(ae::gpuPassClassMetricName(ae::GpuPassClass::WaterSimulation))==
+      "gpu_water_simulation_ms","explicit water simulation metric");
 }
 
 // O nome da métrica e o rótulo do marcador de captura precisam vir da mesma

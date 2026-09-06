@@ -3,6 +3,30 @@
 #include "renderer/gpu_draw_culling.h"
 #include "rhi/shaders/astc_encode_spirv.h"
 #include "rhi/shaders/draw_cull_spirv.h"
+#include "rhi/shaders/water_spectrum_evolve_spirv.h"
+#include "rhi/shaders/water_fft_inverse_spirv.h"
+#include "rhi/shaders/water_foam_update_spirv.h"
+
+AE_TEST(Compute_water_spectral_shaders_match_resource_contract) {
+  ae::rhi::ComputeShaderReflection reflection{};
+  AE_EXPECT_TRUE(ae::rhi::reflectComputeShader(ae::rhi::shaders::kWater_Spectrum_EvolveCompSpirv,
+      ae::rhi::shaders::kWater_Spectrum_EvolveCompSpirvSize,reflection),"evolution reflection");
+  AE_EXPECT_EQ(reflection.bindingCount,2u,"initial and output");
+  AE_EXPECT_EQ(reflection.localSize[0],64u,"evolution group");
+  for(ae::u32 i=0;i<2;++i)
+    AE_EXPECT_TRUE(reflection.bindings[i].binding==i && reflection.bindings[i].type==VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,"storage contract");
+  AE_EXPECT_TRUE(reflection.hasPushConstants,"evolution parameters");
+  AE_EXPECT_TRUE(ae::rhi::reflectComputeShader(ae::rhi::shaders::kWater_Fft_InverseCompSpirv,
+      ae::rhi::shaders::kWater_Fft_InverseCompSpirvSize,reflection),"inverse reflection");
+  AE_EXPECT_EQ(reflection.bindingCount,1u,"in-place output");
+  AE_EXPECT_EQ(reflection.localSize[0],128u,"line group");
+  AE_EXPECT_TRUE(reflection.hasPushConstants,"axis and size");
+  AE_EXPECT_TRUE(ae::rhi::reflectComputeShader(ae::rhi::shaders::kWater_Foam_UpdateCompSpirv,
+      ae::rhi::shaders::kWater_Foam_UpdateCompSpirvSize,reflection),"foam reflection");
+  AE_EXPECT_EQ(reflection.bindingCount,1u,"surface and history share buffer");
+  AE_EXPECT_EQ(reflection.localSize[0],64u,"foam group");
+  AE_EXPECT_TRUE(reflection.hasPushConstants,"foam rates and reset");
+}
 
 using namespace ae;
 using namespace ae::rhi;

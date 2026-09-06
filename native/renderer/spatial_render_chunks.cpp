@@ -139,6 +139,12 @@ bool buildSpatialRenderChunks(const MapPackageView &package,
     const u32 triangleCount = draw.indexCount / 3;
     const u32 materialFlags = package.materials[draw.materialIndex].flags;
     const bool blended = (materialFlags & MapMaterialBlend) != 0;
+    // Static spatial bounds cannot cull camera-relative grids. Splitting them
+    // only adds draws and reorders an already coherent mesh without visibility
+    // savings. Finite water remains eligible for normal spatial partitioning.
+    const bool cameraWater = (materialFlags & (MapMaterialWater | MapMaterialWaterCameraGrid)) ==
+                            (MapMaterialWater | MapMaterialWaterCameraGrid);
+    const bool preservePrimitive = blended || cameraWater;
     const bool coverage = (materialFlags & MapMaterialAlphaMask) != 0;
     const u32 targetTriangles = coverage ? settings.coverageTrianglesPerChunk
                                          : settings.opaqueTrianglesPerChunk;
@@ -161,7 +167,7 @@ bool buildSpatialRenderChunks(const MapPackageView &package,
                       (corners[0].z + corners[1].z + corners[2].z) / 3.0f};
       expand(ref.centroid, minimum, maximum);
     }
-    if (!blended && triangleCount > targetTriangles) {
+    if (!preservePrimitive && triangleCount > targetTriangles) {
       for (TriangleRef &ref : triangles) {
         ref.morton = morton3(quantize(ref.centroid.x, minimum.x, maximum.x),
                              quantize(ref.centroid.y, minimum.y, maximum.y),
@@ -174,7 +180,7 @@ bool buildSpatialRenderChunks(const MapPackageView &package,
       });
     }
     for (u32 first = 0; first < triangleCount;) {
-      const u32 count = blended ? triangleCount :
+      const u32 count = preservePrimitive ? triangleCount :
           std::min(targetTriangles, triangleCount - first);
       if (!appendChunk(package, draw, triangles.data() + first, count,
                        settings.waterDisplacementAllowance, prepared)) return false;

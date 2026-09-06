@@ -63,6 +63,50 @@ WaterValidationError validateWaterProfile(const WaterProfile &p) noexcept {
   return WaterValidationError::None;
 }
 
+bool authorWaterWaves(const WaterProfile &source, const WaterWaveAuthoring &s,
+                      WaterProfile &destination) noexcept {
+  if (validateWaterProfile(source) != WaterValidationError::None ||
+      !finite(s.lengthScale) || s.lengthScale < .5f || s.lengthScale > 4.0f ||
+      !finite(s.directionalSpread) || s.directionalSpread < 0 || s.directionalSpread > 2 ||
+      !finite(s.crossSwell) || s.crossSwell < 0 || s.crossSwell > 2) return false;
+  auto result = source;
+  for (u32 i=0; i<result.waveCount; ++i) {
+    auto &wave = result.waves[i];
+    const float angle = std::atan2(wave.direction.y,wave.direction.x)*s.directionalSpread;
+    wave.direction = {std::cos(angle),std::sin(angle)};
+    wave.wavelength *= s.lengthScale;
+    wave.speed /= std::sqrt(s.lengthScale);
+  }
+  const u32 available = MaximumWaterWaves-result.waveCount;
+  const u32 added = s.crossSwell > 0 ? std::min({3u,source.waveCount,available}) : 0;
+  if (s.crossSwell > 0 && added == 0) return false;
+  for (u32 i=0; i<added; ++i) {
+    auto wave = result.waves[i];
+    wave.direction = {-wave.direction.y,wave.direction.x};
+    wave.amplitude *= s.crossSwell;
+    wave.wavelength *= 1.37f;
+    wave.speed /= std::sqrt(1.37f);
+    wave.phase += 1.618f*(i+1);
+    result.waves[result.waveCount++] = wave;
+  }
+  if (validateWaterProfile(result) != WaterValidationError::None) return false;
+  destination = result;
+  return true;
+}
+
+bool appendLongWaterWave(WaterProfile &profile, float amplitude, float wavelength,
+                         float depth, WaterVec2 direction) noexcept {
+  if (profile.waveCount >= MaximumWaterWaves || !finite(depth) || depth<=0 ||
+      !finite(wavelength) || wavelength<=0) return false;
+  auto result=profile;
+  const float k=2*Pi/wavelength;
+  result.waves[result.waveCount++]={direction,amplitude,wavelength,
+      std::sqrt(9.81f*k*std::tanh(k*depth)),.8f,0};
+  if(validateWaterProfile(result)!=WaterValidationError::None) return false;
+  profile=result;
+  return true;
+}
+
 WaterSample sampleWaterSurface(const WaterProfile &p, WaterVec2 position,
                                float timeSeconds) noexcept {
   WaterSample result{};
