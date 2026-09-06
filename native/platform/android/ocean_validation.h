@@ -53,10 +53,22 @@ public:
         if (!simulation_.bind({bodies_[i],{physics::BuoyantShapeKind::Box,extents_[i]},widths[i]*depths[i]})) return false;
       }
     }
+    if (!ripples_.isReady()) {
+      renderer::WaterRippleSettings rippleSettings{};
+      // Área modesta em volta dos corpos: ondulação de impacto só é legível de
+      // perto, e área grande gasta resolução onde o espectro já entrega detalhe.
+      rippleSettings.areaSize = 48.0f;
+      rippleSettings.resolution = 96;
+      rippleSettings.propagationSpeed = 4.0f;
+      rippleSettings.damping = 0.6f;
+      if (!ripples_.initialize(rippleSettings)) return false;
+    }
     auto setup=renderer.waterQuerySetup();
+    setup.ripples=&ripples_;
     if (!water_.setVolume(1,setup)) return false;
     physics::WaterRuntimeSettings runtimeSettings;
     runtimeSettings.forces.fluidDensity=density;
+    runtimeSettings.rippleGain=1.0f;
     if (!simulation_.setWaterSettings(runtimeSettings)) return false;
     const double delta=previous_<0?0:std::max(0.0,wallTime-previous_);
     previous_=wallTime;
@@ -67,7 +79,12 @@ public:
     physics::WaterSimulationHooks hooks{};
     hooks.context=&impactContext_;
     hooks.afterStep=&OceanValidation::onContact;
-    const auto frame=simulation_.advance(physics_,water_,delta,1,paused,hooks);
+    const auto frame=simulation_.advance(physics_,water_,delta,1,paused,hooks,&ripples_);
+    // A ondulação avança com o mesmo relógio da física e é publicada para o
+    // próximo quadro. Avançá-la depois do passo, e não antes, é o que faz o
+    // deslocamento injetado pelos corpos deste passo aparecer neste passo.
+    if (!paused) ripples_.advance(static_cast<float>(delta));
+    renderer.setWaterRipples(ripples_);
     if (frame.error!=physics::WaterSimulationError::None) return false;
     renderTime=static_cast<float>(frame.simulationTime);
     for (u32 i=0;i<4;++i) {
@@ -148,6 +165,7 @@ private:
     }
   }
 
+  renderer::WaterRippleField ripples_{};
   std::array<AetherVec3,4> extents_{};
   struct BoatDraw { u32 index=0; float center[3]{}; float radius=0; };
   std::vector<BoatDraw> boatDraws_;

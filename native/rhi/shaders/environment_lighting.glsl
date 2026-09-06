@@ -30,6 +30,9 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   vec4 waterInteractionParameters; // active count, reserved
   vec4 waterInteractionShape[8]; // center.xz, start time, amplitude
   vec4 waterInteractionMotion[8]; // wavelength, speed, decay, duration
+  // centro x, centro z, lado da area em metros, resolucao da grade. Resolucao
+  // zero significa que nao ha ondulacao e o vertice pula a leitura inteira.
+  vec4 waterRippleArea;
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 // sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de

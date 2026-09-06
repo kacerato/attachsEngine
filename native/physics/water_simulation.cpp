@@ -30,7 +30,7 @@ void WaterSimulation::reset() noexcept {
 
 WaterSimulationFrame WaterSimulation::advance(AetherPhysicsWorld *physics,
     const renderer::WaterWorld &water, double frameSeconds, double timeScale,
-    bool paused, WaterSimulationHooks hooks) noexcept {
+    bool paused, WaterSimulationHooks hooks, renderer::WaterRippleField *ripples) noexcept {
   WaterSimulationFrame result{};
   result.simulationTime = time_;
   result.interpolation = std::clamp(accumulator_ / settings_.fixedStep, 0.0, 1.0);
@@ -52,7 +52,7 @@ WaterSimulationFrame WaterSimulation::advance(AetherPhysicsWorld *physics,
       result.error = WaterSimulationError::Provider;
       break; // no force applied yet: retry the same step on the next frame
     }
-    if (!runtime_.apply(physics, water, time_, settings_.water)) {
+    if (!runtime_.apply(physics, water, time_, settings_.water, ripples)) {
       result.error = WaterSimulationError::Forces;
       faulted_ = true;
       break;

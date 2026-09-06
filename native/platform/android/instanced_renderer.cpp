@@ -107,8 +107,11 @@ struct DirtRoadFrameUniform {
   float waterInteractionParameters[4]{}; // active count, reserved
   float waterInteractionShape[renderer::MaximumWaterInteractions][4]{}; // center.xy, start, amplitude
   float waterInteractionMotion[renderer::MaximumWaterInteractions][4]{}; // wavelength, speed, decay, duration
+  // centro x, centro z, lado da área em metros, resolução da grade. Resolução
+  // zero significa "não há ondulação" e o vértice pula a leitura inteira.
+  float waterRippleArea[4]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 1152);
+static_assert(sizeof(DirtRoadFrameUniform) == 1168);
 
 struct ShadowPushConstants {
   float lightViewProjection[16]{};
@@ -773,6 +776,35 @@ bool InstancedRenderer::createPipeline() {
   return layoutOk && pipelineOk;
 }
 
+bool InstancedRenderer::setWaterRipples(const renderer::WaterRippleField &field) noexcept {
+  if (!field.isReady() || waterRippleBuffer_.mappedData() == nullptr) return false;
+  const u32 resolution = field.settings().resolution;
+  if (resolution == 0 || resolution > renderer::MaximumWaterGridSegments) return false;
+
+  // A cópia é ponto a ponto porque o campo não expõe o vetor interno: ele é
+  // dele, e abrir o armazenamento para o renderer trocaria uma cópia barata por
+  // um acoplamento que amarra os dois a um layout de memória.
+  auto *destination = static_cast<float *>(waterRippleBuffer_.mappedData());
+  const float area = field.settings().areaSize;
+  const float cell = area / static_cast<float>(resolution);
+  const float origin = -area * 0.5f + cell * 0.5f;
+  for (u32 row = 0; row < resolution; ++row) {
+    const float z = field.centreZ() + origin + static_cast<float>(row) * cell;
+    for (u32 column = 0; column < resolution; ++column) {
+      const float x = field.centreX() + origin + static_cast<float>(column) * cell;
+      destination[row * resolution + column] = field.height(x, z);
+    }
+  }
+  if (!memoryAllocator_->flushBuffer(waterRippleBuffer_)) return false;
+
+  waterRippleResolution_ = resolution;
+  waterRippleCentre_[0] = field.centreX();
+  waterRippleCentre_[1] = field.centreZ();
+  waterRippleArea_ = area;
+  waterRippleGain_ = 1.0f;
+  return true;
+}
+
 bool InstancedRenderer::createEnvironmentDescriptors() {
   if (!dirtRoadPreview_) return true;
   rhi::BufferDesc buffer{};
@@ -781,6 +813,19 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   buffer.cpuAccess = rhi::CpuAccess::SequentialWrite;
   buffer.preferDeviceMemory = false;
   if (!memoryAllocator_->createBuffer(buffer, &environmentUniform_)) return false;
+  // Capacidade fixa no teto do contrato da grade: realocar no meio do laço de
+  // quadro obrigaria a reescrever o descritor, e o tamanho aqui é modesto.
+  {
+    rhi::BufferDesc ripple{};
+    ripple.sizeBytes = static_cast<u64>(renderer::MaximumWaterGridSegments) *
+                       renderer::MaximumWaterGridSegments * sizeof(float);
+    ripple.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    ripple.cpuAccess = rhi::CpuAccess::SequentialWrite;
+    ripple.preferDeviceMemory = false;
+    if (!memoryAllocator_->createBuffer(ripple, &waterRippleBuffer_)) return false;
+    std::memset(waterRippleBuffer_.mappedData(), 0, static_cast<usize>(ripple.sizeBytes));
+    if (!memoryAllocator_->flushBuffer(waterRippleBuffer_)) return false;
+  }
   DirtRoadFrameUniform initialFrame{};
   initialFrame.environment = dirtRoadResources_.environmentLighting();
   if (initialFrame.environment.parameters[3] > 0.5f)
@@ -798,7 +843,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[15]{};
+  VkDescriptorSetLayoutBinding bindings[16]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -829,18 +874,22 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
     bindings[i]={i,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,nullptr};
   if(spectralWaterCount_>0) for(u32 i=11;i<15;++i)
     bindings[i]={i,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
-  layout.bindingCount = spectralWaterCount_>0 ? 15u : (waterSubpassActive_ ? 7u : 5u);
+  u32 bindingCount = spectralWaterCount_>0 ? 15u : (waterSubpassActive_ ? 7u : 5u);
+  if (waterSubpassActive_)
+    bindings[bindingCount++]={15,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,nullptr};
+  layout.bindingCount = bindingCount;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
                                    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                     spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)},
                                    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
-                                   {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,4}};
+                                   {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                    (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u)}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool.maxSets = 1;
-  pool.poolSizeCount = spectralWaterCount_>0 ? 4u : (waterSubpassActive_ ? 3u : 2u);
+  pool.poolSizeCount = spectralWaterCount_>0 ? 4u : (waterSubpassActive_ ? 4u : 2u);
   pool.pPoolSizes = sizes;
   if (vkCreateDescriptorPool(device_, &pool, nullptr, &environmentPool_) != VK_SUCCESS) return false;
   VkDescriptorSetAllocateInfo allocation{};
@@ -876,7 +925,8 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
       break;
     }
   }
-  VkWriteDescriptorSet writes[15]{};
+  VkWriteDescriptorSet writes[16]{};
+  VkDescriptorBufferInfo rippleBuffer{};
   VkDescriptorImageInfo spectralImages[4]{};
   VkDescriptorBufferInfo spectralBuffers[4]{};
   writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -939,7 +989,18 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
     writes[11+i].descriptorCount=1; writes[11+i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     writes[11+i].pImageInfo=&spectralImages[i];
   }
-  vkUpdateDescriptorSets(device_, spectralWaterCount_>0 ? 15u : (waterSubpassActive_ ? 7u : 5u), writes, 0, nullptr);
+  u32 writeCount = spectralWaterCount_>0 ? 15u : (waterSubpassActive_ ? 7u : 5u);
+  if (waterSubpassActive_) {
+    rippleBuffer = {waterRippleBuffer_.handle(), 0, waterRippleBuffer_.sizeBytes()};
+    writes[writeCount].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[writeCount].dstSet = environmentSet_;
+    writes[writeCount].dstBinding = 15;
+    writes[writeCount].descriptorCount = 1;
+    writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[writeCount].pBufferInfo = &rippleBuffer;
+    ++writeCount;
+  }
+  vkUpdateDescriptorSets(device_, writeCount, writes, 0, nullptr);
   return true;
 }
 
@@ -3350,6 +3411,7 @@ void InstancedRenderer::shutdown() {
   environmentPool_ = VK_NULL_HANDLE;
   environmentSetLayout_ = VK_NULL_HANDLE;
   environmentSet_ = VK_NULL_HANDLE;
+  waterRippleBuffer_.reset();
   environmentUniform_.reset();
   indirectBuffer_.reset();
   indirectCommands_.clear();
@@ -3642,6 +3704,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       frame->waterInteractionMotion[packedIndex][2] = impulse.decay;
       frame->waterInteractionMotion[packedIndex][3] = impulse.duration;
     }
+    // Ganho zero apaga a resolução também: o vértice testa um número só antes
+    // de decidir ler o buffer, e deixar resolução sem ganho o faria ler dados
+    // que ninguém prometeu estar atualizados.
+    frame->waterRippleArea[0] = waterRippleCentre_[0];
+    frame->waterRippleArea[1] = waterRippleCentre_[1];
+    frame->waterRippleArea[2] = waterRippleArea_;
+    frame->waterRippleArea[3] = waterRippleGain_ > 0.0f
+        ? static_cast<float>(waterRippleResolution_) : 0.0f;
     frame->waterInteractionParameters[0] = static_cast<float>(activeWaterInteractionCount);
     frame->waterInteractionParameters[1] = static_cast<float>(waterCostIsolation_);
     frame->waterInteractionParameters[2] = waterShading_.specularAntialiasing;

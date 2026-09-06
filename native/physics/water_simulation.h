@@ -40,9 +40,13 @@ public:
   bool unbind(AetherBodyHandle body) noexcept { return runtime_.unbind(body); }
   // Clears registrations and clock. Call before destroying/changing worlds.
   void reset() noexcept;
+  // `ripples` é repassado ao runtime a cada passo. Ele fica aqui, e não em
+  // WaterSimulationSettings, porque é um recurso emprestado: as configurações
+  // são copiadas e um ponteiro dentro delas sobreviveria ao que aponta.
   WaterSimulationFrame advance(AetherPhysicsWorld *physics, const renderer::WaterWorld &water,
                                 double frameSeconds, double timeScale = 1, bool paused = false,
-                                WaterSimulationHooks hooks = {}) noexcept;
+                                WaterSimulationHooks hooks = {},
+                                renderer::WaterRippleField *ripples = nullptr) noexcept;
   WaterRuntimeStats stats() const noexcept { return runtime_.stats(); }
 private:
   WaterSimulationSettings settings_{};

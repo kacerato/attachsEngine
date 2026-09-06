@@ -2,6 +2,7 @@
 
 #include "renderer/water_shading.h"
 #include "renderer/water_field.h"
+#include "renderer/water_ripples.h"
 #include "renderer/map_draw_update.h"
 
 #include "core/base.h"
@@ -173,6 +174,13 @@ public:
     waterBaseHeight_ = baseHeight;
     return true;
   }
+  // Publica a grade de ondulação para o próximo quadro. O campo é copiado, não
+  // referenciado: a simulação roda no dono da cena e o renderer lê no laço de
+  // quadro, e emprestar aqui obrigaria os dois a concordarem sobre tempo de
+  // vida sem nenhum mecanismo que garanta isso.
+  bool setWaterRipples(const renderer::WaterRippleField &field) noexcept;
+  void clearWaterRipples() noexcept { waterRippleGain_ = 0.0f; }
+
   bool addWaterImpulse(const renderer::WaterImpulse &impulse) {
     if (std::abs(waterBaseHeight_)+std::abs(impulse.amplitude) + renderer::maximumWaterDisplacement(waterProfile_) >
         waterDisplacementCapacity_) return false;
@@ -586,6 +594,16 @@ private:
   std::vector<renderer::WaterCascadeSettings> waterCascadeSettings_;
   std::array<rhi::VulkanWaterSpectralCompute,renderer::MaximumWaterCascades> waterSpectralCompute_;
   renderer::WaterInteractionField waterInteractions_{};
+  // Alturas da ondulação, num buffer mapeado escrito por quadro. É um storage
+  // buffer e não uma imagem pelo mesmo motivo das cascatas espectrais: o
+  // caminho de upload existente é síncrono e pertence à importação, e abrir
+  // imagem nova exigiria staging, transição de layout e barreira por quadro
+  // para dados que o vértice lê com interpolação manual de qualquer forma.
+  rhi::VulkanBuffer waterRippleBuffer_{};
+  u32 waterRippleResolution_ = 0;
+  float waterRippleCentre_[2]{0.0f, 0.0f};
+  float waterRippleArea_ = 0.0f;
+  float waterRippleGain_ = 0.0f;
   float waterDisplacementCapacity_ = 5.0f;
   float waterBaseHeight_ = 0.0f;
   renderer::DynamicResolutionController dynamicResolution_{};
