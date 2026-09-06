@@ -56,6 +56,15 @@
       "pairedDeltaMs": -1.218,
       "pairedDeltaSdMs": 0.932,
       "conclusive": false
+    },
+    {
+      "name": "f1-malha",
+      "isolationB": -1,
+      "baselineMeanMs": 23.482,
+      "baselineSdMs": 0.015,
+      "pairedDeltaMs": 3.05,
+      "pairedDeltaSdMs": 0.011,
+      "conclusive": true
     }
   ],
   "runs": [
@@ -1542,6 +1551,192 @@
         "hzb": 0.002
       },
       "passesSumMs": 24.973,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f1-malha-A1",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 35.16,
+      "gpuFrameMs": 23.471,
+      "cpuProcessMs": 8.265,
+      "batteryCelsiusAfter": 40.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.798,
+        "opaque": 16.987,
+        "post": 4.733,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 23.53,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f1-malha-A2",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 36.79,
+      "gpuFrameMs": 23.475,
+      "cpuProcessMs": 5.022,
+      "batteryCelsiusAfter": 41.1,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.786,
+        "opaque": 17.001,
+        "post": 4.734,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 23.533,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f1-malha-A3",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 36.51,
+      "gpuFrameMs": 23.5,
+      "cpuProcessMs": 5.21,
+      "batteryCelsiusAfter": 41.1,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.791,
+        "opaque": 17.01,
+        "post": 4.739,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 23.552,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f1-malha-B1",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 33.2,
+      "gpuFrameMs": 26.531,
+      "cpuProcessMs": 5.032,
+      "batteryCelsiusAfter": 41.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.796,
+        "opaque": 20.066,
+        "post": 4.73,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.604,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f1-malha-B2",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 33.1,
+      "gpuFrameMs": 26.53,
+      "cpuProcessMs": 5.211,
+      "batteryCelsiusAfter": 41.1,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.791,
+        "opaque": 20.062,
+        "post": 4.732,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.597,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f1-malha-warmup",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 36.45,
+      "gpuFrameMs": 23.505,
+      "cpuProcessMs": 5.109,
+      "batteryCelsiusAfter": 40.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.798,
+        "opaque": 17.006,
+        "post": 4.739,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 23.555,
       "gpuEngineMiB": [
         90.0,
         100.6

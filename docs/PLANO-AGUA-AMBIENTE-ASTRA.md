@@ -430,8 +430,8 @@ maneira global".
 | # | Alvo medido | Técnica | Por que ataca este alvo |
 |---|---:|---|---|
 | 1 | **12,639 ms** — passe opaco sem a água | **Cortar o overdraw da superfície** | 48% do frame numa cena de 16 draws não é geometria, é a superfície transparente cobrindo a tela. Um *depth prepass* de água, ou clipe por cobertura antes do sombreamento, remove fragmento que nunca vai aparecer. É o maior item da lista por larga margem. |
-| 2 | idem | **Densidade do clipmap ligada ao vento** | KWS2 escala o LOD do chunk pelo vento (`{0.5, 0.75, 1, 1.5, 2, 2.5}` [CITADO]): mar calmo não precisa de malha de tempestade. Menos vértice, menos fragmento. |
-| 3 | idem | **Perfis de malha de verdade** | KWS2 tem 5 níveis Ultra→VeryLow com contagens explícitas de chunk [CITADO]; a ASTRA tem `clipmapLevels` e pouco mais. |
+| 2 | ✅ **−3,050 ms medidos** | **Densidade da malha por perfil e vento** | Feito. A malha era constante assada de 256 segmentos; virou eixo de política com escada Ultra→VeryLow e densificação pelo vento. Ver §7.4 para o resultado e a ressalva. |
+| 3 | — | **Perfis de malha de verdade** | Entregue junto do item 2. |
 | 4 | **4,736 ms** — pós-processamento | **Explicar antes de otimizar** | 18% do frame para tonemap, bloom e FXAA, contra 1,10 ms medidos em release na cena de estrada. Ou é custo de debug, ou é bloom em resolução cheia — e isso se descobre com uma rodada, não com uma reescrita. |
 | 5 | **7,493 ms** — shading da água | **Escala de render separada para a água** | O resto da cena a 1,00 e a água a 0,7 é imperceptível em movimento e corta o custo por pixel dela quase pela metade. |
 | 6 | idem | **Resolução dinâmica ligada** | Está **desligada** nas rodadas medidas, e a engine já tem o controlador pronto. |
@@ -441,6 +441,37 @@ maneira global".
 A ordem importa: os itens 1 a 3 atacam 12,639 ms, o item 4 mais 4,736 ms, e só
 então se chega ao shading. Um plano que começasse otimizando o shader da água
 estaria mexendo em 28% do frame e deixando 48% intocado.
+
+### 7.0 O primeiro item entregue: densidade de malha [MEDIDO]
+
+A malha de água era uma constante de cozimento — 256 segmentos, 131.072
+triângulos, iguais em qualquer aparelho. Virou eixo de política, com escada por
+perfil e densificação pelo estado de mar, e o corte é feito por decimação de
+índices sobre a grade assada.
+
+No perfil deste aparelho a política escolhe 128 segmentos, e a medição pareada
+fecha o número:
+
+| Malha | GPU | FPS |
+|---|---:|---:|
+| 256 segmentos (o que existia) | 26,531 ms | 33,2 |
+| 128 segmentos (o que a política escolhe) | **23,482 ms ± 0,015** | 36,5 |
+
+**Economia de 3,050 ms ± 0,011**, 11,5% do frame, em regime térmico de 1,1 °C.
+
+**E a ressalva, que é do mesmo tamanho:** a 128 segmentos a onda perde relevo de
+forma visível — comparação em
+`assets/astra-visual/reference/water-mesh-256-vs-128.png`. A 64 (perfil VeryLow)
+a onda vira quase textura, em
+`water-mesh-256-vs-64.png`. Não há costura nem rasgo em nenhum dos dois: a
+geometria está íntegra, o que se perde é amplitude.
+
+Isso expõe o limite da abordagem. Decimar uma grade assada só permite divisores
+do número original — 256, 128, 64, 32 — e não existe meio-termo entre "onda
+cheia" e "25% dos triângulos". `buildWaterGrid` já aceita qualquer múltiplo de
+4, então **gerar a malha em runtime em vez de decimar a assada é o que destrava
+os 192 e 176 segmentos** onde provavelmente mora o ponto de equilíbrio. É o
+próximo passo desta frente, e agora ele tem um número para justificar o esforço.
 
 ### 7.1 O que "fora do comum" quer dizer, em número
 
