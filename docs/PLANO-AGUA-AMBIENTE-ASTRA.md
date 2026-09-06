@@ -165,79 +165,80 @@ E o que ela prova que falta, sem precisar de opinião:
 ### 2.4 Os números [MEDIDO]
 
 Aparelho `25053PC47G` (SM8735 / Adreno), Android 16, 2772×1280 = 3,55 Mpx,
-escala 1,00, resolução dinâmica desligada, `Thermal Status 0`, **build debug**,
-cena `samples/ocean` com 16 draws / 168.729 triângulos, três janelas de 600
-frames por rodada.
+escala 1,00, resolução dinâmica desligada, **build debug**, cena `samples/ocean`
+com 16 draws / 168.729 triângulos, câmera travada na pose `(0, 12, −34)`,
+`yaw 0`, `pitch 0,28` — verificada byte a byte no log de cada rodada.
+
+#### A bancada teve de ser construída antes dos números
+
+A primeira tentativa de decompor o custo falhou de forma clara: três dos cinco
+modos de `WaterCostIsolation` "economizaram" tempo negativo, e remover a
+reflexão deixou o frame 11 ms **mais caro**. Investigando, a mesma configuração
+com a **mesma pose** mediu 15,575 ms numa execução e 26,640 ms noutra — 71% de
+diferença sem nada mudar na cena.
+
+A causa é o relógio da GPU. O aparelho roda sem root, `/sys/class/kgsl` não é
+acessível e o governor não pode ser fixado: quando a carga cai, a frequência
+cai junto, e o tempo por quadro deixa de ser monotônico com o trabalho.
+
+`tools/measure-ocean-paired.ps1` resolve isso sem root, intercalando as pontas —
+`A B A B … A` — e comparando cada B com a média dos dois A vizinhos, o que
+cancela deriva linear dentro do par. O desvio entre as réplicas de A vira a
+régua da bancada, e o relatório carrega um campo `conclusive` que recusa
+qualquer efeito menor que ela.
+
+O resultado justifica a ferramenta: **dentro de uma sessão contínua a referência
+ficou em 26,584 ms com desvio de 0,039 ms entre quatro réplicas — 0,15%.** O
+problema nunca foi medir; era comparar rodadas separadas por minutos.
 
 ```bash
 $env:ANDROID_SERIAL="<serial>"
-./tools/measure-ocean.ps1 -Name agua-lock-base -SpectralWater -LockCamera -TargetFps 120 -DurationSeconds 50
+./tools/measure-ocean-paired.ps1 -Name f0-flat -IsolationB 5 -Repeats 3
+python tools/summarize_water_runs.py --out docs/measurements/<arquivo>.json
 ```
 
-**O custo do oceano, em duas condições:**
+#### O frame do oceano, aberto
 
-| Condição | FPS | GPU mediana |
+Com a régua de pé, a telemetria de `[FrameProfilePasses]` fecha a conta. Todas
+as colunas abaixo têm desvio ≤ 0,04 ms entre réplicas:
+
+| Componente | ms | % do frame |
 |---|---:|---:|
-| Câmera travada na pose inicial | **52,18** | **15,575 ms** |
-| Câmera livre, poses variadas (pior caso observado) | **31,69** | **26,662 ms** |
+| Passe opaco — **tudo menos o shading da água** | **12,639** | **48%** |
+| Passe opaco — shading da água | 7,493 | 28% |
+| Pós-processamento | 4,736 | 18% |
+| Simulação espectral (compute, 3 cascatas) | 1,767 | 7% |
+| **Frame** | **26,578** | |
 
-O orçamento de 120 Hz é **8,333 ms de frame inteiro**; o de 60 Hz é 16,6 ms. O
-oceano gasta entre **1,9× e 3,2×** o alvo de 120 Hz, e passa do alvo de 60 Hz
-assim que a câmera desce para perto da água — que é onde o overdraw da
-superfície transparente explode.
+O efeito pareado do shading inteiro é **−7,766 ms ± 0,008** (o passe opaco cede
+7,493 e o post cede 0,321, porque menos brilho gera menos bloom).
 
-Isso bate com o que `docs/ORCAMENTO-120HZ.md` mediu na cena `dirt-road`, em
-release: o passe opaco **só com base color** custa 8,811 ms, mais que o frame
-inteiro a 120 Hz. Nas duas cenas a conclusão é a mesma: **o gargalo é quantidade
-de fragmentos, não custo por fragmento.** Por isso a §7 vem antes da §5.
+**O que isso diz, e reordena o plano:**
 
-#### A decomposição por termo não fechou — e isso é um resultado
+1. **O maior consumidor não é a água — são os 12,639 ms do resto do passe
+   opaco**, numa cena com 16 draws e 168 mil triângulos. Isso não é geometria:
+   é a superfície transparente cobrindo a tela e gerando fragmento. Overdraw.
+2. **O pós-processamento custa 4,736 ms**, 18% do frame, para tonemap, bloom e
+   FXAA. O `ORCAMENTO-120HZ.md` mediu 1,10 ms na cena de estrada, **em release**.
+   A diferença precisa ser explicada antes de qualquer coisa ser otimizada — ou
+   é custo de debug, ou é bloom em resolução cheia.
+3. **A simulação FFT é barata: 1,767 ms** para três cascatas, e não muda quando
+   o shading sai. Ela não é o problema, e cabem mais cascatas se houver
+   orçamento — o gargalo está no consumo, não na geração.
+4. O orçamento de 120 Hz é 8,333 ms e o de 60 Hz é 16,6 ms. Só o passe opaco sem
+   água já gasta 12,6 ms.
 
-O shader tem um modo de isolamento de custo (`WaterCostIsolation`) que remove um
-termo por vez. Rodei os cinco modos com a câmera travada, mesma pose, mesma
-janela térmica:
+O diagnóstico é o mesmo do `ORCAMENTO-120HZ.md` na cena de estrada — lá o passe
+opaco só com base color custava 8,811 ms, mais que o frame inteiro a 120 Hz:
+**o gargalo é quantidade de fragmentos, não custo por fragmento.** Por isso a §7
+vem antes da §5.
 
-| Modo | O que remove | FPS | GPU mediana | Δ vs base |
-|---|---|---:|---:|---:|
-| base | nada | 52,18 | 15,575 ms | — |
-| 3 | micro-normais | 56,66 | 13,964 ms | **−1,611** |
-| 5 | todo o sombreamento | 55,52 | 14,767 ms | **−0,808** |
-| 1 | sombra na água | 43,14 | 18,696 ms | **+3,121** |
-| 2 | detalhe espectral | 45,31 | 18,878 ms | **+3,303** |
-| 4 | reflexão | 29,98 | 26,604 ms | **+11,029** |
+> Ressalva: tudo acima é **debug**. `android/app/build.gradle.kts` agora tem
+> `signingConfig` no `release`, então a rodada release já pode existir; ela é a
+> primeira tarefa restante da Fase 0. Até lá esses números são um teto.
 
-Três dessas linhas são fisicamente impossíveis: **remover trabalho não pode
-deixar o frame mais caro**. E remover só as micro-normais (−1,611) não pode
-economizar mais do que remover o sombreamento inteiro (−0,808).
-
-O que isso mede não é o shader, é a bancada. As causas prováveis, em ordem:
-
-1. **Governor de GPU.** Carga menor → clock menor → tempo por frame maior. O
-   `present_fps` sobe (56,66 no modo 3) enquanto o `gpu_frame_ms` não acompanha
-   de forma monotônica. É a assinatura clássica de DVFS.
-2. **Estado térmico entre rodadas.** A rodada do modo 4, a mais destoante, é
-   também a única que terminou a 34,7 °C em vez de 34,1 °C.
-3. **TBDR.** Numa GPU de tiles, timestamps dentro de um mesmo render pass
-   resolvem no fim do tile — o `ORCAMENTO-120HZ.md` já registra esse efeito.
-
-Uma rodada anterior, com **câmera livre**, produziu uma decomposição
-aparentemente limpa (sombreamento = 6,54 ms, reflexão = 0,48 ms). Ela não entra
-neste plano: com câmera livre cada rodada olha para uma cena diferente, e os
-números coerentes eram coincidência. Ficam registrados em
-`build/android-validation/plano-agua-*` como o que são — uma medição descartada.
-As doze rodadas, boas e ruins, estão versionadas em
-`docs/measurements/agua-baseline-2026-09-06.json`.
-
-**Consequência direta para o plano:** enquanto a bancada não fixar clock e
-janela térmica, o único número que sustenta decisão é o **total, na mesma pose**.
-Estabelecer essa bancada é a tarefa nº 1 da Fase 0, antes de qualquer linha de
-shader — senão toda otimização das fases seguintes vai ser avaliada com uma
-régua que se move.
-
-> Ressalva adicional: tudo acima é **debug**. O orçamento de 120 Hz foi medido em
-> **release**. `android/app/build.gradle.kts` tem `release { isMinifyEnabled =
-> false }` e nenhum `signingConfig`, então a rodada release exige configurar
-> assinatura primeiro — outro item da Fase 0.
+As rodadas, os relatórios pareados e a decomposição por passe estão em
+`docs/measurements/`.
 
 ---
 
@@ -374,20 +375,25 @@ O que falta para o ambiente ficar à altura da água:
 
 ## 7. Desempenho fora do comum — a fase que paga todas as outras
 
-Os 20,122 ms medidos com a água chapada são o alvo. Nenhuma dessas técnicas é
-específica de água: todas valem para a engine inteira, que é o que você pediu
-com "aplicado de maneira global".
+A §2.4 já disse onde o frame está. A fila abaixo é a mesma decomposição, virada
+em trabalho, do maior alvo para o menor. Nenhuma dessas técnicas é específica de
+água: todas valem para a engine inteira, que é o que você pediu com "aplicado de
+maneira global".
 
-| # | Técnica | Por que ataca o problema medido | Ganho |
-|---|---|---|---|
-| 1 | **Medir em release** | a base é debug; o orçamento de referência é release | desconhecido, mas é o primeiro número honesto |
-| 2 | **Densidade do clipmap ligada ao vento** | KWS2 escala o LOD do chunk pelo vento (`{0.5, 0.75, 1, 1.5, 2, 2.5}` [CITADO]): mar calmo não precisa de malha de tempestade | geometria |
-| 3 | **Perfis de malha de verdade** | KWS2 tem 5 níveis Ultra→VeryLow com contagens explícitas de chunk [CITADO]; a ASTRA tem `clipmapLevels` e pouco mais | geometria |
-| 4 | **Cortar o overdraw da água** | a água é transparente e desenha o frame inteiro; um *depth prepass* de água ou clipe por cobertura remove fragmento que não vai aparecer | fragmento |
-| 5 | **Resolução dinâmica ligada por padrão** | está **desligada** na rodada medida; a engine já tem o controlador | fragmento |
-| 6 | **Escala separada para a água** | o resto da cena a 1,00 e a água a 0,7 é imperceptível em movimento e corta o custo por pixel dela em metade | fragmento |
-| 7 | **Cascatas em ritmos diferentes** | o GodotOceanWaves atualiza cascatas seletivamente para não engasgar; a cascata de 160 m não muda a 120 Hz | compute |
-| 8 | **Refração e reflexão em meia resolução** | é como todo plugin da §1 faz; nenhum roda SSR em resolução nativa | fragmento |
+| # | Alvo medido | Técnica | Por que ataca este alvo |
+|---|---:|---|---|
+| 1 | **12,639 ms** — passe opaco sem a água | **Cortar o overdraw da superfície** | 48% do frame numa cena de 16 draws não é geometria, é a superfície transparente cobrindo a tela. Um *depth prepass* de água, ou clipe por cobertura antes do sombreamento, remove fragmento que nunca vai aparecer. É o maior item da lista por larga margem. |
+| 2 | idem | **Densidade do clipmap ligada ao vento** | KWS2 escala o LOD do chunk pelo vento (`{0.5, 0.75, 1, 1.5, 2, 2.5}` [CITADO]): mar calmo não precisa de malha de tempestade. Menos vértice, menos fragmento. |
+| 3 | idem | **Perfis de malha de verdade** | KWS2 tem 5 níveis Ultra→VeryLow com contagens explícitas de chunk [CITADO]; a ASTRA tem `clipmapLevels` e pouco mais. |
+| 4 | **4,736 ms** — pós-processamento | **Explicar antes de otimizar** | 18% do frame para tonemap, bloom e FXAA, contra 1,10 ms medidos em release na cena de estrada. Ou é custo de debug, ou é bloom em resolução cheia — e isso se descobre com uma rodada, não com uma reescrita. |
+| 5 | **7,493 ms** — shading da água | **Escala de render separada para a água** | O resto da cena a 1,00 e a água a 0,7 é imperceptível em movimento e corta o custo por pixel dela quase pela metade. |
+| 6 | idem | **Resolução dinâmica ligada** | Está **desligada** nas rodadas medidas, e a engine já tem o controlador pronto. |
+| 7 | **1,767 ms** — simulação FFT | **Cascatas em ritmos diferentes** | O menor alvo da lista, e por isso o último. O GodotOceanWaves atualiza cascatas seletivamente; a cascata de 160 m não precisa mudar a 120 Hz. |
+| 8 | custo futuro | **Refração e reflexão em meia resolução** | É como todo plugin da §1 faz; nenhum roda SSR em resolução nativa. Vale fixar isso antes de a §5 item 6 existir, não depois. |
+
+A ordem importa: os itens 1 a 3 atacam 12,639 ms, o item 4 mais 4,736 ms, e só
+então se chega ao shading. Um plano que começasse otimizando o shader da água
+estaria mexendo em 28% do frame e deixando 48% intocado.
 
 ### 7.1 O que "fora do comum" quer dizer, em número
 
@@ -399,11 +405,9 @@ tela e volumétrica a 15%. A régua desta engine é diferente e mais dura:
 > sustentados sem resolução dinâmica; e a 120 Hz com resolução dinâmica dentro
 > da janela [0,7 … 1,0].**
 
-Isso é 16,6 ms no alvo baixo e 8,3 ms no alto, contra **15,575 ms na pose
-travada e 26,662 ms com a câmera livre** [MEDIDO]. Ou seja: o alvo de 60 Hz já
-é alcançado numa pose favorável e perdido numa pose rasante. O trabalho da Fase 1
-não é ganhar um número médio — é **fechar essa distância entre a melhor e a pior
-pose**, que é o que separa "roda" de "roda sempre".
+Isso é 16,6 ms no alvo baixo e 8,3 ms no alto, contra **26,578 ms** [MEDIDO] na
+pose de referência, em debug. Falta cortar 10 ms para 60 Hz e 18,2 ms para
+120 Hz — e a §7 mostra que 12,6 deles estão num único lugar.
 
 É por isso que a §7 vem antes da §5, e não depois.
 
