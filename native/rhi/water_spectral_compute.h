@@ -40,6 +40,8 @@ private:
   VulkanComputeKernel evolve_, inverse_, foam_, pack_;
   VulkanImage slopes_;
   VulkanSampler slopeSampler_;
+  VkImageView slopeStorageView_=VK_NULL_HANDLE;
+  u32 slopeMipLevels_=1;
   bool slopesInitialized_=false;
   bool narrowSlopes_=false;
   u32 resolution_=0;

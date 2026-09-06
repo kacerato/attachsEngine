@@ -33,6 +33,8 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   // casar com a copia em environment_lighting.glsl e com DirtRoadFrameUniform:
   // o bloco e declarado uma vez por estagio e as tres descrevem a mesma memoria.
   vec4 waterRippleArea;
+  // espuma elevada, cobertura, deslocamento micro, comprimento micro
+  vec4 waterSurfaceDetail;
 } environment;
 #ifdef AETHER_WATER_RIPPLES
 #include "water_ripple_sampling.glsl"
@@ -181,6 +183,27 @@ void main() {
       slope+=shape.xy*(shape.z*shape.w*cosine*(1.0+4.0*crest*sine)/normalization);
     }
 #endif
+    // Micro-ondas que ainda cabem na malha participam da silhueta. Abaixo do
+    // Nyquist geométrico elas desaparecem continuamente daqui e permanecem no
+    // fragmento como normal filtrada; isso evita tanto aliasing quanto um anel
+    // abruptamente liso ao redor da câmera.
+    highp float microAmplitude=environment.waterSurfaceDetail.z*
+        environment.waterParameters.w;
+    highp float microBase=max(environment.waterSurfaceDetail.w,0.2);
+    const highp vec2 microDirections[3]=vec2[3](
+        normalize(vec2(.91,.41)),normalize(vec2(-.32,.95)),normalize(vec2(.68,-.73)));
+    const highp float microRatios[3]=float[3](1.0,.63,.39);
+    const highp float microWeights[3]=float[3](.48,.32,.20);
+    for(int microIndex=0;microIndex<3;++microIndex) {
+      highp float wavelength=microBase*microRatios[microIndex];
+      highp float geometryWeight=smoothstep(2.0,5.0,wavelength/max(waterCellSize,.001));
+      highp float waveNumber=6.28318530718/wavelength;
+      highp float phase=waveNumber*dot(microDirections[microIndex],worldPosition.xz)-
+          environment.waterParameters.z*(1.7+float(microIndex)*.43);
+      highp float amplitude=microAmplitude*microWeights[microIndex]*geometryWeight;
+      height+=sin(phase)*amplitude;
+      slope+=microDirections[microIndex]*(cos(phase)*amplitude*waveNumber);
+    }
     int interactionCount=clamp(int(environment.waterInteractionParameters.x+0.5),0,8);
     for(int interactionIndex=0;interactionIndex<interactionCount;++interactionIndex) {
       highp vec4 shape=environment.waterInteractionShape[interactionIndex];
@@ -214,6 +237,18 @@ void main() {
       slope+=sampleWaterRippleSlope(worldPosition.xz,max(waterCellSize,0.25));
     }
 #endif
+    // A película de espuma é aerada e fica acima do plano líquido. Elevar a
+    // própria geometria, em vez de apenas clarear o fragmento, dá espessura à
+    // crista e corrige a silhueta sem deslocar toda a massa d'água.
+#ifdef AETHER_SPECTRAL_WATER
+    highp float elevationFoam=vSpectralFoam;
+#else
+    highp float elevationSlope=length(slope)/max(1.0+length(slope),.001);
+    highp float elevationFoam=smoothstep(environment.waterOptics.w,
+        min(environment.waterOptics.w+.22,1.0),elevationSlope);
+#endif
+    elevationFoam=clamp(elevationFoam*environment.waterSurfaceDetail.y,0.0,1.0);
+    height+=environment.waterSurfaceDetail.x*elevationFoam*elevationFoam;
     worldPosition.y=height;
 #ifdef AETHER_SPECTRAL_WATER
     worldPosition.xz+=horizontal;

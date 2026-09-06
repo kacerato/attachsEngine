@@ -110,8 +110,9 @@ struct DirtRoadFrameUniform {
   // centro x, centro z, lado da área em metros, resolução da grade. Resolução
   // zero significa "não há ondulação" e o vértice pula a leitura inteira.
   float waterRippleArea[4]{};
+  float waterSurfaceDetail[4]{}; // foam elevation/coverage, micro height/wavelength
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 1168);
+static_assert(sizeof(DirtRoadFrameUniform) == 1184);
 
 struct ShadowPushConstants {
   float lightViewProjection[16]{};
@@ -3734,6 +3735,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     frame->waterRippleArea[2] = waterRippleArea_;
     frame->waterRippleArea[3] = waterRippleGain_ > 0.0f
         ? static_cast<float>(waterRippleResolution_) : 0.0f;
+    frame->waterSurfaceDetail[0] = waterShading_.foamElevation;
+    frame->waterSurfaceDetail[1] = waterShading_.foamCoverage;
+    frame->waterSurfaceDetail[2] = waterShading_.microDisplacement;
+    frame->waterSurfaceDetail[3] = waterShading_.microWavelength;
     frame->waterInteractionParameters[0] = static_cast<float>(activeWaterInteractionCount);
     frame->waterInteractionParameters[1] = static_cast<float>(waterCostIsolation_);
     frame->waterInteractionParameters[2] = waterShading_.specularAntialiasing;

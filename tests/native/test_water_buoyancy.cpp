@@ -102,6 +102,8 @@ AE_TEST(Water_runtime_queries_applies_and_emits_contact_with_real_jolt_bodies) {
   AE_EXPECT_TRUE(runtime.events().size() == 1 && runtime.events()[0].phase == WaterContactPhase::Enter,
                  "entry event");
   AE_EXPECT_TRUE(runtime.stats().forces.bodiesSubmerged == 1, "force submitted");
+  AE_EXPECT_TRUE(runtime.submergedFraction(body) > .7f && runtime.submergedFraction(body) < .8f,
+                 "runtime exposes the wet fraction to wake/effects consumers");
   AE_EXPECT_TRUE(!runtime.apply(physics, water, 0), "reject duplicate tick before adding forces twice");
   AetherPhysics_Step(physics, 1.0f / 60, 1);
   AE_EXPECT_TRUE(AetherPhysics_GetLinearVelocity(physics, body).x > 0, "current accelerates real body");
@@ -113,6 +115,7 @@ AE_TEST(Water_runtime_queries_applies_and_emits_contact_with_real_jolt_bodies) {
   AE_EXPECT_TRUE(runtime.events().size() == 1 && runtime.events()[0].phase == WaterContactPhase::Exit,
                  "unload exits contact");
   AE_EXPECT_TRUE(runtime.stats().forces.bodiesSubmerged == 0, "unloaded water applies no force");
+  AE_EXPECT_EQ(runtime.submergedFraction(body),0.0f,"dry body clears wet fraction");
   AE_EXPECT_TRUE(runtime.unbind(body), "scene lifecycle unbind");
   AetherPhysics_DestroyWorld(physics);
 }

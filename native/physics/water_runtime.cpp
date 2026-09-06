@@ -42,6 +42,13 @@ bool WaterRuntime::unbind(AetherBodyHandle body) noexcept {
   return false;
 }
 
+float WaterRuntime::submergedFraction(AetherBodyHandle body) const noexcept {
+  if (body == AetherBodyHandle_Invalid) return 0.0f;
+  for (const auto &slot : slots_)
+    if (slot.binding.body == body) return slot.submergedFraction;
+  return 0.0f;
+}
+
 void WaterRuntime::clear() noexcept {
   for (auto &slot : slots_) slot = {};
   eventCount_ = 0;
@@ -153,6 +160,7 @@ bool WaterRuntime::apply(AetherPhysicsWorld *physics, const renderer::WaterWorld
       }
     }
     const bool sameVolume = slot.wetVolume != renderer::InvalidWaterVolume && slot.wetVolume == query.volume;
+    slot.submergedFraction = fraction;
     const bool wet = query.volume != renderer::InvalidWaterVolume &&
         fraction >= (sameVolume ? settings.exitFraction : settings.enterFraction) && fraction > 0;
     const auto next = wet ? query.volume : renderer::InvalidWaterVolume;

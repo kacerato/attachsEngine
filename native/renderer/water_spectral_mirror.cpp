@@ -40,11 +40,13 @@ bool validateWaterMirrorSettings(const WaterMirrorSettings &settings) noexcept {
   // The mirror exists to be cheap. A resolution that is not cheap defeats the
   // reason it is not a GPU readback in the first place.
   if (settings.spectrum.resolution < 8 || settings.spectrum.resolution > 128) return false;
+  // Effective transforms include cascade authoring (10 / 4) multiplied by
+  // global controls (3 / 2). Validate their product, just like GPU sampling.
   if (!std::isfinite(settings.displacementScale) || settings.displacementScale < 0.0f ||
-      settings.displacementScale > 3.0f)
+      settings.displacementScale > 30.0f)
     return false;
   if (!std::isfinite(settings.choppiness) || settings.choppiness < 0.0f ||
-      settings.choppiness > 2.0f)
+      settings.choppiness > 8.0f)
     return false;
   if (!std::isfinite(settings.directionRadians)) return false;
   return settings.inversionIterations <= 8;

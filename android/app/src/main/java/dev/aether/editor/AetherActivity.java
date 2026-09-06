@@ -14,14 +14,21 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 public final class AetherActivity extends NativeActivity {
+    private static final String WATER_PREFERENCES="water_controls_v3";
     static { System.loadLibrary("aether_android"); }
     private static native int nativeWaterProviderStatus();
+    private static native void nativeApplyVisibilityControls(float solid,float foliage,float transition);
+    private float solidLodError=0,foliageLodError=0,lodTransition=0;
     private static native void nativeApplyControls(float renderScale, int shadowQuality,
         boolean dynamicResolution, float bloomIntensity, float sharpen, float waveHeight,
         float waveSpeed, float waveSteepness, float microWaves, float surfaceOpacity,
         float absorption, float foam, float interactionStrength, float bodyRippleGain, float roughness,
         float turbidity, float ior, float direction, float foamCompression,float foamGrowth,float foamDecay,
-        float specularAntialiasing,float contactFoamWidth,float fluidDensity,boolean waterPaused,
+        float specularAntialiasing,float contactFoamWidth,
+        float foamElevation,float foamCoverage,float microDisplacement,float microWavelength,
+        float wakeStrength,float wakeMinimumSpeed,float wakeSpacing,float wakeWidthScale,
+        float wakeMaximumImpulse,
+        float fluidDensity,boolean waterPaused,
         float swellLength,float directionalSpread,float crossSwell,
         float waterLevel,float longWaveAmplitude,float longWaveLength,
         float spectralWindSpeed,float spectralFetchKm,float spectralDepth,
@@ -32,12 +39,16 @@ public final class AetherActivity extends NativeActivity {
         float nearChoppiness,float midChoppiness,float farChoppiness);
 
     private float renderScale=1, bloom=.08f, sharpen=.12f, waveHeight=1, waveSpeed=1;
-    private float steepness=1, micro=1, opacity=.72f, absorption=1, foam=.65f, interaction=.65f;
+    private float steepness=1, micro=1.6f, opacity=.72f, absorption=1, foam=1.05f, interaction=.65f;
     private float bodyRippleGain=.75f;
     private int shadows=3; private boolean dynamic=true;
     private float roughness=.22f, turbidity=.10f, ior=1.333f, direction=0;
     private float foamCompression=.8f,foamGrowth=4,foamDecay=.5f;
     private float specularAntialiasing=.5f,contactFoamWidth=1.35f;
+    private float foamElevation=.14f,foamCoverage=1.35f;
+    private float microDisplacement=.10f,microWavelength=.85f;
+    private float wakeStrength=1.2f,wakeMinimumSpeed=.1f,wakeSpacing=2,wakeWidthScale=.22f;
+    private float wakeMaximumImpulse=1.2f;
     private float fluidDensity=1400;
     private boolean waterPaused=false;
     private float swellLength=1,directionalSpread=1,crossSwell=0;
@@ -69,6 +80,88 @@ public final class AetherActivity extends NativeActivity {
     }
     private android.widget.PopupWindow toolbarWindow;
     private android.widget.PopupWindow settingsWindow;
+    private ScrollView settingsScroll;
+
+    private float savedWater(android.content.SharedPreferences values,String key,float fallback) {
+        float value=values.getFloat(key,fallback);
+        return Float.isFinite(value)?value:fallback;
+    }
+    private void loadWaterControls() {
+        android.content.SharedPreferences p=getSharedPreferences(WATER_PREFERENCES,MODE_PRIVATE);
+        waveHeight=savedWater(p,"waveHeight",waveHeight); waveSpeed=savedWater(p,"waveSpeed",waveSpeed);
+        steepness=savedWater(p,"steepness",steepness); micro=savedWater(p,"micro",micro);
+        opacity=savedWater(p,"opacity",opacity); absorption=savedWater(p,"absorption",absorption);
+        foam=savedWater(p,"foam",foam); interaction=savedWater(p,"interaction",interaction);
+        bodyRippleGain=savedWater(p,"bodyRippleGain",bodyRippleGain);
+        roughness=savedWater(p,"roughness",roughness); turbidity=savedWater(p,"turbidity",turbidity);
+        ior=savedWater(p,"ior",ior); direction=savedWater(p,"direction",direction);
+        foamCompression=savedWater(p,"foamCompression",foamCompression);
+        foamGrowth=savedWater(p,"foamGrowth",foamGrowth); foamDecay=savedWater(p,"foamDecay",foamDecay);
+        specularAntialiasing=savedWater(p,"specularAntialiasing",specularAntialiasing);
+        contactFoamWidth=savedWater(p,"contactFoamWidth",contactFoamWidth);
+        foamElevation=savedWater(p,"foamElevation",foamElevation);
+        foamCoverage=savedWater(p,"foamCoverage",foamCoverage);
+        microDisplacement=savedWater(p,"microDisplacement",microDisplacement);
+        microWavelength=savedWater(p,"microWavelength",microWavelength);
+        wakeStrength=savedWater(p,"wakeStrength",wakeStrength);
+        wakeMinimumSpeed=savedWater(p,"wakeMinimumSpeed",wakeMinimumSpeed);
+        wakeSpacing=savedWater(p,"wakeSpacing",wakeSpacing);
+        wakeWidthScale=savedWater(p,"wakeWidthScale",wakeWidthScale);
+        wakeMaximumImpulse=savedWater(p,"wakeMaximumImpulse",wakeMaximumImpulse);
+        fluidDensity=savedWater(p,"fluidDensity",fluidDensity);
+        swellLength=savedWater(p,"swellLength",swellLength);
+        directionalSpread=savedWater(p,"directionalSpread",directionalSpread);
+        crossSwell=savedWater(p,"crossSwell",crossSwell); waterLevel=savedWater(p,"waterLevel",waterLevel);
+        longWaveAmplitude=savedWater(p,"longWaveAmplitude",longWaveAmplitude);
+        longWaveLength=savedWater(p,"longWaveLength",longWaveLength);
+        spectralWindSpeed=savedWater(p,"spectralWindSpeed",spectralWindSpeed);
+        spectralFetchKm=savedWater(p,"spectralFetchKm",spectralFetchKm);
+        spectralDepth=savedWater(p,"spectralDepth",spectralDepth);
+        spectralSwell=savedWater(p,"spectralSwell",spectralSwell);
+        spectralSpread=savedWater(p,"spectralSpread",spectralSpread);
+        spectralDamping=savedWater(p,"spectralDamping",spectralDamping);
+        crossWindSpeed=savedWater(p,"crossWindSpeed",crossWindSpeed);
+        crossDirection=savedWater(p,"crossDirection",crossDirection);
+        crossFetchKm=savedWater(p,"crossFetchKm",crossFetchKm);
+        crossSwellShape=savedWater(p,"crossSwellShape",crossSwellShape);
+        crossSpread=savedWater(p,"crossSpread",crossSpread); crossWeight=savedWater(p,"crossWeight",crossWeight);
+        nearDisplacement=savedWater(p,"nearDisplacement",nearDisplacement);
+        midDisplacement=savedWater(p,"midDisplacement",midDisplacement);
+        farDisplacement=savedWater(p,"farDisplacement",farDisplacement);
+        nearChoppiness=savedWater(p,"nearChoppiness",nearChoppiness);
+        midChoppiness=savedWater(p,"midChoppiness",midChoppiness);
+        farChoppiness=savedWater(p,"farChoppiness",farChoppiness);
+    }
+    private void persistWaterControls() {
+        if(!getIntent().getBooleanExtra("aether.ocean_preview",false)) return;
+        getSharedPreferences(WATER_PREFERENCES,MODE_PRIVATE).edit()
+            .putFloat("waveHeight",waveHeight).putFloat("waveSpeed",waveSpeed)
+            .putFloat("steepness",steepness).putFloat("micro",micro)
+            .putFloat("opacity",opacity).putFloat("absorption",absorption)
+            .putFloat("foam",foam).putFloat("interaction",interaction)
+            .putFloat("bodyRippleGain",bodyRippleGain).putFloat("roughness",roughness)
+            .putFloat("turbidity",turbidity).putFloat("ior",ior).putFloat("direction",direction)
+            .putFloat("foamCompression",foamCompression).putFloat("foamGrowth",foamGrowth)
+            .putFloat("foamDecay",foamDecay).putFloat("specularAntialiasing",specularAntialiasing)
+            .putFloat("contactFoamWidth",contactFoamWidth).putFloat("foamElevation",foamElevation)
+            .putFloat("foamCoverage",foamCoverage).putFloat("microDisplacement",microDisplacement)
+            .putFloat("microWavelength",microWavelength).putFloat("wakeStrength",wakeStrength)
+            .putFloat("wakeMinimumSpeed",wakeMinimumSpeed).putFloat("wakeSpacing",wakeSpacing)
+            .putFloat("wakeWidthScale",wakeWidthScale).putFloat("wakeMaximumImpulse",wakeMaximumImpulse)
+            .putFloat("fluidDensity",fluidDensity).putFloat("swellLength",swellLength)
+            .putFloat("directionalSpread",directionalSpread).putFloat("crossSwell",crossSwell)
+            .putFloat("waterLevel",waterLevel).putFloat("longWaveAmplitude",longWaveAmplitude)
+            .putFloat("longWaveLength",longWaveLength).putFloat("spectralWindSpeed",spectralWindSpeed)
+            .putFloat("spectralFetchKm",spectralFetchKm).putFloat("spectralDepth",spectralDepth)
+            .putFloat("spectralSwell",spectralSwell).putFloat("spectralSpread",spectralSpread)
+            .putFloat("spectralDamping",spectralDamping).putFloat("crossWindSpeed",crossWindSpeed)
+            .putFloat("crossDirection",crossDirection).putFloat("crossFetchKm",crossFetchKm)
+            .putFloat("crossSwellShape",crossSwellShape).putFloat("crossSpread",crossSpread)
+            .putFloat("crossWeight",crossWeight).putFloat("nearDisplacement",nearDisplacement)
+            .putFloat("midDisplacement",midDisplacement).putFloat("farDisplacement",farDisplacement)
+            .putFloat("nearChoppiness",nearChoppiness).putFloat("midChoppiness",midChoppiness)
+            .putFloat("farChoppiness",farChoppiness).apply();
+    }
 
     @Override protected void onNewIntent(android.content.Intent intent) {
         super.onNewIntent(intent);
@@ -100,10 +193,14 @@ public final class AetherActivity extends NativeActivity {
         text.setPadding(0,dp(14),0,dp(5)); return text;
     }
     private void apply() {
+        nativeApplyVisibilityControls(solidLodError,foliageLodError,lodTransition);
         nativeApplyControls(renderScale,shadows,dynamic,bloom,sharpen,waveHeight,waveSpeed,
                             steepness,micro,opacity,absorption,foam,interaction,bodyRippleGain,
                             roughness,turbidity,ior,direction,foamCompression,foamGrowth,foamDecay,
-                            specularAntialiasing,contactFoamWidth,fluidDensity,waterPaused,
+                            specularAntialiasing,contactFoamWidth,
+                            foamElevation,foamCoverage,microDisplacement,microWavelength,
+                            wakeStrength,wakeMinimumSpeed,wakeSpacing,wakeWidthScale,wakeMaximumImpulse,
+                            fluidDensity,waterPaused,
                             swellLength,directionalSpread,crossSwell,
                             waterLevel,longWaveAmplitude,longWaveLength,
                             spectralWindSpeed,spectralFetchKm,spectralDepth,
@@ -143,11 +240,15 @@ public final class AetherActivity extends NativeActivity {
                 }
             }
             public void onStartTrackingTouch(SeekBar bar) {}
-            public void onStopTrackingTouch(SeekBar bar) { if(!live) apply(); }
+            public void onStopTrackingTouch(SeekBar bar) { if(!live) apply(); persistWaterControls(); }
         }); row.addView(seek,new LinearLayout.LayoutParams(-1,dp(48))); return row;
     }
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        android.content.SharedPreferences visibility=getSharedPreferences("render_visibility_v1",MODE_PRIVATE);
+        solidLodError=savedWater(visibility,"solidError",0);
+        foliageLodError=savedWater(visibility,"foliageError",0);
+        lodTransition=savedWater(visibility,"transition",0);
         // Test-scene defaults, not renderer policy: the user can change every
         // axis live. Keep the forest's existing defaults untouched.
         if(getIntent().getBooleanExtra("aether.ocean_preview",false)) {
@@ -155,6 +256,7 @@ public final class AetherActivity extends NativeActivity {
             waveHeight=3;
             crossSwell=.3f;
             roughness=.14f;
+            loadWaterControls();
         }
         // Diagnostic launch overrides are authoritative in the native policy.
         // Reflect them here instead of displaying editable values ignored by it.
@@ -172,10 +274,20 @@ public final class AetherActivity extends NativeActivity {
         settings.setOnClickListener(view -> {
             refreshWaterProvider();
             if (settingsWindow.isShowing()) settingsWindow.dismiss();
-            else settingsWindow.showAtLocation(getWindow().getDecorView(), Gravity.TOP|Gravity.END, dp(12), dp(72));
+            else {
+                // A raiz recebe o foco, não um SeekBar arbitrário. Isso impede
+                // o Android de rolar até um slider e evita um painel que parece
+                // ter perdido as configurações acima dele.
+                settingsScroll.scrollTo(0,0);
+                settingsScroll.requestFocus();
+                settingsWindow.showAtLocation(getWindow().getDecorView(), Gravity.TOP|Gravity.END, dp(12), dp(72));
+                settingsScroll.post(() -> settingsScroll.scrollTo(0,0));
+            }
         });
 
         ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true);
+        settingsScroll=scroll;
+        settingsScroll.setFocusableInTouchMode(true);
         panel=new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(18),dp(12),dp(18),dp(18)); panel.setBackground(background(Color.argb(244,18,24,27),12));
         panel.addView(heading("RENDERIZAÇÃO"));
@@ -189,6 +301,11 @@ public final class AetherActivity extends NativeActivity {
         drs.setEnabled(!fixedDynamic);
         panel.addView(slider("Bloom",0,1,bloom,v->bloom=v));
         panel.addView(slider("Nitidez",0,1,sharpen,v->sharpen=v));
+        panel.addView(heading("DETALHE À DISTÂNCIA · GLOBAL"));
+        panel.addView(heading("0 herda projeto · menor erro preserva mais detalhe"));
+        panel.addView(deferredSlider("Erro geométrico · pixels",0,16,solidLodError,v->solidLodError=v));
+        panel.addView(deferredSlider("Erro de vegetação · pixels",0,128,foliageLodError,v->foliageLodError=v));
+        panel.addView(deferredSlider("Margem de transição LOD",0,.99f,lodTransition,v->lodTransition=v));
         if(getIntent().getBooleanExtra("aether.ocean_preview",false)) {
         boolean spectral=getIntent().getBooleanExtra("aether.water_fft",false);
         panel.addView(heading("ÁGUA / ONDAS GPU"));
@@ -235,7 +352,11 @@ public final class AetherActivity extends NativeActivity {
         panel.addView(slider("Velocidade · multiplicador",0,3,waveSpeed,v->waveSpeed=v));
         panel.addView(slider("Direção do espectro · graus",-180,180,direction,v->direction=v));
         panel.addView(slider("Inclinação / cristas",0,2,steepness,v->steepness=v));
-        panel.addView(slider("Micro-ondas",0,3,micro,v->micro=v));
+        panel.addView(slider("Micro-ondas · normal",0,4,micro,v->micro=v));
+        panel.addView(slider("Relevo micro geométrico · metros",0,1,microDisplacement,
+            v->microDisplacement=v));
+        panel.addView(slider("Comprimento do relevo micro · metros",.2f,8,microWavelength,
+            v->microWavelength=v));
         panel.addView(heading("ÓPTICA / MATERIAL"));
         panel.addView(slider("Rugosidade",.025f,1,roughness,v->roughness=v));
         panel.addView(slider("Filtro de brilho especular",0,1,specularAntialiasing,v->specularAntialiasing=v));
@@ -244,7 +365,10 @@ public final class AetherActivity extends NativeActivity {
         panel.addView(slider("Opacidade da água",.05f,1,opacity,v->opacity=v));
         panel.addView(slider("Absorção por profundidade",.1f,4,absorption,v->absorption=v));
         panel.addView(heading("ESPUMA / INTERAÇÃO"));
-        panel.addView(slider("Espuma",0,2,foam,v->foam=v));
+        panel.addView(slider("Espuma · intensidade",0,3,foam,v->foam=v));
+        panel.addView(slider("Cobertura da espuma",0,4,foamCoverage,v->foamCoverage=v));
+        panel.addView(slider("Elevação física visual da espuma · metros",0,1,foamElevation,
+            v->foamElevation=v));
         panel.addView(slider("Espuma de contato · largura em metros",0,10,contactFoamWidth,v->contactFoamWidth=v));
         if(spectral) {
             spectralFoamControls=new LinearLayout(this); spectralFoamControls.setOrientation(LinearLayout.VERTICAL);
@@ -257,6 +381,16 @@ public final class AetherActivity extends NativeActivity {
         panel.addView(slider("Força da interação",0,2,interaction,v->interaction=v));
         panel.addView(slider("Resposta da água aos corpos",0,4,bodyRippleGain,
             v->bodyRippleGain=v));
+        panel.addView(heading("ESTEIRA NAVAL · EMISSÃO POR DISTÂNCIA"));
+        panel.addView(slider("Força da esteira",0,8,wakeStrength,v->wakeStrength=v));
+        panel.addView(slider("Velocidade mínima da esteira · m/s",0,10,wakeMinimumSpeed,
+            v->wakeMinimumSpeed=v));
+        panel.addView(slider("Espaçamento entre seções · metros",.5f,100,wakeSpacing,
+            v->wakeSpacing=v));
+        panel.addView(slider("Largura relativa da esteira",.05f,2,wakeWidthScale,
+            v->wakeWidthScale=v));
+        panel.addView(slider("Limite de impulso da esteira · metros",.05f,5,wakeMaximumImpulse,
+            v->wakeMaximumImpulse=v));
         TextView hint=heading("Toque curto na água gera uma onda local.");
         panel.addView(hint);
         }
@@ -282,6 +416,10 @@ public final class AetherActivity extends NativeActivity {
     }
 
     @Override protected void onPause() {
+        getSharedPreferences("render_visibility_v1",MODE_PRIVATE).edit()
+            .putFloat("solidError",solidLodError).putFloat("foliageError",foliageLodError)
+            .putFloat("transition",lodTransition).apply();
+        persistWaterControls();
         if(settingsWindow!=null) settingsWindow.dismiss();
         if(toolbarWindow!=null) toolbarWindow.dismiss();
         super.onPause();

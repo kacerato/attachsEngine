@@ -58,11 +58,13 @@ public:
              renderer::WaterRippleField *ripples = nullptr) noexcept;
   std::span<const WaterContactEvent> events() const noexcept { return {events_.data(), eventCount_}; }
   WaterRuntimeStats stats() const noexcept { return stats_; }
+  float submergedFraction(AetherBodyHandle body) const noexcept;
 
 private:
   struct Slot final {
     WaterBodyBinding binding{};
     renderer::WaterVolumeId wetVolume = renderer::InvalidWaterVolume;
+    float submergedFraction = 0.0f;
   };
   std::array<Slot, Capacity> slots_{};
   // Switching volumes can generate an exit and an enter for each body.

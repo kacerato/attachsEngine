@@ -6,6 +6,7 @@
 #include "rhi/shaders/water_slope_pack_wide_spirv.h"
 #include <cmath>
 #include <cstring>
+#include <bit>
 
 namespace ae::rhi {
 bool VulkanWaterSpectralCompute::initialize(VulkanMemoryAllocator &allocator,
@@ -15,7 +16,8 @@ bool VulkanWaterSpectralCompute::initialize(VulkanMemoryAllocator &allocator,
   shutdown();
   if(physicalDevice==VK_NULL_HANDLE) return false;
   constexpr VkFormatFeatureFlags required=VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT|
-    VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+    VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT|VK_FORMAT_FEATURE_BLIT_SRC_BIT|
+    VK_FORMAT_FEATURE_BLIT_DST_BIT;
   const auto supports=[&](VkFormat candidate) {
     VkFormatProperties properties{};
     vkGetPhysicalDeviceFormatProperties(physicalDevice,candidate,&properties);
@@ -24,7 +26,7 @@ bool VulkanWaterSpectralCompute::initialize(VulkanMemoryAllocator &allocator,
   // Two slope scalars per texel, read once per cascade per water fragment. The
   // narrow format is preferred for bandwidth; the wide one is a real fallback
   // with its own kernel, not a silent quality change.
-  const bool narrowSlopes=!preferWideSlopes && supports(VK_FORMAT_R16G16_SFLOAT);
+  const bool narrowSlopes=!preferWideSlopes && supports(VK_FORMAT_R16G16B16A16_SFLOAT);
   if(!narrowSlopes && !supports(VK_FORMAT_R32G32B32A32_SFLOAT)) return false;
   const u64 count=static_cast<u64>(resolution)*resolution;
   if(!allocator.isReady() || resolution<8 || resolution>256 ||
@@ -66,10 +68,21 @@ bool VulkanWaterSpectralCompute::initialize(VulkanMemoryAllocator &allocator,
   if(!foam_.initialize(allocator.device(),limits,kernel) ||
      !foam_.writeBuffer(0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,output_)) { shutdown(); return false; }
   ImageDesc image{}; image.width=resolution; image.height=resolution;
-  image.format=narrowSlopes?VK_FORMAT_R16G16_SFLOAT:VK_FORMAT_R32G32B32A32_SFLOAT;
+  image.format=narrowSlopes?VK_FORMAT_R16G16B16A16_SFLOAT:VK_FORMAT_R32G32B32A32_SFLOAT;
   image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
-  image.usage=VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
-  if(!allocator.createImage(image,&slopes_) || !slopeSampler_.initialize(allocator.device(),{})) { shutdown(); return false; }
+  image.usage=VK_IMAGE_USAGE_STORAGE_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|
+      VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  image.mipLevels=std::bit_width(resolution);
+  slopeMipLevels_=image.mipLevels;
+  SamplerDesc sampler{}; sampler.maxLod=static_cast<float>(image.mipLevels-1);
+  if(!allocator.createImage(image,&slopes_) || !slopeSampler_.initialize(allocator.device(),sampler)) { shutdown(); return false; }
+  VkImageViewCreateInfo storageView{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+  storageView.image=slopes_.handle(); storageView.viewType=VK_IMAGE_VIEW_TYPE_2D;
+  storageView.format=image.format;
+  storageView.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
+  if(vkCreateImageView(allocator.device(),&storageView,nullptr,&slopeStorageView_)!=VK_SUCCESS) {
+    shutdown(); return false;
+  }
   const ComputeBindingDesc packing[]={{0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1},{1,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,1}};
   kernel.spirv=narrowSlopes?shaders::kWater_Slope_PackCompSpirv:shaders::kWater_Slope_Pack_WideCompSpirv;
   kernel.spirvBytes=narrowSlopes?shaders::kWater_Slope_PackCompSpirvSize
@@ -77,7 +90,7 @@ bool VulkanWaterSpectralCompute::initialize(VulkanMemoryAllocator &allocator,
   kernel.bindings=packing; kernel.bindingCount=2; kernel.pushConstantBytes=0; kernel.debugName="WaterSlopePack";
   if(!pack_.initialize(allocator.device(),limits,kernel) ||
      !pack_.writeBuffer(0,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,output_) ||
-     !pack_.writeImage(1,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,slopes_.view(),VK_IMAGE_LAYOUT_GENERAL)) { shutdown(); return false; }
+     !pack_.writeImage(1,VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,slopeStorageView_,VK_IMAGE_LAYOUT_GENERAL)) { shutdown(); return false; }
   resolution_=resolution; patchLength_=patchLength; narrowSlopes_=narrowSlopes;
   return true;
 }
@@ -85,7 +98,11 @@ bool VulkanWaterSpectralCompute::initialize(VulkanMemoryAllocator &allocator,
 void VulkanWaterSpectralCompute::shutdown() {
   evolve_.shutdown(); inverse_.shutdown(); foam_.shutdown(); output_.reset(); initial_.reset(); resolution_=0;
   historyValid_=false; previousTime_=0;
-  pack_.shutdown(); slopes_.reset(); slopeSampler_.shutdown(); slopesInitialized_=false; narrowSlopes_=false;
+  pack_.shutdown();
+  if(slopeStorageView_!=VK_NULL_HANDLE && allocator_!=nullptr)
+    vkDestroyImageView(allocator_->device(),slopeStorageView_,nullptr);
+  slopeStorageView_=VK_NULL_HANDLE; slopeMipLevels_=1;
+  slopes_.reset(); slopeSampler_.shutdown(); slopesInitialized_=false; narrowSlopes_=false;
   allocator_=nullptr;
 }
 
@@ -136,8 +153,34 @@ bool VulkanWaterSpectralCompute::record(VkCommandBuffer commandBuffer,float time
     slopesInitialized_?VK_ACCESS_SHADER_READ_BIT:0,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT);
   cmdComputeMemoryBarrier(commandBuffer,VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT);
   if(!pack_.recordDispatch(commandBuffer,{(resolution_+7)/8,(resolution_+7)/8,1})) return false;
-  cmdComputeImageBarrier(commandBuffer,slopes_.handle(),range,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT);
+  cmdComputeImageBarrier(commandBuffer,slopes_.handle(),range,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_READ_BIT);
+  for(u32 mip=1;mip<slopeMipLevels_;++mip) {
+    const VkImageSubresourceRange destination{VK_IMAGE_ASPECT_COLOR_BIT,mip,1,0,1};
+    cmdComputeImageBarrier(commandBuffer,slopes_.handle(),destination,
+      slopesInitialized_?VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:VK_IMAGE_LAYOUT_UNDEFINED,
+      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      slopesInitialized_?VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT:VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+      slopesInitialized_?VK_ACCESS_SHADER_READ_BIT:0,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT);
+    VkImageBlit blit{};
+    blit.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,mip-1,0,1};
+    blit.dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,mip,0,1};
+    const int sourceSize=static_cast<int>(resolution_>>(mip-1));
+    const int targetSize=static_cast<int>(resolution_>>mip);
+    blit.srcOffsets[1]={sourceSize,sourceSize,1};
+    blit.dstOffsets[1]={targetSize,targetSize,1};
+    vkCmdBlitImage(commandBuffer,slopes_.handle(),VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        slopes_.handle(),VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&blit,VK_FILTER_LINEAR);
+    cmdComputeImageBarrier(commandBuffer,slopes_.handle(),destination,
+      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+      VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_WRITE_BIT,
+      VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_READ_BIT);
+  }
+  const VkImageSubresourceRange fullRange{VK_IMAGE_ASPECT_COLOR_BIT,0,slopeMipLevels_,0,1};
+  cmdComputeImageBarrier(commandBuffer,slopes_.handle(),fullRange,
+    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    VK_PIPELINE_STAGE_TRANSFER_BIT,VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT,
+    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_ACCESS_SHADER_READ_BIT);
   slopesInitialized_=true;
   cmdComputeBufferBarrier(commandBuffer,output_.handle(),0,output_.sizeBytes(),
     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,VK_ACCESS_SHADER_WRITE_BIT,

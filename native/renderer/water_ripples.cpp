@@ -244,4 +244,86 @@ double WaterRippleField::totalEnergy() const noexcept {
   return total;
 }
 
+bool validateWaterWakeSettings(const WaterWakeSettings &settings) noexcept {
+  return finite(settings.strength) && settings.strength >= 0.0f && settings.strength <= 8.0f &&
+      finite(settings.minimumSpeed) && settings.minimumSpeed >= 0.0f &&
+      settings.minimumSpeed <= 50.0f && finite(settings.spacing) && settings.spacing >= .5f &&
+      settings.spacing <= 100.0f && finite(settings.widthScale) && settings.widthScale >= .05f &&
+      settings.widthScale <= 2.0f && finite(settings.maximumImpulse) &&
+      settings.maximumImpulse > 0.0f && settings.maximumImpulse <= 5.0f;
+}
+
+bool WaterWakeEmitter::configure(const WaterWakeSettings &settings) noexcept {
+  if (!validateWaterWakeSettings(settings)) return false;
+  settings_ = settings;
+  configured_ = true;
+  return true;
+}
+
+void WaterWakeEmitter::reset() noexcept {
+  distanceRemainder_ = 0.0f;
+  emittedSections_ = 0;
+}
+
+bool WaterWakeEmitter::update(const WaterWakeInput &input, WaterRippleField &field) noexcept {
+  if (!configured_ || !field.isReady() || !finite(input.position.x) ||
+      !finite(input.position.y) || !finite(input.forward.x) || !finite(input.forward.y) ||
+      !finite(input.velocity.x) || !finite(input.velocity.y) || !finite(input.halfLength) ||
+      !finite(input.halfWidth) || !finite(input.submergedFraction) ||
+      !finite(input.deltaSeconds) || input.halfLength <= 0.0f || input.halfWidth <= 0.0f ||
+      input.submergedFraction < 0.0f || input.submergedFraction > 1.0f ||
+      input.deltaSeconds < 0.0f) return false;
+
+  const float forwardLength = std::hypot(input.forward.x, input.forward.y);
+  if (!(forwardLength > 1.0e-5f)) return false;
+  const WaterVec2 forward{input.forward.x / forwardLength, input.forward.y / forwardLength};
+  const WaterVec2 right{forward.y, -forward.x};
+  const float signedSpeed = input.velocity.x * forward.x + input.velocity.y * forward.y;
+  const float speed = std::abs(signedSpeed);
+  if (settings_.strength == 0.0f || input.submergedFraction == 0.0f ||
+      speed < settings_.minimumSpeed || input.deltaSeconds == 0.0f) return true;
+
+  distanceRemainder_ += speed * input.deltaSeconds;
+  // Um frame longo não pode preencher toda a grade. As seções restantes ficam
+  // no acumulador e saem nos próximos frames, preservando densidade espacial.
+  constexpr u32 MaximumSectionsPerUpdate = 8;
+  // O mesmo metro integrado em 60 ou 120 floats pode terminar poucos ulps
+  // abaixo da fronteira. A tolerância é relativa ao espaçamento e não cria
+  // uma seção antecipada observável (máximo 0,01%).
+  const u32 available = static_cast<u32>((distanceRemainder_ +
+      settings_.spacing * 1.0e-4f) / settings_.spacing);
+  const u32 sections = std::min(available, MaximumSectionsPerUpdate);
+  if (sections == 0) return true;
+  distanceRemainder_ = std::max(0.0f,distanceRemainder_ -
+      static_cast<float>(sections) * settings_.spacing);
+  distanceRemainder_ = std::min(distanceRemainder_, settings_.spacing * 8.0f);
+
+  const float cellSize = field.settings().areaSize /
+                         static_cast<float>(field.settings().resolution);
+  const float radius = std::max(cellSize * 1.5f, input.halfWidth * settings_.widthScale);
+  const float amplitude = std::min(settings_.maximumImpulse,
+      speed * .025f * settings_.strength * input.submergedFraction);
+  const float travelSign = signedSpeed >= 0.0f ? 1.0f : -1.0f;
+  const WaterVec2 travel{forward.x * travelSign, forward.y * travelSign};
+  for (u32 section = 0; section < sections; ++section) {
+    const float trail = distanceRemainder_ + static_cast<float>(section) * settings_.spacing;
+    const WaterVec2 centre{input.position.x - travel.x * trail,
+                           input.position.y - travel.y * trail};
+    const WaterVec2 bow{centre.x + travel.x * input.halfLength * .82f,
+                        centre.y + travel.y * input.halfLength * .82f};
+    const WaterVec2 stern{centre.x - travel.x * input.halfLength * .78f,
+                          centre.y - travel.y * input.halfLength * .78f};
+    field.addImpulse(bow.x, bow.y, radius * 1.25f, amplitude * .55f);
+    field.addImpulse(stern.x, stern.y, radius, -amplitude);
+    field.addImpulse(stern.x + right.x * input.halfWidth * .72f,
+                     stern.y + right.y * input.halfWidth * .72f,
+                     radius, amplitude * .48f);
+    field.addImpulse(stern.x - right.x * input.halfWidth * .72f,
+                     stern.y - right.y * input.halfWidth * .72f,
+                     radius, amplitude * .48f);
+  }
+  emittedSections_ += sections;
+  return true;
+}
+
 } // namespace ae::renderer

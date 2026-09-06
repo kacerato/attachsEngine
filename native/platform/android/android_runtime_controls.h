@@ -16,13 +16,16 @@ struct AndroidRuntimeControls final {
   bool dynamicResolution = true;
   float bloomIntensity = 0.08f;
   float sharpen = 0.12f;
+  // Zero inherits the project policy; display-pixel budgets are independent
+  // from resolution scale and do not shorten world visibility.
+  float solidLodError = 0, foliageLodError = 0, lodTransition = 0;
   float waveHeight = 1.0f;
   float waveSpeed = 1.0f;
   float waveSteepness = 1.0f;
-  float microWaves = 1.0f;
+  float microWaves = 1.6f;
   float surfaceOpacity = 0.72f;
   float absorption = 1.0f;
-  float foam = 0.65f;
+  float foam = 1.05f;
   float interactionStrength = 0.65f;
   // Ganho corpo->grade. Independente da onda analítica de toque: um autor
   // pode querer interação tátil forte sem fazer cada casco abrir uma cratera.
@@ -33,6 +36,10 @@ struct AndroidRuntimeControls final {
   float waveDirectionDegrees = 0.0f;
   float foamCompression=.8f, foamGrowth=4, foamDecay=.5f;
   float specularAntialiasing=.5f, contactFoamWidth=1.35f;
+  float foamElevation=.14f, foamCoverage=1.35f;
+  float microDisplacement=.10f, microWavelength=.85f;
+  float wakeStrength=1.2f, wakeMinimumSpeed=.1f, wakeSpacing=2.0f;
+  float wakeWidthScale=.22f, wakeMaximumImpulse=1.2f;
   float fluidDensity=1400;
   bool waterPaused=false;
   float swellLength=1, directionalSpread=1, crossSwell=0;

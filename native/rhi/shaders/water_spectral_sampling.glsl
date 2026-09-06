@@ -3,13 +3,13 @@ layout(set=1,binding=11) uniform sampler2D slope0;
 layout(set=1,binding=12) uniform sampler2D slope1;
 layout(set=1,binding=13) uniform sampler2D slope2;
 layout(set=1,binding=14) uniform sampler2D slope3;
-vec2 sampleWaterSlope(int cascade,vec2 position,uint n) {
+vec4 sampleWaterSurface(int cascade,vec2 position,uint n,vec2 dx,vec2 dy) {
   // FFT samples lie on grid nodes, textures on texel centres.
   vec2 uv=position+vec2(.5/float(n));
-  if(cascade==0) return textureLod(slope0,uv,0).rg;
-  if(cascade==1) return textureLod(slope1,uv,0).rg;
-  if(cascade==2) return textureLod(slope2,uv,0).rg;
-  return textureLod(slope3,uv,0).rg;
+  if(cascade==0) return textureGrad(slope0,uv,dx,dy);
+  if(cascade==1) return textureGrad(slope1,uv,dx,dy);
+  if(cascade==2) return textureGrad(slope2,uv,dx,dy);
+  return textureGrad(slope3,uv,dx,dy);
 }
 #endif
 

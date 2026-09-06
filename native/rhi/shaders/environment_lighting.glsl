@@ -33,6 +33,7 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   // centro x, centro z, lado da area em metros, resolucao da grade. Resolucao
   // zero significa que nao ha ondulacao e o vertice pula a leitura inteira.
   vec4 waterRippleArea;
+  vec4 waterSurfaceDetail; // foam elevation/coverage, micro height/wavelength
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 // sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de

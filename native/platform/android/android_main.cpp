@@ -257,12 +257,18 @@ void applyRuntimeControls(AndroidShell &shell) {
     __android_log_print(ANDROID_LOG_ERROR,LogTag,"[RuntimeControls] controles espectrais recusados.");
   if (!shell.instancedRenderer.setWaterProfile(water,controls.waterLevel))
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[RuntimeControls] perfil de água recusado.");
-  if (!shell.instancedRenderer.setWaterShading({controls.specularAntialiasing, controls.contactFoamWidth}))
+  if (!shell.instancedRenderer.setWaterShading({controls.specularAntialiasing,
+      controls.contactFoamWidth, controls.foamElevation, controls.foamCoverage,
+      controls.microDisplacement, controls.microWavelength}))
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[RuntimeControls] shading de água recusado.");
 
   if (!shell.renderingCapabilitiesReady || !shell.instancedRendererReady) return;
+  auto requestedSettings=shell.renderingSettings;
+  if(controls.solidLodError>0) requestedSettings.lodPixelErrorBudget=controls.solidLodError;
+  if(controls.foliageLodError>0) requestedSettings.coverageLodPixelErrorBudget=controls.foliageLodError;
+  if(controls.lodTransition>0) requestedSettings.lodHysteresisBandRatio=controls.lodTransition;
   auto policy = ae::renderer::resolveRenderingPolicy(
-      shell.renderingSettings, shell.renderingCapabilities, shell.thermalMonitor.state().pressure);
+      requestedSettings, shell.renderingCapabilities, shell.thermalMonitor.state().pressure);
   // Uma opção de lançamento é override de diagnóstico: se o painel puder
   // sobrescrevê-la, toda medição feita com ela é inválida sem aviso. Foi
   // exatamente assim que as capturas do oceano ficaram presas em escala 0,5,
@@ -1365,8 +1371,13 @@ void android_main(android_app *app) {
                                     std::chrono::steady_clock::now() - shell.shellStartTime)
                                     .count();
       const auto waterControls=ae::platform::android::runtimeControlsSnapshot();
+      const ae::renderer::WaterWakeSettings wakeSettings{
+          waterControls.wakeStrength, waterControls.wakeMinimumSpeed,
+          waterControls.wakeSpacing, waterControls.wakeWidthScale,
+          waterControls.wakeMaximumImpulse};
       if (shell.oceanPreview && !shell.oceanValidation.update(shell.instancedRenderer,timeSeconds,timeSeconds,
-          waterControls.fluidDensity,waterControls.waterPaused,waterControls.bodyRippleGain)) {
+          waterControls.fluidDensity,waterControls.waterPaused,waterControls.bodyRippleGain,
+          wakeSettings)) {
         __android_log_print(ANDROID_LOG_ERROR,LogTag,"[OceanValidation] simulation update failed");
       }
       shell.waterTimeSeconds = timeSeconds;

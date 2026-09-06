@@ -29,7 +29,7 @@ AE_TEST(Water_mirror_rejects_settings_that_defeat_its_purpose) {
   AE_EXPECT_TRUE(!mirror.isReady(), "a rejected mirror is not ready");
 
   settings = mirrorSettings();
-  settings.choppiness = 5.0f;
+  settings.choppiness = 9.0f;
   AE_EXPECT_TRUE(!validateWaterMirrorSettings(settings), "choppiness stays inside its envelope");
 
   settings = mirrorSettings();
@@ -215,4 +215,21 @@ AE_TEST(Water_mirror_set_combines_every_gpu_band_before_world_column_inversion) 
   AE_EXPECT_TRUE(!mirrors.setControls(invalid), "invalid live edit is rejected");
   AE_EXPECT_TRUE(mirrors.controls().displacement == doubled.displacement,
                  "rejection preserves the previous complete control state");
+}
+
+AE_TEST(Water_mirror_accepts_composed_cascade_and_global_gains) {
+  auto cascades=defaultWaterCascadeSettings();
+  for(auto &cascade:cascades) {
+    cascade.displacementScale=10.0f;
+    cascade.choppiness=4.0f;
+  }
+  WaterSpectralControls controls{};
+  controls.displacement=3.0f;
+  controls.choppiness=2.0f;
+  WaterSpectralMirrorSet mirrors;
+  AE_EXPECT_TRUE(mirrors.initialize(cascades,controls,{}),
+                 "physics accepts the same composed gains as rendering");
+  AE_EXPECT_TRUE(mirrors.update(.25),"composed field evaluates");
+  const auto sample=mirrors.sample({17,-9});
+  AE_EXPECT_TRUE(std::isfinite(sample.height),"query remains finite");
 }

@@ -48,7 +48,7 @@ bool InstancedRenderer::createSpectralWaterResources() {
   std::vector<VkQueueFamilyProperties> families(familyCount);
   vkGetPhysicalDeviceQueueFamilyProperties(rhiDevice_->physicalDevice(),&familyCount,families.data());
   bool ready=(families[rhiDevice_->graphicsQueueFamily()].queueFlags&VK_QUEUE_COMPUTE_BIT)!=0 &&
-      properties.limits.maxPerStageDescriptorStorageBuffers>=4 &&
+      properties.limits.maxPerStageDescriptorStorageBuffers>=5 &&
       properties.limits.maxPerStageDescriptorSamplers>=9 &&
       properties.limits.maxPerStageDescriptorSampledImages>=9;
   for(usize cascade=0;ready && cascade<spectra.size();++cascade) {

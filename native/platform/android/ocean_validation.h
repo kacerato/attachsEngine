@@ -23,10 +23,12 @@ public:
     spectralMirrors_.clear();
     spectralMirrorConfigured_ = false;
     spectralMirrorRevision_ = 0;
+    wakeEmitter_.reset();
     boatDraws_.clear();
   }
   bool update(InstancedRenderer &renderer, double wallTime, float &renderTime,
-              float density, bool paused, float bodyRippleGain) {
+              float density, bool paused, float bodyRippleGain,
+              const renderer::WaterWakeSettings &wakeSettings) {
     const bool spectral = renderer.waterProviderStatus() == 2;
     if (spectral) {
       if (!spectralMirrorConfigured_ ||
@@ -67,30 +69,37 @@ public:
       settings.water.forces.fluidDensity = 1400;
       if (!simulation_.configure(settings)) return false;
       for (u32 i=0;i<4;++i) {
-        const float widths[4]={2,3,1.5f,4.4f}, heights[4]={1.5f,1,2,2.4f}, depths[4]={2,2,1.5f,16};
+        // A embarcação foi aumentada uniformemente 15x no asset cozido. O
+        // proxy, a área de arrasto e a pegada das sondagens crescem juntos;
+        // aumentar só a malha produziria um navio de 300 m boiando como bote.
+        const float widths[4]={2,3,1.5f,4.4f*BoatScale};
+        const float heights[4]={1.5f,1,2,2.4f*BoatScale};
+        const float depths[4]={2,2,1.5f,16*BoatScale};
         extents_[i]={widths[i]*.5f,heights[i]*.5f,depths[i]*.5f};
         AetherBodyDesc desc{};
         desc.shape.kind=AetherShapeKind::Box; desc.shape.boxHalfExtent=extents_[i];
         desc.position={static_cast<float>(static_cast<int>(i)*5-5),2,-10};
-        if(i==3) desc.position={0,2,10};
+        if(i==3) desc.position={0,2,BoatPositionZ};
         desc.rotation={0,0,0,1}; desc.motionType=AetherMotionType::Dynamic;
         bodies_[i]=AetherPhysics_CreateBody(physics_,&desc);
         // A wave-driven validation body must keep reacting to changing fluid
         // density. This sample opts out of sleep; global engine defaults stay.
         if(!AetherPhysics_SetAllowSleepingV2(physics_,bodies_[i],0)) return false;
         if (!simulation_.bind({bodies_[i],{physics::BuoyantShapeKind::Box,extents_[i]},widths[i]*depths[i]})) return false;
+        if(i==3) AetherPhysics_SetLinearVelocity(physics_,bodies_[i],{0,0,8});
       }
     }
     if (!ripples_.isReady()) {
       renderer::WaterRippleSettings rippleSettings{};
       // Área modesta em volta dos corpos: ondulação de impacto só é legível de
       // perto, e área grande gasta resolução onde o espectro já entrega detalhe.
-      rippleSettings.areaSize = 48.0f;
-      rippleSettings.resolution = 96;
-      rippleSettings.propagationSpeed = 4.0f;
-      rippleSettings.damping = 0.6f;
-      rippleSettings.maximumAmplitude = 1.5f;
+      rippleSettings.areaSize = 768.0f;
+      rippleSettings.resolution = 256;
+      rippleSettings.propagationSpeed = 8.0f;
+      rippleSettings.damping = 0.45f;
+      rippleSettings.maximumAmplitude = 4.0f;
       if (!ripples_.initialize(rippleSettings)) return false;
+      ripples_.recenter(0.0f,BoatPositionZ);
     }
     auto setup=renderer.waterQuerySetup();
     setup.ripples=&ripples_;
@@ -115,22 +124,32 @@ public:
     hooks.beforeStep=&OceanValidation::beforeStep;
     hooks.afterStep=&OceanValidation::onContact;
     const auto frame=simulation_.advance(physics_,water_,delta,1,paused,hooks,&ripples_);
+    if (frame.error!=physics::WaterSimulationError::None) return false;
+    for (u32 i=0;i<4;++i)
+      if (!AetherPhysics_TryGetBodyPoseV2(physics_,bodies_[i],&poses_[i],&rotations_[i]))
+        return false;
     // A ondulação avança com o mesmo relógio da física e é publicada para o
     // próximo quadro. Avançá-la depois do passo, e não antes, é o que faz o
     // deslocamento injetado pelos corpos deste passo aparecer neste passo.
     const double simulatedDelta = std::max(0.0, frame.simulationTime - previousSimulationTime_);
     previousSimulationTime_ = frame.simulationTime;
+    if (!wakeEmitter_.configure(wakeSettings)) return false;
+    if (!paused && simulatedDelta > 0.0) {
+      const auto &p=poses_[3]; const auto &q=rotations_[3];
+      const float forwardX=2.0f*(q.x*q.z+q.w*q.y);
+      const float forwardZ=1.0f-2.0f*(q.x*q.x+q.y*q.y);
+      const auto velocity=AetherPhysics_GetLinearVelocity(physics_,bodies_[3]);
+      if (!wakeEmitter_.update({{p.x,p.z},{forwardX,forwardZ},{velocity.x,velocity.z},
+          extents_[3].z,extents_[3].x,simulation_.submergedFraction(bodies_[3]),
+          static_cast<float>(simulatedDelta)},ripples_)) return false;
+    }
     if (!paused) ripples_.advance(static_cast<float>(simulatedDelta));
     if (spectral && !spectralMirrors_.update(
             frame.simulationTime * renderer.waterSpectralControls().timeScale)) return false;
     renderer.setWaterRipples(ripples_);
-    if (frame.error!=physics::WaterSimulationError::None) return false;
     renderTime=static_cast<float>(frame.simulationTime);
     for (u32 i=0;i<4;++i) {
-      AetherVec3 p{}; AetherQuat q{};
-      if (!AetherPhysics_TryGetBodyPoseV2(physics_,bodies_[i],&p,&q)) return false;
-      poses_[i] = p;
-      rotations_[i] = q;
+      const AetherVec3 &p=poses_[i]; const AetherQuat &q=rotations_[i];
       const float x=q.x,y=q.y,z=q.z,w=q.w;
       float m[16]={1-2*(y*y+z*z),2*(x*y+z*w),2*(x*z-y*w),0,
                    2*(x*y-z*w),1-2*(x*x+z*z),2*(y*z+x*w),0,
@@ -147,7 +166,7 @@ public:
             BoatDraw binding{};
             binding.index=d;
             for(u32 axis=0;axis<3;++axis) binding.center[axis]=draws[d].boundsCenter[axis];
-            binding.center[1]-=2; binding.center[2]-=10;
+            binding.center[1]-=2; binding.center[2]-=BoatPositionZ;
             binding.radius=draws[d].boundsRadius;
             boatDraws_.push_back(binding);
           }
@@ -159,16 +178,19 @@ public:
     if (spectral && frame.simulationTime >= nextTelemetrySimulationTime_) {
       __android_log_print(ANDROID_LOG_INFO, "Aether.Android",
           "[WaterPhysicsFFT] t=%.2f caixas_y=[%.3f,%.3f,%.3f] "
-          "barco_y=%.3f barco_inclinacao_qxz=[%.3f,%.3f].",
+          "barco_y=%.3f barco_inclinacao_qxz=[%.3f,%.3f] esteira=%llu.",
           frame.simulationTime,
           static_cast<double>(poses_[0].y), static_cast<double>(poses_[1].y),
           static_cast<double>(poses_[2].y), static_cast<double>(poses_[3].y),
-          static_cast<double>(rotations_[3].x), static_cast<double>(rotations_[3].z));
+          static_cast<double>(rotations_[3].x), static_cast<double>(rotations_[3].z),
+          static_cast<unsigned long long>(wakeEmitter_.emittedSections()));
       nextTelemetrySimulationTime_ = frame.simulationTime + 2.0;
     }
     return true;
   }
 private:
+  static constexpr float BoatScale=15.0f;
+  static constexpr float BoatPositionZ=520.0f;
   AetherPhysicsWorld *physics_=nullptr;
   physics::WaterSimulation simulation_;
   renderer::WaterWorld water_;
@@ -226,6 +248,7 @@ private:
   }
 
   renderer::WaterRippleField ripples_{};
+  renderer::WaterWakeEmitter wakeEmitter_{};
   renderer::WaterSpectralMirrorSet spectralMirrors_{};
   bool spectralMirrorConfigured_ = false;
   u64 spectralMirrorRevision_ = 0;

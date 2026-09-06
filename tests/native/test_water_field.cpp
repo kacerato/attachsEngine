@@ -36,6 +36,12 @@ AE_TEST(Water_shading_variance_preserves_flat_normals_and_bounds_broadening) {
   AE_EXPECT_TRUE(validateWaterShading({}), "defaults valid");
   AE_EXPECT_TRUE(!validateWaterShading({2, 1}), "AA envelope");
   AE_EXPECT_TRUE(!validateWaterShading({.5f, -1}), "foam envelope");
+  WaterShadingSettings detail{};
+  detail.microDisplacement = 2.0f;
+  AE_EXPECT_TRUE(!validateWaterShading(detail), "micro geometry envelope");
+  detail = {};
+  AE_EXPECT_TRUE(std::abs(maximumWaterDetailDisplacement(detail) - .54f) < 1e-6f,
+                 "foam and micro bounds are reserved together");
   AE_EXPECT_TRUE(std::abs(filteredWaterRoughness(.2f, 0, 1) - .2f) < 1e-6f, "flat floor");
   AE_EXPECT_TRUE(std::abs(filteredWaterRoughness(.2f, 1, 0) - .2f) < 1e-6f, "disabled");
   const float filtered = filteredWaterRoughness(.2f, .1f, .5f);

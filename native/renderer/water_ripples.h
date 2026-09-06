@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/base.h"
+#include "renderer/water_surface.h"
 
 #include <span>
 #include <vector>
@@ -106,6 +107,44 @@ private:
   float cellSize_ = 1.0f;
   float centreX_ = 0.0f, centreZ_ = 0.0f;
   std::vector<float> current_, previous_, scratch_;
+};
+
+// Emissor genérico de esteira para qualquer corpo flutuante. Ele converte
+// deslocamento horizontal em uma sequência espacial de fontes de proa, popa e
+// bordos; a distância, e não a taxa de quadros, determina quantas são emitidas.
+struct WaterWakeSettings final {
+  float strength = 1.2f;
+  float minimumSpeed = .1f;
+  float spacing = 2.0f;
+  float widthScale = .22f;
+  float maximumImpulse = 1.2f;
+};
+
+struct WaterWakeInput final {
+  WaterVec2 position{};
+  WaterVec2 forward{0.0f, 1.0f};
+  WaterVec2 velocity{};
+  float halfLength = 1.0f;
+  float halfWidth = .5f;
+  float submergedFraction = 1.0f;
+  float deltaSeconds = 0.0f;
+};
+
+bool validateWaterWakeSettings(const WaterWakeSettings &settings) noexcept;
+
+class WaterWakeEmitter final {
+public:
+  bool configure(const WaterWakeSettings &settings) noexcept;
+  void reset() noexcept;
+  bool update(const WaterWakeInput &input, WaterRippleField &field) noexcept;
+  u64 emittedSections() const noexcept { return emittedSections_; }
+  const WaterWakeSettings &settings() const noexcept { return settings_; }
+
+private:
+  WaterWakeSettings settings_{};
+  float distanceRemainder_ = 0.0f;
+  u64 emittedSections_ = 0;
+  bool configured_ = false;
 };
 
 } // namespace ae::renderer

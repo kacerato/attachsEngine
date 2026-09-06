@@ -15,10 +15,10 @@ struct SharedControls final {
   std::atomic<float> waveHeight{1.0f};
   std::atomic<float> waveSpeed{1.0f};
   std::atomic<float> waveSteepness{1.0f};
-  std::atomic<float> microWaves{1.0f};
+  std::atomic<float> microWaves{1.6f};
   std::atomic<float> surfaceOpacity{0.72f};
   std::atomic<float> absorption{1.0f};
-  std::atomic<float> foam{0.65f};
+  std::atomic<float> foam{1.05f};
   std::atomic<float> interactionStrength{0.65f};
   std::atomic<float> bodyRippleGain{0.75f};
   std::atomic<float> waterRoughness{0.22f};
@@ -27,6 +27,11 @@ struct SharedControls final {
   std::atomic<float> waveDirectionDegrees{0.0f};
   std::atomic<float> foamCompression{.8f},foamGrowth{4},foamDecay{.5f};
   std::atomic<float> specularAntialiasing{.5f},contactFoamWidth{1.35f};
+  std::atomic<float> foamElevation{.14f},foamCoverage{1.35f};
+  std::atomic<float> microDisplacement{.10f},microWavelength{.85f};
+  std::atomic<float> wakeStrength{1.2f},wakeMinimumSpeed{.1f},wakeSpacing{2.0f};
+  std::atomic<float> wakeWidthScale{.22f},wakeMaximumImpulse{1.2f};
+  std::atomic<float> solidLodError{0},foliageLodError{0},lodTransition{0};
   std::atomic<float> fluidDensity{1400};
   std::atomic<bool> waterPaused{false};
   std::atomic<float> swellLength{1}, directionalSpread{1}, crossSwell{0};
@@ -62,6 +67,9 @@ AndroidRuntimeControls runtimeControlsSnapshot() noexcept {
     snapshot.dynamicResolution = controls.dynamicResolution.load(std::memory_order_relaxed);
     snapshot.bloomIntensity = controls.bloomIntensity.load(std::memory_order_relaxed);
     snapshot.sharpen = controls.sharpen.load(std::memory_order_relaxed);
+    snapshot.solidLodError=controls.solidLodError.load(std::memory_order_relaxed);
+    snapshot.foliageLodError=controls.foliageLodError.load(std::memory_order_relaxed);
+    snapshot.lodTransition=controls.lodTransition.load(std::memory_order_relaxed);
     snapshot.waveHeight = controls.waveHeight.load(std::memory_order_relaxed);
     snapshot.waveSpeed = controls.waveSpeed.load(std::memory_order_relaxed);
     snapshot.waveSteepness = controls.waveSteepness.load(std::memory_order_relaxed);
@@ -80,6 +88,15 @@ AndroidRuntimeControls runtimeControlsSnapshot() noexcept {
     snapshot.foamDecay=controls.foamDecay.load(std::memory_order_relaxed);
     snapshot.specularAntialiasing=controls.specularAntialiasing.load(std::memory_order_relaxed);
     snapshot.contactFoamWidth=controls.contactFoamWidth.load(std::memory_order_relaxed);
+    snapshot.foamElevation=controls.foamElevation.load(std::memory_order_relaxed);
+    snapshot.foamCoverage=controls.foamCoverage.load(std::memory_order_relaxed);
+    snapshot.microDisplacement=controls.microDisplacement.load(std::memory_order_relaxed);
+    snapshot.microWavelength=controls.microWavelength.load(std::memory_order_relaxed);
+    snapshot.wakeStrength=controls.wakeStrength.load(std::memory_order_relaxed);
+    snapshot.wakeMinimumSpeed=controls.wakeMinimumSpeed.load(std::memory_order_relaxed);
+    snapshot.wakeSpacing=controls.wakeSpacing.load(std::memory_order_relaxed);
+    snapshot.wakeWidthScale=controls.wakeWidthScale.load(std::memory_order_relaxed);
+    snapshot.wakeMaximumImpulse=controls.wakeMaximumImpulse.load(std::memory_order_relaxed);
     snapshot.fluidDensity=controls.fluidDensity.load(std::memory_order_relaxed);
     snapshot.waterPaused=controls.waterPaused.load(std::memory_order_relaxed);
     snapshot.swellLength=controls.swellLength.load(std::memory_order_relaxed);
@@ -117,6 +134,16 @@ Java_dev_aether_editor_AetherActivity_nativeWaterProviderStatus(JNIEnv *,jclass)
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_dev_aether_editor_AetherActivity_nativeApplyVisibilityControls(
+    JNIEnv *,jclass,jfloat solid,jfloat foliage,jfloat transition) {
+  controls.revision.fetch_add(1,std::memory_order_acq_rel);
+  controls.solidLodError.store(bounded(solid,0,16,0),std::memory_order_relaxed);
+  controls.foliageLodError.store(bounded(foliage,0,128,0),std::memory_order_relaxed);
+  controls.lodTransition.store(bounded(transition,0,.99f,0),std::memory_order_relaxed);
+  controls.revision.fetch_add(1,std::memory_order_release);
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_dev_aether_editor_AetherActivity_nativeApplyControls(
     JNIEnv *, jclass, jfloat renderScale, jint shadowQuality, jboolean dynamicResolution,
     jfloat bloomIntensity, jfloat sharpen, jfloat waveHeight, jfloat waveSpeed,
@@ -124,7 +151,11 @@ Java_dev_aether_editor_AetherActivity_nativeApplyControls(
     jfloat foam, jfloat interactionStrength, jfloat bodyRippleGain, jfloat waterRoughness,
     jfloat waterTurbidity, jfloat waterIor, jfloat waveDirectionDegrees,
     jfloat foamCompression,jfloat foamGrowth,jfloat foamDecay,
-    jfloat specularAntialiasing,jfloat contactFoamWidth,jfloat fluidDensity,jboolean waterPaused,
+    jfloat specularAntialiasing,jfloat contactFoamWidth,
+    jfloat foamElevation,jfloat foamCoverage,jfloat microDisplacement,jfloat microWavelength,
+    jfloat wakeStrength,jfloat wakeMinimumSpeed,jfloat wakeSpacing,jfloat wakeWidthScale,
+    jfloat wakeMaximumImpulse,
+    jfloat fluidDensity,jboolean waterPaused,
     jfloat swellLength,jfloat directionalSpread,jfloat crossSwell,
     jfloat waterLevel,jfloat longWaveAmplitude,jfloat longWaveLength,
     jfloat spectralWindSpeed,jfloat spectralFetchKm,jfloat spectralDepth,
@@ -145,11 +176,11 @@ Java_dev_aether_editor_AetherActivity_nativeApplyControls(
   controls.waveSpeed.store(bounded(waveSpeed, 0.0f, 3.0f, 1.0f), std::memory_order_relaxed);
   controls.waveSteepness.store(bounded(waveSteepness, 0.0f, 2.0f, 1.0f),
                                std::memory_order_relaxed);
-  controls.microWaves.store(bounded(microWaves, 0.0f, 3.0f, 1.0f), std::memory_order_relaxed);
+  controls.microWaves.store(bounded(microWaves, 0.0f, 4.0f, 1.6f), std::memory_order_relaxed);
   controls.surfaceOpacity.store(bounded(surfaceOpacity, 0.05f, 1.0f, 0.72f),
                                 std::memory_order_relaxed);
   controls.absorption.store(bounded(absorption, 0.1f, 4.0f, 1.0f), std::memory_order_relaxed);
-  controls.foam.store(bounded(foam, 0.0f, 2.0f, 0.65f), std::memory_order_relaxed);
+  controls.foam.store(bounded(foam, 0.0f, 3.0f, 1.05f), std::memory_order_relaxed);
   controls.interactionStrength.store(bounded(interactionStrength, 0.0f, 2.0f, 0.65f),
                                      std::memory_order_relaxed);
   controls.bodyRippleGain.store(bounded(bodyRippleGain, 0.0f, 4.0f, 0.75f),
@@ -163,6 +194,15 @@ Java_dev_aether_editor_AetherActivity_nativeApplyControls(
   controls.foamDecay.store(bounded(foamDecay,0,100,.5f),std::memory_order_relaxed);
   controls.specularAntialiasing.store(bounded(specularAntialiasing,0,1,.5f),std::memory_order_relaxed);
   controls.contactFoamWidth.store(bounded(contactFoamWidth,0,10,1.35f),std::memory_order_relaxed);
+  controls.foamElevation.store(bounded(foamElevation,0,1,.14f),std::memory_order_relaxed);
+  controls.foamCoverage.store(bounded(foamCoverage,0,4,1.35f),std::memory_order_relaxed);
+  controls.microDisplacement.store(bounded(microDisplacement,0,1,.10f),std::memory_order_relaxed);
+  controls.microWavelength.store(bounded(microWavelength,.2f,8,.85f),std::memory_order_relaxed);
+  controls.wakeStrength.store(bounded(wakeStrength,0,8,1.2f),std::memory_order_relaxed);
+  controls.wakeMinimumSpeed.store(bounded(wakeMinimumSpeed,0,10,.1f),std::memory_order_relaxed);
+  controls.wakeSpacing.store(bounded(wakeSpacing,.5f,100,2),std::memory_order_relaxed);
+  controls.wakeWidthScale.store(bounded(wakeWidthScale,.05f,2,.22f),std::memory_order_relaxed);
+  controls.wakeMaximumImpulse.store(bounded(wakeMaximumImpulse,.05f,5,1.2f),std::memory_order_relaxed);
   controls.fluidDensity.store(bounded(fluidDensity,500,2000,1400),std::memory_order_relaxed);
   controls.waterPaused.store(waterPaused==JNI_TRUE,std::memory_order_relaxed);
   controls.swellLength.store(bounded(swellLength,.5f,4,1),std::memory_order_relaxed);

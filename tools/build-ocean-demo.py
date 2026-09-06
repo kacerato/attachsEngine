@@ -211,7 +211,7 @@ def main():
         1, 5, 5, len(vertices) // VERTEX_STRIDE, len(indices), 0,
         texture_offset, material_offset, draw_offset, vertex_offset, index_offset,
         -extent, -33.0, -extent, extent, 3.0, extent,
-        0.0, 12.0, -34.0, 0.0, 0.28, .1, 12000.0, len(indices) // 3, 0, 0)
+        0.0, 110.0, -420.0, 0.0, 0.255, .1, 12000.0, len(indices) // 3, 0, 0)
     assert len(header) == HEADER_SIZE and len(draw) == DRAW_STRIDE * 5
     package[:len(header)] = header
     package[texture_offset:texture_offset + len(texture)] = texture
@@ -235,7 +235,7 @@ def main():
     write_water_normal(OUT / "texture_000.aetex", 256)
     write_water_normal(OUT / "texture_000-fallback.aetex", 128)
     boat = append_instance(OUT / "scene.aemap", ROOT / "samples/boat/Imported/scene.aemap",
-                           position=(0,2,10), scale=2)
+                           position=(0,2,520), scale=30)
     outputs = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                for p in sorted(OUT.iterdir()) if p.is_file()}
     manifest = {"version": 1, "format": "AEMAP-3", "scene": "ocean-gpu",

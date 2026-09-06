@@ -186,7 +186,8 @@ public:
   bool setWaterProfile(const renderer::WaterProfile &profile, float baseHeight = 0.0f) {
     if (renderer::validateWaterProfile(profile) != renderer::WaterValidationError::None ||
         !std::isfinite(baseHeight) ||
-        std::abs(baseHeight)+renderer::maximumWaterDisplacement(profile) > waterDisplacementCapacity_) return false;
+        std::abs(baseHeight)+renderer::maximumWaterDisplacement(profile) +
+        renderer::maximumWaterDetailDisplacement(waterShading_) > waterDisplacementCapacity_) return false;
     waterProfile_ = profile;
     waterBaseHeight_ = baseHeight;
     return true;
@@ -199,12 +200,16 @@ public:
   void clearWaterRipples() noexcept { waterRippleGain_ = 0.0f; }
 
   bool addWaterImpulse(const renderer::WaterImpulse &impulse) {
-    if (std::abs(waterBaseHeight_)+std::abs(impulse.amplitude) + renderer::maximumWaterDisplacement(waterProfile_) >
+    if (std::abs(waterBaseHeight_)+std::abs(impulse.amplitude) +
+        renderer::maximumWaterDisplacement(waterProfile_) +
+        renderer::maximumWaterDetailDisplacement(waterShading_) >
         waterDisplacementCapacity_) return false;
     return waterInteractions_.addImpulse(impulse);
   }
   bool setWaterShading(const renderer::WaterShadingSettings &settings) noexcept {
-    if (!renderer::validateWaterShading(settings)) return false;
+    if (!renderer::validateWaterShading(settings) || std::abs(waterBaseHeight_) +
+        renderer::maximumWaterDisplacement(waterProfile_) +
+        renderer::maximumWaterDetailDisplacement(settings) > waterDisplacementCapacity_) return false;
     waterShading_ = settings;
     return true;
   }

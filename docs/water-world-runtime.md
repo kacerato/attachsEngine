@@ -1,5 +1,12 @@
 # Volumes, contato físico e filtragem de água
 
+Estado mais recente: ver [alcance visual e preparação do editor](RENDERIZACAO-ALCANCE-E-EDITOR.md).
+As seções abaixo registram incrementos históricos; limitações de integração
+descritas nas primeiras rodadas foram parcialmente superadas nas posteriores.
+O incremento naval de 15×, micro-relevo, esteira espacial e espuma desacoplada do
+LOD geométrico passou em 461 testes host e no build Android Release. A validação
+visual e de custo precisa ser registrada separadamente do sucesso da compilação.
+
 ## Ownership e integração
 
 `WaterWorld` guarda até 16 campos por valor, identificados por IDs não nulos

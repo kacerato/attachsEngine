@@ -8,5 +8,6 @@ void main() {
   ivec2 p=ivec2(gl_GlobalInvocationID.xy),size=imageSize(slopeImage);
   if(any(greaterThanEqual(p,size))) return;
   uint i=uint(p.y*size.x+p.x);
-  imageStore(slopeImage,p,vec4(values[8*i+3],values[8*i+4],0,0));
+  vec2 slope=vec2(values[8*i+3],values[8*i+4]);
+  imageStore(slopeImage,p,vec4(slope,values[8*uint(size.x*size.y)+i],dot(slope,slope)));
 }

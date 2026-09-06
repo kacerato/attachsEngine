@@ -48,6 +48,9 @@ public:
                                 WaterSimulationHooks hooks = {},
                                 renderer::WaterRippleField *ripples = nullptr) noexcept;
   WaterRuntimeStats stats() const noexcept { return runtime_.stats(); }
+  float submergedFraction(AetherBodyHandle body) const noexcept {
+    return runtime_.submergedFraction(body);
+  }
 private:
   WaterSimulationSettings settings_{};
   WaterRuntime runtime_{};

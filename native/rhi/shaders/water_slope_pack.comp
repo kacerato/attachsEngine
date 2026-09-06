@@ -5,10 +5,11 @@ layout(std430,set=0,binding=0) readonly buffer Surface { float values[]; };
 // every cascade. Half floats keep the same range with a quarter of the
 // bandwidth of the wide fallback, which is what a full-screen water
 // surface actually spends here.
-layout(rg16f,set=0,binding=1) writeonly uniform image2D slopeImage;
+layout(rgba16f,set=0,binding=1) writeonly uniform image2D slopeImage;
 void main() {
   ivec2 p=ivec2(gl_GlobalInvocationID.xy),size=imageSize(slopeImage);
   if(any(greaterThanEqual(p,size))) return;
   uint i=uint(p.y*size.x+p.x);
-  imageStore(slopeImage,p,vec4(values[8*i+3],values[8*i+4],0,0));
+  vec2 slope=vec2(values[8*i+3],values[8*i+4]);
+  imageStore(slopeImage,p,vec4(slope,values[8*uint(size.x*size.y)+i],dot(slope,slope)));
 }

@@ -91,23 +91,29 @@ void main() {
   thickness=min(thickness,farPlane);
   mediump vec2 micro=isolation==WATER_ISOLATION_NO_MICRO_NORMAL?vec2(0.0):
       microSlope(vPosition.xz,environment.waterParameters.z);
+  highp vec2 rippleDetailSlope=vec2(0.0);
+  highp float spectralVariance=0.0;
 #ifdef AETHER_SPECTRAL_WATER
+  mediump float crestFoam=0.0;
   if(isolation!=WATER_ISOLATION_NO_SPECTRAL_DETAIL) {
     // Geometry filtering must not erase wavelengths still resolvable by pixels.
     // Use parameter-space derivatives before any divergent cascade selection.
-    highp float pixelSpacing=max(length(dFdx(vSpectralCoordinates.xy)),length(dFdy(vSpectralCoordinates.xy)));
+    highp vec2 surfaceDx=dFdx(vSpectralCoordinates.xy);
+    highp vec2 surfaceDy=dFdy(vSpectralCoordinates.xy);
     for(int cascade=0;cascade<4;++cascade) {
       if(cascade>=int(environment.waterParameters.x)) break;
       highp vec4 parameters=environment.waterWaveShape[cascade];
       highp float shortest=environment.waterWaveMotion[cascade].x;
       highp float geometricWeight=smoothstep(2.0,5.0,shortest/max(vSpectralCoordinates.z,.001));
-      highp float pixelWeight=smoothstep(2.0,5.0,shortest/max(pixelSpacing,.001));
-      highp float weight=parameters.z*(1.0-geometricWeight)*pixelWeight;
-      if(weight<=.00001) continue;
+      highp float weight=parameters.z*(1.0-geometricWeight);
       highp float c=environment.waterWaveMotion[cascade].y,s=environment.waterWaveMotion[cascade].z;
       highp mat2 rotation=mat2(c,s,-s,c);
       highp vec2 uv=transpose(rotation)*vSpectralCoordinates.xy/parameters.y;
-      micro+=rotation*sampleWaterSlope(cascade,uv,uint(parameters.x))*weight;
+      highp vec4 surface=sampleWaterSurface(cascade,uv,uint(parameters.x),
+          transpose(rotation)*surfaceDx/parameters.y,transpose(rotation)*surfaceDy/parameters.y);
+      micro+=rotation*surface.xy*weight;
+      crestFoam=max(crestFoam,surface.z);
+      spectralVariance+=max(0.0,surface.w-dot(surface.xy,surface.xy))*parameters.z*parameters.z;
     }
   }
 #endif
@@ -121,7 +127,8 @@ void main() {
     highp float rippleCell=environment.waterRippleArea.z/
         max(environment.waterRippleArea.w,1.0);
     highp float rippleFootprint=max(length(dFdx(vPosition.xz)),length(dFdy(vPosition.xz)));
-    micro+=sampleWaterRippleSlope(vPosition.xz,max(rippleCell,rippleFootprint));
+    rippleDetailSlope=sampleWaterRippleSlope(vPosition.xz,max(rippleCell,rippleFootprint));
+    micro+=rippleDetailSlope;
   }
 #endif
   mediump vec3 n=normalize(vec3(vNormal.x-micro.x,vNormal.y,vNormal.z-micro.y));
@@ -136,7 +143,7 @@ void main() {
   highp float specularAA=clamp(environment.waterInteractionParameters.z,0.0,1.0);
   if(specularAA>0.0) { // uniform draw setting: derivatives remain well-defined
     highp vec3 normalDx=dFdx(n),normalDy=dFdy(n);
-    highp float normalVariance=min(0.25,(dot(normalDx,normalDx)+dot(normalDy,normalDy))*specularAA);
+    highp float normalVariance=min(0.25,(dot(normalDx,normalDx)+dot(normalDy,normalDy)+spectralVariance)*specularAA);
     rough=sqrt(sqrt(min(1.0,rough*rough*rough*rough+normalVariance)));
   }
   if(environment.parameters.w>1.5 && isolation!=WATER_ISOLATION_NO_REFLECTION) {
@@ -179,9 +186,7 @@ void main() {
   body+=environment.waterShallowColorDistance.rgb*forwardScatter*nl*
       environment.waterOptics.z*shadow;
 
-#ifdef AETHER_SPECTRAL_WATER
-  mediump float crestFoam=clamp(vSpectralFoam,0.0,1.0);
-#else
+#ifndef AETHER_SPECTRAL_WATER
   mediump float geometricSlope=length(vNormal.xz)/max(vNormal.y,0.05);
   mediump float crestFoam=smoothstep(environment.waterOptics.w,
       min(environment.waterOptics.w+0.22,1.0),clamp(geometricSlope,0.0,1.0));
@@ -191,12 +196,23 @@ void main() {
   highp float contactWidth=environment.waterInteractionParameters.w;
   mediump float shoreFoam=contactWidth>0.0?
       (1.0-smoothstep(0.0,max(contactWidth,0.001),thickness))*step(opaqueDeviceDepth,0.99999):0.0;
-  mediump float foam=clamp(max(crestFoam,shoreFoam)*environment.waterDeepColorFoam.w,0.0,1.0);
+  // Ondulação de casco possui inclinação própria mesmo sem compressão FFT. Ela
+  // entra na espuma de esteira, tornando visível a reação contínua do corpo.
+  mediump float wakeFoam=smoothstep(.035,.22,length(rippleDetailSlope));
+  mediump float foamSignal=max(max(crestFoam,shoreFoam),wakeFoam);
+  mediump float foam=clamp(foamSignal*environment.waterDeepColorFoam.w*
+      environment.waterSurfaceDetail.y,0.0,1.0);
   // Mip-filtered multiscale breakup avoids a solid white contact ribbon. Uses
   // the existing periodic normal asset; no random per-frame noise or aliasing.
   highp vec2 foamUv=vPosition.xz*.09+vec2(.007,-.011)*environment.waterParameters.z;
   mediump float foamPattern=texture(waterNormalTexture,foamUv).r;
-  foam*=smoothstep(.28,.68,foamPattern);
+  const highp mat2 foamRotation=mat2(.766044,.642788,-.642788,.766044);
+  mediump float foamPatternWide=texture(waterNormalTexture,
+      foamRotation*(vPosition.xz*.041)+vec2(-.004,.006)*environment.waterParameters.z).g;
+  mediump float foamBreakup=smoothstep(.22,.68,mix(foamPattern,foamPatternWide,.38));
+  // Nunca apagar a película inteira: a textura quebra o contorno, mas a
+  // energia persistente continua legível entre os poros.
+  foam*=mix(.32,1.0,foamBreakup);
 
   mediump float opacity=clamp(1.0-transmissionLuma,0.0,1.0);
   mediump float compositeAlpha=clamp(max(opacity+fresnelWeight*(1.0-opacity),foam),0.0,1.0);

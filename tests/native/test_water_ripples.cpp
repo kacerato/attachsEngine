@@ -238,3 +238,43 @@ AE_TEST(WaterRipples_bound_overlapping_sources_before_they_become_geometry_artif
                    return std::isfinite(value) && std::fabs(value) <= configuration.maximumAmplitude;
                  }), "every cell remains finite and inside the envelope");
 }
+
+AE_TEST(WaterWake_emission_is_spatial_and_frame_rate_independent) {
+  auto configuration=settings();
+  configuration.areaSize=128;
+  configuration.resolution=128;
+  WaterRippleField sixty,oneTwenty;
+  AE_EXPECT_TRUE(sixty.initialize(configuration) && oneTwenty.initialize(configuration),"fields");
+  WaterWakeSettings wake{}; wake.spacing=2; wake.strength=1;
+  WaterWakeEmitter a,b;
+  AE_EXPECT_TRUE(a.configure(wake) && b.configure(wake),"wake configuration");
+  WaterWakeInput input{};
+  input.forward={0,1}; input.velocity={0,10}; input.halfLength=10; input.halfWidth=2;
+  input.submergedFraction=.75f;
+  for(int frame=0;frame<60;++frame) {
+    input.position.y=10.0f*(frame+1)/60.0f; input.deltaSeconds=1.0f/60.0f;
+    AE_EXPECT_TRUE(a.update(input,sixty),"60 Hz emission");
+  }
+  for(int frame=0;frame<120;++frame) {
+    input.position.y=10.0f*(frame+1)/120.0f; input.deltaSeconds=1.0f/120.0f;
+    AE_EXPECT_TRUE(b.update(input,oneTwenty),"120 Hz emission");
+  }
+  AE_EXPECT_EQ(a.emittedSections(),5u,"five spatial sections at 60 Hz");
+  AE_EXPECT_EQ(b.emittedSections(),5u,"same spatial sections at 120 Hz");
+  AE_EXPECT_TRUE(sixty.totalEnergy()>0 && oneTwenty.totalEnergy()>0,"wake deforms both fields");
+}
+
+AE_TEST(WaterWake_validation_is_transactional_and_dry_bodies_emit_nothing) {
+  WaterWakeEmitter emitter;
+  WaterWakeSettings good{};
+  AE_EXPECT_TRUE(emitter.configure(good),"valid settings");
+  auto invalid=good; invalid.spacing=0;
+  AE_EXPECT_TRUE(!emitter.configure(invalid),"invalid edit rejected");
+  AE_EXPECT_TRUE(emitter.settings().spacing==good.spacing,"old settings preserved");
+  WaterRippleField field;
+  AE_EXPECT_TRUE(field.initialize(settings()),"field");
+  WaterWakeInput input{};
+  input.velocity={0,20}; input.deltaSeconds=1; input.submergedFraction=0;
+  AE_EXPECT_TRUE(emitter.update(input,field),"dry update is valid no-op");
+  AE_EXPECT_EQ(field.totalEnergy(),0.0,"dry hull cannot leave a wake");
+}

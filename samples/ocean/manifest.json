@@ -65,14 +65,14 @@
     "position": [
       0,
       2,
-      10
+      520
     ],
     "pivot": [
       0,
       0.6,
       0
     ],
-    "scale": 2,
+    "scale": 30,
     "collision": "box-proxy"
   },
   "outputs": {
@@ -80,7 +80,7 @@
     "environment-specular.aetex": "2322feb34abd2fedece9cff0b8fd3338cb6b0361707c65670b9009026b583c26",
     "environment.aeenv": "6e5f2834794884bc50663fc2371c75a84e2ba05de44e3dd3c81576c98921782d",
     "environment.aetex": "b3ba412215277c67a132af1b2d1a0b4e3b5ba0daef037053983c9b92174a80e0",
-    "scene.aemap": "7df9914d7062dfaac082c003694b705bf604d96975b2220aa0c4bd0c66ac06f9",
+    "scene.aemap": "39e1e9e00df7a34b9413f796e16bc38d8de0c74ed9bf6cc61d3988dcc21053b4",
     "texture_000-fallback.aetex": "2f765d5e3bee50c6e11383a422764c1693a2a8c79c8adfb781ea78163e21124b",
     "texture_000.aetex": "c0504076008bb206226f5f5156010ec65bb926d037e2649fd4cf58493dc39267",
     "texture_001-fallback.aetex": "5b30cf6f2f794f3f417e14d65fc71095433cd184efc8c754149b3091ea5a5664",
