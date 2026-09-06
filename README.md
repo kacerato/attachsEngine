@@ -8,6 +8,9 @@ Ver `docs/PLANO-FECHAMENTO-LACUNAS.md` para a ordem executável de fechamento
 dos itens parciais, limitações conhecidas e critérios de validação M0–M9.
 Ver `docs/PLANO-OTIMIZACAO-GLOBAL-GRAFICOS.md` para a ordem global de desempenho,
 correção visual, céu/iluminação e evolução do renderer sem reduzir qualidade.
+Ver `docs/PLANO-AGUA-AMBIENTE-ASTRA.md` para o plano de água, ondas, ambiente e
+física — com a varredura dos plugins de referência e a medição do oceano no
+aparelho.
 Ver `docs/design/ASTRA-SHELL-UI.md` para o shell do editor — marca ASTRA, splash,
 prateleira de projetos, criação e carregamento — e de onde vêm suas medidas.
 
