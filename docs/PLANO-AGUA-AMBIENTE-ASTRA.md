@@ -217,6 +217,14 @@ aparelho é de uso pessoal, e uma série foi perdida quando outro aplicativo sub
 e o gerenciador de energia do sistema matou o processo em segundo plano. Medição
 longa nesse aparelho precisa de modo avião e nada mais rodando.
 
+E um quarto, que era da própria ferramenta: a classificação das pontas usava
+`-like '*-A*'`, insensível a maiúsculas no PowerShell, então um experimento
+chamado `f0-ambiente` casava com o "-a" do próprio nome. As cinco medidas
+entraram como referência, o desvio inflou de 0,005 para 0,188 ms e um efeito
+real de 0,342 ms foi declarado inconclusivo. O filtro passou a ser `-cmatch`
+ancorado no sufixo, e a contagem das pontas agora falha alto quando não bate —
+uma bancada que classifica errado em silêncio é pior que não ter bancada.
+
 ```bash
 $env:ANDROID_SERIAL="<serial>"
 ./tools/measure-ocean-paired.ps1 -Name f0-flat -IsolationB 5 -Repeats 3
@@ -392,15 +400,23 @@ O que falta para o ambiente ficar à altura da água:
 4. **Reflexão especular do sol com forma de disco** e nuvens refletidas — o KWS2
    trata isso como item de primeira classe (`ReflectSun`,
    `ReflectedSunCloudinessStrength`) porque é o que dá escala ao mar.
-5. **Subir o ambiente da cena de água — achado da medição.** O log da rodada diz
-   `perfil=1 ... ambiente=hemisferio`. Em `rendering_policy.cpp`,
+5. **Subir o ambiente da cena de água — medido, e é barato.** O log da rodada
+   dizia `perfil=1 ... ambiente=hemisferio`. Em `rendering_policy.cpp`,
    `AmbientQuality::Hemispheric` resolve para `{true, false, false}`: **ambiente
    hemisférico sem probe especular e sem IBL pré-filtrado**. Só os perfis S e A
-   recebem `HemisphericSpecular`. Ou seja, a reflexão pobre da captura não é
-   limitação do shader da água — é o perfil deste aparelho rebaixando o
-   ambiente. Como a reflexão inteira custa 0,48 ms [MEDIDO], medir o custo de
-   subir esta cena para `HemisphericSpecular` é um experimento de minutos com
-   ganho visual direto, e é a primeira coisa a fazer na Fase 0.
+   recebem `HemisphericSpecular`. A reflexão pobre da captura nunca foi
+   limitação do shader da água — era o perfil deste aparelho rebaixando o
+   ambiente.
+
+   O experimento foi feito: **subir esta cena para `HemisphericSpecular` custa
+   0,342 ms ± 0,018** [MEDIDO], contra uma referência de 26,551 ms ± 0,005.
+   São 1,3% do frame, e a comparação visual está em
+   `assets/astra-visual/reference/water-ambient-ab.png`: as caixas flutuantes
+   passam de chapadas a refletindo o céu, com nuvens visíveis na face azul.
+
+   Este é o melhor negócio de qualidade por milissegundo que a medição encontrou
+   até agora, e ele não é da água — é da cena inteira. A decisão de perfil que o
+   rebaixou merece ser revista com esse número na mão.
 
 ---
 
@@ -542,8 +558,8 @@ Cada fase tem um portão numérico. Uma fase não começa antes de a anterior pa
   instalável.
 - ⬜ Refazer as três decomposições recusadas pela guarda térmica.
 - ⬜ Rodar a base em **release** e comparar com o orçamento.
-- ⬜ Medir o custo de subir esta cena para `AmbientQuality::HemisphericSpecular`
-  (§6, item 5) — o experimento de melhor razão ganho/esforço que existe hoje.
+- ✅ Custo de `AmbientQuality::HemisphericSpecular` medido: **0,342 ms ± 0,018**,
+  1,3% do frame, com ganho visual direto (§6, item 5).
 - ⬜ Declarar o orçamento de VRAM da §7.2.
 
 *Portão: a tabela de custo por termo, em release, com todos os termos

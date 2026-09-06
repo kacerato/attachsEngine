@@ -105,8 +105,16 @@ for ($i = 1; $i -le $Repeats; $i++) {
 # lado, e é exatamente onde a deriva térmica é maior.
 $runs += Invoke-Run -RunName "$Name-A$($Repeats + 1)" -Isolation $IsolationA
 
-$aRuns = @($runs | Where-Object { $_.run -like '*-A*' })
-$bRuns = @($runs | Where-Object { $_.run -like '*-B*' })
+# -cmatch e não -like: `-like '*-A*'` é insensível a maiúsculas no PowerShell, e
+# um experimento chamado "f0-ambiente" casa com "-a" no meio do próprio nome.
+# Foi o que aconteceu na primeira rodada do ambiente especular: as cinco medidas
+# entraram como referência, o desvio inflou de 0,005 para 0,188 ms e o efeito
+# real foi declarado inconclusivo. O sufixo é ancorado no fim por isso.
+$aRuns = @($runs | Where-Object { $_.run -cmatch '-A\d+$' })
+$bRuns = @($runs | Where-Object { $_.run -cmatch '-B\d+$' })
+if ($aRuns.Count -ne ($Repeats + 1) -or $bRuns.Count -ne $Repeats) {
+    throw "classificação das pontas falhou: $($aRuns.Count) A e $($bRuns.Count) B para $Repeats repetições"
+}
 
 $deltas = @()
 for ($i = 0; $i -lt $bRuns.Count; $i++) {
