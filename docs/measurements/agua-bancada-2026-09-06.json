@@ -4,6 +4,15 @@
   "note": "Só compare rodadas dentro de um mesmo relatório pareado. Entre sessões separadas a mesma configuração já mediu 15,575 e 26,640 ms com pose de câmera idêntica.",
   "paired": [
     {
+      "name": "f0-espectral",
+      "isolationB": 2,
+      "baselineMeanMs": 20.483,
+      "baselineSdMs": 6.058,
+      "pairedDeltaMs": 5.614,
+      "pairedDeltaSdMs": 3.08,
+      "conclusive": false
+    },
+    {
       "name": "f0-flat",
       "isolationB": 5,
       "baselineMeanMs": 26.584,
@@ -11,6 +20,33 @@
       "pairedDeltaMs": -7.766,
       "pairedDeltaSdMs": 0.008,
       "conclusive": true
+    },
+    {
+      "name": "f0-micro",
+      "isolationB": 3,
+      "baselineMeanMs": 25.951,
+      "baselineSdMs": 1.41,
+      "pairedDeltaMs": -0.379,
+      "pairedDeltaSdMs": 1.756,
+      "conclusive": false
+    },
+    {
+      "name": "f0-reflexao",
+      "isolationB": 4,
+      "baselineMeanMs": 26.834,
+      "baselineSdMs": 0.047,
+      "pairedDeltaMs": -0.443,
+      "pairedDeltaSdMs": 0.046,
+      "conclusive": true
+    },
+    {
+      "name": "f0-sombra",
+      "isolationB": 1,
+      "baselineMeanMs": 25.919,
+      "baselineSdMs": 1.421,
+      "pairedDeltaMs": -1.218,
+      "pairedDeltaSdMs": 0.932,
+      "conclusive": false
     }
   ],
   "runs": [
@@ -387,6 +423,68 @@
       ]
     },
     {
+      "run": "f0-espectral-A2",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 55.3,
+      "gpuFrameMs": 14.614,
+      "cpuProcessMs": 4.807,
+      "batteryCelsiusAfter": 31.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.045,
+        "opaque": 10.825,
+        "post": 2.537,
+        "shadow": 0.001,
+        "culling": 0.001,
+        "sky": 0.001,
+        "transparent": 0.001,
+        "ui": 0.001,
+        "hzb": 0.001
+      },
+      "passesSumMs": 14.413,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-espectral-A3",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 31.94,
+      "gpuFrameMs": 26.714,
+      "cpuProcessMs": 5.723,
+      "batteryCelsiusAfter": 32.1,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.767,
+        "opaque": 20.226,
+        "post": 4.741,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.746,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
       "run": "f0-espectral-B1",
       "build": "debug",
       "waterIsolation": 2,
@@ -412,6 +510,161 @@
         "hzb": 0.002
       },
       "passesSumMs": 24.759,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-espectral-B2",
+      "build": "debug",
+      "waterIsolation": 2,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 34.95,
+      "gpuFrameMs": 24.1,
+      "cpuProcessMs": 5.567,
+      "batteryCelsiusAfter": 31.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.764,
+        "opaque": 17.734,
+        "post": 4.58,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 24.09,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-espectral2-A1",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 31.9,
+      "gpuFrameMs": 26.841,
+      "cpuProcessMs": 5.262,
+      "batteryCelsiusAfter": 37.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.757,
+        "opaque": 20.265,
+        "post": 4.74,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.774,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-espectral2-A2",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 30.09,
+      "gpuFrameMs": 26.507,
+      "cpuProcessMs": 8.951,
+      "batteryCelsiusAfter": 37.4,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.694,
+        "opaque": 20.154,
+        "post": 4.708,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.568,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-espectral2-B1",
+      "build": "debug",
+      "waterIsolation": 2,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 32.15,
+      "gpuFrameMs": 24.113,
+      "cpuProcessMs": 9.085,
+      "batteryCelsiusAfter": 37.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.767,
+        "opaque": 17.755,
+        "post": 4.569,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 24.103,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-espectral2-warmup",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 42.17,
+      "gpuFrameMs": 19.962,
+      "cpuProcessMs": 5.213,
+      "batteryCelsiusAfter": 36.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.255,
+        "opaque": 14.927,
+        "post": 3.465,
+        "shadow": 0.001,
+        "culling": 0.001,
+        "sky": 0.001,
+        "transparent": 0.001,
+        "ui": 0.001,
+        "hzb": 0.001
+      },
+      "passesSumMs": 19.653,
       "gpuEngineMiB": [
         90.0,
         100.6
@@ -629,6 +882,471 @@
         "hzb": 0.002
       },
       "passesSumMs": 18.826,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-micro-A1",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 31.84,
+      "gpuFrameMs": 26.821,
+      "cpuProcessMs": 5.304,
+      "batteryCelsiusAfter": 35.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.769,
+        "opaque": 20.221,
+        "post": 4.756,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.758,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-micro-A2",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 33.25,
+      "gpuFrameMs": 24.325,
+      "cpuProcessMs": 8.951,
+      "batteryCelsiusAfter": 35.6,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.768,
+        "opaque": 20.274,
+        "post": 2.292,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 24.346,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-micro-A3",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 30.59,
+      "gpuFrameMs": 26.709,
+      "cpuProcessMs": 8.698,
+      "batteryCelsiusAfter": 35.6,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.52,
+        "opaque": 20.379,
+        "post": 4.855,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.766,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-micro-B1",
+      "build": "debug",
+      "waterIsolation": 3,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 35.27,
+      "gpuFrameMs": 23.952,
+      "cpuProcessMs": 5.346,
+      "batteryCelsiusAfter": 35.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.766,
+        "opaque": 19.805,
+        "post": 2.287,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 23.87,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-micro-B2",
+      "build": "debug",
+      "waterIsolation": 3,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 32.25,
+      "gpuFrameMs": 26.379,
+      "cpuProcessMs": 5.654,
+      "batteryCelsiusAfter": 35.6,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.767,
+        "opaque": 19.835,
+        "post": 4.733,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.347,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-reflexao-A1",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 31.57,
+      "gpuFrameMs": 26.866,
+      "cpuProcessMs": 5.364,
+      "batteryCelsiusAfter": 35.6,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.763,
+        "opaque": 20.329,
+        "post": 4.734,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.838,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-reflexao-A2",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 30.52,
+      "gpuFrameMs": 26.856,
+      "cpuProcessMs": 8.821,
+      "batteryCelsiusAfter": 35.6,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.763,
+        "opaque": 20.329,
+        "post": 4.73,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.834,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-reflexao-A3",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 29.0,
+      "gpuFrameMs": 26.78,
+      "cpuProcessMs": 9.419,
+      "batteryCelsiusAfter": 36.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.778,
+        "opaque": 20.301,
+        "post": 4.73,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.821,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-reflexao-B1",
+      "build": "debug",
+      "waterIsolation": 4,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 32.05,
+      "gpuFrameMs": 26.385,
+      "cpuProcessMs": 5.689,
+      "batteryCelsiusAfter": 35.6,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.774,
+        "opaque": 19.898,
+        "post": 4.732,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.416,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-reflexao-B2",
+      "build": "debug",
+      "waterIsolation": 4,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 29.64,
+      "gpuFrameMs": 26.407,
+      "cpuProcessMs": 9.333,
+      "batteryCelsiusAfter": 36.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.774,
+        "opaque": 19.925,
+        "post": 4.731,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.442,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-sombra-A1",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 31.76,
+      "gpuFrameMs": 26.7,
+      "cpuProcessMs": 5.487,
+      "batteryCelsiusAfter": 32.1,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.776,
+        "opaque": 20.187,
+        "post": 4.741,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.716,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-sombra-A2",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 31.63,
+      "gpuFrameMs": 26.779,
+      "cpuProcessMs": 5.433,
+      "batteryCelsiusAfter": 33.3,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.778,
+        "opaque": 20.232,
+        "post": 4.744,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 26.766,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-sombra-A3",
+      "build": "debug",
+      "waterIsolation": -1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 33.19,
+      "gpuFrameMs": 24.278,
+      "cpuProcessMs": 8.783,
+      "batteryCelsiusAfter": 34.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.771,
+        "opaque": 20.118,
+        "post": 2.298,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 24.199,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-sombra-B1",
+      "build": "debug",
+      "waterIsolation": 1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 33.6,
+      "gpuFrameMs": 24.862,
+      "cpuProcessMs": 5.49,
+      "batteryCelsiusAfter": 33.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.767,
+        "opaque": 18.394,
+        "post": 4.748,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 24.921,
+      "gpuEngineMiB": [
+        90.0,
+        100.6
+      ]
+    },
+    {
+      "run": "f0-sombra-B2",
+      "build": "debug",
+      "waterIsolation": 1,
+      "lockedCamera": true,
+      "resolution": [
+        2772,
+        1280
+      ],
+      "fps": 30.77,
+      "gpuFrameMs": 24.969,
+      "cpuProcessMs": 9.324,
+      "batteryCelsiusAfter": 34.0,
+      "waterProvider": "experimental provider cascades=3 buffer_bytes=3342336 bounds=450.370 slopes=rg16f",
+      "passesMs": {
+        "water_simulation": 1.775,
+        "opaque": 18.445,
+        "post": 4.741,
+        "shadow": 0.002,
+        "culling": 0.002,
+        "sky": 0.002,
+        "transparent": 0.002,
+        "ui": 0.002,
+        "hzb": 0.002
+      },
+      "passesSumMs": 24.973,
       "gpuEngineMiB": [
         90.0,
         100.6

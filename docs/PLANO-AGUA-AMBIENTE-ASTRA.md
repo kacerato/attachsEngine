@@ -191,6 +191,32 @@ O resultado justifica a ferramenta: **dentro de uma sessão contínua a referên
 ficou em 26,584 ms com desvio de 0,039 ms entre quatro réplicas — 0,15%.** O
 problema nunca foi medir; era comparar rodadas separadas por minutos.
 
+**E a bancada tem uma segunda condição, descoberta do jeito difícil.** Das cinco
+decomposições, três saíram inconclusivas — e a ferramenta as recusou sozinha:
+
+| Pareamento | Referência | Desvio entre réplicas | Efeito | Veredito |
+|---|---:|---:|---:|---|
+| água chapada | 26,584 ms | **0,039** | −7,766 ms | conclusivo |
+| reflexão | 26,834 ms | **0,047** | −0,443 ms | conclusivo |
+| sombra | 25,919 ms | 1,421 | −1,218 ms | inconclusivo |
+| micro-normais | 25,951 ms | 1,410 | −0,379 ms | inconclusivo |
+| detalhe espectral | 20,483 ms | **6,058** | +5,614 ms | inconclusivo |
+
+O que separa as duas primeiras linhas das outras não é a técnica medida: é a
+temperatura. As séries conclusivas correram com o aparelho já quente e faixa
+térmica de 0,4 a 1,0 °C; a pior começou a 30 °C, com o aparelho recém-esfriado,
+e mediu desvio de 6 ms entre réplicas da **mesma** configuração.
+
+Intercalar cancela deriva *linear*, e o aquecimento de um Adreno não é linear no
+tempo. Por isso a bancada ganhou um aquecimento descartado antes da primeira
+medida e uma guarda térmica: uma série que varia mais de 1,5 °C não conclui
+nada, por mais limpos que os números pareçam.
+
+Fica registrado um terceiro modo de falha, que nenhuma guarda resolve: o
+aparelho é de uso pessoal, e uma série foi perdida quando outro aplicativo subiu
+e o gerenciador de energia do sistema matou o processo em segundo plano. Medição
+longa nesse aparelho precisa de modo avião e nada mais rodando.
+
 ```bash
 $env:ANDROID_SERIAL="<serial>"
 ./tools/measure-ocean-paired.ps1 -Name f0-flat -IsolationB 5 -Repeats 3
@@ -211,7 +237,12 @@ as colunas abaixo têm desvio ≤ 0,04 ms entre réplicas:
 | **Frame** | **26,578** | |
 
 O efeito pareado do shading inteiro é **−7,766 ms ± 0,008** (o passe opaco cede
-7,493 e o post cede 0,321, porque menos brilho gera menos bloom).
+7,493 e o post cede 0,321, porque menos brilho gera menos bloom). Dentro dele, o
+único termo isolado com veredito conclusivo até agora é a **reflexão de
+ambiente: 0,443 ms ± 0,046** — barata, e portanto não é onde o shading gasta.
+A subdivisão do restante (detalhe espectral, sombra, micro-normais) fica
+pendente: as três séries foram recusadas pela guarda térmica e precisam ser
+refeitas com o aparelho em regime.
 
 **O que isso diz, e reordena o plano:**
 
@@ -502,13 +533,22 @@ colado dentro de um frame graph Vulkan.
 
 Cada fase tem um portão numérico. Uma fase não começa antes de a anterior passar.
 
-**Fase 0 — a bancada, antes de qualquer shader.** Na ordem: (a) fixar clock de
-GPU e janela térmica até a decomposição da §2.4 ficar monotônica; (b) configurar
-assinatura de release e repetir a base; (c) medir o custo de subir esta cena para
-`AmbientQuality::HemisphericSpecular`; (d) declarar o orçamento de VRAM da §7.2.
-*Portão: a tabela de custo por termo, em release, monotônica e reproduzível em
-duas execuções dentro de 0,3 ms.* Sem esse portão, nenhuma otimização das fases
-seguintes é verificável.
+**Fase 0 — a bancada, antes de qualquer shader.** Parcialmente feita:
+
+- ✅ Bancada pareada com aquecimento e guarda térmica
+  (`tools/measure-ocean-paired.ps1`), régua de 0,04 ms em regime.
+- ✅ Decomposição do frame por passe (§2.4) e o custo total do shading da água.
+- ✅ Assinatura de release configurada — `assembleRelease` agora produz um APK
+  instalável.
+- ⬜ Refazer as três decomposições recusadas pela guarda térmica.
+- ⬜ Rodar a base em **release** e comparar com o orçamento.
+- ⬜ Medir o custo de subir esta cena para `AmbientQuality::HemisphericSpecular`
+  (§6, item 5) — o experimento de melhor razão ganho/esforço que existe hoje.
+- ⬜ Declarar o orçamento de VRAM da §7.2.
+
+*Portão: a tabela de custo por termo, em release, com todos os termos
+conclusivos.* Sem esse portão, nenhuma otimização das fases seguintes é
+verificável.
 
 **Fase 1 — comprar o orçamento** (§7, itens 2 a 8). *Portão: oceano em release,
 escala 1,00, ≤ 16,6 ms de GPU na mesma pose.*
