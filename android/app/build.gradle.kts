@@ -25,6 +25,7 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
     dependsOn(publishManagedCore)
     inputs.file("../../samples/material-preview/manifest.json")
     inputs.file("../../samples/dirt-road/manifest.json")
+    inputs.file("../../samples/ocean/manifest.json")
     from("src/main/assets") {
         exclude("dotnet/Aether.*", "dotnet_manifest.txt", "dotnet_build_id.txt")
     }
@@ -32,6 +33,8 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
     from("../../samples/material-preview/Imported") { include("*.aetex"); into("material_preview") }
     from("../../samples/dirt-road/Imported") { include("*.aetex", "*.aemap", "*.aeenv"); into("dirt_road") }
     from("../../samples/dirt-road") { include("manifest.json", "LICENSE.txt"); into("dirt_road") }
+    from("../../samples/ocean/Imported") { include("*.aetex", "*.aemap", "*.aeenv"); into("ocean") }
+    from("../../samples/ocean") { include("manifest.json", "LICENSE.txt"); into("ocean") }
     into(generatedAssets)
     doLast {
         val root = generatedAssets.get().asFile
@@ -74,6 +77,23 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
             }
             val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
             check(actualHash == expectedHash) { "Cooked map asset checksum mismatch: $name" }
+        }
+        val oceanManifest = JsonSlurper().parse(file("../../samples/ocean/manifest.json")) as Map<*, *>
+        check((oceanManifest["version"] as? Number)?.toInt() == 1 &&
+              oceanManifest["format"] == "AEMAP-3") { "Unsupported ocean package manifest" }
+        val oceanOutputs = oceanManifest["outputs"] as Map<*, *>
+        check(oceanOutputs.isNotEmpty()) { "Empty ocean package" }
+        oceanOutputs.forEach { (name, expectedHash) ->
+            val asset = root.resolve("ocean/$name")
+            check(asset.isFile) { "Missing cooked ocean asset: $name; run tools/build-ocean-demo.py" }
+            val digest = MessageDigest.getInstance("SHA-256")
+            asset.inputStream().use { stream ->
+                val buffer = ByteArray(65536)
+                var count = stream.read(buffer)
+                while (count >= 0) { digest.update(buffer, 0, count); count = stream.read(buffer) }
+            }
+            val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
+            check(actualHash == expectedHash) { "Cooked ocean asset checksum mismatch: $name" }
         }
         val dotnet = root.resolve("dotnet")
         val paths = dotnet.walkTopDown().filter { it.isFile }.map { it.relativeTo(dotnet).invariantSeparatorsPath }.sorted().toList()
@@ -140,12 +160,40 @@ android {
         }
     }
 
+    // Medir em debug e comparar com um orçamento medido em release compara duas
+    // coisas diferentes. Para que a rodada release exista, ela precisa de uma
+    // assinatura; sem esta configuração `assembleRelease` produz um APK
+    // unsigned que o aparelho recusa instalar.
+    //
+    // O padrão aponta para o keystore de depuração porque ele já existe em
+    // qualquer máquina com o SDK, o que torna a medição reproduzível sem
+    // segredo compartilhado. Isto NÃO é uma configuração de publicação: para
+    // distribuir, defina ASTRA_KEYSTORE/ASTRA_KEYSTORE_PASSWORD/
+    // ASTRA_KEY_ALIAS/ASTRA_KEY_PASSWORD e o bloco passa a usá-los.
+    signingConfigs {
+        create("measurement") {
+            val explicitStore = System.getenv("ASTRA_KEYSTORE")
+            if (explicitStore != null) {
+                storeFile = file(explicitStore)
+                storePassword = System.getenv("ASTRA_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ASTRA_KEY_ALIAS")
+                keyPassword = System.getenv("ASTRA_KEY_PASSWORD")
+            } else {
+                storeFile = File(System.getProperty("user.home"), ".android/debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isJniDebuggable = true
         }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("measurement")
             ndk {
                 debugSymbolLevel = "SYMBOL_TABLE"
             }

@@ -14,6 +14,11 @@ param(
     # Opções booleanas extras, aplicadas como `--ez <nome> true`. Existe para que
     # um A/B caiba num APK só: reinstalar entre as pontas mede o aparelho.
     [string[]]$ExtraBooleans = @(),
+    # Opções de texto extras, no formato `nome=valor`, aplicadas como
+    # `--es <nome> <valor>`. É o caminho para os overrides de política de
+    # qualidade (aether.quality_ambient, aether.quality_preset, ...), que não
+    # são booleanos e por isso não cabiam em ExtraBooleans.
+    [string[]]$ExtraStrings = @(),
     # Modo de WaterCostIsolation; -1 não envia a opção.
     [int]$WaterIsolation = -1,
     [int]$DurationSeconds = 90,
@@ -60,6 +65,11 @@ else { $arguments += @('--ez', 'aether.disable_dynamic_resolution', 'true') }
 if ($SpectralWater) { $arguments += @('--ez', 'aether.water_fft', 'true') }
 if ($LockCamera) { $arguments += @('--ez', 'aether.lock_camera', 'true') }
 foreach ($option in $ExtraBooleans) { $arguments += @('--ez', $option, 'true') }
+foreach ($option in $ExtraStrings) {
+    $separator = $option.IndexOf('=')
+    if ($separator -lt 1) { throw "ExtraStrings espera 'nome=valor', recebi '$option'" }
+    $arguments += @('--es', $option.Substring(0, $separator), $option.Substring($separator + 1))
+}
 if ($WaterIsolation -ge 0) { $arguments += @('--ei', 'aether.water_isolation', $WaterIsolation) }
 
 $thermalBefore = Get-ThermalSnapshot
