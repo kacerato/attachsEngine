@@ -23,6 +23,8 @@
 #include "renderer/frustum_visibility.h"
 #include "renderer/gpu_draw_culling.h"
 #include "renderer/hzb_visibility.h"
+
+#include <algorithm>
 #include "renderer/lod_selection.h"
 #include "renderer/render_instance.h"
 #include "renderer/rendering_policy.h"
@@ -152,6 +154,16 @@ public:
     if(!waterSubpassActive_) return 0;
     return spectralWaterCount_>0?2u:(spectralWaterEnabled_?3u:1u);
   }
+  // Configuracao efetivamente usada pelo provider GPU. O owner da simulacao
+  // pode construir um espelho CPU deterministico sem conhecer Vulkan nem
+  // duplicar defaults de cascata no gameplay.
+  std::span<const renderer::WaterCascadeSettings> activeWaterCascades() const noexcept {
+    return {waterCascadeSettings_.data(),
+            std::min<usize>(spectralWaterCount_, waterCascadeSettings_.size())};
+  }
+  const renderer::WaterSpectralControls &waterSpectralControls() const noexcept {
+    return waterSpectralControls_;
+  }
   bool setWaterSpectralControls(const renderer::WaterSpectralControls &controls) {
     if(!renderer::validateWaterSpectralControls(controls)) return false;
     waterSpectralControls_=controls; return true;
@@ -162,6 +174,11 @@ public:
     waterCascadeBufferBudget_=bufferBudget;
     return true;
   }
+  // Atualiza modos espectrais sem recriar layouts/pipelines. Quantidade,
+  // resolução e domínio permanecem invariantes nesta operação; mudanças
+  // estruturais pertencem à reconstrução de recursos da cena.
+  bool reconfigureWaterCascades(std::span<const renderer::WaterCascadeSettings> settings);
+  u64 waterSpectrumRevision() const noexcept { return waterSpectrumRevision_; }
   void setAdpfGpuTimingEnabled(bool enabled) { adpfGpuTimingEnabled_ = enabled; }
   // Water authoring remains a backend-neutral Resource. The Vulkan renderer
   // only retains its validated value representation and uploads it once per
@@ -594,6 +611,7 @@ private:
   renderer::WaterSpectralControls waterSpectralControls_{};
   renderer::WaterSpectralClock waterSpectralClock_{};
   u32 spectralWaterCount_=0;
+  u64 waterSpectrumRevision_=0;
   float spectralWaterBoundsExpansion_=0;
   u64 waterCascadeBufferBudget_=4ull*1024*1024;
   std::vector<renderer::WaterCascadeSettings> waterCascadeSettings_;

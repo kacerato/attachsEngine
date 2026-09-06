@@ -45,17 +45,18 @@ Verificado no código e nas capturas do repositório, não inferido.
 | Provedor analítico (Gerstner, ≤8 ondas) | `native/renderer/water_surface.cpp` | Produção. É o caminho padrão de lançamento. |
 | Referência FFT em CPU, 8 canais + jacobiano | `native/renderer/water_fft.cpp` | Oráculo de teste. 8 transformadas inversas por update; explicitamente **não** é fallback móvel. |
 | Espectro TMA/JONSWAP | `native/renderer/water_spectrum.cpp` | Gera h₀ com vento, fetch, profundidade, swell, spread. |
-| Provedor espectral em compute Vulkan | `native/rhi/water_spectral_compute.cpp` + 4 shaders | Experimental, atrás de `aether.water_fft=true`. Evolução → IFFT (butterfly em memória compartilhada) → espuma → empacotamento de inclinação. |
+| Provedor espectral em compute Vulkan | `native/rhi/water_spectral_compute.cpp` + 4 shaders | Ativo por `aether.water_fft=true`, padrão declarativo dos templates Ocean Lab/Boat On Water e fallback analítico por capability. Evolução → IFFT → espuma → empacotamento de inclinação. |
 | Cascatas | `native/renderer/water_cascades.cpp` | 3 por padrão, teto de 4. Validação de sobreposição e de orçamento de buffer. |
 | Espuma persistente por jacobiano | `water_foam_update.comp` + `water_foam.h` | Solução exata da EDO, independente da taxa de update. Regressão CPU compara 30/60/120 updates. |
 | Inclinação com filtragem de hardware | imagem RGBA32F por cascata, bindings 11–14 | Substituiu a leitura de storage buffer no fragmento. |
 | Grade camera-relative | material `MapMaterialWaterCameraGrid` | Draw único preservado pelo particionador. 149.504 triângulos, sem upload por frame. |
 | Bounds conservadores por desigualdade triangular | `instanced_renderer_water.cpp` | Cobre todo o envelope de controles ao vivo (ganho ≤3, choppiness ≤2). |
-| Controles ao vivo | `android_runtime_controls.h` | 19 floats por JNI posicional. |
+| Controles ao vivo | `android_runtime_controls.h` | Snapshot coerente; contrato JNI posicional chegou a 49 eixos e deve migrar para bloco versionado (§6). |
 
 ### 1.2 O que **não** existe
 
-Estes são os buracos que este plano fecha. Nenhum deles está parcialmente feito.
+Esta lista registra o diagnóstico de abertura do plano. O estado executado mais
+recente está nas trilhas F/G abaixo e em `water-world-runtime.md`.
 
 1. **Física de água: zero.** `native/physics/jolt_bridge.h` não expõe empuxo,
    arrasto hidrodinâmico, acoplamento onda→corpo ou corpo→onda. A única
@@ -241,6 +242,15 @@ Readback opcional, com `ageFrames` real e `flags::Extrapolated` quando a amostra
 
 ### F1 — Espelho espectral em CPU (fonte de verdade da física)
 
+**Estado implementado em 2026-09-06:** `WaterSpectralMirrorSet` recebe as
+cascatas validadas do renderer, cria espelhos adaptativos 32²/32²/128² no perfil
+padrão, soma as bandas antes da inversão horizontal e fornece altura, inclinação,
+deslocamento e velocidade orbital ao `WaterField`. O hook `beforeStep` o avalia
+no relógio fixo da física; o renderer recebe a mesma origem temporal. Não há
+readback. O teste Android confirmou poses móveis e inclinação do barco. A porta
+formal P10 de paridade GPU/CPU em centímetros e a migração para job dedicado
+continuam abertas.
+
 **Decisão de arquitetura, e é a mais importante da trilha:** a física **não**
 espera readback da GPU. Ela avalia o mesmo espectro numa resolução menor, no job
 system, com o mesmo `h₀`, a mesma dispersão e o mesmo relógio de simulação.
@@ -252,10 +262,12 @@ não é.
 
 #### F1.1 — Truncamento e erro
 
-- Física usa a cascata de maior domínio (a que carrega a energia que move corpo)
-  em resolução reduzida: 64² no tier S/A, 32² no B, e o analítico no C.
-- As cascatas curtas (detalhe de 2–8 m) contribuem inclinação, não força útil
-  para um casco de vários metros; entram só como perturbação de normal opcional.
+- A política atual usa todas as cascatas, cada uma na menor potência de dois que
+  preserva ao menos duas amostras por menor comprimento de onda, com teto 128.
+  Esse teto e a densidade de amostragem são configuração do conjunto.
+- As cascatas curtas contribuem ao campo combinado, inclusive inclinação. Um
+  futuro filtro por footprint de casco pode retirar energia imperceptível para
+  corpos grandes sem reduzir o detalhe visual próximo.
 - **O erro precisa ser medido, não assumido:** teste compara altura truncada
   contra a referência completa `WaterSpectralField` em 10.000 amostras e publica
   RMS e máximo em centímetros. Se o RMS passar de 5 cm no perfil "mar aberto", a
@@ -263,8 +275,9 @@ não é.
 
 #### F1.2 — Agendamento
 
-- Um job por cascata de física, disparado no início do frame, colhido antes do
-  passo de física. Timestep fixo (F9).
+- O owner do laboratório atualiza as cascatas em sequência no hook `beforeStep`,
+  imediatamente antes das consultas/forças no timestep fixo. Job por cascata é
+  otimização futura, não requisito funcional já entregue.
 - Reuso de plano FFT e buffers alocados na inicialização; zero alocação por
   update (E5).
 - Cadência configurável (`physics.spectrumHz`, padrão 30 Hz) com interpolação
@@ -634,8 +647,11 @@ de escala (E7).
 - **G1.4 — Deslocamento horizontal completo** no vértice, com a correção de
   normal pelas derivadas horizontais (já calculadas: XX/XZ/ZZ).
 - **G1.5 — Reconfiguração ao vivo do espectro** sem recriar device: vento, fetch,
-  profundidade, swell, spread, peso e choppiness por cascata. Hoje os controles
-  ao vivo não persistem e o espectro não é reconfigurável.
+  profundidade, swell, spread, segundo trem, deslocamento e choppiness por
+  cascata. **Implementado para propriedades que não mudam a estrutura alocada:**
+  os modos GPU são atualizados ao soltar o slider e o espelho físico adota a
+  mesma revisão. Persistência e edição ao vivo de domínio/resolução continuam
+  pendentes porque exigem reconstrução estrutural, não apenas novos modos.
 - **G1.6 — Espuma advectada** pelo campo de fluxo e com mip próprio.
 - **G1.7 — Fila assíncrona.** Hoje a evolução e as duas IFFT são gravadas na fila
   gráfica. Migrar para compute assíncrona onde houver família dedicada; onde não
@@ -769,7 +785,8 @@ não de quantidade de sliders.
 
 ### P1 — Tabela de descritores refletida
 
-O JNI posicional de 19 floats não escala para ~90 eixos. Substituir por:
+O JNI posicional, já expandido de 19 para 49 eixos durante a integração, não
+escala para ~90 eixos. Substituir por:
 
 ```cpp
 struct WaterParameterDescriptor final {

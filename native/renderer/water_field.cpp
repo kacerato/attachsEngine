@@ -135,14 +135,19 @@ bool WaterField::configure(const WaterFieldSetup &setup) noexcept {
   status_.configured = true;
   status_.resolved = WaterFieldProvider::Analytic;
   if (setup.requested == WaterFieldProvider::SpectralCpu) {
-    if (setup.mirror == nullptr) status_.fallbackReason = "nenhum espelho espectral fornecido";
-    else if (!setup.mirror->isReady()) status_.fallbackReason = "espelho espectral sem avaliacao";
-    else {
+    if (setup.mirrorSet != nullptr && setup.mirrorSet->isReady()) {
+      status_.resolved = WaterFieldProvider::SpectralCpu;
+      status_.cascadesActive = setup.mirrorSet->cascadeCount();
+      status_.cascadeResolution = setup.mirrorSet->maximumResolution();
+      status_.simulationTime = setup.mirrorSet->simulationTime();
+    } else if (setup.mirror != nullptr && setup.mirror->isReady()) {
       status_.resolved = WaterFieldProvider::SpectralCpu;
       status_.cascadesActive = 1;
       status_.cascadeResolution = setup.mirror->resolution();
       status_.simulationTime = setup.mirror->simulationTime();
-    }
+    } else if (setup.mirrorSet != nullptr || setup.mirror != nullptr)
+      status_.fallbackReason = "espelho espectral sem avaliacao";
+    else status_.fallbackReason = "nenhum espelho espectral fornecido";
   } else if (setup.requested == WaterFieldProvider::SpectralGpu) {
     // The readback provider is deliberately absent: physics reads the mirror,
     // which has no frame-dependent age. Saying so beats reporting it resolved.
@@ -153,8 +158,10 @@ bool WaterField::configure(const WaterFieldSetup &setup) noexcept {
 
 WaterFieldStatus WaterField::status() const noexcept {
   auto result = status_;
-  if (result.resolved == WaterFieldProvider::SpectralCpu && setup_.mirror)
-    result.simulationTime = setup_.mirror->simulationTime();
+  if (result.resolved == WaterFieldProvider::SpectralCpu) {
+    if (setup_.mirrorSet != nullptr) result.simulationTime = setup_.mirrorSet->simulationTime();
+    else if (setup_.mirror != nullptr) result.simulationTime = setup_.mirror->simulationTime();
+  }
   return result;
 }
 
@@ -190,7 +197,8 @@ WaterFieldSample WaterField::sampleOne(WaterVec2 position, float timeSeconds) co
   }
 
   if (status_.resolved == WaterFieldProvider::SpectralCpu) {
-    const WaterMirrorSample mirror = setup_.mirror->sample(position);
+    const WaterMirrorSample mirror = setup_.mirrorSet != nullptr
+        ? setup_.mirrorSet->sample(position) : setup_.mirror->sample(position);
     result.height = setup_.baseHeight + mirror.height + impulse.height + rippleHeight;
     result.normal = normalized({-(mirror.slope.x + impulseSlope.x), 1.0f,
                                 -(mirror.slope.y + impulseSlope.y)});

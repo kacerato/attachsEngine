@@ -534,12 +534,13 @@ exatamente por que um barco adorna para o lado errado.
 2. **Plano ajustado por mínimos quadrados**, com 3 a 5 amostras do `WaterField`
    por corpo em vez de uma. Um casco longo numa onda curta sente um plano
    inclinado; com uma amostra só, sente a média e não balança.
-3. **Reação do corpo na água — parcial e funcional no analítico.** O laboratório
+3. **Reação do corpo na água — parcial e funcional nos dois provedores.** O laboratório
    já injeta volume molhado e velocidade vertical num campo dinâmico com ganho e
    amplitude configuráveis. CPU e shaders analítico/espectral compartilham
-   amostragem, filtragem e borda sem costura. Falta a física consumir o provedor
-   FFT e falta distribuir a reação pelo casco/painéis para produzir uma esteira
-   naval direcional; o proxy atual não encerra este item.
+   amostragem, filtragem e borda sem costura. O provedor FFT agora alimenta a
+   física por um espelho CPU multicascata sincronizado ao mesmo relógio; falta
+   distribuir a reação pelo casco/painéis para produzir uma esteira naval
+   direcional. O proxy atual não encerra este item.
 4. **Arrasto por painel** para cascos, no lugar de um coeficiente global: força
    normal proporcional à área projetada de cada face contra o fluxo relativo. É
    o que faz um leme funcionar e um casco planar.
@@ -606,10 +607,12 @@ Refração, espuma direcional, ondas dinâmicas com esteira, subsurface de crist
 casco real. *Portão: ≤ 16,6 ms mantidos; o barco gera esteira visível; o casco
 adorna na direção certa numa onda lateral.*
 
-Estado em 2026-09-06: a ondulação dinâmica já é visível no caminho analítico,
-limitada e configurável, e ambos os shaders conseguem compô-la sem emenda de
-grade. O portão continua aberto: ainda faltam reação distribuída/esteira do
-casco, consulta física FFT e a prova de ≤16,6 ms na mesma condição térmica.
+Estado em 2026-09-06: a ondulação dinâmica é visível nos caminhos analítico e
+FFT, limitada e configurável, e ambos os shaders a compõem sem emenda de grade.
+O espelho CPU multicascata fecha a consulta física FFT sem readback e foi validado
+com caixas e barco móveis no Adreno. O portão continua aberto: ainda faltam
+reação distribuída/esteira do casco e a prova de ≤16,6 ms na mesma condição
+térmica.
 
 **Fase 3 — ambiente** (§6, itens 1 a 4). Atmosfera, névoa, exposição
 automática, sol especular. *Portão: ≤ 16,6 ms mantidos; horizonte sem degrau.*

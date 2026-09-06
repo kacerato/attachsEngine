@@ -181,3 +181,38 @@ AE_TEST(Water_mirror_reports_nothing_before_the_first_update) {
   AE_EXPECT_TRUE(sample.height == 0.0f && sample.velocity.y == 0.0f,
                  "an un-evaluated mirror reports a flat surface, not stale memory");
 }
+
+AE_TEST(Water_mirror_set_combines_every_gpu_band_before_world_column_inversion) {
+  const auto cascades = defaultWaterCascadeSettings();
+  WaterSpectralControls controls{};
+  controls.choppiness = 0.0f;  // isolates linear gain from horizontal inversion
+  WaterMirrorSetSettings policy{};
+  policy.maximumResolution = 128;
+  policy.samplesPerMinimumWavelength = 2.0f;
+
+  WaterSpectralMirrorSet mirrors;
+  AE_EXPECT_TRUE(mirrors.initialize(cascades, controls, policy), "initialize all authored bands");
+  AE_EXPECT_TRUE(!mirrors.isReady(), "configuration alone does not fabricate an evaluated sea");
+  AE_EXPECT_EQ(mirrors.cascadeCount(), 3u, "all GPU cascades have a physics counterpart");
+  AE_EXPECT_EQ(mirrors.maximumResolution(), 128u,
+               "the long-wave band keeps enough samples for its lower bound");
+  AE_EXPECT_TRUE(mirrors.update(1.25), "evaluate the combined field");
+  const WaterMirrorSample base = mirrors.sample({17.0f, -9.0f});
+  AE_EXPECT_TRUE(std::isfinite(base.height) && std::isfinite(base.velocity.y) &&
+                     std::isfinite(base.slope.x) && std::isfinite(base.slope.y),
+                 "combined query is finite");
+
+  WaterSpectralControls doubled = controls;
+  doubled.displacement = 2.0f;
+  AE_EXPECT_TRUE(mirrors.setControls(doubled), "live displacement control");
+  const WaterMirrorSample scaled = mirrors.sample({17.0f, -9.0f});
+  const float tolerance = 1.0e-5f * std::max(1.0f, std::abs(base.height));
+  AE_EXPECT_TRUE(std::abs(scaled.height - base.height * 2.0f) <= tolerance,
+                 "one global gain scales the sum rather than only one cascade");
+
+  WaterSpectralControls invalid = doubled;
+  invalid.displacement = 4.0f;
+  AE_EXPECT_TRUE(!mirrors.setControls(invalid), "invalid live edit is rejected");
+  AE_EXPECT_TRUE(mirrors.controls().displacement == doubled.displacement,
+                 "rejection preserves the previous complete control state");
+}

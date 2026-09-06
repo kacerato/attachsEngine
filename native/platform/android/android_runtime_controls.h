@@ -2,6 +2,8 @@
 
 #include "core/base.h"
 
+#include <array>
+
 namespace ae::platform::android {
 
 // Immutable snapshot published by the Android editor overlay. This is a
@@ -35,6 +37,13 @@ struct AndroidRuntimeControls final {
   bool waterPaused=false;
   float swellLength=1, directionalSpread=1, crossSwell=0;
   float waterLevel=0, longWaveAmplitude=0, longWaveLength=320;
+  // Espectro TMA/JONSWAP. Fetch usa metros no contrato nativo; a UI mostra km.
+  float spectralWindSpeed=10, spectralFetch=100000, spectralDepth=20;
+  float spectralSwell=.8f, spectralSpread=.2f, spectralDamping=.1f;
+  float crossWindSpeed=0, crossDirectionDegrees=65, crossFetch=100000;
+  float crossSwellShape=1, crossSpread=.1f, crossWeight=.35f;
+  std::array<float,3> cascadeDisplacement{1,1,1};
+  std::array<float,3> cascadeChoppiness{1,1,1};
 };
 
 AndroidRuntimeControls runtimeControlsSnapshot() noexcept;

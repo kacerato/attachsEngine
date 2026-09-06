@@ -153,10 +153,20 @@ padrão Jolt de 1000 kg/m³; mudando a do fluido, flutuam ou afundam até o fund
 O laboratório desativa sono apenas nesses três corpos para reagirem às mudanças.
 Reset da surface/renderer destrói esse mundo de teste. A cena floresta não o cria.
 
-FFT ainda não aciona essa física: as caixas permanecem estáticas nesse modo até
-as consultas multicascata serem integradas. O launcher padrão abre o laboratório
-analítico; o modo FFT continua opt-in. Não declarar isso como flutuação espectral.
-Interpolação de transforms entre passos e múltiplos pontos de casco são pendentes.
+FFT agora aciona a mesma física por um `WaterSpectralMirrorSet` de CPU. O conjunto
+é construído a partir das cascatas efetivamente aceitas pelo renderer, soma as
+três bandas antes de inverter o deslocamento horizontal e entrega altura,
+inclinação e velocidade orbital ao `WaterField`. A resolução é adaptativa por
+comprimento mínimo de onda, com teto configurável; o laboratório usa 32², 32² e
+128², em vez de copiar cegamente os três campos GPU 128². Não há readback nem
+latência variável entre GPU e Jolt.
+
+O relógio fixo da física alimenta tanto o espelho quanto o relógio espectral do
+renderer. Ganho, choppiness, direção, velocidade, densidade e pausa continuam
+controles globais independentes. `Ocean Lab` e `Boat On Water` selecionam FFT
+declarativamente no template; dispositivo sem os recursos necessários mantém o
+fallback analítico. Interpolação de transforms entre passos e múltiplos pontos
+de casco continuam pendentes.
 
 - 406/406 testes nativos; 7/7 testes Python de geometria/assets.
 - Shaders analítico/espectral compilados, SPIR-V validado e headers reproduzíveis.
@@ -213,9 +223,23 @@ Validação desta integração:
 - capturas em `build/android-validation/water-ripple-integration/analytical-final.png`
   e `spectral-final.png`.
 
-Limite preservado: `OceanValidation` ainda suspende a simulação física quando o
-provedor FFT está ativo. O pipeline espectral já consegue ler o SSBO, mas os
-corpos do laboratório ainda não consultam nem injetam no campo multicascata.
+Incremento FFT + física validado depois dessa rodada:
+
+- 459/459 testes nativos no host;
+- build Android Release concluído e APK instalado com SHA-256 host/device
+  `090d9b15ecb317a3082bb7b3d2fc9f12e36746f7b4e4de72ec2d7a91d92e0d92`;
+- abertura pelo ícone -> shell -> `Water Lab`, sem extras ADB, selecionou o
+  provedor espectral com três cascatas e espelho físico de resolução máxima 128;
+- a telemetria de 0 a 34 s registrou alturas distintas para as três caixas e
+  rotação X/Z do barco, além de quatro impactos corpo -> água aceitos;
+- capturas em `build/android-validation/fft-physics/11-water-final-default.png` e
+  `13-water-band-controls.png` mostram física e authoring sem separação visual persistente
+  entre os corpos e a superfície;
+- escala nativa 1,0, DRS desligada, cadência VSYNC observada de 107,56 Hz no
+  smoke test; isso não substitui uma janela determinística de benchmark.
+
+Limite preservado: o barco ainda usa um único proxy de caixa. Plano local por
+seção, forças distribuídas no casco e esteira direcional continuam pendentes.
 A faixa atmosférica clara visível no horizonte pertence ao HDRI autorado e não é
 uma costura da água; sua substituição por atmosfera/aerial perspective permanece
 no portão da Fase 3 do plano ASTRA.

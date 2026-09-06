@@ -6,6 +6,31 @@
 namespace ae::renderer {
 namespace {
 constexpr double TwoPi = 6.2831853071795864769;
+
+bool powerOfTwo(u32 value) noexcept { return value != 0 && (value & (value - 1u)) == 0; }
+
+u32 mirrorResolution(const WaterCascadeSettings &cascade,
+                     const WaterMirrorSetSettings &settings) noexcept {
+  const float required = cascade.spectrum.patchLength /
+                         cascade.spectrum.minimumWavelength *
+                         settings.samplesPerMinimumWavelength;
+  u32 resolution = 8;
+  while (resolution < required && resolution < settings.maximumResolution)
+    resolution <<= 1u;
+  return std::min({resolution, settings.maximumResolution,
+                   cascade.spectrum.resolution});
+}
+
+void addSample(WaterMirrorSample &target, const WaterMirrorSample &source) noexcept {
+  target.height += source.height;
+  target.velocity.x += source.velocity.x;
+  target.velocity.y += source.velocity.y;
+  target.velocity.z += source.velocity.z;
+  target.slope.x += source.slope.x;
+  target.slope.y += source.slope.y;
+  target.displacement.x += source.displacement.x;
+  target.displacement.y += source.displacement.y;
+}
 } // namespace
 
 usize WaterSpectralMirror::packedIndex(Packed field) noexcept { return static_cast<usize>(field); }
@@ -59,6 +84,17 @@ bool WaterSpectralMirror::initialize(const WaterMirrorSettings &settings) {
   resolution_ = size;
   patchLength_ = settings.spectrum.patchLength;
   simulationTime_ = 0.0;
+  return true;
+}
+
+bool WaterSpectralMirror::setSurfaceTransform(float displacementScale, float choppiness,
+                                              float directionRadians) noexcept {
+  WaterMirrorSettings candidate = settings_;
+  candidate.displacementScale = displacementScale;
+  candidate.choppiness = choppiness;
+  candidate.directionRadians = directionRadians;
+  if (resolution_ == 0 || !validateWaterMirrorSettings(candidate)) return false;
+  settings_ = candidate;
   return true;
 }
 
@@ -196,6 +232,129 @@ WaterMirrorSample WaterSpectralMirror::sample(WaterVec2 worldPosition) const noe
   result.displacement = {cosine * sample.displacement.x - sine * sample.displacement.y,
                          sine * sample.displacement.x + cosine * sample.displacement.y};
   return result;
+}
+
+bool validateWaterMirrorSetSettings(const WaterMirrorSetSettings &settings) noexcept {
+  return powerOfTwo(settings.maximumResolution) && settings.maximumResolution >= 8 &&
+      settings.maximumResolution <= 128 &&
+      std::isfinite(settings.samplesPerMinimumWavelength) &&
+      settings.samplesPerMinimumWavelength >= 2.0f &&
+      settings.samplesPerMinimumWavelength <= 8.0f &&
+      settings.inversionIterations <= 8;
+}
+
+bool WaterSpectralMirrorSet::initialize(std::span<const WaterCascadeSettings> cascades,
+                                        const WaterSpectralControls &controls,
+                                        const WaterMirrorSetSettings &settings) {
+  clear();
+  if (!validateWaterMirrorSetSettings(settings) ||
+      !validateWaterSpectralControls(controls) ||
+      validateWaterCascades(cascades, UINT64_MAX) != WaterCascadeError::None)
+    return false;
+
+  for (usize index = 0; index < cascades.size(); ++index) {
+    WaterMirrorSettings mirror{};
+    mirror.spectrum = cascades[index].spectrum;
+    mirror.spectrum.resolution = mirrorResolution(cascades[index], settings);
+    // A fronteira compartilhada pertence exclusivamente a cascata longa, como
+    // em generateWaterCascades(); manter isso igual evita energia duplicada.
+    if (index + 1 < cascades.size() &&
+        mirror.spectrum.maximumWavelength == cascades[index + 1].spectrum.minimumWavelength)
+      mirror.spectrum.maximumWavelength =
+          std::nextafter(mirror.spectrum.maximumWavelength, 0.0f);
+    mirror.displacementScale = cascades[index].displacementScale * controls.displacement;
+    mirror.choppiness = cascades[index].choppiness * controls.choppiness;
+    // A rotacao e aplicada uma unica vez ao conjunto, depois que todas as
+    // cascatas foram somadas e invertidas em conjunto.
+    mirror.directionRadians = 0.0f;
+    mirror.inversionIterations = 0;
+    if (!cascades_[index].initialize(mirror)) {
+      clear();
+      return false;
+    }
+    displacementScales_[index] = cascades[index].displacementScale;
+    choppinessScales_[index] = cascades[index].choppiness;
+    maximumResolution_ = std::max(maximumResolution_, mirror.spectrum.resolution);
+  }
+  cascadeCount_ = static_cast<u32>(cascades.size());
+  settings_ = settings;
+  controls_ = controls;
+  return true;
+}
+
+bool WaterSpectralMirrorSet::setControls(const WaterSpectralControls &controls) noexcept {
+  if (cascadeCount_ == 0 || !validateWaterSpectralControls(controls)) return false;
+  // Valida o lote inteiro antes de alterar qualquer cascata: um live edit
+  // recusado preserva a superficie anterior completa.
+  for (u32 index = 0; index < cascadeCount_; ++index) {
+    WaterMirrorSettings candidate = cascades_[index].settings();
+    candidate.displacementScale = displacementScales_[index] * controls.displacement;
+    candidate.choppiness = choppinessScales_[index] * controls.choppiness;
+    if (!validateWaterMirrorSettings(candidate)) return false;
+  }
+  for (u32 index = 0; index < cascadeCount_; ++index)
+    if (!cascades_[index].setSurfaceTransform(
+            displacementScales_[index] * controls.displacement,
+            choppinessScales_[index] * controls.choppiness, 0.0f))
+      return false;
+  controls_ = controls;
+  return true;
+}
+
+bool WaterSpectralMirrorSet::update(double simulationTime) noexcept {
+  if (cascadeCount_ == 0 || !std::isfinite(simulationTime)) return false;
+  for (u32 index = 0; index < cascadeCount_; ++index)
+    if (!cascades_[index].update(simulationTime)) return false;
+  simulationTime_ = simulationTime;
+  evaluated_ = true;
+  return true;
+}
+
+WaterMirrorSample WaterSpectralMirrorSet::sampleLocalParameter(
+    WaterVec2 parameter) const noexcept {
+  WaterMirrorSample result{};
+  for (u32 index = 0; index < cascadeCount_; ++index)
+    addSample(result, cascades_[index].sampleParameter(parameter));
+  return result;
+}
+
+WaterMirrorSample WaterSpectralMirrorSet::sample(WaterVec2 worldPosition) const noexcept {
+  if (!isReady() || !std::isfinite(worldPosition.x) || !std::isfinite(worldPosition.y))
+    return {};
+  const float cosine = std::cos(controls_.directionRadians);
+  const float sine = std::sin(controls_.directionRadians);
+  const WaterVec2 local{cosine * worldPosition.x + sine * worldPosition.y,
+                        -sine * worldPosition.x + cosine * worldPosition.y};
+  WaterVec2 parameter = local;
+  WaterMirrorSample combined = sampleLocalParameter(parameter);
+  for (u32 iteration = 0; iteration < settings_.inversionIterations; ++iteration) {
+    parameter = {local.x - combined.displacement.x,
+                 local.y - combined.displacement.y};
+    combined = sampleLocalParameter(parameter);
+  }
+
+  WaterMirrorSample result = combined;
+  result.velocity = {cosine * combined.velocity.x - sine * combined.velocity.z,
+                     combined.velocity.y,
+                     sine * combined.velocity.x + cosine * combined.velocity.z};
+  result.slope = {cosine * combined.slope.x - sine * combined.slope.y,
+                  sine * combined.slope.x + cosine * combined.slope.y};
+  result.displacement = {
+      cosine * combined.displacement.x - sine * combined.displacement.y,
+      sine * combined.displacement.x + cosine * combined.displacement.y};
+  return result;
+}
+
+void WaterSpectralMirrorSet::clear() noexcept {
+  for (auto &cascade : cascades_) cascade = WaterSpectralMirror{};
+  displacementScales_ = {};
+  choppinessScales_ = {};
+  settings_ = {};
+  controls_ = {};
+  cascadeCount_ = 0;
+  maximumResolution_ = 0;
+  simulationTime_ = 0.0;
+  evaluated_ = false;
 }
 
 } // namespace ae::renderer

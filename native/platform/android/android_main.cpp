@@ -135,6 +135,8 @@ struct AndroidShell final {
   float maximumDisplayHz = 60.0f;
   int displayRotation = -1;
   ae::u64 runtimeControlsRevision = ~ae::u64{0};
+  ae::renderer::WaterSpectrumAuthoringSettings waterSpectrumAuthoring{};
+  bool waterSpectrumAuthoringApplied = false;
   float waterInteractionStrength = 0.65f;
   float waterTimeSeconds = 0.0f;
   bool waterTapTracking = false;
@@ -157,10 +159,58 @@ struct AndroidShell final {
 
 void applyThermalRenderingPolicy(AndroidShell &shell, bool force);
 
+bool sameSpectrumAuthoring(const ae::renderer::WaterSpectrumAuthoringSettings &a,
+                           const ae::renderer::WaterSpectrumAuthoringSettings &b) {
+  const auto sameCross=[](const ae::renderer::WaterSwellSystem &x,
+                          const ae::renderer::WaterSwellSystem &y) {
+    return x.windSpeed==y.windSpeed && x.directionRadians==y.directionRadians &&
+      x.fetch==y.fetch && x.swell==y.swell && x.spread==y.spread && x.weight==y.weight;
+  };
+  return a.windSpeed==b.windSpeed && a.fetch==b.fetch && a.depth==b.depth &&
+    a.swell==b.swell && a.spread==b.spread &&
+    a.shortWaveDamping==b.shortWaveDamping && sameCross(a.crossSwell,b.crossSwell) &&
+    a.cascadeDisplacement==b.cascadeDisplacement &&
+    a.cascadeChoppiness==b.cascadeChoppiness;
+}
+
 void applyRuntimeControls(AndroidShell &shell) {
   const auto controls = ae::platform::android::runtimeControlsSnapshot();
   if (controls.revision == shell.runtimeControlsRevision) return;
   shell.waterInteractionStrength = controls.interactionStrength;
+
+  ae::renderer::WaterSpectrumAuthoringSettings spectrum{};
+  spectrum.windSpeed=controls.spectralWindSpeed;
+  spectrum.fetch=controls.spectralFetch;
+  spectrum.depth=controls.spectralDepth;
+  spectrum.swell=controls.spectralSwell;
+  spectrum.spread=controls.spectralSpread;
+  spectrum.shortWaveDamping=controls.spectralDamping;
+  spectrum.crossSwell.windSpeed=controls.crossWindSpeed;
+  spectrum.crossSwell.directionRadians=controls.crossDirectionDegrees*0.017453292519943295f;
+  spectrum.crossSwell.fetch=controls.crossFetch;
+  spectrum.crossSwell.swell=controls.crossSwellShape;
+  spectrum.crossSwell.spread=controls.crossSpread;
+  spectrum.crossSwell.weight=controls.crossWeight;
+  for(ae::usize index=0;index<3;++index) {
+    spectrum.cascadeDisplacement[index]=controls.cascadeDisplacement[index];
+    spectrum.cascadeChoppiness[index]=controls.cascadeChoppiness[index];
+  }
+  if(!shell.waterSpectrumAuthoringApplied ||
+     !sameSpectrumAuthoring(spectrum,shell.waterSpectrumAuthoring)) {
+    const auto defaults=ae::renderer::defaultWaterCascadeSettings();
+    std::vector<ae::renderer::WaterCascadeSettings> cascades;
+    bool accepted=ae::renderer::authorWaterCascades(defaults,spectrum,cascades);
+    if(accepted) accepted=shell.instancedRendererReady
+        ? shell.instancedRenderer.reconfigureWaterCascades(cascades)
+        : shell.instancedRenderer.setWaterCascades(cascades,4ull*1024*1024);
+    if(!accepted) {
+      __android_log_print(ANDROID_LOG_ERROR,LogTag,
+          "[WaterFFT] configuracao autoral recusada; espectro anterior preservado.");
+    } else {
+      shell.waterSpectrumAuthoring=spectrum;
+      shell.waterSpectrumAuthoringApplied=true;
+    }
+  }
 
   auto water = ae::renderer::defaultOceanWaterProfile();
   if (!ae::renderer::authorWaterWaves(water,

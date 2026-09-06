@@ -18,12 +18,40 @@ public:
     if (physics_) AetherPhysics_DestroyWorld(physics_);
     physics_ = nullptr;
     previous_ = -1;
+    previousSimulationTime_ = 0.0;
+    nextTelemetrySimulationTime_ = 0.0;
+    spectralMirrors_.clear();
+    spectralMirrorConfigured_ = false;
+    spectralMirrorRevision_ = 0;
     boatDraws_.clear();
   }
   bool update(InstancedRenderer &renderer, double wallTime, float &renderTime,
               float density, bool paused, float bodyRippleGain) {
-    // Do not float bodies on an unrelated analytic approximation to FFT.
-    if (renderer.waterProviderStatus() == 2) return true;
+    const bool spectral = renderer.waterProviderStatus() == 2;
+    if (spectral) {
+      if (!spectralMirrorConfigured_ ||
+          spectralMirrorRevision_ != renderer.waterSpectrumRevision()) {
+        renderer::WaterMirrorSetSettings mirrorSettings{};
+        mirrorSettings.maximumResolution = 128;
+        mirrorSettings.samplesPerMinimumWavelength = 2.0f;
+        mirrorSettings.inversionIterations = 3;
+        renderer::WaterSpectralMirrorSet replacement;
+        const double spectralTime = previousSimulationTime_ *
+                                    renderer.waterSpectralControls().timeScale;
+        if (!replacement.initialize(renderer.activeWaterCascades(),
+                                    renderer.waterSpectralControls(),
+                                    mirrorSettings) ||
+            !replacement.update(spectralTime)) return false;
+        spectralMirrors_ = std::move(replacement);
+        spectralMirrorConfigured_ = true;
+        spectralMirrorRevision_ = renderer.waterSpectrumRevision();
+        __android_log_print(ANDROID_LOG_INFO, "Aether.Android",
+            "[WaterPhysicsFFT] espelho ativo revisao=%llu cascatas=%u resolucao_max=%u sem readback.",
+            static_cast<unsigned long long>(spectralMirrorRevision_),
+            spectralMirrors_.cascadeCount(),spectralMirrors_.maximumResolution());
+      }
+      if (!spectralMirrors_.setControls(renderer.waterSpectralControls())) return false;
+    }
     if (!physics_) {
       physics_ = AetherPhysics_CreateWorld({0,-9.81f,0}, 16);
       if (!physics_) return false;
@@ -66,6 +94,10 @@ public:
     }
     auto setup=renderer.waterQuerySetup();
     setup.ripples=&ripples_;
+    if (spectral) {
+      setup.requested = renderer::WaterFieldProvider::SpectralCpu;
+      setup.mirrorSet = &spectralMirrors_;
+    }
     if (!water_.setVolume(1,setup)) return false;
     physics::WaterRuntimeSettings runtimeSettings;
     runtimeSettings.forces.fluidDensity=density;
@@ -76,21 +108,29 @@ public:
     // O corpo que entra na água passa a levantar onda visível. Antes só o toque
     // do usuário gerava impulso, e um casco caindo do alto não deixava marca
     // nenhuma na superfície — a água ignorava quem flutuava nela.
-    impactContext_={this,&renderer};
+    impactContext_={this,&renderer,
+                    spectral ? renderer.waterSpectralControls().timeScale : 1.0f};
     physics::WaterSimulationHooks hooks{};
     hooks.context=&impactContext_;
+    hooks.beforeStep=&OceanValidation::beforeStep;
     hooks.afterStep=&OceanValidation::onContact;
     const auto frame=simulation_.advance(physics_,water_,delta,1,paused,hooks,&ripples_);
     // A ondulação avança com o mesmo relógio da física e é publicada para o
     // próximo quadro. Avançá-la depois do passo, e não antes, é o que faz o
     // deslocamento injetado pelos corpos deste passo aparecer neste passo.
-    if (!paused) ripples_.advance(static_cast<float>(delta));
+    const double simulatedDelta = std::max(0.0, frame.simulationTime - previousSimulationTime_);
+    previousSimulationTime_ = frame.simulationTime;
+    if (!paused) ripples_.advance(static_cast<float>(simulatedDelta));
+    if (spectral && !spectralMirrors_.update(
+            frame.simulationTime * renderer.waterSpectralControls().timeScale)) return false;
     renderer.setWaterRipples(ripples_);
     if (frame.error!=physics::WaterSimulationError::None) return false;
     renderTime=static_cast<float>(frame.simulationTime);
     for (u32 i=0;i<4;++i) {
       AetherVec3 p{}; AetherQuat q{};
       if (!AetherPhysics_TryGetBodyPoseV2(physics_,bodies_[i],&p,&q)) return false;
+      poses_[i] = p;
+      rotations_[i] = q;
       const float x=q.x,y=q.y,z=q.z,w=q.w;
       float m[16]={1-2*(y*y+z*z),2*(x*y+z*w),2*(x*z-y*w),0,
                    2*(x*y-z*w),1-2*(x*x+z*z),2*(y*z+x*w),0,
@@ -116,6 +156,16 @@ public:
           if(!renderer.queueMapDrawPose(binding.index,m,binding.center,binding.radius)) return false;
       }
     }
+    if (spectral && frame.simulationTime >= nextTelemetrySimulationTime_) {
+      __android_log_print(ANDROID_LOG_INFO, "Aether.Android",
+          "[WaterPhysicsFFT] t=%.2f caixas_y=[%.3f,%.3f,%.3f] "
+          "barco_y=%.3f barco_inclinacao_qxz=[%.3f,%.3f].",
+          frame.simulationTime,
+          static_cast<double>(poses_[0].y), static_cast<double>(poses_[1].y),
+          static_cast<double>(poses_[2].y), static_cast<double>(poses_[3].y),
+          static_cast<double>(rotations_[3].x), static_cast<double>(rotations_[3].z));
+      nextTelemetrySimulationTime_ = frame.simulationTime + 2.0;
+    }
     return true;
   }
 private:
@@ -128,8 +178,17 @@ private:
   struct ImpactContext final {
     OceanValidation *owner = nullptr;
     InstancedRenderer *renderer = nullptr;
+    float spectralTimeScale = 1.0f;
   };
   ImpactContext impactContext_{};
+
+  static bool beforeStep(void *context, double simulationTime) {
+    auto *impact = static_cast<ImpactContext *>(context);
+    if (impact == nullptr || impact->owner == nullptr) return false;
+    if (!impact->owner->spectralMirrorConfigured_) return true;
+    return impact->owner->spectralMirrors_.update(
+        simulationTime * impact->spectralTimeScale);
+  }
 
   static void onContact(void *context, std::span<const physics::WaterContactEvent> events) {
     auto *impact = static_cast<ImpactContext *>(context);
@@ -167,9 +226,16 @@ private:
   }
 
   renderer::WaterRippleField ripples_{};
+  renderer::WaterSpectralMirrorSet spectralMirrors_{};
+  bool spectralMirrorConfigured_ = false;
+  u64 spectralMirrorRevision_ = 0;
   std::array<AetherVec3,4> extents_{};
+  std::array<AetherVec3,4> poses_{};
+  std::array<AetherQuat,4> rotations_{};
   struct BoatDraw { u32 index=0; float center[3]{}; float radius=0; };
   std::vector<BoatDraw> boatDraws_;
   double previous_=-1;
+  double previousSimulationTime_=0;
+  double nextTelemetrySimulationTime_=0;
 };
 }

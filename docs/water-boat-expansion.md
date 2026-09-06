@@ -20,8 +20,8 @@
 
 - Multi-section hull sampling with mass/centre-of-mass authoring and waterline
   exclusion shared by physics/rendering; rigid body propulsion and rudder forces.
-- Asynchronous spectral surface queries with bounded latency and CPU/GPU clock
-  agreement before attaching buoyancy to FFT rendering.
+- Diagnostic CPU/GPU parity readback and a published centimetre error bound for
+  the synchronous multicascade CPU mirror now attached to FFT buoyancy.
 - Velocity-driven wake, persistent foam advection, spray events and underwater
   camera transitions. Each must have explicit capacity and quality controls.
 - Linear-HDR scene-colour refraction and unified sky/ocean exposure, then spatial

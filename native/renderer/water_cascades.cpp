@@ -2,6 +2,50 @@
 #include <cmath>
 
 namespace ae::renderer {
+bool validateWaterSpectrumAuthoring(const WaterSpectrumAuthoringSettings &settings) noexcept {
+  WaterSpectrumSettings probe{};
+  probe.windSpeed = settings.windSpeed;
+  probe.fetch = settings.fetch;
+  probe.depth = settings.depth;
+  probe.swell = settings.swell;
+  probe.spread = settings.spread;
+  probe.shortWaveDamping = settings.shortWaveDamping;
+  probe.crossSwell = settings.crossSwell;
+  if (!validateWaterSpectrum(probe)) return false;
+  for (usize index = 0; index < MaximumWaterCascades; ++index) {
+    if (!std::isfinite(settings.cascadeDisplacement[index]) ||
+        settings.cascadeDisplacement[index] < 0.0f ||
+        settings.cascadeDisplacement[index] > 3.0f ||
+        !std::isfinite(settings.cascadeChoppiness[index]) ||
+        settings.cascadeChoppiness[index] < 0.0f ||
+        settings.cascadeChoppiness[index] > 4.0f) return false;
+  }
+  return true;
+}
+
+bool authorWaterCascades(std::span<const WaterCascadeSettings> base,
+                         const WaterSpectrumAuthoringSettings &settings,
+                         std::vector<WaterCascadeSettings> &output) {
+  if (!validateWaterSpectrumAuthoring(settings) || base.empty() ||
+      base.size() > MaximumWaterCascades) return false;
+  std::vector<WaterCascadeSettings> result(base.begin(), base.end());
+  for (usize index = 0; index < result.size(); ++index) {
+    auto &cascade = result[index];
+    cascade.spectrum.windSpeed = settings.windSpeed;
+    cascade.spectrum.fetch = settings.fetch;
+    cascade.spectrum.depth = settings.depth;
+    cascade.spectrum.swell = settings.swell;
+    cascade.spectrum.spread = settings.spread;
+    cascade.spectrum.shortWaveDamping = settings.shortWaveDamping;
+    cascade.spectrum.crossSwell = settings.crossSwell;
+    cascade.displacementScale = settings.cascadeDisplacement[index];
+    cascade.choppiness = settings.cascadeChoppiness[index];
+  }
+  if (validateWaterCascades(result, UINT64_MAX) != WaterCascadeError::None) return false;
+  output = std::move(result);
+  return true;
+}
+
 std::array<WaterCascadeSettings,3> defaultWaterCascadeSettings() {
   std::array<WaterCascadeSettings,3> result{};
   const float patches[]={32,128,2048};

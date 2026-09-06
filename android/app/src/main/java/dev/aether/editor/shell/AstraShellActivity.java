@@ -93,6 +93,7 @@ public final class AstraShellActivity extends Activity implements ShellView.List
         Intent intent = new Intent(this, AetherActivity.class);
         intent.putExtra(template.previewExtra, true);
         intent.putExtra("aether.free_camera", "aether.ocean_preview".equals(template.previewExtra));
+        intent.putExtra("aether.water_fft", template.spectralWater);
         intent.putExtra("aether.target_fps", 120.0f);
         intent.putExtra("astra.project_path", project.path);
         intent.putExtra("astra.project_name", project.name);

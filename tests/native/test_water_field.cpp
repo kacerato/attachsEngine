@@ -432,6 +432,30 @@ AE_TEST(Water_field_resolves_the_cpu_mirror_and_reports_what_it_cannot_compute) 
   AE_EXPECT_TRUE(anyDisplacement, "a resolved mirror must actually move the surface");
 }
 
+AE_TEST(Water_field_reports_and_samples_the_complete_spectral_mirror_set) {
+  const auto cascades = defaultWaterCascadeSettings();
+  WaterSpectralMirrorSet mirrors;
+  AE_EXPECT_TRUE(mirrors.initialize(cascades, {}), "configure mirror set");
+  AE_EXPECT_TRUE(mirrors.update(0.75), "evaluate mirror set");
+
+  WaterFieldSetup setup = baseSetup();
+  setup.requested = WaterFieldProvider::SpectralCpu;
+  setup.mirrorSet = &mirrors;
+  WaterField field;
+  AE_EXPECT_TRUE(field.configure(setup), "configure field");
+  const WaterFieldStatus status = field.status();
+  AE_EXPECT_EQ(status.resolved, WaterFieldProvider::SpectralCpu, "set becomes active provider");
+  AE_EXPECT_EQ(status.cascadesActive, 3u, "status exposes every combined band");
+  AE_EXPECT_EQ(status.cascadeResolution, 128u, "status exposes maximum mirror resolution");
+
+  std::array<WaterVec2, 2> positions{{{3.0f, 7.0f}, {-19.0f, 41.0f}}};
+  std::array<WaterFieldSample, 2> samples{};
+  AE_EXPECT_TRUE(field.sample(positions, 0.75, samples), "batch sample");
+  AE_EXPECT_TRUE(std::isfinite(samples[0].height) && std::isfinite(samples[1].height),
+                 "physics receives finite combined heights");
+  AE_EXPECT_TRUE(status.fallbackReason == nullptr, "resolved multicascade path is not a fallback");
+}
+
 AE_TEST(Water_cost_isolation_falls_back_to_full_instead_of_reading_past_the_enum) {
   using ae::renderer::WaterCostIsolation;
   AE_EXPECT_EQ(ae::renderer::sanitizeWaterCostIsolation(0), WaterCostIsolation::Full, "zero is production");

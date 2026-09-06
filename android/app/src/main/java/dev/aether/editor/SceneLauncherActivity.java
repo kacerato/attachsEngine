@@ -35,6 +35,7 @@ public final class SceneLauncherActivity extends Activity {
             intent.putExtra("aether.ocean_preview", ocean);
             intent.putExtra("aether.map_preview", !ocean);
             intent.putExtra("aether.free_camera", ocean);
+            intent.putExtra("aether.water_fft", ocean);
             intent.putExtra("aether.target_fps", 120.0f);
             startActivity(intent);
         });
@@ -62,9 +63,9 @@ public final class SceneLauncherActivity extends Activity {
         help.setTextColor(Color.rgb(148, 164, 170)); help.setTextSize(13);
         help.setPadding(0, dp(8), 0, dp(10)); root.addView(help);
         root.addView(sceneButton("Floresta", "LOD, iluminação, sombras e estabilidade", false));
-        root.addView(sceneButton("Oceano · laboratório físico", "3 corpos Jolt · ondas analíticas GPU · toque", true));
+        root.addView(sceneButton("Oceano · laboratório físico", "FFT multicascata · corpos Jolt · toque", true));
         TextView build=new TextView(this);
-        build.setText("Água · integração física 2026-09-05");
+        build.setText("Água FFT + física multicascata · 2026-09-06");
         build.setTextColor(Color.rgb(148,164,170)); build.setPadding(0,dp(14),0,0);
         root.addView(build);
         setContentView(root);

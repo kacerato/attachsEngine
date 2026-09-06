@@ -36,6 +36,28 @@ struct WaterCascadeSpectrum final {
   WaterCascadeSettings settings{};
   std::vector<std::complex<float>> amplitudes;
 };
+
+// Eixos autorais globais do espectro, independentes do backend. As quatro
+// entradas por banda permitem que projetos com 1..4 cascatas usem a mesma API;
+// entradas que excedem a quantidade ativa simplesmente não são consumidas.
+struct WaterSpectrumAuthoringSettings final {
+  float windSpeed = 10.0f;
+  float fetch = 100000.0f;
+  float depth = 20.0f;
+  float swell = 0.8f;
+  float spread = 0.2f;
+  float shortWaveDamping = 0.1f;
+  WaterSwellSystem crossSwell{};
+  std::array<float, MaximumWaterCascades> cascadeDisplacement{1, 1, 1, 1};
+  std::array<float, MaximumWaterCascades> cascadeChoppiness{1, 1, 1, 1};
+};
+
+bool validateWaterSpectrumAuthoring(const WaterSpectrumAuthoringSettings &settings) noexcept;
+// Preserva domínio, resolução, seed, bandas e espuma da configuração base.
+// Falha é transacional: output não muda.
+bool authorWaterCascades(std::span<const WaterCascadeSettings> base,
+                         const WaterSpectrumAuthoringSettings &settings,
+                         std::vector<WaterCascadeSettings> &output);
 std::array<WaterCascadeSettings,3> defaultWaterCascadeSettings();
 enum class WaterCascadeError { None, Count, InvalidSettings, OverlappingBands, MemoryBudget };
 // Array order is low to high wavelength. Gaps are permitted intentionally;

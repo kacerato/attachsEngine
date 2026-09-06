@@ -1,9 +1,12 @@
 #pragma once
 
 #include "renderer/water_fft.h"
+#include "renderer/water_cascades.h"
 #include "renderer/water_surface.h"
 
+#include <array>
 #include <complex>
+#include <span>
 #include <vector>
 
 namespace ae::renderer {
@@ -37,6 +40,10 @@ struct WaterMirrorSample final {
 class WaterSpectralMirror final {
 public:
   bool initialize(const WaterMirrorSettings &settings);
+  // Altera apenas transformacoes da superficie; o espectro/FFT alocado
+  // permanece intacto. E o caminho usado pelos controles ao vivo.
+  bool setSurfaceTransform(float displacementScale, float choppiness,
+                           float directionRadians) noexcept;
   bool update(double simulationTime) noexcept;
 
   // World XZ in, surface at that column out. Horizontal displacement is
@@ -50,6 +57,7 @@ public:
   const WaterMirrorSettings &settings() const noexcept { return settings_; }
 
 private:
+  friend class WaterSpectralMirrorSet;
   // Two real fields ride in one complex transform: both are real, so the
   // inverse yields one in the real part and the other in the imaginary part.
   enum class Packed : u32 { HeightDisplacementX, DisplacementZHeightRate,
@@ -67,6 +75,50 @@ private:
   std::vector<std::complex<float>> packed_[static_cast<usize>(Packed::Count)];
   u32 resolution_ = 0;
   float patchLength_ = 1.0f;
+  double simulationTime_ = 0.0;
+  bool evaluated_ = false;
+};
+
+// Politica de resolucao do espelho de fisica. Cada cascata escolhe a menor
+// potencia de dois que ainda representa sua menor onda e nunca ultrapassa o
+// limite. Assim a fisica nao replica cegamente todo o custo do renderer.
+struct WaterMirrorSetSettings final {
+  u32 maximumResolution = 128;
+  float samplesPerMinimumWavelength = 2.0f;
+  u32 inversionIterations = 3;
+};
+
+bool validateWaterMirrorSetSettings(const WaterMirrorSetSettings &settings) noexcept;
+
+// Composicao multicascata para fisica/gameplay. Todas as cascatas sao somadas
+// antes da inversao horizontal, de modo que o casco consulta a coluna de mundo
+// correta do mar combinado, e nao tres superficies independentes.
+class WaterSpectralMirrorSet final {
+public:
+  bool initialize(std::span<const WaterCascadeSettings> cascades,
+                  const WaterSpectralControls &controls,
+                  const WaterMirrorSetSettings &settings = {});
+  bool setControls(const WaterSpectralControls &controls) noexcept;
+  bool update(double simulationTime) noexcept;
+  WaterMirrorSample sample(WaterVec2 worldPosition) const noexcept;
+  void clear() noexcept;
+
+  bool isReady() const noexcept { return cascadeCount_ != 0 && evaluated_; }
+  u32 cascadeCount() const noexcept { return cascadeCount_; }
+  u32 maximumResolution() const noexcept { return maximumResolution_; }
+  double simulationTime() const noexcept { return simulationTime_; }
+  const WaterSpectralControls &controls() const noexcept { return controls_; }
+
+private:
+  WaterMirrorSample sampleLocalParameter(WaterVec2 parameter) const noexcept;
+
+  std::array<WaterSpectralMirror, MaximumWaterCascades> cascades_{};
+  std::array<float, MaximumWaterCascades> displacementScales_{};
+  std::array<float, MaximumWaterCascades> choppinessScales_{};
+  WaterMirrorSetSettings settings_{};
+  WaterSpectralControls controls_{};
+  u32 cascadeCount_ = 0;
+  u32 maximumResolution_ = 0;
   double simulationTime_ = 0.0;
   bool evaluated_ = false;
 };

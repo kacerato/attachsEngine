@@ -32,6 +32,41 @@ AE_TEST(Water_default_cascades_fit_declared_mobile_buffer_budget) {
     AE_EXPECT_TRUE(cascade.spectrum.minimumWavelength>=2*cascade.spectrum.patchLength/cascade.spectrum.resolution,"band respects spatial Nyquist");
 }
 
+AE_TEST(Water_spectrum_authoring_updates_every_band_without_changing_structure) {
+  const auto base=defaultWaterCascadeSettings();
+  WaterSpectrumAuthoringSettings authored{};
+  authored.windSpeed=18;
+  authored.fetch=450000;
+  authored.depth=73;
+  authored.swell=1.4f;
+  authored.spread=.35f;
+  authored.shortWaveDamping=.22f;
+  authored.crossSwell={11,1.1f,180000,1.2f,.25f,.4f};
+  authored.cascadeDisplacement={1.5f,.8f,1.9f,1};
+  authored.cascadeChoppiness={2.2f,1.3f,.6f,1};
+  std::vector<WaterCascadeSettings> result;
+  AE_EXPECT_TRUE(authorWaterCascades(base,authored,result),"author valid global spectrum");
+  AE_EXPECT_EQ(result.size(),base.size(),"cascade count is structural and preserved");
+  for(ae::usize index=0;index<result.size();++index) {
+    AE_EXPECT_EQ(result[index].spectrum.resolution,base[index].spectrum.resolution,
+                 "live authoring preserves allocated resolution");
+    AE_EXPECT_TRUE(result[index].spectrum.patchLength==base[index].spectrum.patchLength,
+                   "live authoring preserves domain");
+    AE_EXPECT_TRUE(result[index].spectrum.windSpeed==18 &&
+                   result[index].spectrum.fetch==450000 &&
+                   result[index].spectrum.crossSwell.weight==.4f,
+                   "every band consumes the same physical sea state");
+    AE_EXPECT_TRUE(result[index].displacementScale==authored.cascadeDisplacement[index] &&
+                   result[index].choppiness==authored.cascadeChoppiness[index],
+                   "per-band axes remain independent");
+  }
+  const auto previous=result;
+  authored.fetch=0;
+  AE_EXPECT_TRUE(!authorWaterCascades(base,authored,result),"reject invalid physical authoring");
+  AE_EXPECT_TRUE(result[1].spectrum.fetch==previous[1].spectrum.fetch,
+                 "rejected edit preserves the complete previous set");
+}
+
 AE_TEST(Water_cascades_partition_shared_boundary_without_double_energy) {
   std::array<WaterCascadeSettings,2> settings{};
   for(auto &c:settings) { c.spectrum.resolution=32; c.spectrum.patchLength=256; }

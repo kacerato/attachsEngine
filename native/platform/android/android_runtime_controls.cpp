@@ -31,6 +31,12 @@ struct SharedControls final {
   std::atomic<bool> waterPaused{false};
   std::atomic<float> swellLength{1}, directionalSpread{1}, crossSwell{0};
   std::atomic<float> waterLevel{0}, longWaveAmplitude{0}, longWaveLength{320};
+  std::atomic<float> spectralWindSpeed{10}, spectralFetch{100000}, spectralDepth{20};
+  std::atomic<float> spectralSwell{.8f}, spectralSpread{.2f}, spectralDamping{.1f};
+  std::atomic<float> crossWindSpeed{0}, crossDirectionDegrees{65}, crossFetch{100000};
+  std::atomic<float> crossSwellShape{1}, crossSpread{.1f}, crossWeight{.35f};
+  std::array<std::atomic<float>,3> cascadeDisplacement{{1,1,1}};
+  std::array<std::atomic<float>,3> cascadeChoppiness{{1,1,1}};
 } controls;
 std::atomic<ae::u32> waterProviderStatus{0};
 
@@ -78,10 +84,26 @@ AndroidRuntimeControls runtimeControlsSnapshot() noexcept {
     snapshot.waterPaused=controls.waterPaused.load(std::memory_order_relaxed);
     snapshot.swellLength=controls.swellLength.load(std::memory_order_relaxed);
     snapshot.directionalSpread=controls.directionalSpread.load(std::memory_order_relaxed);
-    snapshot.crossSwell=controls.crossSwell.load(std::memory_order_relaxed);
+    snapshot.crossSwellShape=controls.crossSwellShape.load(std::memory_order_relaxed);
     snapshot.waterLevel=controls.waterLevel.load(std::memory_order_relaxed);
     snapshot.longWaveAmplitude=controls.longWaveAmplitude.load(std::memory_order_relaxed);
     snapshot.longWaveLength=controls.longWaveLength.load(std::memory_order_relaxed);
+    snapshot.spectralWindSpeed=controls.spectralWindSpeed.load(std::memory_order_relaxed);
+    snapshot.spectralFetch=controls.spectralFetch.load(std::memory_order_relaxed);
+    snapshot.spectralDepth=controls.spectralDepth.load(std::memory_order_relaxed);
+    snapshot.spectralSwell=controls.spectralSwell.load(std::memory_order_relaxed);
+    snapshot.spectralSpread=controls.spectralSpread.load(std::memory_order_relaxed);
+    snapshot.spectralDamping=controls.spectralDamping.load(std::memory_order_relaxed);
+    snapshot.crossWindSpeed=controls.crossWindSpeed.load(std::memory_order_relaxed);
+    snapshot.crossDirectionDegrees=controls.crossDirectionDegrees.load(std::memory_order_relaxed);
+    snapshot.crossFetch=controls.crossFetch.load(std::memory_order_relaxed);
+    snapshot.crossSwell=controls.crossSwell.load(std::memory_order_relaxed);
+    snapshot.crossSpread=controls.crossSpread.load(std::memory_order_relaxed);
+    snapshot.crossWeight=controls.crossWeight.load(std::memory_order_relaxed);
+    for(ae::usize index=0;index<3;++index) {
+      snapshot.cascadeDisplacement[index]=controls.cascadeDisplacement[index].load(std::memory_order_relaxed);
+      snapshot.cascadeChoppiness[index]=controls.cascadeChoppiness[index].load(std::memory_order_relaxed);
+    }
     const u64 after = controls.revision.load(std::memory_order_acquire);
     if (before == after) { snapshot.revision = after; return snapshot; }
   }
@@ -104,7 +126,13 @@ Java_dev_aether_editor_AetherActivity_nativeApplyControls(
     jfloat foamCompression,jfloat foamGrowth,jfloat foamDecay,
     jfloat specularAntialiasing,jfloat contactFoamWidth,jfloat fluidDensity,jboolean waterPaused,
     jfloat swellLength,jfloat directionalSpread,jfloat crossSwell,
-    jfloat waterLevel,jfloat longWaveAmplitude,jfloat longWaveLength) {
+    jfloat waterLevel,jfloat longWaveAmplitude,jfloat longWaveLength,
+    jfloat spectralWindSpeed,jfloat spectralFetchKm,jfloat spectralDepth,
+    jfloat spectralSwell,jfloat spectralSpread,jfloat spectralDamping,
+    jfloat crossWindSpeed,jfloat crossDirectionDegrees,jfloat crossFetchKm,
+    jfloat spectralCrossSwell,jfloat crossSpread,jfloat crossWeight,
+    jfloat cascade0Displacement,jfloat cascade1Displacement,jfloat cascade2Displacement,
+    jfloat cascade0Choppiness,jfloat cascade1Choppiness,jfloat cascade2Choppiness) {
   controls.revision.fetch_add(1, std::memory_order_acq_rel);
   controls.renderScale.store(bounded(renderScale, 0.5f, 1.0f, 1.0f), std::memory_order_relaxed);
   controls.shadowQuality.store(static_cast<ae::u32>(std::clamp(shadowQuality, 0, 3)),
@@ -143,5 +171,23 @@ Java_dev_aether_editor_AetherActivity_nativeApplyControls(
   controls.waterLevel.store(bounded(waterLevel,-20,40,0),std::memory_order_relaxed);
   controls.longWaveAmplitude.store(bounded(longWaveAmplitude,0,20,0),std::memory_order_relaxed);
   controls.longWaveLength.store(bounded(longWaveLength,120,2000,320),std::memory_order_relaxed);
+  controls.spectralWindSpeed.store(bounded(spectralWindSpeed,0,40,10),std::memory_order_relaxed);
+  controls.spectralFetch.store(bounded(spectralFetchKm,.1f,2000,100)*1000,std::memory_order_relaxed);
+  controls.spectralDepth.store(bounded(spectralDepth,1,500,20),std::memory_order_relaxed);
+  controls.spectralSwell.store(bounded(spectralSwell,0,2,.8f),std::memory_order_relaxed);
+  controls.spectralSpread.store(bounded(spectralSpread,0,1,.2f),std::memory_order_relaxed);
+  controls.spectralDamping.store(bounded(spectralDamping,0,2,.1f),std::memory_order_relaxed);
+  controls.crossWindSpeed.store(bounded(crossWindSpeed,0,40,0),std::memory_order_relaxed);
+  controls.crossDirectionDegrees.store(bounded(crossDirectionDegrees,-180,180,65),std::memory_order_relaxed);
+  controls.crossFetch.store(bounded(crossFetchKm,.1f,2000,100)*1000,std::memory_order_relaxed);
+  controls.crossSwellShape.store(bounded(spectralCrossSwell,0,2,1),std::memory_order_relaxed);
+  controls.crossSpread.store(bounded(crossSpread,0,1,.1f),std::memory_order_relaxed);
+  controls.crossWeight.store(bounded(crossWeight,0,1,.35f),std::memory_order_relaxed);
+  const float displacement[]={cascade0Displacement,cascade1Displacement,cascade2Displacement};
+  const float choppiness[]={cascade0Choppiness,cascade1Choppiness,cascade2Choppiness};
+  for(ae::usize index=0;index<3;++index) {
+    controls.cascadeDisplacement[index].store(bounded(displacement[index],0,3,1),std::memory_order_relaxed);
+    controls.cascadeChoppiness[index].store(bounded(choppiness[index],0,4,1),std::memory_order_relaxed);
+  }
   controls.revision.fetch_add(1, std::memory_order_release);
 }

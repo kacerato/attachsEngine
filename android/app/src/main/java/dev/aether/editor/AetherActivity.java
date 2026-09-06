@@ -23,7 +23,13 @@ public final class AetherActivity extends NativeActivity {
         float turbidity, float ior, float direction, float foamCompression,float foamGrowth,float foamDecay,
         float specularAntialiasing,float contactFoamWidth,float fluidDensity,boolean waterPaused,
         float swellLength,float directionalSpread,float crossSwell,
-        float waterLevel,float longWaveAmplitude,float longWaveLength);
+        float waterLevel,float longWaveAmplitude,float longWaveLength,
+        float spectralWindSpeed,float spectralFetchKm,float spectralDepth,
+        float spectralSwell,float spectralSpread,float spectralDamping,
+        float crossWindSpeed,float crossDirection,float crossFetchKm,
+        float crossSwellShape,float crossSpread,float crossWeight,
+        float nearDisplacement,float midDisplacement,float farDisplacement,
+        float nearChoppiness,float midChoppiness,float farChoppiness);
 
     private float renderScale=1, bloom=.08f, sharpen=.12f, waveHeight=1, waveSpeed=1;
     private float steepness=1, micro=1, opacity=.72f, absorption=1, foam=.65f, interaction=.65f;
@@ -36,12 +42,18 @@ public final class AetherActivity extends NativeActivity {
     private boolean waterPaused=false;
     private float swellLength=1,directionalSpread=1,crossSwell=0;
     private float waterLevel=0,longWaveAmplitude=0,longWaveLength=320;
+    private float spectralWindSpeed=10,spectralFetchKm=100,spectralDepth=20;
+    private float spectralSwell=.8f,spectralSpread=.2f,spectralDamping=.1f;
+    private float crossWindSpeed=0,crossDirection=65,crossFetchKm=100;
+    private float crossSwellShape=1,crossSpread=.1f,crossWeight=.35f;
+    private float nearDisplacement=1,midDisplacement=1,farDisplacement=1;
+    private float nearChoppiness=1,midChoppiness=1,farChoppiness=1;
     private LinearLayout panel;
     private TextView waterProviderLabel;
     private LinearLayout spectralFoamControls;
     private void refreshWaterProvider() {
         int status=nativeWaterProviderStatus();
-        if(waterProviderLabel!=null) waterProviderLabel.setText(status==2?"FFT GPU · experimental ativo":
+        if(waterProviderLabel!=null) waterProviderLabel.setText(status==2?"FFT GPU + física espectral":
             status==3?"Analítico · FFT indisponível (fallback)":status==1?"Ondas analíticas GPU":"Água inativa / carregando");
         if(spectralFoamControls!=null) {
             spectralFoamControls.setAlpha(status==2?1f:.4f);
@@ -63,7 +75,7 @@ public final class AetherActivity extends NativeActivity {
         android.content.Intent previous=getIntent();
         boolean changed=false;
         for(String key:new String[]{"aether.ocean_preview","aether.map_preview",
-                                   "aether.material_preview","aether.free_camera"}) {
+                                   "aether.material_preview","aether.free_camera","aether.water_fft"}) {
             changed |= previous.getBooleanExtra(key,false)!=intent.getBooleanExtra(key,false);
         }
         if(changed) {
@@ -93,7 +105,13 @@ public final class AetherActivity extends NativeActivity {
                             roughness,turbidity,ior,direction,foamCompression,foamGrowth,foamDecay,
                             specularAntialiasing,contactFoamWidth,fluidDensity,waterPaused,
                             swellLength,directionalSpread,crossSwell,
-                            waterLevel,longWaveAmplitude,longWaveLength);
+                            waterLevel,longWaveAmplitude,longWaveLength,
+                            spectralWindSpeed,spectralFetchKm,spectralDepth,
+                            spectralSwell,spectralSpread,spectralDamping,
+                            crossWindSpeed,crossDirection,crossFetchKm,
+                            crossSwellShape,crossSpread,crossWeight,
+                            nearDisplacement,midDisplacement,farDisplacement,
+                            nearChoppiness,midChoppiness,farChoppiness);
     }
     private View slider(String name, float minimum, float maximum, float initial,
                         java.util.function.Consumer<Float> changed) {
@@ -101,6 +119,14 @@ public final class AetherActivity extends NativeActivity {
     }
     private View slider(String name, float minimum, float maximum, float initial,
                         int steps, java.util.function.Consumer<Float> changed) {
+        return slider(name,minimum,maximum,initial,steps,true,changed);
+    }
+    private View deferredSlider(String name,float minimum,float maximum,float initial,
+                                java.util.function.Consumer<Float> changed) {
+        return slider(name,minimum,maximum,initial,1000,false,changed);
+    }
+    private View slider(String name,float minimum,float maximum,float initial,int steps,
+                        boolean live,java.util.function.Consumer<Float> changed) {
         LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.VERTICAL);
         TextView label=new TextView(this);
         label.setText(String.format(java.util.Locale.ROOT,"%s  ·  %.3f",name,initial));
@@ -113,11 +139,11 @@ public final class AetherActivity extends NativeActivity {
                 if(user) {
                     float resolved=minimum+(maximum-minimum)*value/steps;
                     label.setText(String.format(java.util.Locale.ROOT,"%s  ·  %.3f",name,resolved));
-                    changed.accept(resolved); apply();
+                    changed.accept(resolved); if(live) apply();
                 }
             }
             public void onStartTrackingTouch(SeekBar bar) {}
-            public void onStopTrackingTouch(SeekBar bar) {}
+            public void onStopTrackingTouch(SeekBar bar) { if(!live) apply(); }
         }); row.addView(seek,new LinearLayout.LayoutParams(-1,dp(48))); return row;
     }
     @Override protected void onCreate(Bundle state) {
@@ -164,24 +190,48 @@ public final class AetherActivity extends NativeActivity {
         panel.addView(slider("Bloom",0,1,bloom,v->bloom=v));
         panel.addView(slider("Nitidez",0,1,sharpen,v->sharpen=v));
         if(getIntent().getBooleanExtra("aether.ocean_preview",false)) {
+        boolean spectral=getIntent().getBooleanExtra("aether.water_fft",false);
         panel.addView(heading("ÁGUA / ONDAS GPU"));
-        if(!getIntent().getBooleanExtra("aether.water_fft",false)) {
-            panel.addView(heading("LABORATÓRIO FÍSICO · BARCO E CORPOS"));
+        panel.addView(heading("LABORATÓRIO FÍSICO · BARCO E CORPOS"));
+        panel.addView(slider("Nível da água · metros",-20,40,waterLevel,v->waterLevel=v));
+        if(!spectral) {
+            panel.addView(heading("ONDAS ANALÍTICAS"));
             panel.addView(slider("Comprimento do swell",.5f,4,swellLength,v->swellLength=v));
             panel.addView(slider("Dispersão direcional",0,2,directionalSpread,v->directionalSpread=v));
             panel.addView(slider("Swell cruzado",0,2,crossSwell,v->crossSwell=v));
-            panel.addView(slider("Nível da água · metros",-20,40,waterLevel,v->waterLevel=v));
             panel.addView(slider("Onda longa · amplitude em metros",0,20,longWaveAmplitude,v->longWaveAmplitude=v));
             panel.addView(slider("Onda longa · comprimento em metros",120,2000,longWaveLength,v->longWaveLength=v));
             panel.addView(heading("ESTRESSE: ONDA LONGA, NÃO INUNDAÇÃO COSTEIRA"));
-            panel.addView(slider("Densidade do fluido · kg/m³",500,2000,fluidDensity,v->fluidDensity=v));
-            Switch pause=new Switch(this); pause.setText("Pausar água e corpos");
-            pause.setTextColor(Color.WHITE); pause.setChecked(waterPaused);
-            pause.setOnCheckedChangeListener((button,value)->{waterPaused=value;apply();});
-            panel.addView(pause);
+        } else {
+            panel.addView(heading("ESPECTRO FÍSICO · REBUILD AO SOLTAR"));
+            panel.addView(deferredSlider("Vento principal · m/s",0,40,spectralWindSpeed,v->spectralWindSpeed=v));
+            panel.addView(deferredSlider("Fetch principal · km",.1f,2000,spectralFetchKm,v->spectralFetchKm=v));
+            panel.addView(deferredSlider("Profundidade espectral · m",1,500,spectralDepth,v->spectralDepth=v));
+            panel.addView(deferredSlider("Organização do swell",0,2,spectralSwell,v->spectralSwell=v));
+            panel.addView(deferredSlider("Dispersão angular",0,1,spectralSpread,v->spectralSpread=v));
+            panel.addView(deferredSlider("Amortecimento de ondas curtas · m",0,2,spectralDamping,v->spectralDamping=v));
+            panel.addView(heading("MAR CRUZADO · SEGUNDO TREM"));
+            panel.addView(deferredSlider("Vento cruzado · m/s",0,40,crossWindSpeed,v->crossWindSpeed=v));
+            panel.addView(deferredSlider("Direção cruzada relativa · graus",-180,180,crossDirection,v->crossDirection=v));
+            panel.addView(deferredSlider("Fetch cruzado · km",.1f,2000,crossFetchKm,v->crossFetchKm=v));
+            panel.addView(deferredSlider("Organização do swell cruzado",0,2,crossSwellShape,v->crossSwellShape=v));
+            panel.addView(deferredSlider("Dispersão do mar cruzado",0,1,crossSpread,v->crossSpread=v));
+            panel.addView(deferredSlider("Energia do mar cruzado",0,1,crossWeight,v->crossWeight=v));
+            panel.addView(heading("BANDAS FFT · 2–8 / 8–32 / 32–2048 M"));
+            panel.addView(deferredSlider("Deslocamento da banda próxima",0,3,nearDisplacement,v->nearDisplacement=v));
+            panel.addView(deferredSlider("Deslocamento da banda média",0,3,midDisplacement,v->midDisplacement=v));
+            panel.addView(deferredSlider("Deslocamento da banda longa",0,3,farDisplacement,v->farDisplacement=v));
+            panel.addView(deferredSlider("Cristas da banda próxima",0,4,nearChoppiness,v->nearChoppiness=v));
+            panel.addView(deferredSlider("Cristas da banda média",0,4,midChoppiness,v->midChoppiness=v));
+            panel.addView(deferredSlider("Cristas da banda longa",0,4,farChoppiness,v->farChoppiness=v));
         }
+        panel.addView(slider("Densidade do fluido · kg/m³",500,2000,fluidDensity,v->fluidDensity=v));
+        Switch pause=new Switch(this); pause.setText("Pausar água e corpos");
+        pause.setTextColor(Color.WHITE); pause.setChecked(waterPaused);
+        pause.setOnCheckedChangeListener((button,value)->{waterPaused=value;apply();});
+        panel.addView(pause);
         waterProviderLabel=heading("Água inativa / carregando"); panel.addView(waterProviderLabel);
-        panel.addView(slider("Altura · multiplicador",0,getIntent().getBooleanExtra("aether.water_fft",false)?3:12,waveHeight,v->waveHeight=v));
+        panel.addView(slider("Altura · multiplicador",0,spectral?3:12,waveHeight,v->waveHeight=v));
         panel.addView(slider("Velocidade · multiplicador",0,3,waveSpeed,v->waveSpeed=v));
         panel.addView(slider("Direção do espectro · graus",-180,180,direction,v->direction=v));
         panel.addView(slider("Inclinação / cristas",0,2,steepness,v->steepness=v));
@@ -196,9 +246,9 @@ public final class AetherActivity extends NativeActivity {
         panel.addView(heading("ESPUMA / INTERAÇÃO"));
         panel.addView(slider("Espuma",0,2,foam,v->foam=v));
         panel.addView(slider("Espuma de contato · largura em metros",0,10,contactFoamWidth,v->contactFoamWidth=v));
-        if(getIntent().getBooleanExtra("aether.water_fft",false)) {
+        if(spectral) {
             spectralFoamControls=new LinearLayout(this); spectralFoamControls.setOrientation(LinearLayout.VERTICAL);
-            spectralFoamControls.addView(heading("ESPUMA ESPECTRAL · EXPERIMENTAL"));
+            spectralFoamControls.addView(heading("ESPUMA ESPECTRAL"));
             spectralFoamControls.addView(slider("Limiar de compressão",0,2,foamCompression,v->foamCompression=v));
             spectralFoamControls.addView(slider("Crescimento / segundo",0,20,foamGrowth,v->foamGrowth=v));
             spectralFoamControls.addView(slider("Dissipação / segundo",0,5,foamDecay,v->foamDecay=v));

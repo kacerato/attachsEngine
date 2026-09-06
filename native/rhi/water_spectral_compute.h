@@ -25,6 +25,9 @@ public:
   void shutdown();
   bool record(VkCommandBuffer commandBuffer, float timeSeconds,
               const WaterFoamComputeParameters &foam = {});
+  // Reconfiguração autoral: mantém buffers, descriptors e pipelines. O caller
+  // deve garantir que nenhum comando em voo lê initial_/output_.
+  bool updateModes(std::span<const WaterSpectralMode> modes);
   const VulkanBuffer &output() const noexcept { return output_; }
   VkImageView slopeView() const noexcept { return slopes_.view(); }
   VkSampler slopeSampler() const noexcept { return slopeSampler_.handle(); }
@@ -43,5 +46,6 @@ private:
   float patchLength_=1;
   float previousTime_=0;
   bool historyValid_=false;
+  VulkanMemoryAllocator *allocator_=nullptr;
 };
 } // namespace ae::rhi

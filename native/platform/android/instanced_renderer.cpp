@@ -3343,7 +3343,7 @@ void InstancedRenderer::shutdown() {
   if (device_ == VK_NULL_HANDLE) return;
   vkDeviceWaitIdle(device_);
   for(auto &cascade:waterSpectralCompute_) cascade.shutdown();
-  spectralWaterCount_=0; spectralWaterBoundsExpansion_=0;
+  spectralWaterCount_=0; spectralWaterBoundsExpansion_=0; waterSpectrumRevision_=0;
 
   if (commandPool_ != VK_NULL_HANDLE) {
     vkDestroyCommandPool(device_, commandPool_, nullptr);

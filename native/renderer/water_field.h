@@ -110,6 +110,9 @@ struct WaterFieldSetup final {
   // Borrowed, not copied: a mirror owns megabytes of spectral fields. It must
   // outlive the field, and update() must never run while sample() is in flight.
   const WaterSpectralMirror *mirror = nullptr;
+  // Multicascata e preferido quando presente. `mirror` permanece como contrato
+  // compativel para ferramentas que avaliam uma unica banda isoladamente.
+  const WaterSpectralMirrorSet *mirrorSet = nullptr;
   // Ondulação dinâmica, também emprestada e pelas mesmas razões. Ela entra aqui,
   // e não em cada consumidor, porque este é o ponto onde os sistemas de onda se
   // somam: quem pergunta a altura da água recebe o mar, a interação e a

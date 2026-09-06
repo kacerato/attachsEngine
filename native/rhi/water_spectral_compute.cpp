@@ -41,6 +41,7 @@ bool VulkanWaterSpectralCompute::initialize(VulkanMemoryAllocator &allocator,
   if(!allocator.createBuffer(desc,&initial_) || !initial_.mappedData()) { shutdown(); return false; }
   std::memcpy(initial_.mappedData(),modes.data(),desc.sizeBytes);
   if(!allocator.flushBuffer(initial_)) { shutdown(); return false; }
+  allocator_=&allocator;
   desc.sizeBytes=count*(sizeof(WaterSpectralSample)+sizeof(float));
   desc.cpuAccess=CpuAccess::None;
   desc.usage|=VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
@@ -85,6 +86,19 @@ void VulkanWaterSpectralCompute::shutdown() {
   evolve_.shutdown(); inverse_.shutdown(); foam_.shutdown(); output_.reset(); initial_.reset(); resolution_=0;
   historyValid_=false; previousTime_=0;
   pack_.shutdown(); slopes_.reset(); slopeSampler_.shutdown(); slopesInitialized_=false; narrowSlopes_=false;
+  allocator_=nullptr;
+}
+
+bool VulkanWaterSpectralCompute::updateModes(std::span<const WaterSpectralMode> modes) {
+  const u64 count=static_cast<u64>(resolution_)*resolution_;
+  if(!isReady() || allocator_==nullptr || initial_.mappedData()==nullptr || modes.size()!=count) return false;
+  for(const auto &mode:modes)
+    if(!std::isfinite(mode.real) || !std::isfinite(mode.imaginary) ||
+       !std::isfinite(mode.angularFrequency) || mode.angularFrequency<0) return false;
+  std::memcpy(initial_.mappedData(),modes.data(),count*sizeof(WaterSpectralMode));
+  if(!allocator_->flushBuffer(initial_)) return false;
+  historyValid_=false;
+  return true;
 }
 
 bool VulkanWaterSpectralCompute::record(VkCommandBuffer commandBuffer,float timeSeconds,

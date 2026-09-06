@@ -43,12 +43,10 @@ wavelength filtering, directional energy and real-valued temporal evolution.
 
 ## Still required
 
-Device validation and timing of GPU passes,
-serialization, per-cascade spectrum authoring in the panel, flow and spray.
-The experimental render provider does not establish
-parity with GodotOceanWaves. Keep analytical rendering active until the spectral
-path passes numerical and device validation. Do not expose FFT as available
-merely because compute and half-float formats are supported.
+Deterministic pass timing, project-resource serialization, editable structural
+domains/resolutions, flow and spray remain required. The provider does not yet
+establish parity with GodotOceanWaves; capability checks and analytical fallback
+remain mandatory even after the successful Adreno validation.
 
 ## Surface channels
 
@@ -118,14 +116,22 @@ resource creation. The test partitions a seeded spectrum and compares the
 combined amplitudes against the unpartitioned realization at every mode.
 No resolution/choppiness preset is forced onto all scenes.
 
-## Experimental render integration
+## Render integration and capability fallback
 
 `aether.water_fft=true` enables the provider for materials marked Water, not
 for a particular scene name. `setWaterCascades` accepts validated authoring
-before renderer initialization; spectrum reconfiguration and persistent editor
+before renderer initialization. Live mode reconfiguration now updates amplitudes
+and angular frequencies in the existing mapped buffers after `vkDeviceWaitIdle`;
+it does not recreate device, descriptors or pipelines. Persistent editor-resource
 properties are still pending. Without explicit configuration, three 128²
 bands cover 2–8, 8–32 and 32–2048 metres with patches 32, 128 and 2048 metres.
 They use 2.4375 MiB of initial/output/history buffers before allocator alignment.
+
+The Ocean Lab and Boat On Water templates now select this generic flag by
+default. Existing projects retain the choice through their template id; the
+runtime still falls back to the analytical provider when capabilities or
+allocation reject FFT. This is a template policy, not a material-name or
+scene-name branch in the renderer.
 
 Only scenes containing water allocate these resources. Unsupported compute,
 storage or memory creation falls back to the analytical provider with a log.
@@ -144,9 +150,9 @@ conservative submission policy. Resources are destroyed after device work
 completes, together with the owning renderer epoch. Material optics controls
 continue using the common water profile.
 
-The integration was installed and captured on device. The captured ocean remains
-pale, with insufficient near detail and a visible horizon band. Default launch
-remains analytical pending visual/performance acceptance.
+The latest captured ocean has near-field spectral detail and moving FFT-driven
+bodies. The authored HDRI still has a bright horizon band. Ocean Lab and Boat On
+Water launch spectral by default; capability failure remains analytical.
 
 ## Persistent spectral foam
 
@@ -177,23 +183,35 @@ limitations and the still-missing device validation prevent production parity.
 time scale, orientation and optional global foam override. The renderer accepts
 validated updates without reallocating spectra or descriptors. Authored
 per-cascade foam remains active unless the override is explicitly selected.
-The Android overlay publishes these values in its existing coherent JNI
-snapshot. Height, speed, crest and direction sliders affect either provider;
-the experimental FFT launch adds foam compression/growth/decay sliders.
+The Android overlay publishes these values in its coherent JNI snapshot. Height,
+speed, crest and direction sliders affect either provider; an FFT launch adds
+foam compression/growth/decay sliders.
+
+`WaterSpectrumAuthoringSettings` adds real spectrum regeneration for main wind,
+fetch, depth, swell organization, directional spread and short-wave damping; a
+second independent wave train has wind, relative direction, fetch, swell,
+spread and energy. Displacement and choppiness are independent for the 2–8,
+8–32 and 32–2048 metre bands. UI changes are deferred until touch release so a
+drag cannot stall the render loop with repeated idle/rebuild cycles. Validation
+is transactional; rejection preserves the previous modes. A successful update
+increments `waterSpectrumRevision`, and `OceanValidation` replaces its complete
+CPU mirror at the same simulation time before the next physics query.
 
 Direction rotates sampling coordinates and transforms displacements, slopes
 and the full derivative tensor back to world space. It rotates the existing
-realization; it does not regenerate wind/fetch. Speed integrates elapsed time
+realization; the separate physical spectrum controls regenerate wind/fetch.
+Speed integrates elapsed time
 instead of multiplying the absolute clock, so slider edits do not jump phase.
 Speed zero freezes spectral evolution and its foam clock; local impulses keep
 their existing clock. Finite-water culling reserves the complete accepted live
 gain envelope (height 0–3, choppiness gain 0–2) at initialization.
 
-The panel now queries an atomic runtime provider status when opened, showing
+The panel queries an atomic runtime provider status when opened, showing
 inactive/loading, analytical, spectral or fallback and disabling FFT-only
-controls outside spectral mode. UI interaction still needs device validation.
-Spectrum wind/fetch,
-per-band resolution and rebuild scheduling remain separate pending controls.
+controls outside spectral mode. Device validation changed cross-wind live,
+observed GPU revision 3 and the physics mirror adopting revision 3 immediately.
+Per-band structural resolution/domain, persistence and background job scheduling
+remain separate pending controls.
 
 ## Performance evidence and attribution
 
@@ -215,7 +233,7 @@ subpass timings must not be read as proof that water shading costs zero.
 
 ## Sub-grid normal detail
 
-The experimental material now evaluates the spectral slopes excluded by the
+The spectral material now evaluates the spectral slopes excluded by the
 geometry filter when those wavelengths remain resolvable by screen pixels.
 Undisplaced world XZ and mesh spacing are interpolated from the vertex stage;
 fragment derivatives set a separate pixel-footprint fade. The complement of
