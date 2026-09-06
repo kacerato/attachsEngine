@@ -442,3 +442,110 @@ AE_TEST(Water_forces_float_a_body_at_its_density_draught_and_let_it_sleep) {
                  "a settled body is allowed to sleep");
   AetherPhysics_DestroyWorld(world);
 }
+
+AE_TEST(WaterPlane_fit_recovers_a_known_slope) {
+  // Superfície inclinada conhecida: h = 0,3x - 0,2z + 5. O ajuste tem de
+  // devolver exatamente essa inclinação, senão o momento de arfagem sai errado.
+  const auto height = [](float x, float z) { return 0.3f * x - 0.2f * z + 5.0f; };
+  const WaterPlaneSample samples[] = {
+      {-4.0f, -1.0f, height(-4.0f, -1.0f)},
+      { 4.0f, -1.0f, height( 4.0f, -1.0f)},
+      {-4.0f,  1.0f, height(-4.0f,  1.0f)},
+      { 4.0f,  1.0f, height( 4.0f,  1.0f)},
+  };
+  WaterPlane plane{};
+  AE_EXPECT_TRUE(fitWaterPlane(samples, 4, plane), "fit succeeds");
+
+  // A normal de h = a x + b z + c é (-a, 1, -b) normalizada.
+  const float expectedLength = std::sqrt(0.3f * 0.3f + 1.0f + 0.2f * 0.2f);
+  AE_EXPECT_TRUE(std::fabs(plane.normal.x - (-0.3f / expectedLength)) < 1e-4f, "slope along x");
+  AE_EXPECT_TRUE(std::fabs(plane.normal.z - ( 0.2f / expectedLength)) < 1e-4f, "slope along z");
+  AE_EXPECT_TRUE(plane.normal.y > 0.0f, "the surface still faces up");
+
+  // Todo ponto da superfície tem altura assinada zero contra o plano ajustado.
+  for (const auto &sample : samples) {
+    const float signed_ = plane.normal.x * sample.x + plane.normal.y * sample.height +
+                          plane.normal.z * sample.z + plane.offset;
+    AE_EXPECT_TRUE(std::fabs(signed_) < 1e-3f, "sample lies on the fitted plane");
+  }
+}
+
+AE_TEST(WaterPlane_fit_falls_back_to_horizontal_when_it_cannot_tilt) {
+  // Menos de três amostras não determinam um plano, e uma linha também não. Nos
+  // dois casos a resposta certa é a de antes: horizontal na altura média.
+  const WaterPlaneSample single[] = {{10.0f, -3.0f, 2.0f}};
+  WaterPlane plane{};
+  AE_EXPECT_TRUE(fitWaterPlane(single, 1, plane), "single sample still yields a plane");
+  AE_EXPECT_TRUE(std::fabs(plane.normal.y - 1.0f) < 1e-6f, "horizontal");
+  AE_EXPECT_TRUE(std::fabs(plane.offset + 2.0f) < 1e-6f, "at the sampled height");
+
+  const WaterPlaneSample collinear[] = {
+      {-2.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 1.5f}, {2.0f, 0.0f, 2.0f}, {4.0f, 0.0f, 2.5f},
+  };
+  AE_EXPECT_TRUE(fitWaterPlane(collinear, 4, plane), "collinear samples still yield a plane");
+  AE_EXPECT_TRUE(std::fabs(plane.normal.y - 1.0f) < 1e-6f, "collinear cannot tilt");
+  AE_EXPECT_TRUE(std::fabs(plane.offset + 1.75f) < 1e-5f, "and sits at the mean height");
+
+  const WaterPlaneSample coincident[] = {{1.0f, 1.0f, 3.0f}, {1.0f, 1.0f, 3.0f}, {1.0f, 1.0f, 3.0f}};
+  AE_EXPECT_TRUE(fitWaterPlane(coincident, 3, plane), "coincident samples do not divide by zero");
+  AE_EXPECT_TRUE(std::fabs(plane.normal.y - 1.0f) < 1e-6f, "and stay horizontal");
+}
+
+AE_TEST(WaterPlane_fit_survives_being_far_from_the_origin) {
+  // Um sistema normal em coordenadas absolutas perde a inclinação no
+  // arredondamento a milhares de metros da origem. O ajuste é centrado por isso.
+  const float baseX = 40000.0f, baseZ = -25000.0f;
+  const auto height = [](float x, float z) { return 0.05f * x - 0.02f * z; };
+  const WaterPlaneSample samples[] = {
+      {baseX - 5.0f, baseZ - 5.0f, height(baseX - 5.0f, baseZ - 5.0f)},
+      {baseX + 5.0f, baseZ - 5.0f, height(baseX + 5.0f, baseZ - 5.0f)},
+      {baseX - 5.0f, baseZ + 5.0f, height(baseX - 5.0f, baseZ + 5.0f)},
+      {baseX + 5.0f, baseZ + 5.0f, height(baseX + 5.0f, baseZ + 5.0f)},
+  };
+  WaterPlane plane{};
+  AE_EXPECT_TRUE(fitWaterPlane(samples, 4, plane), "fit succeeds far from the origin");
+  const float expectedLength = std::sqrt(0.05f * 0.05f + 1.0f + 0.02f * 0.02f);
+  AE_EXPECT_TRUE(std::fabs(plane.normal.x - (-0.05f / expectedLength)) < 5e-3f,
+                 "the slope survives the distance");
+  AE_EXPECT_TRUE(std::fabs(plane.normal.z - ( 0.02f / expectedLength)) < 5e-3f,
+                 "on both axes");
+}
+
+AE_TEST(WaterPlane_fit_refuses_garbage_instead_of_producing_a_bad_plane) {
+  WaterPlane plane{};
+  AE_EXPECT_TRUE(!fitWaterPlane(nullptr, 4, plane), "null samples are refused");
+  const WaterPlaneSample samples[] = {{0.0f, 0.0f, 0.0f}};
+  AE_EXPECT_TRUE(!fitWaterPlane(samples, 0, plane), "empty range is refused");
+  const WaterPlaneSample broken[] = {
+      {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, std::nanf("")}, {0.0f, 1.0f, 1.0f},
+  };
+  AE_EXPECT_TRUE(!fitWaterPlane(broken, 3, plane), "a non finite height is refused");
+}
+
+AE_TEST(WaterPlane_tilt_is_what_makes_a_long_hull_pitch) {
+  // A razão de existir do ajuste: um casco de dez metros numa onda inclinada
+  // precisa receber empuxo assimétrico. Com plano horizontal, o centro de
+  // empuxo fica no centro do casco e não há momento; com plano inclinado, ele
+  // se desloca para o lado submerso.
+  const BuoyantShape hull{BuoyantShapeKind::Box, {5.0f, 1.0f, 1.5f}};
+  const AetherVec3 position{0.0f, 0.0f, 0.0f};
+  const AetherQuat upright{0.0f, 0.0f, 0.0f, 1.0f};
+
+  WaterPlane flat{};
+  const WaterPlaneSample level[] = {{-5.0f, 0.0f, 0.0f}, {5.0f, 0.0f, 0.0f},
+                                    {0.0f, -1.5f, 0.0f}, {0.0f, 1.5f, 0.0f}};
+  AE_EXPECT_TRUE(fitWaterPlane(level, 4, flat), "level fit");
+  const auto centred = submergedVolume(hull, position, upright, flat);
+  AE_EXPECT_TRUE(std::fabs(centred.centroid.x) < 1e-3f, "level water centres the buoyancy");
+
+  WaterPlane tilted{};
+  const WaterPlaneSample slope[] = {{-5.0f, 0.0f, -1.0f}, {5.0f, 0.0f, 1.0f},
+                                    {0.0f, -1.5f, 0.0f},  {0.0f, 1.5f, 0.0f}};
+  AE_EXPECT_TRUE(fitWaterPlane(slope, 4, tilted), "tilted fit");
+  const auto leaning = submergedVolume(hull, position, upright, tilted);
+  AE_EXPECT_TRUE(leaning.volume > 0.0f, "the hull is still in the water");
+  // O centro de empuxo migra para onde a água está mais alta — é esse braço que
+  // vira momento de arfagem no integrador. Aqui a superfície sobe com x, então
+  // a popa em x positivo é a que afunda.
+  AE_EXPECT_TRUE(leaning.centroid.x > 0.1f, "buoyancy shifts towards the submerged end");
+}

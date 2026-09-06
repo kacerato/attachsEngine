@@ -49,6 +49,62 @@ AetherVec3 interpolateToSurface(AetherVec3 below, float heightBelow, AetherVec3 
 }
 } // namespace
 
+bool fitWaterPlane(const WaterPlaneSample *samples, usize count, WaterPlane &out) noexcept {
+  if (samples == nullptr || count == 0) return false;
+
+  double sumX = 0, sumZ = 0, sumH = 0;
+  for (usize index = 0; index < count; ++index) {
+    const auto &sample = samples[index];
+    if (!std::isfinite(sample.x) || !std::isfinite(sample.z) || !std::isfinite(sample.height))
+      return false;
+    sumX += sample.x; sumZ += sample.z; sumH += sample.height;
+  }
+  const double inverse = 1.0 / static_cast<double>(count);
+  const double meanX = sumX * inverse, meanZ = sumZ * inverse, meanH = sumH * inverse;
+
+  // Plano horizontal na altura média é a resposta correta quando não há
+  // informação para inclinar — e é exatamente o que o código fazia antes.
+  const auto horizontal = [&]() {
+    out.normal = {0.0f, 1.0f, 0.0f};
+    out.offset = static_cast<float>(-meanH);
+    return std::isfinite(out.offset);
+  };
+  if (count < 3) return horizontal();
+
+  // Sistema normal em coordenadas centradas: o termo constante sai do ajuste e
+  // sobra um 2x2 bem condicionado, mesmo com o corpo a quilômetros da origem.
+  double xx = 0, xz = 0, zz = 0, xh = 0, zh = 0;
+  for (usize index = 0; index < count; ++index) {
+    const double x = samples[index].x - meanX;
+    const double z = samples[index].z - meanZ;
+    const double h = samples[index].height - meanH;
+    xx += x * x; xz += x * z; zz += z * z; xh += x * h; zh += z * h;
+  }
+  const double determinant = xx * zz - xz * xz;
+  // Amostras colineares (ou coincidentes) não determinam um plano. O limiar é
+  // relativo à escala das próprias amostras: um absoluto rejeitaria um casco
+  // pequeno e aceitaria ruído num casco grande.
+  const double scale = xx + zz;
+  if (!(scale > 0) || !(determinant > 1e-9 * scale * scale)) return horizontal();
+
+  const double slopeX = (zz * xh - xz * zh) / determinant;
+  const double slopeZ = (xx * zh - xz * xh) / determinant;
+  if (!std::isfinite(slopeX) || !std::isfinite(slopeZ)) return horizontal();
+
+  // A superfície é (x, slopeX*x + slopeZ*z + c, z); sua normal é (-a, 1, -b).
+  const double length = std::sqrt(slopeX * slopeX + 1.0 + slopeZ * slopeZ);
+  if (!(length > 0) || !std::isfinite(length)) return horizontal();
+  const double nx = -slopeX / length, ny = 1.0 / length, nz = -slopeZ / length;
+
+  // Altura do plano no centroide é a média, por construção do ajuste centrado.
+  const double offset = -(nx * meanX + ny * meanH + nz * meanZ);
+  if (!std::isfinite(offset)) return horizontal();
+
+  out.normal = {static_cast<float>(nx), static_cast<float>(ny), static_cast<float>(nz)};
+  out.offset = static_cast<float>(offset);
+  return true;
+}
+
 SubmergedVolume submergedTetrahedron(const AetherVec3 corners[4], const WaterPlane &plane) noexcept {
   SubmergedVolume result{};
   for (int index = 0; index < 4; ++index)

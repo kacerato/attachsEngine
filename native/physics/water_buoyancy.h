@@ -15,6 +15,29 @@ struct WaterPlane final {
   float offset = 0.0f;
 };
 
+// Uma sondagem da superfície sob o corpo: onde, e a que altura.
+struct WaterPlaneSample final {
+  float x = 0.0f, z = 0.0f, height = 0.0f;
+};
+
+// Ajusta o plano local por mínimos quadrados sobre as sondagens.
+//
+// Com uma amostra só — que é o que existia — um casco de dez metros numa onda
+// de seis sente a altura do seu centro e um plano horizontal. Ele sobe e desce
+// junto com a onda sem nunca inclinar, e o resultado é um barco que boia como
+// uma bandeja. A inclinação do plano é o que produz o momento de arfagem, e ela
+// só aparece quando a proa e a popa são sondadas separadamente.
+//
+// As amostras são centralizadas no centroide antes do ajuste. O sistema normal
+// em coordenadas absolutas fica malcondicionado quando o corpo está longe da
+// origem — a milhares de metros, os termos de x² dominam e a inclinação
+// desaparece no arredondamento.
+//
+// Menos de três amostras, ou amostras colineares, devolvem o plano horizontal
+// na altura média: é o comportamento de antes, que é o certo quando não há
+// informação para inclinar.
+bool fitWaterPlane(const WaterPlaneSample *samples, ae::usize count, WaterPlane &out) noexcept;
+
 struct SubmergedVolume final {
   float volume = 0.0f;
   AetherVec3 centroid{};  // centre of buoyancy; meaningless when volume is zero
