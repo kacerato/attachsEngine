@@ -182,6 +182,7 @@ add_library(aether_renderer STATIC
   renderer/static_collision_mesh.cpp
   renderer/thermal_pressure_controller.cpp
   renderer/water_grid.cpp
+  renderer/water_ripples.cpp
   renderer/water_surface.cpp
   renderer/water_field.cpp
   renderer/water_world.cpp
@@ -384,6 +385,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_surface_format.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_thermal_pressure_controller.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_water_grid.cpp
+    ${CMAKE_SOURCE_DIR}/../tests/native/test_water_ripples.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_water_surface.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_water_field.cpp
     ${CMAKE_SOURCE_DIR}/../tests/native/test_water_spectral_mirror.cpp
