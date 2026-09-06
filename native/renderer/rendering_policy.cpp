@@ -15,6 +15,7 @@ struct PresetPoint {
   AmbientQuality ambient;
   PostQuality post;
   TextureQuality textures;
+  WaterMeshQuality waterMesh;
   float resolutionScale;
   u32 shadowCascadeCount;
   u32 shadowCascadeResolution;
@@ -38,22 +39,22 @@ constexpr PresetPoint presetForProfile(rhi::DeviceProfile profile) {
   switch (profile) {
     case rhi::DeviceProfile::S:
       return {ShadowQuality::UltraSoft, AmbientQuality::HemisphericSpecular, PostQuality::Bloom,
-               TextureQuality::Full, 1.0f, 4, 2048, 25, 9, 320.0f, 1.05f,
+               TextureQuality::Full, WaterMeshQuality::Ultra, 1.0f, 4, 2048, 25, 9, 320.0f, 1.05f,
                1.0f, 2.0f, 0.80f, 0.0f, 0.0f, 0.0f, 0.0f, false, 0.85f, true};
     case rhi::DeviceProfile::A:
       return {ShadowQuality::Soft, AmbientQuality::HemisphericSpecular, PostQuality::Bloom,
-               TextureQuality::Full, 1.0f, 3, 1536, 9, 1, 220.0f, 1.06f,
+               TextureQuality::Full, WaterMeshQuality::High, 1.0f, 3, 1536, 9, 1, 220.0f, 1.06f,
                1.5f, 3.0f, 0.78f, 220.0f, 400.0f, 300.0f, 400.0f, false, 0.78f, true};
     case rhi::DeviceProfile::B:
       return {ShadowQuality::Soft, AmbientQuality::Hemispheric, PostQuality::Tonemap,
-               TextureQuality::Full, 1.0f, 2, 1024, 9, 1, 160.0f, 1.08f,
+               TextureQuality::Full, WaterMeshQuality::Medium, 1.0f, 2, 1024, 9, 1, 160.0f, 1.08f,
                2.5f, 4.0f, 0.75f, 60.0f, 120.0f, 180.0f, 240.0f, false, 0.58f, false};
     case rhi::DeviceProfile::C:
     default:
       // O perfil base não perde direcionalidade do sol: mantém uma cascata dura,
       // que é o que separa "sombra barata" de "sem noção de oclusão".
       return {ShadowQuality::Hard, AmbientQuality::Hemispheric, PostQuality::None,
-               TextureQuality::Half, 0.85f, 1, 768, 1, 1, 90.0f, 1.10f,
+               TextureQuality::Half, WaterMeshQuality::Low, 0.85f, 1, 768, 1, 1, 90.0f, 1.10f,
                4.0f, 6.0f, 0.70f, 60.0f, 120.0f, 90.0f, 120.0f, true, 0.55f, false};
   }
 }
@@ -85,6 +86,18 @@ constexpr ShadowQuality degrade(ShadowQuality value) {
     case ShadowQuality::Soft: return ShadowQuality::Hard;
     case ShadowQuality::Hard: return ShadowQuality::Hard;
     default: return ShadowQuality::Off;
+  }
+}
+
+// A malha de água cede um degrau por nível térmico, como os demais eixos. Ela
+// desce até VeryLow e para: sem malha não há superfície, e "oceano invisível" é
+// uma falha, não uma degradação.
+constexpr WaterMeshQuality degrade(WaterMeshQuality value) {
+  switch (value) {
+    case WaterMeshQuality::Ultra: return WaterMeshQuality::High;
+    case WaterMeshQuality::High: return WaterMeshQuality::Medium;
+    case WaterMeshQuality::Medium: return WaterMeshQuality::Low;
+    default: return WaterMeshQuality::VeryLow;
   }
 }
 
@@ -210,6 +223,18 @@ TextureQuality parseTextureQuality(const char *name) {
   return TextureQuality::Inherit;
 }
 
+WaterMeshQuality parseWaterMeshQuality(const char *name) {
+  if (matches(name, "ultra")) return WaterMeshQuality::Ultra;
+  if (matches(name, "high")) return WaterMeshQuality::High;
+  if (matches(name, "medium")) return WaterMeshQuality::Medium;
+  if (matches(name, "low")) return WaterMeshQuality::Low;
+  // "verylow" e "very-low" porque o nome atravessa opção de lançamento, arquivo
+  // de projeto e Inspector, e o hífen é natural em dois dos três.
+  if (matches(name, "verylow") || matches(name, "very-low"))
+    return WaterMeshQuality::VeryLow;
+  return WaterMeshQuality::Inherit;
+}
+
 AntiAliasingMode parseAntiAliasingMode(const char *name) {
   if (matches(name, "off")) return AntiAliasingMode::Off;
   if (matches(name, "fxaa")) return AntiAliasingMode::Fxaa;
@@ -304,6 +329,7 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
   AmbientQuality ambient = inherited(settings.ambient, point.ambient);
   PostQuality post = inherited(settings.post, point.post);
   TextureQuality textures = inherited(settings.textures, point.textures);
+  WaterMeshQuality waterMesh = inherited(settings.waterMesh, point.waterMesh);
   float resolutionScale = settings.resolutionScale > 0.0f ? settings.resolutionScale
                                                           : point.resolutionScale;
 
@@ -322,6 +348,10 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
     if (post != PostQuality::None) {
       post = degrade(post);
       note("post", PolicyClamp::Thermal);
+    }
+    if (waterMesh != WaterMeshQuality::VeryLow) {
+      waterMesh = degrade(waterMesh);
+      note("waterMesh", PolicyClamp::Thermal);
     }
     if (step > 0 && ambient != AmbientQuality::Constant) {
       // O ambiente só cede na pressão severa: perder o hemisfério achata a cena
@@ -528,6 +558,7 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
     reduceFiniteDistance(policy.materialDistance.emissiveMaximumDistance);
     note("materialDistance", PolicyClamp::Thermal);
   }
+  policy.geometry.waterMesh = waterMesh;
   policy.geometry.lodSelection = enabledOverride(settings.lodSelection, true);
   policy.geometry.materialShaderVariants =
       enabledOverride(settings.materialShaderVariants, point.materialShaderVariants);

@@ -28,6 +28,7 @@
 #include "core/base.h"
 #include "core/frame_policy.h"
 #include "renderer/dynamic_resolution.h"
+#include "renderer/water_grid.h"
 #include "rhi/device_profile.h"
 
 namespace ae::renderer {
@@ -112,6 +113,7 @@ struct ProjectRenderingSettings final {
   AmbientQuality ambient = AmbientQuality::Inherit;
   PostQuality post = PostQuality::Inherit;
   TextureQuality textures = TextureQuality::Inherit;
+  WaterMeshQuality waterMesh = WaterMeshQuality::Inherit;
   // 0 = herda do preset. Fora disso, fração da resolução nativa em [0.5, 1.0].
   float resolutionScale = 0.0f;
   // Teto de cadência preferido pelo autor; 0 = herda a política de display.
@@ -286,6 +288,10 @@ struct MaterialDistanceSettings final {
 struct GeometrySettings final {
   bool lodSelection = true;
   bool materialShaderVariants = false;
+  // Densidade da malha de água. Vive aqui, e não num bloco próprio de água,
+  // porque é geometria como qualquer outra: o renderer pergunta quantos
+  // triângulos pode gastar, não se a superfície é líquida.
+  WaterMeshQuality waterMesh = WaterMeshQuality::Medium;
 };
 
 struct TextureSettings final {
@@ -348,6 +354,7 @@ ShadowQuality parseShadowQuality(const char *name);
 AmbientQuality parseAmbientQuality(const char *name);
 PostQuality parsePostQuality(const char *name);
 TextureQuality parseTextureQuality(const char *name);
+WaterMeshQuality parseWaterMeshQuality(const char *name);
 AntiAliasingMode parseAntiAliasingMode(const char *name);
 
 const char *shadowQualityName(ShadowQuality quality);

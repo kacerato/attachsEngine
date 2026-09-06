@@ -89,7 +89,8 @@ AE_TEST(WaterGrid_out_of_range_index_returns_zero_instead_of_reading_past_the_ax
 }
 
 AE_TEST(WaterGrid_selection_scales_with_sea_state_and_never_leaves_its_profile) {
-  for (ae::u32 raw = 0; raw < static_cast<ae::u32>(WaterMeshQuality::Count); ++raw) {
+  for (ae::u32 raw = static_cast<ae::u32>(WaterMeshQuality::Ultra);
+       raw < static_cast<ae::u32>(WaterMeshQuality::Count); ++raw) {
     const auto quality = sanitizeWaterMeshQuality(raw);
     const auto calm = selectWaterGrid(quality, 0.0f, 8000.0f);
     const auto storm = selectWaterGrid(quality, MaximumWaterGridWindSpeed, 8000.0f);
@@ -116,11 +117,27 @@ AE_TEST(WaterGrid_selection_scales_with_sea_state_and_never_leaves_its_profile) 
   // A escada de perfis precisa ser monotônica, senão "reduzir a qualidade" pode
   // aumentar o custo em algum degrau.
   ae::u32 previous = 0xffffffffu;
-  for (ae::u32 raw = 0; raw < static_cast<ae::u32>(WaterMeshQuality::Count); ++raw) {
+  for (ae::u32 raw = static_cast<ae::u32>(WaterMeshQuality::Ultra);
+       raw < static_cast<ae::u32>(WaterMeshQuality::Count); ++raw) {
     const auto grid = selectWaterGrid(sanitizeWaterMeshQuality(raw), 9.0f, 8000.0f);
     AE_EXPECT_TRUE(grid.segments < previous, "each profile is cheaper than the last");
     previous = grid.segments;
   }
+}
+
+AE_TEST(WaterGrid_unresolved_quality_still_produces_a_sea) {
+  // Inherit chegando aqui é defeito de integração, não escolha do autor: alguém
+  // esqueceu de resolver o eixo. A geometria não tem como recusar — um oceano
+  // invisível é falha pior que um oceano de densidade média.
+  const auto inherited = selectWaterGrid(WaterMeshQuality::Inherit, 9.0f, 8000.0f);
+  const auto medium = selectWaterGrid(WaterMeshQuality::Medium, 9.0f, 8000.0f);
+  AE_EXPECT_TRUE(validateWaterGrid(inherited), "unresolved quality yields a legal grid");
+  AE_EXPECT_EQ(inherited.segments, medium.segments, "and it lands on the medium rung");
+
+  // Valor fora do enum vem de projeto ou opção de lançamento corrompida, e
+  // conteúdo inválido nunca pode derrubar a engine.
+  const auto garbage = selectWaterGrid(sanitizeWaterMeshQuality(9999u), 9.0f, 8000.0f);
+  AE_EXPECT_EQ(garbage.segments, medium.segments, "garbage sanitizes to the same rung");
 }
 
 AE_TEST(WaterGrid_selection_keeps_the_horizon_where_the_scene_put_it) {

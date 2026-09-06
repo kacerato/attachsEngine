@@ -574,3 +574,51 @@ AE_TEST(policy_perfil_que_ja_pede_resolucao_dinamica_nao_registra_clamp_por_cade
   AE_EXPECT_TRUE(!hasClamp(policy, "dynamicResolution.enabled", PolicyClamp::Budget),
                  "nao registra como degradacao o que o preset ja pedia");
 }
+
+AE_TEST(policy_malha_de_agua_e_um_eixo_com_preset_override_e_termica) {
+  // Preset: a densidade da água desce junto com o perfil do aparelho. Antes
+  // disso ela era constante de cozimento, igual em qualquer dispositivo.
+  auto capabilities = strongDevice();
+  const auto s = resolveRenderingPolicy({}, capabilities, ThermalPressure::None);
+  AE_EXPECT_EQ(s.geometry.waterMesh, WaterMeshQuality::Ultra, "perfil S usa a malha cheia");
+
+  capabilities.profile = rhi::DeviceProfile::C;
+  const auto c = resolveRenderingPolicy({}, capabilities, ThermalPressure::None);
+  AE_EXPECT_EQ(c.geometry.waterMesh, WaterMeshQuality::Low, "perfil base usa malha baixa");
+
+  // Override: o autor diverge num eixo sem arrastar os outros.
+  ProjectRenderingSettings settings{};
+  settings.waterMesh = WaterMeshQuality::VeryLow;
+  const auto overridden = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(overridden.geometry.waterMesh, WaterMeshQuality::VeryLow, "override vence o preset");
+  AE_EXPECT_EQ(overridden.shadows.cascadeCount, 4u, "e não toca nas sombras");
+}
+
+AE_TEST(policy_malha_de_agua_cede_na_termica_mas_nunca_some) {
+  const auto light = resolveRenderingPolicy({}, strongDevice(), ThermalPressure::Light);
+  AE_EXPECT_EQ(light.geometry.waterMesh, WaterMeshQuality::High, "um degrau na pressão leve");
+  AE_EXPECT_TRUE(hasClamp(light, "waterMesh", PolicyClamp::Thermal), "e o motivo fica registrado");
+
+  const auto severe = resolveRenderingPolicy({}, strongDevice(), ThermalPressure::Severe);
+  AE_EXPECT_EQ(severe.geometry.waterMesh, WaterMeshQuality::Medium, "dois degraus na severa");
+
+  // O piso é VeryLow: sem malha não existe superfície, e um oceano invisível é
+  // falha, não degradação. Partir do degrau mais baixo tem de ser estável.
+  ProjectRenderingSettings floorSettings{};
+  floorSettings.waterMesh = WaterMeshQuality::VeryLow;
+  const auto floored = resolveRenderingPolicy(floorSettings, strongDevice(), ThermalPressure::Severe);
+  AE_EXPECT_EQ(floored.geometry.waterMesh, WaterMeshQuality::VeryLow, "não desce abaixo do piso");
+  AE_EXPECT_TRUE(!hasClamp(floored, "waterMesh", PolicyClamp::Thermal),
+                 "e não registra um clamp que não aconteceu");
+}
+
+AE_TEST(policy_malha_de_agua_le_os_nomes_que_atravessam_projeto_e_lancamento) {
+  AE_EXPECT_EQ(parseWaterMeshQuality("ultra"), WaterMeshQuality::Ultra, "ultra");
+  AE_EXPECT_EQ(parseWaterMeshQuality("medium"), WaterMeshQuality::Medium, "medium");
+  AE_EXPECT_EQ(parseWaterMeshQuality("very-low"), WaterMeshQuality::VeryLow, "very-low com hífen");
+  AE_EXPECT_EQ(parseWaterMeshQuality("verylow"), WaterMeshQuality::VeryLow, "verylow sem hífen");
+  // Nome desconhecido herda em vez de abortar: configuração é conteúdo de
+  // usuário, e conteúdo inválido nunca pode derrubar a engine.
+  AE_EXPECT_EQ(parseWaterMeshQuality("oceano"), WaterMeshQuality::Inherit, "desconhecido herda");
+  AE_EXPECT_EQ(parseWaterMeshQuality(nullptr), WaterMeshQuality::Inherit, "nulo herda");
+}

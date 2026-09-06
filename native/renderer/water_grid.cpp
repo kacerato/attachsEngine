@@ -48,6 +48,7 @@ float waterGridAxisSpacing(const WaterGridSettings &settings, u32 index) noexcep
 
 const char *waterMeshQualityName(WaterMeshQuality quality) noexcept {
   switch (quality) {
+    case WaterMeshQuality::Inherit: return "inherit";
     case WaterMeshQuality::Ultra: return "ultra";
     case WaterMeshQuality::High: return "high";
     case WaterMeshQuality::Medium: return "medium";
@@ -63,11 +64,13 @@ WaterGridSettings selectWaterGrid(WaterMeshQuality quality, float windSpeed,
   // Topo de cada perfil. Ultra reproduz a malha assada hoje, para que trocar o
   // cozimento pelo runtime não mude o que já foi medido.
   static constexpr u32 kSegmentsByQuality[static_cast<usize>(WaterMeshQuality::Count)] = {
+      128u,  // Inherit: cai no ponto de Medium, ver o cabeçalho
       256u, 192u, 128u, 96u, 64u,
   };
   // Piso: abaixo disto a onda longa vira polígono visível mesmo em mar parado,
   // e a economia deixa de ser invisível.
   static constexpr u32 kFloorByQuality[static_cast<usize>(WaterMeshQuality::Count)] = {
+      64u,   // Inherit: idem
       128u, 96u, 64u, 48u, 32u,
   };
 

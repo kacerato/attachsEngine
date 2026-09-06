@@ -49,13 +49,16 @@ inline constexpr u32 waterGridTriangleCount(const WaterGridSettings &settings) n
 // Perfis de malha, na mesma escada que os plugins de referência expõem. A
 // ASTRA tinha `clipmapLevels` e nada mais; sem uma escada declarada, "reduzir a
 // malha em aparelho fraco" não tem onde ser escrito.
+// `Inherit` é o valor 0 pela mesma razão dos outros eixos de qualidade: ele é
+// serializado no projeto, e um sentinela dentro do enum sobrevive ao round-trip
+// sem um campo de presença paralelo que pode dessincronizar.
 enum class WaterMeshQuality : u32 {
-  Ultra = 0, High = 1, Medium = 2, Low = 3, VeryLow = 4, Count = 5,
+  Inherit = 0, Ultra = 1, High = 2, Medium = 3, Low = 4, VeryLow = 5, Count = 6,
 };
 
 inline constexpr WaterMeshQuality sanitizeWaterMeshQuality(u32 value) noexcept {
   return value < static_cast<u32>(WaterMeshQuality::Count)
-             ? static_cast<WaterMeshQuality>(value) : WaterMeshQuality::Medium;
+             ? static_cast<WaterMeshQuality>(value) : WaterMeshQuality::Inherit;
 }
 const char *waterMeshQualityName(WaterMeshQuality quality) noexcept;
 
@@ -73,6 +76,11 @@ inline constexpr float MaximumWaterGridWindSpeed = 15.0f;
 //
 // farExtent é preservado: encurtar o alcance move a linha do horizonte e é
 // mudança de composição, não de desempenho.
+//
+// `Inherit` aqui significa que ninguém resolveu o eixo antes de chegar na
+// geometria, o que é um defeito de integração e não uma escolha do autor. A
+// função trata isso como Medium em vez de recusar: um mar sem malha é uma falha
+// pior que um mar de densidade média.
 WaterGridSettings selectWaterGrid(WaterMeshQuality quality, float windSpeed,
                                   float farExtent) noexcept;
 

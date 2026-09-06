@@ -5,6 +5,7 @@
 #include "platform/android/water_spectral_probe.h"
 #include "platform/android/android_frame_profiler.h"
 #include "renderer/rendering_policy.h"
+#include "renderer/water_fft.h"
 #include "platform/android/android_frame_pacer.h"
 #include "platform/android/android_performance.h"
 #include "platform/android/android_thermal_monitor.h"
@@ -488,7 +489,7 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
       features.memorylessAttachments ? 1 : 0, static_cast<int>(device.deviceProfile()));
   __android_log_print(ANDROID_LOG_INFO, LogTag,
       "[RenderPolicy] preset=%s perfil=%d sombras=%s(%u cascatas @%u, %u/%u taps, cache=%s margem=%.2f blend=%.2f fade=%.2f) "
-      "ambiente=%s%s%s pos=%s%s textura_mip_bias=%u aniso=%.1f escala=%.2f dinamica=%s[%.2f,%.2f] clamps=%u",
+      "ambiente=%s%s%s pos=%s%s malha_agua=%s(%u seg) textura_mip_bias=%u aniso=%.1f escala=%.2f dinamica=%s[%.2f,%.2f] clamps=%u",
       ae::renderer::qualityPresetName(shell.renderingSettings.preset),
       static_cast<int>(shell.renderingPolicy.effectiveProfile),
       shell.renderingPolicy.shadows.enabled ? "on" : "off",
@@ -505,6 +506,14 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
       shell.renderingPolicy.ambient.splitSumBrdf ? "+split-sum" : "",
       shell.renderingPolicy.post.dedicatedPass ? "passe" : "inline",
       shell.renderingPolicy.post.bloom ? "+bloom" : "",
+      // A densidade escolhida entra no relatório junto do resto: uma medição só
+      // é comparável com outra se o estado que a produziu estiver ao lado dela.
+      ae::renderer::waterMeshQualityName(shell.renderingPolicy.geometry.waterMesh),
+      // O vento ainda não é parâmetro de cena: sai do espectro, que é quem o
+      // define hoje. Quando a cena passar a autorá-lo, é daqui que se lê.
+      ae::renderer::selectWaterGrid(shell.renderingPolicy.geometry.waterMesh,
+                                    ae::renderer::WaterSpectrumSettings{}.windSpeed,
+                                    8000.0f).segments,
       shell.renderingPolicy.textures.residencyMipBias,
       static_cast<double>(shell.renderingPolicy.textures.samplerAnisotropy),
       static_cast<double>(shell.renderingPolicy.resolutionScale),
@@ -1008,6 +1017,10 @@ void android_main(android_app *app) {
     if (ae::platform::android::readStringLaunchOption(app->activity, "aether.quality_textures",
                                                       buffer, sizeof(buffer))) {
       shell.renderingSettings.textures = ae::renderer::parseTextureQuality(buffer);
+    }
+    if (ae::platform::android::readStringLaunchOption(app->activity, "aether.quality_water_mesh",
+                                                      buffer, sizeof(buffer))) {
+      shell.renderingSettings.waterMesh = ae::renderer::parseWaterMeshQuality(buffer);
     }
     if (ae::platform::android::readStringLaunchOption(app->activity, "aether.anti_aliasing",
                                                       buffer, sizeof(buffer))) {
