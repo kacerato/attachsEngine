@@ -4,6 +4,7 @@
 #include "renderer/map_package.h"
 #include "renderer/environment_map.h"
 #include "renderer/static_collision_mesh.h"
+#include "renderer/water_grid.h"
 #include "rhi/device.h"
 #include "rhi/resource.h"
 #include "rhi/upload_context.h"
@@ -32,11 +33,16 @@ static_assert(sizeof(EnvironmentLighting) == 128);
 // image decoders and import metadata remain outside the APK render path.
 class DirtRoadResources final {
 public:
+  // `waterGridSegments` é a densidade que a política de renderização escolheu
+  // para a malha de água. Zero mantém a malha assada intacta, que é o
+  // comportamento de sempre; qualquer valor menor que o assado faz a grade ser
+  // reindexada com salto. Ver renderer/water_grid.h.
   bool initialize(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload,
                   AAssetManager *assets, bool forceTextureFallback,
                   float waterDisplacementAllowance,
                   const std::atomic<bool> *cancel = nullptr,
-                  const char *assetRoot = "dirt_road");
+                  const char *assetRoot = "dirt_road",
+                  u32 waterGridSegments = 0);
   void shutdown();
 
   VkBuffer vertexBuffer() const { return vertices_.handle(); }

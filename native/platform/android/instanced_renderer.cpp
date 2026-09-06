@@ -3086,10 +3086,16 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     return false;
   }
   if (dirtRoadPreview_) {
+    // A densidade da malha de água sai da política, não do cozimento. Vento
+    // ainda vem do espectro; quando a cena passar a autorá-lo, é de lá que sai.
+    const u32 waterGridSegments = renderer::selectWaterGrid(
+        renderingPolicy_.geometry.waterMesh,
+        renderer::WaterSpectrumSettings{}.windSpeed, 8000.0f).segments;
     if (!dirtRoadResources_.initialize(device, uploadContext_, materialAssets,
                                        forceTextureFallback,
                                        waterDisplacementCapacity_,
-                                       cancel, mapAssetRoot)) return false;
+                                       cancel, mapAssetRoot,
+                                       waterGridSegments)) return false;
     instanceCount_ = static_cast<u32>(dirtRoadResources_.draws().size());
     for (u32 index = 0; index < instanceCount_; ++index) {
       const u32 material = dirtRoadResources_.draws()[index].materialIndex;

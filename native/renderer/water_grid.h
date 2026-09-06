@@ -119,4 +119,34 @@ bool buildWaterGrid(const WaterGridSettings &settings,
                     WaterGridVertex *vertices, usize vertexCapacity,
                     u32 *indices, usize indexCapacity) noexcept;
 
+// ---------------------------------------------------------------------------
+// Decimação de uma grade já assada
+// ---------------------------------------------------------------------------
+//
+// Enquanto a cena vier de um .aemap, trocar a malha inteira significaria
+// reconstruir o buffer de vértices compartilhado e reindexar todo o resto da
+// cena — barco, caixas, fundo. Muito risco para o ganho.
+//
+// A saída é mais simples: manter o buffer assado como está e reescrever apenas
+// os índices da água, saltando vértices. A grade é regular e o eixo já é
+// graduado, então pegar um vértice a cada `step` preserva a forma da graduação
+// e corta triângulos na proporção do quadrado do salto. Os vértices não
+// referenciados continuam ocupando memória — o que se compra aqui é
+// rasterização, que é onde a medição mostrou o custo.
+//
+// A restrição é que `step` divida o número de segmentos assado, senão a última
+// coluna não fecha e a borda da água abre um rasgo até o horizonte.
+u32 waterGridDecimation(u32 bakedSegments, u32 targetSegments) noexcept;
+
+inline constexpr usize waterGridDecimatedIndexCount(u32 bakedSegments, u32 step) noexcept {
+  const u32 cells = (step == 0u) ? 0u : bakedSegments / step;
+  return static_cast<usize>(cells) * cells * 6u;
+}
+
+// Reescreve os índices de uma grade assada com o salto pedido. `baseVertex` é o
+// primeiro vértice da grade dentro do buffer compartilhado. Devolve false, sem
+// escrever, quando o salto não divide a grade ou o destino não comporta.
+bool decimateWaterGridIndices(u32 bakedSegments, u32 step, u32 baseVertex,
+                              u32 *indices, usize indexCapacity, usize &written) noexcept;
+
 } // namespace ae::renderer

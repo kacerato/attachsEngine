@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 #include <vector>
 
 using namespace ae::renderer;
@@ -271,4 +272,77 @@ AE_TEST(WaterGrid_build_reproduces_the_baked_ocean_vertex_for_vertex) {
   const auto &corner = buffers.vertices[0];
   AE_EXPECT_TRUE(std::fabs(corner.position[0] + 8000.0f) <= 1e-2f, "corner reaches the far extent");
   AE_EXPECT_TRUE(std::fabs(corner.bandLimit - 354.4509f) <= 1e-2f, "and carries the coarse band limit");
+}
+
+AE_TEST(WaterGrid_decimation_only_picks_divisors_and_never_undershoots) {
+  // Um salto que não divide deixa a última coluna sem fechar, e o sintoma é um
+  // rasgo na água indo até o horizonte.
+  for (ae::u32 target : {256u, 200u, 129u, 128u, 100u, 64u, 33u, 32u, 8u, 1u}) {
+    const ae::u32 step = waterGridDecimation(256u, target);
+    AE_EXPECT_TRUE(step >= 1u, "step is positive");
+    AE_EXPECT_EQ(256u % step, 0u, "step divides the baked grid");
+    // Nunca abaixo do pedido: a política escolheu aquela densidade como mínimo
+    // aceitável para o estado de mar, e descer dela é decidir por ela.
+    AE_EXPECT_TRUE(256u / step >= target || step == 256u, "never coarser than requested");
+  }
+  AE_EXPECT_EQ(waterGridDecimation(256u, 256u), 1u, "no decimation when it already fits");
+  AE_EXPECT_EQ(waterGridDecimation(256u, 300u), 1u, "asking for more than baked keeps the mesh");
+  AE_EXPECT_EQ(waterGridDecimation(256u, 128u), 2u, "half the segments is one skip");
+  AE_EXPECT_EQ(waterGridDecimation(256u, 64u), 4u, "a quarter is three skips");
+  // 116 é o que a política escolhe no perfil médio com vento de 10 m/s. O
+  // divisor que atende sem descer dele é 2, que dá 128.
+  AE_EXPECT_EQ(waterGridDecimation(256u, 116u), 2u, "the medium profile lands on half");
+  AE_EXPECT_EQ(waterGridDecimation(0u, 128u), 1u, "degenerate input is a no-op, not a crash");
+}
+
+AE_TEST(WaterGrid_decimated_indices_stay_inside_the_baked_grid_and_face_up) {
+  const ae::u32 baked = 64u, step = 4u, base = 1000u;
+  const ae::usize expected = waterGridDecimatedIndexCount(baked, step);
+  std::vector<ae::u32> indices(expected);
+  ae::usize written = 0;
+  AE_EXPECT_TRUE(decimateWaterGridIndices(baked, step, base, indices.data(), indices.size(), written),
+                 "decimation succeeds");
+  AE_EXPECT_EQ(written, expected, "writes exactly the promised count");
+
+  const ae::u32 stride = baked + 1u;
+  const ae::u32 highest = base + stride * stride - 1u;
+  for (ae::u32 index : indices) {
+    AE_EXPECT_TRUE(index >= base, "no index falls before the grid");
+    AE_EXPECT_TRUE(index <= highest, "no index falls past the grid");
+  }
+
+  // O enrolamento tem de sobreviver ao salto: a mesma ordem a,c,b / b,c,d de
+  // buildWaterGrid, só que com passos maiores.
+  const WaterGridSettings settings{baked, 100.0f, 1000.0f};
+  for (ae::usize triangle = 0; triangle + 2 < indices.size(); triangle += 3) {
+    const auto position = [&](ae::u32 index) {
+      const ae::u32 local = index - base;
+      return std::pair<float, float>{waterGridAxisPosition(settings, local % stride),
+                                     waterGridAxisPosition(settings, local / stride)};
+    };
+    const auto a = position(indices[triangle]);
+    const auto b = position(indices[triangle + 1]);
+    const auto c = position(indices[triangle + 2]);
+    const float ux = b.first - a.first, uz = b.second - a.second;
+    const float vx = c.first - a.first, vz = c.second - a.second;
+    AE_EXPECT_TRUE(uz * vx - ux * vz > 0.0f, "decimated winding still faces up");
+  }
+}
+
+AE_TEST(WaterGrid_decimation_cuts_triangles_by_the_square_of_the_skip) {
+  // A conta que justifica o trabalho: o salto corta rasterização na proporção
+  // do quadrado, e é rasterização que a medição apontou como o custo.
+  AE_EXPECT_EQ(waterGridDecimatedIndexCount(256u, 1u), 256u * 256u * 6u, "no skip, full mesh");
+  AE_EXPECT_EQ(waterGridDecimatedIndexCount(256u, 2u), 128u * 128u * 6u, "one skip, a quarter");
+  AE_EXPECT_EQ(waterGridDecimatedIndexCount(256u, 4u), 64u * 64u * 6u, "three skips, a sixteenth");
+
+  // Buffer curto ou salto que não divide são recusados sem escrever nada: uma
+  // malha meio reindexada desenha, e desenha errado.
+  std::vector<ae::u32> tiny(12);
+  ae::usize written = 123;
+  AE_EXPECT_TRUE(!decimateWaterGridIndices(256u, 2u, 0u, tiny.data(), tiny.size(), written),
+                 "short buffer is refused");
+  AE_EXPECT_EQ(written, 0u, "and reports nothing written");
+  AE_EXPECT_TRUE(!decimateWaterGridIndices(256u, 3u, 0u, tiny.data(), tiny.size(), written),
+                 "non divisor is refused");
 }

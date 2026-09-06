@@ -78,11 +78,66 @@ bool decodeEnvironment(const std::vector<u8> &bytes, EnvironmentLighting &lighti
 }
 }
 
+namespace {
+
+// Reindexa a grade de água com salto, sobre o buffer já montado.
+//
+// A malha assada tem 256 segmentos fixos (tools/build-ocean-demo.py) e a
+// política escolhe a densidade por perfil e estado de mar. Trocar a malha
+// inteira significaria reconstruir o buffer de vértices compartilhado e
+// reindexar barco, caixas e fundo junto — muito risco para o ganho. Aqui os
+// vértices ficam onde estão e só os índices da água mudam: os não referenciados
+// continuam ocupando memória, e o que se compra é rasterização, que foi o que a
+// medição apontou como o custo.
+//
+// Silencioso quando não há o que fazer: sem grade de água, com densidade zero,
+// ou quando o salto resultante é 1, o buffer sai como entrou.
+void decimateWaterGrid(renderer::SpatialRenderChunks &chunks,
+                       const std::vector<renderer::MapMaterialRecord> &materials,
+                       std::vector<renderer::MapDrawRecord> &draws,
+                       u32 targetSegments) {
+  if (targetSegments == 0) return;
+  constexpr u32 kCameraGrid =
+      renderer::MapMaterialWater | renderer::MapMaterialWaterCameraGrid;
+  for (auto &draw : draws) {
+    if (draw.materialIndex >= materials.size()) continue;
+    if ((materials[draw.materialIndex].flags & kCameraGrid) != kCameraGrid) continue;
+    if (draw.indexCount % 6u != 0u) continue;
+
+    // Segmentos da grade assada, deduzidos da contagem: seis índices por célula
+    // e a grade é quadrada. Se a conta não fechar num quadrado perfeito, o draw
+    // não é a grade que este código sabe reindexar, e ele fica como está.
+    const u32 cells = draw.indexCount / 6u;
+    u32 baked = 1u;
+    while (baked * baked < cells) ++baked;
+    if (baked * baked != cells) continue;
+
+    const u32 step = renderer::waterGridDecimation(baked, targetSegments);
+    if (step <= 1u) continue;
+
+    // O primeiro índice do draw aponta para o canto da grade; decimar preserva
+    // esse canto, então a reescrita cabe no espaço que o draw já ocupa.
+    const u32 base = chunks.indices[draw.firstIndex];
+    usize written = 0;
+    if (!renderer::decimateWaterGridIndices(baked, step, base,
+                                            chunks.indices.data() + draw.firstIndex,
+                                            draw.indexCount, written)) continue;
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+        "[Water] grade %u seg -> %u seg (salto %u): %u indices, %.0f%% do original.",
+        baked, baked / step, step, static_cast<u32>(written),
+        100.0 * static_cast<double>(written) / static_cast<double>(draw.indexCount));
+    draw.indexCount = static_cast<u32>(written);
+  }
+}
+
+} // namespace
+
 bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload,
                                    AAssetManager *assets, bool forceTextureFallback,
                                    float waterDisplacementAllowance,
                                    const std::atomic<bool> *cancel,
-                                   const char *assetRoot) {
+                                   const char *assetRoot,
+                                   u32 waterGridSegments) {
   if (assets == nullptr || assetRoot == nullptr || assetRoot[0] == '\0' || !images_.empty()) return false;
   const auto started = std::chrono::steady_clock::now();
   std::vector<u8> packageBytes;
@@ -115,6 +170,7 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
     return false;
   }
   draws_ = std::move(renderChunks.draws);
+  decimateWaterGrid(renderChunks, materials_, draws_, waterGridSegments);
 
   auto &allocator = device.memoryAllocator();
   rhi::BufferDesc buffer{};

@@ -157,4 +157,49 @@ bool buildWaterGrid(const WaterGridSettings &settings,
   return true;
 }
 
+u32 waterGridDecimation(u32 bakedSegments, u32 targetSegments) noexcept {
+  if (bakedSegments == 0u || targetSegments == 0u) return 1u;
+  if (targetSegments >= bakedSegments) return 1u;
+  // Só divisores: um salto que não divide deixa a última coluna sem fechar, e o
+  // sintoma é um rasgo na água indo até o horizonte.
+  u32 best = 1u;
+  for (u32 step = 1u; step <= bakedSegments; ++step) {
+    if (bakedSegments % step != 0u) continue;
+    const u32 resulting = bakedSegments / step;
+    // Nunca abaixo do pedido: a política escolheu aquela densidade como o
+    // mínimo aceitável para o estado de mar, e descer dela é decidir por ela.
+    if (resulting < targetSegments) break;
+    best = step;
+  }
+  return best;
+}
+
+bool decimateWaterGridIndices(u32 bakedSegments, u32 step, u32 baseVertex,
+                              u32 *indices, usize indexCapacity, usize &written) noexcept {
+  written = 0;
+  if (indices == nullptr || step == 0u || bakedSegments == 0u) return false;
+  if (bakedSegments % step != 0u) return false;
+  const usize required = waterGridDecimatedIndexCount(bakedSegments, step);
+  if (required == 0 || indexCapacity < required) return false;
+
+  const u32 stride = bakedSegments + 1u;
+  const u32 cells = bakedSegments / step;
+  usize cursor = 0;
+  for (u32 row = 0; row < cells; ++row) {
+    for (u32 column = 0; column < cells; ++column) {
+      // Índices no espaço da grade assada: o salto escolhe quais vértices
+      // existentes participam, sem mover nenhum deles.
+      const u32 a = baseVertex + (row * step) * stride + column * step;
+      const u32 b = a + step;
+      const u32 c = a + step * stride;
+      const u32 d = c + step;
+      // Mesma ordem de buildWaterGrid: a superfície continua olhando para cima.
+      indices[cursor++] = a; indices[cursor++] = c; indices[cursor++] = b;
+      indices[cursor++] = b; indices[cursor++] = c; indices[cursor++] = d;
+    }
+  }
+  written = cursor;
+  return true;
+}
+
 } // namespace ae::renderer
