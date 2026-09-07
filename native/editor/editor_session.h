@@ -68,6 +68,19 @@ public:
   EditorEntityId selection() const noexcept { return state_.selection; }
   bool playRequested() const noexcept { return playRequested_; }
   void clearPlayRequest() noexcept { playRequested_ = false; }
+
+  // **Editar é ver a cena PARADA.** A água não ondula, o casco não anda e a
+  // física não integra enquanto alguém posiciona um objeto — senão o que se vê
+  // não é um editor, é um vídeo com painéis por cima. A aba Play é o que solta.
+  bool isPlaying() const noexcept { return state_.workspace == EditorWorkspace::Play; }
+  // Relógio da CENA, separado do relógio de parede. Ele só avança em Play, e é
+  // ele que alimenta a animação e a simulação — congelar apenas o desenho
+  // mostraria uma imagem parada sobre um estado que continua mudando, e apertar
+  // Play daria um salto.
+  float sceneTime() const noexcept { return sceneTime_; }
+  // `wallSeconds` é o relógio contínuo da plataforma. A sessão deriva o próprio
+  // passo dele, o que a torna imune a um primeiro quadro com valor arbitrário.
+  void advanceClock(float wallSeconds) noexcept;
   // Enquadra o objeto selecionado. É o gesto de "onde ele está?", e sem ele um
   // objeto longe do alvo da órbita fica inalcançável.
   void frameSelection();
@@ -102,6 +115,9 @@ private:
   EditorGizmoDrag gizmoDrag_{};
   bool gizmoTransactionOpen_ = false;
   bool playRequested_ = false;
+  float sceneTime_ = 0.0f;
+  float lastWallSeconds_ = 0.0f;
+  bool clockPrimed_ = false;
 };
 
 } // namespace ae::editor

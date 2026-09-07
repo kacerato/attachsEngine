@@ -1494,14 +1494,21 @@ void android_main(android_app *app) {
       float timeSeconds = std::chrono::duration<float>(
                                     std::chrono::steady_clock::now() - shell.shellStartTime)
                                     .count();
+      // Em modo de edicao a cena fica congelada; a aba Play e o que a solta. O
+      // relogio da cena vive na sessao, onde e testavel.
+      const bool editorActive = shell.editorUi && shell.instancedRenderer.uiRendererReady();
+      shell.editorSession.advanceClock(timeSeconds);
+      const bool editorPlaying = !editorActive || shell.editorSession.isPlaying();
+      if (editorActive) timeSeconds = shell.editorSession.sceneTime();
+
       const auto waterControls=ae::platform::android::runtimeControlsSnapshot();
       const ae::renderer::WaterWakeSettings wakeSettings{
           waterControls.wakeStrength, waterControls.wakeMinimumSpeed,
           waterControls.wakeSpacing, waterControls.wakeWidthScale,
           waterControls.wakeMaximumImpulse};
       if (shell.oceanPreview && !shell.oceanValidation.update(shell.instancedRenderer,timeSeconds,timeSeconds,
-          waterControls.fluidDensity,waterControls.waterPaused,waterControls.bodyRippleGain,
-          wakeSettings)) {
+          waterControls.fluidDensity,waterControls.waterPaused || !editorPlaying,
+          waterControls.bodyRippleGain, wakeSettings)) {
         __android_log_print(ANDROID_LOG_ERROR,LogTag,"[OceanValidation] simulation update failed");
       }
       shell.waterTimeSeconds = timeSeconds;
@@ -1528,8 +1535,19 @@ void android_main(android_app *app) {
         // levar as coordenadas logicas ao NDC da tela inteira.
         shell.instancedRenderer.setUiSurfaceSize(logicalWidth, logicalHeight);
       }
+      // A CENA e desenhada com a camera do EDITOR. Ate aqui ela usava a camera
+      // livre do jogo e a de orbita movia so a grade e o gizmo: orbitar girava a
+      // sobreposicao sobre uma cena parada em outro lugar, que e exatamente a
+      // sensacao de "isto e uma cena rodando, nao um editor".
+      ae::platform::FreeCameraState sceneCamera = shell.cameraController.state();
+      if (editorActive && !editorPlaying) {
+        const ae::editor::EditorCamera &editorCamera = shell.editorSession.camera();
+        ae::editor::editorCameraPosition(editorCamera, sceneCamera.position);
+        sceneCamera.yaw = editorCamera.yaw;
+        sceneCamera.pitch = editorCamera.pitch;
+      }
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
-          timeSeconds, shell.cameraController.state(), hud);
+          timeSeconds, sceneCamera, hud);
       const ae::u64 frameThreadCpuFinished = currentThreadCpuNanoseconds();
       const ae::u64 frameMonotonicFinished = currentMonotonicNanoseconds();
       const ae::u64 threadCpuNs = frameThreadCpuFinished > frameThreadCpuStarted

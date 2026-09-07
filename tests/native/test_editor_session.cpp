@@ -288,6 +288,41 @@ AE_TEST(session_frames_the_selection) {
                  "o alvo da orbita passa a ser o objeto");
 }
 
+AE_TEST(session_scene_clock_is_frozen_until_play) {
+  // Editar e ver a cena PARADA. Sem isto o que se ve nao e um editor, e um
+  // video com paineis por cima -- a agua ondula e o casco anda enquanto alguem
+  // tenta posicionar um objeto.
+  Fixture fixture;
+  AE_EXPECT_TRUE(!fixture.session.isPlaying(), "o editor comeca parado");
+  fixture.session.advanceClock(0.0f);
+  fixture.session.advanceClock(0.016f);
+  fixture.session.advanceClock(0.032f);
+  AE_EXPECT_TRUE(fixture.session.sceneTime() == 0.0f, "o relogio da cena nao andou");
+
+  // Aperta Play pela aba do topo.
+  EditorScreenState &mutableState = const_cast<EditorScreenState &>(fixture.session.screen());
+  mutableState.workspace = EditorWorkspace::Play;
+  fixture.session.advanceClock(0.048f);
+  AE_EXPECT_TRUE(fixture.session.sceneTime() > 0.0f, "em Play a cena anda");
+}
+
+AE_TEST(session_scene_clock_ignores_a_wall_clock_jump) {
+  // O relogio de parede salta quando o app e retomado. Integrar esse salto
+  // teleportaria a simulacao para um futuro que ninguem viu acontecer.
+  Fixture fixture;
+  EditorScreenState &mutableState = const_cast<EditorScreenState &>(fixture.session.screen());
+  mutableState.workspace = EditorWorkspace::Play;
+  fixture.session.advanceClock(10.0f);
+  fixture.session.advanceClock(10.016f);
+  const float afterStep = fixture.session.sceneTime();
+  AE_EXPECT_TRUE(afterStep > 0.0f, "");
+  fixture.session.advanceClock(400.0f);
+  AE_EXPECT_TRUE(fixture.session.sceneTime() == afterStep, "o salto foi descartado");
+  fixture.session.advanceClock(400.016f);
+  AE_EXPECT_TRUE(fixture.session.sceneTime() > afterStep,
+                 "e o passo seguinte volta a contar normalmente");
+}
+
 AE_TEST(session_camera_stays_valid_under_extreme_gestures) {
   Fixture fixture;
   const UiPoint centre = fixture.viewportCentre();

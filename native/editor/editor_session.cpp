@@ -185,6 +185,22 @@ void EditorSession::cancelPointers() {
   state_.activeGizmoAxis = EditorGizmoHandle::None;
 }
 
+void EditorSession::advanceClock(float wallSeconds) noexcept {
+  if (!std::isfinite(wallSeconds)) return;
+  if (!clockPrimed_) {
+    lastWallSeconds_ = wallSeconds;
+    clockPrimed_ = true;
+    return;
+  }
+  const float delta = wallSeconds - lastWallSeconds_;
+  lastWallSeconds_ = wallSeconds;
+  // Passo negativo ou absurdo é o relógio de parede saltando (retomada do app,
+  // mudança de fonte de tempo). Descartar é melhor do que teleportar a
+  // simulação para um futuro que ninguém viu acontecer.
+  if (!isPlaying() || delta <= 0.0f || delta > 1.0f) return;
+  sceneTime_ += delta;
+}
+
 void EditorSession::frameSelection() {
   const EditorEntity *entity = document_.find(state_.selection);
   if (entity == nullptr) return;
