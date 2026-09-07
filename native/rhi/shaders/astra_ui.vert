@@ -38,7 +38,21 @@ void main() {
 
   // Faixa de triângulos: 0=(0,0) 1=(1,0) 2=(0,1) 3=(1,1).
   const vec2 corner = vec2(float(gl_VertexIndex & 1), float((gl_VertexIndex >> 1) & 1));
-  const vec2 pixel = instance.bounds.xy + corner * instance.bounds.zw;
+  vec2 pixel = instance.bounds.xy + corner * instance.bounds.zw;
+  if (uint(instance.params.z + 0.5) == 3u) {
+    // Linha: o quad é orientado ao longo do segmento, e não a caixa envolvente.
+    // Para uma diagonal a caixa tem o dobro da área, e cada pixel a mais é um
+    // fragmento que só existiria para ser descartado.
+    const vec2 from = instance.atlas.xy;
+    const vec2 to = instance.atlas.zw;
+    const vec2 along = to - from;
+    const float segmentLength = max(sqrt(dot(along, along)), 0.0001);
+    const vec2 direction = along / segmentLength;
+    const vec2 normal = vec2(-direction.y, direction.x);
+    const float halfWidth = instance.params.y * 0.5 + 1.0;
+    pixel = mix(from, to, corner.x) + normal * (corner.y * 2.0 - 1.0) * halfWidth +
+            direction * (corner.x * 2.0 - 1.0) * halfWidth;
+  }
   vPixel = pixel;
 
   // Pixels lógicos para NDC. O Y já cresce para baixo nos dois espaços, então

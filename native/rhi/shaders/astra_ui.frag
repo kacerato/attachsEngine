@@ -35,6 +35,7 @@ layout(location = 0) out vec4 outColor;
 #define UI_KIND_RECT 0u
 #define UI_KIND_GLYPH 1u
 #define UI_KIND_ICON 2u
+#define UI_KIND_LINE 3u
 
 vec4 unpackColor(uint packed) {
   // 0xAARRGGBB, a mesma ordem do literal hexadecimal dos tokens.
@@ -68,6 +69,20 @@ void main() {
 
   const uint kind = uint(instance.params.z + 0.5);
   const vec4 fill = unpackColor(instance.colors.x);
+
+  if (kind == UI_KIND_LINE) {
+    // Distância ponto-segmento, presa às pontas: isso arredonda as
+    // extremidades, que é o que faz duas linhas de grade se encontrarem sem um
+    // degrau visível no cruzamento.
+    const vec2 from = instance.atlas.xy;
+    const vec2 to = instance.atlas.zw;
+    const vec2 along = to - from;
+    const float lengthSquared = max(dot(along, along), 0.0001);
+    const float t = clamp(dot(vPixel - from, along) / lengthSquared, 0.0, 1.0);
+    const float toSegment = length(vPixel - (from + along * t)) - instance.params.y * 0.5;
+    outColor = vec4(fill.rgb, fill.a * coverageFromDistance(toSegment));
+    return;
+  }
 
   if (kind == UI_KIND_GLYPH) {
     const vec2 uv = (instance.atlas.xy +

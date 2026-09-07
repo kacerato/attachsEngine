@@ -175,6 +175,48 @@ EditorPickResult pickNearest(std::span<const EditorPickCandidate> candidates,
   return result;
 }
 
+bool projectSegmentToScreen(const EditorViewport &viewport, const float from[3],
+                            const float to[3], ui::UiPoint &outFrom,
+                            ui::UiPoint &outTo) noexcept {
+  if (!isViewportValid(viewport) || from == nullptr || to == nullptr) return false;
+  if (!isFiniteTriple(from) || !isFiniteTriple(to)) return false;
+
+  const ViewBasis basis = buildViewBasis(viewport.frustum.yaw, viewport.frustum.pitch);
+  const auto depthOf = [&](const float world[3]) {
+    const float delta[3] = {world[0] - viewport.frustum.cameraPosition[0],
+                            world[1] - viewport.frustum.cameraPosition[1],
+                            world[2] - viewport.frustum.cameraPosition[2]};
+    float view[3]{};
+    worldToView(basis, delta, view);
+    return view[2];
+  };
+
+  // Uma folga sobre o plano próximo: exatamente NO plano a divisão ainda é
+  // instável em precisão simples, e o ponto interpolado sairia tremendo.
+  const float nearPlane = viewport.frustum.nearPlane * 1.01f;
+  float start[3] = {from[0], from[1], from[2]};
+  float end[3] = {to[0], to[1], to[2]};
+  const float startDepth = depthOf(start);
+  const float endDepth = depthOf(end);
+  if (startDepth < nearPlane && endDepth < nearPlane) return false;
+
+  if (startDepth < nearPlane || endDepth < nearPlane) {
+    const float span = endDepth - startDepth;
+    if (std::fabs(span) < 1e-6f) return false;
+    const float t = (nearPlane - startDepth) / span;
+    float *moved = startDepth < nearPlane ? start : end;
+    for (u32 axis = 0; axis < 3; ++axis)
+      moved[axis] = from[axis] + (to[axis] - from[axis]) * t;
+  }
+
+  const EditorProjectedPoint projectedFrom = projectWorldToScreen(viewport, start);
+  const EditorProjectedPoint projectedTo = projectWorldToScreen(viewport, end);
+  if (!projectedFrom.valid || !projectedTo.valid) return false;
+  outFrom = projectedFrom.screen;
+  outTo = projectedTo.screen;
+  return true;
+}
+
 float distanceToCamera(const EditorViewport &viewport, const float world[3]) noexcept {
   if (world == nullptr || !isFiniteTriple(world)) return 0.0f;
   const float delta[3] = {world[0] - viewport.frustum.cameraPosition[0],

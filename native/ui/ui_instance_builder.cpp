@@ -92,6 +92,14 @@ UiInstanceBuildResult buildUiInstances(const UiDrawList &list, const UiFont &fon
         push(instance);
         break;
       }
+      case UiPrimitive::Line: {
+        writeRect(instance.bounds, command.bounds);
+        writeRect(instance.atlas, command.atlas);
+        instance.params[1] = command.borderWidth;
+        instance.params[2] = static_cast<float>(UiInstanceKind::Line);
+        push(instance);
+        break;
+      }
       case UiPrimitive::Text: {
         if (!font.isReady()) {
           ++result.missingGlyphRuns;

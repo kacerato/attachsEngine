@@ -52,6 +52,15 @@ CELL = 96
 PADDING = 2
 ATLAS_WIDTH = 1024
 
+# A marca entra no mesmo atlas, mas NÃO na grade: um logotipo tem proporção
+# própria e espremê-lo num quadrado de 96 seria desenhar outra marca. Ele
+# também não passa pela recoloração — o branco do logotipo é o branco dele, e
+# inverter a luminância o deixaria preto sobre um painel preto.
+BRAND = [
+    ("brand/wordmark", "astra-wordmark.png", 56),
+    ("brand/mark", "astra-mark.png", 96),
+]
+
 
 def recolour_for_dark_ui(icon: Image.Image) -> Image.Image:
     """Inverte a luminância dos pixels que não são lima, preservando o alfa."""
@@ -134,8 +143,8 @@ def main() -> None:
 
     columns = max(1, ATLAS_WIDTH // (CELL + PADDING))
     rows = (len(names) + columns - 1) // columns
-    height = rows * (CELL + PADDING) + PADDING
-    atlas = Image.new("RGBA", (ATLAS_WIDTH, height), (0, 0, 0, 0))
+    height_total = rows * (CELL + PADDING) + PADDING
+    atlas = Image.new("RGBA", (ATLAS_WIDTH, height_total), (0, 0, 0, 0))
 
     rects: list[tuple[int, int, int, int]] = []
     for index, name in enumerate(names):
@@ -151,11 +160,33 @@ def main() -> None:
         atlas.paste(icon, (x, y))
         rects.append((x, y, CELL, CELL))
 
+    # Prateleira da marca, logo abaixo da grade de ícones.
+    brand_root = Path("assets/astra-visual/brand")
+    brand_images = []
+    shelf_height = 0
+    for _, filename, height in BRAND:
+        image = Image.open(brand_root / filename).convert("RGBA")
+        width = max(1, round(image.width * height / image.height))
+        brand_images.append(image.resize((width, height), Image.LANCZOS))
+        shelf_height = max(shelf_height, height)
+    if brand_images:
+        shelf_y = height_total
+        grown = Image.new("RGBA", (ATLAS_WIDTH, height_total + shelf_height + PADDING),
+                          (0, 0, 0, 0))
+        grown.paste(atlas, (0, 0))
+        atlas = grown
+        cursor_x = PADDING
+        for image in brand_images:
+            atlas.paste(image, (cursor_x, shelf_y))
+            rects.append((cursor_x, shelf_y, image.width, image.height))
+            cursor_x += image.width + PADDING
+        names = names + [name for name, _, _ in BRAND]
+
     arguments.output.mkdir(parents=True, exist_ok=True)
     atlas.save(arguments.output / f"{arguments.name}.png")
     binary_size = write_icons(
         arguments.output / f"{arguments.name}.aeui",
-        (ATLAS_WIDTH, height),
+        (ATLAS_WIDTH, atlas.height),
         rects,
         atlas.tobytes(),
     )
@@ -180,9 +211,9 @@ def main() -> None:
         encoding="utf-8",
     )
 
-    occupancy = len(names) * CELL * CELL / float(ATLAS_WIDTH * height)
+    occupancy = sum(rect[2] * rect[3] for rect in rects) / float(ATLAS_WIDTH * atlas.height)
     print(
-        f"atlas {ATLAS_WIDTH}x{height}, {len(names)} icones, ocupacao "
+        f"atlas {ATLAS_WIDTH}x{atlas.height}, {len(rects)} entradas, ocupacao "
         f"{occupancy * 100:.1f}%, binario {binary_size / 1024:.0f} KiB"
     )
     print(f"enum: {arguments.header} ({len(identifiers)} entradas)")

@@ -118,6 +118,27 @@ bool UiDrawList::addImage(const UiRect &bounds, UiImageId image, UiColor tint, f
   return push(command);
 }
 
+bool UiDrawList::addLine(UiPoint from, UiPoint to, UiColor color, float width) {
+  if (!std::isfinite(width) || width <= 0.0f) return false;
+  if (!std::isfinite(from.x) || !std::isfinite(from.y)) return false;
+  if (!std::isfinite(to.x) || !std::isfinite(to.y)) return false;
+  UiDrawCommand command{};
+  command.kind = UiPrimitive::Line;
+  const float half = width * 0.5f + 1.0f;  // um pixel a mais para a suavização
+  const float left = std::min(from.x, to.x) - half;
+  const float top = std::min(from.y, to.y) - half;
+  command.bounds = {left, top, std::max(from.x, to.x) + half - left,
+                    std::max(from.y, to.y) + half - top};
+  // As pontas ocupam o campo do atlas porque uma linha não amostra textura. É
+  // um campo reaproveitado, não um significado novo: quem lê sabe pelo `kind`.
+  command.atlas = {from.x, from.y, to.x, to.y};
+  command.clip = currentClip();
+  command.color = color;
+  command.gradientEnd = color;
+  command.borderWidth = width;
+  return push(command);
+}
+
 std::string_view UiDrawList::textOf(const UiDrawCommand &command) const noexcept {
   if (command.kind != UiPrimitive::Text) return {};
   if (static_cast<usize>(command.textOffset) + command.textLength > textArena_.size()) return {};

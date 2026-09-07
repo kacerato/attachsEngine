@@ -147,7 +147,21 @@ inline void rasterizeUi(std::span<const ui::UiInstance> instances, const ui::UiF
           continue;
 
         float colour[4] = {fill[0], fill[1], fill[2], fill[3]};
-        if (kind == static_cast<u32>(ui::UiInstanceKind::Glyph)) {
+        if (kind == static_cast<u32>(ui::UiInstanceKind::Line)) {
+          // Mesma distância ponto-segmento do fragmento. O quad orientado do
+          // vértice não é reproduzido aqui: percorrer a caixa envolvente dá o
+          // mesmo resultado, porque o que decide o pixel é a distância.
+          const float ax = instance.atlas[0];
+          const float ay = instance.atlas[1];
+          const float bx = instance.atlas[2] - ax;
+          const float by = instance.atlas[3] - ay;
+          const float lengthSquared = std::max(bx * bx + by * by, 0.0001f);
+          const float t = std::clamp(((px - ax) * bx + (py - ay) * by) / lengthSquared, 0.0f, 1.0f);
+          const float dx = px - (ax + bx * t);
+          const float dy = py - (ay + by * t);
+          const float distance = std::sqrt(dx * dx + dy * dy) - instance.params[1] * 0.5f;
+          colour[3] = fill[3] * detail::coverageFromDistance(distance);
+        } else if (kind == static_cast<u32>(ui::UiInstanceKind::Glyph)) {
           if (!font.isReady()) continue;
           const float u = (instance.atlas[0] +
                            (px - instance.bounds[0]) / instance.bounds[2] * instance.atlas[2]) /

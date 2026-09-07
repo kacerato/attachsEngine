@@ -89,4 +89,14 @@ EditorPickResult pickNearest(std::span<const EditorPickCandidate> candidates,
 // para manter tamanho constante na tela.
 float distanceToCamera(const EditorViewport &viewport, const float world[3]) noexcept;
 
+// Projeta um SEGMENTO, recortando-o no plano próximo antes de dividir.
+//
+// Sem o recorte, uma linha da grade que passa por baixo da câmera teria uma
+// ponta atrás dela, e a divisão perspectiva jogaria essa ponta para o lado
+// oposto da tela — uma linha atravessando o viewport na diagonal, do nada.
+// Falso quando o segmento inteiro está atrás do plano próximo.
+bool projectSegmentToScreen(const EditorViewport &viewport, const float from[3],
+                            const float to[3], ui::UiPoint &outFrom,
+                            ui::UiPoint &outTo) noexcept;
+
 } // namespace ae::editor

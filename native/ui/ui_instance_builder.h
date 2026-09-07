@@ -35,6 +35,9 @@ enum class UiInstanceKind : u32 {
   Glyph = 1,
   // Ícone amostrado do atlas RGBA, multiplicado pela cor (branco = intacto).
   Icon = 2,
+  // Segmento. `atlas` carrega as duas pontas e `params.y` a espessura; o
+  // vértice monta um quad orientado e o fragmento mede a distância ao segmento.
+  Line = 3,
 };
 
 struct alignas(16) UiInstance final {

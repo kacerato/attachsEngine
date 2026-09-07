@@ -122,6 +122,8 @@ constexpr const char *kNames[] = {
     "view/corners",
     "view/expand",
     "view/grid",
+    "brand/wordmark",
+    "brand/mark",
 };
 } // namespace
 

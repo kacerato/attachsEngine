@@ -203,9 +203,11 @@ target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 # precisa ser literalmente a mesma do vertex shader -- selecionar um objeto e
 # contornar outro seria o defeito de reimplementa-la aqui.
 add_library(aether_editor STATIC
+  editor/editor_camera.cpp
   editor/editor_document.cpp
   editor/editor_gizmo.cpp
   editor/editor_screen.cpp
+  editor/editor_session.cpp
   editor/editor_history.cpp
   editor/editor_view.cpp
 )
@@ -398,6 +400,7 @@ if(NOT ANDROID)
     ../tests/native/test_editor_document.cpp
     ../tests/native/test_editor_gizmo.cpp
     ../tests/native/test_editor_screen.cpp
+    ../tests/native/test_editor_session.cpp
     ../tests/native/test_editor_history.cpp
     ../tests/native/test_editor_view.cpp
     ../tests/native/test_ui_assets.cpp

@@ -131,9 +131,11 @@ enum class UiIcon : u32 {
   ViewCorners = 115,  // view/corners
   ViewExpand = 116,  // view/expand
   ViewGrid = 117,  // view/grid
+  BrandWordmark = 118,  // brand/wordmark
+  BrandMark = 119,  // brand/mark
 };
 
-inline constexpr u32 kUiIconCount = 117;
+inline constexpr u32 kUiIconCount = 119;
 
 // Nome de catálogo do ícone, para log e diagnóstico. Nunca para busca: procurar
 // um ícone por string em tempo de execução desfaria a garantia do enum.

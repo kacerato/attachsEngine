@@ -91,7 +91,6 @@ EditorScreenState waterLabState(const WaterLab &lab) {
   state.document = &lab.document;
   state.selection = lab.block;
   state.projectName = "Water Lab";
-  state.projectSubtitle = "Scene";
   return state;
 }
 
@@ -108,20 +107,16 @@ float colourDistance(const float rgba[4], UiColor token) {
 
 } // namespace
 
-AE_TEST(screen_places_the_viewport_behind_the_floating_panels) {
-  // A decisão de layout mais visível dos masters: a cena aparece atrás e ao
-  // redor dos painéis. Se o viewport encolhesse, a projeção do gizmo passaria a
-  // usar outro retângulo e a seleção erraria o alvo com os painéis abertos.
+AE_TEST(screen_lays_out_panel_viewport_panel) {
   WaterLab lab;
   Frame frame;
   const EditorScreenState state = waterLabState(lab);
   composeFrame(frame, state);
-  AE_EXPECT_TRUE(frame.layout.viewport.width == state.surface.width, "");
-  AE_EXPECT_TRUE(frame.layout.viewport.height == state.surface.height, "");
   AE_EXPECT_TRUE(frame.layout.hierarchyPanel.width > 0.0f, "");
   AE_EXPECT_TRUE(frame.layout.inspectorPanel.right() <= state.surface.right(), "");
   AE_EXPECT_TRUE(frame.layout.hierarchyPanel.right() < frame.layout.inspectorPanel.x,
                  "os dois paineis nao se sobrepoem");
+  AE_EXPECT_TRUE(frame.layout.topBar.height > 0.0f, "");
 }
 
 AE_TEST(screen_panels_absorb_touches_that_would_orbit_the_camera) {
@@ -138,10 +133,12 @@ AE_TEST(screen_panels_absorb_touches_that_would_orbit_the_camera) {
   AE_EXPECT_TRUE(routing.target != UiPointerTarget::Viewport,
                  "o painel absorve o toque");
 
+  const UiRect view = frame.layout.viewport;
   const UiPointerRouting scene = frame.router.route(
-      {2, UiPointerPhase::Down, {frame.layout.viewport.width * 0.5f, 400.0f}, 0.0});
+      {2, UiPointerPhase::Down,
+       {view.x + view.width * 0.7f, view.y + view.height * 0.35f}, 0.0});
   AE_EXPECT_TRUE(scene.target == UiPointerTarget::Viewport,
-                 "e o vazio entre os paineis continua sendo da cena");
+                 "e o meio da cena, longe da trilha, continua sendo da cena");
 }
 
 AE_TEST(screen_hierarchy_rows_and_their_eyes_are_separate_targets) {
@@ -197,16 +194,138 @@ AE_TEST(screen_tabs_divide_the_inspector_content) {
                  "o mesmo ponto do painel controla coisas diferentes em cada aba");
 }
 
-AE_TEST(screen_dock_and_tabs_are_reachable) {
+namespace {
+
+// Toca e solta num ponto, devolvendo o que a tela fez com isso.
+EditorPointerOutcome tap(Frame &frame, EditorScreenState &state, WaterLab &lab, UiPoint at) {
+  frame.router.route({1, UiPointerPhase::Down, at, 0.0});
+  const UiPointerRouting up = frame.router.route({1, UiPointerPhase::Up, at, 0.0});
+  return applyEditorPointer(state, frame.layout, up, lab.document, lab.history);
+}
+
+// Centro de um widget conhecido, procurado por sondagem no retangulo dado. Os
+// testes nao copiam as constantes de layout do .cpp: elas sao privadas e mudam
+// junto com o desenho.
+bool findWidget(Frame &frame, u32 widget, const UiRect &area, UiPoint &out) {
+  for (float y = area.y + 1.0f; y < area.bottom(); y += 2.0f) {
+    for (float x = area.x + 1.0f; x < area.right(); x += 2.0f) {
+      const UiPoint point{x, y};
+      const UiPointerRouting probe = frame.router.route({98, UiPointerPhase::Down, point, 0.0});
+      frame.router.route({98, UiPointerPhase::Up, point, 0.0});
+      if (probe.widgetId == widget && probe.target == UiPointerTarget::Widget) {
+        out = point;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+} // namespace
+
+AE_TEST(screen_workspace_tabs_live_in_the_top_bar_and_switch_context) {
+  // A doca inferior virou aba superior. Numa tela em paisagem a borda de baixo e
+  // a mais cara: e onde o polegar cobre o conteudo e onde a barra de gestos do
+  // sistema disputa o toque.
   WaterLab lab;
   Frame frame;
-  composeFrame(frame, waterLabState(lab));
+  EditorScreenState state = waterLabState(lab);
+  composeFrame(frame, state);
 
-  const UiRect dock = frame.layout.dock;
-  const UiPointerRouting play =
-      frame.router.route({1, UiPointerPhase::Down, {dock.x + dock.width * 0.5f,
-                                                    dock.y + dock.height * 0.5f}, 0.0});
-  AE_EXPECT_TRUE(play.target == UiPointerTarget::Widget, "o centro da dock e um item");
+  UiPoint at{};
+  AE_EXPECT_TRUE(findWidget(frame, widgetId(EditorWidget::TabLighting), frame.layout.topBar, at),
+                 "a aba Lighting esta na barra superior");
+  const EditorPointerOutcome outcome = tap(frame, state, lab, at);
+  AE_EXPECT_TRUE(outcome.consumed, "");
+  AE_EXPECT_TRUE(state.workspace == EditorWorkspace::Lighting, "e trocar de aba troca o contexto");
+}
+
+AE_TEST(screen_tapping_a_row_selects_it) {
+  WaterLab lab;
+  Frame frame;
+  EditorScreenState state = waterLabState(lab);
+  state.selection = kInvalidEntity;
+  composeFrame(frame, state);
+
+  UiPoint at{};
+  AE_EXPECT_TRUE(findWidget(frame, hierarchyRowWidget(lab.environment),
+                            frame.layout.hierarchyPanel, at),
+                 "");
+  tap(frame, state, lab, at);
+  AE_EXPECT_EQ(state.selection, lab.environment, "tocar na linha seleciona a entidade");
+}
+
+AE_TEST(screen_tapping_the_eye_toggles_visibility_and_is_undoable) {
+  // Tudo que o dedo faz passa pelo historico. Um campo que a interface mudasse
+  // direto seria um campo que o Ctrl+Z nao desfaz, sem nada na tela dizendo qual.
+  WaterLab lab;
+  Frame frame;
+  EditorScreenState state = waterLabState(lab);
+  composeFrame(frame, state);
+
+  const bool before = lab.document.find(lab.environment)->visible;
+  UiPoint at{};
+  AE_EXPECT_TRUE(findWidget(frame, hierarchyEyeWidget(lab.environment),
+                            frame.layout.hierarchyPanel, at),
+                 "");
+  const EditorPointerOutcome outcome = tap(frame, state, lab, at);
+  AE_EXPECT_TRUE(outcome.documentChanged, "");
+  AE_EXPECT_TRUE(lab.document.find(lab.environment)->visible != before, "");
+  AE_EXPECT_TRUE(lab.history.undo(lab.document), "");
+  AE_EXPECT_TRUE(lab.document.find(lab.environment)->visible == before,
+                 "e desfazer devolve o estado");
+}
+
+AE_TEST(screen_splitter_drag_resizes_the_panel_continuously) {
+  // O divisor responde ao ARRASTE, e nao ao soltar: esperar o dedo levantar
+  // tornaria impossivel encontrar a largura certa.
+  WaterLab lab;
+  Frame frame;
+  EditorScreenState state = waterLabState(lab);
+  composeFrame(frame, state);
+  const float before = frame.layout.hierarchyPanel.width;
+
+  UiPoint at{};
+  const UiRect strip{frame.layout.hierarchyPanel.right(), frame.layout.hierarchyPanel.y, 12.0f,
+                     frame.layout.hierarchyPanel.height};
+  AE_EXPECT_TRUE(findWidget(frame, widgetId(EditorWidget::SplitterLeft), strip, at), "");
+
+  frame.router.route({1, UiPointerPhase::Down, at, 0.0});
+  const UiPointerRouting drag =
+      frame.router.route({1, UiPointerPhase::Move, {at.x + 60.0f, at.y}, 0.0});
+  applyEditorPointer(state, frame.layout, drag, lab.document, lab.history);
+  AE_EXPECT_TRUE(state.hierarchyWidth > before, "arrastar para a direita alarga a hierarquia");
+
+  composeFrame(frame, state);
+  AE_EXPECT_TRUE(frame.layout.hierarchyPanel.width > before, "e o proximo frame ja mostra isso");
+}
+
+AE_TEST(screen_the_viewport_never_disappears_between_the_panels) {
+  // Arrastar os dois divisores ate o meio nao pode deixar o editor sem cena e
+  // sem como voltar atras.
+  WaterLab lab;
+  Frame frame;
+  EditorScreenState state = waterLabState(lab);
+  state.surface = {0.0f, 0.0f, 600.0f, 394.0f};
+  state.hierarchyWidth = 5000.0f;
+  state.inspectorWidth = 5000.0f;
+  composeFrame(frame, state);
+  AE_EXPECT_TRUE(frame.layout.viewport.width >= 150.0f,
+                 "sobra viewport mesmo com os dois paineis pedindo tudo");
+  AE_EXPECT_TRUE(frame.layout.hierarchyPanel.right() <= frame.layout.viewport.x, "");
+}
+
+AE_TEST(screen_panels_shrink_the_viewport_instead_of_covering_it) {
+  // Com os paineis flutuando, metade do enquadramento vivia atras deles. Agora
+  // a area visivel e a area utilizavel.
+  WaterLab lab;
+  Frame frame;
+  EditorScreenState state = waterLabState(lab);
+  composeFrame(frame, state);
+  AE_EXPECT_TRUE(frame.layout.viewport.width < state.surface.width,
+                 "o viewport nao ocupa a tela inteira");
+  AE_EXPECT_TRUE(frame.layout.viewport.x >= frame.layout.hierarchyPanel.right(), "");
+  AE_EXPECT_TRUE(frame.layout.viewport.right() <= frame.layout.inspectorPanel.x, "");
 }
 
 AE_TEST(screen_selected_row_is_painted_with_the_accent) {
@@ -299,7 +418,7 @@ AE_TEST(screen_without_a_document_produces_nothing) {
                  "sem documento nao ha nem viewport: quem chamou tem de notar");
 }
 
-AE_TEST(screen_hides_the_hierarchy_and_shows_the_tool_rail) {
+AE_TEST(screen_hides_the_panels_and_keeps_the_tool_rail) {
   // O mockup do modo Add troca o painel pela trilha de ferramentas.
   WaterLab lab;
   Frame frame;
@@ -315,11 +434,18 @@ AE_TEST(screen_hides_the_hierarchy_and_shows_the_tool_rail) {
   test::rasterizeUi(frame.instances, font(), icons(), target);
   // A ferramenta ativa e a unica pastilha lima da trilha; ela fica na segunda
   // posicao porque a ordem e mover, girar, escalar, selecionar.
+  // A trilha vive na borda esquerda do viewport, cuja posicao depende de haver
+  // paineis. Varrer a faixa inteira evita repetir a aritmetica de layout aqui.
+  const UiRect view = frame.layout.viewport;
   bool foundAccent = false;
-  for (u32 y = 300; y < 600 && !foundAccent; ++y) {
-    float sampled[4];
-    target.sample(60, y, sampled);
-    if (colourDistance(sampled, defaultTheme().color.accent) < 0.12f) foundAccent = true;
-  }
+  for (u32 y = static_cast<u32>(view.y); y < static_cast<u32>(view.bottom()) && !foundAccent; ++y)
+    for (u32 x = static_cast<u32>(view.x); x < static_cast<u32>(view.x + 70.0f); ++x) {
+      float sampled[4];
+      target.sample(x, y, sampled);
+      if (colourDistance(sampled, defaultTheme().color.accent) < 0.12f) {
+        foundAccent = true;
+        break;
+      }
+    }
   AE_EXPECT_TRUE(foundAccent, "a ferramenta ativa aparece destacada na trilha");
 }

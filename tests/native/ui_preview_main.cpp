@@ -137,16 +137,31 @@ int main(int argc, char **argv) {
   state.document = &document;
   state.selection = selection;
   state.projectName = "Water Lab";
-  state.projectSubtitle = "Scene";
   state.canUndo = history.canUndo();
   state.canRedo = history.canRedo();
+
+  // Uma camera de editor olhando o objeto selecionado de cima e de lado. Sem
+  // ela nao ha grade nem gizmo, e a previa mostraria a interface sobre o vazio.
+  editor::EditorViewport view{};
+  const float eye[3] = {6.0f, 4.5f, -9.0f};
+  renderer::PerspectiveVisibilitySettings visibility{};
+  view.frustum = renderer::buildPerspectiveFrustum(
+      eye, 0.35f, 0.42f, static_cast<float>(width) / static_cast<float>(height), visibility);
+  state.view = &view;
 
   ui::UiDrawList list;
   list.begin(state.surface, font.metrics(ui::UiFontWeight::Regular));
   ui::UiInputRouter router;
   router.beginFrame();
-  const editor::EditorScreenLayout layout =
+  // O retangulo da vista so existe depois do layout, e o layout precisa da vista
+  // para desenhar a grade. Duas passagens resolvem: a primeira descobre onde a
+  // cena mora, a segunda desenha com a projecao certa.
+  editor::EditorScreenLayout layout =
       editor::buildEditorScreen(state, ui::defaultTheme(), list, router);
+  view.rect = layout.viewport;
+  list.begin(state.surface, font.metrics(ui::UiFontWeight::Regular));
+  router.beginFrame();
+  layout = editor::buildEditorScreen(state, ui::defaultTheme(), list, router);
 
   std::vector<ui::UiInstance> instances;
   const ui::UiInstanceBuildResult built =

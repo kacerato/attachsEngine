@@ -1,7 +1,7 @@
 // Lista de desenho da interface: o que o layout resolveu, na ordem em que a GPU
 // vai desenhar.
 //
-// São três primitivas — retângulo, texto e imagem — e nada mais. O sistema
+// São quatro primitivas — retângulo, texto, imagem e linha — e nada mais. O sistema
 // visual do ASTRA é feito de retângulos arredondados, rótulos e ícones; um
 // traçado vetorial genérico aqui significaria um tesselador, um cache e uma
 // classe inteira de bugs de precisão para desenhar coisas que os masters não
@@ -29,7 +29,7 @@
 
 namespace ae::ui {
 
-enum class UiPrimitive : u8 { Rect, Text, Image };
+enum class UiPrimitive : u8 { Rect, Text, Image, Line };
 
 // Identificador de imagem no atlas da interface. Zero é "nenhuma": um comando
 // de imagem com id zero é recusado em vez de desenhar o primeiro slot do atlas.
@@ -51,6 +51,10 @@ struct UiDrawCommand final {
   float radius = 0.0f;
   float borderWidth = 0.0f;
   UiImageId image = kUiNoImage;
+  // Só usado por UiPrimitive::Line, onde carrega as duas pontas do segmento
+  // (x0, y0, x1, y1). É um campo reaproveitado e não um significado novo: quem
+  // lê descobre pelo `kind`, que é a mesma disciplina do resto da struct.
+  UiRect atlas{};
   // Fatia do arena de texto da lista. Só tem sentido em UiPrimitive::Text.
   u32 textOffset = 0;
   u32 textLength = 0;
@@ -87,6 +91,9 @@ public:
                UiAlign vertical = UiAlign::Center);
   bool addImage(const UiRect &bounds, UiImageId image, UiColor tint = 0xFFFFFFFF,
                 float radius = 0.0f);
+  // Segmento com extremidades arredondadas. `bounds` do comando guarda a caixa
+  // envolvente, que é o que o recorte precisa; as pontas viajam em `atlas`.
+  bool addLine(UiPoint from, UiPoint to, UiColor color, float width);
 
   std::span<const UiDrawCommand> commands() const noexcept { return commands_; }
   u32 commandCount() const noexcept { return static_cast<u32>(commands_.size()); }

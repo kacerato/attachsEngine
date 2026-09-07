@@ -22,7 +22,7 @@
 #include <android/configuration.h>
 
 #include "editor/editor_history.h"
-#include "editor/editor_screen.h"
+#include "editor/editor_session.h"
 #include "platform/free_camera_controller.h"
 #include "core/frame_policy.h"
 #include "renderer/gpu_cost_isolation.h"
@@ -121,12 +121,11 @@ struct AndroidShell final {
   // de validacao comparam capturas de tela: ligar a interface por padrao faria
   // todos eles falharem por uma mudanca que nao e do renderer da cena.
   bool editorUi = false;
-  ae::editor::EditorDocument editorDocument;
-  ae::editor::EditorHistory editorHistory;
-  ae::editor::EditorEntityId editorSelection = ae::editor::kInvalidEntity;
-  ae::ui::UiDrawList editorList;
-  ae::ui::UiInputRouter editorRouter;
-  std::vector<ae::ui::UiInstance> editorInstances;
+  ae::editor::EditorSession editorSession;
+  // Escala de pixel fisico para dp, resolvida uma vez na inicializacao. A
+  // interface e montada em dp; sem isto um painel de 220 unidades sairia com 220
+  // pixels num aparelho de 520 dpi -- um terco do tamanho pretendido.
+  float editorScale = 1.0f;
   std::chrono::steady_clock::time_point lastGameplayUpdate{};
   std::chrono::steady_clock::time_point lastPresentedAt{};
   std::chrono::steady_clock::time_point lastFpsPublishedAt{};
@@ -451,6 +450,18 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
   else if (shell.rendererInitialization.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
   const bool ready=shell.rendererInitialization.get();
   shell.instancedRendererReady=ready && !cancel;
+  // A sessao de edicao so pode existir depois que os atlas chegaram a GPU: sao
+  // eles que dizem quanto mede cada glifo e onde cada icone vive. Antes disso
+  // `update` sai cedo e a tela fica sem interface -- que foi exatamente o
+  // sintoma quando esta chamada faltava.
+  if (shell.editorUi && shell.instancedRendererReady &&
+      shell.instancedRenderer.uiRendererReady()) {
+    shell.editorSession.initialize(&shell.instancedRenderer.uiFont(),
+                                   &shell.instancedRenderer.uiIcons());
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+        "[Editor] sessao pronta: %u entidades no documento.",
+        shell.editorSession.document().entityCount());
+  }
   if (shell.instancedRendererReady && shell.dirtRoadPreview && !shell.mapCameraInitialized &&
       shell.instancedRenderer.hasDefaultCamera()) {
     const ae::platform::FreeCameraState initialCamera=shell.hasLaunchCamera?shell.launchCamera
@@ -850,6 +861,47 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
       (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >>
       AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
 
+  // A interface do editor ve o toque PRIMEIRO. Ela devolve se consumiu, e so o
+  // que sobra chega aos controladores de camera e de personagem -- senao um
+  // arraste no Inspector giraria a cena por tras do painel.
+  if (shell.editorUi && shell.instancedRendererReady) {
+    const size_t pointerCount = AMotionEvent_getPointerCount(event);
+    const auto toLogical = [&](size_t index) {
+      return ae::ui::UiPoint{AMotionEvent_getX(event, index) / shell.editorScale,
+                             AMotionEvent_getY(event, index) / shell.editorScale};
+    };
+    const int32_t editorAction = AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_MASK;
+    const size_t editorIndex = static_cast<size_t>(
+        (AMotionEvent_getAction(event) & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >>
+        AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
+    bool consumed = false;
+    if (editorAction == AMOTION_EVENT_ACTION_CANCEL) {
+      shell.editorSession.cancelPointers();
+      consumed = true;
+    } else if (editorAction == AMOTION_EVENT_ACTION_MOVE) {
+      // Um MOVE carrega TODOS os dedos de uma vez. Repassar so o do indice da
+      // acao perderia o segundo dedo da pinca em todo quadro.
+      for (size_t index = 0; index < pointerCount; ++index)
+        consumed |= shell.editorSession.handlePointer(
+            {static_cast<ae::u32>(AMotionEvent_getPointerId(event, index)),
+             ae::ui::UiPointerPhase::Move, toLogical(index), 0.0});
+    } else if (editorAction == AMOTION_EVENT_ACTION_DOWN ||
+               editorAction == AMOTION_EVENT_ACTION_POINTER_DOWN) {
+      consumed = shell.editorSession.handlePointer(
+          {static_cast<ae::u32>(AMotionEvent_getPointerId(event, editorIndex)),
+           ae::ui::UiPointerPhase::Down, toLogical(editorIndex), 0.0});
+    } else if (editorAction == AMOTION_EVENT_ACTION_UP ||
+               editorAction == AMOTION_EVENT_ACTION_POINTER_UP) {
+      consumed = shell.editorSession.handlePointer(
+          {static_cast<ae::u32>(AMotionEvent_getPointerId(event, editorIndex)),
+           ae::ui::UiPointerPhase::Up, toLogical(editorIndex), 0.0});
+    }
+    if (consumed) {
+      shell.cameraController.cancelGesture();
+      return 1;
+    }
+  }
+
   const int32_t bufferWidth = app->window != nullptr ? ANativeWindow_getWidth(app->window) : 0;
   const int32_t bufferHeight = app->window != nullptr ? ANativeWindow_getHeight(app->window) : 0;
   // The swapchain can use a 90-degree pre-transform: its buffer is portrait
@@ -962,8 +1014,8 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
 // no aparelho, e nao para simular um editor que ja funciona.
 static ae::editor::EditorEntityId buildWaterLabDocument(AndroidShell &shell) {
   using namespace ae::editor;
-  EditorDocument &document = shell.editorDocument;
-  EditorHistory &history = shell.editorHistory;
+  EditorDocument &document = shell.editorSession.document();
+  EditorHistory &history = shell.editorSession.history();
   const EditorEntityId environment =
       history.createEntity(document, document.root(), EditorEntityKind::Folder, "Environment");
   history.createEntity(document, environment, EditorEntityKind::Light, "Sky");
@@ -1017,7 +1069,13 @@ void android_main(android_app *app) {
   shell.materialPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.material_preview");
   shell.oceanPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.ocean_preview");
   shell.editorUi = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.editor_ui");
-  if (shell.editorUi) shell.editorSelection = buildWaterLabDocument(shell);
+  if (shell.editorUi) {
+    const float density = app->config != nullptr
+        ? static_cast<float>(AConfiguration_getDensity(app->config)) : 0.0f;
+    shell.editorScale = density > 0.0f && density < 10000.0f ? density / 160.0f : 1.0f;
+    shell.editorSession.setSelection(buildWaterLabDocument(shell));
+    shell.editorSession.setProjectName(shell.oceanPreview ? "Water Lab" : "Forest Road");
+  }
   const bool explicitMap = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.map_preview");
   // The launcher opens the production-test map. Diagnostic fixtures remain
   // explicit so benchmark numbers can never silently include the full scene.
@@ -1461,39 +1519,14 @@ void android_main(android_app *app) {
       }
       if (shell.editorUi && shell.instancedRenderer.uiRendererReady()) {
         const VkExtent2D display = shell.vulkanSurface.swapchain().displayExtent();
-        // A interface e montada em DP, nao em pixels fisicos. Sem esta divisao,
-        // um painel de 220 unidades sairia com 220 pixels num aparelho de 520
-        // dpi -- um terco do tamanho pretendido, que foi exatamente o que a
-        // primeira captura no aparelho mostrou.
-        const float density = shell.app != nullptr && shell.app->config != nullptr
-            ? static_cast<float>(AConfiguration_getDensity(shell.app->config)) : 0.0f;
-        const float scale = density > 0.0f && density < 10000.0f ? density / 160.0f : 1.0f;
-        ae::editor::EditorScreenState screen{};
-        screen.surface = {0.0f, 0.0f, static_cast<float>(display.width) / scale,
-                          static_cast<float>(display.height) / scale};
-        screen.document = &shell.editorDocument;
-        screen.selection = shell.editorSelection;
-        screen.projectName = shell.oceanPreview ? "Water Lab" : "Forest Road";
-        screen.projectSubtitle = "Scene";
-        screen.canUndo = shell.editorHistory.canUndo();
-        screen.canRedo = shell.editorHistory.canRedo();
-        ae::u32 pressed = 0;
-        if (shell.editorRouter.pressedWidget(pressed)) screen.pressedWidget = pressed;
-
-        shell.editorList.begin(screen.surface,
-                               shell.instancedRenderer.uiFont().metrics(
-                                   ae::ui::UiFontWeight::Regular));
-        shell.editorRouter.beginFrame();
-        ae::editor::buildEditorScreen(screen, ae::ui::defaultTheme(), shell.editorList,
-                                      shell.editorRouter);
-        shell.editorInstances.clear();
-        ae::ui::buildUiInstances(shell.editorList, shell.instancedRenderer.uiFont(),
-                                 shell.instancedRenderer.uiIcons(), 16384,
-                                 shell.editorInstances);
-        shell.instancedRenderer.setUiInstances(shell.editorInstances);
+        const float logicalWidth = static_cast<float>(display.width) / shell.editorScale;
+        const float logicalHeight = static_cast<float>(display.height) / shell.editorScale;
+        shell.editorSession.setSurface({0.0f, 0.0f, logicalWidth, logicalHeight}, {});
+        shell.editorSession.update();
+        shell.instancedRenderer.setUiInstances(shell.editorSession.instances());
         // A mesma escala vai ao renderer: e ela que o vertex shader usa para
         // levar as coordenadas logicas ao NDC da tela inteira.
-        shell.instancedRenderer.setUiSurfaceSize(screen.surface.width, screen.surface.height);
+        shell.instancedRenderer.setUiSurfaceSize(logicalWidth, logicalHeight);
       }
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, shell.cameraController.state(), hud);
