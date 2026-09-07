@@ -1,4 +1,5 @@
 #include "platform/android/instanced_renderer.h"
+#include "platform/android/android_texture_loader.h"
 
 #include "rhi/shaders/instanced_spirv.h"
 #include "rhi/shaders/instanced_fallback_spirv.h"
@@ -121,6 +122,11 @@ struct ShadowPushConstants {
   u32 baseTextureIndex[4]{};
 };
 static_assert(sizeof(ShadowPushConstants) == 96);
+
+// Teto de instancias da interface por frame. A tela cheia do editor com a
+// hierarquia aberta usa por volta de 500; o teto e folgado o bastante para uma
+// lista longa e pequeno o bastante para o buffer caber em 1,3 MiB.
+constexpr u32 kUiInstanceCapacity = 16384;
 
 struct RuntimeHudPushConstants {
   float centerHalfSize[4];
@@ -1165,6 +1171,48 @@ bool InstancedRenderer::createRuntimeHudPipeline() {
   vkDestroyShaderModule(device_, vert, nullptr);
   vkDestroyShaderModule(device_, frag, nullptr);
   return ok;
+}
+
+void InstancedRenderer::createUiRenderer(AAssetManager *assets) {
+  if (assets == nullptr) return;
+  if (!platform::android::readAndroidAsset(assets, "ui/astra-ui-font.aeuf", uiFontBytes_) ||
+      !platform::android::readAndroidAsset(assets, "ui/astra-ui-icons.aeui", uiIconBytes_)) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag,
+        "[UI] assets ausentes no APK; o editor roda sem interface.");
+    return;
+  }
+  if (!uiFont_.load(uiFontBytes_) || !uiIcons_.load(uiIconBytes_)) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag,
+        "[UI] atlas recusado pelo leitor: fonte=%s icones=%s.",
+        uiFont_.isReady() ? "ok" : "nao", uiIcons_.isReady() ? "ok" : "nao");
+    return;
+  }
+  // O upload acontece uma vez, no mesmo contexto sincrono que as texturas do
+  // mapa usam; ele nao pertence ao laco de frame.
+  rhi::VulkanUploadContext upload;
+  if (!upload.initialize(device_, rhiDevice_->graphicsQueueFamily())) return;
+  const u32 subpass = waterSubpassActive_ ? 1u : 0u;
+  if (!uiRenderer_.initialize(device_, *memoryAllocator_, upload, renderPass_, subpass,
+                              rhiDevice_->pipelineCache().driverHandle(), uiFont_, uiIcons_,
+                              kUiInstanceCapacity)) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[UI] pipeline recusada; sem interface.");
+    upload.shutdown();
+    return;
+  }
+  upload.shutdown();
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[UI] pronta: fonte %ux%u icones %ux%u capacidade=%u.",
+      uiFont_.atlasWidth(), uiFont_.atlasHeight(), uiIcons_.width(), uiIcons_.height(),
+      uiRenderer_.capacity());
+}
+
+void InstancedRenderer::setUiInstances(std::span<const ui::UiInstance> instances) {
+  uiInstances_.assign(instances.begin(), instances.end());
+}
+
+void InstancedRenderer::setUiSurfaceSize(float width, float height) {
+  uiSurfaceWidth_ = width > 0.0f ? width : 0.0f;
+  uiSurfaceHeight_ = height > 0.0f ? height : 0.0f;
 }
 
 bool InstancedRenderer::createPostResources() {
@@ -3484,6 +3532,7 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pós-processamento.");
     return false;
   }
+  createUiRenderer(materialAssets);
   if (!createRuntimeHudPipeline()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pipeline do HUD runtime.");
     return false;
@@ -4648,6 +4697,15 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // A região abre fora do if: o HUD desenhava sem nenhuma marca e seu custo
   // caía no intervalo não atribuído entre a última classe e o fim do frame.
   beginGpuRegion(GpuPassClass::Ui);
+  // A interface do editor vem ANTES do HUD de runtime: o joystick e o contador
+  // de FPS pertencem ao modo de execucao e ficam por cima de tudo.
+  if (uiRenderer_.isReady() && !uiInstances_.empty()) {
+    const float uiWidth = uiSurfaceWidth_ > 0.0f ? uiSurfaceWidth_
+                                                : static_cast<float>(displayExtent.width);
+    const float uiHeight = uiSurfaceHeight_ > 0.0f ? uiSurfaceHeight_
+                                                  : static_cast<float>(displayExtent.height);
+    uiRenderer_.record(commandBuffer_, uiInstances_, uiWidth, uiHeight, surfaceTransform);
+  }
   if (runtimeHudPipeline_ != VK_NULL_HANDLE && hud.visible) {
     vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, runtimeHudPipeline_);
     const float displayWidth = static_cast<float>(displayExtent.width);

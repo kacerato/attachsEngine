@@ -35,6 +35,9 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
     from("../../samples/dirt-road") { include("manifest.json", "LICENSE.txt"); into("dirt_road") }
     from("../../samples/ocean/Imported") { include("*.aetex", "*.aemap", "*.aeenv"); into("ocean") }
     from("../../samples/ocean") { include("manifest.json", "LICENSE.txt"); into("ocean") }
+    // Atlas da interface do editor. Os dois sao lidos uma vez na inicializacao
+    // e enviados a GPU; noCompress abaixo permite le-los sem descompactar.
+    from("../../assets/astra-visual/ui") { include("*.aeuf", "*.aeui"); into("ui") }
     into(generatedAssets)
     doLast {
         val root = generatedAssets.get().asFile
@@ -117,7 +120,7 @@ android {
     namespace = "dev.aether.editor"
     compileSdk = 35
     ndkVersion = "27.1.12297006"
-    androidResources { noCompress += setOf("aetex", "aemap", "aeenv") }
+    androidResources { noCompress += setOf("aetex", "aemap", "aeenv", "aeuf", "aeui") }
     sourceSets.getByName("main").assets.setSrcDirs(listOf(generatedAssets))
     buildFeatures {
         // AGDK Frame Pacing is consumed as a native Prefab package by CMake.

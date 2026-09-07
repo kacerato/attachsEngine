@@ -14,19 +14,30 @@ using namespace ae::ui;
 // ui_theme.h, porque são a forma DESTA tela — o tema carrega o que é comum a
 // todas as telas (cor, raio, escala de espaçamento), e misturar as duas coisas
 // faria qualquer ajuste de layout parecer uma mudança de sistema visual.
-constexpr float kTopBarHeight = 64.0f;
-constexpr float kDockHeight = 72.0f;
-constexpr float kPanelWidth = 380.0f;
-constexpr float kInspectorWidth = 420.0f;
-constexpr float kPanelHeaderHeight = 56.0f;
-constexpr float kRowHeight = 40.0f;
-constexpr float kActionButton = 48.0f;
-constexpr float kCornerButton = 52.0f;
-constexpr float kToolButton = 56.0f;
-constexpr float kIconSize = 22.0f;
-constexpr float kFieldHeight = 38.0f;
-constexpr float kToggleWidth = 46.0f;
-constexpr float kToggleHeight = 26.0f;
+// Medidas em DP, e a distinção importa. Os masters foram desenhados numa tela de
+// 1672×941; um telefone real em paisagem tem cerca de 853×394 dp, porque a
+// densidade é 3× e não 1,66×. Copiar os números do master daria uma barra
+// superior ocupando 16% da altura em vez de 7%, e painéis somando 94% da
+// largura. As PROPORÇÕES dos masters são o alvo; os números, não.
+constexpr float kTopBarHeight = 56.0f;
+constexpr float kDockHeight = 62.0f;
+constexpr float kPanelHeaderHeight = 44.0f;
+constexpr float kRowHeight = 28.0f;
+constexpr float kActionButton = 40.0f;
+constexpr float kCornerButton = 44.0f;
+constexpr float kToolButton = 48.0f;
+constexpr float kIconSize = 20.0f;
+constexpr float kFieldHeight = 32.0f;
+constexpr float kToggleWidth = 40.0f;
+constexpr float kToggleHeight = 22.0f;
+
+// Largura dos painéis como FRAÇÃO da tela, com um piso em dp. A fração mantém a
+// proporção dos masters em qualquer aparelho; o piso impede que numa tela
+// estreita o painel fique menor do que o próprio conteúdo.
+constexpr float kHierarchyFraction = 0.26f;
+constexpr float kInspectorFraction = 0.30f;
+constexpr float kHierarchyMinimum = 200.0f;
+constexpr float kInspectorMinimum = 240.0f;
 
 UiRect inset(const UiRect &rect, float amount) {
   return deflate(rect, UiInsets::all(amount));
@@ -136,12 +147,12 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
 
   // Marca: quadrado lima com o glifo, mais o logotipo. O logotipo é imagem, não
   // texto — a fonte da interface não é a da marca.
-  const UiRect mark = takeLeft(content, 44.0f);
+  const UiRect mark = takeLeft(content, 36.0f);
   builder.list.addRect(mark, theme.color.accent, theme.radius.control);
-  builder.list.addImage(centred(mark, 26.0f, 26.0f),
+  builder.list.addImage(centred(mark, 22.0f, 22.0f),
                         static_cast<UiImageId>(UiIcon::SceneObject), theme.color.accentInk);
   takeLeft(content, theme.spacing.small);
-  builder.label(takeLeft(content, 132.0f), "ASTRA", theme.color.text, theme.type.title);
+  builder.label(takeLeft(content, 96.0f), "ASTRA", theme.color.text, theme.type.cardName);
 
   takeLeft(content, theme.spacing.large);
   const UiRect divider = takeLeft(content, 1.0f);
@@ -150,9 +161,9 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
   takeLeft(content, theme.spacing.large);
 
   // Ações à direita, montadas de trás para frente para ficarem ancoradas.
-  const UiRect play = takeRight(content, 72.0f);
+  const UiRect play = takeRight(content, 58.0f);
   builder.list.addRect(play, theme.color.accent, theme.radius.control);
-  builder.list.addImage(centred(play, 24.0f, 24.0f),
+  builder.list.addImage(centred(play, 20.0f, 20.0f),
                         static_cast<UiImageId>(UiIcon::RuntimePlay), theme.color.accentInk);
   builder.router.addRegion(play, widgetId(EditorWidget::PlayFromTopBar), theme.touch.minimumTarget);
   takeRight(content, theme.spacing.small);
@@ -169,7 +180,7 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
   action(UiIcon::EditorUndo, EditorWidget::Undo, builder.state.canUndo);
 
   // O que sobra é a pastilha da cena, com nome e subtítulo empilhados.
-  const UiRect chip = takeLeft(content, std::min(content.width, 320.0f));
+  const UiRect chip = takeLeft(content, std::min(content.width, 220.0f));
   UiRect chipContent = chip;
   const UiRect chipIcon = takeLeft(chipContent, 40.0f);
   builder.list.addImage(centred(chipIcon, kIconSize, kIconSize),
@@ -201,7 +212,7 @@ void buildDock(ScreenBuilder &builder, const UiRect &dock) {
       {"Settings", UiIcon::UiSettings, EditorWidget::DockSettings, EditorDock::Settings},
   };
 
-  constexpr float kItemWidth = 132.0f;
+  constexpr float kItemWidth = 96.0f;
   const float totalWidth = kItemWidth * 5.0f + theme.spacing.small * 2.0f;
   const UiRect bar = centred(dock, totalWidth, kDockHeight);
   builder.list.addRect(bar, theme.color.silhouette, theme.radius.card);
@@ -214,9 +225,9 @@ void buildDock(ScreenBuilder &builder, const UiRect &dock) {
     if (active) builder.list.addRect(inset(slot, 2.0f), theme.color.accent, theme.radius.control);
     const UiColor tint = active ? theme.color.accentInk : theme.color.text;
     builder.list.addImage(
-        {slot.x + (slot.width - 26.0f) * 0.5f, slot.y + 8.0f, 26.0f, 26.0f},
+        {slot.x + (slot.width - 22.0f) * 0.5f, slot.y + 6.0f, 22.0f, 22.0f},
         static_cast<UiImageId>(item.icon), tint);
-    builder.label({slot.x, slot.y + 38.0f, slot.width, 20.0f}, item.label,
+    builder.label({slot.x, slot.y + 32.0f, slot.width, 18.0f}, item.label,
                   active ? theme.color.accentInk : theme.color.textDim, theme.type.caption,
                   UiAlign::Center);
     builder.router.addRegion(slot, widgetId(item.widget), theme.touch.minimumTarget);
@@ -309,7 +320,7 @@ void buildTransformRow(ScreenBuilder &builder, UiRect &content, const char *name
   const UiTheme &theme = builder.theme;
   const UiRect line = takeTop(content, kFieldHeight + theme.spacing.small);
   UiRect fields = deflate(line, {0.0f, 0.0f, 0.0f, theme.spacing.small});
-  builder.label(takeLeft(fields, 96.0f), name, theme.color.textDim, theme.type.body);
+  builder.label(takeLeft(fields, 58.0f), name, theme.color.textDim, theme.type.body);
 
   const UiColor axisColours[3] = {theme.color.axisX, theme.color.axisY, theme.color.axisZ};
   const char *axisNames[3] = {"X", "Y", "Z"};
@@ -321,7 +332,7 @@ void buildTransformRow(ScreenBuilder &builder, UiRect &content, const char *name
     builder.list.addRect(field, builder.isPressed(widget) ? theme.color.line : theme.color.raised,
                          theme.radius.thumb);
     UiRect inner = deflate(field, UiInsets::symmetric(theme.spacing.small, 0.0f));
-    builder.label(takeLeft(inner, 14.0f), axisNames[axis], axisColours[axis], theme.type.label);
+    builder.label(takeLeft(inner, 10.0f), axisNames[axis], axisColours[axis], theme.type.label);
     char buffer[16];
     formatValue(buffer, values[axis], decimals);
     builder.label(inner, buffer, theme.color.text, theme.type.numeric);
@@ -343,17 +354,23 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   }
 
   UiRect header = takeTop(content, kPanelHeaderHeight);
-  const UiRect headerIcon = takeLeft(header, 40.0f);
-  builder.list.addImage(centred(headerIcon, 26.0f, 26.0f),
+  const UiRect headerIcon = takeLeft(header, 30.0f);
+  builder.list.addImage(centred(headerIcon, 20.0f, 20.0f),
                         static_cast<UiImageId>(iconForKind(entity->kind)), theme.color.text);
   const UiRect menu = takeRight(header, 34.0f);
   builder.iconButton(menu, UiIcon::UiMoreVertical, widgetId(EditorWidget::InspectorMenu));
   takeRight(header, theme.spacing.small);
-  const UiRect activeArea = takeRight(header, 120.0f);
+  // A palavra "Active" só entra quando sobra largura para ela E para o nome do
+  // objeto. Num painel estreito o interruptor sozinho continua legível; o nome
+  // cortado ao meio, não.
+  const float nameWidth = builder.list.measure(entity->name, theme.type.cardName);
+  const bool roomForWord = header.width - nameWidth > kToggleWidth + 60.0f;
+  const UiRect activeArea = takeRight(header, roomForWord ? 78.0f : kToggleWidth + 8.0f);
   builder.toggle(activeArea, entity->active, widgetId(EditorWidget::InspectorActive));
-  builder.label({activeArea.x, activeArea.y, activeArea.width - kToggleWidth - theme.spacing.small,
-                 activeArea.height},
-                "Active", theme.color.textDim, theme.type.caption, UiAlign::End);
+  if (roomForWord)
+    builder.label({activeArea.x, activeArea.y,
+                   activeArea.width - kToggleWidth - theme.spacing.small, activeArea.height},
+                  "Active", theme.color.textDim, theme.type.caption, UiAlign::End);
   const float half = header.height * 0.5f;
   builder.label({header.x, header.y + 2.0f, header.width, half}, entity->name, theme.color.text,
                 theme.type.cardName);
@@ -383,44 +400,61 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
     builder.list.addRect(slot, active ? theme.color.accent : theme.color.raised,
                          theme.radius.control);
     const UiColor ink = active ? theme.color.accentInk : theme.color.textDim;
-    UiRect inner = deflate(slot, UiInsets::symmetric(theme.spacing.small, 0.0f));
-    builder.list.addImage(centred(takeLeft(inner, 24.0f), 18.0f, 18.0f),
-                          static_cast<UiImageId>(tab.icon), ink);
-    builder.label(inner, tab.label, ink, theme.type.body);
+    UiRect inner = deflate(slot, UiInsets::symmetric(theme.spacing.tiny, 0.0f));
+    // O ícone só entra quando sobra largura para o rótulo inteiro. Numa tela
+    // estreita, "Properties" cortado no meio é pior do que uma aba sem ícone.
+    const float labelWidth = builder.list.measure(tab.label, theme.type.caption);
+    if (inner.width > labelWidth + 26.0f)
+      builder.list.addImage(centred(takeLeft(inner, 20.0f), 15.0f, 15.0f),
+                            static_cast<UiImageId>(tab.icon), ink);
+    builder.label(inner, tab.label, ink, theme.type.caption, UiAlign::Center);
     builder.router.addRegion(slot, widgetId(tab.widget), theme.touch.minimumTarget);
   }
 
   takeTop(content, theme.spacing.medium);
-  buildTransformRow(builder, content, "Position", entity->transform.position, 0, 3);
-  buildTransformRow(builder, content, "Rotation", entity->transform.rotationDegrees, 1, 1);
-  buildTransformRow(builder, content, "Scale", entity->transform.scale, 2, 1);
 
-  takeTop(content, theme.spacing.small);
-  const UiRect rule = takeTop(content, 1.0f);
-  builder.list.addRect(rule, theme.color.line);
-  takeTop(content, theme.spacing.medium);
-
-  struct Switch final {
-    const char *label;
-    UiIcon icon;
-    bool value;
-    EditorWidget widget;
-  };
-  const Switch switches[] = {
-      {"Visible", UiIcon::SceneVisibility, entity->visible, EditorWidget::ToggleVisible},
-      {"Cast Shadow", UiIcon::SceneObject, entity->castShadow, EditorWidget::ToggleCastShadow},
-      {"Receive Shadow", UiIcon::AssetsChecker, entity->receiveShadow,
-       EditorWidget::ToggleReceiveShadow},
-      {"Static", UiIcon::SceneLayers, entity->isStatic, EditorWidget::ToggleStatic},
-  };
-  for (const Switch &item : switches) {
-    if (content.height < kRowHeight) break;
-    UiRect row = takeTop(content, kRowHeight);
-    builder.list.addImage(centred(takeLeft(row, 30.0f), 18.0f, 18.0f),
-                          static_cast<UiImageId>(item.icon), theme.color.textDim);
-    builder.toggle(row, item.value, widgetId(item.widget));
-    builder.label(row, item.label, theme.color.text, theme.type.body);
-    takeTop(content, theme.spacing.tiny);
+  // As abas DIVIDEM o conteúdo, e não decoram o cabeçalho. É a razão de elas
+  // existirem nos masters: um telefone em paisagem tem cerca de 240 dp de altura
+  // útil no painel, e transform mais interruptores mais camada não cabem juntos.
+  // Empilhar tudo e cortar no fim seria esconder controles sem dizer onde estão.
+  switch (builder.state.tab) {
+    case EditorInspectorTab::Transform: {
+      buildTransformRow(builder, content, "Position", entity->transform.position, 0, 3);
+      buildTransformRow(builder, content, "Rotation", entity->transform.rotationDegrees, 1, 1);
+      buildTransformRow(builder, content, "Scale", entity->transform.scale, 2, 1);
+      break;
+    }
+    case EditorInspectorTab::Material: {
+      builder.label(takeTop(content, kRowHeight), "Material", theme.color.textDim,
+                    theme.type.label);
+      builder.label(content, "Sem material atribuido", theme.color.textMuted, theme.type.body);
+      break;
+    }
+    case EditorInspectorTab::Properties: {
+      struct Switch final {
+        const char *label;
+        UiIcon icon;
+        bool value;
+        EditorWidget widget;
+      };
+      const Switch switches[] = {
+          {"Visible", UiIcon::SceneVisibility, entity->visible, EditorWidget::ToggleVisible},
+          {"Cast Shadow", UiIcon::SceneObject, entity->castShadow, EditorWidget::ToggleCastShadow},
+          {"Receive Shadow", UiIcon::AssetsChecker, entity->receiveShadow,
+           EditorWidget::ToggleReceiveShadow},
+          {"Static", UiIcon::SceneLayers, entity->isStatic, EditorWidget::ToggleStatic},
+      };
+      for (const Switch &item : switches) {
+        if (content.height < kRowHeight) break;
+        UiRect row = takeTop(content, kRowHeight);
+        builder.list.addImage(centred(takeLeft(row, 26.0f), 16.0f, 16.0f),
+                              static_cast<UiImageId>(item.icon), theme.color.textDim);
+        builder.toggle(row, item.value, widgetId(item.widget));
+        builder.label(row, item.label, theme.color.text, theme.type.body);
+        takeTop(content, theme.spacing.tiny);
+      }
+      break;
+    }
   }
 }
 
@@ -476,14 +510,18 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   layout.dock = {body.x, body.bottom() - kDockHeight, body.width, kDockHeight};
 
   UiRect panels = {body.x, body.y, body.width, body.height - kDockHeight - theme.spacing.medium};
+  const float hierarchyWidth =
+      std::max(kHierarchyMinimum, panels.width * kHierarchyFraction);
+  const float inspectorWidth =
+      std::max(kInspectorMinimum, panels.width * kInspectorFraction);
   if (state.hierarchyVisible) {
-    layout.hierarchyPanel = {panels.x, panels.y, kPanelWidth, panels.height};
+    layout.hierarchyPanel = {panels.x, panels.y, hierarchyWidth, panels.height};
     layout.hierarchyRowCount = buildHierarchy(builder, layout.hierarchyPanel);
   } else {
     buildToolRail(builder, {panels.x, panels.y, kToolButton + theme.spacing.medium, panels.height});
   }
   if (state.inspectorVisible) {
-    layout.inspectorPanel = {panels.right() - kInspectorWidth, panels.y, kInspectorWidth,
+    layout.inspectorPanel = {panels.right() - inspectorWidth, panels.y, inspectorWidth,
                              panels.height};
     buildInspector(builder, layout.inspectorPanel);
   }

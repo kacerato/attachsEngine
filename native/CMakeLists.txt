@@ -247,6 +247,7 @@ add_library(aether_rhi STATIC
   rhi/resource_desc.cpp
   rhi/render_graph_vulkan.cpp
   rhi/render_graph_vulkan_mapping.cpp
+  rhi/ui_renderer.cpp
   rhi/upload_context.cpp
 )
 target_include_directories(aether_rhi PUBLIC
@@ -254,7 +255,10 @@ target_include_directories(aether_rhi PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/VulkanMemoryAllocator/include
   ${Vulkan_INCLUDE_DIRS}
 )
-target_link_libraries(aether_rhi PUBLIC aether_core aether_rendergraph)
+# aether_ui entra porque o consumidor Vulkan da interface (rhi/ui_renderer)
+# recebe as instancias ja prontas da camada pura. O contrario nao vale: a UI
+# nao conhece Vulkan.
+target_link_libraries(aether_rhi PUBLIC aether_core aether_rendergraph aether_ui)
 
 if(ANDROID)
   find_package(games-frame-pacing REQUIRED CONFIG)
@@ -295,6 +299,7 @@ if(ANDROID)
   )
   target_link_libraries(aether_android PRIVATE
     aether_core
+    aether_editor
     aether_platform
     aether_renderer
     aether_rhi

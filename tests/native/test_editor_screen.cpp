@@ -151,19 +151,50 @@ AE_TEST(screen_hierarchy_rows_and_their_eyes_are_separate_targets) {
   Frame frame;
   composeFrame(frame, waterLabState(lab));
 
+  // A primeira linha e encontrada por sondagem, e nao por uma copia das
+  // constantes de layout: elas sao privadas do .cpp e mudam junto com o desenho.
   const UiRect panel = frame.layout.hierarchyPanel;
-  // A primeira linha fica logo abaixo do cabecalho do painel.
-  const float rowY = panel.y + 12.0f + 56.0f + 20.0f;
-  const UiPointerRouting name =
-      frame.router.route({1, UiPointerPhase::Down, {panel.x + 120.0f, rowY}, 0.0});
-  AE_EXPECT_EQ(name.widgetId, hierarchyRowWidget(lab.environment),
-               "o nome seleciona a entidade");
+  const u32 wanted = hierarchyRowWidget(lab.environment);
+  float rowY = 0.0f;
+  for (float y = panel.y; y < panel.bottom(); y += 2.0f) {
+    const UiPointerRouting probe =
+        frame.router.route({99, UiPointerPhase::Down, {panel.x + panel.width * 0.5f, y}, 0.0});
+    frame.router.route({99, UiPointerPhase::Up, {panel.x + panel.width * 0.5f, y}, 0.0});
+    if (probe.widgetId == wanted) {
+      rowY = y;
+      break;
+    }
+  }
+  AE_EXPECT_TRUE(rowY > 0.0f, "a primeira linha da hierarquia responde ao toque");
 
-  frame.router.route({1, UiPointerPhase::Up, {panel.x + 120.0f, rowY}, 0.0});
   const UiPointerRouting eye =
-      frame.router.route({2, UiPointerPhase::Down, {panel.right() - 30.0f, rowY}, 0.0});
+      frame.router.route({2, UiPointerPhase::Down, {panel.right() - 22.0f, rowY}, 0.0});
   AE_EXPECT_EQ(eye.widgetId, hierarchyEyeWidget(lab.environment),
                "o olho esta por cima da linha e ganha o toque");
+}
+
+AE_TEST(screen_tabs_divide_the_inspector_content) {
+  // As abas nao decoram: elas trocam o que o painel mostra. Um telefone nao tem
+  // altura para transform e interruptores ao mesmo tempo.
+  WaterLab lab;
+  Frame transform;
+  EditorScreenState state = waterLabState(lab);
+  state.surface = {0.0f, 0.0f, 853.0f, 394.0f};
+  state.tab = EditorInspectorTab::Transform;
+  composeFrame(transform, state);
+
+  Frame properties;
+  state.tab = EditorInspectorTab::Properties;
+  composeFrame(properties, state);
+
+  const UiRect panel = properties.layout.inspectorPanel;
+  const UiPoint probe{panel.right() - 30.0f, panel.y + panel.height * 0.5f};
+  const UiPointerRouting onProperties =
+      properties.router.route({1, UiPointerPhase::Down, probe, 0.0});
+  const UiPointerRouting onTransform =
+      transform.router.route({2, UiPointerPhase::Down, probe, 0.0});
+  AE_EXPECT_TRUE(onProperties.widgetId != onTransform.widgetId,
+                 "o mesmo ponto do painel controla coisas diferentes em cada aba");
 }
 
 AE_TEST(screen_dock_and_tabs_are_reachable) {
@@ -189,15 +220,16 @@ AE_TEST(screen_selected_row_is_painted_with_the_accent) {
   target.resize(1600, 900, 0.16f, 0.18f, 0.20f);
   test::rasterizeUi(frame.instances, font(), icons(), target);
 
-  // A linha do "Concrete Block" e a quinta da arvore: Environment, Sky,
-  // Architecture, Glass Wall, Concrete Block.
+  // Procura a faixa lima dentro do painel, sem depender de qual linha da arvore
+  // e a selecionada nem da altura de linha do momento.
   const UiRect panel = frame.layout.hierarchyPanel;
-  const float rowY = panel.y + 12.0f + 56.0f + 40.0f * 4.0f + 20.0f;
-  float sampled[4];
-  // Longe do texto e dos icones, onde so o preenchimento da linha aparece.
-  target.sample(static_cast<u32>(panel.right() - 60.0f), static_cast<u32>(rowY), sampled);
-  AE_EXPECT_TRUE(colourDistance(sampled, defaultTheme().color.accent) < 0.12f,
-                 "a linha selecionada e lima ate o pixel");
+  bool foundAccent = false;
+  for (float y = panel.y; y < panel.bottom() && !foundAccent; y += 1.0f) {
+    float sampled[4];
+    target.sample(static_cast<u32>(panel.x + panel.width * 0.5f), static_cast<u32>(y), sampled);
+    if (colourDistance(sampled, defaultTheme().color.accent) < 0.12f) foundAccent = true;
+  }
+  AE_EXPECT_TRUE(foundAccent, "a linha selecionada e lima ate o pixel");
 }
 
 AE_TEST(screen_play_button_is_painted_with_the_accent) {

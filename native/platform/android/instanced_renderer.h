@@ -22,6 +22,7 @@
 #include "renderer/frame_graph.h"
 #include "renderer/frustum_visibility.h"
 #include "renderer/gpu_draw_compaction.h"
+#include "rhi/ui_renderer.h"
 #include "renderer/gpu_draw_culling.h"
 #include "renderer/hzb_visibility.h"
 
@@ -77,6 +78,18 @@ public:
   // receber a mesma ação de teclado, gamepad ou NoCode.
   rhi::SwapchainStatus drawFrame(float timeSeconds, const platform::FreeCameraState &camera,
                                  const renderer::RuntimeHudState &hud = {});
+
+  // Interface do editor. As instâncias são construídas fora daqui (a composição
+  // da tela é do editor, não do renderer) e valem para UM frame: quem não as
+  // publicar de novo simplesmente não desenha interface, sem estado preso.
+  void setUiInstances(std::span<const ui::UiInstance> instances);
+  // Tamanho da superficie NO ESPACO EM QUE AS INSTANCIAS FORAM CONSTRUIDAS --
+  // pixels logicos, nao fisicos. Zero volta a usar a extensao do display, que e
+  // o comportamento certo so quando as duas escalas coincidem.
+  void setUiSurfaceSize(float width, float height);
+  bool uiRendererReady() const { return uiRenderer_.isReady(); }
+  const ui::UiFont &uiFont() const { return uiFont_; }
+  const ui::UiIconAtlas &uiIcons() const { return uiIcons_; }
   bool hasDefaultCamera() const { return dirtRoadPreview_ && dirtRoadResources_.header().drawCount != 0; }
   platform::FreeCameraState defaultCamera() const { return dirtRoadResources_.defaultCamera(); }
   platform::FreeCameraState defaultGameplayCamera() const {
@@ -345,6 +358,9 @@ private:
   bool createSpectralWaterResources();
   bool createSkyPipeline();
   bool createRuntimeHudPipeline();
+  // Carrega os atlas do APK e monta a pipeline. Falhar aqui NÃO derruba o
+  // renderer: uma cena sem interface ainda é uma cena, e o log diz o motivo.
+  void createUiRenderer(AAssetManager *assets);
   bool createPostResources();
   void destroyPostResources();
   void recordPostProcess(u32 imageIndex, const platform::FreeCameraState &camera);
@@ -613,6 +629,18 @@ private:
   bool adpfGpuTimingEnabled_ = false;
   bool coveragePrepassEnabled_ = true;
   bool runtimeHudEnabled_ = false;
+
+  // Interface do editor. Os bytes dos assets ficam vivos porque UiFont e
+  // UiIconAtlas apontam para dentro deles (ver a nota de tempo de vida em
+  // ui_font.h); só os pixels já foram para a GPU.
+  std::vector<u8> uiFontBytes_;
+  std::vector<u8> uiIconBytes_;
+  ui::UiFont uiFont_{};
+  ui::UiIconAtlas uiIcons_{};
+  rhi::VulkanUiRenderer uiRenderer_{};
+  std::vector<ui::UiInstance> uiInstances_;
+  float uiSurfaceWidth_ = 0.0f;
+  float uiSurfaceHeight_ = 0.0f;
   renderer::PerspectiveVisibilitySettings visibilitySettings_{};
   renderer::VisibilityTelemetry visibilityTelemetry_{};
   u64 renderedFrameCount_ = 0;

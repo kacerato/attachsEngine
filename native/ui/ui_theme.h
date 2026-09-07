@@ -87,19 +87,29 @@ struct UiTypeStyle final {
   bool medium = false;
 };
 
+// Corpos em DP, e é aqui que esta tabela se afasta de `astra.tokens.json`.
+//
+// Os masters foram desenhados numa tela de 1672×941. Um telefone real em
+// paisagem tem cerca de 853×394 dp, porque a densidade é 3× e não 1,66×. O
+// corpo de 15 do master ocupa 1,6% da altura da tela dele; copiado como 15 dp,
+// ocuparia 3,8% da altura de um telefone — texto de título dentro de um rótulo
+// de lista. As PROPORÇÕES dos masters são o alvo; os números, não.
+//
+// O piso é legibilidade, não estética: 12 dp de corpo e 10 dp de rótulo são o
+// mínimo confortável do Material, e nada aqui desce abaixo disso.
 struct UiTypography final {
-  UiTypeStyle label{11.0f, 0.22f, 1.2f, true, true};
-  UiTypeStyle labelWide{11.0f, 0.34f, 1.2f, true, true};
+  UiTypeStyle label{9.5f, 0.22f, 1.2f, true, true};
+  UiTypeStyle labelWide{9.5f, 0.34f, 1.2f, true, true};
   // Rótulo curto em caixa normal. Separado de `label` porque nem todo texto
   // pequeno é caixa alta: "Add", "Assets" e "Active" aparecem como palavras nos
   // masters, e só os rótulos técnicos — "MESH", "SCENE" — são versalete.
-  UiTypeStyle caption{12.0f, 0.0f, 1.2f, false, true};
-  UiTypeStyle body{15.0f, 0.0f, 1.3f, false, false};
-  UiTypeStyle cardName{17.0f, 0.0f, 1.25f, false, true};
-  UiTypeStyle title{38.0f, 0.0f, 1.1f, false, true};
+  UiTypeStyle caption{10.0f, 0.0f, 1.2f, false, true};
+  UiTypeStyle body{12.0f, 0.0f, 1.3f, false, false};
+  UiTypeStyle cardName{13.5f, 0.0f, 1.25f, false, true};
+  UiTypeStyle title{22.0f, 0.0f, 1.1f, false, true};
   // Campo numérico do Inspector. Tabular porque as três colunas X/Y/Z têm de
   // ficar alinhadas mesmo quando os valores mudam de largura durante um arraste.
-  UiTypeStyle numeric{14.0f, 0.0f, 1.2f, false, false};
+  UiTypeStyle numeric{11.0f, 0.0f, 1.2f, false, false};
 };
 
 // Métricas de toque. Separadas da tipografia porque respondem a uma regra

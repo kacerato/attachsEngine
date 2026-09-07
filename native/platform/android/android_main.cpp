@@ -19,6 +19,10 @@
 #include "platform/app_lifecycle.h"
 #include "platform/camera_route.h"
 #include "platform/first_person_controller.h"
+#include <android/configuration.h>
+
+#include "editor/editor_history.h"
+#include "editor/editor_screen.h"
 #include "platform/free_camera_controller.h"
 #include "core/frame_policy.h"
 #include "renderer/gpu_cost_isolation.h"
@@ -112,6 +116,17 @@ struct AndroidShell final {
   ae::platform::FirstPersonTouchControls firstPersonTouches;
   ae::physics::CharacterMotor characterMotor;
   bool firstPersonEnabled = false;
+
+  // Interface do editor. Ela e opt-in por opcao de lancamento porque os runners
+  // de validacao comparam capturas de tela: ligar a interface por padrao faria
+  // todos eles falharem por uma mudanca que nao e do renderer da cena.
+  bool editorUi = false;
+  ae::editor::EditorDocument editorDocument;
+  ae::editor::EditorHistory editorHistory;
+  ae::editor::EditorEntityId editorSelection = ae::editor::kInvalidEntity;
+  ae::ui::UiDrawList editorList;
+  ae::ui::UiInputRouter editorRouter;
+  std::vector<ae::ui::UiInstance> editorInstances;
   std::chrono::steady_clock::time_point lastGameplayUpdate{};
   std::chrono::steady_clock::time_point lastPresentedAt{};
   std::chrono::steady_clock::time_point lastFpsPublishedAt{};
@@ -941,6 +956,55 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
 
 } // namespace
 
+// A hierarquia do Water Lab, montada pelos MESMOS comandos que a interface usa.
+// Ela e um andaime: quando a cena real do mapa alimentar o documento, esta
+// funcao sai. Ate la, ela existe para que a tela do editor tenha o que mostrar
+// no aparelho, e nao para simular um editor que ja funciona.
+static ae::editor::EditorEntityId buildWaterLabDocument(AndroidShell &shell) {
+  using namespace ae::editor;
+  EditorDocument &document = shell.editorDocument;
+  EditorHistory &history = shell.editorHistory;
+  const EditorEntityId environment =
+      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Environment");
+  history.createEntity(document, environment, EditorEntityKind::Light, "Sky");
+  history.createEntity(document, environment, EditorEntityKind::Mesh, "Mountains");
+  history.createEntity(document, environment, EditorEntityKind::Water, "Waterfall");
+
+  const EditorEntityId architecture =
+      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Architecture");
+  history.createEntity(document, architecture, EditorEntityKind::Mesh, "Main Building");
+  history.createEntity(document, architecture, EditorEntityKind::Mesh, "Glass Wall");
+  const EditorEntityId block =
+      history.createEntity(document, architecture, EditorEntityKind::Mesh, "Concrete Block");
+
+  const EditorEntityId water =
+      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Water");
+  history.createEntity(document, water, EditorEntityKind::Water, "Water Plane");
+  history.createEntity(document, water, EditorEntityKind::Effect, "Water FX");
+
+  const EditorEntityId props =
+      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Props");
+  history.createEntity(document, props, EditorEntityKind::Mesh, "Rocks");
+  history.createEntity(document, props, EditorEntityKind::Mesh, "Plants");
+
+  const EditorEntityId lighting =
+      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Lighting");
+  history.createEntity(document, lighting, EditorEntityKind::Light, "Directional Light");
+  history.createEntity(document, lighting, EditorEntityKind::Light, "Area Light");
+
+  const EditorEntityId cameras =
+      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Cameras");
+  history.createEntity(document, cameras, EditorEntityKind::Camera, "Main Camera");
+
+  EditorTransform transform{};
+  transform.position[0] = 1.25f;
+  transform.position[1] = 0.5f;
+  transform.position[2] = -2.0f;
+  transform.rotationDegrees[1] = 90.0f;
+  history.setTransform(document, block, transform);
+  return block;
+}
+
 void android_main(android_app *app) {
   AndroidShell shell{};
   shell.app = app;
@@ -952,6 +1016,8 @@ void android_main(android_app *app) {
   shell.pocABenchmark = benchmarkPreview;
   shell.materialPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.material_preview");
   shell.oceanPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.ocean_preview");
+  shell.editorUi = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.editor_ui");
+  if (shell.editorUi) shell.editorSelection = buildWaterLabDocument(shell);
   const bool explicitMap = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.map_preview");
   // The launcher opens the production-test map. Diagnostic fixtures remain
   // explicit so benchmark numbers can never silently include the full scene.
@@ -1392,6 +1458,42 @@ void android_main(android_app *app) {
         hud.joystickKnobY = joystick.knobY;
         hud.joystickRadiusPixels = joystick.radiusPixels;
         hud.framesPerSecond = shell.displayedFps;
+      }
+      if (shell.editorUi && shell.instancedRenderer.uiRendererReady()) {
+        const VkExtent2D display = shell.vulkanSurface.swapchain().displayExtent();
+        // A interface e montada em DP, nao em pixels fisicos. Sem esta divisao,
+        // um painel de 220 unidades sairia com 220 pixels num aparelho de 520
+        // dpi -- um terco do tamanho pretendido, que foi exatamente o que a
+        // primeira captura no aparelho mostrou.
+        const float density = shell.app != nullptr && shell.app->config != nullptr
+            ? static_cast<float>(AConfiguration_getDensity(shell.app->config)) : 0.0f;
+        const float scale = density > 0.0f && density < 10000.0f ? density / 160.0f : 1.0f;
+        ae::editor::EditorScreenState screen{};
+        screen.surface = {0.0f, 0.0f, static_cast<float>(display.width) / scale,
+                          static_cast<float>(display.height) / scale};
+        screen.document = &shell.editorDocument;
+        screen.selection = shell.editorSelection;
+        screen.projectName = shell.oceanPreview ? "Water Lab" : "Forest Road";
+        screen.projectSubtitle = "Scene";
+        screen.canUndo = shell.editorHistory.canUndo();
+        screen.canRedo = shell.editorHistory.canRedo();
+        ae::u32 pressed = 0;
+        if (shell.editorRouter.pressedWidget(pressed)) screen.pressedWidget = pressed;
+
+        shell.editorList.begin(screen.surface,
+                               shell.instancedRenderer.uiFont().metrics(
+                                   ae::ui::UiFontWeight::Regular));
+        shell.editorRouter.beginFrame();
+        ae::editor::buildEditorScreen(screen, ae::ui::defaultTheme(), shell.editorList,
+                                      shell.editorRouter);
+        shell.editorInstances.clear();
+        ae::ui::buildUiInstances(shell.editorList, shell.instancedRenderer.uiFont(),
+                                 shell.instancedRenderer.uiIcons(), 16384,
+                                 shell.editorInstances);
+        shell.instancedRenderer.setUiInstances(shell.editorInstances);
+        // A mesma escala vai ao renderer: e ela que o vertex shader usa para
+        // levar as coordenadas logicas ao NDC da tela inteira.
+        shell.instancedRenderer.setUiSurfaceSize(screen.surface.width, screen.surface.height);
       }
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, shell.cameraController.state(), hud);
