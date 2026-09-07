@@ -1,0 +1,251 @@
+#include "editor/editor_history.h"
+
+#include <algorithm>
+
+namespace ae::editor {
+namespace {
+
+void assignLabel(char (&destination)[EditorHistory::kLabelCapacity], std::string_view label) {
+  const usize copied = std::min<usize>(label.size(), EditorHistory::kLabelCapacity - 1);
+  for (usize index = 0; index < copied; ++index) destination[index] = label[index];
+  for (usize index = copied; index < EditorHistory::kLabelCapacity; ++index)
+    destination[index] = '\0';
+}
+
+// Um comando de valores é fundível com o anterior quando é a continuação do
+// mesmo gesto sobre o mesmo objeto. O `before` do primeiro é preservado: é ele
+// que representa o estado anterior ao gesto inteiro.
+bool canMerge(const EditorCommand &previous, const EditorCommand &next) noexcept {
+  return next.mergeToken != kNoMerge && previous.mergeToken == next.mergeToken &&
+         previous.kind == EditorCommandKind::ApplyValues &&
+         next.kind == EditorCommandKind::ApplyValues && previous.id == next.id;
+}
+
+} // namespace
+
+bool EditorHistory::begin(std::string_view label) {
+  if (open_) return false;
+  pending_ = Transaction{};
+  assignLabel(pending_.label, label);
+  open_ = true;
+  return true;
+}
+
+void EditorHistory::end() {
+  if (!open_) return;
+  commitOpenTransaction();
+}
+
+void EditorHistory::commitOpenTransaction() {
+  open_ = false;
+  if (pending_.commands.empty()) {
+    pending_ = Transaction{};
+    return;
+  }
+  undoStack_.push_back(std::move(pending_));
+  pending_ = Transaction{};
+  // Qualquer edição nova invalida o futuro que havia sido desfeito: refazer
+  // sobre um documento diferente aplicaria comandos a objetos que já não são
+  // os mesmos.
+  redoStack_.clear();
+  if (undoStack_.size() > kMaximumTransactions)
+    undoStack_.erase(undoStack_.begin(), undoStack_.begin() + 1);
+}
+
+bool EditorHistory::record(const EditorCommand &command) {
+  if (replaying_) return true;
+  const bool implicit = !open_;
+  if (implicit) {
+    // O caso simples — um interruptor do Inspector — não precisa de cerimônia:
+    // ele vira uma transação de um comando só.
+    pending_ = Transaction{};
+    assignLabel(pending_.label, "Edit");
+    open_ = true;
+  }
+  if (!pending_.commands.empty() && canMerge(pending_.commands.back(), command)) {
+    pending_.commands.back().after = command.after;
+  } else {
+    pending_.commands.push_back(command);
+  }
+  if (implicit) commitOpenTransaction();
+  return true;
+}
+
+EditorEntityId EditorHistory::createEntity(EditorDocument &document, EditorEntityId parent,
+                                           EditorEntityKind kind, std::string_view name) {
+  const EditorEntityId id = document.createEntity(parent, kind, name);
+  if (id == kInvalidEntity) return kInvalidEntity;
+  const EditorEntity *created = document.find(id);
+  if (created == nullptr) return kInvalidEntity;
+  u32 childIndex = 0;
+  document.childIndexOf(id, childIndex);
+  EditorCommand command{};
+  command.kind = EditorCommandKind::Create;
+  command.id = id;
+  command.after = *created;
+  command.afterParent = created->parent;
+  command.afterIndex = childIndex;
+  record(command);
+  return id;
+}
+
+bool EditorHistory::destroyEntity(EditorDocument &document, EditorEntityId id) {
+  if (!document.exists(id) || id == document.root()) return false;
+  std::vector<EditorEntityId> subtree;
+  document.collectSubtree(id, subtree);
+
+  // Registrados em pré-ordem invertida. Assim, desfazer (que percorre a
+  // transação ao contrário) restaura os pais antes dos filhos, e refazer
+  // remove as folhas antes dos pais. Nenhuma das duas direções precisa de um
+  // caso especial para a raiz da subárvore.
+  std::vector<EditorCommand> commands;
+  commands.reserve(subtree.size());
+  for (usize index = subtree.size(); index > 0; --index) {
+    const EditorEntityId member = subtree[index - 1];
+    const EditorEntity *entity = document.find(member);
+    if (entity == nullptr) return false;
+    u32 childIndex = 0;
+    document.childIndexOf(member, childIndex);
+    EditorCommand command{};
+    command.kind = EditorCommandKind::Destroy;
+    command.id = member;
+    command.before = *entity;
+    command.beforeParent = entity->parent;
+    command.beforeIndex = childIndex;
+    commands.push_back(command);
+  }
+
+  if (!document.destroyEntity(id)) return false;
+  const bool implicit = !open_;
+  if (implicit) begin("Delete");
+  for (const EditorCommand &command : commands) record(command);
+  if (implicit) end();
+  return true;
+}
+
+bool EditorHistory::applyValues(EditorDocument &document, EditorEntityId id,
+                                const EditorEntity &values, EditorMergeToken mergeToken) {
+  const EditorEntity *current = document.find(id);
+  if (current == nullptr) return false;
+  const EditorEntity before = *current;
+  if (!document.applyEntityValues(id, values)) return false;
+  const EditorEntity *updated = document.find(id);
+  if (updated == nullptr) return false;
+  EditorCommand command{};
+  command.kind = EditorCommandKind::ApplyValues;
+  command.id = id;
+  command.before = before;
+  command.after = *updated;
+  command.mergeToken = mergeToken;
+  record(command);
+  return true;
+}
+
+bool EditorHistory::setTransform(EditorDocument &document, EditorEntityId id,
+                                 const EditorTransform &transform,
+                                 EditorMergeToken mergeToken) {
+  const EditorEntity *current = document.find(id);
+  if (current == nullptr) return false;
+  EditorEntity values = *current;
+  values.transform = transform;
+  return applyValues(document, id, values, mergeToken);
+}
+
+bool EditorHistory::reparent(EditorDocument &document, EditorEntityId id,
+                             EditorEntityId newParent, u32 childIndex) {
+  const EditorEntity *current = document.find(id);
+  if (current == nullptr) return false;
+  const EditorEntityId oldParent = current->parent;
+  u32 oldIndex = 0;
+  if (!document.childIndexOf(id, oldIndex)) return false;
+  if (!document.reparent(id, newParent, childIndex)) return false;
+  u32 newIndex = 0;
+  document.childIndexOf(id, newIndex);
+  EditorCommand command{};
+  command.kind = EditorCommandKind::Reparent;
+  command.id = id;
+  command.beforeParent = oldParent;
+  command.beforeIndex = oldIndex;
+  command.afterParent = newParent;
+  command.afterIndex = newIndex;
+  record(command);
+  return true;
+}
+
+bool EditorHistory::applyForward(EditorDocument &document, const EditorCommand &command) const {
+  switch (command.kind) {
+    case EditorCommandKind::ApplyValues:
+      return document.applyEntityValues(command.id, command.after);
+    case EditorCommandKind::Create:
+      return document.restoreEntity(command.after, command.afterIndex);
+    case EditorCommandKind::Destroy:
+      return document.destroyEntity(command.id);
+    case EditorCommandKind::Reparent:
+      return document.reparent(command.id, command.afterParent, command.afterIndex);
+  }
+  return false;
+}
+
+bool EditorHistory::applyBackward(EditorDocument &document, const EditorCommand &command) const {
+  switch (command.kind) {
+    case EditorCommandKind::ApplyValues:
+      return document.applyEntityValues(command.id, command.before);
+    case EditorCommandKind::Create:
+      return document.destroyEntity(command.id);
+    case EditorCommandKind::Destroy:
+      return document.restoreEntity(command.before, command.beforeIndex);
+    case EditorCommandKind::Reparent:
+      return document.reparent(command.id, command.beforeParent, command.beforeIndex);
+  }
+  return false;
+}
+
+bool EditorHistory::undo(EditorDocument &document) {
+  // Um undo no meio de um arraste desfaria metade do gesto e deixaria a outra
+  // metade viva no documento. Fechar primeiro torna o passo inteiro.
+  if (open_) commitOpenTransaction();
+  if (undoStack_.empty()) return false;
+  Transaction transaction = std::move(undoStack_.back());
+  undoStack_.pop_back();
+  replaying_ = true;
+  bool ok = true;
+  for (usize index = transaction.commands.size(); index > 0; --index)
+    ok = applyBackward(document, transaction.commands[index - 1]) && ok;
+  replaying_ = false;
+  redoStack_.push_back(std::move(transaction));
+  return ok;
+}
+
+bool EditorHistory::redo(EditorDocument &document) {
+  if (open_) commitOpenTransaction();
+  if (redoStack_.empty()) return false;
+  Transaction transaction = std::move(redoStack_.back());
+  redoStack_.pop_back();
+  replaying_ = true;
+  bool ok = true;
+  for (const EditorCommand &command : transaction.commands)
+    ok = applyForward(document, command) && ok;
+  replaying_ = false;
+  undoStack_.push_back(std::move(transaction));
+  return ok;
+}
+
+std::string_view EditorHistory::undoLabel() const noexcept {
+  if (undoStack_.empty()) return {};
+  return undoStack_.back().label;
+}
+
+std::string_view EditorHistory::redoLabel() const noexcept {
+  if (redoStack_.empty()) return {};
+  return redoStack_.back().label;
+}
+
+void EditorHistory::clear() noexcept {
+  undoStack_.clear();
+  redoStack_.clear();
+  pending_ = Transaction{};
+  open_ = false;
+  replaying_ = false;
+}
+
+} // namespace ae::editor

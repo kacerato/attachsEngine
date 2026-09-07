@@ -197,6 +197,20 @@ target_include_directories(aether_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # frame (load/store e memoryless do depth) e derivada dele, nao escrita a mao.
 target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 
+# --- aether_editor: documento de cena, historico, projecao e gizmo ---------
+# O modelo do EDITOR, nao o do runtime: descreve o que o usuario autorou. Ele
+# depende do renderer apenas pela convencao de camera (frustum e projecao), que
+# precisa ser literalmente a mesma do vertex shader -- selecionar um objeto e
+# contornar outro seria o defeito de reimplementa-la aqui.
+add_library(aether_editor STATIC
+  editor/editor_document.cpp
+  editor/editor_gizmo.cpp
+  editor/editor_history.cpp
+  editor/editor_view.cpp
+)
+target_include_directories(aether_editor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(aether_editor PUBLIC aether_core aether_renderer aether_ui)
+
 # --- aether_ui: layout, desenho e roteamento de toque da interface ---------
 # Separada de aether_renderer de proposito: a UI do editor nao conhece Vulkan,
 # nao conhece a cena e e desenhada por quem consome a lista de comandos. Quem
@@ -371,6 +385,10 @@ if(NOT ANDROID)
     ../tests/native/test_foliage_impostors.cpp
     ../tests/native/test_frustum_visibility.cpp
     ../tests/native/test_gpu_draw_compaction.cpp
+    ../tests/native/test_editor_document.cpp
+    ../tests/native/test_editor_gizmo.cpp
+    ../tests/native/test_editor_history.cpp
+    ../tests/native/test_editor_view.cpp
     ../tests/native/test_ui_draw_list.cpp
     ../tests/native/test_ui_input.cpp
     ../tests/native/test_ui_layout.cpp
@@ -427,7 +445,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_transform_bridge.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
-  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_physics aether_water_runtime aether_transform aether_resources)
+  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources)
 
   # Probe separado porque induzir overflow em Debug dispara corretamente o
   # assert fail-fast do próprio Jolt. Em Release este binário valida a outra
