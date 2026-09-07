@@ -217,6 +217,9 @@ target_link_libraries(aether_editor PUBLIC aether_core aether_renderer aether_ui
 # depende dela nao deveria arrastar junto o renderer inteiro.
 add_library(aether_ui STATIC
   ui/ui_draw_list.cpp
+  ui/ui_font.cpp
+  ui/ui_icon_atlas.cpp
+  ui/ui_icon_id.cpp
   ui/ui_input.cpp
   ui/ui_layout.cpp
   ui/ui_text.cpp
@@ -389,6 +392,7 @@ if(NOT ANDROID)
     ../tests/native/test_editor_gizmo.cpp
     ../tests/native/test_editor_history.cpp
     ../tests/native/test_editor_view.cpp
+    ../tests/native/test_ui_assets.cpp
     ../tests/native/test_ui_draw_list.cpp
     ../tests/native/test_ui_input.cpp
     ../tests/native/test_ui_layout.cpp
@@ -445,6 +449,12 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_transform_bridge.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  # Os assets de interface sao gerados por ferramenta e lidos por codigo nativo;
+  # o unico teste que prova que os dois lados concordam e o que abre o arquivo de
+  # verdade. Passar a raiz do repositorio evita que ele dependa do diretorio de
+  # onde o binario foi invocado.
+  target_compile_definitions(aether_tests PRIVATE
+    AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
   target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources)
 
   # Probe separado porque induzir overflow em Debug dispara corretamente o

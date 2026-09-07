@@ -1,0 +1,32 @@
+{
+ "atlas": [
+  1024,
+  512
+ ],
+ "emPixels": 40,
+ "spreadPixels": 5.0,
+ "opticalSize": 14,
+ "font": "Inter Variable (SIL OFL 1.1)",
+ "firstGlyph": 32,
+ "glyphCount": 95,
+ "weights": [
+  {
+   "name": "regular",
+   "ascent": 0.96875,
+   "descent": 0.24375,
+   "capHeight": 0.73125
+  },
+  {
+   "name": "medium",
+   "ascent": 0.96875,
+   "descent": 0.24375,
+   "capHeight": 0.73125
+  },
+  {
+   "name": "semibold",
+   "ascent": 0.96875,
+   "descent": 0.24375,
+   "capHeight": 0.73125
+  }
+ ]
+}
