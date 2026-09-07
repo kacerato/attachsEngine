@@ -1,0 +1,616 @@
+{
+  "duplicates": {
+    "B06": "scene/object",
+    "B07": "editor/edit-points",
+    "B08": "editor/focus",
+    "B18": "runtime/camera",
+    "B36": "scene/object-add",
+    "C01": "editor/select",
+    "C02": "editor/move",
+    "C03": "editor/rotate",
+    "C07": "editor/undo",
+    "C08": "editor/redo",
+    "C16": "assets/folder",
+    "D01": "editor/move",
+    "D02": "editor/rotate",
+    "D03": "editor/edit-points",
+    "D04": "scene/object",
+    "D05": "editor/gizmo-axes",
+    "D06": "editor/focus",
+    "D07": "assets/material",
+    "D09": "scene/layers",
+    "D12": "ui/settings",
+    "D13": "editor/space-world",
+    "D25": "lighting/sun",
+    "D26": "lighting/exposure",
+    "D32": "ui/sliders"
+  },
+  "icons": {
+    "assets/animation": {
+      "category": "assets",
+      "label": "D31",
+      "name": "animation"
+    },
+    "assets/bookmark": {
+      "category": "assets",
+      "label": "B33",
+      "name": "bookmark"
+    },
+    "assets/checker": {
+      "category": "assets",
+      "label": "B12",
+      "name": "checker"
+    },
+    "assets/cloud-download": {
+      "category": "assets",
+      "label": "C20",
+      "name": "cloud-download"
+    },
+    "assets/cloud-upload": {
+      "category": "assets",
+      "label": "C19",
+      "name": "cloud-upload"
+    },
+    "assets/copy": {
+      "category": "assets",
+      "label": "B34",
+      "name": "copy"
+    },
+    "assets/docs": {
+      "category": "assets",
+      "label": "B31",
+      "name": "docs"
+    },
+    "assets/download": {
+      "category": "assets",
+      "label": "C18",
+      "name": "download"
+    },
+    "assets/export": {
+      "category": "assets",
+      "label": "B26",
+      "name": "export"
+    },
+    "assets/file": {
+      "category": "assets",
+      "label": "B03",
+      "name": "file"
+    },
+    "assets/file-mesh": {
+      "category": "assets",
+      "label": "B04",
+      "name": "file-mesh"
+    },
+    "assets/filter": {
+      "category": "assets",
+      "label": "B28",
+      "name": "filter"
+    },
+    "assets/folder": {
+      "category": "assets",
+      "label": "B01",
+      "name": "folder"
+    },
+    "assets/folder-open": {
+      "category": "assets",
+      "label": "B02",
+      "name": "folder-open"
+    },
+    "assets/grid": {
+      "category": "assets",
+      "label": "B30",
+      "name": "grid"
+    },
+    "assets/import": {
+      "category": "assets",
+      "label": "B25",
+      "name": "import"
+    },
+    "assets/library": {
+      "category": "assets",
+      "label": "B32",
+      "name": "library"
+    },
+    "assets/list": {
+      "category": "assets",
+      "label": "B29",
+      "name": "list"
+    },
+    "assets/material": {
+      "category": "assets",
+      "label": "B11",
+      "name": "material"
+    },
+    "assets/material-checker": {
+      "category": "assets",
+      "label": "D08",
+      "name": "material-checker"
+    },
+    "assets/package": {
+      "category": "assets",
+      "label": "B09",
+      "name": "package"
+    },
+    "assets/save": {
+      "category": "assets",
+      "label": "C15",
+      "name": "save"
+    },
+    "assets/search": {
+      "category": "assets",
+      "label": "B27",
+      "name": "search"
+    },
+    "assets/static-mesh": {
+      "category": "assets",
+      "label": "D27",
+      "name": "static-mesh"
+    },
+    "assets/texture": {
+      "category": "assets",
+      "label": "B10",
+      "name": "texture"
+    },
+    "assets/upload": {
+      "category": "assets",
+      "label": "C17",
+      "name": "upload"
+    },
+    "assets/video": {
+      "category": "assets",
+      "label": "B35",
+      "name": "video"
+    },
+    "debug/bug": {
+      "category": "debug",
+      "label": "D33",
+      "name": "bug"
+    },
+    "debug/stats": {
+      "category": "debug",
+      "label": "D34",
+      "name": "stats"
+    },
+    "debug/tools": {
+      "category": "debug",
+      "label": "D35",
+      "name": "tools"
+    },
+    "editor/align": {
+      "category": "editor",
+      "label": "A17",
+      "name": "align"
+    },
+    "editor/edit-points": {
+      "category": "editor",
+      "label": "A06",
+      "name": "edit-points"
+    },
+    "editor/focus": {
+      "category": "editor",
+      "label": "A14",
+      "name": "focus"
+    },
+    "editor/frame-object": {
+      "category": "editor",
+      "label": "A28",
+      "name": "frame-object"
+    },
+    "editor/gizmo-axes": {
+      "category": "editor",
+      "label": "A08",
+      "name": "gizmo-axes"
+    },
+    "editor/move": {
+      "category": "editor",
+      "label": "A04",
+      "name": "move"
+    },
+    "editor/orbit": {
+      "category": "editor",
+      "label": "A13",
+      "name": "orbit"
+    },
+    "editor/pan": {
+      "category": "editor",
+      "label": "A03",
+      "name": "pan"
+    },
+    "editor/pivot": {
+      "category": "editor",
+      "label": "A09",
+      "name": "pivot"
+    },
+    "editor/redo": {
+      "category": "editor",
+      "label": "A30",
+      "name": "redo"
+    },
+    "editor/resize": {
+      "category": "editor",
+      "label": "A10",
+      "name": "resize"
+    },
+    "editor/rotate": {
+      "category": "editor",
+      "label": "A05",
+      "name": "rotate"
+    },
+    "editor/scale": {
+      "category": "editor",
+      "label": "A07",
+      "name": "scale"
+    },
+    "editor/select": {
+      "category": "editor",
+      "label": "A01",
+      "name": "select"
+    },
+    "editor/select-active": {
+      "category": "editor",
+      "label": "A02",
+      "name": "select-active"
+    },
+    "editor/select-box": {
+      "category": "editor",
+      "label": "A22",
+      "name": "select-box"
+    },
+    "editor/selection-bounds": {
+      "category": "editor",
+      "label": "A23",
+      "name": "selection-bounds"
+    },
+    "editor/snap": {
+      "category": "editor",
+      "label": "A18",
+      "name": "snap"
+    },
+    "editor/space-world": {
+      "category": "editor",
+      "label": "A11",
+      "name": "space-world"
+    },
+    "editor/undo": {
+      "category": "editor",
+      "label": "A29",
+      "name": "undo"
+    },
+    "lighting/cloud": {
+      "category": "lighting",
+      "label": "B16",
+      "name": "cloud"
+    },
+    "lighting/cloud-sun": {
+      "category": "lighting",
+      "label": "B17",
+      "name": "cloud-sun"
+    },
+    "lighting/exposure": {
+      "category": "lighting",
+      "label": "B14",
+      "name": "exposure"
+    },
+    "lighting/sun": {
+      "category": "lighting",
+      "label": "B13",
+      "name": "sun"
+    },
+    "nature/architecture": {
+      "category": "nature",
+      "label": "B24",
+      "name": "architecture"
+    },
+    "nature/landscape": {
+      "category": "nature",
+      "label": "B15",
+      "name": "landscape"
+    },
+    "nature/leaf": {
+      "category": "nature",
+      "label": "B22",
+      "name": "leaf"
+    },
+    "nature/mountains": {
+      "category": "nature",
+      "label": "B19",
+      "name": "mountains"
+    },
+    "nature/rock": {
+      "category": "nature",
+      "label": "B23",
+      "name": "rock"
+    },
+    "nature/tree": {
+      "category": "nature",
+      "label": "B21",
+      "name": "tree"
+    },
+    "nature/water": {
+      "category": "nature",
+      "label": "B20",
+      "name": "water"
+    },
+    "physics/character": {
+      "category": "physics",
+      "label": "D24",
+      "name": "character"
+    },
+    "primitive/capsule": {
+      "category": "primitive",
+      "label": "D17",
+      "name": "capsule"
+    },
+    "primitive/cone": {
+      "category": "primitive",
+      "label": "D18",
+      "name": "cone"
+    },
+    "primitive/cube": {
+      "category": "primitive",
+      "label": "D15",
+      "name": "cube"
+    },
+    "primitive/cylinder": {
+      "category": "primitive",
+      "label": "D14",
+      "name": "cylinder"
+    },
+    "primitive/sphere": {
+      "category": "primitive",
+      "label": "D16",
+      "name": "sphere"
+    },
+    "runtime/audio": {
+      "category": "runtime",
+      "label": "D30",
+      "name": "audio"
+    },
+    "runtime/camera": {
+      "category": "runtime",
+      "label": "A26",
+      "name": "camera"
+    },
+    "runtime/camera-orbit": {
+      "category": "runtime",
+      "label": "A27",
+      "name": "camera-orbit"
+    },
+    "runtime/pause": {
+      "category": "runtime",
+      "label": "C05",
+      "name": "pause"
+    },
+    "runtime/play": {
+      "category": "runtime",
+      "label": "C04",
+      "name": "play"
+    },
+    "runtime/restart": {
+      "category": "runtime",
+      "label": "C21",
+      "name": "restart"
+    },
+    "runtime/stop": {
+      "category": "runtime",
+      "label": "C06",
+      "name": "stop"
+    },
+    "scene/duplicate": {
+      "category": "scene",
+      "label": "A19",
+      "name": "duplicate"
+    },
+    "scene/flatten": {
+      "category": "scene",
+      "label": "D28",
+      "name": "flatten"
+    },
+    "scene/isolate-off": {
+      "category": "scene",
+      "label": "A24",
+      "name": "isolate-off"
+    },
+    "scene/layer-add": {
+      "category": "scene",
+      "label": "D36",
+      "name": "layer-add"
+    },
+    "scene/layers": {
+      "category": "scene",
+      "label": "B05",
+      "name": "layers"
+    },
+    "scene/lock": {
+      "category": "scene",
+      "label": "D21",
+      "name": "lock"
+    },
+    "scene/object": {
+      "category": "scene",
+      "label": "A12",
+      "name": "object"
+    },
+    "scene/object-add": {
+      "category": "scene",
+      "label": "A20",
+      "name": "object-add"
+    },
+    "scene/object-preview": {
+      "category": "scene",
+      "label": "A25",
+      "name": "object-preview"
+    },
+    "scene/object-remove": {
+      "category": "scene",
+      "label": "A21",
+      "name": "object-remove"
+    },
+    "scene/pin": {
+      "category": "scene",
+      "label": "D23",
+      "name": "pin"
+    },
+    "scene/unlock": {
+      "category": "scene",
+      "label": "D22",
+      "name": "unlock"
+    },
+    "scene/visibility": {
+      "category": "scene",
+      "label": "D19",
+      "name": "visibility"
+    },
+    "scene/visibility-off": {
+      "category": "scene",
+      "label": "D20",
+      "name": "visibility-off"
+    },
+    "scripting/code": {
+      "category": "scripting",
+      "label": "D11",
+      "name": "code"
+    },
+    "scripting/nodes": {
+      "category": "scripting",
+      "label": "D10",
+      "name": "nodes"
+    },
+    "ui/add": {
+      "category": "ui",
+      "label": "C24",
+      "name": "add"
+    },
+    "ui/arrow-left": {
+      "category": "ui",
+      "label": "C09",
+      "name": "arrow-left"
+    },
+    "ui/arrow-right": {
+      "category": "ui",
+      "label": "C10",
+      "name": "arrow-right"
+    },
+    "ui/check": {
+      "category": "ui",
+      "label": "C27",
+      "name": "check"
+    },
+    "ui/chevron-down": {
+      "category": "ui",
+      "label": "C12",
+      "name": "chevron-down"
+    },
+    "ui/chevron-left": {
+      "category": "ui",
+      "label": "C13",
+      "name": "chevron-left"
+    },
+    "ui/chevron-right": {
+      "category": "ui",
+      "label": "C14",
+      "name": "chevron-right"
+    },
+    "ui/chevron-up": {
+      "category": "ui",
+      "label": "C11",
+      "name": "chevron-up"
+    },
+    "ui/close": {
+      "category": "ui",
+      "label": "C26",
+      "name": "close"
+    },
+    "ui/help": {
+      "category": "ui",
+      "label": "C31",
+      "name": "help"
+    },
+    "ui/home": {
+      "category": "ui",
+      "label": "C28",
+      "name": "home"
+    },
+    "ui/info": {
+      "category": "ui",
+      "label": "C29",
+      "name": "info"
+    },
+    "ui/menu": {
+      "category": "ui",
+      "label": "C33",
+      "name": "menu"
+    },
+    "ui/more-horizontal": {
+      "category": "ui",
+      "label": "C35",
+      "name": "more-horizontal"
+    },
+    "ui/more-vertical": {
+      "category": "ui",
+      "label": "C34",
+      "name": "more-vertical"
+    },
+    "ui/panel-left": {
+      "category": "ui",
+      "label": "C36",
+      "name": "panel-left"
+    },
+    "ui/panel-right": {
+      "category": "ui",
+      "label": "C37",
+      "name": "panel-right"
+    },
+    "ui/remove": {
+      "category": "ui",
+      "label": "C25",
+      "name": "remove"
+    },
+    "ui/settings": {
+      "category": "ui",
+      "label": "C22",
+      "name": "settings"
+    },
+    "ui/share": {
+      "category": "ui",
+      "label": "C32",
+      "name": "share"
+    },
+    "ui/sliders": {
+      "category": "ui",
+      "label": "C23",
+      "name": "sliders"
+    },
+    "ui/warning": {
+      "category": "ui",
+      "label": "C30",
+      "name": "warning"
+    },
+    "vfx/particles": {
+      "category": "vfx",
+      "label": "D29",
+      "name": "particles"
+    },
+    "view/collapse": {
+      "category": "view",
+      "label": "C39",
+      "name": "collapse"
+    },
+    "view/corners": {
+      "category": "view",
+      "label": "C38",
+      "name": "corners"
+    },
+    "view/expand": {
+      "category": "view",
+      "label": "A15",
+      "name": "expand"
+    },
+    "view/grid": {
+      "category": "view",
+      "label": "A16",
+      "name": "grid"
+    }
+  },
+  "unmapped": []
+}
