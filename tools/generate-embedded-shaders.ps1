@@ -26,6 +26,7 @@ if ($All) {
         dirt_road_fallback = @('frag')
         dirt_road_sky = @('vert', 'frag')
         dirt_road = @('vert', 'frag')
+        astra_ui = @('vert', 'frag')
         draw_compact = @('comp')
         draw_cull = @('comp')
         hzb_reduce_first = @('vert', 'frag')

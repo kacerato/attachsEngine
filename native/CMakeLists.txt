@@ -220,6 +220,7 @@ add_library(aether_ui STATIC
   ui/ui_font.cpp
   ui/ui_icon_atlas.cpp
   ui/ui_icon_id.cpp
+  ui/ui_instance_builder.cpp
   ui/ui_input.cpp
   ui/ui_layout.cpp
   ui/ui_text.cpp
@@ -394,6 +395,7 @@ if(NOT ANDROID)
     ../tests/native/test_editor_view.cpp
     ../tests/native/test_ui_assets.cpp
     ../tests/native/test_ui_draw_list.cpp
+    ../tests/native/test_ui_instance_builder.cpp
     ../tests/native/test_ui_input.cpp
     ../tests/native/test_ui_layout.cpp
     ../tests/native/test_gpu_draw_culling.cpp
