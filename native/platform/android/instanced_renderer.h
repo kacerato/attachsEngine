@@ -21,6 +21,7 @@
 #include "renderer/gpu_cost_isolation.h"
 #include "renderer/frame_graph.h"
 #include "renderer/frustum_visibility.h"
+#include "renderer/gpu_draw_compaction.h"
 #include "renderer/gpu_draw_culling.h"
 #include "renderer/hzb_visibility.h"
 
@@ -372,6 +373,15 @@ private:
   // criação no fim, e destroyHzbResources() a destruição no início.
   bool createDrawCullResources();
   void destroyDrawCullResources();
+  bool createDrawCompactionResources();
+  void destroyDrawCompactionResources();
+  // Grava o segundo kernel do estagio de visibilidade. Chamado logo depois de
+  // recordDrawCullDispatch e, como ele, fora de qualquer render pass.
+  void recordDrawCompactDispatch();
+  // Preenche o buffer de lotes a partir dos lotes que a CPU acabou de montar.
+  // Falso quando os lotes nao cabem no contrato: o frame entao submete pela
+  // lista original, que continua correta, apenas com os buracos.
+  bool publishCompactionBatches();
   // Grava o dispatch que escreve o instanceCount dos comandos indiretos. Tem de
   // ficar FORA de qualquer render pass e ANTES do passe opaco. A contagem
   // despachada é a capacidade da lista de comandos, não o número de comandos
@@ -557,10 +567,17 @@ private:
     u32 commandCount = 0;
     u64 triangles = 0;
     bool distantMaterial = false;
+    // Posicao deste lote no buffer de contagens da compactacao. Atribuida em
+    // publishCompactionBatches, na mesma varredura que preenche o buffer, para
+    // que a submissao nao precise recalcular a correspondencia lote->contador.
+    u32 compactionSlot = 0;
   };
   std::vector<VkDrawIndexedIndirectCommand> indirectCommands_;
   std::vector<IndirectBatch> indirectSolidBatches_;
   std::vector<IndirectBatch> indirectCoverageBatches_;
+  // Reaproveitado entre frames para que montar os lotes da compactacao nao
+  // aloque no laco de frame, pela mesma razao que indirectCommands_ persiste.
+  std::vector<renderer::GpuCompactBatch> compactionBatchScratch_;
   bool useMultiDrawIndirect_ = false;
   // Ligado por padrao desde o A/B intercalado de 02/09: com PCF de hardware, a
   // ordem preservada vale -2,14 ms na pose do hotspot (controles reproduzindo
@@ -721,6 +738,23 @@ private:
   // [0]=testados [1]=ocluidos [2]=revividos [3]=visiveis, do dispatch do frame
   // ANTERIOR. Diagnostico: nunca realimenta uma decisao deste frame.
   std::array<u32, 4> drawCullTelemetry_{};
+
+  // Compactacao dos comandos indiretos (renderer/gpu_draw_compaction.h). E o
+  // consumidor final da oclusao: sem ela um draw ocluido continua sendo buscado
+  // e decodificado pelo front-end com instanceCount zero. Depende de
+  // VK_KHR_draw_indirect_count; sem a extensao o estagio fica inativo e o frame
+  // continua exatamente como antes -- correto, apenas com os buracos.
+  bool drawCompactionActive_ = false;
+  bool drawCompactionDispatchedThisFrame_ = false;
+  bool drawCompactionContractLogged_ = false;
+  rhi::VulkanComputeKernel drawCompactKernel_{};
+  rhi::VulkanBuffer compactedIndirectBuffer_{};
+  rhi::VulkanBuffer compactBatchBuffer_{};
+  rhi::VulkanBuffer compactCountBuffer_{};
+  u32 drawCompactionBatchCapacity_ = 0;
+  // Quantos lotes o frame publicou. Zero significa que a submissao deste frame
+  // usa a lista original, nao que nao ha nada a desenhar.
+  u32 drawCompactionBatchCount_ = 0;
 
   // LOD selection (see setLodSelectionEnabled above). Built once at load in
   // initialize() (see the lodGroupId bucketing next to

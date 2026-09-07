@@ -1,0 +1,132 @@
+#version 450
+
+// Compactação estável dos comandos indiretos que draw_cull.comp acabou de
+// marcar. Um grupo de trabalho por lote; o lote é varrido em blocos e cada bloco
+// resolve o destino de seus sobreviventes por soma de prefixo exclusiva em
+// memória compartilhada.
+//
+// Este shader NÃO decide visibilidade. Ele lê o `instanceCount` que a oclusão já
+// escreveu e apenas remove os buracos, preservando a ordem. Ele é o espelho
+// instrução por instrução de renderer::compactDrawCommandsReference; qualquer
+// divergência entre os dois arquivos é um defeito, não uma otimização.
+//
+// A soma de prefixo existe no lugar de um `atomicAdd` porque a ordem importa: o
+// lote chega ordenado front-to-back e é essa ordem que alimenta o early-Z do
+// tile. Um append atômico entregaria a mesma contagem numa ordem que muda a cada
+// execução — mais overdraw e um frame que não se repete.
+
+#define COMPACT_GROUP_SIZE 64
+
+layout(local_size_x = COMPACT_GROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+struct DrawIndexedIndirectCommand {
+  uint indexCount;
+  uint instanceCount;
+  uint firstIndex;
+  int vertexOffset;
+  uint firstInstance;
+};
+
+// Espelho de renderer::GpuCompactBatch: quatro escalares de 4 bytes.
+struct CompactBatch {
+  uint firstCommand;
+  uint commandCount;
+  uint compactedBase;
+  uint reserved;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer SourceCommands {
+  DrawIndexedIndirectCommand commands[];
+} sourceList;
+
+layout(std430, set = 0, binding = 1) writeonly buffer CompactedCommands {
+  DrawIndexedIndirectCommand commands[];
+} compactedList;
+
+layout(std430, set = 0, binding = 2) readonly buffer Batches {
+  CompactBatch batches[];
+} batchList;
+
+// Um contador por lote, lido diretamente por vkCmdDrawIndexedIndirectCount. Não
+// é diagnóstico: um valor errado aqui submete comandos que ninguém escreveu.
+layout(std430, set = 0, binding = 3) buffer VisibleCounts {
+  uint counts[];
+} visible;
+
+// Espelho de renderer::GpuCompactParameters.
+layout(push_constant) uniform CompactPushConstants {
+  uint batchCount;
+  uint sourceCapacity;
+  uint compactedCapacity;
+  uint reserved;
+} pushConstants;
+
+shared uint scan[COMPACT_GROUP_SIZE];
+// Quantos sobreviventes os blocos anteriores deste lote já colocaram. É o que
+// costura os blocos numa única sequência estável.
+shared uint emitted;
+
+void main() {
+  const uint batchIndex = gl_WorkGroupID.x;
+  // Uniforme no grupo inteiro: sair aqui não deixa ninguém preso numa barreira.
+  if (batchIndex >= pushConstants.batchCount) return;
+
+  const CompactBatch batch = batchList.batches[batchIndex];
+  const uint lane = gl_LocalInvocationID.x;
+
+  // Falha fechada. O chamador já validou os lotes na CPU, mas um lote que não
+  // cabe não pode virar escrita fora dos limites: publica zero e não desenha.
+  const bool fits =
+      batch.commandCount <= pushConstants.sourceCapacity &&
+      batch.firstCommand <= pushConstants.sourceCapacity - batch.commandCount &&
+      batch.commandCount <= pushConstants.compactedCapacity &&
+      batch.compactedBase <= pushConstants.compactedCapacity - batch.commandCount;
+  if (!fits) {
+    if (lane == 0u) visible.counts[batchIndex] = 0u;
+    return;
+  }
+
+  if (lane == 0u) emitted = 0u;
+  barrier();
+
+  for (uint blockStart = 0u; blockStart < batch.commandCount;
+       blockStart += COMPACT_GROUP_SIZE) {
+    const uint offset = blockStart + lane;
+    const bool withinBatch = offset < batch.commandCount;
+    const uint sourceIndex = batch.firstCommand + offset;
+    const uint flag =
+        (withinBatch && sourceList.commands[sourceIndex].instanceCount != 0u) ? 1u : 0u;
+
+    scan[lane] = flag;
+    barrier();
+    // Hillis-Steele inclusivo. As duas barreiras ficam fora do condicional: o
+    // grupo inteiro as alcança em toda iteração, que é o que a especificação
+    // exige de barrier() em compute.
+    for (uint stride = 1u; stride < COMPACT_GROUP_SIZE; stride <<= 1) {
+      uint carried = 0u;
+      if (lane >= stride) carried = scan[lane - stride];
+      barrier();
+      if (lane >= stride) scan[lane] += carried;
+      barrier();
+    }
+
+    const uint exclusive = scan[lane] - flag;
+    if (flag != 0u) {
+      DrawIndexedIndirectCommand command = sourceList.commands[sourceIndex];
+      // A lista compacta só contém sobreviventes, então o comando copiado volta
+      // a valer uma instância. Copiar o zero recriaria o buraco que este kernel
+      // existe para remover.
+      command.instanceCount = 1u;
+      compactedList.commands[batch.compactedBase + emitted + exclusive] = command;
+    }
+
+    const uint blockTotal = scan[COMPACT_GROUP_SIZE - 1u];
+    // Todo mundo já leu scan[] e já usou `emitted`; só agora o acumulador pode
+    // avançar e a memória compartilhada pode ser reescrita pela próxima volta.
+    barrier();
+    if (lane == 0u) emitted += blockTotal;
+    barrier();
+  }
+
+  if (lane == 0u) visible.counts[batchIndex] = emitted;
+}

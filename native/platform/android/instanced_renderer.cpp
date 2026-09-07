@@ -20,6 +20,7 @@
 #include "rhi/shaders/shadow_depth_masked_fallback_spirv.h"
 #include "rhi/shaders/hzb_reduce_first_spirv.h"
 #include "rhi/shaders/hzb_reduce_spirv.h"
+#include "rhi/shaders/draw_compact_spirv.h"
 #include "rhi/shaders/draw_cull_spirv.h"
 #include "rhi/shaders/hzb_reduce_compute_spirv.h"
 #include "rhi/shaders/water_surface_spirv.h"
@@ -2174,6 +2175,7 @@ bool InstancedRenderer::createHzbPipeline(const u32 *vertSpirv, u32 vertSpirvSiz
 
 void InstancedRenderer::destroyHzbResources() {
   // O consumidor referencia as imagens e o sampler destruidos abaixo.
+  destroyDrawCompactionResources();
   destroyDrawCullResources();
   for (HzbLevelResources &level : hzbLevels_) {
     level.computeKernel.shutdown();
@@ -2472,6 +2474,9 @@ bool InstancedRenderer::createHzbResources() {
   // O consumidor GPU e criado por ultimo: ele precisa das imagens, do sampler e
   // do buffer indireto ja prontos, e nunca falha a inicializacao do renderer.
   if (!createDrawCullResources()) return false;
+  // A compactacao depende do culling estar ativo: sem instanceCount zerado por
+  // alguem nao ha buraco nenhum para remover.
+  if (!createDrawCompactionResources()) return false;
   __android_log_print(ANDROID_LOG_INFO, LogTag,
       "[HZB] produtor=%s níveis=%u base=%ux%u readback=%s.",
       hzbComputeActive_ ? "compute" : "raster", kHzbLevelCount,
@@ -2891,6 +2896,209 @@ void InstancedRenderer::recordDrawCullDispatch(const platform::FreeCameraState &
         (parameters.flags & renderer::GpuCullPyramidUsable) != 0 ? "sim" : "nao");
     drawCullContractLogged_ = true;
   }
+}
+
+void InstancedRenderer::destroyDrawCompactionResources() {
+  drawCompactKernel_.shutdown();
+  compactedIndirectBuffer_.reset();
+  compactBatchBuffer_.reset();
+  compactCountBuffer_.reset();
+  drawCompactionBatchCapacity_ = 0;
+  drawCompactionBatchCount_ = 0;
+  drawCompactionActive_ = false;
+  drawCompactionDispatchedThisFrame_ = false;
+  drawCompactionContractLogged_ = false;
+}
+
+bool InstancedRenderer::createDrawCompactionResources() {
+  destroyDrawCompactionResources();
+  // Consumidor opcional de um consumidor opcional: sem oclusao nao ha buraco
+  // para remover, e sem a extensao nao ha como a GPU dizer quantos comandos
+  // sobraram. Nos dois casos o frame continua correto pela lista original.
+  if (!hzbGpuCullingActive_ || drawCullCapacity_ == 0) return true;
+  if (rhiDevice_ == nullptr || !rhiDevice_->drawIndirectCountSupported()) {
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+        "[Culling] compactacao indisponivel: draw_indirect_count=nao. O passe opaco "
+        "continua submetendo os ocluidos com instanceCount zero.");
+    return true;
+  }
+
+  // Um lote por combinacao de material e variante de distancia, nas duas
+  // familias (solida e cobertura). E um teto, nao uma previsao: o frame publica
+  // apenas os lotes que existirem e zera o resto.
+  const u64 materialCount = static_cast<u64>(dirtRoadResources_.materials().size());
+  const u64 batchCapacity = std::max<u64>(1, materialCount * 4);
+  if (batchCapacity > 0xffffffffull) return true;
+
+  rhi::BufferDesc compactedDesc{};
+  compactedDesc.sizeBytes =
+      static_cast<u64>(drawCullCapacity_) * sizeof(VkDrawIndexedIndirectCommand);
+  // Escrito e lido so pela GPU: nao ha razao para ficar em memoria host-visible
+  // como indirectBuffer_, que a CPU precisa preencher todo frame.
+  compactedDesc.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+  compactedDesc.memoryClass = rhi::MemoryClass::Buffer;
+  compactedDesc.cpuAccess = rhi::CpuAccess::None;
+  compactedDesc.preferDeviceMemory = true;
+
+  rhi::BufferDesc countDesc = compactedDesc;
+  countDesc.sizeBytes = batchCapacity * sizeof(u32);
+
+  rhi::BufferDesc batchDesc{};
+  batchDesc.sizeBytes = batchCapacity * sizeof(renderer::GpuCompactBatch);
+  batchDesc.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+  batchDesc.memoryClass = rhi::MemoryClass::Buffer;
+  batchDesc.cpuAccess = rhi::CpuAccess::SequentialWrite;
+  batchDesc.preferDeviceMemory = false;
+
+  if (!memoryAllocator_->createBuffer(compactedDesc, &compactedIndirectBuffer_) ||
+      !memoryAllocator_->createBuffer(countDesc, &compactCountBuffer_) ||
+      !memoryAllocator_->createBuffer(batchDesc, &compactBatchBuffer_) ||
+      compactBatchBuffer_.mappedData() == nullptr) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag,
+        "[Culling] recursos de compactacao recusados; estagio permanece desligado.");
+    destroyDrawCompactionResources();
+    return true;
+  }
+  // Nenhum lote entra herdado de uma epoca anterior: um slot com lixo viraria
+  // um intervalo que o kernel recusaria caso a caso, mas o custo de zerar uma
+  // vez e menor do que depender dessa recusa.
+  std::memset(compactBatchBuffer_.mappedData(), 0, static_cast<usize>(batchDesc.sizeBytes));
+  if (!memoryAllocator_->flushBuffer(compactBatchBuffer_)) {
+    destroyDrawCompactionResources();
+    return true;
+  }
+
+  const rhi::ComputeBindingDesc bindings[4] = {
+      {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
+      {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
+      {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
+      {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
+  };
+  rhi::ComputeKernelDesc kernelDesc{};
+  kernelDesc.spirv = rhi::shaders::kDraw_CompactCompSpirv;
+  kernelDesc.spirvBytes = rhi::shaders::kDraw_CompactCompSpirvSize;
+  kernelDesc.bindings = bindings;
+  kernelDesc.bindingCount = 4;
+  kernelDesc.pushConstantBytes = sizeof(renderer::GpuCompactParameters);
+  kernelDesc.debugName = "Culling/DrawCompact";
+  const bool ready =
+      drawCompactKernel_.initialize(device_, rhiDevice_->computeLimits(), kernelDesc,
+                                    rhiDevice_->pipelineCache().driverHandle()) &&
+      drawCompactKernel_.writeBuffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, indirectBuffer_) &&
+      drawCompactKernel_.writeBuffer(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                     compactedIndirectBuffer_) &&
+      drawCompactKernel_.writeBuffer(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, compactBatchBuffer_) &&
+      drawCompactKernel_.writeBuffer(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, compactCountBuffer_);
+  if (!ready) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag,
+        "[Culling] contrato do kernel de compactacao recusado; estagio desligado.");
+    destroyDrawCompactionResources();
+    return true;
+  }
+  rhiDevice_->setObjectName(VK_OBJECT_TYPE_BUFFER,
+      reinterpret_cast<u64>(compactedIndirectBuffer_.handle()), "Culling/CompactedCommands");
+  rhiDevice_->setObjectName(VK_OBJECT_TYPE_BUFFER,
+      reinterpret_cast<u64>(compactCountBuffer_.handle()), "Culling/CompactedCounts");
+  drawCompactionBatchCapacity_ = static_cast<u32>(batchCapacity);
+  drawCompactionActive_ = true;
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[Culling] compactacao=compute lotes=%u comandos=%u bloco=%u.",
+      drawCompactionBatchCapacity_, drawCullCapacity_,
+      static_cast<unsigned>(renderer::kGpuCompactionGroupSize));
+  return true;
+}
+
+void InstancedRenderer::recordDrawCompactDispatch() {
+  drawCompactionDispatchedThisFrame_ = false;
+  // Sem oclusao gravada neste frame nao ha nada a compactar: o buffer indireto
+  // ainda tem o instanceCount=1 que a CPU escreveu, e compactar isso so copiaria
+  // a lista inteira gastando um dispatch.
+  if (!drawCompactionActive_ || !drawCullDispatchedThisFrame_) return;
+
+  // O passe opaco do frame anterior leu os dois como argumentos indiretos.
+  rhi::cmdComputeBufferBarrier(commandBuffer_, compactedIndirectBuffer_.handle(), 0, VK_WHOLE_SIZE,
+      VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
+  rhi::cmdComputeBufferBarrier(commandBuffer_, compactCountBuffer_.handle(), 0, VK_WHOLE_SIZE,
+      VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
+  // A leitura do kernel acontece depois da escrita do culling no mesmo buffer.
+  rhi::cmdComputeBufferBarrier(commandBuffer_, indirectBuffer_.handle(), 0, VK_WHOLE_SIZE,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+
+  renderer::GpuCompactParameters parameters{};
+  // O dispatch cobre a capacidade inteira porque os lotes deste frame ainda nao
+  // foram montados -- a CPU os escreve depois, antes do submit, exatamente como
+  // ja faz com os registros do culling. Um slot zerado publica contagem zero.
+  parameters.batchCount = drawCompactionBatchCapacity_;
+  parameters.sourceCapacity = drawCullCapacity_;
+  parameters.compactedCapacity = drawCullCapacity_;
+
+  const rhi::ComputeDispatch dispatch{
+      renderer::gpuCompactionGroupCount(drawCompactionBatchCapacity_), 1, 1};
+  if (!drawCompactKernel_.recordDispatch(commandBuffer_, dispatch, &parameters,
+                                         sizeof(parameters))) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag,
+        "[Culling] dispatch de compactacao invalido para %u lotes; estagio desligado.",
+        drawCompactionBatchCapacity_);
+    drawCompactionActive_ = false;
+    return;
+  }
+  rhi::cmdComputeBufferBarrier(commandBuffer_, compactedIndirectBuffer_.handle(), 0, VK_WHOLE_SIZE,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+      VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
+  rhi::cmdComputeBufferBarrier(commandBuffer_, compactCountBuffer_.handle(), 0, VK_WHOLE_SIZE,
+      VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+      VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_ACCESS_INDIRECT_COMMAND_READ_BIT);
+  drawCompactionDispatchedThisFrame_ = true;
+  if (!drawCompactionContractLogged_) {
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+        "[Culling] primeira compactacao: grupos=%u origem=%u destino=%u.",
+        dispatch.x, parameters.sourceCapacity, parameters.compactedCapacity);
+    drawCompactionContractLogged_ = true;
+  }
+}
+
+bool InstancedRenderer::publishCompactionBatches() {
+  drawCompactionBatchCount_ = 0;
+  if (!drawCompactionDispatchedThisFrame_ || compactBatchBuffer_.mappedData() == nullptr)
+    return false;
+
+  compactionBatchScratch_.clear();
+  const auto append = [&](std::vector<IndirectBatch> &batches) {
+    for (IndirectBatch &batch : batches) {
+      batch.compactionSlot = static_cast<u32>(compactionBatchScratch_.size());
+      renderer::GpuCompactBatch entry{};
+      entry.firstCommand = batch.firstCommand;
+      entry.commandCount = batch.commandCount;
+      // Destino igual a origem: os lotes ja particionam a lista de comandos em
+      // intervalos disjuntos, entao cada um cabe compactado no proprio espaco.
+      entry.compactedBase = batch.firstCommand;
+      compactionBatchScratch_.push_back(entry);
+    }
+  };
+  append(indirectSolidBatches_);
+  append(indirectCoverageBatches_);
+
+  if (compactionBatchScratch_.size() > drawCompactionBatchCapacity_) return false;
+  // A mesma guarda que o kernel repete por conta propria. Recusar aqui evita
+  // gravar um frame inteiro cuja submissao leria contagens que ninguem escreveu.
+  if (!renderer::validateGpuCompactBatches(compactionBatchScratch_, drawCullCapacity_,
+                                           drawCullCapacity_))
+    return false;
+
+  auto *entries = static_cast<renderer::GpuCompactBatch *>(compactBatchBuffer_.mappedData());
+  for (usize index = 0; index < compactionBatchScratch_.size(); ++index)
+    entries[index] = compactionBatchScratch_[index];
+  // Sobras zeradas: um lote antigo aqui compactaria um intervalo que este frame
+  // nao publicou, escrevendo por cima do destino de um lote real.
+  for (u32 index = static_cast<u32>(compactionBatchScratch_.size());
+       index < drawCompactionBatchCapacity_; ++index)
+    entries[index] = renderer::GpuCompactBatch{};
+  if (!memoryAllocator_->flushBuffer(compactBatchBuffer_)) return false;
+  drawCompactionBatchCount_ = static_cast<u32>(compactionBatchScratch_.size());
+  return true;
 }
 
 void InstancedRenderer::readDrawCullTelemetryFromPreviousFrame() {
@@ -3843,6 +4051,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // classe seguinte nao absorva o custo dela.
   beginGpuRegion(GpuPassClass::Culling);
   recordDrawCullDispatch(camera);
+  // Segundo estagio do mesmo trabalho: remove da lista o que o primeiro acabou
+  // de marcar como invisivel. Fica na mesma regiao de GPU porque e o custo do
+  // mesmo estagio, e atribui-lo a outra classe falsearia a medicao das duas.
+  recordDrawCompactDispatch();
   endGpuRegion(GpuPassClass::Culling);
 
   VkClearValue clearValues[2]{};
@@ -4252,6 +4464,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         }
       }
     };
+    // Preenchido depois de os lotes existirem, mas antes de qualquer submissao;
+    // as lambdas abaixo capturam por referencia e leem o valor ja resolvido.
+    bool compactedSubmission = false;
     auto submitIndirectBatches = [&](const std::vector<IndirectBatch> &batches,
                                      const VkPipeline *variants, VkPipeline fallback,
                                      VkPipeline distantFallback) {
@@ -4260,9 +4475,22 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                             ? distantFallback
                             : materialPipeline(batch.materialIndex, variants, fallback));
         pushMapMaterial(batch.materialIndex);
-        vkCmdDrawIndexedIndirect(commandBuffer_, indirectBuffer_.handle(),
-            static_cast<VkDeviceSize>(batch.firstCommand) * sizeof(VkDrawIndexedIndirectCommand),
-            batch.commandCount, sizeof(VkDrawIndexedIndirectCommand));
+        if (compactedSubmission) {
+          // maxDrawCount continua sendo o tamanho do lote: e o teto que a spec
+          // exige, e a contagem real vem do buffer que o kernel escreveu. O
+          // offset e o mesmo do lote porque o destino da compactacao coincide
+          // com a origem (ver publishCompactionBatches).
+          rhiDevice_->cmdDrawIndexedIndirectCount(commandBuffer_,
+              compactedIndirectBuffer_.handle(),
+              static_cast<VkDeviceSize>(batch.firstCommand) * sizeof(VkDrawIndexedIndirectCommand),
+              compactCountBuffer_.handle(),
+              static_cast<VkDeviceSize>(batch.compactionSlot) * sizeof(u32),
+              batch.commandCount, sizeof(VkDrawIndexedIndirectCommand));
+        } else {
+          vkCmdDrawIndexedIndirect(commandBuffer_, indirectBuffer_.handle(),
+              static_cast<VkDeviceSize>(batch.firstCommand) * sizeof(VkDrawIndexedIndirectCommand),
+              batch.commandCount, sizeof(VkDrawIndexedIndirectCommand));
+        }
         ++visibilityTelemetry_.submittedDrawCalls;
         visibilityTelemetry_.submittedTriangles += batch.triangles;
       }
@@ -4306,6 +4534,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                     indirectCommands_.size() * sizeof(VkDrawIndexedIndirectCommand));
       if (!memoryAllocator_->flushBuffer(indirectBuffer_) || !publishDrawCullRecords())
         return rhi::SwapchainStatus::FatalError;
+      // Recusa aqui nao e erro de frame: significa que este frame submete pela
+      // lista original, que continua correta. O dispatch de compactacao ja
+      // gravado escreve num destino que ninguem le, e isso e barato o bastante
+      // para nao valer uma segunda passagem de gravacao do command buffer.
+      compactedSubmission = publishCompactionBatches();
       submitIndirectBatches(indirectSolidBatches_, opaqueMaterialPipelines_, pipeline_,
                             opaqueDistantPipeline_);
     } else {

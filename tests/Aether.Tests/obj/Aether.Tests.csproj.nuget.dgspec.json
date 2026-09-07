@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\donod\\Downloads\\atchengine\\tests\\Aether.Tests\\Aether.Tests.csproj": {}
+    "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\tests\\Aether.Tests\\Aether.Tests.csproj": {}
   },
   "projects": {
-    "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj": {
+    "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Core\\Aether.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj",
+        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Core\\Aether.Core.csproj",
         "projectName": "Aether.Core",
-        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj",
+        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Core\\Aether.Core.csproj",
         "packagesPath": "C:\\Users\\donod\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\obj\\",
+        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Core\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\donod\\Downloads\\atchengine\\NuGet.Config",
+          "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\NuGet.Config",
           "C:\\Users\\donod\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
@@ -61,17 +61,17 @@
         }
       }
     },
-    "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Flow\\Aether.Flow.csproj": {
+    "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Flow\\Aether.Flow.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Flow\\Aether.Flow.csproj",
+        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Flow\\Aether.Flow.csproj",
         "projectName": "Aether.Flow",
-        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Flow\\Aether.Flow.csproj",
+        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Flow\\Aether.Flow.csproj",
         "packagesPath": "C:\\Users\\donod\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Flow\\obj\\",
+        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Flow\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\donod\\Downloads\\atchengine\\NuGet.Config",
+          "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\NuGet.Config",
           "C:\\Users\\donod\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
@@ -81,8 +81,8 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj": {
-                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Core\\Aether.Core.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Core\\Aether.Core.csproj"
               }
             }
           }
@@ -122,17 +122,17 @@
         }
       }
     },
-    "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\Aether.Rendering.csproj": {
+    "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Rendering\\Aether.Rendering.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\Aether.Rendering.csproj",
+        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Rendering\\Aether.Rendering.csproj",
         "projectName": "Aether.Rendering",
-        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\Aether.Rendering.csproj",
+        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Rendering\\Aether.Rendering.csproj",
         "packagesPath": "C:\\Users\\donod\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\obj\\",
+        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Rendering\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\donod\\Downloads\\atchengine\\NuGet.Config",
+          "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\NuGet.Config",
           "C:\\Users\\donod\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
@@ -142,11 +142,11 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj": {
-                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Core\\Aether.Core.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Core\\Aether.Core.csproj"
               },
-              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj": {
-                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Scene\\Aether.Scene.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Scene\\Aether.Scene.csproj"
               }
             }
           }
@@ -186,17 +186,17 @@
         }
       }
     },
-    "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj": {
+    "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Scene\\Aether.Scene.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj",
+        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Scene\\Aether.Scene.csproj",
         "projectName": "Aether.Scene",
-        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj",
+        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Scene\\Aether.Scene.csproj",
         "packagesPath": "C:\\Users\\donod\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\obj\\",
+        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Scene\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\donod\\Downloads\\atchengine\\NuGet.Config",
+          "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\NuGet.Config",
           "C:\\Users\\donod\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
@@ -206,8 +206,8 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj": {
-                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Core\\Aether.Core.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Core\\Aether.Core.csproj"
               }
             }
           }
@@ -247,17 +247,17 @@
         }
       }
     },
-    "C:\\Users\\donod\\Downloads\\atchengine\\tests\\Aether.Tests\\Aether.Tests.csproj": {
+    "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\tests\\Aether.Tests\\Aether.Tests.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine\\tests\\Aether.Tests\\Aether.Tests.csproj",
+        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\tests\\Aether.Tests\\Aether.Tests.csproj",
         "projectName": "Aether.Tests",
-        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\tests\\Aether.Tests\\Aether.Tests.csproj",
+        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\tests\\Aether.Tests\\Aether.Tests.csproj",
         "packagesPath": "C:\\Users\\donod\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine\\tests\\Aether.Tests\\obj\\",
+        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\tests\\Aether.Tests\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\donod\\Downloads\\atchengine\\NuGet.Config",
+          "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\NuGet.Config",
           "C:\\Users\\donod\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
@@ -267,17 +267,17 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj": {
-                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Core\\Aether.Core.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Core\\Aether.Core.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Core\\Aether.Core.csproj"
               },
-              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Flow\\Aether.Flow.csproj": {
-                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Flow\\Aether.Flow.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Flow\\Aether.Flow.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Flow\\Aether.Flow.csproj"
               },
-              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\Aether.Rendering.csproj": {
-                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\Aether.Rendering.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Rendering\\Aether.Rendering.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Rendering\\Aether.Rendering.csproj"
               },
-              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj": {
-                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj"
+              "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Scene\\Aether.Scene.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine-render-rebuild\\managed\\Aether.Scene\\Aether.Scene.csproj"
               }
             }
           }

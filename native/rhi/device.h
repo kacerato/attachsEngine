@@ -271,6 +271,21 @@ public:
                           float b) const;
   void cmdEndDebugLabel(VkCommandBuffer commandBuffer) const;
 
+  // VK_KHR_draw_indirect_count: deixa a própria GPU dizer quantos comandos
+  // indiretos submeter, o que é o que permite compactar a lista de draws sem
+  // uma ida e volta à CPU (renderer/gpu_draw_compaction.h). É core no Vulkan
+  // 1.2, mas o piso do plano é 1.1 (RNF-11), então a extensão é enumerada e
+  // habilitada explicitamente — nunca presumida a partir da versão da API.
+  // Ausente, o consumidor mantém o caminho atual de instanceCount zerado.
+  bool drawIndirectCountSupported() const { return cmdDrawIndexedIndirectCountFn_ != nullptr; }
+  // No-op quando a extensão não está presente: quem grava o frame precisa poder
+  // consultar `drawIndirectCountSupported()` uma vez, na criação dos recursos,
+  // em vez de ramificar a cada draw.
+  void cmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer,
+                                   VkDeviceSize offset, VkBuffer countBuffer,
+                                   VkDeviceSize countOffset, u32 maximumDrawCount,
+                                   u32 stride) const;
+
 private:
   VkInstance instance_ = VK_NULL_HANDLE;
   VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
@@ -289,6 +304,10 @@ private:
   u32 maximumImage2DSize_ = 4096;
   u32 maximumImageArrayLayers_ = 256;
   float maximumSamplerAnisotropy_ = 1.0f;
+  // Carregado por vkGetDeviceProcAddr depois de criar o device, e só quando a
+  // extensão foi enumerada E habilitada. Nulo é a resposta honesta de "este
+  // aparelho não tem", e é ele que `drawIndirectCountSupported()` reporta.
+  PFN_vkCmdDrawIndexedIndirectCountKHR cmdDrawIndexedIndirectCountFn_ = nullptr;
   IVulkanPresentationScheduler *presentationScheduler_ = nullptr;
 
 #if AETHER_VULKAN_VALIDATION

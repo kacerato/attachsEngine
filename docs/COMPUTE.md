@@ -154,6 +154,56 @@ desligado por padrão; o código fica porque a fatia seguinte muda só um dos do
 lados da conta (produtor mais barato, ou candidatos maiores via HLOD/impostors).
 Tabela completa do A/B em `PROFILING-ANDROID.md`.
 
+## C2b — compactação dos comandos indiretos (implementada, não medida)
+
+C2 removia o trabalho de rasterização de um objeto ocluído, mas não o comando.
+Um `VkDrawIndexedIndirectCommand` com `instanceCount=0` continua sendo buscado da
+memória e decodificado pelo front-end, e o passe opaco continuava submetendo
+`commandCount` comandos por lote. Numa vista com centenas de draws, é justamente
+o lado do consumidor que o A/B do hotspot apontou como não devolvendo o custo do
+produtor. Esta fatia fecha esse lado — **e só esse lado**.
+
+Um segundo kernel (`native/rhi/shaders/draw_compact.comp`) varre cada lote,
+empurra os sobreviventes para o início de uma lista compacta e escreve quantos
+sobraram. A submissão passa a ser `vkCmdDrawIndexedIndirectCount`, que lê essa
+contagem da própria GPU.
+
+- **A ordem é preservada exatamente.** O lote chega ordenado front-to-back e essa
+  ordem alimenta o early-Z/LRZ do tile. Compactar com `atomicAdd` seria menos
+  código e entregaria a mesma contagem numa ordem que muda a cada execução —
+  mais overdraw e um frame que não se repete. O kernel usa soma de prefixo
+  exclusiva por bloco, com um acumulador costurando os blocos.
+- **A referência de CPU não é o mesmo algoritmo por acaso.**
+  `renderer::compactDrawCommandsReference` percorre o lote sequencialmente e,
+  por isso, nunca cruza uma fronteira de bloco — que é onde o kernel erraria. O
+  teste fecha esse buraco simulando a varredura em blocos, com a mesma ordem de
+  leitura e escrita das barreiras, e exigindo lista idêntica à referência.
+- **`VK_KHR_draw_indirect_count` é enumerada, nunca presumida.** É core no Vulkan
+  1.2, mas o piso do plano é 1.1 (RNF-11). Sem a extensão — ou sem
+  `multiDrawIndirect`, que é o que dá sentido a um `maxDrawCount` — o estágio não
+  existe e o frame continua submetendo os ocluídos com `instanceCount` zero,
+  exatamente como antes. O ponteiro é resolvido pelo alias KHR via
+  `vkGetDeviceProcAddr`, porque o stub do NDK exporta o símbolo core mesmo em
+  aparelhos 1.1.
+- **O dispatch cobre a capacidade de lotes, não os lotes do frame**, pela mesma
+  razão que o de C2: ele é gravado antes do render pass e a lista de lotes só é
+  montada dentro dele. Slots de sobra são zerados pela CPU e publicam contagem
+  zero. Um lote que não passa na validação faz o frame inteiro voltar à lista
+  original — correta, apenas com os buracos —, não um frame errado.
+- **A telemetria não mudou de significado.** `submitted_draws` e
+  `submitted_triangles` continuam medindo o que a **CPU** montou e continuam
+  incluindo o que a GPU removeu. Trocá-los por um número vindo da GPU exigiria um
+  readback que este caminho existe para não ter.
+
+Estado: **implementada, sem medição em aparelho.** 473 testes host passam, o
+build Android Release compila e o SPIR-V passa em `spirv-val`. Nada disso é
+evidência de ganho. O saldo de C2 no hotspot era +1,28 ms de frame e esta fatia
+mexe em **um** dos dois lados da conta: o custo do produtor (a cadeia de redução,
++0,99 ms) continua idêntico. Refazer o A/B intercalado da rota `forest-walk-v1`,
+com três runs frios e três aquecidos, é o que decide se C2 sai de opt-in — e é
+plausível que continue negativo até os candidatos ficarem maiores via
+HLOD/impostor.
+
 ## Ordem dos próximos consumidores
 
 1. **C0 — fundação + ASTC técnico:** entregue.
@@ -161,6 +211,9 @@ Tabela completa do A/B em `PROFILING-ANDROID.md`.
 3. **C2 — culling GPU-driven:** implementado e medido; rejeitado por saldo
    negativo na pose do hotspot. Retomar exige produtor mais barato ou candidatos
    maiores, não ajuste de parâmetro.
+3b. **C2b — compactação + indirect count:** implementada, sem medição. Fecha o
+   lado do consumidor (o comando ocluído deixa de ser submetido); não toca no
+   custo do produtor, que é o outro termo do saldo negativo.
 4. **Próximo alvo medido:** o passe opaco tem ~4,8 ms fixos e ~9,1 ms por pixel
    a 1280×2772, dos quais 5,1 ms são material acima de `base-color`. O que paga
    é reduzir **quantas vezes cada pixel é sombreado** — overdraw de folhagem e

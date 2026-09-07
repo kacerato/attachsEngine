@@ -173,6 +173,7 @@ add_library(aether_renderer STATIC
   renderer/environment_map.cpp
   renderer/frame_graph.cpp
   renderer/frustum_visibility.cpp
+  renderer/gpu_draw_compaction.cpp
   renderer/gpu_draw_culling.cpp
   renderer/rendering_policy.cpp
   renderer/shadow_cascades.cpp
@@ -356,6 +357,7 @@ if(NOT ANDROID)
     ../tests/native/test_first_person_controller.cpp
     ../tests/native/test_foliage_impostors.cpp
     ../tests/native/test_frustum_visibility.cpp
+    ../tests/native/test_gpu_draw_compaction.cpp
     ../tests/native/test_gpu_draw_culling.cpp
     ../tests/native/test_hzb_visibility.cpp
     ../tests/native/test_lod_selection.cpp

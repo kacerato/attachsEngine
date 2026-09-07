@@ -408,6 +408,9 @@ void VulkanDevice::shutdown() {
       presentationScheduler_->onDeviceDestroyed(device_);
     vkDestroyDevice(device_, nullptr);
     device_ = VK_NULL_HANDLE;
+    // O ponteiro pertence ao device destruido: mante-lo faria
+    // drawIndirectCountSupported() mentir para quem reinicializa o RHI.
+    cmdDrawIndexedIndirectCountFn_ = nullptr;
   }
   if (instance_ != VK_NULL_HANDLE) {
 #if AETHER_VULKAN_VALIDATION
@@ -469,6 +472,15 @@ void VulkanDevice::setObjectName(VkObjectType, u64, const char *) const {}
 void VulkanDevice::cmdBeginDebugLabel(VkCommandBuffer, const char *, float, float, float) const {}
 void VulkanDevice::cmdEndDebugLabel(VkCommandBuffer) const {}
 #endif
+
+void VulkanDevice::cmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer,
+                                               VkDeviceSize offset, VkBuffer countBuffer,
+                                               VkDeviceSize countOffset, u32 maximumDrawCount,
+                                               u32 stride) const {
+  if (cmdDrawIndexedIndirectCountFn_ == nullptr) return;
+  cmdDrawIndexedIndirectCountFn_(commandBuffer, buffer, offset, countBuffer, countOffset,
+                                 maximumDrawCount, stride);
+}
 
 bool VulkanDevice::initialize(const char *appName) {
   if (!initializeInstance(appName, nullptr, 0)) return false;
@@ -736,6 +748,7 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   // dispositivo cai para DeviceProfile::C (ver device_profile.cpp), não é um erro fatal.
   bool descriptorIndexingExtensionSupported = false;
   bool memoryBudgetExtensionSupported = false;
+  bool drawIndirectCountExtensionSupported = false;
   {
     u32 extensionCount = 0;
     vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extensionCount, nullptr);
@@ -748,6 +761,10 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
         }
         if (std::strcmp(ext.extensionName, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) == 0)
           memoryBudgetExtensionSupported = true;
+        // Mesma disciplina do descriptor_indexing acima: core em 1.2 não é o
+        // mesmo que disponível aqui, e o piso do plano continua sendo 1.1.
+        if (std::strcmp(ext.extensionName, VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME) == 0)
+          drawIndirectCountExtensionSupported = true;
       }
     }
   }
@@ -822,6 +839,14 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   }
   if (memoryBudgetExtensionSupported)
     deviceExtensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+  // `multiDrawIndirect` é a feature que permite mais de um comando por chamada;
+  // sem ela, um `maxDrawCount` vindo da GPU não teria como ser respeitado e a
+  // extensão não serviria para nada. Pedir as duas juntas evita habilitar uma
+  // extensão que o consumidor jamais poderia usar.
+  if (drawIndirectCountExtensionSupported && enabledFeatures.multiDrawIndirect)
+    deviceExtensions.push_back(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
+  else
+    drawIndirectCountExtensionSupported = false;
   if (presentationScheduler_ != nullptr) {
     presentationScheduler_->requiredDeviceExtensions(physicalDevice_, schedulerExtensions);
     for (const auto &extension : schedulerExtensions) {
@@ -841,6 +866,15 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
     return false;
   }
   vkGetDeviceQueue(device_, graphicsQueueFamily_, 0, &graphicsQueue_);
+
+  // O stub libvulkan.so do NDK exporta o símbolo core de 1.2 mesmo em aparelhos
+  // 1.1, onde chamá-lo entraria num ponteiro nulo do ICD. Resolver o alias KHR
+  // pelo device é o caminho que só devolve algo quando a extensão foi de fato
+  // habilitada logo acima — a mesma escolha já feita para debug_utils.
+  if (drawIndirectCountExtensionSupported) {
+    cmdDrawIndexedIndirectCountFn_ = reinterpret_cast<PFN_vkCmdDrawIndexedIndirectCountKHR>(
+        vkGetDeviceProcAddr(device_, "vkCmdDrawIndexedIndirectCountKHR"));
+  }
 
   if (!memoryAllocator_.initialize(instance_, physicalDevice_, device_,
                                    deriveMobileMemoryBudget(physicalDevice_),
