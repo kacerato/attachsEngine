@@ -1,0 +1,173 @@
+// Renderiza a tela do editor em um arquivo, sem GPU e sem aparelho.
+//
+// A interface é desenhada pela engine. Sem isto, a única forma de ver se um
+// painel ficou onde deveria seria montar um APK, instalar e olhar — um ciclo de
+// minutos para um ajuste de oito pixels. Aqui o ciclo é de segundos, e o que
+// rasteriza é o espelho do fragment shader (tests/native/ui_software_raster.h),
+// então o que aparece aqui é o que a GPU vai desenhar.
+//
+// Não faz parte do produto: é um alvo de ferramenta, ao lado dos testes.
+//
+// Uso:
+//   aether_ui_preview [saida.ppm] [largura] [altura]
+#include "editor/editor_history.h"
+#include "editor/editor_screen.h"
+#include "ui_software_raster.h"
+
+#include <cstdio>
+#include <cstdlib>
+#include <string>
+#include <vector>
+
+using namespace ae;
+
+namespace {
+
+bool readAsset(const char *relative, std::vector<u8> &out) {
+  const std::string path = std::string(AETHER_REPOSITORY_ROOT) + "/" + relative;
+  std::FILE *file = std::fopen(path.c_str(), "rb");
+  if (file == nullptr) {
+    std::fprintf(stderr, "nao abriu %s\n", path.c_str());
+    return false;
+  }
+  std::fseek(file, 0, SEEK_END);
+  const long size = std::ftell(file);
+  std::fseek(file, 0, SEEK_SET);
+  out.resize(size > 0 ? static_cast<usize>(size) : 0);
+  const bool ok = size > 0 && std::fread(out.data(), 1, out.size(), file) == out.size();
+  std::fclose(file);
+  return ok;
+}
+
+// A cena do mockup, montada pelos mesmos comandos que a interface usaria. Ela
+// não é um dado de teste solto: é o Water Lab que o editor precisa saber criar.
+editor::EditorEntityId buildWaterLab(editor::EditorDocument &document,
+                                     editor::EditorHistory &history) {
+  using namespace ae::editor;
+  const EditorEntityId environment =
+      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Environment");
+  history.createEntity(document, environment, EditorEntityKind::Light, "Sky");
+  history.createEntity(document, environment, EditorEntityKind::Mesh, "Mountains");
+  history.createEntity(document, environment, EditorEntityKind::Water, "Waterfall");
+
+  const EditorEntityId architecture =
+      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Architecture");
+  history.createEntity(document, architecture, EditorEntityKind::Mesh, "Main Building");
+  history.createEntity(document, architecture, EditorEntityKind::Mesh, "Glass Wall");
+  const EditorEntityId block =
+      history.createEntity(document, architecture, EditorEntityKind::Mesh, "Concrete Block");
+
+  const EditorEntityId water =
+      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Water");
+  history.createEntity(document, water, EditorEntityKind::Water, "Water Plane");
+  history.createEntity(document, water, EditorEntityKind::Effect, "Water FX");
+
+  const EditorEntityId props =
+      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Props");
+  history.createEntity(document, props, EditorEntityKind::Mesh, "Rocks");
+  history.createEntity(document, props, EditorEntityKind::Mesh, "Plants");
+
+  const EditorEntityId lighting =
+      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Lighting");
+  history.createEntity(document, lighting, EditorEntityKind::Light, "Directional Light");
+  history.createEntity(document, lighting, EditorEntityKind::Light, "Area Light");
+
+  const EditorEntityId cameras =
+      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Cameras");
+  history.createEntity(document, cameras, EditorEntityKind::Camera, "Main Camera");
+
+  EditorTransform transform{};
+  transform.position[0] = 1.25f;
+  transform.position[1] = 0.5f;
+  transform.position[2] = -2.0f;
+  transform.rotationDegrees[1] = 90.0f;
+  history.setTransform(document, block, transform);
+  return block;
+}
+
+bool writePpm(const char *path, const test::UiSoftwareTarget &target) {
+  std::FILE *file = std::fopen(path, "wb");
+  if (file == nullptr) return false;
+  std::fprintf(file, "P6\n%u %u\n255\n", target.width, target.height);
+  std::vector<u8> row(static_cast<usize>(target.width) * 3);
+  for (u32 y = 0; y < target.height; ++y) {
+    for (u32 x = 0; x < target.width; ++x) {
+      const usize source = (static_cast<usize>(y) * target.width + x) * 4;
+      for (u32 channel = 0; channel < 3; ++channel) {
+        const float value = target.pixels[source + channel];
+        row[static_cast<usize>(x) * 3 + channel] =
+            static_cast<u8>((value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value)) * 255.0f + 0.5f);
+      }
+    }
+    std::fwrite(row.data(), 1, row.size(), file);
+  }
+  std::fclose(file);
+  return true;
+}
+
+} // namespace
+
+int main(int argc, char **argv) {
+  const char *output = argc > 1 ? argv[1] : "build/editor-preview.ppm";
+  const u32 width = argc > 3 ? static_cast<u32>(std::atoi(argv[2])) : 1600;
+  const u32 height = argc > 3 ? static_cast<u32>(std::atoi(argv[3])) : 900;
+
+  std::vector<u8> fontBytes;
+  std::vector<u8> iconBytes;
+  if (!readAsset("assets/astra-visual/ui/astra-ui-font.aeuf", fontBytes)) return 1;
+  if (!readAsset("assets/astra-visual/ui/astra-ui-icons.aeui", iconBytes)) return 1;
+
+  ui::UiFont font;
+  ui::UiIconAtlas icons;
+  if (!font.load(fontBytes)) {
+    std::fprintf(stderr, "fonte recusada\n");
+    return 1;
+  }
+  if (!icons.load(iconBytes)) {
+    std::fprintf(stderr, "atlas de icones recusado\n");
+    return 1;
+  }
+
+  editor::EditorDocument document;
+  editor::EditorHistory history;
+  const editor::EditorEntityId selection = buildWaterLab(document, history);
+
+  editor::EditorScreenState state{};
+  state.surface = {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)};
+  state.document = &document;
+  state.selection = selection;
+  state.projectName = "Water Lab";
+  state.projectSubtitle = "Scene";
+  state.canUndo = history.canUndo();
+  state.canRedo = history.canRedo();
+
+  ui::UiDrawList list;
+  list.begin(state.surface, font.metrics(ui::UiFontWeight::Regular));
+  ui::UiInputRouter router;
+  router.beginFrame();
+  const editor::EditorScreenLayout layout =
+      editor::buildEditorScreen(state, ui::defaultTheme(), list, router);
+
+  std::vector<ui::UiInstance> instances;
+  const ui::UiInstanceBuildResult built =
+      ui::buildUiInstances(list, font, icons, 16384, instances);
+
+  test::UiSoftwareTarget target;
+  // Um cinza-azulado no lugar da cena 3D: preto esconderia um painel preto que
+  // não foi desenhado, e é justamente isso que a pré-visualização tem de expor.
+  target.resize(width, height, 0.16f, 0.18f, 0.20f);
+  test::rasterizeUi(instances, font, icons, target);
+
+  if (!writePpm(output, target)) {
+    std::fprintf(stderr, "nao escreveu %s\n", output);
+    return 1;
+  }
+  std::printf("%s %ux%u\n", output, width, height);
+  std::printf("comandos=%u instancias=%u descartadas=%u sem_fonte=%u recortados=%u\n",
+              list.commandCount(), built.emitted, built.dropped, built.missingGlyphRuns,
+              list.culledCommandCount());
+  std::printf("hierarquia=%u linhas viewport=%.0fx%.0f\n", layout.hierarchyRowCount,
+              static_cast<double>(layout.viewport.width),
+              static_cast<double>(layout.viewport.height));
+  return 0;
+}

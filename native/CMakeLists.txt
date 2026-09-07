@@ -205,6 +205,7 @@ target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 add_library(aether_editor STATIC
   editor/editor_document.cpp
   editor/editor_gizmo.cpp
+  editor/editor_screen.cpp
   editor/editor_history.cpp
   editor/editor_view.cpp
 )
@@ -391,6 +392,7 @@ if(NOT ANDROID)
     ../tests/native/test_gpu_draw_compaction.cpp
     ../tests/native/test_editor_document.cpp
     ../tests/native/test_editor_gizmo.cpp
+    ../tests/native/test_editor_screen.cpp
     ../tests/native/test_editor_history.cpp
     ../tests/native/test_editor_view.cpp
     ../tests/native/test_ui_assets.cpp
@@ -462,6 +464,15 @@ if(NOT ANDROID)
   # Probe separado porque induzir overflow em Debug dispara corretamente o
   # assert fail-fast do próprio Jolt. Em Release este binário valida a outra
   # metade do contrato: warning + flags + contadores, sem encerramento silencioso.
+  # Pre-visualizacao da interface: renderiza a tela do editor em arquivo, sem GPU
+  # e sem aparelho, usando o espelho de astra_ui.frag. Nao faz parte do produto.
+  add_executable(aether_ui_preview ../tests/native/ui_preview_main.cpp)
+  target_include_directories(aether_ui_preview PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_ui_preview PRIVATE
+    AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_ui_preview PRIVATE aether_core aether_ui aether_editor
+                        aether_renderer)
+
   add_executable(physics_overflow_probe
     ${CMAKE_SOURCE_DIR}/../tests/native/physics_overflow_probe.cpp
   )

@@ -12,6 +12,20 @@ fileira de ferramentas parecer alinhada. Um empacotamento por prateleiras
 economizaria área e devolveria a inconsistência que `square_canvas` removeu no
 fatiamento.
 
+**Os ícones são recoloridos para fundo escuro.** As folhas foram desenhadas como
+adesivos para fundo claro: 60 a 75% da área de cada ícone é preenchimento preto,
+com o detalhe em branco por dentro. Sobre os painéis do editor, que são pretos,
+esse corpo simplesmente desaparece e sobra o detalhe solto — um sol vira um ponto
+lima, um cubo vira três riscos. A recoloração inverte a LUMINÂNCIA dos pixels que
+não são lima: o corpo preto vira claro e o detalhe branco vira escuro, o que
+devolve a silhueta e mantém as linhas internas legíveis. O lima é preservado
+porque ele não é luminância, é a identidade da marca.
+
+Isso muda a aparência em relação às folhas de origem, e de propósito: um ícone
+que não se vê não é um ícone. A tintura em tempo de execução continua funcionando
+por multiplicação — branco deixa intacto, e o quase-preto da pastilha lima ativa
+inverte a polaridade de novo, que é o que os masters mostram.
+
 **Sem mipmaps.** As células são vizinhas no atlas e um mip alto mistura o
 contorno de um ícone com o do lado — o clássico sangramento de atlas. A célula
 de 96 px cobre o maior desenho da interface (48 dp numa tela 2×), então a
@@ -29,6 +43,7 @@ import json
 from pathlib import Path
 
 
+import numpy as np
 from PIL import Image
 
 from ui_asset_format import cpp_identifier, write_icons
@@ -36,6 +51,21 @@ from ui_asset_format import cpp_identifier, write_icons
 CELL = 96
 PADDING = 2
 ATLAS_WIDTH = 1024
+
+
+def recolour_for_dark_ui(icon: Image.Image) -> Image.Image:
+    """Inverte a luminância dos pixels que não são lima, preservando o alfa."""
+    pixels = np.asarray(icon, dtype=np.int32)
+    red, green, blue, alpha = (pixels[..., channel] for channel in range(4))
+    # O lima da marca é o único matiz que o sistema visual usa; qualquer coisa
+    # verde-clara e pouco azul é ele, inclusive as bordas anti-aliased.
+    lime = (green > 150) & (blue < 120) & (red > 120)
+    luminance = (red * 299 + green * 587 + blue * 114) // 1000
+    inverted = np.clip(255 - luminance, 0, 255)
+    result = pixels.copy()
+    for channel in range(3):
+        result[..., channel] = np.where(lime, pixels[..., channel], inverted)
+    return Image.fromarray(result.astype(np.uint8), "RGBA")
 
 HEADER_PREAMBLE = """// GERADO por tools/pack-icon-atlas.py — não edite à mão.
 //
@@ -111,7 +141,11 @@ def main() -> None:
     for index, name in enumerate(names):
         category, _, leaf = name.partition("/")
         source = arguments.named / category / f"{leaf}.png"
-        icon = Image.open(source).convert("RGBA").resize((CELL, CELL), Image.LANCZOS)
+        # A recoloração acontece ANTES da redução: inverter depois misturaria a
+        # franja anti-aliased do contorno com o fundo transparente e deixaria um
+        # halo claro em volta de cada ícone.
+        icon = recolour_for_dark_ui(Image.open(source).convert("RGBA"))
+        icon = icon.resize((CELL, CELL), Image.LANCZOS)
         x = PADDING + (index % columns) * (CELL + PADDING)
         y = PADDING + (index // columns) * (CELL + PADDING)
         atlas.paste(icon, (x, y))

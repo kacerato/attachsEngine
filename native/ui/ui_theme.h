@@ -90,6 +90,10 @@ struct UiTypeStyle final {
 struct UiTypography final {
   UiTypeStyle label{11.0f, 0.22f, 1.2f, true, true};
   UiTypeStyle labelWide{11.0f, 0.34f, 1.2f, true, true};
+  // Rótulo curto em caixa normal. Separado de `label` porque nem todo texto
+  // pequeno é caixa alta: "Add", "Assets" e "Active" aparecem como palavras nos
+  // masters, e só os rótulos técnicos — "MESH", "SCENE" — são versalete.
+  UiTypeStyle caption{12.0f, 0.0f, 1.2f, false, true};
   UiTypeStyle body{15.0f, 0.0f, 1.3f, false, false};
   UiTypeStyle cardName{17.0f, 0.0f, 1.25f, false, true};
   UiTypeStyle title{38.0f, 0.0f, 1.1f, false, true};
