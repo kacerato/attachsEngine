@@ -197,6 +197,19 @@ target_include_directories(aether_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # frame (load/store e memoryless do depth) e derivada dele, nao escrita a mao.
 target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 
+# --- aether_ui: layout, desenho e roteamento de toque da interface ---------
+# Separada de aether_renderer de proposito: a UI do editor nao conhece Vulkan,
+# nao conhece a cena e e desenhada por quem consome a lista de comandos. Quem
+# depende dela nao deveria arrastar junto o renderer inteiro.
+add_library(aether_ui STATIC
+  ui/ui_draw_list.cpp
+  ui/ui_input.cpp
+  ui/ui_layout.cpp
+  ui/ui_text.cpp
+)
+target_include_directories(aether_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(aether_ui PUBLIC aether_core)
+
 # --- aether_rhi: descritores/cache/perfis de dispositivo + wrappers Vulkan -
 add_library(aether_rhi STATIC
   rhi/bindless_index_allocator.cpp
@@ -358,6 +371,9 @@ if(NOT ANDROID)
     ../tests/native/test_foliage_impostors.cpp
     ../tests/native/test_frustum_visibility.cpp
     ../tests/native/test_gpu_draw_compaction.cpp
+    ../tests/native/test_ui_draw_list.cpp
+    ../tests/native/test_ui_input.cpp
+    ../tests/native/test_ui_layout.cpp
     ../tests/native/test_gpu_draw_culling.cpp
     ../tests/native/test_hzb_visibility.cpp
     ../tests/native/test_lod_selection.cpp
@@ -411,7 +427,7 @@ if(NOT ANDROID)
     ${CMAKE_SOURCE_DIR}/../tests/native/test_transform_bridge.cpp
   )
   target_include_directories(aether_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
-  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_physics aether_water_runtime aether_transform aether_resources)
+  target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_physics aether_water_runtime aether_transform aether_resources)
 
   # Probe separado porque induzir overflow em Debug dispara corretamente o
   # assert fail-fast do próprio Jolt. Em Release este binário valida a outra

@@ -1,0 +1,166 @@
+#include "ui/ui_input.h"
+
+#include <cmath>
+
+namespace ae::ui {
+namespace {
+
+float distanceSquared(UiPoint first, UiPoint second) noexcept {
+  const float dx = first.x - second.x;
+  const float dy = first.y - second.y;
+  return dx * dx + dy * dy;
+}
+
+} // namespace
+
+void UiInputRouter::beginFrame() noexcept { regions_.clear(); }
+
+bool UiInputRouter::addRegion(const UiRect &rect, u32 widgetId, float minimumTouchSide) {
+  if (regions_.size() >= kMaximumRegions) return false;
+  if (!isFinite(rect) || rect.isEmpty()) return false;
+  if (!std::isfinite(minimumTouchSide) || minimumTouchSide < 0.0f) return false;
+  Region region{};
+  region.rect = minimumTouchSide > 0.0f ? expandToMinimumTouchTarget(rect, minimumTouchSide) : rect;
+  region.widgetId = widgetId;
+  regions_.push_back(region);
+  return true;
+}
+
+bool UiInputRouter::addBlocker(const UiRect &rect) {
+  if (regions_.size() >= kMaximumRegions) return false;
+  if (!isFinite(rect) || rect.isEmpty()) return false;
+  Region region{};
+  region.rect = rect;
+  region.blocker = true;
+  regions_.push_back(region);
+  return true;
+}
+
+const UiInputRouter::ActivePointer *UiInputRouter::find(u32 pointerId) const noexcept {
+  for (const ActivePointer &pointer : pointers_)
+    if (pointer.pointerId == pointerId) return &pointer;
+  return nullptr;
+}
+
+UiInputRouter::ActivePointer *UiInputRouter::find(u32 pointerId) noexcept {
+  for (ActivePointer &pointer : pointers_)
+    if (pointer.pointerId == pointerId) return &pointer;
+  return nullptr;
+}
+
+void UiInputRouter::erase(u32 pointerId) noexcept {
+  for (usize index = 0; index < pointers_.size(); ++index) {
+    if (pointers_[index].pointerId != pointerId) continue;
+    pointers_[index] = pointers_.back();
+    pointers_.pop_back();
+    return;
+  }
+}
+
+UiPointerRouting UiInputRouter::route(const UiPointerEvent &event) noexcept {
+  UiPointerRouting routing{};
+  if (!std::isfinite(event.position.x) || !std::isfinite(event.position.y)) return routing;
+
+  if (event.phase == UiPointerPhase::Down) {
+    // Um `Down` repetido para o mesmo id é entrada malformada (o sistema perdeu
+    // um `Up`). Descartar o estado antigo é a recuperação honesta: manter os
+    // dois deixaria uma captura órfã que nunca mais recebe `Up`.
+    erase(event.pointerId);
+
+    ActivePointer pointer{};
+    pointer.pointerId = event.pointerId;
+    pointer.start = event.position;
+    pointer.previous = event.position;
+    pointer.target = UiPointerTarget::Viewport;
+
+    // Da última registrada para a primeira: a ordem de desenho é a ordem de
+    // profundidade, e o que foi desenhado por último está por cima.
+    for (usize index = regions_.size(); index > 0; --index) {
+      const Region &region = regions_[index - 1];
+      if (!region.rect.contains(event.position)) continue;
+      if (region.blocker) {
+        // O toque foi absorvido pelo painel, mas nenhum widget o quer. Ele
+        // termina aqui: nem vira clique, nem desce para a cena.
+        pointer.target = UiPointerTarget::None;
+      } else {
+        pointer.target = UiPointerTarget::Widget;
+        pointer.widgetId = region.widgetId;
+      }
+      break;
+    }
+
+    pointers_.push_back(pointer);
+    routing.target = pointer.target;
+    routing.widgetId = pointer.widgetId;
+    routing.start = pointer.start;
+    routing.position = event.position;
+    return routing;
+  }
+
+  ActivePointer *pointer = find(event.pointerId);
+  // Movimento ou `Up` de um dedo que nunca desceu (perdido numa troca de
+  // superfície, por exemplo) não pertence a ninguém. Inventar um alvo aqui
+  // moveria a câmera sem que o usuário tivesse tocado nela.
+  if (pointer == nullptr) return routing;
+
+  routing.target = pointer->target;
+  routing.widgetId = pointer->widgetId;
+  routing.start = pointer->start;
+  routing.position = event.position;
+  routing.totalDelta = {event.position.x - pointer->start.x, event.position.y - pointer->start.y};
+  routing.stepDelta = {event.position.x - pointer->previous.x,
+                       event.position.y - pointer->previous.y};
+  pointer->previous = event.position;
+
+  if (!pointer->dragging &&
+      distanceSquared(event.position, pointer->start) > dragSlop_ * dragSlop_)
+    pointer->dragging = true;
+  routing.dragging = pointer->dragging;
+
+  if (event.phase == UiPointerPhase::Move) return routing;
+
+  routing.released = true;
+  if (event.phase == UiPointerPhase::Up && pointer->target == UiPointerTarget::Widget &&
+      !pointer->dragging) {
+    // O clique exige que o dedo ainda esteja sobre o widget NESTE frame. Sair
+    // da área antes de levantar é o gesto universal de desistir do botão, e o
+    // widget pode ter mudado de lugar durante o toque.
+    for (usize index = regions_.size(); index > 0; --index) {
+      const Region &region = regions_[index - 1];
+      if (region.blocker || region.widgetId != pointer->widgetId) continue;
+      if (region.rect.contains(event.position)) routing.tapped = true;
+      break;
+    }
+  }
+  erase(event.pointerId);
+  return routing;
+}
+
+bool UiInputRouter::pressedWidget(u32 &outWidgetId) const noexcept {
+  for (const ActivePointer &pointer : pointers_) {
+    if (pointer.target != UiPointerTarget::Widget) continue;
+    outWidgetId = pointer.widgetId;
+    return true;
+  }
+  return false;
+}
+
+bool UiInputRouter::isPointerActive(u32 pointerId) const noexcept {
+  return find(pointerId) != nullptr;
+}
+
+u32 UiInputRouter::viewportPointerCount() const noexcept {
+  u32 count = 0;
+  for (const ActivePointer &pointer : pointers_)
+    if (pointer.target == UiPointerTarget::Viewport) ++count;
+  return count;
+}
+
+void UiInputRouter::setDragSlop(float slop) noexcept {
+  if (!std::isfinite(slop) || slop < 0.0f) return;
+  dragSlop_ = slop;
+}
+
+void UiInputRouter::cancelAllPointers() noexcept { pointers_.clear(); }
+
+} // namespace ae::ui
