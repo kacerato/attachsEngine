@@ -89,6 +89,8 @@ public:
   bool addBlocker(const UiRect &rect);
 
   UiPointerRouting route(const UiPointerEvent &event) noexcept;
+  // Read-only hit test for drop targets; does not transfer pointer capture.
+  UiPointerRouting hitTest(UiPoint position) const noexcept;
 
   // Widget que está com algum dedo em cima agora, para o estado visual de
   // pressionado. Devolve false quando nenhum widget está capturado.

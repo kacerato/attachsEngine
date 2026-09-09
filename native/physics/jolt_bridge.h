@@ -274,6 +274,7 @@ void AetherPhysics_GetTransform(AetherPhysicsWorld *world, AetherBodyHandle hand
                                  AetherVec3 *outPosition, AetherQuat *outRotation);
 
 void AetherPhysics_SetLinearVelocity(AetherPhysicsWorld *world, AetherBodyHandle handle, AetherVec3 velocity);
+ae::i32 AetherPhysics_SetMassV2(AetherPhysicsWorld *world,AetherBodyHandle handle,float mass);
 // Body-origin pose (not centre of mass). A stale/destroyed handle returns zero
 // and leaves outputs untouched; read under one body lock.
 ae::i32 AetherPhysics_TryGetBodyPoseV2(AetherPhysicsWorld *world, AetherBodyHandle handle,

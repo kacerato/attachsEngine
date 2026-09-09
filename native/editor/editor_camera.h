@@ -33,8 +33,8 @@ struct EditorCamera final {
 };
 
 struct EditorCameraLimits final {
-  float minimumDistance = 0.5f;
-  float maximumDistance = 400.0f;
+  float minimumDistance = 0.01f;
+  float maximumDistance = 1000000.0f;
   float maximumPitch = 1.45f;  // ~83 graus
   // Radianos por pixel arrastado. Uma volta completa em cerca de meia tela.
   float orbitRadiansPerPixel = 0.010f;

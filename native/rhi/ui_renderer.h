@@ -48,13 +48,14 @@ public:
   // são pixels LÓGICOS — os mesmos em que as instâncias foram construídas —, e a
   // pré-rotação leva o resultado ao espaço do display.
   bool record(VkCommandBuffer commandBuffer, std::span<const ui::UiInstance> instances,
-              float surfaceWidth, float surfaceHeight, const SurfaceTransform &surfaceTransform);
+              float surfaceWidth, float surfaceHeight, const SurfaceTransform &surfaceTransform, bool srgbTarget=false);
 
 private:
   struct PushConstants final {
     float surface[4]{};
     float surfaceTransform[4]{};
     float atlasSizes[4]{};
+    float outputFlags[4]{};
   };
 
   bool createAtlas(VulkanMemoryAllocator &allocator, VulkanUploadContext &upload,

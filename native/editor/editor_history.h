@@ -66,6 +66,8 @@ public:
   EditorEntityId createEntity(EditorDocument &document, EditorEntityId parent,
                               EditorEntityKind kind, std::string_view name);
   bool destroyEntity(EditorDocument &document, EditorEntityId id);
+  EditorEntityId duplicateEntity(EditorDocument &document, EditorEntityId id);
+  bool reparentKeepingWorld(EditorDocument &document, EditorEntityId id, EditorEntityId parent);
   bool applyValues(EditorDocument &document, EditorEntityId id, const EditorEntity &values,
                    EditorMergeToken mergeToken = kNoMerge);
   bool setTransform(EditorDocument &document, EditorEntityId id, const EditorTransform &transform,

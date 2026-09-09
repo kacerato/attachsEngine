@@ -59,6 +59,13 @@ bool authorWaterCascades(std::span<const WaterCascadeSettings> base,
                          const WaterSpectrumAuthoringSettings &settings,
                          std::vector<WaterCascadeSettings> &output);
 std::array<WaterCascadeSettings,3> defaultWaterCascadeSettings();
+struct WaterCascadeLayout final {
+  u32 count=3,resolution=128,seed=1;
+  float minimumWavelength=2,maximumWavelength=2048,domainScale=1;
+};
+// Logarithmic, non-overlapping bands. Rebuilding is an authoring operation.
+bool buildWaterCascadeLayout(const WaterCascadeLayout &layout,
+                              std::vector<WaterCascadeSettings> &output);
 enum class WaterCascadeError { None, Count, InvalidSettings, OverlappingBands, MemoryBudget };
 // Array order is low to high wavelength. Gaps are permitted intentionally;
 // overlap is rejected rather than silently changing artist-authored energy.

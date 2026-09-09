@@ -41,7 +41,7 @@ from PIL import Image, ImageDraw, ImageFont
 from ui_asset_format import write_font
 
 FIRST_GLYPH = 32
-LAST_GLYPH = 126
+LAST_GLYPH = 255
 GLYPH_COUNT = LAST_GLYPH - FIRST_GLYPH + 1
 # Corpo em que o glifo é rasterizado antes de virar distância. Não é o corpo em
 # que ele será desenhado: é a resolução do campo.

@@ -115,12 +115,18 @@ bool sampleWaterBottom(const WaterBathymetry &data, WaterVec2 position, float &h
 }
 
 bool WaterField::configure(const WaterFieldSetup &setup) noexcept {
+  if(setup.route.count && !validateWaterRoute(setup.route)) return false;
+  for(float value:setup.routeTransform) if(!std::isfinite(value)) return false;
+  if(setup.route.count && std::abs(setup.routeTransform[0]*setup.routeTransform[10]-setup.routeTransform[8]*setup.routeTransform[2])<1e-8f) return false;
+  for(float scale:{setup.waveScale,setup.rippleScale,setup.foamScale})
+    if(!std::isfinite(scale) || scale<0 || scale>4) return false;
   // Validate before committing: a bad live edit must not disable valid water.
   if (setup.requested != WaterFieldProvider::Analytic &&
       setup.requested != WaterFieldProvider::SpectralCpu &&
       setup.requested != WaterFieldProvider::SpectralGpu) return false;
   if (validateWaterProfile(setup.profile) != WaterValidationError::None) return false;
   if (!finite(setup.baseHeight) || !finite(setup.bottomHeight)) return false;
+  if(!finite(setup.planeOrigin.x) || !finite(setup.planeOrigin.y) || !finite(setup.planeSlope.x) || !finite(setup.planeSlope.y)) return false;
   if (setup.exclusionCount > MaximumWaterExclusionVolumes) return false;
   if (!validateWaterCurrents(setup.currents)) return false;
   if (!validateWaterBathymetry(setup.bathymetry)) return false;
@@ -172,6 +178,35 @@ WaterFieldSample WaterField::sampleOne(WaterVec2 position, float timeSeconds) co
     return result;
 
   float coverage = setup_.bounded ? 1.0f - waterCoverage(setup_.boundary, position) : 1.0f;
+  WaterRouteSample routeSample;
+  const bool routed=setup_.route.count!=0;
+  WaterVec2 routeSlope{};
+  if(routed) {
+    const float *m=setup_.routeTransform;
+    const float inverse=1/(m[0]*m[10]-m[8]*m[2]);
+    WaterVec2 local{};bool wet=false;
+    // Invert the projected height graph, retaining authored ribbon width under
+    // nonuniform scaling. Transforming only its centerline widens the physics.
+    for(u32 iteration=0;iteration<5;++iteration) {
+      const float x=position.x-m[12]-m[4]*routeSample.center.y;
+      const float z=position.y-m[14]-m[6]*routeSample.center.y;
+      local={(m[10]*x-m[8]*z)*inverse,(-m[2]*x+m[0]*z)*inverse};
+      wet=sampleWaterRoute(setup_.route,local,routeSample);
+      if(m[4]==0 && m[6]==0) break;
+    }
+    if(!wet) coverage=0;
+    const auto tangent=routeSample.tangent;
+    const WaterVec3 longitudinal{m[0]*tangent.x+m[4]*tangent.y+m[8]*tangent.z,
+      m[1]*tangent.x+m[5]*tangent.y+m[9]*tangent.z,m[2]*tangent.x+m[6]*tangent.y+m[10]*tangent.z};
+    const WaterVec3 side{m[0]*tangent.z-m[8]*tangent.x,m[1]*tangent.z-m[9]*tangent.x,m[2]*tangent.z-m[10]*tangent.x};
+    const WaterVec3 normal{longitudinal.y*side.z-longitudinal.z*side.y,
+      longitudinal.z*side.x-longitudinal.x*side.z,longitudinal.x*side.y-longitudinal.y*side.x};
+    if(std::abs(normal.y)>.00001f) routeSlope={-normal.x/normal.y,-normal.z/normal.y};
+    routeSample.center.y=m[13]+m[1]*local.x+m[5]*routeSample.center.y+m[9]*local.y;
+    routeSample.depth*=std::sqrt(m[4]*m[4]+m[5]*m[5]+m[6]*m[6]);
+    const float norm=std::max(.00001f,std::hypot(longitudinal.x,longitudinal.z));
+    routeSample.tangent={longitudinal.x/norm,longitudinal.y/norm,longitudinal.z/norm};
+  }
   for (u32 index = 0; index < setup_.exclusionCount; ++index)
     coverage = std::min(coverage, waterCoverage(setup_.exclusions[index], position));
   float bottom = setup_.bottomHeight;
@@ -182,39 +217,41 @@ WaterFieldSample WaterField::sampleOne(WaterVec2 position, float timeSeconds) co
   result.flags = static_cast<u32>(WaterFieldFlag::Valid);
   if (coverage <= 0.0f) result.flags |= static_cast<u32>(WaterFieldFlag::Excluded);
 
-  const WaterSample impulse = setup_.interaction.sample(position, timeSeconds);
+  auto impulse = setup_.interaction.sample(position, timeSeconds);
+  impulse.height*=setup_.rippleScale;impulse.velocity.y*=setup_.rippleScale;
   WaterVec2 impulseSlope = slopeOf(impulse.normal);
+  impulseSlope.x*=setup_.rippleScale;impulseSlope.y*=setup_.rippleScale;
   // A ondulação soma na mesma conta dos impulsos analíticos: altura sobre a
   // superfície e inclinação sobre a normal. Fora da área simulada ela devolve
   // zero, e somar zero é exatamente o que se quer na fronteira — sem degrau.
   float rippleHeight = 0.0f;
   if (setup_.ripples != nullptr && setup_.ripples->isReady() && coverage > 0.0f) {
-    rippleHeight = setup_.ripples->height(position.x, position.y);
+    rippleHeight = setup_.ripples->height(position.x, position.y)*setup_.rippleScale;
     float rippleSlopeX = 0.0f, rippleSlopeZ = 0.0f;
     setup_.ripples->slope(position.x, position.y, rippleSlopeX, rippleSlopeZ);
-    impulseSlope.x += rippleSlopeX;
-    impulseSlope.y += rippleSlopeZ;
+    impulseSlope.x += rippleSlopeX*setup_.rippleScale;
+    impulseSlope.y += rippleSlopeZ*setup_.rippleScale;
   }
 
   if (status_.resolved == WaterFieldProvider::SpectralCpu) {
     const WaterMirrorSample mirror = setup_.mirrorSet != nullptr
         ? setup_.mirrorSet->sample(position) : setup_.mirror->sample(position);
-    result.height = setup_.baseHeight + mirror.height + impulse.height + rippleHeight;
-    result.normal = normalized({-(mirror.slope.x + impulseSlope.x), 1.0f,
-                                -(mirror.slope.y + impulseSlope.y)});
-    result.velocity = {mirror.velocity.x, mirror.velocity.y + impulse.velocity.y,
-                       mirror.velocity.z};
+    result.height = setup_.baseHeight + mirror.height*setup_.waveScale + impulse.height + rippleHeight;
+    result.normal = normalized({-(mirror.slope.x*setup_.waveScale + impulseSlope.x), 1.0f,
+                                -(mirror.slope.y*setup_.waveScale + impulseSlope.y)});
+    result.velocity = {mirror.velocity.x*setup_.waveScale, mirror.velocity.y*setup_.waveScale + impulse.velocity.y,
+                       mirror.velocity.z*setup_.waveScale};
     result.foam = std::clamp(impulse.breaking, 0.0f, 1.0f);
     // The mirror does not evaluate the horizontal derivative fields, so the
     // determinant is unknown here rather than one: with choppy displacement the
     // mapping is not the identity, and claiming one would be a fabrication.
   } else {
     const WaterSample spectrum = sampleWaterSurface(setup_.profile, position, timeSeconds);
-    result.height = setup_.baseHeight + spectrum.height + impulse.height + rippleHeight;
+    result.height = setup_.baseHeight + spectrum.height*setup_.waveScale + impulse.height + rippleHeight;
     const WaterVec2 slope = slopeOf(spectrum.normal);
-    result.normal = normalized({-(slope.x + impulseSlope.x), 1.0f, -(slope.y + impulseSlope.y)});
-    result.velocity = {spectrum.velocity.x, spectrum.velocity.y + impulse.velocity.y,
-                       spectrum.velocity.z};
+    result.normal = normalized({-(slope.x*setup_.waveScale + impulseSlope.x), 1.0f, -(slope.y*setup_.waveScale + impulseSlope.y)});
+    result.velocity = {spectrum.velocity.x*setup_.waveScale, spectrum.velocity.y*setup_.waveScale + impulse.velocity.y,
+                       spectrum.velocity.z*setup_.waveScale};
     result.foam = std::clamp(spectrum.breaking + impulse.breaking, 0.0f, 1.0f);
     // The analytic profile displaces vertically only, so the horizontal mapping
     // is the identity and its determinant is exactly one. A ondulação também é
@@ -223,9 +260,30 @@ WaterFieldSample WaterField::sampleOne(WaterVec2 position, float timeSeconds) co
     result.flags |= static_cast<u32>(WaterFieldFlag::JacobianKnown);
   }
 
+  result.foam*=setup_.foamScale;
+  result.height+=setup_.planeSlope.x*(position.x-setup_.planeOrigin.x)+setup_.planeSlope.y*(position.y-setup_.planeOrigin.y);
+  const auto surfaceSlope=slopeOf(result.normal);
+  result.normal=normalized({-(surfaceSlope.x+setup_.planeSlope.x),1,-(surfaceSlope.y+setup_.planeSlope.y)});
   if (depthKnown) {
     result.depth = std::max(setup_.baseHeight - bottom, 0.0f);
     result.flags |= static_cast<u32>(WaterFieldFlag::DepthKnown);
+  }
+  if(routed) {
+    result.height+=routeSample.center.y;
+    const auto slope=slopeOf(result.normal);
+    result.normal=normalized({-(slope.x+routeSlope.x),1,-(slope.y+routeSlope.y)});
+    result.depth=routeSample.depth;
+    result.flags|=static_cast<u32>(WaterFieldFlag::DepthKnown);
+    if(coverage>0) {
+      result.flow.x+=routeSample.tangent.x*routeSample.speed;
+      result.flow.y+=routeSample.tangent.z*routeSample.speed;
+      result.foam=std::clamp(result.foam*routeSample.foam,0.0f,1.0f);
+    }
+  }
+  if(hasWaterFieldFlag(result.flags,WaterFieldFlag::DepthKnown)) {
+    const float still=setup_.baseHeight+(routed?routeSample.center.y:0)+
+        setup_.planeSlope.x*(position.x-setup_.planeOrigin.x)+setup_.planeSlope.y*(position.y-setup_.planeOrigin.y);
+    result.instantaneousDepth=std::max(0.0f,result.depth+result.height-still);
   }
   return result;
 }

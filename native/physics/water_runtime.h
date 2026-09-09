@@ -82,6 +82,7 @@ private:
   std::array<WaterPlaneSample, ProbesPerBody> planeSamples_{};
   std::array<u32, Capacity> indices_{};
   std::array<AetherWaterBodySample, Capacity> forces_{};
+  std::array<float,Capacity> depths_{};
   u32 eventCount_ = 0;
   double lastTime_ = 0;
   bool applied_ = false;

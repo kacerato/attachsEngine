@@ -43,7 +43,7 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
 #include "water_spectral_sampling.glsl"
 #endif
 layout(location=0) in vec3 inPosition;
-layout(location=1) in vec3 inNormal;
+layout(location=1) in vec4 inNormal;
 layout(location=2) in vec4 inTangent;
 layout(location=3) in vec2 inUv0;
 layout(location=4) in vec2 inUv1;
@@ -75,6 +75,9 @@ layout(location=5) out mediump vec4 vColor;
 // one carrying real data (tangent handedness sign), so this slot never grew
 // the 128-byte instance struct or its vertex binding stride.
 layout(location=6) out mediump float vDither;
+#ifdef AETHER_WATER_RIPPLES
+layout(location=9) out highp vec2 vRippleGeometrySlope;
+#endif
 #ifdef AETHER_SPECTRAL_WATER
 layout(location=7) out mediump float vSpectralFoam;
 layout(location=8) out highp vec3 vSpectralCoordinates; // undisplaced XZ and mesh spacing
@@ -82,6 +85,9 @@ layout(location=8) out highp vec3 vSpectralCoordinates; // undisplaced XZ and me
 const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
 const uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
 void main() {
+#ifdef AETHER_WATER_RIPPLES
+  vRippleGeometrySlope=vec2(0);
+#endif
 #ifdef AETHER_SPECTRAL_WATER
   vSpectralFoam=0;
   vSpectralCoordinates=vec3(0);
@@ -99,7 +105,7 @@ void main() {
   // assado, e a folhagem distante alternaria entre clara e escura conforme o
   // giro -- defeito mais visivel que a troca de LOD que o impostor resolve.
   highp vec3 modelPosition=inPosition;
-  highp vec3 modelNormal=inNormal;
+  highp vec3 modelNormal=inNormal.xyz;
   highp vec3 modelTangent=inTangent.xyz;
   highp vec2 resolvedUv0=inUv0;
   highp vec2 resolvedUv1=inUv1;
@@ -115,7 +121,7 @@ void main() {
     highp vec3 worldRight=vec3(forward.y,0.0,-forward.x);
     highp mat3 faceCamera=mat3(worldRight,vec3(0.0,1.0,0.0),worldForward);
     modelPosition=faceCamera*inPosition;
-    modelNormal=faceCamera*inNormal;
+    modelNormal=faceCamera*inNormal.xyz;
     modelTangent=faceCamera*inTangent.xyz;
 
     uint metadata=frame.materialFlags.y>>16u;
@@ -143,7 +149,17 @@ void main() {
   highp mat3 linear=mat3(inModel);
   highp mat3 normalMatrix=mat3(inNormalColumn0.xyz,inNormalColumn1.xyz,inNormalColumn2.xyz);
   if((frame.materialFlags.x&MATERIAL_WATER)!=0u) {
+    bool authoredSurface=(frame.materialFlags.x&2048u)!=0u; // WaterAuthoringResource
+    bool routeSurface=(frame.materialFlags.x&4096u)!=0u;
+    highp vec4 waterLayers=authoredSurface?frame.emissiveFactorStrength:vec4(1);
     highp float waterCellSize=0.0;
+    if(authoredSurface) waterCellSize=inUv1.x*max(length(linear[0]),length(linear[2]));
+    if(routeSurface) waterCellSize=inNormal.w*512.0*max(length(linear[0]),length(linear[2]));
+    if(routeSurface) {
+      highp vec2 direction=linear[0].xz*inUv1.x+linear[2].xz*inUv1.y;
+      resolvedUv1=length(direction)>.0001?normalize(direction)*length(inUv1):vec2(0);
+      resolvedUv0.y*=length(linear[1]);
+    }
     if((frame.materialFlags.x&1024u)!=0u) { // MapMaterialWaterCameraGrid
       highp float gridScale=environment.waterShallowColorDistance.w/max(inUv1.y,1.0);
       worldPosition.xz=frame.cameraPositionNear.xz+inPosition.xz*gridScale;
@@ -155,6 +171,12 @@ void main() {
     // patches mathematically watertight.
     highp float height=environment.waterParameters.y;
     highp vec2 slope=vec2(0.0);
+    if(authoredSurface) {
+      height+=worldPosition.y;
+      highp vec3 planeNormal=normalize(normalMatrix*(routeSurface?inNormal.xyz:vec3(0,1,0)));
+      if(abs(planeNormal.y)>.001) slope=-planeNormal.xz/planeNormal.y;
+    }
+    highp vec2 baseSlope=slope;
 #ifdef AETHER_SPECTRAL_WATER
     highp vec2 horizontal=vec2(0.0);
     highp vec3 horizontalDerivative=vec3(0.0);
@@ -183,11 +205,17 @@ void main() {
       slope+=shape.xy*(shape.z*shape.w*cosine*(1.0+4.0*crest*sine)/normalization);
     }
 #endif
+    highp float stillHeight=environment.waterParameters.y+(authoredSurface?worldPosition.y:0);
+    height=mix(stillHeight,height,waterLayers.x);
+    slope=baseSlope+(slope-baseSlope)*waterLayers.x;
+#ifdef AETHER_SPECTRAL_WATER
+    horizontal*=waterLayers.x;horizontalDerivative*=waterLayers.x;
+#endif
     // Micro-ondas que ainda cabem na malha participam da silhueta. Abaixo do
     // Nyquist geométrico elas desaparecem continuamente daqui e permanecem no
     // fragmento como normal filtrada; isso evita tanto aliasing quanto um anel
     // abruptamente liso ao redor da câmera.
-    highp float microAmplitude=environment.waterSurfaceDetail.z*
+    highp float microAmplitude=waterLayers.x*environment.waterSurfaceDetail.z*
         environment.waterParameters.w;
     highp float microBase=max(environment.waterSurfaceDetail.w,0.2);
     const highp vec2 microDirections[3]=vec2[3](
@@ -216,7 +244,7 @@ void main() {
       highp float radial=distance-motion.y*age;
       highp float width=max(0.35,motion.x*0.55);
       highp float gaussian=exp(-(radial*radial)/(width*width));
-      highp float envelope=shape.w*gaussian*exp(-motion.z*age);
+      highp float envelope=waterLayers.z*shape.w*gaussian*exp(-motion.z*age);
       highp float angle=waveNumber*radial;
       height+=envelope*sin(angle);
       if(distance>1.0e-5) {
@@ -231,10 +259,11 @@ void main() {
     // espectral. Ela e deslocamento vertical puro.
     highp float rippleHeight=sampleWaterRipple(worldPosition.xz);
     if(rippleHeight!=0.0) {
-      height+=rippleHeight;
+      height+=rippleHeight*waterLayers.z;
       // No espacamento da propria malha: abaixo dele a geometria nao carrega o
       // detalhe de qualquer forma, e o fragmento e quem o mostra.
-      slope+=sampleWaterRippleSlope(worldPosition.xz,max(waterCellSize,0.25));
+      vRippleGeometrySlope=sampleWaterRippleSlope(worldPosition.xz,max(waterCellSize,0.25))*waterLayers.z;
+      slope+=vRippleGeometrySlope;
     }
 #endif
     // A película de espuma é aerada e fica acima do plano líquido. Elevar a

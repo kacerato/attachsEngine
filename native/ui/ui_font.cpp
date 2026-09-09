@@ -45,7 +45,7 @@ bool isFiniteGlyph(const UiGlyph &glyph) noexcept {
 }
 
 u32 toUpperAscii(u32 codepoint) noexcept {
-  return (codepoint >= 'a' && codepoint <= 'z') ? codepoint - 32 : codepoint;
+  return uiUppercase(codepoint);
 }
 
 } // namespace
@@ -184,8 +184,8 @@ float UiFont::layoutLine(std::string_view text, UiFontWeight weight, const UiTyp
 
   const float tracking = style.tracking * style.size;
   float pen = penBaseline.x;
-  for (const char byte : text) {
-    u32 codepoint = static_cast<u32>(static_cast<unsigned char>(byte));
+  for (usize cursor=0;cursor<text.size();) {
+    u32 codepoint = nextUiCodepoint(text,cursor);
     if (style.uppercase) codepoint = toUpperAscii(codepoint);
     const UiGlyph *entry = glyph(weight, codepoint);
     if (entry == nullptr) {

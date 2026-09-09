@@ -79,19 +79,22 @@ public final class AstraShellActivity extends Activity implements ShellView.List
         toast(label + ": em breve.");
     }
 
-    /**
-     * O editor ainda é o preview nativo por cena. Enquanto ele não abre projetos
-     * de verdade, o shell traduz o template para o preview equivalente e avisa
-     * quando não existe nenhum.
-     */
+    /** Abre o editor nativo Aether mantendo o projeto escolhido no shell. */
     private void openInEditor(Project project) {
         SceneTemplate template = SceneTemplate.byId(project.templateId);
-        if (template.previewExtra == null) {
-            toast(project.name + ": cena vazia — editor em breve.");
+        if (template.previewExtra == null && !SceneTemplate.EMPTY.equals(template.id)) {
+            toast(project.name + ": cena indisponível.");
+            return;
+        }
+        java.io.File scenes = new java.io.File(project.path, "scenes");
+        if (!scenes.isDirectory() && !scenes.mkdirs()) {
+            toast("Não foi possível abrir a pasta de cenas do projeto.");
             return;
         }
         Intent intent = new Intent(this, AetherActivity.class);
-        intent.putExtra(template.previewExtra, true);
+        intent.putExtra(template.previewExtra != null ? template.previewExtra : "aether.map_preview", true);
+        intent.putExtra("aether.editor_ui", !"aether.material_preview".equals(template.previewExtra));
+        intent.putExtra("aether.editor_empty", SceneTemplate.EMPTY.equals(template.id));
         intent.putExtra("aether.free_camera", "aether.ocean_preview".equals(template.previewExtra));
         intent.putExtra("aether.water_fft", template.spectralWater);
         intent.putExtra("aether.target_fps", 120.0f);

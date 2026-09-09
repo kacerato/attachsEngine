@@ -238,3 +238,40 @@ AE_TEST(gizmo_refuses_malformed_settings) {
   negativeSnap.snapStep = -1.0f;
   AE_EXPECT_TRUE(!isGizmoSettingsValid(negativeSnap), "");
 }
+
+AE_TEST(gizmo_rotate_and_scale_do_not_translate_the_entity) {
+  EditorGizmoDrag drag{};drag.active=true;drag.handle=EditorGizmoHandle::AxisX;
+  drag.frame.valid=true;drag.frame.axisUsable[0]=true;drag.frame.axisEndScreen[0]={100,0};
+  drag.frame.axisWorldLength=10;
+  EditorTransform rotated{},scaled{};
+  AE_EXPECT_TRUE(resolveGizmoTransform(drag,EditorGizmoMode::Rotate,{90,0},rotated),"rotate");
+  AE_EXPECT_EQ(rotated.rotationDegrees[0],90.0f,"rotation mode changes angle");
+  AE_EXPECT_EQ(rotated.position[0],0.0f,"position unchanged");
+  AE_EXPECT_TRUE(resolveGizmoTransform(drag,EditorGizmoMode::Scale,{100,0},scaled),"scale");
+  AE_EXPECT_TRUE(scaled.scale[0]>2.7f && scaled.scale[0]<2.8f,"scale multiplier");
+  AE_EXPECT_EQ(scaled.position[0],0.0f,"position unchanged");
+}
+
+AE_TEST(gizmo_ring_angle_matches_projected_world_points) {
+  const auto view=viewportLookingForward();const float origin[3]{0,0,5};
+  for(float expected : {0.0f,.5f,1.5707963f,-2.0f}) {
+    float point[3];gizmoRingPoint(origin,2,1,expected,point);
+    const auto projected=projectWorldToScreen(view,point);float angle=0;
+    AE_EXPECT_TRUE(projected.valid && gizmoRingAngle(view,origin,2,projected.screen,angle),"ray hits ring plane");
+    AE_EXPECT_TRUE(nearlyEqual(angle,expected,.0001f),"angle is geometric, not pixel displacement");
+  }
+  float angle=0;
+  AE_EXPECT_TRUE(!gizmoRingAngle(view,origin,0,{800,450},angle),"parallel ray rejected");
+  AE_EXPECT_TRUE(!gizmoRingAngle(view,origin,2,{800,450},angle),"undefined centre rejected");
+}
+
+AE_TEST(gizmo_plane_intersection_roundtrips_and_rejects_parallel) {
+  const auto view=viewportLookingForward();const float origin[3]{0,0,10};
+  const float point[3]{2,-3,10};float hit[3]{};
+  const auto screen=projectWorldToScreen(view,point).screen;
+  AE_EXPECT_TRUE(gizmoPlanePoint(view,origin,2,screen,hit),"XY hit");
+  for(u32 i=0;i<3;++i) AE_EXPECT_TRUE(std::abs(hit[i]-point[i])<.0001f,"exact projected point");
+  AE_EXPECT_TRUE(!gizmoPlanePoint(view,origin,0,{800,450},hit),"parallel ray");
+  const float behind[3]{0,0,-10};
+  AE_EXPECT_TRUE(!gizmoPlanePoint(view,behind,2,screen,hit),"behind camera");
+}

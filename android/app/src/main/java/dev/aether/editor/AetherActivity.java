@@ -411,7 +411,7 @@ public final class AetherActivity extends NativeActivity {
 
     @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
-        if(focused && toolbarWindow!=null && !toolbarWindow.isShowing())
+        if(focused && !getIntent().getBooleanExtra("aether.editor_ui",false) && toolbarWindow!=null && !toolbarWindow.isShowing())
             toolbarWindow.showAtLocation(getWindow().getDecorView(),Gravity.TOP|Gravity.START,dp(18),dp(16));
     }
 

@@ -18,8 +18,10 @@
 //
 // Sem Vulkan, sem Android, sem I/O: testável integralmente no host.
 #pragma once
+#include "renderer/water_route.h"
 
 #include "core/base.h"
+#include "renderer/material_override.h"
 
 #include <span>
 #include <string_view>
@@ -34,9 +36,7 @@ using EditorEntityId = u32;
 inline constexpr EditorEntityId kInvalidEntity = 0;
 
 enum class EditorEntityKind : u8 {
-  // Agrupador puro. Existe porque a hierarquia do mockup organiza a cena em
-  // Environment/Architecture/Water/Props/Lighting/Cameras, e essas pastas
-  // precisam de transform para que mover o grupo mova o conteúdo.
+  // Transform-only grouping object; moving it transforms its descendants.
   Folder,
   Mesh,
   Light,
@@ -66,7 +66,7 @@ struct EditorEntity final {
   // então o nome útil tem 63 bytes.
   char name[kEditorNameCapacity]{};
   EditorTransform transform{};
-  // Espelham os interruptores do Inspector do mockup.
+  // Authoring flags consumed by extraction and Inspector.
   bool active = true;
   bool visible = true;
   bool castShadow = true;
@@ -76,6 +76,25 @@ struct EditorEntity final {
   // Recurso que dá corpo à entidade: malha, perfil de luz, material de água.
   // Zero é "nenhum" — uma pasta e uma entidade recém-criada não têm.
   u32 assetId = 0;
+  renderer::MaterialOverride material{};
+  renderer::WaterRoute route{};
+  bool waterPhysicsEnabled=true;
+  bool waterInfinite=false;
+  bool rigidBodyEnabled=false;
+  // depth, uniform current X/Z, wave gain, foam gain, ripple gain, optical gain.
+  float waterBody[7]{3,0,0,1,1,1,1};
+  // mass, drag, collider half-extents X/Y/Z.
+  float rigidBody[5]{50,1,.5f,.5f,.5f};
+  // Root scene environment: sun, ambient, exposure multipliers; sky rotation offset in degrees.
+  float environment[4]{1,1,1,0};
+  bool waterEnabled=false;
+  bool waterSpectrumEnabled=false;
+  bool waterLayoutEnabled=false;
+  // count, log2 FFT resolution, wavelength interval, seed, domain scale, MiB budget.
+  float waterLayout[9]{3,7,2,2048,1,1,8,1,1};
+  float water[34]{3,1,1,1.6f,.72f,1,1.05f,.14f,.1f,1.333f,0,0,1400,
+    10,100000,20,.8f,.2f,.1f, 0,65,100000,1,.1f,.35f,
+    1,1,1, 1,1,1, .8f,4,.5f};
 };
 
 class EditorDocument final {

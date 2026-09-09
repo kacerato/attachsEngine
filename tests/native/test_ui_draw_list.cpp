@@ -32,6 +32,14 @@ AE_TEST(draw_list_records_commands_in_submission_order) {
   AE_EXPECT_TRUE(list.textOf(list.commands()[1]) == "HIERARCHY", "");
 }
 
+AE_TEST(draw_list_clips_extreme_projected_lines_before_gpu_interpolation) {
+  UiDrawList list=beginList();list.pushClip({100,100,300,200});
+  AE_EXPECT_TRUE(list.addLine({-10000000,200},{10000000,200},0xffffffff,1),"crossing line accepted");
+  const auto &line=list.commands().back();
+  AE_EXPECT_TRUE(line.atlas.x>=98 && line.atlas.width<=402,"GPU endpoints stay near viewport");
+  AE_EXPECT_TRUE(!list.addLine({-10000000,0},{10000000,0},0xffffffff,1),"fully outside line rejected");
+}
+
 AE_TEST(draw_list_clip_is_baked_into_each_command) {
   UiDrawList list = beginList();
   AE_EXPECT_TRUE(list.pushClip({100, 100, 200, 200}), "");

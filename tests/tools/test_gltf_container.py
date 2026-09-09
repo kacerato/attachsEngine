@@ -55,3 +55,24 @@ class GlbSourceNormalizationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AuthoringSceneTest(unittest.TestCase):
+    def test_trs_parent_and_child_world(self):
+        doc={"scenes":[{"nodes":[0]}],"nodes":[{"translation":[10,0,0],"scale":[2,2,2],"children":[1]}, {"translation":[1,3,0]}]}
+        nodes=COOK.scene_nodes(doc)
+        self.assertEqual(nodes[1][1][12:15].tolist(), [12,6,0])
+
+    def test_shared_mesh_has_independent_objects_and_derived_draws(self):
+        doc={"scenes":[{"nodes":[0,1]}],"nodes":[{"name":"Tree A","mesh":0},{"name":"Tree B","mesh":0}],"meshes":[{"name":"Tree","primitives":[{}]}]}
+        catalog=COOK.authoring_catalog(doc,"forest",{0:[0,1,2],1:[3,4,5]})
+        a,b=catalog["objects"]
+        self.assertNotEqual(a["id"],b["id"])
+        self.assertEqual(a["mesh"],b["mesh"])
+        self.assertEqual(a["draws"],[0,1,2])
+        self.assertEqual(len(catalog["meshes"]),1)
+        self.assertEqual(a["id"],COOK.authoring_catalog(doc,"forest",{})["objects"][0]["id"])
+
+    def test_cycle_rejected(self):
+        with self.assertRaises(ValueError):
+            COOK.scene_nodes({"scenes":[{"nodes":[0]}],"nodes":[{"children":[0]}]})

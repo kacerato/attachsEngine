@@ -1,4 +1,5 @@
 #include "editor/editor_document.h"
+#include "editor/editor_properties.h"
 
 #include <algorithm>
 #include <cmath>
@@ -46,7 +47,7 @@ void EditorDocument::reset() {
   root.entity.id = rootId_;
   root.entity.parent = kInvalidEntity;
   root.entity.kind = EditorEntityKind::Folder;
-  assignEntityName(root.entity, "Scene");
+  assignEntityName(root.entity, "Cena");
   aliveCount_ = 1;
 }
 
@@ -161,10 +162,10 @@ EditorEntityId EditorDocument::createEntity(EditorEntityId parent, EditorEntityK
 }
 
 bool EditorDocument::restoreEntity(const EditorEntity &entity, u32 childIndex) {
-  if (entity.id == kInvalidEntity) return false;
+  if (entity.id == kInvalidEntity || entity.id > kMaximumEntities || entityCount() >= kMaximumEntities) return false;
   if (exists(entity.id)) return false;
   if (record(entity.parent) == nullptr) return false;
-  if (!isTransformValid(entity.transform)) return false;
+  if (!isTransformValid(entity.transform) || !validEditorAppearance(entity)) return false;
   if (entity.id >= records_.size()) records_.resize(entity.id + 1);
   Record &restored = records_[entity.id];
   restored = Record{};
@@ -223,7 +224,7 @@ bool EditorDocument::setTransform(EditorEntityId id, const EditorTransform &tran
 bool EditorDocument::applyEntityValues(EditorEntityId id, const EditorEntity &values) {
   Record *found = record(id);
   if (found == nullptr) return false;
-  if (!isTransformValid(values.transform)) return false;
+  if (!isTransformValid(values.transform) || !validEditorAppearance(values)) return false;
   EditorEntity &target = found->entity;
   // Identidade e posição na árvore não vêm daqui: trocá-las exigiria mexer nas
   // listas de filhos, e um "aplicar valores" que reparenta em silêncio é uma
@@ -236,6 +237,18 @@ bool EditorDocument::applyEntityValues(EditorEntityId id, const EditorEntity &va
   target.isStatic = values.isStatic;
   target.layer = values.layer;
   target.assetId = values.assetId;
+  target.material=values.material;
+  target.route=values.route;target.waterPhysicsEnabled=values.waterPhysicsEnabled;
+  target.waterInfinite=values.waterInfinite;
+  target.rigidBodyEnabled=values.rigidBodyEnabled;
+  std::copy(std::begin(values.waterBody),std::end(values.waterBody),target.waterBody);
+  std::copy(std::begin(values.rigidBody),std::end(values.rigidBody),target.rigidBody);
+  target.waterEnabled=values.waterEnabled;
+  target.waterSpectrumEnabled=values.waterSpectrumEnabled;
+  target.waterLayoutEnabled=values.waterLayoutEnabled;
+  std::copy(std::begin(values.waterLayout),std::end(values.waterLayout),target.waterLayout);
+  std::copy(std::begin(values.water),std::end(values.water),target.water);
+  std::copy(values.environment,values.environment+4,target.environment);
   for (u32 index = 0; index < kEditorNameCapacity; ++index) target.name[index] = values.name[index];
   target.name[kEditorNameCapacity - 1] = '\0';
   ++revision_;

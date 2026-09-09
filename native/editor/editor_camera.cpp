@@ -59,8 +59,13 @@ EditorViewport buildEditorViewport(const EditorCamera &camera, const ui::UiRect 
   if (!isEditorCameraValid(camera) || rect.isEmpty()) return viewport;
   float position[3]{};
   editorCameraPosition(camera, position);
+  auto projection = settings;
+  // Preserve the scene's range at ordinary scales, but keep centimetre-sized
+  // selections in front of near and kilometre-sized selections inside far.
+  projection.nearPlane = std::min(settings.nearPlane, std::max(.0001f, camera.distance*.01f));
+  projection.farPlane = std::max(settings.farPlane, camera.distance*4.0f);
   viewport.frustum = renderer::buildPerspectiveFrustum(position, camera.yaw, camera.pitch,
-                                                       rect.width / rect.height, settings);
+                                                       rect.width / rect.height, projection);
   viewport.surfaceTransform = surfaceTransform;
   viewport.rect = rect;
   return viewport;
@@ -70,16 +75,14 @@ void orbitEditorCamera(EditorCamera &camera, ui::UiPoint delta,
                        const EditorCameraLimits &limits) noexcept {
   if (!isEditorCameraValid(camera)) return;
   if (!std::isfinite(delta.x) || !std::isfinite(delta.y)) return;
-  camera.yaw -= delta.x * limits.orbitRadiansPerPixel;
-  camera.pitch += delta.y * limits.orbitRadiansPerPixel;
-  // Preso longe dos polos. Exatamente neles a órbita perde a referência de
-  // "para cima" e a câmera passa a girar em torno do próprio eixo.
-  camera.pitch = std::clamp(camera.pitch, -limits.maximumPitch, limits.maximumPitch);
-  // O yaw dá voltas, e mantê-lo em [-pi, pi] evita que horas de uso acumulem
-  // um número grande o bastante para o seno perder precisão.
-  constexpr float kTwoPi = 6.28318530718f;
-  while (camera.yaw > 3.14159265f) camera.yaw -= kTwoPi;
-  while (camera.yaw < -3.14159265f) camera.yaw += kTwoPi;
+  if (!std::isfinite(limits.orbitRadiansPerPixel) || !std::isfinite(limits.maximumPitch) ||
+      limits.maximumPitch <= 0 || limits.maximumPitch >= 1.5707963f) return;
+  camera.yaw = static_cast<float>(std::remainder(static_cast<double>(camera.yaw) -
+      static_cast<double>(delta.x) * limits.orbitRadiansPerPixel, 6.283185307179586));
+  camera.pitch = static_cast<float>(std::clamp(static_cast<double>(camera.pitch) +
+      static_cast<double>(delta.y) * limits.orbitRadiansPerPixel,
+      -static_cast<double>(limits.maximumPitch), static_cast<double>(limits.maximumPitch)));
+
 }
 
 void panEditorCamera(EditorCamera &camera, ui::UiPoint delta, const ui::UiRect &rect,

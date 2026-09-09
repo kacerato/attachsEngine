@@ -1,14 +1,14 @@
 {
  "atlas": [
-  1024,
-  512
+  2048,
+  1024
  ],
  "emPixels": 40,
  "spreadPixels": 5.0,
  "opticalSize": 14,
  "font": "Inter Variable (SIL OFL 1.1)",
  "firstGlyph": 32,
- "glyphCount": 95,
+ "glyphCount": 224,
  "weights": [
   {
    "name": "regular",

@@ -3,6 +3,7 @@
 #include "platform/android/android_texture_loader.h"
 #include "renderer/spatial_render_chunks.h"
 #include "renderer/environment_map.h"
+#include "renderer/water_authoring_geometry.h"
 
 #include <android/log.h>
 #include <algorithm>
@@ -137,7 +138,7 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
                                    float waterDisplacementAllowance,
                                    const std::atomic<bool> *cancel,
                                    const char *assetRoot,
-                                   u32 waterGridSegments) {
+                                   u32 waterGridSegments, bool waterAuthoring) {
   if (assets == nullptr || assetRoot == nullptr || assetRoot[0] == '\0' || !images_.empty()) return false;
   const auto started = std::chrono::steady_clock::now();
   std::vector<u8> packageBytes;
@@ -172,14 +173,22 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
   draws_ = std::move(renderChunks.draws);
   decimateWaterGrid(renderChunks, materials_, draws_, waterGridSegments);
 
+  std::vector<u8> authoringVertices;
+  if(waterAuthoring) {
+    authoringVertices.assign(package.vertices.begin(),package.vertices.end());
+    if(!renderer::appendWaterAuthoringGeometry(header_.vertexStride,
+        waterGridSegments?waterGridSegments:128,authoringVertices,renderChunks.indices,draws_,materials_)) return false;
+  }
+  const std::span<const u8> vertexData=waterAuthoring?std::span<const u8>(authoringVertices):package.vertices;
+
   auto &allocator = device.memoryAllocator();
   rhi::BufferDesc buffer{};
   buffer.preferDeviceMemory = true;
   buffer.cpuAccess = rhi::CpuAccess::None;
-  buffer.sizeBytes = package.vertices.size();
+  buffer.sizeBytes = vertexData.size();
   buffer.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
   if (!allocator.createBuffer(buffer, &vertices_) ||
-      !upload.uploadBuffer(allocator, package.vertices.data(), package.vertices.size(), vertices_,
+      !upload.uploadBuffer(allocator, vertexData.data(), vertexData.size(), vertices_,
                            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT)) return false;
   buffer.sizeBytes = renderChunks.indices.size() * sizeof(u32);
   buffer.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;

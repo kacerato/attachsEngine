@@ -43,6 +43,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".godot.GodotEditorActivity"
+            android:exported="false"
+            android:process=":editor_ui"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density"
+            android:screenOrientation="sensorLandscape"
+            android:launchMode="singleTask" />
         <!-- Seletor tecnico de cenas de validacao. Sai do menu do aparelho mas
              continua acessivel por adb para as medicoes de regressao. -->
         <activity

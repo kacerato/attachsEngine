@@ -60,6 +60,10 @@ float buoyantShapeVolume(const BuoyantShape &shape) noexcept;
 
 SubmergedVolume submergedVolume(const BuoyantShape &shape, AetherVec3 position,
                                 AetherQuat rotation, const WaterPlane &plane) noexcept;
+// Negative depth keeps the legacy unbounded half-space. Otherwise both surface
+// and bottom participate in displaced volume and its centre of buoyancy.
+SubmergedVolume submergedWaterVolume(const BuoyantShape &shape,AetherVec3 position,
+    AetherQuat rotation,const WaterPlane &plane,float verticalDepth) noexcept;
 
 struct BuoyancySettings final {
   float fluidDensity = 1000.0f;      // kg/m^3
@@ -130,5 +134,8 @@ ae::i32 AetherPhysics_ApplyWaterForces(AetherPhysicsWorld *world,
                                        const AetherWaterBodySample *samples, ae::i32 count,
                                        const ae::physics::BuoyancySettings *settings,
                                        AetherWaterForceStats *outStats);
+ae::i32 AetherPhysics_ApplyWaterForcesV2(AetherPhysicsWorld *world,
+    const AetherWaterBodySample *samples,const float *verticalDepths,ae::i32 count,
+    const ae::physics::BuoyancySettings *settings,AetherWaterForceStats *outStats);
 
 } // extern "C"

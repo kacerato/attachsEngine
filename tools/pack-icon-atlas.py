@@ -150,10 +150,15 @@ def main() -> None:
     for index, name in enumerate(names):
         category, _, leaf = name.partition("/")
         source = arguments.named / category / f"{leaf}.png"
+        metadata = catalogue["icons"][name]
+        if "raster" in metadata:
+            source = arguments.named / metadata["raster"]
         # A recoloração acontece ANTES da redução: inverter depois misturaria a
         # franja anti-aliased do contorno com o fundo transparente e deixaria um
         # halo claro em volta de cada ícone.
-        icon = recolour_for_dark_ui(Image.open(source).convert("RGBA"))
+        icon = Image.open(source).convert("RGBA")
+        if not metadata.get("dark_ui_ready", False):
+            icon = recolour_for_dark_ui(icon)
         icon = icon.resize((CELL, CELL), Image.LANCZOS)
         x = PADDING + (index % columns) * (CELL + PADDING)
         y = PADDING + (index // columns) * (CELL + PADDING)

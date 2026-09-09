@@ -17,6 +17,9 @@
 
 #include "core/base.h"
 #include "editor/editor_camera.h"
+#include "editor/editor_commands.h"
+#include "editor/editor_map_scene.h"
+#include "editor/editor_archive.h"
 #include "editor/editor_document.h"
 #include "editor/editor_history.h"
 #include "editor/editor_screen.h"
@@ -28,6 +31,12 @@
 #include <vector>
 
 namespace ae::editor {
+
+struct EditorAssetInstantiation {
+  std::string_view name;
+  float scale[3]{1,1,1};
+  bool rigidBody=false;
+};
 
 class EditorSession final {
 public:
@@ -45,6 +54,13 @@ public:
   // a grade saiu atravessando a tela na diagonal.
   void setSurface(const ui::UiRect &surface, const ui::UiInsets &safeArea);
   void setProjectName(const char *name);
+  bool setProjectDirectory(const char *path);
+  const std::string &requestedScenePath() const { return requestedScenePath_; }
+  void clearSceneOpenRequest() { requestedScenePath_.clear(); }
+  void reportSceneOpenFailure() { state_.status="Não foi possível abrir a cena; cena atual preservada"; }
+  void setCameraPose(const float position[3], float yaw, float pitch);
+  void setProjection(renderer::PerspectiveVisibilitySettings settings) { projection_=settings; }
+
   // Seleção inicial vinda de fora, para uma cena recém-carregada já abrir com
   // algo no Inspector em vez de "nada selecionado".
   void setSelection(EditorEntityId entity);
@@ -66,6 +82,8 @@ public:
   EditorDocument &document() noexcept { return document_; }
   EditorHistory &history() noexcept { return history_; }
   EditorEntityId selection() const noexcept { return state_.selection; }
+  EditorSceneVersion sceneVersion() const noexcept { return {sceneEpoch_,document_.revision()}; }
+  EditorActionResult dispatch(const EditorActionRequest &request);
   bool playRequested() const noexcept { return playRequested_; }
   void clearPlayRequest() noexcept { playRequested_ = false; }
 
@@ -84,8 +102,22 @@ public:
   // Enquadra o objeto selecionado. É o gesto de "onde ele está?", e sem ele um
   // objeto longe do alvo da órbita fica inalcançável.
   void frameSelection();
+  void frameAll();
+  bool saveRequested() const { return state_.saveRequested; }
+  bool save(const char *path, u64 fingerprint);
+  bool load(const char *path, u64 fingerprint);
+  bool importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true);
+  bool extractMap(std::vector<renderer::MapDrawState> &out) const { return mapScene_.extract(document_, out); }
+  EditorEntityId instantiateAsset(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options=nullptr);
+  EditorEntityId createWaterSurface(bool cameraRelative);
+  void reportWaterConfiguration(bool accepted) {
+    state_.status=accepted?"Agua atualizada":"Configuracao de agua recusada; estado anterior mantido";
+  }
+  void reportPlayFailure() {state_.workspace=EditorWorkspace::Scene;state_.status="Falha na simulacao; revise volumes e corpos fisicos";}
+
 
 private:
+  static u64 nextSceneEpoch() noexcept;
   struct ViewportPointer final {
     u32 id = 0;
     ui::UiPoint position{};
@@ -93,6 +125,7 @@ private:
   };
 
   void buildPickCandidates();
+  void frameSubtree(EditorEntityId root);
   bool handleViewportPointer(const ui::UiPointerEvent &event, const ui::UiPointerRouting &routing);
   void handleGizmoPointer(const ui::UiPointerRouting &routing, u32 axis);
   ViewportPointer *findViewportPointer(u32 id) noexcept;
@@ -100,8 +133,13 @@ private:
   const ui::UiFont *font_ = nullptr;
   const ui::UiIconAtlas *icons_ = nullptr;
   EditorDocument document_;
+  EditorFileSystem files_;
+  std::string requestedScenePath_;
+  u64 sceneEpoch_=nextSceneEpoch();
+  EditorMapScene mapScene_;
   EditorHistory history_;
   EditorCamera camera_;
+  renderer::PerspectiveVisibilitySettings projection_{};
   EditorViewport view_{};
   EditorScreenState state_{};
   EditorScreenLayout layout_{};
@@ -113,7 +151,20 @@ private:
   // Distância entre dois dedos no frame anterior, para derivar a pinça.
   float pinchDistance_ = 0.0f;
   EditorGizmoDrag gizmoDrag_{};
+  EditorViewport rotationView_{};
+  float rotationWorld_[16]{}, rotationParent_[16]{};
+  float planeStart_[3]{};
+  float rotationLastAngle_=0, rotationTotalAngle_=0;
   bool gizmoTransactionOpen_ = false;
+  u32 gizmoPointer_ = 0;
+  float parentInverseTranspose_[12]{};
+  EditorGizmoMode dragMode_ = EditorGizmoMode::Translate;
+  EditorEntityId dragEntity_ = kInvalidEntity;
+  u32 fieldPointer_ = 0;
+  u32 fieldWidget_ = 0;
+  u32 assetPointer_ = 0;
+  u32 hierarchyPointer_ = 0;
+  EditorEntity fieldInitial_{};
   bool playRequested_ = false;
   float sceneTime_ = 0.0f;
   float lastWallSeconds_ = 0.0f;

@@ -1,3 +1,4 @@
+#include "ui/ui_text.h"
 #include "harness.h"
 #include "ui/ui_layout.h"
 
@@ -278,4 +279,12 @@ AE_TEST(layout_user_data_survives_the_resolution) {
   AE_EXPECT_TRUE(tree.resolve({0, 0, 10, 10}), "");
   AE_EXPECT_EQ(tree.userData(root), 0xABCDEF01u, "");
   AE_EXPECT_EQ(tree.userData(999), 0u, "no inexistente devolve zero, nao lixo");
+}
+
+AE_TEST(ui_portuguese_text_measures_codepoints_and_preserves_utf8_boundaries) {
+  const auto &metrics=ae::ui::fallbackFontMetrics();
+  ae::ui::UiTypeStyle style{};style.size=10;style.tracking=0;
+  AE_EXPECT_EQ(ae::ui::measureTextWidth("água",metrics,style),20.0f,"quatro caracteres, não cinco bytes");
+  AE_EXPECT_EQ(ae::ui::truncateToWidth("água",metrics,style,5),2u,"corte após o acento inteiro");
+  AE_EXPECT_EQ(ae::ui::uiUppercase(0xe7),0xc7u,"cedilha maiúscula");
 }

@@ -10,6 +10,17 @@
 
 using namespace ae::physics;
 
+AE_TEST(Water_depth_clips_displacement_and_centroid_at_the_bottom) {
+  const BuoyantShape box{BuoyantShapeKind::Box,{1,1,1}};
+  const auto slice=submergedWaterVolume(box,{0,-1,0},{0,0,0,1},{{0,1,0},0},.5f);
+  AE_EXPECT_TRUE(std::abs(slice.volume-2)<.0001f,"only half metre of water displaces box");
+  AE_EXPECT_TRUE(std::abs(slice.centroid.y+.25f)<.0001f,"buoyancy centre is inside fluid layer");
+  const auto dry=submergedWaterVolume(box,{0,-3,0},{0,0,0,1},{{0,1,0},0},.5f);
+  AE_EXPECT_EQ(dry.volume,0.0f,"body below bottom receives no phantom buoyancy");
+  const auto legacy=submergedWaterVolume(box,{0,-3,0},{0,0,0,1},{{0,1,0},0},-1);
+  AE_EXPECT_EQ(legacy.volume,8.0f,"legacy infinite depth remains compatible");
+}
+
 AE_TEST(Water_simulation_runs_the_same_fixed_clock_at_different_render_rates) {
   for (int rate : {30, 60, 120}) {
     AetherPhysicsWorld *world = AetherPhysics_CreateWorld({0, -9.81f, 0}, 8);

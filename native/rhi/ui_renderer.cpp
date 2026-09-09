@@ -305,7 +305,7 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
 
 bool VulkanUiRenderer::record(VkCommandBuffer commandBuffer,
                               std::span<const ui::UiInstance> instances, float surfaceWidth,
-                              float surfaceHeight, const SurfaceTransform &surfaceTransform) {
+                              float surfaceHeight, const SurfaceTransform &surfaceTransform, bool srgbTarget) {
   if (!isReady() || commandBuffer == VK_NULL_HANDLE) return false;
   if (instances.empty()) return true;
   if (surfaceWidth <= 0.0f || surfaceHeight <= 0.0f) return false;
@@ -316,6 +316,7 @@ bool VulkanUiRenderer::record(VkCommandBuffer commandBuffer,
   if (allocator_ == nullptr || !allocator_->flushBuffer(instanceBuffer_)) return false;
 
   PushConstants push{};
+  push.outputFlags[0]=srgbTarget?1.0f:0.0f;
   push.surface[0] = surfaceWidth;
   push.surface[1] = surfaceHeight;
   push.surface[2] = 1.0f / surfaceWidth;

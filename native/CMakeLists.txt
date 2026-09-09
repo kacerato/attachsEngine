@@ -203,6 +203,9 @@ target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 # precisa ser literalmente a mesma do vertex shader -- selecionar um objeto e
 # contornar outro seria o defeito de reimplementa-la aqui.
 add_library(aether_editor STATIC
+  editor/editor_filesystem.cpp
+  editor/editor_archive.cpp
+  editor/editor_map_scene.cpp
   editor/editor_camera.cpp
   editor/editor_document.cpp
   editor/editor_gizmo.cpp
@@ -212,7 +215,7 @@ add_library(aether_editor STATIC
   editor/editor_view.cpp
 )
 target_include_directories(aether_editor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_editor PUBLIC aether_core aether_renderer aether_ui)
+target_link_libraries(aether_editor PUBLIC aether_core aether_renderer aether_ui aether_platform)
 
 # --- aether_ui: layout, desenho e roteamento de toque da interface ---------
 # Separada de aether_renderer de proposito: a UI do editor nao conhece Vulkan,
@@ -397,6 +400,7 @@ if(NOT ANDROID)
     ../tests/native/test_foliage_impostors.cpp
     ../tests/native/test_frustum_visibility.cpp
     ../tests/native/test_gpu_draw_compaction.cpp
+    ../tests/native/test_editor_map_scene.cpp
     ../tests/native/test_editor_document.cpp
     ../tests/native/test_editor_gizmo.cpp
     ../tests/native/test_editor_screen.cpp

@@ -1,0 +1,9 @@
+{
+  "version": "4.7.2-stable",
+  "commit": "ed1daf0bf001b61586d9930840f2f1394092c079",
+  "source": "https://github.com/godotengine/godot.git",
+  "android_editor_url": "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_android_editor.apk",
+  "android_editor_sha512": "550d6cb67ae10c62ed3dbc2c6d3327a20eb547d85d037eae9739ab8142c9c2e814ff84c89324943462d10dabcf62dc66fed0616f65578ad8584a25338f1e28ea",
+  "application_id": "dev.aether.godotlab",
+  "version_code": 2
+}

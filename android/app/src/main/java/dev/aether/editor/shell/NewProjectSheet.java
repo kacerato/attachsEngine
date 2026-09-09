@@ -132,10 +132,11 @@ public final class NewProjectSheet extends FrameLayout {
         templates.removeAllViews();
         List<SceneTemplate> all = SceneTemplate.all();
         for (SceneTemplate template : all) {
+            if (!template.ready) continue;
             LinearLayout tile = new LinearLayout(getContext());
             tile.setOrientation(LinearLayout.VERTICAL);
             boolean selected = picked != null && picked.id.equals(template.id);
-            tile.setBackground(panel(selected ? Design.WASH : 0xFF0A0A0A, 9f,
+            tile.setBackground(panel(selected ? Design.WASH : Design.RAISED, 6f,
                     selected ? Design.ACCENT : Design.LINE));
             tile.setPadding(dp(11), dp(9), dp(11), dp(9));
             tile.setAlpha(template.ready ? 1f : .48f);

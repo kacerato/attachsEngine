@@ -1,4 +1,5 @@
 #include "editor/editor_history.h"
+#include "editor/editor_map_scene.h"
 
 #include <algorithm>
 
@@ -89,6 +90,26 @@ EditorEntityId EditorHistory::createEntity(EditorDocument &document, EditorEntit
   return id;
 }
 
+EditorEntityId EditorHistory::duplicateEntity(EditorDocument &document, EditorEntityId id) {
+  const auto *source=document.find(id);
+  if(!source || id==document.root() || open_) return kInvalidEntity;
+  std::vector<EditorEntityId> ids;document.collectSubtree(id,ids);
+  if(document.entityCount()+ids.size()>EditorDocument::kMaximumEntities) return kInvalidEntity;
+  // Snapshot before creating: document growth invalidates pointers into its records.
+  std::vector<EditorEntity> values;
+  for(auto member:ids) values.push_back(*document.find(member));
+  std::vector<EditorEntityId> created;created.reserve(ids.size());
+  begin("Duplicate");
+  for(usize i=0;i<values.size();++i) {
+    auto value=values[i];auto parent=value.parent;
+    if(i>0) for(usize j=0;j<i;++j) if(ids[j]==parent) {parent=created[j];break;}
+    const auto copy=createEntity(document,parent,value.kind,value.name);
+    if(!copy) {end();undo(document);return kInvalidEntity;}
+    created.push_back(copy);applyValues(document,copy,value);
+  }
+  end();return created.front();
+}
+
 bool EditorHistory::destroyEntity(EditorDocument &document, EditorEntityId id) {
   if (!document.exists(id) || id == document.root()) return false;
   std::vector<EditorEntityId> subtree;
@@ -149,6 +170,17 @@ bool EditorHistory::setTransform(EditorDocument &document, EditorEntityId id,
   EditorEntity values = *current;
   values.transform = transform;
   return applyValues(document, id, values, mergeToken);
+}
+
+bool EditorHistory::reparentKeepingWorld(EditorDocument &document,EditorEntityId id,EditorEntityId parent) {
+  if(open_ || id==document.root() || document.isDescendantOf(parent,id)) return false;
+  float world[16],parentWorld[16];EditorTransform local;
+  if(!editorWorldMatrix(document,id,world) || !editorWorldMatrix(document,parent,parentWorld) ||
+     !editorLocalTransformForWorld(world,parentWorld,local)) return false;
+  begin("Reparent");
+  if(!reparent(document,id,parent,static_cast<u32>(document.childrenOf(parent).size()))) {end();return false;}
+  if(!setTransform(document,id,local)) {end();undo(document);return false;}
+  end();return true;
 }
 
 bool EditorHistory::reparent(EditorDocument &document, EditorEntityId id,

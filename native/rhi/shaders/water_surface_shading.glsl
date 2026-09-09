@@ -1,4 +1,7 @@
 #include "dirt_road_frame.glsl"
+#ifdef AETHER_WATER_RIPPLES
+layout(location=9) in highp vec2 vRippleGeometrySlope;
+#endif
 
 precision mediump int;
 precision highp float;
@@ -71,6 +74,11 @@ mediump vec2 microSlope(highp vec2 xz,highp float timeSeconds) {
 #define WATER_ISOLATION_FLAT 5
 
 void main() {
+  bool authoredSurface=(frame.materialFlags.x&2048u)!=0u;
+  bool routeSurface=(frame.materialFlags.x&4096u)!=0u;
+  mediump vec4 waterLayers=authoredSurface?frame.emissiveFactorStrength:vec4(1);
+  highp vec2 current=(routeSurface?vUv1:vec2(0))+(authoredSurface?frame.baseColorFactor.xy:vec2(0));
+  highp vec2 flowOffset=current*environment.waterParameters.z;
   int isolation=WATER_ISOLATION;
   if(isolation==WATER_ISOLATION_FLAT) {
     // Geometria, profundidade e blend permanecem; só o sombreamento sai.
@@ -89,8 +97,9 @@ void main() {
   highp float thickness=max(opaqueDepth-waterDepth,0.0)*
       (cameraDistance/max(waterDepth,nearPlane));
   thickness=min(thickness,farPlane);
+  if(authoredSurface) thickness=min(thickness,(routeSurface?vUv0.y:frame.baseColorFactor.z)*cameraDistance/max(abs(eye.y-vPosition.y),.1));
   mediump vec2 micro=isolation==WATER_ISOLATION_NO_MICRO_NORMAL?vec2(0.0):
-      microSlope(vPosition.xz,environment.waterParameters.z);
+      microSlope(vPosition.xz-flowOffset,environment.waterParameters.z)*waterLayers.x;
   highp vec2 rippleDetailSlope=vec2(0.0);
   highp float spectralVariance=0.0;
 #ifdef AETHER_SPECTRAL_WATER
@@ -105,7 +114,7 @@ void main() {
       highp vec4 parameters=environment.waterWaveShape[cascade];
       highp float shortest=environment.waterWaveMotion[cascade].x;
       highp float geometricWeight=smoothstep(2.0,5.0,shortest/max(vSpectralCoordinates.z,.001));
-      highp float weight=parameters.z*(1.0-geometricWeight);
+      highp float weight=parameters.z*(1.0-geometricWeight)*waterLayers.x;
       highp float c=environment.waterWaveMotion[cascade].y,s=environment.waterWaveMotion[cascade].z;
       highp mat2 rotation=mat2(c,s,-s,c);
       highp vec2 uv=transpose(rotation)*vSpectralCoordinates.xy/parameters.y;
@@ -113,7 +122,7 @@ void main() {
           transpose(rotation)*surfaceDx/parameters.y,transpose(rotation)*surfaceDy/parameters.y);
       micro+=rotation*surface.xy*weight;
       crestFoam=max(crestFoam,surface.z);
-      spectralVariance+=max(0.0,surface.w-dot(surface.xy,surface.xy))*parameters.z*parameters.z;
+      spectralVariance+=max(0.0,surface.w-dot(surface.xy,surface.xy))*parameters.z*parameters.z*waterLayers.x*waterLayers.x;
     }
   }
 #endif
@@ -127,11 +136,11 @@ void main() {
     highp float rippleCell=environment.waterRippleArea.z/
         max(environment.waterRippleArea.w,1.0);
     highp float rippleFootprint=max(length(dFdx(vPosition.xz)),length(dFdy(vPosition.xz)));
-    rippleDetailSlope=sampleWaterRippleSlope(vPosition.xz,max(rippleCell,rippleFootprint));
-    micro+=rippleDetailSlope;
+    rippleDetailSlope=sampleWaterRippleSlope(vPosition.xz,max(rippleCell,rippleFootprint))*waterLayers.z;
+    micro+=rippleDetailSlope-vRippleGeometrySlope;
   }
 #endif
-  mediump vec3 n=normalize(vec3(vNormal.x-micro.x,vNormal.y,vNormal.z-micro.y));
+  mediump vec3 n=normalize(vec3(vNormal.x-micro.x*vNormal.y,vNormal.y,vNormal.z-micro.y*vNormal.y));
   mediump vec3 v=normalize(eye-vPosition);
   mediump float nv=max(dot(n,v),0.001);
   mediump float ior=clamp(environment.waterOptics.x,1.0,2.0);
@@ -156,7 +165,7 @@ void main() {
   // Opacity scales optical density, not coverage: a deep column must converge
   // to opaque instead of permanently leaking (1-opacity) of the background.
   mediump vec3 transmittance=exp(-environment.waterAbsorption.rgb*
-      (thickness*clamp(environment.waterAbsorption.w,0.0,1.0)));
+      (thickness*clamp(environment.waterAbsorption.w,0.0,1.0)*waterLayers.w));
   mediump float transmissionLuma=dot(transmittance,vec3(0.2126,0.7152,0.0722));
   mediump vec3 body=mix(environment.waterDeepColorFoam.rgb,
                         environment.waterShallowColorDistance.rgb,transmissionLuma);
@@ -202,9 +211,10 @@ void main() {
   mediump float foamSignal=max(max(crestFoam,shoreFoam),wakeFoam);
   mediump float foam=clamp(foamSignal*environment.waterDeepColorFoam.w*
       environment.waterSurfaceDetail.y,0.0,1.0);
+  foam=clamp(foam*waterLayers.y*(routeSurface?vColor.r*10.0:1.0),0.0,1.0);
   // Mip-filtered multiscale breakup avoids a solid white contact ribbon. Uses
   // the existing periodic normal asset; no random per-frame noise or aliasing.
-  highp vec2 foamUv=vPosition.xz*.09+vec2(.007,-.011)*environment.waterParameters.z;
+  highp vec2 foamUv=(vPosition.xz-flowOffset)*.09+vec2(.007,-.011)*environment.waterParameters.z;
   mediump float foamPattern=texture(waterNormalTexture,foamUv).r;
   const highp mat2 foamRotation=mat2(.766044,.642788,-.642788,.766044);
   mediump float foamPatternWide=texture(waterNormalTexture,

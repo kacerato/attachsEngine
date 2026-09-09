@@ -1,3 +1,5 @@
+#include "editor/editor_scene_camera.h"
+#include <cstring>
 #include "platform/android/android_paths.h"
 #include "platform/android/android_launch_options.h"
 #include "platform/android/android_runtime_controls.h"
@@ -15,6 +17,7 @@
 #include "platform/android/dotnet_host.h"
 #include "platform/android/instanced_renderer.h"
 #include "platform/android/ocean_validation.h"
+#include "editor/editor_water_play.h"
 #include "platform/android/lifecycle_trace.h"
 #include "platform/app_lifecycle.h"
 #include "platform/camera_route.h"
@@ -91,6 +94,8 @@ struct AndroidShell final {
   bool dirtRoadPreview = false;
   bool oceanPreview = false;
   ae::platform::android::OceanValidation oceanValidation;
+  ae::editor::EditorWaterPlay authoredWaterPlay;
+  std::vector<ae::renderer::MapDrawState> authoredDraws;
   bool forceTextureFallback = false;
   bool lockCamera = false;
   std::future<bool> rendererInitialization;
@@ -122,6 +127,17 @@ struct AndroidShell final {
   // todos eles falharem por uma mudanca que nao e do renderer da cena.
   bool editorUi = false;
   ae::editor::EditorSession editorSession;
+  bool editorMapImported = false;
+  ae::u64 editorPackageFingerprint = 0;
+  std::string editorSavePath;
+  char editorProjectName[256]{};
+  char editorProjectPath[1024]{};
+  bool editorEmpty = false;
+  ae::u64 editorSavedRevision = ~ae::u64{0};
+  float editorLastSaveSeconds = 0.0f;
+  bool editorWasPlaying = false;
+  ae::u64 editorPublishedRevision = ~ae::u64{0};
+
   // Escala de pixel fisico para dp, resolvida uma vez na inicializacao. A
   // interface e montada em dp; sem isto um painel de 220 unidades sairia com 220
   // pixels num aparelho de 520 dpi -- um terco do tamanho pretendido.
@@ -149,6 +165,8 @@ struct AndroidShell final {
   float maximumDisplayHz = 60.0f;
   int displayRotation = -1;
   ae::u64 runtimeControlsRevision = ~ae::u64{0};
+  ae::u64 waterDocumentRevision = ~ae::u64{0};
+  ae::u64 waterLayoutRevision = ~ae::u64{0};
   ae::renderer::WaterSpectrumAuthoringSettings waterSpectrumAuthoring{};
   bool waterSpectrumAuthoringApplied = false;
   float waterInteractionStrength = 0.65f;
@@ -188,8 +206,46 @@ bool sameSpectrumAuthoring(const ae::renderer::WaterSpectrumAuthoringSettings &a
 }
 
 void applyRuntimeControls(AndroidShell &shell) {
-  const auto controls = ae::platform::android::runtimeControlsSnapshot();
-  if (controls.revision == shell.runtimeControlsRevision) return;
+  auto controls = ae::platform::android::runtimeControlsSnapshot();
+  const auto &document=shell.editorSession.document();
+  const auto *root=document.find(document.root());
+  const bool authored=shell.editorUi && shell.editorMapImported && root && root->waterEnabled;
+  ae::u64 documentRevision=authored?14695981039346656037ull:0;
+  if(authored) for(float value:root->water) {
+    ae::u32 bits;std::memcpy(&bits,&value,sizeof(bits));
+    documentRevision^=bits;documentRevision*=1099511628211ull;
+  }
+  if(authored && root->waterSpectrumEnabled) documentRevision^=1;
+  ae::u64 layoutRevision=0;
+  if(authored && root->waterLayoutEnabled) {
+    layoutRevision=14695981039346656037ull;
+    for(float value:root->waterLayout) {
+      ae::u32 bits;std::memcpy(&bits,&value,sizeof(bits));layoutRevision^=bits;layoutRevision*=1099511628211ull;
+    }
+    documentRevision^=layoutRevision;
+  }
+  if (controls.revision == shell.runtimeControlsRevision && documentRevision==shell.waterDocumentRevision) return;
+  shell.waterDocumentRevision=documentRevision;
+  if(authored) {
+    controls.waveHeight=root->water[0];controls.waveSpeed=root->water[1];controls.waveSteepness=root->water[2];
+    controls.microWaves=root->water[3];controls.surfaceOpacity=root->water[4];controls.absorption=root->water[5];
+    controls.foam=root->water[6];controls.waterRoughness=root->water[7];controls.waterTurbidity=root->water[8];
+    controls.waterIor=root->water[9];controls.waveDirectionDegrees=root->water[10];
+    controls.waterLevel=root->water[11];controls.fluidDensity=root->water[12];
+    if(root->waterSpectrumEnabled) {
+      controls.spectralWindSpeed=root->water[13];controls.spectralFetch=root->water[14];
+      controls.spectralDepth=root->water[15];controls.spectralSwell=root->water[16];
+      controls.spectralSpread=root->water[17];controls.spectralDamping=root->water[18];
+      controls.crossWindSpeed=root->water[19];controls.crossDirectionDegrees=root->water[20];
+      controls.crossFetch=root->water[21];controls.crossSwellShape=root->water[22];
+      controls.crossSpread=root->water[23];controls.crossWeight=root->water[24];
+      for(ae::usize i=0;i<3;++i) {
+        controls.cascadeDisplacement[i]=root->water[25+i];
+        controls.cascadeChoppiness[i]=root->water[28+i];
+      }
+      controls.foamCompression=root->water[31];controls.foamGrowth=root->water[32];controls.foamDecay=root->water[33];
+    }
+  }
   shell.waterInteractionStrength = controls.interactionStrength;
 
   ae::renderer::WaterSpectrumAuthoringSettings spectrum{};
@@ -209,21 +265,39 @@ void applyRuntimeControls(AndroidShell &shell) {
     spectrum.cascadeDisplacement[index]=controls.cascadeDisplacement[index];
     spectrum.cascadeChoppiness[index]=controls.cascadeChoppiness[index];
   }
+  if(authored && root->waterLayoutEnabled) {
+    spectrum.cascadeDisplacement[3]=root->waterLayout[7];
+    spectrum.cascadeChoppiness[3]=root->waterLayout[8];
+  }
   if(!shell.waterSpectrumAuthoringApplied ||
-     !sameSpectrumAuthoring(spectrum,shell.waterSpectrumAuthoring)) {
+     !sameSpectrumAuthoring(spectrum,shell.waterSpectrumAuthoring) || layoutRevision!=shell.waterLayoutRevision) {
     const auto defaults=ae::renderer::defaultWaterCascadeSettings();
+    std::vector<ae::renderer::WaterCascadeSettings> base(defaults.begin(),defaults.end());
+    ae::u64 budget=4ull*1024*1024;
+    bool accepted=true;
+    if(authored && root->waterLayoutEnabled) {
+      ae::renderer::WaterCascadeLayout layout;
+      layout.count=static_cast<ae::u32>(root->waterLayout[0]);
+      layout.resolution=1u<<static_cast<ae::u32>(root->waterLayout[1]);
+      layout.minimumWavelength=root->waterLayout[2];layout.maximumWavelength=root->waterLayout[3];
+      layout.seed=static_cast<ae::u32>(root->waterLayout[4]);layout.domainScale=root->waterLayout[5];
+      budget=static_cast<ae::u64>(root->waterLayout[6]*1024*1024);
+      accepted=ae::renderer::buildWaterCascadeLayout(layout,base);
+    }
     std::vector<ae::renderer::WaterCascadeSettings> cascades;
-    bool accepted=ae::renderer::authorWaterCascades(defaults,spectrum,cascades);
+    accepted=accepted && ae::renderer::authorWaterCascades(base,spectrum,cascades);
     if(accepted) accepted=shell.instancedRendererReady
-        ? shell.instancedRenderer.reconfigureWaterCascades(cascades)
-        : shell.instancedRenderer.setWaterCascades(cascades,4ull*1024*1024);
+        ? shell.instancedRenderer.reconfigureWaterCascades(cascades,budget)
+        : shell.instancedRenderer.setWaterCascades(cascades,budget);
     if(!accepted) {
       __android_log_print(ANDROID_LOG_ERROR,LogTag,
           "[WaterFFT] configuracao autoral recusada; espectro anterior preservado.");
     } else {
       shell.waterSpectrumAuthoring=spectrum;
       shell.waterSpectrumAuthoringApplied=true;
+      shell.waterLayoutRevision=layoutRevision;
     }
+    if(authored) shell.editorSession.reportWaterConfiguration(accepted);
   }
 
   auto water = ae::renderer::defaultOceanWaterProfile();
@@ -458,6 +532,69 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
       shell.instancedRenderer.uiRendererReady()) {
     shell.editorSession.initialize(&shell.instancedRenderer.uiFont(),
                                    &shell.instancedRenderer.uiIcons());
+    if (!shell.editorMapImported && !shell.instancedRenderer.mapDraws().empty()) {
+      shell.editorPackageFingerprint=shell.instancedRenderer.contentFingerprint();
+      shell.editorSession.setProjection(shell.instancedRenderer.mapProjection());
+      shell.editorMapImported = shell.editorSession.importMap(shell.instancedRenderer.mapDraws(),shell.instancedRenderer.mapMaterials(), !shell.editorEmpty);
+      if (!shell.editorEmpty) {
+        const auto initial=shell.instancedRenderer.defaultCamera();
+        shell.editorSession.setCameraPose(initial.position,initial.yaw,initial.pitch);
+      }
+      if (shell.editorMapImported && shell.app->activity->internalDataPath) {
+        ae::u64 projectId=14695981039346656037ull;
+        for(const unsigned char *p=reinterpret_cast<const unsigned char *>(shell.editorProjectPath);*p;++p) {projectId^=*p;projectId*=1099511628211ull;}
+        const std::string legacyPath=std::string(shell.app->activity->internalDataPath)+"/editor-"+
+            std::to_string(projectId)+"-"+std::to_string(shell.instancedRenderer.contentFingerprint())+".aescene";
+        // The project owns authored data. Keep the old private archive as a migration backup.
+        shell.editorSavePath=shell.editorProjectPath[0]
+            ? std::string(shell.editorProjectPath)+"/scenes/editor.aescene" : legacyPath;
+        FILE *existing=std::fopen(shell.editorSavePath.c_str(),"rb");
+        if(existing) {
+          std::fclose(existing);
+          if(!shell.editorSession.load(shell.editorSavePath.c_str(),shell.editorPackageFingerprint)) {
+            __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Cena salva invalida; arquivo preservado.");
+            shell.editorSavePath += ".recovered";
+            FILE *recovery=std::fopen(shell.editorSavePath.c_str(),"rb");
+            if(recovery) {
+              std::fclose(recovery);
+              if(!shell.editorSession.load(shell.editorSavePath.c_str(),shell.editorPackageFingerprint)) {
+                __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Recuperacao invalida; salvamento automatico suspenso.");
+                shell.editorSavePath.clear();
+              }
+            }
+          }
+        } else if(shell.editorSavePath!=legacyPath) {
+          FILE *legacy=std::fopen(legacyPath.c_str(),"rb");
+          if(legacy) {
+            std::fclose(legacy);
+            if(!shell.editorSession.load(legacyPath.c_str(),shell.editorPackageFingerprint))
+              __android_log_print(ANDROID_LOG_WARN,LogTag,"[Editor] Arquivo legado invalido; original preservado.");
+          }
+          if(!shell.editorSession.save(shell.editorSavePath.c_str(),shell.editorPackageFingerprint))
+            __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Falha ao criar cena no projeto: %s",shell.editorSavePath.c_str());
+        }
+        auto &document=shell.editorSession.document();
+        auto root=*document.find(document.root());
+        if(!root.waterEnabled) {
+          const auto c=ae::platform::android::runtimeControlsSnapshot();
+          const float values[]{c.waveHeight,c.waveSpeed,c.waveSteepness,c.microWaves,c.surfaceOpacity,
+            c.absorption,c.foam,c.waterRoughness,c.waterTurbidity,c.waterIor,c.waveDirectionDegrees,c.waterLevel,c.fluidDensity};
+          std::copy(values,values+13,root.water);document.applyEntityValues(root.id,root);
+        }
+        if(!root.waterSpectrumEnabled) {
+          const auto c=ae::platform::android::runtimeControlsSnapshot();
+          const float values[]{c.spectralWindSpeed,c.spectralFetch,c.spectralDepth,c.spectralSwell,
+            c.spectralSpread,c.spectralDamping,c.crossWindSpeed,c.crossDirectionDegrees,c.crossFetch,
+            c.crossSwellShape,c.crossSpread,c.crossWeight,c.cascadeDisplacement[0],c.cascadeDisplacement[1],
+            c.cascadeDisplacement[2],c.cascadeChoppiness[0],c.cascadeChoppiness[1],c.cascadeChoppiness[2],
+            c.foamCompression,c.foamGrowth,c.foamDecay};
+          std::copy(std::begin(values),std::end(values),root.water+13);
+          document.applyEntityValues(root.id,root);
+        }
+        shell.editorSavedRevision=shell.editorSession.document().revision();
+      }
+    }
+    shell.editorPublishedRevision = ~ae::u64{0};
     __android_log_print(ANDROID_LOG_INFO, LogTag,
         "[Editor] sessao pronta: %u entidades no documento.",
         shell.editorSession.document().entityCount());
@@ -660,6 +797,7 @@ void applyThermalRenderingPolicy(AndroidShell &shell, bool force) {
 bool rebuildInstancedRenderer(AndroidShell &shell) {
   collectRendererInitialization(shell,true);
   shell.oceanValidation.shutdown();
+  shell.authoredWaterPlay.stop();
   shell.frameProfiler.reset();
   ae::platform::android::ScopedLifecycleStage trace("rebuild-renderer");
   shell.instancedRenderer.shutdown();
@@ -693,6 +831,7 @@ bool rebuildInstancedRenderer(AndroidShell &shell) {
 bool recreateSwapchainAndRenderer(AndroidShell &shell) {
   collectRendererInitialization(shell,true);
   shell.oceanValidation.shutdown();
+  shell.authoredWaterPlay.stop();
   ae::platform::android::ScopedLifecycleStage trace("recreate-swapchain-renderer");
   // Framebuffers precisam morrer ANTES das image views da swapchain antiga.
   // Inverter esta ordem viola o lifetime Vulkan mesmo depois de wait-idle.
@@ -743,6 +882,7 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     flushCameraRouteRecordingIfNeeded(shell);
     ae::platform::android::ScopedLifecycleStage trace("destroy-surface-renderer");
     shell.oceanValidation.shutdown();
+  shell.authoredWaterPlay.stop();
     shell.instancedRenderer.shutdown();
     shell.instancedRendererReady = false;
     shell.vulkanSurface.shutdown();
@@ -783,12 +923,16 @@ void handleCommand(android_app *app, int32_t command) {
     applyEvent(shell, ae::platform::AppEvent::WindowCreated);
     break;
   case APP_CMD_TERM_WINDOW:
+    shell.editorSession.cancelPointers();
     applyEvent(shell, ae::platform::AppEvent::WindowDestroyed);
     break;
   case APP_CMD_RESUME:
     applyEvent(shell, ae::platform::AppEvent::Resume);
     break;
   case APP_CMD_PAUSE:
+    shell.editorSession.cancelPointers();
+    if(!shell.editorSavePath.empty() && !shell.editorSession.save(shell.editorSavePath.c_str(),shell.editorPackageFingerprint))
+      __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Falha ao salvar ao pausar.");
     applyEvent(shell, ae::platform::AppEvent::Pause);
     break;
   case APP_CMD_GAINED_FOCUS:
@@ -796,6 +940,7 @@ void handleCommand(android_app *app, int32_t command) {
     applyEvent(shell, ae::platform::AppEvent::GainFocus);
     break;
   case APP_CMD_LOST_FOCUS:
+    shell.editorSession.cancelPointers();
     applyEvent(shell, ae::platform::AppEvent::LoseFocus);
     break;
   case APP_CMD_CONFIG_CHANGED:
@@ -807,6 +952,7 @@ void handleCommand(android_app *app, int32_t command) {
       shell.displayRotation = newRotation;
       // A pointer delta must never bridge two coordinate systems. This is
       // global for both the editor camera and runtime action controller.
+      shell.editorSession.cancelPointers();
       shell.cameraController.cancelGesture();
       shell.firstPersonTouches.cancel();
       __android_log_print(ANDROID_LOG_INFO, LogTag, "Configuração alterada: janela=%dx%d.",
@@ -897,10 +1043,15 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
            ae::ui::UiPointerPhase::Up, toLogical(editorIndex), 0.0});
     }
     if (consumed) {
+      // Preserve editor capture through Down -> Move -> Up; runtime loses ownership.
+      shell.firstPersonTouches.cancel();
       shell.cameraController.cancelGesture();
       return 1;
     }
   }
+
+  // A cena autorada não herda controles ou interações da demonstração.
+  if (shell.editorUi) return 1;
 
   const int32_t bufferWidth = app->window != nullptr ? ANativeWindow_getWidth(app->window) : 0;
   const int32_t bufferHeight = app->window != nullptr ? ANativeWindow_getHeight(app->window) : 0;
@@ -1008,55 +1159,6 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
 
 } // namespace
 
-// A hierarquia do Water Lab, montada pelos MESMOS comandos que a interface usa.
-// Ela e um andaime: quando a cena real do mapa alimentar o documento, esta
-// funcao sai. Ate la, ela existe para que a tela do editor tenha o que mostrar
-// no aparelho, e nao para simular um editor que ja funciona.
-static ae::editor::EditorEntityId buildWaterLabDocument(AndroidShell &shell) {
-  using namespace ae::editor;
-  EditorDocument &document = shell.editorSession.document();
-  EditorHistory &history = shell.editorSession.history();
-  const EditorEntityId environment =
-      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Environment");
-  history.createEntity(document, environment, EditorEntityKind::Light, "Sky");
-  history.createEntity(document, environment, EditorEntityKind::Mesh, "Mountains");
-  history.createEntity(document, environment, EditorEntityKind::Water, "Waterfall");
-
-  const EditorEntityId architecture =
-      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Architecture");
-  history.createEntity(document, architecture, EditorEntityKind::Mesh, "Main Building");
-  history.createEntity(document, architecture, EditorEntityKind::Mesh, "Glass Wall");
-  const EditorEntityId block =
-      history.createEntity(document, architecture, EditorEntityKind::Mesh, "Concrete Block");
-
-  const EditorEntityId water =
-      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Water");
-  history.createEntity(document, water, EditorEntityKind::Water, "Water Plane");
-  history.createEntity(document, water, EditorEntityKind::Effect, "Water FX");
-
-  const EditorEntityId props =
-      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Props");
-  history.createEntity(document, props, EditorEntityKind::Mesh, "Rocks");
-  history.createEntity(document, props, EditorEntityKind::Mesh, "Plants");
-
-  const EditorEntityId lighting =
-      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Lighting");
-  history.createEntity(document, lighting, EditorEntityKind::Light, "Directional Light");
-  history.createEntity(document, lighting, EditorEntityKind::Light, "Area Light");
-
-  const EditorEntityId cameras =
-      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Cameras");
-  history.createEntity(document, cameras, EditorEntityKind::Camera, "Main Camera");
-
-  EditorTransform transform{};
-  transform.position[0] = 1.25f;
-  transform.position[1] = 0.5f;
-  transform.position[2] = -2.0f;
-  transform.rotationDegrees[1] = 90.0f;
-  history.setTransform(document, block, transform);
-  return block;
-}
-
 void android_main(android_app *app) {
   AndroidShell shell{};
   shell.app = app;
@@ -1069,12 +1171,22 @@ void android_main(android_app *app) {
   shell.materialPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.material_preview");
   shell.oceanPreview = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.ocean_preview");
   shell.editorUi = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.editor_ui");
+  shell.instancedRenderer.setWaterAuthoringEnabled(shell.editorUi);
   if (shell.editorUi) {
     const float density = app->config != nullptr
         ? static_cast<float>(AConfiguration_getDensity(app->config)) : 0.0f;
-    shell.editorScale = density > 0.0f && density < 10000.0f ? density / 160.0f : 1.0f;
-    shell.editorSession.setSelection(buildWaterLabDocument(shell));
-    shell.editorSession.setProjectName(shell.oceanPreview ? "Water Lab" : "Forest Road");
+    // Densidade do editor independente do DPI do sistema; input usa a mesma escala.
+    float editorUiScale=0.60f;
+    ae::platform::android::readFloatLaunchOption(app->activity,"aether.editor_scale",editorUiScale);
+    if(!std::isfinite(editorUiScale)) editorUiScale=0.60f;
+    shell.editorScale = std::clamp(editorUiScale,0.40f,1.50f) *
+        (density > 0.0f && density < 10000.0f ? density / 160.0f : 1.0f);
+
+    ae::platform::android::readStringLaunchOption(app->activity,"astra.project_name",shell.editorProjectName,sizeof(shell.editorProjectName));
+    ae::platform::android::readStringLaunchOption(app->activity,"astra.project_path",shell.editorProjectPath,sizeof(shell.editorProjectPath));
+    shell.editorEmpty=ae::platform::android::readBooleanLaunchOption(app->activity,"aether.editor_empty");
+    shell.editorSession.setProjectName(*shell.editorProjectName?shell.editorProjectName:(shell.oceanPreview ? "Water Lab" : "Forest Road"));
+    if(shell.editorProjectPath[0]) shell.editorSession.setProjectDirectory(shell.editorProjectPath);
   }
   const bool explicitMap = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.map_preview");
   // The launcher opens the production-test map. Diagnostic fixtures remain
@@ -1105,7 +1217,7 @@ void android_main(android_app *app) {
   // Controller mode is a global runtime policy. Diagnostic fixtures and locked
   // camera captures remain deterministic; `aether.free_camera` explicitly
   // selects the editor navigation controller instead.
-  shell.firstPersonEnabled = shell.dirtRoadPreview && !shell.oceanPreview && !shell.lockCamera &&
+  shell.firstPersonEnabled = !shell.editorUi && shell.dirtRoadPreview && !shell.oceanPreview && !shell.lockCamera &&
       !ae::platform::android::readBooleanLaunchOption(app->activity, "aether.free_camera");
   shell.instancedRenderer.setRuntimeHudEnabled(shell.firstPersonEnabled);
   __android_log_print(ANDROID_LOG_INFO, LogTag,
@@ -1316,8 +1428,8 @@ void android_main(android_app *app) {
       hzbComputeValidation || ae::platform::android::readBooleanLaunchOption(
           app->activity, "aether.hzb_compute"));
   shell.instancedRenderer.setHzbComputeReadbackValidationEnabled(hzbComputeValidation);
-  shell.instancedRenderer.setWaterDisplacementCapacity(shell.oceanPreview?128.0f:5.0f);
-  shell.instancedRenderer.setSpectralWaterEnabled(ae::platform::android::readBooleanLaunchOption(
+  shell.instancedRenderer.setWaterDisplacementCapacity((shell.oceanPreview || shell.editorUi)?128.0f:5.0f);
+  shell.instancedRenderer.setSpectralWaterEnabled(shell.editorUi || ae::platform::android::readBooleanLaunchOption(
       app->activity,"aether.water_fft"));
   shell.instancedRenderer.setWideWaterSlopes(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.water_slope_wide"));
@@ -1466,7 +1578,7 @@ void android_main(android_app *app) {
         shell.cameraController.setState(
             shell.cameraRoutePlayer.sample(shell.cameraRouteFrameOrdinal));
         ++shell.cameraRouteFrameOrdinal;
-      } else if (shell.firstPersonEnabled) {
+      } else if (shell.firstPersonEnabled && !shell.editorUi) {
         auto camera = shell.cameraController.state();
         const float deltaSeconds = std::chrono::duration<float>(
             frameWorkStarted - shell.lastGameplayUpdate).count();
@@ -1500,20 +1612,27 @@ void android_main(android_app *app) {
       shell.editorSession.advanceClock(timeSeconds);
       const bool editorPlaying = !editorActive || shell.editorSession.isPlaying();
       if (editorActive) timeSeconds = shell.editorSession.sceneTime();
+      if (editorActive && shell.editorWasPlaying && !editorPlaying) {
+        shell.editorPublishedRevision=~ae::u64{0};
+        shell.cameraController.cancelGesture();shell.firstPersonTouches.cancel();
+      }
+      shell.editorWasPlaying=editorPlaying;
 
-      const auto waterControls=ae::platform::android::runtimeControlsSnapshot();
+      auto waterControls=ae::platform::android::runtimeControlsSnapshot();
+      const auto *waterRoot=shell.editorSession.document().find(shell.editorSession.document().root());
+      if(editorActive && waterRoot && waterRoot->waterEnabled) waterControls.fluidDensity=waterRoot->water[12];
       const ae::renderer::WaterWakeSettings wakeSettings{
           waterControls.wakeStrength, waterControls.wakeMinimumSpeed,
           waterControls.wakeSpacing, waterControls.wakeWidthScale,
           waterControls.wakeMaximumImpulse};
-      if (shell.oceanPreview && !shell.oceanValidation.update(shell.instancedRenderer,timeSeconds,timeSeconds,
+      if (shell.oceanPreview && !editorActive && editorPlaying && !shell.oceanValidation.update(shell.instancedRenderer,timeSeconds,timeSeconds,
           waterControls.fluidDensity,waterControls.waterPaused || !editorPlaying,
           waterControls.bodyRippleGain, wakeSettings)) {
         __android_log_print(ANDROID_LOG_ERROR,LogTag,"[OceanValidation] simulation update failed");
       }
       shell.waterTimeSeconds = timeSeconds;
       ae::renderer::RuntimeHudState hud{};
-      hud.visible = shell.firstPersonEnabled;
+      hud.visible = shell.firstPersonEnabled && !editorActive;
       if (shell.firstPersonEnabled) {
         const auto &joystick = shell.firstPersonTouches.joystickState();
         hud.joystickActive = joystick.active;
@@ -1530,21 +1649,83 @@ void android_main(android_app *app) {
         const float logicalHeight = static_cast<float>(display.height) / shell.editorScale;
         shell.editorSession.setSurface({0.0f, 0.0f, logicalWidth, logicalHeight}, {});
         shell.editorSession.update();
+        shell.instancedRenderer.setEnvironmentAdjustment(shell.editorSession.document().find(shell.editorSession.document().root())->environment);
+        const float editorWallSeconds=std::chrono::duration<float>(std::chrono::steady_clock::now()-shell.shellStartTime).count();
+        if(!shell.editorSession.requestedScenePath().empty() && !editorPlaying && !shell.editorSession.history().isOpen()) {
+          const auto requested=shell.editorSession.requestedScenePath();
+          shell.editorSession.clearSceneOpenRequest();
+          if(requested!=shell.editorSavePath) {
+          const bool saved=shell.editorSavePath.empty() || shell.editorSavedRevision==shell.editorSession.document().revision() ||
+            shell.editorSession.save(shell.editorSavePath.c_str(),shell.editorPackageFingerprint);
+          if(saved && shell.editorSession.load(requested.c_str(),shell.editorPackageFingerprint)) {
+            shell.editorSavePath=requested;
+            shell.editorSavedRevision=shell.editorSession.document().revision();
+            shell.editorPublishedRevision=~ae::u64{0};
+            shell.editorSession.frameAll();
+          } else shell.editorSession.reportSceneOpenFailure();
+          }
+        }
+        if(!shell.editorSavePath.empty() && !shell.editorSession.history().isOpen() &&
+           (shell.editorSession.saveRequested() ||
+            (shell.editorSavedRevision!=shell.editorSession.document().revision() &&
+             editorWallSeconds-shell.editorLastSaveSeconds>=3.0f))) {
+          shell.editorLastSaveSeconds=editorWallSeconds;
+          if(shell.editorSession.save(shell.editorSavePath.c_str(),shell.editorPackageFingerprint))
+            shell.editorSavedRevision=shell.editorSession.document().revision();
+          else __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Falha ao salvar cena.");
+        }
+        if(!editorPlaying && shell.authoredWaterPlay.active()) {shell.authoredWaterPlay.stop();shell.instancedRenderer.clearWaterRipples();shell.instancedRenderer.setWaterSimulationClock(-1);}
+        if (shell.editorMapImported && (editorPlaying || shell.editorPublishedRevision != shell.editorSession.document().revision())) {
+          auto &authored=shell.authoredDraws;
+          const bool changed=shell.editorPublishedRevision!=shell.editorSession.document().revision();
+          bool ready=!changed || shell.editorSession.extractMap(authored);
+          if(changed && shell.authoredWaterPlay.active()) shell.authoredWaterPlay.stop();
+          if(ready && editorPlaying) {
+            if(!shell.authoredWaterPlay.active()) {
+              ready=shell.authoredWaterPlay.start(shell.editorSession.document(),authored,
+                shell.instancedRenderer.waterQuerySetup(),shell.instancedRenderer.activeWaterCascades(),
+                shell.instancedRenderer.waterSpectralControls(),waterControls.fluidDensity);
+              if(ready) __android_log_print(ANDROID_LOG_INFO,LogTag,"[WaterPlay] volumes=%u bodies=%u fixedStep=60Hz",shell.authoredWaterPlay.volumeCount(),shell.authoredWaterPlay.bodyCount());
+            }
+            if(ready) ready=shell.authoredWaterPlay.update(timeSeconds,authored) && shell.instancedRenderer.setWaterRipples(shell.authoredWaterPlay.ripples());
+            if(ready) shell.instancedRenderer.setWaterSimulationClock(shell.authoredWaterPlay.simulationTime());
+          }
+          if (ready && (changed?shell.instancedRenderer.queueMapScene(authored):shell.instancedRenderer.queueAuthoredPoses(authored)))
+            shell.editorPublishedRevision = shell.editorSession.document().revision();
+          else {
+            __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Editor] Falha ao publicar documento no renderer.");
+            if(editorPlaying) shell.editorSession.reportPlayFailure();
+          }
+        }
         shell.instancedRenderer.setUiInstances(shell.editorSession.instances());
         // A mesma escala vai ao renderer: e ela que o vertex shader usa para
         // levar as coordenadas logicas ao NDC da tela inteira.
         shell.instancedRenderer.setUiSurfaceSize(logicalWidth, logicalHeight);
+        const auto &rect = shell.editorSession.layout().viewport;
+        shell.instancedRenderer.setSceneViewport({rect.x/logicalWidth, rect.y/logicalHeight,
+                                                  rect.width/logicalWidth, rect.height/logicalHeight});
       }
       // A CENA e desenhada com a camera do EDITOR. Ate aqui ela usava a camera
       // livre do jogo e a de orbita movia so a grade e o gizmo: orbitar girava a
       // sobreposicao sobre uma cena parada em outro lugar, que e exatamente a
       // sensacao de "isto e uma cena rodando, nao um editor".
       ae::platform::FreeCameraState sceneCamera = shell.cameraController.state();
-      if (editorActive && !editorPlaying) {
+      shell.instancedRenderer.setSceneClipPlanes(0, 0);
+      shell.instancedRenderer.setEditorBackground(editorActive && !editorPlaying);
+      if (editorActive) {
+        const auto &projection = shell.editorSession.view().frustum;
+        shell.instancedRenderer.setSceneClipPlanes(projection.nearPlane, projection.farPlane);
         const ae::editor::EditorCamera &editorCamera = shell.editorSession.camera();
         ae::editor::editorCameraPosition(editorCamera, sceneCamera.position);
         sceneCamera.yaw = editorCamera.yaw;
         sceneCamera.pitch = editorCamera.pitch;
+        if(editorPlaying) {
+          const auto authoredCamera=ae::editor::resolveSceneCamera(shell.editorSession.document());
+          if(authoredCamera.entity) {
+            std::copy(authoredCamera.position,authoredCamera.position+3,sceneCamera.position);
+            sceneCamera.yaw=authoredCamera.yaw;sceneCamera.pitch=authoredCamera.pitch;
+          }
+        }
       }
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, sceneCamera, hud);

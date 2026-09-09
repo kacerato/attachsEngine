@@ -25,7 +25,7 @@ namespace ae::editor {
 
 enum class EditorGizmoMode : u8 { Select, Translate, Rotate, Scale };
 
-enum class EditorGizmoHandle : u8 { None, AxisX, AxisY, AxisZ };
+enum class EditorGizmoHandle : u8 { None, AxisX, AxisY, AxisZ, PlaneYZ, PlaneZX, PlaneXY };
 
 struct EditorGizmoSettings final {
   // Comprimento do eixo em pixels lógicos. Constante na tela: é o que faz o
@@ -84,6 +84,17 @@ bool beginGizmoDrag(const EditorGizmoFrame &frame, EditorGizmoHandle handle,
 // o mesmo resultado, que é o que torna o arraste reprodutível e o undo exato.
 bool resolveGizmoTranslation(const EditorGizmoDrag &drag, ui::UiPoint totalScreenDelta,
                              EditorTransform &outTransform) noexcept;
+bool resolveGizmoTransform(const EditorGizmoDrag &drag, EditorGizmoMode mode,
+                           ui::UiPoint delta, EditorTransform &outTransform) noexcept;
+
+// Intersect a world-axis plane through origin. Parallel/behind rays are rejected.
+bool gizmoPlanePoint(const EditorViewport &view, const float origin[3], u32 normalAxis,
+                     ui::UiPoint point, float out[3]) noexcept;
+
+// Ring geometry and ray/plane angle use the same world-axis convention.
+void gizmoRingPoint(const float origin[3], u32 axis, float radius, float angle, float out[3]) noexcept;
+bool gizmoRingAngle(const EditorViewport &view, const float origin[3], u32 axis,
+                    ui::UiPoint point, float &angle) noexcept;
 
 // Distância em pixels de um ponto ao segmento do eixo. Exposta porque o desenho
 // destaca o eixo sob o dedo com o mesmo critério que a seleção usa.

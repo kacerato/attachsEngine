@@ -1,0 +1,33 @@
+#pragma once
+#include "editor/editor_document.h"
+#include "renderer/map_draw_update.h"
+
+namespace ae::editor {
+// Immutable package geometry plus authored transforms. No Vulkan or Android.
+// assetId identifies a package draw, not a process pointer. The package fingerprint
+// must accompany saved documents so references cannot silently target another map.
+using EditorMapUpdate = renderer::MapDrawState;
+class EditorMapScene {
+public:
+  u32 assetCount() const { return static_cast<u32>(source_.size()); }
+  const renderer::MapDrawRecord *asset(u32 index) const { return index<source_.size()?&source_[index]:nullptr; }
+  // Loading a resource library need not instantiate its contents in the scene.
+  bool import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws,
+              std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true);
+  bool extract(const EditorDocument &document, std::vector<EditorMapUpdate> &out) const;
+  bool bounds(const EditorDocument &document, EditorEntityId entity, float center[3], float &radius) const;
+  void hydrateMaterials(EditorDocument &document) const;
+  renderer::MaterialOverride materialForAsset(u32 index) const;
+  u32 materialFlagsForAsset(u32 index) const {
+    return index<source_.size() && source_[index].materialIndex<materials_.size()
+        ? materials_[source_[index].materialIndex].flags : 0;
+  }
+private:
+  std::vector<renderer::MapMaterialRecord> materials_;
+  std::vector<renderer::MapDrawRecord> source_;
+};
+// Column-major local/world matrices with Rz * Ry * Rx Euler convention.
+void editorTransformMatrix(const EditorTransform &transform, float out[16]);
+bool editorWorldMatrix(const EditorDocument &document, EditorEntityId entity, float out[16]);
+bool editorLocalTransformForWorld(const float world[16], const float parent[16], EditorTransform &out);
+} // namespace ae::editor

@@ -57,6 +57,19 @@ void UiInputRouter::erase(u32 pointerId) noexcept {
   }
 }
 
+UiPointerRouting UiInputRouter::hitTest(UiPoint position) const noexcept {
+  UiPointerRouting result{};result.position=position;
+  if(!std::isfinite(position.x) || !std::isfinite(position.y)) return result;
+  result.target=UiPointerTarget::Viewport;
+  for(usize i=regions_.size();i>0;--i) {
+    const auto &region=regions_[i-1];
+    if(!region.rect.contains(position)) continue;
+    result.target=region.blocker?UiPointerTarget::None:UiPointerTarget::Widget;
+    result.widgetId=region.widgetId;break;
+  }
+  return result;
+}
+
 UiPointerRouting UiInputRouter::route(const UiPointerEvent &event) noexcept {
   UiPointerRouting routing{};
   if (!std::isfinite(event.position.x) || !std::isfinite(event.position.y)) return routing;
@@ -71,24 +84,11 @@ UiPointerRouting UiInputRouter::route(const UiPointerEvent &event) noexcept {
     pointer.pointerId = event.pointerId;
     pointer.start = event.position;
     pointer.previous = event.position;
-    pointer.target = UiPointerTarget::Viewport;
+    const auto hit=hitTest(event.position);
+    pointer.target=hit.target;pointer.widgetId=hit.widgetId;
 
     // Da última registrada para a primeira: a ordem de desenho é a ordem de
     // profundidade, e o que foi desenhado por último está por cima.
-    for (usize index = regions_.size(); index > 0; --index) {
-      const Region &region = regions_[index - 1];
-      if (!region.rect.contains(event.position)) continue;
-      if (region.blocker) {
-        // O toque foi absorvido pelo painel, mas nenhum widget o quer. Ele
-        // termina aqui: nem vira clique, nem desce para a cena.
-        pointer.target = UiPointerTarget::None;
-      } else {
-        pointer.target = UiPointerTarget::Widget;
-        pointer.widgetId = region.widgetId;
-      }
-      break;
-    }
-
     pointers_.push_back(pointer);
     routing.target = pointer.target;
     routing.widgetId = pointer.widgetId;

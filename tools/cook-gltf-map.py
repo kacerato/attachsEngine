@@ -912,22 +912,67 @@ def multiply_column_major(left, right):
     return (a @ b).reshape(16, order="F").astype(np.float32)
 
 
+def node_matrix(node):
+    """glTF local transform, including TRS-authored objects (column major)."""
+    if "matrix" in node:
+        if any(key in node for key in ("translation", "rotation", "scale")):
+            raise ValueError("node cannot combine matrix and TRS")
+        matrix = np.asarray(node["matrix"], dtype=np.float64).reshape(4, 4, order="F")
+    else:
+        x, y, z, w = node.get("rotation", [0, 0, 0, 1])
+        length = math.sqrt(x*x+y*y+z*z+w*w)
+        if not math.isfinite(length) or length < 1e-12:
+            raise ValueError("invalid node quaternion")
+        x, y, z, w = x/length, y/length, z/length, w/length
+        matrix = np.eye(4)
+        matrix[:3, :3] = [[1-2*(y*y+z*z), 2*(x*y-z*w), 2*(x*z+y*w)],
+                         [2*(x*y+z*w), 1-2*(x*x+z*z), 2*(y*z-x*w)],
+                         [2*(x*z-y*w), 2*(y*z+x*w), 1-2*(x*x+y*y)]]
+        matrix[:3, :3] *= np.asarray(node.get("scale", [1, 1, 1]))
+        matrix[:3, 3] = node.get("translation", [0, 0, 0])
+    if not np.isfinite(matrix).all():
+        raise ValueError("non-finite node transform")
+    return matrix.reshape(16, order="F").astype(np.float32)
+
+
 def scene_nodes(gltf):
-    identity = np.identity(4, dtype=np.float32).reshape(16, order="F")
+    identity = np.eye(4, dtype=np.float32).reshape(16, order="F")
     roots = gltf["scenes"][gltf.get("scene", 0)]["nodes"]
-    result = []
-
-    def visit(index, parent):
+    result, visited = [], set()
+    stack = [(index, identity) for index in reversed(roots)]
+    while stack:
+        index, parent = stack.pop()
+        if index in visited or not 0 <= index < len(gltf["nodes"]):
+            raise ValueError("invalid scene hierarchy: cycle, duplicate parent or missing node")
+        visited.add(index)
         node = gltf["nodes"][index]
-        local = np.asarray(node.get("matrix", identity), dtype=np.float32)
-        world = multiply_column_major(parent, local)
+        world = multiply_column_major(parent, node_matrix(node))
         result.append((index, world))
-        for child in node.get("children", []):
-            visit(child, world)
-
-    for root in roots:
-        visit(root, identity)
+        stack.extend((child, world) for child in reversed(node.get("children", [])))
     return result
+
+
+def authoring_catalog(gltf, source_id, draw_bindings):
+    """Stable source objects/resources; spatial chunks and LODs remain derived data."""
+    parents = {child: index for index, node in enumerate(gltf["nodes"])
+               for child in node.get("children", [])}
+    identity = lambda kind, index: hashlib.sha256(f"{source_id}/{kind}/{index}".encode()).hexdigest()[:32]
+    objects = []
+    for index, world in scene_nodes(gltf):
+        node = gltf["nodes"][index]
+        objects.append({"id": identity("node", index), "sourceNode": index,
+                        "name": node.get("name", f"Object {index}"),
+                        "parent": identity("node", parents[index]) if index in parents else None,
+                        "localMatrix": node_matrix(node).tolist(),
+                        "mesh": identity("mesh", node["mesh"]) if "mesh" in node else None,
+                        "draws": draw_bindings.get(index, [])})
+    meshes = [{"id": identity("mesh", index), "sourceMesh": index,
+               "name": mesh.get("name", f"Mesh {index}"),
+               "primitives": [{"sourcePrimitive": i, "material": p.get("material", 0)}
+                              for i, p in enumerate(mesh["primitives"])]}
+              for index, mesh in enumerate(gltf.get("meshes", []))]
+    return {"format": "AETHER-AUTHORING", "version": 1, "sourceId": source_id,
+            "objects": objects, "meshes": meshes}
 
 
 def transform_bounds(minimum, maximum, matrix):
@@ -1164,6 +1209,7 @@ def main():
         materials = [material_record(material, texture_map, inferred_cutouts)
                      for material in gltf["materials"]]
         vertices, indices, draws = [], [], []
+        draw_bindings = {}
         source_draw_count = 0
         lod_level_counts = {}  # For the manifest: level index -> draws generated at that level.
         lod_triangle_counts = {}
@@ -1243,6 +1289,7 @@ def main():
                         first_index = len(indices)
                         indices.extend(int(value) for value in emitted_indices)
                         geometric_error = float(entry["geometricError"] * world_scale)
+                        draw_bindings.setdefault(node_index, []).append(len(draws))
                         draws.append(struct.pack(
                             "<4I16f4fIfI", first_index, len(emitted_indices), 0,
                             primitive.get("material", 0), *world, *center, radius,
@@ -1277,6 +1324,9 @@ def main():
         package[vertex_offset:vertex_offset + len(vertices) * VERTEX_STRIDE] = b"".join(vertices)
         package[index_offset:] = struct.pack(f"<{len(indices)}I", *indices)
         (args.out / "scene.aemap").write_bytes(package)
+        catalog = authoring_catalog(gltf, args.source.stem, draw_bindings)
+        catalog["packageSha256"] = hashlib.sha256(package).hexdigest()
+        (args.out / "scene.authoring.json").write_text(json.dumps(catalog, indent=2), encoding="utf-8")
         # License text is an authored/legal asset, not normalized cooker output.
         # Writing through TextIO on Windows translates every existing LF and
         # compounds CRLF into CRCRLF on each recook. Preserve its exact bytes so

@@ -948,6 +948,16 @@ ae::i32 AetherPhysics_SetAllowSleepingV2(AetherPhysicsWorld *world, AetherBodyHa
   return 1;
 }
 
+ae::i32 AetherPhysics_SetMassV2(AetherPhysicsWorld *world,AetherBodyHandle handle,float mass) {
+  if(!world || handle==AetherBodyHandle_Invalid || !std::isfinite(mass) || mass<=0 || mass>1e6f) return 0;
+  JPH::BodyLockWrite lock(world->physicsSystem.GetBodyLockInterface(),JPH::BodyID(handle));
+  if(!lock.Succeeded() || !lock.GetBody().IsDynamic()) return 0;
+  auto &body=lock.GetBody();auto properties=body.GetShape()->GetMassProperties();
+  properties.ScaleToMass(mass);
+  auto *motion=body.GetMotionProperties();motion->SetMassProperties(motion->GetAllowedDOFs(),properties);
+  return 1;
+}
+
 ae::i32 AetherPhysics_TryGetBodyPoseV2(AetherPhysicsWorld *world, AetherBodyHandle handle,
                                       AetherVec3 *position, AetherQuat *rotation) {
   if (world == nullptr || handle == AetherBodyHandle_Invalid) return 0;
@@ -1503,10 +1513,17 @@ ae::i32 AetherPhysics_ApplyWaterForces(AetherPhysicsWorld *world,
                                        const AetherWaterBodySample *samples, ae::i32 count,
                                        const ae::physics::BuoyancySettings *settings,
                                        AetherWaterForceStats *outStats) {
+  return AetherPhysics_ApplyWaterForcesV2(world,samples,nullptr,count,settings,outStats);
+}
+
+ae::i32 AetherPhysics_ApplyWaterForcesV2(AetherPhysicsWorld *world,
+    const AetherWaterBodySample *samples,const float *verticalDepths,ae::i32 count,
+    const ae::physics::BuoyancySettings *settings,AetherWaterForceStats *outStats) {
   if (outStats != nullptr) *outStats = {};
   if (world == nullptr || settings == nullptr) return -1;
   if (count < 0 || (count > 0 && samples == nullptr)) return -1;
   if (!ae::physics::validateBuoyancySettings(*settings)) return -1;
+  if(verticalDepths) for(ae::i32 i=0;i<count;++i) if(!std::isfinite(verticalDepths[i])) return -1;
 
   const JPH::BodyLockInterfaceLocking &lockInterface = world->physicsSystem.GetBodyLockInterface();
   const JPH::Vec3 gravity = world->physicsSystem.GetGravity();
@@ -1535,11 +1552,11 @@ ae::i32 AetherPhysics_ApplyWaterForces(AetherPhysicsWorld *world,
     const JPH::RVec3 position = body.GetPosition();
     const JPH::Quat rotation = body.GetRotation();
     const ae::physics::WaterPlane plane{sample.planeNormal, sample.planeOffset};
-    const ae::physics::SubmergedVolume submerged = ae::physics::submergedVolume(
+    const ae::physics::SubmergedVolume submerged = ae::physics::submergedWaterVolume(
         shape,
         {static_cast<float>(position.GetX()), static_cast<float>(position.GetY()),
          static_cast<float>(position.GetZ())},
-        {rotation.GetX(), rotation.GetY(), rotation.GetZ(), rotation.GetW()}, plane);
+        {rotation.GetX(), rotation.GetY(), rotation.GetZ(), rotation.GetW()}, plane,verticalDepths?verticalDepths[index]:-1);
     if (submerged.volume <= 0.0f) continue;
     ++stats.bodiesSubmerged;
     stats.submergedVolume += submerged.volume;

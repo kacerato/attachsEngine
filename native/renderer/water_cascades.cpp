@@ -2,6 +2,26 @@
 #include <cmath>
 
 namespace ae::renderer {
+bool buildWaterCascadeLayout(const WaterCascadeLayout &layout,std::vector<WaterCascadeSettings> &output) {
+  if(!layout.count || layout.count>MaximumWaterCascades || layout.resolution<32 || layout.resolution>256 ||
+     (layout.resolution & (layout.resolution-1)) || !std::isfinite(layout.minimumWavelength) ||
+     !std::isfinite(layout.maximumWavelength) || !std::isfinite(layout.domainScale) ||
+     layout.minimumWavelength<=0 || layout.maximumWavelength<=layout.minimumWavelength ||
+     layout.maximumWavelength>100000 || layout.domainScale<1 || layout.domainScale>8) return false;
+  std::vector<WaterCascadeSettings> result(layout.count);
+  float start=layout.minimumWavelength;
+  for(u32 i=0;i<layout.count;++i) {
+    auto &s=result[i].spectrum;
+    s.resolution=layout.resolution;s.seed=layout.seed+i;
+    s.minimumWavelength=start;
+    s.maximumWavelength=i+1==layout.count?layout.maximumWavelength:
+        layout.minimumWavelength*std::pow(layout.maximumWavelength/layout.minimumWavelength,float(i+1)/layout.count);
+    s.patchLength=s.maximumWavelength*layout.domainScale;
+    start=s.maximumWavelength;
+  }
+  if(validateWaterCascades(result,UINT64_MAX)!=WaterCascadeError::None) return false;
+  output=std::move(result);return true;
+}
 bool validateWaterSpectrumAuthoring(const WaterSpectrumAuthoringSettings &settings) noexcept {
   WaterSpectrumSettings probe{};
   probe.windSpeed = settings.windSpeed;

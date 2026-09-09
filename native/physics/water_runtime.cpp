@@ -133,10 +133,12 @@ bool WaterRuntime::apply(AetherPhysicsWorld *physics, const renderer::WaterWorld
         force.planeNormal = fitted.normal;
         force.planeOffset = fitted.offset;
       }
-      const auto submerged = submergedVolume(slot.binding.shape, bodyPositions_[i], rotations_[i],
-                                             {force.planeNormal, force.planeOffset});
+      const float depth=renderer::hasWaterFieldFlag(query.surface.flags,renderer::WaterFieldFlag::DepthKnown)?
+          (query.surface.instantaneousDepth>=0?query.surface.instantaneousDepth:query.surface.depth):-1;
+      const auto submerged = submergedWaterVolume(slot.binding.shape, bodyPositions_[i], rotations_[i],
+                                             {force.planeNormal, force.planeOffset},depth);
       fraction = std::clamp(submerged.volume / buoyantShapeVolume(slot.binding.shape), 0.0f, 1.0f);
-      forces_[forceCount++] = force;
+      depths_[forceCount]=depth;forces_[forceCount++] = force;
 
       // O corpo empurra a água de volta. A taxa é a velocidade vertical: é ela
       // que mede quanto volume está sendo deslocado por segundo, e é o que
@@ -172,7 +174,7 @@ bool WaterRuntime::apply(AetherPhysicsWorld *physics, const renderer::WaterWorld
       slot.wetVolume = next;
     }
   }
-  if (AetherPhysics_ApplyWaterForces(physics, forces_.data(), static_cast<i32>(forceCount),
+  if (AetherPhysics_ApplyWaterForcesV2(physics, forces_.data(),depths_.data(),static_cast<i32>(forceCount),
                                     &settings.forces, &stats.forces) < 0) return false;
   stats.queried = count;
   stats_ = stats;

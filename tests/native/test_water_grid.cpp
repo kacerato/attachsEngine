@@ -1,5 +1,6 @@
 #include "harness.h"
 #include "renderer/water_grid.h"
+#include "renderer/water_detail_texture.h"
 
 #include <algorithm>
 #include <cmath>
@@ -7,6 +8,20 @@
 #include <vector>
 
 using namespace ae::renderer;
+
+AE_TEST(Water_detail_texture_has_complete_filtered_mips_and_stable_seed) {
+  std::vector<ae::u8> pixels,repeat;
+  AE_EXPECT_TRUE(buildWaterDetailTexture(64,42,pixels),"procedural detail");
+  AE_EXPECT_TRUE(buildWaterDetailTexture(64,42,repeat),"repeat");
+  AE_EXPECT_TRUE(pixels==repeat,"stable seed");
+  AE_EXPECT_EQ(pixels.size(),21844u,"seven complete mip levels");
+  AE_EXPECT_TRUE(std::abs(int(pixels[pixels.size()-4])-128)<=3,"distant average X slope is neutral");
+  AE_EXPECT_TRUE(std::abs(int(pixels[pixels.size()-3])-128)<=3,"distant average Z slope is neutral");
+  AE_EXPECT_TRUE(buildWaterDetailTexture(64,43,repeat),"alternate phase");
+  AE_EXPECT_TRUE(pixels!=repeat,"seed changes detail");
+  AE_EXPECT_TRUE(!buildWaterDetailTexture(63,1,pixels),"non power-of-two rejected");
+  AE_EXPECT_EQ(pixels.size(),21844u,"invalid request preserves previous texture");
+}
 
 AE_TEST(WaterGrid_rejects_shapes_the_cubic_transition_cannot_mirror) {
   AE_EXPECT_TRUE(validateWaterGrid({}), "default grid is the baked ocean");

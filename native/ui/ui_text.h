@@ -23,8 +23,28 @@
 
 namespace ae::ui {
 
+// Decodificação compartilhada por medição, corte e desenho. O cursor sempre
+// avança; sequências inválidas produzem substituição sem ler além do texto.
+inline u32 nextUiCodepoint(std::string_view text, usize &cursor) noexcept {
+  const auto first=static_cast<unsigned char>(text[cursor++]);
+  if(first<0x80) return first;
+  const unsigned count=first>=0xc2&&first<=0xdf?1:first>=0xe0&&first<=0xef?2:first>=0xf0&&first<=0xf4?3:0;
+  if(!count || text.size()-cursor<count) return 0xfffd;
+  u32 value=first & (0x7f>>count);
+  for(unsigned i=0;i<count;++i) {
+    const auto byte=static_cast<unsigned char>(text[cursor+i]);
+    if((byte&0xc0)!=0x80) return 0xfffd;
+    value=(value<<6)|(byte&0x3f);
+  }
+  if(value<(count==1?0x80u:count==2?0x800u:0x10000u) || value>0x10ffff || (value>=0xd800&&value<=0xdfff)) return 0xfffd;
+  cursor+=count;return value;
+}
+inline u32 uiUppercase(u32 value) noexcept {
+  return (value>='a'&&value<='z') || (value>=0xe0&&value<=0xfe&&value!=0xf7) ? value-32:value;
+}
+
 inline constexpr u32 kUiFirstGlyph = 32;  // espaço
-inline constexpr u32 kUiLastGlyph = 126;  // til
+inline constexpr u32 kUiLastGlyph = 255;  // til
 inline constexpr u32 kUiGlyphCount = kUiLastGlyph - kUiFirstGlyph + 1;
 
 struct UiFontMetrics final {

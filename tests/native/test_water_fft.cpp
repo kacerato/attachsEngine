@@ -7,6 +7,30 @@
 
 using namespace ae::renderer;
 
+AE_TEST(Water_authored_layout_covers_requested_range_and_generates_deterministic_bands) {
+  WaterCascadeLayout layout;layout.resolution=32;
+  std::vector<WaterCascadeSettings> bands;
+  for(ae::u32 count=1;count<=MaximumWaterCascades;++count) {
+    layout.count=count;
+    AE_EXPECT_TRUE(buildWaterCascadeLayout(layout,bands),"generate layout");
+    AE_EXPECT_EQ(bands.size(),count,"cascade count changes");
+    AE_EXPECT_EQ(bands.front().spectrum.minimumWavelength,2.0f,"short limit");
+    AE_EXPECT_EQ(bands.back().spectrum.maximumWavelength,2048.0f,"long limit");
+    for(ae::u32 i=1;i<count;++i)
+      AE_EXPECT_EQ(bands[i-1].spectrum.maximumWavelength,bands[i].spectrum.minimumWavelength,"no overlap or gaps");
+    std::vector<WaterCascadeSpectrum> first,second;
+    AE_EXPECT_TRUE(generateWaterCascades(bands,8*1024*1024,first),"generate spectrum");
+    AE_EXPECT_TRUE(generateWaterCascades(bands,8*1024*1024,second),"repeat generation");
+    AE_EXPECT_TRUE(first.front().amplitudes==second.front().amplitudes,"seed is deterministic");
+  }
+  layout.count=5;
+  AE_EXPECT_TRUE(!buildWaterCascadeLayout(layout,bands),"bounded resource count");
+  AE_EXPECT_EQ(bands.size(),4u,"invalid edit preserves previous layout");
+  layout.count=4;layout.resolution=256;
+  AE_EXPECT_TRUE(buildWaterCascadeLayout(layout,bands),"high resolution layout");
+  AE_EXPECT_TRUE(validateWaterCascades(bands,8*1024*1024)==WaterCascadeError::MemoryBudget,"budget rejects expensive layout");
+}
+
 AE_TEST(Water_spectral_live_controls_validate_and_clock_preserves_phase) {
   WaterSpectralControls controls;
   AE_EXPECT_TRUE(validateWaterSpectralControls(controls),"default controls");

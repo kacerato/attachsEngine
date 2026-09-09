@@ -3,6 +3,7 @@
 #include "platform/free_camera_controller.h"
 #include "renderer/map_package.h"
 #include "renderer/environment_map.h"
+#include "renderer/environment_lighting.h"
 #include "renderer/static_collision_mesh.h"
 #include "renderer/water_grid.h"
 #include "rhi/device.h"
@@ -15,19 +16,7 @@
 
 namespace ae::platform::android {
 
-struct EnvironmentLighting final {
-  float sunDirectionIntensity[4]{};
-  float sunColorAngularRadius[4]{};
-  float ambientColorStrength[4]{};
-  float parameters[4]{}; // exposure, rotation, maximum environment LOD, reserved
-  // AEEN v2 serializa estes parâmetros no Environment Resource global. O
-  // decoder mantém migração explícita para projetos AEEN v1.
-  float skyZenithCloudCoverage[4]{}; // rgb linear, cobertura 0..1
-  float skyHorizonCloudDensity[4]{}; // rgb linear, densidade 0..1
-  float groundColorSaturation[4]{};  // rgb linear, saturação global
-  float cloudLightWindSpeed[4]{};    // rgb linear, velocidade angular
-};
-static_assert(sizeof(EnvironmentLighting) == 128);
+using EnvironmentLighting = renderer::EnvironmentLighting;
 
 // Runtime representation of the cooked Dirt Road test scene. Source glTF,
 // image decoders and import metadata remain outside the APK render path.
@@ -42,7 +31,7 @@ public:
                   float waterDisplacementAllowance,
                   const std::atomic<bool> *cancel = nullptr,
                   const char *assetRoot = "dirt_road",
-                  u32 waterGridSegments = 0);
+                  u32 waterGridSegments = 0, bool waterAuthoring = false);
   void shutdown();
 
   VkBuffer vertexBuffer() const { return vertices_.handle(); }
@@ -82,6 +71,8 @@ public:
     draws_[index] = draw;
     return true;
   }
+  // The renderer validates geometry references before publishing an authored list.
+  void setAuthoredDraws(std::vector<renderer::MapDrawRecord> draws) { draws_=std::move(draws); }
   const renderer::MapPackageHeader &header() const { return header_; }
   u64 packageFingerprint() const { return packageFingerprint_; }
   platform::FreeCameraState defaultCamera() const;

@@ -8,7 +8,7 @@ namespace {
 // Maiúscula ASCII. A UI usa `uppercase` só em rótulos técnicos, que são ASCII
 // por construção; um byte fora dessa faixa passa intacto em vez de virar lixo.
 u32 toUpperAscii(u32 codepoint) noexcept {
-  return (codepoint >= 'a' && codepoint <= 'z') ? codepoint - 32 : codepoint;
+  return uiUppercase(codepoint);
 }
 
 } // namespace
@@ -26,11 +26,12 @@ float measureTextWidth(std::string_view text, const UiFontMetrics &metrics,
                        const UiTypeStyle &style) noexcept {
   if (!std::isfinite(style.size) || style.size <= 0.0f) return 0.0f;
   float width = 0.0f;
-  for (const char byte : text) {
-    const u32 codepoint = static_cast<u32>(static_cast<unsigned char>(byte));
+  usize count=0;
+  for (usize cursor=0;cursor<text.size();++count) {
+    const u32 codepoint = nextUiCodepoint(text,cursor);
     width += metrics.advanceOf(style.uppercase ? toUpperAscii(codepoint) : codepoint);
   }
-  const float trackingPixels = style.tracking * style.size * static_cast<float>(text.size());
+  const float trackingPixels = style.tracking * style.size * static_cast<float>(count);
   return width * style.size + trackingPixels;
 }
 
@@ -55,8 +56,9 @@ usize truncateToWidth(std::string_view text, const UiFontMetrics &metrics,
   if (!std::isfinite(style.size) || style.size <= 0.0f) return 0;
   const float tracking = style.tracking * style.size;
   float width = 0.0f;
-  for (usize index = 0; index < text.size(); ++index) {
-    const u32 codepoint = static_cast<u32>(static_cast<unsigned char>(text[index]));
+  for (usize cursor=0;cursor<text.size();) {
+    const usize index=cursor;
+    const u32 codepoint=nextUiCodepoint(text,cursor);
     const float advance =
         metrics.advanceOf(style.uppercase ? toUpperAscii(codepoint) : codepoint) * style.size +
         tracking;

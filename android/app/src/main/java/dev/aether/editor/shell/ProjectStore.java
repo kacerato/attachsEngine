@@ -1,7 +1,6 @@
 package dev.aether.editor.shell;
 
 import android.content.Context;
-import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -14,6 +13,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collections;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.nio.file.StandardCopyOption;
 
 /**
  * Índice de projetos em disco.
@@ -23,62 +26,73 @@ import java.util.List;
  * truncado apagaria a lista de projetos do usuário.
  */
 public final class ProjectStore {
-    private static final String TAG = "AstraShell";
+    private static final Logger LOG = Logger.getLogger("AstraShell");
     private static final String INDEX = "projects.json";
 
-    private final Context context;
+    private final File privateRoot;
+    private final File projectRoot;
+    private boolean writable = true;
     private final List<Project> projects = new ArrayList<>();
 
     public ProjectStore(Context context) {
-        this.context = context.getApplicationContext();
+        this(context.getFilesDir(), new File(context.getExternalFilesDir(null) != null
+                ? context.getExternalFilesDir(null) : context.getFilesDir(), "Projetos"));
+    }
+
+    ProjectStore(File privateRoot, File projectRoot) {
+        this.privateRoot = privateRoot;
+        this.projectRoot = projectRoot;
         load();
     }
 
-    public List<Project> projects() { return projects; }
+    public List<Project> projects() { return Collections.unmodifiableList(projects); }
 
     /** Raiz dos projetos do usuário, visível pelo gerenciador de arquivos. */
     public File root() {
-        File external = context.getExternalFilesDir(null);
-        File root = new File(external != null ? external : context.getFilesDir(), "Projects");
-        if (!root.isDirectory() && !root.mkdirs()) Log.w(TAG, "sem raiz de projetos: " + root);
-        return root;
+        if (!projectRoot.isDirectory() && !projectRoot.mkdirs()) LOG.warning("sem raiz de projetos: " + projectRoot);
+        return projectRoot;
     }
 
-    private File indexFile() { return new File(context.getFilesDir(), INDEX); }
+    private File indexFile() { return new File(privateRoot, INDEX); }
 
     private void load() {
         projects.clear();
         File file = indexFile();
-        if (!file.isFile()) { seed(); return; }
-        try {
+        if (file.isFile()) try {
             String raw = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
             JSONArray array = new JSONArray(raw);
-            for (int i = 0; i < array.length(); ++i) projects.add(Project.fromJson(array.getJSONObject(i)));
+            for (int i = 0; i < array.length(); ++i) {
+                Project project = Project.fromJson(array.getJSONObject(i));
+                // Old seeded cards never had project files. Keep real user data,
+                // including legacy folders, and omit only entries with no folder.
+                if (!project.path.isEmpty() && new File(project.path).isDirectory()) projects.add(project);
+            }
         } catch (Exception error) {
-            Log.w(TAG, "índice ilegível, recomeçando", error);
-            seed();
+            LOG.log(Level.WARNING, "índice ilegível; recuperando descritores", error);
+            projects.clear();
+            try {
+                File backup = File.createTempFile("projects-corrupt-", ".json", privateRoot);
+                Files.copy(file.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException backupError) {
+                writable = false;
+                LOG.log(Level.WARNING, "backup falhou; índice protegido contra sobrescrita", backupError);
+            }
         }
-    }
-
-    /**
-     * Primeira execução: a prateleira já vem com os quatro projetos de exemplo.
-     *
-     * Dois deles apontam para cenas que a engine ainda não monta. Eles ficam
-     * assim mesmo, com selo EM BREVE no card, porque a alternativa — sumir com
-     * eles — esconderia o que falta construir e faria a tela mentir sobre o
-     * estado da engine.
-     */
-    private void seed() {
-        projects.add(newProject("Forest Test", SceneTemplate.byId("forest"), 1, 214));
-        projects.add(newProject("Water Lab", SceneTemplate.byId("ocean"), 2, 96));
-        projects.add(newProject("Backroom Demo", SceneTemplate.byId("backroom"), 1, 357));
-        projects.add(newProject("Vehicle Sandbox", SceneTemplate.byId("vehicle"), 1, 128));
-        save();
-    }
-
-    private Project newProject(String name, SceneTemplate template, int scenes, int assets) {
-        File directory = new File(root(), name);
-        return new Project(name, directory.getAbsolutePath(), template.id, template.thumbnail, scenes, assets);
+        File[] directories = projectRoot.listFiles(File::isDirectory);
+        if (directories == null) return;
+        for (File directory : directories) {
+            File descriptor = new File(directory, "project.json");
+            if (!descriptor.isFile()) continue;
+            try {
+                JSONObject json = new JSONObject(new String(Files.readAllBytes(descriptor.toPath()), StandardCharsets.UTF_8));
+                if (!"ASTRA-PROJECT-1".equals(json.optString("format"))) continue;
+                Project stored = Project.fromJson(json.getJSONObject("project"));
+                boolean known = false;
+                for (Project project : projects) if (new File(project.path).getCanonicalFile().equals(directory.getCanonicalFile())) known = true;
+                if (!known) projects.add(new Project(stored.name, directory.getAbsolutePath(), stored.templateId,
+                        stored.thumbnail, stored.scenes, stored.assets));
+            } catch (Exception error) { LOG.log(Level.WARNING, "descritor ilegível: " + descriptor, error); }
+        }
     }
 
     public boolean exists(String name) {
@@ -88,26 +102,32 @@ public final class ProjectStore {
 
     /** Cria a pasta e o descritor do projeto; devolve null se o disco recusar. */
     public Project create(String name, SceneTemplate template) {
+        if (!writable || name == null || template == null || !template.ready) return null;
+        name = name.trim();
+        if (name.isEmpty() || name.equals(".") || name.equals("..") || name.matches(".*[\\\\/:\\p{Cntrl}].*") || exists(name)) return null;
         File directory = new File(root(), name);
+        if (directory.exists()) return null;
         File scenes = new File(directory, "scenes");
         if (!scenes.isDirectory() && !scenes.mkdirs()) {
-            Log.w(TAG, "não foi possível criar " + scenes);
+            LOG.warning("não foi possível criar " + scenes);
             return null;
         }
         Project project = new Project(name, directory.getAbsolutePath(), template.id,
-                template.thumbnail, 1, template.id.equals(SceneTemplate.EMPTY) ? 0 : 24);
+                template.thumbnail, 1, 0);
         try {
             JSONObject descriptor = new JSONObject();
             descriptor.put("format", "ASTRA-PROJECT-1");
             descriptor.put("project", project.toJson());
             descriptor.put("mainScene", "scenes/main.ascene");
-            writeAtomic(new File(directory, "project.json"), descriptor.toString(2));
+            descriptor.put("editorScene", "scenes/editor.aescene");
             writeAtomic(new File(scenes, "main.ascene"), sceneStub(template));
+            writeAtomic(new File(directory, "project.json"), descriptor.toString(2));
         } catch (Exception error) {
-            Log.w(TAG, "projeto criado sem descritor", error);
+            LOG.log(Level.WARNING, "falha ao criar projeto", error);
+            return null;
         }
         projects.add(0, project);
-        save();
+        if (!save()) { projects.remove(project); return null; }
         return project;
     }
 
@@ -116,13 +136,16 @@ public final class ProjectStore {
                 + "  \"nodes\": []\n}\n";
     }
 
-    public void save() {
+    public boolean save() {
+        if (!writable) return false;
         try {
             JSONArray array = new JSONArray();
             for (Project project : projects) array.put(project.toJson());
             writeAtomic(indexFile(), array.toString(2));
+            return true;
         } catch (Exception error) {
-            Log.w(TAG, "índice não gravado", error);
+            LOG.log(Level.WARNING, "índice não gravado", error);
+            return false;
         }
     }
 

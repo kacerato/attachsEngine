@@ -610,6 +610,139 @@
       "category": "view",
       "label": "A16",
       "name": "grid"
+    },
+    "water/author-surface": {
+      "source": "vector/water/author-surface.svg"
+    },
+    "water/author-route": {
+      "source": "vector/water/author-route.svg"
+    },
+    "water/author-physics": {
+      "source": "vector/water/author-physics.svg"
+    },
+    "water/author-layers": {
+      "source": "vector/water/author-layers.svg"
+    },
+    "water/author-points": {
+      "source": "vector/water/author-points.svg"
+    },
+    "water/author-flow": {
+      "source": "vector/water/author-flow.svg"
+    },
+    "editor/author-select": {
+      "source": "hd-v1/select.svg",
+      "raster": "../hd-v1/select.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-move": {
+      "source": "hd-v1/move.svg",
+      "raster": "../hd-v1/move.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-rotate": {
+      "source": "hd-v1/rotate.svg",
+      "raster": "../hd-v1/rotate.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-scale": {
+      "source": "hd-v1/scale.svg",
+      "raster": "../hd-v1/scale.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-orbit": {
+      "source": "hd-v1/orbit.svg",
+      "raster": "../hd-v1/orbit.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-pan": {
+      "source": "hd-v1/pan.svg",
+      "raster": "../hd-v1/pan.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-zoom": {
+      "source": "hd-v1/zoom.svg",
+      "raster": "../hd-v1/zoom.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-play": {
+      "source": "hd-v1/play.svg",
+      "raster": "../hd-v1/play.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-stop": {
+      "source": "hd-v1/stop.svg",
+      "raster": "../hd-v1/stop.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-object": {
+      "source": "hd-v1/object.svg",
+      "raster": "../hd-v1/object.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-folder": {
+      "source": "hd-v1/folder.svg",
+      "raster": "../hd-v1/folder.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-sun": {
+      "source": "hd-v1/sun.svg",
+      "raster": "../hd-v1/sun.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-settings": {
+      "source": "hd-v1/settings.svg",
+      "raster": "../hd-v1/settings.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-add": {
+      "source": "hd-v1/add.svg",
+      "raster": "../hd-v1/add.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-more": {
+      "source": "hd-v1/more.svg",
+      "raster": "../hd-v1/more.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-chevron": {
+      "source": "hd-v1/chevron.svg",
+      "raster": "../hd-v1/chevron.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-frame": {
+      "source": "hd-v1/frame.svg",
+      "raster": "../hd-v1/frame.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-grid": {
+      "source": "hd-v1/grid.svg",
+      "raster": "../hd-v1/grid.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-camera": {
+      "source": "hd-v1/camera.svg",
+      "raster": "../hd-v1/camera.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-undo": {
+      "source": "hd-v1/undo.svg",
+      "raster": "../hd-v1/undo.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-redo": {
+      "source": "hd-v1/redo.svg",
+      "raster": "../hd-v1/redo.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-eye": {
+      "source": "hd-v1/eye.svg",
+      "raster": "../hd-v1/eye.png",
+      "dark_ui_ready": true
+    },
+    "editor/author-eye-off": {
+      "source": "hd-v1/eye-off.svg",
+      "raster": "../hd-v1/eye-off.png",
+      "dark_ui_ready": true
     }
   },
   "unmapped": []

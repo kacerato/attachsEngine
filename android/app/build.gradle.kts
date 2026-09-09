@@ -5,6 +5,14 @@ plugins {
     id("com.android.application")
 }
 
+val prepareGodotUi by tasks.registering(Exec::class) {
+    inputs.files("../../tools/prepare-godot-ui.py", "../../tools/prepare-godot-editor.py", "../../integrations/godot/upstream.json")
+    outputs.file("../../build/godot-ui/godot-editor-ui.aar")
+    workingDir = rootProject.projectDir.parentFile
+    commandLine("python", "tools/prepare-godot-ui.py")
+}
+
+
 // The packaged engine must come from this checkout, never a stale checked-in DLL.
 // Keep the vendored BCL unchanged; publish only our framework-dependent component.
 val managedOutput = layout.buildDirectory.dir("managed/rendering")
@@ -38,6 +46,7 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
     // Atlas da interface do editor. Os dois sao lidos uma vez na inicializacao
     // e enviados a GPU; noCompress abaixo permite le-los sem descompactar.
     from("../../assets/astra-visual/ui") { include("*.aeuf", "*.aeui"); into("ui") }
+    from("../../assets/astra-visual/godot") { include("*.tres"); into("godot-ui") }
     into(generatedAssets)
     doLast {
         val root = generatedAssets.get().asFile
@@ -119,6 +128,10 @@ tasks.named("preBuild") { dependsOn(prepareEngineAssets) }
 android {
     namespace = "dev.aether.editor"
     compileSdk = 35
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
     ndkVersion = "27.1.12297006"
     androidResources { noCompress += setOf("aetex", "aemap", "aeenv", "aeuf", "aeui") }
     sourceSets.getByName("main").assets.setSrcDirs(listOf(generatedAssets))
@@ -131,8 +144,9 @@ android {
         applicationId = "dev.aether.editor"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // Versão 2 foi o experimento Godot. Atualização preserva dados sem downgrade.
+        versionCode = 4
+        versionName = "0.2.0-editor-ui"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -219,5 +233,11 @@ android {
 }
 
 dependencies {
+    implementation(files("../../build/godot-ui/godot-editor-ui.aar").builtBy(prepareGodotUi))
+    implementation("androidx.fragment:fragment:1.8.6")
+    implementation("androidx.documentfile:documentfile:1.1.0")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.21")
     implementation("androidx.games:games-frame-pacing:2.1.3")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

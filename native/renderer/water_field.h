@@ -3,6 +3,7 @@
 #include "renderer/water_ripples.h"
 #include "renderer/water_spectral_mirror.h"
 #include "renderer/water_surface.h"
+#include "renderer/water_route.h"
 
 #include <array>
 #include <span>
@@ -59,7 +60,8 @@ struct WaterFieldSample final {
   float coverage = 1.0f;       // 0 removes water, 1 keeps it
   float foam = 0.0f;
   float jacobian = 1.0f;       // only meaningful with JacobianKnown
-  float depth = 0.0f;          // still surface down to the bottom, metres
+  float depth = 0.0f;          // still surface down to the fixed bottom, metres
+  float instantaneousDepth = -1.0f; // wave surface to bottom; negative when unavailable
   u32 flags = 0;
 };
 
@@ -93,8 +95,12 @@ bool sampleWaterBottom(const WaterBathymetry &data, WaterVec2 position, float &h
 // Copied wholesale on configure. Holding pointers would make a query depend on
 // the lifetime of scene objects, and the field is read from jobs.
 struct WaterFieldSetup final {
+  WaterRoute route{};
+  float routeTransform[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+  float waveScale=1,rippleScale=1,foamScale=1;
   WaterProfile profile{};
   float baseHeight = 0.0f;
+  WaterVec2 planeOrigin{},planeSlope{};
   float bottomHeight = 0.0f;
   bool hasBathymetry = false;
   WaterBathymetry bathymetry{};

@@ -1,4 +1,6 @@
 #include "editor/editor_view.h"
+#include "editor/editor_camera.h"
+#include "editor/editor_grid.h"
 #include "harness.h"
 
 #include <cmath>
@@ -228,4 +230,56 @@ AE_TEST(picking_with_an_invalid_ray_never_hits) {
   std::vector<EditorPickCandidate> candidates;
   candidates.push_back({1, {0.0f, 0.0f, 10.0f}, 2.0f, true});
   AE_EXPECT_TRUE(!pickNearest(candidates, EditorRay{}).hit, "");
+}
+
+AE_TEST(editor_grid_tracks_remote_camera_and_scales_without_growing_cost) {
+  EditorCamera camera;
+  const ui::UiRect rect{0,0,800,400};
+  auto close = buildEditorGrid(buildEditorViewport(camera,rect,{}));
+  camera.distance = 100000;
+  camera.target[0] = 700000;
+  camera.target[2] = -400000;
+  auto far = buildEditorGrid(buildEditorViewport(camera,rect,{}));
+  AE_EXPECT_TRUE(close.count>0 && close.count==far.count,"bounded line budget across scales");
+  AE_EXPECT_TRUE(far.spacing>close.spacing*100,"subdivisions adapt to camera scale");
+  bool coversTarget = false;
+  for(u32 i=0;i<far.count;++i) {
+    const auto &line=far.lines[i];
+    AE_EXPECT_TRUE(std::isfinite(line.from[0]) && std::isfinite(line.to[2]),"finite remote grid");
+    if(line.from[0]<=camera.target[0] && line.to[0]>=camera.target[0]) coversTarget=true;
+    if(line.axis==1) AE_EXPECT_EQ(line.from[2],0.0f,"X axis remains world aligned");
+    if(line.axis==2) AE_EXPECT_EQ(line.from[0],0.0f,"Z axis remains world aligned");
+  }
+  AE_EXPECT_TRUE(coversTarget,"coverage follows observed area");
+}
+
+AE_TEST(editor_grid_handles_ground_level_and_rejects_invalid_settings) {
+  auto view=viewportLookingForward();
+  auto grid=buildEditorGrid(view);
+  AE_EXPECT_TRUE(grid.count>0 && grid.spacing>0,"horizontal camera has stable finite spacing");
+  EditorGridSettings settings; settings.minimumSpacing=0;
+  AE_EXPECT_EQ(buildEditorGrid(view,settings).count,0u,"invalid spacing refused");
+  AE_EXPECT_EQ(buildEditorGrid(EditorViewport{}).count,0u,"invalid viewport refused");
+}
+
+AE_TEST(editor_camera_clip_range_contains_centimetre_and_kilometre_selections) {
+  EditorCamera camera;camera.distance=.01f;
+  auto view=buildEditorViewport(camera,{0,0,800,400},{});
+  AE_EXPECT_TRUE(projectWorldToScreen(view,camera.target).valid,"centimetre pivot ahead of near plane");
+  AE_EXPECT_TRUE(view.frustum.nearPlane<camera.distance*.1f,"near adapts to fine editing");
+  camera.distance=100000;
+  view=buildEditorViewport(camera,{0,0,800,400},{});
+  AE_EXPECT_TRUE(view.frustum.farPlane>camera.distance*2,"large selections within far plane");
+}
+
+AE_TEST(view_segment_clips_extreme_horizon_coordinates_before_projection) {
+  auto view=viewportLookingForward();
+  const float a[]{-1e8f,-1,-1e5f},b[]{1e8f,-1,1e5f};
+  ae::ui::UiPoint first,last;
+  if(projectSegmentToScreen(view,a,b,first,last)) {
+    for(const auto point:{first,last}) {
+      AE_EXPECT_TRUE(std::isfinite(point.x)&&std::isfinite(point.y),"coordenadas finitas");
+      AE_EXPECT_TRUE(point.x>=-.01f && point.x<=1600.01f && point.y>=-.01f && point.y<=900.01f,"recorte dentro da tela");
+    }
+  }
 }

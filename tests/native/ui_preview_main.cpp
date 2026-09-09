@@ -11,7 +11,9 @@
 // Uso:
 //   aether_ui_preview [saida.ppm] [largura] [altura]
 #include "editor/editor_history.h"
+#include "editor/editor_map_scene.h"
 #include "editor/editor_screen.h"
+#include "renderer/water_authoring_geometry.h"
 #include "ui_software_raster.h"
 
 #include <cstdio>
@@ -37,52 +39,6 @@ bool readAsset(const char *relative, std::vector<u8> &out) {
   const bool ok = size > 0 && std::fread(out.data(), 1, out.size(), file) == out.size();
   std::fclose(file);
   return ok;
-}
-
-// A cena do mockup, montada pelos mesmos comandos que a interface usaria. Ela
-// não é um dado de teste solto: é o Water Lab que o editor precisa saber criar.
-editor::EditorEntityId buildWaterLab(editor::EditorDocument &document,
-                                     editor::EditorHistory &history) {
-  using namespace ae::editor;
-  const EditorEntityId environment =
-      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Environment");
-  history.createEntity(document, environment, EditorEntityKind::Light, "Sky");
-  history.createEntity(document, environment, EditorEntityKind::Mesh, "Mountains");
-  history.createEntity(document, environment, EditorEntityKind::Water, "Waterfall");
-
-  const EditorEntityId architecture =
-      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Architecture");
-  history.createEntity(document, architecture, EditorEntityKind::Mesh, "Main Building");
-  history.createEntity(document, architecture, EditorEntityKind::Mesh, "Glass Wall");
-  const EditorEntityId block =
-      history.createEntity(document, architecture, EditorEntityKind::Mesh, "Concrete Block");
-
-  const EditorEntityId water =
-      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Water");
-  history.createEntity(document, water, EditorEntityKind::Water, "Water Plane");
-  history.createEntity(document, water, EditorEntityKind::Effect, "Water FX");
-
-  const EditorEntityId props =
-      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Props");
-  history.createEntity(document, props, EditorEntityKind::Mesh, "Rocks");
-  history.createEntity(document, props, EditorEntityKind::Mesh, "Plants");
-
-  const EditorEntityId lighting =
-      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Lighting");
-  history.createEntity(document, lighting, EditorEntityKind::Light, "Directional Light");
-  history.createEntity(document, lighting, EditorEntityKind::Light, "Area Light");
-
-  const EditorEntityId cameras =
-      history.createEntity(document, document.root(), EditorEntityKind::Folder, "Cameras");
-  history.createEntity(document, cameras, EditorEntityKind::Camera, "Main Camera");
-
-  EditorTransform transform{};
-  transform.position[0] = 1.25f;
-  transform.position[1] = 0.5f;
-  transform.position[2] = -2.0f;
-  transform.rotationDegrees[1] = 90.0f;
-  history.setTransform(document, block, transform);
-  return block;
 }
 
 bool writePpm(const char *path, const test::UiSoftwareTarget &target) {
@@ -130,13 +86,51 @@ int main(int argc, char **argv) {
 
   editor::EditorDocument document;
   editor::EditorHistory history;
-  const editor::EditorEntityId selection = buildWaterLab(document, history);
+  editor::EditorMapScene map;
+  editor::EditorEntityId selection = editor::kInvalidEntity;
+  // No synthetic scene. An optional repository-relative AEMAP uses the same
+  // import contract as Android, so every hierarchy row has package geometry.
+  if(argc>5) {
+    std::vector<u8> bytes;renderer::MapPackageView package;
+    if(!readAsset(argv[5],bytes) || !renderer::decodeMapPackage(bytes,package) ||
+       !map.import(document,package.draws,package.materials)) {
+      std::fprintf(stderr,"pacote de cena recusado\n");return 1;
+    }
+    const auto children=document.childrenOf(document.root());
+    if(!children.empty()) selection=children.front();
+  }
 
   editor::EditorScreenState state{};
+  if(argc>4 && std::string(argv[4]).starts_with("river")) {
+    std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
+    if(!renderer::appendWaterAuthoringGeometry(renderer::MapVertexStride,32,vertices,indices,draws,materials) || !map.import(document,draws,materials,false)) return 1;
+    selection=document.createEntity(document.root(),editor::EditorEntityKind::Water,"River");
+    auto value=*document.find(selection);value.assetId=3;value.route.count=3;
+    value.route.points[0].position[2]=-12;value.route.points[1].position[0]=8;value.route.points[2].position[2]=12;
+    if(!document.applyEntityValues(selection,value)) return 1;
+    state.waterTab=std::string(argv[4])=="river-physics"?2:std::string(argv[4])=="river-effects"?3:1;
+  }
+  if(argc>4 && std::string(argv[4])=="create") state.creationMenu=true;
   state.surface = {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)};
   state.document = &document;
   state.selection = selection;
-  state.projectName = "Water Lab";
+  state.projectName = argc>5 ? "Package preview" : "Empty Scene";
+  if(argc>4 && std::string(argv[4])=="rotate") state.tool=editor::EditorGizmoMode::Rotate;
+  if(argc>4 && std::string(argv[4])=="rename") {
+    state.renameEntity=state.selection;
+    std::snprintf(state.renameText,sizeof(state.renameText),"Objeto editavel");
+  }
+  if(argc>4 && std::string(argv[4])=="numeric") {
+    state.numericField=editor::transformFieldWidget(0,0);
+    std::snprintf(state.numericText,sizeof(state.numericText),"12.5");
+  }
+  if(argc>4 && std::string(argv[4])=="material") {
+
+    state.tab=editor::EditorInspectorTab::Material;
+  }
+  if(argc>4 && std::string(argv[4])=="lighting") {
+    state.selection=document.root();state.workspace=editor::EditorWorkspace::Lighting;
+  }
   state.canUndo = history.canUndo();
   state.canRedo = history.canRedo();
 

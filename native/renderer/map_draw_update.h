@@ -1,8 +1,11 @@
 #pragma once
 
 #include "renderer/gpu_mesh_instance.h"
+#include "renderer/material_override.h"
 #include "renderer/map_package.h"
 #include <cmath>
+#include <memory>
+#include "renderer/water_route.h"
 
 namespace ae::renderer {
 
@@ -10,6 +13,18 @@ struct MapDrawUpdate final {
   u32 drawIndex = 0;
   MapDrawRecord draw{};
   GpuMeshInstance instance{};
+};
+
+struct MapDrawState {
+  u64 objectId=0;
+  std::shared_ptr<const WaterRoute> route;
+  float waterLayers[4]{1,1,1,1};
+  float waterFlowDepth[4]{0,0,3,0};
+  u32 sourceDrawIndex = 0;
+  MapDrawUpdate pose{};
+  bool visible = true;
+  bool castShadow = true;
+  MaterialOverride material{};
 };
 
 // Caller supplies mesh-local bounds, never the previous frame's world bounds.

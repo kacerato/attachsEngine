@@ -6,9 +6,8 @@ import java.util.List;
 /**
  * Catálogo de cenas iniciais.
  *
- * O que a engine ainda não sabe montar continua listado e marcado EM BREVE em
- * vez de sumir da tela: esconder o roteiro faria o shell parecer completo e
- * transformaria cada ausência em surpresa na hora de criar o projeto.
+ * IDs antigos permanecem reconhecidos para compatibilidade. A criação mostra
+ * somente entradas disponíveis; planos futuros pertencem à documentação.
  */
 public final class SceneTemplate {
     public static final String EMPTY = "empty";
@@ -36,21 +35,21 @@ public final class SceneTemplate {
 
     public static List<SceneTemplate> all() {
         List<SceneTemplate> list = new ArrayList<>();
-        list.add(new SceneTemplate(EMPTY, "Empty Scene",
-                "Câmera, luz direcional e nada mais.", true, null, null, false));
-        list.add(new SceneTemplate("ocean", "Ocean Lab",
-                "Cascatas FFT, espuma e corpos Jolt.", true, "water-lab.png", "aether.ocean_preview", true));
-        list.add(new SceneTemplate("forest", "Forest Road",
+        list.add(new SceneTemplate(EMPTY, "Cena vazia",
+                "Cena sem objetos; câmera de edição independente.", true, null, null, false));
+        list.add(new SceneTemplate("ocean", "Laboratório oceânico",
+                "Oceano espectral, espuma e geometria importada.", true, "water-lab.png", "aether.ocean_preview", true));
+        list.add(new SceneTemplate("forest", "Estrada na floresta",
                 "Estrada de terra, LOD e sombras.", true, "forest-test.png", "aether.map_preview", false));
-        list.add(new SceneTemplate("boat", "Boat On Water",
-                "Casco flutuante sobre o oceano.", true, null, "aether.ocean_preview", true));
-        list.add(new SceneTemplate("material", "Material Preview",
+        list.add(new SceneTemplate("boat", "Barco na água",
+                "Modelo de casco e superfície oceânica.", true, null, "aether.ocean_preview", true));
+        list.add(new SceneTemplate("material", "Prévia de material",
                 "Esfera PBR e mapa de ambiente.", true, null, "aether.material_preview", false));
-        list.add(new SceneTemplate("backroom", "Backroom Demo",
+        list.add(new SceneTemplate("backroom", "Demonstração de interior",
                 "Interior com GI e reflexos.", false, "backroom-demo.png", null, false));
-        list.add(new SceneTemplate("vehicle", "Vehicle Sandbox",
+        list.add(new SceneTemplate("vehicle", "Área de veículos",
                 "Suspensão e pneus sobre pista.", false, "vehicle-sandbox.png", null, false));
-        list.add(new SceneTemplate("river", "River Valley",
+        list.add(new SceneTemplate("river", "Vale com rio",
                 "Rio com fluxo e correnteza.", false, null, null, false));
         return list;
     }

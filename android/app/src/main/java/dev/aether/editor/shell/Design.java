@@ -25,20 +25,20 @@ public final class Design {
     public static final float STAGE_H = 941f;
 
     public static final int VOID       = 0xFF000000;
-    public static final int CANVAS     = 0xFF050505;
-    public static final int SILHOUETTE = 0xFF101010;
-    public static final int SURFACE    = 0xFF0F0F0F;
-    public static final int RAISED     = 0xFF141414;
-    public static final int LINE       = 0xFF1E1E1E;
-    public static final int LINE_SOFT  = 0xFF131313;
-    public static final int TRACK      = 0xFF3D3D3D;
-    public static final int TEXT       = 0xFFFFFFFF;
-    public static final int DIM        = 0xFF9A9A9A;
-    public static final int MUTED      = 0xFF6E6E6E;
-    public static final int FAINT      = 0xFF4A4A4A;
-    public static final int ACCENT     = 0xFFCAFB04;
-    public static final int ACCENT_INK = 0xFF050505;
-    public static final int WASH       = 0x17CAFB04;
+    public static final int CANVAS     = 0xFF191C21;
+    public static final int SILHOUETTE = 0xFF20242B;
+    public static final int SURFACE    = 0xFF242830;
+    public static final int RAISED     = 0xFF2E343E;
+    public static final int LINE       = 0xFF414954;
+    public static final int LINE_SOFT  = 0xFF292E36;
+    public static final int TRACK      = 0xFF535F70;
+    public static final int TEXT       = 0xFFEEF1F5;
+    public static final int DIM        = 0xFFBCC4CF;
+    public static final int MUTED      = 0xFF929CAB;
+    public static final int FAINT      = 0xFF687485;
+    public static final int ACCENT     = 0xFF70ACF5;
+    public static final int ACCENT_INK = 0xFF191C21;
+    public static final int WASH       = 0x1770ACF5;
     public static final int TAG        = 0xFFB8B8B8;
 
     private static final Map<String, Bitmap> CACHE = new HashMap<>();

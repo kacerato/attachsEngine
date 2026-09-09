@@ -27,6 +27,7 @@ layout(push_constant) uniform UiPushConstants {
   vec4 surfaceTransform;
   // largura e altura do atlas de fonte, depois do atlas de ícones
   vec4 atlasSizes;
+  vec4 outputFlags;
 } push;
 
 layout(location = 0) flat out uint vInstance;

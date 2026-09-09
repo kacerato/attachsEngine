@@ -1,5 +1,7 @@
 #include "platform/android/instanced_renderer.h"
 #include "platform/android/android_texture_loader.h"
+#include "renderer/water_detail_texture.h"
+#include "renderer/water_authoring_geometry.h"
 
 #include "rhi/shaders/instanced_spirv.h"
 #include "rhi/shaders/instanced_fallback_spirv.h"
@@ -939,7 +941,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkDescriptorImageInfo sceneDepth{VK_NULL_HANDLE, depthImage_.view(),
                                     VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
-  VkDescriptorImageInfo waterNormal{baseSampler_.handle(), baseTexture_.view(),
+  VkDescriptorImageInfo waterNormal{waterDetailSampler_.handle(), waterDetailTexture_.view(),
                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   if (waterSubpassActive_) {
     for (const auto &material : dirtRoadResources_.materials()) {
@@ -1002,13 +1004,13 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   if(spectralWaterCount_>0) for(u32 i=0;i<4;++i) {
     // Unused statically declared bindings share cascade zero; never read when
     // count excludes them, but Vulkan descriptors remain fully valid.
-    const auto &buffer=waterSpectralCompute_[i<spectralWaterCount_?i:0].output();
+    const auto &buffer=(*waterSpectralCompute_)[i<spectralWaterCount_?i:0].output();
     spectralBuffers[i]={buffer.handle(),0,buffer.sizeBytes()};
     writes[7+i].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[7+i].dstSet=environmentSet_; writes[7+i].dstBinding=7+i;
     writes[7+i].descriptorCount=1; writes[7+i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writes[7+i].pBufferInfo=&spectralBuffers[i];
-    const auto &cascade=waterSpectralCompute_[i<spectralWaterCount_?i:0];
+    const auto &cascade=(*waterSpectralCompute_)[i<spectralWaterCount_?i:0];
     spectralImages[i]={cascade.slopeSampler(),cascade.slopeView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     writes[11+i].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[11+i].dstSet=environmentSet_; writes[11+i].dstBinding=11+i;
@@ -1191,8 +1193,27 @@ void InstancedRenderer::createUiRenderer(AAssetManager *assets) {
   // mapa usam; ele nao pertence ao laco de frame.
   rhi::VulkanUploadContext upload;
   if (!upload.initialize(device_, rhiDevice_->graphicsQueueFamily())) return;
-  const u32 subpass = waterSubpassActive_ ? 1u : 0u;
-  if (!uiRenderer_.initialize(device_, *memoryAllocator_, upload, renderPass_, subpass,
+  VkAttachmentDescription attachment{};attachment.format=swapchain_->imageFormat();attachment.samples=VK_SAMPLE_COUNT_1_BIT;
+  attachment.loadOp=VK_ATTACHMENT_LOAD_OP_LOAD;attachment.storeOp=VK_ATTACHMENT_STORE_OP_STORE;
+  attachment.stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachment.stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachment.initialLayout=attachment.finalLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  VkAttachmentReference color{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};VkSubpassDescription subpass{};
+  subpass.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;subpass.colorAttachmentCount=1;subpass.pColorAttachments=&color;
+  VkSubpassDependency dependency{};dependency.srcSubpass=VK_SUBPASS_EXTERNAL;dependency.dstSubpass=0;
+  dependency.srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT;
+  dependency.dstStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  dependency.srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_TRANSFER_READ_BIT;
+  dependency.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  VkRenderPassCreateInfo pass{};pass.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;pass.attachmentCount=1;pass.pAttachments=&attachment;
+  pass.subpassCount=1;pass.pSubpasses=&subpass;pass.dependencyCount=1;pass.pDependencies=&dependency;
+  if(vkCreateRenderPass(device_,&pass,nullptr,&uiRenderPass_)!=VK_SUCCESS) {upload.shutdown();return;}
+  uiFramebuffers_.resize(swapchain_->imageCount(),VK_NULL_HANDLE);
+  for(u32 i=0;i<uiFramebuffers_.size();++i) {
+    const auto view=swapchain_->imageView(i);VkFramebufferCreateInfo fb{};fb.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    fb.renderPass=uiRenderPass_;fb.attachmentCount=1;fb.pAttachments=&view;fb.width=swapchain_->width();fb.height=swapchain_->height();fb.layers=1;
+    if(vkCreateFramebuffer(device_,&fb,nullptr,&uiFramebuffers_[i])!=VK_SUCCESS) {upload.shutdown();return;}
+  }
+  if (!uiRenderer_.initialize(device_, *memoryAllocator_, upload, uiRenderPass_, 0,
                               rhiDevice_->pipelineCache().driverHandle(), uiFont_, uiIcons_,
                               kUiInstanceCapacity)) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[UI] pipeline recusada; sem interface.");
@@ -1204,6 +1225,27 @@ void InstancedRenderer::createUiRenderer(AAssetManager *assets) {
       "[UI] pronta: fonte %ux%u icones %ux%u capacidade=%u.",
       uiFont_.atlasWidth(), uiFont_.atlasHeight(), uiIcons_.width(), uiIcons_.height(),
       uiRenderer_.capacity());
+}
+
+void InstancedRenderer::recordUiOverlay(u32 imageIndex) {
+  if(!uiRenderer_.isReady() || uiInstances_.empty() || imageIndex>=uiFramebuffers_.size()) return;
+  VkRenderPassBeginInfo begin{};begin.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;begin.renderPass=uiRenderPass_;
+  begin.framebuffer=uiFramebuffers_[imageIndex];begin.renderArea.extent={swapchain_->width(),swapchain_->height()};
+  vkCmdBeginRenderPass(commandBuffer_,&begin,VK_SUBPASS_CONTENTS_INLINE);
+  const VkViewport viewport{0,0,float(swapchain_->width()),float(swapchain_->height()),0,1};
+  const VkRect2D scissor{{0,0},{swapchain_->width(),swapchain_->height()}};
+  vkCmdSetViewport(commandBuffer_,0,1,&viewport);vkCmdSetScissor(commandBuffer_,0,1,&scissor);
+  const auto display=swapchain_->displayExtent();
+  const bool srgb=swapchain_->imageFormat()==VK_FORMAT_B8G8R8A8_SRGB || swapchain_->imageFormat()==VK_FORMAT_R8G8B8A8_SRGB;
+  uiRenderer_.record(commandBuffer_,uiInstances_,uiSurfaceWidth_>0?uiSurfaceWidth_:float(display.width),
+                     uiSurfaceHeight_>0?uiSurfaceHeight_:float(display.height),swapchain_->surfaceTransform(),srgb);
+  vkCmdEndRenderPass(commandBuffer_);
+}
+
+float InstancedRenderer::sceneAspectRatio() const {
+  const auto extent = swapchain_->displayExtent();
+  const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
+  return sceneViewport_.isEmpty() ? aspect : aspect * sceneViewport_.width / sceneViewport_.height;
 }
 
 void InstancedRenderer::setUiInstances(std::span<const ui::UiInstance> instances) {
@@ -1497,7 +1539,7 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
   push.currentCamera[2] = temporalCurrentJitter_[0];
   push.currentCamera[3] = temporalCurrentJitter_[1];
   std::memcpy(push.currentPositionNear, camera.position, sizeof(camera.position));
-  push.currentPositionNear[3] = dirtRoadPreview_ ? dirtRoadResources_.header().nearPlane : 0.1f;
+  push.currentPositionNear[3] = dirtRoadPreview_ ? sceneNearPlane() : 0.1f;
   const platform::FreeCameraState &previous = temporalHistoryInitialized_
                                                    ? temporalPreviousCamera_ : camera;
   push.previousCamera[0] = previous.yaw;
@@ -1507,7 +1549,7 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
   push.previousCamera[3] = temporalHistoryInitialized_ ? temporalPreviousJitter_[1]
                                                        : temporalCurrentJitter_[1];
   std::memcpy(push.previousPositionFar, previous.position, sizeof(previous.position));
-  push.previousPositionFar[3] = dirtRoadPreview_ ? dirtRoadResources_.header().farPlane : 1000.0f;
+  push.previousPositionFar[3] = dirtRoadPreview_ ? sceneFarPlane() : 1000.0f;
   vkCmdPushConstants(commandBuffer_, postPipelineLayout_, VK_SHADER_STAGE_FRAGMENT_BIT,
                      0, sizeof(push), &push);
   vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
@@ -1855,6 +1897,7 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     }
   }
   auto pushAndDraw = [&](u32 cascade, u32 drawIndex, bool masked) {
+    if (!authoredVisibility_.empty() && (!authoredVisibility_[drawIndex] || !authoredShadows_[drawIndex])) return;
     const auto &draw=dirtRoadResources_.draws()[drawIndex];
     const auto &material=dirtRoadResources_.materials()[draw.materialIndex];
     // The animated receiver must not enter the static-caster cache. Ocean
@@ -2744,12 +2787,11 @@ void InstancedRenderer::readHzbPyramidFromPreviousFrame() {
 renderer::PerspectiveFrustum InstancedRenderer::buildFrameFrustum(
     const platform::FreeCameraState &camera) const {
   renderer::PerspectiveVisibilitySettings settings = visibilitySettings_;
-  settings.nearPlane = dirtRoadResources_.header().nearPlane;
-  settings.farPlane = dirtRoadResources_.header().farPlane;
-  const VkExtent2D displayExtent = swapchain_->displayExtent();
+  settings.nearPlane = sceneNearPlane();
+  settings.farPlane = sceneFarPlane();
   return renderer::buildPerspectiveFrustum(
       camera.position, camera.yaw, camera.pitch,
-      static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height),
+      sceneAspectRatio(),
       settings);
 }
 
@@ -2875,7 +2917,7 @@ bool InstancedRenderer::createDrawCullResources() {
 
 void InstancedRenderer::recordDrawCullDispatch(const platform::FreeCameraState &camera) {
   drawCullDispatchedThisFrame_ = false;
-  if (!hzbGpuCullingActive_ || !hzbComputeImagesInitialized_) return;
+  if (!sceneViewport_.isEmpty() || !hzbGpuCullingActive_ || !hzbComputeImagesInitialized_) return;
 
   // A view descreve a FORMA da piramide, nao seu conteudo: os texels vivem em
   // seis imagens da GPU e nunca sao mapeados neste caminho. O ponteiro nulo e
@@ -3214,7 +3256,20 @@ bool InstancedRenderer::createTextureResources() {
   samplerDesc.minFilter = VK_FILTER_NEAREST;
   samplerDesc.magFilter = VK_FILTER_NEAREST;
   samplerDesc.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-  return baseSampler_.initialize(device_, samplerDesc);
+  if(!baseSampler_.initialize(device_, samplerDesc)) return false;
+  if(waterSubpassActive_) {
+    std::vector<u8> detail;
+    if(!renderer::buildWaterDetailTexture(64,1,detail)) return false;
+    imageDesc.width=imageDesc.height=64;imageDesc.mipLevels=7;
+    imageDesc.format=VK_FORMAT_R8G8B8A8_UNORM;
+    if(!memoryAllocator_->createImage(imageDesc,&waterDetailTexture_) ||
+       !uploadContext_.uploadSampledMipChain(*memoryAllocator_,detail.data(),detail.size(),waterDetailTexture_)) return false;
+    samplerDesc.minFilter=samplerDesc.magFilter=VK_FILTER_LINEAR;
+    samplerDesc.mipmapMode=VK_SAMPLER_MIPMAP_MODE_LINEAR;samplerDesc.maxLod=6;
+    samplerDesc.addressU=samplerDesc.addressV=VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    if(!waterDetailSampler_.initialize(device_,samplerDesc)) return false;
+  }
+  return true;
 }
 
 bool InstancedRenderer::createBindlessRegistry() {
@@ -3431,7 +3486,8 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
                                        forceTextureFallback,
                                        waterDisplacementCapacity_,
                                        cancel, mapAssetRoot,
-                                       waterGridSegments)) return false;
+                                       waterGridSegments, waterAuthoringEnabled_)) return false;
+    sourceMapDraws_=dirtRoadResources_.draws();
     instanceCount_ = static_cast<u32>(dirtRoadResources_.draws().size());
     for (u32 index = 0; index < instanceCount_; ++index) {
       const u32 material = dirtRoadResources_.draws()[index].materialIndex;
@@ -3600,7 +3656,14 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
 void InstancedRenderer::shutdown() {
   if (device_ == VK_NULL_HANDLE) return;
   vkDeviceWaitIdle(device_);
-  for(auto &cascade:waterSpectralCompute_) cascade.shutdown();
+  // The UI owns VMA buffers and images too. Release them before its render pass
+  // and before the surface destroys the allocator/device (including resume).
+  uiRenderer_.shutdown();
+  for(auto framebuffer:uiFramebuffers_) if(framebuffer) vkDestroyFramebuffer(device_,framebuffer,nullptr);
+  uiFramebuffers_.clear();if(uiRenderPass_) vkDestroyRenderPass(device_,uiRenderPass_,nullptr);uiRenderPass_=VK_NULL_HANDLE;
+  uiInstances_.clear();
+
+  for(auto &cascade:*waterSpectralCompute_) cascade.shutdown();
   spectralWaterCount_=0; spectralWaterBoundsExpansion_=0; waterSpectrumRevision_=0;
 
   if (commandPool_ != VK_NULL_HANDLE) {
@@ -3722,6 +3785,8 @@ void InstancedRenderer::shutdown() {
   renderedFrameCount_ = 0;
   baseSampler_.shutdown();
   baseTexture_.reset();
+  waterDetailSampler_.shutdown();waterDetailTexture_.reset();
+  routeVertices_.reset();routeIndices_.reset();authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();authoredWaterTime_=-1;
   dummySampler_.shutdown();
   dummyTexture_.reset();
   depthImage_.reset();
@@ -3733,6 +3798,7 @@ void InstancedRenderer::shutdown() {
   rhiDevice_ = nullptr;
   memoryAllocator_ = nullptr;
   swapchain_ = nullptr;
+  pendingScene_.clear();sourceMapDraws_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredMaterials_.clear();
   fillInstanceBuffer_ = nullptr;
   extractScene_ = nullptr;
   dirtRoadPreview_ = false;
@@ -3765,6 +3831,111 @@ void InstancedRenderer::endGpuRegion(GpuPassClass pass) {
   if (commandBuffer_ == VK_NULL_HANDLE) return;
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
   if (gpuTimingEnabled()) gpuFrameTimer_.markPassEnd(commandBuffer_, pass);
+}
+
+bool InstancedRenderer::queueMapScene(std::span<const renderer::MapDrawState> draws) {
+  if (draws.size() < sourceMapDraws_.size() || draws.size()>65536) return false;
+  for (u32 i=0; i<draws.size(); ++i) {
+    if(draws[i].sourceDrawIndex>=sourceMapDraws_.size()) return false;
+    const auto &a=draws[i].pose.draw;const auto &b=sourceMapDraws_[draws[i].sourceDrawIndex];
+    if(draws[i].pose.drawIndex!=i || a.firstIndex!=b.firstIndex || a.indexCount!=b.indexCount ||
+       a.vertexOffset!=b.vertexOffset || a.materialIndex!=b.materialIndex) return false;
+  }
+  pendingScene_.assign(draws.begin(),draws.end());
+  return true;
+}
+
+bool InstancedRenderer::queueAuthoredPoses(std::span<const renderer::MapDrawState> draws) {
+  const auto &current=dirtRoadResources_.draws();
+  if(draws.size()!=current.size()) return false;
+  u32 count=0;
+  for(u32 i=0;i<draws.size();++i) {
+    if(std::memcmp(draws[i].pose.draw.model,current[i].model,sizeof(current[i].model))==0) continue;
+    if(count==pendingMapPoses_.size() || draws[i].route) return false;
+    auto update=draws[i].pose;
+    // Topology remains owned by the committed scene, including generated meshes.
+    update.draw.firstIndex=current[i].firstIndex;update.draw.indexCount=current[i].indexCount;
+    update.draw.vertexOffset=current[i].vertexOffset;update.draw.materialIndex=current[i].materialIndex;
+    pendingMapPoses_[count++]=update;
+  }
+  pendingMapPoseCount_=count;return true;
+}
+
+bool InstancedRenderer::commitAuthoredScene() {
+  const u32 count=static_cast<u32>(pendingScene_.size());
+  struct RouteVertex {float position[3];i16 normal[4],tangent[4];float uv[2],flow[2];u8 color[4];};
+  static_assert(sizeof(RouteVertex)==renderer::MapVertexStride);
+  std::vector<RouteVertex> routeVertices;std::vector<u32> routeIndices;
+  for(auto &state:pendingScene_) if(state.route) {
+    std::vector<renderer::WaterRouteVertex> geometry;std::vector<u32> topology;
+    if(!renderer::buildWaterRouteMesh(*state.route,geometry,topology)) return false;
+    auto &draw=state.pose.draw;draw.firstIndex=static_cast<u32>(routeIndices.size());
+    draw.vertexOffset=static_cast<u32>(routeVertices.size());draw.indexCount=static_cast<u32>(topology.size());
+    for(const auto &source:geometry) {
+      RouteVertex vertex{};std::copy(source.position,source.position+3,vertex.position);
+      for(u32 axis=0;axis<3;++axis) vertex.normal[axis]=static_cast<i16>(std::clamp(source.normal[axis],-1.0f,1.0f)*32767);
+      vertex.normal[3]=static_cast<i16>(std::clamp(source.spacing/512,0.0f,1.0f)*32767);
+      vertex.tangent[0]=vertex.tangent[3]=32767;std::copy(source.uv,source.uv+2,vertex.uv);
+      std::copy(source.flow,source.flow+2,vertex.flow);
+      vertex.color[0]=static_cast<u8>(std::clamp(source.foam/10,0.0f,1.0f)*255);
+      vertex.color[1]=vertex.color[2]=vertex.color[3]=255;routeVertices.push_back(vertex);
+    }
+    routeIndices.insert(routeIndices.end(),topology.begin(),topology.end());
+  }
+  rhi::VulkanBuffer nextVertices,nextIndices;
+  if(!routeVertices.empty()) {
+    rhi::BufferDesc desc{};desc.cpuAccess=rhi::CpuAccess::SequentialWrite;desc.preferDeviceMemory=false;
+    desc.usage=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;desc.sizeBytes=routeVertices.size()*sizeof(RouteVertex);
+    if(!memoryAllocator_->createBuffer(desc,&nextVertices) || !nextVertices.mappedData()) return false;
+    std::memcpy(nextVertices.mappedData(),routeVertices.data(),desc.sizeBytes);
+    desc.usage=VK_BUFFER_USAGE_INDEX_BUFFER_BIT;desc.sizeBytes=routeIndices.size()*sizeof(u32);
+    if(!memoryAllocator_->createBuffer(desc,&nextIndices) || !nextIndices.mappedData()) return false;
+    std::memcpy(nextIndices.mappedData(),routeIndices.data(),desc.sizeBytes);
+    if(!memoryAllocator_->flushBuffer(nextVertices) || !memoryAllocator_->flushBuffer(nextIndices)) return false;
+  }
+  if(count!=instanceCount_) {
+    rhi::BufferDesc desc{};desc.sizeBytes=static_cast<u64>(count)*sizeof(renderer::GpuMeshInstance);
+    desc.usage=VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;desc.memoryClass=rhi::MemoryClass::Buffer;
+    desc.cpuAccess=rhi::CpuAccess::SequentialWrite;desc.preferDeviceMemory=false;
+    rhi::VulkanBuffer replacement;
+    if(!memoryAllocator_->createBuffer(desc,&replacement) || !replacement.mappedData()) return false;
+    // Acquired frame fence has retired every previous read of these buffers.
+    destroyDrawCullResources();
+    instanceBuffer_=std::move(replacement);
+    useMultiDrawIndirect_=false;
+    instanceCount_=count;
+    hzbHysteresis_.assign(count,{});dynamicMapDraws_.assign(count,1);
+  }
+  auto *instances=static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
+  if(!instances) return false;
+  std::vector<renderer::MapDrawRecord> records;records.reserve(count);
+  authoredVisibility_.resize(count);authoredShadows_.resize(count);authoredMaterials_.resize(count);
+  routeVertices_=std::move(nextVertices);routeIndices_=std::move(nextIndices);authoredWaterLayers_.resize(count);
+  authoredWaterFlowDepth_.resize(count);
+  // Scalar per-instance overrides require individual push constants.
+  useMultiDrawIndirect_=false;
+  solidDrawOrder_.clear();coverageDrawOrder_.clear();transparentDrawOrder_.clear();waterDrawOrder_.clear();
+  lodGroups_.clear();coverageLodGroups_.clear();
+  cameraWaterHorizonFillActive_=false;
+  for(u32 i=0;i<count;++i) {
+    const auto &state=pendingScene_[i];records.push_back(state.pose.draw);instances[i]=state.pose.instance;
+    authoredVisibility_[i]=state.visible;authoredShadows_[i]=state.castShadow;authoredMaterials_[i]=state.material;
+    std::copy(state.waterLayers,state.waterLayers+4,authoredWaterLayers_[i].begin());
+    std::copy(state.waterFlowDepth,state.waterFlowDepth+4,authoredWaterFlowDepth_[i].begin());
+    dynamicMapDraws_[i]=1;hzbHysteresis_[i]={};
+    // Authored view uses LOD0; derived package bounds are no longer a valid LOD selection cache.
+    if(state.pose.draw.lodLevel!=0) continue;
+    const auto flags=dirtRoadResources_.materials()[state.pose.draw.materialIndex].flags;
+    if(state.visible && (flags & renderer::MapMaterialWaterCameraGrid)) cameraWaterHorizonFillActive_=true;
+    if(flags & renderer::MapMaterialWater) waterDrawOrder_.push_back(i);
+    else if(flags & renderer::MapMaterialBlend) transparentDrawOrder_.push_back(i);
+    else if(flags & renderer::MapMaterialAlphaMask) coverageDrawOrder_.push_back(i);
+    else solidDrawOrder_.push_back(i);
+  }
+  dirtRoadResources_.setAuthoredDraws(std::move(records));
+  if(!memoryAllocator_->flushBuffer(instanceBuffer_)) return false;
+  pendingScene_.clear();shadowCascadeDirtyMask_=0xffffffffu;
+  return true;
 }
 
 bool InstancedRenderer::queueMapDrawPose(u32 drawIndex, const float *model,
@@ -3825,7 +3996,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // Same "safe without a new stall" reasoning as collectPrevious() above --
   // see readHzbPyramidFromPreviousFrame()'s own comment.
   readDrawCullTelemetryFromPreviousFrame();
-  const bool mapPosesChanged = pendingMapPoseCount_ != 0;
+  const bool mapPosesChanged = pendingMapPoseCount_ != 0 || !pendingScene_.empty();
+  if (!pendingScene_.empty() && !commitAuthoredScene()) return rhi::SwapchainStatus::FatalError;
   if (pendingMapPoseCount_ != 0) {
     auto *instances = static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
     if (instances == nullptr) return rhi::SwapchainStatus::FatalError;
@@ -3901,6 +4073,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if (!dirtRoadPreview_ && !memoryAllocator_->flushBuffer(instanceBuffer_)) return rhi::SwapchainStatus::FatalError;
   if (dirtRoadPreview_) {
     auto *frame = static_cast<DirtRoadFrameUniform *>(environmentUniform_.mappedData());
+    if(!renderer::adjustEnvironmentLighting(dirtRoadResources_.environmentLighting(),environmentAdjustment_,frame->environment))
+      return rhi::SwapchainStatus::FatalError;
     const float cy = std::cos(camera.yaw), sy = std::sin(camera.yaw);
     const float cp = std::cos(camera.pitch), sp = std::sin(camera.pitch);
     const float row0[4] = {cy, 0.0f, -sy, 0.0f};
@@ -3925,7 +4099,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         renderingPolicy_.materialDistance.fadeBandRatio;
     frame->waterParameters[0] = static_cast<float>(waterProfile_.waveCount);
     frame->waterParameters[1] = waterBaseHeight_;
-    frame->waterParameters[2] = timeSeconds;
+    frame->waterParameters[2] = authoredWaterTime_>=0?authoredWaterTime_:timeSeconds;
     frame->waterParameters[3] = waterProfile_.microWaveStrength;
     frame->waterOptics[0] = waterProfile_.refractiveIndex;
     frame->waterOptics[1] = waterProfile_.roughness;
@@ -4021,11 +4195,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       std::memcpy(input.cameraPosition, camera.position, sizeof(input.cameraPosition));
       std::memcpy(input.cameraForward, row2, sizeof(input.cameraForward));
       std::memcpy(input.cameraUp, row1, sizeof(input.cameraUp));
-      input.aspectRatio = static_cast<float>(swapchain_->displayExtent().width) /
-                          static_cast<float>(swapchain_->displayExtent().height);
-      input.nearPlane = dirtRoadResources_.header().nearPlane;
+      input.aspectRatio = sceneAspectRatio();
+      input.nearPlane = sceneNearPlane();
       input.shadowDistance = std::min(renderingPolicy_.shadows.maximumDistance,
-                                      dirtRoadResources_.header().farPlane);
+                                      sceneFarPlane());
       const auto &environment = frame->environment;
       input.lightDirection[0] = -environment.sunDirectionIntensity[0];
       input.lightDirection[1] = -environment.sunDirectionIntensity[1];
@@ -4079,14 +4252,17 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if (gpuTimingEnabled()) gpuFrameTimer_.begin(commandBuffer_);
   beginGpuRegion(GpuPassClass::WaterSimulation);
   const float spectralTime=spectralWaterCount_>0?
-    static_cast<float>(waterSpectralClock_.advance(timeSeconds,waterSpectralControls_.timeScale)):0;
-  for(u32 cascade=0;cascade<spectralWaterCount_;++cascade) {
+    (authoredWaterTime_>=0?authoredWaterTime_*waterSpectralControls_.timeScale:
+    static_cast<float>(waterSpectralClock_.advance(timeSeconds,waterSpectralControls_.timeScale))):0;
+  const bool simulateWater=authoredVisibility_.empty() ||
+      std::any_of(waterDrawOrder_.begin(),waterDrawOrder_.end(),[&](u32 draw){return authoredVisibility_[draw]!=0;});
+  for(u32 cascade=0;simulateWater && cascade<spectralWaterCount_;++cascade) {
     const auto &c=waterCascadeSettings_[cascade];
     const auto &foamSettings=waterSpectralControls_.overrideFoam?waterSpectralControls_.foam:c.foam;
     const rhi::WaterFoamComputeParameters foam{c.displacementScale*c.choppiness*
       waterSpectralControls_.displacement*waterSpectralControls_.choppiness,
       foamSettings.compressionThreshold,foamSettings.growth,foamSettings.decay};
-    if(!waterSpectralCompute_[cascade].record(commandBuffer_,spectralTime,foam)) return rhi::SwapchainStatus::FatalError;
+    if(!(*waterSpectralCompute_)[cascade].record(commandBuffer_,spectralTime,foam)) return rhi::SwapchainStatus::FatalError;
   }
 
   endGpuRegion(GpuPassClass::WaterSimulation);
@@ -4107,7 +4283,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   endGpuRegion(GpuPassClass::Culling);
 
   VkClearValue clearValues[2]{};
-  clearValues[0].color = {{0.02f, 0.02f, 0.05f, 1.0f}};
+  clearValues[0].color = editorBackground_ ? VkClearColorValue{{0.028f,0.032f,0.039f,1.0f}} : VkClearColorValue{{0.02f,0.02f,0.05f,1.0f}};
   clearValues[1].depthStencil = {1.0f, 0};
 
   VkRenderPassBeginInfo renderPassInfo{};
@@ -4136,7 +4312,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   const rhi::SurfaceTransform &surfaceTransform = swapchain_->surfaceTransform();
   const FramePushConstants pushConstants{
       timeSeconds,
-      static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height),
+      sceneAspectRatio(),
       camera.yaw,
       camera.pitch,
       surfaceTransform.xx, surfaceTransform.xy, surfaceTransform.yx, surfaceTransform.yy,
@@ -4157,10 +4333,25 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   viewport.height = static_cast<float>(renderHeight());
   viewport.minDepth = 0.0f;
   viewport.maxDepth = 1.0f;
+  if (!sceneViewport_.isEmpty()) {
+    const float x = 2.0f * (sceneViewport_.x + sceneViewport_.width * 0.5f) - 1.0f;
+    const float y = 2.0f * (sceneViewport_.y + sceneViewport_.height * 0.5f) - 1.0f;
+    const float w = std::abs(surfaceTransform.xx) * sceneViewport_.width +
+                    std::abs(surfaceTransform.xy) * sceneViewport_.height;
+    const float h = std::abs(surfaceTransform.yx) * sceneViewport_.width +
+                    std::abs(surfaceTransform.yy) * sceneViewport_.height;
+    viewport.x = (surfaceTransform.xx*x + surfaceTransform.xy*y + 1.0f - w) * 0.5f * renderWidth();
+    viewport.y = (surfaceTransform.yx*x + surfaceTransform.yy*y + 1.0f - h) * 0.5f * renderHeight();
+    viewport.width *= w;
+    viewport.height *= h;
+  }
   vkCmdSetViewport(commandBuffer_, 0, 1, &viewport);
 
   VkRect2D scissor{};
-  scissor.extent = {renderWidth(), renderHeight()};
+  scissor.offset = {static_cast<i32>(std::max(0.0f, std::floor(viewport.x))),
+                    static_cast<i32>(std::max(0.0f, std::floor(viewport.y)))};
+  scissor.extent = {std::min(renderWidth() - static_cast<u32>(scissor.offset.x), static_cast<u32>(std::ceil(viewport.width))),
+                    std::min(renderHeight() - static_cast<u32>(scissor.offset.y), static_cast<u32>(std::ceil(viewport.height)))};
   vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
 
   if (dirtRoadPreview_) {
@@ -4182,24 +4373,29 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                             swapchain_->imageFormat()!=VK_FORMAT_B8G8R8A8_SRGB &&
                             swapchain_->imageFormat()!=VK_FORMAT_R8G8B8A8_SRGB;
     visibilityTelemetry_ = {};
-    auto pushMapMaterial = [&](u32 materialIndex) {
-      const auto &material = dirtRoadResources_.materials()[materialIndex];
+    auto pushMapMaterial = [&](u32 materialIndex, u32 drawIndex=0xffffffffu) {
+      auto material = dirtRoadResources_.materials()[materialIndex];
+      if(drawIndex<authoredMaterials_.size()) material=renderer::applyMaterialOverride(material,authoredMaterials_[drawIndex]);
       if (!useBindless_) {
         const VkDescriptorSet set = dirtMaterialSets_[materialIndex];
         vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
                                 0, 1, &set, 0, nullptr);
       }
       DirtRoadPushConstants push{};
-      push.cameraFrame[0] = static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height);
+      push.cameraFrame[0] = sceneAspectRatio();
       push.cameraFrame[1] = camera.yaw; push.cameraFrame[2] = camera.pitch;
       push.cameraFrame[3] = timeSeconds;
       push.surfaceTransform[0]=surfaceTransform.xx;push.surfaceTransform[1]=surfaceTransform.xy;
       push.surfaceTransform[2]=surfaceTransform.yx;push.surfaceTransform[3]=surfaceTransform.yy;
       std::memcpy(push.cameraPositionNear, camera.position, sizeof(camera.position));
-      push.cameraPositionNear[3] = dirtRoadResources_.header().nearPlane;
+      push.cameraPositionNear[3] = sceneNearPlane();
       std::memcpy(push.baseColorFactor, material.baseColorFactor, sizeof(push.baseColorFactor));
       std::memcpy(push.emissiveFactorAndStrength, material.emissiveFactorAndStrength,
                   sizeof(push.emissiveFactorAndStrength));
+      if((material.flags & renderer::WaterAuthoringResource) && (material.flags & renderer::MapMaterialWater) && drawIndex<authoredWaterLayers_.size()) {
+        std::copy(authoredWaterLayers_[drawIndex].begin(),authoredWaterLayers_[drawIndex].end(),push.emissiveFactorAndStrength);
+        std::copy(authoredWaterFlowDepth_[drawIndex].begin(),authoredWaterFlowDepth_[drawIndex].end(),push.baseColorFactor);
+      }
       for (u32 slot = 0; slot < 4; ++slot) {
         const u32 texture = material.textureIndices[slot];
         push.textureIndices[slot] = useBindless_ && texture != renderer::InvalidMapTexture
@@ -4213,7 +4409,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       push.materialFlags[1]=material.textureCoordinates | (alphaCutoff << 8u) |
                             ((material.reserved & 0xffffu) << 16u);
       push.materialFlags[2]=encodeSrgb?1u:0u;
-      push.materialFlags[3]=std::bit_cast<u32>(dirtRoadResources_.header().farPlane);
+      push.materialFlags[3]=std::bit_cast<u32>(sceneFarPlane());
       push.materialFactors[0]=material.roughness;push.materialFactors[1]=material.metallic;
       push.materialFactors[2]=material.normalScale;push.materialFactors[3]=material.specular;
       vkCmdPushConstants(commandBuffer_,pipelineLayout_,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -4255,7 +4451,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                            usesDistantMaterialPipeline(drawIndex);
       bindMapPipeline(distant ? distantFallback
                               : materialPipeline(draw.materialIndex, variants, fallback));
-      pushMapMaterial(draw.materialIndex);
+      pushMapMaterial(draw.materialIndex,drawIndex);
+      const bool route=(dirtRoadResources_.materials()[draw.materialIndex].flags & renderer::WaterRouteResource)!=0;
+      const VkDeviceSize zero=0;
+      const VkBuffer geometry=route?routeVertices_.handle():dirtRoadResources_.vertexBuffer();
+      vkCmdBindVertexBuffers(commandBuffer_,0,1,&geometry,&zero);
+      vkCmdBindIndexBuffer(commandBuffer_,route?routeIndices_.handle():dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
       vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,
                        static_cast<i32>(draw.vertexOffset),drawIndex);
       ++visibilityTelemetry_.submittedDrawCalls;
@@ -4273,8 +4474,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       return nearestBoundsDistanceSquared(left)<nearestBoundsDistanceSquared(right);
     };
     renderer::PerspectiveVisibilitySettings visibilitySettings = visibilitySettings_;
-    visibilitySettings.nearPlane = dirtRoadResources_.header().nearPlane;
-    visibilitySettings.farPlane = dirtRoadResources_.header().farPlane;
+    visibilitySettings.nearPlane = sceneNearPlane();
+    visibilitySettings.farPlane = sceneFarPlane();
     // Mesmo volume que recordDrawCullDispatch ja usou antes do render pass: as
     // duas etapas nao podem enxergar frustums diferentes no mesmo frame.
     const renderer::PerspectiveFrustum frustum = buildFrameFrustum(camera);
@@ -4293,7 +4494,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         ? &solidDrawOrder_ : &levelZeroSolidDrawOrder_;
     const std::vector<u32> *coverageCandidates = coverageLodGroups_.empty()
         ? &coverageDrawOrder_ : &levelZeroCoverageDrawOrder_;
-    if (lodSelectionEnabled_ && (!lodGroups_.empty() || !coverageLodGroups_.empty())) {
+    if (authoredVisibility_.empty() && lodSelectionEnabled_ && (!lodGroups_.empty() || !coverageLodGroups_.empty())) {
       auto *instances = static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
       // Error budgets describe final display pixels. Internal resolution here
       // allowed a DRS change to remove geometry with a stationary camera.
@@ -4374,6 +4575,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
 
     auto collectVisible = [&](const std::vector<u32> &source, std::vector<u32> &destination) {
       for (u32 drawIndex : source) {
+        if (!authoredVisibility_.empty() && !authoredVisibility_[drawIndex]) continue;
         const auto &draw = dirtRoadResources_.draws()[drawIndex];
         ++visibilityTelemetry_.candidateDraws;
         visibilityTelemetry_.candidateTriangles += draw.indexCount / 3;
@@ -4383,7 +4585,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         // Camera-relative water cannot be culled by its original world bounds.
         // A single bounded grid is conservatively submitted, clipped by the GPU.
         const bool water=(dirtRoadResources_.materials()[draw.materialIndex].flags&renderer::MapMaterialWater)!=0;
-        const float spectralExpansion=water?spectralWaterBoundsExpansion_:0;
+        const float spectralExpansion=water?spectralWaterBoundsExpansion_+
+            std::abs(waterBaseHeight_)+renderer::maximumWaterDisplacement(waterProfile_)+
+            renderer::maximumWaterDetailDisplacement(waterShading_):0;
         if (!cameraWater && !renderer::isSphereVisible(frustum, draw.boundsCenter, draw.boundsRadius+spectralExpansion)) continue;
         destination.push_back(drawIndex);
       }
@@ -4395,7 +4599,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
 
     const u32 hzbCandidateDraws = static_cast<u32>(
         visibleSolidDrawOrder_.size() + visibleCoverageDrawOrder_.size());
-    hzbFrameEligible_ = (hzbOcclusionEnabled_ || hzbComputeEnabled_) &&
+    hzbFrameEligible_ = sceneViewport_.isEmpty() && (hzbOcclusionEnabled_ || hzbComputeEnabled_) &&
         renderer::shouldRunHzb(hzbCandidateDraws, hzbMinimumCandidateDraws_);
     if ((hzbOcclusionEnabled_ || hzbComputeEnabled_) && !hzbFrameEligible_) {
       visibilityTelemetry_.hzbSkippedBudgetDraws = hzbCandidateDraws;
@@ -4627,7 +4831,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     beginGpuRegion(GpuPassClass::Sky);
 
     DirtRoadPushConstants skyPush{};
-    skyPush.cameraFrame[0] = static_cast<float>(displayExtent.width) / static_cast<float>(displayExtent.height);
+    skyPush.cameraFrame[0] = sceneAspectRatio();
     skyPush.cameraFrame[1] = camera.yaw;
     skyPush.cameraFrame[2] = camera.pitch;
     skyPush.cameraFrame[3] = timeSeconds;
@@ -4644,7 +4848,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     vkCmdPushConstants(commandBuffer_, skyPipelineLayout_,
                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                        0, sizeof(skyPush), &skyPush);
-    vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
+    if(!editorBackground_) vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
     endGpuRegion(GpuPassClass::Sky);
     beginGpuRegion(GpuPassClass::Transparent);
 
@@ -4697,15 +4901,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // A região abre fora do if: o HUD desenhava sem nenhuma marca e seu custo
   // caía no intervalo não atribuído entre a última classe e o fim do frame.
   beginGpuRegion(GpuPassClass::Ui);
-  // A interface do editor vem ANTES do HUD de runtime: o joystick e o contador
-  // de FPS pertencem ao modo de execucao e ficam por cima de tudo.
-  if (uiRenderer_.isReady() && !uiInstances_.empty()) {
-    const float uiWidth = uiSurfaceWidth_ > 0.0f ? uiSurfaceWidth_
-                                                : static_cast<float>(displayExtent.width);
-    const float uiHeight = uiSurfaceHeight_ > 0.0f ? uiSurfaceHeight_
-                                                  : static_cast<float>(displayExtent.height);
-    uiRenderer_.record(commandBuffer_, uiInstances_, uiWidth, uiHeight, surfaceTransform);
-  }
+  const VkViewport uiViewport{0,0,static_cast<float>(renderWidth()),static_cast<float>(renderHeight()),0,1};
+  const VkRect2D uiScissor{{0,0},{renderWidth(),renderHeight()}};
+  vkCmdSetViewport(commandBuffer_,0,1,&uiViewport);
+  vkCmdSetScissor(commandBuffer_,0,1,&uiScissor);
   if (runtimeHudPipeline_ != VK_NULL_HANDLE && hud.visible) {
     vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, runtimeHudPipeline_);
     const float displayWidth = static_cast<float>(displayExtent.width);
@@ -4743,6 +4942,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   vkCmdEndRenderPass(commandBuffer_);
   beginGpuRegion(GpuPassClass::Post);
   recordPostProcess(imageIndex, camera);
+  recordUiOverlay(imageIndex);
   endGpuRegion(GpuPassClass::Post);
   // Must run after the main pass ends (depthImage_ needs its final write
   // landed, in DEPTH_STENCIL_READ_ONLY_OPTIMAL) and before submit; a no-op

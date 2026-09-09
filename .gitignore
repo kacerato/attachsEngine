@@ -13,3 +13,9 @@ android/local.properties
 
 __pycache__/
 *.pyc
+
+# Fonte upstream regenerada por tools/prepare-godot-editor.py
+external/godot/
+
+# Cache de importação dos projetos Godot
+.godot/

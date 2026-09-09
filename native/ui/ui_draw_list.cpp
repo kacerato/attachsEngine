@@ -122,6 +122,23 @@ bool UiDrawList::addLine(UiPoint from, UiPoint to, UiColor color, float width) {
   if (!std::isfinite(width) || width <= 0.0f) return false;
   if (!std::isfinite(from.x) || !std::isfinite(from.y)) return false;
   if (!std::isfinite(to.x) || !std::isfinite(to.y)) return false;
+  // Clip before GPU interpolation: near-plane projections may be millions of
+  // pixels away. Huge quads lose precision even when fragment clipping is exact.
+  const UiRect clip=currentClip();
+  const double dx=double(to.x)-from.x,dy=double(to.y)-from.y;
+  double enter=0,leave=1;
+  auto edge=[&](double p,double q) {
+    if(p==0) return q>=0;
+    const double t=q/p;
+    if(p<0) enter=std::max(enter,t);else leave=std::min(leave,t);
+    return enter<=leave;
+  };
+  const double margin=width*.5+1;
+  if(!edge(-dx,double(from.x)-clip.x+margin) || !edge(dx,double(clip.x)+clip.width+margin-from.x) ||
+     !edge(-dy,double(from.y)-clip.y+margin) || !edge(dy,double(clip.y)+clip.height+margin-from.y)) return false;
+  const UiPoint origin=from;
+  from={float(origin.x+enter*dx),float(origin.y+enter*dy)};
+  to={float(origin.x+leave*dx),float(origin.y+leave*dy)};
   UiDrawCommand command{};
   command.kind = UiPrimitive::Line;
   const float half = width * 0.5f + 1.0f;  // um pixel a mais para a suavização

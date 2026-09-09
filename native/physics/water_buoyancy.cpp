@@ -313,4 +313,18 @@ BuoyancyForces evaluateBuoyancy(const BuoyancyInput &input,
   return result;
 }
 
+SubmergedVolume submergedWaterVolume(const BuoyantShape &shape,AetherVec3 position,
+    AetherQuat rotation,const WaterPlane &plane,float verticalDepth) noexcept {
+  if(!std::isfinite(verticalDepth)) return {};
+  auto top=submergedVolume(shape,position,rotation,plane);
+  if(verticalDepth<0 || top.volume<=0) return top;
+  auto bottomPlane=plane;bottomPlane.offset+=verticalDepth*plane.normal.y;
+  const auto bottom=submergedVolume(shape,position,rotation,bottomPlane);
+  const float volume=top.volume-bottom.volume;
+  if(volume<=1e-7f) return {};
+  return {volume,{(top.centroid.x*top.volume-bottom.centroid.x*bottom.volume)/volume,
+      (top.centroid.y*top.volume-bottom.centroid.y*bottom.volume)/volume,
+      (top.centroid.z*top.volume-bottom.centroid.z*bottom.volume)/volume}};
+}
+
 } // namespace ae::physics

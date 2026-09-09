@@ -27,6 +27,7 @@
 #include "renderer/hzb_visibility.h"
 
 #include <algorithm>
+#include <memory>
 #include "renderer/lod_selection.h"
 #include "renderer/render_instance.h"
 #include "renderer/rendering_policy.h"
@@ -87,10 +88,35 @@ public:
   // pixels logicos, nao fisicos. Zero volta a usar a extensao do display, que e
   // o comportamento certo so quando as duas escalas coincidem.
   void setUiSurfaceSize(float width, float height);
+  // Normalized logical display rectangle; empty restores a full display scene.
+  void setSceneViewport(const ui::UiRect &rect) {
+    sceneViewport_ = ui::intersect(rect, {0,0,1,1});
+    // Current temporal reprojection assumes a full-target camera projection.
+    if (!sceneViewport_.isEmpty()) { temporalAaActive_=false; temporalHistoryInitialized_=false; }
+  }
+  float sceneAspectRatio() const;
+  // A zero pair restores the imported camera range (Play/runtime).
+  void setSceneClipPlanes(float nearPlane, float farPlane) {
+    sceneNearPlane_ = nearPlane;
+    sceneFarPlane_ = farPlane;
+  }
+  void setEditorBackground(bool enabled) { editorBackground_=enabled; }
+  void setEnvironmentAdjustment(const float values[4]) { std::copy(values,values+4,environmentAdjustment_); }
+  const std::vector<renderer::MapMaterialRecord> &mapMaterials() const { return dirtRoadResources_.materials(); }
+  bool queueMapScene(std::span<const renderer::MapDrawState> draws);
+  bool queueAuthoredPoses(std::span<const renderer::MapDrawState> draws);
+
+
   bool uiRendererReady() const { return uiRenderer_.isReady(); }
   const ui::UiFont &uiFont() const { return uiFont_; }
   const ui::UiIconAtlas &uiIcons() const { return uiIcons_; }
   bool hasDefaultCamera() const { return dirtRoadPreview_ && dirtRoadResources_.header().drawCount != 0; }
+  renderer::PerspectiveVisibilitySettings mapProjection() const {
+    auto settings=visibilitySettings_;
+    settings.nearPlane=dirtRoadResources_.header().nearPlane;
+    settings.farPlane=dirtRoadResources_.header().farPlane;
+    return settings;
+  }
   platform::FreeCameraState defaultCamera() const { return dirtRoadResources_.defaultCamera(); }
   platform::FreeCameraState defaultGameplayCamera() const {
     return dirtRoadResources_.defaultGameplayCamera();
@@ -157,6 +183,7 @@ public:
   void setDisableTransientDepth(bool disabled) { disableTransientDepth_ = disabled; }
   void setRuntimeHudEnabled(bool enabled) { runtimeHudEnabled_ = enabled; }
   void setSpectralWaterEnabled(bool enabled) { spectralWaterEnabled_ = enabled; }
+  void setWaterAuthoringEnabled(bool enabled) { waterAuthoringEnabled_ = enabled; }
   // Diagnóstico de atribuição: força o formato largo de inclinação para que o
   // A/B do formato caiba num único APK e possa ser intercalado no mesmo estado
   // de clock. Comparar dois APKs instalados em momentos diferentes mede o
@@ -191,7 +218,7 @@ public:
   // Atualiza modos espectrais sem recriar layouts/pipelines. Quantidade,
   // resolução e domínio permanecem invariantes nesta operação; mudanças
   // estruturais pertencem à reconstrução de recursos da cena.
-  bool reconfigureWaterCascades(std::span<const renderer::WaterCascadeSettings> settings);
+  bool reconfigureWaterCascades(std::span<const renderer::WaterCascadeSettings> settings, u64 budget=0);
   u64 waterSpectrumRevision() const noexcept { return waterSpectrumRevision_; }
   void setAdpfGpuTimingEnabled(bool enabled) { adpfGpuTimingEnabled_ = enabled; }
   // Water authoring remains a backend-neutral Resource. The Vulkan renderer
@@ -212,6 +239,8 @@ public:
   // vida sem nenhum mecanismo que garanta isso.
   bool setWaterRipples(const renderer::WaterRippleField &field) noexcept;
   void clearWaterRipples() noexcept { waterRippleGain_ = 0.0f; }
+  // An external fixed-step owner may synchronize optics and geometry to physics.
+  void setWaterSimulationClock(float seconds) { authoredWaterTime_=seconds; }
 
   bool addWaterImpulse(const renderer::WaterImpulse &impulse) {
     if (std::abs(waterBaseHeight_)+std::abs(impulse.amplitude) +
@@ -342,6 +371,18 @@ public:
   }
 
 private:
+  bool editorBackground_=false;
+  float sceneNearPlane_ = 0, sceneFarPlane_ = 0;
+  float sceneNearPlane() const { return sceneNearPlane_ > 0 ? sceneNearPlane_ : dirtRoadResources_.header().nearPlane; }
+  float sceneFarPlane() const { return sceneFarPlane_ > sceneNearPlane_ ? sceneFarPlane_ : dirtRoadResources_.header().farPlane; }
+  ui::UiRect sceneViewport_{};
+  std::vector<renderer::MapDrawState> pendingScene_;
+  std::vector<renderer::MapDrawRecord> sourceMapDraws_;
+  bool commitAuthoredScene();
+  std::vector<u8> authoredVisibility_, authoredShadows_;
+  std::vector<renderer::MaterialOverride> authoredMaterials_;
+  float environmentAdjustment_[4]{1,1,1,0};
+
   void applyRuntimeRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy,
                                    bool preserveDynamicScale);
   bool createRenderPass();
@@ -361,6 +402,7 @@ private:
   // Carrega os atlas do APK e monta a pipeline. Falhar aqui NÃO derruba o
   // renderer: uma cena sem interface ainda é uma cena, e o log diz o motivo.
   void createUiRenderer(AAssetManager *assets);
+  void recordUiOverlay(u32 imageIndex);
   bool createPostResources();
   void destroyPostResources();
   void recordPostProcess(u32 imageIndex, const platform::FreeCameraState &camera);
@@ -455,6 +497,7 @@ private:
   // compõe transmissão/reflexão sem uma cópia full-resolution da cena.
   VkPipeline waterPipeline_ = VK_NULL_HANDLE;
   bool waterSubpassActive_ = false;
+  bool waterAuthoringEnabled_ = false;
   // Uma grade de agua camera-relative e finita por construcao. Quando a
   // camera olha quase paralela ao plano, a cunha entre sua ultima aresta e o
   // horizonte geometrico deve receber o prolongamento refletido do ceu, nao a
@@ -557,6 +600,10 @@ private:
   rhi::VulkanBuffer indirectBuffer_{};
   rhi::VulkanImage depthImage_{};
   rhi::VulkanImage baseTexture_{};
+  rhi::VulkanImage waterDetailTexture_{};
+  rhi::VulkanBuffer routeVertices_,routeIndices_;
+  std::vector<std::array<float,4>> authoredWaterLayers_;
+  rhi::VulkanSampler waterDetailSampler_{};
   rhi::VulkanSampler baseSampler_{};
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
   u32 instanceCount_ = 0;
@@ -638,6 +685,8 @@ private:
   ui::UiFont uiFont_{};
   ui::UiIconAtlas uiIcons_{};
   rhi::VulkanUiRenderer uiRenderer_{};
+  VkRenderPass uiRenderPass_=VK_NULL_HANDLE;
+  std::vector<VkFramebuffer> uiFramebuffers_;
   std::vector<ui::UiInstance> uiInstances_;
   float uiSurfaceWidth_ = 0.0f;
   float uiSurfaceHeight_ = 0.0f;
@@ -652,7 +701,7 @@ private:
   renderer::ResolvedRenderingPolicy renderingPolicy_{};
   renderer::WaterProfile waterProfile_ = renderer::defaultOceanWaterProfile();
   renderer::WaterShadingSettings waterShading_{};
-  std::array<renderer::MapDrawUpdate, 64> pendingMapPoses_{};
+  std::array<renderer::MapDrawUpdate, 128> pendingMapPoses_{};
   u32 pendingMapPoseCount_ = 0;
   std::vector<u8> dynamicMapDraws_;
   bool spectralWaterEnabled_=false;
@@ -660,12 +709,15 @@ private:
   renderer::WaterCostIsolation waterCostIsolation_=renderer::WaterCostIsolation::Full;
   renderer::WaterSpectralControls waterSpectralControls_{};
   renderer::WaterSpectralClock waterSpectralClock_{};
+  float authoredWaterTime_=-1;
+  std::vector<std::array<float,4>> authoredWaterFlowDepth_;
   u32 spectralWaterCount_=0;
   u64 waterSpectrumRevision_=0;
   float spectralWaterBoundsExpansion_=0;
   u64 waterCascadeBufferBudget_=4ull*1024*1024;
   std::vector<renderer::WaterCascadeSettings> waterCascadeSettings_;
-  std::array<rhi::VulkanWaterSpectralCompute,renderer::MaximumWaterCascades> waterSpectralCompute_;
+  using WaterComputeBank=std::array<rhi::VulkanWaterSpectralCompute,renderer::MaximumWaterCascades>;
+  std::unique_ptr<WaterComputeBank> waterSpectralCompute_=std::make_unique<WaterComputeBank>();
   renderer::WaterInteractionField waterInteractions_{};
   // Alturas da ondulação, num buffer mapeado escrito por quadro. É um storage
   // buffer e não uma imagem pelo mesmo motivo das cascatas espectrais: o

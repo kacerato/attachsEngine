@@ -131,7 +131,8 @@ bool beginGizmoDrag(const EditorGizmoFrame &frame, EditorGizmoHandle handle,
   if (!frame.valid || handle == EditorGizmoHandle::None) return false;
   if (!isGizmoSettingsValid(settings) || !isTransformValid(initial)) return false;
   const u32 axis = axisIndexOf(handle);
-  if (axis > 2 || !frame.axisUsable[axis]) return false;
+  const bool plane = handle >= EditorGizmoHandle::PlaneYZ && handle <= EditorGizmoHandle::PlaneXY;
+  if (!plane && (axis > 2 || !frame.axisUsable[axis])) return false;
   outDrag.frame = frame;
   outDrag.handle = handle;
   outDrag.initial = initial;
@@ -167,6 +168,58 @@ bool resolveGizmoTranslation(const EditorGizmoDrag &drag, ui::UiPoint totalScree
   // é o oposto do que um passo de grade serve para fazer.
   outTransform.position[axis] = snapValue(moved, drag.settings.snapStep);
   return isTransformValid(outTransform);
+}
+
+bool resolveGizmoTransform(const EditorGizmoDrag &drag, EditorGizmoMode mode,
+                           ui::UiPoint delta, EditorTransform &out) noexcept {
+  if (mode == EditorGizmoMode::Translate) return resolveGizmoTranslation(drag, delta, out);
+  if (!drag.active || !drag.frame.valid || !std::isfinite(delta.x) || !std::isfinite(delta.y)) return false;
+  const u32 axis = axisIndexOf(drag.handle);
+  if (axis > 2 || mode == EditorGizmoMode::Select) return false;
+  const float x = drag.frame.axisEndScreen[axis].x - drag.frame.originScreen.x;
+  const float y = drag.frame.axisEndScreen[axis].y - drag.frame.originScreen.y;
+  const float length = std::sqrt(x*x + y*y);
+  if (length <= 0.0f) return false;
+  const float pixels = (delta.x*x + delta.y*y) / length;
+  out = drag.initial;
+  if (mode == EditorGizmoMode::Rotate) out.rotationDegrees[axis] += pixels;
+  else out.scale[axis] = std::clamp(out.scale[axis] * std::exp(pixels / 100.0f), 0.001f, 10000.0f);
+  return isTransformValid(out);
+}
+
+void gizmoRingPoint(const float origin[3], u32 axis, float radius, float angle, float out[3]) noexcept {
+  for(u32 i=0;i<3;++i) out[i]=origin[i];
+  if(axis>2) return;
+  out[(axis+1)%3]+=radius*std::cos(angle);
+  out[(axis+2)%3]+=radius*std::sin(angle);
+}
+bool gizmoPlanePoint(const EditorViewport &view,const float origin[3],u32 axis,
+                     ui::UiPoint point,float out[3]) noexcept {
+  if(axis>2 || !origin || !out) return false;
+  const auto ray=screenPointToRay(view,point);
+  if(!ray.valid || std::abs(ray.direction[axis])<.0001f) return false;
+  const float t=(origin[axis]-ray.origin[axis])/ray.direction[axis];
+  if(!std::isfinite(t) || t<=0) return false;
+  float hit[3];
+  for(u32 i=0;i<3;++i) {
+    hit[i]=ray.origin[i]+t*ray.direction[i];
+    if(!std::isfinite(hit[i])) return false;
+  }
+  for(u32 i=0;i<3;++i) out[i]=hit[i];
+  return true;
+}
+bool gizmoRingAngle(const EditorViewport &view,const float origin[3],u32 axis,
+                    ui::UiPoint point,float &angle) noexcept {
+  if(axis>2) return false;
+  const auto ray=screenPointToRay(view,point);
+  if(!ray.valid || std::abs(ray.direction[axis])<.0001f) return false;
+  const float t=(origin[axis]-ray.origin[axis])/ray.direction[axis];
+  if(!std::isfinite(t) || t<=0) return false;
+  const u32 u=(axis+1)%3,v=(axis+2)%3;
+  const float x=ray.origin[u]+t*ray.direction[u]-origin[u];
+  const float y=ray.origin[v]+t*ray.direction[v]-origin[v];
+  if(!std::isfinite(x) || !std::isfinite(y) || x*x+y*y<1e-12f) return false;
+  angle=std::atan2(y,x);return true;
 }
 
 } // namespace ae::editor

@@ -35,7 +35,7 @@ public final class ShellView extends View {
 
     public enum Screen { SPLASH, PROJECTS, LOADING }
 
-    private static final String[] NAV = { "Projects", "New", "Import", "Settings" };
+    private static final String[] NAV = { "Projetos", "Novo", "Importar", "Configurações" };
 
     private final ProjectStore store;
     private Listener listener;
@@ -215,8 +215,8 @@ public final class ShellView extends View {
         float top = -overflowY, bottom = Design.STAGE_H + overflowY;
         if (leftTag) {
             drawBracket(target, left + 35f, top + 36f, 30f, 44f, true);
-            drawCapText(target, "CREATE", left + 68f, top + 60f, tagText);
-            drawCapText(target, "WITHOUT LIMITS", left + 68f, top + 80f, tagText);
+            drawCapText(target, "CRIE", left + 68f, top + 60f, tagText);
+            drawCapText(target, "SEM LIMITES", left + 68f, top + 80f, tagText);
             drawSquares(target, right - 100f, top + 37f, 11.5f);
         }
         drawBracket(target, right - 82f, bottom - 84f, 43f, 44f, false);
@@ -277,7 +277,7 @@ public final class ShellView extends View {
         drawChrome(target, true, true);
         drawLockup(target, 385f, 376f, 892f, 156f);
         drawBar(target, 571f, 777f, 529f, 9f);
-        drawCenteredCapText(target, "INITIALIZING WORKSPACE", 814f, captionText);
+        drawCenteredCapText(target, "INICIANDO ÁREA DE TRABALHO", 814f, captionText);
     }
 
     private void drawLoading(Canvas target) {
@@ -296,7 +296,7 @@ public final class ShellView extends View {
         if (cover != null) drawRoundedBitmap(target, cover, box, 8f);
 
         float column = 890f;
-        drawCapText(target, "PROJECT", column, 386f, fieldText);
+        drawCapText(target, "PROJETO", column, 386f, fieldText);
         drawCapText(target, project != null ? project.name : "—", column, 415f, titleText);
 
         // O mark identifica o produto e nunca um comando, então a linha do
@@ -308,17 +308,17 @@ public final class ShellView extends View {
         target.drawRect(column, 520f, 1263f, 521f, lineSoftPaint);
 
         drawCubeGlyph(target, column, 560f);
-        drawCapText(target, "SCENE", column + 40f, 545f, fieldText);
+        drawCapText(target, "CENA", column + 40f, 545f, fieldText);
         drawCapText(target, project != null ? String.valueOf(project.scenes) : "0",
                 column + 40f, 570f, statText);
         target.drawRect(column + 158f, 538f, column + 159f, 580f, lineSoftPaint);
         drawSheetGlyph(target, column + 196f, 560f);
-        drawCapText(target, "ASSETS", column + 236f, 545f, fieldText);
+        drawCapText(target, "RECURSOS", column + 236f, 545f, fieldText);
         drawCapText(target, project != null ? String.valueOf(project.assets) : "0",
                 column + 236f, 570f, statText);
 
         drawBar(target, 534f, 731f, 603f, 10f);
-        drawCenteredCapText(target, "LOADING PROJECT ASSETS", 768f, captionText);
+        drawCenteredCapText(target, "CARREGANDO RECURSOS DO PROJETO", 768f, captionText);
     }
 
     private void drawProjects(Canvas target) {
@@ -326,11 +326,11 @@ public final class ShellView extends View {
         float top = -overflowY, bottom = Design.STAGE_H + overflowY;
 
         drawLockup(target, left + 69f, top + 45f, 372f, 63f);
-        drawCapText(target, "CREATE", right - 349f, top + 48f, tagText);
-        drawCapText(target, "WITHOUT LIMITS", right - 349f, top + 68f, tagText);
+        drawCapText(target, "CRIE", right - 349f, top + 48f, tagText);
+        drawCapText(target, "SEM LIMITES", right - 349f, top + 68f, tagText);
         drawSquares(target, right - 110f, top + 45f, 13f);
         drawBracket(target, right - 87f, bottom - 94f, 44f, 51f, false);
-        drawRightCapText(target, "READY FOR", right - 95f, bottom - 93f, tagText);
+        drawRightCapText(target, "PRONTO PARA", right - 95f, bottom - 93f, tagText);
         drawRightCapText(target, "WHAT'S NEXT", right - 95f, bottom - 73f, tagText);
 
         // A barra lateral encosta na borda física; deixá-la no palco abriria uma
@@ -352,14 +352,14 @@ public final class ShellView extends View {
         drawCapText(target, "ASTRA ENGINE", left + 51f, bottom - 78f, stampText);
         drawCapText(target, "v1.0.0", left + 51f, bottom - 58f, stampText);
 
-        drawCapText(target, "PROJECTS", railEnd + 33f, 310f, labelText);
+        drawCapText(target, "PROJETOS", railEnd + 33f, 310f, labelText);
 
         float buttonRight = right - 46f, buttonLeft = buttonRight - 264f;
         box.set(buttonLeft, 234f, buttonRight, 300f);
         target.drawRoundRect(box, 14f, 14f, accentPaint);
         target.drawLine(buttonLeft + 52f, 254f, buttonLeft + 52f, 280f, plusPaint);
         target.drawLine(buttonLeft + 39f, 267f, buttonLeft + 65f, 267f, plusPaint);
-        drawCapText(target, "New Project", buttonLeft + 85f, 256f, buttonText);
+        drawCapText(target, "Novo projeto", buttonLeft + 85f, 256f, buttonText);
         hits.add(new Hit(buttonLeft, 234f, buttonRight, 300f, this::requestNewProject));
 
         // As quatro capas preenchem a faixa entre a barra lateral e a borda
@@ -392,7 +392,7 @@ public final class ShellView extends View {
                 cover != null ? coverEdgePaint(cover, box) : raisedPaint);
 
         drawCapText(target, "ASTRA", left + 21f, top + 22f, kickerText);
-        drawCapText(target, "PROJECT", left + 21f, top + 41f, kickerText);
+        drawCapText(target, "PROJETO", left + 21f, top + 41f, kickerText);
         if (!SceneTemplate.byId(project.templateId).ready) drawSoonFlag(target, left + w - 21f, top + 20f);
         drawCapText(target, project.name, left + 22f, top + coverH + 23f, cardText);
         drawOpenGlyph(target, left + w - 41f, top + coverH + 25f);

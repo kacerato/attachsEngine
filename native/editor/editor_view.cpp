@@ -181,39 +181,39 @@ bool projectSegmentToScreen(const EditorViewport &viewport, const float from[3],
   if (!isViewportValid(viewport) || from == nullptr || to == nullptr) return false;
   if (!isFiniteTriple(from) || !isFiniteTriple(to)) return false;
 
-  const ViewBasis basis = buildViewBasis(viewport.frustum.yaw, viewport.frustum.pitch);
-  const auto depthOf = [&](const float world[3]) {
-    const float delta[3] = {world[0] - viewport.frustum.cameraPosition[0],
-                            world[1] - viewport.frustum.cameraPosition[1],
-                            world[2] - viewport.frustum.cameraPosition[2]};
-    float view[3]{};
-    worldToView(basis, delta, view);
-    return view[2];
-  };
-
-  // Uma folga sobre o plano próximo: exatamente NO plano a divisão ainda é
-  // instável em precisão simples, e o ponto interpolado sairia tremendo.
-  const float nearPlane = viewport.frustum.nearPlane * 1.01f;
-  float start[3] = {from[0], from[1], from[2]};
-  float end[3] = {to[0], to[1], to[2]};
-  const float startDepth = depthOf(start);
-  const float endDepth = depthOf(end);
-  if (startDepth < nearPlane && endDepth < nearPlane) return false;
-
-  if (startDepth < nearPlane || endDepth < nearPlane) {
-    const float span = endDepth - startDepth;
-    if (std::fabs(span) < 1e-6f) return false;
-    const float t = (nearPlane - startDepth) / span;
-    float *moved = startDepth < nearPlane ? start : end;
-    for (u32 axis = 0; axis < 3; ++axis)
-      moved[axis] = from[axis] + (to[axis] - from[axis]) * t;
+  const ViewBasis basis=buildViewBasis(viewport.frustum.yaw,viewport.frustum.pitch);
+  double clip[2][3]{};
+  for(unsigned endpoint=0;endpoint<2;++endpoint) {
+    const float *world=endpoint?to:from;double view[3]{};
+    const float *rows[]{basis.row0,basis.row1,basis.row2};
+    for(unsigned r=0;r<3;++r) for(unsigned k=0;k<3;++k)
+      view[r]+=rows[r][k]*(static_cast<double>(world[k])-viewport.frustum.cameraPosition[k]);
+    const double x=view[0]/viewport.frustum.tangentHalfHorizontal;
+    const double y=-view[1]/viewport.frustum.tangentHalfVertical;
+    clip[endpoint][0]=viewport.surfaceTransform.xx*x+viewport.surfaceTransform.xy*y;
+    clip[endpoint][1]=viewport.surfaceTransform.yx*x+viewport.surfaceTransform.yy*y;
+    clip[endpoint][2]=view[2];
   }
-
-  const EditorProjectedPoint projectedFrom = projectWorldToScreen(viewport, start);
-  const EditorProjectedPoint projectedTo = projectWorldToScreen(viewport, end);
-  if (!projectedFrom.valid || !projectedTo.valid) return false;
-  outFrom = projectedFrom.screen;
-  outTo = projectedTo.screen;
+  // Recorte homogêneo ANTES da divisão perspectiva. Não gera coordenadas
+  // gigantes nem reconstrói um ponto no plano próximo em precisão simples.
+  double first=0,last=1;
+  const auto plane=[&](double a,double b) {
+    if(a<0 && b<0) return false;
+    if(a<0) first=std::max(first,a/(a-b));
+    else if(b<0) last=std::min(last,a/(a-b));
+    return first<=last;
+  };
+  if(!plane(clip[0][2]-viewport.frustum.nearPlane,clip[1][2]-viewport.frustum.nearPlane)) return false;
+  for(unsigned axis=0;axis<2;++axis) for(int sign:{-1,1})
+    if(!plane(clip[0][2]+sign*clip[0][axis],clip[1][2]+sign*clip[1][axis])) return false;
+  const auto project=[&](double t) {
+    const double depth=clip[0][2]+t*(clip[1][2]-clip[0][2]);
+    const double x=(clip[0][0]+t*(clip[1][0]-clip[0][0]))/depth;
+    const double y=(clip[0][1]+t*(clip[1][1]-clip[0][1]))/depth;
+    return UiPoint{static_cast<float>(viewport.rect.x+(x*.5+.5)*viewport.rect.width),
+                   static_cast<float>(viewport.rect.y+(y*.5+.5)*viewport.rect.height)};
+  };
+  outFrom=project(first);outTo=project(last);
   return true;
 }
 

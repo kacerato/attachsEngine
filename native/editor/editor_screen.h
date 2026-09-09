@@ -22,6 +22,7 @@
 
 #include "core/base.h"
 #include "editor/editor_document.h"
+#include "editor/editor_filesystem.h"
 #include "editor/editor_gizmo.h"
 #include "editor/editor_history.h"
 #include "editor/editor_view.h"
@@ -35,8 +36,12 @@ namespace ae::editor {
 // no fim são para os que existem por entidade ou por eixo, onde o índice entra
 // no próprio identificador.
 enum class EditorWidget : u32 {
+  CreationCategoryBase=0x63000000,
+  CreationRowBase=0x64000000,
   None = 0,
-  Undo,
+  FilesUp=0x65000000,FilesRefresh,FilesPrevious,FilesNext,FilesSplitter,FilesCollapse,
+  FileRowBase=0x66000000,
+  Undo=1,
   Redo,
   OpenProject,
   ProjectMenu,
@@ -52,6 +57,10 @@ enum class EditorWidget : u32 {
   HierarchyAdd,
   HierarchyMenu,
   HierarchyToggle,
+  HierarchySearch,
+  HierarchyExpandAll,
+  HierarchyCollapseAll,
+  HierarchyClearSearch,
   InspectorMenu,
   InspectorActive,
   InspectorToggle,
@@ -75,9 +84,65 @@ enum class EditorWidget : u32 {
   ToolMove,
   ToolRotate,
   ToolScale,
+  NavigationOrbit,
+  NavigationPan,
+  NavigationZoom,
+  FrameSelection,
+  FrameAll,
+  DeleteSelection,
+  DuplicateSelection,
+  CreateGroup,
+  AssetsPrevious,
+  AssetsNext,
+  SaveDocument,
+  PropertyPrevious,
+  PropertyNext,
+  ReparentSelection,
+  MoveToRoot,
+  MoveEarlier,
+  MoveLater,
+  RenameSelection,
+  NameApply,
+  NameCancel,
+  NameBackspace,
+  NameClear,
+  NameShift,
+  NumericApply,
+  NumericCancel,
+  NumericBackspace,
+  NumericClear,
+  CreateFiniteWater,
+  CreateOceanWater,
+  CreateRiverWater,
+  CreateBuoyantBox,
+  CreateMenuClose,
+  CreationSearch,
+  CreationClearSearch,
+  CreationPrevious,
+  CreationNext,
+  CreateCamera,
+  CreateGround,
+  CreateCube,
+  WorkspaceMenuClose,
+  WaterTabSurface,
+  WaterTabRoute,
+  WaterTabPhysics,
+  WaterTabEffects,
+  RoutePointAdd,
+  RoutePointRemove,
+  RoutePointPrevious,
+  RoutePointNext,
+  ToggleWaterPhysics,
+  ToggleRigidBody,
+  RoutePointBase=0x62000000u,
+  NumericKeyBase = 0x5000'0000u,
+
 
   // Faixas. O identificador de uma linha da hierarquia é a base mais o id da
   // entidade, o que dispensa uma tabela de tradução por frame.
+  NameKeyBase = 0x7000'0000u,
+  HierarchyCollapseBase = 0x8000'0000u,
+  AssetRowBase = 0x6000'0000u,
   HierarchyRowBase = 0x1000'0000u,
   HierarchyEyeBase = 0x2000'0000u,
   TransformFieldBase = 0x3000'0000u,  // + linha * 3 + eixo
@@ -101,6 +166,7 @@ inline constexpr u32 gizmoAxisWidget(u32 axis) noexcept {
 // O que o viewport está mostrando. É a aba do topo, e trocá-la troca o contexto
 // inteiro — não é um botão que dispara algo.
 enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Settings };
+enum class EditorNavigationMode : u8 { Orbit, Pan, Zoom };
 enum class EditorInspectorTab : u8 { Transform, Material, Properties };
 
 struct EditorScreenState final {
@@ -109,6 +175,11 @@ struct EditorScreenState final {
   ui::UiRect surface{};
   ui::UiInsets safeArea{};
   const EditorDocument *document = nullptr;
+  const EditorFileSystem *files=nullptr;
+  u32 fileScroll=0;
+  float fileScrollOffset=0;
+  float filePanelRatio=.46f;
+  bool filesCollapsed=false;
   EditorEntityId selection = kInvalidEntity;
   // Widget sob o dedo agora, para o realce de pressionado.
   u32 pressedWidget = 0;
@@ -123,12 +194,41 @@ struct EditorScreenState final {
   bool inspectorVisible = true;
   // Quantas linhas a hierarquia já rolou, em linhas inteiras.
   u32 hierarchyScroll = 0;
+  float hierarchyScrollRemainder = 0.0f;
   // Câmera do viewport. Sem ela a cena continua aparecendo, mas sem grade nem
   // gizmo — que é exatamente a diferença entre um preview e um editor.
   const EditorViewport *view = nullptr;
   bool showGrid = true;
+  EditorNavigationMode navigation = EditorNavigationMode::Orbit;
   EditorGizmoHandle activeGizmoAxis = EditorGizmoHandle::None;
   const char *projectName = "Untitled";
+  u32 numericField = 0;
+  EditorEntityId numericEntity = kInvalidEntity;
+  char numericText[48]{};
+  bool numericReplace = false;
+  bool numericError = false;
+  bool entityMenu = false;
+  bool creationMenu=false;
+  bool workspaceMenu=false;
+  unsigned creationCategory=0,creationSelection=0,creationPage=0;
+  bool editingCreationSearch=false;
+  char creationSearch[kEditorNameCapacity]{};
+  bool editingHierarchySearch=false;
+  char hierarchySearch[kEditorNameCapacity]{};
+  u32 waterTab=0,routePoint=0;
+  std::vector<EditorEntityId> collapsedEntities;
+  EditorEntityId renameEntity = kInvalidEntity;
+  char renameText[kEditorNameCapacity]{};
+  bool renameUppercase = false;
+  u32 propertyPage = 0;
+  EditorEntityId reparentEntity = kInvalidEntity;
+  u32 assetCount = 0;
+  u32 assetScroll = 0;
+  bool draggingAsset = false;
+  EditorEntityId draggingEntity = kInvalidEntity;
+  ui::UiPoint assetDragPosition{};
+  bool saveRequested = false;
+  const char *status = "";
   bool canUndo = false;
   bool canRedo = false;
 };
@@ -140,6 +240,7 @@ struct EditorScreenLayout final {
   ui::UiRect viewport{};
   ui::UiRect topBar{};
   ui::UiRect hierarchyPanel{};
+  ui::UiRect filesPanel{};
   ui::UiRect inspectorPanel{};
   u32 hierarchyRowCount = 0;
   // Quantas linhas caberiam. Menor que o total significa que há rolagem.

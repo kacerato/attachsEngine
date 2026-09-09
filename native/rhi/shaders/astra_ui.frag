@@ -26,6 +26,7 @@ layout(push_constant) uniform UiPushConstants {
   vec4 surface;
   vec4 surfaceTransform;
   vec4 atlasSizes;
+  vec4 outputFlags;
 } push;
 
 layout(location = 0) flat in uint vInstance;
@@ -58,6 +59,11 @@ float coverageFromDistance(float distance) {
   return clamp(0.5 - distance, 0.0, 1.0);
 }
 
+vec4 outputColor(vec4 color) {
+  if(push.outputFlags.x>0.5) color.rgb=mix(color.rgb/12.92,pow((color.rgb+0.055)/1.055,vec3(2.4)),greaterThan(color.rgb,vec3(0.04045)));
+  return color;
+}
+
 void main() {
   const UiInstance instance = ui.instances[vInstance];
 
@@ -80,7 +86,7 @@ void main() {
     const float lengthSquared = max(dot(along, along), 0.0001);
     const float t = clamp(dot(vPixel - from, along) / lengthSquared, 0.0, 1.0);
     const float toSegment = length(vPixel - (from + along * t)) - instance.params.y * 0.5;
-    outColor = vec4(fill.rgb, fill.a * coverageFromDistance(toSegment));
+    outColor = outputColor(vec4(fill.rgb, fill.a * coverageFromDistance(toSegment)));
     return;
   }
 
@@ -96,7 +102,7 @@ void main() {
     const float texelsPerPixel = instance.atlas.w / max(instance.bounds.w, 0.001);
     const float softness = max(texelsPerPixel / (2.0 * max(instance.params.w, 0.001)), 0.0015);
     const float alpha = clamp((field - 0.5) / softness + 0.5, 0.0, 1.0);
-    outColor = vec4(fill.rgb, fill.a * alpha);
+    outColor = outputColor(vec4(fill.rgb, fill.a * alpha));
     return;
   }
 
@@ -113,7 +119,7 @@ void main() {
       color.a *= coverageFromDistance(
           roundedBoxDistance(vPixel, instance.bounds, instance.params.x));
     }
-    outColor = color;
+    outColor = outputColor(color);
     return;
   }
 
@@ -137,5 +143,5 @@ void main() {
                 innerCoverage);
   }
 
-  outColor = vec4(color.rgb, color.a * outer);
+  outColor = outputColor(vec4(color.rgb, color.a * outer));
 }

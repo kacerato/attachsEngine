@@ -33,21 +33,21 @@ inline UiColor withAlpha(UiColor color, float alpha) noexcept {
 
 struct UiPalette final {
   UiColor voidBlack = 0xFF000000;
-  UiColor canvas = 0xFF050505;
-  UiColor silhouette = 0xFF101010;
-  UiColor surface = 0xFF0F0F0F;
-  UiColor raised = 0xFF141414;
-  UiColor line = 0xFF1E1E1E;
-  UiColor lineSoft = 0xFF131313;
-  UiColor track = 0xFF3D3D3D;
-  UiColor text = 0xFFFFFFFF;
-  UiColor textDim = 0xFF9A9A9A;
-  UiColor textMuted = 0xFF6E6E6E;
-  UiColor textFaint = 0xFF4A4A4A;
-  UiColor accent = 0xFFCAFB04;
-  UiColor accentInk = 0xFF050505;
-  // rgba(202,251,4,0.09) do JSON, pré-multiplicado no canal alfa do formato.
-  UiColor accentWash = 0x17CAFB04;
+  UiColor canvas = 0xFF191C21;
+  UiColor silhouette = 0xFF20242B;
+  UiColor surface = 0xFF242830;
+  UiColor raised = 0xFF2E343E;
+  UiColor line = 0xFF414954;
+  UiColor lineSoft = 0xFF292E36;
+  UiColor track = 0xFF535F70;
+  UiColor text = 0xFFEEF1F5;
+  UiColor textDim = 0xFFBCC4CF;
+  UiColor textMuted = 0xFF929CAB;
+  UiColor textFaint = 0xFF687485;
+  UiColor accent = 0xFF70ACF5;
+  UiColor accentInk = 0xFF191C21;
+  // rgba(112,172,245,0.09) do JSON, pré-multiplicado no canal alfa do formato.
+  UiColor accentWash = 0x1770ACF5;
   // Os três eixos do gizmo. Vermelho/verde/azul não é escolha estética: é a
   // convenção que o usuário já traz de qualquer outra ferramenta 3D, e trocá-la
   // por cores da marca custaria mais do que a coerência ganharia.
@@ -57,9 +57,9 @@ struct UiPalette final {
 };
 
 struct UiRadii final {
-  float card = 16.0f;
+  float card = 8.0f;
   float thumb = 8.0f;
-  float control = 10.0f;
+  float control = 4.0f;
   float mark = 24.0f;
   float bar = 5.0f;
 };
