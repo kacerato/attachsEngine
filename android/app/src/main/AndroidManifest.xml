@@ -44,22 +44,9 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".godot.GodotEditorActivity"
-            android:exported="false"
-            android:process=":editor_ui"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density"
-            android:screenOrientation="sensorLandscape"
-            android:launchMode="singleTask" />
-        <!-- Seletor tecnico de cenas de validacao. Sai do menu do aparelho mas
-             continua acessivel por adb para as medicoes de regressao. -->
-        <activity
-            android:name=".SceneLauncherActivity"
-            android:exported="true"
-            android:screenOrientation="sensorLandscape" />
-        <activity
             android:name=".AetherActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
             tools:ignore="DiscouragedApi">

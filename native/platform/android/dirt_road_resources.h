@@ -32,8 +32,11 @@ public:
                   const std::atomic<bool> *cancel = nullptr,
                   const char *assetRoot = "dirt_road",
                   u32 waterGridSegments = 0, bool waterAuthoring = false);
+  bool initializePrimitives(rhi::VulkanDevice &device,rhi::VulkanUploadContext &upload);
   void shutdown();
 
+  std::span<const u8> pickingVertices() const { return pickingVertices_; }
+  std::span<const u32> pickingIndices() const { return pickingIndices_; }
   VkBuffer vertexBuffer() const { return vertices_.handle(); }
   VkBuffer indexBuffer() const { return indices_.handle(); }
   VkImageView view(u32 index) const { return images_[index].view(); }
@@ -81,6 +84,8 @@ public:
   void releaseStaticCollisionCpuData() { collisionMesh_.clear(); }
 
 private:
+  std::vector<u8> pickingVertices_;
+  std::vector<u32> pickingIndices_;
   renderer::MapPackageHeader header_{};
   u64 packageFingerprint_ = 0;
   std::vector<renderer::MapTextureRecord> textureRecords_;

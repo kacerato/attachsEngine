@@ -164,7 +164,8 @@ EditorPickResult pickNearest(std::span<const EditorPickCandidate> candidates,
     if (farHit < 0.0f) continue;  // inteiramente atrás da câmera
     // Câmera dentro da esfera conta como acerto na distância zero: o usuário
     // está dentro do objeto e tocar a tela deve selecioná-lo.
-    const float distance = nearHit >= 0.0f ? nearHit : 0.0f;
+    float distance = nearHit >= 0.0f ? nearHit : 0.0f;
+    if(candidate.mesh && !candidate.mesh->intersect(ray.origin,ray.direction,candidate.model,distance)) continue;
     // Estritamente menor: empate fica com quem foi registrado antes, o que
     // torna a seleção a mesma entre frames com a mesma lista.
     if (result.hit && distance >= result.distance) continue;

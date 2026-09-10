@@ -41,6 +41,12 @@
       "artifactName": "aether_core",
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_core.a"
     },
+    "aether_editor::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_editor",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_editor.a"
+    },
     "aether_native_app_glue::@6890427a1f51a3e7e1df": {
       "toolchain": "toolchain",
       "abi": "arm64-v8a",
@@ -89,6 +95,18 @@
       "artifactName": "aether_transform",
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\602j185f\\obj\\arm64-v8a\\libaether_transform.so",
       "runtimeFiles": []
+    },
+    "aether_ui::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_ui",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_ui.a"
+    },
+    "aether_water_runtime::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_water_runtime",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_water_runtime.a"
     },
     "benchmark_physics2d::@6890427a1f51a3e7e1df": {
       "toolchain": "toolchain",

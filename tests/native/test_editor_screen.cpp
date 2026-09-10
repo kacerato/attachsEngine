@@ -170,28 +170,19 @@ AE_TEST(screen_hierarchy_rows_and_their_eyes_are_separate_targets) {
                "o olho esta por cima da linha e ganha o toque");
 }
 
-AE_TEST(screen_tabs_divide_the_inspector_content) {
-  // As abas nao decoram: elas trocam o que o painel mostra. Um telefone nao tem
-  // altura para transform e interruptores ao mesmo tempo.
+namespace { bool findWidget(Frame &frame,u32 widget,const UiRect &area,UiPoint &out); }
+AE_TEST(screen_folded_components_open_into_available_inspector_space) {
   WaterLab lab;
-  Frame transform;
+  Frame folded;
   EditorScreenState state = waterLabState(lab);
   state.surface = {0.0f, 0.0f, 853.0f, 394.0f};
-  state.tab = EditorInspectorTab::Transform;
-  composeFrame(transform, state);
-
-  Frame properties;
-  state.tab = EditorInspectorTab::Properties;
-  composeFrame(properties, state);
-
-  const UiRect panel = properties.layout.inspectorPanel;
-  const UiPoint probe{panel.right() - 30.0f, panel.y + panel.height * 0.5f};
-  const UiPointerRouting onProperties =
-      properties.router.route({1, UiPointerPhase::Down, probe, 0.0});
-  const UiPointerRouting onTransform =
-      transform.router.route({2, UiPointerPhase::Down, probe, 0.0});
-  AE_EXPECT_TRUE(onProperties.widgetId != onTransform.widgetId,
-                 "o mesmo ponto do painel controla coisas diferentes em cada aba");
+  composeFrame(folded,state);UiPoint point{};
+  AE_EXPECT_TRUE(findWidget(folded,widgetId(EditorWidget::TransformFold),state.surface,point),"transform header available");
+  AE_EXPECT_TRUE(!findWidget(folded,transformFieldWidget(0,0),state.surface,point),"fields start closed");
+  state.componentSelection=state.selection;state.expandedComponent="astra.transform";
+  Frame expanded;composeFrame(expanded,state);
+  AE_EXPECT_TRUE(findWidget(expanded,transformFieldWidget(0,0),state.surface,point),"focused component exposes position");
+  AE_EXPECT_TRUE(findWidget(expanded,widgetId(EditorWidget::AddComponentMenu),state.surface,point),"Add stays reachable while editing");
 }
 
 namespace {
@@ -223,7 +214,7 @@ bool findWidget(Frame &frame, u32 widget, const UiRect &area, UiPoint &out) {
 
 } // namespace
 
-AE_TEST(screen_workspace_tabs_live_in_the_top_bar_and_switch_context) {
+AE_TEST(screen_scene_menu_separates_authoring_context_from_play) {
   // A doca inferior virou aba superior. Numa tela em paisagem a borda de baixo e
   // a mais cara: e onde o polegar cobre o conteudo e onde a barra de gestos do
   // sistema disputa o toque.
@@ -233,8 +224,12 @@ AE_TEST(screen_workspace_tabs_live_in_the_top_bar_and_switch_context) {
   composeFrame(frame, state);
 
   UiPoint at{};
-  AE_EXPECT_TRUE(findWidget(frame, widgetId(EditorWidget::TabLighting), frame.layout.topBar, at),
-                 "a aba Lighting esta na barra superior");
+  AE_EXPECT_TRUE(!findWidget(frame,widgetId(EditorWidget::TabLighting),frame.layout.topBar,at),"environment is not a top-level tab");
+  AE_EXPECT_TRUE(!findWidget(frame,widgetId(EditorWidget::TabPlay),frame.layout.topBar,at),"no duplicate play tab");
+  AE_EXPECT_TRUE(!findWidget(frame,widgetId(EditorWidget::OpenProject),frame.layout.topBar,at),"no disconnected open command");
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ProjectMenu),frame.layout.topBar,at),"scene menu");
+  tap(frame,state,lab,at);composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::TabLighting),state.surface,at),"scene environment remains reachable");
   const EditorPointerOutcome outcome = tap(frame, state, lab, at);
   AE_EXPECT_TRUE(outcome.consumed, "");
   AE_EXPECT_TRUE(state.workspace == EditorWorkspace::Lighting, "e trocar de aba troca o contexto");
@@ -298,6 +293,48 @@ AE_TEST(screen_splitter_drag_resizes_the_panel_continuously) {
 
   composeFrame(frame, state);
   AE_EXPECT_TRUE(frame.layout.hierarchyPanel.width > before, "e o proximo frame ja mostra isso");
+}
+
+AE_TEST(screen_compact_panels_switch_without_mutating_authoring_or_wide_widths) {
+  WaterLab lab;Frame frame;auto state=waterLabState(lab);
+  EditorFileSystem files;state.files=&files;
+  state.hierarchyWidth=260;state.inspectorWidth=280;
+  const auto selection=state.selection;const auto revision=lab.document.revision();
+  const auto undoDepth=lab.history.undoDepth();
+  state.surface={0,0,600,394};composeFrame(frame,state);
+  AE_EXPECT_TRUE(frame.layout.hierarchyPanel.isEmpty() && frame.layout.inspectorPanel.isEmpty(),"compact starts with viewport");
+  AE_EXPECT_EQ(frame.layout.viewport.y,frame.layout.topBar.bottom(),"no permanent panel strip");
+  const auto openPanels=[&] {
+    UiPoint button{};
+    AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::CompactPanelMenu),state.surface,button),"panel menu reachable");
+    tap(frame,state,lab,button);composeFrame(frame,state);
+  };
+  UiPoint at{};
+  openPanels();
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::HierarchyToggle),state.surface,at),"hierarchy remains reachable");
+  tap(frame,state,lab,at);composeFrame(frame,state);
+  AE_EXPECT_EQ(frame.layout.hierarchyPanel.width,240.0f,"readable hierarchy width");
+  AE_EXPECT_TRUE(frame.layout.inspectorPanel.isEmpty() && frame.layout.viewport.width>=180,"one side panel only");
+  openPanels();
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::InspectorToggle),state.surface,at),"inspector remains reachable");
+  tap(frame,state,lab,at);composeFrame(frame,state);
+  AE_EXPECT_TRUE(frame.layout.hierarchyPanel.isEmpty() && frame.layout.inspectorPanel.width==240,"switch to inspector");
+  openPanels();
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::CompactFiles),state.surface,at),"files reachable even with short body");
+  tap(frame,state,lab,at);state.surface.height=263;composeFrame(frame,state);
+  AE_EXPECT_TRUE(!frame.layout.filesPanel.isEmpty() && frame.layout.hierarchyPanel.isEmpty(),"files use entire side panel");
+  for(auto widget:{EditorWidget::ToolSelect,EditorWidget::ToolMove,EditorWidget::ToolRotate,EditorWidget::ToolScale})
+    AE_EXPECT_TRUE(findWidget(frame,widgetId(widget),frame.layout.viewport,at),"all compact tools remain touchable inside viewport");
+  openPanels();
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::CompactViewport),state.surface,at),"viewport return is always reachable");
+  tap(frame,state,lab,at);composeFrame(frame,state);
+  AE_EXPECT_EQ(frame.layout.viewport.width,600.0f,"return releases all body width");
+  state.surface={0,0,1100,600};composeFrame(frame,state);
+  AE_EXPECT_EQ(frame.layout.hierarchyPanel.width,260.0f,"wide hierarchy restored");
+  AE_EXPECT_EQ(frame.layout.inspectorPanel.width,280.0f,"wide inspector restored");
+  AE_EXPECT_EQ(state.selection,selection,"selection preserved");
+  AE_EXPECT_EQ(lab.document.revision(),revision,"layout does not edit document");
+  AE_EXPECT_EQ(lab.history.undoDepth(),undoDepth,"layout does not enter history");
 }
 
 AE_TEST(screen_the_viewport_never_disappears_between_the_panels) {

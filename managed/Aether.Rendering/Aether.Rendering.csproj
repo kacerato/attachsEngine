@@ -7,5 +7,6 @@
   <ItemGroup>
     <ProjectReference Include="../Aether.Core/Aether.Core.csproj" />
     <ProjectReference Include="../Aether.Scene/Aether.Scene.csproj" />
+    <ProjectReference Include="../Astra.Scripting/Astra.Scripting.csproj" />
   </ItemGroup>
 </Project>

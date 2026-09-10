@@ -1,6 +1,7 @@
 #pragma once
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ae::editor {
@@ -25,6 +26,9 @@ public:
   const std::string &current() const { return current_; }
   const std::string &error() const { return error_; }
   bool ready() const { return !root_.empty(); }
+  bool createDirectory(const std::string &relative);
+  bool createTextFile(const std::string &relative,std::string_view text);
+  std::string rootPath() const;
   std::string resolveFile(const std::string &relative) const;
 private:
   bool resolve(const std::string &relative,std::filesystem::path &out) const;

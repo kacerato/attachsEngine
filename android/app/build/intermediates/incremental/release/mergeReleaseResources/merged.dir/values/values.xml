@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="astra_accent">#CAFB04</color>
+    <color name="astra_void">#000000</color>
     <style name="AetherTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowActionModeOverlay">true</item>
@@ -9,6 +11,15 @@
         <item name="android:colorAccent">#8EA1B5</item>
         <item name="android:navigationBarColor">#17191D</item>
         <item name="android:statusBarColor">#17191D</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <style name="AstraShellTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/astra_void</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:colorAccent">@color/astra_accent</item>
+        <item name="android:navigationBarColor">@color/astra_void</item>
+        <item name="android:statusBarColor">@color/astra_void</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

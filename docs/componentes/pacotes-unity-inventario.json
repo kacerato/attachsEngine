@@ -1,0 +1,2357 @@
+{
+  "date": "2026-09-10",
+  "method": "Declaracoes publicas de componentes fora de comentarios, Editor, Tests, Samples e Documentation; descendencia por nome de base exige revisao semantica antes de declarar cobertura completa. Nenhum binario foi compilado ou executado.",
+  "packages": [
+    {
+      "name": "com.unity.ai.navigation",
+      "version": "2.0.5",
+      "unityMinimum": "2023.2",
+      "sourceArchive": "https://download.packages.unity.com/com.unity.ai.navigation/-/com.unity.ai.navigation-2.0.5.tgz",
+      "integrity": "9f76b145f0a8dd734ff2a4877f7f7edb83b7f62c",
+      "status": "inventario de declaracoes publicas; curadoria funcional por tipo e implementacao pendentes",
+      "types": [
+        {
+          "name": "NavMeshLink",
+          "namespace": "Unity.AI.Navigation",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/NavMeshLink.cs"
+          ]
+        },
+        {
+          "name": "NavMeshModifier",
+          "namespace": "Unity.AI.Navigation",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/NavMeshModifier.cs"
+          ]
+        },
+        {
+          "name": "NavMeshModifierVolume",
+          "namespace": "Unity.AI.Navigation",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/NavMeshModifierVolume.cs"
+          ]
+        },
+        {
+          "name": "NavMeshSurface",
+          "namespace": "Unity.AI.Navigation",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/NavMeshSurface.cs"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "com.unity.animation.rigging",
+      "version": "1.3.0",
+      "unityMinimum": "2022.2",
+      "sourceArchive": "https://download.packages.unity.com/com.unity.animation.rigging/-/com.unity.animation.rigging-1.3.0.tgz",
+      "integrity": "68167b505d2b550a35f5d5b6daef6193de3c7460",
+      "status": "inventario de declaracoes publicas; curadoria funcional por tipo e implementacao pendentes",
+      "types": [
+        {
+          "name": "BlendConstraint",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "RigConstraint",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Constraints/BlendConstraint.cs"
+          ]
+        },
+        {
+          "name": "BoneRenderer",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Utils/BoneRenderer.cs"
+          ]
+        },
+        {
+          "name": "ChainIKConstraint",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "RigConstraint",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Constraints/ChainIKConstraint.cs"
+          ]
+        },
+        {
+          "name": "CustomPlayableGraphEvaluator",
+          "namespace": "DocCodeExamples",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/DocCodeExamples/CustomPlayableGraphEvaluator.cs"
+          ]
+        },
+        {
+          "name": "CustomRigBuilderEvaluator",
+          "namespace": "DocCodeExamples",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/DocCodeExamples/CustomRigBuilderEvaluator.cs"
+          ]
+        },
+        {
+          "name": "DampedTransform",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "RigConstraint",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Constraints/DampedTransform.cs"
+          ]
+        },
+        {
+          "name": "MultiAimConstraint",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "RigConstraint",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Constraints/MultiAimConstraint.cs"
+          ]
+        },
+        {
+          "name": "MultiParentConstraint",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "RigConstraint",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Constraints/MultiParentConstraint.cs"
+          ]
+        },
+        {
+          "name": "MultiPositionConstraint",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "RigConstraint",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Constraints/MultiPositionConstraint.cs"
+          ]
+        },
+        {
+          "name": "MultiReferentialConstraint",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "RigConstraint",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Constraints/MultiReferentialConstraint.cs"
+          ]
+        },
+        {
+          "name": "MultiRotationConstraint",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "RigConstraint",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Constraints/MultiRotationConstraint.cs"
+          ]
+        },
+        {
+          "name": "OverrideTransform",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "RigConstraint",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Constraints/OverrideTransform.cs"
+          ]
+        },
+        {
+          "name": "Rig",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Rig.cs"
+          ]
+        },
+        {
+          "name": "RigBuilder",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/RigBuilder.cs"
+          ]
+        },
+        {
+          "name": "RigConstraint",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/RigConstraint.cs"
+          ]
+        },
+        {
+          "name": "RigTransform",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/RigTransform.cs"
+          ]
+        },
+        {
+          "name": "TwistChainConstraint",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "RigConstraint",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Constraints/TwistChainConstraint.cs"
+          ]
+        },
+        {
+          "name": "TwistCorrection",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "RigConstraint",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Constraints/TwistCorrection.cs"
+          ]
+        },
+        {
+          "name": "TwoBoneIKConstraint",
+          "namespace": "UnityEngine.Animations.Rigging",
+          "base": "RigConstraint",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AnimationRig/Constraints/TwoBoneIKConstraint.cs"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "com.unity.cinemachine",
+      "version": "3.1.3",
+      "unityMinimum": "2022.3",
+      "sourceArchive": "https://download.packages.unity.com/com.unity.cinemachine/-/com.unity.cinemachine-3.1.3.tgz",
+      "integrity": "624f919d8cdd376712eda21b43abcb0330c023e2",
+      "status": "inventario de declaracoes publicas; curadoria funcional por tipo e implementacao pendentes",
+      "types": [
+        {
+          "name": "Cinemachine3rdPersonFollow",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/Cinemachine3rdPersonFollow.cs"
+          ]
+        },
+        {
+          "name": "CinemachineAutoFocus",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/PostProcessing/CinemachineAutoFocus.cs"
+          ]
+        },
+        {
+          "name": "CinemachineBasicMultiChannelPerlin",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/CinemachineBasicMultiChannelPerlin.cs"
+          ]
+        },
+        {
+          "name": "CinemachineBrain",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineBrain.cs"
+          ]
+        },
+        {
+          "name": "CinemachineBrainEvents",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineMixerEventsBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Helpers/CinemachineBrainEvents.cs"
+          ]
+        },
+        {
+          "name": "CinemachineCamera",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineVirtualCameraBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineCamera.cs"
+          ]
+        },
+        {
+          "name": "CinemachineCameraEvents",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Helpers/CinemachineCameraEvents.cs"
+          ]
+        },
+        {
+          "name": "CinemachineCameraManagerBase",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineVirtualCameraBase",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Core/CinemachineCameraManagerBase.cs"
+          ]
+        },
+        {
+          "name": "CinemachineCameraManagerEvents",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineMixerEventsBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Helpers/CinemachineCameraManagerEvents.cs"
+          ]
+        },
+        {
+          "name": "CinemachineCameraOffset",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineCameraOffset.cs"
+          ]
+        },
+        {
+          "name": "CinemachineClearShot",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineCameraManagerBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineClearShot.cs"
+          ]
+        },
+        {
+          "name": "CinemachineCollider",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineCollider.cs"
+          ]
+        },
+        {
+          "name": "CinemachineCollisionImpulseSource",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineImpulseSource",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Impulse/CinemachineCollisionImpulseSource.cs",
+            "package/Runtime/Impulse/CinemachineCollisionImpulseSource.cs"
+          ]
+        },
+        {
+          "name": "CinemachineComponentBase",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Core/CinemachineComponentBase.cs"
+          ]
+        },
+        {
+          "name": "CinemachineComposer",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineComposer.cs"
+          ]
+        },
+        {
+          "name": "CinemachineConfiner",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineConfiner.cs"
+          ]
+        },
+        {
+          "name": "CinemachineConfiner2D",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineConfiner2D.cs"
+          ]
+        },
+        {
+          "name": "CinemachineConfiner3D",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineConfiner3D.cs"
+          ]
+        },
+        {
+          "name": "CinemachineDecollider",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineDecollider.cs"
+          ]
+        },
+        {
+          "name": "CinemachineDeoccluder",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineDeoccluder.cs"
+          ]
+        },
+        {
+          "name": "CinemachineDollyCart",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineDollyCart.cs"
+          ]
+        },
+        {
+          "name": "CinemachineDoNotUpgrade",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineDoNotUpgrade.cs"
+          ]
+        },
+        {
+          "name": "CinemachineExtension",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Core/CinemachineExtension.cs"
+          ]
+        },
+        {
+          "name": "CinemachineExternalCamera",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineVirtualCameraBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineExternalCamera.cs"
+          ]
+        },
+        {
+          "name": "CinemachineFollow",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/CinemachineFollow.cs"
+          ]
+        },
+        {
+          "name": "CinemachineFollowZoom",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineFollowZoom.cs"
+          ]
+        },
+        {
+          "name": "CinemachineFramingTransposer",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineFramingTransposer.cs"
+          ]
+        },
+        {
+          "name": "CinemachineFreeLook",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineVirtualCameraBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineFreeLook.cs"
+          ]
+        },
+        {
+          "name": "CinemachineFreeLookModifier",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineFreeLookModifier.cs"
+          ]
+        },
+        {
+          "name": "CinemachineGroupComposer",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComposer",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineGroupComposer.cs"
+          ]
+        },
+        {
+          "name": "CinemachineGroupFraming",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineGroupFraming.cs"
+          ]
+        },
+        {
+          "name": "CinemachineHardLockToTarget",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/CinemachineHardLockToTarget.cs"
+          ]
+        },
+        {
+          "name": "CinemachineHardLookAt",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/CinemachineHardLookAt.cs"
+          ]
+        },
+        {
+          "name": "CinemachineImpulseListener",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Impulse/CinemachineImpulseListener.cs"
+          ]
+        },
+        {
+          "name": "CinemachineImpulseSource",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Impulse/CinemachineImpulseSource.cs"
+          ]
+        },
+        {
+          "name": "CinemachineInputAxisController",
+          "namespace": "Unity.Cinemachine",
+          "base": "InputAxisControllerBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Helpers/CinemachineInputAxisController.cs"
+          ]
+        },
+        {
+          "name": "CinemachineInputProvider",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineInputProvider.cs",
+            "package/Runtime/Deprecated/CinemachineInputProvider.cs"
+          ]
+        },
+        {
+          "name": "CinemachineLegacyCameraEvents",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineLegacyCameraEvents.cs"
+          ]
+        },
+        {
+          "name": "CinemachineMixerEventsBase",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Helpers/CinemachineMixerEventsBase.cs"
+          ]
+        },
+        {
+          "name": "CinemachineMixingCamera",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineCameraManagerBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineMixingCamera.cs"
+          ]
+        },
+        {
+          "name": "CinemachineOrbitalFollow",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/CinemachineOrbitalFollow.cs"
+          ]
+        },
+        {
+          "name": "CinemachineOrbitalTransposer",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineTransposer",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineOrbitalTransposer.cs"
+          ]
+        },
+        {
+          "name": "CinemachinePanTilt",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/CinemachinePanTilt.cs"
+          ]
+        },
+        {
+          "name": "CinemachinePath",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachinePathBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachinePath.cs"
+          ]
+        },
+        {
+          "name": "CinemachinePathBase",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachinePathBase.cs"
+          ]
+        },
+        {
+          "name": "CinemachinePipeline",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachinePipeline.cs"
+          ]
+        },
+        {
+          "name": "CinemachinePixelPerfect",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachinePixelPerfect.cs",
+            "package/Runtime/Behaviours/CinemachinePixelPerfect.cs"
+          ]
+        },
+        {
+          "name": "CinemachinePositionComposer",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/CinemachinePositionComposer.cs"
+          ]
+        },
+        {
+          "name": "CinemachinePostProcessing",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/PostProcessing/CinemachinePostProcessing.cs"
+          ]
+        },
+        {
+          "name": "CinemachinePOV",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachinePOV.cs"
+          ]
+        },
+        {
+          "name": "CinemachineRecomposer",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineRecomposer.cs"
+          ]
+        },
+        {
+          "name": "CinemachineRotateWithFollowTarget",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/CinemachineRotateWithFollowTarget.cs"
+          ]
+        },
+        {
+          "name": "CinemachineRotationComposer",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/CinemachineRotationComposer.cs"
+          ]
+        },
+        {
+          "name": "CinemachineSameAsFollowTarget",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineSameAsFollowTarget.cs"
+          ]
+        },
+        {
+          "name": "CinemachineSequencerCamera",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineCameraManagerBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineSequencerCamera.cs"
+          ]
+        },
+        {
+          "name": "CinemachineShotQualityEvaluator",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineShotQualityEvaluator.cs"
+          ]
+        },
+        {
+          "name": "CinemachineSmoothPath",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachinePathBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineSmoothPath.cs"
+          ]
+        },
+        {
+          "name": "CinemachineSplineCart",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineSplineCart.cs"
+          ]
+        },
+        {
+          "name": "CinemachineSplineDolly",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/CinemachineSplineDolly.cs"
+          ]
+        },
+        {
+          "name": "CinemachineSplineDollyLookAtTargets",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/CinemachineSplineDollyLookAtTargets.cs"
+          ]
+        },
+        {
+          "name": "CinemachineSplineRoll",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineSplineRoll.cs"
+          ]
+        },
+        {
+          "name": "CinemachineSplineSmoother",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Helpers/CinemachineSplineSmoother.cs"
+          ]
+        },
+        {
+          "name": "CinemachineStateDrivenCamera",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineCameraManagerBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineStateDrivenCamera.cs"
+          ]
+        },
+        {
+          "name": "CinemachineStoryboard",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineStoryboard.cs"
+          ]
+        },
+        {
+          "name": "CinemachineTargetGroup",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineTargetGroup.cs"
+          ]
+        },
+        {
+          "name": "CinemachineThirdPersonAim",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Behaviours/CinemachineThirdPersonAim.cs"
+          ]
+        },
+        {
+          "name": "CinemachineThirdPersonFollow",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/CinemachineThirdPersonFollow.cs"
+          ]
+        },
+        {
+          "name": "CinemachineTouchInputMapper",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineTouchInputMapper.cs"
+          ]
+        },
+        {
+          "name": "CinemachineTrackedDolly",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineTrackedDolly.cs"
+          ]
+        },
+        {
+          "name": "CinemachineTransposer",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineComponentBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineTransposer.cs"
+          ]
+        },
+        {
+          "name": "CinemachineTriggerAction",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Helpers/CinemachineTriggerAction.cs"
+          ]
+        },
+        {
+          "name": "CinemachineVirtualCamera",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineVirtualCameraBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Deprecated/CinemachineVirtualCamera.cs"
+          ]
+        },
+        {
+          "name": "CinemachineVirtualCameraBase",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Core/CinemachineVirtualCameraBase.cs"
+          ]
+        },
+        {
+          "name": "CinemachineVolumeSettings",
+          "namespace": "Unity.Cinemachine",
+          "base": "CinemachineExtension",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/PostProcessing/CinemachineVolumeSettings.cs"
+          ]
+        },
+        {
+          "name": "CinemachineExternalImpulseListener",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Impulse/CinemachinExternalImpulseListener.cs"
+          ]
+        },
+        {
+          "name": "GroupWeightManipulator",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Helpers/GroupWeightManipulator.cs"
+          ]
+        },
+        {
+          "name": "InputAxisControllerBase",
+          "namespace": "Unity.Cinemachine",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Core/InputAxisControllerBase.cs"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "com.unity.inputsystem",
+      "version": "1.11.2",
+      "unityMinimum": "2019.4",
+      "sourceArchive": "https://download.packages.unity.com/com.unity.inputsystem/-/com.unity.inputsystem-1.11.2.tgz",
+      "integrity": "3c4a97c3950fef77960981e0fe90613de6e512ee",
+      "status": "inventario de declaracoes publicas; curadoria funcional por tipo e implementacao pendentes",
+      "types": [
+        {
+          "name": "OnScreenButton",
+          "namespace": "UnityEngine.InputSystem.OnScreen",
+          "base": "OnScreenControl",
+          "abstract": false,
+          "sourceAliases": [
+            "package/InputSystem/Plugins/OnScreen/OnScreenButton.cs"
+          ]
+        },
+        {
+          "name": "OnScreenControl",
+          "namespace": "UnityEngine.InputSystem.OnScreen",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/InputSystem/Plugins/OnScreen/OnScreenControl.cs"
+          ]
+        },
+        {
+          "name": "OnScreenStick",
+          "namespace": "UnityEngine.InputSystem.OnScreen",
+          "base": "OnScreenControl",
+          "abstract": false,
+          "sourceAliases": [
+            "package/InputSystem/Plugins/OnScreen/OnScreenStick.cs"
+          ]
+        },
+        {
+          "name": "PlayerInput",
+          "namespace": "UnityEngine.InputSystem",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/InputSystem/Plugins/PlayerInput/PlayerInput.cs"
+          ]
+        },
+        {
+          "name": "PlayerInputManager",
+          "namespace": "UnityEngine.InputSystem",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/InputSystem/Plugins/PlayerInput/PlayerInputManager.cs"
+          ]
+        },
+        {
+          "name": "TouchSimulation",
+          "namespace": "UnityEngine.InputSystem.EnhancedTouch",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/InputSystem/Plugins/EnhancedTouch/TouchSimulation.cs"
+          ]
+        },
+        {
+          "name": "TrackedPoseDriver",
+          "namespace": "UnityEngine.InputSystem.XR",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/InputSystem/Plugins/XR/TrackedPoseDriver.cs"
+          ]
+        },
+        {
+          "name": "VirtualMouseInput",
+          "namespace": "UnityEngine.InputSystem.UI",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/InputSystem/Plugins/UI/VirtualMouseInput.cs"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "com.unity.netcode.gameobjects",
+      "version": "2.2.0",
+      "unityMinimum": "6000.0",
+      "sourceArchive": "https://download.packages.unity.com/com.unity.netcode.gameobjects/-/com.unity.netcode.gameobjects-2.2.0.tgz",
+      "integrity": "f2477a6c90fe227d487326b01afaa677e0fa8f31",
+      "status": "inventario de declaracoes publicas; curadoria funcional por tipo e implementacao pendentes",
+      "types": [
+        {
+          "name": "AnticipatedNetworkTransform",
+          "namespace": "Unity.Netcode.Components",
+          "base": "NetworkTransform",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/AnticipatedNetworkTransform.cs"
+          ]
+        },
+        {
+          "name": "NetworkAnimator",
+          "namespace": "Unity.Netcode.Components",
+          "base": "NetworkBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/NetworkAnimator.cs"
+          ]
+        },
+        {
+          "name": "NetworkBehaviour",
+          "namespace": "Unity.Netcode",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Core/NetworkBehaviour.cs"
+          ]
+        },
+        {
+          "name": "NetworkManager",
+          "namespace": "Unity.Netcode",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Core/NetworkManager.cs"
+          ]
+        },
+        {
+          "name": "NetworkObject",
+          "namespace": "Unity.Netcode",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Core/NetworkObject.cs"
+          ]
+        },
+        {
+          "name": "NetworkRigidbody",
+          "namespace": "Unity.Netcode.Components",
+          "base": "NetworkRigidbodyBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/NetworkRigidbody.cs"
+          ]
+        },
+        {
+          "name": "NetworkRigidbody2D",
+          "namespace": "Unity.Netcode.Components",
+          "base": "NetworkRigidbodyBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/NetworkRigidbody2D.cs"
+          ]
+        },
+        {
+          "name": "NetworkRigidbodyBase",
+          "namespace": "Unity.Netcode.Components",
+          "base": "NetworkBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Components/NetworkRigidBodyBase.cs"
+          ]
+        },
+        {
+          "name": "NetworkTransform",
+          "namespace": "Unity.Netcode.Components",
+          "base": "NetworkBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/NetworkTransform.cs"
+          ]
+        },
+        {
+          "name": "NetworkTransport",
+          "namespace": "Unity.Netcode",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Transports/NetworkTransport.cs"
+          ]
+        },
+        {
+          "name": "TestingNetworkTransport",
+          "namespace": "Unity.Netcode",
+          "base": "NetworkTransport",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Transports/NetworkTransport.cs"
+          ]
+        },
+        {
+          "name": "NetworkVariableComponent",
+          "namespace": "Unity.Netcode.TestHelpers.Runtime.Metrics",
+          "base": "NetworkBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/TestHelpers/Runtime/Metrics/NetworkVariableComponent.cs"
+          ]
+        },
+        {
+          "name": "ObjectNameIdentifier",
+          "namespace": "Unity.Netcode.TestHelpers.Runtime",
+          "base": "NetworkBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/TestHelpers/Runtime/Components/ObjectNameIdentifier.cs"
+          ]
+        },
+        {
+          "name": "RigidbodyContactEventManager",
+          "namespace": "Unity.Netcode.Components",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Components/RigidbodyContactEventManager.cs"
+          ]
+        },
+        {
+          "name": "RpcTestComponent",
+          "namespace": "Unity.Netcode.TestHelpers.Runtime.Metrics",
+          "base": "NetworkBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/TestHelpers/Runtime/Metrics/RpcTestComponent.cs"
+          ]
+        },
+        {
+          "name": "SecretsLoaderHelper",
+          "namespace": "Unity.Netcode.Transports.UTP",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Transports/UTP/SecretsLoaderHelper.cs"
+          ]
+        },
+        {
+          "name": "UNetTransport",
+          "namespace": "Unity.Netcode.Transports.UNET",
+          "base": "NetworkTransport",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Transports/UNET/UNetTransport.cs"
+          ]
+        },
+        {
+          "name": "UnityTransport",
+          "namespace": "Unity.Netcode.Transports.UTP",
+          "base": "NetworkTransport",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Transports/UTP/UnityTransport.cs"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "com.unity.splines",
+      "version": "2.7.2",
+      "unityMinimum": "2022.3",
+      "sourceArchive": "https://download.packages.unity.com/com.unity.splines/-/com.unity.splines-2.7.2.tgz",
+      "integrity": "d3e1e500c9a0fa3a1e812117108982dd612c2e27",
+      "status": "inventario de declaracoes publicas; curadoria funcional por tipo e implementacao pendentes",
+      "types": [
+        {
+          "name": "SplineAnimate",
+          "namespace": "UnityEngine.Splines",
+          "base": "SplineComponent",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/SplineAnimate.cs"
+          ]
+        },
+        {
+          "name": "SplineComponent",
+          "namespace": "UnityEngine.Splines",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/SplineComponent.cs"
+          ]
+        },
+        {
+          "name": "SplineContainer",
+          "namespace": "UnityEngine.Splines",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/SplineContainer.cs"
+          ]
+        },
+        {
+          "name": "SplineExtrude",
+          "namespace": "UnityEngine.Splines",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/SplineExtrude.cs"
+          ]
+        },
+        {
+          "name": "SplineInstantiate",
+          "namespace": "UnityEngine.Splines",
+          "base": "SplineComponent",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/SplineInstantiate.cs"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "com.unity.xr.interaction.toolkit",
+      "version": "3.0.9",
+      "unityMinimum": "2021.3",
+      "sourceArchive": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz",
+      "integrity": "9774edd5e6a450da8504c90c2d1f8980ce4aa3d8",
+      "status": "inventario de declaracoes publicas; curadoria funcional por tipo e implementacao pendentes",
+      "types": [
+        {
+          "name": "ActionBasedContinuousMoveProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "ContinuousMoveProviderBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Legacy/ActionBasedContinuousMoveProvider.cs"
+          ]
+        },
+        {
+          "name": "ActionBasedContinuousTurnProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "ContinuousTurnProviderBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Legacy/ActionBasedContinuousTurnProvider.cs"
+          ]
+        },
+        {
+          "name": "ActionBasedController",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "XRBaseController",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Controllers/ActionBasedController.cs"
+          ]
+        },
+        {
+          "name": "ActionBasedSnapTurnProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "SnapTurnProviderBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Legacy/ActionBasedSnapTurnProvider.cs"
+          ]
+        },
+        {
+          "name": "ARAnnotationInteractable",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR",
+          "base": "ARBaseGestureInteractable",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Interactables/ARAnnotationInteractable.deprecated.cs"
+          ]
+        },
+        {
+          "name": "ARBaseGestureInteractable",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR",
+          "base": "XRBaseInteractable",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/AR/Interactables/ARBaseGestureInteractable.deprecated.cs"
+          ]
+        },
+        {
+          "name": "ARGestureInteractor",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR",
+          "base": "XRBaseInteractor",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Interactors/ARGestureInteractor.deprecated.cs"
+          ]
+        },
+        {
+          "name": "ARPlacementInteractable",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR",
+          "base": "ARBaseGestureInteractable",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Interactables/ARPlacementInteractable.deprecated.cs"
+          ]
+        },
+        {
+          "name": "ARRotationInteractable",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR",
+          "base": "ARBaseGestureInteractable",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Interactables/ARRotationInteractable.deprecated.cs"
+          ]
+        },
+        {
+          "name": "ARScaleInteractable",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR",
+          "base": "ARBaseGestureInteractable",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Interactables/ARScaleInteractable.deprecated.cs"
+          ]
+        },
+        {
+          "name": "ARSelectionInteractable",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR",
+          "base": "ARBaseGestureInteractable",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Interactables/ARSelectionInteractable.deprecated.cs"
+          ]
+        },
+        {
+          "name": "ARTransformer",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Transformers",
+          "base": "XRBaseGrabTransformer",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Transformers/ARTransformer.cs"
+          ]
+        },
+        {
+          "name": "ARTranslationInteractable",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR",
+          "base": "ARBaseGestureInteractable",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Interactables/ARTranslationInteractable.deprecated.cs"
+          ]
+        },
+        {
+          "name": "AudioAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Audio",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Audio/AudioAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "BaseAffordanceStateProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.State",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/State/Provider/BaseAffordanceStateProvider.cs"
+          ]
+        },
+        {
+          "name": "BaseAffordanceStateReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/BaseAffordanceStateReceiver.cs"
+          ]
+        },
+        {
+          "name": "BaseAsyncAffordanceStateReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver",
+          "base": "BaseAffordanceStateReceiver",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/BaseAsyncAffordanceStateReceiver.cs"
+          ]
+        },
+        {
+          "name": "BaseSynchronousAffordanceStateReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver",
+          "base": "BaseAffordanceStateReceiver",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/BaseSynchronousAffordanceStateReceiver.cs"
+          ]
+        },
+        {
+          "name": "BaseTeleportationInteractable",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Teleportation",
+          "base": "XRBaseInteractable",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Teleportation/BaseTeleportationInteractable.cs"
+          ]
+        },
+        {
+          "name": "BlendShapeAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Rendering",
+          "base": "FloatAffordanceReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Rendering/BlendShapeAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "CanvasOptimizer",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.UI",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/UI/CanvasOptimizer.cs"
+          ]
+        },
+        {
+          "name": "CanvasTracker",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.UI",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/UI/CanvasTracker.cs"
+          ]
+        },
+        {
+          "name": "CharacterControllerDriver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Legacy/CharacterControllerDriver.cs"
+          ]
+        },
+        {
+          "name": "ClimbInteractable",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Climbing",
+          "base": "XRBaseInteractable",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Climbing/ClimbInteractable.cs"
+          ]
+        },
+        {
+          "name": "ClimbProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Climbing",
+          "base": "LocomotionProvider",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Climbing/ClimbProvider.cs"
+          ]
+        },
+        {
+          "name": "ClimbTeleportInteractor",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Climbing",
+          "base": "XRBaseInteractor",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Climbing/ClimbTeleportInteractor.cs"
+          ]
+        },
+        {
+          "name": "ColorAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Primitives",
+          "base": "BaseAsyncAffordanceStateReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Primitives/ColorAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "ColorGradientLineRendererAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Rendering",
+          "base": "ColorAffordanceReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Rendering/ColorGradientLineRendererAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "ColorMaterialPropertyAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Rendering",
+          "base": "ColorAffordanceReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Rendering/ColorMaterialPropertyAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "ConstrainedMoveProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Movement",
+          "base": "LocomotionProvider",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Movement/ConstrainedMoveProvider.cs"
+          ]
+        },
+        {
+          "name": "ContinuousMoveProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Movement",
+          "base": "LocomotionProvider",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Movement/ContinuousMoveProvider.cs"
+          ]
+        },
+        {
+          "name": "ContinuousMoveProviderBase",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "LocomotionProvider",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Legacy/ContinuousMoveProviderBase.cs"
+          ]
+        },
+        {
+          "name": "ContinuousTurnProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Turning",
+          "base": "LocomotionProvider",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Turning/ContinuousTurnProvider.cs"
+          ]
+        },
+        {
+          "name": "ContinuousTurnProviderBase",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "LocomotionProvider",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Legacy/ContinuousTurnProviderBase.cs"
+          ]
+        },
+        {
+          "name": "CurveInteractionCaster",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors.Casters",
+          "base": "InteractionCasterBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/Casters/CurveInteractionCaster.cs"
+          ]
+        },
+        {
+          "name": "CurveVisualController",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors.Visuals",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/Visuals/CurveVisualController.cs"
+          ]
+        },
+        {
+          "name": "DeviceBasedContinuousMoveProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "ContinuousMoveProviderBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Legacy/DeviceBasedContinuousMoveProvider.cs"
+          ]
+        },
+        {
+          "name": "DeviceBasedContinuousTurnProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "ContinuousTurnProviderBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Legacy/DeviceBasedContinuousTurnProvider.cs"
+          ]
+        },
+        {
+          "name": "DeviceBasedSnapTurnProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "SnapTurnProviderBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Legacy/DeviceBasedSnapTurnProvider.cs"
+          ]
+        },
+        {
+          "name": "FloatAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Primitives",
+          "base": "BaseAsyncAffordanceStateReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Primitives/FloatAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "FloatMaterialPropertyAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Rendering",
+          "base": "FloatAffordanceReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Rendering/FloatMaterialPropertyAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "GrabMoveProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Movement",
+          "base": "ConstrainedMoveProvider",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Movement/GrabMoveProvider.cs"
+          ]
+        },
+        {
+          "name": "HandMenu",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.UI.BodyUI",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/UI/BodyUI/HandMenu.cs"
+          ]
+        },
+        {
+          "name": "HapticImpulsePlayer",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Inputs.Haptics",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Inputs/Haptics/HapticImpulsePlayer.cs"
+          ]
+        },
+        {
+          "name": "ImageColorAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.UI",
+          "base": "ColorAffordanceReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/UI/ImageColorAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "InputActionManager",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Inputs",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Inputs/InputActionManager.cs"
+          ]
+        },
+        {
+          "name": "InteractionAttachController",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Attachment",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Attachment/InteractionAttachController.cs"
+          ]
+        },
+        {
+          "name": "InteractionCasterBase",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors.Casters",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/Casters/InteractionCasterBase.cs"
+          ]
+        },
+        {
+          "name": "LazyFollow",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.UI",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/UI/LazyFollow.cs"
+          ]
+        },
+        {
+          "name": "LocomotionMediator",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/LocomotionMediator.cs"
+          ]
+        },
+        {
+          "name": "LocomotionProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/LocomotionProvider.cs"
+          ]
+        },
+        {
+          "name": "LocomotionSystem",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Legacy/LocomotionSystem.cs"
+          ]
+        },
+        {
+          "name": "MaterialHelperBase",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Rendering",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Rendering/MaterialHelperBase.cs"
+          ]
+        },
+        {
+          "name": "MaterialInstanceHelper",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Rendering",
+          "base": "MaterialHelperBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Rendering/MaterialInstanceHelper.cs"
+          ]
+        },
+        {
+          "name": "MaterialPropertyBlockHelper",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Rendering",
+          "base": "MaterialHelperBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Rendering/MaterialPropertyBlockHelper.cs"
+          ]
+        },
+        {
+          "name": "NearFarInteractor",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors",
+          "base": "XRBaseInputInteractor",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/NearFarInteractor.cs"
+          ]
+        },
+        {
+          "name": "QuaternionAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Primitives",
+          "base": "Vector4AffordanceReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Primitives/QuaternionAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "QuaternionEulerAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Primitives",
+          "base": "Vector3AffordanceReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Primitives/QuaternionEulerAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "ScreenSpacePinchScaleInput",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR.Inputs",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Inputs/ScreenSpacePinchScaleInput.cs"
+          ]
+        },
+        {
+          "name": "ScreenSpaceRayPoseDriver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR.Inputs",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Inputs/ScreenSpaceRayPoseDriver.cs"
+          ]
+        },
+        {
+          "name": "ScreenSpaceRotateInput",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR.Inputs",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Inputs/ScreenSpaceRotateInput.cs"
+          ]
+        },
+        {
+          "name": "ScreenSpaceSelectInput",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR.Inputs",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Inputs/ScreenSpaceSelectInput.cs"
+          ]
+        },
+        {
+          "name": "SimpleAudioFeedback",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Feedback",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Feedback/SimpleAudioFeedback.cs"
+          ]
+        },
+        {
+          "name": "SimpleHapticFeedback",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Feedback",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Feedback/SimpleHapticFeedback.cs"
+          ]
+        },
+        {
+          "name": "SnapTurnProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Turning",
+          "base": "LocomotionProvider",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Turning/SnapTurnProvider.cs"
+          ]
+        },
+        {
+          "name": "SnapTurnProviderBase",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "LocomotionProvider",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Legacy/SnapTurnProviderBase.cs"
+          ]
+        },
+        {
+          "name": "SphereInteractionCaster",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors.Casters",
+          "base": "InteractionCasterBase",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/Casters/SphereInteractionCaster.cs"
+          ]
+        },
+        {
+          "name": "TeleportationAnchor",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Teleportation",
+          "base": "BaseTeleportationInteractable",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Teleportation/TeleportationAnchor.cs"
+          ]
+        },
+        {
+          "name": "TeleportationArea",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Teleportation",
+          "base": "BaseTeleportationInteractable",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Teleportation/TeleportationArea.cs"
+          ]
+        },
+        {
+          "name": "TeleportationMultiAnchorVolume",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Teleportation",
+          "base": "BaseTeleportationInteractable",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Teleportation/TeleportationMultiAnchorVolume.cs"
+          ]
+        },
+        {
+          "name": "TeleportationProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Teleportation",
+          "base": "LocomotionProvider",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Teleportation/TeleportationProvider.cs"
+          ]
+        },
+        {
+          "name": "TouchscreenGestureInputController",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR.Inputs",
+          "base": "InputSystem.XR.XRController",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Inputs/TouchscreenGestureInputController.cs"
+          ]
+        },
+        {
+          "name": "TouchscreenGestureInputLoader",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AR.Inputs",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AR/Inputs/TouchscreenGestureInputLoader.cs"
+          ]
+        },
+        {
+          "name": "TouchscreenHoverFilter",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Filtering",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Filtering/Hover/TouchscreenHoverFilter.cs"
+          ]
+        },
+        {
+          "name": "TunnelingVignetteController",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Comfort",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Comfort/TunnelingVignetteController.cs"
+          ]
+        },
+        {
+          "name": "TwoHandedGrabMoveProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion.Movement",
+          "base": "ConstrainedMoveProvider",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/Movement/TwoHandedGrabMoveProvider.cs"
+          ]
+        },
+        {
+          "name": "UniformTransformScaleAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Transformation",
+          "base": "FloatAffordanceReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Transformation/UniformTransformScaleAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "Vector2AffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Primitives",
+          "base": "BaseAsyncAffordanceStateReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Primitives/Vector2AffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "Vector2MaterialPropertyAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Rendering",
+          "base": "Vector2AffordanceReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Rendering/Vector2MaterialPropertyAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "Vector3AffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Primitives",
+          "base": "BaseAsyncAffordanceStateReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Primitives/Vector3AffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "Vector3MaterialPropertyAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Rendering",
+          "base": "Vector3AffordanceReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Rendering/Vector3MaterialPropertyAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "Vector4AffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Primitives",
+          "base": "BaseAsyncAffordanceStateReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Primitives/Vector4AffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "Vector4MaterialPropertyAffordanceReceiver",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.Receiver.Rendering",
+          "base": "Vector4AffordanceReceiver",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/Receiver/Rendering/Vector4MaterialPropertyAffordanceReceiver.cs"
+          ]
+        },
+        {
+          "name": "XRBaseController",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Controllers/XRBaseController.cs"
+          ]
+        },
+        {
+          "name": "XRBaseControllerInteractor",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "XRBaseInteractor",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/XRBaseControllerInteractor.cs"
+          ]
+        },
+        {
+          "name": "XRBaseGrabTransformer",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Transformers",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Transformers/XRBaseGrabTransformer.cs"
+          ]
+        },
+        {
+          "name": "XRBaseInputInteractor",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors",
+          "base": "XRBaseInteractor",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/XRBaseInputInteractor.cs"
+          ]
+        },
+        {
+          "name": "XRBaseInteractable",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactables",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactables/XRBaseInteractable.cs"
+          ]
+        },
+        {
+          "name": "XRBaseInteractor",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/XRBaseInteractor.cs"
+          ]
+        },
+        {
+          "name": "XRBaseTargetFilter",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Filtering",
+          "base": "MonoBehaviour",
+          "abstract": true,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Filtering/Target/Filters/XRBaseTargetFilter.cs"
+          ]
+        },
+        {
+          "name": "XRBodyTransformer",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Locomotion",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Locomotion/XRBodyTransformer.cs"
+          ]
+        },
+        {
+          "name": "XRController",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "XRBaseController",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Controllers/XRController.cs"
+          ]
+        },
+        {
+          "name": "XRControllerRecorder",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Controllers/XRControllerRecorder.cs"
+          ]
+        },
+        {
+          "name": "XRDeviceSimulator",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Inputs.Simulation",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Inputs/Simulation/XRDeviceSimulator.cs"
+          ]
+        },
+        {
+          "name": "XRDirectInteractor",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors",
+          "base": "XRBaseInputInteractor",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/XRDirectInteractor.cs"
+          ]
+        },
+        {
+          "name": "XRDualGrabFreeTransformer",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Transformers",
+          "base": "XRBaseGrabTransformer",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Transformers/XRDualGrabFreeTransformer.cs"
+          ]
+        },
+        {
+          "name": "XRGazeAssistance",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Gaze",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Gaze/XRGazeAssistance.cs"
+          ]
+        },
+        {
+          "name": "XRGazeInteractor",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors",
+          "base": "XRRayInteractor",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/XRGazeInteractor.cs"
+          ]
+        },
+        {
+          "name": "XRGeneralGrabTransformer",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Transformers",
+          "base": "XRBaseGrabTransformer",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Transformers/XRGeneralGrabTransformer.cs"
+          ]
+        },
+        {
+          "name": "XRGrabInteractable",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactables",
+          "base": "XRBaseInteractable",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactables/XRGrabInteractable.cs"
+          ]
+        },
+        {
+          "name": "XRHandSkeletonPokeDisplacer",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Inputs",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Inputs/XRHandSkeletonPokeDisplacer.cs"
+          ]
+        },
+        {
+          "name": "XRInputDeviceButtonReader",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Inputs.Readers",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Inputs/Readers/XRInputDeviceButtonReader.cs"
+          ]
+        },
+        {
+          "name": "XRInputModalityManager",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Inputs",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Inputs/XRInputModalityManager.cs"
+          ]
+        },
+        {
+          "name": "XRInteractableAffordanceStateProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.State",
+          "base": "BaseAffordanceStateProvider",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/State/Provider/XRInteractableAffordanceStateProvider.cs"
+          ]
+        },
+        {
+          "name": "XRInteractableSnapVolume",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactables",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactables/XRInteractableSnapVolume.cs"
+          ]
+        },
+        {
+          "name": "XRInteractionGroup",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/XRInteractionGroup.cs"
+          ]
+        },
+        {
+          "name": "XRInteractionManager",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/XRInteractionManager.cs"
+          ]
+        },
+        {
+          "name": "XRInteractorAffordanceStateProvider",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.AffordanceSystem.State",
+          "base": "BaseAffordanceStateProvider",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/AffordanceSystem/State/Provider/XRInteractorAffordanceStateProvider.cs"
+          ]
+        },
+        {
+          "name": "XRInteractorLineVisual",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors.Visuals",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/Visuals/XRInteractorLineVisual.cs"
+          ]
+        },
+        {
+          "name": "XRInteractorReticleVisual",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors.Visuals",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/Visuals/XRInteractorReticleVisual.cs"
+          ]
+        },
+        {
+          "name": "XRLegacyGrabTransformer",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Transformers",
+          "base": "XRBaseGrabTransformer",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Transformers/XRLegacyGrabTransformer.cs"
+          ]
+        },
+        {
+          "name": "XRPokeFilter",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Filtering",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Filtering/Poke/XRPokeFilter.cs"
+          ]
+        },
+        {
+          "name": "XRPokeInteractor",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors",
+          "base": "XRBaseInteractor",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/XRPokeInteractor.cs"
+          ]
+        },
+        {
+          "name": "XRRayInteractor",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors",
+          "base": "XRBaseInputInteractor",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/XRRayInteractor.cs",
+            "package/Runtime/Interaction/Interactors/XRRayInteractor.cs"
+          ]
+        },
+        {
+          "name": "XRScreenSpaceController",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit",
+          "base": "XRBaseController",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Controllers/XRScreenSpaceController.cs"
+          ]
+        },
+        {
+          "name": "XRSimpleInteractable",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactables",
+          "base": "XRBaseInteractable",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactables/XRSimpleInteractable.cs"
+          ]
+        },
+        {
+          "name": "XRSimulatedController",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Inputs.Simulation",
+          "base": "InputSystem.XR.XRController",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Inputs/Simulation/XRSimulatedController.cs"
+          ]
+        },
+        {
+          "name": "XRSingleGrabFreeTransformer",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Transformers",
+          "base": "XRBaseGrabTransformer",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Transformers/XRSingleGrabFreeTransformer.cs"
+          ]
+        },
+        {
+          "name": "XRSocketInteractor",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactors",
+          "base": "XRBaseInteractor",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactors/XRSocketInteractor.cs"
+          ]
+        },
+        {
+          "name": "XRTargetFilter",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Filtering",
+          "base": "XRBaseTargetFilter",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Filtering/Target/Filters/XRTargetFilter.cs"
+          ]
+        },
+        {
+          "name": "XRTintInteractableVisual",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Interactables.Visuals",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Interaction/Interactables/Visuals/XRTintInteractableVisual.cs"
+          ]
+        },
+        {
+          "name": "XRTransformStabilizer",
+          "namespace": "UnityEngine.XR.Interaction.Toolkit.Inputs",
+          "base": "MonoBehaviour",
+          "abstract": false,
+          "sourceAliases": [
+            "package/Runtime/Inputs/XRTransformStabilizer.cs"
+          ]
+        }
+      ]
+    }
+  ]
+}

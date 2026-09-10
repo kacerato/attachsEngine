@@ -1,5 +1,29 @@
 # .NET runtime para Android (vendorizado)
 
+**Correção de identificação, 10/09/2026:** o binário oficial deste pacote exporta
+`mono_*` e executa Mono/SGen, embora se chame libcoreclr.so e exponha a ABI
+CoreCLR usada pelo hostfxr. A nomenclatura CoreCLR abaixo descreve o contrato
+de hospedagem e o layout, não identifica corretamente a implementação da VM.
+DotNetHost agora resolve as transições GC desse binário e o loop Android mantém
+uma região nativa com marcador na pilha, também durante a espera final pelo
+compilador. Os trampolins UnmanagedCallersOnly cuidam da reentrada gerenciada.
+Sem essa transição, o GC do compilador aguardava a thread nativa de renderização
+indefinidamente. Código conferido na
+[implementação Mono 8.0.27](https://github.com/dotnet/runtime/blob/v8.0.27/src/mono/mono/utils/mono-threads-coop.c)
+e na [documentação de suspensão](https://www.mono-project.com/docs/advanced/runtime/docs/coop-suspend/).
+
+Uma nova NativeActivity cria outra thread nativa no mesmo processo. Antes de
+pedir delegates ao hostfxr novamente, o host consulta o domínio Mono existente
+e associa a thread com mono_thread_attach, conforme o contrato de
+[embedding](https://www.mono-project.com/docs/advanced/embedding/). Não descarrega
+nem reinicializa uma segunda VM. Reabertura e recompilação no mesmo PID foram
+exercitadas no Release; ver reattach-second.log na rodada.
+
+O runtime também requer [OpenSSL privado](../openssl/README.md), agora
+empacotado pelo Gradle. Os registros anteriores de Ping não cobriam compilação
+Roslyn nem GC concorrente com a thread do editor. Ver
+[rodada integrada](../../../docs/validacao/2026-09-10-componentes-codigo.md).
+
 Subconjunto do runtime .NET 8 (CoreCLR) compilado para `linux-bionic-arm64`
 (Android arm64, libc bionic) — usado para hospedar C# gerenciado dentro do
 processo nativo do shell Android (item 0.1.4 do plano), via a API oficial de

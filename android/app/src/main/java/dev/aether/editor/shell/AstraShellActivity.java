@@ -92,6 +92,20 @@ public final class AstraShellActivity extends Activity implements ShellView.List
             return;
         }
         Intent intent = new Intent(this, AetherActivity.class);
+        final boolean independent;
+        try {
+            independent = ProjectSceneSource.isIndependent(project);
+        } catch (java.io.IOException error) {
+            android.util.Log.e("AstraProjects", "Falha ao ler a origem da cena", error);
+            toast("Não foi possível abrir a cena. O arquivo foi preservado.");
+            return;
+        }
+        if (!independent && !dev.aether.editor.BuildConfig.INCLUDE_LEGACY_DEMOS) {
+            toast("Este projeto depende de um pacote de demonstração legado. Arquivos preservados.");
+            android.util.Log.w("AstraProjects", "Projeto legado requer build de migração com pacotes: " + project.path);
+            return;
+        }
+        intent.putExtra("aether.empty_workspace", independent);
         intent.putExtra(template.previewExtra != null ? template.previewExtra : "aether.map_preview", true);
         intent.putExtra("aether.editor_ui", !"aether.material_preview".equals(template.previewExtra));
         intent.putExtra("aether.editor_empty", SceneTemplate.EMPTY.equals(template.id));

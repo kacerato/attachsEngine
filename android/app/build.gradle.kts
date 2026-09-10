@@ -5,23 +5,39 @@ plugins {
     id("com.android.application")
 }
 
-val prepareGodotUi by tasks.registering(Exec::class) {
-    inputs.files("../../tools/prepare-godot-ui.py", "../../tools/prepare-godot-editor.py", "../../integrations/godot/upstream.json")
-    outputs.file("../../build/godot-ui/godot-editor-ui.aar")
-    workingDir = rootProject.projectDir.parentFile
-    commandLine("python", "tools/prepare-godot-ui.py")
-}
-
-
 // The packaged engine must come from this checkout, never a stale checked-in DLL.
 // Keep the vendored BCL unchanged; publish only our framework-dependent component.
 val managedOutput = layout.buildDirectory.dir("managed/rendering")
 val generatedAssets = layout.buildDirectory.dir("generated/aetherAssets")
+val verifyPackagedOpenSsl by tasks.registering {
+    val libraryRoot = file("../../native/third_party/openssl/arm64-v8a")
+    inputs.dir(libraryRoot)
+    doLast {
+        val hashes = libraryRoot.resolve("SHA256SUMS")
+        check(hashes.isFile) { "OpenSSL ausente; execute tools/build-android-openssl.sh" }
+        val expected = hashes.readLines().filter { it.isNotBlank() }.associate { line ->
+            val parts = line.trim().split(Regex("\\s+"), limit = 2)
+            check(parts.size == 2) { "SHA256SUMS OpenSSL invalido" }
+            parts[1].removePrefix("*") to parts[0]
+        }
+        check(expected.keys == setOf("libcrypto.so.astra.so", "libssl.so.astra.so")) {
+            "Bibliotecas OpenSSL incompletas"
+        }
+        expected.forEach { (name, hash) ->
+            val library = libraryRoot.resolve(name)
+            check(library.isFile) { "OpenSSL ausente: $name" }
+            val actual = MessageDigest.getInstance("SHA-256").digest(library.readBytes())
+                .joinToString("") { "%02x".format(it) }
+            check(actual == hash) { "Hash OpenSSL divergente: $name" }
+        }
+    }
+}
 val publishManagedCore by tasks.registering(Exec::class) {
     inputs.files(fileTree("../../managed/Aether.Core") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
     inputs.files(fileTree("../../managed/Aether.Scene") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
     inputs.files(fileTree("../../managed/Aether.Rendering") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
     inputs.files(fileTree("../../managed/Aether.Analyzers") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
+    inputs.files(fileTree("../../managed/Astra.Scripting") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
     inputs.files("../../Directory.Build.props", "../../NuGet.Config")
     outputs.dir(managedOutput)
     workingDir = rootProject.projectDir.parentFile
@@ -29,27 +45,39 @@ val publishManagedCore by tasks.registering(Exec::class) {
         "-r", "linux-bionic-arm64", "--self-contained", "false",
         "-p:GenerateRuntimeConfigurationFiles=true", "-o", managedOutput.get().asFile.absolutePath)
 }
+// Legacy packages are only for explicit regression/migration builds.
+val includeLegacyDemos = providers.gradleProperty("astra.includeLegacyDemos").map {
+    require(it == "true" || it == "false") { "astra.includeLegacyDemos must be true or false" }
+    it.toBoolean()
+}.getOrElse(false)
 val prepareEngineAssets by tasks.registering(Sync::class) {
+    inputs.property("includeLegacyDemos", includeLegacyDemos)
     dependsOn(publishManagedCore)
+    dependsOn(verifyPackagedOpenSsl)
+    from("../../native/third_party/openssl/LICENSE.txt") { into("licenses/openssl") }
+    if (includeLegacyDemos) {
     inputs.file("../../samples/material-preview/manifest.json")
     inputs.file("../../samples/dirt-road/manifest.json")
     inputs.file("../../samples/ocean/manifest.json")
+    }
     from("src/main/assets") {
         exclude("dotnet/Aether.*", "dotnet_manifest.txt", "dotnet_build_id.txt")
     }
-    from(managedOutput) { include("Aether.Core.dll", "Aether.Scene.dll", "Aether.Rendering.dll", "Aether.Rendering.deps.json", "Aether.Rendering.runtimeconfig.json"); into("dotnet") }
+    from(managedOutput) { include("*.dll", "*.deps.json", "*.runtimeconfig.json"); into("dotnet") }
+    if (includeLegacyDemos) {
     from("../../samples/material-preview/Imported") { include("*.aetex"); into("material_preview") }
     from("../../samples/dirt-road/Imported") { include("*.aetex", "*.aemap", "*.aeenv"); into("dirt_road") }
     from("../../samples/dirt-road") { include("manifest.json", "LICENSE.txt"); into("dirt_road") }
     from("../../samples/ocean/Imported") { include("*.aetex", "*.aemap", "*.aeenv"); into("ocean") }
     from("../../samples/ocean") { include("manifest.json", "LICENSE.txt"); into("ocean") }
+    }
     // Atlas da interface do editor. Os dois sao lidos uma vez na inicializacao
     // e enviados a GPU; noCompress abaixo permite le-los sem descompactar.
     from("../../assets/astra-visual/ui") { include("*.aeuf", "*.aeui"); into("ui") }
-    from("../../assets/astra-visual/godot") { include("*.tres"); into("godot-ui") }
     into(generatedAssets)
     doLast {
         val root = generatedAssets.get().asFile
+        if (includeLegacyDemos) {
         val materialManifest = JsonSlurper().parse(file("../../samples/material-preview/manifest.json")) as Map<*, *>
         check(materialManifest["version"] == 1) { "Unsupported material preview manifest version" }
         val materialOutputs = materialManifest["outputs"] as Map<*, *>
@@ -107,6 +135,12 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
             val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
             check(actualHash == expectedHash) { "Cooked ocean asset checksum mismatch: $name" }
         }
+        }
+        if (!includeLegacyDemos) {
+            listOf("ocean", "dirt_road", "material_preview").forEach { name ->
+                check(!root.resolve(name).exists()) { "Legacy demo leaked into standard assets: $name" }
+            }
+        }
         val dotnet = root.resolve("dotnet")
         val paths = dotnet.walkTopDown().filter { it.isFile }.map { it.relativeTo(dotnet).invariantSeparatorsPath }.sorted().toList()
         root.resolve("dotnet_manifest.txt").writeText(paths.joinToString("\n", postfix = "\n"))
@@ -135,13 +169,22 @@ android {
     ndkVersion = "27.1.12297006"
     androidResources { noCompress += setOf("aetex", "aemap", "aeenv", "aeuf", "aeui") }
     sourceSets.getByName("main").assets.setSrcDirs(listOf(generatedAssets))
+    sourceSets.getByName("main").jniLibs.srcDir("../../native/third_party/openssl")
+    // The regression laboratory is not part of the production editor.
+    sourceSets.getByName("main").java.srcDir(if (includeLegacyDemos) "src/legacy/java" else "src/editor/java")
+    if (includeLegacyDemos) {
+        sourceSets.getByName("debug").manifest.srcFile("src/legacy/AndroidManifest.xml")
+        sourceSets.getByName("release").manifest.srcFile("src/legacy/AndroidManifest.xml")
+    }
     buildFeatures {
         // AGDK Frame Pacing is consumed as a native Prefab package by CMake.
         prefab = true
+        buildConfig = true
     }
 
     defaultConfig {
         applicationId = "dev.aether.editor"
+        buildConfigField("boolean", "INCLUDE_LEGACY_DEMOS", includeLegacyDemos.toString())
         minSdk = 26
         targetSdk = 35
         // Versão 2 foi o experimento Godot. Atualização preserva dados sem downgrade.
@@ -233,10 +276,6 @@ android {
 }
 
 dependencies {
-    implementation(files("../../build/godot-ui/godot-editor-ui.aar").builtBy(prepareGodotUi))
-    implementation("androidx.fragment:fragment:1.8.6")
-    implementation("androidx.documentfile:documentfile:1.1.0")
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.21")
     implementation("androidx.games:games-frame-pacing:2.1.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

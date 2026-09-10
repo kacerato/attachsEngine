@@ -33,3 +33,5 @@ C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\obj\Release\net8.0\
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\obj\Release\net8.0\refint\Aether.Rendering.dll
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\obj\Release\net8.0\Aether.Rendering.pdb
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\obj\Release\net8.0\ref\Aether.Rendering.dll
+C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Release\net8.0\Astra.Scripting.dll
+C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Release\net8.0\Astra.Scripting.pdb

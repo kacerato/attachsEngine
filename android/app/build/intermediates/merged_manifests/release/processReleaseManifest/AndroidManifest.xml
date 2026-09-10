@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="dev.aether.editor"
-    android:versionCode="1"
-    android:versionName="0.1.0" >
+    android:versionCode="4"
+    android:versionName="0.2.0-editor-ui" >
 
     <uses-sdk
         android:minSdkVersion="26"
@@ -28,25 +28,44 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:extractNativeLibs="true"
         android:fullBackupContent="@xml/backup_rules"
-        android:hasCode="false"
-        android:icon="@drawable/ic_aether"
-        android:label="Aether"
+        android:hasCode="true"
+        android:icon="@mipmap/ic_astra"
+        android:label="Astra"
         android:theme="@style/AetherTheme" >
-        <activity
-            android:name="android.app.NativeActivity"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
-            android:exported="true"
-            android:launchMode="singleTask"
-            android:screenOrientation="sensorLandscape" >
-            <meta-data
-                android:name="android.app.lib_name"
-                android:value="aether_android" />
 
+        <!--
+             Sem este meta-data o GameManager nao enxerga o game-mode-config e
+             o app fica em STANDARD. A diferenca medida entre STANDARD e
+             PERFORMANCE, mesma cena e mesmo APK, foi 10,204 contra 7,284 ms de
+             frame. Ver res/xml/game_mode_config.xml.
+        -->
+        <meta-data
+            android:name="android.game_mode_config"
+            android:resource="@xml/game_mode_config" />
+        <!--
+             O shell do ASTRA e a unica porta de entrada: ele decide qual
+             projeto o editor abre.
+        -->
+        <activity
+            android:name="dev.aether.editor.shell.AstraShellActivity"
+            android:exported="true"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/AstraShellTheme" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+        <activity
+            android:name="dev.aether.editor.AetherActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape" >
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="aether_android" />
         </activity>
     </application>
 

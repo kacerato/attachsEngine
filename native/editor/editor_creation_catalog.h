@@ -37,4 +37,11 @@ inline constexpr std::array<EditorCreationEntry,8> editorCreationCatalog{{
   {EditorWidget::CreateRiverWater,2,"Rio por pontos","Traçado com largura, profundidade e fluxo.",ui::UiIcon::WaterAuthorRoute},
   {EditorWidget::CreateBuoyantBox,3,"Caixa flutuante","Corpo rígido com massa e arrasto na água.",ui::UiIcon::WaterAuthorPhysics}
 }};
+inline bool creationAvailable(const EditorScreenState &state,u32 index) {
+  return index<editorCreationCatalog.size() && (state.creationAvailable & (1u<<index));
+}
+// Temporary capability adapter for the existing imported water library.
+inline bool waterCreationAvailable(const EditorScreenState &state) {
+  return creationAvailable(state,4) || creationAvailable(state,5) || creationAvailable(state,6);
+}
 }

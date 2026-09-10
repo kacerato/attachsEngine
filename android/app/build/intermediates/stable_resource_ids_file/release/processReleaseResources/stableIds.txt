@@ -1,4 +1,10 @@
-dev.aether.editor:xml/data_extraction_rules = 0x7f030001
-dev.aether.editor:xml/backup_rules = 0x7f030000
-dev.aether.editor:style/AetherTheme = 0x7f020000
-dev.aether.editor:drawable/ic_aether = 0x7f010000
+dev.aether.editor:xml/data_extraction_rules = 0x7f050001
+dev.aether.editor:style/AstraShellTheme = 0x7f040001
+dev.aether.editor:style/AetherTheme = 0x7f040000
+dev.aether.editor:mipmap/ic_astra_foreground = 0x7f030001
+dev.aether.editor:xml/game_mode_config = 0x7f050002
+dev.aether.editor:xml/backup_rules = 0x7f050000
+dev.aether.editor:drawable/ic_aether = 0x7f020000
+dev.aether.editor:mipmap/ic_astra = 0x7f030000
+dev.aether.editor:color/astra_void = 0x7f010001
+dev.aether.editor:color/astra_accent = 0x7f010000

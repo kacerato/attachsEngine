@@ -48,6 +48,21 @@ public:
   void shutdown();
   bool isReady() const { return loadAssemblyAndGetFunctionPointer_ != nullptr; }
 
+  // Stack-owned region for native event/render work. The vendored bionic VM is
+  // Mono/SGen behind the CoreCLR hosting ABI and needs cooperative GC boundaries.
+  // UnmanagedCallersOnly trampolines handle managed re-entry inside this region.
+  class NativeRegion final {
+  public:
+    explicit NativeRegion(DotNetHost &host);
+    ~NativeRegion();
+    NativeRegion(const NativeRegion &) = delete;
+    NativeRegion &operator=(const NativeRegion &) = delete;
+  private:
+    void *stackMarker_ = nullptr;
+    void *cookie_ = nullptr;
+    void (*exit_)(void *, void **) = nullptr;
+  };
+
   // Resolve um ponteiro de função para um método gerenciado estático marcado
   // com [UnmanagedCallersOnly] (delegate_type_name = UNMANAGEDCALLERSONLY_METHOD
   // internamente — não expomos delegate customizado nesta primeira fatia,
@@ -63,6 +78,8 @@ public:
   void *getManagedFunctionPointer(const char *typeName, const char *methodName);
 
 private:
+  void *(*enterNative_)(void **) = nullptr;
+  void (*exitNative_)(void *, void **) = nullptr;
   void *hostfxrLibrary_ = nullptr;
   void *hostContextHandle_ = nullptr;
   void *loadAssemblyAndGetFunctionPointer_ = nullptr; // load_assembly_and_get_function_pointer_fn

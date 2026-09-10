@@ -304,7 +304,8 @@ void main() {
                  dot(environment.worldToViewRow2.xyz,relative));
   highp float farPlane=uintBitsToFloat(frame.materialFlags.w);
   highp float nearPlane=frame.cameraPositionNear.w;
-  highp vec2 xy=vec2(view.x*1.732050808/frame.cameraFrame.x,-view.y*1.732050808);
+  highp float focal=environment.shadowTransitionParameters.z>0.0?environment.shadowTransitionParameters.z:1.732050808;
+  highp vec2 xy=vec2(view.x*focal/frame.cameraFrame.x,-view.y*focal);
   highp vec2 projected=vec2(dot(frame.surfaceTransform.xy,xy),
                             dot(frame.surfaceTransform.zw,xy));
   projected += environment.shadowFilterParameters.zw * view.z;

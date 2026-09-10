@@ -20,6 +20,9 @@
         "originalTargetFrameworks": [
           "net8.0"
         ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
         "frameworks": {
           "net8.0": {
             "targetAlias": "net8.0",
@@ -59,6 +62,11 @@
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
         }
+      },
+      "runtimes": {
+        "linux-bionic-arm64": {
+          "#import": []
+        }
       }
     },
     "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj": {
@@ -77,6 +85,9 @@
         "originalTargetFrameworks": [
           "net8.0"
         ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
         "frameworks": {
           "net8.0": {
             "targetAlias": "net8.0",
@@ -119,6 +130,11 @@
             }
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "linux-bionic-arm64": {
+          "#import": []
         }
       }
     }

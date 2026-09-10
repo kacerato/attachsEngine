@@ -1,3 +1,5 @@
+#include "editor/editor_component_references.h"
+#include "scene/script_behavior.h"
 #include "editor/editor_history.h"
 #include "editor/editor_map_scene.h"
 
@@ -105,7 +107,30 @@ EditorEntityId EditorHistory::duplicateEntity(EditorDocument &document, EditorEn
     if(i>0) for(usize j=0;j<i;++j) if(ids[j]==parent) {parent=created[j];break;}
     const auto copy=createEntity(document,parent,value.kind,value.name);
     if(!copy) {end();undo(document);return kInvalidEntity;}
-    created.push_back(copy);applyValues(document,copy,value);
+    created.push_back(copy);
+  }
+  // Resolve all clone identities before remapping references, including forward
+  // references to siblings. External object references intentionally survive.
+  for(usize i=0;i<values.size();++i) {
+    auto value=values[i];
+    for(usize c=0;c<value.components.size();++c) if(const auto *script=scene::scriptBehavior(value.components.at(c))) {
+      auto replacement=*script;
+      for(auto &p:replacement.properties) if(p.valueType=="object") {
+        std::istringstream in(p.value);u64 target=0;in>>target;
+        for(usize j=0;j<ids.size();++j) if(target==ids[j]) {p.value=std::to_string(created[j]);break;}
+      }
+      if(!value.components.replaceInstance(script->instanceId(),replacement)) {end();undo(document);return kInvalidEntity;}
+    }
+    for(usize c=0;c<value.components.size();++c) {
+      const auto *component=value.components.at(c);if(component->type().references.empty()) continue;
+      auto replacement=component->clone();
+      for(const auto &property:replacement->type().references) {
+        const auto target=property.read(*replacement);
+        for(usize j=0;j<ids.size();++j) if(target==ids[j]) {property.write(*replacement,created[j]);break;}
+      }
+      if(!value.components.replaceInstance(component->instanceId(),*replacement)) {end();undo(document);return kInvalidEntity;}
+    }
+    if(!applyValues(document,created[i],value)) {end();undo(document);return kInvalidEntity;}
   }
   end();return created.front();
 }
@@ -190,6 +215,22 @@ bool EditorHistory::reparent(EditorDocument &document, EditorEntityId id,
   const EditorEntityId oldParent = current->parent;
   u32 oldIndex = 0;
   if (!document.childIndexOf(id, oldIndex)) return false;
+  // Preserve valid ancestor ownership when changing hierarchy. Existing drafts
+  // with unresolved links stay editable and receive diagnostics at execution.
+  EditorDocument candidate=document;
+  if(!candidate.reparent(id,newParent,childIndex)) return false;
+  std::vector<EditorEntityId> moved;document.collectSubtree(id,moved);
+  for(auto member:moved) {
+    const auto &entity=*document.find(member);
+    for(usize i=0;i<entity.components.size();++i) {
+      const auto *value=entity.components.at(i);
+      for(const auto &property:value->type().references) {
+        const auto target=property.read(*value);
+        if(property.scope==scene::ObjectReferenceScope::SelfOrAncestor &&
+           editorReferenceAccepts(document,member,property,target,true)&&!editorReferenceAccepts(candidate,member,property,target,true)) return false;
+      }
+    }
+  }
   if (!document.reparent(id, newParent, childIndex)) return false;
   u32 newIndex = 0;
   document.childIndexOf(id, newIndex);

@@ -1,0 +1,193 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Emit;
+
+namespace Astra.Compilation;
+
+public sealed record ScriptDiagnostic(string File, int Line, int Column, string Code, string Message, bool Error);
+public sealed record ScriptPropertySchema(string Id, string Name, string ValueType);
+public sealed record ScriptTypeSchema(string Id, string Name, string File, ScriptPropertySchema[] Properties);
+public sealed record CompiledProject(string Id, byte[] Assembly, byte[] Symbols, ScriptTypeSchema[] Types);
+public sealed record ScriptBuildResult(CompiledProject? Project, ScriptDiagnostic[] Diagnostics)
+{
+    public bool Success => Project is not null;
+}
+
+/// <summary>In-process C# compiler. It parses and emits; building never instantiates user classes.</summary>
+public sealed class ProjectCompiler
+{
+    public const int MaximumSources = 1024;
+    public const int MaximumSourceBytes = 512 * 1024;
+    public const int MaximumProjectBytes = 32 * 1024 * 1024;
+    public ScriptBuildResult Build(string projectDirectory, CancellationToken cancellation = default)
+    {
+        try
+        {
+            var root = Path.GetFullPath(projectDirectory);
+            if (!Directory.Exists(root)) return Failure("ASTRA001", "Project directory is unavailable.");
+            var inputs = ReadSources(root, cancellation);
+            if (inputs.Count == 0) return Failure("ASTRA002", "The project contains no C# source files.");
+            var trees = inputs.Select(input => CSharpSyntaxTree.ParseText(input.Text,
+                new CSharpParseOptions(LanguageVersion.CSharp12), input.Path, Encoding.UTF8, cancellation)).ToArray();
+            var referencePaths = ReferencePaths();
+            var references = referencePaths.Select(path => MetadataReference.CreateFromFile(path)).ToArray();
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            foreach (var input in inputs)
+            {
+                hash.AppendData(Encoding.UTF8.GetBytes(input.Path + "\0" + input.Text + "\0"));
+            }
+            hash.AppendData(Encoding.UTF8.GetBytes(typeof(ProjectCompiler).Assembly.ManifestModule.ModuleVersionId.ToString()));
+            var id = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+            var compilation = CSharpCompilation.Create("Astra.Project." + id, trees, references,
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
+                    optimizationLevel: OptimizationLevel.Debug, allowUnsafe: false, deterministic: true,
+                    nullableContextOptions: NullableContextOptions.Enable));
+            var schemaErrors = new List<ScriptDiagnostic>();
+            var types = ExtractSchemas(compilation, root, schemaErrors, cancellation);
+            using var assembly = new MemoryStream(); using var symbols = new MemoryStream();
+            var emitted = compilation.Emit(assembly, symbols,
+                options: new EmitOptions(debugInformationFormat: DebugInformationFormat.PortablePdb),
+                cancellationToken: cancellation);
+            var diagnostics = emitted.Diagnostics.Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+                .Select(d => ConvertDiagnostic(d, root)).Concat(schemaErrors).Take(4096).ToArray();
+            if (!emitted.Success || schemaErrors.Any(d => d.Error)) return new(null, diagnostics);
+            return new(new(id, assembly.ToArray(), symbols.ToArray(), types), diagnostics);
+        }
+        catch (OperationCanceledException) { return Failure("ASTRA003", "Compilation cancelled."); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or BadImageFormatException)
+        {
+            return Failure("ASTRA004", error.Message);
+        }
+    }
+    private static ScriptBuildResult Failure(string code, string message) =>
+        new(null, [new("", 1, 1, code, message, true)]);
+
+    private static List<(string Path, string Text)> ReadSources(string root, CancellationToken cancellation)
+    {
+        var sources = new List<(string Path, string Text)>(); var total = 0;
+        var pending = new Stack<string>(); pending.Push(root);
+        while (pending.TryPop(out var directory))
+        {
+            cancellation.ThrowIfCancellationRequested();
+            foreach (var path in Directory.EnumerateFileSystemEntries(directory).Order(StringComparer.Ordinal))
+            {
+                var attributes = File.GetAttributes(path);
+                if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    var name = Path.GetFileName(path);
+                    if (name is not (".astra" or ".git" or "bin" or "obj" or "Library" or "Packages")) pending.Push(path);
+                    continue;
+                }
+                if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) continue;
+                var length = new FileInfo(path).Length;
+                if (length > MaximumSourceBytes || sources.Count >= MaximumSources || total + length > MaximumProjectBytes)
+                    throw new IOException("Project source limits exceeded.");
+                var text = File.ReadAllText(path, new UTF8Encoding(false, true));
+                total += Encoding.UTF8.GetByteCount(text);
+                sources.Add((Path.GetRelativePath(root, path).Replace('\\', '/'), text));
+            }
+        }
+        sources.Sort((a, b) => StringComparer.Ordinal.Compare(a.Path, b.Path)); return sources;
+    }
+    private static string[] ReferencePaths()
+    {
+        var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string path)
+        {
+            if (!File.Exists(path)) return;
+            // Native libraries can share the host's runtime directory/probing
+            // list. They are not C# references and must not abort compilation.
+            string? name;
+            try { name = System.Reflection.AssemblyName.GetAssemblyName(path).Name; }
+            catch (BadImageFormatException) { return; }
+            if (name is not null) paths.TryAdd(name, path);
+        }
+        // Prefer the host's resolved assembly identity. Adding all runtime DLLs
+        // unconditionally would mix framework v8 and package v9 identities.
+        if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string trusted)
+            foreach (var path in trusted.Split(Path.PathSeparator)) Add(path);
+        var runtimeDirectory = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
+        foreach (var path in Directory.EnumerateFiles(runtimeDirectory, "*.dll")) Add(path);
+        Add(typeof(Behavior).Assembly.Location);
+        return paths.Values.Order(StringComparer.Ordinal).ToArray();
+    }
+    private static ScriptDiagnostic ConvertDiagnostic(Diagnostic diagnostic, string root)
+    {
+        var span = diagnostic.Location.GetLineSpan(); var file = span.Path;
+        if (Path.IsPathRooted(file)) file = Path.GetRelativePath(root, file);
+        return new(file.Replace('\\', '/'), span.StartLinePosition.Line + 1, span.StartLinePosition.Character + 1,
+            diagnostic.Id, diagnostic.GetMessage(CultureInfo.InvariantCulture), diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+    private static ScriptTypeSchema[] ExtractSchemas(CSharpCompilation compilation, string root,
+        List<ScriptDiagnostic> errors, CancellationToken cancellation)
+    {
+        var types = new List<ScriptTypeSchema>(); var identities = new HashSet<string>(StringComparer.Ordinal);
+        var behavior = compilation.GetTypeByMetadataName("Astra.Behavior");
+        foreach (var tree in compilation.SyntaxTrees)
+        {
+            var model = compilation.GetSemanticModel(tree);
+            foreach (var syntax in tree.GetRoot(cancellation).DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax>())
+            {
+                if (model.GetDeclaredSymbol(syntax, cancellation) is not INamedTypeSymbol type || type.IsAbstract) continue;
+                bool derived = false;
+                for (var parent = type.BaseType; parent is not null; parent = parent.BaseType)
+                    if (SymbolEqualityComparer.Default.Equals(parent, behavior)) derived = true;
+                if (!derived) continue;
+                // Partial declarations share one type and are emitted once.
+                if (!SymbolEqualityComparer.Default.Equals(type, model.GetDeclaredSymbol(syntax, cancellation)) ||
+                    type.DeclaringSyntaxReferences[0].Span != syntax.Span || type.DeclaringSyntaxReferences[0].SyntaxTree != tree) continue;
+                var location = syntax.GetLocation().GetLineSpan();
+                void Error(string message) => errors.Add(new(tree.FilePath, location.StartLinePosition.Line + 1,
+                    location.StartLinePosition.Character + 1, "ASTRA_SCHEMA", message, true));
+                if (type.DeclaredAccessibility != Accessibility.Public || type.TypeParameters.Length != 0 || type.ContainingType is not null)
+                { Error("Behavior types must be public, non-generic top-level classes."); continue; }
+                if (!type.InstanceConstructors.Any(c => c.DeclaredAccessibility == Accessibility.Public && c.Parameters.Length == 0))
+                { Error("Behavior requires a public parameterless constructor."); continue; }
+                var id = AttributeId(type, "Astra.ComponentIdAttribute");
+                if (!ValidId(id) || !identities.Add(id!)) { Error("Behavior requires a unique [ComponentId] with a stable ID."); continue; }
+                var properties = new List<ScriptPropertySchema>(); var propertyIds = new HashSet<string>(StringComparer.Ordinal);
+                var propertyNames = new HashSet<string>(StringComparer.Ordinal);
+                for (var current = type; current is not null && !SymbolEqualityComparer.Default.Equals(current, behavior); current = current.BaseType)
+                foreach (var member in current.GetMembers())
+                {
+                    var propertyId = AttributeId(member, "Astra.PropertyIdAttribute"); if (propertyId is null) continue;
+                    var valueType = member switch
+                    {
+                        IFieldSymbol field when !field.IsReadOnly && !field.IsStatic && field.DeclaredAccessibility == Accessibility.Public => field.Type,
+                        IPropertySymbol property when !property.IsStatic && !property.IsIndexer && property.GetMethod?.DeclaredAccessibility == Accessibility.Public && property.SetMethod?.DeclaredAccessibility == Accessibility.Public => property.Type,
+                        _ => null
+                    };
+                    var name = valueType is null ? null : PropertyKind(valueType);
+                    if (!ValidId(propertyId) || !propertyIds.Add(propertyId) || !propertyNames.Add(member.Name) || valueType is null || !Supported(valueType))
+                    { Error("Unsupported, duplicate or inaccessible [PropertyId]: " + member.Name); continue; }
+                    properties.Add(new(propertyId, member.Name, name!));
+                }
+                types.Add(new(id!, type.ToDisplayString(), tree.FilePath, properties.ToArray()));
+            }
+        }
+        _ = root;
+        return types.OrderBy(t => t.Id, StringComparer.Ordinal).ToArray();
+    }
+    private static string PropertyKind(ITypeSymbol type) => type.TypeKind == TypeKind.Enum ? "enum" :
+        type.SpecialType switch
+        {
+            SpecialType.System_Boolean => "bool", SpecialType.System_Int32 => "int32",
+            SpecialType.System_Single => "float", SpecialType.System_String => "string",
+            _ => type.ToDisplayString() switch
+            {
+                "System.Numerics.Vector3" => "vector3", "Astra.ObjectReference" => "object",
+                "Astra.AssetReference" => "asset", _ => "unsupported"
+            }
+        };
+    private static bool Supported(ITypeSymbol type) => (type is INamedTypeSymbol { TypeKind: TypeKind.Enum, EnumUnderlyingType.SpecialType: SpecialType.System_Int32 }) ||
+        type.SpecialType is SpecialType.System_Boolean or SpecialType.System_Int32 or SpecialType.System_Single or SpecialType.System_String ||
+        type.ToDisplayString() is "System.Numerics.Vector3" or "Astra.ObjectReference" or "Astra.AssetReference";
+    private static string? AttributeId(ISymbol symbol, string attribute) => symbol.GetAttributes()
+        .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == attribute)?.ConstructorArguments.FirstOrDefault().Value as string;
+    private static bool ValidId(string? id) => !string.IsNullOrWhiteSpace(id) && id.Length <= 256 &&
+        id.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-' or '/');
+}

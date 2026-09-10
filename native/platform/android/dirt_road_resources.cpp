@@ -289,6 +289,46 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
   return true;
 }
 
+// Shared Vulkan resource upload backend; this entry never reads a demo package.
+bool DirtRoadResources::initializePrimitives(rhi::VulkanDevice &device,rhi::VulkanUploadContext &upload) {
+  if(vertices_.handle()!=VK_NULL_HANDLE || !draws_.empty()) return false;
+  std::vector<u8> vertices;std::vector<u32> indices;
+  if(!renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride,vertices,indices,draws_,materials_)) return false;
+  auto &allocator=device.memoryAllocator();
+  rhi::BufferDesc buffer{};buffer.preferDeviceMemory=true;buffer.cpuAccess=rhi::CpuAccess::None;
+  buffer.sizeBytes=vertices.size();buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+  if(!allocator.createBuffer(buffer,&vertices_) || !upload.uploadBuffer(allocator,vertices.data(),vertices.size(),vertices_,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT)) return false;
+  buffer.sizeBytes=indices.size()*sizeof(u32);buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+  if(!allocator.createBuffer(buffer,&indices_) || !upload.uploadBuffer(allocator,indices.data(),buffer.sizeBytes,indices_,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_ACCESS_INDEX_READ_BIT)) return false;
+  pickingVertices_=std::move(vertices);pickingIndices_=std::move(indices);
+  // Neutral editor preview lighting, not a hidden authored light or demo HDRI.
+  environmentLighting_={};
+  environmentLighting_.sunDirectionIntensity[0]=.4082483f;
+  environmentLighting_.sunDirectionIntensity[1]=.8164966f;
+  environmentLighting_.sunDirectionIntensity[2]=.4082483f;
+  environmentLighting_.sunDirectionIntensity[3]=2;
+  for(u32 i=0;i<3;++i) {
+    environmentLighting_.sunColorAngularRadius[i]=1;
+    environmentLighting_.ambientColorStrength[i]=.5f;
+    environmentLighting_.skyZenithCloudCoverage[i]=.15f;
+    environmentLighting_.skyHorizonCloudDensity[i]=.15f;
+    environmentLighting_.groundColorSaturation[i]=.15f;
+  }
+  environmentLighting_.ambientColorStrength[3]=1;
+  environmentLighting_.groundColorSaturation[3]=1;
+  environmentLighting_.parameters[0]=1;
+  const u8 pixel[]{128,128,128,255};
+  rhi::ImageDesc image{};image.width=image.height=1;image.format=VK_FORMAT_R8G8B8A8_UNORM;
+  image.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
+  image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;image.memoryClass=rhi::MemoryClass::Texture;
+  if(!allocator.createImage(image,&environmentImage_) || !upload.uploadRgba8ToSampledImage(allocator,pixel,sizeof(pixel),environmentImage_)) return false;
+  rhi::SamplerDesc sampler{};
+  if(!environmentSampler_.initialize(device.handle(),sampler)) return false;
+  header_={};header_.vertexStride=renderer::MapVertexStride;packageFingerprint_=0;
+  __android_log_print(ANDROID_LOG_INFO,LogTag,"[Authoring] primitive_library=1 packages=0 water=0 authored_objects=0");
+  return true;
+}
+
 platform::FreeCameraState DirtRoadResources::defaultCamera() const {
   platform::FreeCameraState state{};
   std::memcpy(state.position, header_.defaultCameraPosition, sizeof(state.position));
@@ -331,6 +371,7 @@ void DirtRoadResources::shutdown() {
   textureRecords_.clear();
   header_ = {};
   packageFingerprint_ = 0;
+  pickingVertices_.clear();pickingIndices_.clear();
 }
 
 } // namespace ae::platform::android

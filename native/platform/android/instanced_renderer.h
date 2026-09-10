@@ -66,7 +66,7 @@ public:
                   DotNetHost &dotNetHost, u32 instanceCount, bool scenePreview = false,
                   AAssetManager *materialAssets = nullptr, bool forceTextureFallback = false,
                   const std::atomic<bool> *cancel = nullptr, bool dirtRoadPreview = false,
-                  const char *mapAssetRoot = "dirt_road");
+                  const char *mapAssetRoot = "dirt_road", bool emptyScene = false);
   void shutdown();
   // Single render-owner thread. Queues up to 64 distinct draw poses per frame;
   // GPU writes happen after acquire/fence, before shadows and culling. Dynamic
@@ -100,6 +100,8 @@ public:
     sceneNearPlane_ = nearPlane;
     sceneFarPlane_ = farPlane;
   }
+  // Zero restores the renderer's configured field of view.
+  void setSceneFieldOfView(float radians) { sceneFieldOfView_=radians; }
   void setEditorBackground(bool enabled) { editorBackground_=enabled; }
   void setEnvironmentAdjustment(const float values[4]) { std::copy(values,values+4,environmentAdjustment_); }
   const std::vector<renderer::MapMaterialRecord> &mapMaterials() const { return dirtRoadResources_.materials(); }
@@ -125,6 +127,8 @@ public:
     return dirtRoadResources_.staticCollisionMesh();
   }
   void releaseStaticCollisionCpuData(){dirtRoadResources_.releaseStaticCollisionCpuData();}
+  std::span<const u8> pickingVertices() const { return dirtRoadResources_.pickingVertices(); }
+  std::span<const u32> pickingIndices() const { return dirtRoadResources_.pickingIndices(); }
   const std::vector<renderer::MapDrawRecord> &mapDraws() const { return dirtRoadResources_.draws(); }
   renderer::WaterFieldSetup waterQuerySetup() const {
     renderer::WaterFieldSetup setup;
@@ -372,7 +376,9 @@ public:
 
 private:
   bool editorBackground_=false;
-  float sceneNearPlane_ = 0, sceneFarPlane_ = 0;
+  float sceneNearPlane_ = 0, sceneFarPlane_ = 0, sceneFieldOfView_=0;
+  float previousSceneProjection_[4]{};
+  float sceneFieldOfView() const {return sceneFieldOfView_>0?sceneFieldOfView_:visibilitySettings_.verticalFieldOfViewRadians;}
   float sceneNearPlane() const { return sceneNearPlane_ > 0 ? sceneNearPlane_ : dirtRoadResources_.header().nearPlane; }
   float sceneFarPlane() const { return sceneFarPlane_ > sceneNearPlane_ ? sceneFarPlane_ : dirtRoadResources_.header().farPlane; }
   ui::UiRect sceneViewport_{};
@@ -609,6 +615,7 @@ private:
   u32 instanceCount_ = 0;
   u32 drawnInstanceCount_ = 0;
   bool scenePreview_ = false;
+  bool emptyScene_ = false;
   bool materialPreview_ = false;
   bool dirtRoadPreview_ = false;
   MaterialPreviewResources materialResources_;

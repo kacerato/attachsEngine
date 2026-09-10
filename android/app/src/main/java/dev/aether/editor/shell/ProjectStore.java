@@ -102,7 +102,8 @@ public final class ProjectStore {
 
     /** Cria a pasta e o descritor do projeto; devolve null se o disco recusar. */
     public Project create(String name, SceneTemplate template) {
-        if (!writable || name == null || template == null || !template.ready) return null;
+        if (!writable || name == null || template == null || !template.ready
+                || !SceneTemplate.EMPTY.equals(template.id)) return null;
         name = name.trim();
         if (name.isEmpty() || name.equals(".") || name.equals("..") || name.matches(".*[\\\\/:\\p{Cntrl}].*") || exists(name)) return null;
         File directory = new File(root(), name);
@@ -117,6 +118,7 @@ public final class ProjectStore {
         try {
             JSONObject descriptor = new JSONObject();
             descriptor.put("format", "ASTRA-PROJECT-1");
+            descriptor.put("resourceSource", "independent");
             descriptor.put("project", project.toJson());
             descriptor.put("mainScene", "scenes/main.ascene");
             descriptor.put("editorScene", "scenes/editor.aescene");

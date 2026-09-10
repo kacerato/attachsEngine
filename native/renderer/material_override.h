@@ -1,17 +1,9 @@
 #pragma once
 #include "renderer/map_package.h"
+#include "scene/material_parameters.h"
 namespace ae::renderer {
 // Scalar instance overrides preserve the shared textures and pipeline class.
-struct MaterialOverride {
-  bool enabled = false;
-  float baseColor[3]{1,1,1};
-  float roughness = 0.5f;
-  float metallic = 0;
-  float normalScale = 1;
-  float specular = 1;
-  float emission[3]{};
-  float emissionStrength = 1;
-};
+using MaterialOverride=scene::MaterialParameters;
 inline MaterialOverride materialOverrideFrom(const MapMaterialRecord &source) {
   MaterialOverride result;
   for(u32 i=0;i<3;++i) {result.baseColor[i]=source.baseColorFactor[i];result.emission[i]=source.emissiveFactorAndStrength[i];}

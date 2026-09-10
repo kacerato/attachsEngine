@@ -1,0 +1,7 @@
+# Junta — ícone Astra
+
+Gerado em 10/09/2026 com a ferramenta integrada `image_gen`, seguindo a identidade raster dos componentes Astra e a paleta da marca. Arquivo de projeto: `joint.png`. A imagem foi inspecionada como arte; isso não é validação do layout no aparelho. O atlas foi empacotado pelo pipeline existente, preservando o alpha. Nenhum build da engine foi executado.
+
+Prompt utilizado:
+
+> Create a single production raster PNG icon for the Junta (physics joint) component of the Astra mobile game engine. It must feel alive and sculpted, a premium tiny 3D toy mechanical ball-and-socket joint: two chunky short off-white ceramic arms connected by a vivid acid-lime spherical pivot, an open charcoal-and-lime orbital collar hugging the pivot, evoking Astra's orbital star logo. Three-quarter isometric view. Strong very readable silhouette at 28 dp. Palette acid lime #c8ff00, warm white and deep charcoal, restrained dark seams, polished bevel highlights and very subtle material texture matching existing Astra component icons. Center the complete single object on actual transparent background, comfortable 12 percent empty margins all around, square 512x512. No text, no letters, no badge rectangle, no extra background or ground plane, no watermark. The icon represents a physical mechanical connection, not a chain hyperlink. Not flat vector or SVG appearance. Output transparent PNG with real alpha.

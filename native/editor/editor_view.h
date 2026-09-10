@@ -19,6 +19,8 @@
 #include "ui/ui_geometry.h"
 
 #include <span>
+#include <memory>
+#include "editor/editor_pick_mesh.h"
 
 namespace ae::editor {
 
@@ -60,11 +62,8 @@ struct EditorRay final {
 // que o dedo sai, e recusar aqui truncaria o gesto na borda.
 EditorRay screenPointToRay(const EditorViewport &viewport, ui::UiPoint screen) noexcept;
 
-// Candidato de seleção. Esfera porque é o que os lotes de renderização já
-// carregam (`boundsCenter`/`boundsRadius`): uma caixa orientada exigiria uma
-// segunda fonte de verdade sobre os limites, que hoje não existe. O efeito é
-// conhecido e aceito — um objeto alongado é selecionável um pouco além da
-// silhueta —, e é por isso que o empate é resolvido pelo mais próximo.
+// Sphere is broadphase only when resource triangles are available. Legacy
+// resources without CPU geometry retain an explicitly approximate fallback.
 struct EditorPickCandidate final {
   u32 id = 0;
   float center[3]{};
@@ -72,6 +71,8 @@ struct EditorPickCandidate final {
   // Candidato invisível ou travado não é selecionável pelo toque. O olho e o
   // cadeado da hierarquia precisam significar algo no viewport também.
   bool selectable = true;
+  std::shared_ptr<const EditorPickMesh> mesh{};
+  float model[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
 };
 
 struct EditorPickResult final {

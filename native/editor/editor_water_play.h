@@ -27,7 +27,7 @@ public:
     std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
     const bool needsSampling=std::any_of(ids.begin(),ids.end(),[&](auto id) {
       const auto &e=*document.find(id);
-      return e.active && e.rigidBodyEnabled && e.assetId && std::any_of(draws.begin(),draws.end(),[&](const auto &draw){return draw.objectId==id && draw.visible;});
+      return e.active && e.rigidBodyEnabled && meshAsset(e) && std::any_of(draws.begin(),draws.end(),[&](const auto &draw){return draw.objectId==id && draw.visible;});
     });
     if(needsSampling && !cascades.empty()) {
       renderer::WaterMirrorSetSettings settings;settings.maximumResolution=128;
@@ -42,7 +42,7 @@ public:
     physics::WaterSimulationSettings settings;settings.water.forces.fluidDensity=density;
     if(!simulation_.configure(settings)) {stop();return false;}
     for(auto id:ids) {
-      const auto &e=*document.find(id);if(!e.active || !e.rigidBodyEnabled || !e.assetId) continue;
+      const auto &e=*document.find(id);if(!e.active || !e.rigidBodyEnabled || !meshAsset(e)) continue;
       auto found=std::find_if(draws.begin(),draws.end(),[&](const auto &draw){return draw.objectId==id && draw.visible;});
       if(found==draws.end()) continue;
       if(bindings_.size()>=physics::WaterRuntime::Capacity) {stop();return false;}

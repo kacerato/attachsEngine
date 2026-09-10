@@ -1,10 +1,16 @@
+#include "scene/script_behavior.h"
+#include "editor/editor_water_body_component.h"
+#include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
 #include <unordered_set>
 #include <cctype>
 #include "editor/editor_screen.h"
+#include "editor/editor_reference_picker.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_properties.h"
+#include "editor/editor_component_catalog.h"
 #include "editor/editor_grid.h"
+#include "editor/editor_collider_geometry.h"
 
 #include "ui/ui_icon_id.h"
 
@@ -85,23 +91,12 @@ UiIcon iconForKind(EditorEntityKind kind) {
   return UiIcon::EditorAuthorObject;
 }
 
-const char *kindLabel(EditorEntityKind kind) {
-  switch (kind) {
-    case EditorEntityKind::Folder: return "GRUPO";
-    case EditorEntityKind::Mesh: return "MALHA";
-    case EditorEntityKind::Light: return "LUZ";
-    case EditorEntityKind::Camera: return "CÂMERA";
-    case EditorEntityKind::Water: return "ÁGUA";
-    case EditorEntityKind::Effect: return "EFEITO";
-  }
-  return "NÓ";
-}
-
 struct ScreenBuilder final {
   const EditorScreenState &state;
   const UiTheme &theme;
   UiDrawList &list;
   UiInputRouter &router;
+  u32 componentPage=0;
 
   bool isPressed(u32 widget) const { return state.pressedWidget == widget && widget != 0; }
 
@@ -168,58 +163,68 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
                        enabled ? theme.color.text : theme.color.textFaint);
     takeRight(content, theme.spacing.tiny);
   };
-  action(UiIcon::EditorAuthorMore, EditorWidget::ProjectMenu, true);
-  action(UiIcon::EditorAuthorFolder, EditorWidget::OpenProject, true);
-  action(UiIcon::EditorAuthorRedo, EditorWidget::Redo, builder.state.canRedo);
-  action(UiIcon::EditorAuthorUndo, EditorWidget::Undo, builder.state.canUndo);
 
-  builder.iconButton(takeLeft(content, 40.0f), UiIcon::EditorAuthorMore,
-                     widgetId(EditorWidget::SceneChip));
 
-  // As abas de modo. Elas trocam o CONTEXTO do viewport; por isso ficam no topo,
-  // ao lado do nome do projeto, e não numa doca de ações no rodapé — numa tela
-  // em paisagem a borda inferior é onde o polegar cobre o conteúdo e onde a
-  // barra de gestos do sistema disputa o toque.
-  takeLeft(content, theme.spacing.small);
-  struct Tab final {
-    const char *label;
-    UiIcon icon;
-    EditorWidget widget;
-    EditorWorkspace workspace;
-  };
-  const Tab tabs[] = {
-      {"Cena", UiIcon::EditorAuthorObject, EditorWidget::TabScene, EditorWorkspace::Scene},
-      {"Recursos", UiIcon::EditorAuthorFolder, EditorWidget::TabAssets, EditorWorkspace::Assets},
-      {"Iluminação", UiIcon::EditorAuthorSun, EditorWidget::TabLighting, EditorWorkspace::Lighting},
-      {"Executar", UiIcon::EditorAuthorPlay, EditorWidget::TabPlay, EditorWorkspace::Play},
-      {"Configurações", UiIcon::EditorAuthorSettings, EditorWidget::TabSettings, EditorWorkspace::Settings},
-  };
-  const float tabWidth = std::max(38.0f, content.width / 5.0f);
-  // A decisão de mostrar rótulo é UMA, para todas as abas, e é tomada pela mais
-  // larga. Decidir por aba deixaria "Executar" com nome e "Configurações" sem, o que
-  // parece defeito de renderização e não uma adaptação de espaço.
-  float widestLabel = 0.0f;
-  for (const Tab &tab : tabs)
-    widestLabel = std::max(widestLabel, builder.list.measure(tab.label, theme.type.caption));
-  const bool showLabels = tabWidth - theme.spacing.small * 2.0f >= widestLabel + 22.0f;
+  if(builder.state.workspace==EditorWorkspace::Play && !waterCreationAvailable(builder.state)) {
+    const auto control=[&](const char *label,EditorWidget id,bool enabled) {
+      const auto rect=takeRight(content,76);
+      builder.list.addRect(rect,theme.color.raised,theme.radius.control);
+      builder.label(rect,label,enabled?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+      if(enabled) builder.router.addRegion(rect,widgetId(id),theme.touch.minimumTarget);
+      takeRight(content,theme.spacing.small);
+    };
+    control("Passo",EditorWidget::StepPlay,builder.state.playPaused);
+    control(builder.state.playPaused?"Retomar":"Pausar",EditorWidget::PausePlay,true);
+  } else {
+    action(UiIcon::EditorAuthorRedo, EditorWidget::Redo, builder.state.canRedo);
+    action(UiIcon::EditorAuthorUndo, EditorWidget::Undo, builder.state.canUndo);
+  }
 
-  for (const Tab &tab : tabs) {
-    if (content.width <= 0.0f) break;
-    const UiRect slot = takeLeft(content, tabWidth);
-    const bool active = builder.state.workspace == tab.workspace;
-    if (active)
-      builder.list.addRect(deflate(slot, UiInsets::symmetric(2.0f, 6.0f)), theme.color.accent,
-                           theme.radius.control);
-    const UiColor ink = active ? theme.color.accentInk : theme.color.textDim;
-    if (showLabels) {
-      UiRect inner = deflate(slot, UiInsets::symmetric(theme.spacing.small, 0.0f));
-      builder.list.addImage(centred(takeLeft(inner, 20.0f), 15.0f, 15.0f),
-                            static_cast<UiImageId>(tab.icon), ink);
-      builder.label(inner, tab.label, ink, theme.type.caption);
-    } else {
-      builder.list.addImage(centred(slot, 18.0f, 18.0f), static_cast<UiImageId>(tab.icon), ink);
-    }
-    builder.router.addRegion(slot, widgetId(tab.widget), theme.touch.minimumTarget);
+  const auto sceneMenu=takeLeft(content,76.0f);
+  builder.list.addRect(sceneMenu,theme.color.raised,theme.radius.control);
+  builder.label(sceneMenu,"Cena",theme.color.text,theme.type.caption,UiAlign::Center);
+  builder.router.addRegion(sceneMenu,widgetId(EditorWidget::ProjectMenu));
+  takeLeft(content,theme.spacing.small);
+  const auto save=takeLeft(content,64.0f);
+  builder.list.addRect(save,theme.color.raised,theme.radius.control);
+  builder.label(save,"Salvar",theme.color.text,theme.type.caption,UiAlign::Center);
+  builder.router.addRegion(save,widgetId(EditorWidget::SaveDocument));
+
+  takeLeft(content,theme.spacing.medium);
+  const char *context=builder.state.workspace==EditorWorkspace::Play ? (builder.state.playPaused?"Pausado":"Em execução") :
+      builder.state.workspace==EditorWorkspace::Lighting ? "Ambiente da cena" :
+      builder.state.workspace==EditorWorkspace::Settings ? "Água da cena" :
+      builder.state.workspace==EditorWorkspace::Assets ? "Recursos importados" : "Edição";
+  if(content.width>80) builder.label(content,context,theme.color.textDim,theme.type.caption);
+
+}
+
+void buildPhysicsOverlay(ScreenBuilder &builder) {
+  const auto &state=builder.state;const auto *entity=state.document->find(state.selection);
+  if(!entity || state.workspace!=EditorWorkspace::Scene || state.componentSelection!=entity->id) return;
+  const auto *component=entity->components.findInstance(state.expandedNative);if(!component) return;
+  if(&component->type()==&scene::Collider::descriptor) {
+    const auto &c=static_cast<const scene::Collider &>(*component);float world[16],local[16];
+    if(!editorWorldMatrix(*state.document,entity->id,world)) return;
+    EditorTransform t;t.position[0]=c.centerX;t.position[1]=c.centerY;t.position[2]=c.centerZ;
+    t.rotationDegrees[0]=c.rotationX;t.rotationDegrees[1]=c.rotationY;t.rotationDegrees[2]=c.rotationZ;editorTransformMatrix(t,local);
+    const bool validOwner=editorReferenceAccepts(*state.document,entity->id,scene::colliderReferences[0],c.owner,true);
+    const auto color=!validOwner?builder.theme.color.axisX:c.enabled?builder.theme.color.accent:builder.theme.color.textMuted;
+    editorColliderSegments(c,[&](const auto &a,const auto &b) {
+      float points[2][3];const auto transform=[&](const auto &p,float *out) {
+        float l[3];for(u32 k=0;k<3;++k) l[k]=local[k]*p[0]+local[4+k]*p[1]+local[8+k]*p[2]+local[12+k];
+        for(u32 k=0;k<3;++k) out[k]=world[k]*l[0]+world[4+k]*l[1]+world[8+k]*l[2]+world[12+k];
+      };
+      transform(a,points[0]);transform(b,points[1]);UiPoint from,to;
+      if(projectSegmentToScreen(*state.view,points[0],points[1],from,to)) builder.list.addLine(from,to,color,1.5f);
+    });
+  } else if(&component->type()==&scene::Joint::descriptor) {
+    const auto &joint=static_cast<const scene::Joint &>(*component);
+    if(!editorReferenceAccepts(*state.document,entity->id,scene::jointReferences[0],joint.connectedBody,true)) return;
+    float a[16],b[16];if(!editorWorldMatrix(*state.document,entity->id,a)||!editorWorldMatrix(*state.document,static_cast<EditorEntityId>(joint.connectedBody),b)) return;
+    float p[3],q[3];for(u32 k=0;k<3;++k) {p[k]=a[k]*joint.anchorA[0]+a[4+k]*joint.anchorA[1]+a[8+k]*joint.anchorA[2]+a[12+k];q[k]=b[k]*joint.anchorB[0]+b[4+k]*joint.anchorB[1]+b[8+k]*joint.anchorB[2]+b[12+k];}
+    UiPoint from,to;if(projectSegmentToScreen(*state.view,p,q,from,to)) builder.list.addLine(from,to,builder.theme.color.accent,2);
+    for(const float *point:{p,q}) {const auto projected=projectWorldToScreen(*state.view,point);if(projected.valid) builder.list.addRect({projected.screen.x-3,projected.screen.y-3,6,6},builder.theme.color.accent,3);}
   }
 }
 
@@ -265,9 +270,10 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
     }
   }
 
+  buildPhysicsOverlay(builder);
   const EditorEntity *entity = state.document->find(state.selection);
   if (entity != nullptr && state.tool != EditorGizmoMode::Select &&
-      state.workspace == EditorWorkspace::Scene && !(entity->route.count && state.waterTab==1)) {
+      state.workspace == EditorWorkspace::Scene && !(waterRoute(*entity).count && state.waterTab==1)) {
     EditorGizmoSettings settings{};
     settings.screenLengthPixels = 72.0f;
     float world[16];
@@ -351,6 +357,7 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
   auto header=takeTop(content,28);
   builder.label(header,"Arquivos",theme.color.text,theme.type.body);
   builder.router.addRegion(header,widgetId(EditorWidget::FilesCollapse));
+  builder.iconButton(takeRight(header,28),UiIcon::ScriptingCode,widgetId(EditorWidget::CodeOpen));
   if(builder.state.filesCollapsed) return;
   if(!files.error().empty()) {
     builder.list.pushClip(content);builder.label(content,files.error().c_str(),theme.color.textDim,theme.type.caption);builder.list.popClip();return;
@@ -446,7 +453,7 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
                             static_cast<UiImageId>(collapsed ? UiIcon::EditorAuthorAdd : UiIcon::EditorAuthorChevron),
                             selected ? theme.color.accentInk : theme.color.textDim);
     builder.list.addImage(centred(takeLeft(rowContent, 22.0f), 15.0f, 15.0f),
-                          static_cast<UiImageId>(iconForKind(entity->kind)),
+                          static_cast<UiImageId>(cameraComponent(*entity)?UiIcon::EditorAuthorCamera:meshRenderer(*entity)?UiIcon::EditorAuthorObject:iconForKind(entity->kind)),
                           selected ? theme.color.accentInk : theme.color.accent);
     const UiRect eye = takeRight(rowContent, 24.0f);
     builder.list.addImage(
@@ -498,7 +505,7 @@ void buildPropertyPage(ScreenBuilder &builder, UiRect content, const EditorEntit
   const auto &theme=builder.theme;
   std::vector<u32> properties;
   for(u32 i=9;i<editorNumericProperties.size();++i)
-    if(editorNumericProperties[i].group==group &&
+    if(editorNumericProperties[i].group==group && editorPropertyVisible(entity,i) &&
        (group!=EditorPropertyGroup::WaterBody || (builder.state.waterTab==2?i<70:i>=70)) &&
        (group!=EditorPropertyGroup::Route || (i>=RoutePropertyBase+builder.state.routePoint*8 && i<RoutePropertyBase+(builder.state.routePoint+1)*8))) properties.push_back(i);
   const u32 pageSize=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-42.0f)/40.0f));
@@ -514,6 +521,7 @@ void buildPropertyPage(ScreenBuilder &builder, UiRect content, const EditorEntit
     builder.label(slot,number,theme.color.text,theme.type.numeric,UiAlign::Center);
     builder.router.addRegion(slot,widgetId(EditorWidget::TransformFieldBase)+index);
   }
+  if(pages<=1) return;
   UiRect footer=takeTop(content,40);
   const float buttonWidth=footer.width*.3f;
   const auto previous=takeLeft(footer,buttonWidth),next=takeRight(footer,buttonWidth);
@@ -523,6 +531,353 @@ void buildPropertyPage(ScreenBuilder &builder, UiRect content, const EditorEntit
   builder.label(footer,pageLabel,theme.color.textDim,theme.type.caption,UiAlign::Center);
   if(page) builder.router.addRegion(previous,widgetId(EditorWidget::PropertyPrevious));
   if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::PropertyNext));
+}
+
+// Descriptor fields are addressed by stable instance/property IDs on edit.
+// Widget indices exist only for one rendered frame, never in the scene archive.
+void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity,
+                          const EditorComponentEntry &entry,u32 index) {
+  const auto &theme=builder.theme;
+  const auto *component=entity.components.at(index);if(!component || &component->type()!=entry.type) return;
+  if(const auto *reason=entry.unavailable(entity)) builder.label(takeTop(content,30),reason,theme.color.textMuted,theme.type.caption);
+  if(entry.type==&scene::Joint::descriptor) {
+    const auto &j=static_cast<const scene::Joint &>(*component);
+    builder.label(takeTop(content,28),j.kind==scene::JointKind::Hinge?"Limites/alvo: graus · velocidade: graus/s":"Âncoras e limites: unidades de cena",theme.color.textMuted,theme.type.caption);
+  }
+  const bool mesh=entry.type==&scene::MeshRenderer::descriptor;
+  if(mesh) {
+    auto tabs=takeTop(content,36);const float width=tabs.width*.5f;
+    for(u32 i=0;i<2;++i) {
+      auto tab=deflate(takeLeft(tabs,width),UiInsets::all(2));const bool selected=builder.state.meshTab==i;
+      builder.list.addRect(tab,selected?theme.color.accent:theme.color.raised,theme.radius.control);
+      builder.label(tab,i?"Material":"Geometria",selected?theme.color.accentInk:theme.color.textDim,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(tab,widgetId(i?EditorWidget::MeshMaterialTab:EditorWidget::MeshGeometryTab));
+    }
+  }
+  struct Field {u32 kind,index;}; // 0 boolean, 1 enum, 2 number, 3 action, 4 object reference
+  std::vector<Field> fields;
+  if(!mesh || !builder.state.meshTab) {
+    for(u32 i=0;i<entry.type->booleans.size();++i) fields.push_back({0,i});
+    for(u32 i=0;i<entry.type->enums.size();++i) {
+      if(entry.type==&scene::Joint::descriptor && i==1) {const auto &j=static_cast<const scene::Joint &>(*component);if(j.kind==scene::JointKind::Point||j.kind==scene::JointKind::Distance) continue;}
+      fields.push_back({1,i});
+    }
+  }
+  for(u32 i=0;i<entry.type->references.size();++i) fields.push_back({4,i});
+  if(mesh && !builder.state.meshTab) {
+    fields.push_back({3,widgetId(EditorWidget::MeshChoose)});
+    fields.push_back({3,widgetId(EditorWidget::ToggleCastShadow)});
+  } else {
+    if(mesh) fields.push_back({3,widgetId(EditorWidget::MaterialRestore)});
+    if(entry.type==&EditorCollider::descriptor && meshAsset(entity)) fields.push_back({3,widgetId(EditorWidget::ColliderFit)});
+    for(u32 i=0;i<entry.type->numbers.size();++i) {
+      if(entry.type==&EditorCollider::descriptor) {
+        const auto *c=static_cast<const scene::Collider *>(component);
+        if(i<5 && !(c->shape==scene::ColliderShape::Box?i<3:c->shape==scene::ColliderShape::Sphere?i==3:i>=3)) continue;
+      }
+      if(entry.type==&scene::Joint::descriptor) {
+        const auto &j=static_cast<const scene::Joint &>(*component);
+        if(i>=6&&i<12&&(j.kind==scene::JointKind::Point||j.kind==scene::JointKind::Distance)) continue;
+        if(i>=12&&j.kind==scene::JointKind::Point) continue;
+        if(i>=14&&(!j.motor||j.kind==scene::JointKind::Distance)) continue;
+      }
+      fields.push_back({2,i});
+    }
+  }
+  if(content.height<40) return;
+  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-30)/40));
+  const u32 pages=std::max(1u,(static_cast<u32>(fields.size())+perPage-1)/perPage);
+  const u32 page=std::min(builder.state.propertyPage,pages-1);
+  auto footer=pages>1?takeBottom(content,30):UiRect{};
+  for(u32 row=page*perPage;row<fields.size() && row<(page+1)*perPage;++row) {
+    const auto f=fields[row];auto slot=takeTop(content,std::min(40.0f,content.height));const auto hit=slot;
+    if(f.kind==0) {
+      const auto &property=entry.type->booleans[f.index];auto toggle=takeRight(slot,44);
+      builder.label(slot,property.name,theme.color.textDim,theme.type.caption);
+      builder.toggle(toggle,property.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(f.index<<8));
+    } else if(f.kind==1) {
+      const auto &property=entry.type->enums[f.index];
+      builder.label(takeLeft(slot,slot.width*.38f),property.name,theme.color.textDim,theme.type.caption);
+      const char *label="Valor inválido";
+      for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
+      builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      builder.label(slot,label,theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(hit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.index<<8));
+    } else if(f.kind==4) {
+      const auto &property=entry.type->references[f.index];const auto target=property.read(*component);
+      builder.label(takeTop(slot,17),property.name,theme.color.textMuted,theme.type.caption);
+      const auto *object=target<=std::numeric_limits<EditorEntityId>::max()?builder.state.document->find(static_cast<EditorEntityId>(target)):nullptr;
+      builder.label(slot,!target?property.nullLabel:object?object->name:"Objeto ausente",theme.color.text,theme.type.caption);
+      builder.list.addImage(centred(takeRight(slot,24),18,18),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.textDim);
+      builder.router.addRegion(hit,widgetId(EditorWidget::ComponentReferenceBase)+index+(f.index<<8));
+    } else if(f.kind==2) {
+      const auto &property=entry.type->numbers[f.index];
+      builder.label(takeLeft(slot,slot.width*.62f),property.name,theme.color.textDim,theme.type.caption);
+      char value[32];std::snprintf(value,sizeof(value),"%.6g",static_cast<double>(property.read(*component)));
+      builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      builder.label(slot,value,theme.color.text,theme.type.numeric,UiAlign::Center);
+      builder.router.addRegion(slot,widgetId(EditorWidget::ComponentNumberBase)+index+(f.index<<8));
+    } else if(f.index==widgetId(EditorWidget::MeshChoose)) {
+      builder.list.addImage(centred(takeRight(slot,30),22,22),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.text);
+      const auto ref=meshAsset(entity);const auto text=ref?"Malha "+std::to_string(ref):"Escolher malha";
+      builder.label(slot,text.c_str(),theme.color.text,theme.type.caption);
+      builder.router.addRegion(hit,f.index);
+    } else if(f.index==widgetId(EditorWidget::ToggleCastShadow)) {
+      auto toggle=takeRight(slot,44);builder.label(slot,"Projetar sombra",theme.color.textDim,theme.type.caption);
+      builder.toggle(toggle,entity.castShadow,f.index);
+    } else {
+      builder.label(slot,f.index==widgetId(EditorWidget::MaterialRestore)?"Restaurar material da origem":"Ajustar à malha",theme.color.text,theme.type.caption);
+      builder.router.addRegion(hit,f.index);
+    }
+  }
+  if(pages>1) {
+    const auto previous=takeLeft(footer,36),next=takeRight(footer,36);
+    builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    if(page) builder.router.addRegion(previous,widgetId(EditorWidget::PropertyPrevious));
+    if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::PropertyNext));
+    const auto label=std::to_string(page+1)+" / "+std::to_string(pages);
+    builder.label(footer,label.c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  }
+}
+
+void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  auto title=takeTop(content,36),back=takeLeft(title,36);
+  builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);builder.router.addRegion(back,widgetId(EditorWidget::MeshPickerClose));
+  builder.label(title,"Geometria",theme.color.text,theme.type.body);
+  auto search=takeTop(content,36);builder.list.addRect(search,theme.color.raised,theme.radius.control);
+  builder.label(search,state.meshQuery.empty()?"Buscar malha ou material":state.meshQuery.c_str(),theme.color.textDim,theme.type.caption);
+  builder.router.addRegion(search,widgetId(EditorWidget::MeshSearch));
+  auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
+  std::vector<u32> matches;const auto query=editorSearchKey(state.meshQuery);
+  if(state.resources) for(u32 i=0;i<state.resources->assetCount();++i) {
+    if(state.resources->materialFlagsForAsset(i)&renderer::MapMaterialWater) continue;
+    const auto *asset=state.resources->asset(i);
+    const auto text="Malha "+std::to_string(i+1)+" material "+std::to_string(asset->materialIndex);
+    if(query.empty() || editorSearchKey(text).find(query)!=std::string::npos) matches.push_back(i);
+  }
+  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-34)/50));
+  const u32 pages=std::max(1u,(static_cast<u32>(matches.size())+perPage-1)/perPage),page=std::min(state.meshPage,pages-1);
+  auto clear=takeTop(content,34);builder.label(clear,"Sem malha",theme.color.textDim,theme.type.caption);builder.router.addRegion(clear,widgetId(EditorWidget::MeshClear));
+  for(u32 row=page*perPage;row<matches.size() && row<(page+1)*perPage;++row) {
+    if(content.height<40) break;
+    const auto i=matches[row];const auto *asset=state.resources->asset(i);auto slot=takeTop(content,50);const auto hit=slot;
+    const bool selected=meshAsset(entity)==i+1;builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+    if(selected) builder.list.addRect({slot.x,slot.y+4,3,slot.height-8},theme.color.accent,1);
+    builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(UiIcon::EditorAuthorObject),0xffffffff);
+    const auto name="Malha "+std::to_string(i+1);builder.label(takeTop(slot,25),name.c_str(),theme.color.text,theme.type.body);
+    const auto detail=std::to_string(asset->indexCount/3)+" triângulos · material "+std::to_string(asset->materialIndex);
+    builder.label(slot,detail.c_str(),theme.color.textMuted,theme.type.caption);
+    builder.router.addRegion(hit,widgetId(EditorWidget::MeshChoiceBase)+i);
+  }
+  if(matches.empty()) builder.label(content,"Nenhuma malha nesta biblioteca",theme.color.textMuted,theme.type.caption);
+  builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
+  if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::MeshNext));
+  const auto text=std::to_string(page+1)+" / "+std::to_string(pages);builder.label(footer,text.c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+}
+
+const EditorScriptType *scriptSchema(const EditorScreenState &state,std::string_view id) {
+  if(state.code) for(const auto &type:state.code->scriptTypes()) if(type.id==id) return &type;
+  return nullptr;
+}
+void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::ScriptBehavior &script,u32 index) {
+  const auto &theme=builder.theme;
+  auto enabled=takeTop(content,38);builder.label(enabled,"Ativo",theme.color.textDim,theme.type.caption);
+  builder.toggle(takeRight(enabled,44),script.enabled,widgetId(EditorWidget::ScriptEnabledBase)+index);
+  auto source=takeTop(content,38);builder.label(source,"Abrir código",theme.color.text,theme.type.caption);
+  builder.router.addRegion(source,widgetId(EditorWidget::ScriptSourceBase)+index);
+  const auto *schema=scriptSchema(builder.state,script.scriptType);
+  if(!schema) {builder.label(content,"Aplique o código para carregar os campos",theme.color.textMuted,theme.type.caption);return;}
+  const u32 visible=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-32)/40));
+  const u32 pages=std::max(1u,(static_cast<u32>(schema->properties.size())+visible-1)/visible);
+  const u32 page=std::min(builder.state.scriptPropertyPage,pages-1);
+  auto footer=takeBottom(content,32);
+  for(u32 field=page*visible;field<schema->properties.size() && field<(page+1)*visible;++field) {
+    const auto &property=schema->properties[field];
+    auto row=takeTop(content,40);const auto hit=row;
+    builder.label(takeLeft(row,row.width*.43f),property.name.c_str(),theme.color.textDim,theme.type.caption);
+    const char *value="Padrão do código";
+    for(const auto &p:script.properties) if(p.id==property.id) value=p.valueType==property.valueType?p.value.c_str():"Tipo alterado";
+    std::string referenceName;
+    if(property.valueType=="object") {
+      u64 target=0;for(const auto &p:script.properties) if(p.id==property.id&&p.valueType=="object") {std::istringstream in(p.value);in>>target;}
+      const auto *object=target<=std::numeric_limits<EditorEntityId>::max()?builder.state.document->find(static_cast<EditorEntityId>(target)):nullptr;
+      referenceName=!target?"Escolher objeto":object?object->name:"Objeto ausente";value=referenceName.c_str();
+    }
+    builder.list.addRect(row,theme.color.raised,theme.radius.control);
+    builder.label(row,value,theme.color.text,theme.type.caption);
+    builder.router.addRegion(hit,widgetId(EditorWidget::ScriptFieldBase)+index+(field<<8));
+  }
+  if(pages>1) {
+    auto previous=takeLeft(footer,40),next=takeRight(footer,40);
+    builder.label(previous,"<",theme.color.text,theme.type.caption,UiAlign::Center);
+    builder.label(next,">",theme.color.text,theme.type.caption,UiAlign::Center);
+    if(page) builder.router.addRegion(previous,widgetId(EditorWidget::ScriptFieldsPrevious));
+    if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::ScriptFieldsNext));
+    const auto text=std::to_string(page+1)+" / "+std::to_string(pages);
+    builder.label(footer,text.c_str(),theme.color.textDim,theme.type.caption,UiAlign::Center);
+  }
+}
+void buildReferencePicker(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
+  const auto &state=builder.state;const auto &theme=builder.theme;
+  const auto *property=state.referenceScript?&editorAnyObjectReference:editorReferenceProperty(entity,state.referenceInstance,state.referenceProperty);
+  auto header=takeTop(content,36),back=takeLeft(header,36);
+  builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);builder.router.addRegion(back,widgetId(EditorWidget::ReferenceClose));
+  builder.label(header,property?property->name:"Referência ausente",theme.color.text,theme.type.body);
+  if(!property) return;
+  auto search=deflate(takeTop(content,38),UiInsets::all(2));builder.list.addRect(search,theme.color.raised,theme.radius.control);
+  builder.label(search,state.referenceQuery.empty()?"Buscar objeto":state.referenceQuery.c_str(),theme.color.textDim,theme.type.caption);
+  builder.router.addRegion(search,widgetId(EditorWidget::ReferenceSearch));
+  auto clear=takeTop(content,34);builder.label(clear,property->nullLabel,theme.color.textDim,theme.type.caption);builder.router.addRegion(clear,widgetId(EditorWidget::ReferenceClear));
+  auto footer=takeBottom(content,32),previous=takeLeft(footer,36),next=takeRight(footer,36);
+  const auto choices=editorReferenceChoices(*state.document,entity.id,*property,state.referenceQuery);
+  const u32 visible=std::max(1u,static_cast<u32>(std::max(0.0f,content.height)/48));
+  const u32 pages=std::max(1u,(static_cast<u32>(choices.size())+visible-1)/visible),page=std::min(state.referencePage,pages-1);
+  for(u32 i=page*visible;i<choices.size()&&i<(page+1)*visible;++i) {
+    auto row=takeTop(content,48);const auto hit=row;const auto *object=state.document->find(choices[i]);
+    builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+    builder.list.addImage(centred(takeLeft(row,36),24,24),static_cast<UiImageId>(UiIcon::EditorAuthorObject),0xffffffff);
+    builder.label(takeTop(row,25),object->name,theme.color.text,theme.type.body);
+    const auto *parent=state.document->find(object->parent);
+    const auto detail=std::string(parent?parent->name:"Cena")+" · "+std::to_string(object->id)+(object->active?"":" · inativo");
+    builder.label(row,detail.c_str(),theme.color.textMuted,theme.type.caption);
+    builder.router.addRegion(hit,widgetId(EditorWidget::ReferenceChoiceBase)+i);
+  }
+  if(choices.empty()) builder.label(content,"Nenhum objeto compatível",theme.color.textMuted,theme.type.caption);
+  builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  if(page) builder.router.addRegion(previous,widgetId(EditorWidget::ReferencePrevious));
+  if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::ReferenceNext));
+  builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+}
+
+void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity &entity) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  const bool same=state.componentSelection==entity.id,adding=same&&state.addingComponent;
+  if(same && state.referenceInstance) {buildReferencePicker(builder,content,entity);return;}
+  if(same && state.meshPicker && meshRenderer(entity)) {buildMeshPicker(builder,content,entity);return;}
+  auto footer=takeBottom(content,42);auto button=deflate(footer,UiInsets::all(2));
+  builder.list.addRect(button,theme.color.raised,theme.radius.control);
+  builder.router.addRegion(button,widgetId(EditorWidget::AddComponentMenu));
+  builder.list.addImage(centred(takeLeft(button,40),28,28),static_cast<UiImageId>(UiIcon::ComponentAdd),0xffffffff);
+  builder.label(button,adding?"Add · fechar":"Add",theme.color.text,theme.type.body);
+  struct Card {const EditorComponentEntry *native=nullptr;const scene::ComponentValue *value=nullptr;u32 index=0;bool transform=false;};
+  std::vector<Card> cards;
+  if(adding) {
+    auto search=takeTop(content,34),clear=takeRight(search,32);builder.list.addRect(search,theme.color.raised,theme.radius.control);
+    builder.label(search,state.componentQuery.empty()?"Buscar componente":state.componentQuery.c_str(),theme.color.textDim,theme.type.caption);
+    builder.router.addRegion(search,widgetId(EditorWidget::ComponentSearch));
+    if(!state.componentQuery.empty()) {builder.label(clear,"x",theme.color.textDim,theme.type.caption,UiAlign::Center);builder.router.addRegion(clear,widgetId(EditorWidget::ComponentSearchClear));}
+    const char *categories[]{"Todos","Câmera","Visual","Física","Código"};
+    auto category=takeTop(content,32);builder.label(category,categories[state.componentCategory%5],theme.color.accent,theme.type.caption);
+    builder.label(takeRight(category,24),">",theme.color.textDim,theme.type.caption,UiAlign::Center);builder.router.addRegion(category,widgetId(EditorWidget::ComponentCategory));
+    const auto query=editorSearchKey(state.componentQuery);
+    for(u32 i=0;i<editorComponentCatalog.size();++i) {
+      const auto &entry=editorComponentCatalog[i];const u32 category=static_cast<u32>(entry.category);
+      if(state.componentCategory && state.componentCategory!=category) continue;
+      if(!query.empty() && editorSearchKey(std::string(entry.name)+" "+entry.description+" "+std::string(entry.type->id)).find(query)==std::string::npos) continue;
+      cards.push_back({&entry,nullptr,i});
+    }
+    if(state.code && (!state.componentCategory||state.componentCategory==4)) for(u32 i=0;i<state.code->scriptTypes().size();++i) {
+      const auto &type=state.code->scriptTypes()[i];
+      if(query.empty()||editorSearchKey(type.name+" "+type.id).find(query)!=std::string::npos) cards.push_back({nullptr,nullptr,i});
+    }
+  } else {
+    cards.push_back({nullptr,nullptr,0,true});
+    for(u32 i=0;i<entity.components.size();++i) {
+      const auto *v=entity.components.at(i);bool known=false;
+      for(u32 type=0;type<editorComponentCatalog.size();++type) if(&v->type()==editorComponentCatalog[type].type) {
+        cards.push_back({&editorComponentCatalog[type],v,i});known=true;break;
+      }
+      if(!known && (scene::scriptBehavior(v)||v->unresolved())) cards.push_back({nullptr,v,i});
+    }
+  }
+  if(!adding && same) {
+    const auto focused=std::find_if(cards.begin(),cards.end(),[&](const Card &item) {
+      if(item.transform) return state.expandedComponent=="astra.transform";
+      if(item.native) return (item.value&&state.expandedNative==item.value->instanceId()) || (item.value&&state.nativeMenu==item.value->instanceId());
+      const auto *script=scene::scriptBehavior(item.value);
+      return script&&(state.expandedScript==script->instanceId()||state.scriptMenu==script->instanceId());
+    });
+    if(focused!=cards.end()) {const auto selected=*focused;cards.assign(1,selected);}
+  }
+  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-32)/(adding?58:48)));
+  const u32 pages=std::max(1u,(static_cast<u32>(cards.size())+perPage-1)/perPage);
+  const u32 page=same?std::min(state.componentPage,pages-1):0;
+  builder.componentPage=page;
+  if(pages>1) {
+    auto pager=takeBottom(content,32),previous=takeLeft(pager,36),next=takeRight(pager,36);
+    builder.label(previous,"<",theme.color.text,theme.type.caption,UiAlign::Center);builder.label(next,">",theme.color.text,theme.type.caption,UiAlign::Center);
+    if(page) builder.router.addRegion(previous,widgetId(EditorWidget::ComponentPrevious));
+    if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::ComponentNext));
+    const auto text=std::to_string(page+1)+" / "+std::to_string(pages);builder.label(pager,text.c_str(),theme.color.textDim,theme.type.caption,UiAlign::Center);
+  }
+  const u32 end=std::min(static_cast<u32>(cards.size()),(page+1)*perPage);
+  for(u32 card=page*perPage;card<end;++card) {
+    if(content.height<40) break;
+    const auto &item=cards[card];const auto *script=scene::scriptBehavior(item.value);const auto *schema=script?scriptSchema(state,script->scriptType):nullptr;
+    const bool open=same&&(item.transform?state.expandedComponent=="astra.transform":item.native?(item.value&&state.expandedNative==item.value->instanceId()):script&&state.expandedScript==script->instanceId());
+    const bool menu=same&&!item.transform&&(item.native?(item.value&&state.nativeMenu==item.value->instanceId()):script&&state.scriptMenu==script->instanceId());
+    const EditorScriptType *newType=adding&&!item.native?&state.code->scriptTypes()[item.index]:nullptr;
+    std::string title=item.transform?"Transformação":item.native?item.native->name:newType?newType->name:script?(schema?schema->name:script->scriptType):std::string(item.value->type().id);
+    if(item.value && item.native && item.native->type->allowMultiple) title+=" · "+std::to_string(item.value->instanceId());
+    const auto icon=item.transform?UiIcon::EditorAuthorMove:item.native?item.native->icon:UiIcon::ScriptingCode;
+    const char *reason=adding&&item.native?(!item.native->type->allowMultiple&&entity.components.find(*item.native->type)?"Já adicionado":item.native->unavailable(entity)):nullptr;
+    auto row=takeTop(content,adding?54.0f:44.0f);const auto hit=row;
+    builder.list.addRect(row,theme.color.raised,theme.radius.control);
+    if(open) builder.list.addRect({row.x,row.y+4,3,row.height-8},theme.color.accent,1);
+    if(!adding) builder.label(takeLeft(row,20),open?"v":">",theme.color.textDim,theme.type.body,UiAlign::Center);
+    builder.list.addImage(centred(takeLeft(row,36),28,28),static_cast<UiImageId>(icon),0xffffffff);
+    auto more=takeRight(row,adding||item.transform?0:32);
+    builder.label(adding?takeTop(row,27):row,title.c_str(),reason?theme.color.textMuted:theme.color.text,theme.type.body);
+    if(adding) builder.label(row,reason?reason:item.native?item.native->description:"Comportamento C#",theme.color.textMuted,theme.type.caption);
+    if(adding) {
+      if(!reason) builder.router.addRegion(hit,widgetId(item.native?EditorWidget::ComponentAddBase:EditorWidget::ScriptAddBase)+item.index);
+    } else if(item.transform||item.native||script) {
+      builder.router.addRegion({hit.x,hit.y,hit.width-(item.transform?0:32),hit.height},item.transform?widgetId(EditorWidget::TransformFold):widgetId(item.native?EditorWidget::ComponentFoldBase:EditorWidget::ScriptFoldBase)+item.index);
+      if(!item.transform) {
+        builder.list.addImage(centred(more,20,20),static_cast<UiImageId>(UiIcon::EditorAuthorMore),theme.color.textDim);
+        builder.router.addRegion(more,widgetId(item.native?EditorWidget::ComponentMenuBase:EditorWidget::ScriptMenuBase)+item.index);
+      }
+      if(menu) {
+        if(item.native) {
+          const EditorWidget actions[]{EditorWidget::ComponentCopyBase,EditorWidget::ComponentPasteBase,EditorWidget::ComponentResetBase};
+          const char *labels[]{"Copiar valores","Colar valores","Restaurar padrão"};
+          for(u32 i=0;i<3;++i) {auto action=takeTop(content,34);builder.label(action,labels[i],theme.color.text,theme.type.caption);
+            if(i!=1||(state.componentClipboard && &state.componentClipboard->type()==item.native->type)) builder.router.addRegion(action,widgetId(actions[i])+item.index);}
+        }
+        auto remove=takeTop(content,34);builder.label(remove,"Remover componente",theme.color.text,theme.type.caption);
+        builder.router.addRegion(remove,widgetId(item.native?EditorWidget::ComponentRemoveBase:EditorWidget::ScriptRemoveBase)+item.index);
+      }
+      if(open) {
+        auto fields=takeTop(content,std::max(0.0f,content.height-(end-card-1)*48.0f-4));
+        builder.list.pushClip(fields);
+        if(item.transform) {
+          const u32 rows=std::max(1u,std::min(3u,static_cast<u32>(std::max(0.0f,fields.height-30)/34)));
+          const u32 page=std::min(state.propertyPage,(3u+rows-1)/rows-1);
+          auto pager=rows<3?takeBottom(fields,30):UiRect{};
+          for(u32 i=page*rows;i<3 && i<(page+1)*rows;++i) {
+            if(fields.height<34) break;
+            buildTransformRow(builder,fields,i==0?"Posição":i==1?"Rotação":"Escala",i==0?entity.transform.position:i==1?entity.transform.rotationDegrees:entity.transform.scale,i,i==1?1:3);
+          }
+          if(rows<3) {
+            auto prev=takeLeft(pager,36),next=takeRight(pager,36);
+            builder.label(prev,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+            if(page) builder.router.addRegion(prev,widgetId(EditorWidget::PropertyPrevious));
+            if((page+1)*rows<3) builder.router.addRegion(next,widgetId(EditorWidget::PropertyNext));
+          }
+        } else if(item.native) buildComponentFields(builder,fields,entity,*item.native,item.index);
+        else buildScriptFields(builder,fields,*script,item.index);
+        builder.list.popClip();
+      }
+    } else {
+      // Missing records stay visible without claiming that they execute.
+      builder.label(takeTop(content,24),"Indisponível · dados preservados",theme.color.textMuted,theme.type.caption);
+    }
+    takeTop(content,4);
+  }
+  if(cards.empty()) builder.label(content,"Nenhum componente encontrado",theme.color.textMuted,theme.type.caption);
 }
 
 void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
@@ -540,7 +895,7 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
 
   UiRect header = takeTop(content, kPanelHeaderHeight);
   builder.list.addImage(centred(takeLeft(header, 26.0f), 18.0f, 18.0f),
-                        static_cast<UiImageId>(iconForKind(entity->kind)), theme.color.text);
+                        static_cast<UiImageId>(cameraComponent(*entity)?UiIcon::EditorAuthorCamera:meshRenderer(*entity)?UiIcon::EditorAuthorObject:iconForKind(entity->kind)), theme.color.text);
   builder.iconButton(takeRight(header, 28.0f), UiIcon::EditorAuthorMore,
                      widgetId(EditorWidget::InspectorMenu));
   takeRight(header, theme.spacing.tiny);
@@ -549,7 +904,7 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   const float half = header.height * 0.5f;
   builder.label({header.x, header.y, header.width, half}, entity->name, theme.color.text,
                 theme.type.cardName);
-  builder.label({header.x, header.y + half, header.width, half}, kindLabel(entity->kind),
+  builder.label({header.x, header.y + half, header.width, half}, (std::to_string(entity->components.size())+" componentes").c_str(),
                 theme.color.textDim, theme.type.label);
 
   if(builder.state.workspace==EditorWorkspace::Settings) {
@@ -581,92 +936,25 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
       buildTransformRow(builder,content,"Rotação",entity->transform.rotationDegrees,1,1);
       buildTransformRow(builder,content,"Escala",entity->transform.scale,2,2);
     } else if(builder.state.waterTab==1) {
-      if(!entity->route.count) {builder.label(content,"Crie um rio para editar o traçado",theme.color.textDim,theme.type.body);return;}
+      if(!waterRoute(*entity).count) {builder.label(content,"Crie um rio para editar o traçado",theme.color.textDim,theme.type.body);return;}
       UiRect controls=takeTop(content,40);
       const EditorWidget actions[]{EditorWidget::RoutePointPrevious,EditorWidget::RoutePointNext,EditorWidget::RoutePointAdd,EditorWidget::RoutePointRemove};
       const char *names[]{"<",">","+ ponto","Remover"};const float buttonWidth=controls.width/4;
       for(u32 i=0;i<4;++i) {auto button=takeLeft(controls,buttonWidth);builder.label(button,names[i],theme.color.text,theme.type.caption,UiAlign::Center);builder.router.addRegion(button,widgetId(actions[i]));}
-      char label[40];std::snprintf(label,sizeof(label),"PONTO %u / %u",builder.state.routePoint+1,entity->route.count);
+      char label[40];std::snprintf(label,sizeof(label),"PONTO %u / %u",builder.state.routePoint+1,waterRoute(*entity).count);
       builder.label(takeTop(content,24),label,theme.color.accent,theme.type.caption);
       buildPropertyPage(builder,content,*entity,EditorPropertyGroup::Route);
     } else {
       if(builder.state.waterTab==2) {
         auto row=takeTop(content,36);builder.label(row,"Volume de água / flutuação",theme.color.text,theme.type.caption);
-        builder.toggle(takeRight(row,44),entity->waterPhysicsEnabled,widgetId(EditorWidget::ToggleWaterPhysics));
+        builder.toggle(takeRight(row,44),waterBody(*entity).physicsEnabled,widgetId(EditorWidget::ToggleWaterPhysics));
       }
       buildPropertyPage(builder,content,*entity,EditorPropertyGroup::WaterBody);
     }
     return;
   }
-  UiRect tabs = takeTop(content, 30.0f);
-  takeTop(content, theme.spacing.small);
-  struct Tab final {
-    const char *label;
-    EditorWidget widget;
-    EditorInspectorTab value;
-  };
-  const Tab tabItems[] = {
-      {"Transformação", EditorWidget::InspectorTabTransform, EditorInspectorTab::Transform},
-      {"Material", EditorWidget::InspectorTabMaterial, EditorInspectorTab::Material},
-      {"Propriedades", EditorWidget::InspectorTabProperties, EditorInspectorTab::Properties},
-  };
-  const float tabWidth = (tabs.width - theme.spacing.tiny * 2.0f) / 3.0f;
-  for (const Tab &tab : tabItems) {
-    const UiRect slot = takeLeft(tabs, tabWidth);
-    takeLeft(tabs, theme.spacing.tiny);
-    const bool active = builder.state.tab == tab.value;
-    builder.list.addRect(slot, active ? theme.color.accent : theme.color.raised,
-                         theme.radius.control);
-    builder.label(slot, tab.label, active ? theme.color.accentInk : theme.color.textDim,
-                  theme.type.caption, UiAlign::Center);
-    builder.router.addRegion(slot, widgetId(tab.widget), theme.touch.minimumTarget);
-  }
-
-  // As abas DIVIDEM o conteúdo, e não decoram o cabeçalho. É a razão de elas
-  // existirem: um telefone em paisagem tem cerca de 240 dp de altura útil no
-  // painel, e transform mais interruptores não cabem juntos. Empilhar tudo e
-  // cortar no fim seria esconder controles sem dizer onde estão.
-  switch (builder.state.tab) {
-    case EditorInspectorTab::Transform: {
-      buildTransformRow(builder, content, "Posição", entity->transform.position, 0, 3);
-      buildTransformRow(builder, content, "Rotação", entity->transform.rotationDegrees, 1, 1);
-      buildTransformRow(builder, content, "Escala", entity->transform.scale, 2, 1);
-      break;
-    }
-    case EditorInspectorTab::Material: {
-      if(entity->assetId) buildPropertyPage(builder,content,*entity,EditorPropertyGroup::Material);
-      else builder.label(content,"Selecione uma malha",theme.color.textMuted,theme.type.body);
-      break;
-    }
-    case EditorInspectorTab::Properties: {
-      auto physicsRow=takeTop(content,38);
-      builder.label(physicsRow,"Corpo rígido / flutuação",theme.color.text,theme.type.caption);
-      builder.toggle(takeRight(physicsRow,44),entity->rigidBodyEnabled,widgetId(EditorWidget::ToggleRigidBody));
-      if(entity->rigidBodyEnabled) {buildPropertyPage(builder,content,*entity,EditorPropertyGroup::Physics);break;}
-      struct Switch final {
-        const char *label;
-        UiIcon icon;
-        bool value;
-        EditorWidget widget;
-      };
-      const Switch switches[] = {
-          {"Visível", UiIcon::EditorAuthorEye, entity->visible, EditorWidget::ToggleVisible},
-          {"Projetar sombra", UiIcon::EditorAuthorObject, entity->castShadow, EditorWidget::ToggleCastShadow},
-          {"Receber sombra", UiIcon::AssetsChecker, entity->receiveShadow,
-           EditorWidget::ToggleReceiveShadow},
-          {"Estático", UiIcon::SceneLayers, entity->isStatic, EditorWidget::ToggleStatic},
-      };
-      for (const Switch &item : switches) {
-        if (content.height < kRowHeight) break;
-        UiRect row = takeTop(content, kRowHeight);
-        builder.list.addImage(centred(takeLeft(row, 22.0f), 14.0f, 14.0f),
-                              static_cast<UiImageId>(item.icon), theme.color.textDim);
-        builder.toggle(row, item.value, widgetId(item.widget));
-        builder.label(row, item.label, theme.color.text, theme.type.body);
-      }
-      break;
-    }
-  }
+  takeTop(content,6);
+  buildComponents(builder,content,*entity);
 }
 
 void buildSplitter(ScreenBuilder &builder, const UiRect &bounds, EditorWidget widget) {
@@ -682,7 +970,7 @@ void buildSplitter(ScreenBuilder &builder, const UiRect &bounds, EditorWidget wi
   builder.router.addRegion(bounds, widgetId(widget), theme.touch.minimumTarget);
 }
 
-void buildToolRail(ScreenBuilder &builder, const UiRect &viewport) {
+void buildToolRail(ScreenBuilder &builder, const UiRect &viewport, bool compact) {
   const UiTheme &theme = builder.theme;
   struct Tool final {
     UiIcon icon;
@@ -696,20 +984,103 @@ void buildToolRail(ScreenBuilder &builder, const UiRect &viewport) {
       {UiIcon::EditorAuthorScale, EditorWidget::ToolScale, EditorGizmoMode::Scale},
   };
   const float height = kToolButton * 4.0f + theme.spacing.tiny * 5.0f;
-  const UiRect rail{viewport.x + theme.spacing.small,
+  const UiRect vertical{viewport.x + theme.spacing.small,
                     viewport.y + (viewport.height - height) * 0.5f,
                     kToolButton + theme.spacing.tiny * 2.0f, height};
+  const UiRect rail = compact ? UiRect{viewport.x+8,viewport.y+56,height,kToolButton+theme.spacing.tiny*2} : vertical;
   builder.list.addRect(rail, withAlpha(theme.color.silhouette, 0.92f), theme.radius.control);
   builder.router.addBlocker(rail);
   UiRect content = deflate(rail, UiInsets::all(theme.spacing.tiny));
   for (const Tool &tool : tools) {
-    const UiRect slot = takeTop(content, kToolButton);
-    takeTop(content, theme.spacing.tiny);
+    const UiRect slot = compact ? takeLeft(content,kToolButton) : takeTop(content, kToolButton);
+    if(compact) takeLeft(content,theme.spacing.tiny); else takeTop(content, theme.spacing.tiny);
     builder.iconButton(slot, tool.icon, widgetId(tool.widget), builder.state.tool == tool.mode);
   }
 }
 
 } // namespace
+
+void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,EditorScreenLayout &layout) {
+  const auto &theme=builder.theme;const auto *workspace=builder.state.code;
+  builder.list.addRect(toolbar,theme.color.canvas);
+  builder.router.addBlocker(toolbar);builder.router.addBlocker(body);
+  auto button=[&](const char *label,EditorWidget action,float width,bool enabled=true) {
+    auto rect=deflate(takeLeft(toolbar,width),UiInsets::all(4));
+    builder.list.addRect(rect,theme.color.raised,theme.radius.control);
+    builder.label(rect,label,enabled?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    if(enabled) builder.router.addRegion(rect,widgetId(action));
+  };
+  const auto *buffer=workspace?workspace->active():nullptr;
+  button("Cena",EditorWidget::CodeScene,65);
+  button("Novo script",EditorWidget::CodeNew,100);
+  button("Editar",EditorWidget::CodeEdit,72,buffer!=nullptr);
+  button("Salvar",EditorWidget::CodeSave,72,buffer!=nullptr);
+  button("Desfazer",EditorWidget::CodeUndo,85,buffer&&!buffer->undo.empty());
+  button("Refazer",EditorWidget::CodeRedo,80,buffer&&!buffer->redo.empty());
+  button("Buscar",EditorWidget::CodeSearch,72,buffer!=nullptr);
+  button("Fechar",EditorWidget::CodeClose,72,buffer!=nullptr);
+  if(builder.state.codeCompilerAvailable)
+    button(builder.state.codeBuildBusy?"Compilando":"Aplicar",EditorWidget::CodeApply,88,!builder.state.codeBuildBusy);
+  if(builder.state.files && body.width>720) {
+    layout.filesPanel=takeLeft(body,std::min(230.0f,body.width*.22f));
+    buildFiles(builder,layout.filesPanel);
+  }
+  layout.viewport=body;
+  builder.list.addRect(body,theme.color.surface);
+  auto content=deflate(body,UiInsets::all(10));
+  auto tabs=takeTop(content,40);
+  if(workspace) {
+    builder.list.pushClip(tabs);
+    for(u32 i=0;i<workspace->buffers().size();++i) {
+      const auto &item=workspace->buffers()[i];
+      auto tab=deflate(takeLeft(tabs,160),UiInsets::all(2));
+      builder.list.addRect(tab,buffer&&item.id==buffer->id?theme.color.raised:theme.color.surface,theme.radius.control);
+      const auto slash=item.path.find_last_of('/');
+      const std::string name=(slash==std::string::npos?item.path:item.path.substr(slash+1))+(item.dirty()?" *":"");
+      builder.label(tab,name.c_str(),theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(tab,widgetId(EditorWidget::CodeTabBase)+i);
+    }
+    builder.list.popClip();
+  }
+  auto status=takeBottom(content,28);
+  const std::string statusText=workspace&&!workspace->error().empty()?workspace->error():builder.state.status;
+  builder.label(status,statusText.c_str(),theme.color.textDim,theme.type.caption);
+  if(!buffer) {
+    builder.label(takeTop(content,48),"Abra um arquivo ou crie um script C#",theme.color.text,theme.type.body);
+    builder.label(takeTop(content,32),"Os arquivos pertencem ao projeto e têm histórico próprio.",theme.color.textDim,theme.type.caption);
+    return;
+  }
+  builder.label(takeTop(content,28),buffer->path.c_str(),theme.color.textDim,theme.type.caption);
+  if(workspace && !workspace->diagnostics().empty()) {
+    auto diagnostics=takeBottom(content,std::min(160.0f,content.height*.3f));
+    builder.list.pushClip(diagnostics);
+    for(const auto &entry:workspace->diagnostics()) {
+      const std::string text=entry.file+":"+std::to_string(entry.line)+":"+std::to_string(entry.column)+" "+entry.code+" "+entry.message;
+      builder.label(takeTop(diagnostics,26),text.c_str(),theme.color.text,theme.type.caption);
+    }
+    builder.list.popClip();
+  }
+  builder.router.addRegion(content,widgetId(EditorWidget::CodeBody));
+  builder.list.pushClip(content);
+  usize start=0;u32 line=0;
+  while(start<buffer->text.size() && line<buffer->firstLine) {
+    const auto end=buffer->text.find('\n',start);if(end==std::string::npos) {start=buffer->text.size();break;}
+    start=end+1;++line;
+  }
+  while(content.height>=24 && start<=buffer->text.size()) {
+    const auto end=buffer->text.find('\n',start);
+    auto row=takeTop(content,24);const auto gutter=takeLeft(row,48);
+    const std::string number=std::to_string(++line);
+    builder.label(gutter,number.c_str(),theme.color.textMuted,theme.type.numeric,UiAlign::Center);
+    const auto length=end==std::string::npos?buffer->text.size()-start:end-start;
+    std::string text=buffer->text.substr(start,std::min<usize>(length,512));
+    std::replace(text.begin(),text.end(),'\t',' ');
+    builder.label(row,text.c_str(),theme.color.text,theme.type.numeric);
+    if(end==std::string::npos) break;
+    start=end+1;
+  }
+  builder.list.popClip();
+}
 
 EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiTheme &theme,
                                      UiDrawList &list, UiInputRouter &router) {
@@ -719,10 +1090,17 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   ScreenBuilder builder{state, theme, list, router};
   UiRect remaining = deflate(state.surface, state.safeArea);
   layout.topBar = takeTop(remaining, kTopBarHeight);
+  if(state.workspace==EditorWorkspace::Code) {
+    buildCodeWorkspace(builder,remaining,layout.topBar,layout);return layout;
+  }
 
   // Larguras resolvidas ANTES de desenhar, porque o viewport é o que sobra e
   // precisa existir mesmo quando o usuário arrasta os dois divisores ao limite.
   const float available = remaining.width;
+  // Keep a useful property row instead of compressing both side panels.
+  constexpr float compactPanelWidth = 240.0f;
+  const bool compact = available < compactPanelWidth * 2 + kViewportMinimum + kSplitterWidth * 2;
+
   float hierarchyWidth = state.hierarchyVisible && state.workspace != EditorWorkspace::Play
       ? (state.hierarchyWidth > 0.0f ? state.hierarchyWidth : available * 0.24f)
       : 0.0f;
@@ -731,6 +1109,12 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       : 0.0f;
   if (hierarchyWidth > 0.0f) hierarchyWidth = std::max(hierarchyWidth, kPanelMinimum);
   if (inspectorWidth > 0.0f) inspectorWidth = std::max(inspectorWidth, kPanelMinimum);
+  if (compact) {
+    hierarchyWidth = state.workspace != EditorWorkspace::Play && (state.compactPanel == EditorScreenState::CompactPanel::Hierarchy || state.compactPanel == EditorScreenState::CompactPanel::Files)
+        ? std::min(compactPanelWidth, std::max(0.0f, available-kViewportMinimum-kSplitterWidth)) : 0;
+    inspectorWidth = state.workspace != EditorWorkspace::Play && state.compactPanel == EditorScreenState::CompactPanel::Inspector
+        ? std::min(compactPanelWidth, std::max(0.0f, available-kViewportMinimum-kSplitterWidth)) : 0;
+  }
   const float splitters = (hierarchyWidth > 0.0f ? kSplitterWidth : 0.0f) +
                           (inspectorWidth > 0.0f ? kSplitterWidth : 0.0f);
   const float overflow = hierarchyWidth + inspectorWidth + splitters + kViewportMinimum - available;
@@ -747,8 +1131,11 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   UiRect body = remaining;
   if (hierarchyWidth > 0.0f) {
     layout.hierarchyPanel = takeLeft(body, hierarchyWidth);
-    buildSplitter(builder, takeLeft(body, kSplitterWidth), EditorWidget::SplitterLeft);
-    if(state.files && layout.hierarchyPanel.height>210) {
+    const auto splitter=takeLeft(body, kSplitterWidth);
+    if (!compact) buildSplitter(builder, splitter, EditorWidget::SplitterLeft);
+    if(compact && state.files && state.compactPanel == EditorScreenState::CompactPanel::Files) {
+      layout.filesPanel=layout.hierarchyPanel;layout.hierarchyPanel={};
+    } else if(state.files && layout.hierarchyPanel.height>210) {
       const float height=layout.hierarchyPanel.height;
       layout.filesPanel=takeBottom(layout.hierarchyPanel,state.filesCollapsed?40:height*std::clamp(state.filePanelRatio,.28f,.58f));
       const auto divider=takeBottom(layout.hierarchyPanel,kSplitterWidth);
@@ -758,7 +1145,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   }
   if (inspectorWidth > 0.0f) {
     layout.inspectorPanel = takeRight(body, inspectorWidth);
-    buildSplitter(builder, takeRight(body, kSplitterWidth), EditorWidget::SplitterRight);
+    const auto splitter=takeRight(body, kSplitterWidth);
+    if (!compact) buildSplitter(builder, splitter, EditorWidget::SplitterRight);
   }
   layout.viewport = body;
 
@@ -771,18 +1159,26 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   // Play owns the entire body; editor gizmos must not intercept runtime input.
   if (state.workspace == EditorWorkspace::Play) {
     list.addRect({layout.viewport.x+8,layout.viewport.y+4,std::min(390.0f,layout.viewport.width-16),32},withAlpha(theme.color.surface,.90f),3);
+    const auto *controlled=state.document?state.document->find(state.selection):nullptr;
+    if(controlled&&characterComponent(*controlled)&&characterComponent(*controlled)->jumpSpeed>0) {
+      const UiRect jump{layout.viewport.x+layout.viewport.width-108,layout.viewport.y+layout.viewport.height-76,92,56};
+      list.addRect(jump,theme.color.raised,theme.radius.control);
+      builder.label(jump,"Saltar",state.playPaused?theme.color.textFaint:theme.color.text,theme.type.body,UiAlign::Center);
+      if(!state.playPaused) router.addRegion(jump,widgetId(EditorWidget::JumpCharacter),theme.touch.minimumTarget);
+    }
     builder.label({layout.viewport.x+12,layout.viewport.y+8,layout.viewport.width-24,24},
-                  "Simulação - use o quadrado no topo para parar", theme.color.textDim,theme.type.caption);
+                  controlled&&characterComponent(*controlled)?"Arraste à esquerda para mover o personagem":"Simulação - use o quadrado no topo para parar", theme.color.textDim,theme.type.caption);
     return layout;
   }
   buildViewportOverlay(builder, layout.viewport);
-  if (state.workspace == EditorWorkspace::Scene) buildToolRail(builder, layout.viewport);
+  if (state.workspace == EditorWorkspace::Scene) buildToolRail(builder, layout.viewport, compact);
   if (!layout.hierarchyPanel.isEmpty())
     layout.hierarchyRowCount =
         buildHierarchy(builder, layout.hierarchyPanel, layout.hierarchyVisibleRows);
   if(!layout.filesPanel.isEmpty()) buildFiles(builder,layout.filesPanel);
   if (!layout.inspectorPanel.isEmpty()) buildInspector(builder, layout.inspectorPanel);
-  if(!layout.filesPanel.isEmpty()) {
+  layout.componentPage=builder.componentPage;
+  if(!compact && !layout.filesPanel.isEmpty()) {
     // A área de toque ultrapassa a linha visual, acima dos bloqueadores dos painéis.
     const UiRect divider{layout.filesPanel.x,layout.hierarchyPanel.bottom()-4,
                          layout.filesPanel.width,kSplitterWidth+8};
@@ -794,13 +1190,9 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   const UiRect corner{layout.viewport.right() - kCornerButton - theme.spacing.small,
                       layout.viewport.bottom() - kCornerButton - theme.spacing.small,
                       kCornerButton, kCornerButton};
-  const UiRect save{layout.viewport.right()-48.0f,layout.viewport.y+8.0f,40.0f,40.0f};
-  builder.list.addRect(save,theme.color.raised,theme.radius.control);
-  builder.label(save,"Salvar",theme.color.text,theme.type.caption,UiAlign::Center);
-  router.addRegion(save,widgetId(EditorWidget::SaveDocument));
-  if (state.status && *state.status)
+  if (!compact && !state.status.empty())
     builder.label({layout.viewport.x+8,layout.viewport.bottom()-26,layout.viewport.width-160,24},
-                  state.status,theme.color.text,theme.type.caption);
+                  state.status.c_str(),theme.color.text,theme.type.caption);
   builder.iconButton(corner, UiIcon::EditorAuthorFrame, widgetId(EditorWidget::Fullscreen));
   builder.iconButton({layout.viewport.right() - kCornerButton * 2.0f - theme.spacing.small * 2.0f,
                       corner.y, kCornerButton, kCornerButton},
@@ -809,12 +1201,18 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
                      UiIcon::EditorAuthorCamera, widgetId(EditorWidget::FrameSelection));
   builder.iconButton({layout.viewport.x + 56.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
                      UiIcon::EditorAuthorFrame, widgetId(EditorWidget::FrameAll));
+  if(compact) {
+    const UiRect button{layout.viewport.x+104,layout.viewport.y+8,100,40};
+    list.addRect(button,theme.color.raised,theme.radius.control);
+    builder.label(button,"Painéis",theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(button,widgetId(EditorWidget::CompactPanelMenu));
+  }
   if(state.workspace==EditorWorkspace::Scene) {
     const UiIcon icons[]={UiIcon::EditorAuthorOrbit,UiIcon::EditorAuthorPan,UiIcon::EditorAuthorZoom};
     const EditorWidget actions[]={EditorWidget::NavigationOrbit,EditorWidget::NavigationPan,EditorWidget::NavigationZoom};
-    const float width=std::min(64.0f,(layout.viewport.width-16)/3);
+    const float width=std::min(64.0f,(layout.viewport.width-(compact?112:16))/3);
     for(u32 i=0;i<3;++i) {
-      const UiRect cell{layout.viewport.x+8+i*width,layout.viewport.bottom()-76,width-2,36};
+      const UiRect cell{layout.viewport.x+8+i*width,layout.viewport.bottom()-(compact?44:76),width-2,36};
       const bool active=static_cast<u32>(state.navigation)==i;
       list.addRect(cell,active?theme.color.accent:theme.color.raised,theme.radius.control);
       list.addImage(centred(cell,20.0f,20.0f),static_cast<UiImageId>(icons[i]),active?theme.color.accentInk:theme.color.text);
@@ -825,13 +1223,19 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     list.addRect(layout.viewport,theme.color.surface);router.addBlocker(layout.viewport);
     UiRect content=deflate(layout.viewport,UiInsets::all(8));
     UiRect title=takeTop(content,44);
-    builder.label(title,"Malhas do pacote",theme.color.text,theme.type.body);
-    UiRect waterRow=takeTop(content,44);
-    const auto finite=takeLeft(waterRow,waterRow.width*.5f);
-    builder.label(finite,"Criar agua finita",theme.color.text,theme.type.body,UiAlign::Center);
-    builder.label(waterRow,"Criar oceano",theme.color.text,theme.type.body,UiAlign::Center);
-    router.addRegion(finite,widgetId(EditorWidget::CreateFiniteWater));
-    router.addRegion(waterRow,widgetId(EditorWidget::CreateOceanWater));
+    builder.label(title,"Malhas disponíveis",theme.color.text,theme.type.body);
+    if(creationAvailable(state,4) || creationAvailable(state,5)) {
+      UiRect waterRow=takeTop(content,44);
+      if(creationAvailable(state,4)) {
+        const auto finite=takeLeft(waterRow,creationAvailable(state,5)?waterRow.width*.5f:waterRow.width);
+        builder.label(finite,"Criar agua finita",theme.color.text,theme.type.body,UiAlign::Center);
+        router.addRegion(finite,widgetId(EditorWidget::CreateFiniteWater));
+      }
+      if(creationAvailable(state,5)) {
+        builder.label(waterRow,"Criar oceano",theme.color.text,theme.type.body,UiAlign::Center);
+        router.addRegion(waterRow,widgetId(EditorWidget::CreateOceanWater));
+      }
+    }
     const u32 pageRows=static_cast<u32>(std::max(0.0f,content.height-48)/44);
     for(u32 row=0;row<pageRows && state.assetScroll+row<state.assetCount;++row) {
       const u32 index=state.assetScroll+row;
@@ -858,7 +1262,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(row,widgetId(actions[i]));
     }
   }
-  if (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch) {
+  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingMeshSearch || state.editingReferenceSearch)) {
     router.addBlocker(state.surface);
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,0.8f));
     const auto modal=centred(state.surface,std::min(560.0f,state.surface.width-16),std::min(320.0f,state.surface.height-16));
@@ -890,21 +1294,21 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   }
   if(state.document && state.view && state.workspace==EditorWorkspace::Scene) {
     const auto *water=state.document->find(state.selection);
-    if(water && water->route.count && state.waterTab==1) {
+    if(water && waterRoute(*water).count && state.waterTab==1) {
       float world[16];
       if(editorWorldMatrix(*state.document,water->id,world)) {
         list.pushClip(layout.viewport);
         UiPoint previous{};bool hasPrevious=false;
-        for(u32 segment=0;segment+1<water->route.count;++segment) for(u32 step=0;step<=renderer::WaterRouteSteps;++step) {
-          const auto sample=renderer::evaluateWaterRoute(water->route,segment,float(step)/renderer::WaterRouteSteps);
+        for(u32 segment=0;segment+1<waterRoute(*water).count;++segment) for(u32 step=0;step<=renderer::WaterRouteSteps;++step) {
+          const auto sample=renderer::evaluateWaterRoute(waterRoute(*water),segment,float(step)/renderer::WaterRouteSteps);
           const float local[]{sample.center.x,sample.center.y,sample.center.z};float position[3];
           for(u32 a=0;a<3;++a) position[a]=world[12+a]+world[a]*local[0]+world[4+a]*local[1]+world[8+a]*local[2];
           const auto projected=projectWorldToScreen(*state.view,position);
           if(projected.valid) {if(hasPrevious) list.addLine(previous,projected.screen,theme.color.accent,2);previous=projected.screen;hasPrevious=true;}
           else hasPrevious=false;
         }
-        for(u32 i=0;i<water->route.count;++i) {
-          const auto &p=water->route.points[i];float position[3];
+        for(u32 i=0;i<waterRoute(*water).count;++i) {
+          const auto &p=waterRoute(*water).points[i];float position[3];
           for(u32 a=0;a<3;++a) position[a]=world[12+a]+world[a]*p.position[0]+world[4+a]*p.position[1]+world[8+a]*p.position[2];
           const auto projected=projectWorldToScreen(*state.view,position);if(!projected.valid) continue;
           const auto point=projected.screen;
@@ -918,12 +1322,38 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   }
   if(state.workspaceMenu) {
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,.65f));router.addBlocker(state.surface);
-    const UiRect modal=centred(state.surface, std::min(340.0f,state.surface.width-24), 288);
+    const u32 menuRows=3+(state.assetCount?1:0)+(waterCreationAvailable(state)?1:0);
+    const UiRect modal=centred(state.surface, std::min(340.0f,state.surface.width-24), 48.0f+44.0f*menuRows);
     list.addRect(modal,theme.color.surface,8);auto content=deflate(modal,UiInsets::all(12));
-    const char *names[]{"Cena","Recursos","Iluminação","Configurações","Fechar"};
+    const char *names[]{"Voltar à edição","Recursos importados","Ambiente da cena","Água da cena","Fechar"};
     const EditorWidget actions[]{EditorWidget::TabScene,EditorWidget::TabAssets,EditorWidget::TabLighting,EditorWidget::TabSettings,EditorWidget::WorkspaceMenuClose};
-    builder.label(takeTop(content,32),"Áreas de trabalho",theme.color.text,theme.type.cardName);
-    for(u32 i=0;i<5;++i) {auto row=takeTop(content,44);builder.label(row,names[i],theme.color.text,theme.type.body);router.addRegion(row,widgetId(actions[i]));}
+    builder.label(takeTop(content,24),"Cena",theme.color.text,theme.type.cardName);
+    for(u32 i=0;i<5;++i) {
+      if(actions[i]==EditorWidget::TabAssets && !state.assetCount) continue;
+      if(actions[i]==EditorWidget::TabSettings && !waterCreationAvailable(state)) continue;
+      auto row=takeTop(content,44);builder.label(row,names[i],theme.color.text,theme.type.body);router.addRegion(row,widgetId(actions[i]));
+    }
+  }
+  if(compact && state.compactPanelMenu) {
+    list.addRect(state.surface,withAlpha(theme.color.voidBlack,.6f));
+    router.addBlocker(state.surface);
+    const UiRect modal=centred(state.surface,std::min(300.0f,state.surface.width-16),148);
+    list.addRect(modal,theme.color.surface,theme.radius.control);
+    auto content=deflate(modal,UiInsets::all(8));
+    auto header=takeTop(content,40);auto close=takeRight(header,60);
+    builder.label(header,"Painéis",theme.color.text,theme.type.body);
+    builder.label(close,"Fechar",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    router.addRegion(close,widgetId(EditorWidget::CompactPanelMenu));
+    const char *labels[]{"Viewport","Hierarquia","Inspector","Arquivos"};
+    const EditorWidget actions[]{EditorWidget::CompactViewport,EditorWidget::HierarchyToggle,EditorWidget::InspectorToggle,EditorWidget::CompactFiles};
+    const u32 count=state.files?4:3;
+    for(u32 i=0;i<count;++i) {
+      const UiRect cell{content.x+(i%2)*content.width/2,content.y+(i/2)*44,content.width/2-4,40};
+      const bool selected=static_cast<u32>(state.compactPanel)==i;
+      list.addRect(cell,selected?theme.color.accent:theme.color.raised,theme.radius.control);
+      builder.label(cell,labels[i],selected?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
+      router.addRegion(cell,widgetId(actions[i]));
+    }
   }
   if(state.creationMenu && !state.editingCreationSearch) {
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,.60f));router.addBlocker(state.surface);
@@ -940,6 +1370,10 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     UiRect description{content.x,footer.y-28,content.width,28};content.height=std::max(0.0f,description.y-content.y);
     auto categories=takeLeft(content,112);takeLeft(content,12);
     for(u32 i=0;i<4;++i) {
+      bool available=false;
+      for(u32 j=0;j<editorCreationCatalog.size();++j)
+        available |= creationAvailable(state,j) && editorCreationCatalog[j].category==i;
+      if(!available) continue;
       auto row=takeTop(categories,36);
       if(state.creationCategory==i&&!state.creationSearch[0]) list.addRect(row,theme.color.raised,2);
       builder.label(deflate(row,UiInsets::symmetric(8,0)),creationCategories[i],state.creationCategory==i?theme.color.accent:theme.color.textDim,theme.type.body);
@@ -948,6 +1382,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     const auto query=editorSearchKey(state.creationSearch);
     u32 count=0;bool selectedVisible=false;
     for(u32 i=0;i<editorCreationCatalog.size();++i) {
+      if(!creationAvailable(state,i)) continue;
       const auto &entry=editorCreationCatalog[i];const auto name=editorSearchKey(entry.name);
       if(query.empty()?entry.category!=state.creationCategory:name.find(query)==std::string::npos) continue;
       const auto ordinal=count++;if(ordinal/3!=state.creationPage) continue;
@@ -969,7 +1404,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       auto next=takeLeft(footer,36);builder.label(next,">",theme.color.text,theme.type.body,UiAlign::Center);router.addRegion(next,widgetId(EditorWidget::CreationNext));
     }
   }
-  if (state.numericField != 0) {
+  if (!state.platformTextInput && state.numericField != 0) {
     router.addBlocker(state.surface);
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,0.8f));
     const float width=std::min(320.0f,state.surface.width-16.0f);
@@ -1041,6 +1476,62 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   // e desliza para fora desistiu dele.
   if (!routing.tapped) return outcome;
 
+  if(widget>=widgetId(EditorWidget::ComponentAddBase) && widget<widgetId(EditorWidget::ComponentEnumBase)+0x01000000u) {
+    const auto *entity=document.find(state.selection);
+    if(!entity || state.workspace!=EditorWorkspace::Scene) return outcome;
+    if(state.componentSelection!=state.selection) {
+      state.componentSelection=state.selection;state.expandedComponent.clear();state.expandedNative=0;state.nativeMenu=0;state.addingComponent=false;state.componentPage=0;state.expandedScript=0;state.scriptMenu=0;
+    }
+    const u32 operation=widget&0xff000000u;
+    const u32 index=widget&((operation==widgetId(EditorWidget::ComponentBooleanBase)||operation==widgetId(EditorWidget::ComponentEnumBase))?0xffu:0x00ffffffu);
+    const bool adding=operation==widgetId(EditorWidget::ComponentAddBase);
+    const auto *component=adding?nullptr:entity->components.at(index);
+    const auto *metadata=adding?(index<editorComponentCatalog.size()?&editorComponentCatalog[index]:nullptr):component?findEditorComponent(component->type().id):nullptr;
+    if(!metadata) return outcome;
+    const auto &entry=*metadata;
+    const u64 instance=component?component->instanceId():0;
+    if(operation==widgetId(EditorWidget::ComponentMenuBase)) {
+      state.nativeMenu=state.nativeMenu==instance?0:instance;state.expandedNative=0;state.expandedComponent.clear();state.expandedScript=0;
+    } else if(operation==widgetId(EditorWidget::ComponentFoldBase)) {
+      state.expandedNative=state.expandedNative==instance?0:instance;state.expandedComponent.clear();state.expandedScript=0;state.nativeMenu=0;state.scriptMenu=0;state.meshPicker=false;
+    } else if(operation==widgetId(EditorWidget::ComponentCopyBase)) {
+      state.componentClipboard=component->clone();state.status="Valores do componente copiados";
+    } else {
+      auto value=*entity;
+      if(adding) {
+        if(const auto *reason=entry.unavailable(value)) {state.status=reason;return outcome;}
+        if(!value.components.add(*entry.type)) return outcome;
+        state.expandedComponent.clear();state.expandedNative=0;state.expandedScript=0;state.componentPage=~u32{0};state.addingComponent=false;state.nativeMenu=0;
+      } else if(operation==widgetId(EditorWidget::ComponentRemoveBase)) {
+        if(!value.components.removeInstance(instance)) return outcome;
+        if(state.expandedNative==instance) state.expandedNative=0;
+        state.nativeMenu=0;
+      } else if(operation==widgetId(EditorWidget::ComponentBooleanBase)) {
+        const u32 field=(widget&0x00ffffffu)>>8;if(field>=entry.type->booleans.size()) return outcome;
+        const auto &property=entry.type->booleans[field];
+        if(scene::setComponentProperty(value.components,entry.type->id,property.id,!property.read(*component),instance)!=scene::ComponentPropertyStatus::Applied) return outcome;
+      } else if(operation==widgetId(EditorWidget::ComponentEnumBase)) {
+        const u32 field=(widget&0x00ffffffu)>>8;if(field>=entry.type->enums.size()) return outcome;
+        const auto &property=entry.type->enums[field];const auto current=property.read(*component);
+        bool applied=false;
+        for(u32 i=0;i<property.options.size();++i) if(property.options[i].value==current) {
+          const auto next=property.options[(i+1)%property.options.size()].value;
+          applied=scene::setComponentProperty(value.components,entry.type->id,property.id,next,instance)==scene::ComponentPropertyStatus::Applied;break;
+        }
+        if(!applied) {state.status="Ajuste os limites ou o motor antes de trocar o tipo";return outcome;}
+      } else if(operation==widgetId(EditorWidget::ComponentPasteBase)) {
+        if(!state.componentClipboard||&state.componentClipboard->type()!=entry.type||
+           !editorReferencesAccept(document,entity->id,*state.componentClipboard)||
+           !value.components.replaceInstance(instance,*state.componentClipboard)) {state.status="Valores ou referências incompatíveis";return outcome;}
+      } else if(operation==widgetId(EditorWidget::ComponentResetBase)) {
+        const auto defaults=entry.type->create();if(!defaults||!value.components.replaceInstance(instance,*defaults)) return outcome;
+      } else return outcome;
+      outcome.documentChanged=history.applyValues(document,state.selection,value);
+    }
+    state.propertyPage=0;
+    return outcome;
+  }
+
   if (widget >= widgetId(EditorWidget::HierarchyCollapseBase)) {
     const auto entity=widget-widgetId(EditorWidget::HierarchyCollapseBase);
     if(document.find(entity)) {
@@ -1082,23 +1573,13 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   };
 
   switch (static_cast<EditorWidget>(widget)) {
+    case EditorWidget::AddComponentMenu:
+      if(state.componentSelection!=state.selection) {state.componentSelection=state.selection;state.expandedComponent.clear();state.expandedNative=0;state.expandedScript=0;state.componentPage=0;state.addingComponent=false;}
+      state.addingComponent=!state.addingComponent;state.meshPicker=false;state.propertyPage=0;state.componentPage=0;break;
     case EditorWidget::PropertyPrevious: if(state.propertyPage) --state.propertyPage; break;
-    case EditorWidget::PropertyNext: {
-      float available=layout.inspectorPanel.height-16.0f-kPanelHeaderHeight-38.0f;
-      auto group=state.workspace==EditorWorkspace::Settings?EditorPropertyGroup::Water:state.workspace==EditorWorkspace::Lighting?EditorPropertyGroup::Environment:EditorPropertyGroup::Material;
-      const auto *entity=document.find(state.selection);
-      if(state.workspace==EditorWorkspace::Scene && entity) {
-        if(entity->kind==EditorEntityKind::Water) {
-          available-=10;
-          group=state.waterTab==1?EditorPropertyGroup::Route:EditorPropertyGroup::WaterBody;
-          available-=state.waterTab==1?64:state.waterTab==2?36:0;
-        } else if(state.tab==EditorInspectorTab::Properties && entity->rigidBodyEnabled) {group=EditorPropertyGroup::Physics;available-=38;}
-      }
-      const u32 pageSize=std::max(1u,static_cast<u32>(std::max(0.0f,available-42.0f)/40.0f));
-      const u32 count=group==EditorPropertyGroup::Route?8:group==EditorPropertyGroup::WaterBody?(state.waterTab==2?3:4):static_cast<u32>(std::count_if(editorNumericProperties.begin(),editorNumericProperties.end(),[&](const auto &p){return p.group==group;}));
-      const u32 pages=(count+pageSize-1)/pageSize;
-      state.propertyPage=std::min(state.propertyPage+1,pages?pages-1:0);break;
-    }
+    // The rendered pager already knows its exact field rectangle and only
+    // registers Next when another page exists. Do not duplicate layout math.
+    case EditorWidget::PropertyNext: ++state.propertyPage;break;
     case EditorWidget::ReparentSelection:
       state.reparentEntity=state.selection;state.entityMenu=false;state.status="Toque no novo pai na hierarquia";break;
     case EditorWidget::MoveToRoot:
@@ -1136,7 +1617,10 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::CreationPrevious: if(state.creationPage) --state.creationPage;break;
     case EditorWidget::CreationNext: {
       const auto query=editorSearchKey(state.creationSearch);u32 count=0;
-      for(const auto &entry:editorCreationCatalog) if(query.empty()?entry.category==state.creationCategory:editorSearchKey(entry.name).find(query)!=std::string::npos) ++count;
+      for(u32 i=0;i<editorCreationCatalog.size();++i) {
+        const auto &entry=editorCreationCatalog[i];
+        if(creationAvailable(state,i) && (query.empty()?entry.category==state.creationCategory:editorSearchKey(entry.name).find(query)!=std::string::npos)) ++count;
+      }
       state.creationPage=(state.creationPage+1)%std::max(1u,(count+2)/3);break;
     }
     case EditorWidget::HierarchySearch:
@@ -1171,22 +1655,34 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::Redo: outcome.documentChanged = history.redo(document); break;
     case EditorWidget::PlayFromTopBar:
     case EditorWidget::TabPlay:
+      if(state.codeBuildBusy) {state.status="Aguarde a compilação antes de Play";break;}
       state.workspace = state.workspace == EditorWorkspace::Play ? EditorWorkspace::Scene : EditorWorkspace::Play;
+      state.playPaused=false;state.playStepRequested=false;
       outcome.requestPlay = state.workspace == EditorWorkspace::Play;
       break;
     case EditorWidget::TabScene: state.workspaceMenu=false; state.workspace = EditorWorkspace::Scene; break;
-    case EditorWidget::TabAssets: state.workspaceMenu=false; state.workspace = EditorWorkspace::Assets; break;
+    case EditorWidget::TabAssets: if(state.assetCount) {state.workspaceMenu=false; state.workspace = EditorWorkspace::Assets;} break;
     case EditorWidget::TabLighting: state.workspaceMenu=false; state.workspace = EditorWorkspace::Lighting; state.selection=document.root(); state.propertyPage=0; break;
-    case EditorWidget::TabSettings: state.workspaceMenu=false; state.workspace = EditorWorkspace::Settings; state.selection=document.root();state.propertyPage=0;break;
+    case EditorWidget::TabSettings: if(waterCreationAvailable(state)) {state.workspaceMenu=false; state.workspace = EditorWorkspace::Settings; state.selection=document.root();state.propertyPage=0;} break;
     case EditorWidget::InspectorTabTransform: state.tab = EditorInspectorTab::Transform; break;
-    case EditorWidget::InspectorTabMaterial: state.tab = EditorInspectorTab::Material; state.propertyPage=0; break;
+    case EditorWidget::InspectorTabMaterial:
+      if (const auto *selected=document.find(state.selection); selected && meshAsset(*selected)) {
+        state.tab = EditorInspectorTab::Material; state.propertyPage=0;
+      }
+      break;
     case EditorWidget::InspectorTabProperties: state.tab = EditorInspectorTab::Properties; break;
     case EditorWidget::ToolSelect: state.tool = EditorGizmoMode::Select; break;
     case EditorWidget::ToolMove: state.tool = EditorGizmoMode::Translate; break;
     case EditorWidget::ToolRotate: state.tool = EditorGizmoMode::Rotate; break;
     case EditorWidget::ToolScale: state.tool = EditorGizmoMode::Scale; break;
     case EditorWidget::ViewModeSolid: state.showGrid = !state.showGrid; break;
+    case EditorWidget::CompactPanelMenu: state.compactPanelMenu=!state.compactPanelMenu;break;
+    case EditorWidget::CompactFiles: state.compactPanel=EditorScreenState::CompactPanel::Files;state.compactPanelMenu=false;break;
+    case EditorWidget::CompactViewport: state.compactPanel=EditorScreenState::CompactPanel::Viewport;state.compactPanelMenu=false;break;
+    case EditorWidget::HierarchyToggle: state.compactPanel=EditorScreenState::CompactPanel::Hierarchy;state.compactPanelMenu=false;break;
+    case EditorWidget::InspectorToggle: state.compactPanel=EditorScreenState::CompactPanel::Inspector;state.compactPanelMenu=false;break;
     case EditorWidget::Fullscreen:
+      state.compactPanel=EditorScreenState::CompactPanel::Viewport;
       // Tela cheia é esconder os dois painéis, e não um modo separado: o estado
       // continua o mesmo e voltar devolve as larguras que o usuário tinha.
       state.hierarchyVisible = !state.hierarchyVisible;
@@ -1199,7 +1695,51 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::ToggleStatic: toggleField(&EditorEntity::isStatic); break;
     case EditorWidget::HierarchyAdd: state.creationMenu=true; break;
     case EditorWidget::CreateMenuClose: state.creationMenu=false;break;
-    case EditorWidget::ToggleWaterPhysics: toggleField(&EditorEntity::waterPhysicsEnabled);break;
+    case EditorWidget::ToggleWaterPhysics:
+      if(const auto *entity=document.find(state.selection)) {
+        auto value=*entity;
+        if(setWaterBodyFlags(value,!waterBody(value).physicsEnabled,waterBody(value).infinite))
+          outcome.documentChanged=history.applyValues(document,state.selection,value);
+      }
+      break;
+    case EditorWidget::ToggleSceneBody:
+    case EditorWidget::ToggleDynamicBody: {
+      if(const auto *current=document.find(state.selection)) {
+        auto value=*current;
+        if(static_cast<EditorWidget>(widget)==EditorWidget::ToggleSceneBody) {
+          if(physicsBody(value)) value.components.remove(EditorPhysicsBody::descriptor);
+          else editPhysicsBody(value);
+        } else if(physicsBody(value)) {auto *body=editPhysicsBody(value);if(body) body->motion=body->motion==scene::BodyMotion::Dynamic?scene::BodyMotion::Static:scene::BodyMotion::Dynamic;}
+        outcome.documentChanged=history.applyValues(document,value.id,value);
+        state.propertyPage=0;
+      }
+      break;
+    case EditorWidget::PausePlay:
+      if(state.workspace==EditorWorkspace::Play && !waterCreationAvailable(state)) {
+        state.playPaused=!state.playPaused;state.playStepRequested=false;
+      }
+      break;
+    case EditorWidget::StepPlay:
+      if(state.workspace==EditorWorkspace::Play && state.playPaused && !waterCreationAvailable(state)) state.playStepRequested=true;
+      break;
+    }
+    case EditorWidget::ToggleCharacter: {
+      if(const auto *current=document.find(state.selection);current && !physicsBody(*current)) {
+        auto value=*current;
+        if(characterComponent(value)) value.components.remove(EditorCharacter::descriptor);
+        else editCharacter(value);
+        outcome.documentChanged=history.applyValues(document,value.id,value);state.propertyPage=0;
+      }
+      break;
+    }
+    case EditorWidget::ToggleCameraLook: {
+      if(const auto *current=document.find(state.selection);current&&cameraComponent(*current)) {
+        auto value=*current;
+        if(cameraLook(value)) value.components.remove(EditorCameraLook::descriptor);else editCameraLook(value);
+        outcome.documentChanged=history.applyValues(document,value.id,value);state.propertyPage=0;
+      }
+      break;
+    }
     case EditorWidget::ToggleRigidBody: toggleField(&EditorEntity::rigidBodyEnabled);state.propertyPage=0;break;
     case EditorWidget::WaterTabSurface:state.waterTab=0;state.propertyPage=0;break;
     case EditorWidget::WaterTabRoute:state.waterTab=1;state.propertyPage=0;break;

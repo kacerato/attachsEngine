@@ -4,22 +4,39 @@
             "outputFile": "dev.aether.editor.app-release-4:/values_values.arsc.flat",
             "map": [
                 {
-                    "source": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\src\\main\\res\\values\\styles.xml",
+                    "source": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\src\\main\\res\\values\\astra_colors.xml",
                     "from": {
-                        "startLines": "2",
-                        "startColumns": "4",
-                        "startOffsets": "57",
-                        "endLines": "12",
-                        "endColumns": "12",
-                        "endOffsets": "689"
+                        "startLines": "3,4",
+                        "startColumns": "4,4",
+                        "startOffsets": "136,184",
+                        "endColumns": "46,44",
+                        "endOffsets": "178,224"
                     },
                     "to": {
-                        "startLines": "2",
-                        "startColumns": "4",
-                        "startOffsets": "55",
-                        "endLines": "12",
-                        "endColumns": "12",
-                        "endOffsets": "677"
+                        "startLines": "2,3",
+                        "startColumns": "4,4",
+                        "startOffsets": "55,102",
+                        "endColumns": "46,44",
+                        "endOffsets": "97,142"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\src\\main\\res\\values\\styles.xml",
+                    "from": {
+                        "startLines": "2,16",
+                        "startColumns": "4,4",
+                        "startOffsets": "57,832",
+                        "endLines": "12,24",
+                        "endColumns": "12,12",
+                        "endOffsets": "689,1390"
+                    },
+                    "to": {
+                        "startLines": "4,15",
+                        "startColumns": "4,4",
+                        "startOffsets": "147,774",
+                        "endLines": "14,23",
+                        "endColumns": "12,12",
+                        "endOffsets": "769,1324"
                     }
                 }
             ]

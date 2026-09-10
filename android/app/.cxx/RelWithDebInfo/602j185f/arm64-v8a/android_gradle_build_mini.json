@@ -22,6 +22,12 @@
     "{LIST_OF_TARGETS_TO_BUILD}"
   ],
   "libraries": {
+    "aether_ui::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_ui",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_ui.a",
+      "runtimeFiles": []
+    },
     "aether_physics::@6890427a1f51a3e7e1df": {
       "artifactName": "aether_physics",
       "abi": "arm64-v8a",
@@ -32,6 +38,12 @@
       "artifactName": "box2d",
       "abi": "arm64-v8a",
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\third_party\\Box2D\\src\\libbox2d.a",
+      "runtimeFiles": []
+    },
+    "aether_water_runtime::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_water_runtime",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_water_runtime.a",
       "runtimeFiles": []
     },
     "aether_platform::@6890427a1f51a3e7e1df": {
@@ -98,6 +110,12 @@
       "artifactName": "aether_native_app_glue",
       "abi": "arm64-v8a",
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_native_app_glue.a",
+      "runtimeFiles": []
+    },
+    "aether_editor::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_editor",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_editor.a",
       "runtimeFiles": []
     },
     "sqlite3::@404bef308afbc8f16dd1": {

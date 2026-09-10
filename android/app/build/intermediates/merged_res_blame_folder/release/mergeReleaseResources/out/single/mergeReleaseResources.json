@@ -1,7 +1,31 @@
 [
     {
+        "merged": "dev.aether.editor.app-release-4:/mipmap-anydpi-v26_ic_astra.xml.flat",
+        "source": "dev.aether.editor.app-main-5:/mipmap-anydpi-v26/ic_astra.xml"
+    },
+    {
         "merged": "dev.aether.editor.app-release-4:/drawable_ic_aether.xml.flat",
         "source": "dev.aether.editor.app-main-5:/drawable/ic_aether.xml"
+    },
+    {
+        "merged": "dev.aether.editor.app-release-4:/mipmap-mdpi_ic_astra.png.flat",
+        "source": "dev.aether.editor.app-main-5:/mipmap-mdpi/ic_astra.png"
+    },
+    {
+        "merged": "dev.aether.editor.app-release-4:/mipmap-xxxhdpi_ic_astra_foreground.png.flat",
+        "source": "dev.aether.editor.app-main-5:/mipmap-xxxhdpi/ic_astra_foreground.png"
+    },
+    {
+        "merged": "dev.aether.editor.app-release-4:/mipmap-xxhdpi_ic_astra.png.flat",
+        "source": "dev.aether.editor.app-main-5:/mipmap-xxhdpi/ic_astra.png"
+    },
+    {
+        "merged": "dev.aether.editor.app-release-4:/xml_game_mode_config.xml.flat",
+        "source": "dev.aether.editor.app-main-5:/xml/game_mode_config.xml"
+    },
+    {
+        "merged": "dev.aether.editor.app-release-4:/mipmap-hdpi_ic_astra.png.flat",
+        "source": "dev.aether.editor.app-main-5:/mipmap-hdpi/ic_astra.png"
     },
     {
         "merged": "dev.aether.editor.app-release-4:/xml_backup_rules.xml.flat",
@@ -10,5 +34,13 @@
     {
         "merged": "dev.aether.editor.app-release-4:/xml_data_extraction_rules.xml.flat",
         "source": "dev.aether.editor.app-main-5:/xml/data_extraction_rules.xml"
+    },
+    {
+        "merged": "dev.aether.editor.app-release-4:/mipmap-xxxhdpi_ic_astra.png.flat",
+        "source": "dev.aether.editor.app-main-5:/mipmap-xxxhdpi/ic_astra.png"
+    },
+    {
+        "merged": "dev.aether.editor.app-release-4:/mipmap-xhdpi_ic_astra.png.flat",
+        "source": "dev.aether.editor.app-main-5:/mipmap-xhdpi/ic_astra.png"
     }
 ]

@@ -1,5 +1,6 @@
 #pragma once
 #include "renderer/map_package.h"
+#include "renderer/authoring_geometry.h"
 #include "renderer/water_grid.h"
 #include <algorithm>
 #include <limits>
@@ -8,7 +9,6 @@ namespace ae::renderer {
 // Runtime-only library resource marker. Never instantiated by package import.
 inline constexpr u32 WaterAuthoringResource = 1u << 11;
 inline constexpr u32 WaterRouteResource = 1u << 12;
-inline constexpr u32 BoxAuthoringResource = 1u << 13;
 
 // Append reusable geometry before upload. Instances share these buffers; their
 // transforms provide finite dimensions. Spectral displacement stays in the GPU.
@@ -61,26 +61,11 @@ inline bool appendWaterAuthoringGeometry(u32 vertexStride, u32 segments,
   route.lodGroupId=static_cast<u32>(draws.size());
   auto material=materials[draws[firstWater].materialIndex];material.flags|=WaterRouteResource;
   materials.push_back(material);draws.push_back(route);
-  MapDrawRecord box{};box.firstIndex=static_cast<u32>(indices.size());box.vertexOffset=static_cast<u32>(vertices.size()/vertexStride);
-  box.indexCount=36;box.materialIndex=static_cast<u32>(materials.size());box.lodGroupId=static_cast<u32>(draws.size());
-  box.model[0]=box.model[5]=box.model[10]=box.model[15]=1;box.boundsRadius=.8660254f;
-  for(u32 face=0;face<6;++face) {
-    const u32 axis=face/2,u=(axis+1)%3,v=(axis+2)%3;const float sign=face%2?1.0f:-1.0f;
-    for(u32 corner=0;corner<4;++corner) {
-      Vertex vertex{};vertex.position[axis]=sign*.5f;
-      vertex.position[u]=(corner==1 || corner==2)?.5f:-.5f;vertex.position[v]=corner>=2?.5f:-.5f;
-      vertex.normal[axis]=static_cast<i16>(sign*32767);vertex.tangent[u]=vertex.tangent[3]=32767;
-      vertex.uv[0]=vertex.position[u]+.5f;vertex.uv[1]=vertex.position[v]+.5f;vertex.color=0xffffffffu;
-      const usize offset=vertices.size();vertices.resize(offset+sizeof(Vertex));std::memcpy(vertices.data()+offset,&vertex,sizeof(Vertex));
-    }
-    const u32 a=face*4;
-    if(sign>0) indices.insert(indices.end(),{a,a+1,a+2,a,a+2,a+3});
-    else indices.insert(indices.end(),{a,a+2,a+1,a,a+3,a+2});
-  }
-  MapMaterialRecord boxMaterial{};std::fill(std::begin(boxMaterial.textureIndices),std::end(boxMaterial.textureIndices),InvalidMapTexture);
-  boxMaterial.baseColorFactor[0]=.55f;boxMaterial.baseColorFactor[1]=.29f;boxMaterial.baseColorFactor[2]=.12f;boxMaterial.baseColorFactor[3]=1;
-  boxMaterial.roughness=.65f;boxMaterial.normalScale=1;boxMaterial.flags=WaterAuthoringResource|BoxAuthoringResource;
-  materials.push_back(boxMaterial);draws.push_back(box);
+  const auto boxMaterialIndex=materials.size();
+  if(!appendBoxAuthoringGeometry(vertexStride,vertices,indices,draws,materials)) return false;
+  auto &boxMaterial=materials[boxMaterialIndex];
+  boxMaterial.flags|=WaterAuthoringResource;
+  boxMaterial.baseColorFactor[1]=.29f;boxMaterial.baseColorFactor[2]=.12f;
   return true;
 }
 }

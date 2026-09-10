@@ -10,12 +10,10 @@ import android.view.Gravity;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import java.util.List;
 
 /**
  * Folha de criação de projeto.
@@ -24,7 +22,7 @@ import java.util.List;
  * teclado do sistema, e reimplementar edição de texto sobre Canvas seria trocar
  * uma caixa de texto que funciona por um bug de IME.
  *
- * A lista de cenas rola e as ações ficam fora do scroll — num aparelho em
+ * A descrição rola e as ações ficam fora do scroll — num aparelho em
  * paisagem, com o teclado aberto, um layout de altura livre empurra "Criar
  * projeto" para fora da tela.
  */
@@ -40,8 +38,7 @@ public final class NewProjectSheet extends FrameLayout {
     private final EditText nameField;
     private final TextView errorLabel;
     private final Button confirm;
-    private final GridLayout templates;
-    private SceneTemplate picked;
+    private final SceneTemplate picked = SceneTemplate.byId(SceneTemplate.EMPTY);
 
     public NewProjectSheet(Context context, ProjectStore store, Listener listener) {
         super(context);
@@ -62,7 +59,7 @@ public final class NewProjectSheet extends FrameLayout {
         card.addView(label("NEW PROJECT", 9f, Design.MUTED, .28f));
 
         TextView title = new TextView(context);
-        title.setText("Nomeie e escolha o ponto de partida");
+        title.setText("Novo projeto vazio");
         title.setTextColor(Design.TEXT);
         title.setTextSize(17f);
         title.setTypeface(Design.ui(true));
@@ -86,19 +83,14 @@ public final class NewProjectSheet extends FrameLayout {
         errorLabel.setPadding(0, dp(5), 0, 0);
         card.addView(errorLabel);
 
-        TextView group = label("SCENE TEMPLATE", 9f, Design.MUTED, .28f);
-        group.setPadding(0, dp(14), 0, dp(8));
-        card.addView(group);
-
+        TextView description = new TextView(context);
+        description.setText("Comece com uma cena vazia e adicione os objetos do seu projeto no editor.");
+        description.setTextColor(Design.MUTED);
+        description.setTextSize(13f);
+        description.setPadding(0, dp(14), 0, dp(8));
         ScrollView scroller = new ScrollView(context);
-        scroller.setFillViewport(true);
-        templates = new GridLayout(context);
-        templates.setColumnCount(4);
-        scroller.addView(templates);
-        LinearLayout.LayoutParams scrollParams =
-                new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f);
-        card.addView(scroller, scrollParams);
-        buildTemplates();
+        scroller.addView(description);
+        card.addView(scroller, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f));
 
         LinearLayout actions = new LinearLayout(context);
         actions.setGravity(Gravity.END);
@@ -126,52 +118,6 @@ public final class NewProjectSheet extends FrameLayout {
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void afterTextChanged(Editable s) { validate(); }
         });
-    }
-
-    private void buildTemplates() {
-        templates.removeAllViews();
-        List<SceneTemplate> all = SceneTemplate.all();
-        for (SceneTemplate template : all) {
-            if (!template.ready) continue;
-            LinearLayout tile = new LinearLayout(getContext());
-            tile.setOrientation(LinearLayout.VERTICAL);
-            boolean selected = picked != null && picked.id.equals(template.id);
-            tile.setBackground(panel(selected ? Design.WASH : Design.RAISED, 6f,
-                    selected ? Design.ACCENT : Design.LINE));
-            tile.setPadding(dp(11), dp(9), dp(11), dp(9));
-            tile.setAlpha(template.ready ? 1f : .48f);
-
-            if (!template.ready) tile.addView(label("EM BREVE", 8f, Design.ACCENT, .2f));
-
-            TextView name = new TextView(getContext());
-            name.setText(template.name);
-            name.setTextColor(Design.TEXT);
-            name.setTextSize(12.5f);
-            name.setTypeface(Design.ui(true));
-            tile.addView(name);
-
-            TextView note = new TextView(getContext());
-            note.setText(template.note);
-            note.setTextColor(Design.MUTED);
-            note.setTextSize(10.5f);
-            note.setMaxLines(2);
-            note.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            tile.addView(note);
-
-            tile.setOnClickListener(view -> {
-                if (!template.ready) { listener.onUnavailable(template); return; }
-                picked = template;
-                buildTemplates();
-                validate();
-            });
-
-            GridLayout.LayoutParams params = new GridLayout.LayoutParams();
-            params.width = 0;
-            params.height = dp(92);
-            params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
-            params.setMargins(dp(3), dp(3), dp(3), dp(3));
-            templates.addView(tile, params);
-        }
     }
 
     private void validate() {

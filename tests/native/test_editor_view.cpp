@@ -283,3 +283,27 @@ AE_TEST(view_segment_clips_extreme_horizon_coordinates_before_projection) {
     }
   }
 }
+
+AE_TEST(pick_mesh_rejects_empty_triangle_region_and_orders_real_surfaces) {
+  auto mesh=std::make_shared<EditorPickMesh>();
+  AE_EXPECT_TRUE(mesh->build({{{-2,-2,5, 2,-2,5, -2,2,5}}}),"triangle");
+  EditorPickCandidate candidate;candidate.id=1;candidate.center[2]=5;candidate.radius=4;candidate.mesh=mesh;
+  EditorRay ray;ray.valid=true;ray.direction[2]=1;ray.origin[0]=ray.origin[1]=1.5f;
+  AE_EXPECT_TRUE(!pickNearest({&candidate,1},ray).hit,"sphere hit outside actual triangle is rejected");
+  ray.origin[0]=ray.origin[1]=-.5f;
+  AE_EXPECT_EQ(pickNearest({&candidate,1},ray).distance,5.0f,"surface distance");
+  EditorPickCandidate instances[]{candidate,candidate};instances[0].model[10]=2;instances[0].center[2]=10;instances[0].radius=8;
+  instances[1].id=2;
+  AE_EXPECT_EQ(pickNearest(instances,ray).id,2u,"nearest real surface wins even when first sphere encloses camera");
+}
+AE_TEST(pick_mesh_affine_transform_keeps_world_distance_and_handles_bvh) {
+  EditorPickMesh mesh;std::vector<EditorPickMesh::Triangle> triangles;
+  for(int i=0;i<100;++i) {const float x=float(i*4);triangles.push_back({x-1,-1,0,x+1,-1,0,x,1,0});}
+  AE_EXPECT_TRUE(mesh.build(std::move(triangles)),"build multiple BVH levels");
+  float model[]{2,0,0,0, .5f,3,0,0, 0,0,-4,0, 7,2,12,1};
+  const float origin[]{7,2,0},direction[]{0,0,1};float distance=0;
+  AE_EXPECT_TRUE(mesh.intersect(origin,direction,model,distance),"shear and reflection");
+  AE_EXPECT_EQ(distance,12.0f,"world-space distance under nonuniform scale");
+  model[0]=0;
+  AE_EXPECT_TRUE(!mesh.intersect(origin,direction,model,distance),"singular instance rejected");
+}

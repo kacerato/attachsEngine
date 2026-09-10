@@ -121,6 +121,23 @@ struct AetherBodyDescV2 {
   ae::u32 eventLayerMask; // bits AetherQueryLayerMask; All (3) é o default da fachada C#
 };
 
+// Additive ABI: each part is in the authored body frame, with scale baked into dimensions.
+// No pointers survive creation. Structure versions are independent of the frozen body V2.
+struct AetherCompoundPart {
+  AetherShapeDesc shape;
+  AetherVec3 position;
+  AetherQuat rotation;
+};
+struct AetherBodyDynamicsV1 {
+  ae::u32 structSize;
+  ae::u32 apiVersion;
+  float linearDamping;
+  float angularDamping;
+  float gravityFactor;
+  AetherVec3 angularVelocity;
+  ae::u32 allowSleeping;
+};
+
 // Opaco de propósito — o layout real (PhysicsSystem, alocador temporário, job
 // system, filtros de camada) vive só em jolt_bridge.cpp.
 struct AetherPhysicsWorld;
@@ -218,6 +235,16 @@ AetherBodyHandle AetherPhysics_CreateBodyV2(AetherPhysicsWorld *world, const Aet
 /// criados/adicionados e o retorno é `count`, ou nenhum permanece vivo, todos
 /// os outHandles ficam Invalid e o retorno é 0. Arrays podem ser nulos somente
 /// quando count == 0.
+// Additional entry point preserves V1/V2 layouts. Center is shape-local after
+// scale, relative to the authored body origin; body pose APIs keep that origin.
+AetherBodyHandle AetherPhysics_CreateBodyWithLocalCenterV2(AetherPhysicsWorld *world,
+    const AetherBodyDescV2 *desc,AetherVec3 localCenter);
+
+// Creates one body from 1..256 primitive parts. V2 desc.shape is unused here.
+AetherBodyHandle AetherPhysics_CreateCompoundBodyV1(AetherPhysicsWorld *world,
+    const AetherBodyDescV2 *desc,const AetherCompoundPart *parts,ae::u32 count,
+    const AetherBodyDynamicsV1 *dynamics);
+
 ae::i32 AetherPhysics_CreateBodiesV2(AetherPhysicsWorld *world,
                                      const AetherBodyDescV2 *descs,
                                      AetherBodyHandle *outHandles,
@@ -274,6 +301,11 @@ void AetherPhysics_GetTransform(AetherPhysicsWorld *world, AetherBodyHandle hand
                                  AetherVec3 *outPosition, AetherQuat *outRotation);
 
 void AetherPhysics_SetLinearVelocity(AetherPhysicsWorld *world, AetherBodyHandle handle, AetherVec3 velocity);
+// World-space vectors. Force/torque accumulate until Step; impulses act immediately.
+// Commands require a live dynamic body. Handles are checked under the world lock.
+enum class AetherBodyForceKind : ae::u32 { Force=0, Impulse=1, Torque=2, AngularImpulse=3 };
+ae::i32 AetherPhysics_ApplyBodyForceV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 value,AetherBodyForceKind kind);
+ae::i32 AetherPhysics_TryGetBodyVelocityV1(AetherPhysicsWorld *world,AetherBodyHandle handle,AetherVec3 *out);
 ae::i32 AetherPhysics_SetMassV2(AetherPhysicsWorld *world,AetherBodyHandle handle,float mass);
 // Body-origin pose (not centre of mass). A stale/destroyed handle returns zero
 // and leaves outputs untouched; read under one body lock.

@@ -142,7 +142,7 @@ struct PostPushConstants {
   float texelFlags[4]{};
   float bloom[4]{};
   float grade[4]{};
-  float sourceTransform[4]{}; // active UV scale, active render scale, reserved
+  float sourceTransform[4]{}; // active UV scale, focal length, display aspect
   float currentCamera[4]{};
   float currentPositionNear[4]{};
   float previousCamera[4]{};
@@ -842,7 +842,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   if (!memoryAllocator_->createBuffer(buffer, &environmentUniform_)) return false;
   // Capacidade fixa no teto do contrato da grade: realocar no meio do laço de
   // quadro obrigaria a reescrever o descritor, e o tamanho aqui é modesto.
-  {
+  if(waterSubpassActive_) {
     rhi::BufferDesc ripple{};
     ripple.sizeBytes = static_cast<u64>(renderer::MaximumWaterGridSegments) *
                        renderer::MaximumWaterGridSegments * sizeof(float);
@@ -1530,7 +1530,7 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
                             static_cast<float>(renderTargetWidth());
   push.sourceTransform[1] = static_cast<float>(renderHeight()) /
                             static_cast<float>(renderTargetHeight());
-  push.sourceTransform[2] = dynamicResolution_.scale();
+  push.sourceTransform[2] = dirtRoadPreview_?1.0f/std::tan(sceneFieldOfView()*.5f):1.732050808f;
   const VkExtent2D displayExtent = swapchain_->displayExtent();
   push.sourceTransform[3] = static_cast<float>(displayExtent.width) /
                             static_cast<float>(displayExtent.height);
@@ -2787,6 +2787,7 @@ void InstancedRenderer::readHzbPyramidFromPreviousFrame() {
 renderer::PerspectiveFrustum InstancedRenderer::buildFrameFrustum(
     const platform::FreeCameraState &camera) const {
   renderer::PerspectiveVisibilitySettings settings = visibilitySettings_;
+  settings.verticalFieldOfViewRadians = sceneFieldOfView();
   settings.nearPlane = sceneNearPlane();
   settings.farPlane = sceneFarPlane();
   return renderer::buildPerspectiveFrustum(
@@ -3405,8 +3406,10 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
                                    DotNetHost &dotNetHost, u32 instanceCount, bool scenePreview,
                                    AAssetManager *materialAssets, bool forceTextureFallback,
                                    const std::atomic<bool> *cancel, bool dirtRoadPreview,
-                                   const char *mapAssetRoot) {
-  if (instanceCount == 0 || (!dotNetHost.isReady() && !dirtRoadPreview)) return false;
+                                   const char *mapAssetRoot, bool emptyScene) {
+  if (instanceCount == 0 || (!dotNetHost.isReady() && !dirtRoadPreview && !emptyScene)) return false;
+  if (emptyScene && (dirtRoadPreview || scenePreview)) return false;
+  emptyScene_ = emptyScene;
 
   device_ = device.handle();
   physicalDevice_ = device.physicalDevice();
@@ -3414,8 +3417,8 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   useBindless_ = device.enabledPaths().bindless;
   memoryAllocator_ = &device.memoryAllocator();
   swapchain_ = &swapchain;
-  dirtRoadPreview_ = dirtRoadPreview;
-  materialPreview_ = materialAssets != nullptr && !dirtRoadPreview_;
+  dirtRoadPreview_ = dirtRoadPreview || emptyScene;
+  materialPreview_ = materialAssets != nullptr && !dirtRoadPreview_ && !emptyScene_;
   scenePreview_ = !dirtRoadPreview_ && (scenePreview || materialPreview_);
 
   // The temporal shader reprojects from FreeCameraState and the matching
@@ -3463,7 +3466,7 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
           "Aether.Rendering.Interop.SceneEntryPoints, Aether.Rendering","GetMaterialParameters"));
       if(readMaterial==nullptr || readMaterial(&materialParameters_,sizeof(MaterialParameters))!=0)return false;
     }
-  } else if (!dirtRoadPreview_) {
+  } else if (!dirtRoadPreview_ && !emptyScene_) {
     fillInstanceBuffer_ = reinterpret_cast<FillInstanceBufferFn>(dotNetHost.getManagedFunctionPointer(
         "Aether.Interop.NativeEntryPoints, Aether.Core", "FillInstanceBuffer"));
     if (fillInstanceBuffer_ == nullptr) {
@@ -3482,12 +3485,15 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     const u32 waterGridSegments = renderer::selectWaterGrid(
         renderingPolicy_.geometry.waterMesh,
         renderer::WaterSpectrumSettings{}.windSpeed, 8000.0f).segments;
-    if (!dirtRoadResources_.initialize(device, uploadContext_, materialAssets,
+    if (emptyScene_) {
+      if(!dirtRoadResources_.initializePrimitives(device,uploadContext_)) return false;
+    } else if (!dirtRoadResources_.initialize(device, uploadContext_, materialAssets,
                                        forceTextureFallback,
                                        waterDisplacementCapacity_,
                                        cancel, mapAssetRoot,
                                        waterGridSegments, waterAuthoringEnabled_)) return false;
     sourceMapDraws_=dirtRoadResources_.draws();
+    if(emptyScene_) { authoredVisibility_.assign(sourceMapDraws_.size(),0);authoredShadows_.assign(sourceMapDraws_.size(),0); }
     instanceCount_ = static_cast<u32>(dirtRoadResources_.draws().size());
     for (u32 index = 0; index < instanceCount_; ++index) {
       const u32 material = dirtRoadResources_.draws()[index].materialIndex;
@@ -3634,8 +3640,8 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
                       static_cast<unsigned long long>(bufferBudget.limitBytes));
 
   __android_log_print(ANDROID_LOG_INFO, LogTag,
-                      "InstancedRenderer pronto: cubo texturizado + depth, capacidade=%u, modo=%s.",
-                      instanceCount_, dirtRoadPreview_ ? "dirt-road" :
+                      "InstancedRenderer pronto: capacidade=%u, modo=%s.",
+                      instanceCount_, emptyScene_ ? "empty-scene" : dirtRoadPreview_ ? "dirt-road" :
                       (materialPreview_ ? "material-preview" : (scenePreview_ ? "scene-preview" : "PoC-A")));
   if (dirtRoadPreview_)
     __android_log_print(ANDROID_LOG_INFO, LogTag,
@@ -3802,6 +3808,7 @@ void InstancedRenderer::shutdown() {
   fillInstanceBuffer_ = nullptr;
   extractScene_ = nullptr;
   dirtRoadPreview_ = false;
+  emptyScene_ = false;
   materialPreview_ = false;
   scenePreview_ = false;
 }
@@ -4018,6 +4025,17 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     hzbPyramidValid_ = false;
     hzbPyramidCameraValid_ = false;
   }
+  const float projection[]{sceneFieldOfView(),sceneNearPlane(),sceneFarPlane(),sceneAspectRatio()};
+  const bool projectionChanged=!std::equal(std::begin(projection),std::end(projection),previousSceneProjection_);
+  std::copy(std::begin(projection),std::end(projection),previousSceneProjection_);
+  if(projectionChanged) {
+    // A depth/history image from another projection cannot occlude or reproject
+    // this frame even when the camera position has not moved.
+    hzbPyramidValid_=false;hzbPyramidCameraValid_=false;hzbRecordedCameraValid_=false;
+    temporalHistoryInitialized_=false;
+    for(auto &state:hzbHysteresis_) state={};
+    invalidateStaticShadowCache();
+  }
   hzbFrameEligible_ = false;
   if (mapPosesChanged) {
     // Old occluders can hide OTHER draws at their previous position. Discard
@@ -4188,6 +4206,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     frame->shadowFilterParameters[3] = temporalCurrentJitter_[1];
     frame->shadowTransitionParameters[0] = renderingPolicy_.shadows.cascadeBlendRatio;
     frame->shadowTransitionParameters[1] = renderingPolicy_.shadows.distanceFadeRatio;
+    frame->shadowTransitionParameters[2] = 1.0f/std::tan(sceneFieldOfView()*.5f);
     const u32 previousShadowCascadeCount = shadowCascadeCount_;
     shadowCascadeCount_ = 0;
     if (renderingPolicy_.shadows.enabled) {
@@ -4196,6 +4215,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       std::memcpy(input.cameraForward, row2, sizeof(input.cameraForward));
       std::memcpy(input.cameraUp, row1, sizeof(input.cameraUp));
       input.aspectRatio = sceneAspectRatio();
+      input.verticalFovRadians = sceneFieldOfView();
       input.nearPlane = sceneNearPlane();
       input.shadowDistance = std::min(renderingPolicy_.shadows.maximumDistance,
                                       sceneFarPlane());
@@ -4474,6 +4494,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       return nearestBoundsDistanceSquared(left)<nearestBoundsDistanceSquared(right);
     };
     renderer::PerspectiveVisibilitySettings visibilitySettings = visibilitySettings_;
+    visibilitySettings.verticalFieldOfViewRadians = sceneFieldOfView();
     visibilitySettings.nearPlane = sceneNearPlane();
     visibilitySettings.farPlane = sceneFarPlane();
     // Mesmo volume que recordDrawCullDispatch ja usou antes do render pass: as
@@ -4832,6 +4853,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
 
     DirtRoadPushConstants skyPush{};
     skyPush.cameraFrame[0] = sceneAspectRatio();
+    skyPush.materialFactors[3] = 1.0f/std::tan(sceneFieldOfView()*.5f);
     skyPush.cameraFrame[1] = camera.yaw;
     skyPush.cameraFrame[2] = camera.pitch;
     skyPush.cameraFrame[3] = timeSeconds;
@@ -4894,7 +4916,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // de somarem seu tempo à classe seguinte (ver VulkanGpuFrameTimer).
     endGpuRegion(GpuPassClass::Opaque);
   } else {
-    vkCmdDraw(commandBuffer_, 36, drawnInstanceCount_, 0, 0);
+    if (drawnInstanceCount_ != 0) vkCmdDraw(commandBuffer_, 36, drawnInstanceCount_, 0, 0);
     endGpuRegion(GpuPassClass::Opaque);
   }
 

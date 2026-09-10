@@ -3,6 +3,11 @@ Aether.Rendering.deps.json
 Aether.Rendering.dll
 Aether.Rendering.runtimeconfig.json
 Aether.Scene.dll
+Astra.Scripting.dll
+Microsoft.CodeAnalysis.CSharp.dll
+Microsoft.CodeAnalysis.dll
+System.Collections.Immutable.dll
+System.Reflection.Metadata.dll
 shared/Microsoft.NETCore.App/8.0.27/Microsoft.CSharp.dll
 shared/Microsoft.NETCore.App/8.0.27/Microsoft.NETCore.App.deps.json
 shared/Microsoft.NETCore.App/8.0.27/Microsoft.NETCore.App.runtimeconfig.json

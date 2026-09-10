@@ -1,3 +1,5 @@
+#include "editor/editor_water_body_component.h"
+#include "editor/editor_route_component.h"
 #include "editor/editor_map_scene.h"
 #include "renderer/water_authoring_geometry.h"
 #include <algorithm>
@@ -69,8 +71,24 @@ bool editorLocalTransformForWorld(const float world[16],const float parent[16],E
   out=value;return true;
 }
 
-bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate) {
+bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices) {
   if(draws.size()+1>EditorDocument::kMaximumEntities) return false;
+  std::vector<std::shared_ptr<const EditorPickMesh>> meshes(draws.size());
+  if(vertices.empty()!=indices.empty() || vertices.size()%renderer::MapVertexStride) return false;
+  usize triangleCount=0;
+  if(!vertices.empty()) for(u32 index=0;index<draws.size();++index) {
+    const auto &draw=draws[index];triangleCount+=draw.indexCount/3;
+    if(!draw.indexCount || draw.indexCount%3 || triangleCount>EditorPickMesh::MaximumTriangles ||
+       u64(draw.firstIndex)+draw.indexCount>indices.size()) return false;
+    std::vector<EditorPickMesh::Triangle> triangles(draw.indexCount/3);
+    for(u32 t=0;t<triangles.size();++t) for(u32 point=0;point<3;++point) {
+      const auto vertex=static_cast<long long>(draw.vertexOffset)+indices[draw.firstIndex+t*3+point];
+      if(vertex<0 || static_cast<u64>(vertex)>=vertices.size()/renderer::MapVertexStride) return false;
+      std::memcpy(triangles[t].data()+point*3,vertices.data()+vertex*renderer::MapVertexStride,3*sizeof(float));
+    }
+    auto mesh=std::make_shared<EditorPickMesh>();if(!mesh->build(std::move(triangles))) return false;
+    meshes[index]=std::move(mesh);
+  }
   EditorDocument prepared;
   for(u32 index=0;instantiate && index<draws.size();++index) {
     const auto &draw=draws[index];
@@ -81,12 +99,13 @@ bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::
     const auto id=prepared.createEntity(prepared.root(),water?EditorEntityKind::Water:EditorEntityKind::Mesh,name);
     if(!id) return false;
     auto entity=*prepared.find(id);
-    entity.assetId=index+1;entity.visible=draw.lodLevel==0;
-    entity.waterInfinite=(flags & renderer::MapMaterialWaterCameraGrid)!=0;
-    if(draw.materialIndex<materials.size()) entity.material=renderer::materialOverrideFrom(materials[draw.materialIndex]);
+    auto *render=editMeshRenderer(entity);if(!render) return false;render->mesh=index+1;entity.visible=draw.lodLevel==0;
+    if(!setWaterBodyFlags(entity,true,(flags & renderer::MapMaterialWaterCameraGrid)!=0)) return false;
+    if(draw.materialIndex<materials.size()) render->material=renderer::materialOverrideFrom(materials[draw.materialIndex]);
     std::copy(draw.boundsCenter,draw.boundsCenter+3,entity.transform.position);
     if(!prepared.applyEntityValues(id,entity)) return false;
   }
+  pickMeshes_=std::move(meshes);
   source_.assign(draws.begin(),draws.end());
   materials_.assign(materials.begin(),materials.end());
   document=std::move(prepared);
@@ -100,19 +119,19 @@ void EditorMapScene::hydrateMaterials(EditorDocument &document) const {
   std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
   for(auto id:ids) {
     auto value=*document.find(id);
-    if(!value.assetId || value.material.enabled) continue;
-    value.material=materialForAsset(value.assetId-1);document.applyEntityValues(id,value);
+    if(!meshAsset(value) || meshMaterial(value).enabled) continue;
+    auto *render=editMeshRenderer(value);if(!render) continue;render->material=materialForAsset(meshAsset(value)-1);document.applyEntityValues(id,value);
   }
 }
 bool EditorMapScene::bounds(const EditorDocument &document, EditorEntityId id, float center[3], float &radius) const {
   const auto *entity=document.find(id);
-  if(!entity || !entity->assetId || entity->assetId>source_.size()) return false;
+  if(!entity || !meshAsset(*entity) || meshAsset(*entity)>source_.size()) return false;
   float world[16];if(!editorWorldMatrix(document,id,world)) return false;
-  if(entity->route.count) {
-      if(!renderer::validateWaterRoute(entity->route)) return false;
+  if(waterRoute(*entity).count) {
+      if(!renderer::validateWaterRoute(waterRoute(*entity))) return false;
       float low[3]{1e30f,1e30f,1e30f},high[3]{-1e30f,-1e30f,-1e30f};
-      for(u32 segment=0;segment+1<entity->route.count;++segment) for(u32 step=0;step<=renderer::WaterRouteSteps;++step) {
-        const auto sample=renderer::evaluateWaterRoute(entity->route,segment,float(step)/renderer::WaterRouteSteps);
+      for(u32 segment=0;segment+1<waterRoute(*entity).count;++segment) for(u32 step=0;step<=renderer::WaterRouteSteps;++step) {
+        const auto sample=renderer::evaluateWaterRoute(waterRoute(*entity),segment,float(step)/renderer::WaterRouteSteps);
         for(float side:{-.5f,.5f}) for(u32 axis=0;axis<3;++axis) {
         const float x=sample.center.x+sample.tangent.z*sample.width*side,z=sample.center.z-sample.tangent.x*sample.width*side;
         const float p=world[12+axis]+world[axis]*x+world[4+axis]*sample.center.y+world[8+axis]*z;
@@ -129,8 +148,24 @@ bool EditorMapScene::bounds(const EditorDocument &document, EditorEntityId id, f
     for(u32 j=0;j<3;++j) {col+=std::abs(world[i*4+j]);row+=std::abs(world[j*4+i]);}
     one=std::max(one,col);inf=std::max(inf,row);
   }
-  radius=source_[entity->assetId-1].boundsRadius*std::sqrt(one*inf);
+  radius=source_[meshAsset(*entity)-1].boundsRadius*std::sqrt(one*inf);
   return std::isfinite(radius);
+}
+bool EditorMapScene::localGeometry(u32 assetId,std::span<const EditorPickMesh::Triangle> &triangles,float relative[16]) const {
+  if(!assetId||assetId>pickMeshes_.size()||!pickMeshes_[assetId-1]) return false;
+  const auto &source=source_[assetId-1];std::copy(source.model,source.model+16,relative);
+  for(u32 axis=0;axis<3;++axis) relative[12+axis]-=source.boundsCenter[axis];
+  triangles=pickMeshes_[assetId-1]->triangles();return !triangles.empty();
+}
+bool EditorMapScene::pickGeometry(const EditorDocument &document,EditorEntityId id,EditorPickCandidate &out) const {
+  const auto *entity=document.find(id);
+  if(!entity || !meshAsset(*entity) || meshAsset(*entity)>pickMeshes_.size()) return false;
+  const auto index=meshAsset(*entity)-1;
+  if(!pickMeshes_[index]) return false;
+  float world[16],relative[16];if(!editorWorldMatrix(document,id,world)) return false;
+  const auto &source=source_[index];std::copy(source.model,source.model+16,relative);
+  for(u32 axis=0;axis<3;++axis) relative[12+axis]-=source.boundsCenter[axis];
+  multiply(world,relative,out.model);out.mesh=pickMeshes_[index];return true;
 }
 bool EditorMapScene::extract(const EditorDocument &document, std::vector<EditorMapUpdate> &out) const {
   std::vector<EditorMapUpdate> prepared(source_.size());
@@ -143,8 +178,8 @@ bool EditorMapScene::extract(const EditorDocument &document, std::vector<EditorM
   std::vector<bool> seen(source_.size());
   for(auto id:ids) {
     const auto *entity=document.find(id);
-    if(!entity || !entity->assetId) continue;
-    const u32 index=entity->assetId-1;
+    if(!entity || !meshAsset(*entity)) continue;
+    const u32 index=meshAsset(*entity)-1;
     if(index>=source_.size()) return false;
     u32 target=index;
     if(seen[index]) {
@@ -164,13 +199,15 @@ bool EditorMapScene::extract(const EditorDocument &document, std::vector<EditorM
     const float tint[4]{1,1,1,1};
     if(!renderer::buildGpuMeshInstance(update.pose.draw.model,tint,&update.pose.instance)) return false;
     if(!bounds(document,id,update.pose.draw.boundsCenter,update.pose.draw.boundsRadius)) return false;
-    update.visible=inheritedVisible(document,id);
+    update.visible=inheritedVisible(document,id) && meshRenderer(*entity)->enabled;
     update.castShadow=entity->castShadow;
-    update.material=entity->material;
-    for(u32 layer=0;layer<4;++layer) update.waterLayers[layer]=entity->waterBody[3+layer];
-    update.waterFlowDepth[0]=entity->waterBody[1];update.waterFlowDepth[1]=entity->waterBody[2];
-    update.waterFlowDepth[2]=entity->waterBody[0];
-    if(entity->route.count) update.route=std::make_shared<const renderer::WaterRoute>(entity->route);
+    update.material=meshMaterial(*entity);
+    const auto &body=waterBody(*entity);
+    update.waterLayers[0]=body.waveGain;update.waterLayers[1]=body.foamGain;
+    update.waterLayers[2]=body.rippleGain;update.waterLayers[3]=body.opticalGain;
+    update.waterFlowDepth[0]=waterBody(*entity).currentX;update.waterFlowDepth[1]=waterBody(*entity).currentZ;
+    update.waterFlowDepth[2]=waterBody(*entity).depth;
+    if(waterRoute(*entity).count) update.route=std::make_shared<const renderer::WaterRoute>(waterRoute(*entity));
   }
   out=std::move(prepared);
   return true;

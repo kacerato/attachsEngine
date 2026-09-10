@@ -18,7 +18,7 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   vec4 shadowParameters;
   vec4 shadowWorldUnitsPerTexel;
   vec4 shadowFilterParameters; // near PCF radius, far PCF radius, reserved
-  vec4 shadowTransitionParameters; // cascade blend, final distance fade, reserved
+  vec4 shadowTransitionParameters; // cascade blend, final distance fade, camera focal length, reserved
   vec4 materialDistanceParameters; // MR map, emissive map, fade-band ratio, reserved
   vec4 waterParameters; // wave count, base height, time, reserved
   vec4 waterOptics; // IOR, roughness, turbidity, foam threshold

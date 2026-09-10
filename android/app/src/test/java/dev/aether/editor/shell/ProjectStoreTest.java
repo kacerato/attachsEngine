@@ -60,4 +60,21 @@ public class ProjectStoreTest {
         assertNull(initial.create("Failure",SceneTemplate.byId("empty")));
         assertTrue(initial.projects().isEmpty());
     }
+
+    @Test public void creationOffersOnlyEmptyButPreservesLegacyResolution() throws Exception {
+        assertEquals(1, SceneTemplate.all().size());
+        assertEquals(SceneTemplate.EMPTY, SceneTemplate.all().get(0).id);
+        assertEquals("aether.ocean_preview", SceneTemplate.byId("ocean").previewExtra);
+        assertEquals("aether.map_preview", SceneTemplate.byId("forest").previewExtra);
+        File files=temporary.newFolder("files"), projects=temporary.newFolder("Projects");
+        ProjectStore initial=store(files,projects);
+        assertNull(initial.create("Demo",SceneTemplate.byId("ocean")));
+        assertFalse(new File(projects,"Demo").exists());
+        Project empty=initial.create("Blank",SceneTemplate.all().get(0));
+        assertNotNull(empty);
+        org.json.JSONObject scene=new org.json.JSONObject(new String(Files.readAllBytes(
+                new File(empty.path,"scenes/main.ascene").toPath()),StandardCharsets.UTF_8));
+        assertEquals(0,scene.getJSONArray("nodes").length());
+        assertEquals(SceneTemplate.EMPTY,scene.getString("template"));
+    }
 }

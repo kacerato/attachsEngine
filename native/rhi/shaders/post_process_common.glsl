@@ -10,7 +10,7 @@ layout(push_constant) uniform PostPushConstants {
   vec4 texelFlags; // xy=1/source extent, z=bloom, w=AA mode/history state
   vec4 bloom;      // threshold, intensity, sharpen, vignette intensity
   vec4 grade;      // contrast, saturation, encode sRGB, packed transform+feedback
-  vec4 sourceTransform; // xy=active/source extent, z=render scale, w=display aspect
+  vec4 sourceTransform; // xy=active/source extent, z=focal length, w=display aspect
   vec4 currentCamera; // yaw, pitch, physical-NDC jitter x/y
   vec4 currentPositionNear; // camera xyz, near plane
   vec4 previousCamera; // yaw, pitch, previous physical-NDC jitter x/y
@@ -132,17 +132,18 @@ vec3 temporalResolve(vec2 sourceUv, vec3 current, vec3 unfiltered, vec3 crossAve
   vec2 physicalNdc = vUv * 2.0 - 1.0 - post.currentCamera.zw;
   vec2 cameraNdc = vec2(dot(surface.xz, physicalNdc),
                         dot(surface.yw, physicalNdc));
-  vec3 viewPosition = vec3(cameraNdc.x * post.sourceTransform.w * viewZ / 1.732050808,
-                           -cameraNdc.y * viewZ / 1.732050808, viewZ);
+  float focal=post.sourceTransform.z;
+  vec3 viewPosition = vec3(cameraNdc.x * post.sourceTransform.w * viewZ / focal,
+                           -cameraNdc.y * viewZ / focal, viewZ);
   vec3 worldPosition = post.currentPositionNear.xyz +
                        cameraRotation(post.currentCamera.x, post.currentCamera.y) * viewPosition;
   vec3 previousView = transpose(cameraRotation(post.previousCamera.x,
                                                  post.previousCamera.y)) *
                       (worldPosition - post.previousPositionFar.xyz);
   if (previousView.z <= nearPlane) return current;
-  vec2 previousCameraNdc = vec2(previousView.x * 1.732050808 /
+  vec2 previousCameraNdc = vec2(previousView.x * focal /
                                     (post.sourceTransform.w * previousView.z),
-                                -previousView.y * 1.732050808 / previousView.z);
+                                -previousView.y * focal / previousView.z);
   vec2 previousPhysicalNdc = vec2(dot(surface.xy, previousCameraNdc),
                                   dot(surface.zw, previousCameraNdc)) +
                              post.previousCamera.zw;

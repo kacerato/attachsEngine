@@ -1,6 +1,7 @@
 #pragma once
 #include "editor/editor_document.h"
 #include "renderer/map_draw_update.h"
+#include "editor/editor_view.h"
 
 namespace ae::editor {
 // Immutable package geometry plus authored transforms. No Vulkan or Android.
@@ -13,9 +14,11 @@ public:
   const renderer::MapDrawRecord *asset(u32 index) const { return index<source_.size()?&source_[index]:nullptr; }
   // Loading a resource library need not instantiate its contents in the scene.
   bool import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws,
-              std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true);
+              std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true, std::span<const u8> vertices = {}, std::span<const u32> indices = {});
   bool extract(const EditorDocument &document, std::vector<EditorMapUpdate> &out) const;
   bool bounds(const EditorDocument &document, EditorEntityId entity, float center[3], float &radius) const;
+  bool localGeometry(u32 assetId,std::span<const EditorPickMesh::Triangle> &triangles,float relative[16]) const;
+  bool pickGeometry(const EditorDocument &document, EditorEntityId id, EditorPickCandidate &out) const;
   void hydrateMaterials(EditorDocument &document) const;
   renderer::MaterialOverride materialForAsset(u32 index) const;
   u32 materialFlagsForAsset(u32 index) const {
@@ -23,6 +26,7 @@ public:
         ? materials_[source_[index].materialIndex].flags : 0;
   }
 private:
+  std::vector<std::shared_ptr<const EditorPickMesh>> pickMeshes_;
   std::vector<renderer::MapMaterialRecord> materials_;
   std::vector<renderer::MapDrawRecord> source_;
 };

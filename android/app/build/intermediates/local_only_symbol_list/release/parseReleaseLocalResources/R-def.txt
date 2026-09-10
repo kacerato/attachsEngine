@@ -1,6 +1,12 @@
 R_DEF: Internal format may change without notice
 local
+color astra_accent
+color astra_void
 drawable ic_aether
+mipmap ic_astra
+mipmap ic_astra_foreground
 style AetherTheme
+style AstraShellTheme
 xml backup_rules
 xml data_extraction_rules
+xml game_mode_config

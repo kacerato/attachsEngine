@@ -18,7 +18,7 @@ struct CharacterMotorSettings {
 };
 
 // Runtime character primitive over the engine physics facade. It owns one
-// PhysicsWorld, one static cooked world mesh and one CharacterVirtual capsule.
+// private PhysicsWorld or borrows a scene world, plus one CharacterVirtual capsule.
 // Touch/camera APIs do not enter this layer: callers provide normalized actions.
 class CharacterMotor final {
 public:
@@ -29,19 +29,28 @@ public:
 
   bool initialize(std::span<const renderer::CollisionVertex> vertices,std::span<const u32> indices,
                   AetherVec3 spawnEyePosition,const CharacterMotorSettings &settings={});
+  // The scene owns and steps this world. Destroy the motor before the world.
+  // Call update once per scene fixed tick; this never steps rigid bodies.
+  bool initializeInWorld(AetherPhysicsWorld *world,AetherVec3 spawnEyePosition,
+                         const CharacterMotorSettings &settings={});
   void shutdown();
   bool update(float moveRight,float moveForward,float yawRadians,float deltaSeconds);
+  bool jump(float speed);
 
   bool isReady() const { return world_!=nullptr&&character_!=AetherCharacterHandle_Invalid; }
   AetherVec3 eyePosition() const;
   AetherCharacterGroundState groundState() const;
 
 private:
+  bool initializeImpl(std::span<const renderer::CollisionVertex> vertices,std::span<const u32> indices,
+                      AetherVec3 spawnEyePosition,const CharacterMotorSettings &settings,AetherPhysicsWorld *sceneWorld);
+  bool ownsWorld_=false;
   AetherPhysicsWorld *world_=nullptr;
   AetherBodyHandle staticWorld_=AetherBodyHandle_Invalid;
   AetherCharacterHandle character_=AetherCharacterHandle_Invalid;
   CharacterMotorSettings settings_{};
   float accumulator_=0.0f;
+  float pendingJump_=0;
 };
 
 } // namespace ae::physics

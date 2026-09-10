@@ -7,10 +7,9 @@
 // por um comando seria um campo que o Ctrl+Z não desfaz — e o usuário não tem
 // como saber quais são.
 //
-// A entidade é um POD de tamanho fixo, com nome em `char[]` e sem ponteiros.
-// Isso não é economia de alocação: é o que permite que o histórico guarde
-// "antes" e "depois" copiando a struct inteira, sem clonagem profunda e sem uma
-// segunda representação que possa divergir do original.
+// Snapshots have value semantics, including optional owned data. Copying an
+// entity never aliases mutable extension data with the document or history.
+// An empty component collection has no payload allocation; reads do not allocate.
 //
 // Este é o modelo do EDITOR, não o do runtime. Ele descreve o que o usuário
 // autorou; a extração para lotes de renderização e para a ECS em C# é uma
@@ -18,10 +17,11 @@
 //
 // Sem Vulkan, sem Android, sem I/O: testável integralmente no host.
 #pragma once
-#include "renderer/water_route.h"
+#include "editor/editor_components.h"
 
 #include "core/base.h"
-#include "renderer/material_override.h"
+#include "scene/mesh_renderer.h"
+#include "scene/camera.h"
 
 #include <span>
 #include <string_view>
@@ -66,36 +66,28 @@ struct EditorEntity final {
   // então o nome útil tem 63 bytes.
   char name[kEditorNameCapacity]{};
   EditorTransform transform{};
-  // Authoring flags consumed by extraction and Inspector.
+  // Object-wide authoring flags. Camera/mesh capability lives in components.
   bool active = true;
   bool visible = true;
   bool castShadow = true;
   bool receiveShadow = true;
   bool isStatic = false;
   u32 layer = 0;
-  // Recurso que dá corpo à entidade: malha, perfil de luz, material de água.
-  // Zero é "nenhum" — uma pasta e uma entidade recém-criada não têm.
-  u32 assetId = 0;
-  renderer::MaterialOverride material{};
-  renderer::WaterRoute route{};
-  bool waterPhysicsEnabled=true;
-  bool waterInfinite=false;
+  EditorComponents components{};
   bool rigidBodyEnabled=false;
-  // depth, uniform current X/Z, wave gain, foam gain, ripple gain, optical gain.
-  float waterBody[7]{3,0,0,1,1,1,1};
   // mass, drag, collider half-extents X/Y/Z.
   float rigidBody[5]{50,1,.5f,.5f,.5f};
   // Root scene environment: sun, ambient, exposure multipliers; sky rotation offset in degrees.
   float environment[4]{1,1,1,0};
-  bool waterEnabled=false;
-  bool waterSpectrumEnabled=false;
-  bool waterLayoutEnabled=false;
-  // count, log2 FFT resolution, wavelength interval, seed, domain scale, MiB budget.
-  float waterLayout[9]{3,7,2,2048,1,1,8,1,1};
-  float water[34]{3,1,1,1.6f,.72f,1,1.05f,.14f,.1f,1.333f,0,0,1400,
-    10,100000,20,.8f,.2f,.1f, 0,65,100000,1,.1f,.35f,
-    1,1,1, 1,1,1, .8f,4,.5f};
+
 };
+
+inline const scene::MeshRenderer *meshRenderer(const EditorEntity &e) {return static_cast<const scene::MeshRenderer*>(e.components.find(scene::MeshRenderer::descriptor));}
+inline scene::MeshRenderer *editMeshRenderer(EditorEntity &e) {return static_cast<scene::MeshRenderer*>(e.components.edit(scene::MeshRenderer::descriptor));}
+inline u32 meshAsset(const EditorEntity &e) {const auto *m=meshRenderer(e);return m?m->mesh:0;}
+inline const scene::MaterialParameters &meshMaterial(const EditorEntity &e) {static const scene::MaterialParameters defaults;const auto *m=meshRenderer(e);return m?m->material:defaults;}
+inline const scene::Camera *cameraComponent(const EditorEntity &e) {return static_cast<const scene::Camera*>(e.components.find(scene::Camera::descriptor));}
+inline scene::Camera *editCamera(EditorEntity &e) {return static_cast<scene::Camera*>(e.components.edit(scene::Camera::descriptor));}
 
 class EditorDocument final {
 public:

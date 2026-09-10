@@ -33,7 +33,16 @@ public final class SceneTemplate {
         this.spectralWater = spectralWater;
     }
 
+    /** Only empty authoring projects are offered for creation. */
     public static List<SceneTemplate> all() {
+        List<SceneTemplate> list = new ArrayList<>();
+        list.add(knownTemplates().get(0));
+        return list;
+    }
+
+    // Legacy identifiers remain readable so removing demos from creation never
+    // silently changes the renderer used by an existing user's project.
+    private static List<SceneTemplate> knownTemplates() {
         List<SceneTemplate> list = new ArrayList<>();
         list.add(new SceneTemplate(EMPTY, "Cena vazia",
                 "Cena sem objetos; câmera de edição independente.", true, null, null, false));
@@ -55,7 +64,7 @@ public final class SceneTemplate {
     }
 
     public static SceneTemplate byId(String id) {
-        for (SceneTemplate template : all()) {
+        for (SceneTemplate template : knownTemplates()) {
             if (template.id.equals(id)) return template;
         }
         return all().get(0);

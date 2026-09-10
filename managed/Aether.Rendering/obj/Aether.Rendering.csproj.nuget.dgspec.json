@@ -20,6 +20,9 @@
         "originalTargetFrameworks": [
           "net8.0"
         ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
         "frameworks": {
           "net8.0": {
             "targetAlias": "net8.0",
@@ -59,6 +62,11 @@
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
         }
+      },
+      "runtimes": {
+        "linux-bionic-arm64": {
+          "#import": []
+        }
       }
     },
     "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\Aether.Rendering.csproj": {
@@ -77,6 +85,9 @@
         "originalTargetFrameworks": [
           "net8.0"
         ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
         "frameworks": {
           "net8.0": {
             "targetAlias": "net8.0",
@@ -86,6 +97,9 @@
               },
               "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj": {
                 "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj"
+              },
+              "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Astra.Scripting\\Astra.Scripting.csproj": {
+                "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Astra.Scripting\\Astra.Scripting.csproj"
               }
             }
           }
@@ -122,6 +136,11 @@
             }
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "linux-bionic-arm64": {
+          "#import": []
         }
       }
     },
@@ -141,6 +160,9 @@
         "originalTargetFrameworks": [
           "net8.0"
         ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
         "frameworks": {
           "net8.0": {
             "targetAlias": "net8.0",
@@ -183,6 +205,85 @@
             }
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "linux-bionic-arm64": {
+          "#import": []
+        }
+      }
+    },
+    "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Astra.Scripting\\Astra.Scripting.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Astra.Scripting\\Astra.Scripting.csproj",
+        "projectName": "Astra.Scripting",
+        "projectPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Astra.Scripting\\Astra.Scripting.csproj",
+        "packagesPath": "C:\\Users\\donod\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Astra.Scripting\\obj\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "C:\\Users\\donod\\Downloads\\atchengine\\NuGet.Config",
+          "C:\\Users\\donod\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "allWarningsAsErrors": true,
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreLockProperties": {
+          "restorePackagesWithLockFile": "true"
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "dependencies": {
+            "Microsoft.CodeAnalysis.CSharp": {
+              "target": "Package",
+              "version": "[4.14.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "linux-bionic-arm64": {
+          "#import": []
         }
       }
     }

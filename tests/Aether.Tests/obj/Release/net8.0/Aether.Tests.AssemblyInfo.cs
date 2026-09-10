@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Aether.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+85f819f7fe7b3e302e2bc0f258f2d7e14dccb29e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+eb6ea87d5973c29a9169e489ea0a106e7762899d")]
 [assembly: System.Reflection.AssemblyProductAttribute("Aether.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Aether.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

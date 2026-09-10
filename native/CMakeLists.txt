@@ -203,6 +203,8 @@ target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 # precisa ser literalmente a mesma do vertex shader -- selecionar um objeto e
 # contornar outro seria o defeito de reimplementa-la aqui.
 add_library(aether_editor STATIC
+  editor/editor_code_workspace.cpp
+  editor/editor_script_bridge.cpp
   editor/editor_filesystem.cpp
   editor/editor_archive.cpp
   editor/editor_map_scene.cpp
@@ -211,6 +213,7 @@ add_library(aether_editor STATIC
   editor/editor_gizmo.cpp
   editor/editor_screen.cpp
   editor/editor_session.cpp
+  editor/editor_scene_physics.cpp
   editor/editor_history.cpp
   editor/editor_view.cpp
 )
@@ -278,6 +281,7 @@ if(ANDROID)
   add_library(aether_android SHARED
     platform/android/android_main.cpp
     platform/android/android_runtime_controls.cpp
+    platform/android/android_editor_text_input.cpp
     platform/android/android_texture_loader.cpp
     platform/android/dirt_road_resources.cpp
     platform/android/android_launch_options.cpp
@@ -335,6 +339,7 @@ add_library(aether_physics STATIC
 )
 target_include_directories(aether_physics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_physics PUBLIC aether_core PRIVATE Jolt)
+target_link_libraries(aether_editor PUBLIC aether_physics)
 add_library(aether_water_runtime STATIC physics/water_runtime.cpp physics/water_simulation.cpp)
 target_include_directories(aether_water_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_water_runtime PUBLIC aether_physics aether_renderer)
@@ -401,10 +406,12 @@ if(NOT ANDROID)
     ../tests/native/test_frustum_visibility.cpp
     ../tests/native/test_gpu_draw_compaction.cpp
     ../tests/native/test_editor_map_scene.cpp
+    ../tests/native/test_scene_components.cpp
     ../tests/native/test_editor_document.cpp
     ../tests/native/test_editor_gizmo.cpp
     ../tests/native/test_editor_screen.cpp
     ../tests/native/test_editor_session.cpp
+    ../tests/native/test_editor_composition.cpp
     ../tests/native/test_editor_history.cpp
     ../tests/native/test_editor_view.cpp
     ../tests/native/test_ui_assets.cpp
@@ -479,6 +486,8 @@ if(NOT ANDROID)
   # Pre-visualizacao da interface: renderiza a tela do editor em arquivo, sem GPU
   # e sem aparelho, usando o espelho de astra_ui.frag. Nao faz parte do produto.
   add_executable(aether_ui_preview ../tests/native/ui_preview_main.cpp)
+  add_executable(component_scene_fixture EXCLUDE_FROM_ALL ../tests/native/component_scene_fixture.cpp)
+  target_link_libraries(component_scene_fixture PRIVATE aether_editor aether_renderer aether_physics aether_ui)
   target_include_directories(aether_ui_preview PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_compile_definitions(aether_ui_preview PRIVATE
     AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")

@@ -51,6 +51,11 @@
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_platform.dir\\platform\\process_memory.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\process_memory.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\process_memory.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_platform.dir\\platform\\virtual_joystick.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\virtual_joystick.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\virtual_joystick.cpp"
 },
@@ -78,6 +83,11 @@
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_renderer.dir\\renderer\\frustum_visibility.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\frustum_visibility.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\frustum_visibility.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_renderer.dir\\renderer\\gpu_draw_compaction.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\gpu_draw_compaction.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\gpu_draw_compaction.cpp"
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
@@ -121,6 +131,156 @@
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_renderer.dir\\renderer\\water_grid.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_grid.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_grid.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_renderer.dir\\renderer\\water_ripples.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_ripples.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_ripples.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_renderer.dir\\renderer\\water_surface.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_surface.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_surface.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_renderer.dir\\renderer\\water_field.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_field.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_field.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_renderer.dir\\renderer\\water_world.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_world.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_world.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_renderer.dir\\renderer\\water_spectral_mirror.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_spectral_mirror.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_spectral_mirror.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_renderer.dir\\renderer\\water_fft.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_fft.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_fft.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_renderer.dir\\renderer\\water_spectrum.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_spectrum.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_spectrum.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_renderer.dir\\renderer\\water_cascades.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_cascades.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\renderer\\water_cascades.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_code_workspace.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_code_workspace.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_code_workspace.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_script_bridge.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_script_bridge.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_script_bridge.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_filesystem.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_filesystem.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_filesystem.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_archive.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_archive.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_archive.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_map_scene.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_map_scene.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_map_scene.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_camera.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_camera.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_camera.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_document.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_document.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_document.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_gizmo.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_gizmo.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_gizmo.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_screen.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_screen.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_screen.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_session.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_session.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_session.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_scene_physics.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_scene_physics.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_scene_physics.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_history.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_history.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_history.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_view.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_view.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_view.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_ui.dir\\ui\\ui_draw_list.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_draw_list.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_draw_list.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_ui.dir\\ui\\ui_font.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_font.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_font.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_ui.dir\\ui\\ui_icon_atlas.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_icon_atlas.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_icon_atlas.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_ui.dir\\ui\\ui_icon_id.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_icon_id.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_icon_id.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_ui.dir\\ui\\ui_instance_builder.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_instance_builder.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_instance_builder.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_ui.dir\\ui\\ui_input.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_input.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_input.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_ui.dir\\ui\\ui_layout.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_layout.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_layout.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_ui.dir\\ui\\ui_text.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_text.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\ui\\ui_text.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_rhi.dir\\rhi\\bindless_index_allocator.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\rhi\\bindless_index_allocator.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\rhi\\bindless_index_allocator.cpp"
 },
@@ -133,6 +293,11 @@
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_rhi.dir\\rhi\\compute.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\rhi\\compute.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\rhi\\compute.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_rhi.dir\\rhi\\water_spectral_compute.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\rhi\\water_spectral_compute.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\rhi\\water_spectral_compute.cpp"
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
@@ -196,6 +361,11 @@
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_rhi.dir\\rhi\\ui_renderer.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\rhi\\ui_renderer.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\rhi\\ui_renderer.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_rhi.dir\\rhi\\upload_context.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\rhi\\upload_context.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\rhi\\upload_context.cpp"
 },
@@ -208,6 +378,16 @@
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -Daether_android_EXPORTS -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_android.dir\\platform\\android\\android_main.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\android_main.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\android_main.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -Daether_android_EXPORTS -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_android.dir\\platform\\android\\android_runtime_controls.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\android_runtime_controls.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\android_runtime_controls.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -Daether_android_EXPORTS -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_android.dir\\platform\\android\\android_editor_text_input.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\android_editor_text_input.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\android_editor_text_input.cpp"
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
@@ -276,6 +456,11 @@
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -Daether_android_EXPORTS -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_android.dir\\platform\\android\\instanced_renderer_water.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\instanced_renderer_water.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\instanced_renderer_water.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -Daether_android_EXPORTS -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_android.dir\\platform\\android\\material_preview_resources.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\material_preview_resources.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\material_preview_resources.cpp"
 },
@@ -296,6 +481,11 @@
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -Daether_android_EXPORTS -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_android.dir\\platform\\android\\water_spectral_probe.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\water_spectral_probe.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\water_spectral_probe.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -DJPH_ENABLE_ASSERTS -DJPH_USE_CPU_COMPUTE -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/JoltPhysics/Build/.. -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_physics.dir\\physics\\character_motor.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\physics\\character_motor.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\physics\\character_motor.cpp"
 },
@@ -303,6 +493,21 @@
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -DJPH_ENABLE_ASSERTS -DJPH_USE_CPU_COMPUTE -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/JoltPhysics/Build/.. -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_physics.dir\\physics\\jolt_bridge.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\physics\\jolt_bridge.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\physics\\jolt_bridge.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -DJPH_ENABLE_ASSERTS -DJPH_USE_CPU_COMPUTE -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/JoltPhysics/Build/.. -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_physics.dir\\physics\\water_buoyancy.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\physics\\water_buoyancy.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\physics\\water_buoyancy.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_water_runtime.dir\\physics\\water_runtime.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\physics\\water_runtime.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\physics\\water_runtime.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_water_runtime.dir\\physics\\water_simulation.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\physics\\water_simulation.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\physics\\water_simulation.cpp"
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",

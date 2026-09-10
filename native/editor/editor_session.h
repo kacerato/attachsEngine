@@ -16,6 +16,11 @@
 #pragma once
 
 #include "core/base.h"
+#include "editor/editor_play_scene.h"
+#include "editor/editor_character.h"
+#include "editor/editor_scene_camera.h"
+#include "editor/editor_camera_look.h"
+#include "platform/first_person_controller.h"
 #include "editor/editor_camera.h"
 #include "editor/editor_commands.h"
 #include "editor/editor_map_scene.h"
@@ -31,6 +36,17 @@
 #include <vector>
 
 namespace ae::editor {
+
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch };
+struct EditorTextEdit {
+  EditorTextPurpose purpose=EditorTextPurpose::None;
+  EditorSceneVersion version{};
+  EditorEntityId entity=0;
+  u32 field=0;
+  std::string text;
+  u64 bufferId=0,bufferRevision=0,componentInstance=0;
+  std::string propertyId,propertyType;
+};
 
 struct EditorAssetInstantiation {
   std::string_view name;
@@ -55,6 +71,19 @@ public:
   void setSurface(const ui::UiRect &surface, const ui::UiInsets &safeArea);
   void setProjectName(const char *name);
   bool setProjectDirectory(const char *path);
+  bool needsScriptRuntime() const {return isPlaying()&&EditorScriptBridge::hasScripts(document_);}
+  void setScriptRuntime(scene::ScriptRuntimeApi api) {playScene_.setScriptRuntime(api,files_.rootPath());}
+  void setScriptLogSink(EditorScriptBridge::LogSink sink) {playScene_.setScriptLogSink(std::move(sink));}
+  void setCodeCompilerAvailable(bool value) {state_.codeCompilerAvailable=value;}
+  std::string takeCodeBuildRequest() {auto request=std::move(codeBuildRequest_);codeBuildRequest_.clear();return request;}
+  bool completeCodeBuild(std::string_view report) {
+    state_.codeBuildBusy=false;const bool ok=code_.applyBuildReport(report,codeBuildGeneration_);
+    state_.status=ok?"Código compilado; pronto para aplicar":code_.error();return ok;
+  }
+  void reportCodeCommit(bool accepted) {
+    if(!accepted) code_.invalidateBuild();
+    state_.status=accepted?"Código aplicado ao projeto":"Não foi possível publicar a compilação";
+  }
   const std::string &requestedScenePath() const { return requestedScenePath_; }
   void clearSceneOpenRequest() { requestedScenePath_.clear(); }
   void reportSceneOpenFailure() { state_.status="Não foi possível abrir a cena; cena atual preservada"; }
@@ -70,6 +99,9 @@ public:
   // toque ao controlador de jogo.
   bool handlePointer(const ui::UiPointerEvent &event);
   void cancelPointers();
+  void usePlatformTextInput(bool enabled) { state_.platformTextInput=enabled; }
+  EditorTextEdit pendingTextEdit() const;
+  bool completeTextEdit(const EditorTextEdit &edit, std::string_view text, bool accept);
 
   // Reconstrói a lista de desenho e as instâncias do frame.
   void update();
@@ -106,14 +138,58 @@ public:
   bool saveRequested() const { return state_.saveRequested; }
   bool save(const char *path, u64 fingerprint);
   bool load(const char *path, u64 fingerprint);
-  bool importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true);
+  bool importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true, std::span<const u8> vertices = {}, std::span<const u32> indices = {});
   bool extractMap(std::vector<renderer::MapDrawState> &out) const { return mapScene_.extract(document_, out); }
+  SceneCameraPose sceneCameraPose() const {
+    return resolveSceneCamera(isPlaying()&&playScene_.active()?playScene_.document():document_);
+  }
+  bool extractPlayMap(std::vector<renderer::MapDrawState> &out) {
+    if(!isPlaying()) return false;
+    if(!playScene_.active()) {
+      if(EditorPlayScene::unresolvedEntity(document_)!=kInvalidEntity) {
+        state_.status="Play indisponível: há componentes de tipo ausente";return false;
+      }
+      if(!playScene_.start(document_,mapScene_)) {
+        state_.status=!playScene_.scriptDiagnostics().empty()?playScene_.scriptDiagnostics():playScene_.physicsError().empty()?"Falha ao preparar a cena para Play":playScene_.physicsError();
+        return false;
+      }
+      playLastSeconds_=sceneTime_;
+    }
+    const double elapsed=std::max(0.0,static_cast<double>(sceneTime_)-playLastSeconds_);
+    playLastSeconds_=sceneTime_;
+    playScene_.pause(state_.playPaused);
+    if(state_.playPaused) playTouches_.cancel();
+    const auto actions=playTouches_.consumeInput();
+    auto view=resolveSceneCamera(playScene_.document());
+    const auto *viewEntity=playScene_.document().find(view.entity);
+    if(viewEntity&&cameraLook(*viewEntity)) {
+      if(!applyCameraLook(*playScene_.executionDocument(),view.entity,actions.lookScreenX,actions.lookScreenY)) return false;
+      view=resolveSceneCamera(playScene_.document());
+    }
+    const auto *controlled=playScene_.document().find(state_.selection);
+    if(controlled && characterComponent(*controlled)) {
+      if(!playScene_.setCharacterMove(controlled->id,actions.moveRight,actions.moveForward,view.entity?view.yaw:0)) return false;
+    }
+    if(state_.playStepRequested) {
+      state_.playStepRequested=false;
+      if(!playScene_.step()) return false;
+    }
+    if(!playScene_.advance(elapsed)) return false;
+    if(!playScene_.scriptDiagnostics().empty()) state_.status=playScene_.scriptDiagnostics();
+    return playScene_.extract(mapScene_,out);
+  }
   EditorEntityId instantiateAsset(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options=nullptr);
   EditorEntityId createWaterSurface(bool cameraRelative);
   void reportWaterConfiguration(bool accepted) {
     state_.status=accepted?"Agua atualizada":"Configuracao de agua recusada; estado anterior mantido";
   }
-  void reportPlayFailure() {state_.workspace=EditorWorkspace::Scene;state_.status="Falha na simulacao; revise volumes e corpos fisicos";}
+  void reportPlayFailure() {
+    playScene_.stop();state_.workspace=EditorWorkspace::Scene;
+    if(!playScene_.scriptDiagnostics().empty()) state_.status=playScene_.scriptDiagnostics();
+    else if(!playScene_.physicsError().empty()) state_.status=playScene_.physicsError();
+    else if(state_.status.rfind("Play indisponível:",0)!=0)
+      state_.status="Falha ao executar a cena; revise os recursos e componentes";
+  }
 
 
 private:
@@ -134,9 +210,15 @@ private:
   const ui::UiIconAtlas *icons_ = nullptr;
   EditorDocument document_;
   EditorFileSystem files_;
+  EditorCodeWorkspace code_;
+  std::string codeBuildRequest_;
+  u64 codeBuildGeneration_=0;
   std::string requestedScenePath_;
   u64 sceneEpoch_=nextSceneEpoch();
   EditorMapScene mapScene_;
+  EditorPlayScene playScene_;
+  double playLastSeconds_=0;
+  platform::FirstPersonTouchControls playTouches_;
   EditorHistory history_;
   EditorCamera camera_;
   renderer::PerspectiveVisibilitySettings projection_{};

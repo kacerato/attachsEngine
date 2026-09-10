@@ -743,6 +743,30 @@
       "source": "hd-v1/eye-off.svg",
       "raster": "../hd-v1/eye-off.png",
       "dark_ui_ready": true
+    },
+    "component/physics": {
+      "raster": "component/physics.png",
+      "dark_ui_ready": true
+    },
+    "component/character": {
+      "raster": "component/character.png",
+      "dark_ui_ready": true
+    },
+    "component/look": {
+      "raster": "component/look.png",
+      "dark_ui_ready": true
+    },
+    "component/add": {
+      "raster": "component/add.png",
+      "dark_ui_ready": true
+    },
+    "component/collider": {
+      "raster": "component/collider.png",
+      "dark_ui_ready": true
+    },
+    "component/joint": {
+      "raster": "component/joint.png",
+      "dark_ui_ready": true
     }
   },
   "unmapped": []

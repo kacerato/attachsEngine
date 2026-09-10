@@ -23,6 +23,7 @@
 #include "core/base.h"
 #include "editor/editor_document.h"
 #include "editor/editor_filesystem.h"
+#include "editor/editor_code_workspace.h"
 #include "editor/editor_gizmo.h"
 #include "editor/editor_history.h"
 #include "editor/editor_view.h"
@@ -31,6 +32,7 @@
 #include "ui/ui_theme.h"
 
 namespace ae::editor {
+class EditorMapScene;
 
 // Identidade dos controles. Os valores fixos são os controles únicos; as faixas
 // no fim são para os que existem por entidade ou por eixo, onde o índice entra
@@ -134,6 +136,39 @@ enum class EditorWidget : u32 {
   RoutePointNext,
   ToggleWaterPhysics,
   ToggleRigidBody,
+  CompactViewport,
+  CompactFiles,
+  CompactPanelMenu,
+  ToggleSceneBody,
+  ToggleDynamicBody,
+  PausePlay,
+  StepPlay,
+  ToggleCharacter,
+  JumpCharacter,
+  ToggleCameraLook,
+  AddComponentMenu,
+  CodeOpen, CodeScene, CodeNew, CodeEdit, CodeSave, CodeUndo, CodeRedo, CodeSearch, CodeClose, CodeApply,
+  ColliderFit, ComponentPrevious, ComponentNext, ScriptFieldsPrevious, ScriptFieldsNext,
+  TransformFold, ComponentSearch, ComponentSearchClear, ComponentCategory,
+  MeshGeometryTab, MeshMaterialTab, MeshChoose, MeshPickerClose, MeshClear, MeshSearch, MeshPrevious, MeshNext, MaterialRestore,
+  ReferenceClose, ReferenceSearch, ReferenceClear, ReferencePrevious, ReferenceNext,
+  ComponentReferenceBase=0x7a000000u, ReferenceChoiceBase=0x7b000000u,
+  ComponentNumberBase=0x78000000u,
+  MeshChoiceBase=0x79000000u,
+  ScriptAddBase=0x71000000u, ScriptFoldBase=0x72000000u, ScriptMenuBase=0x73000000u,
+  ScriptRemoveBase=0x74000000u, ScriptEnabledBase=0x75000000u, ScriptSourceBase=0x76000000u,
+  ScriptFieldBase=0x77000000u,
+  CodeBody=0x61000000u, CodeTabBase=0x61010000u,
+
+  ComponentAddBase=0x67000000u,
+  ComponentFoldBase=0x68000000u,
+  ComponentRemoveBase=0x69000000u,
+  ComponentBooleanBase=0x6a000000u,
+  ComponentCopyBase=0x6b000000u,
+  ComponentPasteBase=0x6c000000u,
+  ComponentResetBase=0x6d000000u,
+  ComponentMenuBase=0x6e000000u,
+  ComponentEnumBase=0x6f000000u,
   RoutePointBase=0x62000000u,
   NumericKeyBase = 0x5000'0000u,
 
@@ -165,7 +200,7 @@ inline constexpr u32 gizmoAxisWidget(u32 axis) noexcept {
 
 // O que o viewport está mostrando. É a aba do topo, e trocá-la troca o contexto
 // inteiro — não é um botão que dispara algo.
-enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Settings };
+enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Settings, Code };
 enum class EditorNavigationMode : u8 { Orbit, Pan, Zoom };
 enum class EditorInspectorTab : u8 { Transform, Material, Properties };
 
@@ -176,6 +211,11 @@ struct EditorScreenState final {
   ui::UiInsets safeArea{};
   const EditorDocument *document = nullptr;
   const EditorFileSystem *files=nullptr;
+  const EditorCodeWorkspace *code=nullptr;
+  const EditorMapScene *resources=nullptr;
+  bool codeCompilerAvailable=false,codeBuildBusy=false;
+  bool editingCode=false,creatingScript=false,searchingCode=false;
+  std::string codeQuery;
   u32 fileScroll=0;
   float fileScrollOffset=0;
   float filePanelRatio=.46f;
@@ -185,11 +225,33 @@ struct EditorScreenState final {
   u32 pressedWidget = 0;
   EditorGizmoMode tool = EditorGizmoMode::Translate;
   EditorWorkspace workspace = EditorWorkspace::Scene;
+  bool playPaused=false;
+  bool playStepRequested=false;
   EditorInspectorTab tab = EditorInspectorTab::Transform;
+  // Folding is editor-only, keyed by object and stable component instance identity.
+  EditorEntityId componentSelection=0;
+  std::string expandedComponent;
+  u64 expandedNative=0,nativeMenu=0;
+  u64 referenceInstance=0;
+  std::string referenceProperty,referenceQuery;
+  bool referenceScript=false,editingReferenceSearch=false;
+  u32 referencePage=0;
+  bool addingComponent=false;
+  bool editingComponentSearch=false,editingMeshSearch=false,meshPicker=false;
+  std::string componentQuery,meshQuery;
+  u32 componentCategory=0,meshPage=0,meshTab=0;
+  u32 componentPage=0,scriptPropertyPage=0;
+  u64 expandedScript=0,scriptMenu=0,editingScriptInstance=0;
+  EditorEntityId editingScriptEntity=0;
+  std::string editingScriptProperty,editingScriptType;
+  std::shared_ptr<const EditorComponentValue> componentClipboard;
   // Largura dos painéis em dp. Zero pede o padrão proporcional; qualquer outro
   // valor é o que o usuário arrastou e é preservado entre frames.
   float hierarchyWidth = 0.0f;
   float inspectorWidth = 0.0f;
+  enum class CompactPanel { Viewport, Hierarchy, Inspector, Files };
+  CompactPanel compactPanel = CompactPanel::Viewport;
+  bool compactPanelMenu=false;
   bool hierarchyVisible = true;
   bool inspectorVisible = true;
   // Quantas linhas a hierarquia já rolou, em linhas inteiras.
@@ -203,14 +265,18 @@ struct EditorScreenState final {
   EditorGizmoHandle activeGizmoAxis = EditorGizmoHandle::None;
   const char *projectName = "Untitled";
   u32 numericField = 0;
+  u64 numericInstance=0;
+  std::string numericProperty;
   EditorEntityId numericEntity = kInvalidEntity;
   char numericText[48]{};
   bool numericReplace = false;
   bool numericError = false;
+  bool platformTextInput = false;
   bool entityMenu = false;
   bool creationMenu=false;
   bool workspaceMenu=false;
   unsigned creationCategory=0,creationSelection=0,creationPage=0;
+  u32 creationAvailable=3; // Basic object and camera; resource tools opt in on import.
   bool editingCreationSearch=false;
   char creationSearch[kEditorNameCapacity]{};
   bool editingHierarchySearch=false;
@@ -228,7 +294,7 @@ struct EditorScreenState final {
   EditorEntityId draggingEntity = kInvalidEntity;
   ui::UiPoint assetDragPosition{};
   bool saveRequested = false;
-  const char *status = "";
+  std::string status;
   bool canUndo = false;
   bool canRedo = false;
 };
@@ -243,6 +309,7 @@ struct EditorScreenLayout final {
   ui::UiRect filesPanel{};
   ui::UiRect inspectorPanel{};
   u32 hierarchyRowCount = 0;
+  u32 componentPage=0;
   // Quantas linhas caberiam. Menor que o total significa que há rolagem.
   u32 hierarchyVisibleRows = 0;
 };

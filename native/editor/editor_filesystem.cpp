@@ -1,5 +1,6 @@
 #include "editor/editor_filesystem.h"
 #include <algorithm>
+#include <cstdio>
 
 namespace ae::editor {
 namespace fs=std::filesystem;
@@ -86,4 +87,50 @@ std::string EditorFileSystem::resolveFile(const std::string &relative) const {
   if(!resolve(relative,path) || !fs::is_regular_file(path,error) || error) return {};
   return utf8(path);
 }
+std::string EditorFileSystem::rootPath() const {return utf8(root_);}
+bool EditorFileSystem::createDirectory(const std::string &relative) {
+  const auto input=fromUtf8(relative);
+  if(input.empty() || input.is_absolute() || input.has_root_name() || relative.find('\0')!=std::string::npos) {
+    error_="Nome de pasta inválido";return false;
+  }
+  fs::path current=root_;
+  if(current.empty()) {error_="Projeto sem pasta";return false;}
+  for(const auto &part:input) {
+    if(part==".." || part==".") {error_="Caminho relativo inválido";return false;}
+    current/=part;std::error_code error;
+    auto status=fs::symlink_status(current,error);
+    if(error && error!=std::errc::no_such_file_or_directory) {error_="Pasta indisponível";return false;}
+    if(fs::exists(status)) {
+      if(fs::is_symlink(status) || !fs::is_directory(status)) {error_="O caminho já existe e não é uma pasta local";return false;}
+    } else {
+      error.clear();if(!fs::create_directory(current,error) || error) {error_="Não foi possível criar a pasta";return false;}
+    }
+  }
+  error_.clear();return true;
+}
+bool EditorFileSystem::createTextFile(const std::string &relative,std::string_view text) {
+  const auto input=fromUtf8(relative);fs::path parent;
+  if(input.empty() || input.filename()=="." || input.filename()==".." ||
+     !resolve(utf8(input.parent_path()),parent) || text.find('\0')!=std::string_view::npos) {
+    error_="Caminho do arquivo inválido";return false;
+  }
+  if(input.is_absolute() || input.has_root_name() || relative.find('\0')!=std::string::npos) {
+    error_="Arquivo fora do projeto";return false;
+  }
+  const auto destination=parent/input.filename();
+#ifdef _WIN32
+  FILE *file=_wfopen(destination.c_str(),L"wbx");
+#else
+  FILE *file=std::fopen(destination.c_str(),"wbx");
+#endif
+  if(!file) {error_="Arquivo já existe ou não pode ser criado";return false;}
+  const bool written=std::fwrite(text.data(),1,text.size(),file)==text.size();
+  const bool closed=std::fclose(file)==0;
+  if(!written || !closed) {
+    std::error_code ignored;fs::remove(destination,ignored);
+    error_="Gravação do novo arquivo falhou";return false;
+  }
+  error_.clear();return true;
+}
+
 }
