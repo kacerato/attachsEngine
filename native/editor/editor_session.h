@@ -139,7 +139,7 @@ public:
   bool saveRequested() const { return state_.saveRequested; }
   bool save(const char *path, u64 fingerprint);
   bool load(const char *path, u64 fingerprint);
-  bool importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true, std::span<const u8> vertices = {}, std::span<const u32> indices = {});
+  bool importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true, std::span<const u8> vertices = {}, std::span<const u32> indices = {}, u64 packageFingerprint = 0);
   bool extractMap(std::vector<renderer::MapDrawState> &out) const { return mapScene_.extract(document_, out); }
   // As luzes saem do MESMO grafo que a câmera e os desenhos: em execução, o
   // mundo de Play; fora dele, o documento autoral. É o que faz um script mover

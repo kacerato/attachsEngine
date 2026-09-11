@@ -1,13 +1,26 @@
 #pragma once
+#include "resources/asset_registry.h"
 #include "scene/components.h"
 #include "scene/material_parameters.h"
 #include <array>
 namespace ae::scene {
 class MeshRenderer final : public ComponentValue {
 public:
-  // Package-local reference, qualified by the scene archive fingerprint.
-  // Zero deliberately represents an unassigned resource, not a default cube.
+  // `mesh` é o SLOT resolvido no processo — índice 1-based no pacote carregado,
+  // zero quando não há malha. `asset` é a IDENTIDADE persistente.
+  //
+  // Os dois existem porque respondem a perguntas diferentes. O slot é o que o
+  // extrator e o pick usam em todo quadro, e precisa ser um índice. A identidade
+  // é o que sobrevive a reordenar o pacote, reimportar a fonte ou renomear o
+  // arquivo — coisas que trocam o índice sem trocar a malha. Ao carregar, o
+  // slot é RECONCILIADO a partir da identidade; ao salvar, os dois vão ao
+  // arquivo, e é a identidade que manda numa divergência.
+  //
+  // Cena v1 do componente não tem identidade: ela é preenchida na reconciliação
+  // a partir do slot, e o projeto passa a carregar a referência estável no
+  // próximo salvamento.
   u32 mesh=0;
+  resources::AssetGuid asset{};
   bool enabled=true;
   MaterialParameters material;
   static const ComponentType descriptor;
@@ -20,12 +33,22 @@ public:
   void write(std::ostream &out) const override {
     out<<mesh<<' '<<enabled<<' '<<material.enabled<<' ';
     for(const auto &p:descriptor.numbers) out<<p.read(*this)<<' ';
+    out<<(asset.valid()?asset.text():std::string("-"))<<' ';
   }
   bool read(std::istream &in,u32 version) override {
     bool overridden=false;
-    if(version!=1||!(in>>mesh>>enabled>>overridden)) return false;
+    if((version!=1&&version!=2)||!(in>>mesh>>enabled>>overridden)) return false;
     for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
-    material.enabled=overridden;return true;
+    material.enabled=overridden;
+    asset={};
+    if(version>=2) {
+      std::string guid;
+      if(!(in>>guid)) return false;
+      // "-" é ausência declarada, não falha de leitura: uma malha pode não ter
+      // recurso nenhum, e isso precisa voltar do arquivo como ausência.
+      if(guid!="-" && !resources::AssetGuid::parse(guid,asset)) return false;
+    }
+    return true;
   }
 };
 inline constexpr std::array<ComponentNumber,11> meshRendererNumbers{{
@@ -47,6 +70,6 @@ inline constexpr std::array<ComponentBoolean,1> meshRendererBooleans{{
   {"enabled","Renderizar",[](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).enabled;},[](ComponentValue &v,bool b){static_cast<MeshRenderer&>(v).enabled=b;}}
 }};
 inline const ComponentType MeshRenderer::descriptor{
-  "astra.render.mesh",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
+  "astra.render.mesh",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
 };
 }

@@ -776,3 +776,109 @@ AE_TEST(camera_look_component_is_optional_serialized_and_clamped_in_runtime) {
   AE_EXPECT_EQ(play.document().find(camera)->transform.rotationDegrees[1],90.0f,"yaw wraps without losing heading");
   AE_EXPECT_EQ(play.document().find(camera)->transform.rotationDegrees[0],-60.0f,"lower limit");
 }
+
+namespace {
+renderer::MapDrawRecord identityDraw(u32 material) {
+  renderer::MapDrawRecord draw{};
+  draw.model[0]=draw.model[5]=draw.model[10]=draw.model[15]=1;
+  draw.boundsRadius=1;draw.indexCount=36;draw.materialIndex=material;
+  return draw;
+}
+renderer::MapMaterialRecord flatMaterial(float red) {
+  renderer::MapMaterialRecord material{};
+  material.baseColorFactor[0]=red;material.baseColorFactor[1]=material.baseColorFactor[2]=material.baseColorFactor[3]=1;
+  return material;
+}
+} // namespace
+
+AE_TEST(mesh_reference_survives_the_package_being_reordered) {
+  // O defeito que a identidade existe para impedir: o pacote é recarregado com
+  // os desenhos em outra ordem e a cena passa a apontar para outra malha. Com
+  // índice puro isso é silencioso — o objeto simplesmente vira outra coisa.
+  const renderer::MapDrawRecord draws[]{identityDraw(0),identityDraw(1)};
+  const renderer::MapMaterialRecord materials[]{flatMaterial(1),flatMaterial(0)};
+  EditorDocument document;EditorMapScene scene;
+  AE_EXPECT_TRUE(scene.import(document,draws,materials,true,{},{},7),"pacote importado");
+  const auto ids=document.childrenOf(document.root());
+  AE_EXPECT_EQ(ids.size(),2u,"dois objetos");
+  const auto segundo=ids[1];
+  const auto *render=meshRenderer(*document.find(segundo));
+  AE_EXPECT_TRUE(render && render->mesh==2,"slot inicial");
+  AE_EXPECT_TRUE(render->asset.valid(),"identidade atribuída na importação");
+  const auto identidade=render->asset;
+  AE_EXPECT_TRUE(scene.assetGuid(1)==identidade,"a identidade é a do desenho 1");
+
+  const auto salvo=serializeEditorDocument(document,7);
+
+  // O MESMO pacote, com os dois desenhos trocados de lugar.
+  const renderer::MapDrawRecord trocados[]{identityDraw(1),identityDraw(0)};
+  EditorDocument outro;EditorMapScene reordenado;
+  AE_EXPECT_TRUE(reordenado.import(outro,trocados,materials,true,{},{},7),"pacote reordenado");
+
+  EditorDocument carregado;
+  AE_EXPECT_TRUE(deserializeEditorDocument(salvo,7,carregado),"cena relida");
+  reordenado.reconcileAssets(carregado);
+  const auto *reconciliado=meshRenderer(*carregado.find(segundo));
+  AE_EXPECT_TRUE(reconciliado!=nullptr,"malha preservada");
+  AE_EXPECT_TRUE(reconciliado->asset==identidade,"identidade preservada");
+  // O slot mudou porque o pacote mudou. A identidade é que não mudou, e é ela
+  // que diz qual desenho é o certo agora.
+  AE_EXPECT_EQ(reconciliado->mesh,2u,"o slot foi recalculado pela identidade");
+  AE_EXPECT_TRUE(reordenado.assetGuid(reconciliado->mesh-1)==identidade,"o slot aponta para a mesma malha");
+}
+
+AE_TEST(mesh_reference_without_identity_is_adopted_and_missing_identity_is_not_faked) {
+  const renderer::MapDrawRecord draws[]{identityDraw(0)};
+  const renderer::MapMaterialRecord materials[]{flatMaterial(1)};
+  EditorDocument document;EditorMapScene scene;
+  AE_EXPECT_TRUE(scene.import(document,draws,materials,true,{},{},3),"pacote importado");
+  const auto id=document.childrenOf(document.root())[0];
+
+  // Cena anterior ao registro: slot válido, identidade ausente.
+  auto legado=*document.find(id);
+  editMeshRenderer(legado)->asset={};
+  AE_EXPECT_TRUE(document.applyEntityValues(id,legado),"cena sem identidade");
+  AE_EXPECT_TRUE(!meshRenderer(*document.find(id))->asset.valid(),"sem identidade antes");
+  scene.reconcileAssets(document);
+  AE_EXPECT_TRUE(meshRenderer(*document.find(id))->asset==scene.assetGuid(0),
+                 "a identidade derivada do slot é adotada");
+
+  // Identidade que este pacote não tem: o slot vai a zero. Apontar para a malha
+  // que por acaso ocupa o índice antigo seria corromper a cena em silêncio.
+  auto ausente=*document.find(id);
+  editMeshRenderer(ausente)->asset=resources::assetGuidFromSeed("pacote:999:0");
+  AE_EXPECT_TRUE(document.applyEntityValues(id,ausente),"identidade de outro pacote");
+  scene.reconcileAssets(document);
+  AE_EXPECT_EQ(meshRenderer(*document.find(id))->mesh,0u,"referência ausente vira slot zero");
+}
+
+AE_TEST(mesh_component_v1_archive_still_loads_and_gains_identity_on_save) {
+  // Um projeto salvo antes desta mudança precisa abrir. O componente é v2 e a
+  // carga de v1 não pode exigir o campo novo.
+  const renderer::MapDrawRecord draws[]{identityDraw(0)};
+  const renderer::MapMaterialRecord materials[]{flatMaterial(1)};
+  EditorDocument document;EditorMapScene scene;
+  AE_EXPECT_TRUE(scene.import(document,draws,materials,true,{},{},11),"pacote importado");
+  const auto id=document.childrenOf(document.root())[0];
+
+  auto texto=serializeEditorDocument(document,11);
+  // Rebaixa o componente para a versão 1 e corta o campo de identidade do
+  // payload, exatamente como um arquivo gravado antes desta mudança.
+  const std::string alvo="\"astra.render.mesh\" 2 ";
+  const auto posicao=texto.find(alvo);
+  AE_EXPECT_TRUE(posicao!=std::string::npos,"componente encontrado no arquivo");
+  texto.replace(posicao,alvo.size(),"\"astra.render.mesh\" 1 ");
+  const auto guid=meshRenderer(*document.find(id))->asset.text();
+  const auto comGuid=texto.find(guid);
+  AE_EXPECT_TRUE(comGuid!=std::string::npos,"identidade presente no arquivo v2");
+  texto.erase(comGuid,guid.size()+1);
+
+  EditorDocument antigo;
+  AE_EXPECT_TRUE(deserializeEditorDocument(texto,11,antigo),"arquivo v1 do componente carrega");
+  const auto *render=meshRenderer(*antigo.find(id));
+  AE_EXPECT_TRUE(render && render->mesh==1,"slot preservado");
+  AE_EXPECT_TRUE(!render->asset.valid(),"sem identidade, como no arquivo antigo");
+  scene.reconcileAssets(antigo);
+  AE_EXPECT_TRUE(meshRenderer(*antigo.find(id))->asset==scene.assetGuid(0),
+                 "a reconciliação dá identidade ao projeto antigo");
+}

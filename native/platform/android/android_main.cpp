@@ -612,7 +612,7 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
     if (!shell.editorMapImported && (shell.independentWorkspace || !shell.instancedRenderer.mapDraws().empty())) {
       shell.editorPackageFingerprint=shell.independentWorkspace ? 0 : shell.instancedRenderer.contentFingerprint();
       if (!shell.independentWorkspace) shell.editorSession.setProjection(shell.instancedRenderer.mapProjection());
-      shell.editorMapImported = shell.editorSession.importMap(shell.instancedRenderer.mapDraws(),shell.instancedRenderer.mapMaterials(), !shell.editorEmpty,shell.instancedRenderer.pickingVertices(),shell.instancedRenderer.pickingIndices());
+      shell.editorMapImported = shell.editorSession.importMap(shell.instancedRenderer.mapDraws(),shell.instancedRenderer.mapMaterials(), !shell.editorEmpty,shell.instancedRenderer.pickingVertices(),shell.instancedRenderer.pickingIndices(),shell.editorPackageFingerprint);
       if (!shell.editorEmpty) {
         const auto initial=shell.instancedRenderer.defaultCamera();
         shell.editorSession.setCameraPose(initial.position,initial.yaw,initial.pitch);

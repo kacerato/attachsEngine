@@ -1124,6 +1124,10 @@ bool EditorSession::load(const char *path, u64 fingerprint) {
   if(isPlaying()) return false;
   EditorDocument candidate;
   if(!loadEditorDocument(path,fingerprint,candidate)) return false;
+  // Reconciliar ANTES de conferir a extração: a cena pode trazer identidades
+  // cujos slots mudaram, e a checagem tem de valer para o documento que vai
+  // realmente ser adotado.
+  mapScene_.reconcileAssets(candidate);
   std::vector<renderer::MapDrawState> check;
   if(!mapScene_.extract(candidate,check)) return false;
   mapScene_.hydrateMaterials(candidate);
@@ -1134,10 +1138,10 @@ bool EditorSession::load(const char *path, u64 fingerprint) {
   return true;
 }
 
-bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices) {
+bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices, u64 packageFingerprint) {
   if(isPlaying()) return false;
   cancelPointers();
-  if (!mapScene_.import(document_, draws, materials, instantiate,vertices,indices)) return false;
+  if (!mapScene_.import(document_, draws, materials, instantiate,vertices,indices,packageFingerprint)) return false;
   state_.creationAvailable=3;
   for(u32 i=0;i<mapScene_.assetCount();++i) {
     const auto flags=mapScene_.materialFlagsForAsset(i);

@@ -197,6 +197,24 @@ target_include_directories(aether_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # frame (load/store e memoryless do depth) e derivada dele, nao escrita a mao.
 target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 
+# --- aether_assets: registro de recursos do projeto ------------------------
+# Identidade (GUID), caminho, hash de conteudo, versao do importador,
+# dependencias e derivados. Puro dado: nao conhece editor, renderer nem sistema
+# de arquivos -- quem le e escreve o arquivo e quem tem o projeto na mao. Fica
+# fora de aether_core porque core e o nucleo que TODO alvo arrasta, incluindo os
+# benchmarks, e um registro de projeto nao pertence a esse conjunto.
+add_library(aether_assets STATIC
+  resources/asset_registry.cpp
+  resources/json_reader.cpp
+  resources/gltf_import.cpp
+)
+target_include_directories(aether_assets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# aether_renderer pelo formato do pacote de mapa: a importacao produz
+# exatamente os mesmos registros de desenho e material que o cozinhador offline,
+# para que geometria importada no aparelho e geometria cozida no computador
+# percorram o MESMO caminho depois daqui.
+target_link_libraries(aether_assets PUBLIC aether_core aether_renderer)
+
 # --- aether_runtime: o mundo de execucao, independente do editor -----------
 # Grafo de cena, identidade/geracao de handles, fila de comandos e relogio. Nao
 # conhece editor, UI, historico nem selecao: e o que um consumidor sem editor
@@ -213,7 +231,7 @@ add_library(aether_runtime STATIC
   runtime/script_bridge.cpp
 )
 target_include_directories(aether_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_runtime PUBLIC aether_core aether_physics)
+target_link_libraries(aether_runtime PUBLIC aether_core aether_assets aether_physics)
 
 # --- aether_editor: documento de cena, historico, projecao e gizmo ---------
 # O modelo do EDITOR, nao o do runtime: descreve o que o usuario autorou. Ele
@@ -234,7 +252,7 @@ add_library(aether_editor STATIC
   editor/editor_view.cpp
 )
 target_include_directories(aether_editor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_editor PUBLIC aether_core aether_runtime aether_renderer aether_ui aether_platform)
+target_link_libraries(aether_editor PUBLIC aether_core aether_assets aether_runtime aether_renderer aether_ui aether_platform)
 
 # --- aether_ui: layout, desenho e roteamento de toque da interface ---------
 # Separada de aether_renderer de proposito: a UI do editor nao conhece Vulkan,
@@ -425,6 +443,8 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_physics_access.cpp
     ../tests/native/test_runtime_input.cpp
     ../tests/native/test_runtime_lights.cpp
+    ../tests/native/test_asset_registry.cpp
+    ../tests/native/test_gltf_import.cpp
     ../tests/native/test_editor_script_templates.cpp
     ../tests/native/test_editor_play_scripts.cpp
     ../tests/native/test_editor_map_scene.cpp

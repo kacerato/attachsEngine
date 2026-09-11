@@ -9,6 +9,14 @@
 
 namespace ae::editor {
 namespace {
+// A identidade de um desenho do pacote. Derivada e não sorteada de propósito --
+// ver `EditorMapScene::assetGuid`. O prefixo textual evita que uma semente de
+// outro domínio (um script, uma textura) colida com esta por acidente.
+resources::AssetGuid packageAssetGuid(u64 fingerprint,u32 index) {
+  char seed[64];
+  std::snprintf(seed,sizeof(seed),"pacote:%llu:%u",static_cast<unsigned long long>(fingerprint),index);
+  return resources::assetGuidFromSeed(std::string_view(seed));
+}
 void multiply(const float a[16], const float b[16], float out[16]) {
   float value[16]{};
   for (u32 c=0;c<4;++c) for (u32 r=0;r<4;++r)
@@ -23,7 +31,7 @@ bool inheritedVisible(const runtime::SceneGraph &document, EditorEntityId id) {
   return true;
 }
 }
-bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices) {
+bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices, u64 packageFingerprint) {
   if(draws.size()+1>EditorDocument::kMaximumEntities) return false;
   std::vector<std::shared_ptr<const EditorPickMesh>> meshes(draws.size());
   if(vertices.empty()!=indices.empty() || vertices.size()%renderer::MapVertexStride) return false;
@@ -51,7 +59,8 @@ bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::
     const auto id=prepared.createEntity(prepared.root(),water?EditorEntityKind::Water:EditorEntityKind::Mesh,name);
     if(!id) return false;
     auto entity=*prepared.find(id);
-    auto *render=editMeshRenderer(entity);if(!render) return false;render->mesh=index+1;entity.visible=draw.lodLevel==0;
+    auto *render=editMeshRenderer(entity);if(!render) return false;
+    render->mesh=index+1;render->asset=packageAssetGuid(packageFingerprint,index);entity.visible=draw.lodLevel==0;
     if(!setWaterBodyFlags(entity,true,(flags & renderer::MapMaterialWaterCameraGrid)!=0)) return false;
     if(draw.materialIndex<materials.size()) render->material=renderer::materialOverrideFrom(materials[draw.materialIndex]);
     std::copy(draw.boundsCenter,draw.boundsCenter+3,entity.transform.position);
@@ -60,8 +69,36 @@ bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::
   pickMeshes_=std::move(meshes);
   source_.assign(draws.begin(),draws.end());
   materials_.assign(materials.begin(),materials.end());
+  assets_.resize(draws.size());
+  for(u32 index=0;index<draws.size();++index) assets_[index]=packageAssetGuid(packageFingerprint,index);
   document=std::move(prepared);
   return true;
+}
+u32 EditorMapScene::assetSlot(const resources::AssetGuid &guid) const {
+  if(!guid.valid()) return 0;
+  for(u32 index=0;index<assets_.size();++index) if(assets_[index]==guid) return index+1;
+  return 0;
+}
+void EditorMapScene::reconcileAssets(EditorDocument &document) const {
+  std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
+  for(auto id:ids) {
+    auto value=*document.find(id);
+    auto *render=editMeshRenderer(value);
+    if(!render) continue;
+    const auto previousSlot=render->mesh;
+    const auto previousAsset=render->asset;
+    if(render->asset.valid()) {
+      // A identidade manda. Se ela não está neste pacote, o slot vira zero:
+      // "referência ausente" é informação, e desenhar a malha que por acaso
+      // ocupa o índice antigo seria corromper a cena em silêncio.
+      render->mesh=assetSlot(render->asset);
+    } else if(render->mesh && render->mesh<=assets_.size()) {
+      // Cena anterior ao registro: ela já trazia um slot válido para ESTE
+      // pacote, então a identidade derivada dele é a identidade correta.
+      render->asset=assets_[render->mesh-1];
+    }
+    if(render->mesh!=previousSlot || !(render->asset==previousAsset)) document.applyEntityValues(id,value);
+  }
 }
 renderer::MaterialOverride EditorMapScene::materialForAsset(u32 index) const {
   if(index>=source_.size() || source_[index].materialIndex>=materials_.size()) return {};

@@ -3,6 +3,7 @@
 #include "runtime/transform_math.h"
 #include "renderer/map_draw_update.h"
 #include "editor/editor_view.h"
+#include "resources/asset_registry.h"
 
 namespace ae::editor {
 // Immutable package geometry plus authored transforms. No Vulkan or Android.
@@ -15,7 +16,25 @@ public:
   const renderer::MapDrawRecord *asset(u32 index) const { return index<source_.size()?&source_[index]:nullptr; }
   // Loading a resource library need not instantiate its contents in the scene.
   bool import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws,
-              std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true, std::span<const u8> vertices = {}, std::span<const u32> indices = {});
+              std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true, std::span<const u8> vertices = {}, std::span<const u32> indices = {},
+              u64 packageFingerprint = 0);
+  // A identidade estável do desenho `index` (0-based) do pacote carregado.
+  //
+  // Ela é DERIVADA, não sorteada: a mesma impressão digital de pacote e o mesmo
+  // índice produzem o mesmo GUID em qualquer máquina e em qualquer dia. É o que
+  // permite uma cena salva antes do registro existir ganhar identidade sem
+  // precisar de um arquivo de tradução guardado em lugar nenhum.
+  resources::AssetGuid assetGuid(u32 index) const {
+    return index < assets_.size() ? assets_[index] : resources::AssetGuid{};
+  }
+  // O slot (1-based, como `MeshRenderer::mesh`) de uma identidade, ou zero
+  // quando o recurso não está neste pacote — uma referência ausente, que quem
+  // chama precisa explicar em vez de desenhar outra malha no lugar.
+  u32 assetSlot(const resources::AssetGuid &guid) const;
+  // Casa slot e identidade depois de carregar uma cena. Cena com identidade
+  // manda: o slot é recalculado. Cena antiga, sem identidade, ganha a derivada
+  // do slot que ela já trazia.
+  void reconcileAssets(EditorDocument &document) const;
   bool extract(const runtime::SceneGraph &document, std::vector<EditorMapUpdate> &out) const;
   bool bounds(const runtime::SceneGraph &document, EditorEntityId entity, float center[3], float &radius) const;
   bool localGeometry(u32 assetId,std::span<const EditorPickMesh::Triangle> &triangles,float relative[16]) const;
@@ -27,6 +46,7 @@ public:
         ? materials_[source_[index].materialIndex].flags : 0;
   }
 private:
+  std::vector<resources::AssetGuid> assets_;
   std::vector<std::shared_ptr<const EditorPickMesh>> pickMeshes_;
   std::vector<renderer::MapMaterialRecord> materials_;
   std::vector<renderer::MapDrawRecord> source_;
