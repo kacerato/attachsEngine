@@ -579,6 +579,16 @@ apresentado como resolvido:
   o que trava o defeito desta rodada: interpolar o raio cru tem de reproduzir o
   raio exato, e normalizar antes de interpolar tem de errar por mais de 15° no
   centro da tela. 834/834.
+- **M04.3 — o que se vê e o que se seleciona.** Defeito encontrado lendo o
+  código, não na tela: `extract` (o que é desenhado) passou a usar o pivô do nó
+  na rodada de importação, e `pickGeometry` (o que o toque acerta) ficou para
+  trás usando o centro dos limites. Em geometria de um GLB com hierarquia os dois
+  não coincidem — a porta gira na dobradiça —, então a malha de seleção ficava
+  deslocada da desenhada: tocar o objeto não selecionava nada e tocar ao lado
+  selecionava. Corrigido, e coberto por um teste que exige que a matriz de
+  seleção seja **idêntica** à de desenho para a mesma entidade. O teste foi
+  verificado ao contrário: com o defeito reintroduzido ele falha (834/835), com
+  a correção passa (835/835).
 - ~~**Objetos que somem / grade que sobe por cima ao dar zoom.**~~ **FECHADO**
   pela mesma correção — era a deformação do raio mudando junto com a câmera, não
   culling nem sumiço de geometria. As varreduras anteriores

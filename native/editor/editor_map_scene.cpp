@@ -202,9 +202,15 @@ bool EditorMapScene::pickGeometry(const runtime::SceneGraph &document,EditorEnti
   if(!entity || !meshAsset(*entity) || meshAsset(*entity)>pickMeshes_.size()) return false;
   const auto index=meshAsset(*entity)-1;
   if(!pickMeshes_[index]) return false;
-  float world[16],relative[16];if(!editorWorldMatrix(document,id,world)) return false;
+  float world[16],relative[16],pivot[3];
+  if(!editorWorldMatrix(document,id,world)) return false;
   const auto &source=source_[index];std::copy(source.model,source.model+16,relative);
-  for(u32 axis=0;axis<3;++axis) relative[12+axis]-=source.boundsCenter[axis];
+  // O MESMO pivo que `extract` usa para desenhar. Com `boundsCenter` aqui, a
+  // malha de selecao ficava deslocada da malha desenhada em tudo que viesse de
+  // um GLB com hierarquia, onde o pivo do no nao coincide com o centro dos
+  // limites: tocar o objeto nao selecionava nada e tocar ao lado selecionava.
+  pivotOf(index,pivot);
+  for(u32 axis=0;axis<3;++axis) relative[12+axis]-=pivot[axis];
   multiply(world,relative,out.model);out.mesh=pickMeshes_[index];return true;
 }
 bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<EditorMapUpdate> &out) const {

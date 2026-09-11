@@ -882,3 +882,38 @@ AE_TEST(mesh_component_v1_archive_still_loads_and_gains_identity_on_save) {
   AE_EXPECT_TRUE(meshRenderer(*antigo.find(id))->asset==scene.assetGuid(0),
                  "a reconciliação dá identidade ao projeto antigo");
 }
+
+AE_TEST(what_is_drawn_and_what_is_picked_share_the_same_pivot) {
+  // O defeito: `extract` — o que aparece na tela — usava o pivô do nó, e
+  // `pickGeometry` — o que o toque acerta — continuava usando o centro dos
+  // limites. Em geometria vinda de um GLB com hierarquia os dois não coincidem
+  // (a porta gira na dobradiça, não no meio dela), então a malha de seleção
+  // ficava deslocada da malha desenhada: tocar o objeto não selecionava nada e
+  // tocar ao lado selecionava.
+  std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;
+  std::vector<renderer::MapMaterialRecord> materials;
+  AE_EXPECT_TRUE(renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride,vertices,indices,draws,materials),"geometria");
+  AE_EXPECT_EQ(draws.size(),usize{1},"um desenho no pacote");
+
+  // Pivô deliberadamente longe do centro dos limites.
+  const float pivots[3]{1.5f,0.0f,-.75f};
+  EditorMapScene scene;EditorDocument doc;
+  AE_EXPECT_TRUE(scene.adoptPackage(doc,draws,materials,vertices,indices,{},31,pivots),"pacote com pivô de nó");
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Mesh,"Porta");
+  auto value=*doc.find(id);editMeshRenderer(value)->mesh=1;
+  value.transform.position[0]=4;value.transform.position[2]=2;value.transform.rotationDegrees[1]=34;
+  AE_EXPECT_TRUE(doc.applyEntityValues(id,value),"posicionar e girar");
+
+  std::vector<EditorMapUpdate> updates;
+  AE_EXPECT_TRUE(scene.extract(doc,updates),"extrair a cena");
+  const EditorMapUpdate *drawn=nullptr;
+  for(const auto &update:updates) if(update.objectId==id) drawn=&update;
+  AE_EXPECT_TRUE(drawn!=nullptr,"o objeto foi desenhado");
+
+  EditorPickCandidate candidate{};
+  AE_EXPECT_TRUE(scene.pickGeometry(doc,id,candidate),"malha de seleção");
+  bool identical=true;
+  for(u32 term=0;term<16;++term)
+    identical&=std::abs(candidate.model[term]-drawn->pose.draw.model[term])<1e-4f;
+  AE_EXPECT_TRUE(identical,"a malha de seleção usa a mesma matriz da malha desenhada");
+}
