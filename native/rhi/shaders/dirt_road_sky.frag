@@ -31,7 +31,7 @@ void main() {
   // visible sky to one filtered lookup avoids the full-screen procedural-cloud
   // cost measured on mobile. Only world direction is used: camera translation
   // cannot move the infinitely distant sky or introduce parallax.
-  vec3 visibleDirection=vDirection;
+  vec3 visibleDirection=normalize(vDirection);
   if((frame.materialFlags.x&1u)!=0u && visibleDirection.y<0.0) {
     // A grade oceanica acompanha XZ da camera, mas continua finita. Raios
     // quase paralelos podem passar alem da ultima aresta e revelar a metade

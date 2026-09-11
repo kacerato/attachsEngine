@@ -487,11 +487,71 @@ inferior). Medições feitas:
   ordem tenha sido mantida porque é a correta.
 
 Depois do moiré corrigido a banda ficou reduzida a uma ou duas linhas fracas
-(`181-final.png`), em vez do tapete ruidoso anterior.
+(`181-final.png`), em vez do tapete ruidoso anterior — mas o relato seguinte do
+usuário ("ainda está inclinado", com quatro capturas de zoom) mostrou que o
+moiré era **sintoma**, não a causa. A causa foi encontrada lendo a projeção, e
+fecha os dois relatos de uma vez.
 
-Fechar isso pede captura do buffer de profundidade, que é exatamente o que o
-plano mestre pede para VIE01. A entrega fica registrada como **parcial**, e o
-defeito continua na lista de abertos.
+### Causa raiz: o raio de câmera era normalizado no vértice
+
+O vértice do passe reconstrói o raio de cada pixel invertendo a projeção do
+vértice da cena (`dirt_road_vertex.glsl`). Ele normalizava o raio **antes** de
+entregá-lo à interpolação.
+
+O raio cru `(x, y, 1)` é afim em NDC e interpola exato entre os três vértices do
+triângulo de tela inteira. O versor não é afim. Com os vértices em NDC
+`(-1,-1)`, `(3,-1)` e `(-1,3)`, os três raios têm comprimentos ≈1,42, ≈2,82 e
+≈2,16; normalizando e interpolando, a direção no **centro da tela** sai
+`(-0,294, 0,093, 0,951)` normalizada, contra `(0, 0, 1)` verdadeira — **17° fora
+em X e 5° em Y**, medido aritmeticamente a partir dos três vértices.
+
+Consequências, todas as observadas:
+
+- o plano do chão era intersectado por raios que não eram os da câmera, então a
+  grade saía inclinada contra um veículo reto;
+- o horizonte da grade não coincidia com o da cena, e a grade aparecia **acima**
+  do objeto, desconexa dele;
+- ao mover a câmera a deformação mudava junto, então a grade escorregava sobre a
+  geometria enquanto o objeto encolhia — o segundo relato do usuário;
+- a profundidade escrita vinha desse ponto de interseção errado, o que explica a
+  banda em faces rasantes que as medições anteriores não conseguiam atribuir a
+  quantização;
+- `fwidth` media a derivada do ponto errado, o que alimentava o moiré.
+
+O céu (`dirt_road_sky.vert`) tem o mesmo padrão e o mesmo defeito desde sempre.
+Ninguém viu porque um gradiente tolera a deformação; a grade, não. Corrigido
+junto: o vértice passa o raio cru e o fragmento normaliza.
+
+Corrigido também o deslocamento temporal: o vértice da cena soma `jitter` ao NDC
+**depois** da divisão por `view.z`, então o caminho inverso precisa subtraí-lo
+antes de desfazer a projeção. Sem isso a grade anda meio pixel por quadro contra
+a geometria e o resolve temporal a borra.
+
+**Verificado no aparelho** (projeto `Hierarquia0911`, `veiculo.glb`), com o
+editor confirmado em primeiro plano antes de cada captura:
+
+| Verificação | Resultado |
+| --- | --- |
+| Perspectiva coerente | `g1.png`: todas as linhas convergem para um único ponto de fuga |
+| Objetos apoiados no plano | `g1.png`: a base das caixas encosta na linha azul do eixo X |
+| Oclusão | `g1.png`: a grade some atrás das caixas, sem banda residual visível |
+| Eixos na origem | `g2crop.png`: vermelho e azul cruzam exatamente na origem |
+| Campo próximo | `g2crop.png`: sem moiré, célula grande e linha fina constante |
+
+O usuário confirmou os dois relatos fechados no próprio aparelho: a inclinação e
+o sumiço no zoom.
+
+**Limiares de moiré revistos.** Com o raio correto, `fwidth` volta a medir o que
+promete e o limiar global de 10–22 px deixou de ser necessário. Cada família de
+linhas — as perpendiculares a X e as perpendiculares a Z — passa a medir o
+próprio tamanho de célula em pixels e some sozinha abaixo de ~2 px (cheia em 6).
+Isso é o que faltava para ângulos rasantes, onde a célula tem centenas de pixels
+numa direção e frações na outra: antes era preciso escolher entre apagar as
+linhas ainda nítidas e manter as que já viraram ruído.
+
+O empurrão relativo de profundidade caiu de 0,5% para 0,05%. Ele continua
+existindo só para desempatar o contato coplanar entre o chão e a base de um
+objeto apoiado nele.
 
 ### Defeitos do plano mestre ainda ABERTOS
 
@@ -506,16 +566,15 @@ apresentado como resolvido:
 - **Sumiço visual após retomada.** Hierarquia preservada e viewport vazio ao
   voltar do segundo plano. Sem reprodução instrumentada aqui; o próprio plano
   classifica a causa como não fechada. É o marco M03.
-- **Grade sobre faces quase verticais em ângulo rasante.** O passe com
-  profundidade, a transição contínua de escala e o campo próximo sem moiré
-  existem e estão verificados; resta a banda descrita acima. É o que sobra do
-  M04.
-- **Objetos que somem ao afastar, relatado pelo usuário: NÃO reproduzido.** Uma
-  varredura de seis passos de afastamento (`150-sequencia.png`) e outra de oito
-  (`180`) mantiveram o veículo visível, diminuindo como o esperado para uma
-  câmera que se afasta. O que a varredura de aproximação mostra
-  (`140-sequencia.png`) é a câmera **atravessando** o objeto — comportamento de
-  dolly, não sumiço. Falta a condição exata em que o defeito aparece.
+- ~~**Grade inclinada e grade sobre faces em ângulo rasante.**~~ **FECHADO.**
+  Causa raiz no raio normalizado no vértice, acima. Verificado no aparelho e
+  confirmado pelo usuário. O M04 fica completo.
+- ~~**Objetos que somem / grade que sobe por cima ao dar zoom.**~~ **FECHADO**
+  pela mesma correção — era a deformação do raio mudando junto com a câmera, não
+  culling nem sumiço de geometria. As varreduras anteriores
+  (`140`/`150`/`180-sequencia.png`) não reproduziam porque o efeito é de
+  **alinhamento** entre grade e cena, e não de objeto ausente. Confirmado pelo
+  usuário no aparelho.
 - **Entrega G**: a prova de aceitação — duas composições diferentes montadas
   inteiramente pela interface — **não** foi feita. Esta rodada montou UMA cena
   simples (chão, cubo, corpo, colisores, script) para exercitar os caminhos.

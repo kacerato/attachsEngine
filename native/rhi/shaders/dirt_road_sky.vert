@@ -7,8 +7,12 @@ void main() {
   vec2 ndc=positions[gl_VertexIndex];
   vec2 cameraNdc=vec2(dot(frame.surfaceTransform.xz,ndc),dot(frame.surfaceTransform.yw,ndc));
   float focal=frame.materialFactors.w>0.0?frame.materialFactors.w:1.732050808;
-  vec3 view=normalize(vec3(cameraNdc.x*frame.cameraFrame.x/focal,
-                           -cameraNdc.y/focal,1));
-  vDirection=dirtRoadCameraRotation()*view;
+  // SEM `normalize` aqui: o raio de camera (x,y,1) e afim em NDC e interpola
+  // exato; o versor nao e. Normalizar nos vertices de um triangulo de tela
+  // inteira -- cujos cantos ficam em NDC 3 -- e interpolar devolve, no meio da
+  // tela, uma direcao dezenas de graus fora da que o pixel realmente enxerga.
+  // O ceu e um gradiente e tolerava o erro; o fragmento normaliza.
+  vDirection=dirtRoadCameraRotation()*vec3(cameraNdc.x*frame.cameraFrame.x/focal,
+                                           -cameraNdc.y/focal,1.0);
   gl_Position=vec4(ndc,1,1);
 }

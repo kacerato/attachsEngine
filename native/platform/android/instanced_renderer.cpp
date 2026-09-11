@@ -5107,6 +5107,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       const float farPlane = sceneFarPlane();
       std::memcpy(&gridPush.materialFlags[3], &farPlane, sizeof(farPlane));
       gridPush.materialFlags[2] = encodeSrgb ? 1u : 0u;
+      // O mesmo deslocamento temporal que o vertice da cena soma ao NDC. O
+      // vertice da grade o subtrai antes de desfazer a projecao; sem isso a
+      // grade anda meio pixel por quadro contra a geometria.
+      gridPush.baseColorFactor[0] = temporalCurrentJitter_[0];
+      gridPush.baseColorFactor[1] = temporalCurrentJitter_[1];
       gridPush.baseColorFactor[3] = editorGrid_.planeHeight;
       gridPush.emissiveFactorAndStrength[0] = editorGrid_.minorSpacing;
       gridPush.emissiveFactorAndStrength[1] = editorGrid_.majorSpacing;

@@ -34,52 +34,60 @@ layout(set=0,binding=0,std140) uniform EnvironmentLightingBlock {
   vec4 worldToViewRow2;
 } environment;
 
-layout(location=0) in vec3 vDirection;
+layout(location=0) in vec3 vRay;
 layout(location=0) out vec4 outColor;
 
-// Cobertura de uma familia de linhas de passo `spacing`, com espessura constante
-// em pixels. `fwidth` da a derivada do mundo por pixel: sem ela, a linha some ao
-// longe e engorda de perto.
-float coverage(vec2 position, vec2 derivative, float spacing, float widthPixels) {
-  vec2 scaled=position/spacing;
-  vec2 width=derivative/spacing;
-  vec2 distanceToLine=abs(fract(scaled-0.5)-0.5)/max(width,vec2(1e-8));
-  float line=min(distanceToLine.x,distanceToLine.y);
-  return 1.0-smoothstep(widthPixels-0.5,widthPixels+0.5,line);
+// UMA familia de linhas: as perpendiculares a um eixo, de passo `spacing`.
+//
+// Separar as duas familias em vez de tratar a grade como um todo e o que
+// resolve o angulo rasante. Perto do horizonte a celula mede centenas de pixels
+// numa direcao e fracoes de pixel na outra; medir a grade por um unico numero
+// obrigava a escolher entre apagar as linhas que ainda sao nitidas ou manter as
+// que ja viraram ruido. Aqui cada familia responde pelo proprio rodape.
+//
+// `derivative` e a variacao do mundo por pixel no eixo (fwidth): sem ela a linha
+// some ao longe e engorda de perto. `spacing/derivative` e o tamanho da celula
+// em pixels; abaixo de ~2 px o `fract` alterna dentro do mesmo pixel e o que
+// aparece e moire -- faixas diagonais em angulos que NAO existem na grade, que
+// leem como uma grade torta. Por isso a familia desaparece sozinha ali.
+float lineFamily(float position, float derivative, float spacing, float widthPixels) {
+  float width=max(derivative/spacing,1e-8);
+  float distanceToLine=abs(fract(position/spacing-0.5)-0.5)/width;
+  float line=1.0-smoothstep(widthPixels-0.5,widthPixels+0.5,distanceToLine);
+  return line*smoothstep(2.0,6.0,1.0/width);
+}
+
+float grid(vec2 position, vec2 derivative, float spacing, float widthPixels) {
+  return max(lineFamily(position.x,derivative.x,spacing,widthPixels),
+             lineFamily(position.y,derivative.y,spacing,widthPixels));
 }
 
 void main() {
-  vec3 direction=normalize(vDirection);
+  // Raio CRU, como veio do vertice. A intersecao com o plano e invariante a
+  // escala do raio (`travel` escala pelo inverso), entao normalizar aqui seria
+  // trabalho sem efeito -- e normalizar no vertice era o defeito.
+  vec3 direction=vRay;
   vec3 origin=frame.cameraPositionNear.xyz;
   float planeHeight=frame.baseColorFactor.w;
   // Raio paralelo ao plano nunca cruza: descartar e a resposta certa, e nao um
   // denominador enorme que produziria uma linha explosiva no horizonte.
-  if(abs(direction.y)<1e-5) discard;
+  if(abs(direction.y)<1e-7) discard;
   float travel=(planeHeight-origin.y)/direction.y;
   if(travel<=0.0) discard;
   vec3 hit=origin+direction*travel;
 
-  vec3 relative=hit-origin;
-  vec3 view=vec3(dot(environment.worldToViewRow0.xyz,relative),
-                 dot(environment.worldToViewRow1.xyz,relative),
-                 dot(environment.worldToViewRow2.xyz,relative));
+  // A MESMA profundidade do vertice da cena, a partir da MESMA linha de
+  // worldToView. Qualquer divergencia aqui coloca a grade sistematicamente na
+  // frente ou atras da geometria que ela deveria acompanhar.
+  float viewZ=dot(environment.worldToViewRow2.xyz,hit-origin);
   float nearPlane=frame.cameraPositionNear.w;
   float farPlane=uintBitsToFloat(frame.materialFlags.w);
-  if(view.z<=nearPlane || view.z>=farPlane) discard;
-  // A MESMA projecao do vertice da cena. Qualquer divergencia aqui coloca a
-  // grade sistematicamente na frente ou atras da geometria coplanar.
-  //
-  // Empurrao relativo, a favor da geometria no empate. O alcance de
-  // profundidade da camera editorial vai de centimetros a quilometros e o chao
-  // atras de um objeto cai no mesmo valor quantizado da face desse objeto com
-  // frequencia. Por ser relativo, ele some junto com a distancia e nao afasta a
-  // grade do chao perto da camera.
-  //
-  // MEDIDO: o valor sozinho NAO elimina o vazamento nas faces verticais (ver o
-  // relatorio de validacao). Aumenta-lo dez vezes mudou pouco, o que diz que o
-  // residuo nao e so quantizacao -- e por isso ele esta documentado como aberto
-  // em vez de escondido atras de um numero maior.
-  float biased=view.z*1.005;
+  if(viewZ<=nearPlane || viewZ>=farPlane) discard;
+  // Empurrao relativo minimo, a favor da geometria no empate. O chao e a base de
+  // um objeto apoiado nele sao coplanares por construcao; sem desempate a linha
+  // de contato cintila. Por ser relativo ele acompanha a perda de precisao com a
+  // distancia e nao descola a grade do chao perto da camera.
+  float biased=viewZ*1.0005;
   gl_FragDepth=((farPlane*biased-nearPlane*farPlane)/(farPlane-nearPlane))/biased;
 
   vec2 position=hit.xz;
@@ -89,25 +97,13 @@ void main() {
   float minorWeight=frame.emissiveFactorStrength.z;
   float fadeDistance=frame.emissiveFactorStrength.w;
 
-  float minor=coverage(position,derivative,minorSpacing,0.5)*minorWeight;
-  float major=coverage(position,derivative,majorSpacing,0.6);
-  // Eixos do mundo: sempre a mesma linha, nunca acompanhando a camera.
+  float minor=grid(position,derivative,minorSpacing,0.5)*minorWeight;
+  float major=grid(position,derivative,majorSpacing,0.7);
+  // Eixos do mundo: sempre a mesma linha, nunca acompanhando a camera. Eles nao
+  // se repetem, entao nao ha moire a evitar -- so a espessura em pixels.
   vec2 axisDistance=abs(position)/max(derivative,vec2(1e-8));
-  float axisX=1.0-smoothstep(0.6,1.6,axisDistance.y); // linha sobre z=0
-  float axisZ=1.0-smoothstep(0.6,1.6,axisDistance.x); // linha sobre x=0
-
-  // Uma celula de poucos pixels NAO e informacao: o `fract` que desenha a linha
-  // passa a alternar dentro do mesmo pixel e o resultado e moire -- faixas
-  // diagonais em angulos que nao existem na grade, que leem como uma grade
-  // torta. O limiar precisa ser generoso: so mostrar a familia quando a celula
-  // tem tamanho suficiente para a linha e o vao serem distinguiveis.
-  //
-  // MEDIDO no aparelho: com 1,5 a 4 pixels o campo proximo virava um tapete
-  // ruidoso inclinado; com 10 a 22 a grade fica limpa e a familia fina aparece
-  // so quando de fato ajuda a medir distancia.
-  float pixelsPerUnit=1.0/max(max(derivative.x,derivative.y),1e-8);
-  minor*=smoothstep(10.0,22.0,minorSpacing*pixelsPerUnit);
-  major*=smoothstep(6.0,14.0,majorSpacing*pixelsPerUnit);
+  float axisX=1.0-smoothstep(0.7,1.7,axisDistance.y); // linha sobre z=0
+  float axisZ=1.0-smoothstep(0.7,1.7,axisDistance.x); // linha sobre x=0
 
   float distanceFade=1.0-smoothstep(fadeDistance*0.35,fadeDistance,length(hit-origin));
   vec3 minorColor=frame.materialFactors.xyz;

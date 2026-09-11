@@ -377,6 +377,11 @@ e sem profundidade nenhuma — por construção apareciam por cima de qualquer
 objeto. E trocar de década de escala trocava todos os segmentos de uma vez, que
 era o piscar ao aproximar e afastar.
 
+> A primeira versão do passe analítico ainda saía inclinada e escorregava sobre
+> a geometria ao dar zoom. A causa não era o passe, e sim a reconstrução do raio
+> de câmera — está descrita abaixo, porque é o tipo de erro que reaparece em
+> qualquer passe de tela inteira que precise do raio por pixel.
+
 A separação é a do plano mestre:
 
 | Tipo | Exemplo | Profundidade |
@@ -389,19 +394,51 @@ A política fica no editor (`buildEditorGridPlan`) e a cobertura no fragmento:
 o editor escolhe a célula fina, a grossa, o peso da mistura e onde a grade some;
 o fragmento intersecta o raio com o plano, desenha as linhas com espessura
 constante em pixels (`fwidth`) e escreve `gl_FragDepth` com **a mesma projeção**
-do vértice da cena. Célula menor que alguns pixels some antes de virar ruído —
-é o que evita a faixa branca no horizonte.
+do vértice da cena.
 
 Duas células coexistem e a fina perde peso continuamente dentro da década, e
 chega a zero antes de a próxima assumir. Um teste de host percorre a distância
 da câmera e exige exatamente isso.
 
-**Resíduo conhecido, não resolvido:** em ângulos rasantes contra faces quase
-verticais, parte da grade ainda atravessa a face. De cima e em faces
-horizontais a oclusão está correta. Um empurrão relativo de profundidade a
-favor da geometria reduz o efeito, e aumentá-lo dez vezes mudou pouco — o que
-diz que não é só quantização. Fechar isso pede captura do buffer de
-profundidade, e até lá a grade continua **parcial**.
+### O raio de câmera precisa ser afim em NDC
+
+O vértice do passe reconstrói o raio de cada pixel invertendo a projeção do
+vértice da cena. Ele passa o raio **cru** `(x, y, 1)`, que é afim em NDC e por
+isso interpola exato entre os três vértices. O versor **não é afim**, e
+normalizar no vértice era o defeito de fundo do viewport:
+
+- o triângulo de tela inteira tem vértices em NDC `(-1,-1)`, `(3,-1)`, `(-1,3)`;
+- os três raios têm comprimentos bem diferentes (≈1,4, ≈2,8 e ≈2,2 num campo de
+  60° com a proporção da vista);
+- normalizar e depois interpolar devolve, **no centro da tela**, uma direção
+  cerca de 17° fora em X e 5° em Y da que o pixel realmente enxerga.
+
+O efeito era exatamente o relatado: a grade saía inclinada contra objetos retos,
+o horizonte dela não coincidia com o da cena, e ao mover a câmera ela escorregava
+em relação à geometria — a grade parecia "subir por cima" do objeto enquanto o
+objeto encolhia. O céu tinha o mesmo defeito desde sempre e ninguém via, porque
+gradiente tolera deformação; a grade, não. O fragmento normaliza quando precisa,
+e a interseção com o plano nem precisa — ela é invariante à escala do raio.
+
+O vértice também subtrai o deslocamento temporal (`jitter`) antes de desfazer a
+projeção, porque a cena o soma **depois** da divisão por `view.z`. Sem isso a
+grade anda meio pixel por quadro contra a geometria.
+
+### Moiré por família, não pela grade inteira
+
+Cada família de linhas — as perpendiculares a X e as perpendiculares a Z — mede
+o próprio tamanho de célula em pixels e desaparece sozinha abaixo de ~2 px, onde
+o `fract` passa a alternar dentro do mesmo pixel e o que aparece são faixas
+diagonais em ângulos que não existem na grade. Medir a grade por um número só
+obrigava a escolher entre apagar as linhas ainda nítidas ou manter as que já
+viraram ruído, porque em ângulo rasante a célula tem centenas de pixels numa
+direção e frações na outra.
+
+**Resolvido junto:** o vazamento da grade através de faces em ângulo rasante era
+consequência do mesmo erro — a profundidade escrita vinha de um ponto de
+interseção calculado com o raio errado. Com o raio correto, o empurrão relativo
+de profundidade caiu de 0,5% para 0,05%, e ele existe só para desempatar o
+contato coplanar entre o chão e a base de um objeto apoiado nele.
 
 ## 16. O que este documento NÃO afirma
 
