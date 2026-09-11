@@ -208,6 +208,7 @@ add_library(aether_runtime STATIC
   runtime/input_actions.cpp
   runtime/transform_math.cpp
   runtime/game_world.cpp
+  runtime/scene_lights.cpp
   runtime/scene_physics.cpp
   runtime/script_bridge.cpp
 )
@@ -423,6 +424,7 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_world.cpp
     ../tests/native/test_runtime_physics_access.cpp
     ../tests/native/test_runtime_input.cpp
+    ../tests/native/test_runtime_lights.cpp
     ../tests/native/test_editor_script_templates.cpp
     ../tests/native/test_editor_play_scripts.cpp
     ../tests/native/test_editor_map_scene.cpp

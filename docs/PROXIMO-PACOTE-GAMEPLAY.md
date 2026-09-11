@@ -50,7 +50,7 @@ O relatório de 10/09 prevalece para a rodada já executada. O gerador
 atualizar a fonte do catálogo e seus derivados, sem converter uma validação
 parcial em aprovação de toda a família.
 
-## 1.1 Estado por entrega (atualizado em 10/09/2026)
+## 1.1 Estado por entrega (atualizado em 11/09/2026)
 
 Branch `codex/gameplay-runtime`. As colunas são independentes e **não se
 colapsam**: "implementado" é código que existe; "integrado" é código ligado ao
@@ -62,11 +62,16 @@ Android.
 |---|---|---|---|---|---|
 | A — mundo de execução e schema | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim | sim (Play roda no `GameWorld`) | 11 testes | **parcial**: Play/pausa/passo/Stop, arquivo v12, identidade de sessão por Play e reabertura no mesmo processo |
 | B — recursos e importação | — | não | não | não | não |
-| C — materiais e luzes | — | não | não | não | não |
+| C — materiais e luzes | [luzes](runtime-gameplay.md#12-luzes) | **parcial**: Luz anexável (direcional/pontual/spot) e override de material por instância; MaterialAsset compartilhado, slots por submesh e pré-visualização isolada **não** iniciados | sim (shader PBR consome as pontuais/spot; a direcional vira o sol) | 6 testes de luz + 1 de material em execução | **sim, para a parte implementada**: Luz criada pelo inspetor, três modalidades vistas na tela, salvar/reabrir preserva a aparência |
 | D — física acessível | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim, exceto sensor por colisor e `CharacterVirtual` na broadphase | sim (queries, camadas no solver, contatos no C#) | 9 testes | **parcial**: contato sólido com normal chegou ao comportamento; consultas e camadas só no host |
 | E — entrada e comportamentos | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim | sim (toque → ações → personagem/câmera; modelos no editor) | 7 testes | **parcial**: modelo criado, compilado e anexado no aparelho; ações de entrada só no host |
 | F — IDE, console e inspetor | — | apenas o seletor de modelo de script | idem | 2 testes | **parcial**: seletor de modelos usado no aparelho |
 | G — rodada integrada | — | não | não | não | **não** |
+
+A rodada de 11/09 também corrigiu um defeito que bloqueava qualquer trabalho de
+aparência: durante o Play o renderer publicava apenas poses, então material,
+visibilidade e sombra por instância ficavam congelados no valor de autoria e uma
+cor escrita por script nunca chegava à tela. Está corrigido e guardado por teste.
 
 A rodada de aparelho de 11/09 exercitou UMA cena montada pela interface para
 percorrer os caminhos; a prova de aceitação do pacote — **duas** composições

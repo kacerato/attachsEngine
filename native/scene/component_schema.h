@@ -22,6 +22,7 @@
 #include "scene/camera_look.h"
 #include "scene/mesh_renderer.h"
 #include "scene/joint.h"
+#include "scene/light.h"
 #include "scene/script_behavior.h"
 
 #include <array>
@@ -71,7 +72,7 @@ inline constexpr std::array<ComponentRule, 1> jointRequirements{{
   {"astra.physics.body", "Adicione Corpo físico a este objeto"}
 }};
 
-inline const std::array<ComponentSchema, 8> componentSchemas{{
+inline const std::array<ComponentSchema, 9> componentSchemas{{
   {&PhysicsBody::descriptor, "Corpo físico", "Massa e resposta física", ComponentCategory::Physics,
     {}, bodyConflicts, PlayMutability::Never, PlayMutability::SafePoint},
   {&Character::descriptor, "Personagem", "Locomoção com cápsula", ComponentCategory::Physics,
@@ -85,6 +86,8 @@ inline const std::array<ComponentSchema, 8> componentSchemas{{
   {&Camera::descriptor, "Câmera", "Perspectiva e enquadramento", ComponentCategory::Camera,
     {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint},
   {&MeshRenderer::descriptor, "Malha", "Geometria e material", ComponentCategory::Visual,
+    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint},
+  {&Light::descriptor, "Luz", "Direcional, pontual ou spot", ComponentCategory::Visual,
     {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint},
   {&ScriptBehavior::descriptor, "Comportamento", "Código C# do projeto", ComponentCategory::Script,
     {}, {}, PlayMutability::Never, PlayMutability::Never}

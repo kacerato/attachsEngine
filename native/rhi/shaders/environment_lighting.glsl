@@ -34,6 +34,13 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   // zero significa que nao ha ondulacao e o vertice pula a leitura inteira.
   vec4 waterRippleArea;
   vec4 waterSurfaceDetail; // foam elevation/coverage, micro height/wavelength
+  // Luzes pontuais e spot. `x` e quantas valem neste quadro. O array e o mesmo
+  // `PunctualLight` do C++, tres vec4 por luz: posicao+alcance, cor*intensidade
+  // +escala do cone, direcao+deslocamento do cone. Estes membros ficam SO nesta
+  // copia do bloco: o vertice nao le luz, e std140 permite que um estagio
+  // declare menos membros no fim do mesmo buffer.
+  vec4 punctualLightParameters;
+  vec4 punctualLights[24];
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 // sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de

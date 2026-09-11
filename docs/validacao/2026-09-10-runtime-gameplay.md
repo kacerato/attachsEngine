@@ -3,7 +3,9 @@
 Rodada de host em 10/09/2026 e rodada de aparelho em 11/09/2026, branch
 `codex/gameplay-runtime`, a partir de `a34d0325d6c4302942c14442a9d900a199d4cdd0`.
 Escopo: entregas A, D e E de
-[Próximo pacote — criação de gameplay](../PROXIMO-PACOTE-GAMEPLAY.md).
+[Próximo pacote — criação de gameplay](../PROXIMO-PACOTE-GAMEPLAY.md), mais a
+parte da entrega C entregue em 11/09 — Luz anexável e override de material por
+instância chegando à tela.
 
 O usuário autorizou ADB. **A rodada no aparelho exercitou o caminho autoral
 completo** — criar projeto, compor objetos, criar script a partir de modelo,
@@ -16,12 +18,18 @@ aceitação com duas composições continuam **fora** desta rodada.
 | Comando | Resultado |
 |---|---|
 | `cmake --build build/editor-host --target aether_tests --parallel 6` | compila sem warning (`-Werror` ligado) |
-| `./build/editor-host/aether_tests.exe` | **794/794** aprovados |
-| `dotnet run --project tests/Aether.Tests/Aether.Tests.csproj -c Release -p:AetherNativeBuildDir=…/build/editor-host` | **521/521** aprovados |
+| `./build/editor-host/aether_tests.exe` | **794/794** em 10/09; **801/801** em 11/09, com os testes de luz e de material em execução |
+| `dotnet run --project tests/Aether.Tests/Aether.Tests.csproj -c Release -p:AetherNativeBuildDir=…/build/editor-host` | **521/521** em 10/09; em 11/09, 451 aprovados e 70 pulados (os pulados dependem da lib nativa que este build de host não produz) |
 | `android/gradlew.bat :app:assembleDebug :app:testDebugUnitTest --console=plain` | BUILD SUCCESSFUL; 16 testes Java (10 `ProjectSceneSourceTest` + 6 `ProjectStoreTest`), 0 falhas |
 | `android/gradlew.bat :app:assembleRelease --console=plain` | BUILD SUCCESSFUL — `app-release.apk`, 30.705.870 bytes |
 
 Linha de base antes das alterações: 767 nativos e 513 gerenciados.
+
+A rodada de 11/09 reinstalou o APK: a anterior tinha ficado com um APK
+**instrumentado** ainda no aparelho (o processo não havia sido substituído), e a
+primeira leitura de pixels foi feita contra ele. Conferido pelo tamanho de
+`libaether_android.so` — 12.027.008 bytes instrumentado contra 12.025.712 do
+artefato limpo — e repetido do zero contra o limpo.
 
 APK Debug instalado no aparelho (SHA256):
 `FC583315716C52043319F589F1CA55C678E2F5B73B8167286C160FBBF1EF22D3`.
@@ -151,6 +159,34 @@ por estar fora de `[0,1]`, a exceção desligou o comportamento e sobrou
 `(0, 0.55, 0.55)` — ciano. A engine se comportou como especificado. O componente
 foi removido do objeto pelo menu do inspetor e a cena voltou ao estado limpo.
 
+### Entrega C — Luz anexável, validada no aparelho (11/09)
+
+Montado inteiramente pela interface, no APK Debug sem instrumentação, sobre o
+projeto `RuntimeGameplay0910`: selecionar o Cubo, `Add` → **Luz**, e editar as
+propriedades nos campos do inspetor (teclado numérico do aparelho).
+
+O inspetor desenhou o componente inteiro a partir do descritor, sem nenhuma tela
+específica de luz: interruptor **Acesa**, seletor **Modalidade**, **Cor R/G/B**,
+**Intensidade**, **Alcance**, **Cone interno/externo**.
+
+| Passo | Evidência | Amostra de pixel |
+| --- | --- | --- |
+| Luz anexada (Pontual, intensidade 8) | `63-luz-anexada.png` | chão `(211,211,211)` — luz fraca a 5 m, sem efeito visível |
+| Intensidade 300 | `66-intensidade-300.png` | chão `(221,221,221)`: clareia e a sombra do cubo enfraquece |
+| Cor G e B em 0 | `67-luz-vermelha.png` | chão `(238,211,211)` — poça vermelha com queda suave |
+| Modalidade → Spot, objeto girado X=90° | `70-spot-para-baixo.png` | cone vermelho de borda suave no chão, centrado sob a luz |
+| Modalidade → Direcional | `71-direcional.png` | chão inteiro `(255,171,171)` e **sombra projetada do cubo** — a modalidade com passe de sombra |
+| Salvar, encerrar o processo e reabrir | `72-reaberto-luz.png` | `(255,171,171)` e `(252,170,171)`, idênticos: a aparência sobrevive ao arquivo |
+
+A sombra em `71-direcional.png` é a prova de que a matriz de capacidades é real e
+não decorativa: a direcional projeta porque o passe de cascatas existe, e é a
+única que projeta. Pontual e spot iluminam e não projetam — está documentado, e a
+Luz não oferece interruptor de sombra que não teria shader atrás.
+
+O que a entrega C **não** tem: MaterialAsset compartilhado, slots por submesh,
+pré-visualização isolada de material. A luz e o override de material por
+instância são a parte implementada.
+
 ## Testes acrescentados (host)
 
 ### Mundo de execução (`tests/native/test_runtime_world.cpp`, 11)
@@ -194,6 +230,23 @@ foi removido do objeto pelo menu do inspetor e a cena voltou ao estado limpo.
   observável, contexto desligado zera sem apagar a configuração;
 - ida e volta do mapa no arquivo de cena.
 
+### Luzes (`tests/native/test_runtime_lights.cpp`, 6)
+
+- o componente existe para as três bocas — schema, catálogo do inspetor e
+  arquivo — e sobrevive à ida e volta da serialização; cone interno maior que o
+  externo é recusado na autoria;
+- coleta com pose de MUNDO pela hierarquia, e ancestral desativado ou interruptor
+  apagado tiram a luz do quadro;
+- orçamento determinístico: mais influente primeiro, empate pelo menor id, o que
+  não coube é **contado**; direcional não ocupa vaga pontual e a segunda
+  direcional é declarada excedente; intensidade zero não rouba vaga;
+- janela do cone pré-calculada — a mesma conta que o fragmento faz — dá 1 no eixo
+  e 0 no ângulo externo, e a pontual dá 1 em qualquer direção pela mesma conta;
+- a matriz de capacidades de sombra é publicada e a Luz **não** expõe
+  interruptor de sombra enquanto pontual e spot não tiverem passe;
+- luz alterada por código durante o Play chega ao quadro coletado, e o Stop
+  devolve a autoria intacta.
+
 ### Play com scripts (`tests/native/test_editor_play_scripts.cpp`, 3)
 
 - contato sólido atravessando `EditorPlayScene` → `ScriptBridge` → ABI, com o
@@ -233,10 +286,14 @@ foi removido do objeto pelo menu do inspetor e a cena voltou ao estado limpo.
 
 - **Entrega B** (recursos com GUID, importação GLB pelo Android, renomear/mover/
   reimportar, cenas reutilizáveis): não iniciada.
-- **Entrega C** (MaterialAsset compartilhado, slots por submesh, Luz anexável,
-  pré-visualização isolada): não iniciada. O override de material **por
-  instância** já chega ao renderer durante a execução — ver a divergência
-  corrigida acima —, mas material compartilhado, slots e luz continuam fora.
+- **Entrega C**: a Luz anexável (direcional, pontual e spot) e o override de
+  material por instância estão implementados, integrados ao renderer e validados
+  no aparelho. Continuam **fora**: MaterialAsset compartilhado, slots por
+  submesh, pré-visualização isolada de material, e sombra de luz pontual e de
+  spot (não existe passe para elas — a matriz de capacidades diz isso).
+- Luzes pontuais/spot têm teto de **8** por quadro. O excedente é contado e
+  avisado no log do shell; ainda **não** aparece no console do editor, porque o
+  console da entrega F não existe.
 - **Entrega F** (console com histórico e navegação por diagnóstico, estados de
   compilação, busca/substituição, campos tipados novos, ocultar `.astra`): não
   iniciada. O seletor de modelo de script é a única parte de interface deste

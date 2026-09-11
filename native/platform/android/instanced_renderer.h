@@ -4,6 +4,7 @@
 #include "renderer/water_field.h"
 #include "renderer/water_ripples.h"
 #include "renderer/map_draw_update.h"
+#include "renderer/punctual_lights.h"
 
 #include "core/base.h"
 #include "profiler/frame_statistics.h"
@@ -107,6 +108,15 @@ public:
   const std::vector<renderer::MapMaterialRecord> &mapMaterials() const { return dirtRoadResources_.materials(); }
   bool queueMapScene(std::span<const renderer::MapDrawState> draws);
   bool queueAuthoredPoses(std::span<const renderer::MapDrawState> draws);
+  // As luzes da cena, sem orçamento aplicado. Quem escolhe é o quadro, porque a
+  // escolha depende da câmera: publicar aqui uma lista já cortada faria a luz
+  // relevante depender de onde a câmera estava quando a cena foi publicada.
+  void queueSceneLights(std::span<const renderer::SceneLight> lights) {
+    sceneLights_.assign(lights.begin(), lights.end());
+  }
+  // O que o último quadro conseguiu acender. Quem chama publica no console: uma
+  // luz excedente precisa aparecer como aviso, nunca sumir calada.
+  const renderer::LightBudgetReport &lightBudget() const noexcept { return lightBudget_; }
 
 
   bool uiRendererReady() const { return uiRenderer_.isReady(); }
@@ -724,6 +734,8 @@ private:
   };
   std::vector<AuthoredInstanceState> pendingAuthoredState_;
   bool pendingAuthoredStateValid_ = false;
+  std::vector<renderer::SceneLight> sceneLights_;
+  renderer::LightBudgetReport lightBudget_{};
   std::vector<u8> dynamicMapDraws_;
   bool spectralWaterEnabled_=false;
   bool wideWaterSlopes_=false;

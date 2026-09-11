@@ -1,6 +1,6 @@
 # Mundo de execução, física consultável e ações de entrada
 
-Contrato efetivo em 10/09/2026, branch `codex/gameplay-runtime`. Decisões e
+Contrato efetivo em 11/09/2026, branch `codex/gameplay-runtime`. Decisões e
 alternativas descartadas em [ADR](adr/ADR-RUNTIME-GAMEPLAY.md); estado por
 entrega em [Próximo pacote](PROXIMO-PACOTE-GAMEPLAY.md).
 
@@ -71,6 +71,7 @@ O schema (`scene/component_schema.h`) é a única lista de regras. O que ele diz
 | `astra.camera` | Câmera | — | — | sim |
 | `astra.camera.look` | Câmera | câmera | — | sim |
 | `astra.render.mesh` | Visual | — | — | sim |
+| `astra.render.light` | Visual | — | — | sim |
 | `astra.script.behavior` | Código | — | — | não |
 
 "Anexável em Play" é sobre estrutura; escrever **propriedades** é permitido em
@@ -172,7 +173,7 @@ nenhuma das duas**, então elas não são apresentadas como validadas no aparelh
 
 ## 10. Modelos de comportamento
 
-Sete modelos editáveis acompanham o editor (`assets/script-templates`), oferecidos
+Oito modelos editáveis acompanham o editor (`assets/script-templates`), oferecidos
 ao criar um script e **nunca semeados em projeto nenhum**:
 
 | Modelo | O que exercita |
@@ -184,6 +185,7 @@ ao criar um script e **nunca semeados em projeto nenhum**:
 | Plataforma móvel | `MoveKinematic` por passo fixo, transporte pelo solver |
 | Item coletável | Sensor, destruição no ponto seguro, contrato de coleta |
 | Trocar material | Propriedades de componente pela API comum, contato sólido |
+| Controle de luz | Propriedades de Luz pela API comum, alvo em outro objeto |
 
 Eles conversam por **interface** (`IInteragivel`, `IColetavel`), resolvida por
 capacidade: acrescentar uma alavanca não exige tocar no script que interage. As
@@ -199,12 +201,62 @@ v5. Campos de v2 nas mesmas posições; v3 acrescentou hierarquia/ciclo de
 vida/componentes/propriedades/transform de mundo, v4 consultas e contatos, v5
 ações de entrada. O lado gerenciado exige a versão corrente e confere `size`.
 
-## 12. O que este documento NÃO afirma
+## 12. Luzes
+
+`astra.render.light` é um componente como qualquer outro: anexado pelo mesmo
+catálogo, editado pelo mesmo inspetor genérico, escrito pela mesma API de
+propriedades em C#, salvo pelo mesmo registro de componentes. A pose vem da
+Transformação, e **`+Z` local é a direção de emissão** — a mesma convenção de
+frente da Câmera.
+
+| Propriedade | Id | Faixa | Significado |
+|---|---|---|---|
+| Modalidade | `kind` | Direcional / Pontual / Spot | consumidor gráfico distinto por modalidade |
+| Acesa | `enabled` | — | apagar não remove o componente |
+| Cor | `color.r/g/b` | 0..1 | **RGB linear**, não sRGB |
+| Intensidade | `intensity` | 0..10000 | direcional: irradiância na escala do sol; pontual/spot: valor a um metro |
+| Alcance | `range` | 0,01..1000 m | janela suave; a luz chega a zero exatamente em `range` |
+| Cone interno/externo | `inner_angle`/`outer_angle` | 0..89° | meio-ângulos; interno maior que externo é recusado na autoria |
+
+Pontual e spot entram num buffer de quadro com teto de
+`renderer::MaximumPunctualLights` (**8**). A escolha é feita no quadro, com a
+câmera dele: maior influência primeiro — intensidade e alcance contra a
+distância — e, em empate, menor id de objeto, para que dois quadros com a mesma
+cena produzam a mesma lista. **Nada some em silêncio**: `LightBudgetReport` conta
+o que não coube, por modalidade, e o shell publica um aviso quando o número muda.
+
+Direcional tem **um** consumidor: o sol do ambiente, com as cascatas de sombra
+que já existiam. Uma direcional acesa na cena passa a ser esse sol; a segunda é
+declarada excedente pelo mesmo relatório. Sem nenhuma, o sol do recurso de
+ambiente continua valendo.
+
+Sombra é capacidade publicada, não promessa. `renderer::lightCapabilities` diz o
+que existe em passe e shader:
+
+| Modalidade | Ilumina | Projeta sombra |
+|---|---|---|
+| Direcional | sim | **sim** (cascatas do sol) |
+| Pontual | sim | não |
+| Spot | sim | não |
+
+Por isso a Luz **não expõe** interruptor de sombra: enquanto não existir um
+cubemap ou um atlas de spot, o botão seria um controle sem shader atrás. Uma luz
+pontual atravessa parede, e isso está escrito aqui em vez de disfarçado.
+
+Mudar uma luz durante o Play funciona pelo mesmo caminho de qualquer
+propriedade: a coleta do quadro lê o mundo em execução, não o documento autoral.
+O modelo `ControleDeLuz` acende, apaga e pulsa uma luz por esse caminho.
+
+## 13. O que este documento NÃO afirma
 
 - Não há exportação de jogo nem player autônomo.
 - Sensor **por colisor** não existe: o sensor pertence ao corpo inteiro.
 - `CharacterVirtual` não participa da broadphase como corpo rígido; sensores e
   consultas **não** acertam o personagem.
-- Recursos com GUID, importação GLB pelo Android, materiais compartilhados e
-  luzes anexáveis são as entregas B e C, **não implementadas neste pacote**.
+- Recursos com GUID e importação GLB pelo Android são a entrega B, **não
+  implementada**.
+- Da entrega C, só a Luz anexável e o override de material **por instância**
+  existem. MaterialAsset compartilhado, slots por submesh e pré-visualização
+  isolada de material **não** existem.
+- Sombra de luz pontual e de spot **não** existe: não há passe para elas.
 - Nada aqui foi medido em FPS nem exercitado por sessão prolongada.

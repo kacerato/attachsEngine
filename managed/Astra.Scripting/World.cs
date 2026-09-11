@@ -60,6 +60,7 @@ public static class ComponentIds
     public const string Camera = "astra.camera";
     public const string CameraLook = "astra.camera.look";
     public const string MeshRenderer = "astra.render.mesh";
+    public const string Light = "astra.render.light";
     public const string ScriptBehavior = "astra.script.behavior";
 }
 

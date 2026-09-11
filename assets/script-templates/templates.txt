@@ -16,3 +16,4 @@ Porta|Porta|Abre e fecha ao ser interagida, com ângulo configurável
 PlataformaMovel|Plataforma móvel|Vai e volta por movimento cinemático
 ItemColetavel|Item coletável|Some ao ser tocado ou interagido e soma pontos
 TrocaMaterial|Trocar material|Muda cor e emissão da malha por evento
+ControleDeLuz|Controle de luz|Acende, apaga e pulsa uma Luz, nela ou em outro objeto

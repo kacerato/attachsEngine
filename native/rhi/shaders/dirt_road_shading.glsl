@@ -21,6 +21,9 @@ layout(constant_id=2) const uint ENVIRONMENT_PROJECTION=0u;
 const float PI=3.141592653589793;
 const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
 const uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
+// Precisa casar com renderer::MaximumPunctualLights. Os dois lados leem a mesma
+// memoria; divergir aqui leria alem do array ou apagaria luzes que couberam.
+const int PUNCTUAL_LIGHT_LIMIT=8;
 #include "environment_lighting.glsl"
 // LOD cross-fade (see renderer::selectLodLevel): vDither==0 for every draw
 // outside an active transition, so this is a no-op discard everywhere LOD is
@@ -82,6 +85,46 @@ mediump vec3 directLight(mediump vec3 n,mediump vec3 v,mediump vec3 l,mediump ve
   mediump float specular=f90>0.0?
       float(distribution(nh,alpha)*visibility(nv,nl,alpha)):0.0;
   return ((1-f)*(1-metal)*base*fd+specular*f)*radiance*float(nl);
+}
+// Luzes pontuais e spot da cena, com a mesma BRDF do sol -- nao ha um segundo
+// modelo de iluminacao escondido aqui. O laco tem limite constante para o
+// compilador desenrolar; `count` so decide onde parar.
+//
+// Sem sombra: a matriz de capacidades em renderer/punctual_lights.h diz que o
+// unico passe de profundidade implementado e o de cascatas do sol. Uma luz
+// pontual atravessa parede ate existir um cubemap de sombra, e isso esta
+// documentado em vez de disfarcado.
+mediump vec3 punctualLighting(highp vec3 position,mediump vec3 n,mediump vec3 v,
+                              mediump vec3 base,mediump vec3 f0,mediump float f90,
+                              mediump float metal,mediump float rough) {
+  int count=int(environment.punctualLightParameters.x+0.5);
+  mediump vec3 sum=vec3(0.0);
+  for(int i=0;i<PUNCTUAL_LIGHT_LIMIT;++i) {
+    if(i>=count) break;
+    highp vec4 positionRange=environment.punctualLights[i*3];
+    mediump vec4 colorIntensity=environment.punctualLights[i*3+1];
+    mediump vec4 directionOffset=environment.punctualLights[i*3+2];
+    highp vec3 toLight=positionRange.xyz-position;
+    highp float distanceSquared=dot(toLight,toLight);
+    // Uma luz exatamente sobre a superficie dividiria por zero e pintaria o
+    // fragmento de infinito. O piso e um centimetro quadrado.
+    highp float safeSquared=max(distanceSquared,1e-4);
+    mediump vec3 l=toLight*inversesqrt(safeSquared);
+    // Janela suave de alcance: a luz chega a zero exatamente em `range`, sem o
+    // degrau que um corte duro deixaria na borda da esfera de influencia.
+    mediump float ratio=distanceSquared/max(positionRange.w*positionRange.w,1e-4);
+    mediump float window=clamp(1.0-ratio*ratio,0.0,1.0);
+    window*=window;
+    if(window<=0.0) continue;
+    // Cone do spot pre-calculado na CPU: escala e deslocamento em vez de dois
+    // cossenos por fragmento. Pontual usa escala 0 e deslocamento 1, o que da
+    // exatamente 1 em qualquer direcao -- mesma conta, sem desvio por tipo.
+    mediump float cone=clamp(dot(directionOffset.xyz,-l)*colorIntensity.w+directionOffset.w,0.0,1.0);
+    cone*=cone;
+    mediump vec3 radiance=colorIntensity.rgb*(window*cone/safeSquared);
+    sum+=directLight(n,v,l,radiance,base,f0,f90,metal,rough);
+  }
+  return sum;
 }
 mediump vec3 shadeWater(highp vec3 position,mediump vec3 n) {
   highp vec3 eye=frame.cameraPositionNear.xyz;
@@ -216,6 +259,7 @@ void main() {
       directionalShadow(vPosition,n,viewDepth):1.0;
   mediump vec3 color=directLight(n,v,environment.sunDirectionIntensity.xyz,sunRadiance,
                          base.rgb,f0,f90,metal,rough)*sunVisibility;
+  color+=punctualLighting(vPosition,n,v,base.rgb,f0,f90,metal,rough);
   mediump float nv=max(dot(n,v),0.0);
   // A single global hemispherical irradiance keeps upward-facing foliage tied
   // to the sky while giving downward/vertical surfaces a neutral ground bounce.

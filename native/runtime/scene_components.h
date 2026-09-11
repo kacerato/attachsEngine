@@ -13,6 +13,7 @@
 #include "scene/character.h"
 #include "scene/collider.h"
 #include "scene/joint.h"
+#include "scene/light.h"
 #include "scene/mesh_renderer.h"
 #include "scene/physics_body.h"
 #include "scene/script_behavior.h"
@@ -67,6 +68,12 @@ inline const scene::MaterialParameters &meshMaterial(const SceneObject &e) {
   static const scene::MaterialParameters defaults;
   const auto *m = meshRenderer(e);
   return m ? m->material : defaults;
+}
+inline const scene::Light *lightComponent(const SceneObject &e) {
+  return static_cast<const scene::Light *>(e.components.find(scene::Light::descriptor));
+}
+inline scene::Light *editLight(SceneObject &e) {
+  return static_cast<scene::Light *>(e.components.edit(scene::Light::descriptor));
 }
 
 // Drafts may retain a null reference; execution requires a compatible live target.

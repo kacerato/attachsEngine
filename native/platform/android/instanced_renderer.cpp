@@ -115,8 +115,12 @@ struct DirtRoadFrameUniform {
   // zero significa "não há ondulação" e o vértice pula a leitura inteira.
   float waterRippleArea[4]{};
   float waterSurfaceDetail[4]{}; // foam elevation/coverage, micro height/wavelength
+  // Luzes pontuais e spot da cena. `x` é quantas valem neste quadro; o resto do
+  // vetor existe para manter o alinhamento std140 do array que vem depois.
+  float punctualLightParameters[4]{};
+  renderer::PunctualLight punctualLights[renderer::MaximumPunctualLights]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 1184);
+static_assert(sizeof(DirtRoadFrameUniform) == 1584);
 
 struct ShadowPushConstants {
   float lightViewProjection[16]{};
@@ -4213,6 +4217,29 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     frame->waterRippleArea[2] = waterRippleArea_;
     frame->waterRippleArea[3] = waterRippleGain_ > 0.0f
         ? static_cast<float>(waterRippleResolution_) : 0.0f;
+    // Luzes da cena: a escolha do orçamento acontece aqui, com a câmera deste
+    // quadro, e o que não coube fica contado em `lightBudget_`.
+    {
+      const u32 accepted = renderer::selectPunctualLights(
+          sceneLights_, camera.position, frame->punctualLights, lightBudget_);
+      frame->punctualLightParameters[0] = static_cast<float>(accepted);
+      for (u32 i = accepted; i < renderer::MaximumPunctualLights; ++i)
+        frame->punctualLights[i] = {};
+      // Uma direcional autorada na cena passa a ser o sol: ela é a modalidade
+      // que já tem consumidor com cascatas de sombra. Sem nenhuma, o sol do
+      // recurso de ambiente continua valendo, como antes deste caminho existir.
+      if (const auto *sun = renderer::selectDirectionalLight(sceneLights_)) {
+        float direction[3];
+        renderer::detail::normalized(sun->direction, direction);
+        // `sunDirectionIntensity.xyz` é a direção PARA a luz, que é o oposto da
+        // direção de emissão do objeto.
+        for (u32 axis = 0; axis < 3; ++axis)
+          frame->environment.sunDirectionIntensity[axis] = -direction[axis];
+        frame->environment.sunDirectionIntensity[3] = sun->intensity;
+        for (u32 axis = 0; axis < 3; ++axis)
+          frame->environment.sunColorAngularRadius[axis] = sun->color[axis];
+      }
+    }
     frame->waterSurfaceDetail[0] = waterShading_.foamElevation;
     frame->waterSurfaceDetail[1] = waterShading_.foamCoverage;
     frame->waterSurfaceDetail[2] = waterShading_.microDisplacement;

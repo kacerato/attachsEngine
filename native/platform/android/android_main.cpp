@@ -98,6 +98,10 @@ struct AndroidShell final {
   ae::platform::android::OceanValidation oceanValidation;
   ae::editor::EditorWaterPlay authoredWaterPlay;
   std::vector<ae::renderer::MapDrawState> authoredDraws;
+  std::vector<ae::renderer::SceneLight> authoredLights;
+  // Quantas luzes ficaram de fora no último aviso publicado. Sem isto o mesmo
+  // excedente sairia no log a cada quadro e viraria ruído em vez de aviso.
+  ae::u32 editorReportedLightOverflow = 0;
   bool forceTextureFallback = false;
   bool lockCamera = false;
   std::future<bool> rendererInitialization;
@@ -1776,8 +1780,24 @@ void android_main(android_app *app) {
             if(ready) ready=shell.authoredWaterPlay.update(timeSeconds,authored) && shell.instancedRenderer.setWaterRipples(shell.authoredWaterPlay.ripples());
             if(ready) shell.instancedRenderer.setWaterSimulationClock(shell.authoredWaterPlay.simulationTime());
           }
-          if (ready && (changed?shell.instancedRenderer.queueMapScene(authored):shell.instancedRenderer.queueAuthoredPoses(authored)))
+          if (ready && (changed?shell.instancedRenderer.queueMapScene(authored):shell.instancedRenderer.queueAuthoredPoses(authored))) {
             shell.editorPublishedRevision = shell.editorSession.document().revision();
+            // As luzes seguem o mesmo quadro dos desenhos. Republicar sempre é
+            // barato (são poucas) e evita um segundo conceito de "sujo" para um
+            // estado que muda por script no meio do Play.
+            if(shell.editorSession.extractLights(shell.authoredLights))
+              shell.instancedRenderer.queueSceneLights(shell.authoredLights);
+            // O relatório é o do último quadro desenhado: quem escolhe as luzes
+            // é o quadro, com a câmera dele. Um excedente aparece no aviso
+            // seguinte, nunca some.
+            const auto &budget=shell.instancedRenderer.lightBudget();
+            if(!budget.complete() && budget.punctualDropped+budget.directionalDropped!=shell.editorReportedLightOverflow) {
+              shell.editorReportedLightOverflow=budget.punctualDropped+budget.directionalDropped;
+              __android_log_print(ANDROID_LOG_WARN,LogTag,
+                "[Editor] Orcamento de luzes: %u pontuais acesas, %u fora; %u direcional, %u fora.",
+                budget.punctualAccepted,budget.punctualDropped,budget.directionalAccepted,budget.directionalDropped);
+            } else if(budget.complete()) shell.editorReportedLightOverflow=0;
+          }
           else {
             __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Editor] Falha ao publicar documento no renderer.");
             if(editorPlaying) shell.editorSession.reportPlayFailure();

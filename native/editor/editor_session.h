@@ -17,6 +17,7 @@
 
 #include "core/base.h"
 #include "editor/editor_play_scene.h"
+#include "runtime/scene_lights.h"
 #include "editor/editor_character.h"
 #include "editor/editor_scene_camera.h"
 #include "editor/editor_camera_look.h"
@@ -140,6 +141,12 @@ public:
   bool load(const char *path, u64 fingerprint);
   bool importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true, std::span<const u8> vertices = {}, std::span<const u32> indices = {});
   bool extractMap(std::vector<renderer::MapDrawState> &out) const { return mapScene_.extract(document_, out); }
+  // As luzes saem do MESMO grafo que a câmera e os desenhos: em execução, o
+  // mundo de Play; fora dele, o documento autoral. É o que faz um script mover
+  // ou apagar uma luz e a tela mudar, sem nenhum caminho separado de execução.
+  bool extractLights(std::vector<renderer::SceneLight> &out) const {
+    return runtime::collectSceneLights(isPlaying() && playScene_.active() ? playScene_.document() : document_, out);
+  }
   SceneCameraPose sceneCameraPose() const {
     return resolveSceneCamera(isPlaying()&&playScene_.active()?playScene_.document():document_);
   }
