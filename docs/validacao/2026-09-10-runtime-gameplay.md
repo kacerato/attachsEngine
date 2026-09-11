@@ -43,7 +43,8 @@ para o valor original (600000) ao final.
 O overlay GameTurbo ("Wild Boost ativado") apareceu sobre a primeira captura e
 saiu sozinho; a captura seguinte é a que vale. Nada nesta rodada mede FPS.
 
-Evidências em `build/validation-runtime-20260910/` (57 arquivos).
+Evidências em `build/validation-runtime-20260910/` (72 arquivos; não versionadas —
+`build/` é ignorado).
 
 ### Defeitos encontrados no aparelho
 
@@ -63,6 +64,13 @@ Evidências em `build/validation-runtime-20260910/` (57 arquivos).
    (`test_editor_play_scripts.cpp`), um deles verificando que uma ABI incompleta
    (por exemplo um hospedeiro que não resolveu `Contact`) **recusa o Play** em
    vez de rodar com os contatos sumindo em silêncio.
+3. **Material escrito por código não chegava à tela durante o Play.** Durante a
+   execução só as poses eram publicadas para o renderer; material, visibilidade
+   e sombra por instância ficavam parados no valor de autoria. Corrigido em
+   `InstancedRenderer::queueAuthoredPoses` e guardado pelo teste
+   `play_scene_material_written_by_code_reaches_the_draw_state`. A seção
+   "Divergência observada" abaixo tem a causa, a correção e a amostragem de
+   pixel no aparelho.
 
 ### O que foi exercitado pela interface, no aparelho
 
@@ -91,19 +99,57 @@ A `Sonda` é um script de diagnóstico escrito para esta rodada e empurrado por
 `adb push` para o projeto de validação — **não** acompanha o produto nem é
 semeada em projeto nenhum.
 
-### Divergência observada e NÃO corrigida
+### Divergência observada — causa achada e corrigida
 
-O comportamento escreveu `base_color.*` na Malha com sucesso (a chamada lança se
-for recusada, e o log seguinte saiu), mas **a cor do objeto não mudou na tela**.
-A amostragem de pixel confirma: o cubo continua cinza antes e depois do contato.
+O comportamento escrevia `base_color.*` na Malha com sucesso (a chamada lança se
+for recusada, e o log seguinte saía), mas **a cor do objeto não mudava na tela**.
+A escrita chegava ao componente e chegava a `MapDrawState::material`; o que não
+acontecia era a publicação desse estado para o renderer.
 
-A escrita chega ao componente; o que não acontece é o consumo do override de
-material por instância no caminho de desenho das primitivas do projeto
-independente, no renderer Android. Isso pertence à **entrega C** (materiais),
-que este pacote não implementou, e não é regressão desta rodada — o teste de
-host `editor_material_instance_override_is_independent_and_roundtrips` continua
-passando, ou seja, o valor chega a `MapDrawState::material`. Fica registrado
-aqui como lacuna concreta, com o ponto exato onde a cadeia para.
+Causa: durante o Play o documento autoral é deliberadamente **não** escrito,
+então `changed` é sempre falso em `android_main.cpp` e o único caminho de
+publicação que roda é `InstancedRenderer::queueAuthoredPoses`, que — como o nome
+diz — publicava **apenas matrizes de modelo**. Material, visibilidade e sombra
+por instância ficavam congelados no valor do último `queueMapScene`, isto é, no
+valor de autoria. Não era lacuna da entrega C: o override por instância já
+existia e já funcionava no documento; ele simplesmente não alcançava a tela
+enquanto a cena estava em execução.
+
+Correção: `queueAuthoredPoses` passou a acumular também o estado por instância
+que não é pose (material, visibilidade, sombra) num lote transacional, publicado
+no quadro junto com as poses e invalidando o cache de cascatas de sombra quando
+algum deles muda. As camadas de água ficaram **de fora** de propósito: são estado
+de autoria de água e a simulação escreve nos mesmos lotes depois da extração —
+republicá-las aqui sobrescreveria o que ela acabou de calcular.
+
+Fixado em teste de host:
+`play_scene_material_written_by_code_reaches_the_draw_state` escreve
+`base_color.{r,g,b}` pelo mundo de execução, exige que a escrita **ligue** o
+override, que o verde chegue a `MapDrawState::material` e que
+`applyMaterialOverride` o entregue ao registro de material do desenho — e que o
+Stop devolva a autoria intacta.
+
+Verificação no aparelho, em APK Debug **sem** nenhuma instrumentação
+(`libaether_android.so` de 12.025.712 bytes, o mesmo do artefato local; a rodada
+anterior tinha sido feita contra um APK instrumentado ainda instalado):
+
+| Momento | Amostra | Resultado |
+| --- | --- | --- |
+| Autoria (antes do Play) | cubo | `(141,141,141)` cinza |
+| Em execução, depois do contato | cubo frente / topo | `(41,175,73)` / `(101,229,150)` verde |
+| Em execução | chão em três pontos | `(211,211,211)` — inalterado |
+| Depois do Stop | cubo | `(141,141,141)` cinza: autoria preservada |
+
+Evidências: `build/validation-runtime-20260910/57-play-final.png` e
+`58-stop-final.png`.
+
+**Correção de registro sobre a rodada anterior.** O "chão ficou ciano" relatado
+durante a investigação não era defeito da engine: eram valores que eu mesmo
+havia deixado no inspetor por toques às cegas (`cor_ligada`/`cor_desligada` com
+`"0 9 0"` e `alvo` apontando para o chão). O descritor recusou `base_color.g=9`
+por estar fora de `[0,1]`, a exceção desligou o comportamento e sobrou
+`(0, 0.55, 0.55)` — ciano. A engine se comportou como especificado. O componente
+foi removido do objeto pelo menu do inspetor e a cena voltou ao estado limpo.
 
 ## Testes acrescentados (host)
 
@@ -148,11 +194,13 @@ aqui como lacuna concreta, com o ponto exato onde a cadeia para.
   observável, contexto desligado zera sem apagar a configuração;
 - ida e volta do mapa no arquivo de cena.
 
-### Play com scripts (`tests/native/test_editor_play_scripts.cpp`, 2)
+### Play com scripts (`tests/native/test_editor_play_scripts.cpp`, 3)
 
 - contato sólido atravessando `EditorPlayScene` → `ScriptBridge` → ABI, com o
   par correto e a descrição de anexos chegando ao runtime;
-- ABI incompleta **recusa** o Play em vez de perder eventos em silêncio.
+- ABI incompleta **recusa** o Play em vez de perder eventos em silêncio;
+- material escrito por código durante a execução chega ao estado de desenho,
+  liga o override e não contamina a autoria depois do Stop.
 
 ### Modelos de script (`tests/native/test_editor_script_templates.cpp`, 2)
 
@@ -185,9 +233,10 @@ aqui como lacuna concreta, com o ponto exato onde a cadeia para.
 
 - **Entrega B** (recursos com GUID, importação GLB pelo Android, renomear/mover/
   reimportar, cenas reutilizáveis): não iniciada.
-- **Entrega C** (MaterialAsset compartilhado, slots por submesh, overrides
-  chegando ao renderer, Luz anexável, pré-visualização isolada): não iniciada —
-  ver a divergência de material registrada acima.
+- **Entrega C** (MaterialAsset compartilhado, slots por submesh, Luz anexável,
+  pré-visualização isolada): não iniciada. O override de material **por
+  instância** já chega ao renderer durante a execução — ver a divergência
+  corrigida acima —, mas material compartilhado, slots e luz continuam fora.
 - **Entrega F** (console com histórico e navegação por diagnóstico, estados de
   compilação, busca/substituição, campos tipados novos, ocultar `.astra`): não
   iniciada. O seletor de modelo de script é a única parte de interface deste

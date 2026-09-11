@@ -140,3 +140,49 @@ AE_TEST(play_scene_refuses_a_script_runtime_that_does_not_fill_the_abi) {
   AE_EXPECT_TRUE(!play.start(doc, resources), "ABI incompleta recusa o Play");
   AE_EXPECT_EQ(FakeRuntime::starts, 0u, "o runtime nem chega a ser iniciado");
 }
+
+AE_TEST(play_scene_material_written_by_code_reaches_the_draw_state) {
+  // O que o aparelho mostrou: um comportamento escreve `base_color` e a cor não
+  // muda na tela. Este teste fixa até onde a cadeia PRECISA funcionar — do
+  // mundo de execução até o estado de desenho. O que estiver depois disto é
+  // consumo do renderer, e não este contrato.
+  renderer::MapDrawRecord draw{};
+  draw.model[0] = draw.model[5] = draw.model[10] = draw.model[15] = 1;
+  draw.boundsRadius = 1;
+  draw.indexCount = 36;
+  renderer::MapMaterialRecord material{};
+  material.baseColorFactor[0] = material.baseColorFactor[1] = material.baseColorFactor[2] = 1;
+  material.baseColorFactor[3] = 1;
+
+  EditorDocument doc;
+  EditorMapScene resources;
+  AE_EXPECT_TRUE(resources.import(doc, {&draw, 1}, {&material, 1}), "malha importada");
+  const auto id = doc.childrenOf(doc.root())[0];
+  AE_EXPECT_TRUE(!meshMaterial(*doc.find(id)).enabled, "sem override ao importar");
+
+  EditorPlayScene play;
+  AE_EXPECT_TRUE(play.start(doc, resources), "Play inicia");
+  auto &world = play.world();
+  const auto handle = world.handle(id);
+  const auto mesh = world.findComponent(handle, "astra.render.mesh");
+  AE_EXPECT_TRUE(mesh.valid(), "componente de malha endereçável");
+
+  // Exatamente o que `Component.SetFloat` faz do lado C#.
+  AE_EXPECT_EQ(static_cast<u32>(world.setProperty(mesh, "base_color.r", .10f)), 0u, "R");
+  AE_EXPECT_EQ(static_cast<u32>(world.setProperty(mesh, "base_color.g", .90f)), 0u, "G");
+  AE_EXPECT_EQ(static_cast<u32>(world.setProperty(mesh, "base_color.b", .20f)), 0u, "B");
+
+  std::vector<renderer::MapDrawState> draws;
+  AE_EXPECT_TRUE(play.extract(resources, draws), "extração do mundo em execução");
+  AE_EXPECT_EQ(draws.size(), 1u, "um desenho");
+  // Escrever uma propriedade de material LIGA o override: sem isso o valor
+  // ficaria guardado e o desenho continuaria usando o material do pacote.
+  AE_EXPECT_TRUE(draws[0].material.enabled, "override ativado pela escrita");
+  AE_EXPECT_EQ(draws[0].material.baseColor[1], .90f, "verde escrito pelo código");
+  const auto applied = renderer::applyMaterialOverride(material, draws[0].material);
+  AE_EXPECT_EQ(applied.baseColorFactor[1], .90f, "o override chega ao registro de material do desenho");
+
+  // E o documento autoral continua com o material do pacote.
+  play.stop();
+  AE_EXPECT_TRUE(!meshMaterial(*doc.find(id)).enabled, "autoria preservada depois do Stop");
+}

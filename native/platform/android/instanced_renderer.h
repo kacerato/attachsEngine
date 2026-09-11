@@ -710,6 +710,20 @@ private:
   renderer::WaterShadingSettings waterShading_{};
   std::array<renderer::MapDrawUpdate, 128> pendingMapPoses_{};
   u32 pendingMapPoseCount_ = 0;
+  // Estado por instância que NÃO é pose: material, visibilidade e sombra. Ele
+  // muda durante o Play sem que a hierarquia mude -- um script escrevendo
+  // `base_color`, por exemplo -- e a publicação de poses sozinha o deixaria
+  // congelado no valor do último `queueMapScene`. As camadas de água NÃO entram:
+  // são estado de autoria de água, e a simulação escreve nos mesmos lotes depois
+  // da extração -- republicá-las aqui sobrescreveria o que ela acabou de
+  // calcular.
+  struct AuthoredInstanceState {
+    renderer::MaterialOverride material{};
+    bool visible = true;
+    bool castShadow = true;
+  };
+  std::vector<AuthoredInstanceState> pendingAuthoredState_;
+  bool pendingAuthoredStateValid_ = false;
   std::vector<u8> dynamicMapDraws_;
   bool spectralWaterEnabled_=false;
   bool wideWaterSlopes_=false;

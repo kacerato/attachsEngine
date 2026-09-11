@@ -27,6 +27,13 @@ do documento antes e depois de trinta passos de simulação
 permite ligar o mesmo par física+scripts a um consumidor sem editor. **Isso ainda
 não é exportação de jogo** — não existe empacotador nem player autônomo.
 
+Como o documento autoral não muda durante o Play, o renderer Android publica os
+quadros da execução pelo caminho de poses (`queueAuthoredPoses`). Esse caminho
+publica também o estado por instância que **não** é pose — material,
+visibilidade e sombra —, senão uma propriedade escrita por script mudaria o
+componente sem nunca mudar a tela. As camadas de água ficam de fora de propósito:
+a simulação de água escreve nos mesmos lotes depois da extração.
+
 ## 2. Identidade de objetos
 
 | Campo | Papel |

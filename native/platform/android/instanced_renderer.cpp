@@ -3865,6 +3865,19 @@ bool InstancedRenderer::queueAuthoredPoses(std::span<const renderer::MapDrawStat
     update.draw.vertexOffset=current[i].vertexOffset;update.draw.materialIndex=current[i].materialIndex;
     pendingMapPoses_[count++]=update;
   }
+  // Material, visibilidade e sombra não são pose e mudam sem que a hierarquia
+  // mude. Durante o Play o documento autoral não é escrito, então o caminho de
+  // "só poses" é o ÚNICO que roda: sem isto, um script que escreve `base_color`
+  // altera o componente e a tela nunca muda. Transacional como o resto: só
+  // publica depois de todo o lote ter sido aceito.
+  pendingAuthoredState_.resize(draws.size());
+  for(u32 i=0;i<draws.size();++i) {
+    auto &state=pendingAuthoredState_[i];
+    state.material=draws[i].material;
+    state.visible=draws[i].visible;
+    state.castShadow=draws[i].castShadow;
+  }
+  pendingAuthoredStateValid_=true;
   pendingMapPoseCount_=count;return true;
 }
 
@@ -4005,6 +4018,22 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   readDrawCullTelemetryFromPreviousFrame();
   const bool mapPosesChanged = pendingMapPoseCount_ != 0 || !pendingScene_.empty();
   if (!pendingScene_.empty() && !commitAuthoredScene()) return rhi::SwapchainStatus::FatalError;
+  if (pendingAuthoredStateValid_) {
+    // `commitAuthoredScene` já escreve estes vetores a partir de pendingScene_;
+    // aqui é o caminho de Play, em que a cena publicada não mudou.
+    const u32 states = static_cast<u32>(
+        std::min<usize>(pendingAuthoredState_.size(), authoredMaterials_.size()));
+    for (u32 i = 0; i < states; ++i) {
+      const auto &state = pendingAuthoredState_[i];
+      if (!(authoredMaterials_[i] == state.material) || authoredVisibility_[i] != state.visible ||
+          authoredShadows_[i] != state.castShadow)
+        shadowCascadeDirtyMask_ = 0xffffffffu;
+      authoredMaterials_[i] = state.material;
+      authoredVisibility_[i] = state.visible;
+      authoredShadows_[i] = state.castShadow;
+    }
+    pendingAuthoredStateValid_ = false;
+  }
   if (pendingMapPoseCount_ != 0) {
     auto *instances = static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
     if (instances == nullptr) return rhi::SwapchainStatus::FatalError;
