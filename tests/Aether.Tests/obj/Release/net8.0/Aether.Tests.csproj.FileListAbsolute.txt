@@ -51,9 +51,6 @@ C:\Users\donod\Downloads\atchengine-render-rebuild\tests\Aether.Tests\obj\Releas
 C:\Users\donod\Downloads\atchengine-render-rebuild\tests\Aether.Tests\obj\Release\net8.0\Aether.Tests.pdb
 C:\Users\donod\Downloads\atchengine-render-rebuild\tests\Aether.Tests\obj\Release\net8.0\Aether.Tests.genruntimeconfig.cache
 C:\Users\donod\Downloads\atchengine-render-rebuild\tests\Aether.Tests\obj\Release\net8.0\ref\Aether.Tests.dll
-C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\bin\Release\net8.0\aether_physics.dll
-C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\bin\Release\net8.0\aether_resources.dll
-C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\bin\Release\net8.0\aether_transform.dll
 C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\bin\Release\net8.0\Aether.Tests.exe
 C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\bin\Release\net8.0\Aether.Tests.deps.json
 C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\bin\Release\net8.0\Aether.Tests.runtimeconfig.json
@@ -111,3 +108,6 @@ C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\obj\Release\net8.0\refint
 C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\obj\Release\net8.0\Aether.Tests.pdb
 C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\obj\Release\net8.0\Aether.Tests.genruntimeconfig.cache
 C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\obj\Release\net8.0\ref\Aether.Tests.dll
+C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\bin\Release\net8.0\aether_physics.dll
+C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\bin\Release\net8.0\aether_resources.dll
+C:\Users\donod\Downloads\atchengine\tests\Aether.Tests\bin\Release\net8.0\aether_transform.dll

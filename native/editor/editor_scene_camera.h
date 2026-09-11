@@ -11,7 +11,7 @@ struct SceneCameraPose {
 };
 // Projeção de câmera da cena: +Z para frente, hierarquia completa e nenhum
 // controlador implícito. Maior prioridade vence; menor ID desempata.
-inline SceneCameraPose resolveSceneCamera(const EditorDocument &document) {
+inline SceneCameraPose resolveSceneCamera(const runtime::SceneGraph &document) {
   SceneCameraPose result;
   std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
   for(auto id:ids) {

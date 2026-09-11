@@ -1,14 +1,15 @@
 #pragma once
 #include "editor/editor_document.h"
+#include "runtime/scene_components.h"
 #include "scene/camera_look.h"
 namespace ae::editor {
 using EditorCameraLook=scene::CameraLook;
 using scene::cameraLookNumbers;
-inline const EditorCameraLook *cameraLook(const EditorEntity &e) {return static_cast<const EditorCameraLook*>(e.components.find(EditorCameraLook::descriptor));}
-inline EditorCameraLook *editCameraLook(EditorEntity &e) {return static_cast<EditorCameraLook*>(e.components.edit(EditorCameraLook::descriptor));}
+using runtime::cameraLook;
+using runtime::editCameraLook;
 // Input is normalized by the viewport, independent of DPI and frame duration.
 // Local axes are intentional: a parent rig supplies its own world orientation.
-inline bool applyCameraLook(EditorDocument &document,EditorEntityId id,float x,float y) {
+inline bool applyCameraLook(runtime::SceneGraph &document,EditorEntityId id,float x,float y) {
   const auto *e=document.find(id);if(!e||!cameraComponent(*e)||!std::isfinite(x)||!std::isfinite(y)) return false;
   const auto *settings=cameraLook(*e);if(!settings||!settings->valid()) return false;
   if(x==0&&y==0) return true;

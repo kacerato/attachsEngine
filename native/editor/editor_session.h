@@ -71,9 +71,9 @@ public:
   void setSurface(const ui::UiRect &surface, const ui::UiInsets &safeArea);
   void setProjectName(const char *name);
   bool setProjectDirectory(const char *path);
-  bool needsScriptRuntime() const {return isPlaying()&&EditorScriptBridge::hasScripts(document_);}
+  bool needsScriptRuntime() const {return isPlaying()&&runtime::ScriptBridge::hasScripts(document_);}
   void setScriptRuntime(scene::ScriptRuntimeApi api) {playScene_.setScriptRuntime(api,files_.rootPath());}
-  void setScriptLogSink(EditorScriptBridge::LogSink sink) {playScene_.setScriptLogSink(std::move(sink));}
+  void setScriptLogSink(runtime::ScriptBridge::LogSink sink) {playScene_.setScriptLogSink(std::move(sink));}
   void setCodeCompilerAvailable(bool value) {state_.codeCompilerAvailable=value;}
   std::string takeCodeBuildRequest() {auto request=std::move(codeBuildRequest_);codeBuildRequest_.clear();return request;}
   bool completeCodeBuild(std::string_view report) {
@@ -163,7 +163,7 @@ public:
     auto view=resolveSceneCamera(playScene_.document());
     const auto *viewEntity=playScene_.document().find(view.entity);
     if(viewEntity&&cameraLook(*viewEntity)) {
-      if(!applyCameraLook(*playScene_.executionDocument(),view.entity,actions.lookScreenX,actions.lookScreenY)) return false;
+      if(!applyCameraLook(*playScene_.executionGraph(),view.entity,actions.lookScreenX,actions.lookScreenY)) return false;
       view=resolveSceneCamera(playScene_.document());
     }
     const auto *controlled=playScene_.document().find(state_.selection);

@@ -1,5 +1,6 @@
 #pragma once
 #include "editor/editor_document.h"
+#include "runtime/transform_math.h"
 #include "renderer/map_draw_update.h"
 #include "editor/editor_view.h"
 
@@ -15,10 +16,10 @@ public:
   // Loading a resource library need not instantiate its contents in the scene.
   bool import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws,
               std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true, std::span<const u8> vertices = {}, std::span<const u32> indices = {});
-  bool extract(const EditorDocument &document, std::vector<EditorMapUpdate> &out) const;
-  bool bounds(const EditorDocument &document, EditorEntityId entity, float center[3], float &radius) const;
+  bool extract(const runtime::SceneGraph &document, std::vector<EditorMapUpdate> &out) const;
+  bool bounds(const runtime::SceneGraph &document, EditorEntityId entity, float center[3], float &radius) const;
   bool localGeometry(u32 assetId,std::span<const EditorPickMesh::Triangle> &triangles,float relative[16]) const;
-  bool pickGeometry(const EditorDocument &document, EditorEntityId id, EditorPickCandidate &out) const;
+  bool pickGeometry(const runtime::SceneGraph &document, EditorEntityId id, EditorPickCandidate &out) const;
   void hydrateMaterials(EditorDocument &document) const;
   renderer::MaterialOverride materialForAsset(u32 index) const;
   u32 materialFlagsForAsset(u32 index) const {
@@ -31,7 +32,16 @@ private:
   std::vector<renderer::MapDrawRecord> source_;
 };
 // Column-major local/world matrices with Rz * Ry * Rx Euler convention.
-void editorTransformMatrix(const EditorTransform &transform, float out[16]);
-bool editorWorldMatrix(const EditorDocument &document, EditorEntityId entity, float out[16]);
-bool editorLocalTransformForWorld(const float world[16], const float parent[16], EditorTransform &out);
+// A convenção mora em runtime/transform_math.h: o editor apenas a reexporta com
+// os nomes que seus arquivos já usam, para que gizmo, física e scripts não
+// possam divergir por terem cópias da mesma decomposição.
+inline void editorTransformMatrix(const EditorTransform &transform, float out[16]) {
+  runtime::transformMatrix(transform, out);
+}
+inline bool editorWorldMatrix(const runtime::SceneGraph &graph, EditorEntityId entity, float out[16]) {
+  return runtime::worldMatrix(graph, entity, out);
+}
+inline bool editorLocalTransformForWorld(const float world[16], const float parent[16], EditorTransform &out) {
+  return runtime::localTransformForWorld(world, parent, out);
+}
 } // namespace ae::editor

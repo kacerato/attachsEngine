@@ -21,5 +21,3 @@ C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Release\net8.0\Aethe
 C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Release\net8.0\refint\Aether.Core.dll
 C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Release\net8.0\Aether.Core.pdb
 C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Release\net8.0\ref\Aether.Core.dll
-C:\Users\donod\Downloads\atchengine\managed\Aether.Core\bin\Release\net8.0\Aether.Core.runtimeconfig.json
-C:\Users\donod\Downloads\atchengine\managed\Aether.Core\obj\Release\net8.0\Aether.Core.genruntimeconfig.cache

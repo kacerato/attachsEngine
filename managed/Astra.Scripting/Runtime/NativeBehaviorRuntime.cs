@@ -8,6 +8,12 @@ namespace Astra.Runtime;
 
 public static unsafe class NativeBehaviorRuntime
 {
+    /// <summary>
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v3). A ordem dos
+    /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
+    /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
+    /// do fim do que o nativo alocou.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct SceneAccess
     {
@@ -18,27 +24,105 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*, ulong, byte*, int, void> Log;
         public delegate* unmanaged<void*, ulong, float*, uint, int> BodyForce;
         public delegate* unmanaged<void*, ulong, float*, int> GetVelocity;
+        // v3 — identidade
+        public delegate* unmanaged<void*, uint> WorldId;
+        public delegate* unmanaged<void*, ulong, uint> Generation;
+        public delegate* unmanaged<void*, uint> LastStatus;
+        // v3 — hierarquia
+        public delegate* unmanaged<void*, ulong, ulong> ParentOf;
+        public delegate* unmanaged<void*, ulong, int> ChildCount;
+        public delegate* unmanaged<void*, ulong, uint, ulong> ChildAt;
+        public delegate* unmanaged<void*, ulong, byte*, int, int, ulong> FindChild;
+        public delegate* unmanaged<void*, ulong, byte*, int, int> GetName;
+        public delegate* unmanaged<void*, ulong, byte*, int, int> SetName;
+        public delegate* unmanaged<void*, ulong, int> GetActive;
+        public delegate* unmanaged<void*, ulong, int, int> SetActive;
+        // v3 — ciclo de vida
+        public delegate* unmanaged<void*, ulong, byte*, int, ulong> CreateObject;
+        public delegate* unmanaged<void*, ulong, int> DestroyObject;
+        public delegate* unmanaged<void*, ulong, ulong, uint, int> SetParent;
+        // v3 — componentes
+        public delegate* unmanaged<void*, ulong, int> ComponentCount;
+        public delegate* unmanaged<void*, ulong, uint, byte*, int, ulong> ComponentAt;
+        public delegate* unmanaged<void*, ulong, byte*, int, uint, ulong> FindComponent;
+        public delegate* unmanaged<void*, ulong, byte*, int, ulong> AddComponent;
+        public delegate* unmanaged<void*, ulong, ulong, int> RemoveComponent;
+        public delegate* unmanaged<void*, ulong, ulong, byte*, int, uint*, ulong*, int> GetProperty;
+        public delegate* unmanaged<void*, ulong, ulong, byte*, int, uint, ulong, int> SetProperty;
+        // v3 — transform de mundo
+        public delegate* unmanaged<void*, ulong, float*, int> GetWorldTransform;
+        public delegate* unmanaged<void*, ulong, float*, int> SetWorldTransform;
+
+        public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
+            MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
+            Generation != null && LastStatus != null && ParentOf != null && ChildCount != null && ChildAt != null &&
+            FindChild != null && GetName != null && SetName != null && GetActive != null && SetActive != null &&
+            CreateObject != null && DestroyObject != null && SetParent != null && ComponentCount != null &&
+            ComponentAt != null && FindComponent != null && AddComponent != null && RemoveComponent != null &&
+            GetProperty != null && SetProperty != null && GetWorldTransform != null && SetWorldTransform != null;
     }
+
     private sealed class SceneAdapter(SceneAccess access) : ISceneAccess
     {
+        // Nomes cabem em 63 bytes e ids de tipo em 256; os buffers são o teto do
+        // contrato nativo, não uma estimativa.
+        private const int NameCapacity = 64;
+        private const int TypeIdCapacity = 257;
         private bool _active = true;
         private readonly int _ownerThread = Environment.CurrentManagedThreadId;
         private bool Accessible => _active && Environment.CurrentManagedThreadId == _ownerThread;
         public void Invalidate() => _active = false;
+
+        private static byte[] Utf8(string text, string what)
+        {
+            ArgumentNullException.ThrowIfNull(text);
+            var bytes = Encoding.UTF8.GetBytes(text);
+            if (bytes.Length == 0 || bytes.Length > 1024)
+                throw new ArgumentException($"{what} inválido: {text.Length} caracteres", nameof(text));
+            return bytes;
+        }
+
         public bool Exists(ulong objectId) => Accessible && access.Exists(access.Context, objectId) != 0;
+
+        public uint WorldId => Accessible ? access.WorldId(access.Context) : 0;
+        public uint GenerationOf(ulong objectId) => Accessible ? access.Generation(access.Context, objectId) : 0;
+        public WorldStatus LastStatus => Accessible ? (WorldStatus)access.LastStatus(access.Context) : WorldStatus.NotRunning;
+
         public TransformValue GetTransform(ulong objectId)
         {
             float* value = stackalloc float[10];
             if (!Accessible || access.GetTransform(access.Context, objectId, value) == 0)
-                throw new InvalidOperationException("Object transform is unavailable.");
-            return new(new(value[0], value[1], value[2]), new(value[3], value[4], value[5], value[6]), new(value[7], value[8], value[9]));
+                throw new WorldException(LastStatus, "ler transform");
+            return Decode(value);
         }
         public bool SetTransform(ulong objectId, TransformValue value)
         {
-            float* data = stackalloc float[10] { value.Position.X, value.Position.Y, value.Position.Z,
-                value.Rotation.X, value.Rotation.Y, value.Rotation.Z, value.Rotation.W, value.Scale.X, value.Scale.Y, value.Scale.Z };
+            float* data = stackalloc float[10];
+            Encode(value, data);
             return Accessible && access.SetTransform(access.Context, objectId, data) != 0;
         }
+        public TransformValue GetWorldTransform(ulong objectId)
+        {
+            float* value = stackalloc float[10];
+            if (!Accessible || access.GetWorldTransform(access.Context, objectId, value) == 0)
+                throw new WorldException(LastStatus, "ler transform de mundo");
+            return Decode(value);
+        }
+        public bool SetWorldTransform(ulong objectId, TransformValue value)
+        {
+            float* data = stackalloc float[10];
+            Encode(value, data);
+            return Accessible && access.SetWorldTransform(access.Context, objectId, data) != 0;
+        }
+        private static TransformValue Decode(float* v) =>
+            new(new(v[0], v[1], v[2]), new(v[3], v[4], v[5], v[6]), new(v[7], v[8], v[9]));
+        private static void Encode(TransformValue value, float* data)
+        {
+            data[0] = value.Position.X; data[1] = value.Position.Y; data[2] = value.Position.Z;
+            data[3] = value.Rotation.X; data[4] = value.Rotation.Y; data[5] = value.Rotation.Z; data[6] = value.Rotation.W;
+            data[7] = value.Scale.X; data[8] = value.Scale.Y; data[9] = value.Scale.Z;
+        }
+
         public bool SetBodyVelocity(ulong objectId, Vector3 value)
         {
             float* data = stackalloc float[3] { value.X, value.Y, value.Z };
@@ -71,7 +155,93 @@ public static unsafe class NativeBehaviorRuntime
             var bytes = Encoding.UTF8.GetBytes(message.Length > 8192 ? message[..8192] : message);
             fixed (byte* pointer = bytes) access.Log(access.Context, objectId, pointer, bytes.Length);
         }
+
+        // --- hierarquia -----------------------------------------------------
+        public ulong ParentOf(ulong objectId) => Accessible ? access.ParentOf(access.Context, objectId) : 0;
+        public int ChildCount(ulong objectId) => Accessible ? access.ChildCount(access.Context, objectId) : -1;
+        public ulong ChildAt(ulong objectId, uint index) => Accessible ? access.ChildAt(access.Context, objectId, index) : 0;
+        public ulong FindChild(ulong objectId, string name, bool recursive)
+        {
+            if (!Accessible) return 0;
+            var bytes = Utf8(name, "nome");
+            fixed (byte* pointer = bytes)
+                return access.FindChild(access.Context, objectId, pointer, bytes.Length, recursive ? 1 : 0);
+        }
+        public string GetName(ulong objectId)
+        {
+            if (!Accessible) throw new WorldException(WorldStatus.NotRunning, "ler nome");
+            byte* buffer = stackalloc byte[NameCapacity];
+            var size = access.GetName(access.Context, objectId, buffer, NameCapacity);
+            if (size <= 0 || size > NameCapacity) throw new WorldException(LastStatus, "ler nome");
+            return Encoding.UTF8.GetString(buffer, size);
+        }
+        public bool SetName(ulong objectId, string name)
+        {
+            if (!Accessible) return false;
+            var bytes = Utf8(name, "nome");
+            fixed (byte* pointer = bytes) return access.SetName(access.Context, objectId, pointer, bytes.Length) != 0;
+        }
+        public int GetActive(ulong objectId) => Accessible ? access.GetActive(access.Context, objectId) : -1;
+        public bool SetActive(ulong objectId, bool active) =>
+            Accessible && access.SetActive(access.Context, objectId, active ? 1 : 0) != 0;
+
+        // --- ciclo de vida --------------------------------------------------
+        public ulong CreateObject(ulong parent, string name)
+        {
+            if (!Accessible) return 0;
+            var bytes = Utf8(name, "nome");
+            fixed (byte* pointer = bytes) return access.CreateObject(access.Context, parent, pointer, bytes.Length);
+        }
+        public bool DestroyObject(ulong objectId) => Accessible && access.DestroyObject(access.Context, objectId) != 0;
+        public bool SetParent(ulong objectId, ulong parent, uint childIndex) =>
+            Accessible && access.SetParent(access.Context, objectId, parent, childIndex) != 0;
+
+        // --- componentes ----------------------------------------------------
+        public int ComponentCount(ulong objectId) => Accessible ? access.ComponentCount(access.Context, objectId) : -1;
+        public (ulong Instance, string TypeId) ComponentAt(ulong objectId, uint index)
+        {
+            if (!Accessible) return (0, string.Empty);
+            byte* buffer = stackalloc byte[TypeIdCapacity];
+            var instance = access.ComponentAt(access.Context, objectId, index, buffer, TypeIdCapacity);
+            if (instance == 0) return (0, string.Empty);
+            var length = 0;
+            while (length < TypeIdCapacity && buffer[length] != 0) ++length;
+            return (instance, Encoding.UTF8.GetString(buffer, length));
+        }
+        public ulong FindComponent(ulong objectId, string typeId, uint ordinal)
+        {
+            if (!Accessible) return 0;
+            var bytes = Utf8(typeId, "tipo de componente");
+            fixed (byte* pointer = bytes)
+                return access.FindComponent(access.Context, objectId, pointer, bytes.Length, ordinal);
+        }
+        public ulong AddComponent(ulong objectId, string typeId)
+        {
+            if (!Accessible) return 0;
+            var bytes = Utf8(typeId, "tipo de componente");
+            fixed (byte* pointer = bytes) return access.AddComponent(access.Context, objectId, pointer, bytes.Length);
+        }
+        public bool RemoveComponent(ulong objectId, ulong instanceId) =>
+            Accessible && access.RemoveComponent(access.Context, objectId, instanceId) != 0;
+        public bool TryGetProperty(ulong objectId, ulong instanceId, string propertyId, out uint kind, out ulong bits)
+        {
+            kind = 0; bits = 0;
+            if (!Accessible) return false;
+            var bytes = Utf8(propertyId, "propriedade");
+            fixed (byte* pointer = bytes)
+            fixed (uint* kindOut = &kind)
+            fixed (ulong* bitsOut = &bits)
+                return access.GetProperty(access.Context, objectId, instanceId, pointer, bytes.Length, kindOut, bitsOut) != 0;
+        }
+        public bool SetProperty(ulong objectId, ulong instanceId, string propertyId, uint kind, ulong bits)
+        {
+            if (!Accessible) return false;
+            var bytes = Utf8(propertyId, "propriedade");
+            fixed (byte* pointer = bytes)
+                return access.SetProperty(access.Context, objectId, instanceId, pointer, bytes.Length, kind, bits) != 0;
+        }
     }
+
     private static BehaviorWorld? _world;
     private static SceneAdapter? _scene;
     private static byte[] _diagnostics = [];
@@ -81,9 +251,8 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 2 ||
-                access->Size != sizeof(SceneAccess) || access->Exists == null || access->GetTransform == null ||
-                access->SetTransform == null || access->SetVelocity == null || access->MoveKinematic == null || access->Log == null || access->BodyForce == null || access->GetVelocity == null) return 1;
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 3 ||
+                access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);
             var attachments = JsonSerializer.Deserialize<BehaviorAttachment[]>(new ReadOnlySpan<byte>(json, jsonLength))

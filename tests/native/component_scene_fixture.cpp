@@ -2,7 +2,7 @@
 #include "editor/editor_archive.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_physics_body.h"
-#include "editor/editor_scene_physics.h"
+#include "runtime/scene_physics.h"
 #include "scene/joint.h"
 #include "scene/script_behavior.h"
 #include <filesystem>
@@ -53,7 +53,8 @@ int main(int argc,char **argv) {
   doc.applyEntityValues(motor,v);
   const auto camera=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Camera");v=*doc.find(camera);editCamera(v);
   v.transform.position[1]=5;v.transform.position[2]=-12;v.transform.rotationDegrees[0]=15;doc.applyEntityValues(camera,v);
-  EditorScenePhysics physics;if(!physics.start(doc)) {std::fprintf(stderr,"%s\n",physics.error().c_str());return 2;}
+  runtime::GameWorld world;runtime::ScenePhysics physics;
+  if(!world.load(doc)||!physics.start(world)) {std::fprintf(stderr,"%s\n",physics.error().c_str());return 2;}
   if(!saveEditorDocument((output/"composition.aescene").string().c_str(),doc,0)) return 3;
   std::ofstream code(output/"FixtureMotion.cs");code<<R"CS(using Astra;
 using System.Numerics;

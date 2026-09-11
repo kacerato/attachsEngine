@@ -1,14 +1,11 @@
-#include "editor/editor_scene_physics.h"
-#include "editor/editor_physics_body.h"
-#include "editor/editor_character.h"
-#include "editor/editor_map_scene.h"
+#include "runtime/scene_physics.h"
+#include "runtime/transform_math.h"
 #include <cmath>
 #include <unordered_map>
 #include "scene/joint.h"
-#include "editor/editor_component_references.h"
-namespace ae::editor {
+namespace ae::runtime {
 namespace {
-AetherQuat physicsRotation(const EditorTransform &t) {
+AetherQuat physicsRotation(const Transform &t) {
   const float x=t.rotationDegrees[0]*.00872664626f,y=t.rotationDegrees[1]*.00872664626f,z=t.rotationDegrees[2]*.00872664626f;
   const float sx=std::sin(x),cx=std::cos(x),sy=std::sin(y),cy=std::cos(y),sz=std::sin(z),cz=std::cos(z);
   return {sx*cy*cz-cx*sy*sz,cx*sy*cz+sx*cy*sz,cx*cy*sz-sx*sy*cz,cx*cy*cz+sx*sy*sz};
@@ -16,52 +13,57 @@ AetherQuat physicsRotation(const EditorTransform &t) {
 void multiplyPhysicsMatrix(const float *a,const float *b,float *out) {
   for(u32 c=0;c<4;++c) for(u32 r=0;r<4;++r) {out[c*4+r]=0;for(u32 k=0;k<4;++k) out[c*4+r]+=a[k*4+r]*b[c*4+k];}
 }
-bool activePhysicsObject(const EditorDocument &document,EditorEntityId id) {
-  for(auto p=id;p;) {const auto *e=document.find(p);if(!e||!e->active) return false;p=e->parent;}return true;
-}
 AetherVec3 transformPhysicsPoint(const float *m,const float *v,bool direction=false) {
   return {m[0]*v[0]+m[4]*v[1]+m[8]*v[2]+(direction?0:m[12]),
     m[1]*v[0]+m[5]*v[1]+m[9]*v[2]+(direction?0:m[13]),
     m[2]*v[0]+m[6]*v[1]+m[10]*v[2]+(direction?0:m[14])};
 }
 }
-void EditorScenePhysics::stop() {
+void ScenePhysics::stop() {
   characters_.clear();
   if(world_) AetherPhysics_DestroyWorld(world_);
   world_=nullptr;bindings_.clear();objects_.clear();events_.clear();accumulated_=0;jointCount_=0;
 }
-bool EditorScenePhysics::start(const EditorDocument &document) {
-  stop();error_="Falha ao iniciar a física da cena";
-  std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
+ObjectId ScenePhysics::objectForBody(AetherBodyHandle body) const {
+  const auto found=objects_.find(body);
+  return found==objects_.end()?kInvalidObject:found->second;
+}
+bool ScenePhysics::start(GameWorld &gameWorld) {
+  stop();gameWorld.clearAuthorities();error_="Falha ao iniciar a física da cena";
+  const auto &document=gameWorld.graph();
+  std::vector<ObjectId> ids;document.collectSubtree(document.root(),ids);
   AetherPhysicsWorldDescV2 config{};
   config.structSize=sizeof(config);config.apiVersion=AetherPhysicsWorldApiVersionV2;
   config.gravity={0,-9.81f,0};config.maxBodies=1024;config.maxBodyPairs=4096;
   config.maxContactConstraints=4096;config.maxBroadPhasePairs=4096;
   config.overflowPolicy=AetherPhysicsOverflowPolicy::Warning;
   world_=AetherPhysics_CreateWorldV2(&config);if(!world_) return false;
-  struct ColliderSource {EditorEntityId object;const scene::Collider *value;};
-  std::unordered_map<EditorEntityId,std::vector<ColliderSource>> colliders;
-  const auto fail=[&](const EditorEntity &entity,const std::string &reason) {error_=std::string(entity.name)+": "+reason;stop();return false;};
+  struct ColliderSource {ObjectId object;const scene::Collider *value;};
+  std::unordered_map<ObjectId,std::vector<ColliderSource>> colliders;
+  const auto fail=[&](const SceneObject &entity,const std::string &reason) {error_=std::string(entity.name)+": "+reason;stop();return false;};
   // Resolve ownership before creating anything; no nearest-parent inference.
   for(auto id:ids) {
-    const auto &entity=*document.find(id);if(!activePhysicsObject(document,id)) continue;
+    const auto &entity=*document.find(id);if(!document.activeInHierarchy(id)) continue;
     for(usize i=0;i<entity.components.size();++i) {
       const auto *v=entity.components.at(i);if(&v->type()!=&scene::Collider::descriptor) continue;
       const auto &c=static_cast<const scene::Collider &>(*v);if(!c.enabled) continue;
-      if(!c.valid()||!editorReferenceAccepts(document,id,scene::colliderReferences[0],c.owner,true))
+      if(!c.valid()||!referenceAccepts(document,id,scene::colliderReferences[0],c.owner,true))
         return fail(entity,"colisor #"+std::to_string(c.instanceId())+" requer um corpo neste objeto ou em um ancestral explícito");
-      const auto owner=c.owner?static_cast<EditorEntityId>(c.owner):id;
-      if(!activePhysicsObject(document,owner)) return fail(entity,"corpo proprietário inativo");
+      const auto owner=c.owner?static_cast<ObjectId>(c.owner):id;
+      if(!document.activeInHierarchy(owner)) return fail(entity,"corpo proprietário inativo");
       // A collider may not cross a separately simulated body in the hierarchy.
       for(auto p=id;p!=owner;p=document.find(p)->parent)
         if(physicsBody(*document.find(p))) return fail(entity,"colisor não pode atravessar outro corpo físico até seu proprietário");
       auto &parts=colliders[owner];if(parts.size()>=256) return fail(entity,"limite de 256 colisores por corpo");
       parts.push_back({id,&c});
+      // O objeto que contribui a forma também tem a pose congelada pelo corpo:
+      // movê-lo por script deslocaria a parte do composto sem a física saber.
+      gameWorld.setAuthority(id,TransformAuthority::PhysicsBody);
     }
   }
   for(auto id:ids) {
     const auto &entity=*document.find(id);const auto *body=physicsBody(entity);
-    if(!body||!activePhysicsObject(document,id)) continue;
+    if(!body||!document.activeInHierarchy(id)) continue;
     if(!body->valid()||characterComponent(entity)) return fail(entity,"corpo inválido ou incompatível com Personagem");
     for(auto p=entity.parent;p;p=document.find(p)->parent) {
       const auto &ancestor=*document.find(p);const auto *parentBody=physicsBody(ancestor);
@@ -70,17 +72,17 @@ bool EditorScenePhysics::start(const EditorDocument &document) {
     }
     auto found=colliders.find(id);
     if(found==colliders.end()||found->second.empty()) return fail(entity,"corpo sem colisores ativos vinculados");
-    float world[16],identity[16]{};identity[0]=identity[5]=identity[10]=identity[15]=1;EditorTransform transform;
-    if(!editorWorldMatrix(document,id,world)||!editorLocalTransformForWorld(world,identity,transform)) return fail(entity,"transformação física inválida ou com shear");
-    auto rigid=transform;rigid.scale[0]=rigid.scale[1]=rigid.scale[2]=1;float bodyFrame[16];editorTransformMatrix(rigid,bodyFrame);
+    float world[16],identity[16]{};identity[0]=identity[5]=identity[10]=identity[15]=1;Transform transform;
+    if(!worldMatrix(document,id,world)||!localTransformForWorld(world,identity,transform)) return fail(entity,"transformação física inválida ou com shear");
+    auto rigid=transform;rigid.scale[0]=rigid.scale[1]=rigid.scale[2]=1;float bodyFrame[16];transformMatrix(rigid,bodyFrame);
     std::vector<AetherCompoundPart> parts;parts.reserve(found->second.size());
     for(const auto &source:found->second) {
-      const auto &c=*source.value;EditorTransform local;local.position[0]=c.centerX;local.position[1]=c.centerY;local.position[2]=c.centerZ;
+      const auto &c=*source.value;Transform local;local.position[0]=c.centerX;local.position[1]=c.centerY;local.position[2]=c.centerZ;
       local.rotationDegrees[0]=c.rotationX;local.rotationDegrees[1]=c.rotationY;local.rotationDegrees[2]=c.rotationZ;
-      float localMatrix[16],objectMatrix[16],shapeWorld[16];editorTransformMatrix(local,localMatrix);
-      if(!editorWorldMatrix(document,source.object,objectMatrix)) return fail(entity,"objeto do colisor ausente");
-      multiplyPhysicsMatrix(objectMatrix,localMatrix,shapeWorld);EditorTransform partTransform;
-      if(!editorLocalTransformForWorld(shapeWorld,bodyFrame,partTransform)) return fail(*document.find(source.object),"colisor rotacionado sob escala não uniforme produz shear");
+      float localMatrix[16],objectMatrix[16],shapeWorld[16];transformMatrix(local,localMatrix);
+      if(!worldMatrix(document,source.object,objectMatrix)) return fail(entity,"objeto do colisor ausente");
+      multiplyPhysicsMatrix(objectMatrix,localMatrix,shapeWorld);Transform partTransform;
+      if(!localTransformForWorld(shapeWorld,bodyFrame,partTransform)) return fail(*document.find(source.object),"colisor rotacionado sob escala não uniforme produz shear");
       const float x=std::abs(partTransform.scale[0]),y=std::abs(partTransform.scale[1]),z=std::abs(partTransform.scale[2]);
       if(c.shape!=scene::ColliderShape::Box && (std::abs(x-y)>1e-4f*x||std::abs(x-z)>1e-4f*x)) return fail(entity,"esfera e cápsula requerem escala global uniforme");
       AetherCompoundPart part{};part.position={partTransform.position[0],partTransform.position[1],partTransform.position[2]};part.rotation=physicsRotation(partTransform);
@@ -100,20 +102,21 @@ bool EditorScenePhysics::start(const EditorDocument &document) {
     if(handle==AetherBodyHandle_Invalid||(body->motion==scene::BodyMotion::Dynamic&&!AetherPhysics_SetMassV2(world_,handle,body->mass))) return fail(entity,"Jolt recusou a composição ou a massa");
     if(body->motion!=scene::BodyMotion::Static) AetherPhysics_SetLinearVelocity(world_,handle,{body->velocityX,body->velocityY,body->velocityZ});
     objects_.emplace(handle,id);
+    gameWorld.setAuthority(id,TransformAuthority::PhysicsBody);
     bindings_.push_back({id,handle,{transform.scale[0],transform.scale[1],transform.scale[2]},body->motion!=scene::BodyMotion::Static});
   }
   // All bodies exist now, including static anchors and forward references.
   for(auto id:ids) {
-    const auto &entity=*document.find(id);if(!activePhysicsObject(document,id)) continue;
+    const auto &entity=*document.find(id);if(!document.activeInHierarchy(id)) continue;
     for(usize i=0;i<entity.components.size();++i) {
       const auto *v=entity.components.at(i);if(&v->type()!=&scene::Joint::descriptor) continue;
       const auto &joint=static_cast<const scene::Joint &>(*v);if(!joint.enabled) continue;
-      if(!joint.valid()||!physicsBody(entity)||!editorReferenceAccepts(document,id,scene::jointReferences[0],joint.connectedBody,true)) return fail(entity,"junta requer dois corpos distintos e campos válidos");
+      if(!joint.valid()||!physicsBody(entity)||!referenceAccepts(document,id,scene::jointReferences[0],joint.connectedBody,true)) return fail(entity,"junta requer dois corpos distintos e campos válidos");
       const Binding *a=nullptr,*b=nullptr;for(const auto &binding:bindings_) {if(binding.id==id) a=&binding;if(binding.id==joint.connectedBody) b=&binding;}
       if(!a||!b) return fail(entity,"corpo conectado à junta está inativo");
       if(physicsBody(entity)->motion!=scene::BodyMotion::Dynamic&&physicsBody(*document.find(b->id))->motion!=scene::BodyMotion::Dynamic)
         return fail(entity,"junta requer pelo menos um corpo dinâmico");
-      float ma[16],mb[16];if(!editorWorldMatrix(document,id,ma)||!editorWorldMatrix(document,b->id,mb)) return fail(entity,"referencial da junta inválido");
+      float ma[16],mb[16];if(!worldMatrix(document,id,ma)||!worldMatrix(document,b->id,mb)) return fail(entity,"referencial da junta inválido");
       AetherJointDescV2 desc{};desc.structSize=sizeof(desc);desc.apiVersion=AetherJointApiVersionV2;desc.kind=static_cast<AetherJointKind>(joint.kind);desc.space=AetherJointSpace::World;
       desc.point1=transformPhysicsPoint(ma,joint.anchorA);desc.point2=transformPhysicsPoint(mb,joint.anchorB);
       desc.axis1=transformPhysicsPoint(ma,joint.axisA,true);desc.axis2=transformPhysicsPoint(mb,joint.axisB,true);
@@ -137,8 +140,8 @@ bool EditorScenePhysics::start(const EditorDocument &document) {
     }
     CharacterBinding binding{};binding.id=id;binding.eyeHeight=character->eyeHeight;
     binding.jumpSpeed=character->jumpSpeed;
-    float identity[16]{};identity[0]=identity[5]=identity[10]=identity[15]=1;EditorTransform transform;
-    if(!editorWorldMatrix(document,id,binding.world)||!editorLocalTransformForWorld(binding.world,identity,transform)) {stop();return false;}
+    float identity[16]{};identity[0]=identity[5]=identity[10]=identity[15]=1;Transform transform;
+    if(!worldMatrix(document,id,binding.world)||!localTransformForWorld(binding.world,identity,transform)) {stop();return false;}
     for(float scale:transform.scale) if(std::abs(scale-1)>.0001f) {stop();return false;}
     physics::CharacterMotorSettings settings;
     settings.radius=character->radius;settings.standingHalfHeight=character->halfHeight;
@@ -147,35 +150,43 @@ bool EditorScenePhysics::start(const EditorDocument &document) {
     settings.gravityUnitsPerSecondSquared=9.81f;
     binding.motor=std::make_unique<physics::CharacterMotor>();
     if(!binding.motor->initializeInWorld(world_,{binding.world[12],binding.world[13]+binding.eyeHeight,binding.world[14]},settings)) {stop();return false;}
+    gameWorld.setAuthority(id,TransformAuthority::Character);
     characters_.push_back(std::move(binding));
   }
   error_.clear();return true;
 }
-bool EditorScenePhysics::setCharacterMove(EditorEntityId id,float right,float forward,float yaw) {
+void ScenePhysics::releaseObject(ObjectId id) {
+  for(auto i=bindings_.begin();i!=bindings_.end();++i) if(i->id==id) {
+    if(world_) AetherPhysics_DestroyBody(world_,i->body);
+    objects_.erase(i->body);bindings_.erase(i);break;
+  }
+  for(auto i=characters_.begin();i!=characters_.end();++i) if(i->id==id) {characters_.erase(i);break;}
+}
+bool ScenePhysics::setCharacterMove(ObjectId id,float right,float forward,float yaw) {
   if(!std::isfinite(right)||!std::isfinite(forward)||!std::isfinite(yaw)) return false;
   for(auto &c:characters_) if(c.id==id) {c.right=right;c.forward=forward;c.yaw=yaw;return true;}
   return false;
 }
-bool EditorScenePhysics::jumpCharacter(EditorEntityId id) {
+bool ScenePhysics::jumpCharacter(ObjectId id) {
   for(auto &c:characters_) if(c.id==id) return c.motor->jump(c.jumpSpeed);
   return false;
 }
-bool EditorScenePhysics::applyBodyForce(EditorEntityId id,const float *v,u32 kind) {
+bool ScenePhysics::applyBodyForce(ObjectId id,const float *v,u32 kind) {
   if(!v||kind>3) return false;
   for(const auto &b:bindings_) if(b.id==id) return AetherPhysics_ApplyBodyForceV1(world_,b.body,{v[0],v[1],v[2]},static_cast<AetherBodyForceKind>(kind))!=0;
   return false;
 }
-bool EditorScenePhysics::getBodyVelocity(EditorEntityId id,float *out) const {
+bool ScenePhysics::getBodyVelocity(ObjectId id,float *out) const {
   if(!out) return false;
   for(const auto &b:bindings_) if(b.id==id) {AetherVec3 v;if(!AetherPhysics_TryGetBodyVelocityV1(world_,b.body,&v)) return false;out[0]=v.x;out[1]=v.y;out[2]=v.z;return true;}
   return false;
 }
-bool EditorScenePhysics::setBodyVelocity(EditorEntityId id,const float *v) {
+bool ScenePhysics::setBodyVelocity(ObjectId id,const float *v) {
   if(!v||!std::isfinite(v[0])||!std::isfinite(v[1])||!std::isfinite(v[2])) return false;
   for(const auto &b:bindings_) if(b.id==id && b.moving) {AetherPhysics_SetLinearVelocity(world_,b.body,{v[0],v[1],v[2]});return true;}
   return false;
 }
-bool EditorScenePhysics::moveKinematic(EditorEntityId id,const float *v) {
+bool ScenePhysics::moveKinematic(ObjectId id,const float *v) {
   if(!v) return false;
   for(u32 i=0;i<7;++i) if(!std::isfinite(v[i])) return false;
   const float n=std::sqrt(v[3]*v[3]+v[4]*v[4]+v[5]*v[5]+v[6]*v[6]);if(n<1e-8f) return false;
@@ -183,7 +194,7 @@ bool EditorScenePhysics::moveKinematic(EditorEntityId id,const float *v) {
     return AetherPhysics_MoveKinematicV2(world_,b.body,{v[0],v[1],v[2]},{v[3]/n,v[4]/n,v[5]/n,v[6]/n},1.0f/60.0f)!=0;
   return false;
 }
-bool EditorScenePhysics::advance(double elapsed,EditorDocument &document,bool (*beforeStep)(void *,float),void *context,bool (*trigger)(void *,EditorEntityId,EditorEntityId,u32)) {
+bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(void *,float),void *context,bool (*trigger)(void *,ObjectId,ObjectId,u32)) {
   if(!world_ || !std::isfinite(elapsed) || elapsed<0) return false;
   constexpr double fixed=1.0/60.0;
   // Bound catch-up after surface/lifecycle stalls; never feed a large dt to Jolt.
@@ -193,7 +204,7 @@ bool EditorScenePhysics::advance(double elapsed,EditorDocument &document,bool (*
     for(auto &c:characters_) if(!c.motor->update(c.right,c.forward,c.yaw,static_cast<float>(fixed))) return false;
     if(AetherPhysics_StepV2(world_,static_cast<float>(fixed),1)!=0) return false;
     accumulated_-=fixed;
-    if(!synchronizePoses(document)) return false;
+    if(!synchronizePoses(world)) return false;
     if(trigger) {
       const auto count=AetherPhysics_GetTriggerEvents(world_,nullptr,0);
       if(count<0||count>1024*1024) {error_="Quantidade de eventos físicos inválida";return false;}
@@ -208,7 +219,8 @@ bool EditorScenePhysics::advance(double elapsed,EditorDocument &document,bool (*
   }
   return true;
 }
-bool EditorScenePhysics::synchronizePoses(EditorDocument &document) {
+bool ScenePhysics::synchronizePoses(GameWorld &world) {
+  auto &document=world.poseGraph();
   for(const auto &binding:bindings_) {
     if(!binding.moving) continue;
     AetherVec3 p;AetherQuat q;
@@ -217,19 +229,21 @@ bool EditorScenePhysics::synchronizePoses(EditorDocument &document) {
       (1-2*(q.y*q.y+q.z*q.z))*binding.scale[0],2*(q.x*q.y+q.w*q.z)*binding.scale[0],2*(q.x*q.z-q.w*q.y)*binding.scale[0],0,
       2*(q.x*q.y-q.w*q.z)*binding.scale[1],(1-2*(q.x*q.x+q.z*q.z))*binding.scale[1],2*(q.y*q.z+q.w*q.x)*binding.scale[1],0,
       2*(q.x*q.z+q.w*q.y)*binding.scale[2],2*(q.y*q.z-q.w*q.x)*binding.scale[2],(1-2*(q.x*q.x+q.y*q.y))*binding.scale[2],0,p.x,p.y,p.z,1};
-    const auto *entity=document.find(binding.id);if(!entity) return false;
+    // Um objeto removido no ponto seguro já teve o corpo solto; se a ordem
+    // inverter, ignorar é correto — publicar pose de quem não existe não é.
+    const auto *entity=document.find(binding.id);if(!entity) continue;
     float parent[16]{};parent[0]=parent[5]=parent[10]=parent[15]=1;
-    if(entity->parent && !editorWorldMatrix(document,entity->parent,parent)) return false;
-    EditorTransform local;
-    if(!editorLocalTransformForWorld(world,parent,local)||!document.setTransform(binding.id,local)) return false;
+    if(entity->parent && !worldMatrix(document,entity->parent,parent)) return false;
+    Transform local;
+    if(!localTransformForWorld(world,parent,local)||!document.setTransform(binding.id,local)) return false;
   }
   for(auto &c:characters_) {
     const auto eye=c.motor->eyePosition();c.world[12]=eye.x;c.world[13]=eye.y-c.eyeHeight;c.world[14]=eye.z;
-    const auto *entity=document.find(c.id);if(!entity) return false;
+    const auto *entity=document.find(c.id);if(!entity) continue;
     float parent[16]{};parent[0]=parent[5]=parent[10]=parent[15]=1;
-    if(entity->parent&&!editorWorldMatrix(document,entity->parent,parent)) return false;
-    EditorTransform local;
-    if(!editorLocalTransformForWorld(c.world,parent,local)||!document.setTransform(c.id,local)) return false;
+    if(entity->parent&&!worldMatrix(document,entity->parent,parent)) return false;
+    Transform local;
+    if(!localTransformForWorld(c.world,parent,local)||!document.setTransform(c.id,local)) return false;
   }
   return true;
 }

@@ -62,11 +62,6 @@
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
         }
-      },
-      "runtimes": {
-        "linux-bionic-arm64": {
-          "#import": []
-        }
       }
     },
     "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Rendering\\Aether.Rendering.csproj": {
@@ -137,11 +132,6 @@
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
         }
-      },
-      "runtimes": {
-        "linux-bionic-arm64": {
-          "#import": []
-        }
       }
     },
     "C:\\Users\\donod\\Downloads\\atchengine\\managed\\Aether.Scene\\Aether.Scene.csproj": {
@@ -205,11 +195,6 @@
             }
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
-        }
-      },
-      "runtimes": {
-        "linux-bionic-arm64": {
-          "#import": []
         }
       }
     },
@@ -279,11 +264,6 @@
             }
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
-        }
-      },
-      "runtimes": {
-        "linux-bionic-arm64": {
-          "#import": []
         }
       }
     }

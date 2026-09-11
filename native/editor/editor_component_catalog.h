@@ -1,46 +1,59 @@
 #pragma once
 #include "editor/editor_properties.h"
+#include "scene/component_schema.h"
 #include "ui/ui_icon_id.h"
 #include "scene/joint.h"
 
 namespace ae::editor {
-// Editor metadata for the component types with an implemented runtime consumer.
-// The screen iterates this catalog; applicability belongs to the type contract.
-enum class EditorComponentCategory : u32 { Camera=1, Visual=2, Physics=3 };
+// O catálogo anexável do inspetor.
+//
+// **Nome, descrição, categoria, exigências e incompatibilidades vêm do schema**
+// (scene/component_schema.h), que também alimenta o mundo de execução e, por
+// ele, a API em C#. Aqui ficam só as decisões que são de interface: qual ícone
+// e qual grupo de propriedades desenhar. Antes desta separação existiam duas
+// listas com as mesmas regras escritas à mão, e uma regra acrescentada em uma
+// delas fazia a API aceitar o que a interface recusava.
+using EditorComponentCategory = scene::ComponentCategory;
+
 struct EditorComponentEntry {
+  const scene::ComponentSchema *schema;
   const EditorComponentType *type;
   const char *name;
+  const char *description;
+  EditorComponentCategory category;
   EditorPropertyGroup properties;
-  const char *(*unavailable)(const EditorEntity &);
-  const char *description="";
-  ui::UiIcon icon=ui::UiIcon::EditorAuthorObject;
-  EditorComponentCategory category=EditorComponentCategory::Physics;
+  ui::UiIcon icon;
+  // Motivo pelo qual o tipo não pode ser anexado a esta entidade, ou nullptr.
+  const char *unavailable(const EditorEntity &entity) const {
+    return scene::componentUnavailableReason(*schema, entity.components);
+  }
 };
-inline const std::array<EditorComponentEntry,7> editorComponentCatalog{{
-  {&EditorPhysicsBody::descriptor,"Corpo físico",EditorPropertyGroup::ScenePhysics,
-    [](const EditorEntity &e)->const char* {return characterComponent(e)?"Incompatível com personagem cápsula":nullptr;},
-    "Massa e resposta física",ui::UiIcon::ComponentPhysics},
-  {&EditorCharacter::descriptor,"Personagem",EditorPropertyGroup::Character,
-    [](const EditorEntity &e)->const char* {return physicsBody(e)?"Incompatível com corpo físico":colliderComponent(e)?"O personagem já possui cápsula própria":nullptr;},
-    "Locomoção com cápsula",ui::UiIcon::ComponentCharacter},
-  {&EditorCameraLook::descriptor,"Olhar",EditorPropertyGroup::CameraLook,
-    [](const EditorEntity &e)->const char* {return cameraComponent(e)?nullptr:"Adicione Câmera a este objeto";},
-    "Rotação da câmera por toque",ui::UiIcon::ComponentLook,EditorComponentCategory::Camera},
-  {&EditorCollider::descriptor,"Colisor 3D",EditorPropertyGroup::Collider,
-    [](const EditorEntity &e)->const char* {return characterComponent(e)?"O personagem já possui cápsula própria":nullptr;},
-    "Volume de contato",ui::UiIcon::ComponentCollider},
-  {&scene::Joint::descriptor,"Junta",EditorPropertyGroup::ScenePhysics,
-    [](const EditorEntity &e)->const char* {return physicsBody(e)?nullptr:"Adicione Corpo físico a este objeto";},
-    "Conexão, limites e motor entre corpos",ui::UiIcon::ComponentJoint},
-  {&scene::Camera::descriptor,"Câmera",EditorPropertyGroup::CameraLook,
-    [](const EditorEntity &)->const char* {return nullptr;},
-    "Perspectiva e enquadramento",ui::UiIcon::EditorAuthorCamera,EditorComponentCategory::Camera},
-  {&scene::MeshRenderer::descriptor,"Malha",EditorPropertyGroup::Material,
-    [](const EditorEntity &)->const char* {return nullptr;},
-    "Geometria e material",ui::UiIcon::EditorAuthorObject,EditorComponentCategory::Visual}
+
+namespace detail {
+inline EditorComponentEntry catalogEntry(std::string_view id, EditorPropertyGroup properties, ui::UiIcon icon) {
+  const auto *schema = scene::findComponentSchema(id);
+  // Uma entrada de catálogo sem schema seria um componente sem contrato: sem
+  // cardinalidade, sem exigências e invisível para a API. Não existe.
+  return schema ? EditorComponentEntry{schema, schema->type, schema->name, schema->description,
+                                       schema->category, properties, icon}
+                : EditorComponentEntry{nullptr, nullptr, "", "", EditorComponentCategory::Physics, properties, icon};
+}
+} // namespace detail
+
+// Os sete tipos com consumidor implementado. Comportamento C# é anexado pela
+// área de código, não por esta lista, e por isso não aparece aqui.
+inline const std::array<EditorComponentEntry, 7> editorComponentCatalog{{
+  detail::catalogEntry("astra.physics.body", EditorPropertyGroup::ScenePhysics, ui::UiIcon::ComponentPhysics),
+  detail::catalogEntry("astra.physics.character", EditorPropertyGroup::Character, ui::UiIcon::ComponentCharacter),
+  detail::catalogEntry("astra.camera.look", EditorPropertyGroup::CameraLook, ui::UiIcon::ComponentLook),
+  detail::catalogEntry("astra.physics.collider", EditorPropertyGroup::Collider, ui::UiIcon::ComponentCollider),
+  detail::catalogEntry("astra.physics.joint", EditorPropertyGroup::ScenePhysics, ui::UiIcon::ComponentJoint),
+  detail::catalogEntry("astra.camera", EditorPropertyGroup::CameraLook, ui::UiIcon::EditorAuthorCamera),
+  detail::catalogEntry("astra.render.mesh", EditorPropertyGroup::Material, ui::UiIcon::EditorAuthorObject)
 }};
+
 inline const EditorComponentEntry *findEditorComponent(std::string_view id) {
-  for(const auto &entry:editorComponentCatalog) if(entry.type->id==id) return &entry;
+  for(const auto &entry:editorComponentCatalog) if(entry.type && entry.type->id==id) return &entry;
   return nullptr;
 }
 } // namespace ae::editor

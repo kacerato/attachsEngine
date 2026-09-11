@@ -11,5 +11,3 @@ C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net8.0\A
 C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net8.0\refint\Astra.Scripting.dll
 C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net8.0\Astra.Scripting.pdb
 C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net8.0\ref\Astra.Scripting.dll
-C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\bin\Release\net8.0\Astra.Scripting.runtimeconfig.json
-C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net8.0\Astra.Scripting.genruntimeconfig.cache

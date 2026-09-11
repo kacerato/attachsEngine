@@ -197,6 +197,22 @@ target_include_directories(aether_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # frame (load/store e memoryless do depth) e derivada dele, nao escrita a mao.
 target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 
+# --- aether_runtime: o mundo de execucao, independente do editor -----------
+# Grafo de cena, identidade/geracao de handles, fila de comandos e relogio. Nao
+# conhece editor, UI, historico nem selecao: e o que um consumidor sem editor
+# (o futuro player) liga a fisica e aos scripts. O editor usa o MESMO grafo como
+# armazenamento do documento autoral, entao nao existe uma segunda definicao de
+# "objeto de cena" para manter em sincronia.
+add_library(aether_runtime STATIC
+  runtime/scene_graph.cpp
+  runtime/transform_math.cpp
+  runtime/game_world.cpp
+  runtime/scene_physics.cpp
+  runtime/script_bridge.cpp
+)
+target_include_directories(aether_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(aether_runtime PUBLIC aether_core aether_physics)
+
 # --- aether_editor: documento de cena, historico, projecao e gizmo ---------
 # O modelo do EDITOR, nao o do runtime: descreve o que o usuario autorou. Ele
 # depende do renderer apenas pela convencao de camera (frustum e projecao), que
@@ -204,7 +220,6 @@ target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 # contornar outro seria o defeito de reimplementa-la aqui.
 add_library(aether_editor STATIC
   editor/editor_code_workspace.cpp
-  editor/editor_script_bridge.cpp
   editor/editor_filesystem.cpp
   editor/editor_archive.cpp
   editor/editor_map_scene.cpp
@@ -213,12 +228,11 @@ add_library(aether_editor STATIC
   editor/editor_gizmo.cpp
   editor/editor_screen.cpp
   editor/editor_session.cpp
-  editor/editor_scene_physics.cpp
   editor/editor_history.cpp
   editor/editor_view.cpp
 )
 target_include_directories(aether_editor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_editor PUBLIC aether_core aether_renderer aether_ui aether_platform)
+target_link_libraries(aether_editor PUBLIC aether_core aether_runtime aether_renderer aether_ui aether_platform)
 
 # --- aether_ui: layout, desenho e roteamento de toque da interface ---------
 # Separada de aether_renderer de proposito: a UI do editor nao conhece Vulkan,
@@ -405,6 +419,7 @@ if(NOT ANDROID)
     ../tests/native/test_foliage_impostors.cpp
     ../tests/native/test_frustum_visibility.cpp
     ../tests/native/test_gpu_draw_compaction.cpp
+    ../tests/native/test_runtime_world.cpp
     ../tests/native/test_editor_map_scene.cpp
     ../tests/native/test_scene_components.cpp
     ../tests/native/test_editor_document.cpp

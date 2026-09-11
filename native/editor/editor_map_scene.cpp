@@ -15,7 +15,7 @@ void multiply(const float a[16], const float b[16], float out[16]) {
     for (u32 k=0;k<4;++k) value[c*4+r] += a[k*4+r]*b[c*4+k];
   std::copy(value,value+16,out);
 }
-bool inheritedVisible(const EditorDocument &document, EditorEntityId id) {
+bool inheritedVisible(const runtime::SceneGraph &document, EditorEntityId id) {
   while (const auto *entity = document.find(id)) {
     if (!entity->active || !entity->visible) return false;
     id = entity->parent;
@@ -23,54 +23,6 @@ bool inheritedVisible(const EditorDocument &document, EditorEntityId id) {
   return true;
 }
 }
-void editorTransformMatrix(const EditorTransform &t, float out[16]) {
-  constexpr float radians = 0.0174532925199433f;
-  const float x=t.rotationDegrees[0]*radians, y=t.rotationDegrees[1]*radians, z=t.rotationDegrees[2]*radians;
-  const float cx=std::cos(x),sx=std::sin(x),cy=std::cos(y),sy=std::sin(y),cz=std::cos(z),sz=std::sin(z);
-  const float matrix[16]{cy*cz,cy*sz,-sy,0, sx*sy*cz-cx*sz,sx*sy*sz+cx*cz,sx*cy,0,
-    cx*sy*cz+sx*sz,cx*sy*sz-sx*cz,cx*cy,0,t.position[0],t.position[1],t.position[2],1};
-  std::copy(matrix,matrix+16,out);
-  for(u32 c=0;c<3;++c) for(u32 r=0;r<3;++r) out[c*4+r]*=t.scale[c];
-}
-bool editorWorldMatrix(const EditorDocument &document, EditorEntityId id, float out[16]) {
-  const auto *entity=document.find(id);
-  if(!entity) return false;
-  editorTransformMatrix(entity->transform,out);
-  for(u32 depth=0;entity->parent!=kInvalidEntity && depth<document.entityCount();++depth) {
-    entity=document.find(entity->parent);
-    if(!entity) return false;
-    float parent[16];editorTransformMatrix(entity->transform,parent);multiply(parent,out,out);
-  }
-  for(u32 i=0;i<16;++i) if(!std::isfinite(out[i])) return false;
-  return true;
-}
-bool editorLocalTransformForWorld(const float world[16],const float parent[16],EditorTransform &out) {
-  float normal[12];if(!renderer::buildNormalMatrix(parent,normal)) return false;
-  float inverse[16]{};inverse[15]=1;
-  for(u32 r=0;r<3;++r) for(u32 c=0;c<3;++c) inverse[c*4+r]=normal[r*4+c];
-  for(u32 r=0;r<3;++r) for(u32 c=0;c<3;++c) inverse[12+r]-=inverse[c*4+r]*parent[12+c];
-  float local[16];multiply(inverse,world,local);
-  EditorTransform value;
-  for(u32 c=0;c<3;++c) {
-    value.position[c]=local[12+c];
-    value.scale[c]=std::sqrt(local[c*4]*local[c*4]+local[c*4+1]*local[c*4+1]+local[c*4+2]*local[c*4+2]);
-    if(!std::isfinite(value.scale[c]) || value.scale[c]<.001f) return false;
-  }
-  const float pitch=std::asin(std::clamp(-local[2]/value.scale[0],-1.0f,1.0f));
-  const bool pole=std::abs(std::cos(pitch))<.00001f;
-  constexpr float degrees=57.29577951308232f;
-  value.rotationDegrees[1]=pitch*degrees;
-  value.rotationDegrees[0]=(pole?std::atan2(-local[9]/value.scale[2],local[5]/value.scale[1]):
-                                 std::atan2(local[6]/value.scale[1],local[10]/value.scale[2]))*degrees;
-  value.rotationDegrees[2]=pole?0:std::atan2(local[1]/value.scale[0],local[0]/value.scale[0])*degrees;
-  float reconstructed[16];editorTransformMatrix(value,reconstructed);
-  // Reject shear/reflection instead of silently losing the old world transform.
-  for(u32 i=0;i<16;++i)
-    if(!std::isfinite(local[i]) || std::abs(local[i]-reconstructed[i])>.0001f*std::max(1.0f,std::abs(local[i]))) return false;
-  if(!isTransformValid(value)) return false;
-  out=value;return true;
-}
-
 bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices) {
   if(draws.size()+1>EditorDocument::kMaximumEntities) return false;
   std::vector<std::shared_ptr<const EditorPickMesh>> meshes(draws.size());
@@ -123,7 +75,7 @@ void EditorMapScene::hydrateMaterials(EditorDocument &document) const {
     auto *render=editMeshRenderer(value);if(!render) continue;render->material=materialForAsset(meshAsset(value)-1);document.applyEntityValues(id,value);
   }
 }
-bool EditorMapScene::bounds(const EditorDocument &document, EditorEntityId id, float center[3], float &radius) const {
+bool EditorMapScene::bounds(const runtime::SceneGraph &document, EditorEntityId id, float center[3], float &radius) const {
   const auto *entity=document.find(id);
   if(!entity || !meshAsset(*entity) || meshAsset(*entity)>source_.size()) return false;
   float world[16];if(!editorWorldMatrix(document,id,world)) return false;
@@ -157,7 +109,7 @@ bool EditorMapScene::localGeometry(u32 assetId,std::span<const EditorPickMesh::T
   for(u32 axis=0;axis<3;++axis) relative[12+axis]-=source.boundsCenter[axis];
   triangles=pickMeshes_[assetId-1]->triangles();return !triangles.empty();
 }
-bool EditorMapScene::pickGeometry(const EditorDocument &document,EditorEntityId id,EditorPickCandidate &out) const {
+bool EditorMapScene::pickGeometry(const runtime::SceneGraph &document,EditorEntityId id,EditorPickCandidate &out) const {
   const auto *entity=document.find(id);
   if(!entity || !meshAsset(*entity) || meshAsset(*entity)>pickMeshes_.size()) return false;
   const auto index=meshAsset(*entity)-1;
@@ -167,7 +119,7 @@ bool EditorMapScene::pickGeometry(const EditorDocument &document,EditorEntityId 
   for(u32 axis=0;axis<3;++axis) relative[12+axis]-=source.boundsCenter[axis];
   multiply(world,relative,out.model);out.mesh=pickMeshes_[index];return true;
 }
-bool EditorMapScene::extract(const EditorDocument &document, std::vector<EditorMapUpdate> &out) const {
+bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<EditorMapUpdate> &out) const {
   std::vector<EditorMapUpdate> prepared(source_.size());
   for(u32 i=0;i<source_.size();++i) {
     prepared[i].sourceDrawIndex=i;prepared[i].pose.drawIndex=i;prepared[i].pose.draw=source_[i];prepared[i].visible=false;

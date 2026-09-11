@@ -29,5 +29,3 @@ C:\Users\donod\Downloads\atchengine\managed\Aether.Scene\obj\Release\net8.0\Aeth
 C:\Users\donod\Downloads\atchengine\managed\Aether.Scene\obj\Release\net8.0\refint\Aether.Scene.dll
 C:\Users\donod\Downloads\atchengine\managed\Aether.Scene\obj\Release\net8.0\Aether.Scene.pdb
 C:\Users\donod\Downloads\atchengine\managed\Aether.Scene\obj\Release\net8.0\ref\Aether.Scene.dll
-C:\Users\donod\Downloads\atchengine\managed\Aether.Scene\bin\Release\net8.0\Aether.Scene.runtimeconfig.json
-C:\Users\donod\Downloads\atchengine\managed\Aether.Scene\obj\Release\net8.0\Aether.Scene.genruntimeconfig.cache

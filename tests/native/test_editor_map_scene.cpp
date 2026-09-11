@@ -535,13 +535,13 @@ AE_TEST(editor_play_scene_isolates_mutations_and_restarts_from_authoring) {
     AE_EXPECT_TRUE(play.start(doc,resources),"start isolated instance");
     AE_EXPECT_TRUE(!play.start(doc,resources),"no replacement of live instance");
     auto moved=play.document().find(id)->transform;moved.position[1]=7;
-    AE_EXPECT_TRUE(play.executionDocument()->setTransform(id,moved),"runtime mutation");
+    AE_EXPECT_TRUE(play.executionGraph()->setTransform(id,moved),"runtime mutation");
     AE_EXPECT_TRUE(play.extract(resources,poses),"runtime render projection");
     AE_EXPECT_EQ(poses.size(),usize{1},"one object");
     AE_EXPECT_TRUE(std::abs(poses[0].pose.draw.model[13]-7)<.001f,"render consumes runtime transform");
     AE_EXPECT_EQ(serializeEditorDocument(doc,0),original,"authoring never modified");
     play.stop();
-    AE_EXPECT_TRUE(!play.active() && !play.executionDocument(),"runtime destroyed");
+    AE_EXPECT_TRUE(!play.active() && !play.executionGraph(),"runtime destroyed");
     AE_EXPECT_TRUE(!play.extract(resources,poses),"stopped instance cannot publish");
   }
 }
@@ -622,7 +622,7 @@ AE_TEST(scene_play_repeated_failed_start_releases_partial_world_and_recovers) {
   for(int cycle=0;cycle<100;++cycle) {
     // Failure occurs after a world, floor and first character have been created.
     AE_EXPECT_TRUE(!play.start(invalid,resources),"partial initialization rejected");
-    AE_EXPECT_TRUE(!play.active() && !play.executionDocument(),"failed runtime inaccessible");
+    AE_EXPECT_TRUE(!play.active() && !play.executionGraph(),"failed runtime inaccessible");
     AE_EXPECT_TRUE(!play.advance(1.0/60.0),"failed world cannot advance");
     AE_EXPECT_TRUE(play.start(doc,resources),"retry after partial initialization");
     AE_EXPECT_EQ(play.document().find(actor)->transform.position[0],0.0f,"fresh authored pose");
@@ -767,12 +767,12 @@ AE_TEST(camera_look_component_is_optional_serialized_and_clamped_in_runtime) {
   const auto saved=serializeEditorDocument(doc,0);EditorDocument loaded;
   AE_EXPECT_TRUE(deserializeEditorDocument(saved,0,loaded),"controller roundtrip");
   EditorPlayScene play;AE_EXPECT_TRUE(play.start(loaded,resources),"isolated play");
-  AE_EXPECT_TRUE(applyCameraLook(*play.executionDocument(),camera,.5f,2),"normalized look");
+  AE_EXPECT_TRUE(applyCameraLook(*play.executionGraph(),camera,.5f,2),"normalized look");
   const auto &transform=play.document().find(camera)->transform;
   AE_EXPECT_EQ(transform.rotationDegrees[1],90.0f,"sensitivity applies");
   AE_EXPECT_EQ(transform.rotationDegrees[0],60.0f,"vertical limit clamps");
   AE_EXPECT_EQ(serializeEditorDocument(loaded,0),saved,"runtime look does not edit authoring");
-  AE_EXPECT_TRUE(applyCameraLook(*play.executionDocument(),camera,4,-4),"multiple turns stay bounded");
+  AE_EXPECT_TRUE(applyCameraLook(*play.executionGraph(),camera,4,-4),"multiple turns stay bounded");
   AE_EXPECT_EQ(play.document().find(camera)->transform.rotationDegrees[1],90.0f,"yaw wraps without losing heading");
   AE_EXPECT_EQ(play.document().find(camera)->transform.rotationDegrees[0],-60.0f,"lower limit");
 }
