@@ -569,6 +569,16 @@ apresentado como resolvido:
 - ~~**Grade inclinada e grade sobre faces em ângulo rasante.**~~ **FECHADO.**
   Causa raiz no raio normalizado no vértice, acima. Verificado no aparelho e
   confirmado pelo usuário. O M04 fica completo.
+- **M04.1 — contrato de RenderView:** a projeção deixou de ser copiada à mão em
+  cinco lugares e passou a viver em `renderer/camera_ray.h`. A seleção por toque
+  (`screenPointToRay`) consome o contrato em vez da cópia que mantinha — as duas
+  já concordavam, e foi verificado termo a termo antes da troca
+  (`tangentHalfHorizontal = tangentHalfVertical · proporção` corresponde a
+  `aspect/focal` do shader; a base mundo→vista é idêntica linha por linha à do
+  `instanced_renderer`). Cinco testes de host novos cobrem o contrato, entre eles
+  o que trava o defeito desta rodada: interpolar o raio cru tem de reproduzir o
+  raio exato, e normalizar antes de interpolar tem de errar por mais de 15° no
+  centro da tela. 834/834.
 - ~~**Objetos que somem / grade que sobe por cima ao dar zoom.**~~ **FECHADO**
   pela mesma correção — era a deformação do raio mudando junto com a câmera, não
   culling nem sumiço de geometria. As varreduras anteriores

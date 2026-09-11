@@ -400,6 +400,25 @@ Duas células coexistem e a fina perde peso continuamente dentro da década, e
 chega a zero antes de a próxima assumir. Um teste de host percorre a distância
 da câmera e exige exatamente isso.
 
+### O contrato de câmera vive num lugar só
+
+A mesma projeção aparecia escrita à mão no vértice da cena, no céu, no passe da
+grade, na seleção por toque e na oclusão. Foi assim que uma das cópias divergiu
+sem que nada acusasse. Agora ela está em `renderer/camera_ray.h`, que é a
+referência que as outras espelham:
+
+```
+view   = B · (mundo − câmera)                B ortonormal, inversa = transposta
+xy     = (view.x/tanH, view.y/tanV)          tanH = tanV · proporção
+ndc    = M · (xy.x, −xy.y) / view.z          M = pré-rotação do display
+clip.z = (far·view.z − near·far)/(far − near),  clip.w = view.z
+```
+
+`screenPointToRay` (a seleção por toque) usa o contrato diretamente, em vez da
+cópia que mantinha. Cinco testes de host cobrem o caminho: ida e volta
+mundo→pixel→raio, as quatro orientações de tela, e a recusa fechada de um
+frustum que não dá para inverter.
+
 ### O raio de câmera precisa ser afim em NDC
 
 O vértice do passe reconstrói o raio de cada pixel invertendo a projeção do
@@ -423,6 +442,12 @@ e a interseção com o plano nem precisa — ela é invariante à escala do raio
 O vértice também subtrai o deslocamento temporal (`jitter`) antes de desfazer a
 projeção, porque a cena o soma **depois** da divisão por `view.z`. Sem isso a
 grade anda meio pixel por quadro contra a geometria.
+
+Dois testes de host trancam isso sem precisar do aparelho: um exige que
+interpolar o raio cru entre os três vértices do triângulo reproduza o raio exato
+em qualquer ponto da tela, e o outro **mede o erro do jeito errado** — normaliza
+nos vértices, interpola, e exige que o desvio no centro passe de 15°. O segundo
+está lá para que a regra do primeiro não pareça zelo.
 
 ### Moiré por família, não pela grade inteira
 

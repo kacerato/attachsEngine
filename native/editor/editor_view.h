@@ -14,6 +14,7 @@
 #pragma once
 
 #include "core/base.h"
+#include "renderer/camera_ray.h"
 #include "renderer/frustum_visibility.h"
 #include "renderer/hzb_visibility.h"
 #include "ui/ui_geometry.h"

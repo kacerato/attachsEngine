@@ -7,43 +7,19 @@ namespace {
 
 using ui::UiPoint;
 
-struct ViewBasis final {
-  // Linhas da matriz mundo→vista. Ela é ortonormal, então a inversa é a
-  // transposta — é o que `viewDirectionToWorld` usa, em vez de uma inversão
-  // genérica que introduziria erro e um caso de determinante nulo.
-  float row0[3]{};
-  float row1[3]{};
-  float row2[3]{};
-};
+// A base e a projecao NAO sao redefinidas aqui. Elas vivem em
+// renderer/camera_ray.h, que e o contrato unico que o vertice da cena, o ceu, o
+// passe da grade e a oclusao espelham. Um editor com a sua propria copia
+// selecionaria um objeto e desenharia o contorno em outro assim que uma das
+// copias divergisse -- foi o que aconteceu com a grade.
+using ViewBasis = renderer::CameraViewBasis;
 
 ViewBasis buildViewBasis(float yaw, float pitch) noexcept {
-  const float cosineYaw = std::cos(yaw);
-  const float sineYaw = std::sin(yaw);
-  const float cosinePitch = std::cos(pitch);
-  const float sinePitch = std::sin(pitch);
-  ViewBasis basis{};
-  basis.row0[0] = cosineYaw;
-  basis.row0[1] = 0.0f;
-  basis.row0[2] = -sineYaw;
-  basis.row1[0] = sinePitch * sineYaw;
-  basis.row1[1] = cosinePitch;
-  basis.row1[2] = sinePitch * cosineYaw;
-  basis.row2[0] = cosinePitch * sineYaw;
-  basis.row2[1] = -sinePitch;
-  basis.row2[2] = cosinePitch * cosineYaw;
-  return basis;
+  return renderer::buildCameraViewBasis(yaw, pitch);
 }
 
 void worldToView(const ViewBasis &basis, const float delta[3], float outView[3]) noexcept {
-  outView[0] = basis.row0[0] * delta[0] + basis.row0[1] * delta[1] + basis.row0[2] * delta[2];
-  outView[1] = basis.row1[0] * delta[0] + basis.row1[1] * delta[1] + basis.row1[2] * delta[2];
-  outView[2] = basis.row2[0] * delta[0] + basis.row2[1] * delta[1] + basis.row2[2] * delta[2];
-}
-
-void viewToWorld(const ViewBasis &basis, const float view[3], float outWorld[3]) noexcept {
-  outWorld[0] = basis.row0[0] * view[0] + basis.row1[0] * view[1] + basis.row2[0] * view[2];
-  outWorld[1] = basis.row0[1] * view[0] + basis.row1[1] * view[1] + basis.row2[1] * view[2];
-  outWorld[2] = basis.row0[2] * view[0] + basis.row1[2] * view[1] + basis.row2[2] * view[2];
+  renderer::cameraWorldToView(basis, delta, outView);
 }
 
 bool isFiniteTriple(const float values[3]) noexcept {
@@ -112,27 +88,19 @@ EditorRay screenPointToRay(const EditorViewport &viewport, ui::UiPoint screen) n
   const float ndcX = (screen.x - viewport.rect.x) / viewport.rect.width * 2.0f - 1.0f;
   const float ndcY = (screen.y - viewport.rect.y) / viewport.rect.height * 2.0f - 1.0f;
 
-  const float determinant = viewport.surfaceTransform.xx * viewport.surfaceTransform.yy -
-                            viewport.surfaceTransform.xy * viewport.surfaceTransform.yx;
-  const float inverse = 1.0f / determinant;
-  const float planeX = (viewport.surfaceTransform.yy * ndcX - viewport.surfaceTransform.xy * ndcY) *
-                       inverse;
-  const float planeY = (-viewport.surfaceTransform.yx * ndcX + viewport.surfaceTransform.xx * ndcY) *
-                       inverse;
-
-  // Profundidade de vista 1: qualquer valor positivo dá a mesma direção depois
-  // de normalizar, e 1 evita multiplicar por um plano distante grande.
-  const float view[3] = {planeX * viewport.frustum.tangentHalfHorizontal,
-                         -planeY * viewport.frustum.tangentHalfVertical, 1.0f};
-  const ViewBasis basis = buildViewBasis(viewport.frustum.yaw, viewport.frustum.pitch);
-  float world[3]{};
-  viewToWorld(basis, view, world);
-  const float length = std::sqrt(world[0] * world[0] + world[1] * world[1] + world[2] * world[2]);
+  // O raio vem do contrato comum, cru. Normalizar aqui e correto porque este
+  // caminho calcula UM ponto; o que nao pode e normalizar antes de interpolar.
+  const renderer::CameraRay raw =
+      renderer::cameraRayFromNdc(viewport.frustum, viewport.surfaceTransform, ndcX, ndcY);
+  if (!raw.valid) return ray;
+  const float length = std::sqrt(raw.direction[0] * raw.direction[0] +
+                                 raw.direction[1] * raw.direction[1] +
+                                 raw.direction[2] * raw.direction[2]);
   if (!std::isfinite(length) || length <= 0.0f) return ray;
 
   for (u32 axis = 0; axis < 3; ++axis) {
     ray.origin[axis] = viewport.frustum.cameraPosition[axis];
-    ray.direction[axis] = world[axis] / length;
+    ray.direction[axis] = raw.direction[axis] / length;
   }
   ray.valid = true;
   return ray;

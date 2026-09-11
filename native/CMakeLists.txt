@@ -458,6 +458,7 @@ if(NOT ANDROID)
     ../tests/native/test_editor_session.cpp
     ../tests/native/test_editor_composition.cpp
     ../tests/native/test_editor_history.cpp
+    ../tests/native/test_camera_ray_contract.cpp
     ../tests/native/test_editor_view.cpp
     ../tests/native/test_ui_assets.cpp
     ../tests/native/test_ui_draw_list.cpp
