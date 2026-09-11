@@ -70,6 +70,12 @@ struct InputAction {
   bool valid() const;
 };
 
+// Declarados ANTES do mapa: o `operator==` dele compara vetores destes tipos no
+// próprio corpo da classe, e o libc++ não encontra uma sobrecarga declarada
+// depois (o libstdc++ encontrava — a divergência só apareceu no build Android).
+bool operator==(const InputBinding &a, const InputBinding &b);
+bool operator==(const InputAction &a, const InputAction &b);
+
 class InputActionMap final {
 public:
   static constexpr u32 kMaximumActions = 64;
@@ -109,8 +115,6 @@ private:
   std::string move_, look_, jump_;
 };
 
-bool operator==(const InputBinding &a, const InputBinding &b);
-bool operator==(const InputAction &a, const InputAction &b);
 
 // Estado bruto de um quadro, publicado pela plataforma.
 struct InputDeviceState {

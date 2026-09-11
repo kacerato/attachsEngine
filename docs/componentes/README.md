@@ -2,7 +2,9 @@
 
 Atualização: 10/09/2026. Integra `PROMPT_REFUNDACAO_ASTRA_V2.md`, `ASTRA_COMPONENTES_CODIGO_EDITOR.md` e o histórico de `docs/REFUNDACAO-ASTRA.md`. Mantida a cadência pedida: implementar blocos amplos; testar somente após autorização explícita. O usuário autorizou a rodada atual; [resultados host/Android e falhas corrigidas](../validacao/2026-09-10-componentes-codigo.md).
 
-Estado mais recente: [câmera/malha/inspetor](../adr/ADR-REFUNDACAO-CAMERA-MESH-INSPECTOR.md) e [composição física/juntas/referências](../adr/ADR-REFUNDACAO-COMPOSICAO-FISICA.md), arquivo v10, compilados e exercitados na rodada autorizada. O catálogo externo continua sendo roteiro de implementação; não representa 270 componentes entregues.
+Estado mais recente: [câmera/malha/inspetor](../adr/ADR-REFUNDACAO-CAMERA-MESH-INSPECTOR.md) e [composição física/juntas/referências](../adr/ADR-REFUNDACAO-COMPOSICAO-FISICA.md), compilados e exercitados na rodada autorizada. O catálogo externo continua sendo roteiro de implementação; não representa 270 componentes entregues.
+
+**Atualização de 10/09/2026 — mundo de execução.** O Play deixou de rodar sobre uma cópia de `EditorDocument`: existe um [mundo de execução próprio](../runtime-gameplay.md), com identidade de handle por mundo+geração, fila de comandos em ponto seguro e autoridade de pose. O **schema de componentes** (`native/scene/component_schema.h`) passou a ser a única lista de nome, categoria, exigências, incompatibilidades e mutabilidade em Play; o catálogo do inspetor deriva dele, e a API em C# herda o mesmo contrato — um teste nativo recusa que voltem a ser duas listas. O arquivo de cena foi para **v12** (v11 acrescentou camadas de gameplay, v12 as ações de entrada); arquivos anteriores abrem com os padrões, que são o comportamento anterior a esses recursos. Decisões e alternativas descartadas em [ADR](../adr/ADR-RUNTIME-GAMEPLAY.md); resultados e lacunas em [validação](../validacao/2026-09-10-runtime-gameplay.md). As famílias de recursos/importação (B), materiais e luzes (C) e IDE/inspetor (F) **não** foram tocadas nessa rodada.
 
 ## Quadro por tipo
 
@@ -33,10 +35,10 @@ O repositório [reposplugins](https://github.com/kacerato/reposplugins) continua
 
 | Etapa | Resultado concreto | Dependências / plano |
 |---|---|---|
-| A | Registro, identidades de instância, schema, valores, IDE, compilação e lifecycle | M2; S0–S5. Bloco atual de implementação |
+| A | Registro, identidades de instância, schema, valores, IDE, compilação e lifecycle | M2; S0–S5. Schema comum e mundo de execução entregues em 10/09/2026; console e campos tipados do inspetor continuam pendentes |
 | B | Transform, MeshRenderer, Camera e Light anexáveis; IDs de assets; importação e extração de cena | A; M2–M5 |
-| C | Formas, corpos, colliders compostos, sensores, juntas, forças e queries | A+B; M6. Corpo/primitivas existem parcialmente |
-| D | InputActionMap, animação, áudio, partículas, rigs e comportamentos reutilizáveis | A+B+C; M7; S5–S6 |
+| C | Formas, corpos, colliders compostos, sensores, juntas, forças e queries | A+B; M6. Queries com contato real, camadas de gameplay no solver e contatos sólidos entregues em 10/09/2026; ShapeAsset, convexos, malha côncava e sensor por colisor continuam pendentes |
+| D | InputActionMap, animação, áudio, partículas, rigs e comportamentos reutilizáveis | A+B+C; M7; S5–S6. InputActionMap e sete comportamentos reutilizáveis entregues em 10/09/2026; animação, áudio, partículas e rigs não iniciados |
 | E | Ambiente, volumes, sombras, efeitos, render targets e streaming | B; M5/M8 |
 | F | Renderer e física 2D, sprites, tiles e juntas 2D | A+B; extensão com backend próprio |
 | G | Documento UI de jogo, layout, controles, bindings e efeitos UI | A+B+D; M7–M9 |

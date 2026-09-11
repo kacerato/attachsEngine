@@ -125,8 +125,10 @@ public static class AstraBehaviorTests
         var markdown = File.ReadAllText(Path.Combine(directory!.FullName, "docs", "componentes", "fisica-codigo.md"));
         using var project = new Project("");
         var blocks = markdown.Split("```csharp").Skip(1).Select(s => s[..s.IndexOf("```", StringComparison.Ordinal)]).ToArray();
-        Assert.Equal(2, blocks.Length);
+        // Cada bloco `csharp` deste documento e um exemplo COMPLETO: se um deles
+        // deixar de compilar, a documentacao passou a ensinar uma API que nao existe.
+        Assert.True(blocks.Length >= 2, "documento tem exemplos");
         for (var i = 0; i < blocks.Length; ++i) File.WriteAllText(Path.Combine(project.Root, "Example" + i + ".cs"), blocks[i]);
-        Assert.Equal(2, project.Compile().Types.Length, "both documented examples emit attachable schemas");
+        Assert.Equal(blocks.Length, project.Compile().Types.Length, "todo exemplo documentado emite um schema anexável");
     }
 }

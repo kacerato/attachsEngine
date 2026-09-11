@@ -89,6 +89,12 @@
       "artifactName": "aether_rhi",
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_rhi.a"
     },
+    "aether_runtime::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_runtime",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_runtime.a"
+    },
     "aether_transform::@6890427a1f51a3e7e1df": {
       "toolchain": "toolchain",
       "abi": "arm64-v8a",

@@ -1,5 +1,10 @@
 """Generate reference documentation, never execute/validate Astra binaries.
 
+Atualizado em 10/09/2026: os caminhos de física e scripts passaram para
+`native/runtime/`, e a antiga frase "sem build/execução" foi substituída pelo
+que vale hoje — compilado e coberto por testes de host, SEM validação no
+aparelho. Cobertura de host não é aprovação de família no Android.
+
 Inputs are primary-source snapshots plus the individually curated TSV. This
 does not add types to the engine registry or establish runtime support.
 """
@@ -30,16 +35,16 @@ BASES = {"Component", "Behaviour", "MonoBehaviour", "Renderer", "Collider", "Col
 PARTIAL = {
     "Transform3D": ("native/editor/editor_document.h", "TRS e hierarquia existentes; ainda não componente independente."),
     "ComponentRegistry e ScriptBehavior": ("native/scene/components.h;native/scene/script_behavior.h;managed/Astra.Scripting", "Novo código de instâncias, schema, compilação e Play; sem compilação nem execução autorizadas neste bloco."),
-    "PhysicsBody3D": ("native/scene/physics_body.h;native/editor/editor_scene_physics.cpp", "Corpo v3 com composição, sensor, massa, velocidades, damping, gravidade, repouso, comandos e eventos C#; código sem build/execução. Filtros e mutação geral em Play pendentes."),
-    "Collider3D Caixa": ("native/scene/collider.h;native/editor/editor_scene_physics.cpp", "Caixa repetível com centro/rotação locais, owner explícito neste objeto ou ancestral, compound Jolt e sugestão por vértices; sem build/execução."),
-    "Collider3D Esfera": ("native/scene/collider.h;native/editor/editor_scene_physics.cpp", "Esfera repetível, pose local e owner explícito em compound Jolt; sugestão geométrica. Sem build/execução; escala global uniforme exigida."),
-    "Collider3D Cápsula": ("native/scene/collider.h;native/editor/editor_scene_physics.cpp", "Cápsula Y rotacionável/repetível com pose local e owner explícito, ajuste geométrico e compound; sem build/execução. Escala global uniforme exigida."),
+    "PhysicsBody3D": ("native/scene/physics_body.h;native/runtime/scene_physics.cpp", "Corpo v3 com composição, sensor, massa, velocidades, damping, gravidade, repouso, comandos e eventos C#; código compilado e coberto por testes de host; sem validação no aparelho. Filtros e mutação geral em Play pendentes."),
+    "Collider3D Caixa": ("native/scene/collider.h;native/runtime/scene_physics.cpp", "Caixa repetível com centro/rotação locais, owner explícito neste objeto ou ancestral, compound Jolt e sugestão por vértices; compilado e coberto por testes de host; sem validação no aparelho."),
+    "Collider3D Esfera": ("native/scene/collider.h;native/runtime/scene_physics.cpp", "Esfera repetível, pose local e owner explícito em compound Jolt; sugestão geométrica. Sem build/execução; escala global uniforme exigida."),
+    "Collider3D Cápsula": ("native/scene/collider.h;native/runtime/scene_physics.cpp", "Cápsula Y rotacionável/repetível com pose local e owner explícito, ajuste geométrico e compound; compilado e coberto por testes de host; sem validação no aparelho. Escala global uniforme exigida."),
     "Collider3D e ShapeAsset": ("native/scene/collider.h", "Caixa/esfera/cápsula repetíveis, pose local, owner explícito, composição e sensor no corpo. Sem build/execução. ShapeAsset, malha, convexos e filtros por instância pendentes."),
-    "Joint3D Ponto": ("native/scene/joint.h;native/editor/editor_scene_physics.cpp", "Junta repetível por ponto, dois corpos por referência, âncoras locais, undo/remapeamento e consumidor Jolt; sem build/execução. Ruptura e edição em Play pendentes."),
-    "Joint3D Dobradiça": ("native/scene/joint.h;native/editor/editor_scene_physics.cpp", "Dobradiça repetível, eixos/âncoras, limites em graus e motores ligados ao Jolt; sem build/execução. Ruptura, frames completos e atualização de motor em Play pendentes."),
-    "CharacterMotor3D": ("native/editor/editor_character.h;native/editor/editor_scene_physics.cpp", "Cápsula/movimento no mundo compartilhado; input e API de personagem ainda parciais."),
-    "Camera": ("native/scene/camera.h;native/editor/editor_scene_camera.h;native/platform/android/instanced_renderer.cpp", "Componente anexável, prioridade, FOV e planos ligados ao consumidor e aos fontes GLSL; sem build/execução. Ortográfica, roll, múltiplas saídas e render targets pendentes."),
-    "MeshRenderer": ("native/scene/mesh_renderer.h;native/editor/editor_map_scene.cpp;native/editor/editor_screen.cpp", "Componente anexável, escolha de geometria do pacote, material por instância e migração v10 escritos; sem build/execução. GUIDs, submeshes, materiais compartilhados e miniaturas renderizadas pendentes."),
+    "Joint3D Ponto": ("native/scene/joint.h;native/runtime/scene_physics.cpp", "Junta repetível por ponto, dois corpos por referência, âncoras locais, undo/remapeamento e consumidor Jolt; compilado e coberto por testes de host; sem validação no aparelho. Ruptura e edição em Play pendentes."),
+    "Joint3D Dobradiça": ("native/scene/joint.h;native/runtime/scene_physics.cpp", "Dobradiça repetível, eixos/âncoras, limites em graus e motores ligados ao Jolt; compilado e coberto por testes de host; sem validação no aparelho. Ruptura, frames completos e atualização de motor em Play pendentes."),
+    "CharacterMotor3D": ("native/editor/editor_character.h;native/runtime/scene_physics.cpp", "Cápsula/movimento no mundo compartilhado; input e API de personagem ainda parciais."),
+    "Camera": ("native/scene/camera.h;native/editor/editor_scene_camera.h;native/platform/android/instanced_renderer.cpp", "Componente anexável, prioridade, FOV e planos ligados ao consumidor e aos fontes GLSL; compilado e coberto por testes de host; sem validação no aparelho. Ortográfica, roll, múltiplas saídas e render targets pendentes."),
+    "MeshRenderer": ("native/scene/mesh_renderer.h;native/editor/editor_map_scene.cpp;native/editor/editor_screen.cpp", "Componente anexável, escolha de geometria do pacote, material por instância e migração v10 escritos; compilado e coberto por testes de host; sem validação no aparelho. GUIDs, submeshes, materiais compartilhados e miniaturas renderizadas pendentes."),
 }
 
 

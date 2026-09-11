@@ -50,6 +50,32 @@ O relatório de 10/09 prevalece para a rodada já executada. O gerador
 atualizar a fonte do catálogo e seus derivados, sem converter uma validação
 parcial em aprovação de toda a família.
 
+## 1.1 Estado por entrega (atualizado em 10/09/2026)
+
+Branch `codex/gameplay-runtime`. As colunas são independentes e **não se
+colapsam**: "implementado" é código que existe; "integrado" é código ligado ao
+consumidor real; "host" é suíte automatizada aprovada na máquina; "Android" é
+comportamento exercitado NO APARELHO. Um APK que compila não é validação no
+Android.
+
+| Entrega | Contrato | Implementado | Integrado | Testado no host | Validado no Android |
+|---|---|---|---|---|---|
+| A — mundo de execução e schema | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim | sim (Play roda no `GameWorld`) | 11 testes | **não** |
+| B — recursos e importação | — | não | não | não | não |
+| C — materiais e luzes | — | não | não | não | não |
+| D — física acessível | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim, exceto sensor por colisor e `CharacterVirtual` na broadphase | sim (queries, camadas no solver, contatos no C#) | 7 testes | **não** |
+| E — entrada e comportamentos | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim | sim (toque → ações → personagem/câmera; modelos no editor) | 7 testes | **não** |
+| F — IDE, console e inspetor | — | apenas o seletor de modelo de script | idem | 2 testes | **não** |
+| G — rodada integrada | — | não | não | não | **não** |
+
+Somente compilação: `:app:assembleDebug` e `:app:assembleRelease` passam com as
+alterações, e os 16 testes Java do shell continuam verdes. Nenhuma sessão ADB foi
+aberta; as duas composições de aceitação **não** foram montadas pela interface.
+
+Detalhes, números e problemas corrigidos:
+[relatório de validação](validacao/2026-09-10-runtime-gameplay.md).
+Contrato efetivo da API: [runtime de gameplay](runtime-gameplay.md).
+
 ## 2. Base existente e lacunas confirmadas
 
 | Área | Existe na base | Trabalho ainda necessário |

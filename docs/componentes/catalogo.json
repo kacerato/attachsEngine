@@ -554,9 +554,9 @@
       "astraStatus": "parcial",
       "astraEvidence": [
         "native/scene/collider.h",
-        "native/editor/editor_scene_physics.cpp"
+        "native/runtime/scene_physics.cpp"
       ],
-      "remaining": "Caixa repetível com centro/rotação locais, owner explícito neste objeto ou ancestral, compound Jolt e sugestão por vértices; sem build/execução.",
+      "remaining": "Caixa repetível com centro/rotação locais, owner explícito neste objeto ou ancestral, compound Jolt e sugestão por vértices; compilado e coberto por testes de host; sem validação no aparelho.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
       "functionEvidence": "API pública e classe da versão fixada; correspondência Astra é proposta de arquitetura."
     },
@@ -635,7 +635,7 @@
         "native/editor/editor_scene_camera.h",
         "native/platform/android/instanced_renderer.cpp"
       ],
-      "remaining": "Componente anexável, prioridade, FOV e planos ligados ao consumidor e aos fontes GLSL; sem build/execução. Ortográfica, roll, múltiplas saídas e render targets pendentes.",
+      "remaining": "Componente anexável, prioridade, FOV e planos ligados ao consumidor e aos fontes GLSL; compilado e coberto por testes de host; sem validação no aparelho. Ortográfica, roll, múltiplas saídas e render targets pendentes.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
       "functionEvidence": "API pública e classe da versão fixada; correspondência Astra é proposta de arquitetura."
     },
@@ -736,9 +736,9 @@
       "astraStatus": "parcial",
       "astraEvidence": [
         "native/scene/collider.h",
-        "native/editor/editor_scene_physics.cpp"
+        "native/runtime/scene_physics.cpp"
       ],
-      "remaining": "Cápsula Y rotacionável/repetível com pose local e owner explícito, ajuste geométrico e compound; sem build/execução. Escala global uniforme exigida.",
+      "remaining": "Cápsula Y rotacionável/repetível com pose local e owner explícito, ajuste geométrico e compound; compilado e coberto por testes de host; sem validação no aparelho. Escala global uniforme exigida.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
       "functionEvidence": "API pública e classe da versão fixada; correspondência Astra é proposta de arquitetura."
     },
@@ -789,7 +789,7 @@
       "astraStatus": "parcial",
       "astraEvidence": [
         "native/editor/editor_character.h",
-        "native/editor/editor_scene_physics.cpp"
+        "native/runtime/scene_physics.cpp"
       ],
       "remaining": "Cápsula/movimento no mundo compartilhado; input e API de personagem ainda parciais.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
@@ -1321,9 +1321,9 @@
       "astraStatus": "parcial",
       "astraEvidence": [
         "native/scene/joint.h",
-        "native/editor/editor_scene_physics.cpp"
+        "native/runtime/scene_physics.cpp"
       ],
-      "remaining": "Dobradiça repetível, eixos/âncoras, limites em graus e motores ligados ao Jolt; sem build/execução. Ruptura, frames completos e atualização de motor em Play pendentes.",
+      "remaining": "Dobradiça repetível, eixos/âncoras, limites em graus e motores ligados ao Jolt; compilado e coberto por testes de host; sem validação no aparelho. Ruptura, frames completos e atualização de motor em Play pendentes.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
       "functionEvidence": "API pública e classe da versão fixada; correspondência Astra é proposta de arquitetura."
     },
@@ -1677,7 +1677,7 @@
         "native/editor/editor_map_scene.cpp",
         "native/editor/editor_screen.cpp"
       ],
-      "remaining": "Componente anexável, escolha de geometria do pacote, material por instância e migração v10 escritos; sem build/execução. GUIDs, submeshes, materiais compartilhados e miniaturas renderizadas pendentes.",
+      "remaining": "Componente anexável, escolha de geometria do pacote, material por instância e migração v10 escritos; compilado e coberto por testes de host; sem validação no aparelho. GUIDs, submeshes, materiais compartilhados e miniaturas renderizadas pendentes.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
       "functionEvidence": "API pública e classe da versão fixada; correspondência Astra é proposta de arquitetura."
     },
@@ -2232,9 +2232,9 @@
       "astraStatus": "parcial",
       "astraEvidence": [
         "native/scene/physics_body.h",
-        "native/editor/editor_scene_physics.cpp"
+        "native/runtime/scene_physics.cpp"
       ],
-      "remaining": "Corpo v3 com composição, sensor, massa, velocidades, damping, gravidade, repouso, comandos e eventos C#; código sem build/execução. Filtros e mutação geral em Play pendentes.",
+      "remaining": "Corpo v3 com composição, sensor, massa, velocidades, damping, gravidade, repouso, comandos e eventos C#; código compilado e coberto por testes de host; sem validação no aparelho. Filtros e mutação geral em Play pendentes.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
       "functionEvidence": "API pública e classe da versão fixada; correspondência Astra é proposta de arquitetura."
     },
@@ -2435,7 +2435,7 @@
       "astraStatus": "parcial",
       "astraEvidence": [
         "native/scene/collider.h",
-        "native/editor/editor_scene_physics.cpp"
+        "native/runtime/scene_physics.cpp"
       ],
       "remaining": "Esfera repetível, pose local e owner explícito em compound Jolt; sugestão geométrica. Sem build/execução; escala global uniforme exigida.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
@@ -3877,7 +3877,7 @@
         "native/editor/editor_scene_camera.h",
         "native/platform/android/instanced_renderer.cpp"
       ],
-      "remaining": "Componente anexável, prioridade, FOV e planos ligados ao consumidor e aos fontes GLSL; sem build/execução. Ortográfica, roll, múltiplas saídas e render targets pendentes.",
+      "remaining": "Componente anexável, prioridade, FOV e planos ligados ao consumidor e aos fontes GLSL; compilado e coberto por testes de host; sem validação no aparelho. Ortográfica, roll, múltiplas saídas e render targets pendentes.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
       "functionEvidence": "Interpretação explícita da API pública; limitações indicadas na função e em referenceLimit."
     },
@@ -5167,9 +5167,9 @@
       "astraStatus": "parcial",
       "astraEvidence": [
         "native/scene/joint.h",
-        "native/editor/editor_scene_physics.cpp"
+        "native/runtime/scene_physics.cpp"
       ],
-      "remaining": "Dobradiça repetível, eixos/âncoras, limites em graus e motores ligados ao Jolt; sem build/execução. Ruptura, frames completos e atualização de motor em Play pendentes.",
+      "remaining": "Dobradiça repetível, eixos/âncoras, limites em graus e motores ligados ao Jolt; compilado e coberto por testes de host; sem validação no aparelho. Ruptura, frames completos e atualização de motor em Play pendentes.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
       "functionEvidence": "Interpretação explícita da API pública; limitações indicadas na função e em referenceLimit."
     },
@@ -5707,7 +5707,7 @@
         "native/editor/editor_map_scene.cpp",
         "native/editor/editor_screen.cpp"
       ],
-      "remaining": "Componente anexável, escolha de geometria do pacote, material por instância e migração v10 escritos; sem build/execução. GUIDs, submeshes, materiais compartilhados e miniaturas renderizadas pendentes.",
+      "remaining": "Componente anexável, escolha de geometria do pacote, material por instância e migração v10 escritos; compilado e coberto por testes de host; sem validação no aparelho. GUIDs, submeshes, materiais compartilhados e miniaturas renderizadas pendentes.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
       "functionEvidence": "Interpretação explícita da API pública; limitações indicadas na função e em referenceLimit."
     },
@@ -6608,9 +6608,9 @@
       "astraStatus": "parcial",
       "astraEvidence": [
         "native/scene/physics_body.h",
-        "native/editor/editor_scene_physics.cpp"
+        "native/runtime/scene_physics.cpp"
       ],
-      "remaining": "Corpo v3 com composição, sensor, massa, velocidades, damping, gravidade, repouso, comandos e eventos C#; código sem build/execução. Filtros e mutação geral em Play pendentes.",
+      "remaining": "Corpo v3 com composição, sensor, massa, velocidades, damping, gravidade, repouso, comandos e eventos C#; código compilado e coberto por testes de host; sem validação no aparelho. Filtros e mutação geral em Play pendentes.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
       "functionEvidence": "Interpretação explícita da API pública; limitações indicadas na função e em referenceLimit."
     },
@@ -6698,9 +6698,9 @@
       "astraStatus": "parcial",
       "astraEvidence": [
         "native/scene/joint.h",
-        "native/editor/editor_scene_physics.cpp"
+        "native/runtime/scene_physics.cpp"
       ],
-      "remaining": "Junta repetível por ponto, dois corpos por referência, âncoras locais, undo/remapeamento e consumidor Jolt; sem build/execução. Ruptura e edição em Play pendentes.",
+      "remaining": "Junta repetível por ponto, dois corpos por referência, âncoras locais, undo/remapeamento e consumidor Jolt; compilado e coberto por testes de host; sem validação no aparelho. Ruptura e edição em Play pendentes.",
       "validation": "Este catálogo não autoriza nem executa testes; alterações novas não compiladas/não executadas.",
       "functionEvidence": "Interpretação explícita da API pública; limitações indicadas na função e em referenceLimit."
     },

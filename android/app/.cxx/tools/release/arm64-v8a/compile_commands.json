@@ -176,13 +176,38 @@
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
-  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_code_workspace.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_code_workspace.cpp",
-  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_code_workspace.cpp"
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_runtime.dir\\runtime\\scene_graph.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\scene_graph.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\scene_graph.cpp"
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
-  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_script_bridge.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_script_bridge.cpp",
-  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_script_bridge.cpp"
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_runtime.dir\\runtime\\input_actions.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\input_actions.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\input_actions.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_runtime.dir\\runtime\\transform_math.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\transform_math.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\transform_math.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_runtime.dir\\runtime\\game_world.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\game_world.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\game_world.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_runtime.dir\\runtime\\scene_physics.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\scene_physics.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\scene_physics.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_runtime.dir\\runtime\\script_bridge.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\script_bridge.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\script_bridge.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_code_workspace.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_code_workspace.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_code_workspace.cpp"
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
@@ -223,11 +248,6 @@
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_session.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_session.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_session.cpp"
-},
-{
-  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",
-  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_scene_physics.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_scene_physics.cpp",
-  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_scene_physics.cpp"
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a",

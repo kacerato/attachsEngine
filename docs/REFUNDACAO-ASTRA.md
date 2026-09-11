@@ -1499,3 +1499,51 @@ Falhas corrigidas: erros de compilação nativa; fonte/mapeamento de pacotes Ros
 ADB em projeto exclusivo, preservando os anteriores: criar objeto, Add, componentes recolhidos, dois colisores por instância, teclado/offset/wireframe, Undo/Redo, salvar/reabrir, arquivos/IDE, Aplicar com DLL/PDB/schema, referência de script, compound com forma filha, junta motorizada, callbacks Enter/Exit, velocidade, pausa, passo e Stop. Capturas da pausa foram idênticas; um passo mudou a simulação. O arquivo de cena antes/depois de Play/Stop ficou byte a byte igual. Reabertura e Aplicar no mesmo processo passaram após corrigir a associação Mono.
 
 O relatório mantém os hashes dos APKs, as capturas relevantes, o vídeo e os limites. Não houve encerramento dos marcos M/S nem implementação integral do catálogo Unity/ItsMagic. ShapeAsset/GUID, formas complexas, eventos sólidos/personagem, juntas avançadas, mutação em Play, API geral, IDE completo e player/exportação continuam pendentes conforme os contratos.
+
+## 10/09/2026 — mundo de execução, física consultável e ações de entrada
+
+Entregas A, D e E de [Próximo pacote — criação de gameplay](PROXIMO-PACOTE-GAMEPLAY.md),
+na branch `codex/gameplay-runtime`. Decisões e alternativas descartadas em
+[ADR](adr/ADR-RUNTIME-GAMEPLAY.md); contrato efetivo em
+[runtime de gameplay](runtime-gameplay.md); números e lacunas em
+[validação](validacao/2026-09-10-runtime-gameplay.md).
+
+O Play deixou de rodar sobre uma cópia de `EditorDocument`. `runtime::SceneGraph`
+guarda os objetos sem conhecer editor, UI, histórico ou seleção; `EditorDocument`
+passou a ser esse grafo com as invariantes autorais por cima. `runtime::GameWorld`
+possui a sessão de execução, com identidade `{mundo, id, geração}`, fila de
+comandos em ponto seguro e autoridade de pose. `ScenePhysics` e `ScriptBridge`
+são os antigos adaptadores do editor, agora consumindo o mundo — e por isso o
+mesmo par pode ser ligado a um consumidor sem editor. **Isso é a fundação de um
+player futuro, não uma entrega de exportação.**
+
+`scene/component_schema.h` virou a única lista de nome, categoria, exigências,
+incompatibilidades e mutabilidade em Play; o catálogo do inspetor deriva dele, e
+um teste recusa que voltem a ser duas listas.
+
+Física: consultas com ponto, **normal de superfície real** (segunda consulta ao
+corpo acertado) e instância do colisor que respondeu; contatos **sólidos** com
+Enter/Stay/Exit aos dois objetos do par; camadas de gameplay nomeadas cuja matriz
+recíproca vale **no solver** — um par proibido não gera contato, o que um teste
+demonstra derrubando a mesma bola sobre o mesmo piso duas vezes.
+
+Entrada: `InputActionMap` como recurso da cena, com ações, bindings, zona morta,
+sensibilidade, inversão e contexto; os papéis (mover, olhar, saltar) apontam para
+ações escolhidas pelo usuário, então o núcleo não exige nome nenhum. Perder o
+foco para a interface zera as ações e solta os botões na hora.
+
+Sete modelos de comportamento editáveis acompanham o editor e são oferecidos ao
+criar um script — **nunca semeados em projeto nenhum**. Eles conversam por
+interface (`IInteragivel`, `IColetavel`) resolvida por capacidade. O header
+embutido é gerado dos mesmos arquivos que o teste gerenciado compila com o
+compilador do projeto do usuário.
+
+Arquivo de cena em **v12** (v11 camadas, v12 ações); arquivos anteriores abrem
+com os padrões. ABI de scripts em **v5**, preservando as posições de v2.
+
+Estado: **792/792 testes nativos, 520/520 gerenciados, 16/16 Java; APK Debug e
+Release compilados.** Nenhuma sessão ADB nesta rodada: as duas composições de
+aceitação não foram montadas pela interface, e nada aqui foi exercitado no
+aparelho. Entregas B (recursos/importação), C (materiais/luzes), F (IDE/inspetor)
+e G (rodada integrada) continuam abertas, assim como sensor por colisor,
+`CharacterVirtual` na broadphase, ShapeAsset e exportação.

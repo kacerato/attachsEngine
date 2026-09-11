@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Aether.Rendering")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+eb6ea87d5973c29a9169e489ea0a106e7762899d")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9b0c07b38a89948b5232cfe72f24a5201fca1a82")]
 [assembly: System.Reflection.AssemblyProductAttribute("Aether.Rendering")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Aether.Rendering")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

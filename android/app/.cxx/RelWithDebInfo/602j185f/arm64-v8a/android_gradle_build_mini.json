@@ -52,6 +52,12 @@
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_platform.a",
       "runtimeFiles": []
     },
+    "aether_runtime::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_runtime",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_runtime.a",
+      "runtimeFiles": []
+    },
     "benchmark_physics2d::@6890427a1f51a3e7e1df": {
       "artifactName": "benchmark_physics2d",
       "abi": "arm64-v8a",
