@@ -27,7 +27,7 @@ public static unsafe class NativeBehaviorRuntime
     }
 
     /// <summary>
-    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v4). A ordem dos
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v5). A ordem dos
     /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
     /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
     /// do fim do que o nativo alocou.
@@ -76,6 +76,11 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*, NativeShapeQuery*, float*, NativeQueryFilter*, RawQueryHit*, int, int> Overlap;
         public delegate* unmanaged<void*, byte*, int, int> LayerByName;
         public delegate* unmanaged<void*, uint, byte*, int, int> LayerName;
+        // v5 — entrada por ações
+        public delegate* unmanaged<void*, byte*, int, float*, int> InputAxis;
+        public delegate* unmanaged<void*, byte*, int, uint, int> InputButton;
+        public delegate* unmanaged<void*, byte*, int, int, int> InputContext;
+        public delegate* unmanaged<void*, uint, byte*, int, int> InputRole;
 
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
             MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
@@ -84,7 +89,8 @@ public static unsafe class NativeBehaviorRuntime
             CreateObject != null && DestroyObject != null && SetParent != null && ComponentCount != null &&
             ComponentAt != null && FindComponent != null && AddComponent != null && RemoveComponent != null &&
             GetProperty != null && SetProperty != null && GetWorldTransform != null && SetWorldTransform != null &&
-            RayCast != null && ShapeCast != null && Overlap != null && LayerByName != null && LayerName != null;
+            RayCast != null && ShapeCast != null && Overlap != null && LayerByName != null && LayerName != null &&
+            InputAxis != null && InputButton != null && InputContext != null && InputRole != null;
     }
 
     private sealed class SceneAdapter(SceneAccess access) : ISceneAccess
@@ -326,6 +332,39 @@ public static unsafe class NativeBehaviorRuntime
             var size = access.LayerName(access.Context, layer, buffer, NameCapacity);
             return size <= 0 || size > NameCapacity ? string.Empty : Encoding.UTF8.GetString(buffer, size);
         }
+
+        // --- entrada por ações ----------------------------------------------
+        public bool InputAxis(string action, out Vector2 value)
+        {
+            value = default;
+            if (!Accessible) return false;
+            var bytes = Utf8(action, "ação");
+            float* raw = stackalloc float[2];
+            int ok;
+            fixed (byte* pointer = bytes) ok = access.InputAxis(access.Context, pointer, bytes.Length, raw);
+            if (ok == 0) return false;
+            value = new Vector2(raw[0], raw[1]);
+            return true;
+        }
+        public int InputButton(string action, uint query)
+        {
+            if (!Accessible) return -1;
+            var bytes = Utf8(action, "ação");
+            fixed (byte* pointer = bytes) return access.InputButton(access.Context, pointer, bytes.Length, query);
+        }
+        public bool InputContext(string context, int enabled)
+        {
+            if (!Accessible) return false;
+            var bytes = Utf8(context, "contexto");
+            fixed (byte* pointer = bytes) return access.InputContext(access.Context, pointer, bytes.Length, enabled) != 0;
+        }
+        public string InputRole(uint role)
+        {
+            if (!Accessible) return string.Empty;
+            byte* buffer = stackalloc byte[NameCapacity];
+            var size = access.InputRole(access.Context, role, buffer, NameCapacity);
+            return size <= 0 || size > NameCapacity ? string.Empty : Encoding.UTF8.GetString(buffer, size);
+        }
     }
 
     private static BehaviorWorld? _world;
@@ -337,7 +376,7 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 4 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 5 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);

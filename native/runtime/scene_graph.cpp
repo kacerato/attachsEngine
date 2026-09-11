@@ -36,6 +36,7 @@ SceneGraph::SceneGraph() { reset(); }
 
 void SceneGraph::reset() {
   layers_.reset();
+  input_ = InputActionMap{};
   records_.clear();
   records_.resize(1);  // posição 0 é o id inválido e nunca vive
   nextId_ = 1;

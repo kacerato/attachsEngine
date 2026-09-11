@@ -1,0 +1,18 @@
+# Modelos de comportamento oferecidos pelo editor.
+#
+# Formato: classe|nome curto|descrição
+#
+# A ordem é a ordem do menu. `Contratos.cs` NÃO é um modelo: é a dependência
+# que acompanha os modelos que interagem por capacidade, criada junto quando
+# ainda não existe no projeto.
+#
+# Nada aqui é semeado em projeto nenhum. São modelos de PARTIDA: o usuário
+# escolhe um, recebe um arquivo editável com o nome de classe que ele digitou,
+# e a partir daí o arquivo é dele.
+SeguirAlvo|Seguir alvo|Mantém um deslocamento em relação a outro objeto
+CameraOrbital|Câmera orbital|Órbita com desvio de obstáculo por varredura
+Interacao|Interação|Mira à frente e aciona o que estiver sob a mira
+Porta|Porta|Abre e fecha ao ser interagida, com ângulo configurável
+PlataformaMovel|Plataforma móvel|Vai e volta por movimento cinemático
+ItemColetavel|Item coletável|Some ao ser tocado ou interagido e soma pontos
+TrocaMaterial|Trocar material|Muda cor e emissão da malha por evento

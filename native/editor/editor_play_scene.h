@@ -2,6 +2,7 @@
 #include "editor/editor_map_scene.h"
 #include "runtime/game_world.h"
 #include "runtime/scene_physics.h"
+#include "runtime/input_actions.h"
 #include "runtime/script_bridge.h"
 
 namespace ae::editor {
@@ -30,6 +31,14 @@ public:
   runtime::GameWorld &world() noexcept { return world_; }
   const runtime::GameWorld &world() const noexcept { return world_; }
   runtime::SceneGraph *executionGraph() noexcept { return active_ ? &world_.poseGraph() : nullptr; }
+  // O serviço de entrada vive com o mundo: é ele que os scripts consultam, e é
+  // por ele que personagem e câmera recebem o que o projeto configurou.
+  runtime::InputService &input() noexcept { return input_; }
+  const runtime::InputService &input() const noexcept { return input_; }
+  void submitInput(const runtime::InputDeviceState &state) { if(active_) input_.submit(state); }
+  // Foco: quando a interface consome o toque, o gameplay lê zero e nenhum botão
+  // fica preso — a pausa e o cancelamento usam o mesmo caminho.
+  void setInputFocus(bool focused) { input_.setGameplayFocus(focused); }
   static EditorEntityId unresolvedEntity(const EditorDocument &source) {
     std::vector<EditorEntityId> ids;source.collectSubtree(source.root(),ids);
     for(auto id:ids) if(source.find(id)->components.hasUnresolved()) return id;
@@ -41,7 +50,10 @@ public:
     std::vector<renderer::MapDrawState> validated;
     if(!resources.extract(world_.graph(),validated)) {world_.clear();return false;}
     if(!physics_.start(world_)) {world_.clear();return false;}
-    if(!scripts_.start(world_,physics_)) {physics_.stop();world_.clear();return false;}
+    input_.setMap(world_.graph().inputActions());
+    input_.reset();
+    input_.setGameplayFocus(true);
+    if(!scripts_.start(world_,physics_,input_)) {physics_.stop();world_.clear();return false;}
     active_=true;
     paused_=false;
     return true;
@@ -57,6 +69,7 @@ public:
     drainCommands();
     physics_.stop();
     world_.clear();
+    input_.reset();
     active_=false;
     paused_=false;
   }
@@ -99,6 +112,7 @@ private:
   runtime::GameWorld world_;
   runtime::ScenePhysics physics_;
   runtime::ScriptBridge scripts_;
+  runtime::InputService input_;
   std::vector<runtime::ObjectId> destroyed_;
   bool active_=false;
   bool paused_=false;

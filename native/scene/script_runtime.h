@@ -2,7 +2,7 @@
 #include "core/base.h"
 
 namespace ae::scene {
-// ABI v4 é independente de Editor e de headers do CLR. Todos os callbacks e
+// ABI v5 é independente de Editor e de headers do CLR. Todos os callbacks e
 // chamadas de runtime executam na thread dona do mundo, e os buffers só valem
 // durante a chamada.
 //
@@ -50,7 +50,7 @@ struct ScriptShapeQuery {
 };
 
 struct ScriptSceneAccess {
-  u32 version=4,size=sizeof(ScriptSceneAccess);
+  u32 version=5,size=sizeof(ScriptSceneAccess);
   void *context=nullptr;
   int (*exists)(void *,u64)=nullptr;
   int (*getTransform)(void *,u64,float *)=nullptr; // position3 quaternion4 scale3, local space
@@ -99,12 +99,21 @@ struct ScriptSceneAccess {
   // por nome em vez de por índice mágico.
   int (*layerByName)(void *,const u8 *,int)=nullptr;
   int (*layerName)(void *,u32,u8 *,int)=nullptr;
+  // --- v5: entrada por ações ---------------------------------------------
+  // O núcleo não conhece "Mover" nem "Saltar": o projeto nomeia suas ações e
+  // diz quais papéis elas cumprem. `inputRole` traduz papel (0 mover, 1 olhar,
+  // 2 saltar) no nome escolhido, para um script que queira o padrão do projeto.
+  int (*inputAxis)(void *,const u8 *,int,float *)=nullptr;      // escreve x,y
+  int (*inputButton)(void *,const u8 *,int,u32)=nullptr;        // 0 down, 1 pressed, 2 released
+  int (*inputContext)(void *,const u8 *,int,int)=nullptr;       // -1 apenas consulta
+  int (*inputRole)(void *,u32,u8 *,int)=nullptr;
   bool available() const {
     return exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
            worldId&&generation&&lastStatus&&parentOf&&childCount&&childAt&&findChild&&getName&&setName&&
            getActive&&setActive&&createObject&&destroyObject&&setParent&&componentCount&&componentAt&&
            findComponent&&addComponent&&removeComponent&&getProperty&&setProperty&&
-           getWorldTransform&&setWorldTransform&&rayCast&&shapeCast&&overlap&&layerByName&&layerName;
+           getWorldTransform&&setWorldTransform&&rayCast&&shapeCast&&overlap&&layerByName&&layerName&&
+           inputAxis&&inputButton&&inputContext&&inputRole;
   }
 };
 struct ScriptRuntimeApi {

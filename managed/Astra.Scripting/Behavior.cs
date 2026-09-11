@@ -94,27 +94,60 @@ public interface ISceneAccess
         => throw new NotSupportedException();
     int LayerByName(string name) => throw new NotSupportedException();
     string LayerName(uint layer) => throw new NotSupportedException();
+
+    // --- v5: entrada por ações -----------------------------------------------
+    bool InputAxis(string action, out Vector2 value) => throw new NotSupportedException();
+    /// <summary>0 pressionado agora, 1 acabou de descer, 2 acabou de subir; -1 ação desconhecida.</summary>
+    int InputButton(string action, uint query) => throw new NotSupportedException();
+    bool InputContext(string context, int enabled) => throw new NotSupportedException();
+    /// <summary>Nome da ação que cumpre o papel: 0 mover, 1 olhar, 2 saltar.</summary>
+    string InputRole(uint role) => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Como um comportamento encontra OUTRO comportamento por capacidade.
+///
+/// É o que torna "interação" um contrato do projeto em vez de um tipo especial
+/// do núcleo: a porta implementa uma interface, e quem interage procura por essa
+/// interface, sem saber que existe uma porta.
+/// </summary>
+public interface IBehaviorRegistry
+{
+    /// <summary>Primeiro comportamento desse objeto atribuível ao tipo pedido.</summary>
+    object? FindBehavior(ulong objectId, Type contract);
+    /// <summary>Todos os comportamentos desse objeto atribuíveis ao tipo pedido.</summary>
+    IEnumerable<object> FindBehaviors(ulong objectId, Type contract);
 }
 
 public abstract class Behavior
 {
     private ISceneAccess? _scene;
+    private IBehaviorRegistry? _registry;
     public ulong ObjectId { get; private set; }
     public ulong InstanceId { get; private set; }
     public bool Enabled { get; set; } = true;
     protected ISceneAccess Scene => _scene ?? throw new InvalidOperationException("Behavior is not attached to an execution world.");
 
-    /// <summary>O objeto a que este comportamento está anexado.</summary>
-    protected GameObject Object => GameObject.Wrap(Scene, ObjectId);
+    private GameObject? _object;
+
+    /// <summary>
+    /// O objeto a que este comportamento está anexado. Resolvido uma vez: um
+    /// `Object` novo a cada quadro seria lixo alocado por comportamento e por
+    /// quadro, e o handle não muda enquanto o comportamento existe.
+    /// </summary>
+    protected GameObject Object => _object ??= GameObject.Resolve(Scene, ObjectId);
 
     /// <summary>As consultas físicas do mundo de execução.</summary>
     protected PhysicsAccess Physics => new(Scene);
+
+    /// <summary>As ações de entrada configuradas no projeto.</summary>
+    protected InputAccess Input => new(Scene);
 
     /// <summary>Resolve uma referência autorada no inspetor para um objeto vivo.</summary>
     protected GameObject? Resolve(ObjectReference reference)
     {
         if (reference.ObjectId == 0 || !Scene.Exists(reference.ObjectId)) return null;
-        return GameObject.Wrap(Scene, reference.ObjectId);
+        return GameObject.Resolve(Scene, reference.ObjectId);
     }
 
     protected TransformValue Transform
@@ -126,13 +159,26 @@ public abstract class Behavior
                 throw new InvalidOperationException("A execução recusou a transformação.");
         }
     }
-    internal void Attach(ISceneAccess scene, ulong objectId, ulong instanceId)
+    /// <summary>
+    /// O comportamento de <paramref name="target"/> que cumpre o contrato
+    /// <typeparamref name="T"/>, ou null. `T` pode ser uma interface: é assim
+    /// que um objeto interage com outro sem conhecer o tipo concreto dele.
+    /// </summary>
+    protected T? FindBehavior<T>(GameObject? target) where T : class =>
+        target is { IsAlive: true } ? _registry?.FindBehavior(target.ObjectId, typeof(T)) as T : null;
+
+    protected IEnumerable<T> FindBehaviors<T>(GameObject? target) where T : class =>
+        target is { IsAlive: true } && _registry is not null
+            ? _registry.FindBehaviors(target.ObjectId, typeof(T)).OfType<T>()
+            : [];
+
+    internal void Attach(ISceneAccess scene, ulong objectId, ulong instanceId, IBehaviorRegistry? registry = null)
     {
         if (_scene is not null || objectId == 0 || instanceId == 0)
             throw new InvalidOperationException("Invalid or duplicate behavior attachment.");
-        _scene = scene; ObjectId = objectId; InstanceId = instanceId;
+        _scene = scene; ObjectId = objectId; InstanceId = instanceId; _registry = registry;
     }
-    internal void Detach() { _scene = null; ObjectId = 0; InstanceId = 0; }
+    internal void Detach() { _scene = null; _registry = null; _object = null; ObjectId = 0; InstanceId = 0; }
     public virtual void Start() { }
     public virtual void Update(float deltaTime) { }
     public virtual void FixedUpdate(float deltaTime) { }

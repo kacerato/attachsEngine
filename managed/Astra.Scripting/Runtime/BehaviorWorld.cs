@@ -11,7 +11,7 @@ public sealed record BehaviorAttachment(ulong ObjectId, ulong InstanceId, string
 public sealed record BehaviorFailure(ulong ObjectId, ulong InstanceId, string Phase, string Message);
 
 /// <summary>Owns one isolated script assembly and its instances for a Play session.</summary>
-public sealed class BehaviorWorld : IDisposable
+public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
 {
     private sealed class ProjectLoadContext() : AssemblyLoadContext("Astra.Project", isCollectible: true)
     {
@@ -52,7 +52,7 @@ public sealed class BehaviorWorld : IDisposable
                 var type = assembly.GetType(schema.Name, throwOnError: true)!;
                 var instance = (Behavior?)Activator.CreateInstance(type)
                     ?? throw new InvalidOperationException("Behavior construction failed: " + schema.Name);
-                instance.Attach(scene, attachment.ObjectId, attachment.InstanceId);
+                instance.Attach(scene, attachment.ObjectId, attachment.InstanceId, this);
                 instance.Enabled = attachment.Enabled;
                 prepared.Add(new(instance, schema));
                 if (attachment.PropertyTypes is { } authoredTypes)
@@ -113,6 +113,23 @@ public sealed class BehaviorWorld : IDisposable
                     else behavior.CollisionExit(collision);
                 });
     }
+    public object? FindBehavior(ulong objectId, Type contract)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+        foreach (var entry in _entries)
+            if (entry.Instance.ObjectId == objectId && contract.IsInstanceOfType(entry.Instance))
+                return entry.Instance;
+        return null;
+    }
+
+    public IEnumerable<object> FindBehaviors(ulong objectId, Type contract)
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+        foreach (var entry in _entries)
+            if (entry.Instance.ObjectId == objectId && contract.IsInstanceOfType(entry.Instance))
+                yield return entry.Instance;
+    }
+
     private bool EnsureStarted(Entry entry)
     {
         if (!entry.Instance.Enabled) return false;

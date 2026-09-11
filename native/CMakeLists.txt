@@ -205,6 +205,7 @@ target_link_libraries(aether_renderer PUBLIC aether_core aether_rendergraph)
 # "objeto de cena" para manter em sincronia.
 add_library(aether_runtime STATIC
   runtime/scene_graph.cpp
+  runtime/input_actions.cpp
   runtime/transform_math.cpp
   runtime/game_world.cpp
   runtime/scene_physics.cpp
@@ -421,6 +422,8 @@ if(NOT ANDROID)
     ../tests/native/test_gpu_draw_compaction.cpp
     ../tests/native/test_runtime_world.cpp
     ../tests/native/test_runtime_physics_access.cpp
+    ../tests/native/test_runtime_input.cpp
+    ../tests/native/test_editor_script_templates.cpp
     ../tests/native/test_editor_map_scene.cpp
     ../tests/native/test_scene_components.cpp
     ../tests/native/test_editor_document.cpp

@@ -342,6 +342,44 @@ void ScriptBridge::installAccess() {
     return size;
   };
 
+  // --- entrada por acoes ---------------------------------------------------
+  access_.inputAxis = [](void *c, const u8 *action, int length, float *out) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    const auto name = viewOf(action, length);
+    if (name.empty() || !out) return 0;
+    if (!s.input_->map().find(name)) { s.lastStatus_ = WorldStatus::InvalidArgument; return 0; }
+    s.input_->axis2(name, out);
+    return 1;
+  };
+  access_.inputButton = [](void *c, const u8 *action, int length, u32 query) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    const auto name = viewOf(action, length);
+    if (name.empty() || !s.input_->map().find(name)) { s.lastStatus_ = WorldStatus::InvalidArgument; return -1; }
+    switch (query) {
+      case 0: return s.input_->pressed(name) ? 1 : 0;
+      case 1: return s.input_->justPressed(name) ? 1 : 0;
+      case 2: return s.input_->justReleased(name) ? 1 : 0;
+      default: return -1;
+    }
+  };
+  access_.inputContext = [](void *c, const u8 *context, int length, int enabled) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    const auto name = viewOf(context, length);
+    if (name.empty()) return 0;
+    if (enabled >= 0) s.input_->setContextEnabled(name, enabled != 0);
+    return s.input_->contextEnabled(name) ? 1 : 0;
+  };
+  access_.inputRole = [](void *c, u32 role, u8 *out, int capacity) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    const auto &map = s.input_->map();
+    const std::string &name = role == 0 ? map.moveAction() : role == 1 ? map.lookAction() : map.jumpAction();
+    if (role > 2 || name.empty()) return -1;
+    const int size = static_cast<int>(name.size());
+    if (!out || capacity < size) return size;
+    std::memcpy(out, name.data(), name.size());
+    return size;
+  };
+
   access_.getProperty = [](void *c, u64 id, u64 instance, const u8 *propertyId, int length, u32 *kind, u64 *bits) -> int {
     auto &s = *static_cast<ScriptBridge *>(c);
     if (!kind || !bits) return 0;
@@ -380,13 +418,14 @@ void ScriptBridge::installAccess() {
   };
 }
 
-bool ScriptBridge::start(GameWorld &world, ScenePhysics &physics) {
+bool ScriptBridge::start(GameWorld &world, ScenePhysics &physics, InputService &input) {
   stop();
   diagnostics_.clear();
   if (!hasScripts(world.graph())) return true;
   if (!api_.available()) { diagnostics_ = "Runtime C# indisponível; aplique o código antes de Play"; return false; }
   world_ = &world;
   physics_ = &physics;
+  input_ = &input;
   lastStatus_ = WorldStatus::Ok;
   installAccess();
   const auto data = attachments(world.graph());
@@ -486,6 +525,7 @@ void ScriptBridge::stop() {
   running_ = false;
   world_ = nullptr;
   physics_ = nullptr;
+  input_ = nullptr;
   access_ = scene::ScriptSceneAccess{};
 }
 

@@ -238,13 +238,13 @@ public static class AstraWorldTests
         var parent = root.CreateChild("Pátio");
         var child = parent.CreateChild("Plataforma");
         Assert.Equal(1, root.ChildCount);
-        Assert.Equal(parent, child.Parent!.Value);
-        Assert.Equal(child, root.Find("Plataforma")!.Value);
+        Assert.Equal(parent, child.Parent!);
+        Assert.Equal(child, root.Find("Plataforma")!);
         Assert.True(root.Find("Plataforma", recursive: false) is null, "busca direta não atravessa níveis");
 
         child.SetParent(root);
         world.Flush();
-        Assert.Equal(root, child.Parent!.Value);
+        Assert.Equal(root, child.Parent!);
         Assert.Equal(2, root.ChildCount);
 
         child.Name = "Elevador";

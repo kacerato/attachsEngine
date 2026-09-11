@@ -159,16 +159,32 @@ public:
     playLastSeconds_=sceneTime_;
     playScene_.pause(state_.playPaused);
     if(state_.playPaused) playTouches_.cancel();
+    // O toque vira ESTADO DE DISPOSITIVO; quem decide o que ele significa é o
+    // mapa de ações do projeto. Pausado, o gameplay perde o foco: as ações leem
+    // zero e nenhum botão fica preso ao retomar.
     const auto actions=playTouches_.consumeInput();
+    runtime::InputDeviceState device;
+    device.moveX=actions.moveRight;device.moveY=actions.moveForward;
+    device.lookX=actions.lookScreenX;device.lookY=actions.lookScreenY;
+    device.touchButtons=jumpPressed_?1u:0u;
+    jumpPressed_=false;
+    playScene_.setInputFocus(!state_.playPaused);
+    playScene_.submitInput(device);
+    const auto &input=playScene_.input();
+    const auto &map=input.map();
+    float look[2]{0,0},move[2]{0,0};
+    input.axis2(map.lookAction(),look);
+    input.axis2(map.moveAction(),move);
     auto view=resolveSceneCamera(playScene_.document());
     const auto *viewEntity=playScene_.document().find(view.entity);
     if(viewEntity&&cameraLook(*viewEntity)) {
-      if(!applyCameraLook(*playScene_.executionGraph(),view.entity,actions.lookScreenX,actions.lookScreenY)) return false;
+      if(!applyCameraLook(*playScene_.executionGraph(),view.entity,look[0],look[1])) return false;
       view=resolveSceneCamera(playScene_.document());
     }
     const auto *controlled=playScene_.document().find(state_.selection);
     if(controlled && characterComponent(*controlled)) {
-      if(!playScene_.setCharacterMove(controlled->id,actions.moveRight,actions.moveForward,view.entity?view.yaw:0)) return false;
+      if(!playScene_.setCharacterMove(controlled->id,move[0],move[1],view.entity?view.yaw:0)) return false;
+      if(input.justPressed(map.jumpAction())) playScene_.jumpCharacter(controlled->id);
     }
     if(state_.playStepRequested) {
       state_.playStepRequested=false;
@@ -248,6 +264,9 @@ private:
   u32 hierarchyPointer_ = 0;
   EditorEntity fieldInitial_{};
   bool playRequested_ = false;
+  // Pulso de um quadro: o botão de salto da interface vira um BOTÃO DE
+  // DISPOSITIVO, e o mapa de ações decide o que ele aciona.
+  bool jumpPressed_ = false;
   float sceneTime_ = 0.0f;
   float lastWallSeconds_ = 0.0f;
   bool clockPrimed_ = false;

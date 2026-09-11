@@ -12,6 +12,7 @@
 #pragma once
 #include "core/base.h"
 #include "runtime/gameplay_layers.h"
+#include "runtime/input_actions.h"
 #include "scene/components.h"
 
 #include <span>
@@ -143,6 +144,14 @@ public:
     layers_ = value;
     ++revision_;
   }
+  const InputActionMap &inputActions() const noexcept { return input_; }
+  bool setInputActions(const InputActionMap &value) {
+    if (!value.valid()) return false;
+    if (input_ == value) return true;
+    input_ = value;
+    ++revision_;
+    return true;
+  }
 
 protected:
   // Ponto de extensão para consumidores com invariantes próprias de aparência.
@@ -164,6 +173,7 @@ private:
 
   std::vector<Record> records_;  // indexado por id; a posição 0 nunca é usada
   GameplayLayers layers_{};
+  InputActionMap input_{};
   ObjectId rootId_ = kInvalidObject;
   ObjectId nextId_ = 1;
   u32 aliveCount_ = 0;

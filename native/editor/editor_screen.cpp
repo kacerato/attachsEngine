@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <cctype>
 #include "editor/editor_screen.h"
+#include "editor/editor_script_templates.h"
 #include "editor/editor_reference_picker.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_properties.h"
@@ -1027,6 +1028,34 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
   }
   layout.viewport=body;
   builder.list.addRect(body,theme.color.surface);
+  if(builder.state.choosingTemplate) {
+    // Escolher de onde partir vem ANTES de nomear a classe: o nome que o
+    // usuário digita já entra no arquivo certo, sem um segundo passo de
+    // "agora cole este código aqui".
+    auto panel=deflate(body,UiInsets::all(24));
+    builder.list.addRect(panel,theme.color.canvas,theme.radius.card);
+    auto inner=deflate(panel,UiInsets::all(14));
+    builder.label(takeTop(inner,26),"Novo script: escolha o ponto de partida",theme.color.text,theme.type.body);
+    auto footer=takeBottom(inner,36);
+    auto row=takeTop(inner,38);
+    builder.list.addRect(row,theme.color.raised,2);
+    builder.label(deflate(row,UiInsets::symmetric(10,0)),"Arquivo vazio",theme.color.text,theme.type.body);
+    builder.router.addRegion(row,widgetId(EditorWidget::CodeTemplateBase));
+    for(u32 i=0;i<editorScriptTemplates.size();++i) {
+      const auto &model=editorScriptTemplates[i];
+      auto entry=takeTop(inner,38);
+      if(entry.height<38) break;
+      builder.list.addRect(entry,theme.color.raised,2);
+      auto label=deflate(entry,UiInsets::symmetric(10,0));
+      builder.label(takeLeft(label,150),std::string(model.name).c_str(),theme.color.text,theme.type.body);
+      builder.label(label,std::string(model.description).c_str(),theme.color.textDim,theme.type.caption);
+      builder.router.addRegion(entry,widgetId(EditorWidget::CodeTemplateBase)+i+1);
+    }
+    auto cancel=takeRight(footer,90);
+    builder.label(cancel,"Cancelar",theme.color.textDim,theme.type.body,UiAlign::Center);
+    builder.router.addRegion(cancel,widgetId(EditorWidget::CodeTemplateClose));
+    return;
+  }
   auto content=deflate(body,UiInsets::all(10));
   auto tabs=takeTop(content,40);
   if(workspace) {

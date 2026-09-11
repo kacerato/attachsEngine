@@ -71,9 +71,9 @@ public static class ComponentIds
 /// mesmo callback — <see cref="IsAlive"/> passa a ser falso e qualquer operação
 /// lança <see cref="WorldException"/> em vez de acertar outra coisa.
 /// </summary>
-public readonly struct GameObject : IEquatable<GameObject>
+public sealed class GameObject : IEquatable<GameObject>
 {
-    private readonly ISceneAccess? _scene;
+    private readonly ISceneAccess _scene;
     internal GameObject(ISceneAccess scene, ulong objectId, uint world, uint generation)
     {
         _scene = scene; ObjectId = objectId; World = world; Generation = generation;
@@ -82,17 +82,17 @@ public readonly struct GameObject : IEquatable<GameObject>
     public ulong ObjectId { get; }
     public uint World { get; }
     public uint Generation { get; }
-    public bool IsValid => _scene is not null && ObjectId != 0 && Generation != 0;
+    public bool IsValid => ObjectId != 0 && Generation != 0;
 
-    private ISceneAccess Scene => _scene ?? throw new WorldException(WorldStatus.InvalidArgument, "objeto não vinculado");
+    private ISceneAccess Scene => _scene;
 
     /// <summary>Falso quando o objeto foi destruído ou pertence a outra execução.</summary>
-    public bool IsAlive => IsValid && _scene!.WorldId == World && _scene.GenerationOf(ObjectId) == Generation;
+    public bool IsAlive => IsValid && _scene.WorldId == World && _scene.GenerationOf(ObjectId) == Generation;
 
     private void Require(string operation)
     {
         if (!IsValid) throw new WorldException(WorldStatus.InvalidArgument, operation);
-        if (_scene!.WorldId != World) throw new WorldException(WorldStatus.ForeignWorld, operation);
+        if (_scene.WorldId != World) throw new WorldException(WorldStatus.ForeignWorld, operation);
         if (_scene.GenerationOf(ObjectId) != Generation) throw new WorldException(WorldStatus.StaleHandle, operation);
     }
     private void Check(bool ok, string operation)
@@ -123,7 +123,7 @@ public readonly struct GameObject : IEquatable<GameObject>
         {
             Require("ler pai");
             var parent = Scene.ParentOf(ObjectId);
-            return parent == 0 ? null : Wrap(Scene, parent);
+            return parent == 0 ? null : Resolve(Scene, parent);
         }
     }
 
@@ -135,7 +135,7 @@ public readonly struct GameObject : IEquatable<GameObject>
         if (index < 0) throw new ArgumentOutOfRangeException(nameof(index));
         var child = Scene.ChildAt(ObjectId, (uint)index);
         if (child == 0) throw new WorldException(WorldStatus.UnknownObject, "acessar filho");
-        return Wrap(Scene, child);
+        return Resolve(Scene, child);
     }
 
     public IEnumerable<GameObject> Children()
@@ -152,7 +152,7 @@ public readonly struct GameObject : IEquatable<GameObject>
     {
         Require("procurar objeto");
         var found = Scene.FindChild(ObjectId, name, recursive);
-        return found == 0 ? null : Wrap(Scene, found);
+        return found == 0 ? null : Resolve(Scene, found);
     }
 
     public GameObject CreateChild(string name)
@@ -160,7 +160,7 @@ public readonly struct GameObject : IEquatable<GameObject>
         Require("criar objeto");
         var created = Scene.CreateObject(ObjectId, name);
         if (created == 0) throw new WorldException(Scene.LastStatus, "criar objeto");
-        return Wrap(Scene, created);
+        return Resolve(Scene, created);
     }
 
     /// <summary>
@@ -177,7 +177,7 @@ public readonly struct GameObject : IEquatable<GameObject>
     public void SetParent(GameObject parent, int index = 0)
     {
         Require("reparentear");
-        if (!parent.IsValid) throw new WorldException(WorldStatus.InvalidArgument, "reparentear");
+        if (parent is not { IsValid: true }) throw new WorldException(WorldStatus.InvalidArgument, "reparentear");
         Check(Scene.SetParent(ObjectId, parent.ObjectId, (uint)Math.Max(0, index)), "reparentear");
     }
 
@@ -248,13 +248,13 @@ public readonly struct GameObject : IEquatable<GameObject>
 
     internal static GameObject Wrap(ISceneAccess scene, ulong objectId) => Resolve(scene, objectId);
 
-    public bool Equals(GameObject other) =>
+    public bool Equals(GameObject? other) => other is not null &&
         ObjectId == other.ObjectId && World == other.World && Generation == other.Generation;
-    public override bool Equals(object? obj) => obj is GameObject other && Equals(other);
+    public override bool Equals(object? obj) => Equals(obj as GameObject);
     public override int GetHashCode() => HashCode.Combine(ObjectId, World, Generation);
     public override string ToString() => IsValid ? $"objeto #{ObjectId}/{Generation}" : "objeto inválido";
-    public static bool operator ==(GameObject a, GameObject b) => a.Equals(b);
-    public static bool operator !=(GameObject a, GameObject b) => !a.Equals(b);
+    public static bool operator ==(GameObject? a, GameObject? b) => a is null ? b is null : a.Equals(b);
+    public static bool operator !=(GameObject? a, GameObject? b) => !(a == b);
 }
 
 /// <summary>

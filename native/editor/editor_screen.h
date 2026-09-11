@@ -152,12 +152,15 @@ enum class EditorWidget : u32 {
   TransformFold, ComponentSearch, ComponentSearchClear, ComponentCategory,
   MeshGeometryTab, MeshMaterialTab, MeshChoose, MeshPickerClose, MeshClear, MeshSearch, MeshPrevious, MeshNext, MaterialRestore,
   ReferenceClose, ReferenceSearch, ReferenceClear, ReferencePrevious, ReferenceNext,
+  CodeTemplateClose,
   ComponentReferenceBase=0x7a000000u, ReferenceChoiceBase=0x7b000000u,
   ComponentNumberBase=0x78000000u,
   MeshChoiceBase=0x79000000u,
   ScriptAddBase=0x71000000u, ScriptFoldBase=0x72000000u, ScriptMenuBase=0x73000000u,
   ScriptRemoveBase=0x74000000u, ScriptEnabledBase=0x75000000u, ScriptSourceBase=0x76000000u,
   ScriptFieldBase=0x77000000u,
+  // Um id por modelo de script; o valor zero é o arquivo vazio.
+  CodeTemplateBase=0x7c000000u,
   CodeBody=0x61000000u, CodeTabBase=0x61010000u,
 
   ComponentAddBase=0x67000000u,
@@ -215,6 +218,10 @@ struct EditorScreenState final {
   const EditorMapScene *resources=nullptr;
   bool codeCompilerAvailable=false,codeBuildBusy=false;
   bool editingCode=false,creatingScript=false,searchingCode=false;
+  // Escolha do modelo antes de pedir o nome da classe. `~0u` é o arquivo
+  // vazio, que continua sendo o primeiro item da lista.
+  bool choosingTemplate=false;
+  u32 scriptTemplate=~0u;
   std::string codeQuery;
   u32 fileScroll=0;
   float fileScrollOffset=0;

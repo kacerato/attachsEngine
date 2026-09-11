@@ -28,6 +28,8 @@ public:
   bool ready() const { return !root_.empty(); }
   bool createDirectory(const std::string &relative);
   bool createTextFile(const std::string &relative,std::string_view text);
+  // Verdadeiro quando o caminho já existe dentro da raiz do projeto.
+  bool exists(const std::string &relative) const;
   std::string rootPath() const;
   std::string resolveFile(const std::string &relative) const;
 private:

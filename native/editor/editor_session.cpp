@@ -5,6 +5,7 @@
 #include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
 #include "editor/editor_session.h"
+#include "editor/editor_script_templates.h"
 #include "editor/editor_reference_picker.h"
 #include "editor/editor_properties.h"
 #include "editor/editor_theme.h"
@@ -430,6 +431,7 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
      current.entity!=edit.entity || current.field!=edit.field || edit.version.epoch!=sceneEpoch_) return false;
   const auto close=[&] {
     state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;
+    state_.choosingTemplate=false;
     state_.editingScriptInstance=0;state_.editingScriptEntity=0;state_.editingScriptProperty.clear();state_.editingScriptType.clear();
     state_.numericField=0;state_.numericInstance=0;state_.numericProperty.clear();state_.renameEntity=0;
     state_.editingComponentSearch=false;state_.editingMeshSearch=false;state_.editingReferenceSearch=false;
@@ -455,7 +457,8 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     return accepted;
   }
   if(edit.purpose==EditorTextPurpose::ScriptName) {
-    if(!code_.createScript(files_,text)) {state_.status=code_.error();return false;}
+    if(!code_.createScript(files_,text,state_.scriptTemplate)) {state_.status=code_.error();return false;}
+    state_.scriptTemplate=~0u;
     const auto root=files_.rootPath();files_.setRoot(root.c_str());
     state_.workspace=EditorWorkspace::Code;close();return true;
   }
@@ -695,7 +698,8 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
         }
         return true;
       case EditorWidget::CodeScene:state_.workspace=EditorWorkspace::Scene;return true;
-      case EditorWidget::CodeNew:state_.creatingScript=true;return true;
+      case EditorWidget::CodeNew:state_.choosingTemplate=true;state_.workspace=EditorWorkspace::Code;return true;
+      case EditorWidget::CodeTemplateClose:state_.choosingTemplate=false;return true;
       case EditorWidget::CodeEdit:state_.editingCode=code_.active()!=nullptr;return true;
       case EditorWidget::CodeSave:state_.status=code_.save(files_)?"Código salvo":code_.error();return true;
       case EditorWidget::CodeUndo:code_.undo();return true;
@@ -708,8 +712,21 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       }
     }
   }
+  if(routing.tapped && (routing.widgetId&0xff000000u)==widgetId(EditorWidget::CodeTemplateBase) &&
+     state_.choosingTemplate) {
+    const u32 choice=routing.widgetId-widgetId(EditorWidget::CodeTemplateBase);
+    if(choice<=editorScriptTemplates.size()) {
+      // Zero é o arquivo vazio; os demais deslocam um por causa dele.
+      state_.scriptTemplate=choice?choice-1:~0u;
+      state_.choosingTemplate=false;
+      state_.creatingScript=true;
+    }
+    return true;
+  }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::JumpCharacter)) {
-    if(isPlaying()&&!state_.playPaused) playScene_.jumpCharacter(state_.selection);
+    // O toque no botão alimenta o dispositivo; quem traduz isso em salto é o
+    // mapa de ações, no próximo quadro de Play.
+    if(isPlaying()&&!state_.playPaused) jumpPressed_=true;
     return true;
   }
   if(routing.widgetId==widgetId(EditorWidget::FilesSplitter)) {

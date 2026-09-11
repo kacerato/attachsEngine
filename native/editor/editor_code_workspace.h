@@ -31,7 +31,10 @@ public:
   const std::vector<EditorScriptType> &scriptTypes() const {return scriptTypes_;}
   void invalidateBuild() {scriptTypes_.clear();}
   bool open(EditorFileSystem &files,const std::string &relative);
-  bool createScript(EditorFileSystem &files,std::string_view className);
+  // `templateIndex` escolhe um modelo de editor_script_templates.h; fora da
+  // faixa cria o arquivo vazio de sempre. O modelo que interage por capacidade
+  // traz o arquivo de contratos junto, quando o projeto ainda não o tem.
+  bool createScript(EditorFileSystem &files,std::string_view className,u32 templateIndex=~0u);
   bool replace(u64 id,u64 revision,std::string_view text);
   bool undo();
   bool redo();

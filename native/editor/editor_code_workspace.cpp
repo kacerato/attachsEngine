@@ -1,4 +1,5 @@
 #include "editor/editor_code_workspace.h"
+#include "editor/editor_script_templates.h"
 #include "editor/editor_filesystem.h"
 #include "platform/atomic_asset_file.h"
 #include <algorithm>
@@ -100,7 +101,7 @@ bool EditorCodeWorkspace::close(u64 id,bool discard) {
   }
   return false;
 }
-bool EditorCodeWorkspace::createScript(EditorFileSystem &files,std::string_view className) {
+bool EditorCodeWorkspace::createScript(EditorFileSystem &files,std::string_view className,u32 templateIndex) {
   if(className.empty() || className.size()>64) {error_="Nome de classe inválido";return false;}
   for(usize i=0;i<className.size();++i) {
     const unsigned char c=className[i];
@@ -109,7 +110,21 @@ bool EditorCodeWorkspace::createScript(EditorFileSystem &files,std::string_view 
   if(buffers_.size()>=MaximumBuffers) {error_="Feche um arquivo antes de criar outro";return false;}
   if(!files.createDirectory("Scripts")) {error_=files.error();return false;}
   const std::string relative="Scripts/"+std::string(className)+".cs";
-  const std::string text="using Astra;\n\n[ComponentId(\"project."+std::string(className)+"\")]\npublic sealed class "+std::string(className)+" : Behavior\n{\n    public override void Start()\n    {\n    }\n\n    public override void Update(float deltaTime)\n    {\n    }\n}\n";
+  std::string text="using Astra;\n\n[ComponentId(\"project."+std::string(className)+"\")]\npublic sealed class "+std::string(className)+" : Behavior\n{\n    public override void Start()\n    {\n    }\n\n    public override void Update(float deltaTime)\n    {\n    }\n}\n";
+  if(templateIndex<editorScriptTemplates.size()) {
+    const auto &model=editorScriptTemplates[templateIndex];
+    // O modelo traz o próprio nome de classe; trocá-lo pelo que o usuário
+    // digitou mantém o arquivo compilável e o ComponentId único.
+    text=std::string(model.source);
+    const std::string from(model.className),to(className);
+    for(usize at=text.find(from);at!=std::string::npos;at=text.find(from,at+to.size()))
+      text.replace(at,from.size(),to);
+    // Os contratos acompanham quem interage por capacidade, e só na primeira
+    // vez: recriá-los apagaria o que o usuário tivesse acrescentado neles.
+    const std::string contracts="Scripts/"+std::string(kEditorScriptContractsFile);
+    if(model.contracts && !files.exists(contracts) &&
+       !files.createTextFile(contracts,kEditorScriptContracts)) {error_=files.error();return false;}
+  }
   if(!files.createTextFile(relative,text)) {error_=files.error();return false;}
   ++generation_;scriptTypes_.clear();return open(files,relative);
 }

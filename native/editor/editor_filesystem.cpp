@@ -108,6 +108,11 @@ bool EditorFileSystem::createDirectory(const std::string &relative) {
   }
   error_.clear();return true;
 }
+bool EditorFileSystem::exists(const std::string &relative) const {
+  std::filesystem::path path;
+  std::error_code code;
+  return resolve(relative,path) && std::filesystem::exists(path,code);
+}
 bool EditorFileSystem::createTextFile(const std::string &relative,std::string_view text) {
   const auto input=fromUtf8(relative);fs::path parent;
   if(input.empty() || input.filename()=="." || input.filename()==".." ||

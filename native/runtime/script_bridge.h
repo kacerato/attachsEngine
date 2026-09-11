@@ -8,6 +8,7 @@
 // A plataforma injeta o serviço gerenciado; este arquivo não conhece CLR.
 #pragma once
 #include "runtime/game_world.h"
+#include "runtime/input_actions.h"
 #include "runtime/scene_physics.h"
 #include "scene/script_runtime.h"
 
@@ -25,7 +26,7 @@ public:
   void configure(scene::ScriptRuntimeApi api, std::string root) {
     if (!running_) { api_ = api; root_ = std::move(root); }
   }
-  bool start(GameWorld &world, ScenePhysics &physics);
+  bool start(GameWorld &world, ScenePhysics &physics, InputService &input);
   bool update(float elapsed);
   bool fixedUpdate(float elapsed);
   bool trigger(ObjectId sensor, ObjectId other, u32 phase);
@@ -50,6 +51,7 @@ private:
   LogSink logSink_;
   GameWorld *world_ = nullptr;
   ScenePhysics *physics_ = nullptr;
+  InputService *input_ = nullptr;
   WorldStatus lastStatus_ = WorldStatus::Ok;
   bool running_ = false;
 };
