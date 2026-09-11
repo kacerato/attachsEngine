@@ -60,17 +60,20 @@ Android.
 
 | Entrega | Contrato | Implementado | Integrado | Testado no host | Validado no Android |
 |---|---|---|---|---|---|
-| A — mundo de execução e schema | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim | sim (Play roda no `GameWorld`) | 11 testes | **não** |
+| A — mundo de execução e schema | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim | sim (Play roda no `GameWorld`) | 11 testes | **parcial**: Play/pausa/passo/Stop, arquivo v12, identidade de sessão por Play e reabertura no mesmo processo |
 | B — recursos e importação | — | não | não | não | não |
 | C — materiais e luzes | — | não | não | não | não |
-| D — física acessível | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim, exceto sensor por colisor e `CharacterVirtual` na broadphase | sim (queries, camadas no solver, contatos no C#) | 7 testes | **não** |
-| E — entrada e comportamentos | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim | sim (toque → ações → personagem/câmera; modelos no editor) | 7 testes | **não** |
-| F — IDE, console e inspetor | — | apenas o seletor de modelo de script | idem | 2 testes | **não** |
+| D — física acessível | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim, exceto sensor por colisor e `CharacterVirtual` na broadphase | sim (queries, camadas no solver, contatos no C#) | 9 testes | **parcial**: contato sólido com normal chegou ao comportamento; consultas e camadas só no host |
+| E — entrada e comportamentos | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim | sim (toque → ações → personagem/câmera; modelos no editor) | 7 testes | **parcial**: modelo criado, compilado e anexado no aparelho; ações de entrada só no host |
+| F — IDE, console e inspetor | — | apenas o seletor de modelo de script | idem | 2 testes | **parcial**: seletor de modelos usado no aparelho |
 | G — rodada integrada | — | não | não | não | **não** |
 
-Somente compilação: `:app:assembleDebug` e `:app:assembleRelease` passam com as
-alterações, e os 16 testes Java do shell continuam verdes. Nenhuma sessão ADB foi
-aberta; as duas composições de aceitação **não** foram montadas pela interface.
+A rodada de aparelho de 11/09 exercitou UMA cena montada pela interface para
+percorrer os caminhos; a prova de aceitação do pacote — **duas** composições
+diferentes a partir de projetos vazios — continua pendente. Ela encontrou dois
+defeitos que o host não pegava: a versão do arquivo de cena divergindo entre o
+escritor nativo e o shell Java, e a ausência de teste no caminho Play→script.
+Ambos corrigidos e agora cobertos por teste.
 
 Detalhes, números e problemas corrigidos:
 [relatório de validação](validacao/2026-09-10-runtime-gameplay.md).

@@ -9,7 +9,12 @@ import java.nio.file.Files;
 /** Resource source selection, independent of the display name of a project. */
 public final class ProjectSceneSource {
     // Keep aligned with editor_archive.cpp; the native reader owns payload migration.
-    private static final int LAST_SUPPORTED_ARCHIVE_VERSION = 10;
+    // Esquecer de subir isto junto com a versão nativa faz o shell RECUSAR abrir
+    // qualquer projeto salvo pela build nova, com "Formato de cena não
+    // reconhecido" -- foi o que aconteceu ao subir para v12. O teste gerenciado
+    // `ArquivoDeCenaTests` compara esta constante com a versão que o escritor
+    // nativo emite, para que a divergência falhe no host e não no aparelho.
+    private static final int LAST_SUPPORTED_ARCHIVE_VERSION = 12;
     private ProjectSceneSource() {}
 
     public static boolean isIndependent(Project project) throws IOException {

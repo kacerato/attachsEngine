@@ -424,6 +424,7 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_physics_access.cpp
     ../tests/native/test_runtime_input.cpp
     ../tests/native/test_editor_script_templates.cpp
+    ../tests/native/test_editor_play_scripts.cpp
     ../tests/native/test_editor_map_scene.cpp
     ../tests/native/test_scene_components.cpp
     ../tests/native/test_editor_document.cpp

@@ -1547,3 +1547,38 @@ aceitação não foram montadas pela interface, e nada aqui foi exercitado no
 aparelho. Entregas B (recursos/importação), C (materiais/luzes), F (IDE/inspetor)
 e G (rodada integrada) continuam abertas, assim como sensor por colisor,
 `CharacterVirtual` na broadphase, ShapeAsset e exportação.
+
+## 11/09/2026 — rodada de aparelho do pacote de gameplay
+
+ADB autorizado. Xiaomi 25053PC47G, serial `53e1eb7`, Android 16. Projeto
+exclusivo `RuntimeGameplay0910` criado pela interface, projetos anteriores
+preservados. [Relatório completo](validacao/2026-09-10-runtime-gameplay.md).
+
+Exercitado pela interface no aparelho: criar projeto e objetos, arquivo de cena
+**v12** com as seções `LAYERS` e `INPUT` gravadas e relidas ("Cena restaurada"),
+seletor dos sete modelos de comportamento, criação do script a partir de modelo
+com a classe e o `ComponentId` renomeados, Aplicar compilando no aparelho e
+publicando o schema, schema governando o inspetor ("Incompatível com corpo
+físico", "Já adicionado"), Play com o mundo de execução, **contato sólido com
+normal chegando ao comportamento C#**, escrita de propriedade de componente por
+código, identidade de mundo distinta por Play, pausa determinística, passo
+avançando um passo, Stop devolvendo a autoria byte a byte e reabertura no mesmo
+processo (PID 27995) com novo Play completo.
+
+Dois defeitos apareceram só no aparelho e foram corrigidos com teste:
+
+1. O shell Java aceitava no máximo a versão 10 do arquivo de cena e o escritor
+   nativo passou a emitir a 12 — nenhum projeto salvo pela build nova abria.
+   `ArquivoDeCenaTests` agora compara as duas versões e falha no host.
+2. O caminho `EditorPlayScene` → `ScriptBridge` → ABI não tinha teste;
+   `test_editor_play_scripts.cpp` cobre a entrega de contatos e recusa uma ABI
+   incompleta em vez de perder eventos em silêncio.
+
+Uma divergência fica registrada e **não** corrigida: a escrita de `base_color`
+por script é aceita pelo mundo, mas o override de material por instância não
+chega ao desenho das primitivas do projeto independente no renderer Android.
+Isso pertence à entrega C, que este pacote não implementou.
+
+Estado: **794/794 nativos, 521/521 gerenciados, 16/16 Java**; Debug e Release
+compilados. A prova de aceitação com duas composições montadas pela interface
+continua pendente, assim como as entregas B, C, F e G.

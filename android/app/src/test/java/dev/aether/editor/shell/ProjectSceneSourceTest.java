@@ -41,13 +41,13 @@ public class ProjectSceneSourceTest {
         assertTrue(ProjectSceneSource.isIndependent(p));
     }
     @Test public void futureArchiveIsRejected() throws Exception {
-        Project p=project("empty");archive(p,"AETHER_EDITOR 11 0 1\n");
+        Project p=project("empty");archive(p,"AETHER_EDITOR 13 0 1\n");
         try { ProjectSceneSource.isIndependent(p); fail("future version accepted"); }
         catch(IOException expected) { }
     }
     @Test public void allNativeVersionsRouteByFingerprintIncludingInstanceArchive() throws Exception {
         Project p=project("empty");
-        for(int version=1;version<=10;++version) {
+        for(int version=1;version<=12;++version) {
             archive(p,"AETHER_EDITOR "+version+" 0 1\n");
             assertTrue("independent version "+version,ProjectSceneSource.isIndependent(p));
             archive(p,"AETHER_EDITOR "+version+" 9651248282590934415 1\n");
