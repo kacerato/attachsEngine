@@ -30,6 +30,7 @@
 #include "ui/ui_draw_list.h"
 #include "ui/ui_input.h"
 #include "ui/ui_theme.h"
+#include <string>
 
 namespace ae::editor {
 class EditorMapScene;
@@ -280,6 +281,19 @@ struct EditorScreenState final {
   bool numericReplace = false;
   bool numericError = false;
   bool platformTextInput = false;
+  // Texto VIVO vindo do IME do sistema, e o cursor em bytes dentro dele.
+  //
+  // O teclado é do Android; o CAMPO é do editor. A ponte não desenha nada: ela
+  // carrega o IME, entrega o texto a cada tecla e diz quanto da tela o teclado
+  // ocupa. Antes disso a edição inteira acontecia num `AlertDialog` que cobria
+  // a tela, e o usuário não via o que estava editando enquanto editava.
+  std::string platformDraft;
+  u32 platformCaret = 0;
+  // Fração da altura da superfície ocupada pelo teclado do sistema, 0..1. Vem
+  // como fração e não como pixels porque o Android mede em pixels físicos e
+  // esta superfície é lógica; converter no meio do caminho seria mais uma
+  // unidade para errar.
+  float platformImeFraction = 0.0f;
   bool entityMenu = false;
   bool creationMenu=false;
   bool workspaceMenu=false;

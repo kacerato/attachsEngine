@@ -465,7 +465,47 @@ interseção calculado com o raio errado. Com o raio correto, o empurrão relati
 de profundidade caiu de 0,5% para 0,05%, e ele existe só para desempatar o
 contato coplanar entre o chão e a base de um objeto apoiado nele.
 
-## 16. O que este documento NÃO afirma
+## 16. Escrita de texto no Android
+
+O teclado é do sistema; o **campo é do editor**.
+
+A ponte (`EditorTextInput.java`) não desenha campo nenhum. Ela mantém uma `View`
+de um pixel, invisível, só para segurar o foco e a `InputConnection` — é o que
+faz o IME abrir e entregar composição, correção e área de transferência. O texto
+vai para o lado nativo **a cada tecla**, e o editor desenha o campo com o cursor
+na sua própria superfície, apoiado na borda de cima do teclado.
+
+Antes disso a edição inteira acontecia num `AlertDialog` que cobria a tela: o
+usuário não via o objeto que estava renomeando nem o valor que estava mudando
+enquanto digitava, e a busca só filtrava depois de confirmar.
+
+| Coisa | Quem faz |
+|---|---|
+| Teclado, composição, correção, área de transferência | IME do Android |
+| Foco e `InputConnection` | a `View` de um pixel |
+| Campo, cursor, posição na tela | o editor, na superfície dele |
+| Rascunho e confirmação | `EditorSession` |
+
+`updateTextDraft` é **rascunho, não comando**: nada entra no documento nem no
+histórico. A única coisa que acontece antes de confirmar é a busca filtrar
+enquanto se digita, que não toca em nada. Confirmar continua sendo
+`completeTextEdit`, e continua sendo um único comando de histórico.
+
+O cursor chega em **bytes UTF-8**, não no índice UTF-16 do Android: é assim que o
+lado nativo indexa o texto, e converter no lugar errado poria o traço no meio de
+um glifo acentuado. A altura do teclado chega como **fração** da janela, porque o
+Android mede em pixels físicos e a superfície do editor é lógica.
+
+Teclas chegam por dois caminhos que existem os dois — o IME pela
+`InputConnection`, e teclado físico ou evento injetado direto na `View`. Os dois
+passam pela mesma função.
+
+**O editor de código continua no diálogo.** Ele é multi-linha com rolagem e
+seleção própria, e é o que falta do M05 junto com a edição dentro da própria
+linha da propriedade (M05.2). Trocar os dois de uma vez seria anunciar uma coisa
+e entregar outra.
+
+## 17. O que este documento NÃO afirma
 
 - Não há exportação de jogo nem player autônomo.
 - Sensor **por colisor** não existe: o sensor pertence ao corpo inteiro.

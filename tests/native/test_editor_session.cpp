@@ -858,6 +858,49 @@ AE_TEST(session_platform_text_cancel_and_stale_reply_preserve_authoring) {
   AE_EXPECT_TRUE(!f.session.completeTextEdit(stale,"overwrite",true),"revision guard");
   AE_EXPECT_TRUE(std::string(f.session.document().find(f.cube)->name)=="external","external edit preserved");
 }
+AE_TEST(the_live_draft_draws_the_field_without_touching_the_document) {
+  // O campo embutido: o teclado e do sistema, o campo e do editor. Para desenhar
+  // o que esta sendo digitado o editor precisa do texto ANTES de confirmar --
+  // com o AlertDialog ele so via o resultado final, e por isso a edicao tinha de
+  // acontecer numa tela separada.
+  Fixture f;f.session.setSelection(f.cube);f.session.history().clear();
+  f.session.usePlatformTextInput(true);
+  tapWidget(f,widgetId(EditorWidget::HierarchyMenu));tapWidget(f,widgetId(EditorWidget::RenameSelection));
+  const auto edit=f.session.pendingTextEdit();
+  const auto revision=f.session.document().revision();
+
+  AE_EXPECT_TRUE(f.session.updateTextDraft(edit,"Port",4),"rascunho aceito");
+  AE_EXPECT_TRUE(f.session.screen().platformDraft=="Port","o editor tem o texto vivo");
+  AE_EXPECT_EQ(f.session.screen().platformCaret,4u,"e o cursor");
+  AE_EXPECT_EQ(f.session.document().revision(),revision,"rascunho nao toca no documento");
+  AE_EXPECT_EQ(f.session.history().undoDepth(),0u,"e nao cria historico");
+
+  // Cursor alem do fim e preso ao fim: um indice de bytes que veio de outra
+  // revisao do texto nao pode virar leitura fora do buffer na hora de desenhar.
+  AE_EXPECT_TRUE(f.session.updateTextDraft(edit,"Por",99),"cursor fora de alcance");
+  AE_EXPECT_EQ(f.session.screen().platformCaret,3u,"preso ao fim do texto");
+
+  // Confirmar continua sendo o unico caminho que muda a cena.
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"Portao",true),"confirmar");
+  AE_EXPECT_TRUE(std::string(f.session.document().find(f.cube)->name)=="Portao","nome aplicado");
+  AE_EXPECT_EQ(f.session.history().undoDepth(),1u,"um unico comando");
+  AE_EXPECT_TRUE(!f.session.updateTextDraft(edit,"tarde",5),"campo fechado recusa rascunho");
+}
+
+AE_TEST(the_live_draft_filters_a_search_while_it_is_typed) {
+  // A busca e o unico efeito permitido antes de confirmar, porque nao toca em
+  // nada. Com o dialogo ela so filtrava depois de aplicar, o que tornava a busca
+  // inutil justamente enquanto se busca.
+  Fixture f;f.session.usePlatformTextInput(true);
+  tapWidget(f,widgetId(EditorWidget::HierarchySearch));
+  const auto edit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::HierarchySearch,"busca da hierarquia aberta");
+  const auto revision=f.session.document().revision();
+  AE_EXPECT_TRUE(f.session.updateTextDraft(edit,"Cub",3),"rascunho da busca");
+  AE_EXPECT_TRUE(std::string(f.session.screen().renameText)=="Cub","o filtro ve o texto vivo");
+  AE_EXPECT_EQ(f.session.document().revision(),revision,"buscar nao muda a cena");
+}
+
 AE_TEST(session_platform_number_accepts_negative_decimal_and_rejects_invalid) {
   Fixture f;f.session.setSelection(f.cube);f.session.history().clear();f.session.usePlatformTextInput(true);
   tapWidget(f,widgetId(EditorWidget::TransformFold));

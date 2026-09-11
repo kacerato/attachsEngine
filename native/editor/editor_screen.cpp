@@ -972,6 +972,67 @@ void buildToolRail(ScreenBuilder &builder, const UiRect &viewport, bool compact)
   }
 }
 
+
+// Um campo de texto EMBUTIDO, desenhado pelo editor enquanto o teclado do
+// sistema esta aberto.
+//
+// A divisao e essa: o teclado e do Android, o campo e do editor. A ponte JNI
+// nao desenha nada -- ela carrega o IME, entrega o texto a cada tecla e diz
+// quanto da tela o teclado ocupa. Antes disso a edicao inteira acontecia num
+// `AlertDialog` que cobria a tela: o usuario nao via o objeto que estava
+// renomeando nem o valor que estava mudando enquanto digitava, e a busca so
+// filtrava depois de confirmar.
+//
+// O cursor e um glifo inserido no texto desenhado, e nao um retangulo medido.
+// A largura do texto so e resolvida na construcao das instancias, depois deste
+// passo; medir aqui exigiria uma segunda copia da metrica da fonte, que e
+// exatamente a forma de defeito que ja custou caro neste editor.
+bool platformFieldActive(const EditorScreenState &state) {
+  if (!state.platformTextInput || state.editingCode) return false;
+  return state.renameEntity != kInvalidEntity || state.editingHierarchySearch ||
+         state.editingCreationSearch || state.editingComponentSearch || state.editingMeshSearch ||
+         state.editingReferenceSearch || state.numericField != 0 ||
+         state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode;
+}
+
+const char *platformFieldTitle(const EditorScreenState &state) {
+  if (state.numericField != 0) return "Valor";
+  if (state.editingScriptInstance != 0) return "Campo";
+  if (state.creatingScript) return "Nova classe C#";
+  if (state.searchingCode) return "Localizar";
+  if (state.renameEntity != kInvalidEntity) return "Nome";
+  return "Buscar";
+}
+
+void buildPlatformTextField(ScreenBuilder &builder) {
+  const auto &state = builder.state;
+  const UiTheme &theme = builder.theme;
+  if (!platformFieldActive(state)) return;
+  // A borda de cima do teclado. Sem ela o campo nasce embaixo da tela, que e
+  // meio caminho de volta para o dialogo.
+  const float keyboard = state.surface.height * state.platformImeFraction;
+  const float height = 56.0f;
+  const float margin = 8.0f;
+  float top = state.surface.bottom() - keyboard - height - margin;
+  top = std::max(top, state.surface.y + margin);
+  const UiRect bar{state.surface.x + margin, top, state.surface.width - margin * 2.0f, height};
+  // Bloqueia o toque na barra, e SO nela: o resto da tela continua visivel e
+  // rolavel, que e a diferenca entre editar embutido e editar num modal.
+  builder.router.addBlocker(bar);
+  builder.list.addRect(bar, theme.color.surface, theme.radius.control);
+  builder.list.addRect({bar.x, bar.bottom() - 2.0f, bar.width, 2.0f}, theme.color.accent);
+  UiRect content = deflate(bar, UiInsets::all(8.0f));
+  const UiRect title = takeLeft(content, 92.0f);
+  builder.label(title, platformFieldTitle(state), theme.color.textFaint, theme.type.caption,
+                UiAlign::Start);
+  const auto caret = std::min<usize>(state.platformCaret, state.platformDraft.size());
+  std::string shown = state.platformDraft.substr(0, caret);
+  shown += "|";
+  shown += state.platformDraft.substr(caret);
+  builder.label(content, shown, theme.color.text,
+                state.numericField != 0 ? theme.type.numeric : theme.type.body, UiAlign::Start);
+}
+
 } // namespace
 
 void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,EditorScreenLayout &layout) {
@@ -1430,6 +1491,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(cell,widget);
     }
   }
+  buildPlatformTextField(builder);
   return layout;
 }
 

@@ -11,6 +11,13 @@ ae::u64 sequence=0;
 bool visible=false, invalid=false;
 struct Reply { ae::u64 sequence; bool accept; std::string text; };
 std::optional<Reply> reply;
+// Texto VIVO, a cada tecla. O `AlertDialog` so devolvia o resultado final; com
+// o campo embutido o editor precisa saber o que esta sendo digitado para poder
+// desenhar. Guardado como o ultimo estado conhecido e nao como uma fila: quem
+// desenha quer o agora, e quadros perdidos nao precisam ser reproduzidos.
+struct Draft { ae::u64 sequence; ae::u32 caret; std::string text; };
+std::optional<Draft> draft;
+float imeFraction=0.0f;
 bool same(const ae::editor::EditorTextEdit &a,const ae::editor::EditorTextEdit &b) {
   return a.purpose==b.purpose && a.entity==b.entity && a.field==b.field &&
       a.version.epoch==b.version.epoch && a.version.revision==b.version.revision &&
@@ -21,6 +28,14 @@ bool same(const ae::editor::EditorTextEdit &a,const ae::editor::EditorTextEdit &
 namespace ae::platform::android {
 void updateEditorTextInput(editor::EditorSession &session) {
   std::lock_guard lock(mutex);
+  session.setPlatformImeFraction(imeFraction);
+  // O rascunho vale antes da resposta: a ultima tecla e a confirmacao chegam no
+  // mesmo quadro com frequencia, e aplicar o commit primeiro faria o campo
+  // piscar o texto anterior.
+  if(draft && visible && draft->sequence==sequence) {
+    session.updateTextDraft(request,draft->text,draft->caret);
+    draft.reset();
+  } else if(draft && (!visible || draft->sequence!=sequence)) draft.reset();
   if(reply) {
     if(visible && reply->sequence==sequence)
       invalid=!session.completeTextEdit(request,reply->text,reply->accept);
@@ -66,4 +81,27 @@ Java_dev_aether_editor_EditorTextInput_submit(JNIEnv *env,jclass,jlong id,jbyteA
   std::lock_guard lock(mutex);
   if(visible && static_cast<ae::u64>(id)==sequence && !reply)
     reply=Reply{static_cast<ae::u64>(id),accept!=0,std::move(text)};
+}
+
+// Cada tecla, composicao ou colagem. O texto inteiro e nao um delta: a ponte
+// nao mantem estado proprio, entao um evento perdido nao dessincroniza nada --
+// o proximo ja carrega a verdade. Barato porque o campo e curto; o editor de
+// codigo continua no caminho antigo, que e o que o M05.1 ainda nao cobre.
+extern "C" JNIEXPORT void JNICALL
+Java_dev_aether_editor_EditorTextInput_push(JNIEnv *env,jclass,jlong id,jbyteArray bytes,jint caret) {
+  if(!bytes || env->GetArrayLength(bytes)>static_cast<jsize>(ae::editor::EditorCodeWorkspace::MaximumFileBytes)) return;
+  const auto size=env->GetArrayLength(bytes);std::string text;text.resize(static_cast<size_t>(size));
+  env->GetByteArrayRegion(bytes,0,size,reinterpret_cast<jbyte *>(text.data()));
+  std::lock_guard lock(mutex);
+  if(visible && static_cast<ae::u64>(id)==sequence)
+    draft=Draft{static_cast<ae::u64>(id),caret<0?0u:static_cast<ae::u32>(caret),std::move(text)};
+}
+
+// Quanto da janela o teclado ocupa, como FRACAO. O Android mede em pixels
+// fisicos e a superficie do editor e logica; converter no meio do caminho seria
+// mais uma unidade para errar.
+extern "C" JNIEXPORT void JNICALL
+Java_dev_aether_editor_EditorTextInput_ime(JNIEnv *,jclass,jfloat fraction) {
+  std::lock_guard lock(mutex);
+  imeFraction=fraction;
 }

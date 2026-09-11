@@ -123,6 +123,20 @@ public:
   void usePlatformTextInput(bool enabled) { state_.platformTextInput=enabled; }
   EditorTextEdit pendingTextEdit() const;
   bool completeTextEdit(const EditorTextEdit &edit, std::string_view text, bool accept);
+  // Texto vivo do IME, a cada tecla, ANTES de confirmar.
+  //
+  // O `AlertDialog` só devolvia o resultado final: até confirmar, o editor não
+  // sabia o que estava sendo digitado e não podia desenhar nada. Com o campo
+  // embutido a ponte entrega o texto e o cursor continuamente, e o editor
+  // desenha o próprio campo.
+  //
+  // Rascunho, não comando: nada entra no documento nem no histórico aqui. A
+  // única coisa que acontece antes de confirmar é a busca filtrar enquanto se
+  // digita, que não toca em nada.
+  bool updateTextDraft(const EditorTextEdit &edit, std::string_view text, u32 caret);
+  // Quanto da superfície o teclado do sistema ocupa, 0..1. O campo se apoia
+  // nesta borda em vez de ficar escondido atrás do teclado.
+  void setPlatformImeFraction(float fraction);
 
   // Reconstrói a lista de desenho e as instâncias do frame.
   void update();

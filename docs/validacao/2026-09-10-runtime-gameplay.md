@@ -560,9 +560,26 @@ corrigidos por inteiro (catálogo de scripts e hierarquia importada) e a grade
 foi corrigida em grande parte. O que continua aberto, e **não** deve ser
 apresentado como resolvido:
 
-- **Escrita em modal.** Código, nome e valores numéricos são editados num
-  `AlertDialog` do Android, não na superfície onde o conteúdo está desenhado.
-  É o marco M05 do plano e exige uma `View` embutida com `InputConnection`.
+- **Escrita em modal — PARCIAL (M05.1 entregue).** Nome, valores numéricos,
+  buscas e campos de script saíram do `AlertDialog`: a ponte agora é uma `View`
+  de um pixel com `InputConnection`, e o **campo é desenhado pelo editor**, com
+  cursor, apoiado na borda de cima do teclado.
+
+  Verificado no aparelho, no projeto `Hierarquia0911`, campo `Posição X` do
+  `Cubo`:
+
+  | Passo | Resultado |
+  | --- | --- |
+  | Tocar o campo | `t3.png`: barra `Valor 0|` acima do teclado, inspetor inteiro visível, sem diálogo |
+  | Digitar `1` e `5` no teclado do sistema | `t4i.png`: `015|` no campo do editor, ao vivo |
+  | Confirmar no ✓ do IME | `t5i.png`: `Posição X` = 15.000 |
+  | Desfazer | `t6i.png`: volta a 0.000, um único comando |
+  | Tecla injetada (`adb input text`) | `t7i.png`: `07|` — o caminho de teclado físico também |
+  | Voltar | `t8i.png`: cancela o campo, não fecha a tela, valor intacto |
+
+  **O editor de código continua no diálogo**, e a edição dentro da própria linha
+  da propriedade (M05.2) não foi feita. O que está entregue é a ponte e o campo,
+  não o marco inteiro.
 - ~~**Sumiço visual após retomada.**~~ **FECHADO (M03.2).** Reproduzido no
   aparelho pela primeira vez: mandar o editor para segundo plano e voltar deixava
   a hierarquia inteira e o viewport vazio, com

@@ -426,6 +426,38 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   return edit;
 }
 
+bool EditorSession::updateTextDraft(const EditorTextEdit &edit,std::string_view text,u32 caret) {
+  const auto current=pendingTextEdit();
+  if(edit.purpose==EditorTextPurpose::None || current.purpose!=edit.purpose ||
+     current.entity!=edit.entity || current.field!=edit.field || edit.version.epoch!=sceneEpoch_) return false;
+  // O mesmo teto que a ponte aplica. Um rascunho maior que o campo aceita não é
+  // rascunho: é um commit que vai ser recusado no fim, depois de o usuário ter
+  // digitado tudo.
+  if(text.size()>EditorCodeWorkspace::MaximumFileBytes) return false;
+  state_.platformDraft.assign(text);
+  state_.platformCaret=static_cast<u32>(std::min<usize>(caret,text.size()));
+  // Busca filtra enquanto se digita. É o único efeito permitido antes de
+  // confirmar, e ele não toca no documento nem no histórico.
+  switch(edit.purpose) {
+    case EditorTextPurpose::HierarchySearch:
+    case EditorTextPurpose::CreationSearch:
+    case EditorTextPurpose::ComponentSearch:
+    case EditorTextPurpose::MeshSearch:
+    case EditorTextPurpose::ReferenceSearch: {
+      const auto size=std::min(text.size(),sizeof(state_.renameText)-1);
+      std::memcpy(state_.renameText,text.data(),size);
+      state_.renameText[size]='\0';
+      break;
+    }
+    default: break;
+  }
+  return true;
+}
+
+void EditorSession::setPlatformImeFraction(float fraction) {
+  state_.platformImeFraction=std::isfinite(fraction)?std::clamp(fraction,0.0f,0.9f):0.0f;
+}
+
 bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view text,bool accept) {
   const auto current=pendingTextEdit();
   if(edit.purpose==EditorTextPurpose::None || current.purpose!=edit.purpose ||
