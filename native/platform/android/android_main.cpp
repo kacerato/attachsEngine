@@ -1929,6 +1929,10 @@ void android_main(android_app *app) {
             if(editorPlaying) shell.editorSession.reportPlayFailure();
           }
         }
+        // A grade é publicada como plano para o renderer desenhar dentro da
+        // cena. Antes ela era uma lista de segmentos na interface, por cima de
+        // tudo; agora ela testa profundidade como qualquer outro desenho.
+        shell.instancedRenderer.setEditorGrid(shell.editorSession.gridPlan());
         shell.instancedRenderer.setUiInstances(shell.editorSession.instances());
         // A mesma escala vai ao renderer: e ela que o vertex shader usa para
         // levar as coordenadas logicas ao NDC da tela inteira.

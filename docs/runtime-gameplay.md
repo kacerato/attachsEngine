@@ -366,7 +366,44 @@ sobrevive porque a identidade de cada malha vem dos NOMES do nó e da malha, nã
 do índice — acrescentar um objeto no editor 3D reindexa tudo o que vem depois.
 Renomear no editor 3D quebra a ligação, e isso é dito em vez de adivinhado.
 
-## 15. O que este documento NÃO afirma
+## 15. Grade editorial
+
+A grade do chão é **desenho no mundo**, não interface. Ela é um plano analítico
+desenhado dentro da cena, depois da geometria opaca e antes do transparente,
+com teste de profundidade: uma caixa opaca esconde as linhas atrás dela.
+
+Antes ela eram 258 segmentos projetados como linhas de interface, depois de tudo
+e sem profundidade nenhuma — por construção apareciam por cima de qualquer
+objeto. E trocar de década de escala trocava todos os segmentos de uma vez, que
+era o piscar ao aproximar e afastar.
+
+A separação é a do plano mestre:
+
+| Tipo | Exemplo | Profundidade |
+|---|---|---|
+| Desenho no mundo | grade, eixos do piso | testa contra a cena |
+| Ferramenta | gizmo de mover/girar | sempre visível, por decisão |
+| HUD da vista | botões, rótulos | nunca finge ser geometria |
+
+A política fica no editor (`buildEditorGridPlan`) e a cobertura no fragmento:
+o editor escolhe a célula fina, a grossa, o peso da mistura e onde a grade some;
+o fragmento intersecta o raio com o plano, desenha as linhas com espessura
+constante em pixels (`fwidth`) e escreve `gl_FragDepth` com **a mesma projeção**
+do vértice da cena. Célula menor que alguns pixels some antes de virar ruído —
+é o que evita a faixa branca no horizonte.
+
+Duas células coexistem e a fina perde peso continuamente dentro da década, e
+chega a zero antes de a próxima assumir. Um teste de host percorre a distância
+da câmera e exige exatamente isso.
+
+**Resíduo conhecido, não resolvido:** em ângulos rasantes contra faces quase
+verticais, parte da grade ainda atravessa a face. De cima e em faces
+horizontais a oclusão está correta. Um empurrão relativo de profundidade a
+favor da geometria reduz o efeito, e aumentá-lo dez vezes mudou pouco — o que
+diz que não é só quantização. Fechar isso pede captura do buffer de
+profundidade, e até lá a grade continua **parcial**.
+
+## 16. O que este documento NÃO afirma
 
 - Não há exportação de jogo nem player autônomo.
 - Sensor **por colisor** não existe: o sensor pertence ao corpo inteiro.
@@ -379,4 +416,6 @@ Renomear no editor 3D quebra a ligação, e isso é dito em vez de adivinhado.
   existem. MaterialAsset compartilhado, slots por submesh e pré-visualização
   isolada de material **não** existem.
 - Sombra de luz pontual e de spot **não** existe: não há passe para elas.
+- A grade ainda atravessa faces quase verticais em ângulos rasantes; só a
+  oclusão por faces horizontais e vista de cima está verificada.
 - Nada aqui foi medido em FPS nem exercitado por sessão prolongada.

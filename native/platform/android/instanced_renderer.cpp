@@ -3,6 +3,7 @@
 #include "renderer/water_detail_texture.h"
 #include "renderer/water_authoring_geometry.h"
 
+#include "rhi/shaders/editor_grid_spirv.h"
 #include "rhi/shaders/instanced_spirv.h"
 #include "rhi/shaders/instanced_fallback_spirv.h"
 #include "rhi/shaders/scene_preview_spirv.h"
@@ -1100,6 +1101,89 @@ bool InstancedRenderer::createSkyPipeline() {
     pipeline.pDynamicState = &dynamic; pipeline.layout = skyPipelineLayout_;
     pipeline.renderPass = renderPass_; pipeline.subpass = 0;
     ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, &skyPipeline_) == VK_SUCCESS;
+  }
+  vkDestroyShaderModule(device_, vert, nullptr);
+  vkDestroyShaderModule(device_, frag, nullptr);
+  return ok;
+}
+
+bool InstancedRenderer::createEditorGridPipeline() {
+  if (!dirtRoadPreview_) return true;
+  VkShaderModule vert = createShaderModule(device_, rhi::shaders::kEditor_GridVertSpirv,
+                                           rhi::shaders::kEditor_GridVertSpirvSize);
+  VkShaderModule frag = createShaderModule(device_, rhi::shaders::kEditor_GridFragSpirv,
+                                           rhi::shaders::kEditor_GridFragSpirvSize);
+  if (vert == VK_NULL_HANDLE || frag == VK_NULL_HANDLE) {
+    if (vert != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vert, nullptr);
+    if (frag != VK_NULL_HANDLE) vkDestroyShaderModule(device_, frag, nullptr);
+    return false;
+  }
+  VkPipelineShaderStageCreateInfo stages[2]{};
+  stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+               VK_SHADER_STAGE_VERTEX_BIT, vert, "main", nullptr};
+  stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+               VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr};
+  VkPipelineVertexInputStateCreateInfo vertex{};
+  vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  VkPipelineInputAssemblyStateCreateInfo assembly{};
+  assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  VkPipelineViewportStateCreateInfo viewport{};
+  viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewport.viewportCount = 1; viewport.scissorCount = 1;
+  VkPipelineRasterizationStateCreateInfo raster{};
+  raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  raster.polygonMode = VK_POLYGON_MODE_FILL; raster.cullMode = VK_CULL_MODE_NONE; raster.lineWidth = 1;
+  VkPipelineMultisampleStateCreateInfo multisample{};
+  multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+  VkPipelineDepthStencilStateCreateInfo depth{};
+  depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  // Testa contra a cena e NÃO escreve: uma caixa opaca esconde as linhas atrás
+  // dela, e a grade não passa a ocluir o que vier depois. O fragmento escreve
+  // `gl_FragDepth` a partir da interseção, então a comparação é a mesma que
+  // ordena a geometria.
+  depth.depthTestEnable = VK_TRUE; depth.depthWriteEnable = VK_FALSE;
+  // `LESS` e não `LESS_OR_EQUAL`: num empate a geometria ganha. Com o alcance
+  // de profundidade que a câmera editorial usa — de centímetros a quilômetros —
+  // o chão atrás de um objeto e a face desse objeto caem no mesmo valor
+  // quantizado com frequência, e "menor ou igual" deixava a grade atravessar
+  // justamente as faces mais próximas.
+  depth.depthCompareOp = VK_COMPARE_OP_LESS;
+  VkPipelineColorBlendAttachmentState attachment{};
+  attachment.blendEnable = VK_TRUE;
+  attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+  attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  attachment.colorBlendOp = VK_BLEND_OP_ADD;
+  attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+  attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  VkPipelineColorBlendStateCreateInfo blend{};
+  blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  blend.attachmentCount = 1; blend.pAttachments = &attachment;
+  VkDynamicState states[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+  VkPipelineDynamicStateCreateInfo dynamic{};
+  dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  dynamic.dynamicStateCount = 2; dynamic.pDynamicStates = states;
+  VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(DirtRoadPushConstants)};
+  VkPipelineLayoutCreateInfo layout{};
+  layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  layout.setLayoutCount = 1; layout.pSetLayouts = &environmentSetLayout_;
+  layout.pushConstantRangeCount = 1; layout.pPushConstantRanges = &push;
+  bool ok = vkCreatePipelineLayout(device_, &layout, nullptr, &editorGridPipelineLayout_) == VK_SUCCESS;
+  if (ok) {
+    VkGraphicsPipelineCreateInfo pipeline{};
+    pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipeline.stageCount = 2; pipeline.pStages = stages; pipeline.pVertexInputState = &vertex;
+    pipeline.pInputAssemblyState = &assembly; pipeline.pViewportState = &viewport;
+    pipeline.pRasterizationState = &raster; pipeline.pMultisampleState = &multisample;
+    pipeline.pDepthStencilState = &depth; pipeline.pColorBlendState = &blend;
+    pipeline.pDynamicState = &dynamic; pipeline.layout = editorGridPipelineLayout_;
+    pipeline.renderPass = renderPass_; pipeline.subpass = 0;
+    ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, &editorGridPipeline_) == VK_SUCCESS;
   }
   vkDestroyShaderModule(device_, vert, nullptr);
   vkDestroyShaderModule(device_, frag, nullptr);
@@ -3533,6 +3617,10 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pipeline instanciado.");
     return false;
   }
+  if (!createEditorGridPipeline()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pipeline da grade editorial.");
+    return false;
+  }
   if (!createSkyPipeline()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pipeline do céu HDRI.");
     return false;
@@ -3644,6 +3732,14 @@ void InstancedRenderer::shutdown() {
   if (coverageShadePipeline_ != VK_NULL_HANDLE) {
     vkDestroyPipeline(device_, coverageShadePipeline_, nullptr);
     coverageShadePipeline_ = VK_NULL_HANDLE;
+  }
+  if (editorGridPipeline_ != VK_NULL_HANDLE) {
+    vkDestroyPipeline(device_, editorGridPipeline_, nullptr);
+    editorGridPipeline_ = VK_NULL_HANDLE;
+  }
+  if (editorGridPipelineLayout_ != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(device_, editorGridPipelineLayout_, nullptr);
+    editorGridPipelineLayout_ = VK_NULL_HANDLE;
   }
   if (skyPipeline_ != VK_NULL_HANDLE) {
     vkDestroyPipeline(device_, skyPipeline_, nullptr);
@@ -4991,6 +5087,42 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                        0, sizeof(skyPush), &skyPush);
     if(!editorBackground_) vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
+
+    // A grade editorial, depois da geometria opaca e antes do transparente: ela
+    // precisa da profundidade da cena já escrita para ser escondida por ela, e
+    // não deve ocluir água nem vidro.
+    if (editorGrid_.valid() && editorGridPipeline_ != VK_NULL_HANDLE) {
+      DirtRoadPushConstants gridPush{};
+      gridPush.cameraFrame[0] = sceneAspectRatio();
+      gridPush.cameraFrame[1] = camera.yaw;
+      gridPush.cameraFrame[2] = camera.pitch;
+      gridPush.cameraFrame[3] = 1.0f; // opacidade global da grade
+      gridPush.materialFactors[3] = 1.0f/std::tan(sceneFieldOfView()*.5f);
+      gridPush.surfaceTransform[0] = surfaceTransform.xx;
+      gridPush.surfaceTransform[1] = surfaceTransform.xy;
+      gridPush.surfaceTransform[2] = surfaceTransform.yx;
+      gridPush.surfaceTransform[3] = surfaceTransform.yy;
+      std::memcpy(gridPush.cameraPositionNear, camera.position, sizeof(camera.position));
+      gridPush.cameraPositionNear[3] = sceneNearPlane();
+      const float farPlane = sceneFarPlane();
+      std::memcpy(&gridPush.materialFlags[3], &farPlane, sizeof(farPlane));
+      gridPush.materialFlags[2] = encodeSrgb ? 1u : 0u;
+      gridPush.baseColorFactor[3] = editorGrid_.planeHeight;
+      gridPush.emissiveFactorAndStrength[0] = editorGrid_.minorSpacing;
+      gridPush.emissiveFactorAndStrength[1] = editorGrid_.majorSpacing;
+      gridPush.emissiveFactorAndStrength[2] = editorGrid_.minorOpacity;
+      gridPush.emissiveFactorAndStrength[3] = editorGrid_.fadeDistance;
+      // Cinza neutro: a grade é referência espacial, não um elemento de cena.
+      gridPush.materialFactors[0] = gridPush.materialFactors[1] = gridPush.materialFactors[2] = .55f;
+      vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, editorGridPipeline_);
+      boundMapPipeline = VK_NULL_HANDLE;
+      vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, editorGridPipelineLayout_,
+                              0, 1, &environmentSet_, 0, nullptr);
+      vkCmdPushConstants(commandBuffer_, editorGridPipelineLayout_,
+                         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                         0, sizeof(gridPush), &gridPush);
+      vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
+    }
     endGpuRegion(GpuPassClass::Sky);
     beginGpuRegion(GpuPassClass::Transparent);
 

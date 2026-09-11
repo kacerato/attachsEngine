@@ -29,6 +29,7 @@ if ($All) {
         astra_ui = @('vert', 'frag')
         draw_compact = @('comp')
         draw_cull = @('comp')
+        editor_grid = @('vert', 'frag')
         hzb_reduce_first = @('vert', 'frag')
         hzb_reduce = @('vert', 'frag')
         hzb_reduce_compute = @('comp')

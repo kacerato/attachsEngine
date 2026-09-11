@@ -237,39 +237,12 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
   const UiTheme &theme = builder.theme;
   builder.list.pushClip(viewport);
 
-  if (state.showGrid) {
-    const auto grid = buildEditorGrid(*state.view);
-    for (u32 i=0; i<grid.count; ++i) {
-      const auto &line=grid.lines[i];
-      if(line.opacity<=0) continue;
-      const auto base = line.axis==1 ? theme.color.axisX : line.axis==2 ? theme.color.axisZ : theme.color.textMuted;
-      const float alpha = line.axis ? .35f : line.major ? .18f : .08f;
-      // Atenuar quando células ficam menores que poucos pixels evita a faixa
-      // branca de linhas acumuladas no horizonte. O custo permanece limitado.
-      constexpr u32 segments=8;
-      for(u32 segment=0;segment<segments;++segment) {
-        float from[3],to[3],middle[3],neighbor[3];
-        for(u32 axis=0;axis<3;++axis) {
-          from[axis]=line.from[axis]+(line.to[axis]-line.from[axis])*(float(segment)/segments);
-          to[axis]=line.from[axis]+(line.to[axis]-line.from[axis])*(float(segment+1)/segments);
-          middle[axis]=neighbor[axis]=(from[axis]+to[axis])*.5f;
-        }
-        const u32 fixed=line.from[0]==line.to[0]?0:2;
-        neighbor[fixed]+=grid.spacing*(line.major?10:1);
-        UiPoint a{},b{};if(!projectSegmentToScreen(*state.view,from,to,a,b)) continue;
-        float fade=1;
-        if(!line.axis) {
-          const auto center=projectWorldToScreen(*state.view,middle),offset=projectWorldToScreen(*state.view,neighbor);
-          if(!center.valid||!offset.valid) continue;
-          const float dx=b.x-a.x,dy=b.y-a.y,length=std::hypot(dx,dy);
-          if(length<.01f) continue;
-          const float gap=std::abs((offset.screen.x-center.screen.x)*dy-(offset.screen.y-center.screen.y)*dx)/length;
-          fade=std::clamp((gap-2)/6,0.0f,1.0f);
-        }
-        if(fade>0) builder.list.addLine(a,b,withAlpha(base,alpha*line.opacity*fade),1.0f);
-      }
-    }
-  }
+  // A grade NÃO é desenhada aqui. Ela era uma lista de 258 segmentos na camada
+  // de interface, depois de toda a cena e sem profundidade nenhuma: por
+  // construção aparecia por cima de qualquer objeto. Agora é um passe do
+  // renderer, com teste de profundidade e mistura contínua de escala — ver
+  // renderer/grid_plan.h e editor/editor_grid.h. Aqui ficam só as ferramentas
+  // e o HUD, que são coisas diferentes de "desenho no mundo".
 
   buildPhysicsOverlay(builder);
   const EditorEntity *entity = state.document->find(state.selection);

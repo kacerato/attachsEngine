@@ -19,7 +19,7 @@ aceitação com duas composições continuam **fora** desta rodada.
 | Comando | Resultado |
 |---|---|
 | `cmake --build build/editor-host --target aether_tests --parallel 6` | compila sem warning (`-Werror` ligado) |
-| `./build/editor-host/aether_tests.exe` | **794/794** em 10/09; **828/828** em 11/09, com luz, material em execução, registro de recursos, importação de GLB com hierarquia e catálogo de código |
+| `./build/editor-host/aether_tests.exe` | **794/794** em 10/09; **829/829** em 11/09, com luz, material em execução, registro de recursos, importação de GLB com hierarquia e catálogo de código |
 | `dotnet run --project tests/Aether.Tests/Aether.Tests.csproj -c Release -p:AetherNativeBuildDir=…/build/editor-host` | **521/521** em 10/09; em 11/09, 451 aprovados e 70 pulados (os pulados dependem da lib nativa que este build de host não produz) |
 | `android/gradlew.bat :app:assembleDebug :app:testDebugUnitTest --console=plain` | BUILD SUCCESSFUL; 16 testes Java (10 `ProjectSceneSourceTest` + 6 `ProjectStoreTest`), 0 falhas |
 | `android/gradlew.bat :app:assembleRelease --console=plain` | BUILD SUCCESSFUL — `app-release.apk`, 30.705.870 bytes |
@@ -235,8 +235,7 @@ reimportação com o registro presente devolve `reimport=1` e cria zero objetos.
 ### Correções do plano mestre (11/09)
 
 O plano mestre de 11/09 aponta cinco defeitos de escopo imediato. Dois foram
-corrigidos nesta rodada; os outros três continuam abertos e estão listados nas
-lacunas.
+corrigidos por inteiro, um em grande parte, e dois continuam abertos.
 
 **1. O componente sumia do inspetor e continuava executando.** Confirmado no
 código antes de mexer: `EditorCodeWorkspace::replace`, `undo`, `redo`,
@@ -438,11 +437,47 @@ um assembly de cinco nós (`Veiculo` sem malha → `Carroceria`, `PortaEsquerda`
   diálogo do Android), campos numéricos editados no próprio campo,
   busca/substituição e ocultar `.astra`.
 
+**3. A grade era overlay, por construção.** `buildEditorGrid` montava 258
+segmentos e `buildViewportOverlay` os desenhava como linhas de INTERFACE, depois
+de toda a cena e sem teste de profundidade. Também trocava de década de escala
+de uma vez, o que produzia o piscar ao aproximar e afastar.
+
+Corrigido com um passe do renderer: plano analítico dentro da cena, entre o
+opaco e o transparente, com `gl_FragDepth` escrito pela **mesma projeção** do
+vértice da cena. A política (célula fina, grossa, peso da mistura, distância de
+sumiço) ficou em `buildEditorGridPlan`, testável no host; a cobertura ficou no
+fragmento, com espessura constante em pixels por `fwidth`.
+
+| Verificação | Resultado |
+| --- | --- |
+| Oclusão por face horizontal | `123-zoom.png`: a face superior da carroceria esconde a grade |
+| Oclusão vista de cima | `127-zoom.png`: carroceria, rodas e porta escondem a grade por completo |
+| Cobertura sem borda finita | `127-orbita.png`: a grade preenche o viewport inteiro, sem a borda de ±12 células da versão anterior |
+| Sem faixa branca no horizonte | `126`/`127`: a célula some antes de virar ruído |
+| Eixos do mundo | vermelho e azul cruzam na origem e não acompanham a câmera |
+
+**Resíduo medido e NÃO resolvido.** Em ângulo rasante contra faces quase
+verticais, parte da grade ainda atravessa a face (`123-zoom.png`, banda
+inferior). Medições feitas:
+
+- com `VK_COMPARE_OP_GREATER` a grade aparece **só** sobre a caixa e some do
+  chão (`122-greater.png`), o que confirma que a profundidade calculada é maior
+  que a da geometria onde a geometria está — a matemática da projeção está certa;
+- a diferença entre quadro com e sem grade (`124-diff.png`) mostra a face
+  superior preta (grade corretamente escondida) e a banda inferior clara;
+- trocar `LESS_OR_EQUAL` por `LESS` e empurrar a profundidade em 0,1% não mudou
+  a banda; empurrar 3% mudou pouco. Não é só quantização.
+
+Fechar isso pede captura do buffer de profundidade, que é exatamente o que o
+plano mestre pede para VIE01. A entrega fica registrada como **parcial**, e o
+defeito continua na lista de abertos.
+
 ### Defeitos do plano mestre ainda ABERTOS
 
 O plano mestre de 11/09 lista cinco defeitos de escopo imediato. Dois foram
-corrigidos nesta rodada (catálogo de scripts e hierarquia importada). Os outros
-três continuam abertos e **não** devem ser apresentados como resolvidos:
+corrigidos por inteiro (catálogo de scripts e hierarquia importada) e a grade
+foi corrigida em grande parte. O que continua aberto, e **não** deve ser
+apresentado como resolvido:
 
 - **Escrita em modal.** Código, nome e valores numéricos são editados num
   `AlertDialog` do Android, não na superfície onde o conteúdo está desenhado.
@@ -450,9 +485,9 @@ três continuam abertos e **não** devem ser apresentados como resolvidos:
 - **Sumiço visual após retomada.** Hierarquia preservada e viewport vazio ao
   voltar do segundo plano. Sem reprodução instrumentada aqui; o próprio plano
   classifica a causa como não fechada. É o marco M03.
-- **Grade sobre a geometria e piscando no zoom.** `editor_grid.h` é overlay por
-  construção; corrigir exige um passe com teste de profundidade e transição
-  contínua de escala. É o marco M04.
+- **Grade sobre faces quase verticais em ângulo rasante.** O passe com
+  profundidade e a transição contínua de escala existem e estão verificados; o
+  resíduo acima é o que resta do M04.
 - **Entrega G**: a prova de aceitação — duas composições diferentes montadas
   inteiramente pela interface — **não** foi feita. Esta rodada montou UMA cena
   simples (chão, cubo, corpo, colisores, script) para exercitar os caminhos.

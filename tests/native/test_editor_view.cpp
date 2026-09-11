@@ -232,34 +232,56 @@ AE_TEST(picking_with_an_invalid_ray_never_hits) {
   AE_EXPECT_TRUE(!pickNearest(candidates, EditorRay{}).hit, "");
 }
 
-AE_TEST(editor_grid_tracks_remote_camera_and_scales_without_growing_cost) {
+AE_TEST(editor_grid_plan_scales_with_the_observed_distance) {
   EditorCamera camera;
   const ui::UiRect rect{0,0,800,400};
-  auto close = buildEditorGrid(buildEditorViewport(camera,rect,{}));
+  const auto close = buildEditorGridPlan(buildEditorViewport(camera,rect,{}));
   camera.distance = 100000;
   camera.target[0] = 700000;
   camera.target[2] = -400000;
-  auto far = buildEditorGrid(buildEditorViewport(camera,rect,{}));
-  AE_EXPECT_TRUE(close.count>0 && close.count==far.count,"bounded line budget across scales");
-  AE_EXPECT_TRUE(far.spacing>close.spacing*100,"subdivisions adapt to camera scale");
-  bool coversTarget = false;
-  for(u32 i=0;i<far.count;++i) {
-    const auto &line=far.lines[i];
-    AE_EXPECT_TRUE(std::isfinite(line.from[0]) && std::isfinite(line.to[2]),"finite remote grid");
-    if(line.from[0]<=camera.target[0] && line.to[0]>=camera.target[0]) coversTarget=true;
-    if(line.axis==1) AE_EXPECT_EQ(line.from[2],0.0f,"X axis remains world aligned");
-    if(line.axis==2) AE_EXPECT_EQ(line.from[0],0.0f,"Z axis remains world aligned");
-  }
-  AE_EXPECT_TRUE(coversTarget,"coverage follows observed area");
+  const auto far = buildEditorGridPlan(buildEditorViewport(camera,rect,{}));
+  AE_EXPECT_TRUE(close.valid() && far.valid(),"os dois planos valem");
+  AE_EXPECT_TRUE(far.minorSpacing>close.minorSpacing*100,"a célula acompanha a escala da câmera");
+  // A grossa é sempre a década seguinte: é o par que coexiste na tela.
+  AE_EXPECT_EQ(close.majorSpacing,close.minorSpacing*10,"a grossa é a década seguinte");
+  AE_EXPECT_TRUE(far.fadeDistance>close.fadeDistance,"o sumiço acompanha a distância observada");
+  // Nada de contagem de segmentos: o custo do desenho não cresce com a escala
+  // porque não há lista nenhuma para crescer.
+  AE_EXPECT_TRUE(std::isfinite(far.minorSpacing) && std::isfinite(far.fadeDistance),"plano finito");
 }
 
-AE_TEST(editor_grid_handles_ground_level_and_rejects_invalid_settings) {
-  auto view=viewportLookingForward();
-  auto grid=buildEditorGrid(view);
-  AE_EXPECT_TRUE(grid.count>0 && grid.spacing>0,"horizontal camera has stable finite spacing");
+AE_TEST(editor_grid_plan_blends_scales_instead_of_switching_decades) {
+  // O piscar do zoom vinha de trocar TODAS as linhas de uma vez ao mudar de
+  // década. Aqui a célula fina tem que perder peso continuamente, e chegar a
+  // zero antes de a próxima década assumir.
+  EditorCamera camera;
+  const ui::UiRect rect{0,0,800,400};
+  float previousSpacing=0,previousWeight=1;
+  bool sawDecline=false;
+  for(float distance=2;distance<200;distance*=1.08f) {
+    camera.distance=distance;
+    const auto plan=buildEditorGridPlan(buildEditorViewport(camera,rect,{}));
+    AE_EXPECT_TRUE(plan.valid(),"plano válido em toda a varredura");
+    AE_EXPECT_TRUE(plan.minorOpacity>=0 && plan.minorOpacity<=1,"peso normalizado");
+    if(plan.minorSpacing==previousSpacing && plan.minorOpacity<previousWeight-1e-4f) sawDecline=true;
+    // Ao trocar de década, a célula fina precisa já ter chegado perto de zero:
+    // é isso que impede o degrau visível.
+    if(previousSpacing>0 && plan.minorSpacing>previousSpacing)
+      AE_EXPECT_TRUE(previousWeight<.2f,"a célula fina já tinha sumido quando a década trocou");
+    previousSpacing=plan.minorSpacing;previousWeight=plan.minorOpacity;
+  }
+  AE_EXPECT_TRUE(sawDecline,"o peso cai dentro da mesma década");
+}
+
+AE_TEST(editor_grid_plan_handles_ground_level_and_rejects_invalid_settings) {
+  const auto view=viewportLookingForward();
+  const auto plan=buildEditorGridPlan(view);
+  AE_EXPECT_TRUE(plan.valid(),"câmera horizontal tem plano estável");
   EditorGridSettings settings; settings.minimumSpacing=0;
-  AE_EXPECT_EQ(buildEditorGrid(view,settings).count,0u,"invalid spacing refused");
-  AE_EXPECT_EQ(buildEditorGrid(EditorViewport{}).count,0u,"invalid viewport refused");
+  AE_EXPECT_TRUE(!buildEditorGridPlan(view,settings).valid(),"espaçamento inválido recusado");
+  EditorGridSettings fade; fade.fadeDistanceFactor=0;
+  AE_EXPECT_TRUE(!buildEditorGridPlan(view,fade).valid(),"distância de sumiço inválida recusada");
+  AE_EXPECT_TRUE(!buildEditorGridPlan(EditorViewport{}).valid(),"viewport inválido recusado");
 }
 
 AE_TEST(editor_camera_clip_range_contains_centimetre_and_kilometre_selections) {

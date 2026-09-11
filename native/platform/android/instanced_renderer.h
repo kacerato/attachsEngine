@@ -5,6 +5,7 @@
 #include "renderer/water_ripples.h"
 #include "renderer/map_draw_update.h"
 #include "renderer/punctual_lights.h"
+#include "renderer/grid_plan.h"
 
 #include "core/base.h"
 #include "profiler/frame_statistics.h"
@@ -117,6 +118,10 @@ public:
   // O que o último quadro conseguiu acender. Quem chama publica no console: uma
   // luz excedente precisa aparecer como aviso, nunca sumir calada.
   const renderer::LightBudgetReport &lightBudget() const noexcept { return lightBudget_; }
+  // A grade editorial. Ela é desenhada DENTRO da cena, com teste e escrita de
+  // profundidade, e não na lista de interface: é o que faz uma caixa opaca
+  // esconder as linhas atrás dela.
+  void setEditorGrid(const renderer::GridPlan &plan) { editorGrid_ = plan; }
   // Reconstrói a biblioteca de autoria com as primitivas internas MAIS a
   // geometria importada no aparelho, e refaz tudo o que depende da lista de
   // desenhos. Só por ação explícita do usuário: espera a GPU ficar ociosa antes
@@ -422,6 +427,7 @@ private:
   bool createEnvironmentDescriptors();
   bool createSpectralWaterResources();
   bool createSkyPipeline();
+  bool createEditorGridPipeline();
   bool createRuntimeHudPipeline();
   // Carrega os atlas do APK e monta a pipeline. Falhar aqui NÃO derruba o
   // renderer: uma cena sem interface ainda é uma cena, e o log diz o motivo.
@@ -545,6 +551,9 @@ private:
   rhi::VulkanBuffer environmentUniform_{};
   VkPipelineLayout skyPipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline skyPipeline_ = VK_NULL_HANDLE;
+  VkPipelineLayout editorGridPipelineLayout_ = VK_NULL_HANDLE;
+  VkPipeline editorGridPipeline_ = VK_NULL_HANDLE;
+  renderer::GridPlan editorGrid_{};
   VkPipelineLayout runtimeHudPipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline runtimeHudPipeline_ = VK_NULL_HANDLE;
   static constexpr u32 kMaxFramebuffers = 8;

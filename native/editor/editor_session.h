@@ -24,6 +24,7 @@
 #include "platform/first_person_controller.h"
 #include "editor/editor_camera.h"
 #include "editor/editor_commands.h"
+#include "editor/editor_grid.h"
 #include "editor/editor_map_scene.h"
 #include "resources/gltf_import.h"
 #include "editor/editor_archive.h"
@@ -201,6 +202,13 @@ public:
   // caminho do recurso no registro, e trocá-lo depois não muda a identidade.
   bool importModel(std::span<const u8> bytes, std::string_view sourceName,
                    const resources::GltfImportProgress &progress, ModelImportReport &report);
+  // O plano da grade para o quadro: política do editor, desenho do renderer.
+  // Fora do workspace de cena, com a grade desligada ou em execução, ele volta
+  // desabilitado — a grade é ferramenta de autoria, não elemento do jogo.
+  renderer::GridPlan gridPlan() const {
+    if(!state_.showGrid || state_.workspace!=EditorWorkspace::Scene || isPlaying()) return {};
+    return buildEditorGridPlan(view_);
+  }
   const resources::AssetRegistry &assets() const { return assets_; }
   // Pedido de importação levantado pela interface, consumido pelo shell. O
   // editor não abre o seletor: ele não conhece Android.
