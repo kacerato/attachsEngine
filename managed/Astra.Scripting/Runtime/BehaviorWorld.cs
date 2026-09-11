@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Text.Json;
@@ -92,6 +93,24 @@ public sealed class BehaviorWorld : IDisposable
                     if (phase == 0) behavior.TriggerEnter(reference);
                     else if (phase == 1) behavior.TriggerStay(reference);
                     else behavior.TriggerExit(reference);
+                });
+    }
+    /// <summary>
+    /// Entrega um contato sólido aos comportamentos de <paramref name="self"/>.
+    /// O par chega duas vezes, uma por objeto, para que nenhum dos dois precise
+    /// saber qual corpo o backend listou primeiro.
+    /// </summary>
+    public void Contact(ulong self, ulong other, uint phase, Vector3? normal)
+    {
+        if (!Running || phase > 2) return;
+        var collision = new Collision(new ObjectReference(other), normal);
+        foreach (var entry in _entries)
+            if (entry.Instance.ObjectId == self && EnsureStarted(entry))
+                Invoke(entry, phase == 0 ? "CollisionEnter" : phase == 1 ? "CollisionStay" : "CollisionExit", behavior =>
+                {
+                    if (phase == 0) behavior.CollisionEnter(collision);
+                    else if (phase == 1) behavior.CollisionStay(collision);
+                    else behavior.CollisionExit(collision);
                 });
     }
     private bool EnsureStarted(Entry entry)

@@ -83,6 +83,17 @@ public interface ISceneAccess
     // --- v3: transform de mundo --------------------------------------------
     TransformValue GetWorldTransform(ulong objectId) => throw new NotSupportedException();
     bool SetWorldTransform(ulong objectId, TransformValue value) => throw new NotSupportedException();
+
+    // --- v4: consultas físicas ----------------------------------------------
+    /// <summary>Contagem REAL de acertos, que pode exceder o buffer recebido.</summary>
+    int RayCast(Vector3 origin, Vector3 direction, in QueryFilter filter, Span<RawQueryHit> results)
+        => throw new NotSupportedException();
+    int ShapeCast(in ShapeQuery shape, Vector3 origin, Vector3 direction, in QueryFilter filter, out RawQueryHit hit)
+        => throw new NotSupportedException();
+    int Overlap(in ShapeQuery shape, Vector3 origin, in QueryFilter filter, Span<RawQueryHit> results)
+        => throw new NotSupportedException();
+    int LayerByName(string name) => throw new NotSupportedException();
+    string LayerName(uint layer) => throw new NotSupportedException();
 }
 
 public abstract class Behavior
@@ -95,6 +106,9 @@ public abstract class Behavior
 
     /// <summary>O objeto a que este comportamento está anexado.</summary>
     protected GameObject Object => GameObject.Wrap(Scene, ObjectId);
+
+    /// <summary>As consultas físicas do mundo de execução.</summary>
+    protected PhysicsAccess Physics => new(Scene);
 
     /// <summary>Resolve uma referência autorada no inspetor para um objeto vivo.</summary>
     protected GameObject? Resolve(ObjectReference reference)
@@ -127,5 +141,11 @@ public abstract class Behavior
     public virtual void TriggerEnter(ObjectReference other) { }
     public virtual void TriggerStay(ObjectReference other) { }
     public virtual void TriggerExit(ObjectReference other) { }
+    // Contato SÓLIDO, o par em que nenhum dos dois é sensor. Entregue por passo
+    // físico, agregado por par de corpos. A normal acompanha Enter/Stay; o fim
+    // de um contato não traz geometria, e por isso `Collision.Normal` é nulo lá.
+    public virtual void CollisionEnter(Collision collision) { }
+    public virtual void CollisionStay(Collision collision) { }
+    public virtual void CollisionExit(Collision collision) { }
     public virtual void Stop() { }
 }

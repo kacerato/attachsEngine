@@ -38,6 +38,9 @@ bool ScenePhysics::start(GameWorld &gameWorld) {
   config.maxContactConstraints=4096;config.maxBroadPhasePairs=4096;
   config.overflowPolicy=AetherPhysicsOverflowPolicy::Warning;
   world_=AetherPhysics_CreateWorldV2(&config);if(!world_) return false;
+  if(!AetherPhysics_SetLayerInteractionV1(world_,document.layers().matrix(),GameplayLayers::kCount)) {
+    error_="Matriz de camadas do projeto não é recíproca";stop();return false;
+  }
   struct ColliderSource {ObjectId object;const scene::Collider *value;};
   std::unordered_map<ObjectId,std::vector<ColliderSource>> colliders;
   const auto fail=[&](const SceneObject &entity,const std::string &reason) {error_=std::string(entity.name)+": "+reason;stop();return false;};
@@ -103,7 +106,15 @@ bool ScenePhysics::start(GameWorld &gameWorld) {
     if(body->motion!=scene::BodyMotion::Static) AetherPhysics_SetLinearVelocity(world_,handle,{body->velocityX,body->velocityY,body->velocityZ});
     objects_.emplace(handle,id);
     gameWorld.setAuthority(id,TransformAuthority::PhysicsBody);
-    bindings_.push_back({id,handle,{transform.scale[0],transform.scale[1],transform.scale[2]},body->motion!=scene::BodyMotion::Static});
+    std::vector<u64> instances;instances.reserve(found->second.size());
+    for(const auto &source:found->second) instances.push_back(source.value->instanceId());
+    // A camada de gameplay do objeto vale para o corpo inteiro. Dois colisores
+    // do mesmo corpo não podem estar em camadas diferentes: o Jolt filtra por
+    // corpo, e prometer o contrário seria uma propriedade sem efeito.
+    if(!AetherPhysics_SetBodyGameplayLayerV1(world_,handle,entity.layer%GameplayLayers::kCount))
+      return fail(entity,"camada de gameplay inválida");
+    bindings_.push_back({id,handle,{transform.scale[0],transform.scale[1],transform.scale[2]},
+                         body->motion!=scene::BodyMotion::Static,std::move(instances)});
   }
   // All bodies exist now, including static anchors and forward references.
   for(auto id:ids) {
@@ -162,6 +173,133 @@ void ScenePhysics::releaseObject(ObjectId id) {
   }
   for(auto i=characters_.begin();i!=characters_.end();++i) if(i->id==id) {characters_.erase(i);break;}
 }
+namespace {
+AetherQueryFilterV1 nativeFilter(const QueryFilter &filter,AetherBodyHandle ignore) {
+  AetherQueryFilterV1 native{};
+  native.structSize=sizeof(native);
+  native.apiVersion=AetherQueryFilterApiVersionV1;
+  const u32 mask=(filter.includeStatic?static_cast<u32>(AetherQueryLayerMask::Static):0u)|
+                 (filter.includeDynamic?static_cast<u32>(AetherQueryLayerMask::Dynamic):0u);
+  native.layerMask=static_cast<AetherQueryLayerMask>(mask);
+  native.ignoreBody=ignore;
+  native.includeSensors=filter.includeSensors?1u:0u;
+  native.gameplayLayerMask=filter.gameplayLayerMask;
+  return native;
+}
+AetherShapeDesc nativeShape(const QueryShapeDesc &shape) {
+  AetherShapeDesc native{};
+  native.kind=static_cast<AetherShapeKind>(shape.kind);
+  native.boxHalfExtent={shape.halfExtent[0],shape.halfExtent[1],shape.halfExtent[2]};
+  native.sphereRadius=shape.radius;
+  native.capsuleHalfHeight=shape.halfHeight;
+  return native;
+}
+bool finite3(const float *v) {return v&&std::isfinite(v[0])&&std::isfinite(v[1])&&std::isfinite(v[2]);}
+float length3(const float *v) {return std::sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);}
+}
+QueryHit ScenePhysics::describeHit(AetherBodyHandle body,u32 subShapeId) const {
+  QueryHit hit{};
+  hit.object=objectForBody(body);
+  u64 part=0;
+  if(AetherPhysics_GetSubShapeUserDataV1(const_cast<AetherPhysicsWorld *>(world_),body,subShapeId,&part))
+    for(const auto &binding:bindings_)
+      if(binding.body==body&&part<binding.colliderInstances.size()) {
+        hit.colliderInstance=binding.colliderInstances[static_cast<usize>(part)];break;
+      }
+  return hit;
+}
+bool ScenePhysics::rayCast(const float origin[3],const float direction[3],const QueryFilter &filter,QueryHit &out) const {
+  if(!world_||!finite3(origin)||!finite3(direction)) return false;
+  AetherBodyHandle ignore=AetherBodyHandle_Invalid;
+  for(const auto &binding:bindings_) if(binding.id==filter.ignore) ignore=binding.body;
+  const auto native=nativeFilter(filter,ignore);
+  AetherRayQueryHitV1 hit{};
+  if(!AetherPhysics_RayCastClosestV2(const_cast<AetherPhysicsWorld *>(world_),{origin[0],origin[1],origin[2]},
+      {direction[0],direction[1],direction[2]},&native,&hit)) return false;
+  out=describeHit(hit.body,hit.subShapeId);
+  if(!out.object) return false;
+  out.fraction=hit.fraction;
+  out.distance=hit.fraction*length3(direction);
+  out.point[0]=hit.point.x;out.point[1]=hit.point.y;out.point[2]=hit.point.z;
+  out.normal[0]=hit.normal.x;out.normal[1]=hit.normal.y;out.normal[2]=hit.normal.z;
+  out.hasNormal=true;
+  out.isSensor=hit.isSensor!=0;
+  return true;
+}
+u32 ScenePhysics::rayCastAll(const float origin[3],const float direction[3],const QueryFilter &filter,
+                             QueryHit *out,u32 capacity) const {
+  if(!world_||!finite3(origin)||!finite3(direction)) return 0;
+  AetherBodyHandle ignore=AetherBodyHandle_Invalid;
+  for(const auto &binding:bindings_) if(binding.id==filter.ignore) ignore=binding.body;
+  const auto native=nativeFilter(filter,ignore);
+  std::vector<AetherRayQueryHitV1> hits(capacity);
+  const auto total=AetherPhysics_RayCastAllV2(const_cast<AetherPhysicsWorld *>(world_),{origin[0],origin[1],origin[2]},
+      {direction[0],direction[1],direction[2]},&native,capacity?hits.data():nullptr,static_cast<i32>(capacity));
+  if(total<=0) return 0;
+  const u32 copied=std::min<u32>(capacity,static_cast<u32>(total));
+  const float range=length3(direction);
+  for(u32 i=0;i<copied&&out;++i) {
+    out[i]=describeHit(hits[i].body,hits[i].subShapeId);
+    out[i].fraction=hits[i].fraction;
+    out[i].distance=hits[i].fraction*range;
+    out[i].point[0]=hits[i].point.x;out[i].point[1]=hits[i].point.y;out[i].point[2]=hits[i].point.z;
+    out[i].normal[0]=hits[i].normal.x;out[i].normal[1]=hits[i].normal.y;out[i].normal[2]=hits[i].normal.z;
+    out[i].hasNormal=true;
+    out[i].isSensor=hits[i].isSensor!=0;
+  }
+  return static_cast<u32>(total);
+}
+bool ScenePhysics::shapeCast(const QueryShapeDesc &shape,const float origin[3],const float direction[3],
+                             const QueryFilter &filter,QueryHit &out) const {
+  if(!world_||!finite3(origin)||!finite3(direction)) return false;
+  AetherBodyHandle ignore=AetherBodyHandle_Invalid;
+  for(const auto &binding:bindings_) if(binding.id==filter.ignore) ignore=binding.body;
+  const auto native=nativeFilter(filter,ignore);
+  const auto nativeDesc=nativeShape(shape);
+  AetherShapeQueryHit hit{};u32 subShape=0,sensor=0;
+  if(!AetherPhysics_ShapeCastClosestV2(const_cast<AetherPhysicsWorld *>(world_),&nativeDesc,
+      {origin[0],origin[1],origin[2]},{shape.rotation[0],shape.rotation[1],shape.rotation[2],shape.rotation[3]},
+      {direction[0],direction[1],direction[2]},&native,&hit,&subShape,&sensor)) return false;
+  out=describeHit(hit.body,subShape);
+  if(!out.object) return false;
+  out.fraction=hit.fraction;
+  out.distance=hit.fraction*length3(direction);
+  out.point[0]=hit.contactPointOnHit.x;out.point[1]=hit.contactPointOnHit.y;out.point[2]=hit.contactPointOnHit.z;
+  // O eixo de penetração do Jolt não é normalizado; normalizá-lo aqui é o que
+  // torna o valor utilizável como direção sem que cada chamador refaça a conta.
+  const float axis[3]{hit.penetrationAxis.x,hit.penetrationAxis.y,hit.penetrationAxis.z};
+  const float size=length3(axis);
+  if(size>1e-6f) {
+    for(u32 i=0;i<3;++i) out.normal[i]=axis[i]/size;
+    out.hasNormal=true;
+  }
+  out.isSensor=sensor!=0;
+  return true;
+}
+u32 ScenePhysics::overlap(const QueryShapeDesc &shape,const float origin[3],const QueryFilter &filter,
+                          QueryHit *out,u32 capacity) const {
+  if(!world_||!finite3(origin)) return 0;
+  AetherBodyHandle ignore=AetherBodyHandle_Invalid;
+  for(const auto &binding:bindings_) if(binding.id==filter.ignore) ignore=binding.body;
+  const auto native=nativeFilter(filter,ignore);
+  const auto nativeDesc=nativeShape(shape);
+  std::vector<AetherShapeQueryHit> hits(capacity);
+  std::vector<u32> subShapes(capacity),sensors(capacity);
+  const auto total=AetherPhysics_OverlapShapeV2(const_cast<AetherPhysicsWorld *>(world_),&nativeDesc,
+      {origin[0],origin[1],origin[2]},{shape.rotation[0],shape.rotation[1],shape.rotation[2],shape.rotation[3]},
+      &native,capacity?hits.data():nullptr,capacity?subShapes.data():nullptr,capacity?sensors.data():nullptr,
+      static_cast<i32>(capacity));
+  if(total<=0) return 0;
+  const u32 copied=std::min<u32>(capacity,static_cast<u32>(total));
+  for(u32 i=0;i<copied&&out;++i) {
+    out[i]=describeHit(hits[i].body,subShapes[i]);
+    out[i].point[0]=hits[i].contactPointOnHit.x;out[i].point[1]=hits[i].contactPointOnHit.y;out[i].point[2]=hits[i].contactPointOnHit.z;
+    out[i].isSensor=sensors[i]!=0;
+    // Sobreposição parada não tem direção ao longo de quê: fração e normal
+    // continuam ausentes em vez de zeradas.
+  }
+  return static_cast<u32>(total);
+}
 bool ScenePhysics::setCharacterMove(ObjectId id,float right,float forward,float yaw) {
   if(!std::isfinite(right)||!std::isfinite(forward)||!std::isfinite(yaw)) return false;
   for(auto &c:characters_) if(c.id==id) {c.right=right;c.forward=forward;c.yaw=yaw;return true;}
@@ -194,7 +332,7 @@ bool ScenePhysics::moveKinematic(ObjectId id,const float *v) {
     return AetherPhysics_MoveKinematicV2(world_,b.body,{v[0],v[1],v[2]},{v[3]/n,v[4]/n,v[5]/n,v[6]/n},1.0f/60.0f)!=0;
   return false;
 }
-bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(void *,float),void *context,bool (*trigger)(void *,ObjectId,ObjectId,u32)) {
+bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(void *,float),void *context,bool (*trigger)(void *,ObjectId,ObjectId,u32),bool (*contact)(void *,const ContactEvent &)) {
   if(!world_ || !std::isfinite(elapsed) || elapsed<0) return false;
   constexpr double fixed=1.0/60.0;
   // Bound catch-up after surface/lifecycle stalls; never feed a large dt to Jolt.
@@ -214,6 +352,26 @@ bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(vo
       for(const auto &event:events_) {
         const auto sensor=objects_.find(event.sensor),other=objects_.find(event.other);
         if(sensor!=objects_.end()&&other!=objects_.end()&&!trigger(context,sensor->second,other->second,static_cast<u32>(event.type))) return false;
+      }
+    }
+    if(contact) {
+      // Contatos sólidos são a outra metade dos eventos: o par onde NENHUM dos
+      // dois é sensor. Também saem por passo físico, agregados por par de
+      // corpos, e a normal só acompanha Enter/Stay — o Jolt não informa
+      // geometria quando o contato termina.
+      const auto count=AetherPhysics_GetContactEventsV1(world_,nullptr,0);
+      if(count<0||count>1024*1024) {error_="Quantidade de contatos inválida";return false;}
+      contacts_.resize(static_cast<usize>(count));
+      if(count&&AetherPhysics_GetContactEventsV1(world_,contacts_.data(),count)!=count) return false;
+      for(const auto &event:contacts_) {
+        const auto first=objects_.find(event.first),second=objects_.find(event.second);
+        if(first==objects_.end()||second==objects_.end()) continue;
+        ContactEvent value{};
+        value.first=first->second;value.second=second->second;
+        value.phase=static_cast<u32>(event.type);
+        value.hasNormal=event.hasNormal!=0;
+        value.normal[0]=event.normal.x;value.normal[1]=event.normal.y;value.normal[2]=event.normal.z;
+        if(!contact(context,value)) return false;
       }
     }
   }

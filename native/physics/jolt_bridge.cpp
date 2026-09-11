@@ -55,9 +55,20 @@ namespace {
 // colisão" no plural; um esquema configurável por jogo (N camadas nomeadas) é
 // trabalho de um incremento futuro sobre esta base, não desta fatia.
 namespace Layers {
-constexpr JPH::ObjectLayer NonMoving = 0;
-constexpr JPH::ObjectLayer Moving = 1;
-constexpr JPH::uint NumLayers = 2;
+// A ObjectLayer do Jolt passa a carregar DUAS informacoes: a camada de gameplay
+// escolhida pelo projeto (0..31) e a classe de movimento (estatico ou movel).
+// Codificar as duas no mesmo valor e o que permite a matriz de interacao do
+// projeto valer no SOLVER, e nao apenas no filtro de consulta -- um par que a
+// matriz proibe nunca gera contato, em vez de gerar e ser descartado depois.
+constexpr JPH::uint GameplayLayerCount = 32;
+constexpr JPH::ObjectLayer NonMoving = 0;  // camada de gameplay 0, estatico
+constexpr JPH::ObjectLayer Moving = 1;     // camada de gameplay 0, movel
+constexpr JPH::uint NumLayers = GameplayLayerCount * 2;
+constexpr bool IsMoving(JPH::ObjectLayer layer) { return (layer & 1) != 0; }
+constexpr ae::u32 Gameplay(JPH::ObjectLayer layer) { return static_cast<ae::u32>(layer >> 1); }
+constexpr JPH::ObjectLayer Encode(ae::u32 gameplayLayer, bool moving) {
+  return static_cast<JPH::ObjectLayer>((gameplayLayer % GameplayLayerCount) * 2 + (moving ? 1 : 0));
+}
 } // namespace Layers
 
 namespace BroadPhaseLayers {
@@ -69,8 +80,10 @@ constexpr JPH::uint NumLayers = 2;
 class BroadPhaseLayerInterfaceImpl final : public JPH::BroadPhaseLayerInterface {
 public:
   BroadPhaseLayerInterfaceImpl() {
-    mObjectToBroadPhase[Layers::NonMoving] = BroadPhaseLayers::NonMoving;
-    mObjectToBroadPhase[Layers::Moving] = BroadPhaseLayers::Moving;
+    for (JPH::uint layer = 0; layer < Layers::NumLayers; ++layer)
+      mObjectToBroadPhase[layer] = Layers::IsMoving(static_cast<JPH::ObjectLayer>(layer))
+                                       ? BroadPhaseLayers::Moving
+                                       : BroadPhaseLayers::NonMoving;
   }
   JPH::uint GetNumBroadPhaseLayers() const override { return BroadPhaseLayers::NumLayers; }
   JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer inLayer) const override {
@@ -97,17 +110,30 @@ private:
 class ObjectVsBroadPhaseLayerFilterImpl final : public JPH::ObjectVsBroadPhaseLayerFilter {
 public:
   bool ShouldCollide(JPH::ObjectLayer inLayer1, JPH::BroadPhaseLayer inLayer2) const override {
-    if (inLayer1 == Layers::NonMoving) return inLayer2 == BroadPhaseLayers::Moving;
-    return true; // Moving colide com tudo
+    // Estatico contra estatico nunca precisa de par: dois corpos parados nao
+    // podem comecar a se tocar sem que um deles se mova.
+    if (!Layers::IsMoving(inLayer1)) return inLayer2 == BroadPhaseLayers::Moving;
+    return true;
   }
 };
 
+// A matriz de interacao pertence ao MUNDO, nao ao filtro: o filtro so a le. Um
+// bit ligado em [a][b] significa "objetos da camada a colidem com os da camada
+// b"; a reciprocidade e conferida por quem escreve a matriz.
 class ObjectLayerPairFilterImpl final : public JPH::ObjectLayerPairFilter {
 public:
+  void Bind(const ae::u32 *matrix) { mMatrix = matrix; }
   bool ShouldCollide(JPH::ObjectLayer inObject1, JPH::ObjectLayer inObject2) const override {
-    if (inObject1 == Layers::NonMoving) return inObject2 == Layers::Moving;
-    return true; // Moving colide com tudo, incluindo outro Moving
+    if (!Layers::IsMoving(inObject1) && !Layers::IsMoving(inObject2)) return false;
+    if (mMatrix == nullptr) return true;
+    const ae::u32 first = Layers::Gameplay(inObject1);
+    const ae::u32 second = Layers::Gameplay(inObject2);
+    if (first >= Layers::GameplayLayerCount || second >= Layers::GameplayLayerCount) return true;
+    return (mMatrix[first] & (1u << second)) != 0;
   }
+
+private:
+  const ae::u32 *mMatrix = nullptr;
 };
 
 JPH::EMotionType ToJoltMotionType(AetherMotionType type) {
@@ -119,7 +145,7 @@ JPH::EMotionType ToJoltMotionType(AetherMotionType type) {
 }
 
 JPH::ObjectLayer ToObjectLayer(AetherMotionType type) {
-  return type == AetherMotionType::Static ? Layers::NonMoving : Layers::Moving;
+  return Layers::Encode(0, type != AetherMotionType::Static);
 }
 
 /// Item 4.1.6 (física 2D): converte AetherAllowedDOFs para JPH::EAllowedDOFs. Nota de
@@ -169,15 +195,19 @@ JPH::RefConst<JPH::Shape> ToJoltShape(const AetherShapeDesc &desc) {
 /// diretamente teria que reimplementar essa checagem em cada chamador — centralizado aqui.
 class QueryLayerFilter final : public JPH::ObjectLayerFilter {
 public:
-  explicit QueryLayerFilter(AetherQueryLayerMask mask) : mMask(mask) {}
+  explicit QueryLayerFilter(AetherQueryLayerMask mask, ae::u32 gameplayMask = 0xffffffffu)
+      : mMask(mask), mGameplayMask(gameplayMask) {}
   bool ShouldCollide(JPH::ObjectLayer inLayer) const override {
-    ae::u32 bit = inLayer == Layers::NonMoving ? static_cast<ae::u32>(AetherQueryLayerMask::Static)
-                                                : static_cast<ae::u32>(AetherQueryLayerMask::Dynamic);
-    return (static_cast<ae::u32>(mMask) & bit) != 0;
+    const ae::u32 bit = Layers::IsMoving(inLayer) ? static_cast<ae::u32>(AetherQueryLayerMask::Dynamic)
+                                                  : static_cast<ae::u32>(AetherQueryLayerMask::Static);
+    if ((static_cast<ae::u32>(mMask) & bit) == 0) return false;
+    const ae::u32 gameplay = Layers::Gameplay(inLayer);
+    return gameplay >= Layers::GameplayLayerCount || (mGameplayMask & (1u << gameplay)) != 0;
   }
 
 private:
   AetherQueryLayerMask mMask;
+  ae::u32 mGameplayMask;
 };
 
 /// Espelha exatamente JPH::IgnoreSingleBodyFilter (Jolt/Physics/Body/BodyFilter.h) — não
@@ -186,12 +216,20 @@ private:
 /// na assinatura de uma função auxiliar nossa.
 class QueryBodyFilter final : public JPH::BodyFilter {
 public:
-  explicit QueryBodyFilter(AetherBodyHandle ignoreBody)
-      : mIgnore(ignoreBody == AetherBodyHandle_Invalid ? JPH::BodyID() : JPH::BodyID(ignoreBody)) {}
+  explicit QueryBodyFilter(AetherBodyHandle ignoreBody, bool includeSensors = true)
+      : mIgnore(ignoreBody == AetherBodyHandle_Invalid ? JPH::BodyID() : JPH::BodyID(ignoreBody)),
+        mIncludeSensors(includeSensors) {}
   bool ShouldCollide(const JPH::BodyID &inBodyID) const override { return mIgnore != inBodyID; }
+  // Sensores participam das queries do Jolt como qualquer corpo. Um raycast de
+  // visada que atravessasse a zona de deteccao do proprio jogo acertaria o
+  // volume invisivel; por isso o filtro e explicito, nao um padrao herdado.
+  bool ShouldCollideLocked(const JPH::Body &inBody) const override {
+    return mIncludeSensors || !inBody.IsSensor();
+  }
 
 private:
   JPH::BodyID mIgnore;
+  bool mIncludeSensors;
 };
 
 /// Copia um CollideShapeResult/ShapeCastResult (ambos têm os mesmos 3 campos de contato,
@@ -354,6 +392,8 @@ public:
     std::lock_guard<std::mutex> lock(mMutex);
     mFrameEvents = std::move(mPendingEvents);
     mPendingEvents.clear();
+    mFrameContacts = std::move(mPendingContacts);
+    mPendingContacts.clear();
     mInStep = true;
   }
 
@@ -382,6 +422,9 @@ public:
     std::sort(mFrameEvents.begin(), mFrameEvents.end(), EventLess);
     mFrameEvents.erase(std::unique(mFrameEvents.begin(), mFrameEvents.end(), EventEqual),
                        mFrameEvents.end());
+    std::stable_sort(mFrameContacts.begin(), mFrameContacts.end(), ContactLess);
+    mFrameContacts.erase(std::unique(mFrameContacts.begin(), mFrameContacts.end(), ContactEqual),
+                         mFrameContacts.end());
   }
 
   ae::i32 CopyEvents(AetherTriggerEvent *outEvents, ae::i32 maxResults) {
@@ -405,6 +448,7 @@ public:
     ActiveSubShape active{};
     AddDirection(body1, body2, active);
     AddDirection(body2, body1, active);
+    AddSolid(body1, body2, manifold, active);
     mActiveSubShapes.emplace(subPair, active);
   }
 
@@ -421,11 +465,15 @@ public:
       ActiveSubShape active{};
       AddDirection(body1, body2, active);
       AddDirection(body2, body1, active);
+      AddSolid(body1, body2, manifold, active);
       mActiveSubShapes.emplace(subPair, active);
       return;
     }
     for (ae::u32 i = 0; i < it->second.count; ++i)
       AppendEvent(it->second.directions[i], AetherTriggerEventType::Stay);
+    if (it->second.hasSolid)
+      AppendContact(it->second.solid, AetherContactEventType::Stay,
+                    OrientedNormal(body1, it->second.solid, manifold), true);
   }
 
   void OnContactRemoved(const JPH::SubShapeIDPair &subPair) override {
@@ -441,7 +489,24 @@ public:
         mActivePairCounts.erase(countIt);
       }
     }
+    if (it->second.hasSolid) {
+      auto solidIt = mSolidPairCounts.find(it->second.solid);
+      if (solidIt != mSolidPairCounts.end() && --solidIt->second == 0) {
+        // O Jolt nao informa geometria em OnContactRemoved: o Exit sai sem
+        // normal, e quem consome sabe disso pelo sinalizador.
+        AppendContact(it->second.solid, AetherContactEventType::Exit, AetherVec3{0, 0, 0}, false);
+        mSolidPairCounts.erase(solidIt);
+      }
+    }
     mActiveSubShapes.erase(it);
+  }
+
+  ae::i32 CopyContacts(AetherContactEventV1 *outEvents, ae::i32 maxResults) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    const ae::i32 count = static_cast<ae::i32>(mFrameContacts.size());
+    const ae::i32 toCopy = outEvents != nullptr && maxResults > 0 ? std::min(count, maxResults) : 0;
+    std::copy_n(mFrameContacts.begin(), toCopy, outEvents);
+    return count;
   }
 
 private:
@@ -456,12 +521,16 @@ private:
   struct ActiveSubShape {
     DirectedPair directions[2]{};
     ae::u32 count = 0;
+    // Par solido (nenhum dos dois e sensor), ordenado por handle para que o
+    // mesmo contato nao produza dois pares diferentes conforme a ordem em que
+    // o Jolt entrega os corpos.
+    DirectedPair solid{};
+    bool hasSolid = false;
   };
 
   static ae::u32 LayerBit(JPH::ObjectLayer layer) {
-    return layer == Layers::NonMoving
-               ? static_cast<ae::u32>(AetherQueryLayerMask::Static)
-               : static_cast<ae::u32>(AetherQueryLayerMask::Dynamic);
+    return Layers::IsMoving(layer) ? static_cast<ae::u32>(AetherQueryLayerMask::Dynamic)
+                                   : static_cast<ae::u32>(AetherQueryLayerMask::Static);
   }
 
   void AddDirection(const JPH::Body &candidateSensor, const JPH::Body &other,
@@ -475,6 +544,49 @@ private:
     if (active.count < 2) active.directions[active.count++] = pair;
     ae::u32 &count = mActivePairCounts[pair];
     if (count++ == 0) AppendEvent(pair, AetherTriggerEventType::Enter);
+  }
+
+  static DirectedPair OrderedPair(const JPH::Body &a, const JPH::Body &b) {
+    const AetherBodyHandle first = a.GetID().GetIndexAndSequenceNumber();
+    const AetherBodyHandle second = b.GetID().GetIndexAndSequenceNumber();
+    return first <= second ? DirectedPair{first, second} : DirectedPair{second, first};
+  }
+
+  // A normal do manifold move o corpo 2 do Jolt para fora do corpo 1. Como o
+  // par e reordenado por handle, ela e invertida quando a ordem nao coincide --
+  // senao metade dos contatos chegaria com a normal apontando ao contrario.
+  static AetherVec3 OrientedNormal(const JPH::Body &joltFirst, const DirectedPair &pair,
+                                   const JPH::ContactManifold &manifold) {
+    const JPH::Vec3 normal = joltFirst.GetID().GetIndexAndSequenceNumber() == pair.sensor
+                                 ? manifold.mWorldSpaceNormal
+                                 : -manifold.mWorldSpaceNormal;
+    return AetherVec3{normal.GetX(), normal.GetY(), normal.GetZ()};
+  }
+
+  void AddSolid(const JPH::Body &body1, const JPH::Body &body2,
+                const JPH::ContactManifold &manifold, ActiveSubShape &active) {
+    if (body1.IsSensor() || body2.IsSensor()) return;
+    const DirectedPair pair = OrderedPair(body1, body2);
+    active.solid = pair;
+    active.hasSolid = true;
+    ae::u32 &count = mSolidPairCounts[pair];
+    if (count++ == 0)
+      AppendContact(pair, AetherContactEventType::Enter, OrientedNormal(body1, pair, manifold), true);
+  }
+
+  void AppendContact(const DirectedPair &pair, AetherContactEventType type,
+                     AetherVec3 normal, bool hasNormal) {
+    AetherContactEventV1 event{pair.sensor, pair.other, type, hasNormal ? 1u : 0u, normal};
+    (mInStep ? mFrameContacts : mPendingContacts).push_back(event);
+  }
+
+  static bool ContactLess(const AetherContactEventV1 &a, const AetherContactEventV1 &b) {
+    if (a.first != b.first) return a.first < b.first;
+    if (a.second != b.second) return a.second < b.second;
+    return static_cast<ae::u32>(a.type) < static_cast<ae::u32>(b.type);
+  }
+  static bool ContactEqual(const AetherContactEventV1 &a, const AetherContactEventV1 &b) {
+    return a.first == b.first && a.second == b.second && a.type == b.type;
   }
 
   void AppendEvent(const DirectedPair &pair, AetherTriggerEventType type) {
@@ -498,6 +610,9 @@ private:
   std::map<DirectedPair, ae::u32> mActivePairCounts;
   std::vector<AetherTriggerEvent> mPendingEvents;
   std::vector<AetherTriggerEvent> mFrameEvents;
+  std::map<DirectedPair, ae::u32> mSolidPairCounts;
+  std::vector<AetherContactEventV1> mPendingContacts;
+  std::vector<AetherContactEventV1> mFrameContacts;
   bool mInStep = false;
 };
 
@@ -509,6 +624,9 @@ private:
 // preview do editor + play-in-editor ao mesmo tempo) é uma otimização futura,
 // não uma correção necessária agora.
 struct AetherPhysicsWorld {
+  // Tudo ligado por padrao: um projeto que nunca configura camadas se comporta
+  // exatamente como antes deste recurso existir.
+  ae::u32 layerInteraction[Layers::GameplayLayerCount];
   BroadPhaseLayerInterfaceImpl broadPhaseLayerInterface;
   ObjectVsBroadPhaseLayerFilterImpl objectVsBroadPhaseLayerFilter;
   ObjectLayerPairFilterImpl objectLayerPairFilter;
@@ -550,6 +668,11 @@ struct AetherPhysicsWorld {
         jobSystem(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, WorkerThreadCount()), desc(worldDesc) {
     stepStats.structSize = sizeof(AetherPhysicsStepStatsV2);
     stepStats.apiVersion = AetherPhysicsWorldApiVersionV2;
+    // Sem configuração, todas as camadas interagem: o padrão de migração de um
+    // projeto que nunca ouviu falar de camadas é o comportamento anterior.
+    for (ae::u32 layer = 0; layer < Layers::GameplayLayerCount; ++layer)
+      layerInteraction[layer] = 0xffffffffu;
+    objectLayerPairFilter.Bind(layerInteraction);
 
     physicsSystem.Init(desc.maxBodies, /*inNumBodyMutexes*/ 0, desc.maxBodyPairs,
                         desc.maxContactConstraints,
@@ -968,6 +1091,56 @@ ae::i32 AetherPhysics_GetTriggerEvents(AetherPhysicsWorld *world,
   return world == nullptr ? 0 : world->triggerListener.CopyEvents(outEvents, maxResults);
 }
 
+ae::i32 AetherPhysics_GetContactEventsV1(AetherPhysicsWorld *world,
+                                         AetherContactEventV1 *outEvents,
+                                         ae::i32 maxResults) {
+  return world == nullptr ? 0 : world->triggerListener.CopyContacts(outEvents, maxResults);
+}
+
+ae::i32 AetherPhysics_SetLayerInteractionV1(AetherPhysicsWorld *world, const ae::u32 *matrix, ae::u32 count) {
+  if (world == nullptr || matrix == nullptr || count != Layers::GameplayLayerCount) return 0;
+  // Reciprocidade conferida ANTES de escrever: o Jolt consulta o par uma vez
+  // so, em ordem nao especificada, entao uma matriz assimetrica faria a colisao
+  // depender da ordem de criacao dos corpos.
+  for (ae::u32 a = 0; a < count; ++a)
+    for (ae::u32 b = 0; b < count; ++b)
+      if (((matrix[a] >> b) & 1u) != ((matrix[b] >> a) & 1u)) return 0;
+  for (ae::u32 a = 0; a < count; ++a) world->layerInteraction[a] = matrix[a];
+  return 1;
+}
+
+ae::i32 AetherPhysics_SetBodyGameplayLayerV1(AetherPhysicsWorld *world, AetherBodyHandle body, ae::u32 layer) {
+  if (world == nullptr || body == AetherBodyHandle_Invalid || layer >= Layers::GameplayLayerCount) return 0;
+  JPH::BodyInterface &bodies = world->physicsSystem.GetBodyInterface();
+  const JPH::BodyID id(body);
+  if (!bodies.IsAdded(id)) return 0;
+  const bool moving = bodies.GetMotionType(id) != JPH::EMotionType::Static;
+  bodies.SetObjectLayer(id, Layers::Encode(layer, moving));
+  return 1;
+}
+
+ae::i32 AetherPhysics_GetSubShapeUserDataV1(AetherPhysicsWorld *world, AetherBodyHandle body,
+                                            ae::u32 subShapeId, ae::u64 *outUserData) {
+  if (world == nullptr || outUserData == nullptr || body == AetherBodyHandle_Invalid) return 0;
+  JPH::BodyLockRead lock(world->physicsSystem.GetBodyLockInterface(), JPH::BodyID(body));
+  if (!lock.Succeeded()) return 0;
+  const JPH::Shape *shape = lock.GetBody().GetShape();
+  if (shape == nullptr) return 0;
+  JPH::SubShapeID id;
+  id.SetValue(static_cast<JPH::SubShapeID::Type>(subShapeId));
+  *outUserData = shape->GetSubShapeUserData(id);
+  return 1;
+}
+
+ae::u32 AetherPhysics_GetBodyGameplayLayerV1(const AetherPhysicsWorld *world, AetherBodyHandle body) {
+  if (world == nullptr || body == AetherBodyHandle_Invalid) return 0xffffffffu;
+  const JPH::BodyInterface &bodies =
+      const_cast<AetherPhysicsWorld *>(world)->physicsSystem.GetBodyInterface();
+  const JPH::BodyID id(body);
+  if (!bodies.IsAdded(id)) return 0xffffffffu;
+  return Layers::Gameplay(bodies.GetObjectLayer(id));
+}
+
 ae::i32 AetherPhysics_GetStepStatsV2(const AetherPhysicsWorld *world,
                                      AetherPhysicsStepStatsV2 *outStats) {
   if (world == nullptr || outStats == nullptr ||
@@ -1153,6 +1326,134 @@ ae::i32 AetherPhysics_OverlapShape(AetherPhysicsWorld *world, const AetherShapeD
   ae::i32 toCopy = maxResults > 0 ? std::min(count, maxResults) : 0;
   for (ae::i32 i = 0; i < toCopy; ++i) {
     if (outHits != nullptr) outHits[i] = ToShapeQueryHit(collector.mHits[i], 0.0f);
+  }
+  return count;
+}
+
+// --------------------------------------------------- queries com contato real (V2)
+
+namespace {
+
+bool ValidQueryFilter(const AetherQueryFilterV1 *filter) {
+  return filter != nullptr && filter->structSize == sizeof(AetherQueryFilterV1) &&
+         filter->apiVersion == AetherQueryFilterApiVersionV1 &&
+         static_cast<ae::u32>(filter->layerMask) <= static_cast<ae::u32>(AetherQueryLayerMask::All);
+}
+
+bool FiniteVec(AetherVec3 v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
+
+// A normal so existe com uma segunda consulta ao corpo acertado: o RayCastResult
+// do Jolt traz apenas corpo, sub-shape e fracao. Fazer essa consulta aqui e o que
+// permite devolver um contato completo em vez de zeros com cara de contato.
+AetherRayQueryHitV1 ToRayHit(AetherPhysicsWorld *world, const JPH::RRayCast &ray,
+                             const JPH::RayCastResult &hit) {
+  AetherRayQueryHitV1 out{};
+  out.body = hit.mBodyID.GetIndexAndSequenceNumber();
+  out.subShapeId = hit.mSubShapeID2.GetValue();
+  out.fraction = hit.mFraction;
+  const JPH::RVec3 point = ray.GetPointOnRay(hit.mFraction);
+  out.point = AetherVec3{static_cast<float>(point.GetX()), static_cast<float>(point.GetY()),
+                         static_cast<float>(point.GetZ())};
+  JPH::BodyLockRead lock(world->physicsSystem.GetBodyLockInterface(), hit.mBodyID);
+  if (lock.Succeeded()) {
+    const JPH::Body &body = lock.GetBody();
+    out.normal = FromJolt(body.GetWorldSpaceSurfaceNormal(hit.mSubShapeID2, point));
+    out.isSensor = body.IsSensor() ? 1u : 0u;
+  }
+  return out;
+}
+
+ae::u32 BodyIsSensor(AetherPhysicsWorld *world, const JPH::BodyID &id) {
+  JPH::BodyLockRead lock(world->physicsSystem.GetBodyLockInterface(), id);
+  return lock.Succeeded() && lock.GetBody().IsSensor() ? 1u : 0u;
+}
+
+} // namespace
+
+ae::i32 AetherPhysics_RayCastClosestV2(AetherPhysicsWorld *world, AetherVec3 origin, AetherVec3 direction,
+                                       const AetherQueryFilterV1 *filter, AetherRayQueryHitV1 *outHit) {
+  if (world == nullptr || !ValidQueryFilter(filter) || !FiniteVec(origin) || !FiniteVec(direction)) return 0;
+  // Raio de comprimento zero nao tem direcao: a fracao devolvida seria
+  // indefinida e a normal, arbitraria. Recusar e o unico resultado honesto.
+  if (direction.x == 0.0f && direction.y == 0.0f && direction.z == 0.0f) return 0;
+
+  const JPH::RRayCast ray(JPH::RVec3(origin.x, origin.y, origin.z), ToJolt(direction));
+  JPH::ClosestHitCollisionCollector<JPH::CastRayCollector> collector;
+  QueryLayerFilter layerFilter(filter->layerMask, filter->gameplayLayerMask);
+  QueryBodyFilter bodyFilter(filter->ignoreBody, filter->includeSensors != 0);
+  world->physicsSystem.GetNarrowPhaseQuery().CastRay(ray, {}, collector, {}, layerFilter, bodyFilter);
+  if (!collector.HadHit()) return 0;
+  if (outHit != nullptr) *outHit = ToRayHit(world, ray, collector.mHit);
+  return 1;
+}
+
+ae::i32 AetherPhysics_RayCastAllV2(AetherPhysicsWorld *world, AetherVec3 origin, AetherVec3 direction,
+                                   const AetherQueryFilterV1 *filter,
+                                   AetherRayQueryHitV1 *outHits, ae::i32 maxResults) {
+  if (world == nullptr || !ValidQueryFilter(filter) || !FiniteVec(origin) || !FiniteVec(direction)) return 0;
+  if (direction.x == 0.0f && direction.y == 0.0f && direction.z == 0.0f) return 0;
+
+  const JPH::RRayCast ray(JPH::RVec3(origin.x, origin.y, origin.z), ToJolt(direction));
+  JPH::AllHitCollisionCollector<JPH::CastRayCollector> collector;
+  QueryLayerFilter layerFilter(filter->layerMask, filter->gameplayLayerMask);
+  QueryBodyFilter bodyFilter(filter->ignoreBody, filter->includeSensors != 0);
+  world->physicsSystem.GetNarrowPhaseQuery().CastRay(ray, {}, collector, {}, layerFilter, bodyFilter);
+  collector.Sort();
+
+  const ae::i32 count = static_cast<ae::i32>(collector.mHits.size());
+  const ae::i32 toCopy = outHits != nullptr && maxResults > 0 ? std::min(count, maxResults) : 0;
+  for (ae::i32 i = 0; i < toCopy; ++i) outHits[i] = ToRayHit(world, ray, collector.mHits[i]);
+  return count;
+}
+
+ae::i32 AetherPhysics_ShapeCastClosestV2(AetherPhysicsWorld *world, const AetherShapeDesc *shape,
+                                         AetherVec3 origin, AetherQuat rotation, AetherVec3 direction,
+                                         const AetherQueryFilterV1 *filter, AetherShapeQueryHit *outHit,
+                                         ae::u32 *outSubShapeId, ae::u32 *outIsSensor) {
+  if (world == nullptr || shape == nullptr || !ValidQueryFilter(filter) ||
+      !FiniteVec(origin) || !FiniteVec(direction)) return 0;
+  JPH::RefConst<JPH::Shape> joltShape = ToJoltShape(*shape);
+  if (joltShape == nullptr) return 0;
+
+  const JPH::RMat44 startTransform =
+      JPH::RMat44::sRotationTranslation(ToJolt(rotation), JPH::RVec3(origin.x, origin.y, origin.z));
+  const JPH::RShapeCast cast =
+      JPH::RShapeCast::sFromWorldTransform(joltShape, JPH::Vec3::sReplicate(1.0f), startTransform, ToJolt(direction));
+
+  JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> collector;
+  QueryLayerFilter layerFilter(filter->layerMask, filter->gameplayLayerMask);
+  QueryBodyFilter bodyFilter(filter->ignoreBody, filter->includeSensors != 0);
+  world->physicsSystem.GetNarrowPhaseQuery().CastShape(cast, {}, JPH::RVec3::sZero(), collector, {},
+                                                       layerFilter, bodyFilter);
+  if (!collector.HadHit()) return 0;
+  if (outHit != nullptr) *outHit = ToShapeQueryHit(collector.mHit, collector.mHit.mFraction);
+  if (outSubShapeId != nullptr) *outSubShapeId = collector.mHit.mSubShapeID2.GetValue();
+  if (outIsSensor != nullptr) *outIsSensor = BodyIsSensor(world, collector.mHit.mBodyID2);
+  return 1;
+}
+
+ae::i32 AetherPhysics_OverlapShapeV2(AetherPhysicsWorld *world, const AetherShapeDesc *shape,
+                                     AetherVec3 origin, AetherQuat rotation,
+                                     const AetherQueryFilterV1 *filter, AetherShapeQueryHit *outHits,
+                                     ae::u32 *outSubShapeIds, ae::u32 *outSensorFlags, ae::i32 maxResults) {
+  if (world == nullptr || shape == nullptr || !ValidQueryFilter(filter) || !FiniteVec(origin)) return 0;
+  JPH::RefConst<JPH::Shape> joltShape = ToJoltShape(*shape);
+  if (joltShape == nullptr) return 0;
+
+  const JPH::RMat44 transform =
+      JPH::RMat44::sRotationTranslation(ToJolt(rotation), JPH::RVec3(origin.x, origin.y, origin.z));
+  JPH::AllHitCollisionCollector<JPH::CollideShapeCollector> collector;
+  QueryLayerFilter layerFilter(filter->layerMask, filter->gameplayLayerMask);
+  QueryBodyFilter bodyFilter(filter->ignoreBody, filter->includeSensors != 0);
+  world->physicsSystem.GetNarrowPhaseQuery().CollideShape(joltShape, JPH::Vec3::sReplicate(1.0f), transform, {},
+                                                          JPH::RVec3::sZero(), collector, {}, layerFilter, bodyFilter);
+
+  const ae::i32 count = static_cast<ae::i32>(collector.mHits.size());
+  const ae::i32 toCopy = maxResults > 0 ? std::min(count, maxResults) : 0;
+  for (ae::i32 i = 0; i < toCopy; ++i) {
+    if (outHits != nullptr) outHits[i] = ToShapeQueryHit(collector.mHits[i], 0.0f);
+    if (outSubShapeIds != nullptr) outSubShapeIds[i] = collector.mHits[i].mSubShapeID2.GetValue();
+    if (outSensorFlags != nullptr) outSensorFlags[i] = BodyIsSensor(world, collector.mHits[i].mBodyID2);
   }
   return count;
 }

@@ -402,6 +402,125 @@ ae::i32 AetherPhysics_OverlapShape(AetherPhysicsWorld *world, const AetherShapeD
                                     AetherQueryLayerMask layerMask, AetherBodyHandle ignoreBody,
                                     AetherShapeQueryHit *outHits, ae::i32 maxResults);
 
+// --------------------------------------------------- queries com contato real (V2)
+//
+// As funções acima devolvem corpo e fração; um raycast de gameplay precisa também
+// de ponto e NORMAL de superfície, e de saber se acertou um sensor. O Jolt não
+// entrega normal no RayCastResult: ela vem de uma segunda consulta ao corpo
+// acertado (Body::GetWorldSpaceSurfaceNormal com o sub-shape do hit). É isso que
+// as funções V2 fazem — devolver zero no lugar da normal seria entregar um valor
+// que parece contato e não é.
+
+struct AetherQueryFilterV1 {
+  ae::u32 structSize;
+  ae::u32 apiVersion;
+  AetherQueryLayerMask layerMask;
+  AetherBodyHandle ignoreBody;
+  /// 0 descarta corpos sensores do resultado; 1 os inclui, marcados em `isSensor`.
+  ae::u32 includeSensors;
+  /// Bit por camada de gameplay (0..31). Todos ligados aceita qualquer camada.
+  ae::u32 gameplayLayerMask;
+};
+inline constexpr ae::u32 AetherQueryFilterApiVersionV1 = 1;
+
+struct AetherRayQueryHitV1 {
+  AetherBodyHandle body;
+  /// Sub-shape acertado dentro de um corpo composto. É o que permite ao chamador
+  /// distinguir qual parte da composição respondeu.
+  ae::u32 subShapeId;
+  float fraction;
+  AetherVec3 point;
+  /// Normal de superfície no ponto, em espaço de mundo, já normalizada pelo Jolt.
+  AetherVec3 normal;
+  ae::u32 isSensor;
+  ae::u32 reserved;
+};
+
+/// Raio mais próximo com ponto, normal e sub-shape. Devolve 1 quando acertou.
+/// `direction` não é normalizado: seu comprimento é o alcance (convenção do Jolt).
+/// Raio de comprimento zero é recusado (devolve 0) em vez de produzir um hit
+/// degenerado com fração indefinida.
+ae::i32 AetherPhysics_RayCastClosestV2(AetherPhysicsWorld *world, AetherVec3 origin, AetherVec3 direction,
+                                       const AetherQueryFilterV1 *filter, AetherRayQueryHitV1 *outHit);
+
+/// Todos os hits ao longo do raio, ordenados do mais próximo ao mais distante.
+/// Buffer do chamador; o retorno é a contagem REAL e pode exceder maxResults.
+ae::i32 AetherPhysics_RayCastAllV2(AetherPhysicsWorld *world, AetherVec3 origin, AetherVec3 direction,
+                                   const AetherQueryFilterV1 *filter,
+                                   AetherRayQueryHitV1 *outHits, ae::i32 maxResults);
+
+/// Varredura e sobreposição com o mesmo filtro das V2. O hit continua sendo o
+/// AetherShapeQueryHit (ponto nos dois corpos + eixo de penetração), acrescido do
+/// sub-shape acertado e do sinalizador de sensor em buffers paralelos opcionais.
+ae::i32 AetherPhysics_ShapeCastClosestV2(AetherPhysicsWorld *world, const AetherShapeDesc *shape,
+                                         AetherVec3 origin, AetherQuat rotation, AetherVec3 direction,
+                                         const AetherQueryFilterV1 *filter, AetherShapeQueryHit *outHit,
+                                         ae::u32 *outSubShapeId, ae::u32 *outIsSensor);
+ae::i32 AetherPhysics_OverlapShapeV2(AetherPhysicsWorld *world, const AetherShapeDesc *shape,
+                                     AetherVec3 origin, AetherQuat rotation,
+                                     const AetherQueryFilterV1 *filter, AetherShapeQueryHit *outHits,
+                                     ae::u32 *outSubShapeIds, ae::u32 *outSensorFlags, ae::i32 maxResults);
+
+// ------------------------------------------------- camadas de gameplay (V1)
+//
+// As camadas amplas do Jolt (NonMoving/Moving) continuam existindo e continuam
+// decidindo o que a broadphase precisa parear. Por cima delas, cada corpo
+// carrega uma CAMADA DE GAMEPLAY nomeada pelo projeto, e a matriz abaixo decide
+// quais pares de camadas chegam a colidir. A matriz vale no solver, não só nas
+// consultas: um par proibido nunca gera contato, em vez de gerar e ser
+// descartado depois. Um projeto que nunca configura nada tem todas as camadas
+// interagindo, que é o comportamento anterior a este recurso.
+
+inline constexpr ae::u32 AetherPhysicsGameplayLayerCount = 32;
+
+/// Substitui a matriz de interação do mundo. `matrix[a]` é a máscara de camadas
+/// com que a camada `a` colide. A matriz PRECISA ser recíproca — se a colide com
+/// b, b colide com a — porque o Jolt consulta o par uma vez só, em ordem não
+/// especificada; uma matriz assimétrica é recusada (devolve 0) em vez de
+/// produzir colisão que depende da ordem de criação dos corpos.
+ae::i32 AetherPhysics_SetLayerInteractionV1(AetherPhysicsWorld *world, const ae::u32 *matrix, ae::u32 count);
+
+/// Move um corpo já criado para outra camada de gameplay. Devolve 1 em sucesso;
+/// 0 para mundo/handle inválido ou camada fora de [0, 32).
+ae::i32 AetherPhysics_SetBodyGameplayLayerV1(AetherPhysicsWorld *world, AetherBodyHandle body, ae::u32 layer);
+
+/// A camada de gameplay atual do corpo, ou 0xffffffff quando o handle não vale.
+ae::u32 AetherPhysics_GetBodyGameplayLayerV1(const AetherPhysicsWorld *world, AetherBodyHandle body);
+
+/// Dado de usuário da subforma acertada por uma query. `AetherPhysics_CreateCompoundBodyV1`
+/// grava nele o ÍNDICE da parte na ordem em que foi passada, então é por aqui que
+/// um chamador volta de "acertei o corpo X, subforma S" para "acertei o colisor
+/// que eu mesmo montei na posição N". Devolve 1 em sucesso.
+ae::i32 AetherPhysics_GetSubShapeUserDataV1(AetherPhysicsWorld *world, AetherBodyHandle body,
+                                            ae::u32 subShapeId, ae::u64 *outUserData);
+
+// ------------------------------------------------------- contatos sólidos (V1)
+//
+// `AetherTriggerEvent` só existe para pares em que um dos corpos é SENSOR. Um
+// contato sólido — a caixa que encosta no chão, o personagem que bate na porta —
+// nunca aparecia ali. Estes eventos são a outra metade: mesmo agrupamento por
+// par de corpos e por passo, mesma fotografia estável, e a normal do manifold
+// quando o Jolt a fornece.
+enum class AetherContactEventType : ae::u32 { Enter = 0, Stay = 1, Exit = 2 };
+
+struct AetherContactEventV1 {
+  AetherBodyHandle first;
+  AetherBodyHandle second;
+  AetherContactEventType type;
+  /// 1 quando `normal` foi preenchida. O Jolt não informa geometria em
+  /// OnContactRemoved, então um Exit chega SEM normal — e isso é dito, não
+  /// disfarçado com um vetor zero que pareceria um contato de frente.
+  ae::u32 hasNormal;
+  /// Direção ao longo da qual mover `second` para fora de `first`, em mundo.
+  AetherVec3 normal;
+};
+
+/// Fotografia dos contatos sólidos do último Step. Mesma convenção de
+/// truncamento de AetherPhysics_GetTriggerEvents: o retorno é a contagem real.
+ae::i32 AetherPhysics_GetContactEventsV1(AetherPhysicsWorld *world,
+                                         AetherContactEventV1 *outEvents,
+                                         ae::i32 maxResults);
+
 // ---------------------------------------------------------------- juntas e motores (4.1.3)
 
 enum class AetherJointKind : ae::u32 {

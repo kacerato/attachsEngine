@@ -541,6 +541,7 @@ void updateEditorCodeCompiler(AndroidShell &shell) {
     api.update=reinterpret_cast<decltype(api.update)>(shell.dotNetHost.getManagedFunctionPointer(type,"Update"));
     api.fixedUpdate=reinterpret_cast<decltype(api.fixedUpdate)>(shell.dotNetHost.getManagedFunctionPointer(type,"FixedUpdate"));
     api.trigger=reinterpret_cast<decltype(api.trigger)>(shell.dotNetHost.getManagedFunctionPointer(type,"Trigger"));
+    api.contact=reinterpret_cast<decltype(api.contact)>(shell.dotNetHost.getManagedFunctionPointer(type,"Contact"));
     api.stop=reinterpret_cast<decltype(api.stop)>(shell.dotNetHost.getManagedFunctionPointer(type,"Stop"));
     api.copyDiagnostics=reinterpret_cast<decltype(api.copyDiagnostics)>(shell.dotNetHost.getManagedFunctionPointer(type,"CopyDiagnostics"));
   }

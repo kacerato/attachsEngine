@@ -61,7 +61,7 @@ public:
     paused_=false;
   }
   void pause(bool value) {if(active_) paused_=value;}
-  bool step() {return active_ && paused_ && runScripts(1.0f/60.0f) && physics_.advance(1.0/60.0,world_,fixedStep,this,triggerEvent) && drainCommands();}
+  bool step() {return active_ && paused_ && runScripts(1.0f/60.0f) && physics_.advance(1.0/60.0,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands();}
   bool setCharacterMove(EditorEntityId id,float right,float forward,float yaw) {
     return active_ && physics_.setCharacterMove(id,right,forward,yaw);
   }
@@ -71,7 +71,7 @@ public:
     if(paused_) return true;
     world_.advanceClock(std::min(elapsed,.25));
     return runScripts(static_cast<float>(std::min(elapsed,.25))) &&
-           physics_.advance(elapsed,world_,fixedStep,this,triggerEvent) && drainCommands();
+           physics_.advance(elapsed,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands();
   }
   u32 pendingCommandCount() const noexcept {return world_.pendingCommandCount();}
 private:
@@ -87,6 +87,10 @@ private:
   static bool triggerEvent(void *context,runtime::ObjectId sensor,runtime::ObjectId other,u32 phase) {
     auto &self=*static_cast<EditorPlayScene *>(context);
     return self.scripts_.trigger(sensor,other,phase) && self.drainCommands();
+  }
+  static bool contactEvent(void *context,const runtime::ContactEvent &event) {
+    auto &self=*static_cast<EditorPlayScene *>(context);
+    return self.scripts_.contact(event) && self.drainCommands();
   }
   static bool fixedStep(void *context,float dt) {
     auto &self=*static_cast<EditorPlayScene *>(context);

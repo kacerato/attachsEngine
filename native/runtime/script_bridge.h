@@ -13,6 +13,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace ae::runtime {
 
@@ -28,6 +29,9 @@ public:
   bool update(float elapsed);
   bool fixedUpdate(float elapsed);
   bool trigger(ObjectId sensor, ObjectId other, u32 phase);
+  // Contato sólido: o mesmo evento chega aos DOIS objetos do par, cada um
+  // recebendo o outro. A normal acompanha só Enter/Stay.
+  bool contact(const ContactEvent &event);
   void stop();
   const std::string &diagnostics() const { return diagnostics_; }
   static bool hasScripts(const SceneGraph &graph);
@@ -37,6 +41,9 @@ public:
 private:
   void collectDiagnostics();
   void installAccess();
+  QueryFilter queryFilter(const scene::ScriptQueryFilter &filter) const;
+  static QueryShapeDesc queryShape(const scene::ScriptShapeQuery &shape);
+  static void copyHits(const std::vector<QueryHit> &hits, u32 total, scene::ScriptQueryHit *out, int capacity);
   scene::ScriptRuntimeApi api_{};
   scene::ScriptSceneAccess access_{};
   std::string root_, diagnostics_;

@@ -8,8 +8,26 @@ namespace Astra.Runtime;
 
 public static unsafe class NativeBehaviorRuntime
 {
+    /// <summary>Espelho de <c>ae::scene::ScriptQueryFilter</c>.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeQueryFilter
+    {
+        public uint Size, GameplayLayerMask, Flags, Reserved;
+        public ulong Ignore;
+    }
+
+    /// <summary>Espelho de <c>ae::scene::ScriptShapeQuery</c>.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeShapeQuery
+    {
+        public uint Kind;
+        public float HalfX, HalfY, HalfZ;
+        public float Radius, HalfHeight;
+        public float RotationX, RotationY, RotationZ, RotationW;
+    }
+
     /// <summary>
-    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v3). A ordem dos
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v4). A ordem dos
     /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
     /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
     /// do fim do que o nativo alocou.
@@ -52,6 +70,12 @@ public static unsafe class NativeBehaviorRuntime
         // v3 — transform de mundo
         public delegate* unmanaged<void*, ulong, float*, int> GetWorldTransform;
         public delegate* unmanaged<void*, ulong, float*, int> SetWorldTransform;
+        // v4 — consultas físicas
+        public delegate* unmanaged<void*, float*, float*, NativeQueryFilter*, RawQueryHit*, int, int> RayCast;
+        public delegate* unmanaged<void*, NativeShapeQuery*, float*, float*, NativeQueryFilter*, RawQueryHit*, int> ShapeCast;
+        public delegate* unmanaged<void*, NativeShapeQuery*, float*, NativeQueryFilter*, RawQueryHit*, int, int> Overlap;
+        public delegate* unmanaged<void*, byte*, int, int> LayerByName;
+        public delegate* unmanaged<void*, uint, byte*, int, int> LayerName;
 
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
             MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
@@ -59,7 +83,8 @@ public static unsafe class NativeBehaviorRuntime
             FindChild != null && GetName != null && SetName != null && GetActive != null && SetActive != null &&
             CreateObject != null && DestroyObject != null && SetParent != null && ComponentCount != null &&
             ComponentAt != null && FindComponent != null && AddComponent != null && RemoveComponent != null &&
-            GetProperty != null && SetProperty != null && GetWorldTransform != null && SetWorldTransform != null;
+            GetProperty != null && SetProperty != null && GetWorldTransform != null && SetWorldTransform != null &&
+            RayCast != null && ShapeCast != null && Overlap != null && LayerByName != null && LayerName != null;
     }
 
     private sealed class SceneAdapter(SceneAccess access) : ISceneAccess
@@ -240,6 +265,67 @@ public static unsafe class NativeBehaviorRuntime
             fixed (byte* pointer = bytes)
                 return access.SetProperty(access.Context, objectId, instanceId, pointer, bytes.Length, kind, bits) != 0;
         }
+
+        // --- consultas físicas ----------------------------------------------
+        private static NativeQueryFilter Encode(in QueryFilter filter) => new()
+        {
+            Size = (uint)sizeof(NativeQueryFilter),
+            GameplayLayerMask = filter.LayerMask,
+            Flags = (filter.IncludeStatic ? 1u : 0u) | (filter.IncludeDynamic ? 2u : 0u) | (filter.IncludeSensors ? 4u : 0u),
+            Reserved = 0,
+            Ignore = filter.Ignore,
+        };
+        private static NativeShapeQuery Encode(in ShapeQuery shape) => new()
+        {
+            Kind = (uint)shape.Kind,
+            HalfX = shape.HalfExtent.X, HalfY = shape.HalfExtent.Y, HalfZ = shape.HalfExtent.Z,
+            Radius = shape.Radius, HalfHeight = shape.HalfHeight,
+            RotationX = shape.Rotation.X, RotationY = shape.Rotation.Y,
+            RotationZ = shape.Rotation.Z, RotationW = shape.Rotation.W,
+        };
+
+        public int RayCast(Vector3 origin, Vector3 direction, in QueryFilter filter, Span<RawQueryHit> results)
+        {
+            if (!Accessible) return 0;
+            var nativeFilter = Encode(filter);
+            float* from = stackalloc float[3] { origin.X, origin.Y, origin.Z };
+            float* along = stackalloc float[3] { direction.X, direction.Y, direction.Z };
+            fixed (RawQueryHit* hits = results)
+                return access.RayCast(access.Context, from, along, &nativeFilter, hits, results.Length);
+        }
+        public int ShapeCast(in ShapeQuery shape, Vector3 origin, Vector3 direction, in QueryFilter filter, out RawQueryHit hit)
+        {
+            hit = default;
+            if (!Accessible) return 0;
+            var nativeFilter = Encode(filter);
+            var nativeShape = Encode(shape);
+            float* from = stackalloc float[3] { origin.X, origin.Y, origin.Z };
+            float* along = stackalloc float[3] { direction.X, direction.Y, direction.Z };
+            fixed (RawQueryHit* single = &hit)
+                return access.ShapeCast(access.Context, &nativeShape, from, along, &nativeFilter, single);
+        }
+        public int Overlap(in ShapeQuery shape, Vector3 origin, in QueryFilter filter, Span<RawQueryHit> results)
+        {
+            if (!Accessible) return 0;
+            var nativeFilter = Encode(filter);
+            var nativeShape = Encode(shape);
+            float* from = stackalloc float[3] { origin.X, origin.Y, origin.Z };
+            fixed (RawQueryHit* hits = results)
+                return access.Overlap(access.Context, &nativeShape, from, &nativeFilter, hits, results.Length);
+        }
+        public int LayerByName(string name)
+        {
+            if (!Accessible) return -1;
+            var bytes = Utf8(name, "camada");
+            fixed (byte* pointer = bytes) return access.LayerByName(access.Context, pointer, bytes.Length);
+        }
+        public string LayerName(uint layer)
+        {
+            if (!Accessible) return string.Empty;
+            byte* buffer = stackalloc byte[NameCapacity];
+            var size = access.LayerName(access.Context, layer, buffer, NameCapacity);
+            return size <= 0 || size > NameCapacity ? string.Empty : Encoding.UTF8.GetString(buffer, size);
+        }
     }
 
     private static BehaviorWorld? _world;
@@ -251,7 +337,7 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 3 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 4 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);
@@ -278,6 +364,23 @@ public static unsafe class NativeBehaviorRuntime
     public static int Trigger(ulong sensor, ulong other, uint phase)
     {
         try { if (phase > 2) return 1; _world?.Trigger(sensor, other, phase); RefreshDiagnostics(); return 0; }
+        catch (Exception error) { _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }
+    }
+    /// <summary>
+    /// Contato sólido vindo do passo físico. `normal` é nulo quando o backend não
+    /// tem geometria a informar — o fim de um contato não traz.
+    /// </summary>
+    [UnmanagedCallersOnly]
+    public static int Contact(ulong self, ulong other, uint phase, float* normal)
+    {
+        try
+        {
+            if (phase > 2) return 1;
+            Vector3? direction = normal == null ? null : new Vector3(normal[0], normal[1], normal[2]);
+            _world?.Contact(self, other, phase, direction);
+            RefreshDiagnostics();
+            return 0;
+        }
         catch (Exception error) { _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }
     }
     [UnmanagedCallersOnly]

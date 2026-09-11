@@ -2,13 +2,13 @@
 #include "core/base.h"
 
 namespace ae::scene {
-// ABI v3 é independente de Editor e de headers do CLR. Todos os callbacks e
+// ABI v4 é independente de Editor e de headers do CLR. Todos os callbacks e
 // chamadas de runtime executam na thread dona do mundo, e os buffers só valem
 // durante a chamada.
 //
 // **Compatibilidade:** os campos de v2 permanecem nas mesmas posições. Um
 // consumidor que declare `version==2` continua encontrando o que esperava; o
-// runtime gerenciado exige v3 para usar os campos novos e recusa `size`
+// runtime gerenciado exige a versão corrente para usar os campos novos e recusa `size`
 // divergente, porque uma struct maior do que a acordada seria lida além do fim.
 //
 // Convenções dos campos novos:
@@ -19,8 +19,38 @@ namespace ae::scene {
 //     nem chega a ser avaliado; `lastStatus` traz o motivo real da última recusa.
 //   • propriedade trafega como (kind, bits): 0=float (padrão IEEE em 32 bits),
 //     1=bool, 2=enum u32, 3=referência de objeto.
+
+// Consultas físicas na fronteira: POD puro, buffers do chamador, identidade de
+// OBJETO (nunca handle de corpo nativo). `flags` do filtro: bit0 estático,
+// bit1 dinâmico, bit2 inclui sensores. `flags` do acerto: bit0 tem normal,
+// bit1 o corpo acertado é sensor.
+struct ScriptQueryFilter {
+  u32 size=sizeof(ScriptQueryFilter);
+  u32 gameplayLayerMask=0xffffffffu;
+  u32 flags=3;
+  u32 reserved=0;
+  u64 ignore=0;
+};
+struct ScriptQueryHit {
+  u64 object=0;
+  u64 collider=0;
+  float point[3]{};
+  float normal[3]{};
+  float distance=0;
+  float fraction=0;
+  u32 flags=0;
+  u32 reserved=0;
+};
+struct ScriptShapeQuery {
+  u32 kind=1; // 0 caixa, 1 esfera, 2 cápsula
+  float halfExtent[3]{.5f,.5f,.5f};
+  float radius=.5f;
+  float halfHeight=.5f;
+  float rotation[4]{0,0,0,1};
+};
+
 struct ScriptSceneAccess {
-  u32 version=3,size=sizeof(ScriptSceneAccess);
+  u32 version=4,size=sizeof(ScriptSceneAccess);
   void *context=nullptr;
   int (*exists)(void *,u64)=nullptr;
   int (*getTransform)(void *,u64,float *)=nullptr; // position3 quaternion4 scale3, local space
@@ -58,12 +88,23 @@ struct ScriptSceneAccess {
   // --- v3: transform de mundo --------------------------------------------
   int (*getWorldTransform)(void *,u64,float *)=nullptr;
   int (*setWorldTransform)(void *,u64,const float *)=nullptr;
+  // --- v4: consultas físicas ---------------------------------------------
+  // Todas devolvem a contagem REAL de acertos, que pode exceder `capacity`:
+  // quem chama decide se repete com um buffer maior, em vez de receber um
+  // resultado truncado sem saber. -1 significa argumento inválido.
+  int (*rayCast)(void *,const float *,const float *,const ScriptQueryFilter *,ScriptQueryHit *,int)=nullptr;
+  int (*shapeCast)(void *,const ScriptShapeQuery *,const float *,const float *,const ScriptQueryFilter *,ScriptQueryHit *)=nullptr;
+  int (*overlap)(void *,const ScriptShapeQuery *,const float *,const ScriptQueryFilter *,ScriptQueryHit *,int)=nullptr;
+  // Camadas de gameplay do projeto, para que um script possa montar a máscara
+  // por nome em vez de por índice mágico.
+  int (*layerByName)(void *,const u8 *,int)=nullptr;
+  int (*layerName)(void *,u32,u8 *,int)=nullptr;
   bool available() const {
     return exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
            worldId&&generation&&lastStatus&&parentOf&&childCount&&childAt&&findChild&&getName&&setName&&
            getActive&&setActive&&createObject&&destroyObject&&setParent&&componentCount&&componentAt&&
            findComponent&&addComponent&&removeComponent&&getProperty&&setProperty&&
-           getWorldTransform&&setWorldTransform;
+           getWorldTransform&&setWorldTransform&&rayCast&&shapeCast&&overlap&&layerByName&&layerName;
   }
 };
 struct ScriptRuntimeApi {
@@ -73,6 +114,9 @@ struct ScriptRuntimeApi {
   void (*stop)()=nullptr;
   int (*copyDiagnostics)(u8 *,int)=nullptr;
   int (*trigger)(u64,u64,u32)=nullptr;
-  bool available() const {return start&&update&&fixedUpdate&&stop&&copyDiagnostics&&trigger;}
+  // Contato SÓLIDO, entregue aos dois objetos do par. `normal` é nulo quando o
+  // backend não sabe informá-la (o fim de um contato não traz geometria).
+  int (*contact)(u64,u64,u32,const float *)=nullptr;
+  bool available() const {return start&&update&&fixedUpdate&&stop&&copyDiagnostics&&trigger&&contact;}
 };
 }

@@ -269,7 +269,7 @@ AE_TEST(editor_archive_v7_migrates_v6_and_keeps_defaults_stable) {
   for(u32 i=9;i<editorNumericProperties.size();++i)
     AE_EXPECT_EQ(editorPropertyValue(*document.find(document.root()),i),editorPropertyValue(defaults,i),"v7 omitted defaults remain compatible with v6");
   const auto sparse=serializeEditorDocument(document,0);
-  AE_EXPECT_TRUE(sparse.starts_with("AETHER_EDITOR 10 "),"write current version");
+  AE_EXPECT_TRUE(sparse.starts_with("AETHER_EDITOR 11 "),"write current version");
   AE_EXPECT_TRUE(sparse.size()<legacy.size()/2,"default arrays are not repeated");
   EditorDocument restored;
   AE_EXPECT_TRUE(deserializeEditorDocument(sparse,0,restored),"read v7");

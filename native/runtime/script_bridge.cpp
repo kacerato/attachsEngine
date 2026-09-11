@@ -292,6 +292,56 @@ void ScriptBridge::installAccess() {
     s.lastStatus_ = s.world_->removeComponent({s.world_->handle(static_cast<ObjectId>(id)), instance});
     return s.lastStatus_ == WorldStatus::Ok;
   };
+  // --- consultas fisicas --------------------------------------------------
+  access_.rayCast = [](void *c, const float *origin, const float *direction,
+                       const scene::ScriptQueryFilter *filter, scene::ScriptQueryHit *out, int capacity) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    if (!origin || !direction || !filter || filter->size != sizeof(*filter) || capacity < 0 || capacity > 4096) return -1;
+    std::vector<QueryHit> hits(static_cast<usize>(capacity));
+    const u32 total = s.physics_->rayCastAll(origin, direction, s.queryFilter(*filter),
+                                             capacity ? hits.data() : nullptr, static_cast<u32>(capacity));
+    s.copyHits(hits, total, out, capacity);
+    return static_cast<int>(total);
+  };
+  access_.shapeCast = [](void *c, const scene::ScriptShapeQuery *shape, const float *origin,
+                         const float *direction, const scene::ScriptQueryFilter *filter,
+                         scene::ScriptQueryHit *out) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    if (!shape || !origin || !direction || !filter || filter->size != sizeof(*filter) || !out) return -1;
+    QueryHit hit;
+    if (!s.physics_->shapeCast(ScriptBridge::queryShape(*shape), origin, direction, s.queryFilter(*filter), hit)) return 0;
+    s.copyHits({hit}, 1, out, 1);
+    return 1;
+  };
+  access_.overlap = [](void *c, const scene::ScriptShapeQuery *shape, const float *origin,
+                       const scene::ScriptQueryFilter *filter, scene::ScriptQueryHit *out, int capacity) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    if (!shape || !origin || !filter || filter->size != sizeof(*filter) || capacity < 0 || capacity > 4096) return -1;
+    std::vector<QueryHit> hits(static_cast<usize>(capacity));
+    const u32 total = s.physics_->overlap(ScriptBridge::queryShape(*shape), origin, s.queryFilter(*filter),
+                                          capacity ? hits.data() : nullptr, static_cast<u32>(capacity));
+    s.copyHits(hits, total, out, capacity);
+    return static_cast<int>(total);
+  };
+  access_.layerByName = [](void *c, const u8 *name, int length) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    const auto text = viewOf(name, length);
+    if (text.empty()) return -1;
+    const auto &layers = s.world_->graph().layers();
+    for (u32 layer = 0; layer < GameplayLayers::kCount; ++layer)
+      if (layers.name(layer) == text) return static_cast<int>(layer);
+    return -1;
+  };
+  access_.layerName = [](void *c, u32 layer, u8 *out, int capacity) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    const auto name = s.world_->graph().layers().name(layer);
+    if (name.empty()) return -1;
+    const int size = static_cast<int>(name.size());
+    if (!out || capacity < size) return size;
+    std::memcpy(out, name.data(), name.size());
+    return size;
+  };
+
   access_.getProperty = [](void *c, u64 id, u64 instance, const u8 *propertyId, int length, u32 *kind, u64 *bits) -> int {
     auto &s = *static_cast<ScriptBridge *>(c);
     if (!kind || !bits) return 0;
@@ -370,6 +420,56 @@ bool ScriptBridge::update(float elapsed) {
 bool ScriptBridge::fixedUpdate(float elapsed) {
   if (!running_) return true;
   const bool ok = api_.fixedUpdate(elapsed) == 0;
+  collectDiagnostics();
+  return ok;
+}
+
+QueryFilter ScriptBridge::queryFilter(const scene::ScriptQueryFilter &filter) const {
+  QueryFilter value;
+  value.gameplayLayerMask = filter.gameplayLayerMask;
+  value.includeStatic = (filter.flags & 1u) != 0;
+  value.includeDynamic = (filter.flags & 2u) != 0;
+  value.includeSensors = (filter.flags & 4u) != 0;
+  value.ignore = filter.ignore <= std::numeric_limits<ObjectId>::max()
+                     ? static_cast<ObjectId>(filter.ignore) : kInvalidObject;
+  return value;
+}
+
+QueryShapeDesc ScriptBridge::queryShape(const scene::ScriptShapeQuery &shape) {
+  QueryShapeDesc value;
+  value.kind = static_cast<QueryShapeKind>(shape.kind > 2 ? 1u : shape.kind);
+  std::copy(shape.halfExtent, shape.halfExtent + 3, value.halfExtent);
+  value.radius = shape.radius;
+  value.halfHeight = shape.halfHeight;
+  std::copy(shape.rotation, shape.rotation + 4, value.rotation);
+  return value;
+}
+
+void ScriptBridge::copyHits(const std::vector<QueryHit> &hits, u32 total, scene::ScriptQueryHit *out, int capacity) {
+  if (!out || capacity <= 0) return;
+  const u32 copied = std::min<u32>(static_cast<u32>(capacity), std::min<u32>(total, static_cast<u32>(hits.size())));
+  for (u32 i = 0; i < copied; ++i) {
+    const auto &hit = hits[i];
+    scene::ScriptQueryHit value{};
+    value.object = hit.object;
+    value.collider = hit.colliderInstance;
+    std::copy(hit.point, hit.point + 3, value.point);
+    std::copy(hit.normal, hit.normal + 3, value.normal);
+    value.distance = hit.distance;
+    value.fraction = hit.fraction;
+    value.flags = (hit.hasNormal ? 1u : 0u) | (hit.isSensor ? 2u : 0u);
+    out[i] = value;
+  }
+}
+
+bool ScriptBridge::contact(const ContactEvent &event) {
+  if (!running_ || !api_.contact) return true;
+  const float *normal = event.hasNormal ? event.normal : nullptr;
+  // Os dois lados recebem o evento, cada um com o outro objeto: um contato não
+  // tem "dono", e obrigar o projeto a saber qual corpo o backend listou
+  // primeiro seria uma regra invisível.
+  const bool ok = api_.contact(event.first, event.second, event.phase, normal) == 0 &&
+                  api_.contact(event.second, event.first, event.phase, normal) == 0;
   collectDiagnostics();
   return ok;
 }

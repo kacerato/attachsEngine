@@ -11,6 +11,7 @@
 // Sem Vulkan, sem Android, sem I/O: testável integralmente no host.
 #pragma once
 #include "core/base.h"
+#include "runtime/gameplay_layers.h"
 #include "scene/components.h"
 
 #include <span>
@@ -133,6 +134,16 @@ public:
   // frame anterior não vale mais, sem que ninguém precise comparar estado.
   u64 revision() const noexcept { return revision_; }
 
+  // Estado de CENA, não de objeto: as camadas de gameplay do projeto viajam com
+  // o documento, são copiadas para o mundo de execução junto com a hierarquia e
+  // voltam ao arquivo na gravação.
+  const GameplayLayers &layers() const noexcept { return layers_; }
+  void setLayers(const GameplayLayers &value) {
+    if (layers_ == value) return;
+    layers_ = value;
+    ++revision_;
+  }
+
 protected:
   // Ponto de extensão para consumidores com invariantes próprias de aparência.
   // O grafo já recusa transformação inválida e coleção de componentes inválida;
@@ -152,6 +163,7 @@ private:
   bool attachToParent(ObjectId id, ObjectId parent, u32 childIndex);
 
   std::vector<Record> records_;  // indexado por id; a posição 0 nunca é usada
+  GameplayLayers layers_{};
   ObjectId rootId_ = kInvalidObject;
   ObjectId nextId_ = 1;
   u32 aliveCount_ = 0;
