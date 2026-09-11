@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Aether.Scene")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+41ac6b84980afe86bf35ed73551f2b0142032807")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0f569725fc38a12ab55e86d0e89efab0f4352264")]
 [assembly: System.Reflection.AssemblyProductAttribute("Aether.Scene")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Aether.Scene")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

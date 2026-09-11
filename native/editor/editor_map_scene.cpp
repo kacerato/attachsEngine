@@ -31,12 +31,14 @@ bool inheritedVisible(const runtime::SceneGraph &document, EditorEntityId id) {
   return true;
 }
 }
-bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices, u64 packageFingerprint) {
-  if(draws.size()+1>EditorDocument::kMaximumEntities) return false;
-  std::vector<std::shared_ptr<const EditorPickMesh>> meshes(draws.size());
+namespace {
+bool buildPickMeshes(std::span<const renderer::MapDrawRecord> draws,std::span<const u8> vertices,
+                     std::span<const u32> indices,std::vector<std::shared_ptr<const EditorPickMesh>> &out) {
+  out.assign(draws.size(),nullptr);
   if(vertices.empty()!=indices.empty() || vertices.size()%renderer::MapVertexStride) return false;
+  if(vertices.empty()) return true;
   usize triangleCount=0;
-  if(!vertices.empty()) for(u32 index=0;index<draws.size();++index) {
+  for(u32 index=0;index<draws.size();++index) {
     const auto &draw=draws[index];triangleCount+=draw.indexCount/3;
     if(!draw.indexCount || draw.indexCount%3 || triangleCount>EditorPickMesh::MaximumTriangles ||
        u64(draw.firstIndex)+draw.indexCount>indices.size()) return false;
@@ -47,8 +49,37 @@ bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::
       std::memcpy(triangles[t].data()+point*3,vertices.data()+vertex*renderer::MapVertexStride,3*sizeof(float));
     }
     auto mesh=std::make_shared<EditorPickMesh>();if(!mesh->build(std::move(triangles))) return false;
-    meshes[index]=std::move(mesh);
+    out[index]=std::move(mesh);
   }
+  return true;
+}
+} // namespace
+
+bool EditorMapScene::adoptPackage(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws,
+                                  std::span<const renderer::MapMaterialRecord> materials,
+                                  std::span<const u8> vertices, std::span<const u32> indices,
+                                  std::span<const resources::AssetGuid> identities, u64 packageFingerprint) {
+  std::vector<std::shared_ptr<const EditorPickMesh>> meshes;
+  if(!buildPickMeshes(draws,vertices,indices,meshes)) return false;
+  std::vector<resources::AssetGuid> assets(draws.size());
+  for(u32 index=0;index<draws.size();++index)
+    assets[index]=index<identities.size() && identities[index].valid()
+        ? identities[index] : packageAssetGuid(packageFingerprint,index);
+  // Duas identidades iguais no mesmo pacote fariam `assetSlot` escolher pela
+  // ordem da lista — exatamente o que a identidade existe para eliminar.
+  for(u32 a=0;a<assets.size();++a) for(u32 b=0;b<a;++b) if(assets[a]==assets[b]) return false;
+  pickMeshes_=std::move(meshes);
+  source_.assign(draws.begin(),draws.end());
+  materials_.assign(materials.begin(),materials.end());
+  assets_=std::move(assets);
+  reconcileAssets(document);
+  return true;
+}
+
+bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices, u64 packageFingerprint) {
+  if(draws.size()+1>EditorDocument::kMaximumEntities) return false;
+  std::vector<std::shared_ptr<const EditorPickMesh>> meshes;
+  if(!buildPickMeshes(draws,vertices,indices,meshes)) return false;
   EditorDocument prepared;
   for(u32 index=0;instantiate && index<draws.size();++index) {
     const auto &draw=draws[index];

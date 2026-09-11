@@ -117,6 +117,7 @@ enum class EditorWidget : u32 {
   CreateOceanWater,
   CreateRiverWater,
   CreateBuoyantBox,
+  ImportModel,
   CreateMenuClose,
   CreationSearch,
   CreationClearSearch,
@@ -284,6 +285,10 @@ struct EditorScreenState final {
   bool workspaceMenu=false;
   unsigned creationCategory=0,creationSelection=0,creationPage=0;
   u32 creationAvailable=3; // Basic object and camera; resource tools opt in on import.
+  // O editor não conhece Android: ele levanta o pedido e o shell abre o seletor.
+  bool modelImportRequested=false;
+  // Última mensagem da importação, para a barra de status.
+  std::string importStatus;
   bool editingCreationSearch=false;
   char creationSearch[kEditorNameCapacity]{};
   bool editingHierarchySearch=false;

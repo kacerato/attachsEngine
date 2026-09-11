@@ -3496,64 +3496,7 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
                                        waterDisplacementCapacity_,
                                        cancel, mapAssetRoot,
                                        waterGridSegments, waterAuthoringEnabled_)) return false;
-    sourceMapDraws_=dirtRoadResources_.draws();
-    if(emptyScene_) { authoredVisibility_.assign(sourceMapDraws_.size(),0);authoredShadows_.assign(sourceMapDraws_.size(),0); }
-    instanceCount_ = static_cast<u32>(dirtRoadResources_.draws().size());
-    for (u32 index = 0; index < instanceCount_; ++index) {
-      const u32 material = dirtRoadResources_.draws()[index].materialIndex;
-      const u32 flags = dirtRoadResources_.materials()[material].flags;
-      // Um impostor descartado aqui some da cadeia inteira: sem draw nas filas,
-      // buildLodRenderGroups nunca ve o nivel e o grupo termina no nivel
-      // simplificado anterior. E o controle do A/B, nao um caminho de qualidade.
-      if (!foliageImpostors_ && (flags & renderer::MapMaterialImpostor) != 0) continue;
-      if ((flags & renderer::MapMaterialWater) != 0) {
-        waterDrawOrder_.push_back(index);
-        const u32 cameraWater = renderer::MapMaterialWater |
-                                renderer::MapMaterialWaterCameraGrid;
-        cameraWaterHorizonFillActive_ |= (flags & cameraWater) == cameraWater;
-      } else if ((flags & renderer::MapMaterialBlend) != 0)
-        transparentDrawOrder_.push_back(index);
-      else if ((flags & renderer::MapMaterialAlphaMask) != 0)
-        coverageDrawOrder_.push_back(index);
-      else
-        solidDrawOrder_.push_back(index);
-    }
-    waterSubpassActive_ = !waterDrawOrder_.empty();
-    visibleSolidDrawOrder_.reserve(solidDrawOrder_.size());
-    visibleCoverageDrawOrder_.reserve(coverageDrawOrder_.size());
-    visibleTransparentDrawOrder_.reserve(transparentDrawOrder_.size() + waterDrawOrder_.size());
-    // LOD groups (see renderer::selectLodLevel): spatial chunking happens
-    // after import and can produce MANY draws for each imported LOD level.
-    // Bucket by (lodGroupId,lodLevel); treating group.size() as level count
-    // would select arbitrary level-0 chunks and silently drop the rest.
-    if (!renderer::buildLodRenderGroups(dirtRoadResources_.draws(), solidDrawOrder_,
-                                        lodGroups_, ungroupedSolidDrawOrder_)) {
-      __android_log_print(ANDROID_LOG_ERROR, LogTag, "[LOD] grupos opacos de runtime inválidos.");
-      return false;
-    }
-    if (!renderer::buildLodRenderGroups(dirtRoadResources_.draws(), coverageDrawOrder_,
-                                        coverageLodGroups_, ungroupedCoverageDrawOrder_)) {
-      __android_log_print(ANDROID_LOG_ERROR, LogTag, "[LOD] grupos alpha-test de runtime inválidos.");
-      return false;
-    }
-    renderer::buildLodLevelZeroDrawOrder(lodGroups_, ungroupedSolidDrawOrder_,
-                                         levelZeroSolidDrawOrder_);
-    renderer::buildLodLevelZeroDrawOrder(coverageLodGroups_, ungroupedCoverageDrawOrder_,
-                                         levelZeroCoverageDrawOrder_);
-    // Every frame contributes chunks for one active level and optionally
-    // one neighbor, still a subset of all levels already in solidDrawOrder_.
-    lodFilteredSolidDrawOrder_.reserve(solidDrawOrder_.size());
-    lodFilteredCoverageDrawOrder_.reserve(coverageDrawOrder_.size());
-    const u32 maximumHzbCandidates = static_cast<u32>(
-        solidDrawOrder_.size() + coverageDrawOrder_.size());
-    hzbWorkloadEligible_ = (hzbOcclusionEnabled_ || hzbComputeEnabled_) &&
-        !renderingPolicy_.dynamicResolution.enabled &&
-        renderer::shouldRunHzb(maximumHzbCandidates, hzbMinimumCandidateDraws_);
-    if ((hzbOcclusionEnabled_ || hzbComputeEnabled_) && !hzbWorkloadEligible_) {
-      __android_log_print(ANDROID_LOG_INFO, LogTag,
-          "[HZB] solicitado, mas dispensado antes da alocação: candidatos máximos=%u limiar=%u.",
-          maximumHzbCandidates, hzbMinimumCandidateDraws_);
-    }
+    if (!rebuildDrawOrders()) return false;
   }
   if (!createInstanceBuffer()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o buffer de instâncias.");
@@ -3842,6 +3785,127 @@ void InstancedRenderer::endGpuRegion(GpuPassClass pass) {
   if (commandBuffer_ == VK_NULL_HANDLE) return;
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
   if (gpuTimingEnabled()) gpuFrameTimer_.markPassEnd(commandBuffer_, pass);
+}
+
+// A montagem que depende da lista de desenhos do pacote: ordens por tipo de
+// material, grupos de LOD e elegibilidade de HZB. Extraida de `initialize`
+// porque a importacao de um modelo no aparelho acrescenta desenhos ao pacote --
+// e refazer isso pela metade deixaria um desenho novo fora de toda fila,
+// invisivel sem nenhum erro.
+bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, std::span<const u32> indices,
+                                                std::span<const renderer::MapDrawRecord> draws,
+                                                std::span<const renderer::MapMaterialRecord> materials) {
+  if(!dirtRoadPreview_ || !rhiDevice_ || device_==VK_NULL_HANDLE) {
+    __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] renderer sem contexto para absorver geometria.");
+    return false;
+  }
+  // Trocar buffers de vértice com um quadro em voo desenharia memória já
+  // liberada. Importar é raro e explícito: esperar é a resposta certa aqui, e
+  // não uma fila de destruição diferida que ninguém mais no renderer usa.
+  vkDeviceWaitIdle(device_);
+  if(!dirtRoadResources_.rebuildAuthoringLibrary(*rhiDevice_,uploadContext_,vertices,indices,draws,materials)) {
+    __android_log_print(ANDROID_LOG_ERROR,LogTag,
+        "[Import] biblioteca recusada: vertices=%zu indices=%zu desenhos=%zu materiais=%zu",
+        vertices.size()/renderer::MapVertexStride,indices.size(),draws.size(),materials.size());
+    return false;
+  }
+  // A cena publicada descreve a lista ANTERIOR de desenhos. Descartá-la obriga
+  // o próximo quadro a republicar tudo, em vez de casar poses novas com
+  // topologia velha.
+  pendingScene_.clear();pendingMapPoseCount_=0;pendingAuthoredStateValid_=false;
+  authoredMaterials_.clear();authoredVisibility_.clear();authoredShadows_.clear();
+  authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();
+  shadowCascadeDirtyMask_=0xffffffffu;
+  if(!rebuildDrawOrders()) {
+    __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] filas de desenho recusaram o pacote novo.");
+    return false;
+  }
+  // Os buffers antigos precisam sair antes: o alocador não sobrescreve uma
+  // alça viva, e sem isto a recriação falharia com o pacote já publicado.
+  instanceBuffer_.reset();
+  indirectBuffer_.reset();
+  if(!createInstanceBuffer()) {
+    __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] buffer de instancias recusado para %u desenhos.",instanceCount_);
+    return false;
+  }
+  // Os descritores de culling e compactação apontavam para o buffer indireto
+  // que acabou de ser substituído. Recriá-los é obrigatório; deixá-los velhos
+  // faria a GPU escrever contagens de desenho em memória liberada.
+  if(!createDrawCullResources() || !createDrawCompactionResources()) {
+    __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] recursos de culling recusaram o pacote novo.");
+    return false;
+  }
+  __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] pacote absorvido: %u desenhos, %zu vertices.",
+      instanceCount_,dirtRoadResources_.pickingVertices().size()/renderer::MapVertexStride);
+  return true;
+}
+
+bool InstancedRenderer::rebuildDrawOrders() {
+  solidDrawOrder_.clear();coverageDrawOrder_.clear();transparentDrawOrder_.clear();waterDrawOrder_.clear();
+  lodGroups_.clear();coverageLodGroups_.clear();
+  ungroupedSolidDrawOrder_.clear();ungroupedCoverageDrawOrder_.clear();
+  levelZeroSolidDrawOrder_.clear();levelZeroCoverageDrawOrder_.clear();
+  cameraWaterHorizonFillActive_=false;
+  sourceMapDraws_=dirtRoadResources_.draws();
+  if(emptyScene_) { authoredVisibility_.assign(sourceMapDraws_.size(),0);authoredShadows_.assign(sourceMapDraws_.size(),0); }
+  instanceCount_ = static_cast<u32>(dirtRoadResources_.draws().size());
+  for (u32 index = 0; index < instanceCount_; ++index) {
+    const u32 material = dirtRoadResources_.draws()[index].materialIndex;
+    const u32 flags = dirtRoadResources_.materials()[material].flags;
+    // Um impostor descartado aqui some da cadeia inteira: sem draw nas filas,
+    // buildLodRenderGroups nunca ve o nivel e o grupo termina no nivel
+    // simplificado anterior. E o controle do A/B, nao um caminho de qualidade.
+    if (!foliageImpostors_ && (flags & renderer::MapMaterialImpostor) != 0) continue;
+    if ((flags & renderer::MapMaterialWater) != 0) {
+      waterDrawOrder_.push_back(index);
+      const u32 cameraWater = renderer::MapMaterialWater |
+                              renderer::MapMaterialWaterCameraGrid;
+      cameraWaterHorizonFillActive_ |= (flags & cameraWater) == cameraWater;
+    } else if ((flags & renderer::MapMaterialBlend) != 0)
+      transparentDrawOrder_.push_back(index);
+    else if ((flags & renderer::MapMaterialAlphaMask) != 0)
+      coverageDrawOrder_.push_back(index);
+    else
+      solidDrawOrder_.push_back(index);
+  }
+  waterSubpassActive_ = !waterDrawOrder_.empty();
+  visibleSolidDrawOrder_.reserve(solidDrawOrder_.size());
+  visibleCoverageDrawOrder_.reserve(coverageDrawOrder_.size());
+  visibleTransparentDrawOrder_.reserve(transparentDrawOrder_.size() + waterDrawOrder_.size());
+  // LOD groups (see renderer::selectLodLevel): spatial chunking happens
+  // after import and can produce MANY draws for each imported LOD level.
+  // Bucket by (lodGroupId,lodLevel); treating group.size() as level count
+  // would select arbitrary level-0 chunks and silently drop the rest.
+  if (!renderer::buildLodRenderGroups(dirtRoadResources_.draws(), solidDrawOrder_,
+                                      lodGroups_, ungroupedSolidDrawOrder_)) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[LOD] grupos opacos de runtime inválidos.");
+    return false;
+  }
+  if (!renderer::buildLodRenderGroups(dirtRoadResources_.draws(), coverageDrawOrder_,
+                                      coverageLodGroups_, ungroupedCoverageDrawOrder_)) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[LOD] grupos alpha-test de runtime inválidos.");
+    return false;
+  }
+  renderer::buildLodLevelZeroDrawOrder(lodGroups_, ungroupedSolidDrawOrder_,
+                                       levelZeroSolidDrawOrder_);
+  renderer::buildLodLevelZeroDrawOrder(coverageLodGroups_, ungroupedCoverageDrawOrder_,
+                                       levelZeroCoverageDrawOrder_);
+  // Every frame contributes chunks for one active level and optionally
+  // one neighbor, still a subset of all levels already in solidDrawOrder_.
+  lodFilteredSolidDrawOrder_.reserve(solidDrawOrder_.size());
+  lodFilteredCoverageDrawOrder_.reserve(coverageDrawOrder_.size());
+  const u32 maximumHzbCandidates = static_cast<u32>(
+      solidDrawOrder_.size() + coverageDrawOrder_.size());
+  hzbWorkloadEligible_ = (hzbOcclusionEnabled_ || hzbComputeEnabled_) &&
+      !renderingPolicy_.dynamicResolution.enabled &&
+      renderer::shouldRunHzb(maximumHzbCandidates, hzbMinimumCandidateDraws_);
+  if ((hzbOcclusionEnabled_ || hzbComputeEnabled_) && !hzbWorkloadEligible_) {
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+        "[HZB] solicitado, mas dispensado antes da alocação: candidatos máximos=%u limiar=%u.",
+        maximumHzbCandidates, hzbMinimumCandidateDraws_);
+  }
+
+  return true;
 }
 
 bool InstancedRenderer::queueMapScene(std::span<const renderer::MapDrawState> draws) {

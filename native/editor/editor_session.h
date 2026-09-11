@@ -25,6 +25,7 @@
 #include "editor/editor_camera.h"
 #include "editor/editor_commands.h"
 #include "editor/editor_map_scene.h"
+#include "resources/gltf_import.h"
 #include "editor/editor_archive.h"
 #include "editor/editor_document.h"
 #include "editor/editor_history.h"
@@ -33,7 +34,9 @@
 #include "ui/ui_icon_atlas.h"
 #include "ui/ui_instance_builder.h"
 
+#include <functional>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace ae::editor {
@@ -140,6 +143,55 @@ public:
   bool save(const char *path, u64 fingerprint);
   bool load(const char *path, u64 fingerprint);
   bool importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true, std::span<const u8> vertices = {}, std::span<const u32> indices = {}, u64 packageFingerprint = 0);
+
+  // O pacote que o consumidor gráfico passou a ter depois de absorver a
+  // geometria importada. A sessão adota exatamente isto — não uma reconstrução
+  // própria —, senão o slot do editor e o da GPU poderiam divergir.
+  struct PublishedGeometry {
+    std::span<const renderer::MapDrawRecord> draws;
+    std::span<const renderer::MapMaterialRecord> materials;
+    std::span<const u8> vertices;
+    std::span<const u32> indices;
+  };
+  // Quem sabe subir geometria para a GPU é o shell; a sessão não conhece Vulkan.
+  // Recebe a biblioteca importada INTEIRA (ver `rebuildAuthoringLibrary`) e
+  // devolve o pacote resultante.
+  using GeometryPublisher = std::function<bool(std::span<const u8>, std::span<const u32>,
+                                               std::span<const renderer::MapDrawRecord>,
+                                               std::span<const renderer::MapMaterialRecord>,
+                                               PublishedGeometry &)>;
+  void setGeometryPublisher(GeometryPublisher publisher) { publishGeometry_ = std::move(publisher); }
+
+  struct ModelImportReport {
+    u32 objects = 0;
+    // Verdadeiro quando a fonte já estava no projeto: a geometria é publicada
+    // de novo e os objetos que já existem apontam para ela. Reimportar NÃO
+    // duplica os objetos — quem quer outra cópia instancia de novo, e isso é
+    // um ato diferente.
+    bool reimported = false;
+    std::string diagnostic;
+    bool cancelled = false;
+    resources::AssetGuid source{};
+    u32 skippedTextures = 0, skippedAnimations = 0, skippedSkins = 0;
+  };
+  // Importa um GLB e instancia seus nós na cena, num único passo de desfazer.
+  // `sourceName` é o caminho do arquivo dentro do projeto — é ele que vira o
+  // caminho do recurso no registro, e trocá-lo depois não muda a identidade.
+  bool importModel(std::span<const u8> bytes, std::string_view sourceName,
+                   const resources::GltfImportProgress &progress, ModelImportReport &report);
+  const resources::AssetRegistry &assets() const { return assets_; }
+  // Pedido de importação levantado pela interface, consumido pelo shell. O
+  // editor não abre o seletor: ele não conhece Android.
+  bool consumeModelImportRequest() {
+    const bool requested=state_.modelImportRequested;
+    state_.modelImportRequested=false;
+    return requested;
+  }
+  void setImportStatus(std::string message) { state_.status=message; state_.importStatus=std::move(message); }
+  // O registro do projeto, em texto, para o shell gravar ao lado da cena; e a
+  // carga, feita antes de reimportar as fontes.
+  std::string serializeAssets() const { return assets_.serialize(); }
+  bool loadAssets(std::string_view text) { return resources::AssetRegistry::deserialize(text, assets_); }
   bool extractMap(std::vector<renderer::MapDrawState> &out) const { return mapScene_.extract(document_, out); }
   // As luzes saem do MESMO grafo que a câmera e os desenhos: em execução, o
   // mundo de Play; fora dele, o documento autoral. É o que faz um script mover
@@ -216,6 +268,39 @@ public:
 
 
 private:
+  // Geometria importada neste processo, UM bloco por arquivo de origem.
+  //
+  // Por fonte, e não uma lista achatada, porque reimportar substitui o bloco
+  // daquele arquivo e preserva os outros. Numa lista achatada, reimportar
+  // exigiria remendar offsets no meio — e um offset errado lê a geometria do
+  // vizinho sem nenhum erro.
+  struct ImportedSource {
+    resources::AssetGuid guid;
+    std::vector<u8> vertices;
+    std::vector<u32> indices;
+    std::vector<renderer::MapDrawRecord> draws;
+    std::vector<renderer::MapMaterialRecord> materials;
+    std::vector<resources::AssetGuid> identities;
+    std::vector<std::string> names;
+  };
+  struct ImportedLibrary {
+    std::vector<u8> vertices;
+    std::vector<u32> indices;
+    std::vector<renderer::MapDrawRecord> draws;
+    std::vector<renderer::MapMaterialRecord> materials;
+    std::vector<resources::AssetGuid> identities;
+    std::vector<std::string> names;
+  };
+  // Achata os blocos na ordem em que estão, remapeando offsets. A ordem é
+  // estável: reimportar não reordena as fontes, então os slots das outras não
+  // mudam por acidente.
+  static ImportedLibrary flattenSources(const std::vector<ImportedSource> &sources);
+  std::vector<ImportedSource> importedSources_;
+  // A impressão digital do pacote base, guardada na importação inicial: é ela
+  // que deriva a identidade das primitivas internas em toda adoção posterior.
+  u64 packageFingerprint_ = 0;
+  resources::AssetRegistry assets_;
+  GeometryPublisher publishGeometry_;
   static u64 nextSceneEpoch() noexcept;
   struct ViewportPointer final {
     u32 id = 0;

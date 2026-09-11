@@ -3,6 +3,7 @@
 #include <cstring>
 #include "platform/android/android_paths.h"
 #include "platform/android/android_launch_options.h"
+#include "platform/android/android_model_picker.h"
 #include "platform/android/android_runtime_controls.h"
 #include "platform/android/astc_encode_probe.h"
 #include "platform/android/water_spectral_probe.h"
@@ -40,6 +41,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <future>
 #include <atomic>
 #include <time.h>
@@ -590,6 +592,60 @@ void updateEditorCodeCompiler(AndroidShell &shell) {
 // The worker exclusively owns the renderer and graphics queue until get() hands
 // ownership back. No frame submits overlap upload. Surface teardown cancels and
 // joins BEFORE destroying anything referenced by the worker.
+namespace {
+// O registro de recursos mora ao lado da cena, dentro do projeto.
+std::string projectAssetRegistryPath(const char *projectPath) {
+  return projectPath && projectPath[0] ? std::string(projectPath)+"/.astra/assets.astra" : std::string();
+}
+bool writeProjectAssetRegistry(const char *projectPath,const std::string &text) {
+  const auto path=projectAssetRegistryPath(projectPath);
+  if(path.empty()) return false;
+  std::error_code code;
+  std::filesystem::create_directories(std::string(projectPath)+"/.astra",code);
+  FILE *file=std::fopen(path.c_str(),"wb");
+  if(!file) return false;
+  const bool ok=std::fwrite(text.data(),1,text.size(),file)==text.size();
+  return (std::fclose(file)==0)&&ok;
+}
+// Reabre as fontes registradas e republica a geometria delas. Sem isto, uma cena
+// salva com um modelo importado abriria com os objetos apontando para recursos
+// que este processo ainda não carregou -- referência ausente, objeto invisível.
+void reimportProjectSources(AndroidShell &shell) {
+  const auto path=projectAssetRegistryPath(shell.editorProjectPath);
+  if(path.empty()) return;
+  std::string text;
+  if(FILE *file=std::fopen(path.c_str(),"rb")) {
+    char chunk[4096];ae::usize read=0;
+    while((read=std::fread(chunk,1,sizeof(chunk),file))>0) text.append(chunk,read);
+    std::fclose(file);
+  }
+  if(text.empty()) return;
+  if(!shell.editorSession.loadAssets(text)) {
+    __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] registro de recursos invalido; preservado no disco.");
+    return;
+  }
+  for(const auto &record:shell.editorSession.assets().records()) {
+    if(record.type!=ae::resources::AssetType::Mesh || record.source.empty()) continue;
+    const std::string absolute=std::string(shell.editorProjectPath)+"/"+record.source;
+    std::vector<ae::u8> bytes;
+    if(FILE *file=std::fopen(absolute.c_str(),"rb")) {
+      char chunk[16384];ae::usize read=0;
+      while((read=std::fread(chunk,1,sizeof(chunk),file))>0)
+        bytes.insert(bytes.end(),reinterpret_cast<ae::u8 *>(chunk),reinterpret_cast<ae::u8 *>(chunk)+read);
+      std::fclose(file);
+    }
+    ae::editor::EditorSession::ModelImportReport report;
+    if(bytes.empty())
+      __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] fonte ausente: %s",record.source.c_str());
+    else if(!shell.editorSession.importModel(bytes,record.source,{},report))
+      __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] fonte %s recusada: %s",
+          record.source.c_str(),report.diagnostic.c_str());
+    else
+      __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] fonte reaberta: %s",record.source.c_str());
+  }
+}
+} // namespace
+
 void collectRendererInitialization(AndroidShell &shell, bool cancel) {
   if (!shell.rendererInitialization.valid()) return;
   if (cancel) shell.cancelRendererInitialization.store(true);
@@ -602,6 +658,21 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
   // sintoma quando esta chamada faltava.
   if (shell.editorUi && shell.instancedRendererReady &&
       shell.instancedRenderer.uiRendererReady()) {
+    // O editor não conhece Vulkan: quem sobe geometria importada para a GPU é o
+    // shell, e é ele que devolve o pacote resultante para o editor adotar.
+    shell.editorSession.setGeometryPublisher(
+        [&shell](std::span<const ae::u8> vertices, std::span<const ae::u32> indices,
+                 std::span<const ae::renderer::MapDrawRecord> draws,
+                 std::span<const ae::renderer::MapMaterialRecord> materials,
+                 ae::editor::EditorSession::PublishedGeometry &out) {
+          if(!shell.instancedRenderer.rebuildAuthoringGeometry(vertices,indices,draws,materials)) return false;
+          out={shell.instancedRenderer.mapDraws(),shell.instancedRenderer.mapMaterials(),
+               shell.instancedRenderer.pickingVertices(),shell.instancedRenderer.pickingIndices()};
+          // A republicação da cena é obrigatória depois de trocar o pacote: as
+          // poses publicadas descreviam a lista anterior de desenhos.
+          shell.editorPublishedRevision=~ae::u64{0};
+          return true;
+        });
     shell.editorSession.initialize(&shell.instancedRenderer.uiFont(),
                                    &shell.instancedRenderer.uiIcons());
     shell.editorSession.usePlatformTextInput(true);
@@ -617,6 +688,7 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
         const auto initial=shell.instancedRenderer.defaultCamera();
         shell.editorSession.setCameraPose(initial.position,initial.yaw,initial.pitch);
       }
+      if (shell.editorMapImported) reimportProjectSources(shell);
       if (shell.editorMapImported && shell.app->activity->internalDataPath) {
         ae::u64 projectId=14695981039346656037ull;
         for(const unsigned char *p=reinterpret_cast<const unsigned char *>(shell.editorProjectPath);*p;++p) {projectId^=*p;projectId*=1099511628211ull;}
@@ -1761,8 +1833,62 @@ void android_main(android_app *app) {
           if(shell.editorSession.save(shell.editorSavePath.c_str(),shell.editorPackageFingerprint))
             shell.editorSavedRevision=shell.editorSession.document().revision();
           else __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Falha ao salvar cena.");
+          // O registro acompanha a cena: uma cena que referencia recursos e um
+          // registro que não sabe deles abririam com objetos sem malha.
+          if(shell.editorSession.assets().size() &&
+             !writeProjectAssetRegistry(shell.editorProjectPath,shell.editorSession.serializeAssets()))
+            __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Falha ao salvar o registro de recursos.");
         }
         if(!editorPlaying && shell.authoredWaterPlay.active()) {shell.authoredWaterPlay.stop();shell.instancedRenderer.clearWaterRipples();shell.instancedRenderer.setWaterSimulationClock(-1);}
+        // Importação de modelo: o editor pede, o sistema escolhe, o shell lê os
+        // bytes, copia a FONTE para dentro do projeto e manda importar. A cópia
+        // vem antes da importação de propósito: depois disso o projeto abre sem
+        // depender do URI temporário do seletor.
+        if(shell.editorSession.consumeModelImportRequest()) ae::platform::android::requestModelPick();
+        if(ae::platform::android::ModelPickerResult picked;
+           ae::platform::android::takeModelPickResult(picked)) {
+          if(!picked.accepted) {
+            shell.editorSession.setImportStatus(picked.diagnostic.empty()?"Importação cancelada"
+                                                                        :picked.diagnostic);
+          } else if(!shell.editorProjectPath[0]) {
+            shell.editorSession.setImportStatus("Este espaço de trabalho não tem projeto para guardar a fonte.");
+          } else {
+            std::string name=picked.displayName.empty()?std::string("modelo.glb"):picked.displayName;
+            // O nome vem do provedor de conteúdo e é texto de fora: um separador
+            // aqui viraria uma pasta fora de `Fontes/`, ou um caminho recusado
+            // pelo registro. Trocar por `_` mantém o nome reconhecível.
+            for(auto &character:name) if(character=='/'||character=='\\'||character==':') character='_';
+            const std::string relative="Fontes/"+name;
+            const std::string directory=std::string(shell.editorProjectPath)+"/Fontes";
+            std::filesystem::create_directories(directory);
+            const std::string absolute=directory+"/"+name;
+            bool stored=false;
+            if(FILE *file=std::fopen(absolute.c_str(),"wb")) {
+              stored=std::fwrite(picked.bytes.data(),1,picked.bytes.size(),file)==picked.bytes.size();
+              stored=(std::fclose(file)==0)&&stored;
+            }
+            ae::editor::EditorSession::ModelImportReport report;
+            if(!stored) {
+              shell.editorSession.setImportStatus("Não foi possível guardar a fonte no projeto.");
+            } else if(!shell.editorSession.importModel(picked.bytes,relative,{},report)) {
+              shell.editorSession.setImportStatus(report.diagnostic);
+              __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] %s: %s",relative.c_str(),report.diagnostic.c_str());
+            } else {
+              std::string message=report.reimported
+                  ? "Modelo reimportado: "+std::to_string(report.objects)+" objeto(s) novo(s)"
+                  : "Modelo importado: "+std::to_string(report.objects)+" objeto(s)";
+              // O que o arquivo trazia e a importação não trouxe aparece para o
+              // usuário; ficar calado sobre a animação perdida seria pior.
+              if(report.skippedTextures||report.skippedAnimations||report.skippedSkins)
+                message+=" · sem texturas/animação";
+              shell.editorSession.setImportStatus(message);
+              __android_log_print(ANDROID_LOG_INFO,LogTag,
+                  "[Import] %s objetos=%u reimport=%d texturas_ignoradas=%u animacoes=%u peles=%u",
+                  relative.c_str(),report.objects,report.reimported?1:0,
+                  report.skippedTextures,report.skippedAnimations,report.skippedSkins);
+            }
+          }
+        }
         if (shell.editorMapImported && (editorPlaying || shell.editorPublishedRevision != shell.editorSession.document().revision())) {
           auto &authored=shell.authoredDraws;
           const bool changed=shell.editorPublishedRevision!=shell.editorSession.document().revision();

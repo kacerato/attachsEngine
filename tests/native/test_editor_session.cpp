@@ -43,14 +43,17 @@ AE_TEST(editor_independent_document_roundtrip_without_map_resources) {
 AE_TEST(editor_creation_availability_follows_imported_resources) {
   EditorSession session;
   AE_EXPECT_TRUE(session.importMap({}, {}, false),"independent source");
-  AE_EXPECT_EQ(session.screen().creationAvailable,3u,"only object and camera require no geometry");
+  // Objeto vazio, câmera e importar modelo não dependem de nenhuma geometria
+  // já carregada; todo o resto do catálogo depende.
+  const u32 semGeometria=3u|(1u<<8);
+  AE_EXPECT_EQ(session.screen().creationAvailable,semGeometria,"only object, camera and import require no geometry");
   std::vector<u8> vertices;std::vector<u32> indices;
   std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
   AE_EXPECT_TRUE(renderer::appendWaterAuthoringGeometry(renderer::MapVertexStride,32,vertices,indices,draws,materials),"explicit resource library");
   AE_EXPECT_TRUE(session.importMap(draws,materials,false),"import resources without instances");
   AE_EXPECT_TRUE(creationAvailable(session.screen(),4),"finite water has its resource");
   AE_EXPECT_TRUE(session.importMap({}, {}, false),"replace source with empty library");
-  AE_EXPECT_EQ(session.screen().creationAvailable,3u,"old capabilities do not survive source replacement");
+  AE_EXPECT_EQ(session.screen().creationAvailable,semGeometria,"old capabilities do not survive source replacement");
 }
 
 AE_TEST(editor_filesystem_browses_real_project_and_rejects_escape) {

@@ -10,6 +10,7 @@ public final class AetherActivity extends NativeActivity {
     // the NativeActivity entry point through manifest metadata.
     static { System.loadLibrary("aether_android"); }
     private EditorTextInput editorTextInput;
+    private ModelPicker modelPicker;
 
     @Override protected void onCreate(Bundle state) {
         // NativeActivity starts native code in super.onCreate: establish the dry
@@ -29,11 +30,21 @@ public final class AetherActivity extends NativeActivity {
         super.onResume();
         if (editorTextInput == null) editorTextInput = new EditorTextInput(this);
         editorTextInput.start();
+        if (modelPicker == null) modelPicker = new ModelPicker(this);
+        modelPicker.start();
     }
 
     @Override protected void onPause() {
         if (editorTextInput != null) editorTextInput.stop();
+        if (modelPicker != null) modelPicker.stop();
         super.onPause();
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        // O seletor de arquivos responde aqui. Quando o resultado não é dele, o
+        // NativeActivity continua recebendo o que sempre recebeu.
+        if (modelPicker != null && modelPicker.onActivityResult(requestCode, resultCode, data)) return;
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override protected void onNewIntent(Intent intent) {

@@ -35,6 +35,18 @@ public:
   // manda: o slot é recalculado. Cena antiga, sem identidade, ganha a derivada
   // do slot que ela já trazia.
   void reconcileAssets(EditorDocument &document) const;
+  // Adota um pacote novo SEM tocar no documento. É o que a importação usa: a
+  // biblioteca do processo cresce, os objetos que já existem continuam onde
+  // estão, e a reconciliação reata slot e identidade.
+  //
+  // `identities` é opcional e vale por desenho: uma entrada válida é usada como
+  // está — é o caso da geometria importada, cuja identidade vem do arquivo de
+  // origem e da chave estável, não do índice — e uma entrada vazia recebe a
+  // identidade derivada da impressão digital do pacote.
+  bool adoptPackage(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws,
+                    std::span<const renderer::MapMaterialRecord> materials,
+                    std::span<const u8> vertices, std::span<const u32> indices,
+                    std::span<const resources::AssetGuid> identities, u64 packageFingerprint);
   bool extract(const runtime::SceneGraph &document, std::vector<EditorMapUpdate> &out) const;
   bool bounds(const runtime::SceneGraph &document, EditorEntityId entity, float center[3], float &radius) const;
   bool localGeometry(u32 assetId,std::span<const EditorPickMesh::Triangle> &triangles,float relative[16]) const;

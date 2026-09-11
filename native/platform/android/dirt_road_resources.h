@@ -12,6 +12,7 @@
 
 #include <android/asset_manager.h>
 #include <atomic>
+#include <span>
 #include <vector>
 
 namespace ae::platform::android {
@@ -33,6 +34,15 @@ public:
                   const char *assetRoot = "dirt_road",
                   u32 waterGridSegments = 0, bool waterAuthoring = false);
   bool initializePrimitives(rhi::VulkanDevice &device,rhi::VulkanUploadContext &upload);
+  // Biblioteca de autoria = primitivas internas + geometria importada. Reconstrói
+  // do zero, sempre com a lista COMPLETA de extras: o incremental exigiria
+  // manter offsets antigos válidos entre importações, e um offset errado lê a
+  // geometria do vizinho sem nenhum erro. Falha fechada -- os buffers antigos só
+  // são soltos depois que os novos existem e subiram.
+  bool rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload,
+                               std::span<const u8> extraVertices, std::span<const u32> extraIndices,
+                               std::span<const renderer::MapDrawRecord> extraDraws,
+                               std::span<const renderer::MapMaterialRecord> extraMaterials);
   void shutdown();
 
   std::span<const u8> pickingVertices() const { return pickingVertices_; }

@@ -247,14 +247,80 @@ Mudar uma luz durante o Play funciona pelo mesmo caminho de qualquer
 propriedade: a coleta do quadro lê o mundo em execução, não o documento autoral.
 O modelo `ControleDeLuz` acende, apaga e pulsa uma luz por esse caminho.
 
-## 13. O que este documento NÃO afirma
+## 13. Recursos e importação
+
+Um recurso tem **identidade** (`AssetGuid`, 128 bits), um **caminho** e um
+**hash de conteúdo**, e os três são coisas diferentes:
+
+| Ação | Muda o caminho | Muda o hash | Muda a identidade |
+|---|---|---|---|
+| Renomear ou mover o arquivo | sim | não | **não** |
+| Editar o arquivo e reimportar | não | sim | **não** |
+| Importar outro arquivo | — | — | sim |
+
+É o motivo de o registro existir. Uma cena que referencia por caminho quebra
+quando alguém arrasta o arquivo para outra pasta; uma que referencia por hash
+quebra quando alguém corrige uma normal.
+
+O registro (`.astra/assets.astra`, ao lado da cena) guarda por recurso: tipo,
+fonte, hash, versão e parâmetros do importador, dependências e derivados.
+Dependência para um GUID inexistente é recusada na entrada, apagar recurso com
+dependente é recusado com a lista de quem depende, e uma leitura inválida deixa
+o registro anterior intacto.
+
+**Malha**: `MeshRenderer` carrega `mesh` (o slot resolvido neste processo) e
+`asset` (a identidade). Ao carregar, o slot é recalculado a partir da
+identidade; quando ela não está no pacote, o slot vira **zero** — referência
+ausente é informação, e desenhar a malha que por acaso ocupa o índice antigo
+seria corromper a cena em silêncio. Cena anterior a isto carrega e ganha a
+identidade derivada do slot que já trazia.
+
+**Importar um GLB no aparelho.** `Adicionar objeto → Geometria → Importar
+modelo` abre o seletor do sistema. O URI é `content://` e **não** vira caminho
+POSIX: quem lê os bytes é o `ContentResolver`, que é quem tem a permissão. O
+arquivo é copiado para `Fontes/` dentro do projeto antes de qualquer outra
+coisa — depois disso o projeto abre sem depender do URI temporário. Ao reabrir,
+as fontes do registro são relidas e a geometria republicada; os objetos que já
+estavam na cena reatam pelo identificador, sem duplicar.
+
+O que a importação traz e o que não traz:
+
+| Traz | Não traz |
+|---|---|
+| hierarquia de nós, com TRS e `matrix` | texturas (imagens) |
+| instâncias: o mesmo mesh em vários nós custa N desenhos e **uma** cópia da geometria | skins e animações |
+| primitivas TRIANGLES | pontos, linhas, faixas e leques |
+| POSITION, NORMAL, TANGENT, TEXCOORD_0/1, COLOR_0 | câmeras e luzes do arquivo |
+| fatores PBR, emissivo, alfa e dupla face | extensões do formato |
+
+Texturas ficam de fora por um motivo concreto: o runtime não decodifica PNG nem
+JPEG, e o decodificador do sistema (`AImageDecoder`) só existe a partir do
+Android 11 enquanto o mínimo suportado é o 8. O material chega com os fatores,
+que é o que o shader consome sem imagem. O que o arquivo trazia e ficou para
+trás é **contado** e aparece na barra de status.
+
+Nenhuma conversão de coordenadas: glTF é destro, +Y para cima, e é assim que o
+pacote de mapa desta engine já guarda geometria. Só **GLB**: um `.gltf` depende
+de arquivos ao lado dele, que o seletor do Android não entrega, e é recusado com
+esse motivo escrito. Extensão exigida, acessor esparso, índice fora da faixa,
+ciclo na hierarquia e nó com `matrix` e TRS juntos também são recusados, cada um
+com diagnóstico próprio.
+
+Reimportar a mesma fonte **substitui** a geometria e não duplica os objetos:
+quem quer outra cópia instancia de novo, e isso é um ato diferente. A ligação
+sobrevive porque a identidade de cada malha vem dos NOMES do nó e da malha, não
+do índice — acrescentar um objeto no editor 3D reindexa tudo o que vem depois.
+Renomear no editor 3D quebra a ligação, e isso é dito em vez de adivinhado.
+
+## 14. O que este documento NÃO afirma
 
 - Não há exportação de jogo nem player autônomo.
 - Sensor **por colisor** não existe: o sensor pertence ao corpo inteiro.
 - `CharacterVirtual` não participa da broadphase como corpo rígido; sensores e
   consultas **não** acertam o personagem.
-- Recursos com GUID e importação GLB pelo Android são a entrega B, **não
-  implementada**.
+- Da entrega B existem o registro com GUID, a identidade de malha e a
+  importação de GLB pelo aparelho. **Não** existem: renomear/mover/apagar pelo
+  painel de arquivos, cenas reutilizáveis, e texturas na importação.
 - Da entrega C, só a Luz anexável e o override de material **por instância**
   existem. MaterialAsset compartilhado, slots por submesh e pré-visualização
   isolada de material **não** existem.

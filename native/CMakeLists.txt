@@ -316,6 +316,7 @@ if(ANDROID)
     platform/android/android_main.cpp
     platform/android/android_runtime_controls.cpp
     platform/android/android_editor_text_input.cpp
+    platform/android/android_model_picker.cpp
     platform/android/android_texture_loader.cpp
     platform/android/dirt_road_resources.cpp
     platform/android/android_launch_options.cpp
@@ -445,6 +446,7 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_lights.cpp
     ../tests/native/test_asset_registry.cpp
     ../tests/native/test_gltf_import.cpp
+    ../tests/native/test_editor_model_import.cpp
     ../tests/native/test_editor_script_templates.cpp
     ../tests/native/test_editor_play_scripts.cpp
     ../tests/native/test_editor_map_scene.cpp

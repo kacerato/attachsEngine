@@ -3,9 +3,10 @@
 Rodada de host em 10/09/2026 e rodada de aparelho em 11/09/2026, branch
 `codex/gameplay-runtime`, a partir de `a34d0325d6c4302942c14442a9d900a199d4cdd0`.
 Escopo: entregas A, D e E de
-[Próximo pacote — criação de gameplay](../PROXIMO-PACOTE-GAMEPLAY.md), mais a
-parte da entrega C entregue em 11/09 — Luz anexável e override de material por
-instância chegando à tela.
+[Próximo pacote — criação de gameplay](../PROXIMO-PACOTE-GAMEPLAY.md), mais o que
+foi entregue em 11/09: da **C**, a Luz anexável e o override de material por
+instância chegando à tela; da **B**, o registro de recursos com GUID e a
+importação de GLB pelo aparelho.
 
 O usuário autorizou ADB. **A rodada no aparelho exercitou o caminho autoral
 completo** — criar projeto, compor objetos, criar script a partir de modelo,
@@ -18,7 +19,7 @@ aceitação com duas composições continuam **fora** desta rodada.
 | Comando | Resultado |
 |---|---|
 | `cmake --build build/editor-host --target aether_tests --parallel 6` | compila sem warning (`-Werror` ligado) |
-| `./build/editor-host/aether_tests.exe` | **794/794** em 10/09; **801/801** em 11/09, com os testes de luz e de material em execução |
+| `./build/editor-host/aether_tests.exe` | **794/794** em 10/09; **820/820** em 11/09, com luz, material em execução, registro de recursos e importação de GLB |
 | `dotnet run --project tests/Aether.Tests/Aether.Tests.csproj -c Release -p:AetherNativeBuildDir=…/build/editor-host` | **521/521** em 10/09; em 11/09, 451 aprovados e 70 pulados (os pulados dependem da lib nativa que este build de host não produz) |
 | `android/gradlew.bat :app:assembleDebug :app:testDebugUnitTest --console=plain` | BUILD SUCCESSFUL; 16 testes Java (10 `ProjectSceneSourceTest` + 6 `ProjectStoreTest`), 0 falhas |
 | `android/gradlew.bat :app:assembleRelease --console=plain` | BUILD SUCCESSFUL — `app-release.apk`, 30.705.870 bytes |
@@ -51,8 +52,8 @@ para o valor original (600000) ao final.
 O overlay GameTurbo ("Wild Boost ativado") apareceu sobre a primeira captura e
 saiu sozinho; a captura seguinte é a que vale. Nada nesta rodada mede FPS.
 
-Evidências em `build/validation-runtime-20260910/` (72 arquivos; não versionadas —
-`build/` é ignorado).
+Evidências em `build/validation-runtime-20260910/` (não versionadas — `build/` é
+ignorado).
 
 ### Defeitos encontrados no aparelho
 
@@ -187,6 +188,50 @@ O que a entrega C **não** tem: MaterialAsset compartilhado, slots por submesh,
 pré-visualização isolada de material. A luz e o override de material por
 instância são a parte implementada.
 
+### Entrega B — GLB importado pela interface, no aparelho (11/09)
+
+`Adicionar objeto → Geometria → Importar modelo` abre o seletor do sistema. O
+arquivo usado foi um GLB de três nós (`Torre`, `Base`, `Braco`) apontando para a
+mesma malha — instâncias, que é o caso que separa "a importação funciona" de "a
+importação duplica tudo". Gerado para esta rodada em
+`build/validation-runtime-20260910/torre.glb`, 1.692 bytes; **não** acompanha o
+produto.
+
+| Passo | Evidência |
+| --- | --- |
+| A entrada existe no catálogo de criação | `82-geometria.png`: "Importar modelo · Abre um .glb do aparelho e traz suas malhas" |
+| O seletor do sistema abre | `88`, `90`: o seletor de documentos do Android, com busca |
+| Importa e aparece na cena | `92-importado.png`: `Torre`, `Base`, `Braco` na hierarquia e a geometria na tela, com a cor do material do arquivo |
+| A fonte é copiada para dentro do projeto | a pasta `Fontes` aparece no painel de arquivos; `Fontes/torre.glb`, 1.692 bytes |
+| O registro é gravado ao lado da cena | `.astra/assets.astra`: `AETHER_ASSETS 1 1` e o recurso com caminho, fonte e SHA-256 `1096e79b…` |
+| Reabrir o projeto relê a fonte | log: `[Import] fonte reaberta: Fontes/torre.glb`; `94-reaberto-com-registro.png` com a geometria de volta |
+
+Log do aparelho na importação:
+`[Import] pacote absorvido: 4 desenhos, 48 vertices` (uma primitiva interna mais
+três nós) e
+`[Import] Fontes/torre.glb objetos=3 reimport=0 texturas_ignoradas=0 animacoes=0 peles=0`.
+
+Dois defeitos foram encontrados e corrigidos nesta rodada, nenhum deles visível
+no host:
+
+1. **O seletor cancelava a própria importação.** Abrir o seletor pausa a
+   Activity, e o `onPause` encerrava o pedido — a importação era cancelada no
+   exato instante em que o usuário começava a escolher o arquivo. Status
+   observado: "Importação interrompida.". Corrigido: `stop()` para só o laço de
+   consulta, e o pedido sobrevive à pausa.
+2. **A troca do pacote gráfico era recusada.** O alocador não sobrescreve uma
+   alça de buffer viva, então recriar o buffer de instâncias falhava com o
+   pacote novo já publicado. Corrigido soltando os buffers antes de recriar, e
+   recriando também os descritores de culling e compactação — eles apontavam
+   para o buffer indireto substituído, e deixá-los velhos faria a GPU escrever
+   contagens de desenho em memória liberada.
+
+Estado do projeto de validação ao fim: `Torre`/`Base`/`Braco` aparecem **em
+duplicata**. São duas importações feitas antes de a gravação do registro existir
+na build instalada; as duas apontam para as mesmas três identidades, e é por
+isso que se sobrepõem exatamente. Não é defeito do caminho atual — uma
+reimportação com o registro presente devolve `reimport=1` e cria zero objetos.
+
 ## Testes acrescentados (host)
 
 ### Mundo de execução (`tests/native/test_runtime_world.cpp`, 11)
@@ -247,6 +292,31 @@ instância são a parte implementada.
 - luz alterada por código durante o Play chega ao quadro coletado, e o Stop
   devolve a autoria intacta.
 
+### Recursos e importação (`test_asset_registry.cpp` 6, `test_gltf_import.cpp` 6, `test_editor_model_import.cpp` 4, `test_editor_map_scene.cpp` +3)
+
+- SHA-256 conferido contra os vetores publicados, incluindo a borda de 56 bytes
+  do padding — um hash que muda de implementação entre plataformas não serve
+  para dizer "este arquivo é o mesmo";
+- identidade sobrevive a renomear/mover e a editar o conteúdo; caminho ocupado é
+  recusado; dependência pendurada é recusada na entrada; apagar recurso com
+  dependente é recusado; caminho que escapa do projeto é recusado; leitura
+  inválida deixa o registro anterior intacto;
+- o leitor de JSON aceita documentos reais e falha fechado em doze formas de
+  arquivo quebrado, com limite de profundidade;
+- GLB montado byte a byte no teste: geometria, hierarquia e fatores de material;
+  instâncias com **uma** cópia da geometria; o que ficou para trás é contado;
+  arquivo quebrado, `.gltf` de texto, extensão exigida, índice fora da faixa e
+  ciclo na hierarquia recusados **com motivo**; limites e cancelamento;
+- **chave estável na reimportação**: o teste reexporta o arquivo com um nó novo
+  ANTES do existente e exige que a chave do existente não mude — ele pegou uma
+  ordem de travessia invertida na raiz, corrigida;
+- referência de malha sobrevive ao pacote ser reordenado; cena sem identidade a
+  adota; identidade ausente vira slot zero em vez de apontar para outra malha;
+  arquivo do componente v1 continua carregando;
+- importação cria objetos apontando para a geometria nova, reimportar não
+  duplica, importação recusada deixa a cena e o registro exatamente como
+  estavam, e a identidade sobrevive a salvar e reabrir o projeto.
+
 ### Play com scripts (`tests/native/test_editor_play_scripts.cpp`, 3)
 
 - contato sólido atravessando `EditorPlayScene` → `ScriptBridge` → ABI, com o
@@ -284,8 +354,11 @@ instância são a parte implementada.
 
 ## Lacunas conhecidas
 
-- **Entrega B** (recursos com GUID, importação GLB pelo Android, renomear/mover/
-  reimportar, cenas reutilizáveis): não iniciada.
+- **Entrega B**: registro com GUID, identidade de malha, leitor de GLB e
+  importação pelo seletor do Android estão implementados e validados no
+  aparelho. Continuam **fora**: renomear/mover/apagar recursos pelo painel de
+  arquivos com confirmação e dependentes, cenas reutilizáveis com remapeamento
+  de IDs, texturas na importação, e `.gltf` com arquivos externos.
 - **Entrega C**: a Luz anexável (direcional, pontual e spot) e o override de
   material por instância estão implementados, integrados ao renderer e validados
   no aparelho. Continuam **fora**: MaterialAsset compartilhado, slots por

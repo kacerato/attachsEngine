@@ -5,6 +5,7 @@
 #include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
 #include "editor/editor_session.h"
+#include "core/sha256.h"
 #include "editor/editor_script_templates.h"
 #include "editor/editor_reference_picker.h"
 #include "editor/editor_properties.h"
@@ -840,6 +841,13 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     }
     return true;
   }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportModel)) {
+    // O editor não conhece Android nem o seletor de arquivos: levanta o pedido
+    // e quem tem o sistema na mão abre o diálogo e devolve os bytes.
+    state_.modelImportRequested=true;state_.creationMenu=false;
+    state_.status="Escolha um arquivo .glb";
+    return true;
+  }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CreateCamera)) {
     history_.begin("Criar câmera");
     const auto id=history_.createEntity(document_,document_.root(),EditorEntityKind::Camera,"Câmera");
@@ -1138,11 +1146,154 @@ bool EditorSession::load(const char *path, u64 fingerprint) {
   return true;
 }
 
+EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<ImportedSource> &sources) {
+  ImportedLibrary library;
+  for(const auto &source:sources) {
+    const auto vertexBase=static_cast<u32>(library.vertices.size()/renderer::MapVertexStride);
+    const auto indexBase=static_cast<u32>(library.indices.size());
+    const auto materialBase=static_cast<u32>(library.materials.size());
+    library.vertices.insert(library.vertices.end(),source.vertices.begin(),source.vertices.end());
+    library.indices.insert(library.indices.end(),source.indices.begin(),source.indices.end());
+    library.materials.insert(library.materials.end(),source.materials.begin(),source.materials.end());
+    for(const auto &draw:source.draws) {
+      auto moved=draw;
+      moved.firstIndex+=indexBase;moved.vertexOffset+=vertexBase;moved.materialIndex+=materialBase;
+      library.draws.push_back(moved);
+    }
+    library.identities.insert(library.identities.end(),source.identities.begin(),source.identities.end());
+    library.names.insert(library.names.end(),source.names.begin(),source.names.end());
+  }
+  return library;
+}
+
+bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sourceName,
+                                const resources::GltfImportProgress &progress, ModelImportReport &report) {
+  report = {};
+  if(isPlaying()) { report.diagnostic="Pare a execução antes de importar."; return false; }
+  if(!publishGeometry_) { report.diagnostic="Este ambiente não publica geometria importada."; return false; }
+  if(sourceName.empty()) { report.diagnostic="Nome de arquivo vazio."; return false; }
+
+  resources::GltfImport model;
+  if(!resources::importGlb(bytes,{},progress,model)) {
+    report.diagnostic=model.diagnostic;report.cancelled=model.cancelled;return false;
+  }
+  report.skippedTextures=model.skippedTextures;
+  report.skippedAnimations=model.skippedAnimations;
+  report.skippedSkins=model.skippedSkins;
+
+  // Identidade da FONTE: derivada do caminho dentro do projeto, não do conteúdo.
+  // Reimportar o arquivo editado precisa cair no mesmo recurso; é o hash que
+  // muda, não a identidade.
+  const std::string path(sourceName);
+  const auto *existing=assets_.findByPath(path);
+  const resources::AssetGuid source=existing?existing->guid:resources::assetGuidFromSeed("fonte:"+path);
+  report.source=source;
+
+  ImportedSource block;
+  block.guid=source;
+  block.vertices.assign(model.vertices.begin(),model.vertices.end());
+  block.indices.assign(model.indices.begin(),model.indices.end());
+  block.materials.assign(model.materials.begin(),model.materials.end());
+  block.draws.assign(model.draws.begin(),model.draws.end());
+  for(usize i=0;i<model.draws.size();++i) {
+    // A identidade de cada malha importada: a fonte mais a chave estável. É o
+    // que sobrevive a acrescentar um objeto no editor 3D e reexportar.
+    block.identities.push_back(resources::assetGuidFromSeed(
+        "glb:"+source.text()+":"+(i<model.keys.size()?model.keys[i]:std::to_string(i))));
+    block.names.push_back(i<model.names.size()?model.names[i]:std::string("Malha"));
+  }
+  // Duas malhas com a mesma chave no mesmo arquivo tornariam a identidade
+  // ambígua — e um slot escolhido pela ordem da lista é o defeito que a
+  // identidade existe para impedir.
+  for(usize a=0;a<block.identities.size();++a)
+    for(usize b=0;b<a;++b) if(block.identities[a]==block.identities[b]) {
+      report.diagnostic="Duas malhas do arquivo têm o mesmo nome de nó e malha; renomeie uma delas.";
+      return false;
+    }
+
+  // Candidato completo antes de publicar: a versão anterior continua valendo
+  // até a nova estar inteira na GPU e aceita pelo editor.
+  auto candidateSources=importedSources_;
+  usize slot=candidateSources.size();
+  for(usize i=0;i<candidateSources.size();++i) if(candidateSources[i].guid==source) {slot=i;break;}
+  // Reimportação é decidida pelo REGISTRO, não pela biblioteca deste processo.
+  // Ao reabrir o projeto, a fonte está no registro e a biblioteca está vazia --
+  // se a decisão fosse pela biblioteca, cada abertura criaria os objetos de
+  // novo e a cena cresceria sozinha a cada vez.
+  report.reimported=existing!=nullptr;
+  const auto firstNew=[&]{
+    usize count=0;
+    for(usize i=0;i<slot && i<candidateSources.size();++i) count+=candidateSources[i].draws.size();
+    return count;
+  }();
+  const auto newDrawCount=block.draws.size();
+  // Onde o bloco entra é decidido pela BIBLIOTECA (substituir o que já está
+  // carregado); se objetos são criados, pelo REGISTRO. São perguntas diferentes:
+  // ao reabrir o projeto a fonte está no registro e não na biblioteca.
+  if(slot<candidateSources.size()) candidateSources[slot]=std::move(block);
+  else candidateSources.push_back(std::move(block));
+  const auto candidate=flattenSources(candidateSources);
+
+  PublishedGeometry published;
+  if(!publishGeometry_(candidate.vertices,candidate.indices,candidate.draws,candidate.materials,published)) {
+    report.diagnostic="O consumidor gráfico recusou a geometria importada.";return false;
+  }
+  // O pacote publicado é primitivas internas + biblioteca, nessa ordem. As
+  // primitivas mantêm a identidade derivada da impressão digital.
+  if(published.draws.size()<candidate.draws.size()) { report.diagnostic="Pacote publicado inconsistente."; return false; }
+  const auto primitives=published.draws.size()-candidate.draws.size();
+  std::vector<resources::AssetGuid> identities(primitives);
+  identities.insert(identities.end(),candidate.identities.begin(),candidate.identities.end());
+  cancelPointers();
+  if(!mapScene_.adoptPackage(document_,published.draws,published.materials,published.vertices,
+                             published.indices,identities,packageFingerprint_)) {
+    report.diagnostic="O editor recusou o pacote publicado.";return false;
+  }
+  importedSources_=std::move(candidateSources);
+
+  // Reimportar NÃO cria objetos: os que já existem apontam para as mesmas
+  // identidades e acabaram de ser reconciliados com a geometria nova.
+  if(!report.reimported) {
+    history_.begin("Importar modelo");
+    for(usize i=0;i<newDrawCount;++i) {
+      const auto drawSlot=static_cast<u32>(primitives+firstNew+i)+1;
+      const auto id=history_.createEntity(document_,document_.root(),EditorEntityKind::Mesh,
+                                          candidate.names[firstNew+i].c_str());
+      if(!id) { history_.end(); report.diagnostic="Não foi possível criar os objetos do modelo."; return false; }
+      auto value=*document_.find(id);
+      auto *render=editMeshRenderer(value);
+      if(!render) { history_.end(); report.diagnostic="Não foi possível criar a malha do objeto."; return false; }
+      render->mesh=drawSlot;
+      render->asset=candidate.identities[firstNew+i];
+      render->material=mapScene_.materialForAsset(drawSlot-1);
+      // A pose do nó já está na matriz de modelo do desenho importado; o objeto
+      // nasce na origem para que o gizmo mova o conjunto sem duplicar a
+      // transformação do arquivo.
+      history_.applyValues(document_,id,value);
+      ++report.objects;
+    }
+    history_.end();
+  }
+
+  resources::AssetRecord record=existing?*existing:resources::AssetRecord{};
+  record.guid=source;record.type=resources::AssetType::Mesh;record.path=path;record.source=path;
+  record.contentHash=Sha256::hex(bytes);
+  record.importerVersion=1;
+  record.importerParameters="glb";
+  record.derived.clear();
+  if(existing) assets_.publishImport(source,record.contentHash,record.importerVersion,record.importerParameters,{},{});
+  else assets_.add(record);
+  state_.status=report.reimported?"Modelo reimportado":"Modelo importado";
+  return true;
+}
+
 bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices, u64 packageFingerprint) {
   if(isPlaying()) return false;
   cancelPointers();
   if (!mapScene_.import(document_, draws, materials, instantiate,vertices,indices,packageFingerprint)) return false;
-  state_.creationAvailable=3;
+  packageFingerprint_=packageFingerprint;
+  importedSources_.clear();
+  state_.creationAvailable=3|(1u<<8);
   for(u32 i=0;i<mapScene_.assetCount();++i) {
     const auto flags=mapScene_.materialFlagsForAsset(i);
     if(flags & renderer::BoxAuthoringResource) {

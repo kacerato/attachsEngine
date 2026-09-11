@@ -27,7 +27,7 @@ struct EditorCreationEntry {
   ui::UiIcon icon;
 };
 inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física"};
-inline constexpr std::array<EditorCreationEntry,8> editorCreationCatalog{{
+inline constexpr std::array<EditorCreationEntry,9> editorCreationCatalog{{
   {EditorWidget::CreateGroup,0,"Objeto vazio","Organiza filhos e transforma o conjunto.",ui::UiIcon::EditorAuthorObject},
   {EditorWidget::CreateCamera,0,"Câmera","Captura a vista atual para executar a cena.",ui::UiIcon::EditorAuthorCamera},
   {EditorWidget::CreateCube,1,"Cubo","Malha com transformação e material editáveis.",ui::UiIcon::EditorAuthorObject},
@@ -35,7 +35,8 @@ inline constexpr std::array<EditorCreationEntry,8> editorCreationCatalog{{
   {EditorWidget::CreateFiniteWater,2,"Superfície de água","Volume finito com profundidade e corrente.",ui::UiIcon::WaterAuthorSurface},
   {EditorWidget::CreateOceanWater,2,"Oceano","Superfície extensa com ondas espectrais.",ui::UiIcon::WaterAuthorSurface},
   {EditorWidget::CreateRiverWater,2,"Rio por pontos","Traçado com largura, profundidade e fluxo.",ui::UiIcon::WaterAuthorRoute},
-  {EditorWidget::CreateBuoyantBox,3,"Caixa flutuante","Corpo rígido com massa e arrasto na água.",ui::UiIcon::WaterAuthorPhysics}
+  {EditorWidget::CreateBuoyantBox,3,"Caixa flutuante","Corpo rígido com massa e arrasto na água.",ui::UiIcon::WaterAuthorPhysics},
+  {EditorWidget::ImportModel,1,"Importar modelo","Abre um .glb do aparelho e traz suas malhas.",ui::UiIcon::EditorAuthorZoom}
 }};
 inline bool creationAvailable(const EditorScreenState &state,u32 index) {
   return index<editorCreationCatalog.size() && (state.creationAvailable & (1u<<index));

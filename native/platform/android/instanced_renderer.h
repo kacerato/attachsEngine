@@ -117,6 +117,14 @@ public:
   // O que o último quadro conseguiu acender. Quem chama publica no console: uma
   // luz excedente precisa aparecer como aviso, nunca sumir calada.
   const renderer::LightBudgetReport &lightBudget() const noexcept { return lightBudget_; }
+  // Reconstrói a biblioteca de autoria com as primitivas internas MAIS a
+  // geometria importada no aparelho, e refaz tudo o que depende da lista de
+  // desenhos. Só por ação explícita do usuário: espera a GPU ficar ociosa antes
+  // de trocar os buffers, porque trocá-los com um quadro em voo desenharia
+  // memória liberada. Uma importação é rara e o usuário já está esperando.
+  bool rebuildAuthoringGeometry(std::span<const u8> vertices, std::span<const u32> indices,
+                                std::span<const renderer::MapDrawRecord> draws,
+                                std::span<const renderer::MapMaterialRecord> materials);
 
 
   bool uiRendererReady() const { return uiRenderer_.isReady(); }
@@ -734,6 +742,7 @@ private:
   };
   std::vector<AuthoredInstanceState> pendingAuthoredState_;
   bool pendingAuthoredStateValid_ = false;
+  bool rebuildDrawOrders();
   std::vector<renderer::SceneLight> sceneLights_;
   renderer::LightBudgetReport lightBudget_{};
   std::vector<u8> dynamicMapDraws_;

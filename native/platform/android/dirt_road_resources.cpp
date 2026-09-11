@@ -289,6 +289,57 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
   return true;
 }
 
+bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload,
+                                               std::span<const u8> extraVertices, std::span<const u32> extraIndices,
+                                               std::span<const renderer::MapDrawRecord> extraDraws,
+                                               std::span<const renderer::MapMaterialRecord> extraMaterials) {
+  if(extraVertices.size()%renderer::MapVertexStride) return false;
+  // As primitivas internas vêm primeiro e mantêm seus índices: o catálogo de
+  // criação ("Cubo", "Chão") aponta para elas, e reordená-las trocaria o que
+  // cada botão cria.
+  std::vector<u8> vertices;std::vector<u32> indices;
+  std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
+  if(!renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride,vertices,indices,draws,materials)) return false;
+  const auto vertexBase=static_cast<u32>(vertices.size()/renderer::MapVertexStride);
+  const auto indexBase=static_cast<u32>(indices.size());
+  const auto materialBase=static_cast<u32>(materials.size());
+  vertices.insert(vertices.end(),extraVertices.begin(),extraVertices.end());
+  indices.insert(indices.end(),extraIndices.begin(),extraIndices.end());
+  materials.insert(materials.end(),extraMaterials.begin(),extraMaterials.end());
+  const auto vertexCount=vertices.size()/renderer::MapVertexStride;
+  for(const auto &source:extraDraws) {
+    auto draw=source;
+    if(u64(source.materialIndex)>=extraMaterials.size()) return false;
+    draw.materialIndex=materialBase+source.materialIndex;
+    if(u64(source.firstIndex)+source.indexCount>extraIndices.size()) return false;
+    draw.firstIndex=indexBase+source.firstIndex;
+    draw.vertexOffset=vertexBase+source.vertexOffset;
+    if(draw.vertexOffset>=vertexCount) return false;
+    draw.lodGroupId=static_cast<u32>(draws.size());
+    draws.push_back(draw);
+  }
+  // Os índices importados são locais à primitiva e somados a `vertexOffset` no
+  // desenho; conferir aqui evita ler vértice de outro lote na GPU.
+  for(const auto &draw:draws)
+    for(u32 i=0;i<draw.indexCount;++i)
+      if(u64(draw.vertexOffset)+indices[draw.firstIndex+i]>=vertexCount) return false;
+
+  auto &allocator=device.memoryAllocator();
+  rhi::VulkanBuffer nextVertices,nextIndices;
+  rhi::BufferDesc buffer{};buffer.preferDeviceMemory=true;buffer.cpuAccess=rhi::CpuAccess::None;
+  buffer.sizeBytes=vertices.size();buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+  if(!allocator.createBuffer(buffer,&nextVertices) ||
+     !upload.uploadBuffer(allocator,vertices.data(),vertices.size(),nextVertices,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT)) return false;
+  buffer.sizeBytes=indices.size()*sizeof(u32);buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+  if(!allocator.createBuffer(buffer,&nextIndices) ||
+     !upload.uploadBuffer(allocator,indices.data(),buffer.sizeBytes,nextIndices,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_ACCESS_INDEX_READ_BIT)) return false;
+  vertices_=std::move(nextVertices);indices_=std::move(nextIndices);
+  pickingVertices_=std::move(vertices);pickingIndices_=std::move(indices);
+  draws_=std::move(draws);materials_=std::move(materials);
+  header_.vertexStride=renderer::MapVertexStride;
+  return true;
+}
+
 // Shared Vulkan resource upload backend; this entry never reads a demo package.
 bool DirtRoadResources::initializePrimitives(rhi::VulkanDevice &device,rhi::VulkanUploadContext &upload) {
   if(vertices_.handle()!=VK_NULL_HANDLE || !draws_.empty()) return false;
