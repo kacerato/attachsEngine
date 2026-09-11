@@ -96,12 +96,18 @@ void main() {
   float axisX=1.0-smoothstep(0.6,1.6,axisDistance.y); // linha sobre z=0
   float axisZ=1.0-smoothstep(0.6,1.6,axisDistance.x); // linha sobre x=0
 
-  // Celula menor que um pixel nao e informacao: e a faixa branca do horizonte.
-  // Some antes de virar ruido, e some primeiro a familia mais fina.
-  float minorPixels=minorSpacing/max(max(derivative.x,derivative.y),1e-8);
-  minor*=smoothstep(1.5,4.0,minorPixels);
-  float majorPixels=majorSpacing/max(max(derivative.x,derivative.y),1e-8);
-  major*=smoothstep(1.5,4.0,majorPixels);
+  // Uma celula de poucos pixels NAO e informacao: o `fract` que desenha a linha
+  // passa a alternar dentro do mesmo pixel e o resultado e moire -- faixas
+  // diagonais em angulos que nao existem na grade, que leem como uma grade
+  // torta. O limiar precisa ser generoso: so mostrar a familia quando a celula
+  // tem tamanho suficiente para a linha e o vao serem distinguiveis.
+  //
+  // MEDIDO no aparelho: com 1,5 a 4 pixels o campo proximo virava um tapete
+  // ruidoso inclinado; com 10 a 22 a grade fica limpa e a familia fina aparece
+  // so quando de fato ajuda a medir distancia.
+  float pixelsPerUnit=1.0/max(max(derivative.x,derivative.y),1e-8);
+  minor*=smoothstep(10.0,22.0,minorSpacing*pixelsPerUnit);
+  major*=smoothstep(6.0,14.0,majorSpacing*pixelsPerUnit);
 
   float distanceFade=1.0-smoothstep(fadeDistance*0.35,fadeDistance,length(hit-origin));
   vec3 minorColor=frame.materialFactors.xyz;
@@ -110,12 +116,20 @@ void main() {
   vec3 axisZColor=vec3(0.31,0.51,0.90);
 
   float lineAlpha=max(max(minor*0.35,major*0.55),max(axisX,axisZ));
-  if(lineAlpha<=0.0) discard;
   vec3 color=mix(minorColor,majorColor,major);
   color=mix(color,axisXColor,axisX);
   color=mix(color,axisZColor,axisZ);
   float alpha=lineAlpha*distanceFade*frame.cameraFrame.w;
-  if(alpha<=0.002) discard;
+  // Nenhum `discard` DEPOIS de escrever `gl_FragDepth`.
+  //
+  // MEDIDO no aparelho: com os descartes por alfa aqui, a grade atravessava as
+  // faces da geometria; trocando a saida por magenta opaco e sem esses
+  // descartes, a mesma cena ocluia perfeitamente. O descarte tardio faz este
+  // driver resolver o teste de profundidade com um valor que nao e o escrito.
+  //
+  // Alfa zero ja nao pinta nada -- o descarte era so economia, e custava a
+  // correcao. Os descartes que sobram acontecem ANTES da escrita e sao
+  // obrigatorios: raio paralelo ao plano, atras da camera ou fora do alcance.
   if((frame.materialFlags.z&1u)!=0u)
     color=mix(12.92*color,1.055*pow(max(color,vec3(0)),vec3(1.0/2.4))-.055,
               greaterThan(color,vec3(.0031308)));

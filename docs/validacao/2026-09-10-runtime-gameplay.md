@@ -456,6 +456,18 @@ fragmento, com espessura constante em pixels por `fwidth`.
 | Sem faixa branca no horizonte | `126`/`127`: a célula some antes de virar ruído |
 | Eixos do mundo | vermelho e azul cruzam na origem e não acompanham a câmera |
 
+**Moiré no campo próximo — corrigido depois do relato do usuário.** A primeira
+versão mostrava a família fina a partir de célula de 1,5 pixel. Abaixo de uns
+poucos pixels o `fract` que desenha a linha alterna dentro do mesmo pixel e o
+resultado é **moiré**: faixas diagonais em ângulos que não existem na grade. Na
+tela isso lê como uma grade torta — foi exatamente o relato ("a grade está
+inclinada, dá para ver pelo veículo que está reto"), e `133-zoom.png` mostra o
+padrão falso em ângulo diferente do das linhas reais.
+
+Corrigido subindo os limiares: a família fina só aparece a partir de 10 px de
+célula (cheia em 22) e a grossa a partir de 6 px (cheia em 14). `181-final.png`
+mostra o campo próximo limpo, com uma família de linhas só.
+
 **Resíduo medido e NÃO resolvido.** Em ângulo rasante contra faces quase
 verticais, parte da grade ainda atravessa a face (`123-zoom.png`, banda
 inferior). Medições feitas:
@@ -466,7 +478,16 @@ inferior). Medições feitas:
 - a diferença entre quadro com e sem grade (`124-diff.png`) mostra a face
   superior preta (grade corretamente escondida) e a banda inferior clara;
 - trocar `LESS_OR_EQUAL` por `LESS` e empurrar a profundidade em 0,1% não mudou
-  a banda; empurrar 3% mudou pouco. Não é só quantização.
+  a banda; empurrar 3% mudou pouco. Não é só quantização;
+- uma sonda que pinta magenta opaco onde o passe sobrevive ao teste
+  (`173-wash.png`) mostra a face SUPERIOR do objeto limpa e a banda inferior
+  coberta: o passe realmente sobrevive ali, e não é efeito de mistura;
+- remover os `discard` posteriores à escrita de `gl_FragDepth` não mudou a
+  banda — a hipótese de descarte tardio foi descartada por medição, embora a
+  ordem tenha sido mantida porque é a correta.
+
+Depois do moiré corrigido a banda ficou reduzida a uma ou duas linhas fracas
+(`181-final.png`), em vez do tapete ruidoso anterior.
 
 Fechar isso pede captura do buffer de profundidade, que é exatamente o que o
 plano mestre pede para VIE01. A entrega fica registrada como **parcial**, e o
@@ -486,8 +507,15 @@ apresentado como resolvido:
   voltar do segundo plano. Sem reprodução instrumentada aqui; o próprio plano
   classifica a causa como não fechada. É o marco M03.
 - **Grade sobre faces quase verticais em ângulo rasante.** O passe com
-  profundidade e a transição contínua de escala existem e estão verificados; o
-  resíduo acima é o que resta do M04.
+  profundidade, a transição contínua de escala e o campo próximo sem moiré
+  existem e estão verificados; resta a banda descrita acima. É o que sobra do
+  M04.
+- **Objetos que somem ao afastar, relatado pelo usuário: NÃO reproduzido.** Uma
+  varredura de seis passos de afastamento (`150-sequencia.png`) e outra de oito
+  (`180`) mantiveram o veículo visível, diminuindo como o esperado para uma
+  câmera que se afasta. O que a varredura de aproximação mostra
+  (`140-sequencia.png`) é a câmera **atravessando** o objeto — comportamento de
+  dolly, não sumiço. Falta a condição exata em que o defeito aparece.
 - **Entrega G**: a prova de aceitação — duas composições diferentes montadas
   inteiramente pela interface — **não** foi feita. Esta rodada montou UMA cena
   simples (chão, cubo, corpo, colisores, script) para exercitar os caminhos.
