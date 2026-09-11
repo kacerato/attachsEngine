@@ -178,6 +178,17 @@ public:
                                                std::span<const renderer::MapMaterialRecord>,
                                                PublishedGeometry &)>;
   void setGeometryPublisher(GeometryPublisher publisher) { publishGeometry_ = std::move(publisher); }
+  // Republica a geometria importada para um consumidor gráfico NOVO.
+  //
+  // Recriar a superfície reconstrói o renderer do zero, e a biblioteca de
+  // autoria dele volta a ter só as primitivas internas. A cena continua
+  // apontando para os desenhos do modelo importado, então a publicação do
+  // documento passa a falhar a cada quadro: hierarquia intacta e viewport
+  // vazio, que era exatamente o sintoma ao voltar do segundo plano.
+  //
+  // Não lê arquivo nenhum: os blocos por fonte já estão em memória. Verdadeiro
+  // também quando não há nada importado, porque aí não há o que reidratar.
+  bool republishGeometry(std::string &diagnostic);
 
   struct ModelImportReport {
     u32 objects = 0;
@@ -332,6 +343,9 @@ private:
   // estável: reimportar não reordena as fontes, então os slots das outras não
   // mudam por acidente.
   static ImportedLibrary flattenSources(const std::vector<ImportedSource> &sources);
+  // Sobe a biblioteca ao consumidor gráfico e adota o pacote que voltou.
+  bool publishAndAdopt(const ImportedLibrary &library, std::string &diagnostic,
+                       usize *outPrimitives = nullptr);
   std::vector<ImportedSource> importedSources_;
   // A impressão digital do pacote base, guardada na importação inicial: é ela
   // que deriva a identidade das primitivas internas em toda adoção posterior.

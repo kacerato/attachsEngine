@@ -390,3 +390,55 @@ AE_TEST(the_pivot_of_an_imported_part_is_the_node_origin_not_the_mesh_centre) {
   }
   AE_EXPECT_TRUE(false, "a porta apareceu na extração");
 }
+
+AE_TEST(a_recreated_surface_gets_the_imported_geometry_back) {
+  // O defeito M03, reproduzido no aparelho: mandar o editor para segundo plano
+  // e voltar deixava a hierarquia inteira e o viewport VAZIO, com
+  // "Falha ao publicar documento no renderer" a cada quadro.
+  //
+  // A causa não é a cena nem a superfície: recriar a superfície reconstrói o
+  // renderer do zero, e a biblioteca de autoria dele volta a ter só as
+  // primitivas internas. A cena continua apontando para os desenhos do modelo
+  // importado, e a publicação passa a falhar contra uma biblioteca que não os
+  // tem mais.
+  EditorSession session;
+  FakeRenderer first;
+  startSession(session, first);
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.importModel(twoNodeGlb(), "Fontes/placa.glb", {}, report), report.diagnostic.c_str());
+  AE_EXPECT_EQ(report.objects, 2u, "dois objetos importados");
+
+  std::vector<EditorMapUpdate> updates;
+  AE_EXPECT_TRUE(session.extractMap(updates), "publica antes de suspender");
+  const auto before = session.document().entityCount();
+
+  // A superfície é recriada: consumidor gráfico NOVO, sem nada da importação.
+  FakeRenderer second;
+  session.setGeometryPublisher([&second](std::span<const u8> v, std::span<const u32> i,
+                                         std::span<const renderer::MapDrawRecord> d,
+                                         std::span<const renderer::MapMaterialRecord> m,
+                                         EditorSession::PublishedGeometry &out) {
+    return second.publish(v, i, d, m, out);
+  });
+  std::string diagnostic;
+  AE_EXPECT_TRUE(session.republishGeometry(diagnostic), diagnostic.c_str());
+  AE_EXPECT_EQ(second.rebuilds, 1u, "a biblioteca do consumidor novo foi montada uma vez");
+  AE_EXPECT_TRUE(second.draws.size() > first.draws.size() - 1,
+                 "o pacote novo carrega as primitivas e a geometria importada");
+
+  // O que o defeito quebrava: a cena sobrevive E volta a publicar.
+  AE_EXPECT_EQ(session.document().entityCount(), before, "nenhum objeto perdido na reidratação");
+  updates.clear();
+  AE_EXPECT_TRUE(session.extractMap(updates), "publica de novo depois da reidratação");
+  u32 drawn = 0;
+  for (const auto &update : updates) if (update.objectId && update.visible) ++drawn;
+  AE_EXPECT_TRUE(drawn >= 2u, "os objetos importados voltam a ser desenhados");
+
+  // Reidratar sem nada importado é silenciosamente verdadeiro: a biblioteca do
+  // consumidor novo já são as mesmas primitivas.
+  EditorSession limpa;
+  FakeRenderer vazio;
+  startSession(limpa, vazio);
+  AE_EXPECT_TRUE(limpa.republishGeometry(diagnostic), "sem importação não há o que reidratar");
+  AE_EXPECT_EQ(vazio.rebuilds, 0u, "e nada é republicado à toa");
+}

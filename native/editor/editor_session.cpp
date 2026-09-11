@@ -1168,6 +1168,46 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
   return library;
 }
 
+// Sobe a biblioteca para o consumidor gráfico e faz o editor adotar o pacote
+// que voltou. Um caminho só, usado pela importação e pela reidratação: eram
+// duas cópias desta sequência que deixavam uma delas para trás.
+bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string &diagnostic,
+                                    usize *outPrimitives) {
+  if(!publishGeometry_) { diagnostic="Este ambiente não publica geometria importada."; return false; }
+  PublishedGeometry published;
+  if(!publishGeometry_(library.vertices,library.indices,library.draws,library.materials,published)) {
+    diagnostic="O consumidor gráfico recusou a geometria importada.";return false;
+  }
+  // O pacote publicado é primitivas internas + biblioteca, nessa ordem. As
+  // primitivas mantêm a identidade derivada da impressão digital.
+  if(published.draws.size()<library.draws.size()) { diagnostic="Pacote publicado inconsistente."; return false; }
+  const auto primitives=published.draws.size()-library.draws.size();
+  if(outPrimitives) *outPrimitives=primitives;
+  std::vector<resources::AssetGuid> identities(primitives);
+  identities.insert(identities.end(),library.identities.begin(),library.identities.end());
+  // Pivô: as primitivas internas mantêm a convenção do pacote (centro dos
+  // limites), a geometria importada usa a origem do nó.
+  std::vector<float> pivots;
+  pivots.reserve(published.draws.size()*3);
+  for(usize i=0;i<primitives;++i)
+    for(u32 axis=0;axis<3;++axis) pivots.push_back(published.draws[i].boundsCenter[axis]);
+  pivots.insert(pivots.end(),library.pivots.begin(),library.pivots.end());
+  if(pivots.size()!=published.draws.size()*3) { diagnostic="Pacote publicado inconsistente."; return false; }
+  cancelPointers();
+  if(!mapScene_.adoptPackage(document_,published.draws,published.materials,published.vertices,
+                             published.indices,identities,packageFingerprint_,pivots)) {
+    diagnostic="O editor recusou o pacote publicado.";return false;
+  }
+  return true;
+}
+
+bool EditorSession::republishGeometry(std::string &diagnostic) {
+  // Sem geometria importada não há o que reidratar: a biblioteca do consumidor
+  // novo já são as mesmas primitivas internas, com a mesma impressão digital.
+  if(importedSources_.empty()) return true;
+  return publishAndAdopt(flattenSources(importedSources_),diagnostic);
+}
+
 bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sourceName,
                                 const resources::GltfImportProgress &progress, ModelImportReport &report) {
   report = {};
@@ -1238,29 +1278,8 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
   else candidateSources.push_back(std::move(block));
   const auto candidate=flattenSources(candidateSources);
 
-  PublishedGeometry published;
-  if(!publishGeometry_(candidate.vertices,candidate.indices,candidate.draws,candidate.materials,published)) {
-    report.diagnostic="O consumidor gráfico recusou a geometria importada.";return false;
-  }
-  // O pacote publicado é primitivas internas + biblioteca, nessa ordem. As
-  // primitivas mantêm a identidade derivada da impressão digital.
-  if(published.draws.size()<candidate.draws.size()) { report.diagnostic="Pacote publicado inconsistente."; return false; }
-  const auto primitives=published.draws.size()-candidate.draws.size();
-  std::vector<resources::AssetGuid> identities(primitives);
-  identities.insert(identities.end(),candidate.identities.begin(),candidate.identities.end());
-  // Pivô: as primitivas internas mantêm a convenção do pacote (centro dos
-  // limites), a geometria importada usa a origem do nó.
-  std::vector<float> pivots;
-  pivots.reserve(published.draws.size()*3);
-  for(usize i=0;i<primitives;++i)
-    for(u32 axis=0;axis<3;++axis) pivots.push_back(published.draws[i].boundsCenter[axis]);
-  pivots.insert(pivots.end(),candidate.pivots.begin(),candidate.pivots.end());
-  if(pivots.size()!=published.draws.size()*3) { report.diagnostic="Pacote publicado inconsistente."; return false; }
-  cancelPointers();
-  if(!mapScene_.adoptPackage(document_,published.draws,published.materials,published.vertices,
-                             published.indices,identities,packageFingerprint_,pivots)) {
-    report.diagnostic="O editor recusou o pacote publicado.";return false;
-  }
+  usize primitives=0;
+  if(!publishAndAdopt(candidate,report.diagnostic,&primitives)) return false;
   importedSources_=std::move(candidateSources);
 
   // Reimportar NÃO cria objetos: os que já existem apontam para as mesmas

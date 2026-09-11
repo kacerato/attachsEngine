@@ -680,6 +680,10 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
       __android_log_print(ANDROID_LOG_INFO,"Astra.Script","%llu: %.*s",
                           static_cast<unsigned long long>(id),static_cast<int>(message.size()),message.data());
     });
+    // Já havia sessão antes desta inicialização? Então a superfície foi
+    // recriada e este renderer é novo: a cena do editor sobrevive, a biblioteca
+    // dele não.
+    const bool rehydrating = shell.editorMapImported;
     if (!shell.editorMapImported && (shell.independentWorkspace || !shell.instancedRenderer.mapDraws().empty())) {
       shell.editorPackageFingerprint=shell.independentWorkspace ? 0 : shell.instancedRenderer.contentFingerprint();
       if (!shell.independentWorkspace) shell.editorSession.setProjection(shell.instancedRenderer.mapProjection());
@@ -746,6 +750,18 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
     if (shell.independentWorkspace)
       __android_log_print(ANDROID_LOG_INFO, LogTag,"[Editor] independent resources=%zu fingerprint=%llu managed=off",
           shell.instancedRenderer.mapDraws().size(), static_cast<unsigned long long>(shell.editorPackageFingerprint));
+    // Reidratação gráfica: sem isto a publicação do documento falha a cada
+    // quadro contra uma biblioteca que não tem mais a geometria importada, e o
+    // viewport fica vazio com a hierarquia inteira do lado.
+    if (rehydrating) {
+      std::string diagnostic;
+      if (shell.editorSession.republishGeometry(diagnostic))
+        __android_log_print(ANDROID_LOG_INFO, LogTag,
+            "[Editor] Geometria republicada na superficie nova.");
+      else
+        __android_log_print(ANDROID_LOG_ERROR, LogTag,
+            "[Editor] Reidratacao grafica falhou: %s", diagnostic.c_str());
+    }
     shell.editorPublishedRevision = ~ae::u64{0};
     __android_log_print(ANDROID_LOG_INFO, LogTag,
         "[Editor] sessao pronta: %u entidades no documento.",

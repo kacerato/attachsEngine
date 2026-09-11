@@ -563,9 +563,36 @@ apresentado como resolvido:
 - **Escrita em modal.** Código, nome e valores numéricos são editados num
   `AlertDialog` do Android, não na superfície onde o conteúdo está desenhado.
   É o marco M05 do plano e exige uma `View` embutida com `InputConnection`.
-- **Sumiço visual após retomada.** Hierarquia preservada e viewport vazio ao
-  voltar do segundo plano. Sem reprodução instrumentada aqui; o próprio plano
-  classifica a causa como não fechada. É o marco M03.
+- ~~**Sumiço visual após retomada.**~~ **FECHADO (M03.2).** Reproduzido no
+  aparelho pela primeira vez: mandar o editor para segundo plano e voltar deixava
+  a hierarquia inteira e o viewport vazio, com
+  `[Editor] Falha ao publicar documento no renderer.` a **cada quadro**.
+
+  A causa não é a cena nem a superfície. Recriar a superfície chama
+  `rebuildInstancedRenderer`, que reconstrói o renderer do zero — e a biblioteca
+  de autoria dele volta a ter só as primitivas internas. A cena do editor
+  sobrevive apontando para os desenhos do `veiculo.glb`, e a publicação passa a
+  falhar contra uma biblioteca que não os tem mais. A grade continuava aparecendo
+  porque é um passe de shader que não depende do buffer de instâncias — foi ela
+  que mostrou que o renderer e a superfície estavam vivos e que só a publicação
+  do documento falhava.
+
+  Corrigido com `EditorSession::republishGeometry`, chamada quando o renderer
+  fica pronto e já havia sessão antes. Ela não lê arquivo: os blocos por fonte já
+  estão em memória. A sequência publicar+adotar, que existia só dentro de
+  `importModel`, virou `publishAndAdopt` e agora serve aos dois caminhos — eram
+  duas cópias em potencial da mesma sequência, que é a forma de defeito desta
+  semana.
+
+  | Verificação | Antes | Depois |
+  | --- | --- | --- |
+  | Geometria após retomar | ausente (`r1.png`) | presente (`r2.png`) |
+  | `Falha ao publicar documento` | a cada quadro | nenhuma ocorrência |
+  | Log de reidratação | — | `[Editor] Geometria republicada na superficie nova.` |
+
+  Coberto por teste de host: importa um GLB, troca o consumidor gráfico por um
+  novo e exige que a cena sobreviva e volte a publicar, e que reidratar sem nada
+  importado não republique à toa.
 - ~~**Grade inclinada e grade sobre faces em ângulo rasante.**~~ **FECHADO.**
   Causa raiz no raio normalizado no vértice, acima. Verificado no aparelho e
   confirmado pelo usuário. O M04 fica completo.
@@ -589,6 +616,10 @@ apresentado como resolvido:
   seleção seja **idêntica** à de desenho para a mesma entidade. O teste foi
   verificado ao contrário: com o defeito reintroduzido ele falha (834/835), com
   a correção passa (835/835).
+- **M04.3 verificado no aparelho.** Quatro toques no projeto `Hierarquia0911`:
+  corpo azul → `Carroceria`; a lasca amarela da porta → `PortaEsquerda`; chão
+  vazio → nada selecionado; cubo cinza → `Cubo`. A porta é o caso que o defeito
+  do pivô quebrava.
 - ~~**Objetos que somem / grade que sobe por cima ao dar zoom.**~~ **FECHADO**
   pela mesma correção — era a deformação do raio mudando junto com a câmera, não
   culling nem sumiço de geometria. As varreduras anteriores
