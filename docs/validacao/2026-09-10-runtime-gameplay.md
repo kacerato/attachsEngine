@@ -19,7 +19,7 @@ aceitação com duas composições continuam **fora** desta rodada.
 | Comando | Resultado |
 |---|---|
 | `cmake --build build/editor-host --target aether_tests --parallel 6` | compila sem warning (`-Werror` ligado) |
-| `./build/editor-host/aether_tests.exe` | **794/794** em 10/09; **820/820** em 11/09, com luz, material em execução, registro de recursos e importação de GLB |
+| `./build/editor-host/aether_tests.exe` | **794/794** em 10/09; **828/828** em 11/09, com luz, material em execução, registro de recursos, importação de GLB com hierarquia e catálogo de código |
 | `dotnet run --project tests/Aether.Tests/Aether.Tests.csproj -c Release -p:AetherNativeBuildDir=…/build/editor-host` | **521/521** em 10/09; em 11/09, 451 aprovados e 70 pulados (os pulados dependem da lib nativa que este build de host não produz) |
 | `android/gradlew.bat :app:assembleDebug :app:testDebugUnitTest --console=plain` | BUILD SUCCESSFUL; 16 testes Java (10 `ProjectSceneSourceTest` + 6 `ProjectStoreTest`), 0 falhas |
 | `android/gradlew.bat :app:assembleRelease --console=plain` | BUILD SUCCESSFUL — `app-release.apk`, 30.705.870 bytes |
@@ -232,6 +232,55 @@ na build instalada; as duas apontam para as mesmas três identidades, e é por
 isso que se sobrepõem exatamente. Não é defeito do caminho atual — uma
 reimportação com o registro presente devolve `reimport=1` e cria zero objetos.
 
+### Correções do plano mestre (11/09)
+
+O plano mestre de 11/09 aponta cinco defeitos de escopo imediato. Dois foram
+corrigidos nesta rodada; os outros três continuam abertos e estão listados nas
+lacunas.
+
+**1. O componente sumia do inspetor e continuava executando.** Confirmado no
+código antes de mexer: `EditorCodeWorkspace::replace`, `undo`, `redo`,
+`createScript` e uma compilação **falhada** limpavam `scriptTypes_` — a mesma
+lista que o inspetor usa para descobrir tipos e desenhar propriedades. A
+mensagem de falha já dizia "versão aplicada anterior preservada" e não era
+verdade.
+
+Corrigido separando três coisas que não são a mesma: a instância anexada (do
+documento), o schema conhecido (do catálogo **publicado**) e a versão em
+execução (da sessão de Play). O catálogo publicado só muda por publicação
+aceita, e fechar o projeto é a única operação que o apaga. A publicação virou
+atômica: o relatório do compilador apenas encena os tipos, e `publishBuild` só
+os promove depois de o hospedeiro confirmar que carregou o assembly.
+
+Guarda verificada ao contrário: repondo a linha antiga em `replace`, dois testes
+falham — "o tipo continua conhecido depois de editar" e "e ela é de fato
+preservada". Com a correção, 825/825.
+
+**2. A importação achatava a hierarquia.** Confirmado e pior que o relatado: a
+importação entregue em 11/09 assava a matriz de MUNDO no desenho e criava todos
+os nós como irmãos na raiz. Como a extração do editor subtrai o centro dos
+limites e recompõe a partir da transformação do objeto, a pose de cada nó era
+**perdida** — as partes vinham parar na origem, mantendo só rotação e escala.
+
+Corrigido: a importação passa a produzir a árvore do arquivo — um nó por nó,
+inclusive os **sem malha**, com transformação local — e a geometria fica no
+espaço do nó. O pivô de uma parte importada é a origem do NÓ, não o centro dos
+limites; primitivas internas mantêm a convenção do pacote. Nó com matriz que não
+cabe em TRS é contado, não arredondado.
+
+Validado no aparelho, **a partir de um projeto vazio** (`Hierarquia0911`), com
+um assembly de cinco nós (`Veiculo` sem malha → `Carroceria`, `PortaEsquerda`,
+`RodaFrente`, `RodaTras`):
+
+| Passo | Evidência |
+| --- | --- |
+| Hierarquia preservada | `105`: `Veiculo` recolhível com quatro filhos indentados, não cinco irmãos na raiz |
+| Nó sem malha sobrevive | `106`: `Veiculo` selecionável e sem componente de Malha |
+| Transformação local do nó | `107`: `PortaEsquerda` com Posição `(-1.000, 0.000, 1.000)` — exatamente o `translation` do arquivo |
+| Pivô na dobradiça | `106`/`109`: o gizmo nasce no canto da porta, não no centro do volume |
+| A parte é editável sozinha | `108`: Rotação Y = 70 só na porta; carroceria e rodas não se movem |
+| Salvar, encerrar e reabrir | `112`: `[Import] fonte reaberta: Fontes/veiculo.glb`, árvore e poses de volta |
+
 ## Testes acrescentados (host)
 
 ### Mundo de execução (`tests/native/test_runtime_world.cpp`, 11)
@@ -315,7 +364,23 @@ reimportação com o registro presente devolve `reimport=1` e cria zero objetos.
   arquivo do componente v1 continua carregando;
 - importação cria objetos apontando para a geometria nova, reimportar não
   duplica, importação recusada deixa a cena e o registro exatamente como
-  estavam, e a identidade sobrevive a salvar e reabrir o projeto.
+  estavam, e a identidade sobrevive a salvar e reabrir o projeto;
+- **a árvore do arquivo vira árvore de objetos**: o nó sem malha sobrevive como
+  grupo, a ordem dos filhos é a do arquivo e a transformação local de cada nó
+  vira a do objeto;
+- mover uma parte não move a irmã, e mover a raiz move as duas;
+- o pivô de uma parte importada é a origem do nó, não o centro do mesh.
+
+### Catálogo de código (`tests/native/test_editor_code_catalog.cpp`, 5)
+
+- editar, desfazer, refazer e criar arquivo **não** apagam o catálogo publicado,
+  e o estado passa a dizer que o texto está à frente;
+- compilação falhada preserva o catálogo que a própria mensagem promete
+  preservar, e o erro aparece nos diagnósticos;
+- tipos compilados só aparecem depois de o hospedeiro aceitar; recusar a
+  publicação devolve o catálogo anterior e não é tratado como falha;
+- relatório de build de geração antiga é recusado e não publica nada;
+- fechar o projeto é a única operação que limpa o catálogo.
 
 ### Play com scripts (`tests/native/test_editor_play_scripts.cpp`, 3)
 
@@ -367,10 +432,27 @@ reimportação com o registro presente devolve `reimport=1` e cria zero objetos.
 - Luzes pontuais/spot têm teto de **8** por quadro. O excedente é contado e
   avisado no log do shell; ainda **não** aparece no console do editor, porque o
   console da entrega F não existe.
-- **Entrega F** (console com histórico e navegação por diagnóstico, estados de
-  compilação, busca/substituição, campos tipados novos, ocultar `.astra`): não
-  iniciada. O seletor de modelo de script é a única parte de interface deste
-  pacote.
+- **Entrega F**: existe a separação instância/schema/execução com publicação
+  atômica e estado honesto do catálogo. Continuam **fora**: console com
+  histórico e navegação por diagnóstico, edição de código embutida (hoje é um
+  diálogo do Android), campos numéricos editados no próprio campo,
+  busca/substituição e ocultar `.astra`.
+
+### Defeitos do plano mestre ainda ABERTOS
+
+O plano mestre de 11/09 lista cinco defeitos de escopo imediato. Dois foram
+corrigidos nesta rodada (catálogo de scripts e hierarquia importada). Os outros
+três continuam abertos e **não** devem ser apresentados como resolvidos:
+
+- **Escrita em modal.** Código, nome e valores numéricos são editados num
+  `AlertDialog` do Android, não na superfície onde o conteúdo está desenhado.
+  É o marco M05 do plano e exige uma `View` embutida com `InputConnection`.
+- **Sumiço visual após retomada.** Hierarquia preservada e viewport vazio ao
+  voltar do segundo plano. Sem reprodução instrumentada aqui; o próprio plano
+  classifica a causa como não fechada. É o marco M03.
+- **Grade sobre a geometria e piscando no zoom.** `editor_grid.h` é overlay por
+  construção; corrigir exige um passe com teste de profundidade e transição
+  contínua de escala. É o marco M04.
 - **Entrega G**: a prova de aceitação — duas composições diferentes montadas
   inteiramente pela interface — **não** foi feita. Esta rodada montou UMA cena
   simples (chão, cubo, corpo, colisores, script) para exercitar os caminhos.

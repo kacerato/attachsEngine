@@ -46,14 +46,6 @@ i16 packSnorm(float value) {
   return static_cast<i16>(std::lround(clamped * 32767.f));
 }
 
-void multiply(const float a[16], const float b[16], float out[16]) {
-  float value[16]{};
-  for (u32 c = 0; c < 4; ++c)
-    for (u32 r = 0; r < 4; ++r)
-      for (u32 k = 0; k < 4; ++k) value[c * 4 + r] += a[k * 4 + r] * b[c * 4 + k];
-  std::copy(value, value + 16, out);
-}
-
 struct Accessor {
   u32 component = 0, components = 0, count = 0;
   bool normalized = false;
@@ -438,7 +430,9 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
   // Hierarquia depois: cada nó com malha vira um desenho com a matriz de mundo
   // acumulada. Iterativo e com visitados, para que um arquivo com ciclo falhe
   // em vez de rodar para sempre.
-  struct Pending { u32 node; float world[16]; };
+  // A pilha carrega o índice EMITIDO do pai, não uma matriz acumulada: a
+  // árvore é a saída, e compor mundo aqui só voltaria a achatar a hierarquia.
+  struct Pending { u32 node; i32 parent; };
   std::vector<Pending> stack;
   std::vector<bool> visited(nodes->childCount, false);
   const float identity[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
@@ -476,10 +470,9 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
   // objetos numa reimportação.
   for (auto index = roots.size(); index > 0; --index) {
     if (roots[index - 1] >= nodes->childCount) return giveUp("Nó raiz inexistente.");
-    Pending entry{roots[index - 1], {}};
-    std::copy(identity, identity + 16, entry.world);
-    stack.push_back(entry);
+    stack.push_back({roots[index - 1], -1});
   }
+  (void)identity;
 
   while (!stack.empty()) {
     if (importer.cancelled()) return giveUp("Importação cancelada.");
@@ -491,16 +484,26 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
     if (node.kind != Kind::Object) return giveUp("Nó inválido.");
     float local[16];
     if (!importer.localMatrix(node, local)) return giveUp(result.diagnostic.c_str());
-    float world[16];
-    multiply(entry.world, local, world);
-    for (u32 i = 0; i < 16; ++i) if (!std::isfinite(world[i])) return giveUp("Transformação de nó não finita.");
+    for (u32 i = 0; i < 16; ++i) if (!std::isfinite(local[i])) return giveUp("Transformação de nó não finita.");
+
+    const auto name = document.string(node, "name");
+    const std::string nodeKey = name.empty() ? "n" + std::to_string(entry.node) : std::string(name);
+    // Todo nó entra na árvore, TENHA OU NÃO malha. Um grupo, um pivô de
+    // dobradiça ou um alvo de animação é exatamente o que segura a articulação;
+    // descartá-lo por não desenhar nada é o que achata a hierarquia.
+    if (result.nodes.size() >= limits.maximumNodes)
+      return giveUp("O arquivo passa do limite de nós desta importação.");
+    const auto emitted = static_cast<u32>(result.nodes.size());
+    GltfImportNode imported;
+    imported.name = name.empty() ? nodeKey : std::string(name);
+    imported.parent = entry.parent;
+    std::copy(local, local + 16, imported.localMatrix);
+    result.nodes.push_back(std::move(imported));
 
     if (document.member(node, "camera")) ++result.skippedCameras;
     const auto meshIndex = document.index(node, "mesh");
     if (meshIndex >= 0 && meshIndex < meshes->childCount) {
       if (document.index(node, "skin") >= 0) ++result.skippedSkins;
-      const auto name = document.string(node, "name");
-      const std::string nodeKey = name.empty() ? "n" + std::to_string(entry.node) : std::string(name);
       for (const auto &range : byMesh[static_cast<u32>(meshIndex)]) {
         if (result.draws.size() >= limits.maximumDraws)
           return giveUp("O arquivo passa do limite de desenhos desta importação.");
@@ -509,22 +512,15 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
         draw.indexCount = range.indexCount;
         draw.vertexOffset = range.vertexOffset;
         draw.materialIndex = range.material;
-        std::copy(world, world + 16, draw.model);
-        // O centro do desenho é o centro LOCAL levado ao mundo: o extrator do
-        // editor e o culling usam este par, e um centro em espaço local faria o
-        // objeto sumir quando o nó estivesse longe da origem.
-        for (u32 axis = 0; axis < 3; ++axis)
-          draw.boundsCenter[axis] = world[axis] * range.center[0] + world[4 + axis] * range.center[1] +
-                                    world[8 + axis] * range.center[2] + world[12 + axis];
-        float scale = 0;
-        for (u32 column = 0; column < 3; ++column) {
-          float length = 0;
-          for (u32 row = 0; row < 3; ++row) length += world[column * 4 + row] * world[column * 4 + row];
-          scale = std::fmax(scale, std::sqrt(length));
-        }
-        draw.boundsRadius = range.radius * scale;
+        // Modelo IDENTIDADE e limites LOCAIS: a geometria vive no espaço do nó,
+        // e a pose vem da árvore. Assar a matriz de mundo aqui apagaria a
+        // hierarquia -- e foi o que uma versão anterior desta importação fez.
+        draw.model[0] = draw.model[5] = draw.model[10] = draw.model[15] = 1;
+        std::copy(range.center, range.center + 3, draw.boundsCenter);
+        draw.boundsRadius = range.radius;
         draw.lodGroupId = static_cast<u32>(result.draws.size());
         result.draws.push_back(draw);
+        result.drawNodes.push_back(emitted);
         result.names.push_back(name.empty() ? std::string("Malha ") + std::to_string(result.draws.size())
                                             : std::string(name));
         result.keys.push_back(nodeKey + "/" + range.key);
@@ -536,9 +532,7 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
         if (!value || value->kind != Kind::Number) return giveUp("Lista de filhos inválida.");
         const auto index = static_cast<u32>(value->number);
         if (index >= nodes->childCount) return giveUp("Nó filho inexistente.");
-        Pending next{index, {}};
-        std::copy(world, world + 16, next.world);
-        stack.push_back(next);
+        stack.push_back({index, static_cast<i32>(emitted)});
       }
   }
 

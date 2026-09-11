@@ -112,11 +112,20 @@ AE_TEST(glb_import_reads_geometry_hierarchy_and_material_factors) {
   AE_EXPECT_EQ(import.vertices.size(), 3u * renderer::MapVertexStride, "três vértices no passo do pacote");
   AE_EXPECT_TRUE(import.names[0] == "Triangulo", "o nome do nó vira o nome do objeto");
 
-  // A posição do nó chega na matriz de modelo do desenho, e o centro do
-  // limite vem em MUNDO — é o par que o culling usa.
-  AE_EXPECT_EQ(import.draws[0].model[12], 10.f, "translação do nó");
-  AE_EXPECT_TRUE(import.draws[0].boundsCenter[0] > 10.f, "centro levado ao mundo");
+  // A geometria vive no espaço do NÓ: modelo identidade e limites locais. A
+  // pose está na árvore, não assada no desenho — assar apagaria a hierarquia.
+  AE_EXPECT_EQ(import.draws[0].model[12], 0.f, "desenho sem translação assada");
+  AE_EXPECT_EQ(import.draws[0].model[0], 1.f, "modelo identidade");
+  AE_EXPECT_TRUE(import.draws[0].boundsCenter[0] < 1.f, "centro em espaço local");
   AE_EXPECT_TRUE(import.draws[0].boundsRadius > 0.f, "raio do limite");
+
+  // A árvore do arquivo chega inteira, com a transformação local do nó.
+  AE_EXPECT_EQ(import.nodes.size(), 1u, "um nó");
+  AE_EXPECT_TRUE(import.nodes[0].name == "Triangulo", "nome do nó");
+  AE_EXPECT_EQ(import.nodes[0].parent, -1, "raiz");
+  AE_EXPECT_EQ(import.nodes[0].localMatrix[12], 10.f, "translação local do nó");
+  AE_EXPECT_EQ(import.drawNodes.size(), 1u, "um desenho ligado a um nó");
+  AE_EXPECT_EQ(import.drawNodes[0], 0u, "o desenho pertence ao nó");
 
   // Vértice: posição em float, normal empacotada em snorm16, como o pacote.
   float position[3];
@@ -162,7 +171,10 @@ AE_TEST(glb_import_reuses_geometry_for_instances_and_reports_what_it_left_behind
   AE_EXPECT_EQ(import.draws.size(), 2u, "duas instâncias");
   AE_EXPECT_EQ(import.vertices.size(), 3u * renderer::MapVertexStride, "uma cópia da geometria");
   AE_EXPECT_EQ(import.draws[0].vertexOffset, import.draws[1].vertexOffset, "as duas usam o mesmo bloco");
-  AE_EXPECT_TRUE(import.draws[0].model[12] != import.draws[1].model[12], "poses diferentes");
+  AE_EXPECT_EQ(import.nodes.size(), 2u, "dois nós");
+  AE_EXPECT_TRUE(import.nodes[0].localMatrix[12] != import.nodes[1].localMatrix[12],
+                 "poses diferentes, na árvore e não no desenho");
+  AE_EXPECT_TRUE(import.drawNodes[0] != import.drawNodes[1], "cada desenho pertence a seu nó");
   AE_EXPECT_EQ(import.skippedAnimations, 1u, "animação contada");
   AE_EXPECT_EQ(import.skippedSkins, 1u, "pele contada");
   AE_EXPECT_TRUE(import.skippedTextures > 0, "textura contada");

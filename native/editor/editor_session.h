@@ -84,8 +84,24 @@ public:
     state_.codeBuildBusy=false;const bool ok=code_.applyBuildReport(report,codeBuildGeneration_);
     state_.status=ok?"Código compilado; pronto para aplicar":code_.error();return ok;
   }
+  // O que o catálogo publicado diz sobre si mesmo, em texto de interface. É a
+  // resposta honesta para "o componente sumiu": ele não some, o catálogo é que
+  // pode estar atrás do texto.
+  const char *codeCatalogStatus() const {
+    switch(code_.catalogState()) {
+    case EditorCodeCatalogState::Empty: return "Nenhum código publicado";
+    case EditorCodeCatalogState::Current: return "Código publicado corresponde ao texto";
+    case EditorCodeCatalogState::Stale: return "Texto alterado desde a última publicação";
+    case EditorCodeCatalogState::Failed: return "Compilação falhou; publicação anterior em uso";
+    }
+    return "";
+  }
   void reportCodeCommit(bool accepted) {
-    if(!accepted) code_.invalidateBuild();
+    // Fronteira atômica: os tipos compilados só passam a existir para o inspetor
+    // quando o hospedeiro confirma que carregou o assembly. Recusar não apaga o
+    // catálogo anterior — o assembly anterior continua sendo o que executa.
+    if(accepted) code_.publishBuild();
+    else code_.discardBuild();
     state_.status=accepted?"Código aplicado ao projeto":"Não foi possível publicar a compilação";
   }
   const std::string &requestedScenePath() const { return requestedScenePath_; }
@@ -169,6 +185,12 @@ public:
     // duplica os objetos — quem quer outra cópia instancia de novo, e isso é
     // um ato diferente.
     bool reimported = false;
+    // Objetos sem malha criados para segurar a hierarquia: grupos, pivôs,
+    // alvos. Eles são o que faz mover a carroceria levar a porta junto.
+    u32 groups = 0;
+    // Nós cuja matriz não cabe em translação/rotação/escala. A pose deles fica
+    // assada no desenho e o objeto nasce na identidade — dito, não disfarçado.
+    u32 shearedNodes = 0;
     std::string diagnostic;
     bool cancelled = false;
     resources::AssetGuid source{};
@@ -282,6 +304,10 @@ private:
     std::vector<renderer::MapMaterialRecord> materials;
     std::vector<resources::AssetGuid> identities;
     std::vector<std::string> names;
+    // A árvore do arquivo, preservada para reinstanciar e para a reimportação
+    // saber que nó é qual.
+    std::vector<resources::GltfImportNode> nodes;
+    std::vector<u32> drawNodes;
   };
   struct ImportedLibrary {
     std::vector<u8> vertices;
@@ -290,6 +316,9 @@ private:
     std::vector<renderer::MapMaterialRecord> materials;
     std::vector<resources::AssetGuid> identities;
     std::vector<std::string> names;
+    // Pivô por desenho, em espaço do mesh. Geometria importada gira em torno da
+    // origem do NÓ; ver `EditorMapScene::adoptPackage`.
+    std::vector<float> pivots;
   };
   // Achata os blocos na ordem em que estão, remapeando offsets. A ordem é
   // estável: reimportar não reordena as fontes, então os slots das outras não

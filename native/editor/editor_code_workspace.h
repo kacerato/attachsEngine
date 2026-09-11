@@ -21,15 +21,49 @@ struct EditorCodeDiagnostic {
   u32 line=1,column=1;
   bool error=true;
 };
+// O estado do catálogo publicado em relação ao rascunho em edição. São coisas
+// diferentes de propósito: o usuário precisa saber que o texto mudou sem que a
+// lista de componentes conhecidos desapareça embaixo dele.
+enum class EditorCodeCatalogState : u32 {
+  Empty,   // nada foi publicado ainda neste projeto
+  Current, // o catálogo publicado corresponde ao texto atual
+  Stale,   // há rascunho mais novo; o publicado continua valendo
+  Failed   // a última compilação falhou; o publicado anterior continua valendo
+};
+
 // Buffers own edits independently of scene history. IO occurs only in explicit
 // open/save/create actions on the session thread, never while drawing the UI.
 class EditorCodeWorkspace final {
 public:
   static constexpr usize MaximumFileBytes=512*1024,MaximumBuffers=16;
   u64 generation() const {return generation_;}
+  // Recebe o relatório do compilador e **encena** os tipos: nada é publicado
+  // aqui. Quem publica é `publishBuild`, depois de o hospedeiro aceitar a
+  // compilação — é a fronteira atômica que impede o catálogo de anunciar tipos
+  // de um assembly que não entrou em uso.
   bool applyBuildReport(std::string_view report,u64 generation);
+  // Promove o que foi encenado. Só depois disto o inspetor vê os tipos novos.
+  void publishBuild();
+  // Descarta o que foi encenado. O catálogo publicado ANTERIOR continua valendo:
+  // ele descreve o assembly que ainda está em uso.
+  void discardBuild();
+  // O catálogo PUBLICADO. Ele não é limpo por digitar, desfazer, refazer, criar
+  // arquivo ou por uma compilação que falhou.
+  //
+  // Isto já foi o contrário, e o defeito era observável: editar o texto apagava
+  // a lista, o componente sumia de "Adicionar componente" e do inspetor, e
+  // mesmo assim continuava anexado e executando no Play. Instância autorada,
+  // schema conhecido e versão em execução são três coisas distintas.
   const std::vector<EditorScriptType> &scriptTypes() const {return scriptTypes_;}
-  void invalidateBuild() {scriptTypes_.clear();}
+  EditorCodeCatalogState catalogState() const {
+    if(scriptTypes_.empty() && !publishedGeneration_) return EditorCodeCatalogState::Empty;
+    if(lastBuildFailed_) return EditorCodeCatalogState::Failed;
+    return publishedGeneration_==generation_?EditorCodeCatalogState::Current
+                                            :EditorCodeCatalogState::Stale;
+  }
+  // A geração do texto que produziu o catálogo publicado. Zero quando nunca
+  // houve publicação.
+  u64 publishedGeneration() const {return publishedGeneration_;}
   bool open(EditorFileSystem &files,const std::string &relative);
   // `templateIndex` escolhe um modelo de editor_script_templates.h; fora da
   // faixa cria o arquivo vazio de sempre. O modelo que interage por capacidade
@@ -56,8 +90,9 @@ private:
   static void remember(std::vector<std::string> &history,const std::string &text);
   std::vector<EditorCodeBuffer> buffers_;
   std::vector<EditorCodeDiagnostic> diagnostics_;
-  std::vector<EditorScriptType> scriptTypes_;
-  u64 selected_=0,nextId_=1,generation_=1;
+  std::vector<EditorScriptType> scriptTypes_,stagedTypes_;
+  u64 selected_=0,nextId_=1,generation_=1,publishedGeneration_=0,stagedGeneration_=0;
+  bool lastBuildFailed_=false,stagedValid_=false;
   std::string error_;
 };
 }

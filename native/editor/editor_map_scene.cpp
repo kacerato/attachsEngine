@@ -55,10 +55,17 @@ bool buildPickMeshes(std::span<const renderer::MapDrawRecord> draws,std::span<co
 }
 } // namespace
 
+void EditorMapScene::pivotOf(u32 index, float out[3]) const {
+  if(index>=source_.size()) {out[0]=out[1]=out[2]=0;return;}
+  if(pivots_.size()>=static_cast<usize>(index)*3+3) {std::copy(pivots_.begin()+index*3,pivots_.begin()+index*3+3,out);return;}
+  std::copy(source_[index].boundsCenter,source_[index].boundsCenter+3,out);
+}
+
 bool EditorMapScene::adoptPackage(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws,
                                   std::span<const renderer::MapMaterialRecord> materials,
                                   std::span<const u8> vertices, std::span<const u32> indices,
-                                  std::span<const resources::AssetGuid> identities, u64 packageFingerprint) {
+                                  std::span<const resources::AssetGuid> identities, u64 packageFingerprint,
+                                  std::span<const float> pivots) {
   std::vector<std::shared_ptr<const EditorPickMesh>> meshes;
   if(!buildPickMeshes(draws,vertices,indices,meshes)) return false;
   std::vector<resources::AssetGuid> assets(draws.size());
@@ -68,10 +75,12 @@ bool EditorMapScene::adoptPackage(EditorDocument &document, std::span<const rend
   // Duas identidades iguais no mesmo pacote fariam `assetSlot` escolher pela
   // ordem da lista — exatamente o que a identidade existe para eliminar.
   for(u32 a=0;a<assets.size();++a) for(u32 b=0;b<a;++b) if(assets[a]==assets[b]) return false;
+  if(!pivots.empty() && pivots.size()!=draws.size()*3) return false;
   pickMeshes_=std::move(meshes);
   source_.assign(draws.begin(),draws.end());
   materials_.assign(materials.begin(),materials.end());
   assets_=std::move(assets);
+  pivots_.assign(pivots.begin(),pivots.end());
   reconcileAssets(document);
   return true;
 }
@@ -102,6 +111,7 @@ bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::
   materials_.assign(materials.begin(),materials.end());
   assets_.resize(draws.size());
   for(u32 index=0;index<draws.size();++index) assets_[index]=packageAssetGuid(packageFingerprint,index);
+  pivots_.clear();
   document=std::move(prepared);
   return true;
 }
@@ -161,7 +171,16 @@ bool EditorMapScene::bounds(const runtime::SceneGraph &document, EditorEntityId 
     radius=0;for(u32 axis=0;axis<3;++axis) {center[axis]=(low[axis]+high[axis])*.5f;radius+=(high[axis]-low[axis])*(high[axis]-low[axis])*.25f;}
     radius=std::sqrt(radius);return true;
   }
-  std::copy(world+12,world+15,center);
+  float pivot[3];pivotOf(meshAsset(*entity)-1,pivot);
+  const auto &record=source_[meshAsset(*entity)-1];
+  // O centro é o centro do MESH levado ao mundo, e o pivô é a origem do objeto.
+  // Para o pacote os dois coincidem e isto devolve exatamente o de sempre; para
+  // um nó importado, usar a origem como centro deixaria o enquadramento e o
+  // culling deslocados do que se vê.
+  for(u32 axis=0;axis<3;++axis) {
+    const float local[3]{record.boundsCenter[0]-pivot[0],record.boundsCenter[1]-pivot[1],record.boundsCenter[2]-pivot[2]};
+    center[axis]=world[12+axis]+world[axis]*local[0]+world[4+axis]*local[1]+world[8+axis]*local[2];
+  }
   float one=0,inf=0;
   for(u32 i=0;i<3;++i) {
     float col=0,row=0;
@@ -174,7 +193,8 @@ bool EditorMapScene::bounds(const runtime::SceneGraph &document, EditorEntityId 
 bool EditorMapScene::localGeometry(u32 assetId,std::span<const EditorPickMesh::Triangle> &triangles,float relative[16]) const {
   if(!assetId||assetId>pickMeshes_.size()||!pickMeshes_[assetId-1]) return false;
   const auto &source=source_[assetId-1];std::copy(source.model,source.model+16,relative);
-  for(u32 axis=0;axis<3;++axis) relative[12+axis]-=source.boundsCenter[axis];
+  float pivot[3];pivotOf(assetId-1,pivot);
+  for(u32 axis=0;axis<3;++axis) relative[12+axis]-=pivot[axis];
   triangles=pickMeshes_[assetId-1]->triangles();return !triangles.empty();
 }
 bool EditorMapScene::pickGeometry(const runtime::SceneGraph &document,EditorEntityId id,EditorPickCandidate &out) const {
@@ -211,10 +231,11 @@ bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<Ed
     update.objectId=id;
     update.sourceDrawIndex=index;update.pose.drawIndex=target;
     update.pose.draw.lodGroupId=target;update.pose.draw.lodLevel=0;
-    float world[16],relative[16];
+    float world[16],relative[16],pivot[3];
     if(!editorWorldMatrix(document,id,world)) return false;
+    pivotOf(index,pivot);
     std::copy(source.model,source.model+16,relative);
-    for(u32 a=0;a<3;++a) relative[12+a]-=source.boundsCenter[a];
+    for(u32 a=0;a<3;++a) relative[12+a]-=pivot[a];
     multiply(world,relative,update.pose.draw.model);
     const float tint[4]{1,1,1,1};
     if(!renderer::buildGpuMeshInstance(update.pose.draw.model,tint,&update.pose.instance)) return false;

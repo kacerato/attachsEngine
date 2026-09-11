@@ -38,7 +38,13 @@ const EditorCodeBuffer *EditorCodeWorkspace::active() const {
 bool EditorCodeWorkspace::dirty() const {
   return std::any_of(buffers_.begin(),buffers_.end(),[](const auto &b){return b.dirty();});
 }
-void EditorCodeWorkspace::clear() {++generation_;scriptTypes_.clear();buffers_.clear();diagnostics_.clear();selected_=0;error_.clear();}
+void EditorCodeWorkspace::clear() {
+  // Fechar o projeto é a ÚNICA operação que apaga o catálogo publicado: o
+  // assembly daquele projeto deixou de existir para esta sessão.
+  ++generation_;scriptTypes_.clear();stagedTypes_.clear();buffers_.clear();diagnostics_.clear();
+  selected_=0;publishedGeneration_=0;stagedGeneration_=0;lastBuildFailed_=false;stagedValid_=false;
+  error_.clear();
+}
 bool EditorCodeWorkspace::select(u64 id) {
   for(const auto &buffer:buffers_) if(buffer.id==id) {selected_=id;return true;}
   return false;
@@ -64,17 +70,20 @@ bool EditorCodeWorkspace::replace(u64 id,u64 revision,std::string_view text) {
   if(text.size()>MaximumFileBytes || text.find('\0')!=std::string_view::npos) {error_="Código excede o limite ou contém bytes nulos";return false;}
   if(buffer->text==text) return true;
   remember(buffer->undo,buffer->text);buffer->redo.clear();buffer->text=text;
-  ++buffer->revision;++generation_;scriptTypes_.clear();diagnostics_.clear();error_.clear();return true;
+  // O texto mudou: o rascunho fica mais novo que o publicado. Os diagnósticos
+  // são do rascunho e saem; o catálogo publicado continua descrevendo o
+  // assembly que está em uso.
+  ++buffer->revision;++generation_;diagnostics_.clear();error_.clear();return true;
 }
 bool EditorCodeWorkspace::undo() {
   auto *buffer=active();if(!buffer || buffer->undo.empty()) return false;
   remember(buffer->redo,buffer->text);buffer->text=std::move(buffer->undo.back());buffer->undo.pop_back();
-  ++buffer->revision;++generation_;scriptTypes_.clear();diagnostics_.clear();return true;
+  ++buffer->revision;++generation_;diagnostics_.clear();return true;
 }
 bool EditorCodeWorkspace::redo() {
   auto *buffer=active();if(!buffer || buffer->redo.empty()) return false;
   remember(buffer->undo,buffer->text);buffer->text=std::move(buffer->redo.back());buffer->redo.pop_back();
-  ++buffer->revision;++generation_;scriptTypes_.clear();diagnostics_.clear();return true;
+  ++buffer->revision;++generation_;diagnostics_.clear();return true;
 }
 bool EditorCodeWorkspace::saveBuffer(EditorFileSystem &files,EditorCodeBuffer &buffer) {
   if(!buffer.dirty()) return true;
@@ -126,7 +135,9 @@ bool EditorCodeWorkspace::createScript(EditorFileSystem &files,std::string_view 
        !files.createTextFile(contracts,kEditorScriptContracts)) {error_=files.error();return false;}
   }
   if(!files.createTextFile(relative,text)) {error_=files.error();return false;}
-  ++generation_;scriptTypes_.clear();return open(files,relative);
+  // Criar um arquivo torna o rascunho mais novo; não apaga o que já foi
+  // publicado nem os componentes que dependem desses tipos.
+  ++generation_;return open(files,relative);
 }
 std::vector<EditorCodeMatch> EditorCodeWorkspace::find(std::string_view query) const {
   std::vector<EditorCodeMatch> result;const auto *buffer=active();
@@ -165,8 +176,31 @@ bool EditorCodeWorkspace::applyBuildReport(std::string_view report,u64 generatio
   }
   in>>std::ws;if(!in.eof()) return false;
   diagnostics_=std::move(diagnostics);
-  if(success) {scriptTypes_=std::move(types);error_.clear();return true;}
-  scriptTypes_.clear();error_="Compilação com erros; versão aplicada anterior preservada";return false;
+  if(success) {
+    // Encenado, não publicado: o hospedeiro ainda pode recusar a compilação, e
+    // anunciar tipos de um assembly que não entrou em uso faria o inspetor
+    // prometer o que o Play não executaria.
+    stagedTypes_=std::move(types);stagedGeneration_=generation;stagedValid_=true;
+    lastBuildFailed_=false;error_.clear();return true;
+  }
+  stagedTypes_.clear();stagedValid_=false;lastBuildFailed_=true;
+  // A mensagem sempre disse isto; agora é verdade — o catálogo anterior fica.
+  error_="Compilação com erros; versão aplicada anterior preservada";return false;
+}
+
+void EditorCodeWorkspace::publishBuild() {
+  if(!stagedValid_) return;
+  scriptTypes_=std::move(stagedTypes_);
+  stagedTypes_.clear();stagedValid_=false;
+  publishedGeneration_=stagedGeneration_;
+  lastBuildFailed_=false;
+}
+
+void EditorCodeWorkspace::discardBuild() {
+  stagedTypes_.clear();stagedValid_=false;
+  // Não marca falha: a compilação funcionou, quem recusou foi a publicação. O
+  // catálogo anterior continua correto porque o assembly anterior continua em
+  // uso.
 }
 
 }

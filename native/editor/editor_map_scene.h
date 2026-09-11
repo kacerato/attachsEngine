@@ -43,10 +43,18 @@ public:
   // está — é o caso da geometria importada, cuja identidade vem do arquivo de
   // origem e da chave estável, não do índice — e uma entrada vazia recebe a
   // identidade derivada da impressão digital do pacote.
+  // `pivots` traz três floats por desenho: a origem em torno da qual o objeto
+  // gira e pela qual o gizmo o pega. Vazio mantém a convenção do pacote — pivô
+  // no centro dos limites —, que é o que faz um cubo primitivo girar em torno
+  // de si. Geometria importada usa a origem do NÓ, porque é ela que segura a
+  // dobradiça de uma porta; o centro visual não é o pivô do arquivo.
   bool adoptPackage(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws,
                     std::span<const renderer::MapMaterialRecord> materials,
                     std::span<const u8> vertices, std::span<const u32> indices,
-                    std::span<const resources::AssetGuid> identities, u64 packageFingerprint);
+                    std::span<const resources::AssetGuid> identities, u64 packageFingerprint,
+                    std::span<const float> pivots = {});
+  // O pivô do desenho `index` (0-based), em espaço do mesh.
+  void pivotOf(u32 index, float out[3]) const;
   bool extract(const runtime::SceneGraph &document, std::vector<EditorMapUpdate> &out) const;
   bool bounds(const runtime::SceneGraph &document, EditorEntityId entity, float center[3], float &radius) const;
   bool localGeometry(u32 assetId,std::span<const EditorPickMesh::Triangle> &triangles,float relative[16]) const;
@@ -59,6 +67,8 @@ public:
   }
 private:
   std::vector<resources::AssetGuid> assets_;
+  // Três floats por desenho; vazio significa "pivô no centro dos limites".
+  std::vector<float> pivots_;
   std::vector<std::shared_ptr<const EditorPickMesh>> pickMeshes_;
   std::vector<renderer::MapMaterialRecord> materials_;
   std::vector<renderer::MapDrawRecord> source_;

@@ -448,6 +448,7 @@ if(NOT ANDROID)
     ../tests/native/test_gltf_import.cpp
     ../tests/native/test_editor_model_import.cpp
     ../tests/native/test_editor_script_templates.cpp
+    ../tests/native/test_editor_code_catalog.cpp
     ../tests/native/test_editor_play_scripts.cpp
     ../tests/native/test_editor_map_scene.cpp
     ../tests/native/test_scene_components.cpp

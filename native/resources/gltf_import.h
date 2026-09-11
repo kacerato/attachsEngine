@@ -51,7 +51,21 @@ struct GltfImportProgress {
   void *context = nullptr;
 };
 
+// Um nó da árvore do arquivo, com a transformação LOCAL e o pai.
+//
+// A lista de desenhos é uma saída para renderização; ela não é a árvore. Sem
+// esta representação, importar achata a hierarquia: as partes nascem irmãs na
+// raiz e mover a carroceria não leva a porta junto. Nós sem malha — grupos,
+// pivôs, alvos — sobrevivem porque são exatamente o que segura a articulação.
+struct GltfImportNode {
+  std::string name;
+  i32 parent = -1; // -1 é raiz
+  float localMatrix[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+};
+
 struct GltfImport {
+  // Geometria em espaço LOCAL do nó: `model` é identidade e os limites são do
+  // mesh. A pose vem do nó, não da matriz do desenho.
   std::vector<renderer::MapDrawRecord> draws;
   std::vector<renderer::MapMaterialRecord> materials;
   std::vector<u8> vertices; // passo renderer::MapVertexStride
@@ -67,6 +81,9 @@ struct GltfImport {
   // dá nome. Renomear no editor 3D quebra a ligação, e isso é dito ao usuário
   // em vez de resolvido por adivinhação.
   std::vector<std::string> keys;
+  // A árvore do arquivo e, por desenho, o índice do nó dono.
+  std::vector<GltfImportNode> nodes;
+  std::vector<u32> drawNodes;
   // Motivo concreto quando `importGlb` devolve falso. Nunca "erro ao importar".
   std::string diagnostic;
   bool cancelled = false;

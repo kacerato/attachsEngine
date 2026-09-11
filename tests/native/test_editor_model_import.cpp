@@ -257,3 +257,136 @@ AE_TEST(imported_identities_survive_saving_and_reopening_the_project) {
   AE_EXPECT_TRUE(render != nullptr && render->asset == identidade,
                  "a identidade da malha sobreviveu ao arquivo");
 }
+
+namespace {
+// Um assembly de verdade: uma raiz SEM malha com dois filhos que têm malha, e a
+// porta deslocada do próprio centro — é o caso que separa "renderizou igual à
+// imagem" de "a hierarquia sobreviveu para editar".
+std::vector<u8> assemblyGlb() {
+  std::vector<u8> binary;
+  // Um quadrado de 1x1 no plano XY, com o canto na origem: o centro do mesh
+  // (0.5,0.5,0) NÃO é a origem do nó, que é onde a dobradiça vive.
+  const float positions[12]{0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0};
+  for (float value : positions) appendFloat(binary, value);
+  const u16 indices[6]{0, 1, 2, 0, 2, 3};
+  for (u16 value : indices) { binary.push_back(static_cast<u8>(value)); binary.push_back(static_cast<u8>(value >> 8)); }
+  while (binary.size() % 4) binary.push_back(0);
+
+  const std::string json =
+      std::string(R"({"asset":{"version":"2.0"},)") +
+      R"("buffers":[{"byteLength":)" + std::to_string(binary.size()) + R"(}],)" +
+      R"("bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":48},{"buffer":0,"byteOffset":48,"byteLength":12}],)" +
+      R"("accessors":[{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3"},)"
+      R"({"bufferView":1,"componentType":5123,"count":6,"type":"SCALAR"}],)" +
+      R"("meshes":[{"name":"Chapa","primitives":[{"attributes":{"POSITION":0},"indices":1}]}],)" +
+      R"("nodes":[)"
+      R"({"name":"Veiculo","children":[1,2],"translation":[0,0,0]},)"
+      R"({"name":"Carroceria","mesh":0,"translation":[0,0,0]},)"
+      R"({"name":"PortaEsquerda","mesh":0,"translation":[3,0,0]}],)" +
+      R"("scenes":[{"nodes":[0]}],"scene":0})";
+
+  std::string paddedJson = json;
+  while (paddedJson.size() % 4) paddedJson.push_back(' ');
+  std::vector<u8> glb;
+  appendU32(glb, 0x46546C67);
+  appendU32(glb, 2);
+  appendU32(glb, static_cast<u32>(12 + 8 + paddedJson.size() + 8 + binary.size()));
+  appendU32(glb, static_cast<u32>(paddedJson.size()));
+  appendU32(glb, 0x4E4F534A);
+  glb.insert(glb.end(), paddedJson.begin(), paddedJson.end());
+  appendU32(glb, static_cast<u32>(binary.size()));
+  appendU32(glb, 0x004E4942);
+  glb.insert(glb.end(), binary.begin(), binary.end());
+  return glb;
+}
+} // namespace
+
+AE_TEST(importing_an_assembly_keeps_the_tree_and_the_empty_parent) {
+  EditorSession session;
+  FakeRenderer renderer;
+  startSession(session, renderer);
+
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.importModel(assemblyGlb(), "Fontes/veiculo.glb", {}, report), report.diagnostic.c_str());
+  AE_EXPECT_EQ(report.objects, 3u, "raiz mais dois filhos");
+  AE_EXPECT_EQ(report.groups, 1u, "o nó sem malha sobreviveu como grupo");
+
+  const auto raizes = session.document().childrenOf(session.document().root());
+  AE_EXPECT_EQ(raizes.size(), 1u, "uma raiz do modelo, não três irmãos achatados");
+  const auto veiculo = raizes[0];
+  AE_EXPECT_TRUE(session.document().find(veiculo)->name == std::string("Veiculo"), "a raiz é o nó do arquivo");
+  AE_EXPECT_TRUE(meshRenderer(*session.document().find(veiculo)) == nullptr,
+                 "um nó sem malha não ganha malha inventada");
+
+  const auto filhos = session.document().childrenOf(veiculo);
+  AE_EXPECT_EQ(filhos.size(), 2u, "dois filhos");
+  AE_EXPECT_TRUE(session.document().find(filhos[0])->name == std::string("Carroceria"), "ordem do arquivo");
+  AE_EXPECT_TRUE(session.document().find(filhos[1])->name == std::string("PortaEsquerda"), "ordem do arquivo");
+  // A pose local do nó virou a transformação do objeto — é isso que torna a
+  // porta editável em vez de fundida na geometria.
+  AE_EXPECT_EQ(session.document().find(filhos[1])->transform.position[0], 3.f, "translação local da porta");
+  AE_EXPECT_EQ(session.document().find(filhos[0])->transform.position[0], 0.f, "carroceria na origem do pai");
+}
+
+AE_TEST(moving_one_part_does_not_move_its_sibling_and_moving_the_root_moves_both) {
+  EditorSession session;
+  FakeRenderer renderer;
+  startSession(session, renderer);
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.importModel(assemblyGlb(), "Fontes/veiculo.glb", {}, report), report.diagnostic.c_str());
+
+  const auto veiculo = session.document().childrenOf(session.document().root())[0];
+  const auto filhosSpan = session.document().childrenOf(veiculo);
+  const std::vector<EditorEntityId> filhos(filhosSpan.begin(), filhosSpan.end());
+
+  const auto desenhoDe = [&](EditorEntityId id) {
+    std::vector<renderer::MapDrawState> states;
+    if (!session.extractMap(states)) return renderer::MapDrawState{};
+    for (const auto &state : states) if (state.objectId == id) return state;
+    return renderer::MapDrawState{};
+  };
+
+  const auto carroceriaAntes = desenhoDe(filhos[0]);
+  // Mover SÓ a porta.
+  auto porta = *session.document().find(filhos[1]);
+  porta.transform.position[1] += 5;
+  AE_EXPECT_TRUE(session.document().applyEntityValues(filhos[1], porta), "porta movida");
+  const auto carroceriaDepois = desenhoDe(filhos[0]);
+  AE_EXPECT_EQ(carroceriaDepois.pose.draw.model[13], carroceriaAntes.pose.draw.model[13],
+               "a carroceria não se move quando a porta se move");
+  AE_EXPECT_EQ(desenhoDe(filhos[1]).pose.draw.model[13], carroceriaAntes.pose.draw.model[13] + 5.f,
+               "a porta se moveu");
+
+  // Mover a RAIZ leva os dois.
+  auto raiz = *session.document().find(veiculo);
+  raiz.transform.position[2] += 10;
+  AE_EXPECT_TRUE(session.document().applyEntityValues(veiculo, raiz), "raiz movida");
+  AE_EXPECT_EQ(desenhoDe(filhos[0]).pose.draw.model[14], carroceriaAntes.pose.draw.model[14] + 10.f,
+               "a carroceria seguiu o pai");
+  AE_EXPECT_EQ(desenhoDe(filhos[1]).pose.draw.model[14], carroceriaAntes.pose.draw.model[14] + 10.f,
+               "a porta também seguiu o pai");
+}
+
+AE_TEST(the_pivot_of_an_imported_part_is_the_node_origin_not_the_mesh_centre) {
+  // A chapa tem o canto na origem e o centro em (0.5,0.5,0). Se o pivô fosse o
+  // centro visual, girar a porta a arrastaria para longe da dobradiça.
+  EditorSession session;
+  FakeRenderer renderer;
+  startSession(session, renderer);
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.importModel(assemblyGlb(), "Fontes/veiculo.glb", {}, report), report.diagnostic.c_str());
+
+  const auto veiculo = session.document().childrenOf(session.document().root())[0];
+  const auto filhosSpan = session.document().childrenOf(veiculo);
+  const std::vector<EditorEntityId> filhos(filhosSpan.begin(), filhosSpan.end());
+
+  std::vector<renderer::MapDrawState> states;
+  AE_EXPECT_TRUE(session.extractMap(states), "extração");
+  for (const auto &state : states) if (state.objectId == filhos[1]) {
+    // O objeto está em x=3 e a geometria ocupa [3,4]: o nó é a origem, e o
+    // canto do mesh coincide com ela.
+    AE_EXPECT_EQ(state.pose.draw.model[12], 3.f, "a origem do objeto é a origem do nó");
+    return;
+  }
+  AE_EXPECT_TRUE(false, "a porta apareceu na extração");
+}

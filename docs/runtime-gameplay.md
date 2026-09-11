@@ -195,13 +195,44 @@ O header embutido no editor é gerado por `tools/build-script-templates.py` a
 partir dos mesmos arquivos que o teste gerenciado compila com o compilador do
 projeto do usuário. Um modelo que não compila não chega ao editor.
 
-## 11. ABI de scripts
+## 11. Catálogo de código: instância, schema e execução
+
+São três coisas distintas, e confundi-las produziu um defeito observável: editar
+o texto apagava a lista de tipos, o componente sumia de "Adicionar componente" e
+do inspetor — e continuava anexado e executando no Play.
+
+| Coisa | Quem é dono | O que a apaga |
+|---|---|---|
+| Instância anexada | o documento de cena | remover o componente, comando explícito |
+| Schema conhecido | o catálogo **publicado** | fechar o projeto |
+| Versão em execução | a sessão de Play | Stop |
+
+O catálogo publicado **não** é limpo por digitar, desfazer, refazer, criar
+arquivo nem por uma compilação que falhou — a mensagem de falha sempre prometeu
+preservar a versão anterior, e agora isso é verdade.
+
+A publicação é atômica: `applyBuildReport` apenas **encena** os tipos, e só
+`publishBuild` os promove, depois de o hospedeiro confirmar que carregou o
+assembly. Recusar a publicação devolve o catálogo anterior, que continua correto
+porque o assembly anterior continua em uso. Um relatório de build de uma geração
+antiga é recusado e não publica nada.
+
+O estado do catálogo é dito, não escondido:
+
+| Estado | Significado |
+|---|---|
+| Nenhum código publicado | o projeto ainda não compilou nada |
+| Publicado corresponde ao texto | em dia |
+| Texto alterado desde a última publicação | há rascunho mais novo; o publicado vale |
+| Compilação falhou | o publicado anterior continua em uso |
+
+## 12. ABI de scripts
 
 v5. Campos de v2 nas mesmas posições; v3 acrescentou hierarquia/ciclo de
 vida/componentes/propriedades/transform de mundo, v4 consultas e contatos, v5
 ações de entrada. O lado gerenciado exige a versão corrente e confere `size`.
 
-## 12. Luzes
+## 13. Luzes
 
 `astra.render.light` é um componente como qualquer outro: anexado pelo mesmo
 catálogo, editado pelo mesmo inspetor genérico, escrito pela mesma API de
@@ -247,7 +278,7 @@ Mudar uma luz durante o Play funciona pelo mesmo caminho de qualquer
 propriedade: a coleta do quadro lê o mundo em execução, não o documento autoral.
 O modelo `ControleDeLuz` acende, apaga e pulsa uma luz por esse caminho.
 
-## 13. Recursos e importação
+## 14. Recursos e importação
 
 Um recurso tem **identidade** (`AssetGuid`, 128 bits), um **caminho** e um
 **hash de conteúdo**, e os três são coisas diferentes:
@@ -275,6 +306,29 @@ ausente é informação, e desenhar a malha que por acaso ocupa o índice antigo
 seria corromper a cena em silêncio. Cena anterior a isto carrega e ganha a
 identidade derivada do slot que já trazia.
 
+**A árvore do arquivo vira árvore de objetos.** A lista de desenhos é uma saída
+para renderização; ela não é a hierarquia. A importação produz um nó por nó do
+arquivo — **inclusive os sem malha**, que são exatamente o que segura a
+articulação — com a transformação LOCAL de cada um, e a geometria fica no espaço
+do nó em vez de assada em coordenadas de mundo.
+
+Sem isso, importar achata: as partes nascem irmãs na raiz, mover a carroceria
+não leva a porta junto, e a pose de cada nó se perde. Uma versão anterior desta
+importação fazia exatamente isso.
+
+O **pivô** de uma parte importada é a origem do NÓ, não o centro dos limites.
+Uma porta gira na dobradiça porque foi ali que o autor colocou a origem;
+recentralizar no volume visível moveria a rotação para o meio da porta. As
+primitivas internas do editor mantêm a convenção do pacote — pivô no centro —,
+que é o que faz um cubo girar em torno de si.
+
+Um nó cuja matriz tem shear ou reflexão não cabe em translação/rotação/escala.
+Ele chega com a pose fixa no desenho e o objeto nasce na identidade, e a
+importação **conta** esses casos. Arredondar e chamar de preservado seria mentir
+sobre o arquivo. Um nó com várias primitivas ganha um filho por primitiva, com o
+nome indicando a parte: slots por submesh pertencem ao material compartilhado,
+que não existe.
+
 **Importar um GLB no aparelho.** `Adicionar objeto → Geometria → Importar
 modelo` abre o seletor do sistema. O URI é `content://` e **não** vira caminho
 POSIX: quem lê os bytes é o `ContentResolver`, que é quem tem a permissão. O
@@ -287,7 +341,7 @@ O que a importação traz e o que não traz:
 
 | Traz | Não traz |
 |---|---|
-| hierarquia de nós, com TRS e `matrix` | texturas (imagens) |
+| a árvore inteira, com nós sem malha e transformações locais | texturas (imagens) |
 | instâncias: o mesmo mesh em vários nós custa N desenhos e **uma** cópia da geometria | skins e animações |
 | primitivas TRIANGLES | pontos, linhas, faixas e leques |
 | POSITION, NORMAL, TANGENT, TEXCOORD_0/1, COLOR_0 | câmeras e luzes do arquivo |
@@ -312,7 +366,7 @@ sobrevive porque a identidade de cada malha vem dos NOMES do nó e da malha, nã
 do índice — acrescentar um objeto no editor 3D reindexa tudo o que vem depois.
 Renomear no editor 3D quebra a ligação, e isso é dito em vez de adivinhado.
 
-## 14. O que este documento NÃO afirma
+## 15. O que este documento NÃO afirma
 
 - Não há exportação de jogo nem player autônomo.
 - Sensor **por colisor** não existe: o sensor pertence ao corpo inteiro.

@@ -1162,6 +1162,8 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
     }
     library.identities.insert(library.identities.end(),source.identities.begin(),source.identities.end());
     library.names.insert(library.names.end(),source.names.begin(),source.names.end());
+    // Pivô na origem do nó: a geometria importada já vive no espaço dele.
+    for(usize i=0;i<source.draws.size();++i) {library.pivots.push_back(0);library.pivots.push_back(0);library.pivots.push_back(0);}
   }
   return library;
 }
@@ -1195,6 +1197,8 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
   block.indices.assign(model.indices.begin(),model.indices.end());
   block.materials.assign(model.materials.begin(),model.materials.end());
   block.draws.assign(model.draws.begin(),model.draws.end());
+  block.nodes=model.nodes;
+  block.drawNodes=model.drawNodes;
   for(usize i=0;i<model.draws.size();++i) {
     // A identidade de cada malha importada: a fonte mais a chave estável. É o
     // que sobrevive a acrescentar um objeto no editor 3D e reexportar.
@@ -1244,9 +1248,17 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
   const auto primitives=published.draws.size()-candidate.draws.size();
   std::vector<resources::AssetGuid> identities(primitives);
   identities.insert(identities.end(),candidate.identities.begin(),candidate.identities.end());
+  // Pivô: as primitivas internas mantêm a convenção do pacote (centro dos
+  // limites), a geometria importada usa a origem do nó.
+  std::vector<float> pivots;
+  pivots.reserve(published.draws.size()*3);
+  for(usize i=0;i<primitives;++i)
+    for(u32 axis=0;axis<3;++axis) pivots.push_back(published.draws[i].boundsCenter[axis]);
+  pivots.insert(pivots.end(),candidate.pivots.begin(),candidate.pivots.end());
+  if(pivots.size()!=published.draws.size()*3) { report.diagnostic="Pacote publicado inconsistente."; return false; }
   cancelPointers();
   if(!mapScene_.adoptPackage(document_,published.draws,published.materials,published.vertices,
-                             published.indices,identities,packageFingerprint_)) {
+                             published.indices,identities,packageFingerprint_,pivots)) {
     report.diagnostic="O editor recusou o pacote publicado.";return false;
   }
   importedSources_=std::move(candidateSources);
@@ -1254,24 +1266,63 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
   // Reimportar NÃO cria objetos: os que já existem apontam para as mesmas
   // identidades e acabaram de ser reconciliados com a geometria nova.
   if(!report.reimported) {
+    // A árvore do arquivo vira árvore de objetos. Um nó por objeto, INCLUSIVE
+    // os sem malha: é o grupo vazio que segura a porta no lugar quando a
+    // carroceria se move, e descartá-lo é exatamente o que achata a hierarquia.
+    const auto &tree=importedSources_[slot<importedSources_.size()?slot:importedSources_.size()-1];
     history_.begin("Importar modelo");
+    std::vector<EditorEntityId> created(tree.nodes.size(),kInvalidEntity);
+    const float identity[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+    for(usize n=0;n<tree.nodes.size();++n) {
+      const auto &node=tree.nodes[n];
+      const auto parent=node.parent>=0 && static_cast<usize>(node.parent)<created.size()
+          ? created[static_cast<usize>(node.parent)] : document_.root();
+      if(parent==kInvalidEntity) { history_.end(); report.diagnostic="Hierarquia do modelo fora de ordem."; return false; }
+      const auto id=history_.createEntity(document_,parent,EditorEntityKind::Mesh,
+                                          node.name.empty()?"Objeto":node.name.c_str());
+      if(!id) { history_.end(); report.diagnostic="Não foi possível criar os objetos do modelo."; return false; }
+      created[n]=id;
+      auto value=*document_.find(id);
+      // A pose LOCAL do nó vira a transformação do objeto. Um nó cuja matriz
+      // não cabe em TRS mantém a pose assada no desenho e o objeto nasce na
+      // identidade; o relatório conta esses casos em vez de arredondar e
+      // chamar de preservado.
+      EditorTransform local;
+      if(runtime::localTransformForWorld(node.localMatrix,identity,local)) value.transform=local;
+      else ++report.shearedNodes;
+      history_.applyValues(document_,id,value);
+      ++report.objects;
+    }
+    // Cada desenho entra no objeto do seu nó. Um nó com várias primitivas
+    // ganha filhos: slots por submesh são entrega de material, e inventar um
+    // objeto por primitiva sem dizer seria pior que dizer.
+    std::vector<u32> drawsPerNode(tree.nodes.size(),0);
+    for(usize i=0;i<newDrawCount;++i) {
+      const auto nodeIndex=i<tree.drawNodes.size()?tree.drawNodes[i]:0u;
+      if(nodeIndex<drawsPerNode.size()) ++drawsPerNode[nodeIndex];
+    }
+    std::vector<u32> placed(tree.nodes.size(),0);
     for(usize i=0;i<newDrawCount;++i) {
       const auto drawSlot=static_cast<u32>(primitives+firstNew+i)+1;
-      const auto id=history_.createEntity(document_,document_.root(),EditorEntityKind::Mesh,
-                                          candidate.names[firstNew+i].c_str());
-      if(!id) { history_.end(); report.diagnostic="Não foi possível criar os objetos do modelo."; return false; }
-      auto value=*document_.find(id);
+      const auto nodeIndex=i<tree.drawNodes.size()?tree.drawNodes[i]:0u;
+      if(nodeIndex>=created.size()) { history_.end(); report.diagnostic="Desenho sem nó no modelo."; return false; }
+      auto target=created[nodeIndex];
+      if(drawsPerNode[nodeIndex]>1) {
+        const auto name=tree.names[firstNew+i]+" · "+std::to_string(placed[nodeIndex]+1);
+        target=history_.createEntity(document_,created[nodeIndex],EditorEntityKind::Mesh,name.c_str());
+        if(!target) { history_.end(); report.diagnostic="Não foi possível criar as partes do modelo."; return false; }
+        ++report.objects;
+      }
+      ++placed[nodeIndex];
+      auto value=*document_.find(target);
       auto *render=editMeshRenderer(value);
       if(!render) { history_.end(); report.diagnostic="Não foi possível criar a malha do objeto."; return false; }
       render->mesh=drawSlot;
       render->asset=candidate.identities[firstNew+i];
       render->material=mapScene_.materialForAsset(drawSlot-1);
-      // A pose do nó já está na matriz de modelo do desenho importado; o objeto
-      // nasce na origem para que o gizmo mova o conjunto sem duplicar a
-      // transformação do arquivo.
-      history_.applyValues(document_,id,value);
-      ++report.objects;
+      history_.applyValues(document_,target,value);
     }
+    for(usize n=0;n<tree.nodes.size();++n) if(!drawsPerNode[n]) ++report.groups;
     history_.end();
   }
 
