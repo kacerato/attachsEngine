@@ -604,6 +604,26 @@ foi.
 - **Foco do editor vazando para gameplay** e **teclado/multitouch preso** não
   foram testados.
 
+**Os três defeitos foram FECHADOS depois, e dois deles tinham a mesma causa: a
+correção automática do teclado.** A ponte instrumentada mostrou os bytes que
+chegavam ao editor — `50 6F 72 74 61 20 69 6E 74 65 72 69 6F 72`, ou seja
+`Porta interior`, com espaço no meio — quando o que foi digitado, e o que
+aparecia escrito na tela, era `PortaInterior`. O mesmo mecanismo explica o
+`" que "` que apareceu no meio do código.
+
+Nada do que se digita neste editor é prosa: são nomes de classe, nomes de
+objeto, caminhos e código. `TYPE_TEXT_FLAG_NO_SUGGESTIONS` **não basta** no
+Gboard — medido; a variação de senha visível é a que os teclados respeitam, e
+mantém o alfabeto normal.
+
+O terceiro era a ponte fechando o campo antes de saber se o editor tinha
+aceitado. Numa recusa o editor mantém o pedido aberto e rearma a sequência, mas
+a `View` já tinha perdido o foco: o teclado reaparecia ligado a nada. Confirmar
+agora só submete, e quem fecha é a ausência do pedido no `poll`.
+
+Verificado no aparelho: `PortaInterior.cs` criado pelo modelo `Porta`, no
+`InteriorG2` — exatamente o passo que esta rodada não tinha conseguido concluir.
+
 **Defeitos encontrados por esta rodada:**
 
 1. **Campo de nome de script não recebe o texto depois de uma recusa.** Ao
