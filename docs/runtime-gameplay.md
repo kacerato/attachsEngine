@@ -651,7 +651,37 @@ respondiam e as **linhas não** — um bloco anterior ficava com o toque. O cons
 passou para o início da cadeia, e um teste de host varre o painel inteiro
 exigindo que cada linha visível responda com o **seu** índice.
 
-## 20. O que este documento NÃO afirma
+## 20. Compilar quando a digitação para
+
+O build sai sozinho depois de uma pausa de 1,25 s. Não é preciso tocar em
+`Aplicar` — ele continua lá para forçar.
+
+Compilar a cada tecla seria compilar, sessenta vezes por segundo, um texto que
+passa a maior parte do tempo sintaticamente quebrado: cada tecla intermediária
+produz um erro que o usuário não cometeu. O atraso existe para que o compilador
+veja uma **pausa**, e não um meio-caminho.
+
+**E é ele, e não um sinalizador separado, que resolve a composição do IME.**
+Enquanto o teclado compõe uma palavra, cada evento muda o texto e reinicia a
+contagem; o build só acontece depois que a composição termina e o texto fica
+parado. Um bit de "compondo" seria uma segunda verdade sobre o mesmo fato.
+
+Um pedido por **geração**, e não um por quadro parado: o mesmo texto não compila
+duas vezes. E o arquivo é gravado antes de pedir — o compilador lê o disco, e um
+build de um texto que só existe na memória compilaria a versão anterior e
+culparia o usuário por um erro que ele acabou de corrigir.
+
+**Colagem é uma transação própria.** Uma inserção de vários caracteres num evento
+só não veio de teclas: veio da área de transferência ou de uma correção inteira.
+Juntá-la à sessão de digitação faria um desfazer levar as duas coisas de uma vez.
+
+O console ganhou duas correções que só o uso contínuo mostra: a linha
+"compilação com erros" do editor entra apenas quando **não** há diagnóstico — com
+o build automático ela seria uma linha nova por pausa dizendo o que as linhas do
+compilador logo acima já dizem melhor, e com o lugar —, e tirar o bloco do
+compilador agora reconta as linhas iguais que ficaram encostadas.
+
+## 21. O que este documento NÃO afirma
 
 - Não há exportação de jogo nem player autônomo.
 - Sensor **por colisor** não existe: o sensor pertence ao corpo inteiro.

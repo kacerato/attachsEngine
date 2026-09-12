@@ -71,8 +71,21 @@ public:
   void replaceCompiler(std::span<const EditorCodeDiagnostic> diagnostics) {
     std::vector<EditorConsoleEntry> kept;
     kept.reserve(entries_.size());
-    for (auto &entry : entries_)
-      if (entry.origin != EditorConsoleOrigin::Compiler) kept.push_back(std::move(entry));
+    for (auto &entry : entries_) {
+      if (entry.origin == EditorConsoleOrigin::Compiler) continue;
+      // Tirar o bloco do compilador pode encostar duas linhas iguais que antes
+      // tinham um diagnóstico entre elas. A contagem acontece na inserção, e
+      // sem esta passagem o console acumularia pares repetidos a cada
+      // compilação — exatamente no painel que existe para não repetir.
+      if (!kept.empty() && kept.back().severity == entry.severity &&
+          kept.back().origin == entry.origin && kept.back().message == entry.message &&
+          kept.back().file == entry.file && kept.back().line == entry.line &&
+          kept.back().object == entry.object) {
+        kept.back().repeats += entry.repeats;
+        continue;
+      }
+      kept.push_back(std::move(entry));
+    }
     entries_ = std::move(kept);
     for (const auto &diagnostic : diagnostics) {
       EditorConsoleEntry entry;

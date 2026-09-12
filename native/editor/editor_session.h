@@ -103,13 +103,62 @@ public:
     console_.add(std::move(entry));
   }
   void setCodeCompilerAvailable(bool value) {state_.codeCompilerAvailable=value;}
+  // Abre um arquivo de codigo do projeto e o torna o ativo.
+  bool openCodeFile(const std::string &relative) {
+    if(!code_.open(files_,relative)) { state_.status=code_.error(); return false; }
+    state_.code=&code_;state_.workspace=EditorWorkspace::Code;
+    return true;
+  }
+  // Digita no arquivo aberto. E o MESMO caminho que a ponte de texto usa: uma
+  // colagem vira transacao propria e a digitacao contigua vira uma entrada so.
+  bool typeCode(std::string_view text);
+
+  // Compilacao automatica: o build sai sozinho quando a digitacao PARA.
+  //
+  // Compilar a cada tecla seria compilar, sessenta vezes por segundo, um texto
+  // que passa a maior parte do tempo sintaticamente quebrado: cada tecla
+  // intermediaria produz um erro que o usuario nao cometeu. O atraso existe
+  // para que o compilador veja uma pausa, e nao um meio-caminho.
+  //
+  // E e ele, e nao um sinalizador separado, que resolve a composicao do IME:
+  // enquanto o teclado compoe uma palavra, cada evento muda o texto e reinicia
+  // a contagem. O build so acontece depois que a composicao termina e o texto
+  // fica parado.
+  void setCodeAutoBuildDelay(float seconds) noexcept {
+    codeAutoBuildDelay_ = seconds > 0.0f ? seconds : 0.0f;
+  }
+  float codeAutoBuildDelay() const noexcept { return codeAutoBuildDelay_; }
+  void pumpCodeAutoBuild(double seconds) {
+    if(codeAutoBuildDelay_<=0.0f || !state_.codeCompilerAvailable || state_.codeBuildBusy) return;
+    if(files_.rootPath().empty()) return;
+    const auto generation=code_.generation();
+    if(generation!=codeSeenGeneration_) {
+      codeSeenGeneration_=generation;codeQuietSince_=seconds;return;
+    }
+    if(generation==codeBuiltGeneration_ || codeQuietSince_<0.0) return;
+    if(seconds-codeQuietSince_<static_cast<double>(codeAutoBuildDelay_)) return;
+    if(!codeBuildRequest_.empty()) return;
+    // Salvar ANTES de pedir: o compilador le o disco, e um build de um texto
+    // que so existe na memoria compilaria a versao anterior e culparia o
+    // usuario por um erro que ele acabou de corrigir.
+    if(!code_.saveAll(files_)) { state_.status=code_.error(); codeQuietSince_=-1.0; return; }
+    codeBuiltGeneration_=generation;
+    codeBuildGeneration_=generation;
+    codeBuildRequest_=files_.rootPath();
+    state_.codeBuildBusy=true;
+    state_.status="Compilando código do projeto";
+  }
   std::string takeCodeBuildRequest() {auto request=std::move(codeBuildRequest_);codeBuildRequest_.clear();return request;}
   bool completeCodeBuild(std::string_view report) {
     state_.codeBuildBusy=false;const bool ok=code_.applyBuildReport(report,codeBuildGeneration_);
     // O bloco do compilador troca inteiro: um diagnostico de um arquivo que
     // agora compila e mentira, e mentira que o usuario persegue.
     console_.replaceCompiler(code_.diagnostics());
-    if(!ok) reportProblem(EditorConsoleSeverity::Error,code_.error());
+    // A linha do editor so entra quando NAO ha diagnostico. Com o build
+    // automatico, "compilacao com erros" a cada pausa de digitacao seria uma
+    // linha nova por pausa dizendo o que as linhas do compilador logo acima ja
+    // dizem melhor -- e com o lugar.
+    if(!ok && code_.diagnostics().empty()) reportProblem(EditorConsoleSeverity::Error,code_.error());
     state_.status=ok?"Código compilado; pronto para aplicar":code_.error();return ok;
   }
   // O que o catálogo publicado diz sobre si mesmo, em texto de interface. É a
@@ -469,6 +518,9 @@ private:
   EditorViewport view_{};
   EditorScreenState state_{};
   EditorConsole console_;
+  float codeAutoBuildDelay_ = 1.25f;
+  u64 codeSeenGeneration_ = 0, codeBuiltGeneration_ = 0;
+  double codeQuietSince_ = -1.0;
   EditorScreenLayout layout_{};
   ui::UiDrawList list_;
   ui::UiInputRouter router_;

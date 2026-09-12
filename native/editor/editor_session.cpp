@@ -448,7 +448,7 @@ bool EditorSession::updateTextDraft(const EditorTextEdit &edit,std::string_view 
   // desfazer -- `replace` guarda uma copia do arquivo por chamada, e uma
   // chamada por tecla faria desfazer voltar caractere a caractere.
   if(edit.purpose==EditorTextPurpose::Code) {
-    if(!code_.type(edit.bufferId,text)) { state_.status=code_.error(); return false; }
+    if(!typeCode(text)) return false;
     followCodeCaret();
     return true;
   }
@@ -504,6 +504,22 @@ void EditorSession::jumpToConsoleEntry(u32 index) {
     return;
   }
   state_.status="Esta mensagem não aponta para um lugar";
+}
+
+// Colagem e UMA transacao, e nao a continuacao da digitacao.
+//
+// Uma insercao de varios caracteres num evento so nao veio de teclas: veio da
+// area de transferencia ou de uma correcao inteira. Junta-la a sessao de
+// digitacao faria um desfazer levar embora as duas coisas de uma vez.
+bool EditorSession::typeCode(std::string_view text) {
+  auto *buffer=code_.active();
+  if(!buffer) { state_.status="Nenhum arquivo de código aberto"; return false; }
+  const auto before=buffer->text.size();
+  const bool bulk=text.size()>before+2 || before>text.size()+2;
+  if(bulk) code_.endTypingRun();
+  if(!code_.type(buffer->id,text)) { state_.status=code_.error(); return false; }
+  if(bulk) code_.endTypingRun();
+  return true;
 }
 
 void EditorSession::followCodeCaret() {

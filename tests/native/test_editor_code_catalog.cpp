@@ -1,5 +1,6 @@
 #include "harness.h"
 #include "editor/editor_code_workspace.h"
+#include "editor/editor_session.h"
 #include "editor/editor_filesystem.h"
 
 #include <chrono>
@@ -199,4 +200,68 @@ AE_TEST(typing_is_one_undo_entry_per_session_not_one_per_key) {
   // Arquivo errado nao aceita tecla: um buffer trocado no meio da digitacao
   // escreveria o texto de um arquivo dentro de outro.
   AE_EXPECT_TRUE(!workspace.code.type(id + 999u, "qualquer"), "id de outro arquivo e recusado");
+}
+
+AE_TEST(the_build_waits_for_the_typing_to_stop) {
+  // Compilar a cada tecla seria compilar, sessenta vezes por segundo, um texto
+  // que passa a maior parte do tempo sintaticamente quebrado. Cada tecla
+  // intermediaria produz um erro que o usuario nao cometeu.
+  Workspace workspace;
+  AE_EXPECT_TRUE(workspace.start(), "catalogo publicado");
+  EditorSession session;
+  AE_EXPECT_TRUE(session.setProjectDirectory(workspace.root.string().c_str()), "projeto");
+  session.setCodeCompilerAvailable(true);
+  session.setCodeAutoBuildDelay(1.0f);
+  AE_EXPECT_TRUE(session.openCodeFile("Scripts/Comportamento.cs"), "arquivo aberto");
+
+  double now = 10.0;
+  session.pumpCodeAutoBuild(now);
+  AE_EXPECT_TRUE(session.takeCodeBuildRequest().empty(), "sem digitar, sem build");
+
+  AE_EXPECT_TRUE(session.typeCode("public sealed class Comportamento { int a; }"), "digitou");
+  session.pumpCodeAutoBuild(now);
+  now += 0.5;
+  session.pumpCodeAutoBuild(now);
+  AE_EXPECT_TRUE(session.takeCodeBuildRequest().empty(), "meio segundo nao basta");
+
+  // Continuar digitando reinicia a contagem. E isso, e nao um sinalizador
+  // separado, que impede a composicao do IME de disparar um build no meio de
+  // uma palavra.
+  AE_EXPECT_TRUE(session.typeCode("public sealed class Comportamento { int ab; }"), "digitou mais");
+  session.pumpCodeAutoBuild(now);
+  now += 0.9;
+  session.pumpCodeAutoBuild(now);
+  AE_EXPECT_TRUE(session.takeCodeBuildRequest().empty(), "a contagem recomecou");
+
+  now += 0.2;
+  session.pumpCodeAutoBuild(now);
+  const auto request = session.takeCodeBuildRequest();
+  AE_EXPECT_TRUE(!request.empty(), "a pausa dispara o build");
+
+  // E dispara UMA vez: um pedido por geracao, nao um por quadro parado.
+  session.pumpCodeAutoBuild(now + 5.0);
+  AE_EXPECT_TRUE(session.takeCodeBuildRequest().empty(), "o mesmo texto nao compila de novo");
+}
+
+AE_TEST(pasting_is_one_undo_entry_of_its_own) {
+  // Uma insercao de varios caracteres num evento so nao veio de teclas: veio da
+  // area de transferencia. Junta-la a sessao de digitacao faria um desfazer
+  // levar as duas coisas de uma vez.
+  Workspace workspace;
+  AE_EXPECT_TRUE(workspace.start(), "catalogo publicado");
+  const auto *buffer = workspace.code.active();
+  const auto id = buffer->id;
+  const std::string base = buffer->text;
+
+  AE_EXPECT_TRUE(workspace.code.type(id, base + "a"), "tecla");
+  AE_EXPECT_TRUE(workspace.code.type(id, base + "ab"), "tecla");
+  workspace.code.endTypingRun();
+  AE_EXPECT_TRUE(workspace.code.type(id, base + "ab// um bloco colado inteiro"), "colagem");
+  workspace.code.endTypingRun();
+
+  AE_EXPECT_TRUE(workspace.code.undo(), "desfazer a colagem");
+  AE_EXPECT_TRUE(workspace.code.active()->text == base + "ab",
+                 "a colagem sai sozinha e a digitacao fica");
+  AE_EXPECT_TRUE(workspace.code.undo(), "desfazer a digitacao");
+  AE_EXPECT_TRUE(workspace.code.active()->text == base, "e a digitacao sai inteira");
 }

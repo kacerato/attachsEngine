@@ -184,3 +184,25 @@ AE_TEST(every_console_row_is_reachable_by_touch) {
     }
   AE_EXPECT_TRUE(clear && errors, "limpar e o filtro de erros respondem");
 }
+
+AE_TEST(clearing_the_compiler_block_does_not_leave_twins_behind) {
+  // Com o build automatico, uma compilacao acontece a cada pausa de digitacao.
+  // Tirar o bloco do compilador encosta duas linhas do editor que antes tinham
+  // um diagnostico entre elas; sem recontar, o console acumula pares repetidos
+  // -- exatamente no painel que existe para nao repetir.
+  EditorConsole console;
+  const EditorCodeDiagnostic problem[]{diagnostic("Scripts/A.cs", 1, "CS1", "erro")};
+  for (int round = 0; round < 4; ++round) {
+    EditorConsoleEntry note;
+    note.severity = EditorConsoleSeverity::Error;
+    note.origin = EditorConsoleOrigin::Editor;
+    note.message = "Compilacao com erros";
+    console.add(std::move(note));
+    console.replaceCompiler(problem);
+  }
+  u32 editorLines = 0;
+  for (const auto &entry : console.entries())
+    if (entry.origin == EditorConsoleOrigin::Editor) ++editorLines;
+  AE_EXPECT_EQ(editorLines, 1u, "uma linha do editor, com a contagem");
+  AE_EXPECT_EQ(console.count(EditorConsoleSeverity::Error), 5u, "quatro repeticoes mais o erro");
+}

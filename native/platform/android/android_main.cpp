@@ -1823,6 +1823,10 @@ void android_main(android_app *app) {
         const float logicalHeight = static_cast<float>(display.height) / shell.editorScale;
         shell.editorSession.setSurface({0.0f, 0.0f, logicalWidth, logicalHeight}, {});
         ae::platform::android::updateEditorTextInput(shell.editorSession);
+        // O build sai sozinho quando a digitacao para. O relogio e o mesmo do
+        // shell; a sessao so precisa de um instante que ande para frente.
+        shell.editorSession.pumpCodeAutoBuild(
+            std::chrono::duration<double>(std::chrono::steady_clock::now()-shell.shellStartTime).count());
         updateEditorCodeCompiler(shell);
         shell.editorSession.update();
         shell.instancedRenderer.setEnvironmentAdjustment(shell.editorSession.document().find(shell.editorSession.document().root())->environment);
