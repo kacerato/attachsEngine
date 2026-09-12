@@ -210,6 +210,7 @@ bool EditorSession::setProjectDirectory(const char *path) {
   if(code_.dirty()) {state_.status="Salve os arquivos de código antes de trocar de projeto";return false;}
   code_.clear();state_.code=&code_;
   state_.files=&files_;state_.fileScroll=0;state_.fileScrollOffset=0;
+  state_.console=&console_;
   return files_.setRoot(path);
 }
 
@@ -471,6 +472,40 @@ bool EditorSession::updateTextDraft(const EditorTextEdit &edit,std::string_view 
 
 // Rolagem acompanha o cursor. Sem isto, digitar no fim de um arquivo longo
 // escreveria fora da tela.
+// Tocar numa linha do console LEVA ate o lugar dela. Sem isso o console e um
+// mural: diz que algo aconteceu e deixa o usuario procurar onde.
+void EditorSession::jumpToConsoleEntry(u32 index) {
+  const auto *entry=console_.at(index);
+  if(!entry) return;
+  if(!entry->file.empty()) {
+    if(!code_.open(files_,entry->file)) { state_.status=code_.error(); return; }
+    state_.code=&code_;state_.workspace=EditorWorkspace::Code;
+    auto *buffer=code_.active();
+    if(!buffer) return;
+    // A linha do diagnostico e 1-based; a do editor conta do zero.
+    const u32 target=entry->line>0?entry->line-1:0;
+    const u32 visible=layout_.codeVisibleLines>2?layout_.codeVisibleLines:12;
+    buffer->firstLine=target>visible/2?target-visible/2:0;
+    usize start=0;u32 line=0;
+    while(line<target) {
+      const auto end=buffer->text.find(char(10),start);
+      if(end==std::string::npos) { start=buffer->text.size(); break; }
+      start=end+1;++line;
+    }
+    const auto end=buffer->text.find(char(10),start);
+    state_.platformCaret=static_cast<u32>(end==std::string::npos?buffer->text.size():end);
+    state_.platformDraft=buffer->text;
+    state_.status="Linha "+std::to_string(entry->line)+" de "+entry->file;
+    return;
+  }
+  if(entry->object!=0 && document_.find(static_cast<EditorEntityId>(entry->object))) {
+    setSelection(static_cast<EditorEntityId>(entry->object));
+    state_.workspace=EditorWorkspace::Scene;
+    return;
+  }
+  state_.status="Esta mensagem não aponta para um lugar";
+}
+
 void EditorSession::followCodeCaret() {
   auto *buffer=code_.active();
   if(!buffer) return;
@@ -648,6 +683,33 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   if(event.phase==UiPointerPhase::Cancel) playTouches_.cancel();
   if(state_.platformTextInput && pendingTextEdit().purpose!=EditorTextPurpose::None) return true;
   const UiPointerRouting routing = router_.route(event);
+  // O console responde PRIMEIRO.
+  //
+  // Ele e desenhado por cima do editor de codigo e da cena, e a cadeia abaixo
+  // tem varios blocos que consomem o toque por workspace. Um painel que aparece
+  // em cima e decidido embaixo e um painel que so funciona por acidente.
+  if(state_.console) {
+    const auto widget=routing.widgetId;
+    if(routing.dragging && widget>=widgetId(EditorWidget::ConsoleRowBase)) {
+      // Rolar anda a partir do FIM: zero e a linha mais nova.
+      const auto rows=layout_.consoleRowCount,visible=layout_.consoleVisibleRows;
+      const auto maximum=rows>visible?rows-visible:0u;
+      const int next=static_cast<int>(state_.consoleScroll)+static_cast<int>(routing.stepDelta.y/26);
+      state_.consoleScroll=static_cast<u32>(std::clamp(next,0,static_cast<int>(maximum)));
+      return true;
+    }
+    if(routing.tapped) {
+      if(widget==widgetId(EditorWidget::ConsoleInfo)) {console_.toggle(EditorConsoleSeverity::Info);return true;}
+      if(widget==widgetId(EditorWidget::ConsoleWarning)) {console_.toggle(EditorConsoleSeverity::Warning);return true;}
+      if(widget==widgetId(EditorWidget::ConsoleError)) {console_.toggle(EditorConsoleSeverity::Error);return true;}
+      if(widget==widgetId(EditorWidget::ConsoleClear)) {console_.clear();state_.consoleScroll=0;return true;}
+      if(widget==widgetId(EditorWidget::ConsoleCollapse)) {state_.consoleCollapsed=!state_.consoleCollapsed;return true;}
+      const auto base=widgetId(EditorWidget::ConsoleRowBase);
+      if(widget>=base && widget-base<console_.entries().size()) {
+        jumpToConsoleEntry(widget-base);return true;
+      }
+    }
+  }
   if(state_.workspace==EditorWorkspace::Code && routing.widgetId==widgetId(EditorWidget::CodeBody)) {
     if(routing.dragging) if(auto *buffer=code_.active()) {
       const auto count=static_cast<u32>(std::count(buffer->text.begin(),buffer->text.end(),'\n'));
@@ -872,6 +934,14 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     const auto maximum=files_.tree().size()>visible?files_.tree().size()-visible:0;
     state_.fileScrollOffset=std::min(state_.fileScrollOffset,static_cast<float>(maximum)*24);
     state_.fileScroll=static_cast<u32>(state_.fileScrollOffset/24);
+    return true;
+  }
+  if(state_.console && routing.dragging && routing.widgetId>=widgetId(EditorWidget::ConsoleRowBase)) {
+    // Rolar o console anda a partir do FIM: zero e a linha mais nova.
+    const auto rows=layout_.consoleRowCount,visible=layout_.consoleVisibleRows;
+    const auto maximum=rows>visible?rows-visible:0u;
+    const int next=static_cast<int>(state_.consoleScroll)+static_cast<int>(routing.stepDelta.y/26);
+    state_.consoleScroll=static_cast<u32>(std::clamp(next,0,static_cast<int>(maximum)));
     return true;
   }
   if(routing.tapped && state_.files && !history_.isOpen() && !isPlaying()) {

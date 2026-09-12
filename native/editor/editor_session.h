@@ -24,6 +24,7 @@
 #include "platform/first_person_controller.h"
 #include "editor/editor_camera.h"
 #include "editor/editor_commands.h"
+#include "editor/editor_console.h"
 #include "editor/editor_grid.h"
 #include "editor/editor_map_scene.h"
 #include "resources/gltf_import.h"
@@ -78,11 +79,37 @@ public:
   bool setProjectDirectory(const char *path);
   bool needsScriptRuntime() const {return isPlaying()&&runtime::ScriptBridge::hasScripts(document_);}
   void setScriptRuntime(scene::ScriptRuntimeApi api) {playScene_.setScriptRuntime(api,files_.rootPath());}
-  void setScriptLogSink(runtime::ScriptBridge::LogSink sink) {playScene_.setScriptLogSink(std::move(sink));}
+  // O que um script escreve vai para o console ANTES de ir para onde o
+  // hospedeiro mandar. No aparelho o destino do hospedeiro e o `logcat`, que
+  // nao existe para quem esta usando o editor: sem esta captura, um script que
+  // fala nao tem onde ser ouvido.
+  void setScriptLogSink(runtime::ScriptBridge::LogSink sink) {
+    playScene_.setScriptLogSink([this,forward=std::move(sink)](u64 object,std::string_view text) {
+      EditorConsoleEntry entry;
+      entry.origin=EditorConsoleOrigin::Script;
+      entry.message=std::string(text);
+      entry.object=object;
+      console_.add(std::move(entry));
+      if(forward) forward(object,text);
+    });
+  }
+  const EditorConsole &console() const noexcept { return console_; }
+  EditorConsole &console() noexcept { return console_; }
+  // Um problema que o EDITOR tem a dizer, e nao o compilador nem um script.
+  void reportProblem(EditorConsoleSeverity severity,std::string message) {
+    EditorConsoleEntry entry;
+    entry.severity=severity;entry.origin=EditorConsoleOrigin::Editor;
+    entry.message=std::move(message);
+    console_.add(std::move(entry));
+  }
   void setCodeCompilerAvailable(bool value) {state_.codeCompilerAvailable=value;}
   std::string takeCodeBuildRequest() {auto request=std::move(codeBuildRequest_);codeBuildRequest_.clear();return request;}
   bool completeCodeBuild(std::string_view report) {
     state_.codeBuildBusy=false;const bool ok=code_.applyBuildReport(report,codeBuildGeneration_);
+    // O bloco do compilador troca inteiro: um diagnostico de um arquivo que
+    // agora compila e mentira, e mentira que o usuario persegue.
+    console_.replaceCompiler(code_.diagnostics());
+    if(!ok) reportProblem(EditorConsoleSeverity::Error,code_.error());
     state_.status=ok?"Código compilado; pronto para aplicar":code_.error();return ok;
   }
   // O que o catálogo publicado diz sobre si mesmo, em texto de interface. É a
@@ -139,6 +166,7 @@ public:
   void setPlatformImeFraction(float fraction);
 private:
   u32 sceneUsersOf(const resources::AssetGuid &guid) const;
+  void jumpToConsoleEntry(u32 index);
   bool assetRegistryDirty_ = false;
   void followCodeCaret();
   void placeCodeCaret(ui::UiPoint position);
@@ -303,7 +331,8 @@ public:
     if(!isPlaying()) return false;
     if(!playScene_.active()) {
       if(EditorPlayScene::unresolvedEntity(document_)!=kInvalidEntity) {
-        state_.status="Play indisponível: há componentes de tipo ausente";return false;
+        state_.status="Play indisponível: há componentes de tipo ausente";
+        reportProblem(EditorConsoleSeverity::Error,state_.status);return false;
       }
       if(!playScene_.start(document_,mapScene_)) {
         state_.status=!playScene_.scriptDiagnostics().empty()?playScene_.scriptDiagnostics():playScene_.physicsError().empty()?"Falha ao preparar a cena para Play":playScene_.physicsError();
@@ -439,6 +468,7 @@ private:
   renderer::PerspectiveVisibilitySettings projection_{};
   EditorViewport view_{};
   EditorScreenState state_{};
+  EditorConsole console_;
   EditorScreenLayout layout_{};
   ui::UiDrawList list_;
   ui::UiInputRouter router_;

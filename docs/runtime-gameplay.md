@@ -614,7 +614,44 @@ Os outros 115 nomes do catálogo continuam na arte anterior. Desenhar um a um se
 consumidor seria trabalho sem leitor; o M06.2 dirá de quais a reconstrução do IDE
 precisa.
 
-## 19. O que este documento NÃO afirma
+## 19. Console editorial
+
+Compilador, scripts e editor falando no mesmo lugar. Antes disso o compilador
+falava numa lista apertada dentro do editor de código, os scripts falavam no
+`logcat` — que não existe para quem está com o aparelho na mão — e um erro de
+execução simplesmente não tinha onde aparecer.
+
+| Decisão | Por quê |
+|---|---|
+| Repetição **consecutiva** vira contagem | um `Update` que registra a cada quadro produz 60 linhas por segundo; sem colapsar, a primeira coisa interessante sai da tela em dois segundos |
+| Colapsa só o consecutivo | colapsar por conteúdo em qualquer posição esconderia a ordem em que as coisas aconteceram |
+| Teto de 512 linhas | sem teto o console cresce até o editor engasgar, e é justamente o painel que enche quando a coisa vai mal |
+| O bloco do compilador troca **inteiro** | um diagnóstico de um arquivo que agora compila é mentira, e mentira que o usuário persegue: ele abre a linha apontada e encontra código certo |
+| Lista **virtualizada** | 500 linhas seriam 500 retângulos e 500 textos por quadro para mostrar 8 |
+| A janela anda a partir do **fim** | um console mostra o que acabou de acontecer; rolar para cima é a exceção |
+| Filtrar **esconde**, não apaga | o filtro é uma lente, e quem apaga é `Limpar` |
+
+**Cada linha carrega para onde ir**: arquivo e linha para o compilador, objeto da
+cena para o script. Tocar numa linha do compilador abre o arquivo, rola até a
+linha e põe o cursor nela; numa linha de script, seleciona o objeto e volta para
+a cena. Sem isso o console seria um mural — diz que algo aconteceu e deixa o
+usuário procurar onde.
+
+O console é a voz do **projeto**, não do arquivo aberto: ele é reservado antes do
+caminho que sai cedo quando não há buffer. Um erro de compilação que só aparece
+quando há um arquivo aberto é um erro que se esconde de quem acabou de fechar o
+arquivo por causa dele.
+
+### O toque precisa chegar até a linha
+
+O console é desenhado por cima do editor de código, e a cadeia de toque tem
+vários blocos que consomem o evento por workspace. Registrar a região não basta.
+Medido durante a construção: com o console decidido no fim da cadeia, os filtros
+respondiam e as **linhas não** — um bloco anterior ficava com o toque. O console
+passou para o início da cadeia, e um teste de host varre o painel inteiro
+exigindo que cada linha visível responda com o **seu** índice.
+
+## 20. O que este documento NÃO afirma
 
 - Não há exportação de jogo nem player autônomo.
 - Sensor **por colisor** não existe: o sensor pertence ao corpo inteiro.

@@ -1059,6 +1059,97 @@ void buildPlatformTextField(ScreenBuilder &builder) {
 
 } // namespace
 
+
+// O console editorial: compilador, scripts e editor no mesmo lugar.
+//
+// Antes disso o compilador falava numa lista apertada aqui dentro e os scripts
+// falavam no `logcat`, que nao existe para quem esta com o aparelho na mao. Um
+// erro de execucao simplesmente nao tinha onde aparecer.
+//
+// A lista e VIRTUALIZADA: so as linhas que cabem sao desenhadas. Quinhentas
+// linhas viram quinhentos retangulos e quinhentos textos por quadro, e o
+// console e justamente o painel que enche quando a coisa esta indo mal.
+void buildConsole(ScreenBuilder &builder, UiRect panel, EditorScreenLayout &layout) {
+  const auto &theme = builder.theme;
+  const auto *console = builder.state.console;
+  if (console == nullptr) return;
+  builder.list.addRect(panel, theme.color.surface, theme.radius.control);
+  builder.router.addBlocker(panel);
+  UiRect content = deflate(panel, UiInsets::all(6.0f));
+
+  auto header = takeTop(content, 26.0f);
+  const struct { EditorConsoleSeverity severity; const char *label; EditorWidget widget; UiColor tone; }
+      filters[] = {
+    {EditorConsoleSeverity::Error, "Erros", EditorWidget::ConsoleError, theme.color.danger},
+    {EditorConsoleSeverity::Warning, "Avisos", EditorWidget::ConsoleWarning, theme.color.warning},
+    {EditorConsoleSeverity::Info, "Registro", EditorWidget::ConsoleInfo, theme.color.textDim},
+  };
+  for (const auto &filter : filters) {
+    auto chip = deflate(takeLeft(header, 108.0f), UiInsets::all(2.0f));
+    const bool on = console->visible(filter.severity);
+    builder.list.addRect(chip, on ? theme.color.raised : theme.color.surface, theme.radius.control);
+    const std::string text =
+        std::string(filter.label) + " " + std::to_string(console->count(filter.severity));
+    builder.label(chip, text.c_str(), on ? filter.tone : theme.color.textMuted,
+                  theme.type.caption, UiAlign::Center);
+    builder.router.addRegion(chip, widgetId(filter.widget));
+  }
+  auto clear = deflate(takeRight(header, 84.0f), UiInsets::all(2.0f));
+  builder.label(clear, "Limpar", theme.color.textDim, theme.type.caption, UiAlign::Center);
+  builder.router.addRegion(clear, widgetId(EditorWidget::ConsoleClear));
+  auto collapse = deflate(takeRight(header, 34.0f), UiInsets::all(2.0f));
+  builder.label(collapse, builder.state.consoleCollapsed ? "^" : "v", theme.color.textDim,
+                theme.type.caption, UiAlign::Center);
+  builder.router.addRegion(collapse, widgetId(EditorWidget::ConsoleCollapse));
+  if (builder.state.consoleCollapsed) return;
+
+  const auto order = console->filtered();
+  const float row = 26.0f;
+  const auto fits = static_cast<u32>(std::max(0.0f, content.height) / row);
+  layout.consoleVisibleRows = fits;
+  layout.consoleRowCount = static_cast<u32>(order.size());
+  if (order.empty()) {
+    builder.label(content, "Sem mensagens", theme.color.textMuted, theme.type.caption);
+    return;
+  }
+  // A janela anda a partir do FIM: um console mostra o que acabou de acontecer,
+  // e rolar para cima e que e a excecao.
+  const u32 hidden = order.size() > fits ? static_cast<u32>(order.size()) - fits : 0;
+  const u32 first = hidden > builder.state.consoleScroll ? hidden - builder.state.consoleScroll : 0;
+  builder.list.pushClip(content);
+  for (u32 offset = 0; offset < fits && first + offset < order.size(); ++offset) {
+    const u32 index = order[first + offset];
+    const auto *entry = console->at(index);
+    if (entry == nullptr) continue;
+    auto line = takeTop(content, row);
+    builder.router.addRegion(line, widgetId(EditorWidget::ConsoleRowBase) + index);
+    const UiColor tone = entry->severity == EditorConsoleSeverity::Error ? theme.color.danger
+                       : entry->severity == EditorConsoleSeverity::Warning ? theme.color.warning
+                                                                           : theme.color.text;
+    builder.list.addRect({line.x, line.y + 4.0f, 3.0f, line.height - 8.0f}, tone);
+    auto text = line;
+    takeLeft(text, 10.0f);
+    // O lugar fica a DIREITA e o texto a esquerda: o olho procura a mensagem, e
+    // so vai atras do lugar quando decidiu ir ate la.
+    if (!entry->file.empty()) {
+      const auto slash = entry->file.find_last_of('/');
+      const std::string where =
+          (slash == std::string::npos ? entry->file : entry->file.substr(slash + 1)) + ":" +
+          std::to_string(entry->line);
+      builder.label(takeRight(text, 150.0f), where.c_str(), theme.color.textMuted,
+                    theme.type.caption, UiAlign::End);
+    } else if (entry->object != 0) {
+      builder.label(takeRight(text, 150.0f), ("objeto " + std::to_string(entry->object)).c_str(),
+                    theme.color.textMuted, theme.type.caption, UiAlign::End);
+    }
+    if (entry->repeats > 1)
+      builder.label(takeRight(text, 56.0f), ("x" + std::to_string(entry->repeats)).c_str(),
+                    theme.color.accent, theme.type.caption, UiAlign::End);
+    builder.label(text, entry->message.c_str(), theme.color.text, theme.type.caption);
+  }
+  builder.list.popClip();
+}
+
 void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,EditorScreenLayout &layout) {
   const auto &theme=builder.theme;const auto *workspace=builder.state.code;
   // O teclado do sistema come a parte de baixo da janela. Sem descontar isso, a
@@ -1136,24 +1227,24 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
     }
     builder.list.popClip();
   }
+  // O console e a voz do PROJETO, nao do arquivo aberto. Ele e reservado antes
+  // do caminho que sai cedo quando nao ha buffer: um erro de compilacao que so
+  // aparece quando ha um arquivo aberto e um erro que se esconde justamente de
+  // quem acabou de fechar o arquivo por causa dele.
+  if(builder.state.console) {
+    const float wanted=builder.state.consoleCollapsed?38.0f:std::min(230.0f,content.height*.42f);
+    layout.consolePanel=takeBottom(content,wanted);
+  }
   auto status=takeBottom(content,28);
   const std::string statusText=workspace&&!workspace->error().empty()?workspace->error():builder.state.status;
   builder.label(status,statusText.c_str(),theme.color.textDim,theme.type.caption);
+  if(!layout.consolePanel.isEmpty()) buildConsole(builder,layout.consolePanel,layout);
   if(!buffer) {
     builder.label(takeTop(content,48),"Abra um arquivo ou crie um script C#",theme.color.text,theme.type.body);
     builder.label(takeTop(content,32),"Os arquivos pertencem ao projeto e têm histórico próprio.",theme.color.textDim,theme.type.caption);
     return;
   }
   builder.label(takeTop(content,28),buffer->path.c_str(),theme.color.textDim,theme.type.caption);
-  if(workspace && !workspace->diagnostics().empty()) {
-    auto diagnostics=takeBottom(content,std::min(160.0f,content.height*.3f));
-    builder.list.pushClip(diagnostics);
-    for(const auto &entry:workspace->diagnostics()) {
-      const std::string text=entry.file+":"+std::to_string(entry.line)+":"+std::to_string(entry.column)+" "+entry.code+" "+entry.message;
-      builder.label(takeTop(diagnostics,26),text.c_str(),theme.color.text,theme.type.caption);
-    }
-    builder.list.popClip();
-  }
   builder.router.addRegion(content,widgetId(EditorWidget::CodeBody));
   layout.codeBody=content;
   layout.codeLineHeight=24.0f;

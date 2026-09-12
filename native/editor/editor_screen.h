@@ -24,6 +24,7 @@
 #include "editor/editor_document.h"
 #include "editor/editor_filesystem.h"
 #include "editor/editor_code_workspace.h"
+#include "editor/editor_console.h"
 #include "editor/editor_gizmo.h"
 #include "editor/editor_history.h"
 #include "editor/editor_view.h"
@@ -43,7 +44,9 @@ enum class EditorWidget : u32 {
   CreationRowBase=0x64000000,
   None = 0,
   FilesUp=0x65000000,FilesRefresh,FilesPrevious,FilesNext,FilesSplitter,FilesCollapse,FilesRename,FilesDelete,
+  ConsoleInfo,ConsoleWarning,ConsoleError,ConsoleClear,ConsoleCollapse,
   FileRowBase=0x66000000,
+  ConsoleRowBase=0x67000000,
   Undo=1,
   Redo,
   OpenProject,
@@ -220,6 +223,12 @@ struct EditorScreenState final {
   const EditorMapScene *resources=nullptr;
   bool codeCompilerAvailable=false,codeBuildBusy=false;
   bool editingCode=false,creatingScript=false,searchingCode=false;
+  // O console: compilador, scripts e editor no mesmo lugar.
+  const EditorConsole *console = nullptr;
+  // Quantas linhas o usuário subiu a partir do fim. Zero é o fim, que é onde um
+  // console deve estar: a linha que acabou de aparecer é a que interessa.
+  u32 consoleScroll = 0;
+  bool consoleCollapsed = false;
   // O arquivo escolhido no painel. As ações de recurso agem sobre ele, e é o
   // painel que decide qual é — não a seleção da cena, que é outra coisa.
   std::string selectedFile;
@@ -344,6 +353,9 @@ struct EditorScreenLayout final {
   // O corpo do editor de código e quantas linhas dele cabem. O toque vira
   // posição de cursor a partir deste retângulo, e a rolagem acompanha o cursor
   // a partir desta contagem.
+  ui::UiRect consolePanel{};
+  u32 consoleVisibleRows = 0;
+  u32 consoleRowCount = 0;
   ui::UiRect codeBody{};
   u32 codeVisibleLines = 0;
   float codeLineHeight = 24.0f;

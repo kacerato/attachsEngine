@@ -48,6 +48,11 @@ struct UiPalette final {
   UiColor accentInk = 0xFF191C21;
   // rgba(112,172,245,0.09) do JSON, pré-multiplicado no canal alfa do formato.
   UiColor accentWash = 0x1770ACF5;
+  // Severidade. O console precisa distinguir um erro de um aviso sem depender
+  // de o usuário ler o texto primeiro, e o vermelho é o MESMO do eixo X: uma
+  // paleta com dois vermelhos parecidos é uma paleta com um erro.
+  UiColor danger = 0xFFE5484D;
+  UiColor warning = 0xFFE9A23B;
   // Os três eixos do gizmo. Vermelho/verde/azul não é escolha estética: é a
   // convenção que o usuário já traz de qualquer outra ferramenta 3D, e trocá-la
   // por cores da marca custaria mais do que a coerência ganharia.
