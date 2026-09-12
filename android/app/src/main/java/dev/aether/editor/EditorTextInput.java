@@ -190,14 +190,26 @@ final class EditorTextInput {
             push(token, bytes, text.substring(0, selection).getBytes(StandardCharsets.UTF_8).length);
         }
 
+        /**
+         * Confirmar SUBMETE e nao fecha. Quem fecha e o editor.
+         *
+         * <p>O editor pode recusar -- nome vazio, valor invalido, tipo
+         * incompativel -- e nesse caso ele mantem o pedido aberto e rearma a
+         * sequencia. Fechando aqui, a View perde o foco antes da resposta e o
+         * campo reabre sem teclado ligado a ele: o IME aparece, o usuario
+         * digita, e nada chega.
+         *
+         * <p>Quem fecha o campo e a ausencia do pedido no `poll`, que e a mesma
+         * fonte de verdade para os dois lados. O custo e um ciclo de 50 ms entre
+         * confirmar e o teclado sumir.
+         */
         private void accept() {
             final byte[] bytes = buffer.toString().getBytes(StandardCharsets.UTF_8);
             if (bytes.length > limit) return;
             submit(token, bytes, true);
-            end();
         }
 
-        private void cancel() { submit(token, new byte[0], false); end(); }
+        private void cancel() { submit(token, new byte[0], false); }
 
         /**
          * Uma tecla, venha de onde vier.
@@ -252,13 +264,28 @@ final class EditorTextInput {
         }
 
         @Override public InputConnection onCreateInputConnection(EditorInfo out) {
+            // NENHUM campo daqui aceita correcao automatica.
+            //
+            // Nada do que se digita neste editor e prosa: sao nomes de classe,
+            // nomes de objeto, caminhos de arquivo e codigo. O corretor do
+            // teclado reescreve tudo isso com a confianca de quem esta
+            // corrigindo uma frase -- medido no aparelho, `PortaInterior` virou
+            // `Porta interior`, com espaco no meio, e o editor recusou o nome
+            // que o usuario via escrito na tela.
+            // `NO_SUGGESTIONS` sozinho NAO basta: medido no aparelho, o Gboard
+            // continua corrigindo e `PortaInterior` chegou como
+            // `Porta interior` -- com espaco no meio -- e o editor recusou o
+            // nome que o usuario via escrito na tela. A variacao de senha
+            // visivel e a que os teclados de fato respeitam: alfabeto normal,
+            // sem correcao e sem sugestao.
             out.inputType = number
                 ? InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL
                       | InputType.TYPE_NUMBER_FLAG_SIGNED
                 : multiline
                     ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE
                           | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-                    : InputType.TYPE_CLASS_TEXT;
+                    : InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                          | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
             // Sem acao de concluir no codigo: nao existe "aplicar" um arquivo
             // que ja esta sendo escrito. A tecla de voltar fecha o teclado, e o
             // texto fica onde esta -- como em qualquer editor.

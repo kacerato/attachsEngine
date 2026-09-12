@@ -58,9 +58,15 @@ struct ComponentSchema {
 inline constexpr std::array<ComponentRule, 1> bodyConflicts{{
   {"astra.physics.character", "Incompatível com personagem cápsula"}
 }};
+// As duas direções do MESMO conflito precisam de frases diferentes.
+//
+// A mensagem é lida por quem tentou anexar o componente que está sendo
+// recusado, e descreve o que fazer. Uma frase só, reusada nos dois sentidos,
+// fala do objeto errado: num objeto sem personagem, recusar `Personagem` com
+// "o personagem já possui cápsula própria" explica uma situação que não existe.
 inline constexpr std::array<ComponentRule, 2> characterConflicts{{
   {"astra.physics.body", "Incompatível com corpo físico"},
-  {"astra.physics.collider", "O personagem já possui cápsula própria"}
+  {"astra.physics.collider", "O personagem traz a própria cápsula; remova o Colisor 3D"}
 }};
 inline constexpr std::array<ComponentRule, 1> colliderConflicts{{
   {"astra.physics.character", "O personagem já possui cápsula própria"}

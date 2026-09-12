@@ -286,3 +286,31 @@ AE_TEST(runtime_schema_matches_the_editor_catalog_rules) {
   AE_EXPECT_TRUE(components.add(*character->type), "personagem adicionado");
   AE_EXPECT_TRUE(scene::componentUnavailableReason(*body, components), "corpo é incompatível com personagem");
 }
+
+AE_TEST(each_direction_of_a_conflict_explains_the_object_in_front_of_you) {
+  // A mensagem e lida por quem tentou anexar o componente RECUSADO, e descreve
+  // o que fazer. Uma frase so, reusada nos dois sentidos, fala do objeto
+  // errado: num objeto SEM personagem, recusar `Personagem` com "o personagem
+  // ja possui capsula propria" explica uma situacao que nao existe.
+  //
+  // Encontrado montando a composicao de aceitacao no aparelho: a `Plataforma`
+  // tinha um colisor e nenhum personagem.
+  using namespace ae::scene;
+  const auto *character = findComponentSchema(Character::descriptor);
+  const auto *collider = findComponentSchema(Collider::descriptor);
+  AE_EXPECT_TRUE(character && collider, "os dois schemas existem");
+
+  Components comColisor;
+  AE_EXPECT_TRUE(comColisor.add(Collider::descriptor) != nullptr, "objeto com colisor");
+  const char *recusaPersonagem = componentUnavailableReason(*character, comColisor);
+  AE_EXPECT_TRUE(recusaPersonagem != nullptr, "personagem e recusado");
+  AE_EXPECT_TRUE(std::string(recusaPersonagem).find("remova") != std::string::npos,
+                 "e diz o que fazer neste objeto, que nao tem personagem");
+
+  Components comPersonagem;
+  AE_EXPECT_TRUE(comPersonagem.add(Character::descriptor) != nullptr, "objeto com personagem");
+  const char *recusaColisor = componentUnavailableReason(*collider, comPersonagem);
+  AE_EXPECT_TRUE(recusaColisor != nullptr, "colisor e recusado");
+  AE_EXPECT_TRUE(std::string(recusaColisor) != std::string(recusaPersonagem),
+                 "as duas direcoes do mesmo conflito nao usam a mesma frase");
+}

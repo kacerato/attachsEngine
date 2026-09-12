@@ -508,6 +508,22 @@ void EditorSession::setPlatformImeFraction(float fraction) {
   state_.platformImeFraction=std::isfinite(fraction)?std::clamp(fraction,0.0f,0.9f):0.0f;
 }
 
+namespace {
+// Espaco e quebra de linha nas bordas de um NOME nao sao conteudo.
+//
+// O teclado do sistema acrescenta os dois sem o usuario ver: a sugestao vem com
+// espaco no fim, e a tecla de confirmar pode chegar como quebra de linha antes
+// do evento de acao. Recusar o nome por causa deles devolve "use letras,
+// numeros e sublinhado" para quem digitou exatamente isso -- foi o que
+// aconteceu ao criar um script no aparelho.
+std::string_view trimmedName(std::string_view text) {
+  const auto blank=[](char c) { return c==' '||c==char(9)||c==char(10)||c==char(13); };
+  while(!text.empty() && blank(text.front())) text.remove_prefix(1);
+  while(!text.empty() && blank(text.back())) text.remove_suffix(1);
+  return text;
+}
+} // namespace
+
 bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view text,bool accept) {
   const auto current=pendingTextEdit();
   if(edit.purpose==EditorTextPurpose::None || current.purpose!=edit.purpose ||
@@ -551,13 +567,14 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     // Nome, nao caminho: barra e ".." aqui virariam mover disfarcado de
     // renomear, e a checagem de destino do sistema de arquivos passaria a ser a
     // unica barreira.
-    if(text.empty() || text.find('/')!=std::string_view::npos ||
-       text.find(char(92))!=std::string_view::npos || text==".." || text==".") {
+    const auto name=trimmedName(text);
+    if(name.empty() || name.find('/')!=std::string_view::npos ||
+       name.find(char(92))!=std::string_view::npos || name==".." || name==".") {
       state_.status="Nome invalido para um arquivo";return false;
     }
     const auto slash=state_.selectedFile.find_last_of('/');
     const std::string destination=
-        (slash==std::string::npos?std::string():state_.selectedFile.substr(0,slash+1))+std::string(text);
+        (slash==std::string::npos?std::string():state_.selectedFile.substr(0,slash+1))+std::string(name);
     ResourceChangeReport report;
     if(!moveResource(state_.selectedFile,destination,report)) {
       state_.status=report.diagnostic;return false;
@@ -566,7 +583,7 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     close();return true;
   }
   if(edit.purpose==EditorTextPurpose::ScriptName) {
-    if(!code_.createScript(files_,text,state_.scriptTemplate)) {state_.status=code_.error();return false;}
+    if(!code_.createScript(files_,trimmedName(text),state_.scriptTemplate)) {state_.status=code_.error();return false;}
     state_.scriptTemplate=~0u;
     const auto root=files_.rootPath();files_.setRoot(root.c_str());
     state_.workspace=EditorWorkspace::Code;close();return true;
