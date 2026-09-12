@@ -106,8 +106,12 @@ struct ScreenBuilder final {
     const UiColor background = active ? theme.color.accent
                                       : (isPressed(widget) ? theme.color.line : theme.color.raised);
     list.addRect(bounds, background, theme.radius.control);
-    list.addImage(centred(bounds, kIconSize, kIconSize), static_cast<UiImageId>(icon),
-                  active ? theme.color.accentInk : tint);
+    // O icone ATIVO nao e tingido. A tintura e uma multiplicacao: com a arte
+    // antiga, multiplicar pelo quase-preto da pastilha invertia a polaridade e
+    // devolvia a silhueta; com a geracao nova, que ja e colorida e tem brilho
+    // proprio, ela so pinta o desenho de preto -- a grade e a orbita sumiam
+    // dentro da propria pastilha acesa.
+    list.addImage(centred(bounds, kIconSize, kIconSize), static_cast<UiImageId>(icon), tint);
     router.addRegion(bounds, widget, theme.touch.minimumTarget);
   }
 
@@ -1327,7 +1331,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       const UiRect cell{layout.viewport.x+8+i*width,layout.viewport.bottom()-(compact?44:76),width-2,36};
       const bool active=static_cast<u32>(state.navigation)==i;
       list.addRect(cell,active?theme.color.accent:theme.color.raised,theme.radius.control);
-      list.addImage(centred(cell,20.0f,20.0f),static_cast<UiImageId>(icons[i]),active?theme.color.accentInk:theme.color.text);
+      list.addImage(centred(cell,20.0f,20.0f),static_cast<UiImageId>(icons[i]),theme.color.text);
       router.addRegion(cell,widgetId(actions[i]));
     }
   }

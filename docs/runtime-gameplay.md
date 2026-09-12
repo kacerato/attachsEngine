@@ -577,7 +577,50 @@ operação marca o registro para gravação imediata, e não espera o próximo s
 - Criar pasta pelo painel, e desfazer de uma operação de arquivo — apagar é
   definitivo, e é por isso que ele pede confirmação.
 
-## 18. O que este documento NÃO afirma
+## 18. Ícones: a geração HD v2
+
+Quarenta ícones do editor passaram para uma geração nova de arte. **O enum não
+mudou** — nem uma linha de código foi tocada. O identificador de um ícone é um
+índice, o índice vem do nome de catálogo, e só a arte por trás do nome trocou.
+
+As folhas v2 são desenhadas **sobre fundo escuro**, com brilho externo. A
+geração anterior era o contrário: adesivos para fundo claro, que o empacotador
+precisa passar por uma inversão de luminância para aparecerem sobre os painéis
+pretos. O catálogo já tinha a chave `dark_ui_ready` para essa diferença, e as
+entradas novas a usam — passá-las pela inversão apagaria exatamente o que elas
+têm de bom.
+
+**O corte não é por grade.** As células das folhas não têm passo uniforme e o
+brilho de um ícone chega perto do vizinho, então `tools/slice-hd-v2.py`
+identifica cada desenho por componente conexa no alfa. Duas leituras do alfa, de
+propósito: a **componente** sai do halo, senão um ícone cujo corpo sólido tem
+duas partes separadas — o alto-falante e suas ondas, o quadro e o triângulo do
+passo — viraria dois ícones; a **caixa** sai do corpo sólido, senão o símbolo
+fica pequeno dentro da célula, porque o brilho é largo.
+
+### O que a adoção obrigou a mudar na interface
+
+O ícone **ativo** deixou de ser tingido. A tintura é uma multiplicação: com a
+arte antiga, multiplicar pelo quase-preto da pastilha invertia a polaridade e
+devolvia a silhueta; com a arte nova, que já é colorida e tem brilho próprio,
+ela só pinta o desenho de preto — a grade e a órbita sumiam dentro da própria
+pastilha acesa.
+
+### O que ficou de fora, e por quê
+
+- `assets/file`: a folha v2 não tem um documento simples. O mais próximo traz um
+  sinal de mais, e um arquivo que já existe com um "+" desenhado nele é pior do
+  que um ícone de outra geração.
+- `editor/author-orbit`: o globo v2 tem corpo escuro e desaparece dentro da
+  pastilha acesa — que é exatamente onde a ferramenta ativa precisa ser vista.
+- `editor/author-add`, `author-chevron`, `author-pan` e a família de água: sem
+  equivalente na folha nova.
+
+Das 87 fatias, 40 entraram. As outras ficam em
+`assets/astra-visual/icons/source/hd-v2/sliced` à espera dos consumidores que o
+M06.2 vai criar — console, abas do IDE, painel de recursos.
+
+## 19. O que este documento NÃO afirma
 
 - Não há exportação de jogo nem player autônomo.
 - Sensor **por colisor** não existe: o sensor pertence ao corpo inteiro.

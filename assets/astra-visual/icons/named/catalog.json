@@ -79,22 +79,34 @@
     "assets/file-mesh": {
       "category": "assets",
       "label": "B04",
-      "name": "file-mesh"
+      "name": "file-mesh",
+      "raster": "../source/hd-v2/sliced/sheet-7-07.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "assets/filter": {
       "category": "assets",
       "label": "B28",
-      "name": "filter"
+      "name": "filter",
+      "raster": "../source/hd-v2/sliced/sheet-6-03.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "assets/folder": {
       "category": "assets",
       "label": "B01",
-      "name": "folder"
+      "name": "folder",
+      "raster": "../source/hd-v2/sliced/sheet-7-04.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "assets/folder-open": {
       "category": "assets",
       "label": "B02",
-      "name": "folder-open"
+      "name": "folder-open",
+      "raster": "../source/hd-v2/sliced/sheet-4-02.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "assets/grid": {
       "category": "assets",
@@ -104,7 +116,10 @@
     "assets/import": {
       "category": "assets",
       "label": "B25",
-      "name": "import"
+      "name": "import",
+      "raster": "../source/hd-v2/sliced/sheet-7-00.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "assets/library": {
       "category": "assets",
@@ -119,7 +134,10 @@
     "assets/material": {
       "category": "assets",
       "label": "B11",
-      "name": "material"
+      "name": "material",
+      "raster": "../source/hd-v2/sliced/sheet-7-08.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "assets/material-checker": {
       "category": "assets",
@@ -129,27 +147,42 @@
     "assets/package": {
       "category": "assets",
       "label": "B09",
-      "name": "package"
+      "name": "package",
+      "raster": "../source/hd-v2/sliced/sheet-2-01.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "assets/save": {
       "category": "assets",
       "label": "C15",
-      "name": "save"
+      "name": "save",
+      "raster": "../source/hd-v2/sliced/sheet-5-03.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "assets/search": {
       "category": "assets",
       "label": "B27",
-      "name": "search"
+      "name": "search",
+      "raster": "../source/hd-v2/sliced/sheet-4-06.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "assets/static-mesh": {
       "category": "assets",
       "label": "D27",
-      "name": "static-mesh"
+      "name": "static-mesh",
+      "raster": "../source/hd-v2/sliced/sheet-7-06.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "assets/texture": {
       "category": "assets",
       "label": "B10",
-      "name": "texture"
+      "name": "texture",
+      "raster": "../source/hd-v2/sliced/sheet-7-09.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "assets/upload": {
       "category": "assets",
@@ -159,7 +192,10 @@
     "assets/video": {
       "category": "assets",
       "label": "B35",
-      "name": "video"
+      "name": "video",
+      "raster": "../source/hd-v2/sliced/sheet-7-10.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "debug/bug": {
       "category": "debug",
@@ -294,7 +330,10 @@
     "lighting/sun": {
       "category": "lighting",
       "label": "B13",
-      "name": "sun"
+      "name": "sun",
+      "raster": "../source/hd-v2/sliced/sheet-1-01.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "nature/architecture": {
       "category": "nature",
@@ -469,7 +508,10 @@
     "scripting/code": {
       "category": "scripting",
       "label": "D11",
-      "name": "code"
+      "name": "code",
+      "raster": "../source/hd-v2/sliced/sheet-4-01.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "scripting/nodes": {
       "category": "scripting",
@@ -630,29 +672,29 @@
       "source": "vector/water/author-flow.svg"
     },
     "editor/author-select": {
-      "source": "hd-v1/select.svg",
-      "raster": "../hd-v1/select.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-3-00.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-move": {
-      "source": "hd-v1/move.svg",
-      "raster": "../hd-v1/move.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-3-01.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-rotate": {
-      "source": "hd-v1/rotate.svg",
-      "raster": "../hd-v1/rotate.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-3-02.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-scale": {
-      "source": "hd-v1/scale.svg",
-      "raster": "../hd-v1/scale.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-3-03.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-orbit": {
-      "source": "hd-v1/orbit.svg",
       "raster": "../hd-v1/orbit.png",
-      "dark_ui_ready": true
+      "dark_ui_ready": true,
+      "source": "hd-v1/orbit.svg"
     },
     "editor/author-pan": {
       "source": "hd-v1/pan.svg",
@@ -660,39 +702,39 @@
       "dark_ui_ready": true
     },
     "editor/author-zoom": {
-      "source": "hd-v1/zoom.svg",
-      "raster": "../hd-v1/zoom.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-4-06.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-play": {
-      "source": "hd-v1/play.svg",
-      "raster": "../hd-v1/play.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-5-11.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-stop": {
-      "source": "hd-v1/stop.svg",
-      "raster": "../hd-v1/stop.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-5-13.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-object": {
-      "source": "hd-v1/object.svg",
-      "raster": "../hd-v1/object.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-1-02.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-folder": {
-      "source": "hd-v1/folder.svg",
-      "raster": "../hd-v1/folder.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-7-04.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-sun": {
-      "source": "hd-v1/sun.svg",
-      "raster": "../hd-v1/sun.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-1-11.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-settings": {
-      "source": "hd-v1/settings.svg",
-      "raster": "../hd-v1/settings.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-4-09.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-add": {
       "source": "hd-v1/add.svg",
@@ -700,9 +742,9 @@
       "dark_ui_ready": true
     },
     "editor/author-more": {
-      "source": "hd-v1/more.svg",
-      "raster": "../hd-v1/more.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-4-07.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-chevron": {
       "source": "hd-v1/chevron.svg",
@@ -710,63 +752,69 @@
       "dark_ui_ready": true
     },
     "editor/author-frame": {
-      "source": "hd-v1/frame.svg",
-      "raster": "../hd-v1/frame.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-3-11.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-grid": {
-      "source": "hd-v1/grid.svg",
-      "raster": "../hd-v1/grid.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-3-06.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-camera": {
-      "source": "hd-v1/camera.svg",
-      "raster": "../hd-v1/camera.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-1-00.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-undo": {
-      "source": "hd-v1/undo.svg",
-      "raster": "../hd-v1/undo.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-5-05.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-redo": {
-      "source": "hd-v1/redo.svg",
-      "raster": "../hd-v1/redo.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-5-06.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-eye": {
-      "source": "hd-v1/eye.svg",
-      "raster": "../hd-v1/eye.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-2-08.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "editor/author-eye-off": {
-      "source": "hd-v1/eye-off.svg",
-      "raster": "../hd-v1/eye-off.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-2-09.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "component/physics": {
-      "raster": "component/physics.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-2-00.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "component/character": {
-      "raster": "component/character.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-1-08.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "component/look": {
-      "raster": "component/look.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-3-10.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "component/add": {
-      "raster": "component/add.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-2-03.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "component/collider": {
-      "raster": "component/collider.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-1-03.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     },
     "component/joint": {
-      "raster": "component/joint.png",
-      "dark_ui_ready": true
+      "raster": "../source/hd-v2/sliced/sheet-1-04.png",
+      "dark_ui_ready": true,
+      "generation": "hd-v2"
     }
   },
   "unmapped": []
