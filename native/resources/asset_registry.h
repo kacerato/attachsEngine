@@ -87,6 +87,14 @@ public:
   // Renomear e mover são a MESMA operação: o caminho muda, o GUID não. Recusa
   // quando o destino já pertence a outro recurso.
   bool setPath(const AssetGuid &guid, std::string_view path);
+  // Mover uma PASTA muda o caminho de tudo que está dentro dela. Devolve
+  // quantos recursos foram reapontados, ou -1 quando a operação levaria dois
+  // recursos ao mesmo caminho — e nesse caso nada muda.
+  //
+  // Uma operação só, e não uma sequência de `setPath`: aplicada aos poucos, uma
+  // colisão no meio deixaria metade da pasta apontando para o lugar novo e
+  // metade para o velho, e não há como saber qual metade.
+  int retargetPrefix(std::string_view oldPrefix, std::string_view newPrefix);
   // Reimportação publicada: conteúdo, versão e derivados trocam de uma vez. Só
   // chame depois que a nova versão estiver íntegra — até aqui vale a anterior.
   bool publishImport(const AssetGuid &guid, std::string_view contentHash, u32 importerVersion,

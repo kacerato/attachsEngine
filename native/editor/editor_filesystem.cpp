@@ -34,6 +34,57 @@ bool EditorFileSystem::resolve(const std::string &relative,fs::path &out) const 
   for(;a!=root_.end();++a,++b) if(b==out.end() || *a!=*b) return false;
   return true;
 }
+// Resolve um caminho que ainda NAO existe: `resolve` usa `canonical`, que
+// exige o arquivo no disco. Para um destino o que importa e que o pai exista e
+// que o resultado continue dentro do projeto.
+static bool resolveTarget(const fs::path &root,const std::string &relative,fs::path &out) {
+  if(root.empty() || relative.empty() || relative.find(char(0))!=std::string::npos) return false;
+  const auto input=fromUtf8(relative);
+  if(input.is_absolute() || input.has_root_name()) return false;
+  for(const auto &part:input) if(part=="..") return false;
+  out=(root/input).lexically_normal();
+  auto a=root.begin(),b=out.begin();
+  for(;a!=root.end();++a,++b) if(b==out.end() || *a!=*b) return false;
+  return true;
+}
+
+bool EditorFileSystem::movePath(const std::string &relative,const std::string &destination) {
+  fs::path from,to;
+  if(!resolve(relative,from)) {error_="Origem invalida ou fora do projeto";return false;}
+  if(!resolveTarget(root_,destination,to)) {error_="Destino invalido ou fora do projeto";return false;}
+  if(from==root_) {error_="A raiz do projeto nao pode ser movida";return false;}
+  std::error_code error;
+  if(fs::exists(to,error)) {error_="Ja existe um item com esse nome no destino";return false;}
+  // Uma pasta movida para dentro dela mesma some junto com o que carrega. O
+  // `std::filesystem` nem sempre recusa; recusar aqui e barato.
+  auto a=from.begin(),b=to.begin();
+  bool inside=true;
+  for(;a!=from.end();++a,++b) if(b==to.end() || *a!=*b) {inside=false;break;}
+  if(inside && fs::is_directory(from,error)) {error_="Uma pasta nao pode ser movida para dentro dela mesma";return false;}
+  if(!fs::exists(to.parent_path(),error) || error) {error_="A pasta de destino nao existe";return false;}
+  fs::rename(from,to,error);
+  if(error) {error_="Nao foi possivel mover";return false;}
+  error_.clear();
+  return rebuildTree();
+}
+
+bool EditorFileSystem::removePath(const std::string &relative) {
+  fs::path path;
+  if(!resolve(relative,path)) {error_="Caminho invalido ou fora do projeto";return false;}
+  if(path==root_) {error_="A raiz do projeto nao pode ser apagada";return false;}
+  // `.astra` e o estado do projeto -- historico, registro, cache. Apagar por
+  // engano custaria o projeto inteiro, e ele nao aparece como recurso.
+  const auto relativeToRoot=path.lexically_relative(root_);
+  if(!relativeToRoot.empty() && relativeToRoot.begin()->string()==".astra") {
+    error_="A pasta .astra pertence ao projeto e nao pode ser apagada aqui";return false;
+  }
+  std::error_code error;
+  fs::remove_all(path,error);
+  if(error) {error_="Nao foi possivel apagar";return false;}
+  error_.clear();
+  return rebuildTree();
+}
+
 bool EditorFileSystem::open(const std::string &relative) {
   fs::path path;
   std::error_code error;
@@ -61,6 +112,30 @@ bool EditorFileSystem::open(const std::string &relative) {
   if(next==".") next.clear();
   current_=std::move(next);entries_=std::move(prepared);error_.clear();return true;
 }
+bool EditorFileSystem::rebuildTree() {
+  if(root_.empty()) return false;
+  std::vector<std::string> expanded;
+  for(const auto &entry:tree_)
+    if(entry.directory && entry.expanded && !entry.relativePath.empty())
+      expanded.push_back(entry.relativePath);
+  if(!open("")) return false;
+  std::vector<EditorFileEntry> rebuilt{{"Projeto", "", true, 0, true}};
+  for(auto entry:entries_) {entry.depth=1;rebuilt.push_back(std::move(entry));}
+  tree_=std::move(rebuilt);
+  // Reabre o que estava aberto. A varredura recomeca do zero a cada expansao
+  // porque expandir insere linhas no meio: guardar indices daria o indice de
+  // antes da insercao. Uma pasta que sumiu simplesmente nao e reencontrada.
+  for(const auto &path:expanded) {
+    for(unsigned index=0;index<tree_.size();++index) {
+      if(tree_[index].relativePath!=path || !tree_[index].directory || tree_[index].expanded) continue;
+      toggle(index);
+      break;
+    }
+  }
+  error_.clear();
+  return true;
+}
+
 bool EditorFileSystem::toggle(unsigned index) {
   if(index>=tree_.size() || !tree_[index].directory) return false;
   const auto entry=tree_[index];

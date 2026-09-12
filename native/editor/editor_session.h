@@ -42,7 +42,7 @@
 
 namespace ae::editor {
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -138,6 +138,8 @@ public:
   // nesta borda em vez de ficar escondido atrás do teclado.
   void setPlatformImeFraction(float fraction);
 private:
+  u32 sceneUsersOf(const resources::AssetGuid &guid) const;
+  bool assetRegistryDirty_ = false;
   void followCodeCaret();
   void placeCodeCaret(ui::UiPoint position);
 public:
@@ -207,6 +209,42 @@ public:
   // Não lê arquivo nenhum: os blocos por fonte já estão em memória. Verdadeiro
   // também quando não há nada importado, porque aí não há o que reidratar.
   bool republishGeometry(std::string &diagnostic);
+
+  // O que uma operação no painel de arquivos mexeu, e em quem.
+  struct ResourceChangeReport {
+    // Recursos cujo caminho mudou. Renomear uma pasta move todos de uma vez.
+    u32 retargeted = 0;
+    // Objetos da cena que usam este recurso.
+    u32 sceneUsers = 0;
+    // Outros recursos que dependem dele (malha → material → textura).
+    u32 registryDependents = 0;
+    std::string diagnostic;
+  };
+  // Renomear e mover são a MESMA operação: o caminho muda, a identidade não.
+  //
+  // É por isso que a cena não é tocada aqui. Os objetos guardam o GUID do
+  // recurso, não o caminho dele — mover um arquivo não pode quebrar um objeto,
+  // e um teste de host exige exatamente isso.
+  //
+  // Falha fechada e atômica: o registro é conferido ANTES de o arquivo sair do
+  // lugar, e se a gravação falhar o registro volta. Meia pasta apontando para o
+  // caminho novo e meia para o velho não é um estado do qual se saia.
+  bool moveResource(const std::string &relative, const std::string &destination,
+                    ResourceChangeReport &report);
+  // Apagar CONFRONTA quem usa. Sem `force` recusa e diz quantos objetos da cena
+  // e quantos recursos dependem dele; com `force` apaga e os objetos que
+  // apontavam para ele ficam sem malha, visivelmente, em vez de apontar para a
+  // malha que por acaso ocupar o índice.
+  bool deleteResource(const std::string &relative, bool force, ResourceChangeReport &report);
+  // O registro precisa ir ao disco AGORA, não no próximo salvar.
+  //
+  // Renomear e apagar mexem no disco na hora. Até o registro acompanhar, ele
+  // aponta para um caminho que não existe mais — e o projeto reaberto nesse
+  // intervalo abre com os objetos sem malha. Medido no aparelho: renomear a
+  // fonte e reabrir antes de salvar apagava o veículo da tela com a hierarquia
+  // inteira preservada.
+  bool assetRegistryDirty() const noexcept { return assetRegistryDirty_; }
+  void clearAssetRegistryDirty() noexcept { assetRegistryDirty_ = false; }
 
   struct ModelImportReport {
     u32 objects = 0;

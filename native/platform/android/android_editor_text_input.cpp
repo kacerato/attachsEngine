@@ -51,7 +51,11 @@ void updateEditorTextInput(editor::EditorSession &session) {
   if(pending.purpose==editor::EditorTextPurpose::None) {visible=false;invalid=false;return;}
   if(!visible || !same(request,pending)) {
     request=pending;visible=true;++sequence;
-    seedCaret=session.screen().platformCaret;
+    // So o editor de codigo escolhe onde o cursor comeca -- pelo toque na
+    // linha. Um campo curto comeca no fim do texto, e nao num cursor que sobrou
+    // da edicao anterior.
+    seedCaret=pending.purpose==editor::EditorTextPurpose::Code
+        ? session.screen().platformCaret : pending.text.size();
   }
 }
 }
@@ -68,6 +72,7 @@ Java_dev_aether_editor_EditorTextInput_poll(JNIEnv *env,jclass) {
     invalid?"Alteração recusada; revise o campo":code?"Editar código":number?"Editar valor":
       property?("Campo · "+request.propertyType):
       request.purpose==ae::editor::EditorTextPurpose::ScriptName?"Nova classe C#":
+      request.purpose==ae::editor::EditorTextPurpose::ResourceName?"Renomear recurso":
       request.purpose==ae::editor::EditorTextPurpose::Rename?"Renomear objeto":"Pesquisar",
     request.text,code?"524288":property?"4096":number?"47":"63",
     // Onde o cursor comeca, em BYTES. Para o codigo ele vem do toque -- a linha

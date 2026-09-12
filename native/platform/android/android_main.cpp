@@ -1855,6 +1855,16 @@ void android_main(android_app *app) {
              !writeProjectAssetRegistry(shell.editorProjectPath,shell.editorSession.serializeAssets()))
             __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Falha ao salvar o registro de recursos.");
         }
+        // Renomear ou apagar um recurso mexeu no disco AGORA. O registro vai
+        // junto, sem esperar o proximo salvar: no intervalo ele apontaria para
+        // um caminho que nao existe mais, e o projeto reaberto ali abriria com
+        // os objetos sem malha.
+        if(shell.editorSession.assetRegistryDirty()) {
+          if(writeProjectAssetRegistry(shell.editorProjectPath,shell.editorSession.serializeAssets()))
+            shell.editorSession.clearAssetRegistryDirty();
+          else
+            __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Falha ao gravar o registro de recursos.");
+        }
         if(!editorPlaying && shell.authoredWaterPlay.active()) {shell.authoredWaterPlay.stop();shell.instancedRenderer.clearWaterRipples();shell.instancedRenderer.setWaterSimulationClock(-1);}
         // Importação de modelo: o editor pede, o sistema escolhe, o shell lê os
         // bytes, copia a FONTE para dentro do projeto e manda importar. A cópia

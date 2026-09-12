@@ -42,7 +42,7 @@ enum class EditorWidget : u32 {
   CreationCategoryBase=0x63000000,
   CreationRowBase=0x64000000,
   None = 0,
-  FilesUp=0x65000000,FilesRefresh,FilesPrevious,FilesNext,FilesSplitter,FilesCollapse,
+  FilesUp=0x65000000,FilesRefresh,FilesPrevious,FilesNext,FilesSplitter,FilesCollapse,FilesRename,FilesDelete,
   FileRowBase=0x66000000,
   Undo=1,
   Redo,
@@ -220,6 +220,13 @@ struct EditorScreenState final {
   const EditorMapScene *resources=nullptr;
   bool codeCompilerAvailable=false,codeBuildBusy=false;
   bool editingCode=false,creatingScript=false,searchingCode=false;
+  // O arquivo escolhido no painel. As ações de recurso agem sobre ele, e é o
+  // painel que decide qual é — não a seleção da cena, que é outra coisa.
+  std::string selectedFile;
+  bool renamingResource=false;
+  // Apagar pede confirmação em DOIS toques, e não num diálogo. Guarda o caminho
+  // que o primeiro toque recusou; o segundo, no mesmo caminho, confirma.
+  std::string pendingResourceDelete;
   // Escolha do modelo antes de pedir o nome da classe. `~0u` é o arquivo
   // vazio, que continua sendo o primeiro item da lista.
   bool choosingTemplate=false;

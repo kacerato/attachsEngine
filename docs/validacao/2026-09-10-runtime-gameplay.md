@@ -598,9 +598,13 @@ apresentado como resolvido:
     multi-linha, então a hipótese óbvia — sugestão do teclado — não fecha.
     Desfazer removeu, e o arquivo em disco não foi gravado.
 
-  O aparelho saiu do editor antes de eu fechar as duas, então elas ficam
-  registradas como abertas. Falta também a coluna exata pelo toque, seleção e
-  rolagem horizontal (M05.3).
+  As duas, mais a coluna exata pelo toque, a seleção e a rolagem horizontal,
+  ficam **endereçadas ao M06.2 — reconstrução do IDE** (toolbar única, tabs,
+  navegação de fonte, autocomplete). Não faz sentido afinar o comportamento de
+  toque e de composição num editor que o plano já prevê reescrever: o que este
+  marco precisava entregar era a ponte e a ausência de diálogo, e isso está
+  entregue e verificado. Ficam registradas aqui para não serem redescobertas
+  como novidade quando o M06.2 começar.
 - ~~**Sumiço visual após retomada.**~~ **FECHADO (M03.2).** Reproduzido no
   aparelho pela primeira vez: mandar o editor para segundo plano e voltar deixava
   a hierarquia inteira e o viewport vazio, com

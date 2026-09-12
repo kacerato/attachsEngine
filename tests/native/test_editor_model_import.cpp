@@ -2,10 +2,14 @@
 #include "editor/editor_archive.h"
 #include "editor/editor_session.h"
 #include "renderer/authoring_geometry.h"
+#include "editor/editor_filesystem.h"
 
 #include <cstring>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
 
 using namespace ae;
 using namespace ae::editor;
@@ -441,4 +445,161 @@ AE_TEST(a_recreated_surface_gets_the_imported_geometry_back) {
   startSession(limpa, vazio);
   AE_EXPECT_TRUE(limpa.republishGeometry(diagnostic), "sem importação não há o que reidratar");
   AE_EXPECT_EQ(vazio.rebuilds, 0u, "e nada é republicado à toa");
+}
+
+namespace {
+// Uma pasta de projeto de verdade: renomear e apagar mexem no disco, e testar
+// isso com um duplo do sistema de arquivos testaria o duplo.
+struct ProjectDirectory {
+  std::filesystem::path root;
+  ProjectDirectory() {
+    root = std::filesystem::temp_directory_path() /
+           ("aether-recursos-" + std::to_string(
+               std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(root / "Fontes");
+    std::filesystem::create_directories(root / ".astra");
+  }
+  ~ProjectDirectory() { std::error_code ignored; std::filesystem::remove_all(root, ignored); }
+};
+} // namespace
+
+AE_TEST(renaming_a_resource_keeps_every_object_that_uses_it) {
+  // O retorno de ter identidade separada do caminho: mover um arquivo NAO pode
+  // quebrar um objeto. Antes do GUID, a cena apontava para o indice do desenho
+  // e qualquer mexida no pacote trocava um objeto por outro em silencio.
+  ProjectDirectory project;
+  EditorSession session;
+  FakeRenderer renderer;
+  startSession(session, renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto aberto");
+  std::ofstream(project.root / "Fontes" / "placa.glb", std::ios::binary) << "glb";
+
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.importModel(twoNodeGlb(), "Fontes/placa.glb", {}, report), report.diagnostic.c_str());
+  AE_EXPECT_EQ(report.objects, 2u, "dois objetos");
+
+  std::vector<EditorMapUpdate> before;
+  AE_EXPECT_TRUE(session.extractMap(before), "publica antes");
+  u32 drawnBefore = 0;
+  for (const auto &update : before) if (update.objectId && update.visible) ++drawnBefore;
+
+  EditorSession::ResourceChangeReport change;
+  AE_EXPECT_TRUE(session.moveResource("Fontes/placa.glb", "Fontes/tabuleta.glb", change),
+                 change.diagnostic.c_str());
+  AE_EXPECT_EQ(change.retargeted, 1u, "o recurso foi reapontado");
+  // O registro precisa ir ao disco AGORA. Medido no aparelho: renomear a fonte
+  // e reabrir antes de salvar apagava o veiculo da tela com a hierarquia
+  // inteira preservada, porque o registro ainda apontava para o nome antigo.
+  AE_EXPECT_TRUE(session.assetRegistryDirty(), "o registro pede gravacao imediata");
+  session.clearAssetRegistryDirty();
+  AE_EXPECT_TRUE(session.serializeAssets().find("tabuleta.glb") != std::string::npos,
+                 "e o texto gravado ja carrega o nome novo");
+  AE_EXPECT_TRUE(std::filesystem::exists(project.root / "Fontes" / "tabuleta.glb"), "arquivo movido");
+  AE_EXPECT_TRUE(!std::filesystem::exists(project.root / "Fontes" / "placa.glb"), "nao ficou copia");
+
+
+  // O que importa: a cena continua inteira e continua desenhando.
+  std::vector<EditorMapUpdate> after;
+  AE_EXPECT_TRUE(session.extractMap(after), "publica depois");
+  u32 drawnAfter = 0;
+  for (const auto &update : after) if (update.objectId && update.visible) ++drawnAfter;
+  AE_EXPECT_EQ(drawnAfter, drawnBefore, "renomear nao muda o que e desenhado");
+}
+
+AE_TEST(a_move_that_would_collide_changes_nothing) {
+  ProjectDirectory project;
+  EditorSession session;
+  FakeRenderer renderer;
+  startSession(session, renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto aberto");
+  std::ofstream(project.root / "Fontes" / "placa.glb", std::ios::binary) << "glb";
+  std::ofstream(project.root / "Fontes" / "ocupado.glb", std::ios::binary) << "outro";
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.importModel(twoNodeGlb(), "Fontes/placa.glb", {}, report), report.diagnostic.c_str());
+
+  EditorSession::ResourceChangeReport change;
+  AE_EXPECT_TRUE(!session.moveResource("Fontes/placa.glb", "Fontes/ocupado.glb", change),
+                 "destino ocupado e recusado");
+  AE_EXPECT_TRUE(!change.diagnostic.empty(), "e diz por que");
+  AE_EXPECT_TRUE(std::filesystem::exists(project.root / "Fontes" / "placa.glb"), "origem intacta");
+  // O registro tambem: uma recusa que deixasse o caminho novo gravado faria o
+  // projeto reabrir procurando um arquivo que nunca se moveu.
+  std::vector<EditorMapUpdate> updates;
+  AE_EXPECT_TRUE(session.extractMap(updates), "a cena continua publicando");
+}
+
+AE_TEST(deleting_a_resource_in_use_is_refused_and_says_who_uses_it) {
+  ProjectDirectory project;
+  EditorSession session;
+  FakeRenderer renderer;
+  startSession(session, renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto aberto");
+  std::ofstream(project.root / "Fontes" / "placa.glb", std::ios::binary) << "glb";
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.importModel(twoNodeGlb(), "Fontes/placa.glb", {}, report), report.diagnostic.c_str());
+
+  EditorSession::ResourceChangeReport change;
+  AE_EXPECT_TRUE(!session.deleteResource("Fontes/placa.glb", false, change), "recusa sem forcar");
+  AE_EXPECT_TRUE(change.sceneUsers >= 2u, "conta os objetos que usam");
+  AE_EXPECT_TRUE(change.diagnostic.find("objeto") != std::string::npos, "e diz quantos");
+  AE_EXPECT_TRUE(std::filesystem::exists(project.root / "Fontes" / "placa.glb"), "arquivo intacto");
+
+  // Forcando: o arquivo sai e os objetos ficam SEM malha, visivelmente, em vez
+  // de apontar para a malha que por acaso ocupar o indice antigo.
+  EditorSession::ResourceChangeReport forced;
+  AE_EXPECT_TRUE(session.deleteResource("Fontes/placa.glb", true, forced), forced.diagnostic.c_str());
+  AE_EXPECT_TRUE(!std::filesystem::exists(project.root / "Fontes" / "placa.glb"), "arquivo apagado");
+  AE_EXPECT_TRUE(forced.sceneUsers >= 2u, "o relatorio diz quantos ficaram sem malha");
+  std::vector<EditorMapUpdate> updates;
+  AE_EXPECT_TRUE(session.extractMap(updates), "a cena continua publicando sem o recurso");
+}
+
+AE_TEST(the_project_state_folder_is_not_a_resource) {
+  // `.astra` guarda historico, registro e cache. Apagar por engano custaria o
+  // projeto inteiro, e ele nao e um recurso do usuario.
+  ProjectDirectory project;
+  EditorSession session;
+  FakeRenderer renderer;
+  startSession(session, renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto aberto");
+  EditorSession::ResourceChangeReport change;
+  AE_EXPECT_TRUE(!session.deleteResource(".astra", true, change), "recusa apagar o estado do projeto");
+  AE_EXPECT_TRUE(std::filesystem::exists(project.root / ".astra"), "pasta intacta");
+  AE_EXPECT_TRUE(!session.deleteResource("", true, change), "caminho vazio e recusado");
+}
+
+AE_TEST(the_visible_tree_follows_a_rename_on_disk) {
+  // A arvore que o painel desenha e outra estrutura que a pasta corrente:
+  // `refresh` recarregava so a segunda. Sem reler a primeira, um arquivo
+  // renomeado continuava aparecendo com um nome que ja nao existia no disco --
+  // e tocar nele abriria um caminho morto.
+  ProjectDirectory project;
+  std::ofstream(project.root / "Fontes" / "placa.glb", std::ios::binary) << "glb";
+  EditorFileSystem files;
+  AE_EXPECT_TRUE(files.setRoot(project.root.string().c_str()), "raiz");
+
+  unsigned fontes = 0;
+  for (unsigned index = 0; index < files.tree().size(); ++index)
+    if (files.tree()[index].name == "Fontes") fontes = index;
+  AE_EXPECT_TRUE(fontes != 0, "pasta na arvore");
+  AE_EXPECT_TRUE(files.toggle(fontes), "expandir");
+
+  bool before = false;
+  for (const auto &entry : files.tree()) if (entry.name == "placa.glb") before = true;
+  AE_EXPECT_TRUE(before, "o arquivo aparece expandido");
+
+  AE_EXPECT_TRUE(files.movePath("Fontes/placa.glb", "Fontes/tabuleta.glb"), files.error().c_str());
+  bool listed = false, stale = false, stillExpanded = false;
+  for (const auto &entry : files.tree()) {
+    if (entry.name == "tabuleta.glb") listed = true;
+    if (entry.name == "placa.glb") stale = true;
+    if (entry.name == "Fontes" && entry.expanded) stillExpanded = true;
+  }
+  AE_EXPECT_TRUE(listed, "o painel mostra o nome novo");
+  AE_EXPECT_TRUE(!stale, "e nao mostra o antigo");
+  AE_EXPECT_TRUE(stillExpanded, "a pasta continua aberta onde o usuario a deixou");
+
+  AE_EXPECT_TRUE(files.removePath("Fontes/tabuleta.glb"), files.error().c_str());
+  for (const auto &entry : files.tree())
+    AE_EXPECT_TRUE(entry.name != "tabuleta.glb", "apagar tambem some da arvore");
 }

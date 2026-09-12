@@ -1,4 +1,6 @@
 #include "resources/asset_registry.h"
+#include <utility>
+#include <vector>
 #include "core/sha256.h"
 
 #include <algorithm>
@@ -144,6 +146,46 @@ bool AssetRegistry::setPath(const AssetGuid &guid, std::string_view path) {
   if (findByPath(path)) return false;
   record->path = std::string(path);
   return true;
+}
+
+int AssetRegistry::retargetPrefix(std::string_view oldPrefix, std::string_view newPrefix) {
+  if(oldPrefix.empty() || newPrefix.empty()) return -1;
+  // O caminho casa quando e o proprio prefixo ou quando comeca com ele seguido
+  // de barra. Sem a barra, mover "Fontes" levaria "FontesAntigas" junto.
+  const auto matches=[&](std::string_view path) {
+    if(path.size()<oldPrefix.size() || path.compare(0,oldPrefix.size(),oldPrefix)!=0) return false;
+    return path.size()==oldPrefix.size() || path[oldPrefix.size()]=='/';
+  };
+  std::vector<std::pair<usize,std::string>> planned;
+  for(usize index=0;index<records_.size();++index) {
+    if(!matches(records_[index].path)) continue;
+    planned.emplace_back(index,std::string(newPrefix)+records_[index].path.substr(oldPrefix.size()));
+  }
+  if(planned.empty()) return 0;
+  // Confere TUDO antes de escrever qualquer coisa.
+  for(const auto &[index,path]:planned) {
+    for(usize other=0;other<records_.size();++other) {
+      if(records_[other].path!=path) continue;
+      bool moving=false;
+      for(const auto &[movingIndex,ignored]:planned) if(movingIndex==other) {moving=true;break;}
+      if(!moving) return -1;
+    }
+    for(const auto &[otherIndex,otherPath]:planned)
+      if(otherIndex!=index && otherPath==path) return -1;
+  }
+  for(auto &[index,path]:planned) records_[index].path=std::move(path);
+  // `source` e `derived` apontam para o mesmo lugar no disco. Um arquivo que
+  // muda de pasta muda para todos: deixar a fonte para tras faria o projeto
+  // reabrir procurando o arquivo onde ele nao esta mais.
+  const auto retarget=[&](std::string &value) {
+    if(!matches(value)) return;
+    value=std::string(newPrefix)+value.substr(oldPrefix.size());
+  };
+  for(auto &record:records_) {
+    retarget(record.source);
+    for(auto &file:record.derived) retarget(file);
+  }
+  return static_cast<int>(planned.size());
 }
 
 bool AssetRegistry::publishImport(const AssetGuid &guid, std::string_view contentHash, u32 importerVersion,

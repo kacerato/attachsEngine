@@ -333,6 +333,26 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
   builder.router.addRegion(header,widgetId(EditorWidget::FilesCollapse));
   builder.iconButton(takeRight(header,28),UiIcon::ScriptingCode,widgetId(EditorWidget::CodeOpen));
   if(builder.state.filesCollapsed) return;
+  // As acoes aparecem para o arquivo escolhido, e desaparecem com ele. Nomes em
+  // texto e nao icones: apagar um recurso nao e uma acao para se adivinhar pelo
+  // desenho.
+  //
+  // Ancoradas EMBAIXO, e nao sob o cabecalho: entre o cabecalho e a lista, elas
+  // empurrariam as linhas 26 pixels para baixo no mesmo toque que escolhe uma
+  // -- o proximo toque cairia numa linha diferente da que o dedo mirou.
+  if(!builder.state.selectedFile.empty()) {
+    auto actions=takeBottom(content,26);
+    const bool confirming=builder.state.pendingResourceDelete==builder.state.selectedFile;
+    auto action=[&](UiRect rect,const char *label,EditorWidget widget,UiColor color) {
+      rect=deflate(rect,UiInsets::all(2));
+      builder.list.addRect(rect,theme.color.raised,theme.radius.control);
+      builder.label(rect,label,color,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(rect,widgetId(widget));
+    };
+    action(takeLeft(actions,actions.width*.5f),"Renomear",EditorWidget::FilesRename,theme.color.text);
+    action(actions,confirming?"Apagar mesmo assim":"Apagar",EditorWidget::FilesDelete,
+           confirming?theme.color.accent:theme.color.text);
+  }
   if(!files.error().empty()) {
     builder.list.pushClip(content);builder.label(content,files.error().c_str(),theme.color.textDim,theme.type.caption);builder.list.popClip();return;
   }
@@ -340,6 +360,8 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
   const auto &entries=files.tree();
   for(u32 i=builder.state.fileScroll;i<entries.size() && content.height>=24;++i) {
     const auto &entry=entries[i];auto row=takeTop(content,24);const auto hit=row;
+    if(entry.relativePath==builder.state.selectedFile)
+      builder.list.addRect(hit,withAlpha(theme.color.accent,0.18f),theme.radius.control);
     takeLeft(row,static_cast<float>(entry.depth)*14);
     auto icon=takeLeft(row,22);
     builder.list.addImage(centred(icon,15,15),static_cast<UiImageId>(entry.directory?UiIcon::EditorAuthorFolder:UiIcon::AssetsFile),theme.color.textDim);
@@ -992,11 +1014,13 @@ bool platformFieldActive(const EditorScreenState &state) {
   return state.renameEntity != kInvalidEntity || state.editingHierarchySearch ||
          state.editingCreationSearch || state.editingComponentSearch || state.editingMeshSearch ||
          state.editingReferenceSearch || state.numericField != 0 ||
-         state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode;
+         state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode ||
+         state.renamingResource;
 }
 
 const char *platformFieldTitle(const EditorScreenState &state) {
   if (state.numericField != 0) return "Valor";
+  if (state.renamingResource) return "Arquivo";
   if (state.editingScriptInstance != 0) return "Campo";
   if (state.creatingScript) return "Nova classe C#";
   if (state.searchingCode) return "Localizar";

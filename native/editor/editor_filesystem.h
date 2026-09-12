@@ -28,6 +28,20 @@ public:
   bool ready() const { return !root_.empty(); }
   bool createDirectory(const std::string &relative);
   bool createTextFile(const std::string &relative,std::string_view text);
+  // Renomear e mover são a MESMA operação aqui, como no registro: o que muda é
+  // o caminho. Falha fechada — destino já ocupado, caminho fora do projeto, ou
+  // uma pasta movida para dentro dela mesma não acontecem pela metade.
+  bool movePath(const std::string &relative,const std::string &destination);
+  // Apaga arquivo ou pasta inteira. Recusa a raiz e recusa `.astra`, que é o
+  // estado do projeto e não um recurso do usuário.
+  bool removePath(const std::string &relative);
+  // Relê a árvore visível do disco, preservando o que estava expandido.
+  //
+  // `refresh` só recarrega a pasta corrente (`entries_`); a árvore que o painel
+  // desenha é outra estrutura, montada por `toggle`. Sem isto, um arquivo
+  // renomeado continuava aparecendo com o nome antigo até o projeto ser
+  // reaberto — e o nome antigo já não existia no disco.
+  bool rebuildTree();
   // Verdadeiro quando o caminho já existe dentro da raiz do projeto.
   bool exists(const std::string &relative) const;
   std::string rootPath() const;

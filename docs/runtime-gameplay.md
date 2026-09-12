@@ -532,7 +532,52 @@ rolagem horizontal.
 inserção de texto que apareceu uma vez durante o teste e que eu não consegui
 atribuir. Ver o relatório de validação.
 
-## 17. O que este documento NÃO afirma
+## 17. Gerenciar recursos no painel de arquivos
+
+Renomear, mover e apagar um recurso, com as regras que a identidade separada do
+caminho torna possíveis.
+
+**Renomear e mover são a mesma operação**, no painel e no registro: o que muda é
+o caminho. E **a cena não é tocada** — os objetos guardam o GUID do recurso, não
+o caminho dele. Esse é o retorno concreto do registro com identidade: mover um
+arquivo não pode quebrar um objeto, e um teste de host exige exatamente isso
+(renomeia a fonte e conta quantos objetos continuam sendo desenhados).
+
+Mover uma pasta reaponta tudo que está dentro dela numa operação só. Aplicada aos
+poucos, uma colisão no meio deixaria metade da pasta apontando para o caminho
+novo e metade para o velho, e não há como saber qual metade. `source` e
+`derived` acompanham: um arquivo que muda de pasta muda para todos, senão o
+projeto reabre procurando o arquivo onde ele não está mais.
+
+**Apagar confronta quem usa.** O primeiro toque conta os objetos da cena e os
+recursos que dependem do arquivo e recusa, dizendo os números; o segundo, no
+mesmo arquivo, confirma. Dois toques e não um diálogo, pela mesma razão de §16.
+
+A contagem passa pelas identidades da fonte, e não pelo recurso da fonte: um GLB
+de cinco nós vira cinco identidades, e são elas que os objetos guardam. Contar só
+o recurso do arquivo diria "ninguém usa" com a cena inteira montada em cima dele.
+
+Forçando, os objetos que apontavam para o recurso ficam **sem malha,
+visivelmente** — a reconciliação já transforma identidade ausente em slot zero,
+em vez de apontar para a malha que por acaso ocupar o índice antigo.
+
+### O registro vai ao disco na hora
+
+Renomear e apagar mexem no disco imediatamente. Até o registro acompanhar, ele
+aponta para um caminho que não existe mais.
+
+Medido no aparelho: renomear a fonte e reabrir o projeto **antes de salvar**
+apagava o veículo da tela com a hierarquia inteira preservada. Por isso a
+operação marca o registro para gravação imediata, e não espera o próximo salvar.
+
+### O que ainda não existe
+
+- Mover para outra pasta pelo painel (arrastar ou escolher destino). A operação
+  aceita qualquer destino; a interface só oferece renomear no lugar.
+- Criar pasta pelo painel, e desfazer de uma operação de arquivo — apagar é
+  definitivo, e é por isso que ele pede confirmação.
+
+## 18. O que este documento NÃO afirma
 
 - Não há exportação de jogo nem player autônomo.
 - Sensor **por colisor** não existe: o sensor pertence ao corpo inteiro.

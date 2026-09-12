@@ -407,6 +407,12 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
         for(const auto &p:script->properties) if(p.id==edit.propertyId) edit.text=p.value;
     return edit;
   }
+  if(state_.renamingResource && !state_.selectedFile.empty()) {
+    edit.purpose=EditorTextPurpose::ResourceName;
+    const auto slash=state_.selectedFile.find_last_of('/');
+    edit.text=slash==std::string::npos?state_.selectedFile:state_.selectedFile.substr(slash+1);
+    return edit;
+  }
   if(state_.creatingScript) {edit.purpose=EditorTextPurpose::ScriptName;return edit;}
   if(state_.searchingCode) {edit.purpose=EditorTextPurpose::CodeSearch;edit.text=state_.codeQuery;return edit;}
   if(state_.editingComponentSearch) {edit.purpose=EditorTextPurpose::ComponentSearch;edit.text=state_.renameText;return edit;}
@@ -509,6 +515,7 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
   const auto close=[&] {
     code_.endTypingRun();
     state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;
+    state_.renamingResource=false;
     state_.choosingTemplate=false;
     state_.editingScriptInstance=0;state_.editingScriptEntity=0;state_.editingScriptProperty.clear();state_.editingScriptType.clear();
     state_.numericField=0;state_.numericInstance=0;state_.numericProperty.clear();state_.renameEntity=0;
@@ -538,6 +545,25 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
         buffer && buffer->id==edit.bufferId?buffer->revision:edit.bufferRevision,text);
     if(accepted) close();else state_.status=code_.error();
     return accepted;
+  }
+  if(edit.purpose==EditorTextPurpose::ResourceName) {
+    if(state_.selectedFile.empty()) return false;
+    // Nome, nao caminho: barra e ".." aqui virariam mover disfarcado de
+    // renomear, e a checagem de destino do sistema de arquivos passaria a ser a
+    // unica barreira.
+    if(text.empty() || text.find('/')!=std::string_view::npos ||
+       text.find(char(92))!=std::string_view::npos || text==".." || text==".") {
+      state_.status="Nome invalido para um arquivo";return false;
+    }
+    const auto slash=state_.selectedFile.find_last_of('/');
+    const std::string destination=
+        (slash==std::string::npos?std::string():state_.selectedFile.substr(0,slash+1))+std::string(text);
+    ResourceChangeReport report;
+    if(!moveResource(state_.selectedFile,destination,report)) {
+      state_.status=report.diagnostic;return false;
+    }
+    state_.selectedFile=destination;
+    close();return true;
   }
   if(edit.purpose==EditorTextPurpose::ScriptName) {
     if(!code_.createScript(files_,text,state_.scriptTemplate)) {state_.status=code_.error();return false;}
@@ -835,8 +861,35 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     const auto key=routing.widgetId;
     if(key==widgetId(EditorWidget::FilesCollapse)) {state_.filesCollapsed=!state_.filesCollapsed;return true;}
     const u32 base=widgetId(EditorWidget::FileRowBase);
+    if(key==widgetId(EditorWidget::FilesRename)) {
+      if(!state_.selectedFile.empty()) state_.renamingResource=true;
+      return true;
+    }
+    if(key==widgetId(EditorWidget::FilesDelete)) {
+      if(state_.selectedFile.empty()) return true;
+      // Dois toques, nao um dialogo. O primeiro confronta quem usa e conta; o
+      // segundo, no MESMO arquivo, confirma. Mudar de arquivo cancela.
+      const bool force=state_.pendingResourceDelete==state_.selectedFile;
+      ResourceChangeReport report;
+      if(deleteResource(state_.selectedFile,force,report)) {
+        state_.pendingResourceDelete.clear();
+        state_.selectedFile.clear();
+      } else if(!force && (report.sceneUsers>0 || report.registryDependents>0)) {
+        state_.pendingResourceDelete=state_.selectedFile;
+        state_.status=report.diagnostic+" Toque de novo para apagar mesmo assim.";
+      } else {
+        state_.pendingResourceDelete.clear();
+        state_.status=report.diagnostic;
+      }
+      return true;
+    }
     if(key>=base && key-base<files_.tree().size()) {
       const auto entry=files_.tree()[key-base];
+      // Escolher e a acao mais barata do toque, e vale para pasta e arquivo:
+      // as acoes de recurso precisam de um alvo, e abrir um arquivo nem sempre
+      // e possivel.
+      state_.selectedFile=entry.relativePath;
+      state_.pendingResourceDelete.clear();
       if(entry.directory) files_.toggle(key-base);
       else if(entry.name.ends_with(".cs") || entry.name.ends_with(".json") || entry.name.ends_with(".md")) {
         state_.code=&code_;
@@ -1283,6 +1336,109 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
                              published.indices,identities,packageFingerprint_,pivots)) {
     diagnostic="O editor recusou o pacote publicado.";return false;
   }
+  return true;
+}
+
+// Quantos objetos da cena usam este recurso. E a pergunta que apagar precisa
+// responder ANTES de apagar.
+u32 EditorSession::sceneUsersOf(const resources::AssetGuid &guid) const {
+  u32 users=0;
+  std::vector<EditorEntityId> subtree;
+  document_.collectSubtree(document_.root(),subtree);
+  for(const auto id:subtree) {
+    const auto *entity=document_.find(id);
+    if(!entity) continue;
+    const auto *render=meshRenderer(*entity);
+    if(render && render->asset==guid) ++users;
+  }
+  return users;
+}
+
+bool EditorSession::moveResource(const std::string &relative,const std::string &destination,
+                                 ResourceChangeReport &report) {
+  report={};
+  if(relative.empty() || destination.empty() || relative==destination) {
+    report.diagnostic="Origem e destino precisam ser caminhos diferentes.";return false;
+  }
+  // O registro primeiro, porque ele e o unico que sabe dizer "nao" sem deixar
+  // rastro. Se o arquivo fosse antes, uma colisao de caminho descobriria o
+  // problema com o arquivo ja no lugar novo.
+  const int retargeted=assets_.retargetPrefix(relative,destination);
+  if(retargeted<0) {
+    report.diagnostic="Ja existe um recurso registrado nesse caminho.";return false;
+  }
+  if(!files_.movePath(relative,destination)) {
+    // Desfaz o reapontamento: o disco nao mudou, entao o registro tambem nao
+    // pode ter mudado.
+    assets_.retargetPrefix(destination,relative);
+    report.diagnostic=files_.error();
+    return false;
+  }
+  report.retargeted=static_cast<u32>(retargeted);
+  assetRegistryDirty_=true;
+  // A cena NAO e tocada, de proposito: os objetos guardam o GUID, nao o
+  // caminho. Renomear um arquivo nao pode quebrar um objeto.
+  state_.status=report.retargeted>0
+      ? std::to_string(report.retargeted)+" recurso(s) reapontado(s)"
+      : "Movido";
+  return true;
+}
+
+bool EditorSession::deleteResource(const std::string &relative,bool force,
+                                   ResourceChangeReport &report) {
+  report={};
+  if(relative.empty()) { report.diagnostic="Caminho vazio."; return false; }
+  // Tudo que vive sob este caminho: apagar uma pasta apaga os recursos dela.
+  std::vector<resources::AssetGuid> doomed;
+  for(const auto &record:assets_.records()) {
+    const auto &path=record.path;
+    if(path.size()<relative.size() || path.compare(0,relative.size(),relative)!=0) continue;
+    if(path.size()!=relative.size() && path[relative.size()]!='/') continue;
+    doomed.push_back(record.guid);
+  }
+  for(const auto &guid:doomed) {
+    report.sceneUsers+=sceneUsersOf(guid);
+    // A cena nao aponta para o ARQUIVO, e sim para cada malha que saiu dele.
+    // Um GLB de cinco nos vira cinco identidades, e sao elas que os objetos
+    // guardam. Contar so o recurso da fonte diria "ninguem usa" com a cena
+    // inteira montada em cima dele.
+    for(const auto &source:importedSources_)
+      if(source.guid==guid)
+        for(const auto &identity:source.identities) report.sceneUsers+=sceneUsersOf(identity);
+    for(const auto &dependent:assets_.dependents(guid)) {
+      bool alsoDoomed=false;
+      for(const auto &other:doomed) if(other==dependent) {alsoDoomed=true;break;}
+      if(!alsoDoomed) ++report.registryDependents;
+    }
+  }
+  if(!force && (report.sceneUsers>0 || report.registryDependents>0)) {
+    report.diagnostic="Em uso: "+std::to_string(report.sceneUsers)+" objeto(s) da cena e "+
+        std::to_string(report.registryDependents)+" recurso(s) dependem deste arquivo.";
+    return false;
+  }
+  if(!files_.removePath(relative)) { report.diagnostic=files_.error(); return false; }
+
+  // O registro e a biblioteca so mudam DEPOIS que o arquivo saiu: ate aqui o
+  // projeto ainda podia ser recuperado do disco.
+  for(const auto &guid:doomed) {
+    for(auto source=importedSources_.begin();source!=importedSources_.end();++source)
+      if(source->guid==guid) { importedSources_.erase(source); break; }
+    assets_.remove(guid);
+    ++report.retargeted;
+  }
+  assetRegistryDirty_=true;
+  std::string diagnostic;
+  if(!doomed.empty() && !republishGeometry(diagnostic)) {
+    report.diagnostic=diagnostic;
+    return false;
+  }
+  // Objeto que apontava para o recurso apagado fica SEM malha, visivelmente. A
+  // reconciliacao ja faz isso: identidade ausente vira slot zero, em vez de
+  // apontar para a malha que por acaso ocupar o indice antigo.
+  mapScene_.reconcileAssets(document_);
+  state_.status=report.sceneUsers>0
+      ? std::to_string(report.sceneUsers)+" objeto(s) ficaram sem malha"
+      : "Apagado";
   return true;
 }
 
