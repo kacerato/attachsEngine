@@ -1198,7 +1198,12 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   UiRect remaining = deflate(state.surface, state.safeArea);
   layout.topBar = takeTop(remaining, kTopBarHeight);
   if(state.workspace==EditorWorkspace::Code) {
-    buildCodeWorkspace(builder,remaining,layout.topBar,layout);return layout;
+    buildCodeWorkspace(builder,remaining,layout.topBar,layout);
+    // O campo embutido tambem vale aqui. Sem esta chamada, criar um script ou
+    // buscar no codigo abria o teclado com o campo invisivel: o usuario digitava
+    // as cegas, que e pior do que o dialogo que isto substituiu.
+    buildPlatformTextField(builder);
+    return layout;
   }
 
   // Larguras resolvidas ANTES de desenhar, porque o viewport é o que sobra e

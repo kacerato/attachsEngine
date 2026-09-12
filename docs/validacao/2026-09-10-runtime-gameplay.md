@@ -553,6 +553,74 @@ O empurrão relativo de profundidade caiu de 0,5% para 0,05%. Ele continua
 existindo só para desempatar o contato coplanar entre o chão e a base de um
 objeto apoiado nele.
 
+### Entrega G — rodada integrada (11/09, PARCIAL)
+
+Duas composições montadas a partir de projetos **vazios**, inteiramente pela
+interface do aparelho. É a primeira vez que esta prova é executada; ela continua
+**parcial**, e o que não foi provado está listado abaixo com o mesmo peso do que
+foi.
+
+**Composição 1 — `PatioG1`** (chão, plataforma, personagem, câmera, script):
+
+| Fluxo | Prova |
+| --- | --- |
+| Projeto vazio | criado pelo shell, hierarquia vazia, grade desenhando |
+| Criar objetos | Chão e Cubo pelo catálogo `Adicionar objeto` → Geometria |
+| Transformação por campo | plataforma em `y=1`, escala `(4, 0.4, 4)` digitadas no inspetor |
+| Renomear objeto | Cubo → `Plataforma`, Cubo → `Personagem`, pelo menu da hierarquia |
+| Conflitos de componente | com `Personagem` anexado, o catálogo recusa `Corpo físico` ("Incompatível com personagem cápsula") e `Colisor 3D` ("O personagem já possui cápsula própria"), com o motivo escrito |
+| Personagem + câmera | `Personagem`, `Câmera` e `Olhar` no mesmo objeto; `Olhar` só liberou depois da `Câmera`, como a dependência promete |
+| Script por modelo | `Plataforma móvel` → `PlataformaVaiVem.cs`, criado pelo seletor de modelos com implementação real (movimento cinemático) |
+| Compilar | `Aplicar` → "Código aplicado ao projeto" |
+| Duas instâncias do MESMO script | duas `PlataformaVaiVem` no mesmo objeto, uma com `Velocidade = 3` e outra em `Padrão do código` |
+| Play recusado com motivo | "Plataforma: colisor #2 requer um corpo neste objeto ou em um ancestral explícito" — objeto e instância nomeados |
+| Correção pela interface | `Corpo físico` anexado, salvar, Play entra |
+| Play/Pausa/Passo/Stop | os quatro, e Play/Stop repetidos |
+| Stop preserva autoria | plataforma de volta à pose de autoria, 5 componentes intactos |
+
+**Composição 2 — `InteriorG2`** (chão, porta, luz, material por instância):
+
+| Fluxo | Prova |
+| --- | --- |
+| Projeto vazio | segundo projeto, independente do primeiro |
+| Criar e renomear | Chão e Porta |
+| Luz anexável | `Luz` no objeto, vinda da página 2 do catálogo |
+| Material por instância | aba `Material` da Malha, `Cor R` de 0.55 para 0.9, com `Restaurar material da origem` disponível |
+| Salvar | "Salvo" nas duas composições |
+
+**O que esta rodada NÃO provou**, e não deve ser apresentado como provado:
+
+- **Importação de GLB** não foi exercitada nestas duas composições. Ela está
+  provada na rodada anterior, em outro projeto (`Hierarquia0911`), e o
+  renomear/apagar com dependentes está provado lá também.
+- **O segundo script falhou.** Criar `PortaInterior` pelo modelo `Porta` não
+  concluiu: o campo do nome abria vazio e o texto injetado não chegava nele.
+  Ver o defeito abaixo.
+- **Duplicar/reparentear/desfazer/salvar/reabrir preservando IDs** — a linha de
+  "Referências" da tabela de aceitação — não foi percorrida.
+- **Consultas físicas, sensores, plataforma com personagem em cima** não foram
+  observados em execução: o Play rodou, mas a câmera do personagem estava dentro
+  da própria geometria e não houve prova visual do transporte.
+- **Foco do editor vazando para gameplay** e **teclado/multitouch preso** não
+  foram testados.
+
+**Defeitos encontrados por esta rodada:**
+
+1. **Campo de nome de script não recebe o texto depois de uma recusa.** Ao
+   confirmar um nome vazio, o editor recusa e rearma o pedido com uma sequência
+   nova; a ponte reabre o campo, mas as teclas seguintes não chegam ao buffer. A
+   hipótese é que `requestFocus()` na `View` de um pixel não pega no reabrir, e o
+   IME aparece ligado a nada. Endereçado ao **M06.2**, junto com o resto do
+   afinamento do editor de código.
+2. **Mensagem de conflito errada.** No objeto `Plataforma`, que não tem
+   `Personagem`, o catálogo mostra "O personagem já possui cápsula própria" para
+   `Colisor 3D` — a explicação é de outro objeto. O conflito em si está certo
+   (colisor já anexado); a frase é que não corresponde.
+3. **A seta do gizmo é fácil de agarrar sem querer.** Um arraste iniciado perto
+   do centro da tela move o objeto 29 unidades em vez de orbitar a câmera. Não é
+   defeito de código, mas é o tipo de coisa que a prova de aceitação existe para
+   encontrar.
+
 ### Defeitos do plano mestre ainda ABERTOS
 
 O plano mestre de 11/09 lista cinco defeitos de escopo imediato. Dois foram
