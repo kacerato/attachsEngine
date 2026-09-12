@@ -577,7 +577,44 @@ operação marca o registro para gravação imediata, e não espera o próximo s
 - Criar pasta pelo painel, e desfazer de uma operação de arquivo — apagar é
   definitivo, e é por isso que ele pede confirmação.
 
-## 18. O que este documento NÃO afirma
+## 18. Ícones no idioma da marca
+
+Os 37 ícones que o editor usa hoje são desenhados por geometria própria, em
+`tools/generate-astra-mark-icons.py`, no vocabulário da marca Astra. **O enum não
+muda** — nem uma linha de código de tela foi tocada. O identificador de um ícone
+é um índice, o índice vem do nome de catálogo, e só a arte por trás do nome
+trocou.
+
+A marca é duas cores e nada mais: lima sobre quase-preto, formas sólidas, sem
+contorno e sem gradiente. Quatro traços dela aparecem em todo desenho:
+
+- forma **sólida**, nunca traço fino — a silhueta é o ícone;
+- varredura que **afina até a ponta**, como o anel que abraça a estrela;
+- lado **côncavo** onde uma ponta nasce, como as pontas da estrela;
+- um **círculo cheio** como acento, quando o desenho pede um centro.
+
+### Por que isso não exige mudança na interface
+
+Os ícones saem em lima sobre transparente. Nos painéis escuros eles aparecem como
+são; na pastilha acesa a tintura multiplica pelo quase-preto e devolve a relação
+da marca invertida — preto sobre lima. É a mesma relação do logotipo nos dois
+estados, e é por isso que a tintura existente continua valendo sem exceção.
+
+### A marca funciona grande; o ícone vive a 20 px
+
+Foi o que a primeira versão errou. A ponta que afina é o gesto da marca, mas
+abaixo de umas três unidades de espessura ela simplesmente some na tela. Desfazer
+e refazer viravam ganchos, girar virava um ponto. A regra que ficou: a ponta fina
+só onde ela é **o gesto** — nunca onde ela é o desenho inteiro.
+
+Sem brilho externo, de propósito: a célula do atlas tem 96 px e um halo largo
+vira sangramento entre células vizinhas.
+
+Os outros 115 nomes do catálogo continuam na arte anterior. Desenhar um a um sem
+consumidor seria trabalho sem leitor; o M06.2 dirá de quais a reconstrução do IDE
+precisa.
+
+## 19. O que este documento NÃO afirma
 
 - Não há exportação de jogo nem player autônomo.
 - Sensor **por colisor** não existe: o sensor pertence ao corpo inteiro.
