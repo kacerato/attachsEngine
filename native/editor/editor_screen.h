@@ -334,6 +334,12 @@ struct EditorScreenLayout final {
   ui::UiRect hierarchyPanel{};
   ui::UiRect filesPanel{};
   ui::UiRect inspectorPanel{};
+  // O corpo do editor de código e quantas linhas dele cabem. O toque vira
+  // posição de cursor a partir deste retângulo, e a rolagem acompanha o cursor
+  // a partir desta contagem.
+  ui::UiRect codeBody{};
+  u32 codeVisibleLines = 0;
+  float codeLineHeight = 24.0f;
   u32 hierarchyRowCount = 0;
   u32 componentPage=0;
   // Quantas linhas caberiam. Menor que o total significa que há rolagem.

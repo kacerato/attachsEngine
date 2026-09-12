@@ -137,6 +137,10 @@ public:
   // Quanto da superfície o teclado do sistema ocupa, 0..1. O campo se apoia
   // nesta borda em vez de ficar escondido atrás do teclado.
   void setPlatformImeFraction(float fraction);
+private:
+  void followCodeCaret();
+  void placeCodeCaret(ui::UiPoint position);
+public:
 
   // Reconstrói a lista de desenho e as instâncias do frame.
   void update();

@@ -162,3 +162,41 @@ AE_TEST(closing_the_project_is_the_only_thing_that_clears_the_catalogue) {
   AE_EXPECT_TRUE(workspace.code.catalogState() == EditorCodeCatalogState::Empty, "estado vazio");
   AE_EXPECT_EQ(workspace.code.publishedGeneration(), 0u, "sem publicação");
 }
+
+AE_TEST(typing_is_one_undo_entry_per_session_not_one_per_key) {
+  // Escrever direto no editor significa uma chamada por tecla. `replace` guarda
+  // uma copia do arquivo inteiro a cada chamada: por tecla, desfazer voltaria
+  // caractere a caractere e o historico cresceria com uma copia do arquivo por
+  // tecla digitada. `type` agrupa a sessao inteira numa entrada so.
+  Workspace workspace;
+  AE_EXPECT_TRUE(workspace.start(), "catalogo publicado");
+  const auto *buffer = workspace.code.active();
+  AE_EXPECT_TRUE(buffer != nullptr, "arquivo aberto");
+  const auto id = buffer->id;
+  const std::string base = buffer->text;
+
+  AE_EXPECT_TRUE(workspace.code.type(id, base + "a"), "tecla 1");
+  AE_EXPECT_TRUE(workspace.code.type(id, base + "ab"), "tecla 2");
+  AE_EXPECT_TRUE(workspace.code.type(id, base + "abc"), "tecla 3");
+  AE_EXPECT_TRUE(workspace.code.active()->text == base + "abc", "o texto entra ao vivo");
+  AE_EXPECT_TRUE(workspace.code.typing(), "a sessao esta aberta");
+
+  AE_EXPECT_TRUE(workspace.code.undo(), "desfazer");
+  AE_EXPECT_TRUE(workspace.code.active()->text == base,
+                 "desfazer volta a sessao inteira, nao uma tecla");
+  AE_EXPECT_TRUE(!workspace.code.typing(), "desfazer fecha a sessao");
+
+  AE_EXPECT_TRUE(workspace.code.redo(), "refazer");
+  AE_EXPECT_TRUE(workspace.code.active()->text == base + "abc", "refazer devolve a sessao inteira");
+
+  // Fechar o campo e voltar a digitar comeca uma entrada nova.
+  workspace.code.endTypingRun();
+  AE_EXPECT_TRUE(workspace.code.type(id, base + "abcd"), "sessao nova");
+  AE_EXPECT_TRUE(workspace.code.undo(), "desfazer a sessao nova");
+  AE_EXPECT_TRUE(workspace.code.active()->text == base + "abc",
+                 "volta ao fim da sessao anterior, nao ao inicio de tudo");
+
+  // Arquivo errado nao aceita tecla: um buffer trocado no meio da digitacao
+  // escreveria o texto de um arquivo dentro de outro.
+  AE_EXPECT_TRUE(!workspace.code.type(id + 999u, "qualquer"), "id de outro arquivo e recusado");
+}

@@ -3,6 +3,9 @@
 #include <jni.h>
 #include <mutex>
 #include <optional>
+#include <algorithm>
+#include <cstddef>
+#include <string>
 
 namespace {
 std::mutex mutex;
@@ -18,6 +21,9 @@ std::optional<Reply> reply;
 struct Draft { ae::u64 sequence; ae::u32 caret; std::string text; };
 std::optional<Draft> draft;
 float imeFraction=0.0f;
+// Cursor inicial do pedido atual, em bytes. O editor de codigo escolhe pelo
+// toque; os outros campos comecam no fim do texto.
+std::size_t seedCaret=0;
 bool same(const ae::editor::EditorTextEdit &a,const ae::editor::EditorTextEdit &b) {
   return a.purpose==b.purpose && a.entity==b.entity && a.field==b.field &&
       a.version.epoch==b.version.epoch && a.version.revision==b.version.revision &&
@@ -45,6 +51,7 @@ void updateEditorTextInput(editor::EditorSession &session) {
   if(pending.purpose==editor::EditorTextPurpose::None) {visible=false;invalid=false;return;}
   if(!visible || !same(request,pending)) {
     request=pending;visible=true;++sequence;
+    seedCaret=session.screen().platformCaret;
   }
 }
 }
@@ -56,16 +63,20 @@ Java_dev_aether_editor_EditorTextInput_poll(JNIEnv *env,jclass) {
   const bool number=request.purpose==ae::editor::EditorTextPurpose::Number;
   const bool code=request.purpose==ae::editor::EditorTextPurpose::Code;
   const bool property=request.purpose==ae::editor::EditorTextPurpose::ScriptProperty;
+  const auto caret=std::min<std::size_t>(seedCaret,request.text.size());
   const std::string values[]{std::to_string(sequence),code?"code":number?"number":"text",
     invalid?"Alteração recusada; revise o campo":code?"Editar código":number?"Editar valor":
       property?("Campo · "+request.propertyType):
       request.purpose==ae::editor::EditorTextPurpose::ScriptName?"Nova classe C#":
       request.purpose==ae::editor::EditorTextPurpose::Rename?"Renomear objeto":"Pesquisar",
-    request.text,code?"524288":property?"4096":number?"47":"63"};
+    request.text,code?"524288":property?"4096":number?"47":"63",
+    // Onde o cursor comeca, em BYTES. Para o codigo ele vem do toque -- a linha
+    // que o dedo escolheu --, e nao do fim do arquivo.
+    std::to_string(caret)};
   jclass bytes=env->FindClass("[B");if(!bytes) return nullptr;
-  auto result=env->NewObjectArray(5,bytes,nullptr);env->DeleteLocalRef(bytes);
+  auto result=env->NewObjectArray(6,bytes,nullptr);env->DeleteLocalRef(bytes);
   if(!result) return nullptr;
-  for(int i=0;i<5;++i) {
+  for(int i=0;i<6;++i) {
     auto value=env->NewByteArray(static_cast<jsize>(values[i].size()));if(!value) return nullptr;
     env->SetByteArrayRegion(value,0,static_cast<jsize>(values[i].size()),
         reinterpret_cast<const jbyte *>(values[i].data()));

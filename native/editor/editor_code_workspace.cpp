@@ -65,7 +65,7 @@ void EditorCodeWorkspace::remember(std::vector<std::string> &history,const std::
   }
 }
 bool EditorCodeWorkspace::replace(u64 id,u64 revision,std::string_view text) {
-  auto *buffer=active();
+  endTypingRun();auto *buffer=active();
   if(!buffer || buffer->id!=id || buffer->revision!=revision) {error_="O arquivo mudou durante a edição";return false;}
   if(text.size()>MaximumFileBytes || text.find('\0')!=std::string_view::npos) {error_="Código excede o limite ou contém bytes nulos";return false;}
   if(buffer->text==text) return true;
@@ -75,13 +75,28 @@ bool EditorCodeWorkspace::replace(u64 id,u64 revision,std::string_view text) {
   // assembly que está em uso.
   ++buffer->revision;++generation_;diagnostics_.clear();error_.clear();return true;
 }
+bool EditorCodeWorkspace::type(u64 id,std::string_view text) {
+  auto *buffer=active();
+  if(!buffer || buffer->id!=id) {error_="O arquivo mudou durante a edição";return false;}
+  if(text.size()>MaximumFileBytes || text.find('\0')!=std::string_view::npos) {
+    error_="Código excede o limite ou contém bytes nulos";return false;
+  }
+  if(buffer->text==text) return true;
+  // O instantâneo entra UMA vez, na primeira tecla da sessão. As seguintes
+  // escrevem por cima do texto sem empilhar nada: desfazer volta ao que estava
+  // antes de a sessão começar, e não uma tecla atrás.
+  if(typingRun_!=id) { remember(buffer->undo,buffer->text); buffer->redo.clear(); typingRun_=id; }
+  buffer->text=text;
+  ++buffer->revision;++generation_;diagnostics_.clear();error_.clear();return true;
+}
+
 bool EditorCodeWorkspace::undo() {
-  auto *buffer=active();if(!buffer || buffer->undo.empty()) return false;
+  endTypingRun();auto *buffer=active();if(!buffer || buffer->undo.empty()) return false;
   remember(buffer->redo,buffer->text);buffer->text=std::move(buffer->undo.back());buffer->undo.pop_back();
   ++buffer->revision;++generation_;diagnostics_.clear();return true;
 }
 bool EditorCodeWorkspace::redo() {
-  auto *buffer=active();if(!buffer || buffer->redo.empty()) return false;
+  endTypingRun();auto *buffer=active();if(!buffer || buffer->redo.empty()) return false;
   remember(buffer->undo,buffer->text);buffer->text=std::move(buffer->redo.back());buffer->redo.pop_back();
   ++buffer->revision;++generation_;diagnostics_.clear();return true;
 }

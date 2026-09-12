@@ -1,7 +1,6 @@
 package dev.aether.editor;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
@@ -13,12 +12,10 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
-import android.view.WindowManager;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.EditText;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -30,13 +27,11 @@ import java.nio.charset.StandardCharsets;
  * O texto vai para o lado nativo a cada tecla, e e o editor que desenha o campo
  * com o cursor, na sua propria superficie.
  *
- * <p>Antes disso a edicao acontecia num {@link AlertDialog} que cobria a tela:
- * o usuario nao via o objeto que estava renomeando nem o valor que estava
- * mudando enquanto digitava, e a busca so filtrava depois de confirmar.
- *
- * <p>O editor de codigo continua no dialogo. Ele e multi-linha com rolagem e
- * selecao propria, e entra no marco seguinte — trocar os dois de uma vez seria
- * anunciar uma coisa e entregar outra.
+ * <p>Antes disso a edicao acontecia num dialogo modal que cobria a tela: o
+ * usuario nao via o objeto que estava renomeando nem o valor que estava mudando
+ * enquanto digitava, a busca so filtrava depois de confirmar, e o codigo era
+ * escrito numa caixa separada em vez de no proprio editor. Nao ha mais dialogo
+ * nenhum neste caminho.
  */
 final class EditorTextInput {
     private static native byte[][] poll();
@@ -46,7 +41,6 @@ final class EditorTextInput {
 
     private final Activity activity;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private AlertDialog dialog;
     private InlineField field;
     private boolean running;
     private long lastToken;
@@ -78,20 +72,19 @@ final class EditorTextInput {
     void stop() {
         running = false;
         handler.removeCallbacks(tick);
-        if (dialog != null) { submit(lastToken, new byte[0], false); dialog.dismiss(); dialog = null; }
         if (field != null) { submit(lastToken, new byte[0], false); closeField(); }
     }
 
     private void open(long token, byte[][] data) {
         final String kind = decode(data[1]);
         limit = Integer.parseInt(decode(data[4]));
-        if (kind.equals("code")) { showDialog(token, data); return; }
-        showField(token, kind.equals("number"), decode(data[3]));
+        final int caret = data.length > 5 ? Integer.parseInt(decode(data[5])) : Integer.MAX_VALUE;
+        showField(token, kind.equals("number"), kind.equals("code"), decode(data[3]), caret);
     }
 
     // ---- campo embutido -----------------------------------------------------
 
-    private void showField(long token, boolean number, String initial) {
+    private void showField(long token, boolean number, boolean multiline, String initial, int caret) {
         if (field == null) {
             field = new InlineField(activity);
             // Um pixel, transparente, por cima de tudo. Ela existe para o foco e
@@ -99,7 +92,27 @@ final class EditorTextInput {
             activity.addContentView(field, new ViewGroup.LayoutParams(1, 1));
             field.getViewTreeObserver().addOnGlobalLayoutListener(imeWatcher);
         }
-        field.begin(token, number, initial);
+        field.begin(token, number, multiline, initial, caret);
+    }
+
+    /**
+     * De byte UTF-8 para indice UTF-16.
+     *
+     * <p>O lado nativo indexa o texto em bytes; o {@link Editable} do Android
+     * indexa em unidades UTF-16. Converter aqui e o que impede o cursor de cair
+     * no meio de um glifo acentuado.
+     */
+    private static int offsetForBytes(String text, int bytes) {
+        if (bytes >= text.getBytes(StandardCharsets.UTF_8).length) return text.length();
+        int consumed = 0;
+        for (int index = 0; index < text.length(); ) {
+            final int point = text.codePointAt(index);
+            final int width = new String(Character.toChars(point)).getBytes(StandardCharsets.UTF_8).length;
+            if (consumed + width > bytes) return index;
+            consumed += width;
+            index += Character.charCount(point);
+        }
+        return text.length();
     }
 
     private void closeField() {
@@ -129,6 +142,7 @@ final class EditorTextInput {
         private final Editable buffer = new SpannableStringBuilder();
         private long token;
         private boolean number;
+        private boolean multiline;
         private boolean active;
 
         InlineField(Activity host) {
@@ -137,13 +151,14 @@ final class EditorTextInput {
             setFocusableInTouchMode(true);
         }
 
-        void begin(long id, boolean numeric, String initial) {
+        void begin(long id, boolean numeric, boolean multi, String initial, int caretBytes) {
             token = id;
             number = numeric;
+            multiline = multi;
             active = true;
             buffer.clear();
             buffer.append(initial);
-            Selection.setSelection(buffer, buffer.length());
+            Selection.setSelection(buffer, offsetForBytes(initial, caretBytes));
             requestFocus();
             final InputMethodManager manager =
                 (InputMethodManager) activity.getSystemService(Activity.INPUT_METHOD_SERVICE);
@@ -195,7 +210,16 @@ final class EditorTextInput {
          */
         private boolean handleKey(KeyEvent event) {
             if (!active || event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (event.getKeyCode() == KeyEvent.KEYCODE_ENTER) { accept(); return true; }
+            if (event.getKeyCode() == KeyEvent.KEYCODE_ENTER) {
+                // No codigo, Enter e uma quebra de linha. Nos outros campos ele
+                // confirma, porque nao ha linha seguinte para quebrar.
+                if (!multiline) { accept(); return true; }
+                final int at = Math.max(0, Selection.getSelectionEnd(buffer));
+                buffer.insert(at, "\n");
+                Selection.setSelection(buffer, at + 1);
+                publish();
+                return true;
+            }
             if (event.getKeyCode() == KeyEvent.KEYCODE_DEL) {
                 final int end = Selection.getSelectionEnd(buffer);
                 final int start = Selection.getSelectionStart(buffer);
@@ -231,9 +255,15 @@ final class EditorTextInput {
             out.inputType = number
                 ? InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL
                       | InputType.TYPE_NUMBER_FLAG_SIGNED
-                : InputType.TYPE_CLASS_TEXT;
-            out.imeOptions = EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI
-                | EditorInfo.IME_FLAG_NO_FULLSCREEN;
+                : multiline
+                    ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                          | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                    : InputType.TYPE_CLASS_TEXT;
+            // Sem acao de concluir no codigo: nao existe "aplicar" um arquivo
+            // que ja esta sendo escrito. A tecla de voltar fecha o teclado, e o
+            // texto fica onde esta -- como em qualquer editor.
+            out.imeOptions = (multiline ? EditorInfo.IME_ACTION_NONE : EditorInfo.IME_ACTION_DONE)
+                | EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_FLAG_NO_FULLSCREEN;
             out.initialSelStart = Selection.getSelectionStart(buffer);
             out.initialSelEnd = Selection.getSelectionEnd(buffer);
             return new BaseInputConnection(this, true) {
@@ -273,45 +303,4 @@ final class EditorTextInput {
         }
     }
 
-    // ---- editor de codigo: ainda no dialogo ---------------------------------
-
-    private void showDialog(long token, byte[][] data) {
-        final int bytes = limit;
-        EditText input = new EditText(activity);
-        input.setTextSize(14);
-        input.setTypeface(android.graphics.Typeface.MONOSPACE);
-        input.setMinLines(14);
-        input.setHorizontallyScrolling(true);
-        input.setMinHeight((int) (48 * activity.getResources().getDisplayMetrics().density));
-        input.setSingleLine(false);
-        input.setImeOptions(EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_ACTION_NONE);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        input.setText(decode(data[3]));
-        input.setSelection(input.length());
-        int padding = (int) (20 * activity.getResources().getDisplayMetrics().density);
-        input.setPadding(padding, padding / 2, padding, padding / 2);
-        AlertDialog current = new AlertDialog.Builder(activity)
-            .setTitle(decode(data[2])).setView(input)
-            .setNegativeButton("Cancelar", (d, w) -> submit(token, new byte[0], false))
-            .setPositiveButton("Concluir edicao", null).create();
-        dialog = current;
-        current.setCanceledOnTouchOutside(false);
-        current.setOnCancelListener(d -> submit(token, new byte[0], false));
-        current.setOnDismissListener(d -> { if (dialog == current) dialog = null; });
-        current.setOnShowListener(d -> {
-            current.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-                byte[] text = input.getText().toString().getBytes(StandardCharsets.UTF_8);
-                if (text.length > bytes) { input.setError("Limite de " + bytes + " bytes UTF-8"); return; }
-                submit(token, text, true);
-                current.dismiss();
-            });
-            input.requestFocus();
-            current.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
-                | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        });
-        current.show();
-        current.getWindow().setLayout(WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT);
-    }
 }

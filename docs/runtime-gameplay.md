@@ -500,10 +500,37 @@ Teclas chegam por dois caminhos que existem os dois — o IME pela
 `InputConnection`, e teclado físico ou evento injetado direto na `View`. Os dois
 passam pela mesma função.
 
-**O editor de código continua no diálogo.** Ele é multi-linha com rolagem e
-seleção própria, e é o que falta do M05 junto com a edição dentro da própria
-linha da propriedade (M05.2). Trocar os dois de uma vez seria anunciar uma coisa
-e entregar outra.
+### O código é escrito no próprio editor
+
+Não há mais diálogo em nenhum caminho. Tocar numa linha do editor abre o teclado
+e põe o cursor ali; o texto aparece na linha, no editor, enquanto é digitado.
+
+Duas decisões que isso obrigou:
+
+- **Código não tem "aplicar".** O texto digitado **é** o buffer, e entra a cada
+  tecla por `EditorCodeWorkspace::type`. Voltar fecha o teclado e o texto fica
+  onde está, como em qualquer editor.
+- **Uma entrada de desfazer por sessão de digitação, não por tecla.** `replace`
+  guarda uma cópia do arquivo inteiro a cada chamada; com uma chamada por tecla,
+  desfazer voltaria caractere a caractere e o histórico cresceria com uma cópia
+  do arquivo por tecla. `type` empilha o instantâneo na **primeira** tecla da
+  sessão e sobrescreve nas seguintes. Qualquer comando que não seja digitar —
+  desfazer, refazer, `replace`, fechar o campo — encerra a sessão.
+
+O corpo do editor desconta a altura do teclado, e a rolagem persegue o cursor a
+cada quadro: a altura útil só encolhe quando o teclado termina de subir, um ou
+dois quadros depois do toque, e é a contagem de linhas visíveis daquele instante
+que vale.
+
+**O toque escolhe a linha; o cursor vai para o fim dela.** Coluna exata exigiria
+medir o texto, que só acontece na construção das instâncias. Aproximar por
+largura média poria o cursor no lugar errado em toda linha com indentação — ou
+seja, em toda linha de código. É o que falta do M05.3, junto com seleção e
+rolagem horizontal.
+
+**Ainda não verificado no aparelho:** o mapeamento do toque para a linha e uma
+inserção de texto que apareceu uma vez durante o teste e que eu não consegui
+atribuir. Ver o relatório de validação.
 
 ## 17. O que este documento NÃO afirma
 

@@ -436,6 +436,15 @@ bool EditorSession::updateTextDraft(const EditorTextEdit &edit,std::string_view 
   if(text.size()>EditorCodeWorkspace::MaximumFileBytes) return false;
   state_.platformDraft.assign(text);
   state_.platformCaret=static_cast<u32>(std::min<usize>(caret,text.size()));
+  // Codigo nao tem "aplicar": o texto digitado E o buffer. Ele entra ja, por
+  // `type`, que agrupa a sessao inteira de digitacao em UMA entrada de
+  // desfazer -- `replace` guarda uma copia do arquivo por chamada, e uma
+  // chamada por tecla faria desfazer voltar caractere a caractere.
+  if(edit.purpose==EditorTextPurpose::Code) {
+    if(!code_.type(edit.bufferId,text)) { state_.status=code_.error(); return false; }
+    followCodeCaret();
+    return true;
+  }
   // Busca filtra enquanto se digita. É o único efeito permitido antes de
   // confirmar, e ele não toca no documento nem no histórico.
   switch(edit.purpose) {
@@ -454,6 +463,41 @@ bool EditorSession::updateTextDraft(const EditorTextEdit &edit,std::string_view 
   return true;
 }
 
+// Rolagem acompanha o cursor. Sem isto, digitar no fim de um arquivo longo
+// escreveria fora da tela.
+void EditorSession::followCodeCaret() {
+  auto *buffer=code_.active();
+  if(!buffer) return;
+  const auto caret=std::min<usize>(state_.platformCaret,buffer->text.size());
+  const auto line=static_cast<u32>(std::count(buffer->text.begin(),buffer->text.begin()+static_cast<long>(caret),10));
+  const u32 visible=layout_.codeVisibleLines>2?layout_.codeVisibleLines:12;
+  if(line<buffer->firstLine) buffer->firstLine=line;
+  else if(line>=buffer->firstLine+visible) buffer->firstLine=line-visible+1;
+}
+
+// O toque escolhe a LINHA e o cursor vai para o fim dela.
+//
+// Coluna exata exigiria medir o texto, que so acontece na construcao das
+// instancias; aproximar por largura media poria o cursor no lugar errado em
+// cada linha com indentacao, que e toda linha de codigo. Fim de linha e
+// previsivel e util, e a coluna exata e o que falta do M05.3.
+void EditorSession::placeCodeCaret(ui::UiPoint position) {
+  auto *buffer=code_.active();
+  if(!buffer || layout_.codeBody.height<=0 || layout_.codeLineHeight<=0) return;
+  const float offset=(position.y-layout_.codeBody.y)/layout_.codeLineHeight;
+  const u32 row=buffer->firstLine+static_cast<u32>(std::max(0.0f,offset));
+  usize start=0;u32 line=0;
+  while(line<row) {
+    const auto end=buffer->text.find(10,start);
+    if(end==std::string::npos) { start=buffer->text.size();break; }
+    start=end+1;++line;
+  }
+  const auto end=buffer->text.find(10,start);
+  state_.platformCaret=static_cast<u32>(end==std::string::npos?buffer->text.size():end);
+  state_.platformDraft=buffer->text;
+  followCodeCaret();
+}
+
 void EditorSession::setPlatformImeFraction(float fraction) {
   state_.platformImeFraction=std::isfinite(fraction)?std::clamp(fraction,0.0f,0.9f):0.0f;
 }
@@ -463,6 +507,7 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
   if(edit.purpose==EditorTextPurpose::None || current.purpose!=edit.purpose ||
      current.entity!=edit.entity || current.field!=edit.field || edit.version.epoch!=sceneEpoch_) return false;
   const auto close=[&] {
+    code_.endTypingRun();
     state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;
     state_.choosingTemplate=false;
     state_.editingScriptInstance=0;state_.editingScriptEntity=0;state_.editingScriptProperty.clear();state_.editingScriptType.clear();
@@ -485,7 +530,12 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     close();return true;
   }
   if(edit.purpose==EditorTextPurpose::Code) {
-    const bool accepted=code_.replace(edit.bufferId,edit.bufferRevision,text);
+    // Digitando, o texto ja entrou tecla a tecla e a revisao do instantaneo que
+    // abriu o campo ficou para tras de proposito. Confirmar so fecha.
+    const auto *buffer=code_.active();
+    if(buffer && buffer->id==edit.bufferId && buffer->text==text) { close(); return true; }
+    const bool accepted=code_.replace(edit.bufferId,
+        buffer && buffer->id==edit.bufferId?buffer->revision:edit.bufferRevision,text);
     if(accepted) close();else state_.status=code_.error();
     return accepted;
   }
@@ -561,7 +611,10 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       const int next=static_cast<int>(buffer->firstLine)-static_cast<int>(routing.stepDelta.y/12);
       buffer->firstLine=std::min(count,static_cast<u32>(std::max(0,next)));
     }
-    if(routing.tapped) state_.editingCode=code_.active()!=nullptr;
+    if(routing.tapped) {
+      state_.editingCode=code_.active()!=nullptr;
+      if(state_.editingCode) placeCodeCaret(routing.position);
+    }
     return true;
   }
   if(routing.tapped && !isPlaying()) {
@@ -1514,6 +1567,11 @@ void EditorSession::update() {
   list_.begin(state_.surface, metrics);
   router_.beginFrame();
   layout_ = buildEditorScreen(state_, editorTheme(), list_, router_);
+  // A rolagem persegue o cursor a cada quadro enquanto o codigo esta aberto: a
+  // altura util so encolhe quando o teclado termina de subir, um ou dois
+  // quadros depois do toque, e a contagem de linhas visiveis daquele instante e
+  // a unica que vale.
+  if(state_.editingCode && state_.platformTextInput) followCodeCaret();
   const u32 maximumScroll=layout_.hierarchyRowCount>layout_.hierarchyVisibleRows
       ? layout_.hierarchyRowCount-layout_.hierarchyVisibleRows : 0;
   state_.hierarchyScroll=std::min(state_.hierarchyScroll,maximumScroll);
@@ -1527,6 +1585,11 @@ void EditorSession::update() {
   list_.begin(state_.surface, metrics);
   router_.beginFrame();
   layout_ = buildEditorScreen(state_, editorTheme(), list_, router_);
+  // A rolagem persegue o cursor a cada quadro enquanto o codigo esta aberto: a
+  // altura util so encolhe quando o teclado termina de subir, um ou dois
+  // quadros depois do toque, e a contagem de linhas visiveis daquele instante e
+  // a unica que vale.
+  if(state_.editingCode && state_.platformTextInput) followCodeCaret();
 
   instances_.clear();
   buildUiInstances(list_, *font_, *icons_, kMaximumInstances, instances_);

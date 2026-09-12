@@ -70,6 +70,22 @@ public:
   // traz o arquivo de contratos junto, quando o projeto ainda não o tem.
   bool createScript(EditorFileSystem &files,std::string_view className,u32 templateIndex=~0u);
   bool replace(u64 id,u64 revision,std::string_view text);
+  // Digitação contínua: UMA entrada de desfazer por sessão de digitação, não
+  // por tecla.
+  //
+  // `replace` guarda um instantâneo do texto inteiro a cada chamada. Com uma
+  // chamada por tecla — que é o que escrever direto no editor significa —
+  // desfazer voltaria caractere a caractere e o histórico cresceria com uma
+  // cópia do arquivo por tecla digitada.
+  //
+  // Também não exige a revisão: quem digita É a fonte da revisão. O confronto
+  // de revisões existe para uma edição que partiu de um instantâneo antigo, que
+  // não é o caso de um fluxo contínuo de teclas.
+  bool type(u64 id,std::string_view text);
+  // Fecha a sessão: a próxima tecla começa uma entrada de desfazer nova.
+  // Chamado ao sair do campo, e por qualquer comando que não seja digitar.
+  void endTypingRun() noexcept { typingRun_=0; }
+  bool typing() const noexcept { return typingRun_!=0; }
   bool undo();
   bool redo();
   bool save(EditorFileSystem &files);
@@ -78,6 +94,10 @@ public:
   bool select(u64 id);
   bool dirty() const;
   void clear();
+private:
+  // Buffer cuja sessão de digitação está aberta. Zero é "nenhuma".
+  u64 typingRun_=0;
+public:
   EditorCodeBuffer *active();
   const EditorCodeBuffer *active() const;
   const std::vector<EditorCodeBuffer> &buffers() const {return buffers_;}

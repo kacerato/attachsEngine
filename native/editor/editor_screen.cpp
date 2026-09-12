@@ -1037,6 +1037,13 @@ void buildPlatformTextField(ScreenBuilder &builder) {
 
 void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,EditorScreenLayout &layout) {
   const auto &theme=builder.theme;const auto *workspace=builder.state.code;
+  // O teclado do sistema come a parte de baixo da janela. Sem descontar isso, a
+  // linha que esta sendo digitada fica atras do teclado e a rolagem acha que ela
+  // esta visivel -- que e meio caminho de volta para editar numa caixa separada.
+  if(builder.state.editingCode && builder.state.platformTextInput) {
+    const float keyboard=builder.state.surface.height*builder.state.platformImeFraction;
+    body.height=std::max(0.0f,body.height-keyboard);
+  }
   builder.list.addRect(toolbar,theme.color.canvas);
   builder.router.addBlocker(toolbar);builder.router.addBlocker(body);
   auto button=[&](const char *label,EditorWidget action,float width,bool enabled=true) {
@@ -1124,7 +1131,16 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
     builder.list.popClip();
   }
   builder.router.addRegion(content,widgetId(EditorWidget::CodeBody));
+  layout.codeBody=content;
+  layout.codeLineHeight=24.0f;
+  layout.codeVisibleLines=static_cast<u32>(std::max(0.0f,content.height)/24.0f);
   builder.list.pushClip(content);
+  // O cursor, quando o editor esta com o teclado aberto. Ele e um glifo inserido
+  // no texto da linha, e nao um retangulo medido: a largura do texto so e
+  // resolvida na construcao das instancias, depois deste passo, e medir aqui
+  // exigiria uma segunda copia da metrica da fonte.
+  const bool caretVisible=builder.state.editingCode && builder.state.platformTextInput;
+  const usize caret=std::min<usize>(builder.state.platformCaret,buffer->text.size());
   usize start=0;u32 line=0;
   while(start<buffer->text.size() && line<buffer->firstLine) {
     const auto end=buffer->text.find('\n',start);if(end==std::string::npos) {start=buffer->text.size();break;}
@@ -1134,9 +1150,13 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
     const auto end=buffer->text.find('\n',start);
     auto row=takeTop(content,24);const auto gutter=takeLeft(row,48);
     const std::string number=std::to_string(++line);
-    builder.label(gutter,number.c_str(),theme.color.textMuted,theme.type.numeric,UiAlign::Center);
     const auto length=end==std::string::npos?buffer->text.size()-start:end-start;
+    const bool onThisLine=caretVisible && caret>=start && caret<=start+length;
+    builder.label(gutter,number.c_str(),onThisLine?theme.color.accent:theme.color.textMuted,
+                  theme.type.numeric,UiAlign::Center);
+    if(onThisLine) builder.list.addRect(row,withAlpha(theme.color.accent,0.10f));
     std::string text=buffer->text.substr(start,std::min<usize>(length,512));
+    if(onThisLine) text.insert(std::min<usize>(caret-start,text.size()),"|");
     std::replace(text.begin(),text.end(),'\t',' ');
     builder.label(row,text.c_str(),theme.color.text,theme.type.numeric);
     if(end==std::string::npos) break;

@@ -577,9 +577,30 @@ apresentado como resolvido:
   | Tecla injetada (`adb input text`) | `t7i.png`: `07|` — o caminho de teclado físico também |
   | Voltar | `t8i.png`: cancela o campo, não fecha a tela, valor intacto |
 
-  **O editor de código continua no diálogo**, e a edição dentro da própria linha
-  da propriedade (M05.2) não foi feita. O que está entregue é a ponte e o campo,
-  não o marco inteiro.
+  **O editor de código também saiu do diálogo.** Tocar numa linha abre o teclado
+  e põe o cursor ali; o texto entra no buffer a cada tecla. Não há mais
+  `AlertDialog` em nenhum caminho — a classe inteira foi removida da ponte.
+
+  | Passo | Resultado |
+  | --- | --- |
+  | Tocar uma linha do código | `c5.png`/`c6.png`: teclado abre sobre o editor, sem diálogo |
+  | Linha do cursor | `c6i.png`: linha destacada, número em destaque, cursor desenhado |
+  | Corpo do editor com teclado aberto | `c5.png`: o código para acima do teclado, não atrás dele |
+  | Desfazer | `c7i.png`: uma entrada desfez a digitação inteira, não uma tecla |
+
+  **Duas coisas NÃO verificadas, e não devem ser apresentadas como prontas:**
+
+  - O toque em que eu mirei a linha 7 pôs o cursor na linha 3. Pode ser erro da
+    minha conversão de coordenadas no teste (o toque é injetado em pixels
+    físicos e o retângulo é lógico) ou erro do mapeamento; não cheguei a medir.
+  - Durante o teste apareceu um `" que "` no fim da linha 3 que eu **não
+    consegui atribuir**. `TYPE_TEXT_FLAG_NO_SUGGESTIONS` está ligado no caminho
+    multi-linha, então a hipótese óbvia — sugestão do teclado — não fecha.
+    Desfazer removeu, e o arquivo em disco não foi gravado.
+
+  O aparelho saiu do editor antes de eu fechar as duas, então elas ficam
+  registradas como abertas. Falta também a coluna exata pelo toque, seleção e
+  rolagem horizontal (M05.3).
 - ~~**Sumiço visual após retomada.**~~ **FECHADO (M03.2).** Reproduzido no
   aparelho pela primeira vez: mandar o editor para segundo plano e voltar deixava
   a hierarquia inteira e o viewport vazio, com
