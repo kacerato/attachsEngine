@@ -53,6 +53,8 @@ ADOPTED = {
     "scripting/code": "code",
     "lighting/sun": "light",
     "assets/file": "file",
+    "assets/save": "save",
+    "assets/search": "search",
     "vfx/particles": "particles",
     "water/author-surface": "water-surface",
     "water/author-physics": "water-physics",

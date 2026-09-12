@@ -137,12 +137,18 @@
     "assets/save": {
       "category": "assets",
       "label": "C15",
-      "name": "save"
+      "name": "save",
+      "raster": "../mark-v1/save.png",
+      "dark_ui_ready": true,
+      "generation": "mark-v1"
     },
     "assets/search": {
       "category": "assets",
       "label": "B27",
-      "name": "search"
+      "name": "search",
+      "raster": "../mark-v1/search.png",
+      "dark_ui_ready": true,
+      "generation": "mark-v1"
     },
     "assets/static-mesh": {
       "category": "assets",

@@ -42,6 +42,14 @@ public:
   // renomeado continuava aparecendo com o nome antigo até o projeto ser
   // reaberto — e o nome antigo já não existia no disco.
   bool rebuildTree();
+  // `.astra` guarda histórico, registro e cache — estado do projeto, não
+  // recurso do usuário. Ele some da navegação normal, e some da árvore de
+  // verdade: mostrá-lo convida a apagar, e apagá-lo custa o projeto inteiro.
+  //
+  // O caminho continua resolvível para quem souber pedir por nome: é assim que
+  // um diagnóstico ainda pode apontar para dentro dele.
+  void showProjectState(bool value) { showProjectState_=value; }
+  bool showingProjectState() const noexcept { return showProjectState_; }
   // Verdadeiro quando o caminho já existe dentro da raiz do projeto.
   bool exists(const std::string &relative) const;
   std::string rootPath() const;
@@ -49,6 +57,7 @@ public:
 private:
   bool resolve(const std::string &relative,std::filesystem::path &out) const;
   std::filesystem::path root_;
+  bool showProjectState_=false;
   std::string current_,error_;
   std::vector<EditorFileEntry> entries_,tree_;
 };

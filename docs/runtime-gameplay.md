@@ -681,7 +681,46 @@ o build automático ela seria uma linha nova por pausa dizendo o que as linhas d
 compilador logo acima já dizem melhor, e com o lugar —, e tirar o bloco do
 compilador agora reconta as linhas iguais que ficaram encostadas.
 
-## 21. O que este documento NÃO afirma
+## 21. A barra do IDE: ícones e uma lista
+
+O plano mestre pede **uma barra de ícones** (M06.2) e a Entrega F proíbe
+restaurar barras grandes permanentes. Eram nove botões de texto — `Cena · Novo
+script · Editar · Salvar · Desfazer · Refazer · Buscar · Fechar · Aplicar` —
+ocupando a largura inteira de um telefone sem sobrar espaço para o nome do
+arquivo.
+
+Ficaram **sete ícones**: voltar à cena, novo script, salvar, desfazer, refazer,
+buscar e o menu. O que se usa de vez em quando abre numa **lista**, com o nome
+escrito por extenso — um nome legível vale mais do que um décimo ícone que
+ninguém decifra —, e fica a um toque, não atrás de um gesto que só quem já sabe
+descobre.
+
+`Aplicar` **saiu da barra** de propósito: o build acontece sozinho quando a
+digitação para (§20), e um botão permanente para algo que já aconteceu ensina o
+gesto errado. Ele continua no menu, para forçar. `Editar` saiu de vez — tocar no
+código já põe o cursor e abre o teclado (§18).
+
+Um ícone desligado **não registra toque**: um ícone aceso que não faz nada é pior
+do que um apagado. E o menu aberto bloqueia a tela inteira, senão o mesmo gesto
+que o fecha edita o código atrás dele.
+
+À direita, a linha de estado: `Ln`, `Col`, a extensão do arquivo, `*` quando há
+edição não salva e `compilando` durante o build — que é o que a Entrega F pede
+para distinguir, no lugar onde cabe sem roubar espaço de nada.
+
+### O tamanho decidiu três desenhos
+
+Os ícones foram refeitos depois de vistos na barra, não ampliados:
+
+- **salvar** era um disquete. Ele precisa de duas janelas vazadas dentro de um
+  corpo de vinte pixels, e qualquer uma larga o bastante para se ver deixa
+  trilhos finos nas laterais: o desenho lia como a letra **H**. Virou uma seta
+  entrando numa bandeja, que são formas cheias;
+- **desfazer** e **refazer** tinham a ponta encostando na meia-volta, e as duas
+  formas se fundiam num borrão — os dois ficavam idênticos. O que os distingue é
+  para onde a ponta aponta, então ela ganhou ar em volta.
+
+## 22. O que este documento NÃO afirma
 
 - Não há exportação de jogo nem player autônomo.
 - Sensor **por colisor** não existe: o sensor pertence ao corpo inteiro.

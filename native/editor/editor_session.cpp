@@ -898,13 +898,20 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       }
       switch(static_cast<EditorWidget>(key)) {
       case EditorWidget::CodeApply:
+        state_.codeMenu=false;
         if(state_.codeCompilerAvailable && !state_.codeBuildBusy) {
           if(files_.rootPath().empty()) state_.status="Abra um projeto antes de aplicar código";
           else if(!code_.saveAll(files_)) state_.status=code_.error();
           else {codeBuildGeneration_=code_.generation();codeBuildRequest_=files_.rootPath();state_.codeBuildBusy=true;state_.status="Compilando código do projeto";}
         }
         return true;
-      case EditorWidget::CodeScene:state_.workspace=EditorWorkspace::Scene;return true;
+      case EditorWidget::CodeMenu:state_.codeMenu=!state_.codeMenu;return true;
+      case EditorWidget::CodeSaveAll:
+        state_.codeMenu=false;
+        if(!code_.saveAll(files_)) state_.status=code_.error();
+        else state_.status="Arquivos de código salvos";
+        return true;
+      case EditorWidget::CodeScene:state_.codeMenu=false;state_.workspace=EditorWorkspace::Scene;return true;
       case EditorWidget::CodeNew:state_.choosingTemplate=true;state_.workspace=EditorWorkspace::Code;return true;
       case EditorWidget::CodeTemplateClose:state_.choosingTemplate=false;return true;
       case EditorWidget::CodeEdit:state_.editingCode=code_.active()!=nullptr;return true;
@@ -913,6 +920,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       case EditorWidget::CodeRedo:code_.redo();return true;
       case EditorWidget::CodeSearch:state_.searchingCode=true;return true;
       case EditorWidget::CodeClose:
+        state_.codeMenu=false;
         if(const auto *buffer=code_.active()) if(!code_.close(buffer->id)) state_.status=code_.error();
         return true;
       default:break;

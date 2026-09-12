@@ -186,16 +186,38 @@ def icons() -> dict[str, list]:
     # A marca funciona grande; o icone vive a 20 px. Abaixo de ~3 unidades a
     # varredura some, entao a ponta fina fica so onde ela e o gesto -- nunca
     # onde ela e o desenho inteiro.
-    out["undo"] = [("poly", taper(arc(17.5, 18.0, 9.5, 185, 15), 5.8, 3.4))] \
-        + arrow((5.0, 6.0), (11.5, 13.5), 5.0, 7.4)
-    out["redo"] = [("poly", taper(arc(14.5, 18.0, 9.5, -5, 165)[::-1], 5.8, 3.4))] \
-        + arrow((27.0, 6.0), (20.5, 13.5), 5.0, 7.4)
+    # Meia-volta de espessura CONSTANTE e uma ponta cheia que continua a curva.
+    # A ponta que afina e o gesto da marca, mas aqui ela e a informacao: sem
+    # ponta, desfazer e refazer viram a mesma meia-lua.
+    # Cauda curva e ponta cheia SEPARADA da curva.
+    #
+    # Com a ponta encostando na meia-volta as duas formas se fundiam num borrao
+    # e desfazer ficava igual a refazer. O que distingue os dois e para onde a
+    # ponta aponta, entao ela precisa de ar em volta.
+    out["undo"] = [("poly", taper(bez((26.5, 25.0), (24.0, 11.0), (13.0, 11.5)), 5.0, 4.2)),
+                   ("poly", [(4.5, 11.5), (14.0, 6.0), (14.0, 17.0)])]
+    out["redo"] = [("poly", taper(bez((5.5, 25.0), (8.0, 11.0), (19.0, 11.5)), 5.0, 4.2)),
+                   ("poly", [(27.5, 11.5), (18.0, 6.0), (18.0, 17.0)])]
     out["settings"] = rays(16, 16, 6.0, 13.0, 8, 6.4, 4.6, 22.5) \
         + [("poly", arc(16, 16, 8.6, 0, 360)), ("punch", ((16, 16), 3.6))]
     out["sun"] = [("circle", ((16, 16), 6.4))] + rays(16, 16, 9.0, 14.5, 8, 3.4, 0.6)
     out["add"] = [("poly", bar((16, 6), (16, 26), 4.4)), ("poly", bar((6, 16), (26, 16), 4.4))]
     out["chevron"] = chevron(16, 16, 6.5, 4.0, -1)
 
+    # Salvar: o corpo do disquete com a etiqueta vazada e o obturador em cima.
+    # Salvar e uma SETA para dentro de uma bandeja, e nao um disquete.
+    #
+    # O disquete precisa de duas janelas vazadas dentro de um corpo de vinte
+    # pixels; qualquer uma larga o bastante para se ver deixa trilhos finos nas
+    # laterais, e o desenho passa a ler como a letra H. Foi o que aconteceu, e
+    # foi visto na barra. A seta sao formas cheias e sobrevive ao tamanho.
+    out["save"] = [("poly", bar((16, 4), (16, 15), 5.2)),
+                   ("poly", [(16, 23), (7.5, 12.5), (24.5, 12.5)]),
+                   ("poly", bar((4.5, 26), (27.5, 26), 4.4)),
+                   ("poly", bar((4.5, 19.5), (4.5, 26), 4.4)),
+                   ("poly", bar((27.5, 19.5), (27.5, 26), 4.4))]
+    # Buscar: o anel e o cabo, o mesmo gesto da lupa da barra de camera.
+    out["search"] = ring(14, 14, 9.5, 5.0) + [("poly", taper([(20.5, 20.5), (28, 28)], 4.6, 3.0))]
     out["component-add"] = [("poly", rounded(4, 4, 28, 28, 6.0)),
                             ("punch_poly", bar((16, 9.5), (16, 22.5), 4.0)),
                             ("punch_poly", bar((9.5, 16), (22.5, 16), 4.0))]

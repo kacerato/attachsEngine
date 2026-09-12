@@ -206,3 +206,57 @@ AE_TEST(clearing_the_compiler_block_does_not_leave_twins_behind) {
   AE_EXPECT_EQ(editorLines, 1u, "uma linha do editor, com a contagem");
   AE_EXPECT_EQ(console.count(EditorConsoleSeverity::Error), 5u, "quatro repeticoes mais o erro");
 }
+
+AE_TEST(the_ide_toolbar_is_icons_and_the_rest_lives_in_one_menu) {
+  // O plano mestre pede UMA barra de icones (M06.2) e a Entrega F proibe
+  // restaurar barras grandes permanentes. Eram nove botoes de texto ocupando a
+  // largura inteira de um telefone; o que ficou sao sete icones, e o que se usa
+  // de vez em quando abre numa lista com o nome escrito por extenso.
+  EditorDocument document;
+  EditorScreenState state;
+  state.document = &document;
+  state.workspace = EditorWorkspace::Code;
+  state.surface = {0, 0, 1400, 900};
+  state.codeCompilerAvailable = true;
+
+  ui::UiDrawList list;
+  ui::UiInputRouter router;
+  buildEditorScreen(state, editorTheme(), list, router);
+
+  // Sem arquivo aberto, salvar/desfazer/refazer/buscar estao desligados e NAO
+  // registram toque: um icone aceso que nao faz nada e pior do que um apagado.
+  // O que responde sempre e o que nao depende de buffer.
+  const EditorWidget always[] = {EditorWidget::CodeScene, EditorWidget::CodeNew,
+                                 EditorWidget::CodeMenu};
+  for (const auto widget : always) {
+    bool found = false;
+    for (float x = 0; x < 420.0f; x += 4.0f)
+      if (router.hitTest({x, 24.0f}).widgetId == widgetId(widget)) found = true;
+    AE_EXPECT_TRUE(found, "o icone responde na barra");
+  }
+  // `Aplicar` NAO fica na barra: o build acontece sozinho quando a digitacao
+  // para, e um botao permanente para algo que ja aconteceu ensina o gesto
+  // errado.
+  bool applyInBar = false;
+  for (float x = 0; x < 420.0f; x += 4.0f)
+    if (router.hitTest({x, 24.0f}).widgetId == widgetId(EditorWidget::CodeApply)) applyInBar = true;
+  AE_EXPECT_TRUE(!applyInBar, "aplicar saiu da barra");
+
+  // E esta no menu, que abre no icone.
+  state.codeMenu = true;
+  ui::UiDrawList opened;
+  ui::UiInputRouter menuRouter;
+  const auto layout = buildEditorScreen(state, editorTheme(), opened, menuRouter);
+  AE_EXPECT_TRUE(!layout.codeMenu.isEmpty(), "o menu abre");
+  // `Salvar tudo` e `Fechar arquivo` dependem de um workspace de codigo; sem
+  // ele ficam desligados, como na barra. O que este teste garante e que o item
+  // que TEM efeito responde de dentro da lista.
+  bool applyInMenu = false;
+  for (float y = layout.codeMenu.y; y < layout.codeMenu.bottom(); y += 3.0f)
+    if (menuRouter.hitTest({layout.codeMenu.x + 40.0f, y}).widgetId == widgetId(EditorWidget::CodeApply))
+      applyInMenu = true;
+  AE_EXPECT_TRUE(applyInMenu, "aplicar responde no menu");
+  // Um menu aberto que deixa o toque passar fecha e edita no mesmo gesto.
+  AE_EXPECT_EQ(menuRouter.hitTest({layout.codeMenu.x - 200.0f, layout.codeMenu.bottom() + 120.0f}).widgetId,
+               widgetId(EditorWidget::CodeMenu), "fora do menu, o toque so fecha");
+}

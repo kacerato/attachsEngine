@@ -153,6 +153,7 @@ enum class EditorWidget : u32 {
   ToggleCameraLook,
   AddComponentMenu,
   CodeOpen, CodeScene, CodeNew, CodeEdit, CodeSave, CodeUndo, CodeRedo, CodeSearch, CodeClose, CodeApply,
+  CodeMenu, CodeSaveAll,
   ColliderFit, ComponentPrevious, ComponentNext, ScriptFieldsPrevious, ScriptFieldsNext,
   TransformFold, ComponentSearch, ComponentSearchClear, ComponentCategory,
   MeshGeometryTab, MeshMaterialTab, MeshChoose, MeshPickerClose, MeshClear, MeshSearch, MeshPrevious, MeshNext, MaterialRestore,
@@ -229,6 +230,9 @@ struct EditorScreenState final {
   // console deve estar: a linha que acabou de aparecer é a que interessa.
   u32 consoleScroll = 0;
   bool consoleCollapsed = false;
+  // O menu da barra do IDE. Uma lista que abre num ícone é o que tira da barra
+  // tudo o que não é frequente, sem escondê-lo atrás de um gesto.
+  bool codeMenu = false;
   // O arquivo escolhido no painel. As ações de recurso agem sobre ele, e é o
   // painel que decide qual é — não a seleção da cena, que é outra coisa.
   std::string selectedFile;
@@ -353,6 +357,7 @@ struct EditorScreenLayout final {
   // O corpo do editor de código e quantas linhas dele cabem. O toque vira
   // posição de cursor a partir deste retângulo, e a rolagem acompanha o cursor
   // a partir desta contagem.
+  ui::UiRect codeMenu{};
   ui::UiRect consolePanel{};
   u32 consoleVisibleRows = 0;
   u32 consoleRowCount = 0;

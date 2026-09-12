@@ -98,7 +98,9 @@ bool EditorFileSystem::open(const std::string &relative) {
     const auto entry=*iterator;
     const auto status=entry.symlink_status(error);
     if(error) {error_="Não foi possível ler um arquivo";return false;}
-    if(!fs::is_symlink(status) && (fs::is_directory(status) || fs::is_regular_file(status))) {
+    const auto leaf=utf8(entry.path().filename());
+    const bool projectState=!showProjectState_ && (leaf==".astra" || leaf=="obj" || leaf=="bin");
+    if(!projectState && !fs::is_symlink(status) && (fs::is_directory(status) || fs::is_regular_file(status))) {
       if(prepared.size()>=MaximumEntries) {error_="Pasta excede o limite de 4096 entradas";return false;}
       prepared.push_back({utf8(entry.path().filename()),utf8(entry.path().lexically_relative(root_)),fs::is_directory(status)});
     }

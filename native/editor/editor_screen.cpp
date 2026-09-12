@@ -1060,6 +1060,43 @@ void buildPlatformTextField(ScreenBuilder &builder) {
 } // namespace
 
 
+// A lista que abre no icone de menu da barra do IDE.
+//
+// O que esta aqui e o que se usa de vez em quando: escrito por extenso, porque
+// um nome legivel vale mais do que um decimo icone que ninguem decifra. E fica
+// a UM toque -- nao atras de um gesto que so quem ja sabe descobre.
+void buildCodeMenu(ScreenBuilder &builder, const UiRect &anchor, EditorScreenLayout &layout) {
+  if (!builder.state.codeMenu) return;
+  const auto &theme = builder.theme;
+  const auto *workspace = builder.state.code;
+  const auto *buffer = workspace ? workspace->active() : nullptr;
+  struct Item { const char *label; EditorWidget action; bool enabled; };
+  const Item items[] = {
+    {builder.state.codeBuildBusy ? "Compilando…" : "Aplicar agora", EditorWidget::CodeApply,
+     builder.state.codeCompilerAvailable && !builder.state.codeBuildBusy},
+    {"Salvar tudo", EditorWidget::CodeSaveAll, workspace != nullptr},
+    {"Fechar arquivo", EditorWidget::CodeClose, buffer != nullptr},
+  };
+  const float row = 42.0f;
+  const float width = 220.0f;
+  UiRect panel{anchor.x + 250.0f, anchor.bottom() + 2.0f, width,
+               row * static_cast<float>(std::size(items)) + 8.0f};
+  panel.x = std::min(panel.x, builder.state.surface.right() - width - 8.0f);
+  layout.codeMenu = panel;
+  // Bloqueia a TELA inteira, e nao so o painel: um menu aberto que deixa o
+  // toque passar para o editor atras dele fecha e edita no mesmo gesto.
+  builder.router.addBlocker(builder.state.surface);
+  builder.router.addRegion(builder.state.surface, widgetId(EditorWidget::CodeMenu));
+  builder.list.addRect(panel, theme.color.raised, theme.radius.card);
+  UiRect content = deflate(panel, UiInsets::all(4.0f));
+  for (const auto &item : items) {
+    auto line = takeTop(content, row);
+    builder.label(deflate(line, UiInsets::all(6.0f)), item.label,
+                  item.enabled ? theme.color.text : theme.color.textFaint, theme.type.body);
+    if (item.enabled) builder.router.addRegion(line, widgetId(item.action));
+  }
+}
+
 // O console editorial: compilador, scripts e editor no mesmo lugar.
 //
 // Antes disso o compilador falava numa lista apertada aqui dentro e os scripts
@@ -1160,24 +1197,56 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
     body.height=std::max(0.0f,body.height-keyboard);
   }
   builder.list.addRect(toolbar,theme.color.canvas);
+  const UiRect toolbarOrigin=toolbar;
   builder.router.addBlocker(toolbar);builder.router.addBlocker(body);
-  auto button=[&](const char *label,EditorWidget action,float width,bool enabled=true) {
-    auto rect=deflate(takeLeft(toolbar,width),UiInsets::all(4));
-    builder.list.addRect(rect,theme.color.raised,theme.radius.control);
-    builder.label(rect,label,enabled?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
-    if(enabled) builder.router.addRegion(rect,widgetId(action));
-  };
+  // UMA barra de icones, e o resto numa lista que abre no menu.
+  //
+  // Eram nove botoes de texto, e numa tela de telefone eles ocupavam a largura
+  // inteira sem sobrar nada para o nome do arquivo. O que fica na barra e o que
+  // se usa a toda hora; o que se usa de vez em quando fica a um toque de
+  // distancia, com o nome escrito por extenso, que e mais legivel do que um
+  // decimo icone que ninguem decifra.
+  //
+  // `Aplicar` saiu da barra de proposito: o build acontece sozinho quando a
+  // digitacao para (ver runtime-gameplay.md §20), e um botao permanente para
+  // algo que ja aconteceu ensina o gesto errado. Ele continua no menu, para
+  // forcar.
   const auto *buffer=workspace?workspace->active():nullptr;
-  button("Cena",EditorWidget::CodeScene,65);
-  button("Novo script",EditorWidget::CodeNew,100);
-  button("Editar",EditorWidget::CodeEdit,72,buffer!=nullptr);
-  button("Salvar",EditorWidget::CodeSave,72,buffer!=nullptr);
-  button("Desfazer",EditorWidget::CodeUndo,85,buffer&&!buffer->undo.empty());
-  button("Refazer",EditorWidget::CodeRedo,80,buffer&&!buffer->redo.empty());
-  button("Buscar",EditorWidget::CodeSearch,72,buffer!=nullptr);
-  button("Fechar",EditorWidget::CodeClose,72,buffer!=nullptr);
-  if(builder.state.codeCompilerAvailable)
-    button(builder.state.codeBuildBusy?"Compilando":"Aplicar",EditorWidget::CodeApply,88,!builder.state.codeBuildBusy);
+  auto icon=[&](UiIcon glyph,EditorWidget action,bool enabled=true,bool active=false) {
+    auto rect=deflate(takeLeft(toolbar,46.0f),UiInsets::all(4.0f));
+    builder.list.addRect(rect,active?theme.color.accent:theme.color.raised,theme.radius.control);
+    builder.list.addImage(centred(rect,20.0f,20.0f),static_cast<UiImageId>(glyph),
+                          enabled?theme.color.text:theme.color.textFaint);
+    if(enabled) builder.router.addRegion(rect,widgetId(action),theme.touch.minimumTarget);
+  };
+  icon(UiIcon::EditorAuthorChevron,EditorWidget::CodeScene);
+  icon(UiIcon::EditorAuthorAdd,EditorWidget::CodeNew);
+  icon(UiIcon::AssetsSave,EditorWidget::CodeSave,buffer&&buffer->dirty());
+  icon(UiIcon::EditorAuthorUndo,EditorWidget::CodeUndo,buffer&&!buffer->undo.empty());
+  icon(UiIcon::EditorAuthorRedo,EditorWidget::CodeRedo,buffer&&!buffer->redo.empty());
+  icon(UiIcon::AssetsSearch,EditorWidget::CodeSearch,buffer!=nullptr);
+  icon(UiIcon::EditorAuthorMore,EditorWidget::CodeMenu,true,builder.state.codeMenu);
+
+  // A linha de estado, a direita: onde o cursor esta, que arquivo e, e o que o
+  // catalogo publicado diz de si. O plano pede distinguir edicao nao salva,
+  // codigo salvo, compilando e geracao aplicada -- e e aqui que isso cabe sem
+  // roubar espaco de nada.
+  if(toolbar.width>260.0f) {
+    auto stateArea=deflate(takeRight(toolbar,250.0f),UiInsets{0.0f,0.0f,14.0f,0.0f});
+    std::string text;
+    if(buffer) {
+      u32 line=1,column=1;
+      const auto caret=std::min<usize>(builder.state.platformCaret,buffer->text.size());
+      for(usize i=0;i<caret;++i) { if(buffer->text[i]==char(10)) {++line;column=1;} else ++column; }
+      const auto dot=buffer->path.find_last_of('.');
+      const std::string kind=dot==std::string::npos?"":buffer->path.substr(dot+1);
+      text="Ln "+std::to_string(line)+", Col "+std::to_string(column);
+      if(!kind.empty()) text+="  "+kind;
+      if(buffer->dirty()) text+="  *";
+    }
+    if(builder.state.codeBuildBusy) text+="  compilando";
+    builder.label(stateArea,text.c_str(),theme.color.textMuted,theme.type.caption,UiAlign::End);
+  }
   if(builder.state.files && body.width>720) {
     layout.filesPanel=takeLeft(body,std::min(230.0f,body.width*.22f));
     buildFiles(builder,layout.filesPanel);
@@ -1242,6 +1311,8 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
   if(!buffer) {
     builder.label(takeTop(content,48),"Abra um arquivo ou crie um script C#",theme.color.text,theme.type.body);
     builder.label(takeTop(content,32),"Os arquivos pertencem ao projeto e têm histórico próprio.",theme.color.textDim,theme.type.caption);
+    if(!layout.consolePanel.isEmpty()) buildConsole(builder,layout.consolePanel,layout);
+    buildCodeMenu(builder,toolbarOrigin,layout);
     return;
   }
   builder.label(takeTop(content,28),buffer->path.c_str(),theme.color.textDim,theme.type.caption);
@@ -1278,6 +1349,7 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
     start=end+1;
   }
   builder.list.popClip();
+  buildCodeMenu(builder,toolbarOrigin,layout);
 }
 
 EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiTheme &theme,

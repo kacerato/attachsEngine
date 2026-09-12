@@ -603,3 +603,24 @@ AE_TEST(the_visible_tree_follows_a_rename_on_disk) {
   for (const auto &entry : files.tree())
     AE_EXPECT_TRUE(entry.name != "tabuleta.glb", "apagar tambem some da arvore");
 }
+
+AE_TEST(the_project_state_folder_does_not_show_up_in_the_panel) {
+  // `.astra` guarda historico, registro e cache. Mostra-lo na navegacao normal
+  // convida a apagar, e apaga-lo custa o projeto inteiro. O caminho continua
+  // resolvivel por nome, que e como um diagnostico ainda aponta para dentro
+  // dele.
+  ProjectDirectory project;
+  std::ofstream(project.root / ".astra" / "assets.txt") << "x";
+  EditorFileSystem files;
+  AE_EXPECT_TRUE(files.setRoot(project.root.string().c_str()), "raiz");
+  for (const auto &entry : files.tree())
+    AE_EXPECT_TRUE(entry.name != ".astra", "a pasta de estado nao aparece");
+  AE_EXPECT_TRUE(!files.resolveFile(".astra/assets.txt").empty(),
+                 "e continua alcancavel por quem pede por nome");
+
+  files.showProjectState(true);
+  AE_EXPECT_TRUE(files.rebuildTree(), "arvore com o estado do projeto");
+  bool visible = false;
+  for (const auto &entry : files.tree()) if (entry.name == ".astra") visible = true;
+  AE_EXPECT_TRUE(visible, "o diagnostico pode pedir para ver");
+}
