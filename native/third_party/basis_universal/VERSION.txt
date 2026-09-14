@@ -1,0 +1,14 @@
+Basis Universal — transcodificador de KTX2/BasisU para KHR_texture_basisu (Entrega 4, M08/M09)
+
+Origem:   https://github.com/BinomialLLC/basis_universal
+Tag:      v2_50
+Commit:   9bebe16726b3a61c8c213eeee3b7cffb462ef34e
+Licença:  Apache-2.0 (LICENSE, NOTICE); zstd em zstd/LICENSE (BSD)
+
+Subconjunto vendorizado: transcoder/ inteiro (transcodificador, sem o codificador) e, de zstd/,
+só zstddeclib.c, zstd.h e zstd_errors.h (descompressão da supercompressão Zstandard do KTX2).
+Arquivos sem modificação. Formatos de saída desligados por definição de compilação em native/CMakeLists.txt.
+Sem exceções nem RTTI no transcodificador (conferido por busca de throw/try/typeid/dynamic_cast).
+
+Política de atualização: trocar a tag, recopiar transcoder/ e os três arquivos de zstd/, rever as
+definições BASISD_SUPPORT_* em basisu_transcoder.cpp e rodar os testes m09e4 de KTX2 no host.

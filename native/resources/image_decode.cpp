@@ -1,4 +1,5 @@
 #include "resources/image_decode.h"
+#include "resources/gltf_codecs.h"
 
 #include <algorithm>
 #include <array>
@@ -65,6 +66,7 @@ ImageContainer detectImageContainer(std::span<const u8> bytes) {
   static constexpr u8 png[8]{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
   if (bytes.size() >= 8 && std::memcmp(bytes.data(), png, 8) == 0) return ImageContainer::Png;
   if (bytes.size() >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff) return ImageContainer::Jpeg;
+  if (isKtx2(bytes)) return ImageContainer::Ktx2;
   return ImageContainer::Unknown;
 }
 
@@ -73,6 +75,17 @@ bool readImageDimensions(std::span<const u8> bytes, const ImageDecodeLimits &lim
   if (bytes.empty() || bytes.size() > limits.maximumEncodedBytes || bytes.size() > 0x7fffffffu ||
       detectImageContainer(bytes) == ImageContainer::Unknown)
     return false;
+  const auto withinLimits = [&](u32 w, u32 h) {
+    return w <= limits.maximumDimension && h <= limits.maximumDimension &&
+           static_cast<u64>(w) * static_cast<u64>(h) <= limits.maximumPixels;
+  };
+  if (detectImageContainer(bytes) == ImageContainer::Ktx2) {
+    if (!readKtx2Dimensions(bytes, width, height) || !withinLimits(width, height)) {
+      width = height = 0;
+      return false;
+    }
+    return true;
+  }
   int w = 0, h = 0, channels = 0;
   if (!stbi_info_from_memory(bytes.data(), static_cast<int>(bytes.size()), &w, &h, &channels) || w <= 0 || h <= 0)
     return false;
@@ -93,8 +106,27 @@ bool decodeImageRgba8(std::span<const u8> bytes, const ImageDecodeLimits &limits
     return false;
   }
   if (detectImageContainer(bytes) == ImageContainer::Unknown) {
-    diagnostic = "Formato de imagem não suportado neste perfil (só PNG e JPEG).";
+    diagnostic = "Formato de imagem não suportado neste perfil (PNG, JPEG e KTX2/BasisU).";
     return false;
+  }
+  if (detectImageContainer(bytes) == ImageContainer::Ktx2) {
+    // Cabeçalho primeiro, como nos outros formatos: nada é transcodificado
+    // antes de o tamanho ser aceito.
+    u32 width = 0, height = 0;
+    if (!readImageDimensions(bytes, limits, width, height)) {
+      diagnostic = "KTX2 com cabeçalho inválido ou maior que o limite desta importação.";
+      return false;
+    }
+    u32 decodedWidth = 0, decodedHeight = 0;
+    if (!transcodeKtx2Rgba8(bytes, decodedWidth, decodedHeight, out.rgba, diagnostic)) return false;
+    if (decodedWidth != width || decodedHeight != height) {
+      out = {};
+      diagnostic = "KTX2 com dimensões divergentes entre cabeçalho e dados.";
+      return false;
+    }
+    out.width = width;
+    out.height = height;
+    return true;
   }
   int width = 0, height = 0, channels = 0;
   // Cabeçalho primeiro: nenhuma alocação de pixels antes de aceitar o tamanho.

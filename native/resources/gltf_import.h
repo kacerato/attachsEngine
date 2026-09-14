@@ -19,9 +19,10 @@ namespace ae::resources {
 // | hierarquia de nós, com TRS e `matrix` | skins e animações |
 // | instâncias (o mesmo mesh em vários nós) | câmeras e luzes do arquivo |
 // | TRIANGLES, TRIANGLE_STRIP e TRIANGLE_FAN | pontos e linhas |
-// | POSITION, NORMAL, TEXCOORD_0/1, TANGENT, COLOR_0 | KTX2/BasisU, WebP e imagens externas |
-// | fatores PBR, emissivo, alfa e dupla face | Draco, meshopt e materiais avançados |
-// | texturas PNG/JPEG embutidas (cor, normal, MR, emissiva) | oclusão e KHR_texture_transform |
+// | POSITION, NORMAL, TEXCOORD_0/1, TANGENT, COLOR_0 | WebP, AVIF e imagens externas |
+// | fatores PBR, emissivo, alfa e dupla face | materiais avançados |
+// | texturas PNG/JPEG/KTX2 embutidas (cor, normal, MR, emissiva) | oclusão e KHR_texture_transform |
+// | Draco e meshopt (resources/gltf_codecs.h) | KTX2 HDR, cubemap e array |
 //
 // Texturas (Entrega 3) são decodificadas com stb_image vendorizado, porque o
 // decodificador do sistema (`AImageDecoder`) só existe a partir do Android 11
@@ -56,6 +57,10 @@ struct GltfImportLimits {
   // declaração deixaria o fim do arquivo sem textura enquanto o começo fica em
   // resolução cheia.
   u32 minimumTextureDimension = 256;
+  // Bytes que os codecs de geometria (Draco, meshopt) podem produzir por
+  // importação. O tamanho comprimido não limita a expansão: um bloco de poucos
+  // KB pode declarar milhões de vértices.
+  u64 maximumExpandedBytes = 512ull << 20;
   ImageDecodeLimits image{};
 };
 
@@ -131,6 +136,13 @@ struct GltfImport {
   u32 unappliedTextureTransforms = 0, unappliedOcclusion = 0;
   // Texturas aplicadas com resolução reduzida por `maximumTextureDimension`.
   u32 reducedTextures = 0;
+  // Uso efetivo dos codecs (Entrega 4): primitivas Draco decodificadas,
+  // bufferViews meshopt decodificadas e imagens KTX2 transcodificadas.
+  u32 dracoPrimitives = 0, meshoptViews = 0, ktx2Images = 0;
+  // Nós cuja transformação de mundo tem reflexão (escala negativa). A pose local
+  // sai com escala positiva e a geometria desses nós sai espelhada — o resultado
+  // no mundo é o mesmo do arquivo, sem aproximação.
+  u32 mirroredNodes = 0;
   // Primitivas com mapa normal que chegaram sem TANGENT e tiveram as tangentes
   // geradas na importação.
   u32 generatedTangentPrimitives = 0;

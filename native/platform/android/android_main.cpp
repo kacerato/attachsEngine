@@ -1,4 +1,5 @@
 #include "editor/editor_import_transaction.h"
+#include "resources/gltf_package.h"
 #include "editor/editor_water_settings_component.h"
 #include "editor/editor_scene_camera.h"
 #include <cstring>
@@ -142,6 +143,9 @@ struct AndroidShell final {
     std::vector<ae::u8> bytes;
     ae::resources::GltfImport model;
     bool accepted=false;
+    // Entrega 4: manifesto das dependências de um .gltf empacotado (vazio para GLB autocontido).
+    std::string manifest;
+    ae::u32 dependencies=0,unusedCompanions=0;
   };
   // The cancellation token outlives its worker, including shell teardown.
   std::shared_ptr<std::atomic<bool>> importCancellation;
@@ -2010,6 +2014,19 @@ void android_main(android_app *app) {
               }
               result.expectedHash=exists?ae::Sha256::hex(previous):std::string();
               result.bytes=picked.accepted?std::move(picked.bytes):std::move(previous);
+              // .gltf, ou GLB com URI externa: as dependências vêm dos arquivos
+              // escolhidos junto e entram num GLB autocontido, que é o que o
+              // projeto guarda. Reabrir não depende da pasta nem da permissão do seletor.
+              if(ae::resources::gltfNeedsPackage(result.bytes)) {
+                std::vector<ae::resources::GltfPackageFile> files;
+                for(const auto &companion:picked.companions) files.push_back({companion.name,companion.bytes});
+                ae::resources::GltfPackage package;
+                if(!ae::resources::packGltf(result.bytes,files,256ull<<20,package,result.diagnostic)) return result;
+                result.manifest=ae::resources::serializeGltfManifest(picked.displayName,result.bytes,package);
+                result.dependencies=static_cast<ae::u32>(package.dependencies.size());
+                result.unusedCompanions=package.unusedFiles;
+                result.bytes=std::move(package.glb);
+              }
               ae::resources::GltfImportProgress progress{};
               progress.context=cancel.get();
               progress.cancelled=[](void *context) {return static_cast<std::atomic<bool> *>(context)->load();};
@@ -2041,6 +2058,8 @@ void android_main(android_app *app) {
             std::string name=picked.displayName.empty()?"modelo.glb":picked.displayName;
             for(auto &character:name) if(character=='/' || character=='\\' || character==':' || static_cast<unsigned char>(character)<32) character='_';
             if(name=="." || name=="..") name="modelo.glb";
+            // Um .gltf é guardado empacotado: o projeto recebe cena.glb, não cena.gltf.
+            if(name.size()>5 && name.ends_with(".gltf")) name.replace(name.size()-5,5,".glb");
             if(!name.ends_with(".glb")) name+=".glb";
             launchImport(std::move(picked),"Fontes/"+name);
           }
@@ -2052,7 +2071,12 @@ void android_main(android_app *app) {
           } else if(!prepared.accepted) {
             session.showImportFailure(prepared.diagnostic.empty()?"O importador não conseguiu preparar este arquivo.":prepared.diagnostic);
           } else {
-            session.showImportPreview(prepared.path,prepared.model,prepared.contentHash);shell.importPreview=std::move(prepared);
+            session.showImportPreview(prepared.path,prepared.model,prepared.contentHash);
+            if(prepared.dependencies)
+              session.noteImportPreview("Dependências copiadas para o projeto: "+std::to_string(prepared.dependencies)+" arquivo(s)"+
+                (prepared.unusedCompanions?"; "+std::to_string(prepared.unusedCompanions)+" escolhido(s) sem uso":std::string())+
+                ". Reabre sem a pasta original.");
+            shell.importPreview=std::move(prepared);
           }
         }
         if(session.takeImportAccept() && shell.importPreview) {
@@ -2065,6 +2089,16 @@ void android_main(android_app *app) {
           else if(!session.commitModelImport(prepared.bytes,prepared.model,prepared.path,prepared.expectedHash,report,session.importAmbiguityPolicy()))
             session.showImportFailure(report.diagnostic);
           else {
+            // Manifesto ao lado da fonte, só depois da fonte gravada: descreve de
+            // onde veio cada byte do GLB empacotado. Falhar aqui não desfaz a importação.
+            if(!prepared.manifest.empty()) {
+              std::filesystem::path manifestPath;
+              if(!ae::editor::EditorImportTransaction::safePath(ae::editor::EditorImportTransaction::fromUtf8(prepared.root),prepared.path+".deps",manifestPath) ||
+                 !ae::editor::EditorImportTransaction::writeText(manifestPath,prepared.manifest))
+                __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] manifesto de dependências não gravado: %s.deps",prepared.path.c_str());
+              else
+                __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] manifesto de dependências: %s.deps (%u arquivos)",prepared.path.c_str(),prepared.dependencies);
+            }
             std::string message=report.reimported?"Recurso reimportado; instâncias locais preservadas.":"Recurso registrado. Use Instanciar em Arquivos para adicioná-lo à cena.";
             bool instanceFailed=false;
             if(intoScene) {

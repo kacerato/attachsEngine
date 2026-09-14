@@ -22,7 +22,9 @@ struct ImageDecodeLimits {
   u64 maximumEncodedBytes = 64ull << 20;     // bytes da imagem dentro da fonte
 };
 
-enum class ImageContainer : u8 { Unknown, Png, Jpeg };
+// KTX2 (Entrega 4) só com supercompressão Basis: transcodificado para RGBA8 por
+// Basis Universal v2_50, atrás de resources/gltf_codecs.h.
+enum class ImageContainer : u8 { Unknown, Png, Jpeg, Ktx2 };
 
 struct DecodedImage {
   u32 width = 0, height = 0;

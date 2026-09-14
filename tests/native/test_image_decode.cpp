@@ -105,7 +105,9 @@ std::vector<u8> texturedGlb(const std::vector<u8> &image, const std::string &mat
       R"("accessors":[{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3"},{"bufferView":1,"componentType":5123,"count":6,"type":"SCALAR"}],)" +
       R"("images":[{"bufferView":2,"mimeType":"image/png"}],)" +
       R"("samplers":[{"magFilter":9728,"minFilter":9728,"wrapS":33071,"wrapT":33648}],)" +
-      R"("textures":[{"source":0,"sampler":0},{"extensions":{"KHR_texture_basisu":{"source":0}}}],)" +
+      // A segunda textura só existe numa extensão sem decodificador neste perfil.
+      // Era KHR_texture_basisu até a Entrega 4 ligar o transcodificador KTX2.
+      R"("textures":[{"source":0,"sampler":0},{"extensions":{"EXT_texture_webp":{"source":0}}}],)" +
       R"("materials":[)" + material + R"(],)" +
       R"("meshes":[{"name":"Tela","primitives":[{"attributes":{"POSITION":0},"indices":1,"material":0}]}],)" +
       R"("nodes":[{"name":"Tela","mesh":0}],"scenes":[{"nodes":[0]}],"scene":0})";
@@ -179,7 +181,7 @@ AE_TEST(m091_glb_textures_map_to_slots_with_color_space_uv_and_sampler) {
   const auto base = material.textureIndices[0], normal = material.textureIndices[1], mr = material.textureIndices[2];
   AE_EXPECT_TRUE(base < 2 && model.textures[base]->srgb, "cor base em sRGB");
   AE_EXPECT_TRUE(normal < 2 && !model.textures[normal]->srgb && normal == mr, "normal e metálico/rugosidade lineares, mesma textura");
-  AE_EXPECT_TRUE(material.textureIndices[3] == renderer::InvalidMapTexture, "emissivo só em KTX2 não foi aplicado");
+  AE_EXPECT_TRUE(material.textureIndices[3] == renderer::InvalidMapTexture, "emissivo só em WebP não foi aplicado");
   AE_EXPECT_TRUE((material.flags & renderer::MapMaterialNormalMap) && (material.flags & renderer::MapMaterialMetallicRoughnessMap),
                  "flags dos mapas que o shader usa");
   AE_EXPECT_TRUE(!(material.flags & renderer::MapMaterialEmissiveMap), "sem flag de mapa não aplicado");
@@ -194,9 +196,9 @@ AE_TEST(m091_glb_textures_map_to_slots_with_color_space_uv_and_sampler) {
   AE_EXPECT_EQ(model.skippedTextures, 1u, "uma referência não aplicada");
   AE_EXPECT_EQ(model.unappliedTextureTransforms, 1u, "transformação de UV declarada");
   AE_EXPECT_EQ(model.unappliedOcclusion, 1u, "oclusão declarada");
-  bool ktx = false;
-  for (const auto &note : model.textureNotes) ktx |= note.find("KTX2") != std::string::npos;
-  AE_EXPECT_TRUE(ktx, "o motivo cita o formato sem decodificador");
+  bool webp = false;
+  for (const auto &note : model.textureNotes) webp |= note.find("WebP") != std::string::npos;
+  AE_EXPECT_TRUE(webp, "o motivo cita o formato sem decodificador");
 
   resources::GltfImportLimits tight;
   tight.maximumTextureBytes = 8;

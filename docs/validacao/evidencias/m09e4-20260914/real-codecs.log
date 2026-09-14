@@ -1,0 +1,38 @@
+Codecs de importação (Entrega 4) com arquivos reais, host de depuração (build/editor-host), 14/09/2026.
+Comando: aether_tests --reimport-glb <arquivo>. Tempos de build de depuração no PC, não do aparelho.
+Arquivos em build/glb-real (não versionados). As variantes comprimidas foram geradas localmente:
+  torre-meshopt.glb           gltfpack (meshoptimizer v1.2) -cc -kn            a partir de torre.glb
+  ford-lotus-meshopt.glb      gltfpack -cc -kn -km                              (UV quantizada + KHR_texture_transform)
+  ford-lotus-meshopt-noq.glb  gltfpack -cc -noq -kn -km                         (sem quantização)
+  esfera-draco.glb            esfera procedural 48x96 -> draco_encoder 1.5.7 -cl 7 -> GLB montado por script
+CarConcept.glb é o arquivo do Khronos glTF-Sample-Assets (texturas só em KTX2/BasisU).
+
+torre-meshopt.glb:      parse_ms=0.5    textures=0  draco=0 meshopt_views=3 ktx2=0  nodes=6  draws=3  same_content=1 reopen_identical=1
+ford-lotus.glb:         parse_ms=1567.9 textures=18 texture_mb=84.1 meshopt_views=0 unapplied_transforms=0   nodes=42 draws=21 reopen_identical=1
+ford-lotus-meshopt.glb: parse_ms=1572.5 textures=18 texture_mb=84.1 meshopt_views=5 unapplied_transforms=19  nodes=63 draws=21 reopen_identical=1
+esfera-draco.glb:       parse_ms=32.3   draco=1 nodes=1 draws=1 same_content=1 reimport_changed=0 reopen_identical=1
+CarConcept.glb:         parse_ms=261.9  textures=13 texture_mb=15.6 ktx2=12 skipped_textures=0 unapplied_transforms=12 unapplied_occlusion=25
+                        (antes da Entrega 4: textures=0, skipped_textures=25, "Textura só em extensão (KTX2/BasisU ou WebP)")
+
+Reflexão (escala negativa):
+  ford-lotus-espelho.glb      ford-lotus.glb com um nó raiz novo "EspelhoX" (scale [-1,1,1]) acima da cena, montado por script
+ford-lotus-espelho.glb: parse_ms=1590.2 textures=18 mirrored=43 nodes=43 draws=21 linked=86 same_content=1 reopen_identical=1
+  (43 = o nó refletido e os 42 descendentes, que herdam S à esquerda; antes desta entrega a instanciação recusava
+   o arquivo com "Matriz do nó não pode ser instanciada sem perder sua transformação.")
+
+Dependências externas (trilha 3), aether_tests --pack-gltf <principal> [companheiros...]:
+  ford-gltf/ford.gltf         ford-lotus.glb separado por script em ford.gltf + ford.bin + 19 PNG soltos em "texturas/textura N.png"
+                              (URI com %20; os companheiros entram só com o nome, como o seletor os entrega)
+ford.gltf (20 companheiros):  dependencies=20 unused=0 packed_mb=14.1 pack_ms=301.6 import=1 import_ms=1621.8 draws=21 textures=18 skipped_textures=0
+ford.gltf (bin + 3 PNG):      RECUSADO: Faltam arquivos referenciados pelo glTF: textura 2.png, textura 3.png, … Selecione-os junto
+                              com o arquivo principal (seleção múltipla no seletor).
+
+Achados:
+  1. Draco reorganiza vértices e descarta triângulos degenerados: a esfera de 4753 vértices e 27648 índices decodifica
+     em 4751 vértices e 27090 índices. O primeiro GLB montado com as contagens do OBJ foi RECUSADO pelo importador
+     ("Contagem de vértices do bloco Draco (4751) diferente do acessor POSITION (4753)"), como exige o glTF;
+     o arquivo foi remontado com as contagens reais.
+  2. O gltfpack, por padrão, quantiza UV e compensa com KHR_texture_transform. Como a transformação de UV não é
+     aplicada (limitação da Entrega 3), ford-lotus-meshopt.glb teria texturas desalinhadas; o probe mostra
+     unapplied_transforms=19. A conferência no aparelho usa a variante -noq.
+  3. O gltfpack também separa nós (42 -> 63 no Ford); a identidade da Entrega 1 trata como estrutura nova do arquivo.

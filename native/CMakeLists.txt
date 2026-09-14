@@ -90,6 +90,81 @@ add_subdirectory(third_party/Box2D EXCLUDE_FROM_ALL)
 # todo `cmake --build .` genérico.
 add_subdirectory(third_party/sqlite EXCLUDE_FROM_ALL)
 
+# --- Codecs de importação (M08/M09 Entrega 4) --------------------------------
+# Draco 1.5.7 (KHR_draco_mesh_compression), meshoptimizer v1.2 (EXT_meshopt_compression)
+# e Basis Universal v2_50 (KHR_texture_basisu/KTX2). Só decodificadores, vendorizados com
+# origem, commit e licença em third_party/*/VERSION.txt. Entram antes das flags estritas pelo
+# mesmo motivo do Jolt, mas continuam sem RTTI e sem exceções como o resto do binário. O
+# adaptador que conversa com eles (resources/gltf_codecs.cpp) é código nosso, com -Werror.
+set(AETHER_DRACO_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/draco/src/draco)
+add_library(aether_codecs STATIC
+  third_party/meshoptimizer/vertexcodec.cpp
+  third_party/meshoptimizer/indexcodec.cpp
+  third_party/meshoptimizer/vertexfilter.cpp
+  third_party/basis_universal/transcoder/basisu_transcoder.cpp
+  third_party/basis_universal/zstd/zstddeclib.c
+  ${AETHER_DRACO_SOURCE}/attributes/attribute_octahedron_transform.cc
+  ${AETHER_DRACO_SOURCE}/attributes/attribute_quantization_transform.cc
+  ${AETHER_DRACO_SOURCE}/attributes/attribute_transform.cc
+  ${AETHER_DRACO_SOURCE}/attributes/geometry_attribute.cc
+  ${AETHER_DRACO_SOURCE}/attributes/point_attribute.cc
+  ${AETHER_DRACO_SOURCE}/compression/attributes/attributes_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/attributes/kd_tree_attributes_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/attributes/sequential_attribute_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/attributes/sequential_attribute_decoders_controller.cc
+  ${AETHER_DRACO_SOURCE}/compression/attributes/sequential_integer_attribute_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/attributes/sequential_normal_attribute_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/attributes/sequential_quantization_attribute_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/bit_coders/adaptive_rans_bit_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/bit_coders/direct_bit_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/bit_coders/rans_bit_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/bit_coders/symbol_bit_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/decode.cc
+  ${AETHER_DRACO_SOURCE}/compression/mesh/mesh_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/mesh/mesh_edgebreaker_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/mesh/mesh_edgebreaker_decoder_impl.cc
+  ${AETHER_DRACO_SOURCE}/compression/mesh/mesh_sequential_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/point_cloud/point_cloud_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/point_cloud/point_cloud_kd_tree_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/point_cloud/point_cloud_sequential_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/point_cloud/algorithms/dynamic_integer_points_kd_tree_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/point_cloud/algorithms/float_points_tree_decoder.cc
+  ${AETHER_DRACO_SOURCE}/compression/entropy/symbol_decoding.cc
+  ${AETHER_DRACO_SOURCE}/core/bit_utils.cc
+  ${AETHER_DRACO_SOURCE}/core/bounding_box.cc
+  ${AETHER_DRACO_SOURCE}/core/data_buffer.cc
+  ${AETHER_DRACO_SOURCE}/core/decoder_buffer.cc
+  ${AETHER_DRACO_SOURCE}/core/divide.cc
+  ${AETHER_DRACO_SOURCE}/core/draco_types.cc
+  ${AETHER_DRACO_SOURCE}/core/hash_utils.cc
+  ${AETHER_DRACO_SOURCE}/core/options.cc
+  ${AETHER_DRACO_SOURCE}/core/quantization_utils.cc
+  ${AETHER_DRACO_SOURCE}/mesh/corner_table.cc
+  ${AETHER_DRACO_SOURCE}/mesh/mesh.cc
+  ${AETHER_DRACO_SOURCE}/mesh/mesh_attribute_corner_table.cc
+  ${AETHER_DRACO_SOURCE}/mesh/mesh_misc_functions.cc
+  ${AETHER_DRACO_SOURCE}/point_cloud/point_cloud.cc
+  ${AETHER_DRACO_SOURCE}/metadata/geometry_metadata.cc
+  ${AETHER_DRACO_SOURCE}/metadata/metadata.cc
+  ${AETHER_DRACO_SOURCE}/metadata/metadata_decoder.cc
+)
+target_include_directories(aether_codecs SYSTEM PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/draco/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/meshoptimizer
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/basis_universal/transcoder
+)
+# Saídas do transcodificador que o importador não pede (ele decodifica para RGBA8) ficam
+# desligadas; PUBLIC porque o cabeçalho do transcodificador lê as mesmas definições.
+target_compile_definitions(aether_codecs PUBLIC
+  BASISD_SUPPORT_KTX2=1 BASISD_SUPPORT_KTX2_ZSTD=1
+  BASISD_SUPPORT_DXT1=0 BASISD_SUPPORT_DXT5A=0 BASISD_SUPPORT_BC7_MODE5=0
+  BASISD_SUPPORT_PVRTC1=0 BASISD_SUPPORT_PVRTC2=0 BASISD_SUPPORT_ATC=0 BASISD_SUPPORT_FXT1=0
+)
+target_compile_options(aether_codecs PRIVATE -w
+  $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
+  $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
+)
+
 # Engine mobile: sem RTTI, sem exceções, warnings tratados como erro nos alvos de runtime.
 # (só para o NOSSO código — ver a nota acima sobre por que o Jolt entra antes desta linha.)
 add_compile_options(
@@ -210,8 +285,11 @@ add_library(aether_assets STATIC
   resources/import_node_map.cpp
   resources/material_asset.cpp
   resources/image_decode.cpp
+  resources/gltf_codecs.cpp
+  resources/gltf_package.cpp
 )
 target_include_directories(aether_assets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(aether_assets PRIVATE aether_codecs)
 # aether_renderer pelo formato do pacote de mapa: a importacao produz
 # exatamente os mesmos registros de desenho e material que o cozinhador offline,
 # para que geometria importada no aparelho e geometria cozida no computador
@@ -453,6 +531,8 @@ if(NOT ANDROID)
     ../tests/native/test_editor_model_import.cpp
     ../tests/native/test_import_reconcile.cpp
     ../tests/native/test_image_decode.cpp
+    ../tests/native/test_gltf_codecs.cpp
+    ../tests/native/test_gltf_package.cpp
     ../tests/native/test_editor_script_templates.cpp
     ../tests/native/test_editor_code_catalog.cpp
     ../tests/native/test_editor_play_scripts.cpp
@@ -532,6 +612,8 @@ if(NOT ANDROID)
   target_compile_definitions(aether_tests PRIVATE
     AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
   target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources)
+  # Os testes de meshopt codificam com o codificador real da mesma versão vendorizada.
+  target_link_libraries(aether_tests PRIVATE aether_codecs)
 
   # Probe separado porque induzir overflow em Debug dispara corretamente o
   # assert fail-fast do próprio Jolt. Em Release este binário valida a outra

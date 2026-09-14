@@ -31,6 +31,14 @@ import java.nio.charset.StandardCharsets;
 public final class ModelPicker {
     private static native long poll();
     private static native void submit(long token, byte[] bytes, byte[] name, byte[] diagnostic);
+    /**
+     * Vários arquivos escolhidos juntos: um .gltf (ou .glb) e as dependências dele.
+     * O nativo decide qual é o principal; aqui só se lê conteúdo e nome.
+     */
+    private static native void submitMany(long token, byte[][] contents, byte[][] names, byte[] diagnostic);
+
+    /** Máximo de arquivos numa seleção: um glTF com dezenas de texturas cabe, uma pasta inteira não. */
+    private static final int MAXIMUM_FILES = 64;
 
     /** Teto de leitura. Acima disto a importação é recusada com motivo, não travada. */
     private static final int MAXIMUM_BYTES = 128 * 1024 * 1024;
@@ -87,6 +95,9 @@ public final class ModelPicker {
             // arquivo que o usuário quer; a extensão é conferida depois, e o
             // conteúdo é validado pelo leitor nativo de qualquer forma.
             intent.setType("*/*");
+            // Seleção múltipla: um .gltf chega com o .bin e as imagens escolhidos
+            // junto. Não há acesso à pasta — só ao que o usuário marcou.
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
             activity.startActivityForResult(intent, REQUEST);
         } catch (RuntimeException error) {
             submit(token, null, null, encode("Nenhum aplicativo de arquivos respondeu ao pedido."));
@@ -100,19 +111,73 @@ public final class ModelPicker {
         long token = openToken;
         // Keep this token while the asynchronous reader runs. The polling tick
         // must not reopen the picker for the same still-pending native request.
-        Uri uri = data == null ? null : data.getData();
-        if (resultCode != Activity.RESULT_OK || uri == null) {
+        java.util.ArrayList<Uri> uris = new java.util.ArrayList<>();
+        if (resultCode == Activity.RESULT_OK && data != null) {
+            android.content.ClipData clip = data.getClipData();
+            if (clip != null) {
+                for (int i = 0; i < clip.getItemCount(); ++i) {
+                    Uri item = clip.getItemAt(i).getUri();
+                    if (item != null) uris.add(item);
+                }
+            } else if (data.getData() != null) {
+                uris.add(data.getData());
+            }
+        }
+        if (uris.isEmpty()) {
             // Cancelar não é erro: o nativo distingue as duas coisas.
             submit(token, null, null, null);
             return true;
         }
+        if (uris.size() > MAXIMUM_FILES) {
+            submit(token, null, null, encode("Arquivos demais numa seleção; escolha o principal e as dependências dele."));
+            return true;
+        }
         ContentResolver resolver = activity.getApplicationContext().getContentResolver();
         try {
-            READER.execute(() -> readSource(token, uri, resolver));
+            if (uris.size() == 1) {
+                Uri uri = uris.get(0);
+                READER.execute(() -> readSource(token, uri, resolver));
+            } else {
+                READER.execute(() -> readSources(token, uris, resolver));
+            }
         } catch (RejectedExecutionException busy) {
             submit(token, null, null, encode("A leitura anterior ainda está terminando; tente novamente."));
         }
         return true;
+    }
+
+    private static void readSources(long token, java.util.List<Uri> uris, ContentResolver resolver) {
+        byte[][] contents = new byte[uris.size()][];
+        byte[][] names = new byte[uris.size()][];
+        long total = 0;
+        try {
+            for (int i = 0; i < uris.size(); ++i) {
+                Uri uri = uris.get(i);
+                try (InputStream stream = resolver.openInputStream(uri)) {
+                    if (stream == null) {
+                        submitMany(token, null, null, encode("Um dos arquivos escolhidos não pôde ser aberto."));
+                        return;
+                    }
+                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                    byte[] chunk = new byte[64 * 1024];
+                    int read;
+                    while ((read = stream.read(chunk)) > 0) {
+                        if (poll() != token) return;
+                        total += read;
+                        if (total > MAXIMUM_BYTES) {
+                            submitMany(token, null, null, encode("Os arquivos escolhidos juntos são grandes demais para esta importação."));
+                            return;
+                        }
+                        buffer.write(chunk, 0, read);
+                    }
+                    contents[i] = buffer.toByteArray();
+                    names[i] = encode(displayName(uri, resolver));
+                }
+            }
+            submitMany(token, contents, names, null);
+        } catch (Exception error) {
+            submitMany(token, null, null, encode("Não foi possível ler os arquivos escolhidos."));
+        }
     }
 
     private static void readSource(long token, Uri uri, ContentResolver resolver) {

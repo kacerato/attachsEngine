@@ -252,11 +252,12 @@ AE_TEST(glb_import_refuses_broken_files_with_a_concrete_reason) {
   AE_EXPECT_TRUE(import.diagnostic.find(".glb") != std::string::npos, "o motivo aponta o caminho a seguir");
 
   // Extensão exigida muda o significado dos dados: importar ignorando daria
-  // geometria errada com cara de certa.
+  // geometria errada com cara de certa. Draco e meshopt têm decodificador desde
+  // a Entrega 4 (test_gltf_codecs.cpp); uma extensão desconhecida continua recusada.
   auto asset = triangleAsset();
-  asset.json.insert(asset.json.size() - 1, R"(,"extensionsRequired":["KHR_draco_mesh_compression"])");
+  asset.json.insert(asset.json.size() - 1, R"(,"extensionsRequired":["EXT_codec_desconhecido"])");
   AE_EXPECT_TRUE(!importGlb(buildGlb(asset.json, asset.binary), {}, {}, import), "extensão exigida recusada");
-  AE_EXPECT_TRUE(import.diagnostic.find("KHR_draco_mesh_compression") != std::string::npos, "o motivo identifica o decodificador ausente");
+  AE_EXPECT_TRUE(import.diagnostic.find("EXT_codec_desconhecido") != std::string::npos, "o motivo identifica o decodificador ausente");
 
   // Índice apontando para fora da primitiva: aceitar leria memória de outro
   // vértice e desenharia lixo.

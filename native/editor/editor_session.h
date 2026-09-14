@@ -413,6 +413,9 @@ public:
                          const std::string &path, const std::string &expectedHash, ModelImportReport &report,
                          resources::ImportAmbiguityPolicy policy=resources::ImportAmbiguityPolicy::Refuse);
   void showImportPreview(std::string path, const resources::GltfImport &model, std::string_view contentHash={});
+  // Linha extra na preparação, dita por quem preparou os bytes (por exemplo, as
+  // dependências de um .gltf empacotadas no GLB).
+  void noteImportPreview(std::string line) {state_.importSummary+="\n"+std::move(line);}
   void beginImportPreparation() {state_.importPanel=true;state_.importReady=false;state_.importError=false;state_.importPage=0;state_.importIntoScene=false;state_.importSummary.clear();state_.importPath.clear();state_.importAmbiguities=0;state_.importAmbiguityChoice=0;state_.importStatus="Preparando recurso…";}
   resources::ImportAmbiguityPolicy importAmbiguityPolicy() const {
     return state_.importAmbiguityChoice==1?resources::ImportAmbiguityPolicy::MatchInOrder:

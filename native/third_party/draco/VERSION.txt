@@ -1,0 +1,17 @@
+Draco — decodificador de KHR_draco_mesh_compression (Entrega 4, M08/M09)
+
+Origem:   https://github.com/google/draco
+Tag:      1.5.7
+Commit:   8786740086a9f4d83f44aa83badfbea4dce7a1b5
+Licença:  Apache-2.0 (LICENSE)
+
+Subconjunto vendorizado: todos os cabeçalhos de src/draco/{attributes,compression,core,mesh,metadata,point_cloud}
+(sem *_test*) e somente os .cc de DECODIFICAÇÃO listados em native/CMakeLists.txt (aether_codecs).
+Codificador, io, animação, material, cena, transcoder glTF, JavaScript, Unity e Maya ficaram de fora.
+Arquivos sem modificação, exceto:
+  src/draco/draco_features.h — escrito à mão (no upstream é gerado pelo CMake); mesmo conjunto de
+  features da configuração padrão fora do Emscripten, sem DRACO_TRANSCODER_SUPPORTED.
+Sem exceções nem RTTI no subconjunto (conferido por busca de throw/try/typeid/dynamic_cast).
+
+Política de atualização: clonar a nova tag com core.longpaths=true, recopiar cabeçalhos e a mesma lista de .cc,
+conferir de novo draco_options.cmake (draco_set_optional_features) e rodar os testes m09e4 de Draco no host.

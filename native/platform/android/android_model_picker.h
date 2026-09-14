@@ -22,6 +22,13 @@ struct ModelPickerResult {
   // Preenchido quando o lado Java não conseguiu ler: arquivo grande demais,
   // permissão revogada, provedor que sumiu. Nunca "erro ao importar".
   std::string diagnostic;
+  // Seleção múltipla (Entrega 4): os arquivos escolhidos junto com o principal,
+  // candidatos a dependência de um glTF. Casados por nome, nunca por caminho.
+  struct Companion {
+    std::string name;
+    std::vector<u8> bytes;
+  };
+  std::vector<Companion> companions;
 };
 
 // Pede um arquivo ao usuário. Só um pedido por vez: um segundo pedido enquanto

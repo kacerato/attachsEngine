@@ -2215,6 +2215,12 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   if(!model.textures.empty())
     state_.importSummary+="\nTexturas: "+std::to_string(model.textures.size())+" aplicadas ("+
       std::to_string((model.textureBytes+(u64{1}<<19))>>20)+" MB com mipmaps).";
+  if(model.mirroredNodes)
+    state_.importSummary+="\nReflexão (escala negativa) resolvida em "+std::to_string(model.mirroredNodes)+
+      " nó(s): geometria espelhada e pose com escala positiva.";
+  if(model.dracoPrimitives || model.meshoptViews || model.ktx2Images)
+    state_.importSummary+="\nDescomprimido na importação: "+std::to_string(model.dracoPrimitives)+" primitiva(s) Draco, "+
+      std::to_string(model.meshoptViews)+" visão(ões) meshopt, "+std::to_string(model.ktx2Images)+" imagem(ns) KTX2.";
   if(model.reducedTextures)
     state_.importSummary+="\nResolução reduzida em "+std::to_string(model.reducedTextures)+" textura(s), até "+
       std::to_string(model.residentTextureDimension)+" px, para caber no limite do aparelho.";
