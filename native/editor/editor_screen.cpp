@@ -926,6 +926,7 @@ void buildReferencePicker(ScreenBuilder &builder,UiRect content,const EditorEnti
   builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
 }
 
+void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity);
 void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity &entity) {
   const auto &theme=builder.theme;const auto &state=builder.state;
   const bool same=state.componentSelection==entity.id,adding=same&&state.addingComponent;
@@ -937,7 +938,7 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   builder.router.addRegion(button,widgetId(EditorWidget::AddComponentMenu));
   builder.list.addImage(centred(takeLeft(button,40),28,28),static_cast<UiImageId>(UiIcon::ComponentAdd),0xffffffff);
   builder.label(button,adding?"Add · fechar":"Add",theme.color.text,theme.type.body);
-  struct Card {const EditorComponentEntry *native=nullptr;const scene::ComponentValue *value=nullptr;u32 index=0;bool transform=false;};
+  struct Card {const EditorComponentEntry *native=nullptr;const scene::ComponentValue *value=nullptr;u32 index=0;bool transform=false;bool object=false;};
   std::vector<Card> cards;
   if(adding) {
     auto search=takeTop(content,34),clear=takeRight(search,32);builder.list.addRect(search,theme.color.raised,theme.radius.control);
@@ -959,7 +960,10 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
       if(query.empty()||editorSearchKey(type.name+" "+type.id).find(query)!=std::string::npos) cards.push_back({nullptr,nullptr,i});
     }
   } else {
+    // Transformação continua o primeiro card (é o componente de todo objeto);
+    // as configurações universais do objeto vêm logo depois, antes dos componentes.
     cards.push_back({nullptr,nullptr,0,true});
+    cards.push_back({nullptr,nullptr,0,false,true});
     for(u32 i=0;i<entity.components.size();++i) {
       const auto *v=entity.components.at(i);bool known=false;
       for(u32 type=0;type<editorComponentCatalog.size();++type) if(&v->type()==editorComponentCatalog[type].type) {
@@ -970,7 +974,8 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   }
   if(!adding && same) {
     const auto focused=std::find_if(cards.begin(),cards.end(),[&](const Card &item) {
-      if(item.transform) return state.expandedComponent=="astra.transform";
+      if(item.object) return state.expandedComponent=="astra.object";
+      if(item.transform) return state.expandedComponent=="astra.transform" || state.transformMenu;
       if(item.native) return (item.value&&state.expandedNative==item.value->instanceId()) || (item.value&&state.nativeMenu==item.value->instanceId());
       const auto *script=scene::scriptBehavior(item.value);
       return script&&(state.expandedScript==script->instanceId()||state.scriptMenu==script->instanceId());
@@ -992,30 +997,42 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   for(u32 card=page*perPage;card<end;++card) {
     if(content.height<40) break;
     const auto &item=cards[card];const auto *script=scene::scriptBehavior(item.value);const auto *schema=script?scriptSchema(state,script->scriptType):nullptr;
-    const bool open=same&&(item.transform?state.expandedComponent=="astra.transform":item.native?(item.value&&state.expandedNative==item.value->instanceId()):script&&state.expandedScript==script->instanceId());
-    const bool menu=same&&!item.transform&&(item.native?(item.value&&state.nativeMenu==item.value->instanceId()):script&&state.scriptMenu==script->instanceId());
+    const bool open=same&&(item.object?state.expandedComponent=="astra.object":item.transform?state.expandedComponent=="astra.transform":item.native?(item.value&&state.expandedNative==item.value->instanceId()):script&&state.expandedScript==script->instanceId());
+    const bool menu=same&&!item.object&&(item.transform?state.transformMenu:item.native?(item.value&&state.nativeMenu==item.value->instanceId()):script&&state.scriptMenu==script->instanceId());
     const EditorScriptType *newType=adding&&!item.native?&state.code->scriptTypes()[item.index]:nullptr;
-    std::string title=item.transform?"Transformação":item.native?item.native->name:newType?newType->name:script?(schema?schema->name:script->scriptType):std::string(item.value->type().id);
+    std::string title=item.object?"Objeto":item.transform?"Transformação":item.native?item.native->name:newType?newType->name:script?(schema?schema->name:script->scriptType):std::string(item.value->type().id);
     if(item.value && item.native && item.native->type->allowMultiple) title+=" · "+std::to_string(item.value->instanceId());
-    const auto icon=item.transform?UiIcon::EditorAuthorMove:item.native?item.native->icon:UiIcon::ScriptingCode;
+    const auto icon=item.object?UiIcon::EditorAuthorObject:item.transform?UiIcon::EditorAuthorMove:item.native?item.native->icon:UiIcon::ScriptingCode;
     const char *reason=adding&&item.native?(!item.native->type->allowMultiple&&entity.components.find(*item.native->type)?"Já adicionado":item.native->unavailable(entity)):nullptr;
     auto row=takeTop(content,adding?54.0f:44.0f);const auto hit=row;
     builder.list.addRect(row,theme.color.raised,theme.radius.control);
     if(open) builder.list.addRect({row.x,row.y+4,3,row.height-8},theme.color.accent,1);
     if(!adding) builder.label(takeLeft(row,20),open?"v":">",theme.color.textDim,theme.type.body,UiAlign::Center);
     builder.list.addImage(centred(takeLeft(row,36),28,28),static_cast<UiImageId>(icon),0xffffffff);
-    auto more=takeRight(row,adding||item.transform?0:32);
+    auto more=takeRight(row,adding||item.object?0:32);
     builder.label(adding?takeTop(row,27):row,title.c_str(),reason?theme.color.textMuted:theme.color.text,theme.type.body);
     if(adding) builder.label(row,reason?reason:item.native?item.native->description:"Comportamento C#",theme.color.textMuted,theme.type.caption);
     if(adding) {
       if(!reason) builder.router.addRegion(hit,widgetId(item.native?EditorWidget::ComponentAddBase:EditorWidget::ScriptAddBase)+item.index);
-    } else if(item.transform||item.native||script) {
-      builder.router.addRegion({hit.x,hit.y,hit.width-(item.transform?0:32),hit.height},item.transform?widgetId(EditorWidget::TransformFold):widgetId(item.native?EditorWidget::ComponentFoldBase:EditorWidget::ScriptFoldBase)+item.index);
-      if(!item.transform) {
+    } else if(item.object||item.transform||item.native||script) {
+      builder.router.addRegion({hit.x,hit.y,hit.width-(item.object?0:32),hit.height},item.object?widgetId(EditorWidget::ObjectFold):item.transform?widgetId(EditorWidget::TransformFold):widgetId(item.native?EditorWidget::ComponentFoldBase:EditorWidget::ScriptFoldBase)+item.index);
+      if(!item.object) {
         builder.list.addImage(centred(more,20,20),static_cast<UiImageId>(UiIcon::EditorAuthorMore),theme.color.textDim);
-        builder.router.addRegion(more,widgetId(item.native?EditorWidget::ComponentMenuBase:EditorWidget::ScriptMenuBase)+item.index);
+        builder.router.addRegion(more,item.transform?widgetId(EditorWidget::TransformMenu):widgetId(item.native?EditorWidget::ComponentMenuBase:EditorWidget::ScriptMenuBase)+item.index);
       }
-      if(menu) {
+      if(menu && item.transform) {
+        // Unity: copiar, colar e redefinir moram no próprio card da transformação.
+        const struct {const char *label;EditorWidget widget;bool enabled;} rows[]{
+            {"Copiar transformação",EditorWidget::TransformCopy,true},{"Colar transformação",EditorWidget::TransformPaste,state.hasTransformClipboard},
+            {"Redefinir posição",EditorWidget::TransformResetPosition,true},{"Redefinir rotação",EditorWidget::TransformResetRotation,true},
+            {"Redefinir escala",EditorWidget::TransformResetScale,true},{"Redefinir tudo",EditorWidget::TransformReset,true}};
+        for(const auto &action:rows) {
+          if(content.height<34) break;
+          auto line=takeTop(content,34);
+          builder.label(line,action.label,action.enabled?theme.color.text:theme.color.textMuted,theme.type.caption);
+          if(action.enabled) builder.router.addRegion(line,widgetId(action.widget));
+        }
+      } else if(menu) {
         if(item.native) {
           const EditorWidget actions[]{EditorWidget::ComponentCopyBase,EditorWidget::ComponentPasteBase,EditorWidget::ComponentResetBase};
           const char *labels[]{"Copiar valores","Colar valores","Restaurar padrão"};
@@ -1028,7 +1045,8 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
       if(open) {
         auto fields=takeTop(content,std::max(0.0f,content.height-(end-card-1)*48.0f-4));
         builder.list.pushClip(fields);
-        if(item.transform) {
+        if(item.object) buildObjectFields(builder,fields,entity);
+        else if(item.transform) {
           const u32 rows=std::max(1u,std::min(3u,static_cast<u32>(std::max(0.0f,fields.height-30)/34)));
           const u32 page=std::min(state.propertyPage,(3u+rows-1)/rows-1);
           auto pager=rows<3?takeBottom(fields,30):UiRect{};
@@ -1101,6 +1119,106 @@ void buildImportLinkCard(ScreenBuilder &builder, UiRect &content) {
   takeTop(content,4);
 }
 
+// Configurações universais do objeto: valem para qualquer objeto, com ou sem
+// componentes. Só entra o que tem consumidor real — visibilidade (extração de
+// desenhos), sombra projetada (renderer) e camada (física). "Estático" e
+// "receber sombra" existem no documento mas ninguém os lê ainda; mostrá-los
+// seria prometer comportamento que não existe.
+void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  // 0 nome, 1 visível, 2 sombra projetada (só com malha: sem desenho não há
+  // sombra), 3 camada, 4 informação.
+  std::vector<u32> kinds{0,1};
+  if(meshRenderer(entity)) kinds.push_back(2);
+  kinds.push_back(3);kinds.push_back(4);
+  const u32 rows=static_cast<u32>(kinds.size());
+  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-30)/36));
+  const u32 pages=(rows+perPage-1)/perPage,page=std::min(state.propertyPage,pages-1);
+  auto footer=pages>1?takeBottom(content,30):UiRect{};
+  for(u32 index=page*perPage;index<rows && index<(page+1)*perPage;++index) {
+    if(content.height<30) break;
+    const u32 row=kinds[index];
+    auto line=takeTop(content,36);
+    if(row==0) {
+      builder.label(takeLeft(line,line.width*.34f),"Nome",theme.color.textDim,theme.type.caption);
+      builder.list.addRect(deflate(line,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      builder.label(line,entity.name,theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(line,widgetId(EditorWidget::RenameSelection));
+    } else if(row==1 || row==2) {
+      auto toggle=takeRight(line,44);
+      builder.label(line,row==1?"Visível":"Projetar sombra",theme.color.textDim,theme.type.caption);
+      builder.toggle(toggle,row==1?entity.visible:entity.castShadow,widgetId(row==1?EditorWidget::ToggleVisible:EditorWidget::ToggleCastShadow));
+    } else if(row==3) {
+      builder.label(takeLeft(line,line.width*.34f),"Camada",theme.color.textDim,theme.type.caption);
+      auto previous=takeLeft(line,32),next=takeRight(line,32);
+      builder.label(previous,"<",theme.color.text,theme.type.body,UiAlign::Center);
+      builder.label(next,">",theme.color.text,theme.type.body,UiAlign::Center);
+      builder.router.addRegion(previous,widgetId(EditorWidget::ObjectLayerPrevious));
+      builder.router.addRegion(next,widgetId(EditorWidget::ObjectLayerNext));
+      const auto layer=entity.layer%runtime::GameplayLayers::kCount;
+      const auto name=state.document->layers().name(layer);
+      const std::string text=name.empty()?"Camada "+std::to_string(layer):std::string(name);
+      builder.label(line,text.c_str(),theme.color.text,theme.type.caption,UiAlign::Center);
+    } else {
+      const auto children=state.document->childrenOf(entity.id).size();
+      const std::string info="ID "+std::to_string(entity.id)+" · "+std::to_string(children)+(children==1?" filho":" filhos");
+      builder.label(line,info.c_str(),theme.color.textMuted,theme.type.caption);
+    }
+  }
+  if(pages>1) {
+    const auto back=takeLeft(footer,36),forward=takeRight(footer,36);
+    builder.label(back,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.label(forward,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    if(page) builder.router.addRegion(back,widgetId(EditorWidget::PropertyPrevious));
+    if(page+1<pages) builder.router.addRegion(forward,widgetId(EditorWidget::PropertyNext));
+    builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  }
+}
+
+// Ações do objeto no ⋮ do cabeçalho do inspetor: o que se faz COM o objeto
+// selecionado, no painel dele. O menu da hierarquia continua existindo.
+void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  auto title=takeTop(content,36),close=takeRight(title,36);
+  builder.label(title,"Ações do objeto",theme.color.text,theme.type.body);
+  builder.label(close,"x",theme.color.textDim,theme.type.body,UiAlign::Center);
+  builder.router.addRegion(close,widgetId(EditorWidget::InspectorMenu));
+  const bool root=entity.id==state.document->root();
+  const struct {const char *label;EditorWidget widget;bool enabled;} actions[]{
+      {"Renomear",EditorWidget::RenameSelection,true},
+      {"Duplicar",EditorWidget::DuplicateSelection,!root},
+      {"Excluir",EditorWidget::DeleteSelection,!root},
+      {"Enquadrar na vista",EditorWidget::FrameSelection,true},
+      {"Criar filho vazio",EditorWidget::CreateChildGroup,true},
+      {"Mover acima",EditorWidget::MoveEarlier,!root},
+      {"Mover abaixo",EditorWidget::MoveLater,!root},
+      {"Mudar pai",EditorWidget::ReparentSelection,!root},
+      {"Mover para a raiz",EditorWidget::MoveToRoot,!root && entity.parent!=state.document->root()},
+      {"Copiar transformação",EditorWidget::TransformCopy,!root},
+      {"Colar transformação",EditorWidget::TransformPaste,!root && state.hasTransformClipboard},
+      {"Redefinir transformação",EditorWidget::TransformReset,!root}};
+  const u32 count=static_cast<u32>(std::size(actions));
+  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-30)/38));
+  const u32 pages=(count+perPage-1)/perPage,page=std::min(state.propertyPage,pages-1);
+  auto footer=pages>1?takeBottom(content,30):UiRect{};
+  for(u32 i=page*perPage;i<count && i<(page+1)*perPage;++i) {
+    if(content.height<34) break;
+    auto row=takeTop(content,38);
+    builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+    takeLeft(row,12);
+    builder.label(row,actions[i].label,actions[i].enabled?theme.color.text:theme.color.textMuted,theme.type.caption);
+    if(actions[i].enabled) builder.router.addRegion(row,widgetId(actions[i].widget));
+  }
+  if(pages>1) {
+    const auto back=takeLeft(footer,36),forward=takeRight(footer,36);
+    builder.label(back,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.label(forward,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    if(page) builder.router.addRegion(back,widgetId(EditorWidget::PropertyPrevious));
+    if(page+1<pages) builder.router.addRegion(forward,widgetId(EditorWidget::PropertyNext));
+    builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  }
+}
+
 void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   const UiTheme &theme = builder.theme;
   const EditorEntity *entity = builder.state.document->find(builder.state.selection);
@@ -1129,6 +1247,10 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
                 (std::to_string(entity->components.size()-(scene::importLink(entity->components)?1u:0u))+" componentes").c_str(),
                 theme.color.textDim, theme.type.label);
 
+  if(builder.state.inspectorMenu && builder.state.workspace==EditorWorkspace::Scene) {
+    buildObjectActions(builder,content,*entity);
+    return;
+  }
   if(builder.state.workspace==EditorWorkspace::Settings) {
     builder.label(takeTop(content,38),"Água",theme.color.text,theme.type.body);
     buildPropertyPage(builder,content,*builder.state.document->find(builder.state.document->root()),EditorPropertyGroup::Water);
@@ -2329,10 +2451,10 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     // registers Next when another page exists. Do not duplicate layout math.
     case EditorWidget::PropertyNext: ++state.propertyPage;break;
     case EditorWidget::ReparentSelection:
-      state.reparentEntity=state.selection;state.entityMenu=false;state.status="Toque no novo pai na hierarquia";break;
+      state.reparentEntity=state.selection;state.entityMenu=false;state.inspectorMenu=false;state.status="Toque no novo pai na hierarquia";break;
     case EditorWidget::MoveToRoot:
       outcome.documentChanged=history.reparentKeepingWorld(document,state.selection,document.root());
-      state.entityMenu=false;state.status=outcome.documentChanged?"Movido para raiz":"Transformacao incompativel";break;
+      state.entityMenu=false;state.inspectorMenu=false;state.status=outcome.documentChanged?"Movido para raiz":"Transformacao incompativel";break;
     case EditorWidget::MoveEarlier:
     case EditorWidget::MoveLater: {
       u32 index=0;const auto *selected=document.find(state.selection);
@@ -2341,7 +2463,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
         const u32 next=widget==widgetId(EditorWidget::MoveEarlier)?(index?index-1:0):std::min(index+1,static_cast<u32>(count-1));
         if(next!=index) outcome.documentChanged=history.reparent(document,selected->id,selected->parent,next);
       }
-      state.entityMenu=false;break;
+      state.entityMenu=false;state.inspectorMenu=false;break;
     }
     case EditorWidget::AssetsPrevious:
     case EditorWidget::AssetsNext: {
@@ -2350,13 +2472,13 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       else state.assetScroll=state.assetScroll>page?state.assetScroll-page:0;
       break;
     }
-    case EditorWidget::InspectorMenu:
+    case EditorWidget::InspectorMenu: state.inspectorMenu=!state.inspectorMenu;state.transformMenu=false;state.propertyPage=0;break;
     case EditorWidget::RenameSelection:
       if(const auto *entity=document.find(state.selection)) {
         state.renameEntity=entity->id;
         std::snprintf(state.renameText,sizeof(state.renameText),"%s",entity->name);
       }
-      state.entityMenu=false;break;
+      state.entityMenu=false;state.inspectorMenu=false;break;
     case EditorWidget::NavigationOrbit: state.navigation=EditorNavigationMode::Orbit;break;
     case EditorWidget::NavigationPan: state.navigation=EditorNavigationMode::Pan;break;
     case EditorWidget::NavigationZoom: state.navigation=EditorNavigationMode::Zoom;break;
@@ -2381,19 +2503,19 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::DuplicateSelection: {
       const auto copy=history.duplicateEntity(document,state.selection);
       if(copy) {state.selection=copy;outcome.documentChanged=true;}
-      state.entityMenu=false;
+      state.entityMenu=false;state.inspectorMenu=false;
       break;
     }
     case EditorWidget::CreateGroup: {
       const auto copy=history.createEntity(document,document.root(),EditorEntityKind::Folder,"Objeto vazio");
       if(copy) {state.selection=copy;outcome.documentChanged=true;}
-      state.entityMenu=false;
+      state.entityMenu=false;state.inspectorMenu=false;
       break;
     }
     case EditorWidget::DeleteSelection:
       outcome.documentChanged=history.destroyEntity(document,state.selection);
       if(outcome.documentChanged) state.selection=kInvalidEntity;
-      state.entityMenu=false;
+      state.entityMenu=false;state.inspectorMenu=false;
       break;
     case EditorWidget::SceneChip:
     case EditorWidget::ProjectMenu: state.workspaceMenu=!state.workspaceMenu;break;
@@ -2448,6 +2570,49 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::ToggleCastShadow: toggleField(&EditorEntity::castShadow); break;
     case EditorWidget::ToggleReceiveShadow: toggleField(&EditorEntity::receiveShadow); break;
     case EditorWidget::ToggleStatic: toggleField(&EditorEntity::isStatic); break;
+    case EditorWidget::CreateChildGroup: {
+      const auto parent=document.exists(state.selection)?state.selection:document.root();
+      const auto child=history.createEntity(document,parent,EditorEntityKind::Folder,"Objeto vazio");
+      if(child) {state.selection=child;outcome.documentChanged=true;}
+      state.inspectorMenu=false;break;
+    }
+    case EditorWidget::TransformMenu: state.transformMenu=!state.transformMenu;state.inspectorMenu=false;break;
+    case EditorWidget::TransformCopy:
+      if(const auto *entity=document.find(state.selection)) {state.transformClipboard=entity->transform;state.hasTransformClipboard=true;state.status="Transformação copiada";}
+      state.transformMenu=false;state.inspectorMenu=false;break;
+    case EditorWidget::TransformPaste:
+      if(state.hasTransformClipboard && document.exists(state.selection) && state.selection!=document.root())
+        outcome.documentChanged=history.setTransform(document,state.selection,state.transformClipboard);
+      state.transformMenu=false;state.inspectorMenu=false;break;
+    case EditorWidget::TransformReset:
+    case EditorWidget::TransformResetPosition:
+    case EditorWidget::TransformResetRotation:
+    case EditorWidget::TransformResetScale:
+      if(const auto *entity=document.find(state.selection); entity && state.selection!=document.root()) {
+        auto transform=entity->transform;const EditorTransform identity;
+        const bool all=widget==widgetId(EditorWidget::TransformReset);
+        if(all || widget==widgetId(EditorWidget::TransformResetPosition)) std::copy(identity.position,identity.position+3,transform.position);
+        if(all || widget==widgetId(EditorWidget::TransformResetRotation)) std::copy(identity.rotationDegrees,identity.rotationDegrees+3,transform.rotationDegrees);
+        if(all || widget==widgetId(EditorWidget::TransformResetScale)) std::copy(identity.scale,identity.scale+3,transform.scale);
+        outcome.documentChanged=history.setTransform(document,state.selection,transform);
+      }
+      state.transformMenu=false;state.inspectorMenu=false;break;
+    case EditorWidget::ObjectLayerPrevious:
+    case EditorWidget::ObjectLayerNext:
+      if(const auto *entity=document.find(state.selection)) {
+        // Só camadas NOMEADAS: uma camada sem nome é uma camada que o projeto
+        // não declarou, e escolher uma delas às cegas não diz nada à física.
+        const auto &layers=document.layers();const u32 count=runtime::GameplayLayers::kCount;
+        const bool forward=widget==widgetId(EditorWidget::ObjectLayerNext);
+        u32 layer=entity->layer%count;
+        for(u32 step=1;step<count;++step) {
+          const u32 candidate=forward?(layer+step)%count:(layer+count-step)%count;
+          if(layers.named(candidate)) {layer=candidate;break;}
+        }
+        if(layer!=entity->layer) {auto values=*entity;values.layer=layer;outcome.documentChanged=history.applyValues(document,state.selection,values);}
+        else state.status="Nenhuma outra camada nomeada no projeto";
+      }
+      break;
     case EditorWidget::HierarchyAdd: state.creationMenu=true; break;
     case EditorWidget::CreateMenuClose: state.creationMenu=false;break;
     case EditorWidget::ToggleWaterPhysics:

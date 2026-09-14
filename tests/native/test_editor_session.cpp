@@ -1241,3 +1241,51 @@ AE_TEST(independent_authoring_library_creates_dry_geometry_without_water_or_scen
   AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(session.document(),0),0,loaded),"independent archive");
   AE_EXPECT_EQ(meshAsset(*loaded.find(id)),1u,"stable built-in cube reference");
 }
+
+AE_TEST(inspector_object_card_and_actions_edit_the_selected_object_through_history) {
+  // O objeto selecionado se edita onde estão as propriedades dele (padrão
+  // Unity/Godot): configurações universais num card, cópia e redefinição no
+  // card da transformação e as ações do objeto no ⋮ do cabeçalho. Tudo por toque
+  // e pelo mesmo histórico.
+  Fixture f;f.session.setSelection(f.cube);f.session.history().clear();f.session.update();
+  auto &document=f.session.document();
+
+  tapWidget(f,widgetId(EditorWidget::ObjectFold));
+  tapWidget(f,widgetId(EditorWidget::ToggleVisible));
+  AE_EXPECT_TRUE(!document.find(f.cube)->visible,"visível desligado pelo card Objeto");
+  AE_EXPECT_TRUE(f.session.history().undo(document),"desfaz");
+  AE_EXPECT_TRUE(document.find(f.cube)->visible,"visível de volta");
+
+  auto layers=document.layers();
+  AE_EXPECT_TRUE(layers.setName(3,"Jogador"),"camada nomeada no projeto");
+  document.setLayers(layers);
+  f.session.update();
+  revealProperty(f,widgetId(EditorWidget::ObjectLayerNext));
+  tapWidget(f,widgetId(EditorWidget::ObjectLayerNext));
+  AE_EXPECT_EQ(document.find(f.cube)->layer,3u,"próxima camada nomeada, sem passar por camadas não declaradas");
+  tapWidget(f,widgetId(EditorWidget::ObjectFold));
+
+  auto moved=*document.find(f.cube);moved.transform.position[0]=4;moved.transform.scale[1]=2;
+  AE_EXPECT_TRUE(document.applyEntityValues(f.cube,moved),"pose de partida");f.session.update();
+  tapWidget(f,widgetId(EditorWidget::TransformMenu));
+  tapWidget(f,widgetId(EditorWidget::TransformCopy));
+  AE_EXPECT_TRUE(f.session.screen().hasTransformClipboard,"transformação copiada");
+  tapWidget(f,widgetId(EditorWidget::TransformMenu));
+  tapWidget(f,widgetId(EditorWidget::TransformResetPosition));
+  AE_EXPECT_EQ(document.find(f.cube)->transform.position[0],0.0f,"posição redefinida");
+  AE_EXPECT_EQ(document.find(f.cube)->transform.scale[1],2.0f,"a escala não foi tocada");
+  tapWidget(f,widgetId(EditorWidget::TransformMenu));
+  tapWidget(f,widgetId(EditorWidget::TransformPaste));
+  AE_EXPECT_EQ(document.find(f.cube)->transform.position[0],4.0f,"transformação colada");
+
+  const auto before=document.entityCount();
+  tapWidget(f,widgetId(EditorWidget::InspectorMenu));
+  AE_EXPECT_TRUE(f.session.screen().inspectorMenu,"o ⋮ do cabeçalho abre as ações do objeto");
+  tapWidget(f,widgetId(EditorWidget::DuplicateSelection));
+  AE_EXPECT_EQ(document.entityCount(),before+1,"duplicado pelo inspetor");
+  AE_EXPECT_TRUE(!f.session.screen().inspectorMenu,"o menu fecha depois da ação");
+  const auto copy=f.session.screen().selection;
+  tapWidget(f,widgetId(EditorWidget::InspectorMenu));
+  tapWidget(f,widgetId(EditorWidget::CreateChildGroup));
+  AE_EXPECT_EQ(document.find(f.session.screen().selection)->parent,copy,"filho vazio criado sob o objeto selecionado");
+}

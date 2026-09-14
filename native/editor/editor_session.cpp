@@ -173,7 +173,7 @@ void EditorSession::setSurface(const UiRect &surface, const UiInsets &safeArea) 
 void EditorSession::setSelection(EditorEntityId entity) {
   if (!document_.exists(entity)) return;
   if(state_.selection!=entity) {state_.routePoint=0;state_.propertyPage=0;state_.componentPage=0;state_.expandedScript=0;state_.scriptMenu=0;state_.importLinkMenu=false;
-    state_.materialSlot=0;state_.materialShared=false;state_.materialPicker=false;}
+    state_.materialSlot=0;state_.materialShared=false;state_.materialPicker=false;state_.inspectorMenu=false;state_.transformMenu=false;}
   state_.selection=entity;
   // Reveal the selected object through collapsed ancestors and long lists.
   for(auto parent=document_.find(entity);parent;parent=document_.find(parent->parent)) {
@@ -1004,6 +1004,11 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     }
     if(key==widgetId(EditorWidget::ComponentSearchClear)) {state_.componentQuery.clear();state_.componentPage=0;return true;}
     if(key==widgetId(EditorWidget::ComponentCategory)) {state_.componentCategory=(state_.componentCategory+1)%5;state_.componentPage=0;return true;}
+    if(key==widgetId(EditorWidget::ObjectFold)) {
+      state_.componentSelection=state_.selection;state_.expandedComponent=state_.expandedComponent=="astra.object"?"":"astra.object";
+      state_.expandedNative=0;state_.expandedScript=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;
+      state_.transformMenu=false;state_.propertyPage=0;return true;
+    }
     if(key==widgetId(EditorWidget::TransformFold)) {
       state_.componentSelection=state_.selection;state_.expandedComponent=state_.expandedComponent=="astra.transform"?"":"astra.transform";
       state_.expandedNative=0;state_.expandedScript=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;state_.propertyPage=0;return true;
@@ -1554,6 +1559,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       routing.target == UiPointerTarget::Widget &&
       routing.widgetId < widgetId(EditorWidget::GizmoAxisBase)) return true;
   if (routing.tapped && routing.widgetId == widgetId(EditorWidget::FrameSelection)) {
+    state_.inspectorMenu=false;
     frameSelection(); return true;
   }
   if (routing.tapped && routing.widgetId == widgetId(EditorWidget::FrameAll)) {

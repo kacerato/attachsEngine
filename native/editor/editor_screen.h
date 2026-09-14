@@ -175,6 +175,12 @@ enum class EditorWidget : u32 {
   ImportMatchInOrder, ImportTreatAsNew, ImportLinkMenu, ImportLinkUnlink, ImportLinkKeep, ImportLinkDelete,
   MaterialSlotPrevious, MaterialSlotNext, MaterialScopeInstance, MaterialScopeShared, MaterialChoose,
   MaterialPickerClose, MaterialClearOverride, MaterialCreateShared, MaterialUseSource,
+  // Inspetor: configurações universais do objeto e ações que antes só existiam
+  // no menu da hierarquia (padrão Unity/Godot: o objeto selecionado se edita
+  // onde estão as propriedades dele).
+  ObjectFold, ObjectLayerPrevious, ObjectLayerNext, CreateChildGroup,
+  TransformMenu, TransformCopy, TransformPaste, TransformReset,
+  TransformResetPosition, TransformResetRotation, TransformResetScale,
   // + máscara de ImportOverride.
   ImportLinkRevertBase=0x52000000u,
   // + índice do material do projeto / do campo numérico do material.
@@ -379,6 +385,11 @@ struct EditorScreenState final {
   std::vector<std::string> projectMaterials;
   u32 materialSlot=0,materialPage=0;
   bool materialShared=false,materialPicker=false;
+  // Menu de ações do objeto (⋮ do cabeçalho do inspetor) e do card Transformação.
+  bool inspectorMenu=false,transformMenu=false;
+  // Transformação copiada, para colar em outro objeto.
+  bool hasTransformClipboard=false;
+  EditorTransform transformClipboard{};
   bool editingCreationSearch=false;
   char creationSearch[kEditorNameCapacity]{};
   bool editingHierarchySearch=false;
