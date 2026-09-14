@@ -12,13 +12,16 @@ namespace ae::editor {
 class EditorPickMesh final {
 public:
   using Triangle=std::array<float,9>;
-  static constexpr usize MaximumTriangles=262144;
+  // Match the static import index budget (12 Mi indices / 3). The old 256 Ki
+  // ceiling rejected ordinary vehicle assets after successful GPU publication.
+  static constexpr usize MaximumTriangles=4u*1024u*1024u;
   std::span<const Triangle> triangles() const {return triangles_;}
   bool build(std::vector<Triangle> triangles) {
     if(triangles.empty() || triangles.size()>MaximumTriangles) return false;
     for(const auto &t:triangles) for(float v:t) if(!std::isfinite(v)) return false;
     EditorPickMesh next;next.triangles_=std::move(triangles);
-    next.nodes_.reserve(next.triangles_.size()*2);next.buildNode(0,static_cast<u32>(next.triangles_.size()));
+    // Leaves hold up to four triangles; fewer than N nodes suffice for N>=2.
+    next.nodes_.reserve(next.triangles_.size());next.buildNode(0,static_cast<u32>(next.triangles_.size()));
     *this=std::move(next);return true;
   }
   bool intersect(const float origin[3],const float direction[3],const float model[16],float &distance) const {

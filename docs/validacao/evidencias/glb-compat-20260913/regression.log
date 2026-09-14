@@ -1,0 +1,14 @@
+[ok] glb_compat_dequantization_transform_is_not_a_singular_matrix
+[ok] importing_a_glb_creates_objects_that_point_at_the_new_geometry
+[ok] glb_compat_required_appearance_is_reported_and_quantization_decodes
+[ok] glb_compat_sparse_zero_base_and_bounds
+[ok] glb_compat_strip_and_fan_winding
+[ok] glb_compat_optional_attribute_count_is_checked
+[ok] glb_compat_duplicate_names_are_labels_not_identity
+[ok] glb_import_reads_geometry_hierarchy_and_material_factors
+[ok] glb_import_reuses_geometry_for_instances_and_reports_what_it_left_behind
+[ok] glb_import_refuses_broken_files_with_a_concrete_reason
+[ok] glb_import_respects_limits_and_cancellation
+[ok] glb_import_keys_are_stable_across_a_reimport_that_adds_an_object
+
+12/12 testes passaram

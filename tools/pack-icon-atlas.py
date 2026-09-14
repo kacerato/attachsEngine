@@ -157,9 +157,37 @@ def main() -> None:
         # franja anti-aliased do contorno com o fundo transparente e deixaria um
         # halo claro em volta de cada ícone.
         icon = Image.open(source).convert("RGBA")
+        # Generated production sheets declare exact cells in the catalog. The
+        # same packed raster feeds native UI and Android editing accessories.
+        if "rect" in metadata:
+            icon = icon.crop(tuple(metadata["rect"]))
+        # A production sheet can declare its solid matte. Resolve it before
+        # resampling: otherwise the charcoal edge is baked into small icons.
+        # This is deliberately opt-in; dark pixels in other illustrations are
+        # artwork, not transparency. The IDE sheet has bright solid silhouettes
+        # on a dark matte, and its original outlines must remain unchanged.
+        if "solid_matte" in metadata:
+            pixels = np.asarray(icon, dtype=np.float32).copy()
+            matte = np.asarray(metadata["solid_matte"], dtype=np.float32)
+            rgb = pixels[..., :3]
+            coverage = np.clip(np.max((rgb - matte) / (255.0 - matte), axis=2), 0, 1)
+            # Source background texture is below this floor. The upper stop
+            # restores opaque solid fills without changing the silhouette.
+            alpha = np.clip((coverage - .08) / .76, 0, 1)
+            straight = np.clip((rgb - matte * (1 - alpha[..., None])) /
+                               np.maximum(alpha[..., None], .001), 0, 255)
+            pixels[..., :3] = np.where(alpha[..., None] > 0, straight, 0)
+            pixels[..., 3] = np.minimum(pixels[..., 3], alpha * 255)
+            icon = Image.fromarray(np.rint(pixels).astype(np.uint8), "RGBA")
+        if category == "ide" and icon.getchannel("A").getextrema()[0] != 0:
+            raise ValueError(f"IDE icon {name} has no transparent background")
         if not metadata.get("dark_ui_ready", False):
             icon = recolour_for_dark_ui(icon)
         icon = icon.resize((CELL, CELL), Image.LANCZOS)
+        if category == "ide":
+            code_output = arguments.output / "code-ide"
+            code_output.mkdir(parents=True, exist_ok=True)
+            icon.save(code_output / f"{leaf}.png")
         x = PADDING + (index % columns) * (CELL + PADDING)
         y = PADDING + (index // columns) * (CELL + PADDING)
         atlas.paste(icon, (x, y))

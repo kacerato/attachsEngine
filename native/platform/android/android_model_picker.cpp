@@ -30,6 +30,10 @@ void requestModelPick() {
   result.reset();
 }
 
+void cancelModelPick() {
+  std::lock_guard lock(mutex);pending=false;++sequence;result.reset();
+}
+
 bool modelPickPending() {
   std::lock_guard lock(mutex);
   return pending;

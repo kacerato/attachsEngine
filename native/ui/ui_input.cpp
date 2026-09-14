@@ -125,12 +125,8 @@ UiPointerRouting UiInputRouter::route(const UiPointerEvent &event) noexcept {
     // O clique exige que o dedo ainda esteja sobre o widget NESTE frame. Sair
     // da área antes de levantar é o gesto universal de desistir do botão, e o
     // widget pode ter mudado de lugar durante o toque.
-    for (usize index = regions_.size(); index > 0; --index) {
-      const Region &region = regions_[index - 1];
-      if (region.blocker || region.widgetId != pointer->widgetId) continue;
-      if (region.rect.contains(event.position)) routing.tapped = true;
-      break;
-    }
+    const auto hit=hitTest(event.position);
+    routing.tapped=hit.target==UiPointerTarget::Widget && hit.widgetId==pointer->widgetId;
   }
   erase(event.pointerId);
   return routing;

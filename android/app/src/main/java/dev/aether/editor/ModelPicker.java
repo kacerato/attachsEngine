@@ -2,6 +2,11 @@ package dev.aether.editor;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.ContentResolver;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.RejectedExecutionException;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Handler;
@@ -31,6 +36,13 @@ public final class ModelPicker {
     private static final int MAXIMUM_BYTES = 128 * 1024 * 1024;
     private static final int REQUEST = 0x6D_6F_64; // "mod"
 
+    // One provider read at a time, no unbounded queue and no Activity retained
+    // by the worker. JNI tokens reject completion after cancel/project closure.
+    private static final ThreadPoolExecutor READER = new ThreadPoolExecutor(1, 1, 0L,
+            TimeUnit.MILLISECONDS, new SynchronousQueue<>(), runnable -> {
+                Thread thread = new Thread(runnable, "Astra-AssetReader");
+                thread.setDaemon(true); return thread;
+            });
     private final Activity activity;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean running;
@@ -86,37 +98,49 @@ public final class ModelPicker {
     public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode != REQUEST || openToken == 0) return false;
         long token = openToken;
-        openToken = 0;
+        // Keep this token while the asynchronous reader runs. The polling tick
+        // must not reopen the picker for the same still-pending native request.
         Uri uri = data == null ? null : data.getData();
         if (resultCode != Activity.RESULT_OK || uri == null) {
             // Cancelar não é erro: o nativo distingue as duas coisas.
             submit(token, null, null, null);
             return true;
         }
-        try (InputStream stream = activity.getContentResolver().openInputStream(uri)) {
+        ContentResolver resolver = activity.getApplicationContext().getContentResolver();
+        try {
+            READER.execute(() -> readSource(token, uri, resolver));
+        } catch (RejectedExecutionException busy) {
+            submit(token, null, null, encode("A leitura anterior ainda está terminando; tente novamente."));
+        }
+        return true;
+    }
+
+    private static void readSource(long token, Uri uri, ContentResolver resolver) {
+        try (InputStream stream = resolver.openInputStream(uri)) {
             if (stream == null) {
                 submit(token, null, null, encode("O arquivo escolhido não pôde ser aberto."));
-                return true;
+                return;
             }
             ByteArrayOutputStream buffer = new ByteArrayOutputStream();
             byte[] chunk = new byte[64 * 1024];
             int read;
             while ((read = stream.read(chunk)) > 0) {
+                if (poll() != token) return;
                 if (buffer.size() + read > MAXIMUM_BYTES) {
                     submit(token, null, null, encode("O arquivo é grande demais para esta importação."));
-                    return true;
+                    return;
                 }
                 buffer.write(chunk, 0, read);
             }
-            submit(token, buffer.toByteArray(), encode(displayName(uri)), null);
+            submit(token, buffer.toByteArray(), encode(displayName(uri, resolver)), null);
         } catch (Exception error) {
             submit(token, null, null, encode("Não foi possível ler o arquivo escolhido."));
         }
-        return true;
+        return;
     }
 
-    private String displayName(Uri uri) {
-        try (Cursor cursor = activity.getContentResolver().query(uri, null, null, null, null)) {
+    private static String displayName(Uri uri, ContentResolver resolver) {
+        try (Cursor cursor = resolver.query(uri, null, null, null, null)) {
             if (cursor != null && cursor.moveToFirst()) {
                 int column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
                 if (column >= 0) {

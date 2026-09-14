@@ -16,9 +16,9 @@ namespace ae::resources {
 // |---|---|
 // | hierarquia de nós, com TRS e `matrix` | skins e animações |
 // | instâncias (o mesmo mesh em vários nós) | câmeras e luzes do arquivo |
-// | primitivas TRIANGLES | pontos, linhas e leques/faixas |
+// | TRIANGLES, TRIANGLE_STRIP e TRIANGLE_FAN | pontos e linhas |
 // | POSITION, NORMAL, TEXCOORD_0/1, TANGENT, COLOR_0 | texturas (imagens) |
-// | fatores PBR, emissivo, alfa e dupla face | extensões do formato |
+// | fatores PBR, emissivo, alfa e dupla face | Draco, meshopt e materiais avançados |
 //
 // Texturas ficam de fora por um motivo concreto, não por preguiça: o runtime
 // não decodifica PNG nem JPEG, e o decodificador do sistema (`AImageDecoder`)
@@ -61,9 +61,16 @@ struct GltfImportNode {
   std::string name;
   i32 parent = -1; // -1 é raiz
   float localMatrix[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+  // Identificador que o autor gravou no `extras` do nó, quando existe. É a
+  // evidência mais forte de que um nó reexportado é o mesmo (M08.2).
+  std::string authoredId;
 };
 
 struct GltfImport {
+  // Explicit losses in the static geometry profile, shown before publication.
+  // Required appearance extensions are preserved in the original GLB, not
+  // misrepresented as implemented renderer features.
+  std::vector<std::string> appearanceExtensions;
   // Geometria em espaço LOCAL do nó: `model` é identidade e os limites são do
   // mesh. A pose vem do nó, não da matriz do desenho.
   std::vector<renderer::MapDrawRecord> draws;
@@ -92,7 +99,7 @@ struct GltfImport {
   u32 skippedTextures = 0, skippedAnimations = 0, skippedSkins = 0;
   u32 skippedPrimitives = 0, skippedCameras = 0, skippedLights = 0;
   bool anythingSkipped() const noexcept {
-    return skippedTextures || skippedAnimations || skippedSkins || skippedPrimitives ||
+    return !appearanceExtensions.empty() || skippedTextures || skippedAnimations || skippedSkins || skippedPrimitives ||
            skippedCameras || skippedLights;
   }
 };

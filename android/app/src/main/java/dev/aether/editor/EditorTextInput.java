@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Build;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.Selection;
@@ -12,6 +13,8 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -41,18 +44,27 @@ final class EditorTextInput {
 
     private final Activity activity;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final EditorCodeInput code;
     private InlineField field;
     private boolean running;
     private long lastToken;
     private int limit;
 
-    EditorTextInput(Activity activity) { this.activity = activity; }
+    EditorTextInput(Activity activity) {
+        this.activity = activity; code = new EditorCodeInput(activity);
+        // The editor reserves IME space from insets itself. Resizing the native
+        // surface as well would subtract the keyboard twice and move the caret.
+        activity.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+            | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+    }
+    static void reportIme(float fraction) { ime(fraction); }
 
     private static String decode(byte[] value) { return new String(value, StandardCharsets.UTF_8); }
 
     private final Runnable tick = new Runnable() {
         @Override public void run() {
             if (!running) return;
+            code.tick();
             byte[][] data = poll();
             if (data == null) {
                 // O pedido acabou: pode ter sido confirmado pelo IME ou fechado
@@ -72,6 +84,7 @@ final class EditorTextInput {
     void stop() {
         running = false;
         handler.removeCallbacks(tick);
+        code.stop();
         if (field != null) { submit(lastToken, new byte[0], false); closeField(); }
     }
 
@@ -116,7 +129,7 @@ final class EditorTextInput {
     }
 
     private void closeField() {
-        if (field == null) return;
+        if (field == null || !field.active) return;
         field.end();
         ime(0.0f);
     }
@@ -124,9 +137,15 @@ final class EditorTextInput {
     private final ViewTreeObserver.OnGlobalLayoutListener imeWatcher =
         new ViewTreeObserver.OnGlobalLayoutListener() {
             @Override public void onGlobalLayout() {
-                if (field == null) return;
+                if (field == null || !field.active) return;
                 final View root = field.getRootView();
                 if (root == null || root.getHeight() <= 0) return;
+                if (Build.VERSION.SDK_INT >= 30 && root.getRootWindowInsets() != null) {
+                    WindowInsets insets = root.getRootWindowInsets();
+                    ime(insets.isVisible(WindowInsets.Type.ime())
+                        ? insets.getInsets(WindowInsets.Type.ime()).bottom / (float) root.getHeight() : 0);
+                    return;
+                }
                 final Rect visible = new Rect();
                 root.getWindowVisibleDisplayFrame(visible);
                 final float covered = root.getHeight() - visible.height();
@@ -160,13 +179,26 @@ final class EditorTextInput {
             buffer.append(initial);
             Selection.setSelection(buffer, offsetForBytes(initial, caretBytes));
             requestFocus();
+            post(this::showKeyboardWhenFocused);
+            publish();
+        }
+
+        private void showKeyboardWhenFocused() {
+            if (!active || !hasWindowFocus()) return;
+            requestFocus();
             final InputMethodManager manager =
                 (InputMethodManager) activity.getSystemService(Activity.INPUT_METHOD_SERVICE);
             if (manager != null) {
                 manager.restartInput(this);
                 manager.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT);
             }
-            publish();
+        }
+
+        @Override public void onWindowFocusChanged(boolean focus) {
+            super.onWindowFocusChanged(focus);
+            // Removing the attached code panel transfers window focus back
+            // asynchronously. Showing the IME before this event is rejected.
+            if (focus && active) post(this::showKeyboardWhenFocused);
         }
 
         void end() {

@@ -176,6 +176,26 @@
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_assets.dir\\resources\\asset_registry.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\resources\\asset_registry.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\resources\\asset_registry.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_assets.dir\\resources\\json_reader.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\resources\\json_reader.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\resources\\json_reader.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_assets.dir\\resources\\gltf_import.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\resources\\gltf_import.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\resources\\gltf_import.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_assets.dir\\resources\\import_node_map.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\resources\\import_node_map.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\resources\\import_node_map.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_runtime.dir\\runtime\\scene_graph.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\scene_graph.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\scene_graph.cpp"
 },
@@ -193,6 +213,11 @@
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_runtime.dir\\runtime\\game_world.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\game_world.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\game_world.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_runtime.dir\\runtime\\scene_lights.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\scene_lights.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\runtime\\scene_lights.cpp"
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
@@ -248,6 +273,11 @@
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_session.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_session.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_session.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/donod/Downloads/atchengine/native -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_editor.dir\\editor\\editor_import_reconcile.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_import_reconcile.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\editor\\editor_import_reconcile.cpp"
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
@@ -408,6 +438,11 @@
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
   "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -Daether_android_EXPORTS -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_android.dir\\platform\\android\\android_editor_text_input.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\android_editor_text_input.cpp",
   "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\android_editor_text_input.cpp"
+},
+{
+  "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",
+  "command": "C:\\Users\\donod\\AppData\\Local\\Android\\Sdk\\ndk\\27.1.12297006\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android26 --sysroot=C:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/windows-x86_64/sysroot -Daether_android_EXPORTS -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20 -o CMakeFiles\\aether_android.dir\\platform\\android\\android_model_picker.cpp.o -c C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\android_model_picker.cpp",
+  "file": "C:\\Users\\donod\\Downloads\\atchengine\\native\\platform\\android\\android_model_picker.cpp"
 },
 {
   "directory": "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/arm64-v8a",

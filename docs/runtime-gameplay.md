@@ -661,10 +661,7 @@ passa a maior parte do tempo sintaticamente quebrado: cada tecla intermediária
 produz um erro que o usuário não cometeu. O atraso existe para que o compilador
 veja uma **pausa**, e não um meio-caminho.
 
-**E é ele, e não um sinalizador separado, que resolve a composição do IME.**
-Enquanto o teclado compõe uma palavra, cada evento muda o texto e reinicia a
-contagem; o build só acontece depois que a composição termina e o texto fica
-parado. Um bit de "compondo" seria uma segunda verdade sobre o mesmo fato.
+**Correção em 12/09 (M06):** a pausa não indica que o IME terminou de compor. O campo visível informa composição e batch explicitamente; enquanto algum estiver ativo, o auto-build aguarda. O debounce só é liberado depois disso. Consulte o [contrato atual](planos/ESTADO-M06-IDE.md).
 
 Um pedido por **geração**, e não um por quadro parado: o mesmo texto não compila
 duas vezes. E o arquivo é gravado antes de pedir — o compilador lê o disco, e um
@@ -681,7 +678,7 @@ o build automático ela seria uma linha nova por pausa dizendo o que as linhas d
 compilador logo acima já dizem melhor, e com o lugar —, e tirar o bloco do
 compilador agora reconta as linhas iguais que ficaram encostadas.
 
-## 21. A barra do IDE: ícones e uma lista
+## 21. A barra do IDE: ícones e uma lista (histórico de 8064704)
 
 O plano mestre pede **uma barra de ícones** (M06.2) e a Entrega F proíbe
 restaurar barras grandes permanentes. Eram nove botões de texto — `Cena · Novo
@@ -736,3 +733,10 @@ Os ícones foram refeitos depois de vistos na barra, não ampliados:
 - A grade ainda atravessa faces quase verticais em ângulos rasantes; só a
   oclusão por faces horizontais e vista de cima está verificada.
 - Nada aqui foi medido em FPS nem exercitado por sessão prolongada.
+
+
+## 23. Continuidade M06 em 12/09/2026
+
+O bloco atual e seus limites estão no [estado M06](planos/ESTADO-M06-IDE.md). Código passa a usar EditText visível como projeção do documento nativo, deltas com revisão, seleção/rolagem por aba, composição explícita, coloração lexical e navegação. A gaveta de arquivos e as barras seguem o layout das novas imagens, com as cores Astra. Limpar registros preserva os problemas do último build. M06 ainda não está aprovado; testes e ADB não foram executados nesta etapa.
+
+Retificação da lista histórica do §22: renomear/apagar pelo painel já existem (§17), mover por API também; este bloco acrescenta criar pasta no painel de código. Materiais compartilhados, cenas reutilizáveis e texturas não foram entregues por esta alteração. A anotação antiga sobre a grade não é um diagnóstico desta rodada: o usuário informou que resolveu o viewport.

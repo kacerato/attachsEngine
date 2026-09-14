@@ -75,6 +75,63 @@ Triangle triangleAsset(const char *nodeExtra = "", const char *materialsAndMeshE
 }
 } // namespace
 
+AE_TEST(glb_compat_required_appearance_is_reported_and_quantization_decodes) {
+  auto asset=triangleAsset();
+  asset.json.insert(asset.json.size()-1,R"(,"extensionsRequired":["KHR_mesh_quantization","KHR_texture_transform"],"extensionsUsed":["KHR_texture_transform"])");
+  // Replace float POSITION with signed-short coordinates, keeping the padded view.
+  const auto needle=std::string(R"("componentType":5126,"count":3,"type":"VEC3")");
+  asset.json.replace(asset.json.find(needle),needle.size(),R"("componentType":5122,"count":3,"type":"VEC3")");
+  const i16 coordinates[9]{0,0,0,20,0,0,0,30,0};std::memcpy(asset.binary.data(),coordinates,sizeof(coordinates));
+  GltfImport model;AE_EXPECT_TRUE(importGlb(buildGlb(asset.json,asset.binary),{},{},model),model.diagnostic.c_str());
+  float x=0;std::memcpy(&x,model.vertices.data()+renderer::MapVertexStride,4);
+  AE_EXPECT_EQ(x,20.f,"integer coordinate decoded without normalization");
+  AE_EXPECT_EQ(model.appearanceExtensions.size(),1u,"required appearance loss is explicit, not a fake capability");
+}
+
+AE_TEST(glb_compat_sparse_zero_base_and_bounds) {
+  auto asset=triangleAsset();
+  const auto needle=std::string(R"({"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"})");
+  // All values are sparse, using the triangle index view and position view.
+  const std::string sparse=R"({"componentType":5126,"count":3,"type":"VEC3","sparse":{"count":3,"indices":{"bufferView":2,"componentType":5123},"values":{"bufferView":0}}})";
+  asset.json.replace(asset.json.find(needle),needle.size(),sparse);
+  GltfImport model;AE_EXPECT_TRUE(importGlb(buildGlb(asset.json,asset.binary),{},{},model),model.diagnostic.c_str());
+  float x=0;std::memcpy(&x,model.vertices.data()+renderer::MapVertexStride,4);AE_EXPECT_EQ(x,1.f,"sparse position patched");
+  asset.binary[74]=0; // repeated sparse index (0,0,2)
+  AE_EXPECT_TRUE(!importGlb(buildGlb(asset.json,asset.binary),{},{},model),"unordered sparse data rejected");
+  AE_EXPECT_TRUE(model.draws.empty(),"no partial geometry returned");
+}
+
+AE_TEST(glb_compat_strip_and_fan_winding) {
+  for(const auto mode:{5,6}) {
+    auto asset=triangleAsset();
+    const auto at=asset.json.find(R"("attributes":)");asset.json.insert(at,"\"mode\":"+std::to_string(mode)+",");
+    const auto old=std::string(R"({"bufferView":2,"componentType":5123,"count":3,"type":"SCALAR"})");
+    asset.json.replace(asset.json.find(old),old.size(),R"({"bufferView":2,"componentType":5123,"count":4,"type":"SCALAR"})");
+    const auto len=asset.json.find(R"("byteOffset":72,"byteLength":6)");asset.json.replace(len,std::strlen(R"("byteOffset":72,"byteLength":6)"),R"("byteOffset":72,"byteLength":8)");
+    const u16 indices[4]{0,1,2,0};std::memcpy(asset.binary.data()+72,indices,8);
+    GltfImport model;AE_EXPECT_TRUE(importGlb(buildGlb(asset.json,asset.binary),{},{},model),model.diagnostic.c_str());
+    AE_EXPECT_EQ(model.indices.size(),mode==5?6u:3u,"strip alternating winding; fan skips degenerate triangle");
+    if(mode==5) {AE_EXPECT_EQ(model.indices[3],2u,"odd strip triangle swaps first edge");AE_EXPECT_EQ(model.indices[4],1u,"orientation preserved");}
+  }
+}
+
+AE_TEST(glb_compat_optional_attribute_count_is_checked) {
+  auto asset=triangleAsset();const auto needle=std::string(R"({"bufferView":1,"componentType":5126,"count":3)");
+  asset.json.replace(asset.json.find(needle),needle.size(),R"({"bufferView":1,"componentType":5126,"count":1)");
+  GltfImport model;AE_EXPECT_TRUE(!importGlb(buildGlb(asset.json,asset.binary),{},{},model),"short normal accessor cannot be read past end");
+}
+
+AE_TEST(glb_compat_duplicate_names_are_labels_not_identity) {
+  auto asset=triangleAsset();
+  const auto begin=asset.json.find(R"("nodes":[)"),end=asset.json.find(R"("scenes":[)");
+  asset.json.replace(begin,end-begin,R"("nodes":[{"name":"Part","mesh":0},{"name":"Part","mesh":0}],)");
+  const auto roots=asset.json.find(R"("nodes":[0])");asset.json.replace(roots,std::strlen(R"("nodes":[0])"),R"("nodes":[0,1])");
+  GltfImport model;AE_EXPECT_TRUE(importGlb(buildGlb(asset.json,asset.binary),{},{},model),model.diagnostic.c_str());
+  AE_EXPECT_EQ(model.keys.size(),2u,"both named instances retained");
+  AE_EXPECT_TRUE(model.keys[0]!=model.keys[1],"duplicate labels do not collide");
+  AE_EXPECT_EQ(model.nodes[0].name,model.nodes[1].name,"display names preserved");
+}
+
 AE_TEST(json_reader_accepts_real_documents_and_fails_closed) {
   JsonDocument document;
   AE_EXPECT_TRUE(JsonDocument::parse(R"({"a":1,"b":[true,false,null,"x\u00e9"],"c":{"d":-1.5e2}})", document),
@@ -199,7 +256,7 @@ AE_TEST(glb_import_refuses_broken_files_with_a_concrete_reason) {
   auto asset = triangleAsset();
   asset.json.insert(asset.json.size() - 1, R"(,"extensionsRequired":["KHR_draco_mesh_compression"])");
   AE_EXPECT_TRUE(!importGlb(buildGlb(asset.json, asset.binary), {}, {}, import), "extensão exigida recusada");
-  AE_EXPECT_TRUE(import.diagnostic.find("extens") != std::string::npos, "o motivo fala de extensão");
+  AE_EXPECT_TRUE(import.diagnostic.find("KHR_draco_mesh_compression") != std::string::npos, "o motivo identifica o decodificador ausente");
 
   // Índice apontando para fora da primitiva: aceitar leria memória de outro
   // vértice e desenharia lixo.

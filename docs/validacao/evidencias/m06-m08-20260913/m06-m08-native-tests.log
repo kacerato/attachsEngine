@@ -1,0 +1,7 @@
+[ok] m06_m08_resource_publication_and_independent_instances
+[ok] m06_m08_source_conflict_preserves_both_versions
+[ok] m06_m08_gpu_failure_rolls_back_import_files
+[ok] m06_m08_interrupted_import_recovers_original_pair
+[ok] m06_m08_draft_recovery_preserves_external_source_conflict
+
+5/5 testes passaram

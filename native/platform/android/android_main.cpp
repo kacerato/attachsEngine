@@ -1,3 +1,4 @@
+#include "editor/editor_import_transaction.h"
 #include "editor/editor_water_settings_component.h"
 #include "editor/editor_scene_camera.h"
 #include <cstring>
@@ -131,6 +132,25 @@ struct AndroidShell final {
   ae::scene::ScriptRuntimeApi scriptRuntime{};
   // Declared after the CLR owner: joining the worker precedes host teardown.
   std::future<std::string> codeCompilation;
+  CodeBuildFn languageQuery=nullptr;
+  CodeReportFn languageReport=nullptr;
+  void (*languageCancel)()=nullptr;
+  std::future<std::string> languageWork;
+  struct PreparedModel {
+    std::string root,path,expectedHash,diagnostic,contentHash;
+    ae::u64 epoch=0;
+    std::vector<ae::u8> bytes;
+    ae::resources::GltfImport model;
+    bool accepted=false;
+  };
+  // The cancellation token outlives its worker, including shell teardown.
+  std::shared_ptr<std::atomic<bool>> importCancellation;
+  std::future<PreparedModel> importWork;
+  std::optional<PreparedModel> importPreview;
+  std::string importPickerRoot;
+  ae::u64 importPickerEpoch=0;
+
+  std::optional<ae::platform::android::EditorLanguageQuery> languageNext,languageActive;
   std::chrono::steady_clock::time_point shellStartTime = std::chrono::steady_clock::now();
   double pocAMaxFillMicroseconds = 0.0;
   ae::platform::FreeCameraController cameraController;
@@ -160,6 +180,7 @@ struct AndroidShell final {
   // interface e montada em dp; sem isto um painel de 220 unidades sairia com 220
   // pixels num aparelho de 520 dpi -- um terco do tamanho pretendido.
   float editorScale = 1.0f;
+  float editorSceneScale = 1.0f;
   std::chrono::steady_clock::time_point lastGameplayUpdate{};
   std::chrono::steady_clock::time_point lastPresentedAt{};
   std::chrono::steady_clock::time_point lastFpsPublishedAt{};
@@ -182,6 +203,8 @@ struct AndroidShell final {
   bool thermalPolicyApplied = false;
   float maximumDisplayHz = 60.0f;
   int displayRotation = -1;
+  bool windowResizePending = false;
+  std::chrono::steady_clock::time_point windowResizeAfter{};
   ae::u64 runtimeControlsRevision = ~ae::u64{0};
   ae::u64 waterDocumentRevision = ~ae::u64{0};
   ae::u64 waterLayoutRevision = ~ae::u64{0};
@@ -536,8 +559,42 @@ void initializeDotNetHost(AndroidShell &shell) {
 // Build reads a saved source snapshot in a worker. Only the session thread may
 // accept its generation and publish the applied pointer; compiling never starts
 // a Behavior or modifies the running scene.
+void updateEditorLanguage(AndroidShell &shell) {
+  using namespace ae::platform::android;
+  if(auto request=takeEditorLanguageQuery()) {
+    shell.languageNext=std::move(request);
+    if(shell.languageWork.valid() && shell.languageCancel) shell.languageCancel();
+  }
+  if(shell.languageWork.valid()) {
+    if(shell.languageWork.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready) return;
+    const auto result=shell.languageWork.get();
+    if(shell.languageActive) completeEditorLanguageQuery(*shell.languageActive,result);
+    shell.languageActive.reset();
+  }
+  if(!shell.languageNext) return;
+  if(!shell.dotNetHost.isReady()) initializeDotNetHost(shell);
+  if(shell.dotNetHost.isReady() && !shell.languageQuery) {
+    constexpr const char *type="Astra.Compilation.NativeLanguage, Astra.Scripting";
+    shell.languageQuery=reinterpret_cast<AndroidShell::CodeBuildFn>(shell.dotNetHost.getManagedFunctionPointer(type,"Query"));
+    shell.languageReport=reinterpret_cast<AndroidShell::CodeReportFn>(shell.dotNetHost.getManagedFunctionPointer(type,"CopyReply"));
+    shell.languageCancel=reinterpret_cast<void(*)()>(shell.dotNetHost.getManagedFunctionPointer(type,"Cancel"));
+  }
+  shell.languageActive=std::move(shell.languageNext);shell.languageNext.reset();
+  if(!shell.languageQuery || !shell.languageReport) {
+    completeEditorLanguageQuery(*shell.languageActive,R"({"Message":"Serviço C# indisponível.","Items":[]})");return;
+  }
+  shell.languageWork=std::async(std::launch::async,[input=shell.languageActive->json,query=shell.languageQuery,copy=shell.languageReport] {
+    query(reinterpret_cast<const ae::u8*>(input.data()),static_cast<int>(input.size()));
+    const int size=copy(nullptr,0);
+    if(size<=0 || size>1024*1024) return std::string(R"({"Message":"Resposta de linguagem excede o limite.","Items":[]})");
+    std::string result(static_cast<size_t>(size),'\0');
+    if(copy(reinterpret_cast<ae::u8*>(result.data()),size)!=size) return std::string(R"({"Message":"Resposta incompleta.","Items":[]})");
+    return result;
+  });
+}
 void updateEditorCodeCompiler(AndroidShell &shell) {
   if(!shell.editorUi || !shell.independentWorkspace) return;
+  updateEditorLanguage(shell);
   shell.editorSession.setCodeCompilerAvailable(true);
   if(shell.editorSession.needsScriptRuntime()&&!shell.dotNetHost.isReady()) initializeDotNetHost(shell);
   if(shell.dotNetHost.isReady()&&!shell.scriptRuntime.available()) {
@@ -602,10 +659,7 @@ bool writeProjectAssetRegistry(const char *projectPath,const std::string &text) 
   if(path.empty()) return false;
   std::error_code code;
   std::filesystem::create_directories(std::string(projectPath)+"/.astra",code);
-  FILE *file=std::fopen(path.c_str(),"wb");
-  if(!file) return false;
-  const bool ok=std::fwrite(text.data(),1,text.size(),file)==text.size();
-  return (std::fclose(file)==0)&&ok;
+  return !code && ae::editor::EditorImportTransaction::writeText(ae::editor::EditorImportTransaction::fromUtf8(path),text);
 }
 // Reabre as fontes registradas e republica a geometria delas. Sem isto, uma cena
 // salva com um modelo importado abriria com os objetos apontando para recursos
@@ -624,7 +678,11 @@ void reimportProjectSources(AndroidShell &shell) {
     __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] registro de recursos invalido; preservado no disco.");
     return;
   }
-  for(const auto &record:shell.editorSession.assets().records()) {
+  // Publication replaces the registry storage. Keep an owning snapshot: a span
+  // (or a copy of only the current record) leaves later iterations dangling.
+  const auto recordView=shell.editorSession.assets().records();
+  const std::vector<ae::resources::AssetRecord> records(recordView.begin(),recordView.end());
+  for(const auto &record:records) {
     if(record.type!=ae::resources::AssetType::Mesh || record.source.empty()) continue;
     const std::string absolute=std::string(shell.editorProjectPath)+"/"+record.source;
     std::vector<ae::u8> bytes;
@@ -1092,6 +1150,7 @@ void handleCommand(android_app *app, int32_t command) {
     applyEvent(shell, ae::platform::AppEvent::WindowCreated);
     break;
   case APP_CMD_TERM_WINDOW:
+    shell.windowResizePending=false;
     shell.editorSession.cancelPointers();
     applyEvent(shell, ae::platform::AppEvent::WindowDestroyed);
     break;
@@ -1110,7 +1169,20 @@ void handleCommand(android_app *app, int32_t command) {
     break;
   case APP_CMD_LOST_FOCUS:
     shell.editorSession.cancelPointers();
-    applyEvent(shell, ae::platform::AppEvent::LoseFocus);
+    // The attached code panel owns keyboard focus while the same Activity
+    // remains resumed. Keep draining its revision queue and drawing native
+    // tabs/console. APP_CMD_PAUSE still suspends the whole editor normally.
+    if (!ae::platform::android::editorCodePanelVisible())
+      applyEvent(shell, ae::platform::AppEvent::LoseFocus);
+    break;
+  case APP_CMD_WINDOW_RESIZED:
+    // CONFIG_CHANGED can precede the actual buffer resize. On Adreno the
+    // intermediate swapchain can continue presenting successfully forever,
+    // stretched into the new window. Reconcile after the resize has settled,
+    // and after any asynchronous renderer initialization has completed.
+    shell.windowResizePending=true;
+    shell.windowResizeAfter=std::chrono::steady_clock::now()+std::chrono::milliseconds(120);
+    shell.editorSession.cancelPointers();
     break;
   case APP_CMD_CONFIG_CHANGED:
     if (app->window != nullptr) {
@@ -1163,6 +1235,17 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
   if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) return 0;
 
   auto &shell = *static_cast<AndroidShell *>(app->userData);
+  if(shell.editorUi && shell.instancedRendererReady) {
+    // Drain text before tab/undo commands, then let Android own a gesture
+    // begun inside the visible CodeField. Returning zero forwards it through
+    // NativePostImeInputStage; forwarding only Down would break selection.
+    ae::platform::android::updateEditorTextInput(shell.editorSession);
+    if(ae::platform::android::editorCodeOwnsPointer(
+        AMotionEvent_getX(event,0)/shell.editorScale,AMotionEvent_getY(event,0)/shell.editorScale,
+        AMotionEvent_getAction(event)&AMOTION_EVENT_ACTION_MASK)) {
+      shell.cameraController.cancelGesture();shell.firstPersonTouches.cancel();return 0;
+    }
+  }
   if (shell.lockCamera) {
     shell.cameraController.cancelGesture();
     shell.firstPersonTouches.cancel();
@@ -1349,13 +1432,17 @@ void android_main(android_app *app) {
     if(!std::isfinite(editorUiScale)) editorUiScale=0.60f;
     shell.editorScale = std::clamp(editorUiScale,0.40f,1.50f) *
         (density > 0.0f && density < 10000.0f ? density / 160.0f : 1.0f);
+    shell.editorSceneScale=shell.editorScale;
 
     ae::platform::android::readStringLaunchOption(app->activity,"astra.project_name",shell.editorProjectName,sizeof(shell.editorProjectName));
     ae::platform::android::readStringLaunchOption(app->activity,"astra.project_path",shell.editorProjectPath,sizeof(shell.editorProjectPath));
     shell.editorEmpty=ae::platform::android::readBooleanLaunchOption(app->activity,"aether.editor_empty");
     shell.independentWorkspace = shell.editorEmpty && ae::platform::android::readBooleanLaunchOption(app->activity,"aether.empty_workspace");
     shell.editorSession.setProjectName(*shell.editorProjectName?shell.editorProjectName:(shell.oceanPreview ? "Water Lab" : "Forest Road"));
-    if(shell.editorProjectPath[0]) shell.editorSession.setProjectDirectory(shell.editorProjectPath);
+    if(shell.editorProjectPath[0] && !shell.editorSession.setProjectDirectory(shell.editorProjectPath)) {
+      __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Recovery] Projeto não aberto; arquivos preservados: %s",shell.editorSession.screen().status.c_str());
+      ANativeActivity_finish(app->activity);return;
+    }
   }
   shell.instancedRenderer.setWaterAuthoringEnabled(shell.editorUi && !shell.independentWorkspace);
   const bool explicitMap = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.map_preview");
@@ -1733,6 +1820,22 @@ void android_main(android_app *app) {
       continue;
     }
     collectRendererInitialization(shell,false);
+    if(shell.windowResizePending && app->window && shell.vulkanSurface.isReady() &&
+       !shell.rendererInitialization.valid() && std::chrono::steady_clock::now()>=shell.windowResizeAfter) {
+      shell.windowResizePending=false;
+      const auto width=ANativeWindow_getWidth(app->window),height=ANativeWindow_getHeight(app->window);
+      const auto &swapchain=shell.vulkanSurface.swapchain();
+      const auto display=swapchain.displayExtent();
+      // Android reports window coordinates; Vulkan's raw extent may be
+      // portrait even for a landscape window when preTransform is 90 degrees.
+      if(width>0 && height>0 && (static_cast<ae::u32>(width)!=display.width ||
+                               static_cast<ae::u32>(height)!=display.height)) {
+        __android_log_print(ANDROID_LOG_INFO,LogTag,"[EditorSurface] resize settled: window=%dx%d display=%ux%u.",
+                            width,height,display.width,display.height);
+        if(!recreateSurfaceAndRenderer(shell))
+          __android_log_print(ANDROID_LOG_ERROR,LogTag,"Falha ao reconciliar superfície após redimensionamento.");
+      }
+    }
     ae::platform::android::publishWaterProviderStatus(shell.instancedRendererReady?
         shell.instancedRenderer.waterProviderStatus():0);
     applyRuntimeControls(shell);
@@ -1819,6 +1922,10 @@ void android_main(android_app *app) {
       }
       if (shell.editorUi && shell.instancedRenderer.uiRendererReady()) {
         const VkExtent2D display = shell.vulkanSurface.swapchain().displayExtent();
+        // Portrait authoring has phone-sized touch targets, independent of the
+        // dense landscape scene panels. Input consumes this same scale.
+        shell.editorScale=shell.editorSceneScale*
+            (shell.editorSession.screen().workspace==ae::editor::EditorWorkspace::Code && display.height>display.width?1.4f:1.0f);
         const float logicalWidth = static_cast<float>(display.width) / shell.editorScale;
         const float logicalHeight = static_cast<float>(display.height) / shell.editorScale;
         shell.editorSession.setSurface({0.0f, 0.0f, logicalWidth, logicalHeight}, {});
@@ -1870,53 +1977,104 @@ void android_main(android_app *app) {
             __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Falha ao gravar o registro de recursos.");
         }
         if(!editorPlaying && shell.authoredWaterPlay.active()) {shell.authoredWaterPlay.stop();shell.instancedRenderer.clearWaterRipples();shell.instancedRenderer.setWaterSimulationClock(-1);}
-        // Importação de modelo: o editor pede, o sistema escolhe, o shell lê os
-        // bytes, copia a FONTE para dentro do projeto e manda importar. A cópia
-        // vem antes da importação de propósito: depois disso o projeto abre sem
-        // depender do URI temporário do seletor.
-        if(shell.editorSession.consumeModelImportRequest()) ae::platform::android::requestModelPick();
-        if(ae::platform::android::ModelPickerResult picked;
-           ae::platform::android::takeModelPickResult(picked)) {
-          if(!picked.accepted) {
-            shell.editorSession.setImportStatus(picked.diagnostic.empty()?"Importação cancelada"
-                                                                        :picked.diagnostic);
-          } else if(!shell.editorProjectPath[0]) {
-            shell.editorSession.setImportStatus("Este espaço de trabalho não tem projeto para guardar a fonte.");
+        // The worker owns bytes and parser state only. All scene/GPU/filesystem
+        // publication happens below on the editor thread after explicit review.
+        auto &session=shell.editorSession;
+        if(shell.importPreview && (shell.importPreview->root!=session.codeProjectRoot() || shell.importPreview->epoch!=session.sceneVersion().epoch)) {
+          shell.importPreview.reset();session.closeImportPreview();
+        }
+        if(session.takeImportCancel()) {
+          ae::platform::android::cancelModelPick();
+          if(shell.importCancellation) shell.importCancellation->store(true);
+          shell.importPreview.reset();session.setImportStatus("Importação cancelada; projeto preservado.");
+        }
+        const auto launchImport=[&](ae::platform::android::ModelPickerResult picked,std::string path) {
+          if(shell.importWork.valid() || shell.importPreview) {session.setImportStatus("Finalize a importação em andamento.");return;}
+          session.beginImportPreparation();
+          shell.importCancellation=std::make_shared<std::atomic<bool>>(false);
+          auto cancel=shell.importCancellation;
+          const auto root=session.codeProjectRoot();const auto epoch=session.sceneVersion().epoch;
+          shell.importWork=std::async(std::launch::async,[picked=std::move(picked),path=std::move(path),root,epoch,cancel]() mutable {
+            AndroidShell::PreparedModel result;result.root=root;result.path=path;result.epoch=epoch;
+            {
+              std::filesystem::path absolute;
+              if(!ae::editor::EditorImportTransaction::safePath(ae::editor::EditorImportTransaction::fromUtf8(root),path,absolute)) {
+                result.diagnostic="Destino fora do projeto.";return result;
+              }
+              std::error_code error;
+              const bool exists=std::filesystem::exists(absolute,error);
+              std::vector<ae::u8> previous;
+              if(error || (exists && !ae::editor::EditorImportTransaction::read(absolute,previous))) {
+                result.diagnostic="Não foi possível ler a fonte anterior.";return result;
+              }
+              result.expectedHash=exists?ae::Sha256::hex(previous):std::string();
+              result.bytes=picked.accepted?std::move(picked.bytes):std::move(previous);
+              ae::resources::GltfImportProgress progress{};
+              progress.context=cancel.get();
+              progress.cancelled=[](void *context) {return static_cast<std::atomic<bool> *>(context)->load();};
+              result.accepted=ae::resources::importGlb(result.bytes,{},progress,result.model);
+              // Hash no worker: a revisão compara com o mapa publicado sem
+              // percorrer dezenas de MiB na thread do editor.
+              if(result.accepted) result.contentHash=ae::Sha256::hex(result.bytes);
+              result.diagnostic=result.model.diagnostic;
+            }
+            return result;
+          });
+        };
+        if(session.consumeModelImportRequest()) {
+          if(!shell.importWork.valid() && !shell.importPreview) {
+            shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
+            session.beginImportPreparation();
+            ae::platform::android::requestModelPick();
+          }
+        }
+        if(auto path=session.takeReimportPath();!path.empty()) launchImport({},std::move(path));
+        if(ae::platform::android::ModelPickerResult picked;ae::platform::android::takeModelPickResult(picked)) {
+          if(shell.importPickerRoot!=session.codeProjectRoot() || shell.importPickerEpoch!=session.sceneVersion().epoch)
+            {session.closeImportPreview();session.setImportStatus("Seleção descartada: o projeto ou a cena mudou.");}
+          else if(!picked.accepted) {
+            if(picked.diagnostic.empty()) {session.closeImportPreview();session.setImportStatus("Importação cancelada");}
+            else session.showImportFailure(picked.diagnostic);
+          }
+          else {
+            std::string name=picked.displayName.empty()?"modelo.glb":picked.displayName;
+            for(auto &character:name) if(character=='/' || character=='\\' || character==':' || static_cast<unsigned char>(character)<32) character='_';
+            if(name=="." || name=="..") name="modelo.glb";
+            if(!name.ends_with(".glb")) name+=".glb";
+            launchImport(std::move(picked),"Fontes/"+name);
+          }
+        }
+        if(shell.importWork.valid() && shell.importWork.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
+          auto prepared=shell.importWork.get();
+          if(shell.importCancellation->load() || prepared.root!=session.codeProjectRoot() || prepared.epoch!=session.sceneVersion().epoch) {
+            session.closeImportPreview();session.setImportStatus("Preparação descartada; projeto preservado.");
+          } else if(!prepared.accepted) {
+            session.showImportFailure(prepared.diagnostic.empty()?"O importador não conseguiu preparar este arquivo.":prepared.diagnostic);
           } else {
-            std::string name=picked.displayName.empty()?std::string("modelo.glb"):picked.displayName;
-            // O nome vem do provedor de conteúdo e é texto de fora: um separador
-            // aqui viraria uma pasta fora de `Fontes/`, ou um caminho recusado
-            // pelo registro. Trocar por `_` mantém o nome reconhecível.
-            for(auto &character:name) if(character=='/'||character=='\\'||character==':') character='_';
-            const std::string relative="Fontes/"+name;
-            const std::string directory=std::string(shell.editorProjectPath)+"/Fontes";
-            std::filesystem::create_directories(directory);
-            const std::string absolute=directory+"/"+name;
-            bool stored=false;
-            if(FILE *file=std::fopen(absolute.c_str(),"wb")) {
-              stored=std::fwrite(picked.bytes.data(),1,picked.bytes.size(),file)==picked.bytes.size();
-              stored=(std::fclose(file)==0)&&stored;
+            session.showImportPreview(prepared.path,prepared.model,prepared.contentHash);shell.importPreview=std::move(prepared);
+          }
+        }
+        if(session.takeImportAccept() && shell.importPreview) {
+          const bool intoScene=session.takeImportIntoScene();
+          session.closeImportPreview();
+          auto prepared=std::move(*shell.importPreview);shell.importPreview.reset();
+          ae::editor::EditorSession::ModelImportReport report;
+          if(prepared.root!=session.codeProjectRoot() || prepared.epoch!=session.sceneVersion().epoch)
+            session.setImportStatus("Publicação descartada: o projeto ou a cena mudou.",ae::editor::EditorConsoleSeverity::Warning);
+          else if(!session.commitModelImport(prepared.bytes,prepared.model,prepared.path,prepared.expectedHash,report,session.importAmbiguityPolicy()))
+            session.showImportFailure(report.diagnostic);
+          else {
+            std::string message=report.reimported?"Recurso reimportado; instâncias locais preservadas.":"Recurso registrado. Use Instanciar em Arquivos para adicioná-lo à cena.";
+            bool instanceFailed=false;
+            if(intoScene) {
+              ae::editor::EditorSession::ModelImportReport instance;
+              if(session.instantiateModel(report.source,instance)) message="Modelo importado na cena: "+std::to_string(instance.objects)+" objetos. Seleção e câmera enquadradas.";
+              else {session.showImportFailure("Recurso guardado; instanciação falhou: "+instance.diagnostic);instanceFailed=true;}
             }
-            ae::editor::EditorSession::ModelImportReport report;
-            if(!stored) {
-              shell.editorSession.setImportStatus("Não foi possível guardar a fonte no projeto.");
-            } else if(!shell.editorSession.importModel(picked.bytes,relative,{},report)) {
-              shell.editorSession.setImportStatus(report.diagnostic);
-              __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] %s: %s",relative.c_str(),report.diagnostic.c_str());
-            } else {
-              std::string message=report.reimported
-                  ? "Modelo reimportado: "+std::to_string(report.objects)+" objeto(s) novo(s)"
-                  : "Modelo importado: "+std::to_string(report.objects)+" objeto(s)";
-              // O que o arquivo trazia e a importação não trouxe aparece para o
-              // usuário; ficar calado sobre a animação perdida seria pior.
-              if(report.skippedTextures||report.skippedAnimations||report.skippedSkins)
-                message+=" · sem texturas/animação";
-              shell.editorSession.setImportStatus(message);
-              __android_log_print(ANDROID_LOG_INFO,LogTag,
-                  "[Import] %s objetos=%u reimport=%d texturas_ignoradas=%u animacoes=%u peles=%u",
-                  relative.c_str(),report.objects,report.reimported?1:0,
-                  report.skippedTextures,report.skippedAnimations,report.skippedSkins);
-            }
+            if(report.skippedTextures || report.skippedAnimations || report.skippedSkins)
+              message+=" Perfil sem texturas, animações ou skins; omissões informadas na preparação.";
+            if(!instanceFailed) session.setImportStatus(message,(report.skippedTextures || report.skippedAnimations || report.skippedSkins)?
+                ae::editor::EditorConsoleSeverity::Warning:ae::editor::EditorConsoleSeverity::Info);
           }
         }
         if (shell.editorMapImported && (editorPlaying || shell.editorPublishedRevision != shell.editorSession.document().revision())) {
@@ -2185,6 +2343,8 @@ void android_main(android_app *app) {
 
   {
     ae::platform::android::DotNetHost::NativeRegion nativeGc(shell.dotNetHost);
+    if (shell.languageCancel) shell.languageCancel();
+    if (shell.languageWork.valid()) shell.languageWork.wait();
     if (shell.codeCompilation.valid()) shell.codeCompilation.wait();
     collectRendererInitialization(shell,true);
   }

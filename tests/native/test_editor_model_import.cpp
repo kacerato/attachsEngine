@@ -1,8 +1,10 @@
+#include "editor/editor_import_transaction.h"
 #include "harness.h"
 #include "editor/editor_archive.h"
 #include "editor/editor_session.h"
 #include "renderer/authoring_geometry.h"
 #include "editor/editor_filesystem.h"
+#include "runtime/transform_math.h"
 
 #include <cstring>
 #include <string>
@@ -118,6 +120,34 @@ void startSession(EditorSession &session, FakeRenderer &renderer) {
   });
 }
 } // namespace
+
+// Exercise an unmodified external asset through parser, editor publication,
+// instantiation and draw extraction. GPU allocation still needs device proof.
+int inspectGlbFile(const char *path) {
+  std::vector<u8> bytes;
+  if(!EditorImportTransaction::read(EditorImportTransaction::fromUtf8(path),bytes)) {std::fprintf(stderr,"Cannot read %s\n",path);return 2;}
+  resources::GltfImport model;
+  if(!resources::importGlb(bytes,{}, {},model)) {std::fprintf(stderr,"PARSE: %s\n",model.diagnostic.c_str());return 1;}
+  EditorSession session;FakeRenderer renderer;startSession(session,renderer);
+  EditorSession::ModelImportReport report;
+  if(!session.publishModel(model,Sha256::hex(bytes),"Fontes/model.glb",report)) {std::fprintf(stderr,"PUBLISH: %s\n",report.diagnostic.c_str());return 1;}
+  const auto source=report.source;
+  if(!session.instantiateModel(source,report)) {std::fprintf(stderr,"INSTANCE: %s\n",report.diagnostic.c_str());return 1;}
+  std::vector<renderer::MapDrawState> draws;
+  if(!session.extractMap(draws)) {std::fprintf(stderr,"EXTRACT failed\n");return 1;}
+  std::printf("%s: bytes=%zu nodes=%zu meshes=%zu objects=%u draws=%zu textures_omitted=%u appearance_extensions=%zu\n",
+    path,bytes.size(),model.nodes.size(),model.draws.size(),report.objects,draws.size(),model.skippedTextures,model.appearanceExtensions.size());
+  return 0;
+}
+
+AE_TEST(glb_compat_dequantization_transform_is_not_a_singular_matrix) {
+  const float identity[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+  float matrix[16];std::copy(identity,identity+16,matrix);matrix[0]=matrix[5]=matrix[10]=1.f/65535.f;
+  EditorTransform transform;
+  AE_EXPECT_TRUE(runtime::localTransformForWorld(matrix,identity,transform),"small legal dequantization scale retained");
+  AE_EXPECT_EQ(transform.scale[0],matrix[0],"no arbitrary enlargement");
+  matrix[0]=0;AE_EXPECT_TRUE(!runtime::localTransformForWorld(matrix,identity,transform),"singular transform still rejected");
+}
 
 AE_TEST(importing_a_glb_creates_objects_that_point_at_the_new_geometry) {
   EditorSession session;
@@ -623,4 +653,89 @@ AE_TEST(the_project_state_folder_does_not_show_up_in_the_panel) {
   bool visible = false;
   for (const auto &entry : files.tree()) if (entry.name == ".astra") visible = true;
   AE_EXPECT_TRUE(visible, "o diagnostico pode pedir para ver");
+}
+
+namespace {
+struct PackageProject {
+  std::filesystem::path root=std::filesystem::temp_directory_path()/
+      ("astra-package-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  PackageProject() {std::filesystem::create_directories(root);}
+  ~PackageProject() {std::error_code error;std::filesystem::remove_all(root,error);}
+};
+}
+AE_TEST(m06_m08_resource_publication_and_independent_instances) {
+  PackageProject project;EditorSession session;FakeRenderer renderer;startSession(session,renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()),"project");
+  const auto bytes=twoNodeGlb();resources::GltfImport parsed;
+  AE_EXPECT_TRUE(resources::importGlb(bytes,{},{},parsed),"parse");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(bytes,parsed,"Fontes/model.glb","",report),report.diagnostic.c_str());
+  const auto source=report.source;
+  AE_EXPECT_TRUE(session.document().childrenOf(session.document().root()).empty(),"register must not instantiate");
+  AE_EXPECT_TRUE(std::filesystem::exists(project.root/".astra/assets.astra"),"registry durably published");
+  AE_EXPECT_TRUE(session.instantiateModel(source,report),"first instance");
+  const auto firstRoot=session.document().childrenOf(session.document().root()).front();
+  AE_EXPECT_EQ(session.document().childrenOf(firstRoot).size(),2u,"source roots preserved under one movable wrapper");
+  auto group=*session.document().find(firstRoot);group.transform.position[0]=10;
+  session.history().begin("Move model");session.history().applyValues(session.document(),firstRoot,group);session.history().end();
+  float world[16];
+  AE_EXPECT_TRUE(runtime::worldMatrix(session.document(),session.document().childrenOf(firstRoot).front(),world),"child world pose");
+  AE_EXPECT_EQ(world[12],8.f,"moving wrapper moves the complete source tree without changing child local pose");
+  AE_EXPECT_TRUE(session.instantiateModel(source,report),"second instance");
+  AE_EXPECT_EQ(session.document().childrenOf(session.document().root()).size(),2u,"independent model groups");
+  AE_EXPECT_TRUE(session.history().undo(session.document()),"undo instance");
+  AE_EXPECT_EQ(session.document().childrenOf(session.document().root()).size(),1u,"only latest instance removed");
+  AE_EXPECT_EQ(session.assets().size(),1u,"resource survives undo");
+}
+AE_TEST(m06_m08_source_conflict_preserves_both_versions) {
+  PackageProject project;EditorSession session;FakeRenderer renderer;startSession(session,renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()),"project");
+  const auto bytes=twoNodeGlb();resources::GltfImport parsed;resources::importGlb(bytes,{},{},parsed);
+  std::filesystem::create_directories(project.root/"Fontes");
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(project.root/"Fontes/model.glb","external edit"),"external source");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(!session.commitModelImport(bytes,parsed,"Fontes/model.glb","",report),"preview conflict refused");
+  std::vector<u8> current;EditorImportTransaction::read(project.root/"Fontes/model.glb",current);
+  AE_EXPECT_EQ(std::string(current.begin(),current.end()),std::string("external edit"),"external edit retained");
+  AE_EXPECT_EQ(session.assets().size(),0u,"no partial registry");
+}
+AE_TEST(m06_m08_gpu_failure_rolls_back_import_files) {
+  PackageProject project;EditorSession session;FakeRenderer renderer;startSession(session,renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()),"project");
+  auto bytes=twoNodeGlb();resources::GltfImport parsed;resources::importGlb(bytes,{},{},parsed);
+  EditorSession::ModelImportReport report;renderer.refuse=true;
+  AE_EXPECT_TRUE(!session.commitModelImport(bytes,parsed,"Fontes/model.glb","",report),"refused");
+  AE_EXPECT_TRUE(!std::filesystem::exists(project.root/"Fontes/model.glb"),"source not published");
+  AE_EXPECT_TRUE(!std::filesystem::exists(project.root/".astra/assets.astra"),"registry not published");
+  AE_EXPECT_TRUE(!std::filesystem::exists(project.root/".astra/import-transaction/journal"),"rollback journal settled");
+}
+AE_TEST(m06_m08_interrupted_import_recovers_original_pair) {
+  PackageProject project;std::filesystem::create_directories(project.root/"Fontes");
+  std::filesystem::create_directories(project.root/".astra");
+  EditorImportTransaction::writeText(project.root/"Fontes/model.glb","old source");
+  EditorImportTransaction::writeText(project.root/".astra/assets.astra","old registry");
+  std::vector<u8> bytes;EditorImportTransaction::read(project.root/"Fontes/model.glb",bytes);
+  std::string diagnostic;
+  {EditorImportTransaction transaction(project.root.string());
+   AE_EXPECT_TRUE(transaction.begin("Fontes/model.glb",Sha256::hex(bytes),diagnostic),diagnostic.c_str());
+   EditorImportTransaction::writeText(project.root/"Fontes/model.glb","half-published source");}
+  AE_EXPECT_TRUE(EditorImportTransaction::recover(project.root.string(),diagnostic),diagnostic.c_str());
+  EditorImportTransaction::read(project.root/"Fontes/model.glb",bytes);
+  AE_EXPECT_EQ(std::string(bytes.begin(),bytes.end()),std::string("old source"),"source recovered");
+  EditorImportTransaction::read(project.root/".astra/assets.astra",bytes);
+  AE_EXPECT_EQ(std::string(bytes.begin(),bytes.end()),std::string("old registry"),"registry recovered");
+}
+AE_TEST(m06_m08_draft_recovery_preserves_external_source_conflict) {
+  PackageProject project;EditorFileSystem files;AE_EXPECT_TRUE(files.setRoot(project.root.string().c_str()),"project");
+  EditorImportTransaction::writeText(project.root/"Draft.cs","class Original {}");
+  EditorCodeWorkspace code;AE_EXPECT_TRUE(code.open(files,"Draft.cs"),"open");
+  AE_EXPECT_TRUE(code.type(code.active()->id,"class Recovered {}"),"type");
+  AE_EXPECT_TRUE(code.checkpoint(files),code.error().c_str());
+  EditorImportTransaction::writeText(project.root/"Draft.cs","class External {}");
+  EditorCodeWorkspace restored;AE_EXPECT_TRUE(restored.hasRecovery(files),"pending recovery");
+  AE_EXPECT_TRUE(restored.restoreRecovery(files),restored.error().c_str());
+  AE_EXPECT_EQ(restored.active()->text,std::string("class Recovered {}"),"draft preserved");
+  AE_EXPECT_TRUE(!restored.saveAll(files),"external source protected");
+  std::vector<u8> bytes;EditorImportTransaction::read(project.root/"Draft.cs",bytes);
+  AE_EXPECT_EQ(std::string(bytes.begin(),bytes.end()),std::string("class External {}"),"disk preserved");
 }

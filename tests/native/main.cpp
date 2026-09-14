@@ -1,11 +1,19 @@
 #include "harness.h"
 
 #include <cstdio>
+#include <cstring>
+int inspectGlbFile(const char *path);
+int probeReimportGlb(const char *path);
+int writeM082Fixtures(const char *directory);
 
-int main() {
+int main(int argc,char **argv) {
+  if(argc==3 && std::strcmp(argv[1],"--import-glb")==0) return inspectGlbFile(argv[2]);
+  if(argc==3 && std::strcmp(argv[1],"--reimport-glb")==0) return probeReimportGlb(argv[2]);
+  if(argc==3 && std::strcmp(argv[1],"--write-m082-fixtures")==0) return writeM082Fixtures(argv[2]);
   int failCount = 0;
   int total = 0;
   for (const auto &tc : ae::test::registry()) {
+    if(argc>1 && !std::strstr(tc.name,argv[1])) continue;
     ae::test::currentTestFailed() = false;
     ae::test::currentTestName() = tc.name;
     tc.fn();

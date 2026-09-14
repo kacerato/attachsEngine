@@ -1,0 +1,10 @@
+using Astra;
+[ComponentId("project.GiroM06")]
+public sealed class GiroM06 : Behavior
+{
+    [PropertyId("label")] public string Label = "A";
+    public override void Start()
+    {
+        Scene.Log(ObjectId, "M06_RUN_" + Label);
+    }
+}

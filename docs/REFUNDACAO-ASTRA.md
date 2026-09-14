@@ -1,5 +1,11 @@
 # Refundação Astra — plano executável e registro de gates
 
+Continuidade em 12/09/2026: [plano mestre integral](planos/PLANO-MESTRE-ASTRA-EDITOR-RUNTIME-ASSETS.md),
+[entregas A–G](PROXIMO-PACOTE-GAMEPLAY.md) e [estado M06](planos/ESTADO-M06-IDE.md).
+A etapa atual amplia a IDE existente, sem reabrir o viewport informado como resolvido.
+M06 permanece aberto e a aceitação no aparelho depende de nova autorização de ADB.
+Os parágrafos datados abaixo preservam os estados e autorizações de suas próprias rodadas.
+
 Atualização de escopo em 10/09/2026: a referência corrente é
 `C:/Users/donod/Downloads/PROMPT_REFUNDACAO_ASTRA_V2.md`, com o complemento
 `ASTRA_COMPONENTES_CODIGO_EDITOR.md`. As tabelas datadas abaixo são histórico;
@@ -1582,3 +1588,19 @@ Isso pertence à entrega C, que este pacote não implementou.
 Estado: **794/794 nativos, 521/521 gerenciados, 16/16 Java**; Debug e Release
 compilados. A prova de aceitação com duas composições montadas pela interface
 continua pendente, assim como as entregas B, C, F e G.
+
+## 12/09/2026 — M06 funcional após aprovação do IDE
+
+A revisão visual aplicada foi aprovada pelo usuário. A Entrega F prosseguiu com
+serviço semântico Roslyn, navegação à definição, busca/substituição inline,
+busca nas fontes do projeto, preferências de recuo e agrupamento do histórico
+por pausa. Console recebeu contexto de build/Play/projeto, snippet imutável e
+altura arrastável. Play bloqueia código alterado ou em erro; alterações de schema
+preservam instâncias e valores, com diagnósticos explícitos.
+
+O fluxo focal com duas instâncias do mesmo Behavior, valores Alpha/Beta,
+execução e reabertura foi observado no Android pela interface. Isso não equivale
+à aceitação das duas composições completas da entrega G citadas acima.
+Arquitetura/limites em [pacote funcional](planos/M06-PACOTE-FUNCIONAL.md) e
+evidência em [validação](validacao/2026-09-12-m06-funcional.md). M06 integral,
+matriz de lifecycle e demais entregas continuam com pendências rastreadas.

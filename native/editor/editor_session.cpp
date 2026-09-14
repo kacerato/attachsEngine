@@ -5,6 +5,8 @@
 #include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
 #include "editor/editor_session.h"
+#include "editor/editor_import_transaction.h"
+#include "scene/import_link.h"
 #include "core/sha256.h"
 #include "editor/editor_script_templates.h"
 #include "editor/editor_reference_picker.h"
@@ -14,6 +16,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <filesystem>
 #include <cmath>
 #include <cstdio>
 #include <sstream>
@@ -168,7 +172,7 @@ void EditorSession::setSurface(const UiRect &surface, const UiInsets &safeArea) 
 
 void EditorSession::setSelection(EditorEntityId entity) {
   if (!document_.exists(entity)) return;
-  if(state_.selection!=entity) {state_.routePoint=0;state_.propertyPage=0;state_.componentPage=0;state_.expandedScript=0;state_.scriptMenu=0;}
+  if(state_.selection!=entity) {state_.routePoint=0;state_.propertyPage=0;state_.componentPage=0;state_.expandedScript=0;state_.scriptMenu=0;state_.importLinkMenu=false;}
   state_.selection=entity;
   // Reveal the selected object through collapsed ancestors and long lists.
   for(auto parent=document_.find(entity);parent;parent=document_.find(parent->parent)) {
@@ -208,10 +212,18 @@ void EditorSession::setProjectName(const char *name) {
 
 bool EditorSession::setProjectDirectory(const char *path) {
   if(code_.dirty()) {state_.status="Salve os arquivos de código antes de trocar de projeto";return false;}
+  if(path && *path) {
+    std::string recovery;
+    if(!EditorImportTransaction::recover(path,recovery)) {state_.status=recovery;return false;}
+    if(!recovery.empty()) reportProblem(EditorConsoleSeverity::Warning,recovery);
+  }
   code_.clear();state_.code=&code_;
   state_.files=&files_;state_.fileScroll=0;state_.fileScrollOffset=0;
   state_.console=&console_;
-  return files_.setRoot(path);
+  closeImportPreview();state_.importAccept=false;state_.importCancel=false;reimportPath_.clear();
+  if(!files_.setRoot(path)) return false;
+  state_.codeRecoveryPending=code_.hasRecovery(files_);
+  return true;
 }
 
 EditorSession::ViewportPointer *EditorSession::findViewportPointer(u32 id) noexcept {
@@ -392,7 +404,7 @@ bool EditorSession::handleViewportPointer(const UiPointerEvent &event,
 
 EditorTextEdit EditorSession::pendingTextEdit() const {
   EditorTextEdit edit;edit.version=sceneVersion();
-  if(state_.editingCode) {
+  if(state_.editingCode && !state_.platformCodeView) {
     if(const auto *buffer=code_.active()) {
       edit.purpose=EditorTextPurpose::Code;edit.text=buffer->text;
       edit.bufferId=buffer->id;edit.bufferRevision=buffer->revision;
@@ -416,6 +428,9 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   }
   if(state_.creatingScript) {edit.purpose=EditorTextPurpose::ScriptName;return edit;}
   if(state_.searchingCode) {edit.purpose=EditorTextPurpose::CodeSearch;edit.text=state_.codeQuery;return edit;}
+  if(state_.searchingConsole) {edit.purpose=EditorTextPurpose::ConsoleSearch;edit.text=state_.consoleQuery;return edit;}
+  if(state_.goingToLine) {edit.purpose=EditorTextPurpose::CodeLine;return edit;}
+  if(state_.creatingCodeFolder) {edit.purpose=EditorTextPurpose::CodeFolder;return edit;}
   if(state_.editingComponentSearch) {edit.purpose=EditorTextPurpose::ComponentSearch;edit.text=state_.renameText;return edit;}
   if(state_.editingReferenceSearch) {edit.purpose=EditorTextPurpose::ReferenceSearch;edit.text=state_.renameText;return edit;}
   if(state_.editingMeshSearch) {edit.purpose=EditorTextPurpose::MeshSearch;edit.text=state_.renameText;return edit;}
@@ -474,14 +489,41 @@ bool EditorSession::updateTextDraft(const EditorTextEdit &edit,std::string_view 
 // escreveria fora da tela.
 // Tocar numa linha do console LEVA ate o lugar dela. Sem isso o console e um
 // mural: diz que algo aconteceu e deixa o usuario procurar onde.
+void EditorSession::reportScriptSchemaChanges() {
+  std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
+  for(const auto id:ids) {
+    const auto *object=document_.find(id);
+    for(usize i=0;i<object->components.size();++i) if(const auto *script=scene::scriptBehavior(object->components.at(i))) {
+      auto emit=[&](std::string message) {
+        EditorConsoleEntry entry;entry.origin=EditorConsoleOrigin::Editor;entry.severity=EditorConsoleSeverity::Warning;
+        entry.message=std::move(message);entry.object=id;entry.component=script->instanceId();
+        entry.project=files_.rootPath();entry.buildGeneration=code_.publishedGeneration();console_.add(std::move(entry));
+      };
+      const auto schema=std::find_if(code_.scriptTypes().begin(),code_.scriptTypes().end(),[&](const auto &type){return type.id==script->scriptType;});
+      if(schema==code_.scriptTypes().end()) {emit("Tipo não resolvido: "+script->scriptType+". Instância e valores preservados.");continue;}
+      for(const auto &value:script->properties) {
+        const auto property=std::find_if(schema->properties.begin(),schema->properties.end(),[&](const auto &field){return field.id==value.id;});
+        if(property==schema->properties.end()) emit("Campo removido da fonte: "+value.id+". Valor autorado preservado para recuperação.");
+        else if(property->valueType!=value.valueType) emit("Tipo do campo "+value.id+" mudou de "+value.valueType+" para "+property->valueType+". Revise o valor antes de Play.");
+      }
+    }
+  }
+}
 void EditorSession::jumpToConsoleEntry(u32 index) {
   const auto *entry=console_.at(index);
   if(!entry) return;
+  if(!entry->project.empty() && entry->project!=files_.rootPath()) {state_.status="Evento de outro projeto";return;}
+  if(entry->playSession && entry->playSession!=playScene_.world().worldId() && entry->object) {
+    state_.status="Objeto de uma sessão Play encerrada; evento preservado no console";return;
+  }
   if(!entry->file.empty()) {
     if(!code_.open(files_,entry->file)) { state_.status=code_.error(); return; }
     state_.code=&code_;state_.workspace=EditorWorkspace::Code;
     auto *buffer=code_.active();
     if(!buffer) return;
+    if(entry->buildGeneration && entry->buildGeneration!=code_.generation()) {
+      state_.codeFiles=false;state_.status="Fonte alterada; consulte o trecho original no detalhe do evento";return;
+    }
     // A linha do diagnostico e 1-based; a do editor conta do zero.
     const u32 target=entry->line>0?entry->line-1:0;
     const u32 visible=layout_.codeVisibleLines>2?layout_.codeVisibleLines:12;
@@ -492,8 +534,9 @@ void EditorSession::jumpToConsoleEntry(u32 index) {
       if(end==std::string::npos) { start=buffer->text.size(); break; }
       start=end+1;++line;
     }
-    const auto end=buffer->text.find(char(10),start);
-    state_.platformCaret=static_cast<u32>(end==std::string::npos?buffer->text.size():end);
+    code_.locate(entry->line,entry->column);
+    state_.platformCaret=buffer->selectionEnd;
+    state_.codeFiles=false;
     state_.platformDraft=buffer->text;
     state_.status="Linha "+std::to_string(entry->line)+" de "+entry->file;
     return;
@@ -559,6 +602,28 @@ void EditorSession::setPlatformImeFraction(float fraction) {
   state_.platformImeFraction=std::isfinite(fraction)?std::clamp(fraction,0.0f,0.9f):0.0f;
 }
 
+void EditorSession::setCodeViewState(u64 id,u64 revision,u32 start,u32 end,float x,float y,bool focus) {
+  if(!code_.setSelection(id,revision,start,end,std::isfinite(x)?std::max(0.0f,x):0,
+                          std::isfinite(y)?std::max(0.0f,y):0)) return;
+  state_.platformCaret=end;state_.editingCode=focus;
+  if(!focus) {code_.endTypingRun();state_.codeComposing=false;}
+}
+void EditorSession::codeHistoryAction(bool redo) {
+  if(redo) code_.redo();else code_.undo();
+}
+void EditorSession::recoverCodeDraft(std::string_view text) {
+  if(text.size()>EditorCodeWorkspace::MaximumFileBytes) return;
+  const std::string folder=".astra/recovery";
+  if(!files_.createDirectory(folder)) {state_.status=files_.error();return;}
+  std::string path;
+  for(u64 i=1;;++i) {path=folder+"/Codigo-recuperado-"+std::to_string(i)+".txt";if(!files_.exists(path)) break;}
+  if(!files_.createTextFile(path,text)) {state_.status=files_.error();return;}
+  EditorConsoleEntry entry;entry.severity=EditorConsoleSeverity::Warning;
+  entry.message="Edição concorrente: rascunho preservado. Toque para abrir a recuperação.";
+  entry.file=path;entry.line=1;console_.add(std::move(entry));
+  state_.consoleCollapsed=false;state_.status="Rascunho preservado em "+path;
+}
+
 namespace {
 // Espaco e quebra de linha nas bordas de um NOME nao sao conteudo.
 //
@@ -582,6 +647,8 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
   const auto close=[&] {
     code_.endTypingRun();
     state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;
+    state_.goingToLine=false;state_.creatingCodeFolder=false;state_.codeComposing=false;
+    state_.searchingConsole=false;
     state_.renamingResource=false;
     state_.choosingTemplate=false;
     state_.editingScriptInstance=0;state_.editingScriptEntity=0;state_.editingScriptProperty.clear();state_.editingScriptType.clear();
@@ -591,6 +658,30 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     cancelPointers();
   };
   if(!accept) {close();return true;}
+  if(edit.purpose==EditorTextPurpose::ConsoleSearch) {
+    state_.consoleQuery=std::string(text);state_.consoleScroll=0;state_.consoleAnchor=0;close();return true;
+  }
+  if(edit.purpose==EditorTextPurpose::CodeLine) {
+    u32 line=0;std::istringstream value{std::string(text)};
+    if(!(value>>line) || line==0) {state_.status="Informe um número de linha positivo";return false;}
+    value>>std::ws;if(!value.eof()) return false;
+    code_.locate(line);close();return true;
+  }
+  if(edit.purpose==EditorTextPurpose::CodeFolder) {
+    const auto name=trimmedName(text);
+    if(name.empty() || name=="." || name==".." || name.find_first_of("/\\")!=std::string_view::npos) {
+      state_.status="Informe apenas o nome da nova pasta";return false;
+    }
+    std::string parent;
+    for(const auto &entry:files_.tree()) if(entry.relativePath==state_.selectedFile) {
+      if(entry.directory) parent=entry.relativePath;
+      else {const auto slash=entry.relativePath.find_last_of('/');if(slash!=std::string::npos) parent=entry.relativePath.substr(0,slash);}
+    }
+    const auto path=(parent.empty()?"":parent+"/")+std::string(name);
+    if(files_.exists(path)) {state_.status="Já existe um recurso com esse nome";return false;}
+    if(!files_.createDirectory(path)) {state_.status=files_.error();return false;}
+    files_.rebuildTree();state_.selectedFile=path;state_.status="Pasta criada: "+path;close();return true;
+  }
   if(edit.purpose==EditorTextPurpose::ScriptProperty) {
     const auto *entity=document_.find(edit.entity);
     if(!entity || isPlaying() || edit.version.revision!=document_.revision() ||
@@ -634,14 +725,23 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     close();return true;
   }
   if(edit.purpose==EditorTextPurpose::ScriptName) {
-    if(!code_.createScript(files_,trimmedName(text),state_.scriptTemplate)) {state_.status=code_.error();return false;}
+    std::string directory="Scripts";
+    for(const auto &entry:files_.tree()) if(!state_.selectedFile.empty() && entry.relativePath==state_.selectedFile) {
+      if(entry.directory) directory=entry.relativePath;
+      else {const auto slash=entry.relativePath.find_last_of('/');directory=slash==std::string::npos?"":entry.relativePath.substr(0,slash);}
+    }
+    if(!code_.createScript(files_,trimmedName(text),state_.scriptTemplate,directory)) {state_.status=code_.error();return false;}
     state_.scriptTemplate=~0u;
-    const auto root=files_.rootPath();files_.setRoot(root.c_str());
+    files_.rebuildTree();state_.codeFiles=false;state_.codeFirstTab=static_cast<u32>(code_.buffers().size()-1);
     state_.workspace=EditorWorkspace::Code;close();return true;
   }
   if(edit.purpose==EditorTextPurpose::CodeSearch) {
     state_.codeQuery=text;const auto matches=code_.find(text);
-    if(auto *buffer=code_.active();buffer && !matches.empty()) buffer->firstLine=matches.front().line-1;
+    if(auto *buffer=code_.active();buffer && !matches.empty()) {
+      buffer->selectionStart=static_cast<u32>(matches.front().offset);
+      buffer->selectionEnd=static_cast<u32>(matches.front().offset+matches.front().length);
+      buffer->firstLine=matches.front().line-1;++buffer->viewRevision;
+    }
     state_.status=std::to_string(matches.size())+" ocorrências";close();return true;
   }
   if(edit.purpose==EditorTextPurpose::ComponentSearch || edit.purpose==EditorTextPurpose::MeshSearch || edit.purpose==EditorTextPurpose::ReferenceSearch) {
@@ -699,6 +799,34 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   if(event.phase==UiPointerPhase::Cancel) playTouches_.cancel();
   if(state_.platformTextInput && pendingTextEdit().purpose!=EditorTextPurpose::None) return true;
   const UiPointerRouting routing = router_.route(event);
+  if(state_.codeRecoveryPending) {
+    if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CodeRecover)) {
+      if(code_.restoreRecovery(files_)) {
+        state_.codeRecoveryPending=false;state_.workspace=EditorWorkspace::Code;state_.codeFiles=false;
+        reportProblem(EditorConsoleSeverity::Info,"Rascunhos recuperados. Arquivos alterados externamente continuam protegidos contra sobrescrita.");
+      } else reportProblem(EditorConsoleSeverity::Error,code_.error());
+    }
+    if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CodeDiscardRecovery)) {
+      if(code_.discardRecovery(files_)) state_.codeRecoveryPending=false;
+      else reportProblem(EditorConsoleSeverity::Error,code_.error());
+    }
+    return true;
+  }
+  if(state_.importPanel) {
+    if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportPreviousPage) && state_.importPage) --state_.importPage;
+    if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportNextPage)) ++state_.importPage;
+    if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportCancel)) {state_.importCancel=!state_.importError;closeImportPreview();}
+    if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportMatchInOrder)) state_.importAmbiguityChoice=1;
+    if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportTreatAsNew)) state_.importAmbiguityChoice=2;
+    // Com ambiguidade, publicar só depois da escolha explícita.
+    if(routing.tapped && (routing.widgetId==widgetId(EditorWidget::ImportAccept) ||
+        routing.widgetId==widgetId(EditorWidget::ImportIntoScene)) && state_.importReady &&
+        (!state_.importAmbiguities || state_.importAmbiguityChoice)) {
+      state_.importIntoScene=routing.widgetId==widgetId(EditorWidget::ImportIntoScene);
+      state_.importAccept=true;state_.importReady=false;state_.importStatus="Publicando recurso…";
+    }
+    return true;
+  }
   // O console responde PRIMEIRO.
   //
   // Ele e desenhado por cima do editor de codigo e da cena, e a cadeia abaixo
@@ -706,23 +834,87 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   // em cima e decidido embaixo e um painel que so funciona por acidente.
   if(state_.console) {
     const auto widget=routing.widgetId;
-    if(routing.dragging && widget>=widgetId(EditorWidget::ConsoleRowBase)) {
+    if(widget==widgetId(EditorWidget::ConsoleResize) && routing.dragging) {
+      state_.consoleCollapsed=false;state_.consoleExpanded=false;
+      state_.consoleFraction=std::clamp(state_.consoleFraction-routing.stepDelta.y/std::max(1.0f,layout_.consolePanel.height/state_.consoleFraction),.25f,.82f);
+      return true;
+    }
+    if(event.phase==UiPointerPhase::Down) state_.consoleDragRemainder=0;
+    if(routing.dragging && widget>=widgetId(EditorWidget::ConsoleRowBase) &&
+        widget-widgetId(EditorWidget::ConsoleRowBase)<EditorConsole::Capacity) {
       // Rolar anda a partir do FIM: zero e a linha mais nova.
       const auto rows=layout_.consoleRowCount,visible=layout_.consoleVisibleRows;
       const auto maximum=rows>visible?rows-visible:0u;
-      const int next=static_cast<int>(state_.consoleScroll)+static_cast<int>(routing.stepDelta.y/26);
+      state_.consoleDragRemainder+=routing.stepDelta.y;
+      const int steps=static_cast<int>(state_.consoleDragRemainder/56);
+      if(!steps) return true;
+      state_.consoleDragRemainder-=steps*56;
+      const int next=static_cast<int>(state_.consoleScroll)+steps;
       state_.consoleScroll=static_cast<u32>(std::clamp(next,0,static_cast<int>(maximum)));
+      state_.consoleFollow=state_.consoleScroll==0;
+      const auto order=console_.filtered(state_.consoleProblems?1:0,state_.consoleOrigin,state_.consoleQuery);
+      const auto first=maximum>state_.consoleScroll?maximum-state_.consoleScroll:0;
+      if(first<order.size()) state_.consoleAnchor=console_.at(order[first])->eventId;
       return true;
     }
     if(routing.tapped) {
       if(widget==widgetId(EditorWidget::ConsoleInfo)) {console_.toggle(EditorConsoleSeverity::Info);return true;}
       if(widget==widgetId(EditorWidget::ConsoleWarning)) {console_.toggle(EditorConsoleSeverity::Warning);return true;}
       if(widget==widgetId(EditorWidget::ConsoleError)) {console_.toggle(EditorConsoleSeverity::Error);return true;}
-      if(widget==widgetId(EditorWidget::ConsoleClear)) {console_.clear();state_.consoleScroll=0;return true;}
+      if(widget==widgetId(EditorWidget::ConsoleClear)) {console_.clearLogs();state_.consoleScroll=0;return true;}
       if(widget==widgetId(EditorWidget::ConsoleCollapse)) {state_.consoleCollapsed=!state_.consoleCollapsed;return true;}
+      if(widget==widgetId(EditorWidget::ConsoleExpand)) {state_.consoleExpanded=!state_.consoleExpanded;return true;}
+      if(widget==widgetId(EditorWidget::ConsoleProblems) || widget==widgetId(EditorWidget::ConsoleLogs)) {
+        state_.consoleProblems=widget==widgetId(EditorWidget::ConsoleProblems);state_.consoleOrigin=-1;
+        state_.consoleScroll=0;state_.consoleAnchor=0;state_.consoleSelected=0;return true;
+      }
+      if(widget==widgetId(EditorWidget::ConsoleSource)) {
+        state_.consoleOrigin=state_.consoleOrigin==3?-1:state_.consoleOrigin+1;
+        state_.consoleScroll=0;state_.consoleAnchor=0;return true;
+      }
+      if(widget==widgetId(EditorWidget::ConsoleSearch)) {state_.searchingConsole=true;return true;}
+      if(widget==widgetId(EditorWidget::ConsoleFollow)) {
+        state_.consoleFollow=!state_.consoleFollow;
+        if(state_.consoleFollow) {state_.consoleScroll=0;state_.consoleAnchor=0;}
+        else {
+          const auto order=console_.filtered(state_.consoleProblems?1:0,state_.consoleOrigin,state_.consoleQuery);
+          const auto first=order.size()>layout_.consoleVisibleRows?order.size()-layout_.consoleVisibleRows:0;
+          if(first<order.size()) state_.consoleAnchor=console_.at(order[first])->eventId;
+        }
+        return true;
+      }
+      if(widget==widgetId(EditorWidget::ConsoleDetailClose)) {state_.consoleSelected=0;return true;}
+      if(widget==widgetId(EditorWidget::ConsoleDetailPrevious)) {
+        if(state_.consoleDetailPage) --state_.consoleDetailPage;
+        return true;
+      }
+      if(widget==widgetId(EditorWidget::ConsoleDetailNext)) {++state_.consoleDetailPage;return true;}
+      if(widget==widgetId(EditorWidget::ConsoleCopy)) {
+        if(const auto *entry=console_.find(state_.consoleSelected)) consoleCopy_=EditorConsole::describe(*entry);
+        return true;
+      }
+      if(widget==widgetId(EditorWidget::ConsoleOpenSource)) {
+        for(u32 i=0;i<console_.entries().size();++i) if(console_.at(i)->eventId==state_.consoleSelected) {
+          jumpToConsoleEntry(i);state_.consoleExpanded=false;break;
+        }
+        return true;
+      }
+      if(widget==widgetId(EditorWidget::ConsoleExport)) {
+        std::string text="ASTRA · Console\nTempos relativos ao início desta sessão. Repetições consecutivas agrupadas.\n";
+        for(const auto i:console_.filtered(state_.consoleProblems?1:0,state_.consoleOrigin,state_.consoleQuery))
+          text+='\n'+EditorConsole::describe(*console_.at(i))+"\n";
+        const std::string directory="Logs";
+        const auto now=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        const auto path=directory+"/console-"+std::to_string(now)+".txt";
+        if((files_.exists(directory)||files_.createDirectory(directory)) && files_.createTextFile(path,text)) {
+          files_.rebuildTree();state_.selectedFile=path;state_.status="Console exportado: "+path;
+          reportProblem(EditorConsoleSeverity::Info,state_.status);
+        } else reportProblem(EditorConsoleSeverity::Error,"Não foi possível exportar: "+files_.error());
+        return true;
+      }
       const auto base=widgetId(EditorWidget::ConsoleRowBase);
       if(widget>=base && widget-base<console_.entries().size()) {
-        jumpToConsoleEntry(widget-base);return true;
+        state_.consoleSelected=console_.at(widget-base)->eventId;state_.consoleDetailPage=0;return true;
       }
     }
   }
@@ -796,6 +988,22 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       state_.expandedNative=0;state_.expandedScript=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;state_.propertyPage=0;return true;
     }
     if(key==widgetId(EditorWidget::MeshChoose)) {state_.meshPicker=true;state_.meshPage=0;return true;}
+    // Vínculo com a fonte importada (M08.2).
+    if(key==widgetId(EditorWidget::ImportLinkMenu)) {state_.importLinkMenu=!state_.importLinkMenu;return true;}
+    if(key>=widgetId(EditorWidget::ImportLinkRevertBase) && key<widgetId(EditorWidget::ImportLinkRevertBase)+64u) {
+      state_.status=revertImportLink(state_.selection,key-widgetId(EditorWidget::ImportLinkRevertBase))?"Revertido para a fonte":"Nada a reverter";
+      state_.importLinkMenu=false;return true;
+    }
+    if(key==widgetId(EditorWidget::ImportLinkUnlink)) {
+      const auto count=unlinkImport(state_.selection);
+      state_.status=count?std::to_string(count)+" objeto(s) desvinculado(s); a fonte não altera mais esta instância":"Sem vínculo";
+      state_.importLinkMenu=false;return true;
+    }
+    if(key==widgetId(EditorWidget::ImportLinkKeep) || key==widgetId(EditorWidget::ImportLinkDelete)) {
+      const bool keep=key==widgetId(EditorWidget::ImportLinkKeep);
+      state_.status=resolveImportOrphan(state_.selection,keep)?(keep?"Órfão mantido como objeto independente":"Órfão apagado"):"Nada a resolver";
+      state_.importLinkMenu=false;return true;
+    }
     if(key==widgetId(EditorWidget::MeshPickerClose)) {state_.meshPicker=false;return true;}
     if(key==widgetId(EditorWidget::MeshPrevious)) {if(state_.meshPage) --state_.meshPage;return true;}
     if(key==widgetId(EditorWidget::MeshNext)) {++state_.meshPage;return true;}
@@ -906,19 +1114,50 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
         }
         return true;
       case EditorWidget::CodeMenu:state_.codeMenu=!state_.codeMenu;return true;
+      case EditorWidget::CodeFiles:state_.codeFiles=!state_.codeFiles;state_.codeMenu=false;return true;
+      case EditorWidget::CodeConsole:state_.codeFiles=false;state_.codeMenu=false;state_.consoleCollapsed=false;state_.consoleExpanded=true;return true;
+      case EditorWidget::CodeTabsPrevious:if(state_.codeFirstTab) --state_.codeFirstTab;return true;
+      case EditorWidget::CodeTabsNext:if(state_.codeFirstTab+1<code_.buffers().size()) ++state_.codeFirstTab;return true;
+      case EditorWidget::CodeNewFolder:state_.creatingCodeFolder=true;return true;
+      case EditorWidget::CodeGoLine:state_.goingToLine=true;state_.codeMenu=false;return true;
+      case EditorWidget::CodeFindPrevious:
+      case EditorWidget::CodeFindNext: {
+        auto *buffer=code_.active();const auto matches=code_.find(state_.codeQuery);
+        if(buffer && !matches.empty()) {
+          usize index=0;
+          if(key==widgetId(EditorWidget::CodeFindNext)) {
+            while(index<matches.size() && matches[index].offset<=buffer->selectionStart) ++index;
+            if(index==matches.size()) index=0;
+          } else {
+            index=matches.size()-1;
+            for(usize i=0;i<matches.size();++i) if(matches[i].offset<buffer->selectionStart) index=i;
+          }
+          buffer->selectionStart=static_cast<u32>(matches[index].offset);
+          buffer->selectionEnd=static_cast<u32>(matches[index].offset+matches[index].length);
+          buffer->firstLine=matches[index].line-1;++buffer->viewRevision;
+          state_.status=std::to_string(index+1)+" / "+std::to_string(matches.size());
+        }
+        return true;
+      }
       case EditorWidget::CodeSaveAll:
         state_.codeMenu=false;
         if(!code_.saveAll(files_)) state_.status=code_.error();
         else state_.status="Arquivos de código salvos";
         return true;
       case EditorWidget::CodeScene:state_.codeMenu=false;state_.workspace=EditorWorkspace::Scene;return true;
-      case EditorWidget::CodeNew:state_.choosingTemplate=true;state_.workspace=EditorWorkspace::Code;return true;
+      case EditorWidget::CodeNew:state_.creatingScript=true;state_.scriptTemplate=~0u;state_.codeMenu=false;return true;
+      case EditorWidget::CodeNewHelper:state_.creatingScript=true;state_.scriptTemplate=EditorCodeWorkspace::HelperTemplate;state_.codeMenu=false;return true;
+      case EditorWidget::CodeTemplates:state_.choosingTemplate=true;state_.codeMenu=false;return true;
       case EditorWidget::CodeTemplateClose:state_.choosingTemplate=false;return true;
       case EditorWidget::CodeEdit:state_.editingCode=code_.active()!=nullptr;return true;
       case EditorWidget::CodeSave:state_.status=code_.save(files_)?"Código salvo":code_.error();return true;
-      case EditorWidget::CodeUndo:code_.undo();return true;
-      case EditorWidget::CodeRedo:code_.redo();return true;
-      case EditorWidget::CodeSearch:state_.searchingCode=true;return true;
+      case EditorWidget::CodeUndo:state_.codeMenu=false;codeHistoryAction(false);return true;
+      case EditorWidget::CodeRedo:state_.codeMenu=false;codeHistoryAction(true);return true;
+      case EditorWidget::CodeSearch:
+        state_.codeMenu=false;
+        if(state_.platformCodeView) ++state_.codeSearchRequest;
+        else state_.searchingCode=true;
+        return true;
       case EditorWidget::CodeClose:
         state_.codeMenu=false;
         if(const auto *buffer=code_.active()) if(!code_.close(buffer->id)) state_.status=code_.error();
@@ -954,24 +1193,27 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   if(state_.files && routing.dragging && routing.widgetId>=widgetId(EditorWidget::FileRowBase)
       && routing.widgetId-widgetId(EditorWidget::FileRowBase)<files_.tree().size()) {
     state_.fileScrollOffset=std::max(0.0f,state_.fileScrollOffset-routing.stepDelta.y);
-    const auto visible=static_cast<u32>(std::max(24.0f,layout_.filesPanel.height-40)/24);
+    const float row=state_.workspace==EditorWorkspace::Code?34.0f:24.0f;
+    const auto visible=static_cast<u32>(std::max(row,layout_.filesPanel.height-(state_.workspace==EditorWorkspace::Code?126:66))/row);
     const auto maximum=files_.tree().size()>visible?files_.tree().size()-visible:0;
-    state_.fileScrollOffset=std::min(state_.fileScrollOffset,static_cast<float>(maximum)*24);
-    state_.fileScroll=static_cast<u32>(state_.fileScrollOffset/24);
-    return true;
-  }
-  if(state_.console && routing.dragging && routing.widgetId>=widgetId(EditorWidget::ConsoleRowBase)) {
-    // Rolar o console anda a partir do FIM: zero e a linha mais nova.
-    const auto rows=layout_.consoleRowCount,visible=layout_.consoleVisibleRows;
-    const auto maximum=rows>visible?rows-visible:0u;
-    const int next=static_cast<int>(state_.consoleScroll)+static_cast<int>(routing.stepDelta.y/26);
-    state_.consoleScroll=static_cast<u32>(std::clamp(next,0,static_cast<int>(maximum)));
+    state_.fileScrollOffset=std::min(state_.fileScrollOffset,static_cast<float>(maximum)*row);
+    state_.fileScroll=static_cast<u32>(state_.fileScrollOffset/row);
     return true;
   }
   if(routing.tapped && state_.files && !history_.isOpen() && !isPlaying()) {
     const auto key=routing.widgetId;
     if(key==widgetId(EditorWidget::FilesCollapse)) {state_.filesCollapsed=!state_.filesCollapsed;return true;}
     const u32 base=widgetId(EditorWidget::FileRowBase);
+    if(key==widgetId(EditorWidget::ImportModel)) {state_.modelImportRequested=true;state_.codeFiles=false;return true;}
+    if(key==widgetId(EditorWidget::AssetInstantiate)) {
+      const auto *record=assets_.findByPath(state_.selectedFile);
+      ModelImportReport report;
+      if(!record) setImportStatus("Registre o recurso com Reimportar antes de instanciar.",EditorConsoleSeverity::Warning);
+      else if(!instantiateModel(record->guid,report)) setImportStatus(report.diagnostic,EditorConsoleSeverity::Error);
+      else setImportStatus("Instância criada: "+std::to_string(report.objects)+" objetos. Desfazer remove somente esta instância.");
+      return true;
+    }
+    if(key==widgetId(EditorWidget::AssetReimport)) {reimportPath_=state_.selectedFile;return true;}
     if(key==widgetId(EditorWidget::FilesRename)) {
       if(!state_.selectedFile.empty()) state_.renamingResource=true;
       return true;
@@ -1004,12 +1246,12 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       if(entry.directory) files_.toggle(key-base);
       else if(entry.name.ends_with(".cs") || entry.name.ends_with(".json") || entry.name.ends_with(".md")) {
         state_.code=&code_;
-        if(code_.open(files_,entry.relativePath)) state_.workspace=EditorWorkspace::Code;
+        if(code_.open(files_,entry.relativePath)) {state_.workspace=EditorWorkspace::Code;state_.codeFiles=false;}
         else state_.status=code_.error();
       }
       else if(entry.name.ends_with(".aescene"))
         requestedScenePath_=files_.resolveFile(entry.relativePath);
-      else state_.status="Arquivo de origem; importação ainda não disponível neste painel";
+      else state_.status=entry.name.ends_with(".glb")?"Recurso GLB · Instanciar adiciona à cena; Reimportar atualiza a fonte":"Arquivo de origem";
       return true;
     }
   }
@@ -1385,11 +1627,22 @@ bool EditorSession::load(const char *path, u64 fingerprint) {
   // cujos slots mudaram, e a checagem tem de valer para o documento que vai
   // realmente ser adotado.
   mapScene_.reconcileAssets(candidate);
+  // Vínculos de importação (M08.2): a cena pode ter sido salva antes da última
+  // reimportação, e objetos de cenas antigas ganham vínculo quando há prova.
+  // Sem histórico: é o estado de abertura, não uma edição a desfazer.
+  ImportReconcileReport reconcile;
+  for(const auto &block:importedSources_) if(block.map.revision) {
+    adoptLegacyImportInstances(candidate,nullptr,block.guid,block.map,reconcile);
+    reconcileImportInstances(candidate,nullptr,block.guid,block.map,reconcile,
+                             [this](const resources::AssetGuid &guid){return mapScene_.assetSlot(guid);});
+  }
+  if(reconcile.changed()) mapScene_.reconcileAssets(candidate);
   std::vector<renderer::MapDrawState> check;
   if(!mapScene_.extract(candidate,check)) return false;
   mapScene_.hydrateMaterials(candidate);
   cancelPointers();document_=std::move(candidate);history_.clear();
   sceneEpoch_=nextSceneEpoch();
+  reportImportReconcile(reconcile,"Cena aberta");
   state_.selection=kInvalidEntity;state_.status="Cena restaurada";
   state_.collapsedEntities.clear();state_.hierarchyScroll=0;state_.renameEntity=kInvalidEntity;
   return true;
@@ -1534,6 +1787,7 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
   for(const auto &guid:doomed) {
     for(auto source=importedSources_.begin();source!=importedSources_.end();++source)
       if(source->guid==guid) { importedSources_.erase(source); break; }
+    removeImportMapFile(guid);
     assets_.remove(guid);
     ++report.retargeted;
   }
@@ -1571,6 +1825,39 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
   if(!resources::importGlb(bytes,{},progress,model)) {
     report.diagnostic=model.diagnostic;report.cancelled=model.cancelled;return false;
   }
+  if(!publishModel(model,Sha256::hex(bytes),sourceName,report)) return false;
+  // Reabertura: o mapa acompanha a fonte no projeto. Mesmo conteúdo produz o
+  // mesmo mapa, e nada é regravado; um mapa novo (fonte trocada fora do editor,
+  // ou projeto anterior ao mapa) é gravado para a próxima revisão partir dele.
+  persistImportMap(report.source);
+  // Compatibility entry point for existing loaders; already registered sources
+  // only rehydrate geometry. Interactive import uses resource-only publication.
+  if(!report.reimported) {
+    ModelImportReport instance;
+    // Preserve scene shape for the legacy API; interactive resource instances
+    // use a movable wrapper when the source scene contains independent roots.
+    if(!instantiateModel(report.source,instance,false)) {report.diagnostic=instance.diagnostic;return false;}
+    report.objects=instance.objects;report.groups=instance.groups;
+  }
+  return true;
+}
+
+bool EditorSession::publishModel(const resources::GltfImport &model, std::string_view hash,
+                                std::string_view sourceName, ModelImportReport &report,
+                                resources::ImportAmbiguityPolicy policy) {
+  report={};
+  if(isPlaying() || history_.isOpen()) {report.diagnostic="Finalize a edição antes de publicar o recurso.";return false;}
+  if(model.draws.empty() || model.nodes.empty()) {report.diagnostic="Modelo sem geometria utilizável.";return false;}
+  const float identity[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+  for(usize n=0;n<model.nodes.size();++n) {
+    EditorTransform local;
+    if(model.nodes[n].parent>=static_cast<i32>(n) || model.nodes[n].parent < -1 ||
+       !runtime::localTransformForWorld(model.nodes[n].localMatrix,identity,local)) {
+      report.diagnostic="Hierarquia ou matriz local incompatível com TRS; fonte anterior preservada.";return false;
+    }
+  }
+  if(model.drawNodes.size()!=model.draws.size()) {report.diagnostic="Mapa de desenhos incompleto.";return false;}
+  for(const auto node:model.drawNodes) if(node>=model.nodes.size()) {report.diagnostic="Desenho sem nó.";return false;}
   report.skippedTextures=model.skippedTextures;
   report.skippedAnimations=model.skippedAnimations;
   report.skippedSkins=model.skippedSkins;
@@ -1583,6 +1870,18 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
   const resources::AssetGuid source=existing?existing->guid:resources::assetGuidFromSeed("fonte:"+path);
   report.source=source;
 
+  // Mapa de nós (M08.2): a revisão anterior, em memória ou no projeto, é o ponto
+  // de partida da correspondência. Sem ela as identidades nascem da fonte e das
+  // chaves legadas — as mesmas que cenas anteriores ao mapa já gravaram.
+  resources::ImportNodeMap previousNodeMap;
+  const bool hasPrevious=existing && previousImportMap(source,previousNodeMap);
+  resources::ImportNodeMap nodeMap;
+  std::string mapDiagnostic;
+  if(!resources::buildImportNodeMap(model,source,hash,hasPrevious?&previousNodeMap:nullptr,policy,nodeMap,report.match,mapDiagnostic)) {
+    report.diagnostic=mapDiagnostic.empty()?"Mapa de nós recusado; fonte anterior preservada.":mapDiagnostic;
+    return false;
+  }
+
   ImportedSource block;
   block.guid=source;
   block.vertices.assign(model.vertices.begin(),model.vertices.end());
@@ -1591,21 +1890,18 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
   block.draws.assign(model.draws.begin(),model.draws.end());
   block.nodes=model.nodes;
   block.drawNodes=model.drawNodes;
+  std::vector<usize> primitiveOfNode(model.nodes.size(),0);
   for(usize i=0;i<model.draws.size();++i) {
-    // A identidade de cada malha importada: a fonte mais a chave estável. É o
-    // que sobrevive a acrescentar um objeto no editor 3D e reexportar.
-    block.identities.push_back(resources::assetGuidFromSeed(
-        "glb:"+source.text()+":"+(i<model.keys.size()?model.keys[i]:std::to_string(i))));
+    // A identidade de cada malha vem do mapa: um nó reconhecido na revisão nova
+    // mantém a identidade das suas primitivas, mesmo renomeado ou movido. O mapa
+    // já recusa identidades repetidas.
+    const auto node=model.drawNodes[i];
+    const auto primitive=primitiveOfNode[node]++;
+    if(primitive>=nodeMap.nodes[node].draws.size()) {report.diagnostic="Mapa de nós incompleto; fonte anterior preservada.";return false;}
+    block.identities.push_back(nodeMap.nodes[node].draws[primitive]);
     block.names.push_back(i<model.names.size()?model.names[i]:std::string("Malha"));
   }
-  // Duas malhas com a mesma chave no mesmo arquivo tornariam a identidade
-  // ambígua — e um slot escolhido pela ordem da lista é o defeito que a
-  // identidade existe para impedir.
-  for(usize a=0;a<block.identities.size();++a)
-    for(usize b=0;b<a;++b) if(block.identities[a]==block.identities[b]) {
-      report.diagnostic="Duas malhas do arquivo têm o mesmo nome de nó e malha; renomeie uma delas.";
-      return false;
-    }
+  block.map=std::move(nodeMap);
 
   // Candidato completo antes de publicar: a versão anterior continua valendo
   // até a nova estar inteira na GPU e aceita pelo editor.
@@ -1617,12 +1913,6 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
   // se a decisão fosse pela biblioteca, cada abertura criaria os objetos de
   // novo e a cena cresceria sozinha a cada vez.
   report.reimported=existing!=nullptr;
-  const auto firstNew=[&]{
-    usize count=0;
-    for(usize i=0;i<slot && i<candidateSources.size();++i) count+=candidateSources[i].draws.size();
-    return count;
-  }();
-  const auto newDrawCount=block.draws.size();
   // Onde o bloco entra é decidido pela BIBLIOTECA (substituir o que já está
   // carregado); se objetos são criados, pelo REGISTRO. São perguntas diferentes:
   // ao reabrir o projeto a fonte está no registro e não na biblioteca.
@@ -1630,37 +1920,115 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
   else candidateSources.push_back(std::move(block));
   const auto candidate=flattenSources(candidateSources);
 
-  usize primitives=0;
-  if(!publishAndAdopt(candidate,report.diagnostic,&primitives)) return false;
+  resources::AssetRecord record=existing?*existing:resources::AssetRecord{};
+  record.guid=source;record.type=resources::AssetType::Mesh;record.path=path;record.source=path;
+  record.contentHash=std::string(hash);record.importerVersion=1;record.importerParameters="glb";
+  record.derived.clear();
+  auto nextAssets=assets_;
+  const bool registered=existing
+      ?nextAssets.publishImport(source,record.contentHash,1,"glb",{},{})
+      :nextAssets.add(record);
+  if(!registered) {report.diagnostic="Registro recusou o recurso; publicação cancelada.";return false;}
+  const auto previousDocument=document_;
+  const auto previousMap=mapScene_;
+  if(!publishAndAdopt(candidate,report.diagnostic)) {
+    std::string rollback;
+    if(!publishAndAdopt(flattenSources(importedSources_),rollback))
+      report.diagnostic+=" Falha ao restaurar a GPU: "+rollback;
+    document_=previousDocument;mapScene_=previousMap;return false;
+  }
   importedSources_=std::move(candidateSources);
+  assets_=std::move(nextAssets);assetRegistryDirty_=true;
+  state_.status=report.reimported?"Recurso reimportado; instâncias preservadas":"Recurso registrado; pronto para instanciar";
+  if(report.reimported) if(const auto *published=importNodeMap(source)) {
+    // Um passo de desfazer para tudo o que a reimportação fez na cena: vínculo
+    // de objetos legados comprovados e reconciliação das instâncias.
+    history_.begin("Reimportar recurso");
+    // Objetos legados são provados contra a revisão que a cena USOU — a
+    // anterior. Provar contra a nova faria os nós recém-chegados parecerem
+    // conhecidos e apagados pelo usuário, e eles nunca entrariam.
+    adoptLegacyImportInstances(document_,&history_,source,hasPrevious?previousNodeMap:*published,report.reconcile);
+    reconcileImportInstances(document_,&history_,source,*published,report.reconcile,
+                             [this](const resources::AssetGuid &guid){return mapScene_.assetSlot(guid);});
+    history_.end();
+    if(report.reconcile.changed()) mapScene_.hydrateMaterials(document_);
+    reportImportReconcile(report.reconcile,"Reimportação");
+  }
+  return true;
+}
 
+bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportReport &report,bool wrapMultipleRoots) {
+  report={};report.source=source;
+  if(isPlaying() || history_.isOpen()) {report.diagnostic="Finalize a edição antes de instanciar.";return false;}
+  usize slot=0,firstNew=0,total=0;
+  for(;slot<importedSources_.size() && importedSources_[slot].guid!=source;++slot)
+    firstNew+=importedSources_[slot].draws.size();
+  if(slot==importedSources_.size()) {report.diagnostic="Recurso não carregado; reimporte a fonte.";return false;}
+  for(const auto &block:importedSources_) total+=block.draws.size();
+  if(mapScene_.assetCount()<total) {report.diagnostic="Biblioteca gráfica incompleta.";return false;}
+  const usize primitives=mapScene_.assetCount()-total;
+  const auto newDrawCount=importedSources_[slot].draws.size();
+  const auto previousDocument=document_;const auto previousHistory=history_;
+  std::vector<EditorEntityId> newRoots;
+  const auto rollback=[&](const char *message) {
+    document_=previousDocument;history_=previousHistory;report.objects=0;report.groups=0;
+    report.diagnostic=message;return false;
+  };
   // Reimportar NÃO cria objetos: os que já existem apontam para as mesmas
   // identidades e acabaram de ser reconciliados com a geometria nova.
-  if(!report.reimported) {
+  {
     // A árvore do arquivo vira árvore de objetos. Um nó por objeto, INCLUSIVE
     // os sem malha: é o grupo vazio que segura a porta no lugar quando a
     // carroceria se move, e descartá-lo é exatamente o que achata a hierarquia.
-    const auto &tree=importedSources_[slot<importedSources_.size()?slot:importedSources_.size()-1];
-    history_.begin("Importar modelo");
+    const auto &tree=importedSources_[slot];
+    // Vínculo de cada objeto com o nó da fonte (M08.2). A identidade da
+    // instância precisa ser única entre sessões: relógio e contador.
+    const auto &nodeMap=tree.map;
+    const bool linkable=nodeMap.revision && nodeMap.nodes.size()==tree.nodes.size();
+    const auto instance=resources::assetGuidFromSeed("instancia:"+source.text()+":"+
+        std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+":"+std::to_string(++importInstanceCounter_));
+    history_.begin("Instanciar recurso");
+    auto instanceParent=document_.root();
+    const auto rootCount=std::count_if(tree.nodes.begin(),tree.nodes.end(),[](const auto &node) {return node.parent<0;});
+    if(wrapMultipleRoots && rootCount>1) {
+      std::string name="Modelo importado";
+      if(const auto *record=assets_.find(source)) {
+        name=record->path;const auto slash=name.find_last_of("/\\");if(slash!=std::string::npos) name.erase(0,slash+1);
+        const auto dot=name.find_last_of('.');if(dot!=std::string::npos) name.resize(dot);
+      }
+      instanceParent=history_.createEntity(document_,document_.root(),EditorEntityKind::Folder,name.c_str());
+      if(!instanceParent) return rollback("Não foi possível criar o grupo da importação.");
+      if(linkable) {
+        auto wrapper=*document_.find(instanceParent);
+        if(auto *link=scene::editImportLink(wrapper.components)) {
+          link->source=source;link->instance=instance;link->root=true;link->revision=nodeMap.revision;link->baseName=wrapper.name;
+          history_.applyValues(document_,instanceParent,wrapper);
+        }
+      }
+      newRoots.push_back(instanceParent);++report.objects;++report.groups;
+    }
     std::vector<EditorEntityId> created(tree.nodes.size(),kInvalidEntity);
     const float identity[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
     for(usize n=0;n<tree.nodes.size();++n) {
       const auto &node=tree.nodes[n];
       const auto parent=node.parent>=0 && static_cast<usize>(node.parent)<created.size()
-          ? created[static_cast<usize>(node.parent)] : document_.root();
-      if(parent==kInvalidEntity) { history_.end(); report.diagnostic="Hierarquia do modelo fora de ordem."; return false; }
+          ? created[static_cast<usize>(node.parent)] : instanceParent;
+      if(parent==kInvalidEntity) { return rollback("Hierarquia do modelo fora de ordem."); }
       const auto id=history_.createEntity(document_,parent,EditorEntityKind::Mesh,
                                           node.name.empty()?"Objeto":node.name.c_str());
-      if(!id) { history_.end(); report.diagnostic="Não foi possível criar os objetos do modelo."; return false; }
+      if(!id) { return rollback("Não foi possível criar os objetos do modelo."); }
       created[n]=id;
+      if(node.parent<0 && instanceParent==document_.root()) newRoots.push_back(id);
       auto value=*document_.find(id);
-      // A pose LOCAL do nó vira a transformação do objeto. Um nó cuja matriz
-      // não cabe em TRS mantém a pose assada no desenho e o objeto nasce na
-      // identidade; o relatório conta esses casos em vez de arredondar e
-      // chamar de preservado.
+      // A pose local precisa caber em TRS; nunca substituir shear por identidade.
       EditorTransform local;
       if(runtime::localTransformForWorld(node.localMatrix,identity,local)) value.transform=local;
-      else ++report.shearedNodes;
+      else return rollback("Matriz do nó não pode ser instanciada sem perder sua transformação.");
+      if(linkable) if(auto *link=scene::editImportLink(value.components)) {
+        link->source=source;link->instance=instance;
+        setImportLinkBase(*link,nodeMap.nodes[n],local,-1,nodeMap.revision);
+        link->root=node.parent<0 && instanceParent==document_.root();
+      }
       history_.applyValues(document_,id,value);
       ++report.objects;
     }
@@ -1676,37 +2044,140 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
     for(usize i=0;i<newDrawCount;++i) {
       const auto drawSlot=static_cast<u32>(primitives+firstNew+i)+1;
       const auto nodeIndex=i<tree.drawNodes.size()?tree.drawNodes[i]:0u;
-      if(nodeIndex>=created.size()) { history_.end(); report.diagnostic="Desenho sem nó no modelo."; return false; }
+      if(nodeIndex>=created.size()) { return rollback("Desenho sem nó no modelo."); }
       auto target=created[nodeIndex];
       if(drawsPerNode[nodeIndex]>1) {
-        const auto name=tree.names[firstNew+i]+" · "+std::to_string(placed[nodeIndex]+1);
+        const auto name=tree.names[i]+" · "+std::to_string(placed[nodeIndex]+1);
         target=history_.createEntity(document_,created[nodeIndex],EditorEntityKind::Mesh,name.c_str());
-        if(!target) { history_.end(); report.diagnostic="Não foi possível criar as partes do modelo."; return false; }
+        if(!target) { return rollback("Não foi possível criar as partes do modelo."); }
         ++report.objects;
       }
       ++placed[nodeIndex];
       auto value=*document_.find(target);
       auto *render=editMeshRenderer(value);
-      if(!render) { history_.end(); report.diagnostic="Não foi possível criar a malha do objeto."; return false; }
+      if(!render) { return rollback("Não foi possível criar a malha do objeto."); }
       render->mesh=drawSlot;
-      render->asset=candidate.identities[firstNew+i];
+      render->asset=tree.identities[i];
       render->material=mapScene_.materialForAsset(drawSlot-1);
+      if(linkable && drawsPerNode[nodeIndex]>1) if(auto *link=scene::editImportLink(value.components)) {
+        const EditorTransform none;
+        link->source=source;link->instance=instance;
+        setImportLinkBase(*link,nodeMap.nodes[nodeIndex],none,static_cast<i32>(placed[nodeIndex]-1),nodeMap.revision);
+        link->baseName=value.name;
+      }
       history_.applyValues(document_,target,value);
     }
     for(usize n=0;n<tree.nodes.size();++n) if(!drawsPerNode[n]) ++report.groups;
     history_.end();
   }
 
-  resources::AssetRecord record=existing?*existing:resources::AssetRecord{};
-  record.guid=source;record.type=resources::AssetType::Mesh;record.path=path;record.source=path;
-  record.contentHash=Sha256::hex(bytes);
-  record.importerVersion=1;
-  record.importerParameters="glb";
-  record.derived.clear();
-  if(existing) assets_.publishImport(source,record.contentHash,record.importerVersion,record.importerParameters,{},{});
-  else assets_.add(record);
-  state_.status=report.reimported?"Modelo reimportado":"Modelo importado";
+  state_.status="Recurso instanciado: "+std::to_string(report.objects)+" objetos";
+  // The newly imported object must be discoverable immediately. Fit only this
+  // instance (all its roots), preserving authored scale and source transforms.
+  if(!newRoots.empty()) {
+    state_.workspace=EditorWorkspace::Scene;setSelection(newRoots.front());
+    float low[3]{},high[3]{};bool first=true;
+    std::vector<EditorEntityId> importedIds;
+    for(const auto root:newRoots) {std::vector<EditorEntityId> subtree;document_.collectSubtree(root,subtree);importedIds.insert(importedIds.end(),subtree.begin(),subtree.end());}
+    for(const auto id:importedIds) {
+      float center[3],radius;
+      if(!mapScene_.bounds(document_,id,center,radius)) continue;
+      for(u32 axis=0;axis<3;++axis) {
+        low[axis]=first?center[axis]-radius:std::min(low[axis],center[axis]-radius);
+        high[axis]=first?center[axis]+radius:std::max(high[axis],center[axis]+radius);
+      }
+      first=false;
+    }
+    if(!first) {
+      float center[3],radius2=0;
+      for(u32 axis=0;axis<3;++axis) {center[axis]=(low[axis]+high[axis])*.5f;radius2+=(high[axis]-center[axis])*(high[axis]-center[axis]);}
+      auto fit=projection_;
+      if(layout_.viewport.height>0 && layout_.viewport.width<layout_.viewport.height)
+        fit.verticalFieldOfViewRadians=2*std::atan(std::tan(fit.verticalFieldOfViewRadians*.5f)*layout_.viewport.width/layout_.viewport.height);
+      frameEditorCamera(camera_,center,std::max(.01f,std::sqrt(radius2)),fit);
+    }
+  }
   return true;
+}
+
+bool EditorSession::commitModelImport(std::span<const u8> bytes,const resources::GltfImport &model,
+                                      const std::string &path,const std::string &expectedHash,ModelImportReport &report,
+                                      resources::ImportAmbiguityPolicy policy) {
+  report={};
+  if(isPlaying()) {report.diagnostic="Pare a execução antes de publicar.";return false;}
+  // O mapa de nós entra na MESMA transação que fonte e registro.
+  const auto *known=assets_.findByPath(path);
+  const auto mapSource=known?known->guid:resources::assetGuidFromSeed("fonte:"+path);
+  EditorImportTransaction transaction(files_.rootPath());
+  if(!transaction.begin(path,expectedHash,report.diagnostic,resources::importNodeMapPath(mapSource))) {
+    if(report.diagnostic.empty()) report.diagnostic="Não foi possível preparar os backups da importação.";
+    return false;
+  }
+  const auto previousSources=importedSources_;const auto previousAssets=assets_;
+  const auto previousDocument=document_;const auto previousMap=mapScene_;const auto previousHistory=history_;
+  const bool previousDirty=assetRegistryDirty_;
+  bool published=publishModel(model,Sha256::hex(bytes),path,report,policy);
+  const auto *nodeMap=published?importNodeMap(report.source):nullptr;
+  if(published && nodeMap && transaction.commit(bytes,assets_.serialize(),nodeMap->serialize())) {
+    assetRegistryDirty_=false;files_.rebuildTree();state_.selectedFile=path;
+    // Reveal each ancestor so the selected resource is actually visible.
+    for(usize i=0;i<files_.tree().size();++i) {
+      const auto entry=files_.tree()[i];
+      if(entry.directory && !entry.expanded && !entry.relativePath.empty() && path.starts_with(entry.relativePath+"/"))
+        files_.toggle(static_cast<unsigned>(i));
+    }
+    return true;
+  }
+  if(published) {
+    report.diagnostic="Não foi possível gravar fonte e registro; importação revertida.";
+    importedSources_=previousSources;assets_=previousAssets;
+    std::string rollback;
+    if(!publishAndAdopt(flattenSources(importedSources_),rollback)) report.diagnostic+=" GPU: "+rollback;
+    // A reconciliação entrou no histórico: cena e histórico voltam juntos.
+    document_=previousDocument;mapScene_=previousMap;history_=previousHistory;assetRegistryDirty_=previousDirty;
+  }
+  if(!transaction.rollback()) report.diagnostic+=" Recuperação de disco pendente; backups preservados.";
+  return false;
+}
+
+void EditorSession::showImportPreview(std::string path,const resources::GltfImport &model,std::string_view contentHash) {
+  state_.importAmbiguities=0;state_.importAmbiguityChoice=0;
+  state_.importPanel=true;state_.importReady=true;state_.importError=false;state_.importPage=0;state_.importPath=std::move(path);
+  state_.importStatus=assets_.findByPath(state_.importPath)?"Atualizar recurso existente":"Registrar novo recurso";
+  state_.importSummary=std::to_string(model.nodes.size())+" nós · "+std::to_string(model.draws.size())+" malhas · "+
+      std::to_string(model.materials.size())+" materiais";
+  state_.importSummary+="\nSó recurso: guarda no projeto.\nImportar na cena: guarda, instancia e enquadra o modelo.";
+  if(model.skippedTextures||model.skippedAnimations||model.skippedSkins)
+    state_.importSummary+="\nNão suportado neste perfil: "+std::to_string(model.skippedTextures)+" texturas, "+
+      std::to_string(model.skippedAnimations)+" animações, "+std::to_string(model.skippedSkins)+" skins.";
+  if(!model.appearanceExtensions.empty()) {
+    state_.importSummary+="\nGeometria estática; aparência avançada não reproduzida:";
+    for(const auto &extension:model.appearanceExtensions) state_.importSummary+="\n"+extension;
+  }
+  if(const auto *record=assets_.findByPath(state_.importPath)) {
+    // A mesma correspondência que a publicação fará, sem publicar: o usuário
+    // vê o que muda nas instâncias ANTES de aceitar.
+    resources::ImportNodeMap previous,candidate;resources::ImportMatchReport match;std::string diagnostic;
+    const bool hasPrevious=previousImportMap(record->guid,previous);
+    resources::buildImportNodeMap(model,record->guid,contentHash,hasPrevious?&previous:nullptr,
+                                  resources::ImportAmbiguityPolicy::Refuse,candidate,match,diagnostic);
+    auto &summary=state_.importSummary;
+    if(match.sameContent) summary+="\nMesmo conteúdo da versão publicada; nada muda nas instâncias.";
+    else if(hasPrevious) {
+      summary+="\nCorrespondência: "+std::to_string(match.byAuthoredId)+" por id do autor · "+std::to_string(match.byStructure)+
+          " por estrutura · "+std::to_string(match.renamed)+" renomeados · "+std::to_string(match.reparented)+" com pai novo";
+      if(match.ambiguities.empty())
+        summary+="\nNós novos: "+std::to_string(match.added)+" · removidos da fonte: "+std::to_string(match.removed);
+    } else summary+="\nSem mapa anterior: identidades derivadas das chaves da fonte.";
+    summary+="\nInstâncias: alterações locais preservadas; removidos com dados locais ficam órfãos.";
+    if(!match.ambiguities.empty()) {
+      state_.importAmbiguities=static_cast<u32>(match.ambiguities.size());
+      summary+="\nAmbíguos — escolha abaixo antes de publicar:";
+      for(const auto &item:match.ambiguities)
+        summary+="\n• "+(item.parent.empty()?std::string("raiz"):item.parent)+" / "+item.name+": "+
+            std::to_string(item.previous)+" anteriores, "+std::to_string(item.incoming)+" novos";
+    }
+  }
 }
 
 bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices, u64 packageFingerprint) {
@@ -1816,6 +2287,7 @@ void EditorSession::frameSubtree(EditorEntityId root) {
 }
 
 void EditorSession::update() {
+  refreshImportLinkView();
   if(const auto *selected=document_.find(state_.selection)) state_.routePoint=waterRoute(*selected).count?std::min(state_.routePoint,waterRoute(*selected).count-1):0;
   if (font_ == nullptr || icons_ == nullptr) return;
   state_.assetCount=mapScene_.assetCount();
@@ -1833,12 +2305,12 @@ void EditorSession::update() {
   // está arrastando um divisor — o momento em que ele mais olha para a borda.
   list_.begin(state_.surface, metrics);
   router_.beginFrame();
-  layout_ = buildEditorScreen(state_, editorTheme(), list_, router_);
+  layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
   // A rolagem persegue o cursor a cada quadro enquanto o codigo esta aberto: a
   // altura util so encolhe quando o teclado termina de subir, um ou dois
   // quadros depois do toque, e a contagem de linhas visiveis daquele instante e
   // a unica que vale.
-  if(state_.editingCode && state_.platformTextInput) followCodeCaret();
+  if(state_.editingCode && state_.platformTextInput && !state_.platformCodeView) followCodeCaret();
   const u32 maximumScroll=layout_.hierarchyRowCount>layout_.hierarchyVisibleRows
       ? layout_.hierarchyRowCount-layout_.hierarchyVisibleRows : 0;
   state_.hierarchyScroll=std::min(state_.hierarchyScroll,maximumScroll);
@@ -1851,15 +2323,101 @@ void EditorSession::update() {
 
   list_.begin(state_.surface, metrics);
   router_.beginFrame();
-  layout_ = buildEditorScreen(state_, editorTheme(), list_, router_);
+  layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
   // A rolagem persegue o cursor a cada quadro enquanto o codigo esta aberto: a
   // altura util so encolhe quando o teclado termina de subir, um ou dois
   // quadros depois do toque, e a contagem de linhas visiveis daquele instante e
   // a unica que vale.
-  if(state_.editingCode && state_.platformTextInput) followCodeCaret();
+  if(state_.editingCode && state_.platformTextInput && !state_.platformCodeView) followCodeCaret();
 
   instances_.clear();
   buildUiInstances(list_, *font_, *icons_, kMaximumInstances, instances_);
+}
+
+bool EditorSession::previousImportMap(const resources::AssetGuid &source,resources::ImportNodeMap &out) const {
+  for(const auto &block:importedSources_) if(block.guid==source && block.map.revision) {out=block.map;return true;}
+  const auto root=files_.rootPath();
+  if(root.empty()) return false;
+  std::filesystem::path absolute;
+  if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),resources::importNodeMapPath(source),absolute)) return false;
+  std::error_code error;
+  if(!std::filesystem::exists(absolute,error)) return false;
+  std::vector<u8> bytes;
+  // Mapa ilegível não trava a importação: as identidades voltam a nascer das
+  // chaves da fonte, que é o comportamento de antes do mapa.
+  return EditorImportTransaction::read(absolute,bytes,64u*1024u*1024u) &&
+         resources::ImportNodeMap::deserialize(std::string_view(reinterpret_cast<const char *>(bytes.data()),bytes.size()),out);
+}
+
+bool EditorSession::persistImportMap(const resources::AssetGuid &source) {
+  const auto *nodeMap=importNodeMap(source);const auto root=files_.rootPath();
+  if(!nodeMap || root.empty()) return false;
+  std::filesystem::path absolute;
+  if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),resources::importNodeMapPath(source),absolute)) return false;
+  const auto text=nodeMap->serialize();
+  std::vector<u8> current;
+  if(EditorImportTransaction::read(absolute,current,64u*1024u*1024u) && std::string(current.begin(),current.end())==text) return true;
+  std::error_code error;std::filesystem::create_directories(absolute.parent_path(),error);
+  return !error && EditorImportTransaction::writeText(absolute,text);
+}
+
+void EditorSession::removeImportMapFile(const resources::AssetGuid &source) {
+  const auto root=files_.rootPath();
+  std::filesystem::path absolute;
+  if(root.empty() || !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),resources::importNodeMapPath(source),absolute)) return;
+  std::error_code error;std::filesystem::remove(absolute,error);
+}
+
+void EditorSession::reportImportReconcile(const ImportReconcileReport &report,const char *context) {
+  if(!report.changed() && !report.conflicts && !report.skippedInstances) return;
+  std::string text=std::string(context)+": "+std::to_string(report.updated)+" atualizados · "+std::to_string(report.created)+
+      " criados · "+std::to_string(report.removed)+" removidos · "+std::to_string(report.orphaned)+" órfãos · "+
+      std::to_string(report.conflicts)+" conflitos";
+  if(report.adopted) text+=" · "+std::to_string(report.adopted)+" objetos anteriores vinculados";
+  if(report.unproven) text+=" · "+std::to_string(report.unproven)+" sem prova de vínculo";
+  const bool attention=report.conflicts || report.orphaned || report.skippedInstances;
+  setImportStatus(text,attention?EditorConsoleSeverity::Warning:EditorConsoleSeverity::Info);
+  for(const auto &line:report.notes) {
+    EditorConsoleEntry entry;entry.origin=EditorConsoleOrigin::Importer;entry.severity=EditorConsoleSeverity::Warning;
+    entry.message=line;entry.project=files_.rootPath();console_.add(std::move(entry));
+  }
+}
+
+void EditorSession::refreshImportLinkView() {
+  auto &view=state_.importLink;view={};
+  const auto *entity=document_.find(state_.selection);
+  const auto *link=entity?scene::importLink(entity->components):nullptr;
+  if(!link || link->unlinked) {state_.importLinkMenu=false;return;}
+  view.linked=true;view.orphan=link->orphan;view.root=link->root;view.overrides=importOverrides(document_,entity->id);
+  if(const auto *record=assets_.find(link->source)) {
+    view.source=record->path;
+    const auto slash=view.source.find_last_of('/');if(slash!=std::string::npos) view.source.erase(0,slash+1);
+  } else view.source="Fonte ausente do registro";
+  if(const auto *nodeMap=importNodeMap(link->source)) if(const auto *node=nodeMap->find(link->node)) view.node=node->name;
+  if(!link->node.valid()) view.node="instância";
+}
+
+bool EditorSession::revertImportLink(EditorEntityId id,u32 mask) {
+  if(isPlaying() || history_.isOpen()) return false;
+  if(!revertImportOverrides(document_,history_,id,mask,[this](const resources::AssetGuid &guid){return mapScene_.assetSlot(guid);}))
+    return false;
+  mapScene_.hydrateMaterials(document_);
+  return true;
+}
+
+u32 EditorSession::unlinkImport(EditorEntityId id) {
+  return isPlaying()?0:unlinkImportInstance(document_,history_,id);
+}
+
+bool EditorSession::resolveImportOrphan(EditorEntityId id,bool keep) {
+  const auto *entity=document_.find(id);
+  const auto *link=entity?scene::importLink(entity->components):nullptr;
+  if(isPlaying() || !link || !link->orphan || history_.isOpen()) return false;
+  if(keep) return unlinkImportObject(document_,history_,id);
+  // Apagar é decisão explícita do usuário; o histórico ainda desfaz.
+  const bool destroyed=history_.destroyEntity(document_,id);
+  if(destroyed) state_.selection=kInvalidEntity;
+  return destroyed;
 }
 
 } // namespace ae::editor

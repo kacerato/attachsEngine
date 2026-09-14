@@ -147,6 +147,7 @@ AE_TEST(every_console_row_is_reachable_by_touch) {
   EditorScreenState state;
   state.document = &document;
   state.console = &console;
+  state.consoleCollapsed = false;
   state.workspace = EditorWorkspace::Code;
   state.surface = {0, 0, 1400, 900};
 
@@ -226,11 +227,11 @@ AE_TEST(the_ide_toolbar_is_icons_and_the_rest_lives_in_one_menu) {
   // Sem arquivo aberto, salvar/desfazer/refazer/buscar estao desligados e NAO
   // registram toque: um icone aceso que nao faz nada e pior do que um apagado.
   // O que responde sempre e o que nao depende de buffer.
-  const EditorWidget always[] = {EditorWidget::CodeScene, EditorWidget::CodeNew,
+  const EditorWidget always[] = {EditorWidget::CodeScene, EditorWidget::CodeFiles,
                                  EditorWidget::CodeMenu};
   for (const auto widget : always) {
     bool found = false;
-    for (float x = 0; x < 420.0f; x += 4.0f)
+    for (float x = 0; x < state.surface.width; x += 4.0f)
       if (router.hitTest({x, 24.0f}).widgetId == widgetId(widget)) found = true;
     AE_EXPECT_TRUE(found, "o icone responde na barra");
   }

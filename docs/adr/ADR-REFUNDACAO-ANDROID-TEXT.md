@@ -1,5 +1,9 @@
 # Entrada Android na sessão autoral
 
+**Registro histórico de 09/09.** O diálogo foi removido nas etapas seguintes.
+Para código, a decisão corrente é [M06 — projeção visível](ADR-M06-CODE-INPUT.md),
+de 12/09/2026. O texto abaixo não descreve o caminho atual de edição de código.
+
 Data: 2026-09-09. Escopo: M1, plano externo §§6, 7, 8 e 13.
 
 ## Problema e decisão

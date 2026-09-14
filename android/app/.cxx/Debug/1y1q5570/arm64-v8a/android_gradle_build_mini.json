@@ -76,6 +76,12 @@
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_core.a",
       "runtimeFiles": []
     },
+    "aether_assets::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_assets",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_assets.a",
+      "runtimeFiles": []
+    },
     "aether_resources::@6890427a1f51a3e7e1df": {
       "artifactName": "aether_resources",
       "abi": "arm64-v8a",

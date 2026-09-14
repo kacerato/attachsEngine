@@ -74,6 +74,10 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
     // Atlas da interface do editor. Os dois sao lidos uma vez na inicializacao
     // e enviados a GPU; noCompress abaixo permite le-los sem descompactar.
     from("../../assets/astra-visual/ui") { include("*.aeuf", "*.aeui"); into("ui") }
+    // The embedded code accessory bar uses the same authored raster marks as
+    // the native toolbar. No second icon design or engine enum is introduced.
+    from("../../assets/astra-visual/icons/mark-v1") { include("undo.png", "redo.png"); into("ui/code") }
+    from("../../assets/astra-visual/ui/code-ide") { include("*.png"); into("ui/code-ide") }
     into(generatedAssets)
     doLast {
         val root = generatedAssets.get().asFile

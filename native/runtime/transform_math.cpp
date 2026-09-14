@@ -75,7 +75,9 @@ bool localTransformForWorld(const float world[16], const float parent[16], Trans
   for (u32 c = 0; c < 3; ++c) {
     value.position[c] = local[12 + c];
     value.scale[c] = std::sqrt(local[c * 4] * local[c * 4] + local[c * 4 + 1] * local[c * 4 + 1] + local[c * 4 + 2] * local[c * 4 + 2]);
-    if (!std::isfinite(value.scale[c]) || value.scale[c] < .001f) return false;
+    // Small positive scales are legitimate unit/dequantization transforms.
+    // Singularity is zero, not an authoring-unit threshold such as 0.001.
+    if (!std::isfinite(value.scale[c]) || value.scale[c] <= 0.0f) return false;
   }
   const float pitch = std::asin(std::clamp(-local[2] / value.scale[0], -1.0f, 1.0f));
   const bool pole = std::abs(std::cos(pitch)) < .00001f;

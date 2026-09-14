@@ -1,0 +1,5 @@
+AETHER_EDITOR 12 0 2
+1 0 0 "Cena" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+2 1 0 "Objeto vazio" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 2 3 1 "astra.script.behavior" 1 "\"project.GiroM06\" \"Scripts/GiroM06.cs\" 1 1 \"label\" \"string\" \"Alpha\"" 2 "astra.script.behavior" 1 "\"project.GiroM06\" \"Scripts/GiroM06.cs\" 1 1 \"label\" \"string\" \"Beta\""
+LAYERS 1 "Padrão" 4294967295
+INPUT 3 "Mover" "Olhar" "Saltar" "Mover" 2 0.119999997 1 "" 2 1 0 0 0 1 0 1 0 0 1 1 0 "Olhar" 2 0 1 "" 2 2 0 0 0 1 0 2 0 0 1 1 0 "Saltar" 0 0 1 "" 1 3 0 0 0 1 0

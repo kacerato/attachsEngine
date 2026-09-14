@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <unordered_map>
+#include <array>
 
 namespace ae::resources {
 namespace {
@@ -51,6 +53,7 @@ struct Accessor {
   bool normalized = false;
   const u8 *data = nullptr;
   u32 stride = 0;
+  std::vector<u8> storage;
 };
 
 // Um leitor por acessor, já resolvido contra a view e o buffer: quem consome
@@ -104,19 +107,24 @@ struct Importer {
     if (!accessors || index < 0 || index >= accessors->childCount) return fail(what);
     const auto &accessor = *json->child(*accessors, static_cast<u32>(index));
     if (accessor.kind != Kind::Object) return fail(what);
-    // Acessor esparso reconstrói valores a partir de uma lista de exceções.
-    // Ignorá-lo daria geometria silenciosamente errada; recusar é honesto.
-    if (json->member(accessor, "sparse")) return fail("Acessor esparso não é suportado nesta importação.");
     out.component = static_cast<u32>(json->number(accessor, "componentType", 0));
     out.components = componentCount(json->string(accessor, "type"));
     out.count = static_cast<u32>(json->number(accessor, "count", 0));
     out.normalized = json->boolean(accessor, "normalized", false);
     const auto size = componentSize(out.component);
     if (!size || !out.components || !out.count) return fail(what);
+    const u64 packedBytes=static_cast<u64>(out.count)*size*out.components;
+    if(packedBytes>limits->maximumBytes) return fail("Acessor excede o orçamento de memória da importação.");
 
     const auto viewIndex = json->index(accessor, "bufferView");
     const auto *views = array(root, "bufferViews");
-    if (!views || viewIndex < 0 || viewIndex >= views->childCount) return fail(what);
+    if(viewIndex<0) {
+      // glTF permits an implicit zero-filled base, with or without sparse data.
+      out.stride=size*out.components;
+      out.storage.resize(static_cast<usize>(packedBytes),0);out.data=out.storage.data();
+      return resolveSparse(root,accessor,out,what);
+    }
+    if (!views || viewIndex >= views->childCount) return fail(what);
     const auto &view = *json->child(*views, static_cast<u32>(viewIndex));
     if (view.kind != Kind::Object) return fail(what);
     if (json->index(view, "buffer") != 0)
@@ -131,7 +139,47 @@ struct Importer {
     const u64 span = static_cast<u64>(out.stride) * (out.count - 1) + size * out.components;
     if (accessorOffset > viewLength || span > viewLength - accessorOffset) return fail(what);
     out.data = binary.data() + viewOffset + accessorOffset;
-    return true;
+    return resolveSparse(root,accessor,out,what);
+  }
+
+  bool resolveSparse(const Node &root,const Node &accessor,Accessor &target,const char *what) {
+    const auto *sparse=json->member(accessor,"sparse");
+    if(!sparse) return true;
+    const auto count=json->index(*sparse,"count");
+    const auto *indices=json->member(*sparse,"indices"),*values=json->member(*sparse,"values");
+    if(count<=0 || count>target.count || !indices || !values) return fail(what);
+    const auto component=static_cast<u32>(json->number(*indices,"componentType",0));
+    if(component!=kComponentUnsignedByte && component!=kComponentUnsignedShort && component!=kComponentUnsignedInt)
+      return fail("Índices esparsos precisam ser inteiros sem sinal.");
+    const auto elementSize=componentSize(target.component)*target.components;
+    const auto bytes=[&](const Node &source,u64 length,const u8 *&data) {
+      const auto *views=array(root,"bufferViews");const auto id=json->index(source,"bufferView");
+      if(!views || id<0 || id>=views->childCount) return false;
+      const auto &view=*json->child(*views,static_cast<u32>(id));
+      if(json->index(view,"buffer")!=0 || json->member(view,"byteStride")) return false;
+      const auto offset=json->number(view,"byteOffset",0),extent=json->number(view,"byteLength",-1);
+      const auto local=json->number(source,"byteOffset",0);
+      if(offset<0 || extent<0 || local<0 || offset!=std::floor(offset) || extent!=std::floor(extent) || local!=std::floor(local) ||
+         offset>binary.size() || extent>binary.size()-static_cast<u64>(offset) || local>extent || length>extent-local) return false;
+      data=binary.data()+static_cast<usize>(offset+local);return true;
+    };
+    const u8 *indexData=nullptr,*valueData=nullptr;
+    if(!bytes(*indices,static_cast<u64>(count)*componentSize(component),indexData) ||
+       !bytes(*values,static_cast<u64>(count)*elementSize,valueData)) return fail("Dados esparsos fora do buffer.");
+    if(target.storage.empty()) {
+      target.storage.resize(static_cast<usize>(target.count)*elementSize);
+      for(u32 i=0;i<target.count;++i)
+        std::memcpy(target.storage.data()+static_cast<usize>(i)*elementSize,target.data+static_cast<usize>(i)*target.stride,elementSize);
+    }
+    u32 previous=0;
+    for(u32 i=0;i<static_cast<u32>(count);++i) {
+      if((i&0xffff)==0 && cancelled()) return false;
+      u32 index=0;std::memcpy(&index,indexData+static_cast<usize>(i)*componentSize(component),componentSize(component));
+      if(index>=target.count || (i && index<=previous)) return fail("Índices esparsos fora de ordem ou da faixa.");
+      previous=index;
+      std::memcpy(target.storage.data()+static_cast<usize>(index)*elementSize,valueData+static_cast<usize>(i)*elementSize,elementSize);
+    }
+    target.stride=elementSize;target.data=target.storage.data();return true;
   }
 
   // Transformação local do nó. `matrix` e TRS são exclusivos pelo formato;
@@ -236,7 +284,8 @@ struct Importer {
                           float center[3]{}; float radius = 0; std::string key; };
 
   bool readPrimitive(const Node &root, const Node &primitive, PrimitiveRange &range) {
-    if (static_cast<u32>(json->number(primitive, "mode", 4)) != 4) { ++out->skippedPrimitives; return true; }
+    const auto mode=static_cast<u32>(json->number(primitive,"mode",4));
+    if(mode!=4 && mode!=5 && mode!=6) { ++out->skippedPrimitives; return true; }
     const auto *attributes = json->member(primitive, "attributes");
     if (!attributes || attributes->kind != Kind::Object) return fail("Primitiva sem atributos.");
     Accessor position{};
@@ -261,6 +310,11 @@ struct Importer {
     const bool hasColor = json->index(*attributes, "COLOR_0") >= 0 &&
                           resolveAccessor(root, json->index(*attributes, "COLOR_0"), color, "COLOR_0 inválido.");
     if (json->index(*attributes, "COLOR_0") >= 0 && !hasColor) return false;
+    for(const auto *attribute:{&normal,&tangent,&uv0,&uv1,&color})
+      if(attribute->data && attribute->count!=position.count) return fail("Atributos da malha têm contagens de vértices diferentes.");
+    if((hasNormal && normal.components!=3) || (hasTangent && tangent.components!=4) ||
+       (hasUv0 && uv0.components!=2) || (hasUv1 && uv1.components!=2) ||
+       (hasColor && color.components!=3 && color.components!=4)) return fail("Formato de atributo de vértice inválido.");
 
     const u64 vertexBase = out->vertices.size() / renderer::MapVertexStride;
     if (vertexBase + position.count > limits->maximumVertices)
@@ -312,27 +366,65 @@ struct Importer {
 
     range.firstIndex = static_cast<u32>(out->indices.size());
     const auto indicesIndex = json->index(primitive, "indices");
+    std::vector<u32> topology;
     if (indicesIndex >= 0) {
       Accessor indices{};
       if (!resolveAccessor(root, indicesIndex, indices, "Índices inválidos.")) return false;
       if (indices.components != 1) return fail("Índices precisam ser SCALAR.");
-      if (indices.count % 3) return fail("A primitiva não tem um número de índices múltiplo de três.");
+      if(indices.normalized || (indices.component!=kComponentUnsignedByte && indices.component!=kComponentUnsignedShort &&
+         indices.component!=kComponentUnsignedInt)) return fail("Índices precisam ser inteiros sem sinal, não normalizados.");
+      if (mode==4 && indices.count % 3) return fail("A primitiva não tem um número de índices múltiplo de três.");
       if (out->indices.size() + indices.count > limits->maximumIndices)
         return fail("O arquivo passa do limite de índices desta importação.");
-      out->indices.reserve(out->indices.size() + indices.count);
+      topology.reserve(indices.count);
       for (u32 i = 0; i < indices.count; ++i) {
         if ((i & 0xFFFF) == 0 && cancelled()) return false;
-        const auto value = static_cast<u32>(readComponent(indices, i, 0));
+        u32 value=0;std::memcpy(&value,indices.data+static_cast<usize>(i)*indices.stride,componentSize(indices.component));
         if (value >= position.count) return fail("Índice fora da faixa de vértices da primitiva.");
-        out->indices.push_back(value);
+        topology.push_back(value);
       }
       range.indexCount = indices.count;
     } else {
-      if (position.count % 3) return fail("Primitiva sem índices precisa de vértices múltiplos de três.");
+      if (mode==4 && position.count % 3) return fail("Primitiva sem índices precisa de vértices múltiplos de três.");
       if (out->indices.size() + position.count > limits->maximumIndices)
         return fail("O arquivo passa do limite de índices desta importação.");
-      for (u32 i = 0; i < position.count; ++i) out->indices.push_back(i);
+      topology.reserve(position.count);
+      for (u32 i = 0; i < position.count; ++i) topology.push_back(i);
       range.indexCount = position.count;
+    }
+    if(mode==4) out->indices.insert(out->indices.end(),topology.begin(),topology.end());
+    else {
+      const u64 count=topology.size()<3?0:(topology.size()-2)*3ull;
+      if(out->indices.size()+count>limits->maximumIndices) return fail("Triangulação excede o limite de índices.");
+      for(usize i=2;i<topology.size();++i) {
+        if((i&0xffff)==0 && cancelled()) return false;
+        const u32 a=mode==6?topology[0]:topology[i-2+(i%2)];
+        const u32 b=mode==6?topology[i-1]:topology[i-1-(i%2)],c=topology[i];
+        if(a==b || b==c || a==c) continue;
+        out->indices.insert(out->indices.end(),{a,b,c});
+      }
+    }
+    range.indexCount=static_cast<u32>(out->indices.size())-range.firstIndex;
+    if(!hasNormal) {
+      std::vector<std::array<float,3>> normals(position.count);
+      for(u32 i=range.firstIndex;i<range.firstIndex+range.indexCount;i+=3) {
+        if(((i-range.firstIndex)&0xffff)==0 && cancelled()) return false;
+        const u32 a=out->indices[i],b=out->indices[i+1],c=out->indices[i+2];
+        float p[3],q[3],r[3];
+        std::memcpy(p,write+static_cast<usize>(a)*renderer::MapVertexStride,12);
+        std::memcpy(q,write+static_cast<usize>(b)*renderer::MapVertexStride,12);
+        std::memcpy(r,write+static_cast<usize>(c)*renderer::MapVertexStride,12);
+        for(u32 axis=0;axis<3;++axis) {q[axis]-=p[axis];r[axis]-=p[axis];}
+        const float face[3]{q[1]*r[2]-q[2]*r[1],q[2]*r[0]-q[0]*r[2],q[0]*r[1]-q[1]*r[0]};
+        for(const auto vertex:{a,b,c}) for(u32 axis=0;axis<3;++axis) normals[vertex][axis]+=face[axis];
+      }
+      for(u32 i=0;i<position.count;++i) {
+        if((i&0xffff)==0 && cancelled()) return false;
+        const auto &n=normals[i];const float length=std::hypot(n[0],n[1],n[2]);
+        i16 packed[4]{0,0,32767,0};
+        if(length>0 && std::isfinite(length)) for(u32 axis=0;axis<3;++axis) packed[axis]=packSnorm(n[axis]/length);
+        std::memcpy(write+static_cast<usize>(i)*renderer::MapVertexStride+12,packed,8);
+      }
     }
     const auto material = json->index(primitive, "material");
     range.material = material >= 0 && static_cast<usize>(material) + 1 < out->materials.size()
@@ -389,10 +481,34 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
   importer.report(0.f, "Lendo o arquivo");
   if (importer.cancelled()) return giveUp("Importação cancelada.");
 
-  // Extensões exigidas mudam o significado dos dados. Importar ignorando uma
-  // delas produziria geometria errada com cara de certa.
-  if (const auto *required = importer.array(*root, "extensionsRequired"); required && required->childCount)
-    return giveUp("Este GLB exige extensões do formato que esta importação não lê.");
+  // Quantized attributes use the same typed accessor decoder. Known appearance
+  // extensions can enter the declared static geometry profile, with explicit
+  // losses in the review dialog. Never ignore unknown geometry/codecs.
+  const auto appearance=[](std::string_view name) {
+    return name=="KHR_texture_transform" || name=="KHR_texture_basisu" || name=="EXT_texture_webp" ||
+      name=="EXT_texture_avif" || name=="KHR_materials_clearcoat" ||
+      name=="KHR_materials_transmission" || name=="KHR_materials_volume" || name=="KHR_materials_ior" ||
+      name=="KHR_materials_specular" || name=="KHR_materials_sheen" || name=="KHR_materials_iridescence" ||
+      name=="KHR_materials_anisotropy" || name=="KHR_materials_unlit" || name=="KHR_materials_pbrSpecularGlossiness" ||
+      name=="KHR_materials_variants" || name=="KHR_materials_emissive_strength" || name=="KHR_lights_punctual";
+  };
+  if(const auto *required=importer.array(*root,"extensionsRequired")) for(u32 i=0;i<required->childCount;++i) {
+    const auto &extension=*document.child(*required,i);
+    if(extension.kind!=Kind::String) return giveUp("extensionsRequired contém uma entrada inválida.");
+    const auto name=document.textOf(extension);
+    if(name!="KHR_mesh_quantization" && !appearance(name)) {
+      const std::string reason="Extensão obrigatória sem decodificador: "+std::string(name)+". Fonte preservada; geometria não foi importada.";
+      return giveUp(reason.c_str());
+    }
+  }
+  for(const auto field:{"extensionsUsed","extensionsRequired"})
+    if(const auto *used=importer.array(*root,field)) for(u32 i=0;i<used->childCount;++i) {
+      const auto &extension=*document.child(*used,i);
+      if(extension.kind!=Kind::String) continue;
+      const auto name=document.textOf(extension);
+      if(appearance(name) && std::find(result.appearanceExtensions.begin(),result.appearanceExtensions.end(),name)==result.appearanceExtensions.end())
+        result.appearanceExtensions.emplace_back(name);
+    }
 
   if (const auto *animations = importer.array(*root, "animations")) result.skippedAnimations = animations->childCount;
   if (const auto *skins = importer.array(*root, "skins")) result.skippedSkins = skins->childCount;
@@ -439,6 +555,7 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
   const auto *scenes = importer.array(*root, "scenes");
   const auto sceneIndex = document.index(*root, "scene");
   std::vector<u32> roots;
+  std::unordered_map<std::string,u32> keyCounts;
   if (scenes && scenes->childCount) {
     const auto chosen = sceneIndex >= 0 && sceneIndex < scenes->childCount ? static_cast<u32>(sceneIndex) : 0u;
     const auto &scene = *document.child(*scenes, chosen);
@@ -498,6 +615,13 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
     imported.name = name.empty() ? nodeKey : std::string(name);
     imported.parent = entry.parent;
     std::copy(local, local + 16, imported.localMatrix);
+    // Identificador autoral: o primeiro campo textual reconhecido do `extras`.
+    // Não é o nome — nome é rótulo, e rótulo se repete.
+    if (const auto *extras = document.member(node, "extras"); extras && extras->kind == Kind::Object)
+      for (const auto *field : {"astra_id", "uuid", "guid", "id"}) {
+        const auto value = document.string(*extras, field);
+        if (!value.empty() && value.size() <= 256) { imported.authoredId = std::string(value); break; }
+      }
     result.nodes.push_back(std::move(imported));
 
     if (document.member(node, "camera")) ++result.skippedCameras;
@@ -538,6 +662,11 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
 
   if (result.draws.empty())
     return giveUp("O arquivo não tem nenhuma malha de triângulos que esta importação saiba ler.");
+  // Names in glTF are labels, not unique identifiers. Retain legacy keys when
+  // unique; namespace every collision, including the first occurrence.
+  for(const auto &key:result.keys) ++keyCounts[key];
+  for(usize i=0;i<result.keys.size();++i) if(keyCounts[result.keys[i]]>1)
+    result.keys[i]+="@node:"+std::to_string(result.drawNodes[i]);
   importer.report(1.f, "Concluído");
   out = std::move(result);
   return true;

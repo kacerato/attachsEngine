@@ -39,7 +39,7 @@ inline constexpr std::array<EditorCreationEntry,9> editorCreationCatalog{{
   {EditorWidget::ImportModel,1,"Importar modelo","Abre um .glb do aparelho e traz suas malhas.",ui::UiIcon::EditorAuthorZoom}
 }};
 inline bool creationAvailable(const EditorScreenState &state,u32 index) {
-  return index<editorCreationCatalog.size() && (state.creationAvailable & (1u<<index));
+  return index<editorCreationCatalog.size() && editorCreationCatalog[index].action!=EditorWidget::ImportModel && (state.creationAvailable & (1u<<index));
 }
 // Temporary capability adapter for the existing imported water library.
 inline bool waterCreationAvailable(const EditorScreenState &state) {

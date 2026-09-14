@@ -1,0 +1,4 @@
+build/glb-real/ford-lotus.glb: bytes=8171096 nodes=42 meshes=21 objects=42 draws=22 textures_omitted=21 appearance_extensions=4
+build/glb-real/porsche.glb: bytes=90461732 nodes=195 meshes=113 objects=195 draws=114 textures_omitted=76 appearance_extensions=4
+build/glb-real/CarConcept.glb: bytes=10267996 nodes=101 meshes=109 objects=125 draws=110 textures_omitted=50 appearance_extensions=7
+build/glb-real/torre.glb: bytes=1692 nodes=3 meshes=3 objects=3 draws=4 textures_omitted=0 appearance_extensions=0

@@ -3,6 +3,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <atomic>
+#include <chrono>
 
 namespace ae::editor {
 class EditorFileSystem;
@@ -11,6 +13,10 @@ struct EditorCodeBuffer {
   std::string path,text,saved;
   std::vector<std::string> undo,redo;
   u32 firstLine=0;
+  // View state belongs to each buffer; changing tabs must not move another caret.
+  u32 selectionStart=0,selectionEnd=0;
+  float scrollX=0,scrollY=0;
+  u64 viewRevision=1;
   bool dirty() const {return text!=saved;}
 };
 struct EditorCodeMatch {usize offset=0,length=0;u32 line=1,column=1;};
@@ -20,6 +26,9 @@ struct EditorCodeDiagnostic {
   std::string file,code,message;
   u32 line=1,column=1;
   bool error=true;
+  std::string sourceExcerpt;
+  u32 excerptLine=0;
+  u64 generation=0;
 };
 // O estado do catálogo publicado em relação ao rascunho em edição. São coisas
 // diferentes de propósito: o usuário precisa saber que o texto mudou sem que a
@@ -56,8 +65,8 @@ public:
   // schema conhecido e versão em execução são três coisas distintas.
   const std::vector<EditorScriptType> &scriptTypes() const {return scriptTypes_;}
   EditorCodeCatalogState catalogState() const {
-    if(scriptTypes_.empty() && !publishedGeneration_) return EditorCodeCatalogState::Empty;
     if(lastBuildFailed_) return EditorCodeCatalogState::Failed;
+    if(scriptTypes_.empty() && !publishedGeneration_) return EditorCodeCatalogState::Empty;
     return publishedGeneration_==generation_?EditorCodeCatalogState::Current
                                             :EditorCodeCatalogState::Stale;
   }
@@ -68,7 +77,9 @@ public:
   // `templateIndex` escolhe um modelo de editor_script_templates.h; fora da
   // faixa cria o arquivo vazio de sempre. O modelo que interage por capacidade
   // traz o arquivo de contratos junto, quando o projeto ainda não o tem.
-  bool createScript(EditorFileSystem &files,std::string_view className,u32 templateIndex=~0u);
+  static constexpr u32 HelperTemplate=~1u;
+  bool createScript(EditorFileSystem &files,std::string_view className,u32 templateIndex=~0u,
+                    std::string_view directory="Scripts");
   bool replace(u64 id,u64 revision,std::string_view text);
   // Digitação contínua: UMA entrada de desfazer por sessão de digitação, não
   // por tecla.
@@ -82,6 +93,11 @@ public:
   // de revisões existe para uma edição que partiu de um instantâneo antigo, que
   // não é o caso de um fluxo contínuo de teclas.
   bool type(u64 id,std::string_view text);
+  // UTF-8 byte ranges, revision checked before any mutation. Android projects
+  // this document through an Editable; it does not own a second undo history.
+  bool editDelta(u64 id,u64 revision,usize start,usize erased,std::string_view inserted,bool transaction);
+  bool setSelection(u64 id,u64 revision,u32 start,u32 end,float x,float y);
+  bool locate(u32 line,u32 column=1,u32 length=0);
   // Fecha a sessão: a próxima tecla começa uma entrada de desfazer nova.
   // Chamado ao sair do campo, e por qualquer comando que não seja digitar.
   void endTypingRun() noexcept { typingRun_=0; }
@@ -93,10 +109,17 @@ public:
   bool close(u64 id,bool discard=false);
   bool select(u64 id);
   bool dirty() const;
+  bool checkpoint(EditorFileSystem &files);
+  bool hasRecovery(EditorFileSystem &files) const;
+  bool restoreRecovery(EditorFileSystem &files);
+  bool discardRecovery(EditorFileSystem &files);
   void clear();
 private:
   // Buffer cuja sessão de digitação está aberta. Zero é "nenhuma".
   u64 typingRun_=0;
+  std::chrono::steady_clock::time_point lastDeltaTime_{};
+  usize lastDeltaEnd_=0;
+  bool lastDeltaDeleting_=false;
 public:
   EditorCodeBuffer *active();
   const EditorCodeBuffer *active() const;
@@ -111,8 +134,13 @@ private:
   std::vector<EditorCodeBuffer> buffers_;
   std::vector<EditorCodeDiagnostic> diagnostics_;
   std::vector<EditorScriptType> scriptTypes_,stagedTypes_;
-  u64 selected_=0,nextId_=1,generation_=1,publishedGeneration_=0,stagedGeneration_=0;
+  // Transient buffer handles remain unique across NativeActivity instances;
+  // an old queued edit must never match the first buffer of a new session.
+  inline static std::atomic<u64> nextId_{1};
+  u64 selected_=0,generation_=1,publishedGeneration_=0,stagedGeneration_=0;
   bool lastBuildFailed_=false,stagedValid_=false;
   std::string error_;
+  u64 checkpointGeneration_=0;
+  bool checkpointDirty_=false;
 };
 }

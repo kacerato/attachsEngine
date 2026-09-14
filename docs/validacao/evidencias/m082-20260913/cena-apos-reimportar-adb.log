@@ -1,0 +1,14 @@
+Cena salva no aparelho após reimportar m082-veiculo.glb (v1 -> v2), projeto M08Recursos0913k.
+Formato: id pai tipo nome posX posY posZ ...
+Componentes astra.import.link na cena: 
+281
+327 1 1 "Veiculo" 0 0 0
+331 1 1 "Veiculo" 0 0 0
+328 327 1 "Carroceria" 0 0.5 0
+329 327 1 "Roda" 1 0 0
+330 327 1 "Roda" -1 0.782101035 0
+336 327 1 "Porta" 0 0 2
+332 331 1 "Carroceria" 0 0.5 0
+333 331 1 "Roda" 1 0 0
+334 331 1 "Roda" -1 0 0
+335 331 1 "Porta" 0 0 2

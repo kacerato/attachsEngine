@@ -1,0 +1,11 @@
+09-12 23:39:57.913 14065 21852 I Aether.Android: Swapchain pronta: 1280x2772, 5 imagens, formato=43.
+09-12 23:42:02.604 18947 23607 I Aether.Android: Swapchain pronta: 1280x2772, 5 imagens, formato=43.
+09-12 23:42:03.666 18947 23607 I Aether.Android: [EditorSurface] resize settled: buffer=2772x1280 swapchain=1280x2772.
+09-12 23:42:03.757 18947 23607 I Aether.Android: Swapchain pronta: 1280x2772, 5 imagens, formato=43.
+09-12 23:42:13.396 18947 23607 I Aether.Android: Configuração alterada: janela=2772x1280.
+09-12 23:42:13.463 18947 23607 I Aether.Android: Swapchain pronta: 2772x1280, 5 imagens, formato=43.
+09-12 23:42:14.687 18947 23607 I Aether.Android: [EditorSurface] resize settled: buffer=1280x2772 swapchain=2772x1280.
+09-12 23:42:14.780 18947 23607 I Aether.Android: Swapchain pronta: 1280x2772, 5 imagens, formato=43.
+09-12 23:46:14.664 23452 25295 I Aether.Android: Swapchain pronta: 1280x2772, 5 imagens, formato=43.
+09-12 23:46:59.597 23452 25295 I Aether.Android: Configuração alterada: janela=2772x1280.
+09-12 23:46:59.654 23452 25295 I Aether.Android: Swapchain pronta: 1280x2772, 5 imagens, formato=43.

@@ -14,6 +14,7 @@
 //
 // Sem Vulkan, sem Android, sem I/O: testável integralmente no host.
 #pragma once
+#include <utility>
 
 #include "core/base.h"
 #include "editor/editor_play_scene.h"
@@ -28,6 +29,8 @@
 #include "editor/editor_grid.h"
 #include "editor/editor_map_scene.h"
 #include "resources/gltf_import.h"
+#include "resources/import_node_map.h"
+#include "editor/editor_import_reconcile.h"
 #include "editor/editor_archive.h"
 #include "editor/editor_document.h"
 #include "editor/editor_history.h"
@@ -43,7 +46,7 @@
 
 namespace ae::editor {
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -89,17 +92,23 @@ public:
       entry.origin=EditorConsoleOrigin::Script;
       entry.message=std::string(text);
       entry.object=object;
+      entry.project=files_.rootPath();entry.playSession=playScene_.world().worldId();
+      entry.buildGeneration=runtimeCodeGeneration_;
       console_.add(std::move(entry));
       if(forward) forward(object,text);
     });
   }
   const EditorConsole &console() const noexcept { return console_; }
   EditorConsole &console() noexcept { return console_; }
+  // Explicit copy command, consumed once by the platform clipboard bridge.
+  std::string takeConsoleCopy() {return std::exchange(consoleCopy_,{});}
   // Um problema que o EDITOR tem a dizer, e nao o compilador nem um script.
   void reportProblem(EditorConsoleSeverity severity,std::string message) {
     EditorConsoleEntry entry;
     entry.severity=severity;entry.origin=EditorConsoleOrigin::Editor;
     entry.message=std::move(message);
+    entry.project=files_.rootPath();entry.playSession=playScene_.world().worldId();
+    entry.buildGeneration=state_.codeBuildBusy?codeBuildGeneration_:code_.publishedGeneration();
     console_.add(std::move(entry));
   }
   void setCodeCompilerAvailable(bool value) {state_.codeCompilerAvailable=value;}
@@ -112,6 +121,12 @@ public:
   // Digita no arquivo aberto. E o MESMO caminho que a ponte de texto usa: uma
   // colagem vira transacao propria e a digitacao contigua vira uma entrada so.
   bool typeCode(std::string_view text);
+  std::string codeProjectRoot() const {return files_.rootPath();}
+  bool navigateCode(const std::string &path,u32 line,u32 column) {
+    if(!openCodeFile(path)) return false;
+    code_.locate(line,column);state_.codeFiles=false;state_.codeMenu=false;
+    state_.consoleExpanded=false;return true;
+  }
 
   // Compilacao automatica: o build sai sozinho quando a digitacao PARA.
   //
@@ -120,15 +135,21 @@ public:
   // intermediaria produz um erro que o usuario nao cometeu. O atraso existe
   // para que o compilador veja uma pausa, e nao um meio-caminho.
   //
-  // E e ele, e nao um sinalizador separado, que resolve a composicao do IME:
-  // enquanto o teclado compoe uma palavra, cada evento muda o texto e reinicia
-  // a contagem. O build so acontece depois que a composicao termina e o texto
-  // fica parado.
+  // A pausa e a composicao sao fatos diferentes. Um IME pode segurar um span
+  // composto por segundos sem mudar o texto; so o seu termino libera o debounce.
   void setCodeAutoBuildDelay(float seconds) noexcept {
     codeAutoBuildDelay_ = seconds > 0.0f ? seconds : 0.0f;
   }
   float codeAutoBuildDelay() const noexcept { return codeAutoBuildDelay_; }
   void pumpCodeAutoBuild(double seconds) {
+    if(state_.codeRecoveryPending) return;
+    // A bounded draft journal also works when the compiler is unavailable or
+    // a build is running. It never publishes recovered code implicitly.
+    if(seconds-codeCheckpointAt_>=1.0 && !state_.codeComposing && !files_.rootPath().empty()) {
+      codeCheckpointAt_=seconds;
+      if(!code_.checkpoint(files_)) reportProblem(EditorConsoleSeverity::Warning,code_.error());
+    }
+    if(state_.codeComposing) {codeQuietSince_=seconds;return;}
     if(codeAutoBuildDelay_<=0.0f || !state_.codeCompilerAvailable || state_.codeBuildBusy) return;
     if(files_.rootPath().empty()) return;
     const auto generation=code_.generation();
@@ -147,19 +168,31 @@ public:
     codeBuildRequest_=files_.rootPath();
     state_.codeBuildBusy=true;
     state_.status="Compilando código do projeto";
+    reportProblem(EditorConsoleSeverity::Info,"Compilação automática iniciada · revisão "+std::to_string(generation));
   }
   std::string takeCodeBuildRequest() {auto request=std::move(codeBuildRequest_);codeBuildRequest_.clear();return request;}
   bool completeCodeBuild(std::string_view report) {
+    if(codeBuildGeneration_!=code_.generation()) {
+      state_.codeBuildBusy=false;
+      state_.status="Fonte mais recente; aguardando nova compilação";
+      reportProblem(EditorConsoleSeverity::Info,"Resultado de build antigo descartado · revisão "+std::to_string(codeBuildGeneration_));
+      return false;
+    }
     state_.codeBuildBusy=false;const bool ok=code_.applyBuildReport(report,codeBuildGeneration_);
     // O bloco do compilador troca inteiro: um diagnostico de um arquivo que
     // agora compila e mentira, e mentira que o usuario persegue.
-    console_.replaceCompiler(code_.diagnostics());
+    console_.replaceCompiler(code_.diagnostics(),files_.rootPath());
     // A linha do editor so entra quando NAO ha diagnostico. Com o build
     // automatico, "compilacao com erros" a cada pausa de digitacao seria uma
     // linha nova por pausa dizendo o que as linhas do compilador logo acima ja
     // dizem melhor -- e com o lugar.
     if(!ok && code_.diagnostics().empty()) reportProblem(EditorConsoleSeverity::Error,code_.error());
-    state_.status=ok?"Código compilado; pronto para aplicar":code_.error();return ok;
+    if(!ok && !code_.diagnostics().empty()) {
+      state_.consoleCollapsed=false;state_.consoleProblems=true;state_.consoleOrigin=-1;
+    }
+    reportProblem(EditorConsoleSeverity::Info,ok?"Compilação concluída; aguardando publicação":
+        "Compilação recusada; publicação anterior preservada");
+    state_.status=ok?"Código compilado; publicando":code_.error();return ok;
   }
   // O que o catálogo publicado diz sobre si mesmo, em texto de interface. É a
   // resposta honesta para "o componente sumiu": ele não some, o catálogo é que
@@ -180,7 +213,11 @@ public:
     if(accepted) code_.publishBuild();
     else code_.discardBuild();
     state_.status=accepted?"Código aplicado ao projeto":"Não foi possível publicar a compilação";
+    reportProblem(accepted?EditorConsoleSeverity::Info:EditorConsoleSeverity::Error,
+        accepted?"Código publicado · revisão "+std::to_string(code_.publishedGeneration()):"Publicação recusada; versão anterior preservada");
+    if(accepted) reportScriptSchemaChanges();
   }
+  void reportScriptSchemaChanges();
   const std::string &requestedScenePath() const { return requestedScenePath_; }
   void clearSceneOpenRequest() { requestedScenePath_.clear(); }
   void reportSceneOpenFailure() { state_.status="Não foi possível abrir a cena; cena atual preservada"; }
@@ -197,6 +234,16 @@ public:
   bool handlePointer(const ui::UiPointerEvent &event);
   void cancelPointers();
   void usePlatformTextInput(bool enabled) { state_.platformTextInput=enabled; }
+  void usePlatformCodeView(bool enabled) {state_.platformCodeView=enabled;}
+  void setCodeComposition(bool composing) {state_.codeComposing=composing;}
+  void setCodeViewState(u64 id,u64 revision,u32 start,u32 end,float x,float y,bool focus);
+  void codeHistoryAction(bool redo);
+  bool applyCodeDelta(u64 id,u64 revision,usize start,usize erased,std::string_view text,bool transaction) {
+    const bool ok=code_.editDelta(id,revision,start,erased,text,transaction);
+    if(!ok) state_.status=code_.error();
+    return ok;
+  }
+  void recoverCodeDraft(std::string_view text);
   EditorTextEdit pendingTextEdit() const;
   bool completeTextEdit(const EditorTextEdit &edit, std::string_view text, bool accept);
   // Texto vivo do IME, a cada tecla, ANTES de confirmar.
@@ -333,19 +380,60 @@ public:
     // Objetos sem malha criados para segurar a hierarquia: grupos, pivôs,
     // alvos. Eles são o que faz mover a carroceria levar a porta junto.
     u32 groups = 0;
-    // Nós cuja matriz não cabe em translação/rotação/escala. A pose deles fica
-    // assada no desenho e o objeto nasce na identidade — dito, não disfarçado.
+    // Campo legado do relatório. Matrizes incompatíveis agora recusam a
+    // publicação, preservando a transformação em vez de aplicar identidade.
     u32 shearedNodes = 0;
     std::string diagnostic;
     bool cancelled = false;
     resources::AssetGuid source{};
     u32 skippedTextures = 0, skippedAnimations = 0, skippedSkins = 0;
+    // M08.2: como a revisão nova se relaciona com a anterior, e o que a
+    // reconciliação fez com as instâncias da cena.
+    resources::ImportMatchReport match;
+    ImportReconcileReport reconcile;
   };
   // Importa um GLB e instancia seus nós na cena, num único passo de desfazer.
   // `sourceName` é o caminho do arquivo dentro do projeto — é ele que vira o
   // caminho do recurso no registro, e trocá-lo depois não muda a identidade.
   bool importModel(std::span<const u8> bytes, std::string_view sourceName,
                    const resources::GltfImportProgress &progress, ModelImportReport &report);
+  // Parsing can run on a worker; publication and instantiation belong to the
+  // editor thread. Registering a resource never creates scene objects.
+  // Ambiguidade na correspondência de nós nunca é resolvida pela ordem da lista
+  // sem escolha explícita: `Refuse` devolve falso com `report.match` preenchido.
+  bool publishModel(const resources::GltfImport &model, std::string_view hash,
+                    std::string_view sourceName, ModelImportReport &report,
+                    resources::ImportAmbiguityPolicy policy=resources::ImportAmbiguityPolicy::Refuse);
+  bool instantiateModel(resources::AssetGuid source, ModelImportReport &report, bool wrapMultipleRoots=true);
+  bool commitModelImport(std::span<const u8> bytes, const resources::GltfImport &model,
+                         const std::string &path, const std::string &expectedHash, ModelImportReport &report,
+                         resources::ImportAmbiguityPolicy policy=resources::ImportAmbiguityPolicy::Refuse);
+  void showImportPreview(std::string path, const resources::GltfImport &model, std::string_view contentHash={});
+  void beginImportPreparation() {state_.importPanel=true;state_.importReady=false;state_.importError=false;state_.importPage=0;state_.importIntoScene=false;state_.importSummary.clear();state_.importPath.clear();state_.importAmbiguities=0;state_.importAmbiguityChoice=0;state_.importStatus="Preparando recurso…";}
+  resources::ImportAmbiguityPolicy importAmbiguityPolicy() const {
+    return state_.importAmbiguityChoice==1?resources::ImportAmbiguityPolicy::MatchInOrder:
+           state_.importAmbiguityChoice==2?resources::ImportAmbiguityPolicy::TreatAsNew:resources::ImportAmbiguityPolicy::Refuse;
+  }
+  // Mapa de nós publicado de uma fonte carregada neste processo.
+  const resources::ImportNodeMap *importNodeMap(const resources::AssetGuid &source) const {
+    for(const auto &block:importedSources_) if(block.guid==source && block.map.revision) return &block.map;
+    return nullptr;
+  }
+  // Vínculo de instância (M08.2): o que difere da fonte e os comandos reais do
+  // inspetor. Todos passam pelo histórico.
+  u32 importLinkOverrides(EditorEntityId id) const {return importOverrides(document_,id);}
+  bool revertImportLink(EditorEntityId id,u32 mask);
+  u32 unlinkImport(EditorEntityId id);
+  bool resolveImportOrphan(EditorEntityId id,bool keep);
+  void showImportFailure(std::string message) {
+    setImportStatus(message,EditorConsoleSeverity::Error);state_.importPanel=true;state_.importReady=false;
+    state_.importError=true;state_.importPage=0;state_.importStatus="Importação não concluída";state_.importSummary=std::move(message);
+  }
+  void closeImportPreview() {state_.importPanel=false;state_.importReady=false;}
+  bool takeImportAccept() {return std::exchange(state_.importAccept,false);}
+  bool takeImportIntoScene() {return std::exchange(state_.importIntoScene,false);}
+  bool takeImportCancel() {return std::exchange(state_.importCancel,false);}
+  std::string takeReimportPath() {return std::exchange(reimportPath_,{});}
   // O plano da grade para o quadro: política do editor, desenho do renderer.
   // Fora do workspace de cena, com a grade desligada ou em execução, ele volta
   // desabilitado — a grade é ferramenta de autoria, não elemento do jogo.
@@ -361,7 +449,11 @@ public:
     state_.modelImportRequested=false;
     return requested;
   }
-  void setImportStatus(std::string message) { state_.status=message; state_.importStatus=std::move(message); }
+  void setImportStatus(std::string message, EditorConsoleSeverity severity=EditorConsoleSeverity::Info) {
+    state_.status=message;state_.importStatus=message;
+    EditorConsoleEntry entry;entry.origin=EditorConsoleOrigin::Importer;entry.severity=severity;
+    entry.message=std::move(message);entry.project=files_.rootPath();console_.add(std::move(entry));
+  }
   // O registro do projeto, em texto, para o shell gravar ao lado da cena; e a
   // carga, feita antes de reimportar as fontes.
   std::string serializeAssets() const { return assets_.serialize(); }
@@ -383,10 +475,13 @@ public:
         state_.status="Play indisponível: há componentes de tipo ausente";
         reportProblem(EditorConsoleSeverity::Error,state_.status);return false;
       }
+      runtimeCodeGeneration_=code_.publishedGeneration();
       if(!playScene_.start(document_,mapScene_)) {
         state_.status=!playScene_.scriptDiagnostics().empty()?playScene_.scriptDiagnostics():playScene_.physicsError().empty()?"Falha ao preparar a cena para Play":playScene_.physicsError();
+        reportProblem(EditorConsoleSeverity::Error,state_.status);
         return false;
       }
+      reportProblem(EditorConsoleSeverity::Info,"Play iniciado · código publicado "+std::to_string(runtimeCodeGeneration_));
       playLastSeconds_=sceneTime_;
     }
     const double elapsed=std::max(0.0,static_cast<double>(sceneTime_)-playLastSeconds_);
@@ -461,6 +556,8 @@ private:
     // saber que nó é qual.
     std::vector<resources::GltfImportNode> nodes;
     std::vector<u32> drawNodes;
+    // Identidade persistente dos nós e das primitivas desta revisão.
+    resources::ImportNodeMap map;
   };
   struct ImportedLibrary {
     std::vector<u8> vertices;
@@ -481,6 +578,14 @@ private:
   bool publishAndAdopt(const ImportedLibrary &library, std::string &diagnostic,
                        usize *outPrimitives = nullptr);
   std::vector<ImportedSource> importedSources_;
+  std::string reimportPath_;
+  bool previousImportMap(const resources::AssetGuid &source, resources::ImportNodeMap &out) const;
+  bool persistImportMap(const resources::AssetGuid &source);
+  void removeImportMapFile(const resources::AssetGuid &source);
+  void reportImportReconcile(const ImportReconcileReport &report, const char *context);
+  void refreshImportLinkView();
+  u64 importInstanceCounter_=0;
+  double codeCheckpointAt_=0;
   // A impressão digital do pacote base, guardada na importação inicial: é ela
   // que deriva a identidade das primitivas internas em toda adoção posterior.
   u64 packageFingerprint_ = 0;
@@ -506,6 +611,7 @@ private:
   EditorCodeWorkspace code_;
   std::string codeBuildRequest_;
   u64 codeBuildGeneration_=0;
+  u64 runtimeCodeGeneration_=0;
   std::string requestedScenePath_;
   u64 sceneEpoch_=nextSceneEpoch();
   EditorMapScene mapScene_;
@@ -518,6 +624,7 @@ private:
   EditorViewport view_{};
   EditorScreenState state_{};
   EditorConsole console_;
+  std::string consoleCopy_;
   float codeAutoBuildDelay_ = 1.25f;
   u64 codeSeenGeneration_ = 0, codeBuiltGeneration_ = 0;
   double codeQuietSince_ = -1.0;

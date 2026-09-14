@@ -799,6 +799,198 @@
       "raster": "../mark-v1/joint.png",
       "dark_ui_ready": true,
       "generation": "mark-v1"
+    },
+    "ide/files": {
+      "raster": "../ide-v2/sheet.png",
+      "rect": [
+        12,
+        12,
+        350,
+        350
+      ],
+      "dark_ui_ready": true,
+      "generation": "ide-v2",
+      "solid_matte": [
+        17,
+        22,
+        26
+      ]
+    },
+    "ide/code": {
+      "raster": "../ide-v2/sheet.png",
+      "rect": [
+        374,
+        12,
+        712,
+        350
+      ],
+      "dark_ui_ready": true,
+      "generation": "ide-v2",
+      "solid_matte": [
+        17,
+        22,
+        26
+      ]
+    },
+    "ide/console": {
+      "raster": "../ide-v2/sheet.png",
+      "rect": [
+        736,
+        12,
+        1074,
+        350
+      ],
+      "dark_ui_ready": true,
+      "generation": "ide-v2",
+      "solid_matte": [
+        17,
+        22,
+        26
+      ]
+    },
+    "ide/play": {
+      "raster": "../ide-v2/sheet.png",
+      "rect": [
+        1098,
+        12,
+        1436,
+        350
+      ],
+      "dark_ui_ready": true,
+      "generation": "ide-v2",
+      "solid_matte": [
+        17,
+        22,
+        26
+      ]
+    },
+    "ide/compile": {
+      "raster": "../ide-v2/sheet.png",
+      "rect": [
+        12,
+        374,
+        350,
+        712
+      ],
+      "dark_ui_ready": true,
+      "generation": "ide-v2",
+      "solid_matte": [
+        17,
+        22,
+        26
+      ]
+    },
+    "ide/search": {
+      "raster": "../ide-v2/sheet.png",
+      "rect": [
+        374,
+        374,
+        712,
+        712
+      ],
+      "dark_ui_ready": true,
+      "generation": "ide-v2",
+      "solid_matte": [
+        17,
+        22,
+        26
+      ]
+    },
+    "ide/save": {
+      "raster": "../ide-v2/sheet.png",
+      "rect": [
+        736,
+        374,
+        1074,
+        712
+      ],
+      "dark_ui_ready": true,
+      "generation": "ide-v2",
+      "solid_matte": [
+        17,
+        22,
+        26
+      ]
+    },
+    "ide/add": {
+      "raster": "../ide-v2/sheet.png",
+      "rect": [
+        1098,
+        374,
+        1436,
+        712
+      ],
+      "dark_ui_ready": true,
+      "generation": "ide-v2",
+      "solid_matte": [
+        17,
+        22,
+        26
+      ]
+    },
+    "ide/error": {
+      "raster": "../ide-v2/sheet.png",
+      "rect": [
+        12,
+        736,
+        350,
+        1074
+      ],
+      "dark_ui_ready": true,
+      "generation": "ide-v2",
+      "solid_matte": [
+        17,
+        22,
+        26
+      ]
+    },
+    "ide/warning": {
+      "raster": "../ide-v2/sheet.png",
+      "rect": [
+        374,
+        736,
+        712,
+        1074
+      ],
+      "dark_ui_ready": true,
+      "generation": "ide-v2",
+      "solid_matte": [
+        17,
+        22,
+        26
+      ]
+    },
+    "ide/copy": {
+      "raster": "../ide-v2/sheet.png",
+      "rect": [
+        736,
+        736,
+        1074,
+        1074
+      ],
+      "dark_ui_ready": true,
+      "generation": "ide-v2",
+      "solid_matte": [
+        17,
+        22,
+        26
+      ]
+    },
+    "ide/undo": {
+      "raster": "../ide-v2/sheet.png",
+      "rect": [
+        1098,
+        736,
+        1436,
+        1074
+      ],
+      "dark_ui_ready": true,
+      "generation": "ide-v2",
+      "solid_matte": [
+        17,
+        22,
+        26
+      ]
     }
   },
   "unmapped": []

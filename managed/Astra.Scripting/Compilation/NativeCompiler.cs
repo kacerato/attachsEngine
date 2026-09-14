@@ -61,12 +61,13 @@ public static class NativeCompiler
     private static string Quote(string text) => "\"" + text.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
     private static string SerializeReport(ScriptBuildResult result)
     {
-        var output = new StringBuilder("ASTRA_CODE 1 ");
+        var output = new StringBuilder("ASTRA_CODE 2 ");
         output.Append(result.Success ? "1 " : "0 ").Append(result.Diagnostics.Length).Append(' ');
         foreach (var diagnostic in result.Diagnostics)
             output.Append(Quote(diagnostic.File)).Append(' ').Append(diagnostic.Line).Append(' ')
                 .Append(diagnostic.Column).Append(' ').Append(diagnostic.Error ? "1 " : "0 ")
-                .Append(Quote(diagnostic.Code)).Append(' ').Append(Quote(diagnostic.Message)).Append(' ');
+                .Append(Quote(diagnostic.Code)).Append(' ').Append(Quote(diagnostic.Message)).Append(' ')
+                .Append(diagnostic.ExcerptLine).Append(' ').Append(Quote(diagnostic.SourceExcerpt)).Append(' ');
         var types = result.Project?.Types ?? [];
         output.Append(types.Length).Append(' ');
         foreach (var type in types)

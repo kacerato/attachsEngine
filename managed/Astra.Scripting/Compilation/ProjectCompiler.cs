@@ -7,7 +7,8 @@ using Microsoft.CodeAnalysis.Emit;
 
 namespace Astra.Compilation;
 
-public sealed record ScriptDiagnostic(string File, int Line, int Column, string Code, string Message, bool Error);
+public sealed record ScriptDiagnostic(string File, int Line, int Column, string Code, string Message, bool Error,
+    string SourceExcerpt = "", int ExcerptLine = 0);
 public sealed record ScriptPropertySchema(string Id, string Name, string ValueType);
 public sealed record ScriptTypeSchema(string Id, string Name, string File, ScriptPropertySchema[] Properties);
 public sealed record CompiledProject(string Id, byte[] Assembly, byte[] Symbols, ScriptTypeSchema[] Types);
@@ -29,7 +30,8 @@ public sealed class ProjectCompiler
             var root = Path.GetFullPath(projectDirectory);
             if (!Directory.Exists(root)) return Failure("ASTRA001", "Project directory is unavailable.");
             var inputs = ReadSources(root, cancellation);
-            if (inputs.Count == 0) return Failure("ASTRA002", "The project contains no C# source files.");
+            // An empty project is valid. Emitting an empty assembly also clears
+            // the published catalog when the last source is intentionally removed.
             var trees = inputs.Select(input => CSharpSyntaxTree.ParseText(input.Text,
                 new CSharpParseOptions(LanguageVersion.CSharp12), input.Path, Encoding.UTF8, cancellation)).ToArray();
             var referencePaths = ReferencePaths();
@@ -52,7 +54,22 @@ public sealed class ProjectCompiler
                 options: new EmitOptions(debugInformationFormat: DebugInformationFormat.PortablePdb),
                 cancellationToken: cancellation);
             var diagnostics = emitted.Diagnostics.Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
-                .Select(d => ConvertDiagnostic(d, root)).Concat(schemaErrors).Take(4096).ToArray();
+                .Select(d => ConvertDiagnostic(d, root)).Concat(schemaErrors).Take(4096).Select(d => {
+                    var source = inputs.FirstOrDefault(s => s.Path == d.File).Text;
+                    if (source is null) return d;
+                    int first = Math.Max(1, d.Line - 1), at = 0, line = 1;
+                    while (line < first && at < source.Length) { if (source[at++] == '\n') ++line; }
+                    var excerpt = new StringBuilder();
+                    for (int shown = 0; shown < 3 && at < source.Length; ++shown)
+                    {
+                        int end = source.IndexOf('\n', at); if (end < 0) end = source.Length;
+                        int length = Math.Min(300, end - at);
+                        if (length > 0 && char.IsHighSurrogate(source[at + length - 1])) --length;
+                        if (shown > 0) excerpt.Append('\n');
+                        excerpt.Append(source, at, length); at = end + 1;
+                    }
+                    return d with { SourceExcerpt = excerpt.ToString(), ExcerptLine = first };
+                }).ToArray();
             if (!emitted.Success || schemaErrors.Any(d => d.Error)) return new(null, diagnostics);
             return new(new(id, assembly.ToArray(), symbols.ToArray(), types), diagnostics);
         }
@@ -65,7 +82,7 @@ public sealed class ProjectCompiler
     private static ScriptBuildResult Failure(string code, string message) =>
         new(null, [new("", 1, 1, code, message, true)]);
 
-    private static List<(string Path, string Text)> ReadSources(string root, CancellationToken cancellation)
+    internal static List<(string Path, string Text)> ReadSources(string root, CancellationToken cancellation)
     {
         var sources = new List<(string Path, string Text)>(); var total = 0;
         var pending = new Stack<string>(); pending.Push(root);
@@ -93,7 +110,7 @@ public sealed class ProjectCompiler
         }
         sources.Sort((a, b) => StringComparer.Ordinal.Compare(a.Path, b.Path)); return sources;
     }
-    private static string[] ReferencePaths()
+    internal static string[] ReferencePaths()
     {
         var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         void Add(string path)

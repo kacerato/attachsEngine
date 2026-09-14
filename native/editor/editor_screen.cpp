@@ -1,3 +1,4 @@
+#include <sstream>
 #include "scene/script_behavior.h"
 #include "editor/editor_water_body_component.h"
 #include "editor/editor_route_component.h"
@@ -12,6 +13,8 @@
 #include "editor/editor_component_catalog.h"
 #include "editor/editor_grid.h"
 #include "editor/editor_collider_geometry.h"
+#include "editor/editor_import_reconcile.h"
+#include <bit>
 
 #include "ui/ui_icon_id.h"
 
@@ -19,6 +22,8 @@
 #include <cstdio>
 #include <cmath>
 #include <vector>
+#include <array>
+#include <filesystem>
 
 namespace ae::editor {
 namespace {
@@ -328,11 +333,53 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
   const auto &files=*builder.state.files;
   builder.list.addRect(panel,theme.color.surface);builder.router.addBlocker(panel);
   auto content=deflate(panel,UiInsets::all(6));
-  auto header=takeTop(content,28);
+  const bool code=builder.state.workspace==EditorWorkspace::Code;
+  auto header=takeTop(content,code?62.0f:28.0f);
+  if(code) {
+    auto activity=header;const float width=activity.width/3;
+    u32 index=0;
+    for(const auto &item:std::array<std::pair<UiIcon,EditorWidget>,3>{{
+        {UiIcon::IdeCode,EditorWidget::CodeFiles},{UiIcon::IdeFiles,EditorWidget::CodeFiles},
+        {UiIcon::IdeConsole,EditorWidget::CodeConsole}}}) {
+      auto hit=takeLeft(activity,width);auto label=hit;
+      const auto image=takeTop(label,35);
+      builder.list.addImage(centred(image,24,24),static_cast<UiImageId>(item.first),0xffffffff);
+      const char *names[]{"Código","Arquivos","Console"};
+      builder.label(label,names[index],index==1?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      if(index==1) builder.list.addRect({hit.x+8,hit.bottom()-2,hit.width-16,2},theme.color.accent,1);
+      else builder.router.addRegion(hit,widgetId(item.second));
+      ++index;
+    }
+    header=takeTop(content,44);
+    builder.iconButton(takeRight(header,34),UiIcon::AssetsImport,widgetId(EditorWidget::ImportModel));
+    auto newFile=takeRight(header,34),newFolder=takeRight(header,34);
+    builder.list.addImage(centred(newFile,19,19),static_cast<UiImageId>(UiIcon::IdeAdd),0xffffffff);
+    builder.list.addImage(centred(newFolder,19,19),static_cast<UiImageId>(UiIcon::IdeFiles),0xffffffff);
+    builder.router.addRegion(newFile,widgetId(EditorWidget::CodeNew));
+    builder.router.addRegion(newFolder,widgetId(EditorWidget::CodeNewFolder));
+    builder.list.addRect({content.x,header.bottom(),content.width,1},theme.color.lineSoft);
+  } else {
+    builder.router.addRegion(header,widgetId(EditorWidget::FilesCollapse));
+    builder.iconButton(takeRight(header,28),UiIcon::ScriptingCode,widgetId(EditorWidget::CodeOpen));
+    builder.iconButton(takeRight(header,28),UiIcon::AssetsImport,widgetId(EditorWidget::ImportModel));
+  }
   builder.label(header,"Arquivos",theme.color.text,theme.type.body);
-  builder.router.addRegion(header,widgetId(EditorWidget::FilesCollapse));
-  builder.iconButton(takeRight(header,28),UiIcon::ScriptingCode,widgetId(EditorWidget::CodeOpen));
-  if(builder.state.filesCollapsed) return;
+  if(builder.state.filesCollapsed && !code) return;
+  if(code) {
+    auto bottom=takeBottom(content,58);
+    auto folder=deflate(takeLeft(bottom,bottom.width*.48f),UiInsets::all(5));
+    builder.list.addRect(folder,theme.color.raised,6);builder.list.addBorder(folder,theme.color.line,1,6);
+    builder.label(folder,"Nova pasta",theme.color.text,theme.type.body,UiAlign::Center);
+    builder.router.addRegion(folder,widgetId(EditorWidget::CodeNewFolder));
+    auto add=deflate(bottom,UiInsets::all(5));
+    builder.list.addRect(add,theme.color.accent,6);
+    builder.label(add,"+  Add",theme.color.accentInk,theme.type.body,UiAlign::Center);
+    builder.router.addRegion(add,widgetId(EditorWidget::CodeNew));
+    auto project=takeBottom(content,48);
+    builder.list.addRect({project.x,project.y,project.width,1},theme.color.lineSoft);
+    const auto root=std::filesystem::path(files.rootPath()).filename().string();
+    builder.label(deflate(project,UiInsets::symmetric(10,0)),("Projeto local  ·  "+root).c_str(),theme.color.textMuted,theme.type.caption);
+  }
   // As acoes aparecem para o arquivo escolhido, e desaparecem com ele. Nomes em
   // texto e nao icones: apagar um recurso nao e uma acao para se adivinhar pelo
   // desenho.
@@ -353,18 +400,38 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
     action(actions,confirming?"Apagar mesmo assim":"Apagar",EditorWidget::FilesDelete,
            confirming?theme.color.accent:theme.color.text);
   }
+  if(builder.state.selectedFile.ends_with(".glb")) {
+    auto actions=takeBottom(content,36);
+    for(const auto &item:std::array<std::pair<const char *,EditorWidget>,2>{{
+        {"Instanciar",EditorWidget::AssetInstantiate},{"Reimportar",EditorWidget::AssetReimport}}}) {
+      auto button=deflate(takeLeft(actions,content.width*.5f),UiInsets::all(3));
+      builder.list.addRect(button,theme.color.raised,theme.radius.control);
+      builder.label(button,item.first,theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(button,widgetId(item.second));
+    }
+  }
   if(!files.error().empty()) {
     builder.list.pushClip(content);builder.label(content,files.error().c_str(),theme.color.textDim,theme.type.caption);builder.list.popClip();return;
   }
   builder.list.pushClip(content);
   const auto &entries=files.tree();
-  for(u32 i=builder.state.fileScroll;i<entries.size() && content.height>=24;++i) {
-    const auto &entry=entries[i];auto row=takeTop(content,24);const auto hit=row;
-    if(entry.relativePath==builder.state.selectedFile)
-      builder.list.addRect(hit,withAlpha(theme.color.accent,0.18f),theme.radius.control);
+  const float rowHeight=code?38.0f:24.0f;
+  for(u32 i=builder.state.fileScroll;i<entries.size() && content.height>=rowHeight;++i) {
+    const auto &entry=entries[i];auto row=takeTop(content,rowHeight);const auto hit=row;
+    if(entry.relativePath==builder.state.selectedFile) {
+      builder.list.addRect(hit,code?theme.color.accentWash:withAlpha(theme.color.accent,0.18f),theme.radius.control);
+      if(code) builder.list.addRect({hit.x,hit.y,3,hit.height},theme.color.accent);
+    }
     takeLeft(row,static_cast<float>(entry.depth)*14);
+    if(code) {
+      for(unsigned depth=0;depth<entry.depth;++depth)
+        builder.list.addRect({hit.x+static_cast<float>(depth)*14+7,hit.y,1,hit.height},theme.color.lineSoft);
+      const auto fold=takeLeft(row,14);
+      if(entry.directory) builder.label(fold,entry.expanded?"v":">",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    }
     auto icon=takeLeft(row,22);
-    builder.list.addImage(centred(icon,15,15),static_cast<UiImageId>(entry.directory?UiIcon::EditorAuthorFolder:UiIcon::AssetsFile),theme.color.textDim);
+    builder.list.addImage(centred(icon,code?20:15,code?20:15),static_cast<UiImageId>(entry.directory?(code?UiIcon::IdeFiles:UiIcon::EditorAuthorFolder):
+        entry.name.ends_with(".cs")?(code?UiIcon::IdeCode:UiIcon::ScriptingCode):UiIcon::AssetsFile),code?0xffffffff:theme.color.textDim);
     builder.label(row,entry.name.c_str(),theme.color.text,theme.type.caption);
     builder.router.addRegion(hit,widgetId(EditorWidget::FileRowBase)+i);
   }
@@ -685,7 +752,10 @@ void buildScriptFields(ScreenBuilder &builder,UiRect content,const scene::Script
   auto source=takeTop(content,38);builder.label(source,"Abrir código",theme.color.text,theme.type.caption);
   builder.router.addRegion(source,widgetId(EditorWidget::ScriptSourceBase)+index);
   const auto *schema=scriptSchema(builder.state,script.scriptType);
-  if(!schema) {builder.label(content,"Aplique o código para carregar os campos",theme.color.textMuted,theme.type.caption);return;}
+  if(!schema) {builder.label(content,"Tipo não resolvido; dados preservados",theme.color.textMuted,theme.type.caption);return;}
+  usize orphaned=0;
+  for(const auto &value:script.properties) if(std::none_of(schema->properties.begin(),schema->properties.end(),[&](const auto &property){return property.id==value.id;})) ++orphaned;
+  if(orphaned) builder.label(takeTop(content,30),(std::to_string(orphaned)+" campos preservados fora do schema").c_str(),theme.color.warning,theme.type.caption);
   const u32 visible=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-32)/40));
   const u32 pages=std::max(1u,(static_cast<u32>(schema->properties.size())+visible-1)/visible);
   const u32 page=std::min(builder.state.scriptPropertyPage,pages-1);
@@ -876,6 +946,52 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   if(cards.empty()) builder.label(content,"Nenhum componente encontrado",theme.color.textMuted,theme.type.caption);
 }
 
+// Vínculo com a fonte importada (M08.2): uma linha que diz de onde o objeto
+// veio e quanto ele difere da fonte; as ações reais abrem numa lista, no mesmo
+// padrão do menu de componente, sem barra permanente nova.
+void buildImportLinkCard(ScreenBuilder &builder, UiRect &content) {
+  const auto &state=builder.state;const auto &theme=builder.theme;const auto &view=state.importLink;
+  if(!view.linked || content.height<48) return;
+  auto row=takeTop(content,44);const auto hit=row;
+  builder.list.addRect(row,theme.color.raised,theme.radius.control);
+  if(view.orphan || view.overrides) builder.list.addRect({row.x,row.y+4,3,row.height-8},view.orphan?theme.color.warning:theme.color.accent,1);
+  builder.list.addImage(centred(takeLeft(row,36),24,24),static_cast<UiImageId>(UiIcon::AssetsImport),0xffffffff);
+  auto more=takeRight(row,32);
+  builder.list.addImage(centred(more,20,20),static_cast<UiImageId>(UiIcon::EditorAuthorMore),theme.color.textDim);
+  const std::string title=view.orphan?std::string("Removido da fonte"):view.source;
+  std::string detail=view.orphan?std::string("órfão · dados locais preservados"):view.node.empty()?std::string("vinculado"):view.node;
+  if(!view.orphan) {
+    const auto changes=std::popcount(view.overrides);
+    detail+=changes?" · "+std::to_string(changes)+(changes==1?" alteração local":" alterações locais"):std::string(" · igual à fonte");
+  }
+  builder.label(takeTop(row,24),title.c_str(),theme.color.text,theme.type.body);
+  builder.label(row,detail.c_str(),view.orphan?theme.color.warning:view.overrides?theme.color.accent:theme.color.textMuted,theme.type.caption);
+  builder.router.addRegion(hit,widgetId(EditorWidget::ImportLinkMenu));
+  if(state.importLinkMenu) {
+    struct Action {const char *label;u32 id;};
+    std::vector<Action> actions;
+    if(view.orphan) {
+      actions.push_back({"Manter como objeto independente",widgetId(EditorWidget::ImportLinkKeep)});
+      actions.push_back({"Apagar objeto",widgetId(EditorWidget::ImportLinkDelete)});
+    } else {
+      const struct {u32 bit;const char *label;} fields[]{
+          {ImportOverrideName,"Reverter nome à fonte"},{ImportOverridePosition,"Reverter posição à fonte"},
+          {ImportOverrideRotation,"Reverter rotação à fonte"},{ImportOverrideScale,"Reverter escala à fonte"},
+          {ImportOverrideParent,"Reverter pai à fonte"},{ImportOverrideMesh,"Reverter malha à fonte"}};
+      for(const auto &field:fields) if(view.overrides&field.bit) actions.push_back({field.label,widgetId(EditorWidget::ImportLinkRevertBase)+field.bit});
+      if(std::popcount(view.overrides)>1) actions.push_back({"Reverter tudo à fonte",widgetId(EditorWidget::ImportLinkRevertBase)+ImportOverrideAll});
+      actions.push_back({"Desvincular instância",widgetId(EditorWidget::ImportLinkUnlink)});
+    }
+    for(const auto &action:actions) {
+      if(content.height<34) break;
+      auto line=takeTop(content,34);
+      builder.label(line,action.label,theme.color.text,theme.type.caption);
+      builder.router.addRegion(line,action.id);
+    }
+  }
+  takeTop(content,4);
+}
+
 void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   const UiTheme &theme = builder.theme;
   const EditorEntity *entity = builder.state.document->find(builder.state.selection);
@@ -900,7 +1016,8 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   const float half = header.height * 0.5f;
   builder.label({header.x, header.y, header.width, half}, entity->name, theme.color.text,
                 theme.type.cardName);
-  builder.label({header.x, header.y + half, header.width, half}, (std::to_string(entity->components.size())+" componentes").c_str(),
+  builder.label({header.x, header.y + half, header.width, half}, // O vínculo com a fonte tem linha própria, não é card: não entra na contagem.
+                (std::to_string(entity->components.size()-(scene::importLink(entity->components)?1u:0u))+" componentes").c_str(),
                 theme.color.textDim, theme.type.label);
 
   if(builder.state.workspace==EditorWorkspace::Settings) {
@@ -950,6 +1067,7 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
     return;
   }
   takeTop(content,6);
+  buildImportLinkCard(builder,content);
   buildComponents(builder,content,*entity);
 }
 
@@ -1015,15 +1133,18 @@ bool platformFieldActive(const EditorScreenState &state) {
          state.editingCreationSearch || state.editingComponentSearch || state.editingMeshSearch ||
          state.editingReferenceSearch || state.numericField != 0 ||
          state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode ||
-         state.renamingResource;
+         state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole;
 }
 
 const char *platformFieldTitle(const EditorScreenState &state) {
   if (state.numericField != 0) return "Valor";
   if (state.renamingResource) return "Arquivo";
   if (state.editingScriptInstance != 0) return "Campo";
-  if (state.creatingScript) return "Nova classe C#";
+  if (state.creatingScript) return state.scriptTemplate==EditorCodeWorkspace::HelperTemplate?"Auxiliar C#":"Componente C#";
   if (state.searchingCode) return "Localizar";
+  if (state.searchingConsole) return "Console";
+  if (state.goingToLine) return "Ir para linha";
+  if (state.creatingCodeFolder) return "Nova pasta";
   if (state.renameEntity != kInvalidEntity) return "Nome";
   return "Buscar";
 }
@@ -1072,14 +1193,20 @@ void buildCodeMenu(ScreenBuilder &builder, const UiRect &anchor, EditorScreenLay
   const auto *buffer = workspace ? workspace->active() : nullptr;
   struct Item { const char *label; EditorWidget action; bool enabled; };
   const Item items[] = {
-    {builder.state.codeBuildBusy ? "Compilando…" : "Aplicar agora", EditorWidget::CodeApply,
-     builder.state.codeCompilerAvailable && !builder.state.codeBuildBusy},
+    {"Novo componente C#", EditorWidget::CodeNew, true},
+    {"Novo auxiliar C#", EditorWidget::CodeNewHelper, true},
+    {"Modelos de código…", EditorWidget::CodeTemplates, true},
+    {builder.state.codeBuildBusy ? "Compilando…" : "Recompilar projeto", EditorWidget::CodeApply,
+     builder.state.codeCompilerAvailable && !builder.state.codeBuildBusy && !builder.state.codeComposing},
     {"Salvar tudo", EditorWidget::CodeSaveAll, workspace != nullptr},
+    {"Ir para linha…", EditorWidget::CodeGoLine, buffer != nullptr},
+    {"Desfazer", EditorWidget::CodeUndo, buffer && !buffer->undo.empty()},
+    {"Refazer", EditorWidget::CodeRedo, buffer && !buffer->redo.empty()},
     {"Fechar arquivo", EditorWidget::CodeClose, buffer != nullptr},
   };
-  const float row = 42.0f;
+  const float row = std::min(42.0f,std::max(20.0f,(builder.state.surface.bottom()-anchor.bottom()-12)/static_cast<float>(std::size(items))));
   const float width = 220.0f;
-  UiRect panel{anchor.x + 250.0f, anchor.bottom() + 2.0f, width,
+  UiRect panel{anchor.right() - width - 8.0f, anchor.bottom() + 2.0f, width,
                row * static_cast<float>(std::size(items)) + 8.0f};
   panel.x = std::min(panel.x, builder.state.surface.right() - width - 8.0f);
   layout.codeMenu = panel;
@@ -1106,83 +1233,189 @@ void buildCodeMenu(ScreenBuilder &builder, const UiRect &anchor, EditorScreenLay
 // A lista e VIRTUALIZADA: so as linhas que cabem sao desenhadas. Quinhentas
 // linhas viram quinhentos retangulos e quinhentos textos por quadro, e o
 // console e justamente o painel que enche quando a coisa esta indo mal.
+// Console rows are a viewport into bounded events. Selection is an event ID,
+// so eviction or a new compiler batch cannot redirect a detail action.
 void buildConsole(ScreenBuilder &builder, UiRect panel, EditorScreenLayout &layout) {
-  const auto &theme = builder.theme;
-  const auto *console = builder.state.console;
-  if (console == nullptr) return;
-  builder.list.addRect(panel, theme.color.surface, theme.radius.control);
-  builder.router.addBlocker(panel);
-  UiRect content = deflate(panel, UiInsets::all(6.0f));
-
-  auto header = takeTop(content, 26.0f);
-  const struct { EditorConsoleSeverity severity; const char *label; EditorWidget widget; UiColor tone; }
-      filters[] = {
-    {EditorConsoleSeverity::Error, "Erros", EditorWidget::ConsoleError, theme.color.danger},
-    {EditorConsoleSeverity::Warning, "Avisos", EditorWidget::ConsoleWarning, theme.color.warning},
-    {EditorConsoleSeverity::Info, "Registro", EditorWidget::ConsoleInfo, theme.color.textDim},
-  };
-  for (const auto &filter : filters) {
-    auto chip = deflate(takeLeft(header, 108.0f), UiInsets::all(2.0f));
-    const bool on = console->visible(filter.severity);
-    builder.list.addRect(chip, on ? theme.color.raised : theme.color.surface, theme.radius.control);
-    const std::string text =
-        std::string(filter.label) + " " + std::to_string(console->count(filter.severity));
-    builder.label(chip, text.c_str(), on ? filter.tone : theme.color.textMuted,
-                  theme.type.caption, UiAlign::Center);
-    builder.router.addRegion(chip, widgetId(filter.widget));
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  const auto *console=state.console;if(!console) return;
+  builder.list.addRect(panel,theme.color.canvas,10);
+  builder.list.addBorder(panel,theme.color.line,1,10);
+  if(!state.consoleCollapsed) {
+    builder.list.addRect({panel.x+panel.width*.5f-10,panel.y+3,20,2},theme.color.textMuted,1);
   }
-  auto clear = deflate(takeRight(header, 84.0f), UiInsets::all(2.0f));
-  builder.label(clear, "Limpar", theme.color.textDim, theme.type.caption, UiAlign::Center);
-  builder.router.addRegion(clear, widgetId(EditorWidget::ConsoleClear));
-  auto collapse = deflate(takeRight(header, 34.0f), UiInsets::all(2.0f));
-  builder.label(collapse, builder.state.consoleCollapsed ? "^" : "v", theme.color.textDim,
-                theme.type.caption, UiAlign::Center);
-  builder.router.addRegion(collapse, widgetId(EditorWidget::ConsoleCollapse));
-  if (builder.state.consoleCollapsed) return;
-
-  const auto order = console->filtered();
-  const float row = 26.0f;
-  const auto fits = static_cast<u32>(std::max(0.0f, content.height) / row);
-  layout.consoleVisibleRows = fits;
-  layout.consoleRowCount = static_cast<u32>(order.size());
-  if (order.empty()) {
-    builder.label(content, "Sem mensagens", theme.color.textMuted, theme.type.caption);
+  builder.router.addBlocker(panel);
+  if(!state.consoleCollapsed) builder.router.addRegion({panel.x+panel.width*.5f-32,panel.y,64,14},widgetId(EditorWidget::ConsoleResize));
+  auto content=deflate(panel,UiInsets::all(8));
+  auto button=[&](UiRect rect,const std::string &label,EditorWidget widget,bool active=false,bool enabled=true) {
+    rect=deflate(rect,UiInsets::all(2));
+    builder.list.addRect(rect,active?theme.color.raised:theme.color.surface,5);
+    builder.list.addBorder(rect,active?theme.color.line:theme.color.lineSoft,1,5);
+    builder.label(rect,label.c_str(),enabled?(active?theme.color.accent:theme.color.textDim):theme.color.textFaint,
+                  theme.type.caption,UiAlign::Center);
+    if(enabled) builder.router.addRegion(rect,widgetId(widget));
+  };
+  auto header=takeTop(content,30);
+  builder.list.addImage(centred(takeLeft(header,32),22,22),static_cast<UiImageId>(UiIcon::IdeConsole),0xffffffff);
+  button(takeRight(header,34),state.consoleCollapsed?"+":"-",EditorWidget::ConsoleCollapse);
+  if(!state.consoleCollapsed) {
+    const auto expand=takeRight(header,34);
+    builder.list.addImage(centred(expand,18,18),static_cast<UiImageId>(state.consoleExpanded?UiIcon::ViewCollapse:UiIcon::ViewExpand),theme.color.textDim);
+    builder.router.addRegion(expand,widgetId(EditorWidget::ConsoleExpand));
+  }
+  builder.label(takeLeft(header,std::min(65.0f,header.width)),"Console",theme.color.text,theme.type.caption);
+  if(header.width>65) {
+    const auto errors=console->count(EditorConsoleSeverity::Error);
+    const char *summary=state.codeBuildBusy?"Compilando":errors?"Com erros":
+        state.code&&state.code->publishedGeneration()?"Publicado":"Sem erros";
+    builder.label(header,summary,errors?theme.color.danger:theme.color.accent,theme.type.caption);
+  }
+  if(state.consoleCollapsed) return;
+  auto tabs=takeTop(content,34);
+  const auto problems=std::count_if(console->entries().begin(),console->entries().end(),[](const auto &e) {
+    return e.origin==EditorConsoleOrigin::Compiler;
+  });
+  const auto problemsTab=takeLeft(tabs,tabs.width*.5f);
+  button(problemsTab,"Problemas  "+std::to_string(problems),EditorWidget::ConsoleProblems,state.consoleProblems);
+  button(tabs,"Registros  "+std::to_string(console->entries().size()-problems),EditorWidget::ConsoleLogs,!state.consoleProblems);
+  const auto activeTab=state.consoleProblems?problemsTab:tabs;
+  builder.list.addRect({activeTab.x+3,activeTab.bottom()-2,activeTab.width-6,2},theme.color.accent,1);
+  auto search=takeTop(content,34);
+  const auto searchHit=deflate(search,UiInsets::all(2));
+  builder.list.addRect(searchHit,theme.color.surface,5);
+  builder.list.addBorder(searchHit,theme.color.line,1,5);
+  builder.list.addImage(centred(takeLeft(search,30),18,18),static_cast<UiImageId>(UiIcon::IdeSearch),0xffffffff);
+  builder.label(search,state.consoleQuery.empty()?"Buscar mensagem ou arquivo…":state.consoleQuery.c_str(),theme.color.textMuted,theme.type.caption);
+  builder.router.addRegion(searchHit,widgetId(EditorWidget::ConsoleSearch));
+  const std::string origin=state.consoleOrigin<0?"Todas origens":EditorConsole::originName(static_cast<EditorConsoleOrigin>(state.consoleOrigin));
+  auto filters=takeTop(content,32);
+  const auto source=takeRight(filters,108);
+  button(source,origin,EditorWidget::ConsoleSource,state.consoleOrigin>=0);
+  for(const auto severity:{EditorConsoleSeverity::Error,EditorConsoleSeverity::Warning,EditorConsoleSeverity::Info}) {
+    const auto id=severity==EditorConsoleSeverity::Error?EditorWidget::ConsoleError:severity==EditorConsoleSeverity::Warning?EditorWidget::ConsoleWarning:EditorWidget::ConsoleInfo;
+    const char *name=severity==EditorConsoleSeverity::Error?"Erros":severity==EditorConsoleSeverity::Warning?"Avisos":"Info";
+    const auto chip=deflate(takeLeft(filters,filters.width/(severity==EditorConsoleSeverity::Error?3:severity==EditorConsoleSeverity::Warning?2:1)),UiInsets::all(2));
+    const auto color=severity==EditorConsoleSeverity::Error?theme.color.danger:severity==EditorConsoleSeverity::Warning?theme.color.warning:0xff68b9f2;
+    const bool active=console->visible(severity);
+    builder.list.addRect(chip,theme.color.surface,5);
+    builder.list.addBorder(chip,active?color:theme.color.lineSoft,1,5);
+    builder.label(chip,(std::string(name)+" "+std::to_string(console->count(severity))).c_str(),active?color:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(chip,widgetId(id));
+  }
+  auto tools=takeBottom(content,36);
+  button(takeLeft(tools,tools.width/3),"Exportar",EditorWidget::ConsoleExport);
+  button(takeRight(tools,tools.width*.5f),"Limpar",EditorWidget::ConsoleClear,false,!state.consoleProblems);
+  const auto followHit=tools;
+  const auto toggle=centred(takeLeft(tools,36),30,16);
+  builder.list.addRect(toggle,state.consoleFollow?theme.color.accentWash:theme.color.raised,8);
+  builder.list.addRect({toggle.x+(state.consoleFollow?15.0f:1.0f),toggle.y+1,14,14},state.consoleFollow?theme.color.accent:theme.color.textMuted,7);
+  builder.label(tools,"Seguir saída",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  builder.router.addRegion(followHit,widgetId(EditorWidget::ConsoleFollow));
+  auto footer=takeBottom(content,22);
+  const auto order=console->filtered(state.consoleProblems?1:0,state.consoleOrigin,state.consoleQuery);
+  builder.label(footer,(std::to_string(order.size())+" eventos · repetições agrupadas"+
+      (console->dropped()?" · "+std::to_string(console->dropped())+" descartados":"")).c_str(),theme.color.textMuted,theme.type.caption);
+  const auto *selected=console->find(state.consoleSelected);
+  if(selected && content.height>150) {
+    auto detail=deflate(takeBottom(content,std::min(264.0f,content.height-62.0f)),UiInsets::symmetric(2,4));
+    builder.list.addRect(detail,theme.color.surface,8);
+    builder.list.addBorder(detail,theme.color.line,1,8);
+    auto inner=deflate(detail,UiInsets::all(8));
+    auto actions=takeTop(inner,30);
+    button(takeRight(actions,28),"×",EditorWidget::ConsoleDetailClose);
+    builder.label(actions,"Detalhes do evento",theme.color.text,theme.type.caption);
+    auto detailActions=takeBottom(inner,34);
+    auto openSource=deflate(takeLeft(detailActions,detailActions.width*.58f),UiInsets::all(2));
+    const bool hasSource=!selected->file.empty()||selected->object!=0;
+    builder.list.addRect(openSource,hasSource?theme.color.accent:theme.color.raised,5);
+    builder.label(openSource,"Abrir fonte",hasSource?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    if(hasSource) builder.router.addRegion(openSource,widgetId(EditorWidget::ConsoleOpenSource));
+    button(detailActions,"Copiar",EditorWidget::ConsoleCopy);
+    // Immutable excerpt returned by the compiler, even when the editor buffer
+    // has changed since that build. Never substitute today's text for the error.
+    if(!selected->sourceExcerpt.empty() && selected->excerptLine && inner.height>110) {
+      const auto &source=selected->sourceExcerpt;
+      {
+        auto snippet=takeBottom(inner,76);
+        builder.list.addRect(snippet,theme.color.canvas,4);
+        builder.list.pushClip(snippet);
+        u32 lineNumber=selected->excerptLine;usize at=0;
+        for(int shown=0;shown<3 && at<source.size();++shown,++lineNumber) {
+          auto row=takeTop(snippet,24);
+          if(lineNumber==selected->line) builder.list.addRect(row,0xff302127,3);
+          auto number=takeLeft(row,32);
+          builder.label(number,std::to_string(lineNumber).c_str(),lineNumber==selected->line?theme.color.danger:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+          const auto end=source.find('\n',at);
+          builder.label(row,source.substr(at,end==std::string::npos?end:end-at).c_str(),theme.color.textDim,theme.type.caption);
+          if(end==std::string::npos) break;
+          at=end+1;
+        }
+        builder.list.popClip();
+      }
+    }
+    // Wrap by UTF-8 code points, never split a byte sequence. Pages expose the
+    // complete retained message/stack; copying always uses the complete text.
+    const auto text=EditorConsole::describe(*selected);
+    const auto columns=static_cast<u32>(std::max(12.0f,inner.width/(theme.type.caption.size*.62f)));
+    std::vector<std::string> lines;std::string line;u32 column=0;
+    for(usize i=0;i<text.size();) {
+      if(text[i]=='\n') {lines.push_back(line);line.clear();column=0;++i;continue;}
+      usize end=i+1;while(end<text.size()&&(static_cast<unsigned char>(text[end])&0xc0)==0x80) ++end;
+      line.append(text,i,end-i);i=end;
+      if(++column>=columns) {lines.push_back(line);line.clear();column=0;}
+    }
+    if(!line.empty()) lines.push_back(line);
+    const bool needsPages=lines.size()>static_cast<u32>(std::max(0.0f,inner.height)/19);
+    auto pager=needsPages?takeBottom(inner,24):UiRect{};
+    const u32 fits=std::max(1u,static_cast<u32>(std::max(0.0f,inner.height)/19));
+    const u32 pages=std::max(1u,(static_cast<u32>(lines.size())+fits-1)/fits);
+    const u32 page=std::min(state.consoleDetailPage,pages-1);
+    if(needsPages) {
+      button(takeRight(pager,38),">",EditorWidget::ConsoleDetailNext,false,page+1<pages);
+      button(takeRight(pager,38),"<",EditorWidget::ConsoleDetailPrevious,false,page>0);
+      builder.label(pager,("Página "+std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption);
+    }
+    builder.list.pushClip(inner);
+    for(u32 i=page*fits;i<lines.size() && i<(page+1)*fits;++i)
+      builder.label(takeTop(inner,19),lines[i].c_str(),theme.color.text,theme.type.caption);
+    builder.list.popClip();
+  }
+  constexpr float rowHeight=56;
+  const u32 fits=static_cast<u32>(std::max(0.0f,content.height)/rowHeight);
+  layout.consoleVisibleRows=fits;layout.consoleRowCount=static_cast<u32>(order.size());
+  if(order.empty()) {
+    builder.label(content,state.consoleQuery.empty()?(state.consoleProblems?"Nenhum problema de compilação":"Nenhum registro nesta sessão"):
+        "Nenhuma mensagem corresponde aos filtros",theme.color.textMuted,theme.type.caption,UiAlign::Center);
     return;
   }
-  // A janela anda a partir do FIM: um console mostra o que acabou de acontecer,
-  // e rolar para cima e que e a excecao.
-  const u32 hidden = order.size() > fits ? static_cast<u32>(order.size()) - fits : 0;
-  const u32 first = hidden > builder.state.consoleScroll ? hidden - builder.state.consoleScroll : 0;
+  const u32 hidden=order.size()>fits?static_cast<u32>(order.size())-fits:0;
+  u32 first=hidden>state.consoleScroll?hidden-state.consoleScroll:0;
+  if(!state.consoleFollow && state.consoleAnchor) {
+    const auto anchor=std::find_if(order.begin(),order.end(),[&](u32 i) {return console->at(i)->eventId>=state.consoleAnchor;});
+    first=std::min(hidden,static_cast<u32>(anchor-order.begin()));
+  }
   builder.list.pushClip(content);
-  for (u32 offset = 0; offset < fits && first + offset < order.size(); ++offset) {
-    const u32 index = order[first + offset];
-    const auto *entry = console->at(index);
-    if (entry == nullptr) continue;
-    auto line = takeTop(content, row);
-    builder.router.addRegion(line, widgetId(EditorWidget::ConsoleRowBase) + index);
-    const UiColor tone = entry->severity == EditorConsoleSeverity::Error ? theme.color.danger
-                       : entry->severity == EditorConsoleSeverity::Warning ? theme.color.warning
-                                                                           : theme.color.text;
-    builder.list.addRect({line.x, line.y + 4.0f, 3.0f, line.height - 8.0f}, tone);
-    auto text = line;
-    takeLeft(text, 10.0f);
-    // O lugar fica a DIREITA e o texto a esquerda: o olho procura a mensagem, e
-    // so vai atras do lugar quando decidiu ir ate la.
-    if (!entry->file.empty()) {
-      const auto slash = entry->file.find_last_of('/');
-      const std::string where =
-          (slash == std::string::npos ? entry->file : entry->file.substr(slash + 1)) + ":" +
-          std::to_string(entry->line);
-      builder.label(takeRight(text, 150.0f), where.c_str(), theme.color.textMuted,
-                    theme.type.caption, UiAlign::End);
-    } else if (entry->object != 0) {
-      builder.label(takeRight(text, 150.0f), ("objeto " + std::to_string(entry->object)).c_str(),
-                    theme.color.textMuted, theme.type.caption, UiAlign::End);
-    }
-    if (entry->repeats > 1)
-      builder.label(takeRight(text, 56.0f), ("x" + std::to_string(entry->repeats)).c_str(),
-                    theme.color.accent, theme.type.caption, UiAlign::End);
-    builder.label(text, entry->message.c_str(), theme.color.text, theme.type.caption);
+  for(u32 offset=0;offset<fits && first+offset<order.size();++offset) {
+    const u32 index=order[first+offset];const auto *entry=console->at(index);
+    auto row=takeTop(content,rowHeight);
+    const auto card=deflate(row,UiInsets::symmetric(2,3));
+    const auto semantic=entry->severity==EditorConsoleSeverity::Error?theme.color.danger:
+        entry->severity==EditorConsoleSeverity::Warning?theme.color.warning:0xff68b9f2;
+    builder.list.addRect(card,entry->eventId==state.consoleSelected?
+        (entry->severity==EditorConsoleSeverity::Error?0xff302127:0xff1b2933):theme.color.surface,6);
+    builder.list.addBorder(card,entry->eventId==state.consoleSelected?semantic:theme.color.lineSoft,1,6);
+    builder.router.addRegion(row,widgetId(EditorWidget::ConsoleRowBase)+index);
+    const auto icon=entry->severity==EditorConsoleSeverity::Error?UiIcon::IdeError:
+        entry->severity==EditorConsoleSeverity::Warning?UiIcon::IdeWarning:UiIcon::IdeConsole;
+    row=deflate(row,UiInsets::symmetric(6,3));
+    builder.list.addImage(centred(takeLeft(row,30),20,20),static_cast<UiImageId>(icon),0xffffffff);
+    auto message=takeTop(row,25);
+    if(entry->repeats>1) builder.label(takeRight(message,50),("×"+std::to_string(entry->repeats)).c_str(),theme.color.accent,theme.type.caption,UiAlign::End);
+    builder.label(message,entry->message.c_str(),theme.color.text,theme.type.caption);
+    std::string where=EditorConsole::originName(entry->origin);
+    if(!entry->file.empty()) {where+=" · "+entry->file;if(entry->line) where+=":"+std::to_string(entry->line);}
+    else if(entry->object) where+=" · objeto "+std::to_string(entry->object);
+    where+=" · +"+std::to_string(entry->elapsedMs/1000)+"s";
+    builder.label(row,where.c_str(),theme.color.textMuted,theme.type.caption);
   }
   builder.list.popClip();
 }
@@ -1192,67 +1425,51 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
   // O teclado do sistema come a parte de baixo da janela. Sem descontar isso, a
   // linha que esta sendo digitada fica atras do teclado e a rolagem acha que ela
   // esta visivel -- que e meio caminho de volta para editar numa caixa separada.
-  if(builder.state.editingCode && builder.state.platformTextInput) {
+  if(builder.state.platformTextInput && builder.state.platformImeFraction>0) {
     const float keyboard=builder.state.surface.height*builder.state.platformImeFraction;
     body.height=std::max(0.0f,body.height-keyboard);
   }
   builder.list.addRect(toolbar,theme.color.canvas);
   const UiRect toolbarOrigin=toolbar;
   builder.router.addBlocker(toolbar);builder.router.addBlocker(body);
-  // UMA barra de icones, e o resto numa lista que abre no menu.
-  //
-  // Eram nove botoes de texto, e numa tela de telefone eles ocupavam a largura
-  // inteira sem sobrar nada para o nome do arquivo. O que fica na barra e o que
-  // se usa a toda hora; o que se usa de vez em quando fica a um toque de
-  // distancia, com o nome escrito por extenso, que e mais legivel do que um
-  // decimo icone que ninguem decifra.
-  //
-  // `Aplicar` saiu da barra de proposito: o build acontece sozinho quando a
-  // digitacao para (ver runtime-gameplay.md §20), e um botao permanente para
-  // algo que ja aconteceu ensina o gesto errado. Ele continua no menu, para
-  // forcar.
   const auto *buffer=workspace?workspace->active():nullptr;
-  auto icon=[&](UiIcon glyph,EditorWidget action,bool enabled=true,bool active=false) {
-    auto rect=deflate(takeLeft(toolbar,46.0f),UiInsets::all(4.0f));
-    builder.list.addRect(rect,active?theme.color.accent:theme.color.raised,theme.radius.control);
-    builder.list.addImage(centred(rect,20.0f,20.0f),static_cast<UiImageId>(glyph),
-                          enabled?theme.color.text:theme.color.textFaint);
-    if(enabled) builder.router.addRegion(rect,widgetId(action),theme.touch.minimumTarget);
+  auto icon=[&](UiRect rect,UiIcon glyph,EditorWidget action,bool enabled=true,bool active=false) {
+    rect=deflate(rect,UiInsets::all(4));
+    if(active) builder.list.addRect(rect,theme.color.raised,theme.radius.control);
+    builder.list.addImage(centred(rect,25,25),static_cast<UiImageId>(glyph),enabled?0xffffffff:0x55ffffff);
+    if(enabled) builder.router.addRegion(rect,widgetId(action));
   };
-  icon(UiIcon::EditorAuthorChevron,EditorWidget::CodeScene);
-  icon(UiIcon::EditorAuthorAdd,EditorWidget::CodeNew);
-  icon(UiIcon::AssetsSave,EditorWidget::CodeSave,buffer&&buffer->dirty());
-  icon(UiIcon::EditorAuthorUndo,EditorWidget::CodeUndo,buffer&&!buffer->undo.empty());
-  icon(UiIcon::EditorAuthorRedo,EditorWidget::CodeRedo,buffer&&!buffer->redo.empty());
-  icon(UiIcon::AssetsSearch,EditorWidget::CodeSearch,buffer!=nullptr);
-  icon(UiIcon::EditorAuthorMore,EditorWidget::CodeMenu,true,builder.state.codeMenu);
-
-  // A linha de estado, a direita: onde o cursor esta, que arquivo e, e o que o
-  // catalogo publicado diz de si. O plano pede distinguir edicao nao salva,
-  // codigo salvo, compilando e geracao aplicada -- e e aqui que isso cabe sem
-  // roubar espaco de nada.
-  if(toolbar.width>260.0f) {
-    auto stateArea=deflate(takeRight(toolbar,250.0f),UiInsets{0.0f,0.0f,14.0f,0.0f});
-    std::string text;
-    if(buffer) {
-      u32 line=1,column=1;
-      const auto caret=std::min<usize>(builder.state.platformCaret,buffer->text.size());
-      for(usize i=0;i<caret;++i) { if(buffer->text[i]==char(10)) {++line;column=1;} else ++column; }
-      const auto dot=buffer->path.find_last_of('.');
-      const std::string kind=dot==std::string::npos?"":buffer->path.substr(dot+1);
-      text="Ln "+std::to_string(line)+", Col "+std::to_string(column);
-      if(!kind.empty()) text+="  "+kind;
-      if(buffer->dirty()) text+="  *";
-    }
-    if(builder.state.codeBuildBusy) text+="  compilando";
-    builder.label(stateArea,text.c_str(),theme.color.textMuted,theme.type.caption,UiAlign::End);
-  }
-  if(builder.state.files && body.width>720) {
-    layout.filesPanel=takeLeft(body,std::min(230.0f,body.width*.22f));
-    buildFiles(builder,layout.filesPanel);
-  }
+  const auto brand=takeLeft(toolbar,42);
+  builder.list.addImage(centred(brand,28,28),static_cast<UiImageId>(UiIcon::BrandMark),0xffffffff);
+  builder.router.addRegion(brand,widgetId(EditorWidget::CodeFiles));
+  icon(takeRight(toolbar,42),UiIcon::EditorAuthorMore,EditorWidget::CodeMenu,true,builder.state.codeMenu);
+  const auto play=deflate(takeRight(toolbar,52),UiInsets::symmetric(3,5));
+  builder.list.addRect(play,theme.color.accent,6);
+  builder.list.addImage(centred(play,22,22),static_cast<UiImageId>(UiIcon::EditorAuthorPlay),theme.color.accentInk);
+  builder.router.addRegion(play,widgetId(EditorWidget::PlayFromTopBar));
+  icon(takeRight(toolbar,42),UiIcon::IdeSearch,EditorWidget::CodeSearch,buffer!=nullptr);
+  builder.list.pushClip(toolbar);
+  builder.list.addImage(centred(takeLeft(toolbar,108),96,23),static_cast<UiImageId>(UiIcon::BrandWordmark),0xffffffff);
+  builder.list.popClip();
   layout.viewport=body;
   builder.list.addRect(body,theme.color.surface);
+  auto breadcrumb=takeTop(body,32);
+  builder.list.addRect(breadcrumb,theme.color.canvas);
+  auto back=takeLeft(breadcrumb,66);
+  builder.label(back,"< Cena",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  builder.router.addRegion(back,widgetId(EditorWidget::CodeScene));
+  builder.list.addImage(centred(takeLeft(breadcrumb,26),18,18),static_cast<UiImageId>(UiIcon::IdeFiles),0xffffffff);
+  builder.label(deflate(breadcrumb,UiInsets::symmetric(8,0)),buffer?buffer->path.c_str():"Projeto / Código",theme.color.textDim,theme.type.caption);
+  auto overlays=[&] {
+    if(builder.state.codeFiles && builder.state.files) {
+      builder.router.addBlocker(body);
+      builder.router.addRegion(body,widgetId(EditorWidget::CodeFiles));
+      builder.list.addRect(body,withAlpha(theme.color.voidBlack,.45f));
+      layout.filesPanel={body.x,body.y,std::min(440.0f,body.width*.90f),body.height};
+      buildFiles(builder,layout.filesPanel);
+    }
+    buildCodeMenu(builder,toolbarOrigin,layout);
+  };
   if(builder.state.choosingTemplate) {
     // Escolher de onde partir vem ANTES de nomear a classe: o nome que o
     // usuário digita já entra no arquivo certo, sem um segundo passo de
@@ -1281,45 +1498,103 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
     builder.router.addRegion(cancel,widgetId(EditorWidget::CodeTemplateClose));
     return;
   }
-  auto content=deflate(body,UiInsets::all(10));
-  auto tabs=takeTop(content,40);
-  if(workspace) {
-    builder.list.pushClip(tabs);
-    for(u32 i=0;i<workspace->buffers().size();++i) {
+  auto content=body;
+  auto tabs=takeTop(content,40);layout.codeTabs=tabs;
+  builder.list.addRect(tabs,theme.color.canvas);
+  icon(takeRight(tabs,40),UiIcon::EditorAuthorAdd,EditorWidget::CodeNew);
+  builder.list.addRect({tabs.x,tabs.bottom()-1,tabs.width,1},theme.color.lineSoft);
+  if(workspace && !workspace->buffers().empty()) {
+    const u32 first=std::min(builder.state.codeFirstTab,static_cast<u32>(workspace->buffers().size()-1));
+    const bool overflow=workspace->buffers().size()*156.0f>tabs.width;
+    if(overflow) {
+      auto previous=takeRight(tabs,30),next=takeRight(tabs,30);
+      builder.label(previous,"<",theme.color.textDim,theme.type.body,UiAlign::Center);
+      builder.label(next,">",theme.color.textDim,theme.type.body,UiAlign::Center);
+      if(first) builder.router.addRegion(previous,widgetId(EditorWidget::CodeTabsPrevious));
+      if(first+1<workspace->buffers().size()) builder.router.addRegion(next,widgetId(EditorWidget::CodeTabsNext));
+    }
+    for(u32 i=first;i<workspace->buffers().size() && tabs.width>=48;++i) {
       const auto &item=workspace->buffers()[i];
-      auto tab=deflate(takeLeft(tabs,160),UiInsets::all(2));
-      builder.list.addRect(tab,buffer&&item.id==buffer->id?theme.color.raised:theme.color.surface,theme.radius.control);
+      const auto tab=deflate(takeLeft(tabs,std::min(156.0f,tabs.width)),UiInsets::all(2));
+      const bool selected=buffer&&item.id==buffer->id;
+      builder.list.addRect(tab,selected?theme.color.raised:theme.color.canvas,theme.radius.control);
+      builder.list.addBorder(tab,selected?theme.color.line:theme.color.lineSoft,1,theme.radius.control);
+      if(selected) builder.list.addRect({tab.x,tab.bottom()-2,tab.width,2},theme.color.accent);
+      auto label=deflate(tab,UiInsets::symmetric(8,0));
+      const auto close=selected?takeRight(label,24):UiRect{};
+      builder.list.addImage(centred(takeLeft(label,24),19,19),static_cast<UiImageId>(UiIcon::IdeCode),0xffffffff);
       const auto slash=item.path.find_last_of('/');
       const std::string name=(slash==std::string::npos?item.path:item.path.substr(slash+1))+(item.dirty()?" *":"");
-      builder.label(tab,name.c_str(),theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.label(label,name.c_str(),selected?theme.color.text:theme.color.textDim,theme.type.caption);
       builder.router.addRegion(tab,widgetId(EditorWidget::CodeTabBase)+i);
+      if(selected) {
+        builder.label(close,"×",theme.color.textDim,theme.type.body,UiAlign::Center);
+        builder.router.addRegion(close,widgetId(EditorWidget::CodeClose));
+      }
     }
-    builder.list.popClip();
+  }
+  if(!builder.state.codeQuery.empty() && buffer) {
+    auto find=takeTop(content,30);
+    builder.label(takeLeft(find,std::max(0.0f,find.width-100)),("Buscar: "+builder.state.codeQuery).c_str(),theme.color.textDim,theme.type.caption);
+    auto previous=takeLeft(find,48),next=takeLeft(find,48);
+    builder.label(previous,"<",theme.color.text,theme.type.body,UiAlign::Center);
+    builder.label(next,">",theme.color.text,theme.type.body,UiAlign::Center);
+    builder.router.addRegion(previous,widgetId(EditorWidget::CodeFindPrevious));
+    builder.router.addRegion(next,widgetId(EditorWidget::CodeFindNext));
   }
   // O console e a voz do PROJETO, nao do arquivo aberto. Ele e reservado antes
   // do caminho que sai cedo quando nao ha buffer: um erro de compilacao que so
   // aparece quando ha um arquivo aberto e um erro que se esconde justamente de
   // quem acabou de fechar o arquivo por causa dele.
+  if(builder.state.platformCodeView) {
+    layout.codeAccessory=takeBottom(content,44);
+    builder.list.addRect(layout.codeAccessory,theme.color.canvas);
+    builder.list.addRect({layout.codeAccessory.x,layout.codeAccessory.y,layout.codeAccessory.width,1},theme.color.lineSoft);
+  }
   if(builder.state.console) {
-    const float wanted=builder.state.consoleCollapsed?38.0f:std::min(230.0f,content.height*.42f);
+    const float wanted=builder.state.consoleCollapsed?40.0f:content.height*(builder.state.consoleExpanded?.82f:builder.state.consoleFraction);
     layout.consolePanel=takeBottom(content,wanted);
   }
   auto status=takeBottom(content,28);
-  const std::string statusText=workspace&&!workspace->error().empty()?workspace->error():builder.state.status;
-  builder.label(status,statusText.c_str(),theme.color.textDim,theme.type.caption);
+  builder.list.addRect(status,theme.color.silhouette);
+  builder.list.addRect({status.x,status.y,status.width,1},theme.color.lineSoft);
+  status=deflate(status,UiInsets::symmetric(12,0));
+  std::string statusText;
+  if(buffer) {
+    u32 line=1,column=1;const auto caret=std::min<usize>(buffer->selectionEnd,buffer->text.size());
+    for(usize i=0;i<caret;++i) {
+      const auto c=static_cast<unsigned char>(buffer->text[i]);
+      if(c=='\n') {++line;column=1;} else if((c&0xc0)!=0x80) ++column;
+    }
+    statusText="Ln "+std::to_string(line)+", Col "+std::to_string(column)+"   ·   "+
+        (buffer->path.ends_with(".cs")?"C#":"Texto");
+  }
+  if(builder.state.codeComposing) statusText+="   Compondo";
+  else if(builder.state.codeBuildBusy) statusText+="   Compilando";
+  auto saved=takeRight(status,80);
+  builder.label(saved,buffer&&buffer->dirty()?"Salvar *":"Salvo",buffer&&buffer->dirty()?theme.color.accent:theme.color.textMuted,theme.type.caption,UiAlign::End);
+  if(buffer) builder.router.addRegion(saved,widgetId(EditorWidget::CodeSave));
+  builder.list.addRect(centred(takeLeft(status,20),8,8),theme.color.accent,4);
+  builder.label(status,statusText.c_str(),theme.color.textMuted,theme.type.caption);
   if(!layout.consolePanel.isEmpty()) buildConsole(builder,layout.consolePanel,layout);
   if(!buffer) {
     builder.label(takeTop(content,48),"Abra um arquivo ou crie um script C#",theme.color.text,theme.type.body);
     builder.label(takeTop(content,32),"Os arquivos pertencem ao projeto e têm histórico próprio.",theme.color.textDim,theme.type.caption);
-    if(!layout.consolePanel.isEmpty()) buildConsole(builder,layout.consolePanel,layout);
-    buildCodeMenu(builder,toolbarOrigin,layout);
+    auto open=takeTop(content,42);
+    builder.label(open,"Abrir arquivos",theme.color.accent,theme.type.body);
+    builder.router.addRegion(open,widgetId(EditorWidget::CodeFiles));
+    auto create=takeTop(content,42);
+    builder.label(create,"Criar script C#",theme.color.text,theme.type.body);
+    builder.router.addRegion(create,widgetId(EditorWidget::CodeNew));
+    overlays();
     return;
   }
-  builder.label(takeTop(content,28),buffer->path.c_str(),theme.color.textDim,theme.type.caption);
   builder.router.addRegion(content,widgetId(EditorWidget::CodeBody));
   layout.codeBody=content;
   layout.codeLineHeight=24.0f;
   layout.codeVisibleLines=static_cast<u32>(std::max(0.0f,content.height)/24.0f);
+  if(builder.state.platformCodeView && !builder.state.codeFiles && !builder.state.codeMenu &&
+      !platformFieldActive(builder.state)) {overlays();return;}
   builder.list.pushClip(content);
   // O cursor, quando o editor esta com o teclado aberto. Ele e um glifo inserido
   // no texto da linha, e nao um retangulo medido: a largura do texto so e
@@ -1349,7 +1624,93 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
     start=end+1;
   }
   builder.list.popClip();
-  buildCodeMenu(builder,toolbarOrigin,layout);
+  overlays();
+}
+
+static void buildProjectDialogs(ScreenBuilder &builder) {
+  const auto &state=builder.state;const auto &theme=builder.theme;
+  auto &list=builder.list;auto &router=builder.router;
+    if(state.importPanel) {
+    list.addRect(state.surface,withAlpha(theme.color.voidBlack,.7f));router.addBlocker(state.surface);
+    const auto panel=centred(state.surface,std::min(600.0f,state.surface.width-24),std::min(430.0f,state.surface.height-24));
+    list.addRect(panel,theme.color.surface,12);list.addBorder(panel,theme.color.line,1,12);
+    auto content=deflate(panel,UiInsets::all(16));
+    auto title=takeTop(content,36);
+    list.addImage(centred(takeLeft(title,32),24,24),static_cast<UiImageId>(UiIcon::AssetsImport),0xffffffff);
+    builder.label(title,"Importar recurso",theme.color.text,theme.type.cardName);
+    builder.label(takeTop(content,28),state.importPath.c_str(),theme.color.textMuted,theme.type.caption);
+    builder.label(takeTop(content,30),state.importStatus.c_str(),theme.color.accent,theme.type.body);
+    auto actions=takeBottom(content,42);
+    auto cancel=takeLeft(actions,state.importReady?actions.width*.22f:actions.width);takeLeft(actions,8);
+    list.addRect(cancel,theme.color.raised,8);builder.label(cancel,state.importError?"Fechar":"Cancelar",theme.color.text,theme.type.body,UiAlign::Center);
+    router.addRegion(cancel,widgetId(EditorWidget::ImportCancel));
+    if(state.importReady) {
+      // Ambiguidade na correspondência de nós: publicar só depois de o usuário
+      // dizer como associar. Os botões aparecem apagados e sem toque até lá.
+      const bool decided=!state.importAmbiguities || state.importAmbiguityChoice;
+      auto resource=takeLeft(actions,actions.width*.4f);takeLeft(actions,8);
+      list.addRect(resource,theme.color.raised,8);builder.label(resource,"Só recurso",decided?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
+      if(decided) router.addRegion(resource,widgetId(EditorWidget::ImportAccept));
+      list.addRect(actions,decided?theme.color.accent:theme.color.raised,8);
+      builder.label(actions,"Importar na cena",decided?theme.color.accentInk:theme.color.textMuted,theme.type.body,UiAlign::Center);
+      if(decided) router.addRegion(actions,widgetId(EditorWidget::ImportIntoScene));
+      if(state.importAmbiguities) {
+        takeBottom(content,6);
+        auto choice=takeBottom(content,40);
+        auto order=takeLeft(choice,choice.width*.5f-4);takeLeft(choice,8);
+        const auto pill=[&](UiRect rect,const char *label,bool on,EditorWidget widget) {
+          list.addRect(rect,on?theme.color.accent:theme.color.raised,8);
+          builder.label(rect,label,on?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
+          router.addRegion(rect,widgetId(widget));
+        };
+        pill(order,"Associar pela ordem",state.importAmbiguityChoice==1,EditorWidget::ImportMatchInOrder);
+        pill(choice,"Tratar como novos",state.importAmbiguityChoice==2,EditorWidget::ImportTreatAsNew);
+      }
+    }
+    auto pages=takeBottom(content,30);
+    std::vector<std::string> wrapped;
+    std::istringstream paragraphs(state.importSummary);std::string line;
+    while(std::getline(paragraphs,line)) {
+      while(measureTextWidth(line,list.fontMetrics(),theme.type.caption)>content.width && line.size()>1) {
+        usize width=0;
+        for(usize i=1;i<=line.size();++i) {
+          if(i<line.size() && (static_cast<unsigned char>(line[i])&0xc0)==0x80) continue;
+          if(width && measureTextWidth(std::string_view(line).substr(0,i),list.fontMetrics(),theme.type.caption)>content.width) break;
+          width=i;
+        }
+        usize split=line.rfind(' ',width);
+        if(split==std::string::npos || split==0) split=width;
+        wrapped.push_back(line.substr(0,split));line.erase(0,split);if(!line.empty() && line.front()==' ') line.erase(0,1);
+      }
+      wrapped.push_back(line);
+    }
+    const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.f,content.height)/22));
+    const u32 count=std::max(1u,(static_cast<u32>(wrapped.size())+perPage-1)/perPage),page=std::min(state.importPage,count-1);
+    if(count>1) {
+      auto previous=takeLeft(pages,70),next=takeRight(pages,70);
+      builder.label(pages,std::to_string(page+1)+" / "+std::to_string(count),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      if(page) {builder.label(previous,"Anterior",theme.color.text,theme.type.caption);router.addRegion(previous,widgetId(EditorWidget::ImportPreviousPage));}
+      if(page+1<count) {builder.label(next,"Próxima",theme.color.text,theme.type.caption);router.addRegion(next,widgetId(EditorWidget::ImportNextPage));}
+    }
+    list.pushClip(content);
+    for(usize i=page*perPage;i<wrapped.size() && i<(page+1)*perPage;++i)
+      builder.label(takeTop(content,22),wrapped[i],theme.color.textDim,theme.type.caption);
+    list.popClip();
+  }
+  if(state.codeRecoveryPending) {
+    list.addRect(state.surface,withAlpha(theme.color.voidBlack,.7f));router.addBlocker(state.surface);
+    const auto panel=centred(state.surface,std::min(440.0f,state.surface.width-24),190);
+    list.addRect(panel,theme.color.surface,12);list.addBorder(panel,theme.color.line,1,12);
+    auto content=deflate(panel,UiInsets::all(16));
+    builder.label(takeTop(content,36),"Recuperar código",theme.color.text,theme.type.cardName);
+    builder.label(takeTop(content,28),"Há rascunhos de uma sessão interrompida.",theme.color.textDim,theme.type.caption);
+    builder.label(takeTop(content,28),"Os arquivos salvos permanecem preservados.",theme.color.textDim,theme.type.caption);
+    auto buttons=takeBottom(content,42);auto discard=takeLeft(buttons,buttons.width*.43f);takeLeft(buttons,8);
+    list.addRect(discard,theme.color.raised,8);builder.label(discard,"Descartar",theme.color.text,theme.type.body,UiAlign::Center);
+    router.addRegion(discard,widgetId(EditorWidget::CodeDiscardRecovery));
+    list.addRect(buttons,theme.color.accent,8);builder.label(buttons,"Recuperar",theme.color.accentInk,theme.type.body,UiAlign::Center);
+    router.addRegion(buttons,widgetId(EditorWidget::CodeRecover));
+  }
 }
 
 EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiTheme &theme,
@@ -1365,7 +1726,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     // O campo embutido tambem vale aqui. Sem esta chamada, criar um script ou
     // buscar no codigo abria o teclado com o campo invisivel: o usuario digitava
     // as cegas, que e pior do que o dialogo que isto substituiu.
-    buildPlatformTextField(builder);
+    buildProjectDialogs(builder);
+  buildPlatformTextField(builder);
     return layout;
   }
 
@@ -1703,6 +2065,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(cell,widget);
     }
   }
+  buildProjectDialogs(builder);
   buildPlatformTextField(builder);
   return layout;
 }
@@ -1931,7 +2294,14 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::Redo: outcome.documentChanged = history.redo(document); break;
     case EditorWidget::PlayFromTopBar:
     case EditorWidget::TabPlay:
-      if(state.codeBuildBusy) {state.status="Aguarde a compilação antes de Play";break;}
+      if(state.workspace!=EditorWorkspace::Play) {
+        if(state.codeBuildBusy) {state.status="Aguarde a compilação antes de Play";break;}
+        if(state.code && (state.code->catalogState()==EditorCodeCatalogState::Failed ||
+            state.code->catalogState()==EditorCodeCatalogState::Stale || state.code->dirty())) {
+          state.status="Play bloqueado: a fonte atual ainda não foi publicada";
+          state.consoleCollapsed=false;state.consoleProblems=true;break;
+        }
+      }
       state.workspace = state.workspace == EditorWorkspace::Play ? EditorWorkspace::Scene : EditorWorkspace::Play;
       state.playPaused=false;state.playStepRequested=false;
       outcome.requestPlay = state.workspace == EditorWorkspace::Play;

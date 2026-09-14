@@ -1,0 +1,5 @@
+--------- beginning of main
+09-12 23:29:34.807 12053 19066 I Astra.Script: 2: M06_RUN_Alpha
+09-12 23:29:34.807 12053 19066 I Astra.Script: 2: M06_RUN_Beta
+09-12 23:34:46.790 14065 21852 I Astra.Script: 2: M06_RUN_Alpha
+09-12 23:34:46.790 14065 21852 I Astra.Script: 2: M06_RUN_Beta

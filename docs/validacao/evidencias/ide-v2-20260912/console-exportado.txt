@@ -1,0 +1,20 @@
+ASTRA · Console
+Tempos relativos ao início desta sessão. Repetições consecutivas agrupadas.
+
+#1 · +2s · Editor · Informação
+Compilação automática iniciada · revisão 2
+
+#2 · +3s · Editor · Informação
+Compilação concluída; aguardando publicação
+
+#3 · +3s · Editor · Informação
+Código publicado · revisão 2
+
+#4 · +157s · Editor · Informação
+Compilação automática iniciada · revisão 177
+
+#5 · +158s · Editor · Informação
+Compilação concluída; aguardando publicação
+
+#6 · +158s · Editor · Informação
+Código publicado · revisão 177

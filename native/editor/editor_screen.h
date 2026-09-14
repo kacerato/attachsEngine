@@ -45,8 +45,11 @@ enum class EditorWidget : u32 {
   None = 0,
   FilesUp=0x65000000,FilesRefresh,FilesPrevious,FilesNext,FilesSplitter,FilesCollapse,FilesRename,FilesDelete,
   ConsoleInfo,ConsoleWarning,ConsoleError,ConsoleClear,ConsoleCollapse,
+  ConsoleProblems,ConsoleLogs,ConsoleSource,ConsoleSearch,ConsoleFollow,ConsoleExpand,
+  ConsoleOpenSource,ConsoleCopy,ConsoleExport,ConsoleDetailClose,ConsoleDetailNext,ConsoleDetailPrevious,
+  ConsoleResize,
   FileRowBase=0x66000000,
-  ConsoleRowBase=0x67000000,
+  ConsoleRowBase=0x6F000000,
   Undo=1,
   Redo,
   OpenProject,
@@ -122,6 +125,15 @@ enum class EditorWidget : u32 {
   CreateRiverWater,
   CreateBuoyantBox,
   ImportModel,
+  ImportAccept,
+  ImportIntoScene,
+  ImportPreviousPage,
+  ImportNextPage,
+  ImportCancel,
+  CodeRecover,
+  CodeDiscardRecovery,
+  AssetInstantiate,
+  AssetReimport,
   CreateMenuClose,
   CreationSearch,
   CreationClearSearch,
@@ -153,12 +165,16 @@ enum class EditorWidget : u32 {
   ToggleCameraLook,
   AddComponentMenu,
   CodeOpen, CodeScene, CodeNew, CodeEdit, CodeSave, CodeUndo, CodeRedo, CodeSearch, CodeClose, CodeApply,
-  CodeMenu, CodeSaveAll,
+  CodeMenu, CodeSaveAll, CodeFiles, CodeTabsPrevious, CodeTabsNext, CodeFindPrevious, CodeFindNext,
+  CodeGoLine, CodeNewFolder, CodeNewHelper, CodeTemplates,
   ColliderFit, ComponentPrevious, ComponentNext, ScriptFieldsPrevious, ScriptFieldsNext,
   TransformFold, ComponentSearch, ComponentSearchClear, ComponentCategory,
   MeshGeometryTab, MeshMaterialTab, MeshChoose, MeshPickerClose, MeshClear, MeshSearch, MeshPrevious, MeshNext, MaterialRestore,
   ReferenceClose, ReferenceSearch, ReferenceClear, ReferencePrevious, ReferenceNext,
-  CodeTemplateClose,
+  CodeTemplateClose, CodeConsole,
+  ImportMatchInOrder, ImportTreatAsNew, ImportLinkMenu, ImportLinkUnlink, ImportLinkKeep, ImportLinkDelete,
+  // + máscara de ImportOverride.
+  ImportLinkRevertBase=0x52000000u,
   ComponentReferenceBase=0x7a000000u, ReferenceChoiceBase=0x7b000000u,
   ComponentNumberBase=0x78000000u,
   MeshChoiceBase=0x79000000u,
@@ -224,15 +240,26 @@ struct EditorScreenState final {
   const EditorMapScene *resources=nullptr;
   bool codeCompilerAvailable=false,codeBuildBusy=false;
   bool editingCode=false,creatingScript=false,searchingCode=false;
+  u64 codeSearchRequest=0;
   // O console: compilador, scripts e editor no mesmo lugar.
   const EditorConsole *console = nullptr;
   // Quantas linhas o usuário subiu a partir do fim. Zero é o fim, que é onde um
   // console deve estar: a linha que acabou de aparecer é a que interessa.
   u32 consoleScroll = 0;
-  bool consoleCollapsed = false;
+  bool consoleCollapsed = true;
+  bool consoleProblems=false,consoleExpanded=false,consoleFollow=true,searchingConsole=false;
+  float consoleFraction=.58f;
+  u64 consoleSelected=0,consoleAnchor=0;
+  u32 consoleDetailPage=0;
+  float consoleDragRemainder=0;
+  int consoleOrigin=-1;
+  std::string consoleQuery;
   // O menu da barra do IDE. Uma lista que abre num ícone é o que tira da barra
   // tudo o que não é frequente, sem escondê-lo atrás de um gesto.
   bool codeMenu = false;
+  bool codeFiles = false,platformCodeView=false,codeComposing=false;
+  bool goingToLine=false,creatingCodeFolder=false;
+  u32 codeFirstTab=0;
   // O arquivo escolhido no painel. As ações de recurso agem sobre ele, e é o
   // painel que decide qual é — não a seleção da cena, que é outra coisa.
   std::string selectedFile;
@@ -321,8 +348,20 @@ struct EditorScreenState final {
   u32 creationAvailable=3; // Basic object and camera; resource tools opt in on import.
   // O editor não conhece Android: ele levanta o pedido e o shell abre o seletor.
   bool modelImportRequested=false;
+  bool importPanel=false,importReady=false,importAccept=false,importCancel=false,importIntoScene=false,importError=false;
+  std::string importSummary,importPath;
+  u32 importPage=0;
+  bool codeRecoveryPending=false;
   // Última mensagem da importação, para a barra de status.
   std::string importStatus;
+  // M08.2: ambiguidades da reimportação e a escolha EXPLÍCITA do usuário
+  // (0 nenhuma, 1 associar pela ordem, 2 tratar como novos).
+  u32 importAmbiguities=0;
+  u32 importAmbiguityChoice=0;
+  // Vínculo do objeto selecionado com a fonte, preparado pela sessão.
+  struct ImportLinkView { bool linked=false,orphan=false,root=false; std::string source,node; u32 overrides=0; };
+  ImportLinkView importLink;
+  bool importLinkMenu=false;
   bool editingCreationSearch=false;
   char creationSearch[kEditorNameCapacity]{};
   bool editingHierarchySearch=false;
@@ -362,6 +401,8 @@ struct EditorScreenLayout final {
   u32 consoleVisibleRows = 0;
   u32 consoleRowCount = 0;
   ui::UiRect codeBody{};
+  ui::UiRect codeAccessory{};
+  ui::UiRect codeTabs{};
   u32 codeVisibleLines = 0;
   float codeLineHeight = 24.0f;
   u32 hierarchyRowCount = 0;

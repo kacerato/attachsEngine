@@ -1,5 +1,15 @@
 # Próximo pacote Astra — criação de gameplay
 
+Continuidade de 12/09/2026: o [plano mestre completo](planos/PLANO-MESTRE-ASTRA-EDITOR-RUNTIME-ASSETS.md) e o [estado de M06](planos/ESTADO-M06-IDE.md) complementam estas sete entregas. Os marcos M00–M15 do mestre não são os M0–M11 históricos. O usuário autorizou ADB na tarefa corrente; este arquivo não concede autorização independente em outra tarefa.
+
+Atualização posterior à aprovação visual: a Entrega F recebeu o
+[pacote funcional M06](planos/M06-PACOTE-FUNCIONAL.md), com Roslyn, edição,
+contexto de console e proteção de Play. O fluxo com duas instâncias e reabertura
+foi exercitado no aparelho; ver [registro](validacao/2026-09-12-m06-funcional.md).
+Esse registro prevalece sobre os estados antigos de F/G abaixo, sem declarar
+as demais entregas ou a matriz completa de M06/M11 aprovadas.
+
+
 Especificação de execução preparada em 10/09/2026 para repasse a outro agente.
 Este documento define trabalho futuro; não declara suas capacidades implementadas.
 
@@ -65,7 +75,7 @@ Android.
 | C — materiais e luzes | [luzes](runtime-gameplay.md#13-luzes) | **parcial**: Luz anexável (direcional/pontual/spot) e override de material por instância; MaterialAsset compartilhado, slots por submesh e pré-visualização isolada **não** iniciados | sim (shader PBR consome as pontuais/spot; a direcional vira o sol) | 6 testes de luz + 1 de material em execução | **sim, para a parte implementada**: Luz criada pelo inspetor, três modalidades vistas na tela, salvar/reabrir preserva a aparência |
 | D — física acessível | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim, exceto sensor por colisor e `CharacterVirtual` na broadphase | sim (queries, camadas no solver, contatos no C#) | 9 testes | **parcial**: contato sólido com normal chegou ao comportamento; consultas e camadas só no host |
 | E — entrada e comportamentos | [ADR](adr/ADR-RUNTIME-GAMEPLAY.md) | sim | sim (toque → ações → personagem/câmera; modelos no editor) | 7 testes | **parcial**: modelo criado, compilado e anexado no aparelho; ações de entrada só no host |
-| F — IDE, console e inspetor | [catálogo de código](runtime-gameplay.md#11-catálogo-de-código-instância-schema-e-execução) · [grade](runtime-gameplay.md#15-grade-editorial) · [texto](runtime-gameplay.md#16-escrita-de-texto-no-android) | o seletor de modelo de script, a **separação instância/schema/execução** com publicação atômica, a **grade como desenho no mundo** e a **escrita sem diálogo** (campo embutido e código digitado no próprio editor) | idem | 11 testes | **parcial**: seletor de modelos, grade com profundidade, campo embutido e digitação no editor verificados no aparelho; **console continua fora**, e o afinamento de toque/composição do editor de código está endereçado ao M06.2 (reconstrução do IDE) |
+| F — IDE, console e inspetor | [Estado M06 em 12/09](planos/ESTADO-M06-IDE.md) | catálogo/publicação preservados; console e auto-build já existentes; novo campo Android visível com deltas, seleção/scroll por aba, composição explícita, gaveta de arquivos, navegação e criação C#; limpar registros preserva diagnósticos | integrado ao caminho Android; gate M06 ainda pendente | contagens anteriores são históricas; nenhum teste executado nesta etapa | novo bloco sem ADB: não confundir compilação com aceitação de toque/IME; autocomplete semântico, detalhe/exportação de console e matriz do aparelho continuam pendentes |
 | G — rodada integrada | — | **parcial** | **parcial** | — | **parcial**: duas composições montadas a partir de projetos VAZIOS pela interface (`PatioG1`: chão, plataforma, personagem com câmera e olhar, script de modelo compilado e anexado DUAS vezes com valores diferentes, Play recusado com motivo, corrigido, Play/Pausa/Passo/Stop e Stop preservando autoria; `InteriorG2`: chão, porta, luz anexável, material por instância). **Não** provou: importação nestas composições, o segundo script (defeito registrado), referências com duplicar/reparentear/desfazer/reabrir, consultas físicas em execução, e foco de input |
 
 A rodada de 11/09 também corrigiu um defeito que bloqueava qualquer trabalho de

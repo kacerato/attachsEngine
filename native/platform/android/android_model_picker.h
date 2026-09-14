@@ -27,6 +27,7 @@ struct ModelPickerResult {
 // Pede um arquivo ao usuário. Só um pedido por vez: um segundo pedido enquanto
 // o seletor está aberto é ignorado, em vez de empilhar diálogos.
 void requestModelPick();
+void cancelModelPick();
 bool modelPickPending();
 // Devolve e CONSOME o resultado, quando há um.
 bool takeModelPickResult(ModelPickerResult &out);

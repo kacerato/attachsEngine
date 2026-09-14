@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <map>
+#include <tuple>
 
 namespace ae::editor {
 namespace {
@@ -38,8 +40,12 @@ bool buildPickMeshes(std::span<const renderer::MapDrawRecord> draws,std::span<co
   if(vertices.empty()!=indices.empty() || vertices.size()%renderer::MapVertexStride) return false;
   if(vertices.empty()) return true;
   usize triangleCount=0;
+  std::map<std::tuple<u32,u32,i32>,std::shared_ptr<const EditorPickMesh>> shared;
   for(u32 index=0;index<draws.size();++index) {
-    const auto &draw=draws[index];triangleCount+=draw.indexCount/3;
+    const auto &draw=draws[index];
+    const auto key=std::make_tuple(draw.firstIndex,draw.indexCount,static_cast<i32>(draw.vertexOffset));
+    if(const auto found=shared.find(key);found!=shared.end()) {out[index]=found->second;continue;}
+    triangleCount+=draw.indexCount/3;
     if(!draw.indexCount || draw.indexCount%3 || triangleCount>EditorPickMesh::MaximumTriangles ||
        u64(draw.firstIndex)+draw.indexCount>indices.size()) return false;
     std::vector<EditorPickMesh::Triangle> triangles(draw.indexCount/3);
@@ -49,7 +55,7 @@ bool buildPickMeshes(std::span<const renderer::MapDrawRecord> draws,std::span<co
       std::memcpy(triangles[t].data()+point*3,vertices.data()+vertex*renderer::MapVertexStride,3*sizeof(float));
     }
     auto mesh=std::make_shared<EditorPickMesh>();if(!mesh->build(std::move(triangles))) return false;
-    out[index]=std::move(mesh);
+    out[index]=mesh;shared.emplace(key,std::move(mesh));
   }
   return true;
 }

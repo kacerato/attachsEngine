@@ -1,0 +1,9 @@
+[ok] m082_node_map_starts_from_legacy_keys_and_round_trips
+[ok] m082_matching_uses_authored_ids_renames_and_reparenting
+[ok] m082_ambiguous_repeated_names_are_never_matched_silently
+[ok] m082_reimport_preserves_local_edits_across_two_instances_and_reopen
+[ok] m082_removed_nodes_keep_local_data_as_orphans_and_deleted_parts_stay_deleted
+[ok] m082_revert_unlink_duplicate_and_legacy_adoption
+[ok] m082_interrupted_import_restores_the_node_map_with_source_and_registry
+
+7/7 testes passaram

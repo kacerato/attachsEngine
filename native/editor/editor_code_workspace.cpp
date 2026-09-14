@@ -1,3 +1,4 @@
+#include "editor/editor_import_transaction.h"
 #include "editor/editor_code_workspace.h"
 #include "editor/editor_script_templates.h"
 #include "editor/editor_filesystem.h"
@@ -43,13 +44,15 @@ void EditorCodeWorkspace::clear() {
   // assembly daquele projeto deixou de existir para esta sessão.
   ++generation_;scriptTypes_.clear();stagedTypes_.clear();buffers_.clear();diagnostics_.clear();
   selected_=0;publishedGeneration_=0;stagedGeneration_=0;lastBuildFailed_=false;stagedValid_=false;
-  error_.clear();
+  error_.clear();checkpointGeneration_=0;checkpointDirty_=false;
 }
 bool EditorCodeWorkspace::select(u64 id) {
+  endTypingRun();
   for(const auto &buffer:buffers_) if(buffer.id==id) {selected_=id;return true;}
   return false;
 }
 bool EditorCodeWorkspace::open(EditorFileSystem &files,const std::string &relative) {
+  endTypingRun();
   for(const auto &buffer:buffers_) if(buffer.path==relative) {selected_=buffer.id;return true;}
   if(buffers_.size()>=MaximumBuffers) {error_="Feche um arquivo antes de abrir outro";return false;}
   const auto path=files.resolveFile(relative);
@@ -93,12 +96,74 @@ bool EditorCodeWorkspace::type(u64 id,std::string_view text) {
 bool EditorCodeWorkspace::undo() {
   endTypingRun();auto *buffer=active();if(!buffer || buffer->undo.empty()) return false;
   remember(buffer->redo,buffer->text);buffer->text=std::move(buffer->undo.back());buffer->undo.pop_back();
-  ++buffer->revision;++generation_;diagnostics_.clear();return true;
+  buffer->selectionStart=buffer->selectionEnd=static_cast<u32>(std::min<usize>(buffer->selectionEnd,buffer->text.size()));
+  ++buffer->viewRevision;++buffer->revision;++generation_;diagnostics_.clear();return true;
 }
 bool EditorCodeWorkspace::redo() {
   endTypingRun();auto *buffer=active();if(!buffer || buffer->redo.empty()) return false;
   remember(buffer->undo,buffer->text);buffer->text=std::move(buffer->redo.back());buffer->redo.pop_back();
-  ++buffer->revision;++generation_;diagnostics_.clear();return true;
+  buffer->selectionStart=buffer->selectionEnd=static_cast<u32>(std::min<usize>(buffer->selectionEnd,buffer->text.size()));
+  ++buffer->viewRevision;++buffer->revision;++generation_;diagnostics_.clear();return true;
+}
+
+namespace {
+bool codeBoundary(std::string_view text,usize at) {
+  return at<=text.size() && (at==text.size() || (static_cast<unsigned char>(text[at])&0xc0)!=0x80);
+}
+}
+bool EditorCodeWorkspace::editDelta(u64 id,u64 revision,usize start,usize erased,
+                                    std::string_view inserted,bool transaction) {
+  auto *buffer=active();
+  if(!buffer || buffer->id!=id || buffer->revision!=revision) {
+    error_="Edição recebida de uma revisão antiga; rascunho preservado para recuperação";return false;
+  }
+  if(start>buffer->text.size() || erased>buffer->text.size()-start ||
+     !codeBoundary(buffer->text,start) || !codeBoundary(buffer->text,start+erased) ||
+     inserted.find('\0')!=std::string_view::npos ||
+     inserted.size()>MaximumFileBytes-(buffer->text.size()-erased)) {
+    error_="Intervalo de texto inválido ou arquivo maior que 512 KiB";return false;
+  }
+  if(std::string_view(buffer->text).substr(start,erased)==inserted) return true;
+  const auto now=std::chrono::steady_clock::now();
+  const bool deleting=inserted.empty() && erased>0;
+  if(transaction || now-lastDeltaTime_>std::chrono::milliseconds(1000) ||
+      deleting!=lastDeltaDeleting_ || (start!=lastDeltaEnd_ && !(deleting && start+erased==lastDeltaEnd_)) ||
+      inserted.find('\n')!=std::string_view::npos) endTypingRun();
+  if(typingRun_!=id) {remember(buffer->undo,buffer->text);buffer->redo.clear();typingRun_=id;}
+  buffer->text.replace(start,erased,inserted);
+  lastDeltaTime_=now;lastDeltaEnd_=start+inserted.size();lastDeltaDeleting_=deleting;
+  ++buffer->revision;++generation_;diagnostics_.clear();error_.clear();
+  if(transaction) endTypingRun();
+  return true;
+}
+bool EditorCodeWorkspace::setSelection(u64 id,u64 revision,u32 start,u32 end,float x,float y) {
+  auto *buffer=active();
+  if(!buffer || buffer->id!=id || buffer->revision!=revision ||
+     !codeBoundary(buffer->text,start) || !codeBoundary(buffer->text,end)) return false;
+  buffer->selectionStart=start;buffer->selectionEnd=end;
+  buffer->scrollX=x;buffer->scrollY=y;return true;
+}
+bool EditorCodeWorkspace::locate(u32 line,u32 column,u32 length) {
+  auto *buffer=active();if(!buffer) return false;
+  usize at=0;
+  for(u32 i=1;i<line;++i) {
+    const auto next=buffer->text.find('\n',at);
+    if(next==std::string::npos) {at=buffer->text.size();break;}
+    at=next+1;
+  }
+  // Compiler columns are UTF-16 units (Roslyn), not UTF-8 bytes.
+  for(u32 i=1;i<column && at<buffer->text.size() && buffer->text[at]!='\n';) {
+    const auto c=static_cast<unsigned char>(buffer->text[at]);
+    const usize width=c<0x80?1:c<0xe0?2:c<0xf0?3:4;
+    if(width==4 && i+1>=column) break;
+    at=std::min(at+width,buffer->text.size());i+=width==4?2:1;
+  }
+  buffer->selectionStart=static_cast<u32>(at);
+  auto end=std::min(at+length,buffer->text.size());
+  while(!codeBoundary(buffer->text,end)) --end;
+  buffer->selectionEnd=static_cast<u32>(end);
+  buffer->firstLine=line>3?line-3:0;buffer->scrollX=0;buffer->scrollY=0;
+  ++buffer->viewRevision;endTypingRun();return true;
 }
 bool EditorCodeWorkspace::saveBuffer(EditorFileSystem &files,EditorCodeBuffer &buffer) {
   if(!buffer.dirty()) return true;
@@ -107,7 +172,7 @@ bool EditorCodeWorkspace::saveBuffer(EditorFileSystem &files,EditorCodeBuffer &b
   if(current!=buffer.saved) {error_="Arquivo alterado externamente; gravação interrompida para preservar ambas as versões";return false;}
   WriteText input{buffer.text};
   if(!platform::replaceAssetFile(path.c_str(),buffer.text.size(),readText,&input)) {error_="Falha ao salvar código; buffer preservado";return false;}
-  buffer.saved=buffer.text;error_.clear();return true;
+  buffer.saved=buffer.text;checkpointGeneration_=0;error_.clear();return true;
 }
 bool EditorCodeWorkspace::save(EditorFileSystem &files) {
   auto *buffer=active();return buffer && saveBuffer(files,*buffer);
@@ -119,21 +184,85 @@ bool EditorCodeWorkspace::saveAll(EditorFileSystem &files) {
 bool EditorCodeWorkspace::close(u64 id,bool discard) {
   for(auto it=buffers_.begin();it!=buffers_.end();++it) if(it->id==id) {
     if(it->dirty() && !discard) {error_="Salve o arquivo antes de fechar";return false;}
-    buffers_.erase(it);
+    buffers_.erase(it);checkpointGeneration_=0;
     if(selected_==id) selected_=buffers_.empty()?0:buffers_.back().id;
     return true;
   }
   return false;
 }
-bool EditorCodeWorkspace::createScript(EditorFileSystem &files,std::string_view className,u32 templateIndex) {
+namespace {
+std::filesystem::path recoveryPath(const EditorFileSystem &files) {
+  std::filesystem::path path;
+  if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files.rootPath()),".astra/code-drafts.astra",path)) return {};
+  return path;
+}
+}
+bool EditorCodeWorkspace::hasRecovery(EditorFileSystem &files) const {
+  const auto path=recoveryPath(files);if(path.empty()) return false;
+  std::error_code error;return std::filesystem::is_regular_file(path,error) && !error;
+}
+bool EditorCodeWorkspace::discardRecovery(EditorFileSystem &files) {
+  const auto path=recoveryPath(files);if(path.empty()) return false;
+  std::error_code error;std::filesystem::remove(path,error);
+  if(error) {error_="Não foi possível descartar o checkpoint; rascunhos preservados.";return false;}
+  checkpointGeneration_=generation_;checkpointDirty_=false;return true;
+}
+bool EditorCodeWorkspace::checkpoint(EditorFileSystem &files) {
+  const bool changed=dirty();
+  if(checkpointGeneration_==generation_ && checkpointDirty_==changed) return true;
+  if(!changed) return discardRecovery(files);
+  const auto path=recoveryPath(files);if(path.empty()) {error_="Caminho de recuperação inválido.";return false;}
+  std::error_code error;std::filesystem::create_directories(path.parent_path(),error);
+  if(error) {error_="Não foi possível preparar a recuperação de código.";return false;}
+  usize count=0;for(const auto &buffer:buffers_) if(buffer.dirty()) ++count;
+  std::ostringstream out;out<<"ASTRA_DRAFTS_1 "<<count<<'\n';
+  for(const auto &buffer:buffers_) if(buffer.dirty())
+    out<<std::quoted(buffer.path)<<' '<<std::quoted(buffer.saved)<<' '<<std::quoted(buffer.text)<<' '
+       <<buffer.selectionStart<<' '<<buffer.selectionEnd<<' '<<(buffer.id==selected_)<<'\n';
+  if(!EditorImportTransaction::writeText(path,out.str())) {error_="Falha ao guardar rascunhos; texto continua aberto.";return false;}
+  checkpointGeneration_=generation_;checkpointDirty_=true;return true;
+}
+bool EditorCodeWorkspace::restoreRecovery(EditorFileSystem &files) {
+  std::vector<u8> bytes;const auto path=recoveryPath(files);
+  if(path.empty() || !EditorImportTransaction::read(path,bytes,MaximumBuffers*(MaximumFileBytes*4+4096))) {
+    error_="Checkpoint indisponível ou acima do limite; arquivo preservado.";return false;
+  }
+  std::istringstream in(std::string(bytes.begin(),bytes.end()));std::string magic;usize count=0;
+  if(!(in>>magic>>count) || magic!="ASTRA_DRAFTS_1" || count>MaximumBuffers || !buffers_.empty()) {
+    error_="Checkpoint incompatível ou workspace já aberto; rascunhos preservados.";return false;
+  }
+  std::vector<EditorCodeBuffer> recovered;u64 selected=0;
+  for(usize i=0;i<count;++i) {
+    EditorCodeBuffer buffer;bool active=false;std::filesystem::path resolved;
+    if(!(in>>std::quoted(buffer.path)>>std::quoted(buffer.saved)>>std::quoted(buffer.text)>>buffer.selectionStart>>buffer.selectionEnd>>active) ||
+       buffer.path.starts_with(".astra/") || !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files.rootPath()),buffer.path,resolved) ||
+       buffer.text.size()>MaximumFileBytes || buffer.saved.size()>MaximumFileBytes ||
+       buffer.text.find('\0')!=std::string::npos || buffer.saved.find('\0')!=std::string::npos ||
+       std::any_of(recovered.begin(),recovered.end(),[&](const auto &other){return other.path==buffer.path;})) {
+      error_="Checkpoint inválido; nada foi substituído.";return false;
+    }
+    buffer.id=nextId_++;buffer.selectionStart=std::min<u32>(buffer.selectionStart,buffer.text.size());
+    buffer.selectionEnd=std::min<u32>(buffer.selectionEnd,buffer.text.size());
+    while(!codeBoundary(buffer.text,buffer.selectionStart)) --buffer.selectionStart;
+    while(!codeBoundary(buffer.text,buffer.selectionEnd)) --buffer.selectionEnd;
+    buffer.undo.push_back(buffer.saved);if(active) selected=buffer.id;
+    recovered.push_back(std::move(buffer));
+  }
+  in>>std::ws;if(!in.eof()) {error_="Checkpoint contém dados excedentes.";return false;}
+  buffers_=std::move(recovered);selected_=selected?selected:(buffers_.empty()?0:buffers_.front().id);
+  ++generation_;checkpointGeneration_=0;error_.clear();return true;
+}
+
+bool EditorCodeWorkspace::createScript(EditorFileSystem &files,std::string_view className,u32 templateIndex,std::string_view directory) {
   if(className.empty() || className.size()>64) {error_="Nome de classe inválido";return false;}
   for(usize i=0;i<className.size();++i) {
     const unsigned char c=className[i];
     if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||c=='_'||(i&&c>='0'&&c<='9'))) {error_="Use letras, números e sublinhado no nome da classe";return false;}
   }
   if(buffers_.size()>=MaximumBuffers) {error_="Feche um arquivo antes de criar outro";return false;}
-  if(!files.createDirectory("Scripts")) {error_=files.error();return false;}
-  const std::string relative="Scripts/"+std::string(className)+".cs";
+  if(!directory.empty() && !files.createDirectory(std::string(directory))) {error_=files.error();return false;}
+  const std::string prefix=directory.empty()?"":std::string(directory)+"/";
+  const std::string relative=prefix+std::string(className)+".cs";
   std::string text="using Astra;\n\n[ComponentId(\"project."+std::string(className)+"\")]\npublic sealed class "+std::string(className)+" : Behavior\n{\n    public override void Start()\n    {\n    }\n\n    public override void Update(float deltaTime)\n    {\n    }\n}\n";
   if(templateIndex<editorScriptTemplates.size()) {
     const auto &model=editorScriptTemplates[templateIndex];
@@ -147,8 +276,9 @@ bool EditorCodeWorkspace::createScript(EditorFileSystem &files,std::string_view 
     // vez: recriá-los apagaria o que o usuário tivesse acrescentado neles.
     const std::string contracts="Scripts/"+std::string(kEditorScriptContractsFile);
     if(model.contracts && !files.exists(contracts) &&
-       !files.createTextFile(contracts,kEditorScriptContracts)) {error_=files.error();return false;}
+       (!files.createDirectory("Scripts") || !files.createTextFile(contracts,kEditorScriptContracts))) {error_=files.error();return false;}
   }
+  if(templateIndex==HelperTemplate) text="public static class "+std::string(className)+"\n{\n}\n";
   if(!files.createTextFile(relative,text)) {error_=files.error();return false;}
   // Criar um arquivo torna o rascunho mais novo; não apaga o que já foi
   // publicado nem os componentes que dependem desses tipos.
@@ -168,13 +298,15 @@ bool EditorCodeWorkspace::applyBuildReport(std::string_view report,u64 generatio
   if(generation!=generation_) {error_="O código mudou durante a compilação; aplique a versão atual";return false;}
   if(report.size()>4*1024*1024) {error_="Diagnóstico de compilação excede o limite";return false;}
   std::istringstream in{std::string(report)};std::string magic;u32 version=0,success=0,count=0;
-  if(!(in>>magic>>version>>success>>count) || magic!="ASTRA_CODE" || version!=1 || success>1 || count>4096) {
+  if(!(in>>magic>>version>>success>>count) || magic!="ASTRA_CODE" || (version!=1 && version!=2) || success>1 || count>4096) {
     error_="Resposta inválida do compilador";return false;
   }
   std::vector<EditorCodeDiagnostic> diagnostics;
   for(u32 i=0;i<count;++i) {
     EditorCodeDiagnostic d;u32 error=0;
     if(!(in>>std::quoted(d.file)>>d.line>>d.column>>error>>std::quoted(d.code)>>std::quoted(d.message)) || error>1) return false;
+    if(version==2 && !(in>>d.excerptLine>>std::quoted(d.sourceExcerpt))) return false;
+    d.generation=generation;
     d.error=error!=0;diagnostics.push_back(std::move(d));
   }
   if(!(in>>count) || count>4096) return false;

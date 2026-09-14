@@ -1,0 +1,9 @@
+
+  AstraLanguageTests
+    [32mok[0m   CompletionUsesUnsavedTypesAndReceiverAccessibility
+    [32mok[0m   DefinitionResolvesOtherOpenFileWithUtf16Columns
+    [32mok[0m   DiagnosticKeepsCompiledExcerptAfterFileChanges
+    [32mok[0m   SearchUsesDraftOverDiskAndCancellation
+
+  [32mTUDO VERDE[0m — 4 passaram, 0 falharam, 0 pulados em 1696 ms
+

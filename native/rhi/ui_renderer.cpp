@@ -83,9 +83,10 @@ bool VulkanUiRenderer::createAtlas(VulkanMemoryAllocator &allocator, VulkanUploa
   ImageDesc iconDesc = fontDesc;
   iconDesc.width = icons.width();
   iconDesc.height = icons.height();
-  // Os ícones são cor, e o alvo de apresentação é sRGB: pedir SRGB aqui é o que
-  // faz o lima do atlas sair igual ao lima que o retângulo ao lado pinta.
-  iconDesc.format = VK_FORMAT_R8G8B8A8_SRGB;
+  // UI tokens and PNG pixels share encoded sRGB values. astra_ui.frag performs
+  // the single conversion required by the presentation target. Sampling SRGB
+  // here decoded icons twice, making their dark pixels almost black.
+  iconDesc.format = VK_FORMAT_R8G8B8A8_UNORM;
   if (!allocator.createImage(iconDesc, &iconAtlas_)) return false;
   if (!upload.uploadRgba8ToSampledImage(allocator, icons.pixels().data(), icons.pixels().size(),
                                         iconAtlas_))
