@@ -12,3 +12,6 @@ grad8-uastc.ktx2  basisu (Basis Universal v2_50) -ktx2 -uastc grad8.png  (UASTC 
                   SHA-256 b152bb235eea4e2ac80995165617efa28718951d5cf7895914788e0df6b18a29
 
 meshopt não tem fixture binária: o teste codifica com meshopt_encodeVertexBuffer/IndexBuffer da v1.2.
+grad8-uastc-mips.ktx2  basisu (Basis Universal v2_50) -ktx2 -uastc -mipmap grad8.png  (4 níveis: 8, 4, 2, 1)
+                  SHA-256 2e17fcfa839132abca438e49879866b036384521301ac84d157fa5856998d250
+                  usado pelo teste do caminho ASTC 4x4 (KTX2 com cadeia completa de mips)

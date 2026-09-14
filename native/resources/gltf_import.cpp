@@ -396,6 +396,27 @@ struct Importer {
   u32 textureCap = 0;                                 // maior lado residente deste arquivo
   std::unordered_map<u32, u32> imageUses{};           // usos restantes de cada imagem decodificada
 
+  static u64 residentAstcBytes(u32 width, u32 height, u32 cap) {
+    while (std::max(width, height) > cap) {
+      width = width > 1 ? width / 2 : 1;
+      height = height > 1 ? height / 2 : 1;
+    }
+    u64 total = 0;
+    for (;; width = width > 1 ? width / 2 : 1, height = height > 1 ? height / 2 : 1) {
+      total += static_cast<u64>((width + 3) / 4) * ((height + 3) / 4) * 16;
+      if (width == 1 && height == 1) break;
+    }
+    return total;
+  }
+
+  // KTX2 que vai subir como ASTC: o aparelho amostra ASTC 4x4 e o arquivo traz
+  // a cadeia completa de mips (sem mips não há como gerá-los sem codificador).
+  bool astcEligible(std::span<const u8> bytes, u32 width, u32 height) const {
+    u32 levels = 0;
+    return limits->astc4x4 && detectImageContainer(bytes) == ImageContainer::Ktx2 && ktx2LevelCount(bytes, levels) &&
+           levels == mipLevelCount(width, height);
+  }
+
   static u64 residentChainBytes(u32 width, u32 height, u32 cap) {
     while (std::max(width, height) > cap) {
       width = width > 1 ? width / 2 : 1;
@@ -417,7 +438,7 @@ struct Importer {
     const auto *textures = array(root, "textures");
     const auto *images = array(root, "images");
     if (!materials || !textures || !images) return;
-    struct Reference { u32 width, height; };
+    struct Reference { u32 width, height; bool astc; };
     std::unordered_map<u64, Reference> references;
     std::unordered_set<u64> seen;
     const auto consider = [&](const Node *owner, std::string_view name, bool srgb) {
@@ -440,7 +461,8 @@ struct Importer {
       std::string reason;
       if (viewIndex < 0 || !viewBytes(root, viewIndex, bytes, stride, reason)) return;
       u32 width = 0, height = 0;
-      if (readImageDimensions(bytes, limits->image, width, height)) references.emplace(key, Reference{width, height});
+      if (readImageDimensions(bytes, limits->image, width, height))
+        references.emplace(key, Reference{width, height, astcEligible(bytes, width, height)});
     };
     for (u32 i = 0; i < materials->childCount; ++i) {
       const auto &material = *json->child(*materials, i);
@@ -455,7 +477,9 @@ struct Importer {
     const u32 floor = std::min(textureCap, std::max<u32>(1, limits->minimumTextureDimension));
     for (;;) {
       u64 total = 0;
-      for (const auto &[key, reference] : references) total += residentChainBytes(reference.width, reference.height, textureCap);
+      for (const auto &[key, reference] : references)
+        total += reference.astc ? residentAstcBytes(reference.width, reference.height, textureCap)
+                                : residentChainBytes(reference.width, reference.height, textureCap);
       if (total <= limits->maximumTextureBytes || textureCap / 2 < floor) break;
       textureCap /= 2;
     }
@@ -512,6 +536,53 @@ struct Importer {
     return flags;
   }
 
+  // KTX2 com cadeia completa de mips num aparelho que amostra ASTC 4x4:
+  // transcodificado direto para blocos, sem RGBA intermediário nem mips em CPU.
+  // Devolve verdadeiro quando decidiu a textura (aplicada, ou recusada pelo
+  // orçamento); falso manda para o caminho RGBA8.
+  std::unordered_set<i64> astcImages{}; // imagens KTX2 já contadas no caminho ASTC
+
+  bool resolveAstc(const Node &root, const Node &texture, i64 source, std::span<const u8> bytes, bool srgb, u32 &result) {
+    if (!limits->astc4x4 || detectImageContainer(bytes) != ImageContainer::Ktx2) return false;
+    u32 width = 0, height = 0;
+    if (!readImageDimensions(bytes, limits->image, width, height)) return false;
+    if (!astcEligible(bytes, width, height)) {
+      noteTexture("KTX2 sem cadeia completa de mips: transcodificado para RGBA8, com mips gerados na importação.");
+      return false;
+    }
+    const u32 levels = mipLevelCount(width, height), cap = std::max<u32>(1, textureCap);
+    u32 dropped = 0;
+    for (u32 w = width, h = height; std::max(w, h) > cap && dropped + 1 < levels;
+         w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1)
+      ++dropped;
+    u64 needed = 0;
+    for (u32 level = 0, w = width, h = height; level < levels; ++level, w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1)
+      if (level >= dropped) needed += static_cast<u64>((w + 3) / 4) * ((h + 3) / 4) * 16;
+    if (out->textureBytes + needed > limits->maximumTextureBytes) {
+      noteTexture("Orçamento de memória de texturas da importação esgotado; texturas restantes ficaram de fora.");
+      return true;
+    }
+    renderer::AuthoringTexture made;
+    made.format = renderer::AuthoringTextureAstc4x4;
+    made.srgb = srgb;
+    made.samplerFlags = samplerFlags(root, texture.kind == Kind::Object ? json->index(texture, "sampler") : -1);
+    std::string diagnostic;
+    if (!transcodeKtx2Astc4x4(bytes, dropped, made.mipChain, made.width, made.height, made.levels, diagnostic) ||
+        !made.valid()) {
+      noteTexture((diagnostic.empty() ? std::string("Falha ao transcodificar KTX2 para ASTC.") : diagnostic) +
+                  " Usado RGBA8.");
+      return false;
+    }
+    if (dropped) ++out->reducedTextures;
+    ++out->astcTextures;
+    // Por IMAGEM, como no caminho RGBA8: a mesma imagem em cor e em dados é uma só.
+    if (astcImages.insert(source).second) ++out->ktx2Images;
+    out->textureBytes += made.mipChain.size();
+    result = static_cast<u32>(out->textures.size());
+    out->textures.push_back(std::make_shared<renderer::AuthoringTexture>(std::move(made)));
+    return true;
+  }
+
   // Resolve uma textura glTF para o índice de saída, decodificando e gerando
   // mips na primeira vez. Inválido quando não foi possível aplicar — e o motivo
   // vai para `textureNotes`.
@@ -529,7 +600,7 @@ struct Importer {
     std::span<const u8> bytes;
     if (source < 0) {
       noteTexture("Textura só em extensão sem decodificador neste perfil (WebP ou AVIF).");
-    } else if (imageBytes(root, source, bytes)) {
+    } else if (imageBytes(root, source, bytes) && !resolveAstc(root, texture, source, bytes, srgb, result)) {
       auto decoded = imageCache.find(static_cast<u32>(source));
       if (decoded == imageCache.end()) {
         DecodedImage image;

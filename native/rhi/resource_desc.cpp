@@ -53,6 +53,8 @@ u64 sampledMipByteSize(VkFormat format, u32 width, u32 height) {
     units = static_cast<u64>(width) * height; bytes = 4; break;
   case VK_FORMAT_R16G16B16A16_SFLOAT:
     units = static_cast<u64>(width) * height; bytes = 8; break;
+  case VK_FORMAT_ASTC_4x4_UNORM_BLOCK: case VK_FORMAT_ASTC_4x4_SRGB_BLOCK:
+    units = ((static_cast<u64>(width)+3)/4) * ((static_cast<u64>(height)+3)/4); bytes = 16; break;
   case VK_FORMAT_ASTC_6x6_UNORM_BLOCK: case VK_FORMAT_ASTC_6x6_SRGB_BLOCK:
     units = ((static_cast<u64>(width)+5)/6) * ((static_cast<u64>(height)+5)/6); bytes = 16; break;
   default: return 0;

@@ -1899,7 +1899,7 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
   if(sourceName.empty()) { report.diagnostic="Nome de arquivo vazio."; return false; }
 
   resources::GltfImport model;
-  if(!resources::importGlb(bytes,{},progress,model)) {
+  if(!resources::importGlb(bytes,importLimits_,progress,model)) {
     report.diagnostic=model.diagnostic;report.cancelled=model.cancelled;return false;
   }
   if(!publishModel(model,Sha256::hex(bytes),sourceName,report)) return false;

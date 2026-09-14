@@ -3503,6 +3503,17 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   physicalDevice_ = device.physicalDevice();
   rhiDevice_ = &device;
   useBindless_ = device.enabledPaths().bindless;
+  // KTX2 importado só vira ASTC 4x4 quando o aparelho amostra esse formato com
+  // filtro linear e aceita cópia para ele, nas duas variantes (cor e dados).
+  astc4x4_ = true;
+  for (const VkFormat format : {VK_FORMAT_ASTC_4x4_SRGB_BLOCK, VK_FORMAT_ASTC_4x4_UNORM_BLOCK}) {
+    VkFormatProperties properties{};
+    vkGetPhysicalDeviceFormatProperties(physicalDevice_, format, &properties);
+    const VkFormatFeatureFlags needed = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                                        VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+                                        VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+    astc4x4_ = astc4x4_ && (properties.optimalTilingFeatures & needed) == needed;
+  }
   memoryAllocator_ = &device.memoryAllocator();
   swapchain_ = &swapchain;
   dirtRoadPreview_ = dirtRoadPreview || emptyScene;
@@ -3816,6 +3827,7 @@ void InstancedRenderer::shutdown() {
   textureSetLayout_ = VK_NULL_HANDLE;
   textureSet_ = VK_NULL_HANDLE;
   useBindless_ = false;
+  astc4x4_ = false;
   baseTextureIndex_ = rhi::kBindlessIndexInvalid;
   materialResources_.shutdown();
   dirtRoadResources_.shutdown();

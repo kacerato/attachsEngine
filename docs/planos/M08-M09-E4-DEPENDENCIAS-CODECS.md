@@ -45,9 +45,17 @@ A Entrega 3 deixava `KHR_texture_transform` sem efeito porque o bloco de push co
 - A aplicação acontece antes da geração de tangentes, que seguem as UVs que o shader amostra; espelhamento e empacotamento usam as UVs já transformadas.
 - Efeito medido: o Ford comprimido pelo `gltfpack` (UV quantizada) passou de 19 transformações não aplicadas para 19 assadas; o CarConcept, de 12 para 12 assadas.
 
+## KTX2 comprimido na GPU (implementado)
+
+- O renderer consulta o aparelho (`vkGetPhysicalDeviceFormatProperties`) e só declara suporte quando `VK_FORMAT_ASTC_4x4_SRGB_BLOCK` e `UNORM` aceitam amostragem com filtro linear e cópia. A sessão do editor recebe isso antes de reabrir fontes e passa aos limites de importação (interativa e reabertura).
+- Com suporte e KTX2 com a cadeia completa de mips, cada nível é transcodificado direto para blocos ASTC 4x4 (8 bits por texel em vez de 32), sem RGBA intermediário nem mips em CPU; o limite de resolução residente descarta níveis de cima e o planejamento de memória usa o tamanho comprimido.
+- Sem suporte, ou KTX2 sem mips (não há codificador para gerá-los), o caminho RGBA8 continua, e a prévia diz o motivo.
+- O RHI passou a conhecer o tamanho de ASTC 4x4; o upload usa o mesmo `uploadSampledMipChain` do pacote de mapa.
+
 ## Limitações declaradas
 
-- KTX2 é transcodificado para RGBA8 na CPU. Não há negociação de formato comprimido de GPU (ASTC/ETC2) com o aparelho: a memória de GPU de uma textura KTX2 é a mesma de um PNG da mesma resolução.
+- KTX2 sem cadeia completa de mips, ou em aparelho sem ASTC 4x4, continua em RGBA8. ETC2 não é negociado como alternativa; PNG e JPEG continuam RGBA8 (não há codificador ASTC no aparelho para eles).
+- A qualidade do ASTC vem da transcodificação do Basis (UASTC→ASTC é quase sem perda; ETC1S→ASTC herda a perda do ETC1S). No host não há decodificador ASTC: os testes conferem tamanho e níveis, e a aparência fica para a conferência no aparelho.
 - KTX2 HDR, cubemap e array são recusados com motivo; só o nível 0 é transcodificado e os mips são refeitos.
 - A transformação de UV é assada pelo material da FONTE. Se o usuário trocar o slot para outro material da mesma fonte com transformação diferente, as UVs continuam com a transformação do material original.
 - Materiais cujas texturas discordam na transformação de UV dentro do mesmo conjunto continuam sem ela (contadas na prévia).
@@ -62,4 +70,4 @@ Suíte do host com as três trilhas: **893/895**, com as mesmas duas falhas anti
 
 ### Aparelho
 
-**Pendente.** O APK com as três trilhas compila para arm64 (`CE4B7CD2…4F`; as mensagens dos três codecs estão na biblioteca nativa). A conferência foi interrompida antes de começar: outro aplicativo passou ao primeiro plano, a regra de captura só com o editor em primeiro plano recusou a imagem, e a interação com o aparelho foi suspensa até ele estar livre. Estão preparados em `Fontes/` do projeto de conferência `esfera-draco.glb`, `ford-lotus-meshopt-noq.glb`, `CarConcept.glb` e `ford-lotus-espelho.glb`; o `.gltf` separado do Ford está em `build/glb-real/ford-gltf/` para o teste do seletor com seleção múltipla.
+**Pendente.** O APK com as três trilhas, a transformação de UV assada e o caminho ASTC compila para arm64 (`2E0117F6…3E`; as mensagens dos três codecs estão na biblioteca nativa). A conferência foi interrompida antes de começar: outro aplicativo passou ao primeiro plano, a regra de captura só com o editor em primeiro plano recusou a imagem, e a interação com o aparelho foi suspensa até ele estar livre. Estão preparados em `Fontes/` do projeto de conferência `esfera-draco.glb`, `ford-lotus-meshopt-noq.glb`, `CarConcept.glb` e `ford-lotus-espelho.glb`; o `.gltf` separado do Ford está em `build/glb-real/ford-gltf/` para o teste do seletor com seleção múltipla.

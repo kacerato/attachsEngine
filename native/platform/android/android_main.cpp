@@ -722,6 +722,10 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
       shell.instancedRenderer.uiRendererReady()) {
     // O editor não conhece Vulkan: quem sobe geometria importada para a GPU é o
     // shell, e é ele que devolve o pacote resultante para o editor adotar.
+    // Antes das fontes reabrirem, a sessão sabe se o aparelho amostra ASTC 4x4.
+    shell.editorSession.setImportAstc4x4(shell.instancedRenderer.supportsAstc4x4());
+    __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] KTX2 com mips vira %s.",
+                        shell.instancedRenderer.supportsAstc4x4()?"ASTC 4x4":"RGBA8 (aparelho sem ASTC 4x4)");
     shell.editorSession.setGeometryPublisher(
         [&shell](std::span<const ae::u8> vertices, std::span<const ae::u32> indices,
                  std::span<const ae::renderer::MapDrawRecord> draws,
@@ -1999,7 +2003,8 @@ void android_main(android_app *app) {
           shell.importCancellation=std::make_shared<std::atomic<bool>>(false);
           auto cancel=shell.importCancellation;
           const auto root=session.codeProjectRoot();const auto epoch=session.sceneVersion().epoch;
-          shell.importWork=std::async(std::launch::async,[picked=std::move(picked),path=std::move(path),root,epoch,cancel]() mutable {
+          const auto limits=session.importLimits();
+          shell.importWork=std::async(std::launch::async,[picked=std::move(picked),path=std::move(path),root,epoch,cancel,limits]() mutable {
             AndroidShell::PreparedModel result;result.root=root;result.path=path;result.epoch=epoch;
             {
               std::filesystem::path absolute;
@@ -2030,7 +2035,7 @@ void android_main(android_app *app) {
               ae::resources::GltfImportProgress progress{};
               progress.context=cancel.get();
               progress.cancelled=[](void *context) {return static_cast<std::atomic<bool> *>(context)->load();};
-              result.accepted=ae::resources::importGlb(result.bytes,{},progress,result.model);
+              result.accepted=ae::resources::importGlb(result.bytes,limits,progress,result.model);
               // Hash no worker: a revisão compara com o mapa publicado sem
               // percorrer dezenas de MiB na thread do editor.
               if(result.accepted) result.contentHash=ae::Sha256::hex(result.bytes);

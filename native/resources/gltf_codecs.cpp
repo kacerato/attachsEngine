@@ -36,6 +36,12 @@ bool refuse(std::string &diagnostic, std::string text) {
   return false;
 }
 
+// Tabelas do transcodificador, uma vez por processo e de qualquer thread.
+void initializeBasis() {
+  static std::once_flag initialized;
+  std::call_once(initialized, [] { basist::basisu_transcoder_init(); });
+}
+
 u32 glTFComponentSize(u32 component) {
   switch (component) {
     case 5120: case 5121: return 1;
@@ -204,8 +210,7 @@ bool transcodeKtx2Rgba8(std::span<const u8> bytes, u32 &width, u32 &height, std:
   rgba.clear();
   diagnostic.clear();
   if (!isKtx2(bytes) || bytes.size() > 0xffffffffu) return refuse(diagnostic, "Imagem KTX2 inválida.");
-  static std::once_flag initialized;
-  std::call_once(initialized, [] { basist::basisu_transcoder_init(); });
+  initializeBasis();
   basist::ktx2_transcoder transcoder;
   if (!transcoder.init(bytes.data(), static_cast<u32>(bytes.size())))
     return refuse(diagnostic, "KTX2 sem supercompressão Basis ou com cabeçalho inválido; só KTX2/BasisU é lido.");
@@ -222,6 +227,53 @@ bool transcodeKtx2Rgba8(std::span<const u8> bytes, u32 &width, u32 &height, std:
   }
   width = w;
   height = h;
+  return true;
+}
+
+bool ktx2LevelCount(std::span<const u8> bytes, u32 &levels) {
+  levels = 0;
+  if (!isKtx2(bytes) || bytes.size() < 48) return false;
+  std::memcpy(&levels, bytes.data() + 40, 4);
+  if (!levels) levels = 1;
+  return true;
+}
+
+bool transcodeKtx2Astc4x4(std::span<const u8> bytes, u32 firstLevel, std::vector<u8> &chain, u32 &width, u32 &height,
+                          u32 &levels, std::string &diagnostic) {
+  chain.clear();
+  width = height = levels = 0;
+  diagnostic.clear();
+  if (!isKtx2(bytes) || bytes.size() > 0xffffffffu) return refuse(diagnostic, "Imagem KTX2 inválida.");
+  initializeBasis();
+  basist::ktx2_transcoder transcoder;
+  if (!transcoder.init(bytes.data(), static_cast<u32>(bytes.size())))
+    return refuse(diagnostic, "KTX2 sem supercompressão Basis ou com cabeçalho inválido; só KTX2/BasisU é lido.");
+  if (transcoder.get_faces() != 1 || transcoder.get_layers() > 1)
+    return refuse(diagnostic, "KTX2 de cubemap ou array não é uma textura 2D.");
+  if (transcoder.is_hdr()) return refuse(diagnostic, "KTX2 HDR não é lido neste perfil.");
+  if (!transcoder.start_transcoding()) return refuse(diagnostic, "Não foi possível iniciar a transcodificação do KTX2.");
+  const u32 total = transcoder.get_levels(), baseWidth = transcoder.get_width(), baseHeight = transcoder.get_height();
+  if (!total || !baseWidth || !baseHeight || firstLevel >= total) return refuse(diagnostic, "KTX2 sem o nível pedido.");
+  for (u32 level = firstLevel; level < total; ++level) {
+    const u32 levelWidth = std::max(1u, baseWidth >> level), levelHeight = std::max(1u, baseHeight >> level);
+    basist::ktx2_image_level_info info;
+    if (!transcoder.get_image_level_info(info, level, 0, 0) || info.m_orig_width != levelWidth ||
+        info.m_orig_height != levelHeight) {
+      chain.clear();
+      return refuse(diagnostic, "KTX2 com dimensões de mip fora do padrão do Vulkan.");
+    }
+    const u32 blocks = ((levelWidth + 3) / 4) * ((levelHeight + 3) / 4);
+    const usize offset = chain.size();
+    chain.resize(offset + static_cast<usize>(blocks) * 16);
+    if (!transcoder.transcode_image_level(level, 0, 0, chain.data() + offset, blocks,
+                                          basist::transcoder_texture_format::cTFASTC_4x4_RGBA)) {
+      chain.clear();
+      return refuse(diagnostic, "Falha ao transcodificar o KTX2 para ASTC 4x4.");
+    }
+  }
+  width = std::max(1u, baseWidth >> firstLevel);
+  height = std::max(1u, baseHeight >> firstLevel);
+  levels = total - firstLevel;
   return true;
 }
 } // namespace ae::resources

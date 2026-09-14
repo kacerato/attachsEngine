@@ -6,6 +6,7 @@
 [ok] m09e4_ktx2_etc1s_and_uastc_transcode_to_rgba8
 [ok] m09e4_negative_scale_becomes_positive_trs_with_mirrored_geometry_and_the_same_world
 [ok] m09e4_texture_transform_is_baked_into_uvs_when_the_material_agrees
+[ok] m09e4_ktx2_with_full_mips_becomes_astc_blocks_only_when_the_device_samples_astc
 [ok] m09e4_basisu_only_texture_is_applied_through_the_same_texture_pipeline
 
-9/9 testes passaram
+10/10 testes passaram

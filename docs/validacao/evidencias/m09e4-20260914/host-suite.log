@@ -2,4 +2,4 @@
 [FALHOU] every_console_row_is_reachable_by_touch
   FALHA em C:/Users/donod/Downloads/atchengine/tests/native/test_editor_console.cpp:236: o icone responde na barra
 [FALHOU] the_ide_toolbar_is_icons_and_the_rest_lives_in_one_menu
-894/896 testes passaram
+895/897 testes passaram

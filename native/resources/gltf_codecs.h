@@ -50,4 +50,15 @@ bool isKtx2(std::span<const u8> bytes);
 bool readKtx2Dimensions(std::span<const u8> bytes, u32 &width, u32 &height);
 bool transcodeKtx2Rgba8(std::span<const u8> bytes, u32 &width, u32 &height, std::vector<u8> &rgba,
                         std::string &diagnostic);
+
+// Número de níveis declarado no cabeçalho KTX2 (0 no arquivo, "gerar mips",
+// conta como 1).
+bool ktx2LevelCount(std::span<const u8> bytes, u32 &levels);
+
+// KTX2 com cadeia completa de mips transcodificado direto para blocos ASTC 4x4
+// (16 bytes por bloco), a partir de `firstLevel` — os níveis de cima são
+// descartados pelo limite de resolução residente. `width`/`height`/`levels`
+// descrevem a cadeia devolvida, do maior para o menor nível.
+bool transcodeKtx2Astc4x4(std::span<const u8> bytes, u32 firstLevel, std::vector<u8> &chain, u32 &width, u32 &height,
+                          u32 &levels, std::string &diagnostic);
 } // namespace ae::resources

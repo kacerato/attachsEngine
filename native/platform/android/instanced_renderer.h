@@ -127,6 +127,9 @@ public:
   // desenhos. Só por ação explícita do usuário: espera a GPU ficar ociosa antes
   // de trocar os buffers, porque trocá-los com um quadro em voo desenharia
   // memória liberada. Uma importação é rara e o usuário já está esperando.
+  // Verdadeiro quando o aparelho amostra ASTC 4x4 (sRGB e UNORM) com filtro
+  // linear: o importador então transcodifica KTX2 direto para blocos ASTC.
+  bool supportsAstc4x4() const noexcept { return astc4x4_; }
   bool rebuildAuthoringGeometry(std::span<const u8> vertices, std::span<const u32> indices,
                                 std::span<const renderer::MapDrawRecord> draws,
                                 std::span<const renderer::MapMaterialRecord> materials,
@@ -513,6 +516,7 @@ private:
   // promover a dono no VulkanDevice passa a valer a pena.
   rhi::BindlessTextureRegistry bindlessRegistry_{};
   bool useBindless_ = false;
+  bool astc4x4_ = false;
   VkDescriptorSetLayout textureSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorPool texturePool_ = VK_NULL_HANDLE;
   VkDescriptorSet textureSet_ = VK_NULL_HANDLE;

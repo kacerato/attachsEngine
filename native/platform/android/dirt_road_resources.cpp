@@ -353,7 +353,9 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
     if(!texture || !texture->valid()) return false;
     rhi::ImageDesc image{};
     image.width=texture->width;image.height=texture->height;image.mipLevels=texture->levels;
-    image.format=texture->srgb?VK_FORMAT_R8G8B8A8_SRGB:VK_FORMAT_R8G8B8A8_UNORM;
+    image.format=texture->format==renderer::AuthoringTextureAstc4x4
+      ?(texture->srgb?VK_FORMAT_ASTC_4x4_SRGB_BLOCK:VK_FORMAT_ASTC_4x4_UNORM_BLOCK)
+      :(texture->srgb?VK_FORMAT_R8G8B8A8_SRGB:VK_FORMAT_R8G8B8A8_UNORM);
     image.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
     image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;image.memoryClass=rhi::MemoryClass::Texture;
     if(rhi::sampledChainByteSize(image)!=texture->mipChain.size() || !allocator.createImage(image,&nextImages[t]) ||

@@ -62,6 +62,10 @@ struct GltfImportLimits {
   // importação. O tamanho comprimido não limita a expansão: um bloco de poucos
   // KB pode declarar milhões de vértices.
   u64 maximumExpandedBytes = 512ull << 20;
+  // Aparelho amostra ASTC 4x4 (informado pelo renderer). Com isso, KTX2 com a
+  // cadeia completa de mips vira blocos ASTC — 8 bits por texel em vez de 32 —
+  // sem RGBA intermediário. Sem isso, ou sem mips no arquivo, RGBA8 como antes.
+  bool astc4x4 = false;
   ImageDecodeLimits image{};
 };
 
@@ -144,6 +148,8 @@ struct GltfImport {
   // Uso efetivo dos codecs (Entrega 4): primitivas Draco decodificadas,
   // bufferViews meshopt decodificadas e imagens KTX2 transcodificadas.
   u32 dracoPrimitives = 0, meshoptViews = 0, ktx2Images = 0;
+  // Texturas KTX2 que subiram como ASTC 4x4 em vez de RGBA8.
+  u32 astcTextures = 0;
   // Nós cuja transformação de mundo tem reflexão (escala negativa). A pose local
   // sai com escala positiva e a geometria desses nós sai espelhada — o resultado
   // no mundo é o mesmo do arquivo, sem aproximação.

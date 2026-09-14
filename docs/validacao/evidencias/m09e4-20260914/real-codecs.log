@@ -32,6 +32,13 @@ ford-lotus-meshopt.glb: meshopt_views=5 textures=18 baked_transforms=19 unapplie
 CarConcept.glb:         ktx2=12 textures=13 baked_transforms=12 unapplied_transforms=0          (antes: unapplied_transforms=12)
 ford-lotus.glb:         baked_transforms=0 unapplied_transforms=0                               (sem a extensão, sem mudança)
 
+KTX2 comprimido na GPU (ASTC 4x4), AETHER_PROBE_ASTC=1 simula aparelho com ASTC 4x4:
+CarConcept.glb sem ASTC: textures=13 texture_mb=15.6 astc=0  (RGBA8 com mips gerados na importação)
+CarConcept.glb com ASTC: textures=13 texture_mb=3.9  astc=13 (todas as imagens KTX2 do arquivo trazem a cadeia completa de mips)
+  parse_ms 331.1 -> 205.5 (sem decodificar RGBA nem gerar mips em CPU); reimportação e reabertura iguais.
+  Contagem corrigida em seguida: ktx2 passou a contar imagens também no caminho ASTC (ktx2=12, astc=13 texturas,
+  porque uma imagem é usada como cor e como dado); medição repetida: texture_mb=3.9, parse_ms=245.3.
+
 Achados:
   1. Draco reorganiza vértices e descarta triângulos degenerados: a esfera de 4753 vértices e 27648 índices decodifica
      em 4751 vértices e 27090 índices. O primeiro GLB montado com as contagens do OBJ foi RECUSADO pelo importador

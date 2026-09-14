@@ -416,6 +416,11 @@ public:
   // Linha extra na preparação, dita por quem preparou os bytes (por exemplo, as
   // dependências de um .gltf empacotadas no GLB).
   void noteImportPreview(std::string line) {state_.importSummary+="\n"+std::move(line);}
+  // Formatos de textura que o renderer desta sessão amostra (Entrega 4): KTX2
+  // só vira ASTC 4x4 quando o aparelho confirmou suporte. Vale para a importação
+  // interativa e para a reabertura de fontes do projeto.
+  void setImportAstc4x4(bool supported) {importLimits_.astc4x4=supported;}
+  const resources::GltfImportLimits &importLimits() const {return importLimits_;}
   void beginImportPreparation() {state_.importPanel=true;state_.importReady=false;state_.importError=false;state_.importPage=0;state_.importIntoScene=false;state_.importSummary.clear();state_.importPath.clear();state_.importAmbiguities=0;state_.importAmbiguityChoice=0;state_.importStatus="Preparando recurso…";}
   resources::ImportAmbiguityPolicy importAmbiguityPolicy() const {
     return state_.importAmbiguityChoice==1?resources::ImportAmbiguityPolicy::MatchInOrder:
@@ -621,6 +626,7 @@ private:
   bool publishAndAdopt(const ImportedLibrary &library, std::string &diagnostic,
                        usize *outPrimitives = nullptr);
   std::vector<ImportedSource> importedSources_;
+  resources::GltfImportLimits importLimits_{};
   std::string reimportPath_;
   bool previousImportMap(const resources::AssetGuid &source, resources::ImportNodeMap &out) const;
   bool persistImportMap(const resources::AssetGuid &source);
