@@ -238,6 +238,7 @@ struct Importer {
     // Um material neutro fecha a lista: primitiva sem material é legal em glTF
     // e precisa de alguma coisa para apontar.
     out->materials.resize(count + 1);
+    out->materialNames.assign(count + 1, std::string());
     for (auto &material : out->materials) {
       material.baseColorFactor[0] = material.baseColorFactor[1] = material.baseColorFactor[2] = 1;
       material.baseColorFactor[3] = 1;
@@ -252,6 +253,7 @@ struct Importer {
       const auto &source = *json->child(*materials, i);
       if (source.kind != Kind::Object) return fail("Material inválido.");
       auto &target = out->materials[i];
+      if (const auto name = json->string(source, "name"); name.size() <= 128) out->materialNames[i] = std::string(name);
       if (const auto *pbr = json->member(source, "pbrMetallicRoughness"); pbr && pbr->kind == Kind::Object) {
         if (!readVector(*pbr, "baseColorFactor", target.baseColorFactor, 4)) return false;
         target.roughness = static_cast<float>(json->number(*pbr, "roughnessFactor", 1));

@@ -3,6 +3,7 @@
 #include "scene/script_behavior.h"
 
 #include <algorithm>
+#include <limits>
 #include <map>
 #include <sstream>
 #include <unordered_map>
@@ -42,6 +43,18 @@ void copyVector(float to[3], const float from[3]) { std::copy(from, from + 3, to
 
 const ImportLink *linkOf(const EditorEntity &entity) { return scene::importLink(entity.components); }
 
+// Identidade de cada slot do objeto, na ordem. Vazio sem malha.
+std::vector<AssetGuid> slotAssets(const EditorEntity &entity) {
+  std::vector<AssetGuid> slots;
+  if (const auto *render = meshRenderer(entity))
+    for (u32 slot = 0; slot < render->slotCount(); ++slot) slots.push_back(render->slotAsset(slot));
+  return slots;
+}
+
+bool slotCarriesMaterial(const scene::MeshRenderer &render, u32 slot) {
+  return render.slotMaterial(slot).enabled || render.slotMaterialAsset(slot).valid();
+}
+
 // Onde o objeto está pendurado, dito em termos da fonte: 0 no nível das
 // raízes, 1 sob o nó `out`, 2 sob algo que não é desta instância.
 int localParentNode(const EditorDocument &document, const EditorEntity &entity, const ImportLink &link, AssetGuid &out) {
@@ -79,7 +92,9 @@ bool referenced(const EditorDocument &document, EditorEntityId target) {
 }
 
 // O objeto carrega algo que o usuário pôs nele? Então não pode sumir sozinho.
-bool carriesLocalData(const EditorDocument &document, EditorEntityId id, const ImportLink &link) {
+// `allowMaterial`: material local conta como dado PRESERVÁVEL (ele cabe num
+// slot), usado na migração de partes para slots.
+bool carriesLocalData(const EditorDocument &document, EditorEntityId id, const ImportLink &link, bool allowMaterial = false) {
   const auto *entity = document.find(id);
   if (!entity) return false;
   if (!document.childrenOf(id).empty()) return true;
@@ -87,9 +102,13 @@ bool carriesLocalData(const EditorDocument &document, EditorEntityId id, const I
     const auto &type = entity->components.at(c)->type();
     if (&type != &scene::MeshRenderer::descriptor && &type != &ImportLink::descriptor) return true;
   }
-  const auto *render = meshRenderer(*entity);
-  if (render && (render->material.enabled || !render->enabled || render->asset != link.baseAsset)) return true;
-  if (!render && link.baseAsset.valid()) return true;
+  if (slotAssets(*entity) != link.baseSlots()) return true;
+  if (const auto *render = meshRenderer(*entity)) {
+    if (!render->enabled) return true;
+    if (!allowMaterial)
+      for (u32 slot = 0; slot < render->slotCount(); ++slot)
+        if (slotCarriesMaterial(*render, slot)) return true;
+  }
   if (link.baseName != entity->name || !sameVector(entity->transform.position, link.basePosition) ||
       !sameVector(entity->transform.rotationDegrees, link.baseRotation) || !sameVector(entity->transform.scale, link.baseScale))
     return true;
@@ -101,15 +120,24 @@ bool carriesLocalData(const EditorDocument &document, EditorEntityId id, const I
   return referenced(document, id);
 }
 
-void setMesh(EditorEntity &values, const AssetGuid &asset, const ImportSlotResolver &slotOf) {
-  if (asset.valid()) {
-    if (auto *render = editMeshRenderer(values)) {
-      render->asset = asset;
-      render->mesh = slotOf ? slotOf(asset) : 0; // sem resolvedor, a reconciliação de slots resolve
-    }
-  } else if (const auto *render = meshRenderer(values)) {
-    if (!render->material.enabled) values.components.remove(scene::MeshRenderer::descriptor);
-    else if (auto *edit = editMeshRenderer(values)) { edit->asset = {}; edit->mesh = 0; }
+// Troca as identidades dos slots, preservando o material dos que continuam.
+void setSlots(EditorEntity &values, const std::vector<AssetGuid> &assets, const ImportSlotResolver &slotOf) {
+  if (assets.empty()) {
+    const auto *render = meshRenderer(values);
+    if (!render) return;
+    bool material = false;
+    for (u32 slot = 0; slot < render->slotCount(); ++slot) material |= slotCarriesMaterial(*render, slot);
+    if (!material) values.components.remove(scene::MeshRenderer::descriptor);
+    else if (auto *edit = editMeshRenderer(values)) { edit->asset = {}; edit->mesh = 0; edit->submeshes.clear(); }
+    return;
+  }
+  auto *render = editMeshRenderer(values);
+  if (!render) return;
+  render->submeshes.resize(assets.size() - 1);
+  for (u32 slot = 0; slot < assets.size(); ++slot) {
+    *render->editSlotAsset(slot) = assets[slot];
+    // Sem resolvedor, a reconciliação de slots do pacote resolve depois.
+    *render->editSlotMesh(slot) = slotOf && assets[slot].valid() ? slotOf(assets[slot]) : 0;
   }
 }
 
@@ -130,25 +158,32 @@ bool importNodeTransform(const ImportNodeRecord &node, EditorTransform &out) {
 }
 
 void setImportLinkBase(ImportLink &link, const ImportNodeRecord &node, const EditorTransform &transform, i32 primitive,
-                       u32 revision) {
+                       u32 revision, bool slots) {
   link.node = node.id;
   link.primitive = primitive;
   link.revision = revision;
   link.orphan = false;
   link.baseParent = primitive >= 0 ? AssetGuid{} : node.parent;
   link.basePrimitives = static_cast<u32>(node.draws.size());
+  link.baseSubmeshes.clear();
   if (primitive >= 0) {
-    // A parte artificial não tem pose própria na fonte: identidade.
+    // A parte artificial (representação legada) não tem pose própria na
+    // fonte: identidade.
     const EditorTransform identity;
     copyVector(link.basePosition, identity.position);
     copyVector(link.baseRotation, identity.rotationDegrees);
     copyVector(link.baseScale, identity.scale);
     link.baseAsset = static_cast<usize>(primitive) < node.draws.size() ? node.draws[static_cast<usize>(primitive)] : AssetGuid{};
+    return;
+  }
+  link.baseName = importEntityName(node.name);
+  copyVector(link.basePosition, transform.position);
+  copyVector(link.baseRotation, transform.rotationDegrees);
+  copyVector(link.baseScale, transform.scale);
+  if (slots) {
+    link.baseAsset = node.draws.empty() ? AssetGuid{} : node.draws.front();
+    if (node.draws.size() > 1) link.baseSubmeshes.assign(node.draws.begin() + 1, node.draws.end());
   } else {
-    link.baseName = importEntityName(node.name);
-    copyVector(link.basePosition, transform.position);
-    copyVector(link.baseRotation, transform.rotationDegrees);
-    copyVector(link.baseScale, transform.scale);
     link.baseAsset = node.draws.size() == 1 ? node.draws.front() : AssetGuid{};
   }
 }
@@ -171,7 +206,10 @@ u32 adoptLegacyImportInstances(EditorDocument &document, EditorHistory *history,
   for (const auto id : ids) {
     const auto &entity = *document.find(id);
     const auto *render = meshRenderer(entity);
-    if (linkOf(entity) || !render || !render->asset.valid()) continue;
+    // Só a representação anterior à Entrega 2 é adotada: um objeto por
+    // primitiva. Um objeto sem vínculo com vários slots não tem prova de
+    // qual instância é e fica como está.
+    if (linkOf(entity) || !render || !render->asset.valid() || render->slotCount() > 1) continue;
     const auto owner = owners.find(render->asset);
     if (owner == owners.end()) continue;
     std::vector<Claim> chain;
@@ -259,7 +297,9 @@ u32 adoptLegacyImportInstances(EditorDocument &document, EditorHistory *history,
       if (!importNodeTransform(node, transform)) transform = values.transform;
       link->source = source;
       link->instance = instance;
-      setImportLinkBase(*link, node, transform, claim.primitive, revision);
+      // Nó de várias primitivas na cena legada: o objeto do nó não tem malha e
+      // as partes carregam as primitivas. A migração para slots vem depois.
+      setImportLinkBase(*link, node, transform, claim.primitive, revision, node.draws.size() <= 1);
       if (claim.primitive >= 0) link->baseName = values.name;
       link->root = claim.id == key;
       if (edit.apply(claim.id, values)) ++adopted;
@@ -307,7 +347,8 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
   bool opened = false;
   const Mutator edit{document, history};
   for (auto &[guid, instance] : instances) {
-    if (instance.revision == map.revision && instance.newest == map.revision) continue;
+    // Instância em dia e sem partes legadas: nada a fazer.
+    if (instance.revision == map.revision && instance.newest == map.revision && instance.parts.empty()) continue;
     ++report.instances;
     if (instance.conflict || instance.newest > map.revision) {
       // Dois objetos dizendo ser o mesmo nó da mesma instância, ou uma cena de
@@ -320,7 +361,64 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
     if (instance.wrapper) instance.rootParent = instance.wrapper;
     std::unordered_set<EditorEntityId> created;
 
-    // A. Nós que a instância ainda não conhecia.
+    // 0. Migração das partes artificiais (um filho por primitiva) para slots
+    // do objeto do nó. Só quando é PROVADO que nada se perde: todas as partes
+    // presentes, pristinas (material local é preservado no slot) e o objeto do
+    // nó sem malha própria. Qualquer dúvida mantém o legado, com diagnóstico.
+    std::map<AssetGuid, std::vector<std::pair<i32, EditorEntityId>>> partsByNode;
+    for (const auto &[key, id] : instance.parts) partsByNode[key.first].push_back({key.second, id});
+    for (auto &[nodeId, parts] : partsByNode) {
+      std::sort(parts.begin(), parts.end());
+      const auto owner = instance.nodes.find(nodeId);
+      const char *reason = nullptr;
+      if (owner == instance.nodes.end() || !document.exists(owner->second)) reason = "o objeto do nó não existe";
+      const auto *nodeEntity = reason ? nullptr : document.find(owner->second);
+      if (!reason && meshRenderer(*nodeEntity)) reason = "o objeto do nó já tem malha própria";
+      if (!reason && parts.size() != linkOf(*nodeEntity)->basePrimitives) reason = "faltam partes";
+      for (usize i = 0; !reason && i < parts.size(); ++i) {
+        const auto *part = document.find(parts[i].second);
+        if (!part || parts[i].first != static_cast<i32>(i)) reason = "faltam partes";
+        else if (part->parent != owner->second) reason = "uma parte saiu do nó";
+        else if (carriesLocalData(document, parts[i].second, *linkOf(*part), true)) reason = "uma parte tem dados locais";
+      }
+      if (reason) {
+        ++report.legacyParts;
+        note(report, std::string(nodeEntity ? nodeEntity->name : "Nó") + ": partes por primitiva mantidas (" + reason + ").");
+        continue;
+      }
+      auto values = *nodeEntity;
+      auto *render = editMeshRenderer(values);
+      auto *link = scene::editImportLink(values.components);
+      if (!render || !link) continue;
+      render->submeshes.resize(parts.size() - 1);
+      std::vector<AssetGuid> base;
+      for (usize i = 0; i < parts.size(); ++i) {
+        const auto &part = *document.find(parts[i].second);
+        const auto *partRender = meshRenderer(part);
+        const auto slot = static_cast<u32>(i);
+        if (partRender) {
+          *render->editSlotAsset(slot) = partRender->asset;
+          *render->editSlotMesh(slot) = partRender->mesh;
+          *render->editSlotMaterial(slot) = partRender->material;
+          *render->editSlotMaterialAsset(slot) = partRender->materialAsset;
+        }
+        base.push_back(linkOf(part)->baseAsset);
+      }
+      link->baseAsset = base.front();
+      link->baseSubmeshes.assign(base.begin() + 1, base.end());
+      if (!edit.apply(owner->second, values)) continue;
+      for (const auto &[primitive, id] : parts) {
+        edit.destroy(id);
+        instance.parts.erase({nodeId, primitive});
+      }
+      ++report.consolidated;
+    }
+    const auto partsMode = [&](const AssetGuid &node) {
+      const auto first = instance.parts.lower_bound({node, std::numeric_limits<i32>::min()});
+      return first != instance.parts.end() && first->first.first == node;
+    };
+
+    // A. Nós que a instância ainda não conhecia, já com os slots.
     for (const auto &node : map.nodes) {
       if (instance.nodes.count(node.id)) continue;
       if (node.introduced <= instance.revision) { ++report.keptDeleted; continue; }
@@ -341,7 +439,7 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
       if (!id) { note(report, "Limite de objetos atingido ao criar \"" + node.name + "\"."); continue; }
       auto values = *document.find(id);
       values.transform = transform;
-      if (node.draws.size() == 1) setMesh(values, node.draws.front(), slotOf);
+      setSlots(values, node.draws, slotOf);
       auto *link = scene::editImportLink(values.components);
       if (!link) continue;
       link->source = source;
@@ -351,25 +449,9 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
       instance.nodes[node.id] = id;
       created.insert(id);
       ++report.created;
-      if (node.draws.size() > 1)
-        for (usize p = 0; p < node.draws.size(); ++p) {
-          const auto part = edit.create(id, importEntityName(node.name + " · " + std::to_string(p + 1)));
-          if (!part) break;
-          auto partValues = *document.find(part);
-          setMesh(partValues, node.draws[p], slotOf);
-          auto *partLink = scene::editImportLink(partValues.components);
-          if (!partLink) continue;
-          partLink->source = source;
-          partLink->instance = guid;
-          setImportLinkBase(*partLink, node, transform, static_cast<i32>(p), map.revision);
-          partLink->baseName = partValues.name;
-          edit.apply(part, partValues);
-          instance.parts[{node.id, static_cast<i32>(p)}] = part;
-          created.insert(part);
-        }
     }
 
-    // B. Campos, malha, partes e pai dos nós que continuam na fonte.
+    // B. Campos, slots e pai dos nós que continuam na fonte.
     const auto conflict = [&](const EditorEntity &entity, const char *field) {
       ++report.conflicts;
       note(report, std::string(entity.name) + ": " + field + " mudou na fonte e no objeto; mantido o valor local.");
@@ -404,52 +486,47 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
         copyVector(fresh.rotationDegrees, previous.baseRotation);
         copyVector(fresh.scale, previous.baseScale);
       }
-      const AssetGuid newAsset = node.draws.size() == 1 ? node.draws.front() : AssetGuid{};
-      const auto *render = meshRenderer(values);
-      const AssetGuid localAsset = render ? render->asset : AssetGuid{};
-      if (newAsset != previous.baseAsset) {
-        if (localAsset == previous.baseAsset) { setMesh(values, newAsset, slotOf); touched = true; }
-        else if (localAsset != newAsset) conflict(values, "a malha");
+      // Slots: o vetor inteiro de identidades é o campo. Mudança de contagem
+      // só é aplicada quando não descarta material que o usuário pôs num slot.
+      const bool legacy = partsMode(node.id);
+      std::vector<AssetGuid> incoming;
+      if (!legacy) incoming = node.draws;
+      else if (node.draws.size() == 1) incoming.push_back(node.draws.front());
+      const auto base = previous.baseSlots();
+      const auto local = slotAssets(values);
+      if (incoming != base) {
+        if (local == base) {
+          bool dropsMaterial = false;
+          if (const auto *render = meshRenderer(values))
+            for (u32 slot = static_cast<u32>(incoming.size()); slot < render->slotCount(); ++slot)
+              dropsMaterial |= slotCarriesMaterial(*render, slot);
+          if (dropsMaterial) conflict(values, "os slots de material");
+          else { setSlots(values, incoming, slotOf); touched = true; }
+        } else if (local != incoming) {
+          conflict(values, "a malha");
+        }
       }
       auto *link = scene::editImportLink(values.components);
       if (!link) continue;
       const bool keepRoot = link->root;
-      setImportLinkBase(*link, node, fresh, -1, map.revision);
+      setImportLinkBase(*link, node, fresh, -1, map.revision, !legacy);
       link->root = keepRoot;
       if (!trs) link->baseName = newName;
       edit.apply(id, values);
       if (touched) ++report.updated;
 
-      // Partes por primitiva, enquanto a Astra ainda as cria.
-      if (node.draws.size() > 1)
+      // Partes legadas que não puderam virar slots: só atualização da malha.
+      if (legacy && node.draws.size() > 1)
         for (usize p = 0; p < node.draws.size(); ++p) {
-          const auto key = std::make_pair(node.id, static_cast<i32>(p));
-          const auto part = instance.parts.find(key);
-          if (part == instance.parts.end()) {
-            const bool knew = previous.basePrimitives > 1 && p < previous.basePrimitives;
-            if (knew && node.introduced <= instance.revision) { ++report.keptDeleted; continue; }
-            const auto newPart = edit.create(id, importEntityName(node.name + " · " + std::to_string(p + 1)));
-            if (!newPart) break;
-            auto partValues = *document.find(newPart);
-            setMesh(partValues, node.draws[p], slotOf);
-            auto *partLink = scene::editImportLink(partValues.components);
-            if (!partLink) continue;
-            partLink->source = source;
-            partLink->instance = guid;
-            setImportLinkBase(*partLink, node, fresh, static_cast<i32>(p), map.revision);
-            partLink->baseName = partValues.name;
-            edit.apply(newPart, partValues);
-            instance.parts[key] = newPart;
-            ++report.created;
-            continue;
-          }
+          const auto part = instance.parts.find({node.id, static_cast<i32>(p)});
+          if (part == instance.parts.end()) { ++report.keptDeleted; continue; }
           if (!document.exists(part->second)) continue;
           auto partValues = *document.find(part->second);
           const auto partPrevious = *linkOf(partValues);
           const auto *partRender = meshRenderer(partValues);
           const AssetGuid partLocal = partRender ? partRender->asset : AssetGuid{};
           if (node.draws[p] != partPrevious.baseAsset) {
-            if (partLocal == partPrevious.baseAsset) { setMesh(partValues, node.draws[p], slotOf); ++report.updated; }
+            if (partLocal == partPrevious.baseAsset) { setSlots(partValues, {node.draws[p]}, slotOf); ++report.updated; }
             else if (partLocal != node.draws[p]) conflict(partValues, "a malha");
           }
           auto *partLink = scene::editImportLink(partValues.components);
@@ -532,12 +609,12 @@ u32 importOverrides(const EditorDocument &document, EditorEntityId id) {
     if (where == 2 || (where == 0 && link->baseParent.valid()) || (where == 1 && parent != link->baseParent))
       mask |= ImportOverrideParent;
   }
-  const auto *render = meshRenderer(*entity);
-  if ((render ? render->asset : AssetGuid{}) != link->baseAsset) mask |= ImportOverrideMesh;
+  if (slotAssets(*entity) != link->baseSlots()) mask |= ImportOverrideMesh;
   return mask;
 }
 
-bool revertImportOverrides(EditorDocument &document, EditorHistory &history, EditorEntityId id, u32 mask, const ImportSlotResolver &slotOf) {
+bool revertImportOverrides(EditorDocument &document, EditorHistory &history, EditorEntityId id, u32 mask,
+                           const ImportSlotResolver &slotOf) {
   const auto *entity = document.find(id);
   const auto *found = entity ? linkOf(*entity) : nullptr;
   if (!found || found->orphan || found->unlinked || history.isOpen()) return false;
@@ -549,7 +626,7 @@ bool revertImportOverrides(EditorDocument &document, EditorHistory &history, Edi
   if (mask & ImportOverridePosition) copyVector(values.transform.position, link.basePosition);
   if (mask & ImportOverrideRotation) copyVector(values.transform.rotationDegrees, link.baseRotation);
   if (mask & ImportOverrideScale) copyVector(values.transform.scale, link.baseScale);
-  if (mask & ImportOverrideMesh) setMesh(values, link.baseAsset, slotOf);
+  if (mask & ImportOverrideMesh) setSlots(values, link.baseSlots(), slotOf);
   history.begin("Reverter à fonte");
   bool ok = history.applyValues(document, id, values);
   if (ok && (mask & ImportOverrideParent)) {

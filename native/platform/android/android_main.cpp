@@ -2077,6 +2077,9 @@ void android_main(android_app *app) {
                 ae::editor::EditorConsoleSeverity::Warning:ae::editor::EditorConsoleSeverity::Info);
           }
         }
+        // Material compartilhado editado: a cena não mudou de revisão, mas a
+        // aparência de todos os slots que o usam mudou.
+        if (shell.editorSession.takeAppearanceChanged()) shell.editorPublishedRevision=~ae::u64{0};
         if (shell.editorMapImported && (editorPlaying || shell.editorPublishedRevision != shell.editorSession.document().revision())) {
           auto &authored=shell.authoredDraws;
           const bool changed=shell.editorPublishedRevision!=shell.editorSession.document().revision();

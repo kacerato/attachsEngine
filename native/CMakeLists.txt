@@ -208,6 +208,7 @@ add_library(aether_assets STATIC
   resources/json_reader.cpp
   resources/gltf_import.cpp
   resources/import_node_map.cpp
+  resources/material_asset.cpp
 )
 target_include_directories(aether_assets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # aether_renderer pelo formato do pacote de mapa: a importacao produz

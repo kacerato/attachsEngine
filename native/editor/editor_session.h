@@ -30,6 +30,7 @@
 #include "editor/editor_map_scene.h"
 #include "resources/gltf_import.h"
 #include "resources/import_node_map.h"
+#include "resources/material_asset.h"
 #include "editor/editor_import_reconcile.h"
 #include "editor/editor_archive.h"
 #include "editor/editor_document.h"
@@ -422,6 +423,31 @@ public:
   // Vínculo de instância (M08.2): o que difere da fonte e os comandos reais do
   // inspetor. Todos passam pelo histórico.
   u32 importLinkOverrides(EditorEntityId id) const {return importOverrides(document_,id);}
+  // Materiais por slot (Entrega 2). O ALCANCE é sempre explícito: `Instance`
+  // escreve a substituição no slot deste objeto (histórico); `Shared` escreve o
+  // MaterialAsset e muda todos os slots que o usam.
+  enum class MaterialScope : u8 { Instance, Shared };
+  const std::vector<resources::MaterialAsset> &materialAssets() const {return materials_;}
+  const resources::MaterialAsset *findMaterialAsset(const resources::AssetGuid &guid) const {
+    for(const auto &material:materials_) if(material.guid==guid) return &material;
+    return nullptr;
+  }
+  // Cria `Materiais/<nome>.material` com os valores efetivos do slot e liga o
+  // slot a ele. Devolve a identidade, ou inválida com `diagnostic`.
+  resources::AssetGuid createMaterialFromSlot(EditorEntityId id,u32 slot,std::string &diagnostic);
+  // Liga o slot a um material do projeto; identidade inválida volta à fonte.
+  bool assignSlotMaterial(EditorEntityId id,u32 slot,const resources::AssetGuid &material);
+  // `field` indexa os números do componente de malha (cor, rugosidade...).
+  bool setSlotMaterialValue(EditorEntityId id,u32 slot,MaterialScope scope,u32 field,float value,std::string &diagnostic);
+  bool clearSlotMaterialOverride(EditorEntityId id,u32 slot);
+  // Nome do material da FONTE usado pela primitiva de identidade `draw`.
+  std::string sourceMaterialName(const resources::AssetGuid &draw) const;
+  // Editar um material compartilhado não muda a revisão do documento; o shell
+  // consome este sinal para republicar os desenhos.
+  bool takeAppearanceChanged() {return std::exchange(appearanceChanged_,false);}
+  // Candidatos de toque do viewport, recalculados agora. Inspeção: é o que
+  // prova que cada slot de um objeto seleciona o MESMO objeto.
+  std::span<const EditorPickCandidate> pickCandidates() {buildPickCandidates();return candidates_;}
   bool revertImportLink(EditorEntityId id,u32 mask);
   u32 unlinkImport(EditorEntityId id);
   bool resolveImportOrphan(EditorEntityId id,bool keep);
@@ -457,7 +483,12 @@ public:
   // O registro do projeto, em texto, para o shell gravar ao lado da cena; e a
   // carga, feita antes de reimportar as fontes.
   std::string serializeAssets() const { return assets_.serialize(); }
-  bool loadAssets(std::string_view text) { return resources::AssetRegistry::deserialize(text, assets_); }
+  // O registro e, com ele, os materiais do projeto que ele declara.
+  bool loadAssets(std::string_view text) {
+    if(!resources::AssetRegistry::deserialize(text, assets_)) return false;
+    loadMaterialAssets();
+    return true;
+  }
   bool extractMap(std::vector<renderer::MapDrawState> &out) const { return mapScene_.extract(document_, out); }
   // As luzes saem do MESMO grafo que a câmera e os desenhos: em execução, o
   // mundo de Play; fora dele, o documento autoral. É o que faz um script mover
@@ -558,6 +589,8 @@ private:
     std::vector<u32> drawNodes;
     // Identidade persistente dos nós e das primitivas desta revisão.
     resources::ImportNodeMap map;
+    // Nomes dos materiais da fonte, alinhados a `materials`.
+    std::vector<std::string> materialNames;
   };
   struct ImportedLibrary {
     std::vector<u8> vertices;
@@ -585,6 +618,12 @@ private:
   void reportImportReconcile(const ImportReconcileReport &report, const char *context);
   void refreshImportLinkView();
   u64 importInstanceCounter_=0;
+  std::vector<resources::MaterialAsset> materials_;
+  bool appearanceChanged_=false;
+  void publishMaterialLibrary();
+  void loadMaterialAssets();
+  void refreshMaterialSlotView();
+  bool writeMaterialAsset(const resources::MaterialAsset &material,const std::string &path,std::string &diagnostic);
   double codeCheckpointAt_=0;
   // A impressão digital do pacote base, guardada na importação inicial: é ela
   // que deriva a identidade das primitivas internas em toda adoção posterior.

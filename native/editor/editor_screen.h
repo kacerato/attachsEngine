@@ -173,8 +173,12 @@ enum class EditorWidget : u32 {
   ReferenceClose, ReferenceSearch, ReferenceClear, ReferencePrevious, ReferenceNext,
   CodeTemplateClose, CodeConsole,
   ImportMatchInOrder, ImportTreatAsNew, ImportLinkMenu, ImportLinkUnlink, ImportLinkKeep, ImportLinkDelete,
+  MaterialSlotPrevious, MaterialSlotNext, MaterialScopeInstance, MaterialScopeShared, MaterialChoose,
+  MaterialPickerClose, MaterialClearOverride, MaterialCreateShared, MaterialUseSource,
   // + máscara de ImportOverride.
   ImportLinkRevertBase=0x52000000u,
+  // + índice do material do projeto / do campo numérico do material.
+  MaterialChoiceBase=0x53000000u, MaterialNumberBase=0x54000000u,
   ComponentReferenceBase=0x7a000000u, ReferenceChoiceBase=0x7b000000u,
   ComponentNumberBase=0x78000000u,
   MeshChoiceBase=0x79000000u,
@@ -362,6 +366,19 @@ struct EditorScreenState final {
   struct ImportLinkView { bool linked=false,orphan=false,root=false; std::string source,node; u32 overrides=0; };
   ImportLinkView importLink;
   bool importLinkMenu=false;
+  // Material por slot (Entrega 2), preparado pela sessão para o objeto
+  // selecionado. `values` está no ALCANCE escolhido: a instância mostra o que
+  // é desenhado neste objeto; o compartilhado mostra o recurso do projeto.
+  struct MaterialSlotView {
+    u32 slots=0;
+    std::string name;
+    bool shared=false,missing=false,overridden=false;
+    float values[11]{};
+  };
+  MaterialSlotView materialSlotView;
+  std::vector<std::string> projectMaterials;
+  u32 materialSlot=0,materialPage=0;
+  bool materialShared=false,materialPicker=false;
   bool editingCreationSearch=false;
   char creationSearch[kEditorNameCapacity]{};
   bool editingHierarchySearch=false;

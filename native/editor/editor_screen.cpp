@@ -596,6 +596,111 @@ void buildPropertyPage(ScreenBuilder &builder, UiRect content, const EditorEntit
   if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::PropertyNext));
 }
 
+// Material por slot (Entrega 2). Uma coluna, de cima para baixo: qual slot,
+// qual material ele usa, em que ALCANCE a edição vale, e os campos. O alcance
+// fica sempre à vista: editar o recurso compartilhado muda todos os usos, e isso
+// não pode ser uma surpresa.
+void buildMaterialSlots(ScreenBuilder &builder,UiRect content) {
+  const auto &theme=builder.theme;const auto &state=builder.state;const auto &view=state.materialSlotView;
+  if(!view.slots || content.height<40) return;
+  // Uma linha só para slot e material: "<  Slot 2/3 · Vidro · da fonte  >". O
+  // centro abre a escolha do material; as setas trocam de slot. Numa tela de
+  // telefone, cada linha a menos é um campo a mais visível.
+  auto use=takeTop(content,44);
+  auto previous=takeLeft(use,32),next=takeRight(use,32);const auto useHit=use;
+  const bool canPrevious=state.materialSlot>0,canNext=state.materialSlot+1<view.slots;
+  builder.label(previous,"<",canPrevious?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
+  builder.label(next,">",canNext?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
+  if(canPrevious) builder.router.addRegion(previous,widgetId(EditorWidget::MaterialSlotPrevious));
+  if(canNext) builder.router.addRegion(next,widgetId(EditorWidget::MaterialSlotNext));
+  builder.list.addRect(deflate(use,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+  const std::string origin=view.missing?"ausente":view.shared?"do projeto":"da fonte";
+  builder.label(takeTop(use,22),("Slot "+std::to_string(state.materialSlot+1)+"/"+std::to_string(view.slots)+" · "+view.name).c_str(),
+                view.missing?theme.color.warning:theme.color.text,theme.type.caption);
+  builder.label(use,("Material "+origin+(view.overridden?" · substituição local":"")).c_str(),view.overridden?theme.color.accent:theme.color.textMuted,theme.type.caption);
+  builder.router.addRegion(useHit,widgetId(EditorWidget::MaterialChoose));
+  if(content.height<34) return;
+
+  auto scope=takeTop(content,34);
+  auto instance=takeLeft(scope,scope.width*.5f-2);takeLeft(scope,4);
+  const auto pill=[&](UiRect rect,const char *label,bool on,bool enabled,EditorWidget widget) {
+    builder.list.addRect(deflate(rect,UiInsets::all(2)),on?theme.color.accent:theme.color.raised,theme.radius.control);
+    builder.label(rect,label,on?theme.color.accentInk:enabled?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(rect,widgetId(widget));
+  };
+  pill(instance,"Esta instância",!state.materialShared,true,EditorWidget::MaterialScopeInstance);
+  pill(scope,"Compartilhado",state.materialShared,view.shared,EditorWidget::MaterialScopeShared);
+
+  // A ação do alcance só ocupa linha se ainda couberem campos; senão ela
+  // continua disponível na lista de escolha do material.
+  if(content.height>=32+80) {
+    if(!state.materialShared && view.overridden) {
+      auto clear=takeTop(content,32);builder.label(clear,"Remover substituição local",theme.color.text,theme.type.caption);
+      builder.router.addRegion(clear,widgetId(EditorWidget::MaterialClearOverride));
+    } else if(!view.shared) {
+      auto create=takeTop(content,32);builder.label(create,"Criar material do projeto a partir deste slot",theme.color.text,theme.type.caption);
+      builder.router.addRegion(create,widgetId(EditorWidget::MaterialCreateShared));
+    }
+  }
+
+  const u32 count=static_cast<u32>(scene::meshRendererNumbers.size());
+  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-30)/40));
+  const u32 pages=std::max(1u,(count+perPage-1)/perPage),page=std::min(state.propertyPage,pages-1);
+  auto footer=pages>1?takeBottom(content,30):UiRect{};
+  for(u32 field=page*perPage;field<count && field<(page+1)*perPage;++field) {
+    auto row=takeTop(content,std::min(40.0f,content.height));
+    builder.label(takeLeft(row,row.width*.62f),scene::meshRendererNumbers[field].name,theme.color.textDim,theme.type.caption);
+    char value[32];std::snprintf(value,sizeof(value),"%.6g",static_cast<double>(view.values[field]));
+    builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+    builder.label(row,value,theme.color.text,theme.type.numeric,UiAlign::Center);
+    builder.router.addRegion(row,widgetId(EditorWidget::MaterialNumberBase)+field);
+  }
+  if(pages>1) {
+    const auto back=takeLeft(footer,36),forward=takeRight(footer,36);
+    builder.label(back,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.label(forward,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    if(page) builder.router.addRegion(back,widgetId(EditorWidget::PropertyPrevious));
+    if(page+1<pages) builder.router.addRegion(forward,widgetId(EditorWidget::PropertyNext));
+    builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  }
+}
+
+// Escolha do material de um slot: o da fonte, um do projeto, ou um novo.
+void buildMaterialPicker(ScreenBuilder &builder,UiRect content) {
+  const auto &theme=builder.theme;const auto &state=builder.state;const auto &view=state.materialSlotView;
+  auto title=takeTop(content,36),back=takeLeft(title,36);
+  builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
+  builder.router.addRegion(back,widgetId(EditorWidget::MaterialPickerClose));
+  builder.label(title,("Material do slot "+std::to_string(state.materialSlot+1)).c_str(),theme.color.text,theme.type.body);
+  const auto option=[&](const std::string &label,const char *detail,bool current,u32 widget) {
+    if(content.height<48) return;
+    auto row=takeTop(content,48);const auto hit=row;
+    builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+    if(current) builder.list.addRect({row.x,row.y+4,3,row.height-8},theme.color.accent,1);
+    // Recuo do texto: sem ele a primeira letra encostava na borda (visto no aparelho).
+    takeLeft(row,12);
+    builder.label(takeTop(row,25),label.c_str(),theme.color.text,theme.type.body);
+    builder.label(row,detail,theme.color.textMuted,theme.type.caption);
+    builder.router.addRegion(hit,widget);
+  };
+  option("Material da fonte","o arquivo importado decide",!view.shared && !view.missing,widgetId(EditorWidget::MaterialUseSource));
+  auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
+  const u32 rows=static_cast<u32>(state.projectMaterials.size())+1;
+  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height)/48));
+  const u32 pages=std::max(1u,(rows+perPage-1)/perPage),page=std::min(state.meshPage,pages-1);
+  for(u32 row=page*perPage;row<rows && row<(page+1)*perPage;++row) {
+    if(row<state.projectMaterials.size())
+      option(state.projectMaterials[row],"do projeto · compartilhado",view.shared && view.name==state.projectMaterials[row],
+             widgetId(EditorWidget::MaterialChoiceBase)+row);
+    else option("Novo material do projeto","com os valores deste slot",false,widgetId(EditorWidget::MaterialCreateShared));
+  }
+  builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
+  if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::MeshNext));
+  builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+}
+
 // Descriptor fields are addressed by stable instance/property IDs on edit.
 // Widget indices exist only for one rendered frame, never in the scene archive.
 void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity,
@@ -617,6 +722,9 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       builder.router.addRegion(tab,widgetId(i?EditorWidget::MeshMaterialTab:EditorWidget::MeshGeometryTab));
     }
   }
+  // A aba Material é por SLOT, com alcance explícito; não é mais a lista de
+  // números do componente, que só alcançava o primeiro slot.
+  if(mesh && builder.state.meshTab) {buildMaterialSlots(builder,content);return;}
   struct Field {u32 kind,index;}; // 0 boolean, 1 enum, 2 number, 3 action, 4 object reference
   std::vector<Field> fields;
   if(!mesh || !builder.state.meshTab) {
@@ -823,6 +931,7 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   const bool same=state.componentSelection==entity.id,adding=same&&state.addingComponent;
   if(same && state.referenceInstance) {buildReferencePicker(builder,content,entity);return;}
   if(same && state.meshPicker && meshRenderer(entity)) {buildMeshPicker(builder,content,entity);return;}
+  if(same && state.materialPicker && meshRenderer(entity)) {buildMaterialPicker(builder,content);return;}
   auto footer=takeBottom(content,42);auto button=deflate(footer,UiInsets::all(2));
   builder.list.addRect(button,theme.color.raised,theme.radius.control);
   builder.router.addRegion(button,widgetId(EditorWidget::AddComponentMenu));

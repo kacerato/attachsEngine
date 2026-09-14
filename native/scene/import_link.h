@@ -4,6 +4,7 @@
 #include <cmath>
 #include <iomanip>
 #include <string>
+#include <vector>
 
 namespace ae::scene {
 // Vínculo de um objeto da cena com o nó da fonte importada que o originou
@@ -39,6 +40,16 @@ public:
   float basePosition[3]{0, 0, 0}, baseRotation[3]{0, 0, 0}, baseScale[3]{1, 1, 1};
   resources::AssetGuid baseParent, baseAsset;
   u32 basePrimitives = 0;
+  // v2: identidades base dos slots 1..n do objeto (o slot 0 é `baseAsset`).
+  std::vector<resources::AssetGuid> baseSubmeshes;
+  // Slots da base, na ordem: vazio quando o nó não tinha malha nesse objeto.
+  std::vector<resources::AssetGuid> baseSlots() const {
+    std::vector<resources::AssetGuid> slots;
+    if (!baseAsset.valid() && baseSubmeshes.empty()) return slots;
+    slots.push_back(baseAsset);
+    slots.insert(slots.end(), baseSubmeshes.begin(), baseSubmeshes.end());
+    return slots;
+  }
 
   static const ComponentType descriptor;
   const ComponentType &type() const override { return descriptor; }
@@ -60,9 +71,11 @@ public:
     for (float value : baseRotation) out << ' ' << value;
     for (float value : baseScale) out << ' ' << value;
     out << ' ' << guid(baseParent) << ' ' << guid(baseAsset) << ' ' << basePrimitives << ' ' << unlinked;
+    out << ' ' << baseSubmeshes.size();
+    for (const auto &slot : baseSubmeshes) out << ' ' << guid(slot);
   }
   bool read(std::istream &in, u32 version) override {
-    if (version != 1) return false;
+    if (version != 1 && version != 2) return false;
     std::string sourceText, nodeText, instanceText, parentText, assetText;
     if (!(in >> sourceText >> nodeText >> instanceText >> primitive >> revision >> root >> orphan >> std::quoted(baseName)))
       return false;
@@ -74,13 +87,25 @@ public:
       out = {};
       return text == "-" || resources::AssetGuid::parse(text, out);
     };
-    return parse(sourceText, source) && parse(nodeText, node) && parse(instanceText, instance) &&
-           parse(parentText, baseParent) && parse(assetText, baseAsset);
+    if (!parse(sourceText, source) || !parse(nodeText, node) || !parse(instanceText, instance) ||
+        !parse(parentText, baseParent) || !parse(assetText, baseAsset))
+      return false;
+    baseSubmeshes.clear();
+    if (version >= 2) {
+      usize count = 0;
+      if (!(in >> count) || count > 256) return false;
+      baseSubmeshes.resize(count);
+      for (auto &slot : baseSubmeshes) {
+        std::string text;
+        if (!(in >> text) || !parse(text, slot)) return false;
+      }
+    }
+    return true;
   }
 };
 
 inline const ComponentType ImportLink::descriptor{
-    "astra.import.link", 1, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<ImportLink>(); }};
+    "astra.import.link", 2, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<ImportLink>(); }};
 
 inline const ImportLink *importLink(const Components &components) {
   return static_cast<const ImportLink *>(components.find(ImportLink::descriptor));

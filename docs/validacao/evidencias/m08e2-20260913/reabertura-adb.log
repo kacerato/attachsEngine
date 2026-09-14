@@ -1,0 +1,6 @@
+Reabertura depois de instalar o APK 0A60F155A7A935E85B57614693248A959EFD4665CCD2890C69761610158D654C (install -r), force-stop e abrir M08Recursos0913k.
+Cena antes (depois do Play/Stop): 3B7B35C426EB7014E1E3A442274288ADE4E67A98A4654A1549AB4A341C3E59A0
+Cena depois da reabertura:        3B7B35C426EB7014E1E3A442274288ADE4E67A98A4654A1549AB4A341C3E59A0
+Referências a Vidro (481fef276b9458ce8d22c1cebfafa0a4) na cena: 2
+Materiais/Vidro.material: ASTRA_MATERIAL 1 481fef276b9458ce8d22c1cebfafa0a4 2 "Vidro" 1 0 1 1 1 1 1 0 0 0 1
+Log: [Import] fonte reaberta: Fontes/m08e2-painel.glb

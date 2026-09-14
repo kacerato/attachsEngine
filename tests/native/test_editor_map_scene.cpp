@@ -853,8 +853,8 @@ AE_TEST(mesh_reference_without_identity_is_adopted_and_missing_identity_is_not_f
 }
 
 AE_TEST(mesh_component_v1_archive_still_loads_and_gains_identity_on_save) {
-  // Um projeto salvo antes desta mudança precisa abrir. O componente é v2 e a
-  // carga de v1 não pode exigir o campo novo.
+  // Um projeto salvo antes desta mudança precisa abrir. O componente é v3 (slots)
+  // e a carga de v1 não pode exigir nenhum campo posterior.
   const renderer::MapDrawRecord draws[]{identityDraw(0)};
   const renderer::MapMaterialRecord materials[]{flatMaterial(1)};
   EditorDocument document;EditorMapScene scene;
@@ -862,16 +862,17 @@ AE_TEST(mesh_component_v1_archive_still_loads_and_gains_identity_on_save) {
   const auto id=document.childrenOf(document.root())[0];
 
   auto texto=serializeEditorDocument(document,11);
-  // Rebaixa o componente para a versão 1 e corta o campo de identidade do
-  // payload, exatamente como um arquivo gravado antes desta mudança.
-  const std::string alvo="\"astra.render.mesh\" 2 ";
+  // Rebaixa o componente para a versão 1 e corta tudo o que veio depois dela —
+  // identidade (v2), material compartilhado e contagem de slots (v3) —,
+  // exatamente como um arquivo gravado antes dessas mudanças.
+  const std::string alvo="\"astra.render.mesh\" 3 ";
   const auto posicao=texto.find(alvo);
   AE_EXPECT_TRUE(posicao!=std::string::npos,"componente encontrado no arquivo");
   texto.replace(posicao,alvo.size(),"\"astra.render.mesh\" 1 ");
   const auto guid=meshRenderer(*document.find(id))->asset.text();
-  const auto comGuid=texto.find(guid);
-  AE_EXPECT_TRUE(comGuid!=std::string::npos,"identidade presente no arquivo v2");
-  texto.erase(comGuid,guid.size()+1);
+  const auto comGuid=texto.find(guid+" - 0 ");
+  AE_EXPECT_TRUE(comGuid!=std::string::npos,"identidade e cauda v3 presentes no arquivo");
+  texto.erase(comGuid,guid.size()+5);
 
   EditorDocument antigo;
   AE_EXPECT_TRUE(deserializeEditorDocument(texto,11,antigo),"arquivo v1 do componente carrega");

@@ -32,8 +32,11 @@ using ImportSlotResolver = std::function<u32(const resources::AssetGuid &)>;
 struct ImportReconcileReport {
   u32 instances = 0, updated = 0, created = 0, removed = 0, orphaned = 0;
   u32 conflicts = 0, keptDeleted = 0, adopted = 0, unproven = 0, skippedInstances = 0;
+  // Entrega 2: nós cujas partes por primitiva viraram slots, e nós cujas partes
+  // ficaram como estavam porque migrar perderia algo.
+  u32 consolidated = 0, legacyParts = 0;
   std::vector<std::string> notes;
-  bool changed() const noexcept { return updated || created || removed || orphaned || adopted; }
+  bool changed() const noexcept { return updated || created || removed || orphaned || adopted || consolidated; }
 };
 
 enum ImportOverride : u32 {
@@ -48,9 +51,11 @@ enum ImportOverride : u32 {
 
 // Pose local de um nó do mapa em TRS. Falso quando a matriz não cabe em TRS.
 bool importNodeTransform(const resources::ImportNodeRecord &node, EditorTransform &out);
-// Preenche a base do vínculo com os valores do nó nesta revisão.
+// Preenche a base do vínculo com os valores do nó nesta revisão. `slots`
+// falso descreve a representação legada (objeto do nó sem malha e uma parte
+// por primitiva), usada até a migração provar que pode consolidar.
 void setImportLinkBase(scene::ImportLink &link, const resources::ImportNodeRecord &node,
-                       const EditorTransform &transform, i32 primitive, u32 revision);
+                       const EditorTransform &transform, i32 primitive, u32 revision, bool slots = true);
 std::string importEntityName(std::string_view name);
 
 // Liga objetos de cenas anteriores ao vínculo, SÓ quando a prova existe: a

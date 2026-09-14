@@ -697,7 +697,9 @@ AE_TEST(session_material_and_environment_numeric_controls_use_the_same_history_p
   f.session.document().applyEntityValues(f.cube,entity);f.session.setSelection(f.cube);f.session.history().clear();
   tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
   tapWidget(f,widgetId(EditorWidget::MeshMaterialTab));
-  const u32 roughness=widgetId(EditorWidget::ComponentNumberBase)+(3u<<8);
+  // A aba Material é por slot (Entrega 2); no alcance da instância, o campo do
+  // slot 0 escreve o mesmo material do objeto, pelo mesmo histórico.
+  const u32 roughness=widgetId(EditorWidget::MaterialNumberBase)+3u;
   revealProperty(f,roughness);tapWidget(f,roughness);
   AE_EXPECT_EQ(f.session.screen().numericField,roughness,"roughness reachable in mesh material");
   tapWidget(f,widgetId(EditorWidget::NumericKeyBase)+10);tapWidget(f,widgetId(EditorWidget::NumericKeyBase)+9);

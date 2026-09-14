@@ -132,19 +132,23 @@ void EditorMapScene::reconcileAssets(EditorDocument &document) const {
     auto value=*document.find(id);
     auto *render=editMeshRenderer(value);
     if(!render) continue;
-    const auto previousSlot=render->mesh;
-    const auto previousAsset=render->asset;
-    if(render->asset.valid()) {
-      // A identidade manda. Se ela não está neste pacote, o slot vira zero:
-      // "referência ausente" é informação, e desenhar a malha que por acaso
-      // ocupa o índice antigo seria corromper a cena em silêncio.
-      render->mesh=assetSlot(render->asset);
-    } else if(render->mesh && render->mesh<=assets_.size()) {
-      // Cena anterior ao registro: ela já trazia um slot válido para ESTE
-      // pacote, então a identidade derivada dele é a identidade correta.
-      render->asset=assets_[render->mesh-1];
+    bool changed=false;
+    for(u32 slot=0;slot<render->slotCount();++slot) {
+      auto *mesh=render->editSlotMesh(slot);auto *asset=render->editSlotAsset(slot);
+      const auto previousSlot=*mesh;const auto previousAsset=*asset;
+      if(asset->valid()) {
+        // A identidade manda. Se ela não está neste pacote, o slot vira zero:
+        // "referência ausente" é informação, e desenhar a malha que por acaso
+        // ocupa o índice antigo seria corromper a cena em silêncio.
+        *mesh=assetSlot(*asset);
+      } else if(*mesh && *mesh<=assets_.size()) {
+        // Cena anterior ao registro: ela já trazia um slot válido para ESTE
+        // pacote, então a identidade derivada dele é a identidade correta.
+        *asset=assets_[*mesh-1];
+      }
+      changed|=*mesh!=previousSlot || !(*asset==previousAsset);
     }
-    if(render->mesh!=previousSlot || !(render->asset==previousAsset)) document.applyEntityValues(id,value);
+    if(changed) document.applyEntityValues(id,value);
   }
 }
 renderer::MaterialOverride EditorMapScene::materialForAsset(u32 index) const {
@@ -154,9 +158,15 @@ renderer::MaterialOverride EditorMapScene::materialForAsset(u32 index) const {
 void EditorMapScene::hydrateMaterials(EditorDocument &document) const {
   std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
   for(auto id:ids) {
-    auto value=*document.find(id);
-    if(!meshAsset(value) || meshMaterial(value).enabled) continue;
-    auto *render=editMeshRenderer(value);if(!render) continue;render->material=materialForAsset(meshAsset(value)-1);document.applyEntityValues(id,value);
+    if(!meshRenderer(*document.find(id))) continue;
+    auto value=*document.find(id);auto *render=editMeshRenderer(value);bool changed=false;
+    for(u32 slot=0;slot<render->slotCount();++slot) {
+      const auto mesh=render->slotMesh(slot);auto *material=render->editSlotMaterial(slot);
+      if(!mesh || material->enabled) continue;
+      const auto fresh=materialForAsset(mesh-1);
+      if(!(fresh==*material)) {*material=fresh;changed=true;}
+    }
+    if(changed) document.applyEntityValues(id,value);
   }
 }
 bool EditorMapScene::bounds(const runtime::SceneGraph &document, EditorEntityId id, float center[3], float &radius) const {
@@ -177,8 +187,28 @@ bool EditorMapScene::bounds(const runtime::SceneGraph &document, EditorEntityId 
     radius=0;for(u32 axis=0;axis<3;++axis) {center[axis]=(low[axis]+high[axis])*.5f;radius+=(high[axis]-low[axis])*(high[axis]-low[axis])*.25f;}
     radius=std::sqrt(radius);return true;
   }
-  float pivot[3];pivotOf(meshAsset(*entity)-1,pivot);
-  const auto &record=source_[meshAsset(*entity)-1];
+  const auto *render=meshRenderer(*entity);
+  if(render->slotCount()==1) return slotBounds(document,id,meshAsset(*entity)-1,center,radius);
+  // Vários slots: a esfera que envolve as esferas de cada slot.
+  float low[3]{},high[3]{};bool first=true;
+  for(u32 slot=0;slot<render->slotCount();++slot) {
+    const auto mesh=render->slotMesh(slot);if(!mesh || mesh>source_.size()) continue;
+    float c[3],r=0;if(!slotBounds(document,id,mesh-1,c,r)) return false;
+    for(u32 axis=0;axis<3;++axis) {
+      low[axis]=first?c[axis]-r:std::min(low[axis],c[axis]-r);
+      high[axis]=first?c[axis]+r:std::max(high[axis],c[axis]+r);
+    }
+    first=false;
+  }
+  radius=0;
+  for(u32 axis=0;axis<3;++axis) {center[axis]=(low[axis]+high[axis])*.5f;radius+=(high[axis]-center[axis])*(high[axis]-center[axis]);}
+  radius=std::sqrt(radius);return !first && std::isfinite(radius);
+}
+bool EditorMapScene::slotBounds(const runtime::SceneGraph &document, EditorEntityId id, u32 index, float center[3], float &radius) const {
+  if(index>=source_.size()) return false;
+  float world[16];if(!editorWorldMatrix(document,id,world)) return false;
+  float pivot[3];pivotOf(index,pivot);
+  const auto &record=source_[index];
   // O centro é o centro do MESH levado ao mundo, e o pivô é a origem do objeto.
   // Para o pacote os dois coincidem e isto devolve exatamente o de sempre; para
   // um nó importado, usar a origem como centro deixaria o enquadramento e o
@@ -193,7 +223,7 @@ bool EditorMapScene::bounds(const runtime::SceneGraph &document, EditorEntityId 
     for(u32 j=0;j<3;++j) {col+=std::abs(world[i*4+j]);row+=std::abs(world[j*4+i]);}
     one=std::max(one,col);inf=std::max(inf,row);
   }
-  radius=source_[meshAsset(*entity)-1].boundsRadius*std::sqrt(one*inf);
+  radius=source_[index].boundsRadius*std::sqrt(one*inf);
   return std::isfinite(radius);
 }
 bool EditorMapScene::localGeometry(u32 assetId,std::span<const EditorPickMesh::Triangle> &triangles,float relative[16]) const {
@@ -204,9 +234,13 @@ bool EditorMapScene::localGeometry(u32 assetId,std::span<const EditorPickMesh::T
   triangles=pickMeshes_[assetId-1]->triangles();return !triangles.empty();
 }
 bool EditorMapScene::pickGeometry(const runtime::SceneGraph &document,EditorEntityId id,EditorPickCandidate &out) const {
+  return pickSlotGeometry(document,id,0,out);
+}
+bool EditorMapScene::pickSlotGeometry(const runtime::SceneGraph &document,EditorEntityId id,u32 slot,EditorPickCandidate &out) const {
   const auto *entity=document.find(id);
-  if(!entity || !meshAsset(*entity) || meshAsset(*entity)>pickMeshes_.size()) return false;
-  const auto index=meshAsset(*entity)-1;
+  const auto *render=entity?meshRenderer(*entity):nullptr;
+  if(!render || !render->slotMesh(slot) || render->slotMesh(slot)>pickMeshes_.size()) return false;
+  const auto index=render->slotMesh(slot)-1;
   if(!pickMeshes_[index]) return false;
   float world[16],relative[16],pivot[3];
   if(!editorWorldMatrix(document,id,world)) return false;
@@ -231,36 +265,45 @@ bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<Ed
   for(auto id:ids) {
     const auto *entity=document.find(id);
     if(!entity || !meshAsset(*entity)) continue;
-    const u32 index=meshAsset(*entity)-1;
-    if(index>=source_.size()) return false;
-    u32 target=index;
-    if(seen[index]) {
-      target=static_cast<u32>(prepared.size());
-      prepared.push_back(prepared[index]);
+    const auto *render=meshRenderer(*entity);
+    // Um desenho por slot, todos com o MESMO objeto: selecionar, esconder ou
+    // mover o objeto age sobre todas as primitivas dele.
+    for(u32 slot=0;slot<render->slotCount();++slot) {
+      const u32 meshSlot=render->slotMesh(slot);
+      if(!meshSlot) continue;
+      const u32 index=meshSlot-1;
+      if(index>=source_.size()) return false;
+      u32 target=index;
+      if(seen[index]) {
+        target=static_cast<u32>(prepared.size());
+        prepared.push_back(prepared[index]);
+      }
+      seen[index]=true;
+      auto &update=prepared[target];const auto &source=source_[index];
+      update.objectId=id;
+      update.sourceDrawIndex=index;update.pose.drawIndex=target;
+      update.pose.draw.lodGroupId=target;update.pose.draw.lodLevel=0;
+      float world[16],relative[16],pivot[3];
+      if(!editorWorldMatrix(document,id,world)) return false;
+      pivotOf(index,pivot);
+      std::copy(source.model,source.model+16,relative);
+      for(u32 a=0;a<3;++a) relative[12+a]-=pivot[a];
+      multiply(world,relative,update.pose.draw.model);
+      const float tint[4]{1,1,1,1};
+      if(!renderer::buildGpuMeshInstance(update.pose.draw.model,tint,&update.pose.instance)) return false;
+      const bool route=slot==0 && waterRoute(*entity).count;
+      if(!(route?bounds(document,id,update.pose.draw.boundsCenter,update.pose.draw.boundsRadius)
+                :slotBounds(document,id,index,update.pose.draw.boundsCenter,update.pose.draw.boundsRadius))) return false;
+      update.visible=inheritedVisible(document,id) && render->enabled;
+      update.castShadow=entity->castShadow;
+      update.material=slotMaterial(*render,slot);
+      const auto &body=waterBody(*entity);
+      update.waterLayers[0]=body.waveGain;update.waterLayers[1]=body.foamGain;
+      update.waterLayers[2]=body.rippleGain;update.waterLayers[3]=body.opticalGain;
+      update.waterFlowDepth[0]=waterBody(*entity).currentX;update.waterFlowDepth[1]=waterBody(*entity).currentZ;
+      update.waterFlowDepth[2]=waterBody(*entity).depth;
+      if(route) update.route=std::make_shared<const renderer::WaterRoute>(waterRoute(*entity));
     }
-    seen[index]=true;
-    auto &update=prepared[target];const auto &source=source_[index];
-    update.objectId=id;
-    update.sourceDrawIndex=index;update.pose.drawIndex=target;
-    update.pose.draw.lodGroupId=target;update.pose.draw.lodLevel=0;
-    float world[16],relative[16],pivot[3];
-    if(!editorWorldMatrix(document,id,world)) return false;
-    pivotOf(index,pivot);
-    std::copy(source.model,source.model+16,relative);
-    for(u32 a=0;a<3;++a) relative[12+a]-=pivot[a];
-    multiply(world,relative,update.pose.draw.model);
-    const float tint[4]{1,1,1,1};
-    if(!renderer::buildGpuMeshInstance(update.pose.draw.model,tint,&update.pose.instance)) return false;
-    if(!bounds(document,id,update.pose.draw.boundsCenter,update.pose.draw.boundsRadius)) return false;
-    update.visible=inheritedVisible(document,id) && meshRenderer(*entity)->enabled;
-    update.castShadow=entity->castShadow;
-    update.material=meshMaterial(*entity);
-    const auto &body=waterBody(*entity);
-    update.waterLayers[0]=body.waveGain;update.waterLayers[1]=body.foamGain;
-    update.waterLayers[2]=body.rippleGain;update.waterLayers[3]=body.opticalGain;
-    update.waterFlowDepth[0]=waterBody(*entity).currentX;update.waterFlowDepth[1]=waterBody(*entity).currentZ;
-    update.waterFlowDepth[2]=waterBody(*entity).depth;
-    if(waterRoute(*entity).count) update.route=std::make_shared<const renderer::WaterRoute>(waterRoute(*entity));
   }
   out=std::move(prepared);
   return true;

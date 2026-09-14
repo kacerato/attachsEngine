@@ -55,10 +55,31 @@ public:
                     std::span<const float> pivots = {});
   // O pivô do desenho `index` (0-based), em espaço do mesh.
   void pivotOf(u32 index, float out[3]) const;
+  // Um desenho por SLOT de cada objeto, todos com o mesmo `objectId`.
   bool extract(const runtime::SceneGraph &document, std::vector<EditorMapUpdate> &out) const;
+  // Limites do objeto inteiro: a união dos slots.
   bool bounds(const runtime::SceneGraph &document, EditorEntityId entity, float center[3], float &radius) const;
+  // Limites de um desenho do pacote levado à pose do objeto.
+  bool slotBounds(const runtime::SceneGraph &document, EditorEntityId entity, u32 assetIndex, float center[3], float &radius) const;
   bool localGeometry(u32 assetId,std::span<const EditorPickMesh::Triangle> &triangles,float relative[16]) const;
   bool pickGeometry(const runtime::SceneGraph &document, EditorEntityId id, EditorPickCandidate &out) const;
+  bool pickSlotGeometry(const runtime::SceneGraph &document, EditorEntityId id, u32 slot, EditorPickCandidate &out) const;
+  // Materiais do projeto (MaterialAsset) disponíveis para resolver slots. Trocar
+  // a biblioteca não toca geometria: o próximo `extract` já usa os valores.
+  void setMaterialLibrary(std::vector<std::pair<resources::AssetGuid,scene::MaterialParameters>> library) {materialLibrary_=std::move(library);}
+  const scene::MaterialParameters *materialAsset(const resources::AssetGuid &guid) const {
+    if(!guid.valid()) return nullptr;
+    for(const auto &[id,value]:materialLibrary_) if(id==guid) return &value;
+    return nullptr;
+  }
+  // Material efetivo de um slot: substituição da instância, senão o material
+  // compartilhado, senão o da fonte (`enabled` falso = valores do pacote).
+  scene::MaterialParameters slotMaterial(const scene::MeshRenderer &render, u32 slot) const {
+    const auto &local=render.slotMaterial(slot);
+    if(local.enabled) return local;
+    if(const auto *shared=materialAsset(render.slotMaterialAsset(slot))) {auto value=*shared;value.enabled=true;return value;}
+    return local;
+  }
   void hydrateMaterials(EditorDocument &document) const;
   renderer::MaterialOverride materialForAsset(u32 index) const;
   u32 materialFlagsForAsset(u32 index) const {
@@ -66,6 +87,7 @@ public:
         ? materials_[source_[index].materialIndex].flags : 0;
   }
 private:
+  std::vector<std::pair<resources::AssetGuid,scene::MaterialParameters>> materialLibrary_;
   std::vector<resources::AssetGuid> assets_;
   // Três floats por desenho; vazio significa "pivô no centro dos limites".
   std::vector<float> pivots_;

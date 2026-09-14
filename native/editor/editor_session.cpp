@@ -172,7 +172,8 @@ void EditorSession::setSurface(const UiRect &surface, const UiInsets &safeArea) 
 
 void EditorSession::setSelection(EditorEntityId entity) {
   if (!document_.exists(entity)) return;
-  if(state_.selection!=entity) {state_.routePoint=0;state_.propertyPage=0;state_.componentPage=0;state_.expandedScript=0;state_.scriptMenu=0;state_.importLinkMenu=false;}
+  if(state_.selection!=entity) {state_.routePoint=0;state_.propertyPage=0;state_.componentPage=0;state_.expandedScript=0;state_.scriptMenu=0;state_.importLinkMenu=false;
+    state_.materialSlot=0;state_.materialShared=false;state_.materialPicker=false;}
   state_.selection=entity;
   // Reveal the selected object through collapsed ancestors and long lists.
   for(auto parent=document_.find(entity);parent;parent=document_.find(parent->parent)) {
@@ -251,7 +252,17 @@ void EditorSession::buildPickCandidates() {
     for(auto parent=document_.find(entity->parent);parent;parent=document_.find(parent->parent))
       candidate.selectable &= parent->visible && parent->active;
     mapScene_.pickGeometry(document_,id,candidate);
+    const auto base=candidate;
     candidates_.push_back(std::move(candidate));
+    // Um candidato por slot adicional, com o MESMO objeto: tocar qualquer
+    // primitiva seleciona o objeto inteiro.
+    for(u32 slot=1;slot<mesh->slotCount();++slot) {
+      const auto meshSlot=mesh->slotMesh(slot);if(!meshSlot) continue;
+      auto extra=base;extra.mesh={};
+      if(!mapScene_.slotBounds(document_,id,meshSlot-1,extra.center,extra.radius) ||
+         !mapScene_.pickSlotGeometry(document_,id,slot,extra)) continue;
+      candidates_.push_back(std::move(extra));
+    }
   }
 }
 
@@ -767,6 +778,16 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     const auto *entity=document_.find(edit.entity);
     state_.numericError=true;
     if(!entity || !parsed || !input.eof() || !std::isfinite(number)) return false;
+    // Campo de material de slot: vale no alcance escolhido no inspetor.
+    if(edit.field>=widgetId(EditorWidget::MaterialNumberBase) &&
+       edit.field-widgetId(EditorWidget::MaterialNumberBase)<scene::meshRendererNumbers.size()) {
+      std::string diagnostic;
+      if(!setSlotMaterialValue(edit.entity,state_.materialSlot,state_.materialShared?MaterialScope::Shared:MaterialScope::Instance,
+                               edit.field-widgetId(EditorWidget::MaterialNumberBase),number,diagnostic)) {
+        state_.status=diagnostic;return false;
+      }
+      state_.numericError=false;close();return true;
+    }
     auto values=*entity;
     bool changed=false;
     if(edit.componentInstance) {
@@ -1003,6 +1024,43 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       const bool keep=key==widgetId(EditorWidget::ImportLinkKeep);
       state_.status=resolveImportOrphan(state_.selection,keep)?(keep?"Órfão mantido como objeto independente":"Órfão apagado"):"Nada a resolver";
       state_.importLinkMenu=false;return true;
+    }
+    // Material por slot (Entrega 2).
+    if(key==widgetId(EditorWidget::MaterialSlotPrevious)) {if(state_.materialSlot) --state_.materialSlot;state_.propertyPage=0;return true;}
+    if(key==widgetId(EditorWidget::MaterialSlotNext)) {++state_.materialSlot;state_.propertyPage=0;return true;}
+    if(key==widgetId(EditorWidget::MaterialScopeInstance)) {state_.materialShared=false;return true;}
+    if(key==widgetId(EditorWidget::MaterialScopeShared)) {
+      if(state_.materialSlotView.shared) state_.materialShared=true;
+      else state_.status="Este slot usa o material da fonte: crie um material do projeto para editar todos os usos";
+      return true;
+    }
+    if(key==widgetId(EditorWidget::MaterialChoose)) {state_.materialPicker=true;state_.meshPage=0;return true;}
+    if(key==widgetId(EditorWidget::MaterialPickerClose)) {state_.materialPicker=false;return true;}
+    if(key==widgetId(EditorWidget::MaterialClearOverride)) {
+      state_.status=clearSlotMaterialOverride(state_.selection,state_.materialSlot)?"Substituição local removida":"Sem substituição local";
+      return true;
+    }
+    if(key==widgetId(EditorWidget::MaterialCreateShared)) {
+      std::string diagnostic;
+      if(createMaterialFromSlot(state_.selection,state_.materialSlot,diagnostic).valid()) state_.materialShared=true;
+      else state_.status=diagnostic;
+      state_.materialPicker=false;return true;
+    }
+    if(key==widgetId(EditorWidget::MaterialUseSource)) {
+      state_.status=assignSlotMaterial(state_.selection,state_.materialSlot,{})?"O slot voltou ao material da fonte":"Não foi possível trocar o material";
+      state_.materialShared=false;state_.materialPicker=false;return true;
+    }
+    if(key>=widgetId(EditorWidget::MaterialChoiceBase) && key-widgetId(EditorWidget::MaterialChoiceBase)<materials_.size()) {
+      const auto &material=materials_[key-widgetId(EditorWidget::MaterialChoiceBase)];
+      state_.status=assignSlotMaterial(state_.selection,state_.materialSlot,material.guid)?"O slot usa "+material.name:"Não foi possível trocar o material";
+      state_.materialPicker=false;return true;
+    }
+    if(key>=widgetId(EditorWidget::MaterialNumberBase) && key-widgetId(EditorWidget::MaterialNumberBase)<scene::meshRendererNumbers.size()) {
+      if(history_.isOpen()) return true;
+      const auto field=key-widgetId(EditorWidget::MaterialNumberBase);
+      state_.numericField=key;state_.numericEntity=state_.selection;state_.numericInstance=0;state_.numericProperty.clear();
+      std::snprintf(state_.numericText,sizeof(state_.numericText),"%.9g",static_cast<double>(state_.materialSlotView.values[field]));
+      state_.numericReplace=true;state_.numericError=false;return true;
     }
     if(key==widgetId(EditorWidget::MeshPickerClose)) {state_.meshPicker=false;return true;}
     if(key==widgetId(EditorWidget::MeshPrevious)) {if(state_.meshPage) --state_.meshPage;return true;}
@@ -1713,7 +1771,9 @@ u32 EditorSession::sceneUsersOf(const resources::AssetGuid &guid) const {
     const auto *entity=document_.find(id);
     if(!entity) continue;
     const auto *render=meshRenderer(*entity);
-    if(render && render->asset==guid) ++users;
+    // Um slot usa o recurso pela malha ou pelo material do projeto.
+    if(render) for(u32 slot=0;slot<render->slotCount();++slot)
+      if(render->slotAsset(slot)==guid || render->slotMaterialAsset(slot)==guid) {++users;break;}
   }
   return users;
 }
@@ -1788,10 +1848,14 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
     for(auto source=importedSources_.begin();source!=importedSources_.end();++source)
       if(source->guid==guid) { importedSources_.erase(source); break; }
     removeImportMapFile(guid);
+    // Material apagado: os slots que o usavam voltam ao da fonte, visivelmente
+    // marcados como referência sem arquivo no inspetor.
+    std::erase_if(materials_,[&](const auto &material){return material.guid==guid;});
     assets_.remove(guid);
     ++report.retargeted;
   }
   assetRegistryDirty_=true;
+  if(!doomed.empty()) publishMaterialLibrary();
   std::string diagnostic;
   if(!doomed.empty() && !republishGeometry(diagnostic)) {
     report.diagnostic=diagnostic;
@@ -1902,6 +1966,7 @@ bool EditorSession::publishModel(const resources::GltfImport &model, std::string
     block.names.push_back(i<model.names.size()?model.names[i]:std::string("Malha"));
   }
   block.map=std::move(nodeMap);
+  block.materialNames=model.materialNames;
 
   // Candidato completo antes de publicar: a versão anterior continua valendo
   // até a nova estar inteira na GPU e aceita pelo editor.
@@ -2032,42 +2097,26 @@ bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportRep
       history_.applyValues(document_,id,value);
       ++report.objects;
     }
-    // Cada desenho entra no objeto do seu nó. Um nó com várias primitivas
-    // ganha filhos: slots por submesh são entrega de material, e inventar um
-    // objeto por primitiva sem dizer seria pior que dizer.
-    std::vector<u32> drawsPerNode(tree.nodes.size(),0);
-    for(usize i=0;i<newDrawCount;++i) {
-      const auto nodeIndex=i<tree.drawNodes.size()?tree.drawNodes[i]:0u;
-      if(nodeIndex<drawsPerNode.size()) ++drawsPerNode[nodeIndex];
-    }
+    // Várias primitivas no mesmo nó são SLOTS do mesmo objeto (Entrega 2): um
+    // nó autoral continua sendo um objeto, sem filhos inventados por desenho.
     std::vector<u32> placed(tree.nodes.size(),0);
     for(usize i=0;i<newDrawCount;++i) {
       const auto drawSlot=static_cast<u32>(primitives+firstNew+i)+1;
       const auto nodeIndex=i<tree.drawNodes.size()?tree.drawNodes[i]:0u;
       if(nodeIndex>=created.size()) { return rollback("Desenho sem nó no modelo."); }
-      auto target=created[nodeIndex];
-      if(drawsPerNode[nodeIndex]>1) {
-        const auto name=tree.names[i]+" · "+std::to_string(placed[nodeIndex]+1);
-        target=history_.createEntity(document_,created[nodeIndex],EditorEntityKind::Mesh,name.c_str());
-        if(!target) { return rollback("Não foi possível criar as partes do modelo."); }
-        ++report.objects;
-      }
-      ++placed[nodeIndex];
+      const auto target=created[nodeIndex];
+      const u32 slot=placed[nodeIndex]++;
+      if(slot>scene::MeshRenderer::MaximumSubmeshes) { return rollback("Primitivas demais num nó para os slots de material."); }
       auto value=*document_.find(target);
       auto *render=editMeshRenderer(value);
       if(!render) { return rollback("Não foi possível criar a malha do objeto."); }
-      render->mesh=drawSlot;
-      render->asset=tree.identities[i];
-      render->material=mapScene_.materialForAsset(drawSlot-1);
-      if(linkable && drawsPerNode[nodeIndex]>1) if(auto *link=scene::editImportLink(value.components)) {
-        const EditorTransform none;
-        link->source=source;link->instance=instance;
-        setImportLinkBase(*link,nodeMap.nodes[nodeIndex],none,static_cast<i32>(placed[nodeIndex]-1),nodeMap.revision);
-        link->baseName=value.name;
-      }
+      if(slot) render->submeshes.resize(slot);
+      *render->editSlotMesh(slot)=drawSlot;
+      *render->editSlotAsset(slot)=tree.identities[i];
+      *render->editSlotMaterial(slot)=mapScene_.materialForAsset(drawSlot-1);
       history_.applyValues(document_,target,value);
     }
-    for(usize n=0;n<tree.nodes.size();++n) if(!drawsPerNode[n]) ++report.groups;
+    for(usize n=0;n<tree.nodes.size();++n) if(!placed[n]) ++report.groups;
     history_.end();
   }
 
@@ -2288,6 +2337,7 @@ void EditorSession::frameSubtree(EditorEntityId root) {
 
 void EditorSession::update() {
   refreshImportLinkView();
+  refreshMaterialSlotView();
   if(const auto *selected=document_.find(state_.selection)) state_.routePoint=waterRoute(*selected).count?std::min(state_.routePoint,waterRoute(*selected).count-1):0;
   if (font_ == nullptr || icons_ == nullptr) return;
   state_.assetCount=mapScene_.assetCount();
@@ -2332,6 +2382,190 @@ void EditorSession::update() {
 
   instances_.clear();
   buildUiInstances(list_, *font_, *icons_, kMaximumInstances, instances_);
+}
+
+void EditorSession::refreshMaterialSlotView() {
+  auto &view=state_.materialSlotView;view={};
+  state_.projectMaterials.clear();
+  for(const auto &material:materials_) state_.projectMaterials.push_back(material.name);
+  const auto *entity=document_.find(state_.selection);
+  const auto *render=entity?meshRenderer(*entity):nullptr;
+  if(!render) {state_.materialPicker=false;return;}
+  view.slots=render->slotCount();
+  state_.materialSlot=std::min(state_.materialSlot,view.slots-1);
+  const u32 slot=state_.materialSlot;
+  const auto guid=render->slotMaterialAsset(slot);
+  const auto *shared=findMaterialAsset(guid);
+  view.shared=shared!=nullptr;view.missing=guid.valid() && !shared;view.overridden=render->slotMaterial(slot).enabled;
+  view.name=shared?shared->name:view.missing?std::string("Referência sem arquivo"):sourceMaterialName(render->slotAsset(slot));
+  if(view.name.empty()) view.name="Material do pacote";
+  // Sem recurso do projeto não há alcance compartilhado a mostrar.
+  if(!view.shared) state_.materialShared=false;
+  scene::MaterialParameters values=state_.materialShared?shared->values:mapScene_.slotMaterial(*render,slot);
+  if(!state_.materialShared && !values.enabled && render->slotMesh(slot)) values=mapScene_.materialForAsset(render->slotMesh(slot)-1);
+  scene::MeshRenderer probe;probe.material=values;
+  for(u32 field=0;field<scene::meshRendererNumbers.size() && field<std::size(view.values);++field)
+    view.values[field]=scene::meshRendererNumbers[field].read(probe);
+}
+
+void EditorSession::publishMaterialLibrary() {
+  std::vector<std::pair<resources::AssetGuid,scene::MaterialParameters>> library;
+  library.reserve(materials_.size());
+  for(const auto &material:materials_) library.emplace_back(material.guid,material.values);
+  mapScene_.setMaterialLibrary(std::move(library));
+  appearanceChanged_=true;
+}
+
+void EditorSession::loadMaterialAssets() {
+  materials_.clear();
+  const auto root=files_.rootPath();
+  if(!root.empty()) for(const auto &record:assets_.records()) {
+    if(record.type!=resources::AssetType::Material) continue;
+    std::filesystem::path absolute;std::vector<u8> bytes;resources::MaterialAsset material;
+    // Arquivo ausente ou ilegível NÃO some em silêncio: o slot que o referencia
+    // volta ao material da fonte, e o motivo fica no console.
+    if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),record.path,absolute) ||
+       !EditorImportTransaction::read(absolute,bytes,64u*1024u) ||
+       !resources::MaterialAsset::deserialize(std::string_view(reinterpret_cast<const char *>(bytes.data()),bytes.size()),material) ||
+       material.guid!=record.guid) {
+      reportProblem(EditorConsoleSeverity::Warning,"Material do projeto ilegível ou ausente: "+record.path+"; slots usam o material da fonte.");
+      continue;
+    }
+    materials_.push_back(std::move(material));
+  }
+  publishMaterialLibrary();
+}
+
+bool EditorSession::writeMaterialAsset(const resources::MaterialAsset &material,const std::string &path,std::string &diagnostic) {
+  const auto root=files_.rootPath();
+  std::filesystem::path absolute;
+  if(root.empty() || !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),path,absolute)) {
+    diagnostic="Materiais precisam de um projeto aberto.";return false;
+  }
+  std::error_code error;std::filesystem::create_directories(absolute.parent_path(),error);
+  if(error || !EditorImportTransaction::writeText(absolute,material.serialize())) {
+    diagnostic="Não foi possível gravar "+path+".";return false;
+  }
+  return true;
+}
+
+std::string EditorSession::sourceMaterialName(const resources::AssetGuid &draw) const {
+  for(const auto &block:importedSources_)
+    for(usize i=0;i<block.identities.size() && i<block.draws.size();++i) {
+      if(block.identities[i]!=draw) continue;
+      const auto index=block.draws[i].materialIndex;
+      if(index<block.materialNames.size() && !block.materialNames[index].empty()) return block.materialNames[index];
+      return "Material "+std::to_string(index+1);
+    }
+  return {};
+}
+
+resources::AssetGuid EditorSession::createMaterialFromSlot(EditorEntityId id,u32 slot,std::string &diagnostic) {
+  diagnostic.clear();
+  const auto *entity=document_.find(id);
+  const auto *render=entity?meshRenderer(*entity):nullptr;
+  if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de criar material.";return {};}
+  if(!render || slot>=render->slotCount()) {diagnostic="Slot de material inexistente.";return {};}
+  resources::MaterialAsset material;
+  material.name=sourceMaterialName(render->slotAsset(slot));
+  if(material.name.empty()) material.name="Material";
+  // Os valores que o usuário VÊ agora viram o recurso: substituição local, ou
+  // material já compartilhado, ou o da fonte.
+  material.values=mapScene_.slotMaterial(*render,slot);
+  if(!material.values.enabled && render->slotMesh(slot)) material.values=mapScene_.materialForAsset(render->slotMesh(slot)-1);
+  material.values.enabled=true;
+  std::string stem;
+  for(unsigned char c:material.name) stem.push_back(c<32 || c==127 || c=='/' || c=='\\' || c==':' || c=='"' ? '_' : static_cast<char>(c));
+  if(stem.empty() || stem=="." || stem=="..") stem="Material";
+  std::string path="Materiais/"+stem+".material";
+  for(u32 n=2;assets_.findByPath(path) || files_.exists(path);++n) path="Materiais/"+stem+" "+std::to_string(n)+".material";
+  material.guid=resources::assetGuidFromSeed("material:"+path+":"+
+      std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+":"+std::to_string(++importInstanceCounter_));
+  if(!material.valid()) {diagnostic="Valores de material inválidos.";return {};}
+  resources::AssetRecord record;
+  record.guid=material.guid;record.type=resources::AssetType::Material;record.path=path;
+  const auto serialized=material.serialize();
+  record.contentHash=Sha256::hex(std::span<const u8>(reinterpret_cast<const u8 *>(serialized.data()),serialized.size()));
+  auto nextAssets=assets_;
+  if(!nextAssets.add(record)) {diagnostic="O registro recusou o material.";return {};}
+  if(!writeMaterialAsset(material,path,diagnostic)) return {};
+  assets_=std::move(nextAssets);assetRegistryDirty_=true;
+  materials_.push_back(material);
+  publishMaterialLibrary();
+  files_.rebuildTree();
+  // O slot passa a usar o recurso; a substituição local sai, porque os valores
+  // dela acabaram de virar o próprio recurso.
+  auto values=*entity;auto *edit=editMeshRenderer(values);
+  *edit->editSlotMaterialAsset(slot)=material.guid;
+  edit->editSlotMaterial(slot)->enabled=false;
+  history_.applyValues(document_,id,values);
+  state_.status="Material do projeto criado: "+path;
+  return material.guid;
+}
+
+bool EditorSession::assignSlotMaterial(EditorEntityId id,u32 slot,const resources::AssetGuid &material) {
+  const auto *entity=document_.find(id);
+  const auto *render=entity?meshRenderer(*entity):nullptr;
+  if(isPlaying() || history_.isOpen() || !render || slot>=render->slotCount()) return false;
+  if(material.valid() && !findMaterialAsset(material)) return false;
+  auto values=*entity;
+  *editMeshRenderer(values)->editSlotMaterialAsset(slot)=material;
+  return history_.applyValues(document_,id,values);
+}
+
+bool EditorSession::setSlotMaterialValue(EditorEntityId id,u32 slot,MaterialScope scope,u32 field,float value,std::string &diagnostic) {
+  diagnostic.clear();
+  const auto *entity=document_.find(id);
+  const auto *render=entity?meshRenderer(*entity):nullptr;
+  if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de mudar o material.";return false;}
+  if(!render || slot>=render->slotCount() || field>=scene::meshRendererNumbers.size()) {diagnostic="Campo de material inexistente.";return false;}
+  const auto &number=scene::meshRendererNumbers[field];
+  if(!std::isfinite(value) || value<number.minimum || value>number.maximum) {diagnostic="Valor fora do intervalo do campo.";return false;}
+  if(scope==MaterialScope::Shared) {
+    const auto guid=render->slotMaterialAsset(slot);
+    auto found=std::find_if(materials_.begin(),materials_.end(),[&](const auto &material){return material.guid==guid;});
+    if(!guid.valid() || found==materials_.end()) {
+      diagnostic="Este slot usa o material da fonte; crie um material do projeto para editar todos os usos.";return false;
+    }
+    const auto *record=assets_.find(guid);
+    if(!record) {diagnostic="Material fora do registro.";return false;}
+    auto candidate=*found;
+    scene::MeshRenderer probe;probe.material=candidate.values;
+    *number.write(probe)=value;
+    candidate.values=probe.material;candidate.values.enabled=true;++candidate.revision;
+    if(!candidate.valid() || !writeMaterialAsset(candidate,record->path,diagnostic)) return false;
+    const auto serialized=candidate.serialize();
+    assets_.publishImport(guid,Sha256::hex(std::span<const u8>(reinterpret_cast<const u8 *>(serialized.data()),serialized.size())),0,"",{},{});
+    assetRegistryDirty_=true;
+    *found=std::move(candidate);
+    publishMaterialLibrary();
+    state_.status="Material compartilhado atualizado em todos os usos";
+    return true;
+  }
+  auto values=*entity;
+  auto *edit=editMeshRenderer(values);
+  auto *material=edit->editSlotMaterial(slot);
+  if(!material->enabled) {
+    // Primeira substituição: parte do que está na tela, não de valores padrão.
+    *material=mapScene_.slotMaterial(*render,slot);
+    if(!material->enabled && render->slotMesh(slot)) *material=mapScene_.materialForAsset(render->slotMesh(slot)-1);
+  }
+  scene::MeshRenderer probe;probe.material=*material;
+  *number.write(probe)=value;
+  *material=probe.material;material->enabled=true;
+  return history_.applyValues(document_,id,values);
+}
+
+bool EditorSession::clearSlotMaterialOverride(EditorEntityId id,u32 slot) {
+  const auto *entity=document_.find(id);
+  const auto *render=entity?meshRenderer(*entity):nullptr;
+  if(isPlaying() || history_.isOpen() || !render || slot>=render->slotCount() || !render->slotMaterial(slot).enabled) return false;
+  auto values=*entity;
+  auto *edit=editMeshRenderer(values);
+  auto *material=edit->editSlotMaterial(slot);
+  *material=render->slotMesh(slot)?mapScene_.materialForAsset(render->slotMesh(slot)-1):scene::MaterialParameters{};
+  material->enabled=false;
+  return history_.applyValues(document_,id,values);
 }
 
 bool EditorSession::previousImportMap(const resources::AssetGuid &source,resources::ImportNodeMap &out) const {

@@ -75,6 +75,10 @@ struct GltfImport {
   // mesh. A pose vem do nó, não da matriz do desenho.
   std::vector<renderer::MapDrawRecord> draws;
   std::vector<renderer::MapMaterialRecord> materials;
+  // Nome de cada material do arquivo, alinhado a `materials` (vazio quando o
+  // arquivo não dá nome; o último é o material neutro). É o que o inspetor mostra
+  // num slot que usa o material da fonte.
+  std::vector<std::string> materialNames;
   std::vector<u8> vertices; // passo renderer::MapVertexStride
   std::vector<u32> indices;
   std::vector<std::string> names; // um nome por desenho, para a hierarquia

@@ -1,0 +1,7 @@
+[ok] m08e2_node_with_three_primitives_is_one_object_with_three_slots
+[ok] m08e2_mesh_renderer_records_from_before_slots_still_load
+[ok] m08e2_legacy_parts_become_slots_only_when_nothing_is_lost
+[ok] m08e2_reimport_changes_slot_count_without_dropping_local_material
+[ok] m08e2_slot_material_scope_is_instance_or_shared_resource_and_persists
+
+5/5 testes passaram

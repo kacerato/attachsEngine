@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -50,7 +51,11 @@ std::vector<u8> glb(const std::string &nodes, const std::string &roots) {
       R"({"bufferView":1,"componentType":5123,"count":6,"type":"SCALAR"},{"bufferView":2,"componentType":5123,"count":3,"type":"SCALAR"}],)" +
       R"("meshes":[{"name":"Chapa","primitives":[{"attributes":{"POSITION":0},"indices":1}]},)" +
       R"({"name":"Roda","primitives":[{"attributes":{"POSITION":0},"indices":2}]},)" +
-      R"({"name":"Duplo","primitives":[{"attributes":{"POSITION":0},"indices":1},{"attributes":{"POSITION":0},"indices":2}]}],)" +
+      R"({"name":"Duplo","primitives":[{"attributes":{"POSITION":0},"indices":1},{"attributes":{"POSITION":0},"indices":2}]},)" +
+      R"({"name":"Trio","primitives":[{"attributes":{"POSITION":0},"indices":1,"material":0},{"attributes":{"POSITION":0},"indices":2,"material":1},{"attributes":{"POSITION":0},"indices":1,"material":2}]}],)" +
+      R"("materials":[{"name":"Pintura","pbrMetallicRoughness":{"baseColorFactor":[1,0,0,1]}},)" +
+      R"({"name":"Vidro","pbrMetallicRoughness":{"baseColorFactor":[0,0,1,1]}},)" +
+      R"({"name":"Borracha","pbrMetallicRoughness":{"baseColorFactor":[0.1,0.1,0.1,1]}}],)" +
       R"("nodes":[)" + nodes + R"(],"scenes":[{"nodes":[)" + roots + R"(]}],"scene":0})";
   while (json.size() % 4) json.push_back(' ');
   std::vector<u8> out;
@@ -105,9 +110,11 @@ struct FakeRenderer {
   std::vector<u32> indices;
   std::vector<renderer::MapDrawRecord> draws;
   std::vector<renderer::MapMaterialRecord> materials;
+  u32 rebuilds = 0;
   bool publish(std::span<const u8> extraVertices, std::span<const u32> extraIndices,
                std::span<const renderer::MapDrawRecord> extraDraws,
                std::span<const renderer::MapMaterialRecord> extraMaterials, EditorSession::PublishedGeometry &out) {
+    ++rebuilds;
     vertices.clear(); indices.clear(); draws.clear(); materials.clear();
     if (!renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride, vertices, indices, draws, materials)) return false;
     const auto vertexBase = static_cast<u32>(vertices.size() / renderer::MapVertexStride);
@@ -478,6 +485,8 @@ AE_TEST(m082_revert_unlink_duplicate_and_legacy_adoption) {
 
 // Fontes sintéticas da conferência no aparelho: `--write-m082-fixtures pasta`.
 // Nada de modelo pessoal: o mesmo "Veiculo" genérico dos testes.
+std::vector<u8> panelThree();
+std::vector<u8> panelTwo();
 int writeM082Fixtures(const char *directory) {
   const auto root = EditorImportTransaction::fromUtf8(directory);
   std::error_code error;
@@ -485,7 +494,9 @@ int writeM082Fixtures(const char *directory) {
   const bool ok = !error && EditorImportTransaction::write(root / "m082-v1.glb", vehicleV1()) &&
                   EditorImportTransaction::write(root / "m082-v2.glb", vehicleV2()) &&
                   EditorImportTransaction::write(root / "m082-ambiguo.glb", vehicleAmbiguous()) &&
-                  EditorImportTransaction::write(root / "m082-sem-rodas.glb", vehicleWithoutWheels());
+                  EditorImportTransaction::write(root / "m082-sem-rodas.glb", vehicleWithoutWheels()) &&
+                  EditorImportTransaction::write(root / "m08e2-painel-tres-materiais.glb", panelThree()) &&
+                  EditorImportTransaction::write(root / "m08e2-painel-duas-primitivas.glb", panelTwo());
   std::printf("%s\n", ok ? "fixtures gravadas" : "falha ao gravar fixtures");
   return ok ? 0 : 1;
 }
@@ -584,4 +595,266 @@ AE_TEST(m082_interrupted_import_restores_the_node_map_with_source_and_registry) 
                                      "ASTRA_IMPORT_1 committed \"Fontes/veiculo.glb\" 1 1\n");
   AE_EXPECT_TRUE(EditorImportTransaction::recover(project.root.string(), diagnostic), "journal v1 aceito");
   AE_EXPECT_TRUE(!std::filesystem::exists(project.root / ".astra/import-transaction/journal"), "e assentado");
+}
+
+// ---------------------------------------------------------------------------
+// Entrega 2 — submeshes: um nó com várias primitivas é UM objeto com slots.
+
+// Um painel cujo nó carrega três primitivas com três materiais (a malha "Trio").
+std::vector<u8> panelThree() { return glb(R"({"name":"Painel","mesh":3})", "0"); }
+// Revisão em que o painel passa a ter duas primitivas (a malha "Duplo").
+std::vector<u8> panelTwo() { return glb(R"({"name":"Painel","mesh":2})", "0"); }
+
+namespace {
+std::vector<u8> projectSource(const Project &project) {
+  std::vector<u8> bytes;
+  EditorImportTransaction::read(project.root / kSource, bytes);
+  return bytes;
+}
+} // namespace
+
+AE_TEST(m08e2_node_with_three_primitives_is_one_object_with_three_slots) {
+  Project project;
+  EditorSession session;
+  FakeRenderer renderer;
+  start(session, renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(commit(session, project, panelThree(), report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), report.diagnostic.c_str());
+  auto &document = session.document();
+  const auto roots = children(document, document.root());
+  AE_EXPECT_EQ(roots.size(), 1u, "um objeto para o nó");
+  const auto panel = roots.front();
+  AE_EXPECT_EQ(children(document, panel).size(), 0u, "nenhum filho inventado por primitiva");
+  AE_EXPECT_EQ(report.objects, 1u, "o relatório conta um objeto");
+  const auto *render = meshRenderer(*document.find(panel));
+  AE_EXPECT_TRUE(render && render->slotCount() == 3u, "três slots");
+  for (u32 slot = 0; render && slot < render->slotCount(); ++slot) {
+    AE_EXPECT_TRUE(render->slotMesh(slot) > 0, "slot resolvido no pacote");
+    for (u32 other = 0; other < slot; ++other)
+      AE_EXPECT_TRUE(render->slotAsset(slot) != render->slotAsset(other), "identidade própria por slot");
+  }
+
+  std::vector<renderer::MapDrawState> states;
+  AE_EXPECT_TRUE(session.extractMap(states), "extração");
+  u32 draws = 0;
+  for (const auto &state : states) if (state.objectId == panel && state.visible) ++draws;
+  AE_EXPECT_EQ(draws, 3u, "três desenhos, todos do mesmo objeto");
+  u32 candidates = 0;
+  for (const auto &candidate : session.pickCandidates()) if (candidate.id == panel && candidate.mesh) ++candidates;
+  AE_EXPECT_EQ(candidates, 3u, "cada primitiva é tocável e seleciona o mesmo objeto");
+
+  const auto *link = linkOf(document, panel);
+  AE_EXPECT_TRUE(link && link->baseSlots().size() == 3u, "a base do vínculo conhece os três slots");
+  AE_EXPECT_EQ(session.importLinkOverrides(panel), 0u, "igual à fonte");
+
+  EditorDocument loaded;
+  AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(document, 0), 0, loaded), "cena relida");
+  const auto *again = meshRenderer(*loaded.find(panel));
+  AE_EXPECT_TRUE(again && again->slotCount() == 3u, "slots voltam do arquivo");
+  for (u32 slot = 0; again && render && slot < 3; ++slot)
+    AE_EXPECT_TRUE(again->slotAsset(slot) == render->slotAsset(slot), "com as mesmas identidades");
+  const auto *againLink = scene::importLink(loaded.find(panel)->components);
+  AE_EXPECT_TRUE(againLink && againLink->baseSlots().size() == 3u, "e a base dos slots também");
+}
+
+AE_TEST(m08e2_mesh_renderer_records_from_before_slots_still_load) {
+  // Registro v2 (sem slots): malha 5, sem substituição, onze números, sem id.
+  scene::MeshRenderer render;
+  std::istringstream in("5 1 0 1 1 1 0.5 0 1 1 0 0 0 1 -");
+  in.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(render.read(in, 2), "v2 lido");
+  AE_EXPECT_EQ(render.slotCount(), 1u, "um slot");
+  AE_EXPECT_EQ(render.mesh, 5u, "no lugar de sempre");
+  scene::ImportLink link;
+  std::istringstream old("aa000000000000000000000000000001 bb000000000000000000000000000002 cc000000000000000000000000000003 -1 1 0 0 \"Painel\" 0 0 0 0 0 0 1 1 1 - - 3 0");
+  AE_EXPECT_TRUE(link.read(old, 1), "vínculo v1 lido");
+  AE_EXPECT_TRUE(link.baseSubmeshes.empty(), "v1 não tinha slots na base");
+}
+
+AE_TEST(m08e2_legacy_parts_become_slots_only_when_nothing_is_lost) {
+  const auto buildLegacyScene = [](bool scriptOnPart, std::string &scene, std::string &registry, Project &project) {
+    EditorSession session;
+    FakeRenderer renderer;
+    start(session, renderer);
+    session.setProjectDirectory(project.root.string().c_str());
+    EditorSession::ModelImportReport report;
+    if (!commit(session, project, panelThree(), report) || !session.instantiateModel(report.source, report)) return false;
+    auto &document = session.document();
+    const auto panel = children(document, document.root()).front();
+    const auto &node = session.importNodeMap(report.source)->nodes.front();
+    const auto revision = session.importNodeMap(report.source)->revision;
+    // A representação anterior: o objeto do nó sem malha e uma parte por
+    // primitiva, cada uma com vínculo `primitive`.
+    auto values = *document.find(panel);
+    const auto instance = linkOf(document, panel)->instance;
+    values.components.remove(scene::MeshRenderer::descriptor);
+    setImportLinkBase(*scene::editImportLink(values.components), node, values.transform, -1, revision, false);
+    scene::editImportLink(values.components)->root = true;
+    document.applyEntityValues(panel, values);
+    for (u32 p = 0; p < 3; ++p) {
+      const auto part = document.createEntity(panel, EditorEntityKind::Mesh, "Painel · " + std::to_string(p + 1));
+      auto partValues = *document.find(part);
+      auto *render = editMeshRenderer(partValues);
+      render->asset = node.draws[p];
+      if (p == 1) { render->material.enabled = true; render->material.baseColor[0] = .25f; }
+      auto *link = scene::editImportLink(partValues.components);
+      link->source = report.source;
+      link->instance = instance;
+      setImportLinkBase(*link, node, EditorTransform{}, static_cast<i32>(p), revision);
+      link->baseName = partValues.name;
+      if (scriptOnPart && p == 2) {
+        auto *script = static_cast<scene::ScriptBehavior *>(partValues.components.add(scene::ScriptBehavior::descriptor));
+        script->scriptType = "Jogo.Luz";
+      }
+      document.applyEntityValues(part, partValues);
+    }
+    scene = serializeEditorDocument(document, 0);
+    registry = session.serializeAssets();
+    return true;
+  };
+  const auto reopen = [](Project &project, const std::string &scene, const std::string &registry, EditorSession &session,
+                         FakeRenderer &renderer) {
+    start(session, renderer);
+    session.setProjectDirectory(project.root.string().c_str());
+    session.loadAssets(registry);
+    EditorSession::ModelImportReport report;
+    const auto bytes = projectSource(project);
+    const auto path = project.root / "legado.aescene";
+    EditorImportTransaction::writeText(path, scene);
+    return session.importModel(bytes, kSource, {}, report) && session.load(path.string().c_str(), 0);
+  };
+
+  {
+    Project project;
+    std::string scene, registry;
+    AE_EXPECT_TRUE(buildLegacyScene(false, scene, registry, project), "cena legada montada");
+    EditorSession session;
+    FakeRenderer renderer;
+    AE_EXPECT_TRUE(reopen(project, scene, registry, session, renderer), "cena legada aberta");
+    auto &document = session.document();
+    const auto panel = children(document, document.root()).front();
+    AE_EXPECT_EQ(children(document, panel).size(), 0u, "as partes viraram slots");
+    const auto *render = meshRenderer(*document.find(panel));
+    AE_EXPECT_TRUE(render && render->slotCount() == 3u, "três slots no objeto do nó");
+    AE_EXPECT_TRUE(render && render->slotMaterial(1).enabled && render->slotMaterial(1).baseColor[0] == .25f,
+                   "o material local da segunda parte foi preservado no slot");
+    AE_EXPECT_EQ(session.importLinkOverrides(panel), 0u, "a base migrou junto: nada aparece como alteração");
+    std::vector<renderer::MapDrawState> states;
+    AE_EXPECT_TRUE(session.extractMap(states), "extração depois da migração");
+  }
+  {
+    Project project;
+    std::string scene, registry;
+    AE_EXPECT_TRUE(buildLegacyScene(true, scene, registry, project), "cena legada com script");
+    EditorSession session;
+    FakeRenderer renderer;
+    AE_EXPECT_TRUE(reopen(project, scene, registry, session, renderer), "aberta");
+    const auto panel = children(session.document(), session.document().root()).front();
+    AE_EXPECT_EQ(children(session.document(), panel).size(), 3u, "com script numa parte, nada é consolidado");
+    AE_EXPECT_TRUE(meshRenderer(*session.document().find(panel)) == nullptr, "e o objeto do nó continua sem malha");
+  }
+}
+
+AE_TEST(m08e2_reimport_changes_slot_count_without_dropping_local_material) {
+  Project project;
+  EditorSession session;
+  FakeRenderer renderer;
+  start(session, renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(commit(session, project, panelThree(), report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), "A");
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), "B");
+  auto &document = session.document();
+  const auto roots = children(document, document.root());
+  const auto paint = [&](EditorEntityId id, u32 slot) {
+    auto values = *document.find(id);
+    auto *material = editMeshRenderer(values)->editSlotMaterial(slot);
+    material->enabled = true;
+    material->baseColor[1] = .1f;
+    session.history().begin("Material");
+    session.history().applyValues(document, id, values);
+    session.history().end();
+  };
+  paint(roots[0], 0); // A: slot que continua existindo
+  paint(roots[1], 2); // B: slot que a fonte nova não tem
+  AE_EXPECT_TRUE(commit(session, project, panelTwo(), report), report.diagnostic.c_str());
+  const auto *a = meshRenderer(*document.find(roots[0]));
+  const auto *b = meshRenderer(*document.find(roots[1]));
+  AE_EXPECT_TRUE(a && a->slotCount() == 2u, "A seguiu a fonte: dois slots");
+  AE_EXPECT_TRUE(a && a->slotMaterial(0).enabled && a->slotMaterial(0).baseColor[1] == .1f, "com o material local do slot 0");
+  AE_EXPECT_TRUE(b && b->slotCount() == 3u, "B manteve o slot com material local");
+  AE_EXPECT_EQ(report.reconcile.conflicts, 1u, "e isso foi relatado como conflito");
+  std::vector<renderer::MapDrawState> states;
+  AE_EXPECT_TRUE(session.extractMap(states), "extração");
+}
+
+AE_TEST(m08e2_slot_material_scope_is_instance_or_shared_resource_and_persists) {
+  Project project;
+  EditorSession session;
+  FakeRenderer renderer;
+  start(session, renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(commit(session, project, panelThree(), report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), "A");
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), "B");
+  const auto roots = children(session.document(), session.document().root());
+  const auto a = roots[0], b = roots[1];
+  const auto drawn = [](EditorSession &from, EditorEntityId id, u32 slot) {
+    std::vector<renderer::MapDrawState> states;
+    from.extractMap(states);
+    const auto *render = meshRenderer(*from.document().find(id));
+    for (const auto &state : states)
+      if (render && state.objectId == id && state.sourceDrawIndex + 1 == render->slotMesh(slot)) return state.material;
+    return scene::MaterialParameters{};
+  };
+  AE_EXPECT_EQ(session.sourceMaterialName(meshRenderer(*session.document().find(a))->slotAsset(1)), std::string("Vidro"),
+               "o slot mostra o nome do material da fonte");
+  const auto rebuilds = renderer.rebuilds;
+  std::string diagnostic;
+
+  // 1. Alcance da instância: só o slot 2 de A muda.
+  AE_EXPECT_TRUE(session.setSlotMaterialValue(a, 2, EditorSession::MaterialScope::Instance, 0, .9f, diagnostic), diagnostic.c_str());
+  AE_EXPECT_TRUE(drawn(session, a, 2).enabled && drawn(session, a, 2).baseColor[0] == .9f, "A · slot 2 desenhado com a cor local");
+  AE_EXPECT_TRUE(!drawn(session, b, 2).enabled, "B · slot 2 continua com o material da fonte");
+  AE_EXPECT_TRUE(!drawn(session, a, 0).enabled && !drawn(session, a, 1).enabled, "os irmãos de A não mudaram");
+  AE_EXPECT_TRUE(session.history().undo(session.document()), "a substituição local se desfaz");
+  AE_EXPECT_TRUE(!drawn(session, a, 2).enabled, "desfeita");
+  AE_EXPECT_TRUE(session.history().redo(session.document()), "e se refaz");
+
+  // 2. Alcance compartilhado: um material do projeto usado por A e B.
+  AE_EXPECT_TRUE(!session.setSlotMaterialValue(b, 1, EditorSession::MaterialScope::Shared, 1, .3f, diagnostic),
+                 "material da fonte não é editado como compartilhado");
+  const auto shared = session.createMaterialFromSlot(a, 1, diagnostic);
+  AE_EXPECT_TRUE(shared.valid(), diagnostic.c_str());
+  AE_EXPECT_TRUE(std::filesystem::exists(project.root / "Materiais/Vidro.material"), "arquivo do material no projeto");
+  AE_EXPECT_TRUE(session.assignSlotMaterial(b, 1, shared), "B · slot 1 passa a usar o mesmo recurso");
+  AE_EXPECT_TRUE(drawn(session, a, 1).baseColor[2] == 1 && drawn(session, a, 1).enabled, "o recurso nasceu com a cor da fonte");
+  AE_EXPECT_TRUE(session.setSlotMaterialValue(b, 1, EditorSession::MaterialScope::Shared, 1, .3f, diagnostic), diagnostic.c_str());
+  AE_EXPECT_EQ(drawn(session, a, 1).baseColor[1], .3f, "A recebeu a edição compartilhada feita a partir de B");
+  AE_EXPECT_EQ(drawn(session, b, 1).baseColor[1], .3f, "e B também");
+  AE_EXPECT_TRUE(drawn(session, a, 2).baseColor[0] == .9f && !drawn(session, b, 2).enabled, "slots 2 intocados");
+  AE_EXPECT_EQ(session.findMaterialAsset(shared)->revision, 2u, "revisão do recurso avançou");
+  AE_EXPECT_TRUE(session.takeAppearanceChanged(), "o shell é avisado para republicar");
+  AE_EXPECT_EQ(renderer.rebuilds, rebuilds, "nenhuma operação de material republicou geometria");
+
+  // 3. Salvar e reabrir: os dois alcances voltam.
+  const auto scenePath = project.root / "cena.aescene";
+  AE_EXPECT_TRUE(session.save(scenePath.string().c_str(), 0), "salvo");
+  const auto registry = session.serializeAssets();
+  EditorSession reopened;
+  FakeRenderer second;
+  start(reopened, second);
+  AE_EXPECT_TRUE(reopened.setProjectDirectory(project.root.string().c_str()), "projeto");
+  AE_EXPECT_TRUE(reopened.loadAssets(registry), "registro com o material");
+  AE_EXPECT_TRUE(reopened.findMaterialAsset(shared) != nullptr, "material relido do arquivo");
+  EditorSession::ModelImportReport rehydrate;
+  AE_EXPECT_TRUE(reopened.importModel(projectSource(project), kSource, {}, rehydrate), rehydrate.diagnostic.c_str());
+  AE_EXPECT_TRUE(reopened.load(scenePath.string().c_str(), 0), "cena reaberta");
+  AE_EXPECT_EQ(drawn(reopened, a, 1).baseColor[1], .3f, "compartilhado depois de reabrir");
+  AE_EXPECT_EQ(drawn(reopened, b, 1).baseColor[1], .3f, "nas duas instâncias");
+  AE_EXPECT_EQ(drawn(reopened, a, 2).baseColor[0], .9f, "e a substituição local de A");
 }

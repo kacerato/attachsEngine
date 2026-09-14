@@ -3,9 +3,28 @@
 #include "scene/components.h"
 #include "scene/material_parameters.h"
 #include <array>
+#include <vector>
 namespace ae::scene {
+// Um slot de submesh além do primeiro (M07/M08, Entrega 2).
+//
+// Um nó com várias primitivas é UM objeto autoral: cada primitiva vira um slot
+// deste mesmo componente, e não um filho inventado. O slot guarda a identidade
+// da primitiva, o slot resolvido no pacote e o alcance do material — um
+// `MaterialAsset` compartilhado (`materialAsset`) e/ou uma substituição só nesta
+// instância (`material.enabled`).
+struct MeshSubmesh {
+  u32 mesh = 0;
+  resources::AssetGuid asset{};
+  resources::AssetGuid materialAsset{};
+  MaterialParameters material;
+  friend bool operator==(const MeshSubmesh &a, const MeshSubmesh &b) {
+    return a.mesh == b.mesh && a.asset == b.asset && a.materialAsset == b.materialAsset && a.material == b.material;
+  }
+};
+
 class MeshRenderer final : public ComponentValue {
 public:
+  static constexpr usize MaximumSubmeshes = 256;
   // `mesh` é o SLOT resolvido no processo — índice 1-based no pacote carregado,
   // zero quando não há malha. `asset` é a IDENTIDADE persistente.
   //
@@ -16,37 +35,94 @@ public:
   // slot é RECONCILIADO a partir da identidade; ao salvar, os dois vão ao
   // arquivo, e é a identidade que manda numa divergência.
   //
-  // Cena v1 do componente não tem identidade: ela é preenchida na reconciliação
-  // a partir do slot, e o projeto passa a carregar a referência estável no
-  // próximo salvamento.
+  // Os campos soltos são o slot 0; `submeshes` são os slots 1..n. Manter o slot
+  // 0 onde sempre esteve preserva todos os consumidores de malha única.
   u32 mesh=0;
   resources::AssetGuid asset{};
   bool enabled=true;
   MaterialParameters material;
+  resources::AssetGuid materialAsset{};
+  std::vector<MeshSubmesh> submeshes;
+
+  u32 slotCount() const noexcept { return static_cast<u32>(1 + submeshes.size()); }
+  u32 slotMesh(u32 slot) const noexcept { return slot ? (slot - 1 < submeshes.size() ? submeshes[slot - 1].mesh : 0) : mesh; }
+  resources::AssetGuid slotAsset(u32 slot) const noexcept {
+    return slot ? (slot - 1 < submeshes.size() ? submeshes[slot - 1].asset : resources::AssetGuid{}) : asset;
+  }
+  resources::AssetGuid slotMaterialAsset(u32 slot) const noexcept {
+    return slot ? (slot - 1 < submeshes.size() ? submeshes[slot - 1].materialAsset : resources::AssetGuid{}) : materialAsset;
+  }
+  const MaterialParameters &slotMaterial(u32 slot) const noexcept {
+    static const MaterialParameters none;
+    return slot ? (slot - 1 < submeshes.size() ? submeshes[slot - 1].material : none) : material;
+  }
+  // Acesso de escrita por slot; nulo fora do intervalo.
+  u32 *editSlotMesh(u32 slot) noexcept { return slot ? (slot - 1 < submeshes.size() ? &submeshes[slot - 1].mesh : nullptr) : &mesh; }
+  resources::AssetGuid *editSlotAsset(u32 slot) noexcept {
+    return slot ? (slot - 1 < submeshes.size() ? &submeshes[slot - 1].asset : nullptr) : &asset;
+  }
+  resources::AssetGuid *editSlotMaterialAsset(u32 slot) noexcept {
+    return slot ? (slot - 1 < submeshes.size() ? &submeshes[slot - 1].materialAsset : nullptr) : &materialAsset;
+  }
+  MaterialParameters *editSlotMaterial(u32 slot) noexcept {
+    return slot ? (slot - 1 < submeshes.size() ? &submeshes[slot - 1].material : nullptr) : &material;
+  }
+
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<MeshRenderer>(*this);}
+  static bool validMaterial(const MaterialParameters &value) {
+    MeshRenderer probe;probe.material=value;
+    for(const auto &p:descriptor.numbers) {const auto v=p.read(probe);if(!std::isfinite(v)||v<p.minimum||v>p.maximum) return false;}
+    return true;
+  }
   bool valid() const override {
-    for(const auto &p:descriptor.numbers) {const auto v=p.read(*this);if(!std::isfinite(v)||v<p.minimum||v>p.maximum) return false;}
+    if(!validMaterial(material) || submeshes.size()>MaximumSubmeshes) return false;
+    for(const auto &slot:submeshes) if(!validMaterial(slot.material)) return false;
     return true;
   }
   void write(std::ostream &out) const override {
+    const auto guid=[](const resources::AssetGuid &value) {return value.valid()?value.text():std::string("-");};
     out<<mesh<<' '<<enabled<<' '<<material.enabled<<' ';
     for(const auto &p:descriptor.numbers) out<<p.read(*this)<<' ';
-    out<<(asset.valid()?asset.text():std::string("-"))<<' ';
+    out<<guid(asset)<<' ';
+    // v3: material compartilhado do slot 0 e os slots adicionais.
+    out<<guid(materialAsset)<<' '<<submeshes.size();
+    for(const auto &slot:submeshes) {
+      MeshRenderer probe;probe.material=slot.material;
+      out<<' '<<slot.mesh<<' '<<guid(slot.asset)<<' '<<guid(slot.materialAsset)<<' '<<slot.material.enabled;
+      for(const auto &p:descriptor.numbers) out<<' '<<p.read(probe);
+    }
+    out<<' ';
   }
   bool read(std::istream &in,u32 version) override {
-    bool overridden=false;
-    if((version!=1&&version!=2)||!(in>>mesh>>enabled>>overridden)) return false;
-    for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
-    material.enabled=overridden;
-    asset={};
-    if(version>=2) {
-      std::string guid;
-      if(!(in>>guid)) return false;
+    const auto parse=[](const std::string &text,resources::AssetGuid &out) {
+      out={};
       // "-" é ausência declarada, não falha de leitura: uma malha pode não ter
       // recurso nenhum, e isso precisa voltar do arquivo como ausência.
-      if(guid!="-" && !resources::AssetGuid::parse(guid,asset)) return false;
+      return text=="-" || resources::AssetGuid::parse(text,out);
+    };
+    bool overridden=false;
+    if(version<1 || version>3 || !(in>>mesh>>enabled>>overridden)) return false;
+    for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
+    material.enabled=overridden;
+    asset={};materialAsset={};submeshes.clear();
+    if(version>=2) {
+      std::string guid;
+      if(!(in>>guid) || !parse(guid,asset)) return false;
+    }
+    if(version>=3) {
+      std::string shared;usize count=0;
+      if(!(in>>shared>>count) || !parse(shared,materialAsset) || count>MaximumSubmeshes) return false;
+      submeshes.resize(count);
+      for(auto &slot:submeshes) {
+        std::string slotAsset,slotShared;bool slotOverridden=false;
+        if(!(in>>slot.mesh>>slotAsset>>slotShared>>slotOverridden) || !parse(slotAsset,slot.asset) ||
+           !parse(slotShared,slot.materialAsset)) return false;
+        MeshRenderer probe;
+        for(const auto &p:descriptor.numbers) if(!(in>>*p.write(probe))) return false;
+        slot.material=probe.material;slot.material.enabled=slotOverridden;
+      }
     }
     return true;
   }
@@ -70,6 +146,6 @@ inline constexpr std::array<ComponentBoolean,1> meshRendererBooleans{{
   {"enabled","Renderizar",[](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).enabled;},[](ComponentValue &v,bool b){static_cast<MeshRenderer&>(v).enabled=b;}}
 }};
 inline const ComponentType MeshRenderer::descriptor{
-  "astra.render.mesh",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
+  "astra.render.mesh",3,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
 };
 }
