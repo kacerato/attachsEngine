@@ -2215,6 +2215,9 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   if(!model.textures.empty())
     state_.importSummary+="\nTexturas: "+std::to_string(model.textures.size())+" aplicadas ("+
       std::to_string((model.textureBytes+(u64{1}<<19))>>20)+" MB com mipmaps).";
+  if(model.astcTextures)
+    state_.importSummary+="\nTexturas KTX2 em ASTC 4x4 na GPU: "+std::to_string(model.astcTextures)+
+      " (o aparelho amostra ASTC; sem RGBA intermediário).";
   if(model.bakedTextureTransforms)
     state_.importSummary+="\nTransformação de UV (KHR_texture_transform) aplicada nas UVs em "+
       std::to_string(model.bakedTextureTransforms)+" referência(s) de textura.";

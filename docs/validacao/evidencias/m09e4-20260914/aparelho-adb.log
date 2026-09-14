@@ -1,0 +1,50 @@
+Conferência no aparelho da Entrega 4, projeto M08Recursos0913k, 14/09/2026.
+APK 2E0117F6DE8126234A2245CDF85939E8BE8E9C03A6D71706F05B5173D7BDE53E (install -r, dados preservados).
+Capturas só com o editor (dev.aether.editor) em primeiro plano, conferido antes e depois de cada captura.
+Logs abaixo filtrados pela tag Aether.Android (sem linhas de outros aplicativos).
+
+1) Abertura do projeto
+   17:02:51 [Import] KTX2 com mips vira ASTC 4x4.
+   17:02:59 [Import] texturas importadas: 18 publicadas, 18 slots bindless.        (Ford)
+   17:03:41 [Import] texturas importadas: 91 publicadas, 91 slots bindless.        (Porsche)
+   17:03:50 [Import] fonte reaberta: Fontes/esfera-draco.glb                       (Draco decodificado no aparelho)
+
+2) CarConcept.glb (KTX2) — Arquivos > Fontes > Reimportar
+   Prévia: "Texturas: 13 aplicadas (4 MB com mipmaps)"; "Transformação de UV ... aplicada nas UVs em 12 referência(s)";
+           "Descomprimido na importação: 0 primitiva(s) Draco, 0 visão(ões) meshopt, 12 imagem(ns) KTX2."
+   Importar na cena: 17:06:06 [Import] texturas importadas: 104 publicadas, 104 slots bindless. Vínculo "igual à fonte".
+
+3) ford-lotus-espelho.glb (escala negativa)
+   Prévia: "Reflexão (escala negativa) resolvida em 43 nó(s): geometria espelhada e pose com escala positiva."
+   Importar na cena: 17:08:55 [Import] texturas importadas: 122 publicadas, 122 slots bindless. EspelhoX instanciado,
+   vínculo "igual à fonte", mesmo processo (pid 23222).
+
+4) ford-lotus-meshopt-noq.glb (meshopt)
+   Prévia: "Descomprimido na importação: 0 primitiva(s) Draco, 5 visão(ões) meshopt, 0 imagem(ns) KTX2."; 18 texturas.
+   Cancelado de propósito: "Importação cancelada; projeto preservado." (evita mais 84 MB de texturas na GPU).
+
+5) Salvar, Play, Stop, Home e volta pelo lançador
+   pid antes=23222 depois=23222 (mesmo processo); texturas republicadas: 122 publicadas, 122 slots bindless.
+   As capturas desse trecho, feitas por um script bash, não foram gravadas no destino (caminho interpretado errado
+   pelo adb); o Play foi capturado de novo no item 7.
+
+6) Reabertura a frio (force-stop, lançador, projeto)
+   17:13:36 [Import] fonte reaberta: Fontes/esfera-draco.glb
+   17:13:38 [Import] texturas importadas: 104 publicadas, 104 slots bindless.
+   17:13:40 [Import] fonte reaberta: Fontes/CarConcept.glb
+   17:13:47 [Import] texturas importadas: 122 publicadas, 122 slots bindless.
+   17:13:49 [Import] fonte reaberta: Fontes/ford-lotus-espelho.glb
+   lowmemorykiller: 0 encerramentos durante a reabertura (14 na abertura das 17:02, com outros apps em memória).
+
+7) Play depois da reabertura: CarConcept texturizado (ASTC), Porsche, Ford, esfera Draco e painéis em execução;
+   Stop voltou à edição no mesmo processo (pid 26739).
+
+8) Alteração local não pedida, encontrada e revertida
+   Depois da reabertura, BodyUnderside (CarConcept) aparecia com "1 alteração local". A cena salva mostrava a posição
+   0 0 3.77775908 contra a base 0 0 0 do vínculo. A causa não foi identificada; é provável que um toque desta
+   conferência no viewport tenha arrastado o gizmo de mover com o objeto selecionado.
+   Revertido pelo menu do vínculo ("Reverter posição à fonte") e salvo: a cena de 17:16 volta a gravar 0 0 0 e o
+   vínculo volta a "igual à fonte".
+
+Não conferido no aparelho: seleção múltipla de .gltf pelo seletor do sistema (ler a lista do seletor exige
+autorização explícita); a trilha está coberta no host.
