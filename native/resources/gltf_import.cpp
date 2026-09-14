@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <unordered_map>
+#include <unordered_set>
 #include <array>
 
 namespace ae::resources {
@@ -232,9 +233,250 @@ struct Importer {
     return true;
   }
 
+  // --- Texturas (M09.1) -----------------------------------------------------
+  std::unordered_map<u64, u32> textureCache{};        // (textura glTF, sRGB) -> índice de saída
+  std::unordered_map<u32, DecodedImage> imageCache{}; // imagem glTF decodificada uma vez
+  u32 textureCap = 0;                                 // maior lado residente deste arquivo
+  std::unordered_map<u32, u32> imageUses{};           // usos restantes de cada imagem decodificada
+
+  static u64 residentChainBytes(u32 width, u32 height, u32 cap) {
+    while (std::max(width, height) > cap) {
+      width = width > 1 ? width / 2 : 1;
+      height = height > 1 ? height / 2 : 1;
+    }
+    u64 total = 0;
+    for (;; width = width > 1 ? width / 2 : 1, height = height > 1 ? height / 2 : 1) {
+      total += static_cast<u64>(width) * height * 4;
+      if (width == 1 && height == 1) break;
+    }
+    return total;
+  }
+
+  // Escolhe o limite de resolução do arquivo lendo só cabeçalhos: o mesmo
+  // limite para todas as texturas, reduzido até o conjunto caber no orçamento.
+  void planTextureResolution(const Node &root) {
+    textureCap = std::max<u32>(1, limits->maximumTextureDimension);
+    const auto *materials = array(root, "materials");
+    const auto *textures = array(root, "textures");
+    const auto *images = array(root, "images");
+    const auto *views = array(root, "bufferViews");
+    if (!materials || !textures || !images || !views) return;
+    struct Reference { u32 width, height; };
+    std::unordered_map<u64, Reference> references;
+    std::unordered_set<u64> seen;
+    const auto consider = [&](const Node *owner, std::string_view name, bool srgb) {
+      const auto *info = owner && owner->kind == Kind::Object ? json->member(*owner, name) : nullptr;
+      if (!info || info->kind != Kind::Object || json->index(*info, "texCoord") > 1) return;
+      const auto index = json->index(*info, "index");
+      if (index < 0 || index >= textures->childCount) return;
+      const u64 key = static_cast<u64>(index) * 2 + (srgb ? 1 : 0);
+      if (!seen.insert(key).second) return;
+      const auto &texture = *json->child(*textures, static_cast<u32>(index));
+      const auto source = texture.kind == Kind::Object ? json->index(texture, "source") : -1;
+      if (source < 0 || source >= images->childCount) return;
+      // Cada (textura, espaço de cor) resolvida é um uso da imagem; no último
+      // uso a imagem cheia decodificada é liberada (ver resolveTexture).
+      ++imageUses[static_cast<u32>(source)];
+      const auto &image = *json->child(*images, static_cast<u32>(source));
+      const auto viewIndex = image.kind == Kind::Object ? json->index(image, "bufferView") : -1;
+      if (viewIndex < 0 || viewIndex >= views->childCount) return;
+      const auto &view = *json->child(*views, static_cast<u32>(viewIndex));
+      if (view.kind != Kind::Object || json->index(view, "buffer") != 0) return;
+      const auto offset = static_cast<u64>(json->number(view, "byteOffset", 0));
+      const auto length = static_cast<u64>(json->number(view, "byteLength", 0));
+      if (!length || offset > binary.size() || length > binary.size() - offset) return;
+      u32 width = 0, height = 0;
+      if (readImageDimensions(binary.subspan(static_cast<usize>(offset), static_cast<usize>(length)), limits->image, width, height))
+        references.emplace(key, Reference{width, height});
+    };
+    for (u32 i = 0; i < materials->childCount; ++i) {
+      const auto &material = *json->child(*materials, i);
+      if (material.kind != Kind::Object) continue;
+      const auto *pbr = json->member(material, "pbrMetallicRoughness");
+      consider(pbr, "baseColorTexture", true);
+      consider(pbr, "metallicRoughnessTexture", false);
+      consider(&material, "normalTexture", false);
+      consider(&material, "emissiveTexture", true);
+    }
+    if (references.empty()) return;
+    const u32 floor = std::min(textureCap, std::max<u32>(1, limits->minimumTextureDimension));
+    for (;;) {
+      u64 total = 0;
+      for (const auto &[key, reference] : references) total += residentChainBytes(reference.width, reference.height, textureCap);
+      if (total <= limits->maximumTextureBytes || textureCap / 2 < floor) break;
+      textureCap /= 2;
+    }
+    out->residentTextureDimension = textureCap;
+    if (textureCap < limits->maximumTextureDimension)
+      noteTexture("Resolução das texturas limitada a " + std::to_string(textureCap) +
+                  " px para o arquivo caber no orçamento de memória da importação.");
+  }
+
+  void noteTexture(std::string text) {
+    if (out->textureNotes.size() >= 16) return;
+    for (const auto &existing : out->textureNotes) if (existing == text) return;
+    out->textureNotes.push_back(std::move(text));
+  }
+
+  // Bytes de uma imagem embutida no bloco binário. URI externa ou data URI não
+  // é lida neste caminho: o seletor entrega um arquivo, não a pasta.
+  bool imageBytes(const Node &root, i64 imageIndex, std::span<const u8> &bytes) {
+    const auto *images = array(root, "images");
+    if (!images || imageIndex < 0 || imageIndex >= images->childCount) { noteTexture("Textura aponta para imagem inexistente."); return false; }
+    const auto &image = *json->child(*images, static_cast<u32>(imageIndex));
+    if (image.kind != Kind::Object) { noteTexture("Imagem inválida."); return false; }
+    const auto viewIndex = json->index(image, "bufferView");
+    if (viewIndex < 0) { noteTexture("Imagem externa ou em data URI não é lida neste perfil."); return false; }
+    const auto *views = array(root, "bufferViews");
+    if (!views || viewIndex >= views->childCount) { noteTexture("Imagem com bufferView inexistente."); return false; }
+    const auto &view = *json->child(*views, static_cast<u32>(viewIndex));
+    if (view.kind != Kind::Object || json->index(view, "buffer") != 0) { noteTexture("Imagem fora do bloco binário do GLB."); return false; }
+    const auto offset = static_cast<u64>(json->number(view, "byteOffset", 0));
+    const auto length = static_cast<u64>(json->number(view, "byteLength", 0));
+    if (!length || offset > binary.size() || length > binary.size() - offset) { noteTexture("Imagem com intervalo de bytes inválido."); return false; }
+    bytes = binary.subspan(static_cast<usize>(offset), static_cast<usize>(length));
+    return true;
+  }
+
+  u32 samplerFlags(const Node &root, i64 samplerIndex) {
+    u32 flags = renderer::AuthoringTextureLinearFilter | renderer::AuthoringTextureLinearMip |
+                renderer::AuthoringTextureRepeatU | renderer::AuthoringTextureRepeatV;
+    const auto *samplers = array(root, "samplers");
+    if (!samplers || samplerIndex < 0 || samplerIndex >= samplers->childCount) return flags;
+    const auto &sampler = *json->child(*samplers, static_cast<u32>(samplerIndex));
+    if (sampler.kind != Kind::Object) return flags;
+    const auto mag = static_cast<i64>(json->number(sampler, "magFilter", 9729));
+    const auto min = static_cast<i64>(json->number(sampler, "minFilter", 9987));
+    if (mag == 9728) flags &= ~renderer::AuthoringTextureLinearFilter;
+    // NEAREST_MIPMAP_NEAREST (9984) e LINEAR_MIPMAP_NEAREST (9985) escolhem o mip
+    // mais próximo; sem mipmap declarado (9728/9729) também.
+    if (min == 9984 || min == 9985 || min == 9728 || min == 9729) flags &= ~renderer::AuthoringTextureLinearMip;
+    const auto wrap = [&](const char *field, u32 repeat, u32 mirror) {
+      const auto mode = static_cast<i64>(json->number(sampler, field, 10497));
+      if (mode == 33071) flags &= ~repeat;                       // CLAMP_TO_EDGE
+      else if (mode == 33648) flags = (flags & ~repeat) | mirror; // MIRRORED_REPEAT
+    };
+    wrap("wrapS", renderer::AuthoringTextureRepeatU, renderer::AuthoringTextureMirrorU);
+    wrap("wrapT", renderer::AuthoringTextureRepeatV, renderer::AuthoringTextureMirrorV);
+    return flags;
+  }
+
+  // Resolve uma textura glTF para o índice de saída, decodificando e gerando
+  // mips na primeira vez. Inválido quando não foi possível aplicar — e o motivo
+  // vai para `textureNotes`.
+  u32 resolveTexture(const Node &root, i64 textureIndex, bool srgb) {
+    const auto *textures = array(root, "textures");
+    if (!textures || textureIndex < 0 || textureIndex >= textures->childCount) {
+      noteTexture("Material aponta para textura inexistente.");
+      return renderer::InvalidMapTexture;
+    }
+    const u64 key = static_cast<u64>(textureIndex) * 2 + (srgb ? 1 : 0);
+    if (const auto found = textureCache.find(key); found != textureCache.end()) return found->second;
+    u32 result = renderer::InvalidMapTexture;
+    const auto &texture = *json->child(*textures, static_cast<u32>(textureIndex));
+    const auto source = texture.kind == Kind::Object ? json->index(texture, "source") : -1;
+    std::span<const u8> bytes;
+    if (source < 0) {
+      noteTexture("Textura só em extensão (KTX2/BasisU ou WebP) sem decodificador neste perfil.");
+    } else if (imageBytes(root, source, bytes)) {
+      auto decoded = imageCache.find(static_cast<u32>(source));
+      if (decoded == imageCache.end()) {
+        DecodedImage image;
+        std::string diagnostic;
+        if (!decodeImageRgba8(bytes, limits->image, image, diagnostic)) {
+          noteTexture(diagnostic);
+          image = {};
+        }
+        decoded = imageCache.emplace(static_cast<u32>(source), std::move(image)).first;
+      }
+      if (!decoded->second.rgba.empty()) {
+        renderer::AuthoringTexture made;
+        made.srgb = srgb;
+        made.samplerFlags = samplerFlags(root, texture.kind == Kind::Object ? json->index(texture, "sampler") : -1);
+        // Nível residente: descarta os mips de cima até o maior lado caber no
+        // limite. Calculado antes de qualquer alocação da cadeia.
+        const u32 cap = std::max<u32>(1, textureCap);
+        u32 dropped = 0, width = decoded->second.width, height = decoded->second.height;
+        while (std::max(width, height) > cap) {
+          width = width > 1 ? width / 2 : 1;
+          height = height > 1 ? height / 2 : 1;
+          ++dropped;
+        }
+        made.width = width;
+        made.height = height;
+        const u64 needed = [&] {
+          u64 total = 0;
+          for (u32 w = width, h = height;; w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1) {
+            total += static_cast<u64>(w) * h * 4;
+            if (w == 1 && h == 1) break;
+          }
+          return total;
+        }();
+        // Orçamento conferido ANTES de gerar os mips, já com a resolução residente.
+        std::vector<u8> chain;
+        u32 levels = 0;
+        if (out->textureBytes + needed > limits->maximumTextureBytes) {
+          noteTexture("Orçamento de memória de texturas da importação esgotado; texturas restantes ficaram de fora.");
+        } else if (buildMipChain(decoded->second, srgb, chain, levels) && levels > dropped) {
+          usize skip = 0;
+          for (u32 level = 0, w = decoded->second.width, h = decoded->second.height; level < dropped;
+               ++level, w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1)
+            skip += static_cast<usize>(w) * h * 4;
+          made.levels = levels - dropped;
+          made.mipChain.assign(chain.begin() + static_cast<std::ptrdiff_t>(skip), chain.end());
+          if (made.valid()) {
+            if (dropped) ++out->reducedTextures;
+            out->textureBytes += made.mipChain.size();
+            result = static_cast<u32>(out->textures.size());
+            out->textures.push_back(std::make_shared<renderer::AuthoringTexture>(std::move(made)));
+          } else {
+            noteTexture("Não foi possível gerar os mipmaps de uma textura.");
+          }
+        } else {
+          noteTexture("Não foi possível gerar os mipmaps de uma textura.");
+        }
+      }
+      // Pico de memória: sem isto todas as imagens cheias do arquivo ficariam
+      // vivas até o fim da importação (o Porsche real fez o sistema encerrar
+      // outros apps). A cadeia de mips reduzida já guarda o que interessa.
+      if (const auto use = imageUses.find(static_cast<u32>(source)); use != imageUses.end() && use->second &&
+                                                                      --use->second == 0)
+        imageCache.erase(static_cast<u32>(source));
+    }
+    textureCache.emplace(key, result);
+    return result;
+  }
+
+  // Liga uma `textureInfo` do material a um slot. Devolve se a textura foi
+  // aplicada; toda referência não aplicada é contada em `skippedTextures`.
+  bool assignTexture(const Node &root, const Node &owner, std::string_view name, bool srgb, u32 slot,
+                     renderer::MapMaterialRecord &target, u32 feature) {
+    const auto *info = json->member(owner, name);
+    if (!info || info->kind != Kind::Object) return false;
+    if (const auto *extensions = json->member(*info, "extensions");
+        extensions && extensions->kind == Kind::Object && json->member(*extensions, "KHR_texture_transform"))
+      ++out->unappliedTextureTransforms;
+    const auto coordinate = json->index(*info, "texCoord");
+    if (coordinate > 1) {
+      noteTexture("Textura usa TEXCOORD_" + std::to_string(coordinate) + "; só TEXCOORD_0 e TEXCOORD_1 são lidos.");
+      ++out->skippedTextures;
+      return false;
+    }
+    const auto index = resolveTexture(root, json->index(*info, "index"), srgb);
+    if (index == renderer::InvalidMapTexture) {
+      ++out->skippedTextures;
+      return false;
+    }
+    target.textureIndices[slot] = index;
+    target.flags |= feature;
+    if (coordinate == 1) target.textureCoordinates |= 1u << (slot * 2);
+    return true;
+  }
+
   bool readMaterials(const Node &root) {
     const auto *materials = array(root, "materials");
     const u32 count = materials ? materials->childCount : 0;
+    planTextureResolution(root);
     // Um material neutro fecha a lista: primitiva sem material é legal em glTF
     // e precisa de alguma coisa para apontar.
     out->materials.resize(count + 1);
@@ -250,6 +492,9 @@ struct Importer {
       for (auto &texture : material.textureIndices) texture = renderer::InvalidMapTexture;
     }
     for (u32 i = 0; i < count; ++i) {
+      // Decodificar texturas é a parte lenta desta etapa: o cancelamento precisa
+      // valer entre um material e outro.
+      if (cancelled()) return fail("Importação cancelada.");
       const auto &source = *json->child(*materials, i);
       if (source.kind != Kind::Object) return fail("Material inválido.");
       auto &target = out->materials[i];
@@ -258,16 +503,21 @@ struct Importer {
         if (!readVector(*pbr, "baseColorFactor", target.baseColorFactor, 4)) return false;
         target.roughness = static_cast<float>(json->number(*pbr, "roughnessFactor", 1));
         target.metallic = static_cast<float>(json->number(*pbr, "metallicFactor", 1));
-        if (json->member(*pbr, "baseColorTexture")) ++out->skippedTextures;
-        if (json->member(*pbr, "metallicRoughnessTexture")) ++out->skippedTextures;
+        // Cor base em sRGB; metálico/rugosidade é dado linear (canais G e B).
+        assignTexture(root, *pbr, "baseColorTexture", true, 0, target, 0);
+        assignTexture(root, *pbr, "metallicRoughnessTexture", false, 2, target, renderer::MapMaterialMetallicRoughnessMap);
       }
       float emissive[3]{0, 0, 0};
       if (!readVector(source, "emissiveFactor", emissive, 3)) return false;
       std::copy(emissive, emissive + 3, target.emissiveFactorAndStrength);
       target.emissiveFactorAndStrength[3] = 1;
-      if (json->member(source, "normalTexture")) ++out->skippedTextures;
-      if (json->member(source, "emissiveTexture")) ++out->skippedTextures;
-      if (json->member(source, "occlusionTexture")) ++out->skippedTextures;
+      if (assignTexture(root, source, "normalTexture", false, 1, target, renderer::MapMaterialNormalMap))
+        if (const auto *normal = json->member(source, "normalTexture"); normal && normal->kind == Kind::Object)
+          target.normalScale = static_cast<float>(json->number(*normal, "scale", 1));
+      assignTexture(root, source, "emissiveTexture", true, 3, target, renderer::MapMaterialEmissiveMap);
+      // Oclusão não tem slot no quadro de material deste renderer: declarada,
+      // nunca aproximada em silêncio.
+      if (json->member(source, "occlusionTexture")) ++out->unappliedOcclusion;
       const auto alphaMode = json->string(source, "alphaMode");
       if (alphaMode == "BLEND") target.flags |= renderer::MapMaterialBlend;
       else if (alphaMode == "MASK") {
@@ -432,6 +682,67 @@ struct Importer {
     range.material = material >= 0 && static_cast<usize>(material) + 1 < out->materials.size()
                          ? static_cast<u32>(material)
                          : static_cast<u32>(out->materials.size() - 1);
+    // glTF: sem TANGENT, quem importa gera as tangentes quando o material tem
+    // mapa normal. Tangente zero vira NaN na base TBN e a superfície fica preta
+    // (visto no Porsche real: 46 primitivas com mapa normal e sem TANGENT).
+    // Acúmulo por triângulo a partir das derivadas de UV, ortogonalizado contra
+    // a normal; não é MikkTSpace bit a bit.
+    const auto &owner = out->materials[range.material];
+    if (!hasTangent && (owner.flags & renderer::MapMaterialNormalMap)) {
+      const u32 set = (owner.textureCoordinates >> 2) & 1u; // conjunto de UV do slot 1 (normal)
+      std::vector<std::array<float, 6>> accumulated(position.count, std::array<float, 6>{});
+      for (u32 i = range.firstIndex; i < range.firstIndex + range.indexCount; i += 3) {
+        if (((i - range.firstIndex) & 0xffff) == 0 && cancelled()) return false;
+        const u32 corner[3]{out->indices[i], out->indices[i + 1], out->indices[i + 2]};
+        float p[3][3], uv[3][2];
+        for (u32 k = 0; k < 3; ++k) {
+          const u8 *vertex = write + static_cast<usize>(corner[k]) * renderer::MapVertexStride;
+          std::memcpy(p[k], vertex, 12);
+          std::memcpy(uv[k], vertex + 28 + set * 8, 8);
+        }
+        const float e1[3]{p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]};
+        const float e2[3]{p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]};
+        const float du1 = uv[1][0] - uv[0][0], dv1 = uv[1][1] - uv[0][1];
+        const float du2 = uv[2][0] - uv[0][0], dv2 = uv[2][1] - uv[0][1];
+        const float determinant = du1 * dv2 - du2 * dv1;
+        if (!std::isfinite(determinant) || std::fabs(determinant) < 1e-20f) continue;
+        const float r = 1.0f / determinant;
+        for (u32 k = 0; k < 3; ++k)
+          for (u32 axis = 0; axis < 3; ++axis) {
+            accumulated[corner[k]][axis] += (e1[axis] * dv2 - e2[axis] * dv1) * r;
+            accumulated[corner[k]][3 + axis] += (e2[axis] * du1 - e1[axis] * du2) * r;
+          }
+      }
+      for (u32 v = 0; v < position.count; ++v) {
+        if ((v & 0xffff) == 0 && cancelled()) return false;
+        u8 *vertex = write + static_cast<usize>(v) * renderer::MapVertexStride;
+        i16 packedNormal[4]{};
+        std::memcpy(packedNormal, vertex + 12, 8);
+        float n[3]{packedNormal[0] / 32767.0f, packedNormal[1] / 32767.0f, packedNormal[2] / 32767.0f};
+        const float normalLength = std::hypot(n[0], n[1], n[2]);
+        if (normalLength > 0) for (auto &axis : n) axis /= normalLength;
+        const auto &a = accumulated[v];
+        const float along = n[0] * a[0] + n[1] * a[1] + n[2] * a[2];
+        float t[3]{a[0] - n[0] * along, a[1] - n[1] * along, a[2] - n[2] * along};
+        float length = std::hypot(t[0], t[1], t[2]);
+        if (!std::isfinite(length) || length <= 1e-8f) {
+          // UV degenerado: qualquer perpendicular à normal mantém a base válida.
+          const float axis[3]{std::fabs(n[0]) < .9f ? 1.0f : 0.0f, std::fabs(n[0]) < .9f ? 0.0f : 1.0f, 0};
+          t[0] = n[1] * axis[2] - n[2] * axis[1];
+          t[1] = n[2] * axis[0] - n[0] * axis[2];
+          t[2] = n[0] * axis[1] - n[1] * axis[0];
+          length = std::hypot(t[0], t[1], t[2]);
+        }
+        i16 packedTangent[4]{0, 0, 0, 32767};
+        if (length > 0 && std::isfinite(length)) {
+          for (u32 axis = 0; axis < 3; ++axis) packedTangent[axis] = packSnorm(t[axis] / length);
+          const float cross[3]{n[1] * t[2] - n[2] * t[1], n[2] * t[0] - n[0] * t[2], n[0] * t[1] - n[1] * t[0]};
+          if (cross[0] * a[3] + cross[1] * a[4] + cross[2] * a[5] < 0) packedTangent[3] = -32767;
+        }
+        std::memcpy(vertex + 20, packedTangent, 8);
+      }
+      ++out->generatedTangentPrimitives;
+    }
     return true;
   }
 };

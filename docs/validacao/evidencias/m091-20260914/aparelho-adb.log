@@ -1,0 +1,36 @@
+Conferência no aparelho da Entrega 3 (texturas), projeto M08Recursos0913k, 14/09/2026.
+Capturas só com o editor (dev.aether.editor) em primeiro plano, conferido antes e depois de cada captura.
+
+1) APK com limite residente, SEM geração de tangentes
+   SHA-256 5AD6E9A8942010233E4CD095239C0C8711A19ED254634631B1643556B6A8D011 (install -r, dados preservados)
+   12:24:49 [Import] texturas importadas: 0 publicadas, 0 slots bindless.      (Astra_M08_Paineis.glb)
+   12:24:54 [Import] texturas importadas: 18 publicadas, 18 slots bindless.    (Ford)
+   12:25:28 [Import] fonte reaberta: Fontes/free_1975_porsche_911_930_turbo.glb
+   12:25:29 [Import] texturas importadas: 91 publicadas, 91 slots bindless.    (Ford 18 + Porsche 73)
+   Resultado: Ford texturizado; Porsche PRETO (porsche-preto-sem-tangentes-adb.png).
+   Durante a abertura o lowmemorykiller encerrou apps em segundo plano de outros pacotes; o editor não foi encerrado.
+
+2) APK com tangentes geradas e guarda no shader (SPIR-V regenerado, -All -Check reproduzível)
+   SHA-256 15F7FECB63CC47FE04721C3DB97AD4F29806B94A1CB4AD3AFACD1553EB84D303 (install -r, dados preservados)
+   12:31:52 [Import] texturas importadas: 18 publicadas, 18 slots bindless.    (Ford)
+   12:32:27 [Import] texturas importadas: 91 publicadas, 91 slots bindless.    (Porsche: ~35 s de decodificação no aparelho)
+   12:32:28 [Import] fonte reaberta: Fontes/free_1975_porsche_911_930_turbo.glb
+   12:32:32 [Import] fonte reaberta: Fontes/m08e2-painel.glb
+   Resultado: Porsche amarelo com grade, rodas e detalhes texturizados; Ford igual (ford-porsche-texturizados-adb.png).
+
+3) Play: cena em execução com as mesmas texturas (play-texturizado-adb.png).
+
+4) Stop -> Home -> volta pelo lançador
+   pid antes=27421 depois=27421 (mesmo processo)
+   12:33:41 [Lifecycle] stage=recreate-surface-renderer phase=end elapsed_ms=24.007
+   12:33:43 [Import] texturas importadas: 91 publicadas, 91 slots bindless.    (republicadas da memória, sem decodificar de novo)
+   Sem FATAL, DEVICE_LOST ou falha de publicação no log.
+   Ao voltar, a barra de estado mostrava "Salvo": gravação automática do ciclo de vida ao ir para segundo plano,
+   sem edição feita nesta conferência. Cena e texturas iguais (retomado-texturizado-adb.png).
+
+5) APK com a imagem cheia liberada no último uso
+   SHA-256 103DAA000D01C29AF69011562A4454DB8ED82AD41E48AF3AEB5B4771E380E51F (install -r, dados preservados)
+   Abertura a frio do projeto: 91 texturas em 91 slots bindless, as quatro fontes reabertas, sem FATAL/DEVICE_LOST.
+   Maior TOTAL PSS amostrado (dumpsys meminfo, ~1 amostra/s durante a abertura): 759917 kB (~742 MB).
+   lowmemorykiller: 3 encerramentos de apps de outros pacotes durante a abertura.
+   Sem amostragem de PSS na abertura anterior e com outros apps em estados diferentes: não é comparação controlada.

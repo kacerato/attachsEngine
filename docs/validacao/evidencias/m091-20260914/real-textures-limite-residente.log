@@ -1,0 +1,47 @@
+Segunda medição do perfil de texturas (M09.1) com arquivos reais, host de depuração (build/editor-host), 14/09/2026.
+Comando: aether_tests --reimport-glb <arquivo>. Tempos são de build de depuração no PC, não do aparelho.
+Mudança em relação à primeira medição (real-textures-primeira-medicao.log):
+  - limite residente por textura: maximumTextureDimension = 2048 px (mips de cima descartados, textura mantida);
+  - planejamento do arquivo inteiro lendo só cabeçalhos: se o conjunto não cabe em maximumTextureBytes (256 MB),
+    o limite cai pela metade PARA TODAS as texturas até o piso minimumTextureDimension = 256 px; só depois o
+    orçamento descarta texturas.
+
+Etapa intermediária (só o limite de 2048 px, sem planejamento do arquivo):
+ford-lotus.glb: textures=18 texture_mb=84.1  reduced=1  skipped_textures=0
+porsche.glb:    textures=62 texture_mb=252.3 reduced=4  skipped_textures=11  (orçamento ainda descartava pela ordem do arquivo)
+
+Resultado final:
+torre.glb:      parse_ms=0.7    textures=0  texture_mb=0.0   reduced=0  skipped_textures=0  unapplied_transforms=0  unapplied_occlusion=0
+ford-lotus.glb: parse_ms=2180.4 textures=18 texture_mb=84.1  reduced=1  skipped_textures=0  unapplied_transforms=0  unapplied_occlusion=2
+CarConcept.glb: parse_ms=44.7   textures=0  texture_mb=0.0   reduced=0  skipped_textures=25 unapplied_transforms=12 unapplied_occlusion=25
+  nota: Textura só em extensão (KTX2/BasisU ou WebP) sem decodificador neste perfil.
+porsche.glb:    parse_ms=8035.8 textures=73 texture_mb=167.0 reduced=20 skipped_textures=0  unapplied_transforms=1  unapplied_occlusion=3
+  nota: Resolução das texturas limitada a 1024 px para o arquivo caber no orçamento de memória da importação.
+
+Comparação:
+  ford-lotus: 148.1 MB -> 84.1 MB, nenhuma textura perdida.
+  porsche:    52 aplicadas / 21 descartadas / 255.0 MB -> 73 aplicadas / 0 descartadas / 167.0 MB.
+  CarConcept: sem mudança; as imagens só existem em KTX2 (Entrega 4).
+
+Reimportação/identidade igual à Entrega 1 em todos (same_content=1, reimport_changed=0, reopen_identical=1).
+
+Tangentes (achado no aparelho, corrigido depois desta medição):
+  O Porsche abriu PRETO no aparelho com o perfil de texturas, enquanto antes da Entrega 3 aparecia amarelo.
+  Causa: 46 das 113 primitivas usam material com mapa normal e não trazem TANGENT; o importador gravava
+  tangente zero e o shader fazia normalize(0) = NaN na base TBN. O Ford não mostrou o problema porque as 7
+  primitivas com mapa normal dele trazem TANGENT.
+  Correção: tangentes geradas na importação (derivadas de UV por triângulo, ortogonalizadas contra a normal,
+  sinal de orientação no w) quando o material tem mapa normal e a primitiva não tem TANGENT; e o shader omite o
+  detalhe do mapa normal quando a tangente é degenerada.
+ford-lotus.glb: generated_tangents=0
+porsche.glb:    generated_tangents=46
+
+Imagem cheia liberada no último uso (depois da conferência no aparelho):
+  Resultados idênticos (Ford 18/84.1 MB, CarConcept 0/25 fora, Porsche 73/167.0 MB/46 tangentes); suíte 885/887.
+  Pico de working set do processo de sonda no Porsche (publicar, reimportar e reabrir duas instâncias, com o GLB
+  de 90 MB em memória): 629.3 MB. Sem medição anterior comparável; é referência, não ganho medido.
+
+Limitações que continuam:
+  - parse_ms do Porsche (8 s em debug no PC) é dominado pela decodificação JPEG/PNG e pelos mips em CPU; no aparelho
+    é trabalho do worker de importação, com progresso e cancelamento entre materiais, não entre texturas.
+  - o orçamento de 256 MB é por importação, não da cena inteira; várias fontes texturizadas somam na GPU.

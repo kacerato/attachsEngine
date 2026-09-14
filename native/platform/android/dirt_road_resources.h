@@ -1,6 +1,7 @@
 #pragma once
 
 #include "platform/free_camera_controller.h"
+#include "renderer/authoring_texture.h"
 #include "renderer/map_package.h"
 #include "renderer/environment_map.h"
 #include "renderer/environment_lighting.h"
@@ -42,16 +43,24 @@ public:
   bool rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload,
                                std::span<const u8> extraVertices, std::span<const u32> extraIndices,
                                std::span<const renderer::MapDrawRecord> extraDraws,
-                               std::span<const renderer::MapMaterialRecord> extraMaterials);
+                               std::span<const renderer::MapMaterialRecord> extraMaterials,
+                               std::span<const renderer::SharedAuthoringTexture> extraTextures = {});
   void shutdown();
 
   std::span<const u8> pickingVertices() const { return pickingVertices_; }
   std::span<const u32> pickingIndices() const { return pickingIndices_; }
   VkBuffer vertexBuffer() const { return vertices_.handle(); }
   VkBuffer indexBuffer() const { return indices_.handle(); }
-  VkImageView view(u32 index) const { return images_[index].view(); }
-  VkSampler sampler(u32 index) const { return samplers_[index].handle(); }
-  u32 textureCount() const { return static_cast<u32>(images_.size()); }
+  // Texturas do pacote primeiro, depois as das fontes importadas: os índices do
+  // pacote não mudam quando uma importação acrescenta ou troca imagens.
+  VkImageView view(u32 index) const {
+    return index < images_.size() ? images_[index].view() : authoringImages_[index - images_.size()].view();
+  }
+  VkSampler sampler(u32 index) const {
+    return index < samplers_.size() ? samplers_[index].handle() : authoringSamplers_[index - samplers_.size()].handle();
+  }
+  u32 textureCount() const { return static_cast<u32>(images_.size() + authoringImages_.size()); }
+  u32 packageTextureCount() const { return static_cast<u32>(images_.size()); }
   VkImageView environmentView() const { return environmentImage_.view(); }
   VkSampler environmentSampler() const { return environmentSampler_.handle(); }
   VkImageView environmentSpecularView() const {
@@ -103,6 +112,9 @@ private:
   std::vector<renderer::MapDrawRecord> draws_;
   std::vector<rhi::VulkanImage> images_;
   std::vector<rhi::VulkanSampler> samplers_;
+  // Texturas das fontes importadas (M09.1), trocadas inteiras a cada publicação.
+  std::vector<rhi::VulkanImage> authoringImages_;
+  std::vector<rhi::VulkanSampler> authoringSamplers_;
   rhi::VulkanImage environmentImage_;
   rhi::VulkanSampler environmentSampler_;
   rhi::VulkanImage environmentSpecularImage_;

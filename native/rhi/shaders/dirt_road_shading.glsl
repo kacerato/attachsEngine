@@ -231,8 +231,12 @@ void main() {
   // one upward-facing, over-bright normal.
   mediump float normalDetailWeight=impostor?1.0:
       materialDetailWeight(cameraDistance,environment.quality.x);
-  if(hasMaterialFeature(flags,2u) && isolation!=1u && normalDetailWeight>0.0) {
-    mediump vec3 t=normalize(vTangent.xyz-n*dot(n,vTangent.xyz));
+  // Tangente degenerada (zero) faria normalize() devolver NaN e a superfície
+  // inteira ficar preta; sem base válida o detalhe do mapa normal é omitido.
+  mediump vec3 tangentAxis=vTangent.xyz-n*dot(n,vTangent.xyz);
+  if(hasMaterialFeature(flags,2u) && isolation!=1u && normalDetailWeight>0.0 &&
+     (impostor || dot(tangentAxis,tangentAxis)>1.0e-6)) {
+    mediump vec3 t=normalize(tangentAxis);
     mediump vec3 b=cross(n,t)*(impostor?1.0:vTangent.w);
     mediump vec3 detail=(impostor?
         textureGrad(NORMAL_MAP,impostorUv,impostorDx,impostorDy):

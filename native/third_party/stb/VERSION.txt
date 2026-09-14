@@ -1,0 +1,13 @@
+stb_image.h — decodificador PNG/JPEG usado pela importação de texturas (M09.1).
+
+Origem:   https://github.com/nothings/stb
+Arquivo:  stb_image.h (v2.30)
+Commit:   2c980bb59875b0d32144a71867fbdebb2f77cd20
+SHA-256:  594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3
+Licença:  dupla, à escolha — domínio público (Unlicense) ou MIT. Texto completo no
+          fim do próprio stb_image.h.
+Uso:      só em native/resources/image_decode.cpp, com STBI_ONLY_PNG,
+          STBI_ONLY_JPEG, STBI_NO_STDIO, STBI_NO_HDR e STBI_NO_LINEAR.
+
+Atualizar: baixar o arquivo de um commit fixo, conferir o SHA-256 e registrar
+aqui o commit e o hash novos. Não usar "master" sem fixar.

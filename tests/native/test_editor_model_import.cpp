@@ -115,6 +115,7 @@ void startSession(EditorSession &session, FakeRenderer &renderer) {
   session.setGeometryPublisher([&renderer](std::span<const u8> v, std::span<const u32> i,
                                            std::span<const renderer::MapDrawRecord> d,
                                            std::span<const renderer::MapMaterialRecord> m,
+                                           std::span<const renderer::SharedAuthoringTexture>,
                                            EditorSession::PublishedGeometry &out) {
     return renderer.publish(v, i, d, m, out);
   });
@@ -451,6 +452,7 @@ AE_TEST(a_recreated_surface_gets_the_imported_geometry_back) {
   session.setGeometryPublisher([&second](std::span<const u8> v, std::span<const u32> i,
                                          std::span<const renderer::MapDrawRecord> d,
                                          std::span<const renderer::MapMaterialRecord> m,
+                                         std::span<const renderer::SharedAuthoringTexture>,
                                          EditorSession::PublishedGeometry &out) {
     return second.publish(v, i, d, m, out);
   });

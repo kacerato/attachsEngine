@@ -129,7 +129,8 @@ public:
   // memória liberada. Uma importação é rara e o usuário já está esperando.
   bool rebuildAuthoringGeometry(std::span<const u8> vertices, std::span<const u32> indices,
                                 std::span<const renderer::MapDrawRecord> draws,
-                                std::span<const renderer::MapMaterialRecord> materials);
+                                std::span<const renderer::MapMaterialRecord> materials,
+                                std::span<const renderer::SharedAuthoringTexture> textures = {});
 
 
   bool uiRendererReady() const { return uiRenderer_.isReady(); }
@@ -648,6 +649,8 @@ private:
   MaterialPreviewResources materialResources_;
   DirtRoadResources dirtRoadResources_;
   std::vector<u32> dirtTextureSlots_;
+  // Slots bindless das texturas importadas; devolvidos a cada republicação.
+  std::vector<u32> authoringTextureSlots_;
   std::vector<VkDescriptorSet> dirtMaterialSets_;
   std::vector<u32> solidDrawOrder_;
   std::vector<u32> coverageDrawOrder_;

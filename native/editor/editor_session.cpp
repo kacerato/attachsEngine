@@ -1720,7 +1720,14 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
     const auto materialBase=static_cast<u32>(library.materials.size());
     library.vertices.insert(library.vertices.end(),source.vertices.begin(),source.vertices.end());
     library.indices.insert(library.indices.end(),source.indices.begin(),source.indices.end());
-    library.materials.insert(library.materials.end(),source.materials.begin(),source.materials.end());
+    // Cada fonte numera as próprias texturas a partir de zero; na biblioteca
+    // achatada, os índices dos materiais andam junto com o bloco.
+    const auto textureBase=static_cast<u32>(library.textures.size());
+    for(auto material:source.materials) {
+      for(auto &texture:material.textureIndices) if(texture!=renderer::InvalidMapTexture) texture+=textureBase;
+      library.materials.push_back(material);
+    }
+    library.textures.insert(library.textures.end(),source.textures.begin(),source.textures.end());
     for(const auto &draw:source.draws) {
       auto moved=draw;
       moved.firstIndex+=indexBase;moved.vertexOffset+=vertexBase;moved.materialIndex+=materialBase;
@@ -1741,7 +1748,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
                                     usize *outPrimitives) {
   if(!publishGeometry_) { diagnostic="Este ambiente não publica geometria importada."; return false; }
   PublishedGeometry published;
-  if(!publishGeometry_(library.vertices,library.indices,library.draws,library.materials,published)) {
+  if(!publishGeometry_(library.vertices,library.indices,library.draws,library.materials,library.textures,published)) {
     diagnostic="O consumidor gráfico recusou a geometria importada.";return false;
   }
   // O pacote publicado é primitivas internas + biblioteca, nessa ordem. As
@@ -1973,6 +1980,7 @@ bool EditorSession::publishModel(const resources::GltfImport &model, std::string
   }
   block.map=std::move(nodeMap);
   block.materialNames=model.materialNames;
+  block.textures=model.textures;
 
   // Candidato completo antes de publicar: a versão anterior continua valendo
   // até a nova estar inteira na GPU e aceita pelo editor.
@@ -2202,9 +2210,25 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   state_.importSummary=std::to_string(model.nodes.size())+" nós · "+std::to_string(model.draws.size())+" malhas · "+
       std::to_string(model.materials.size())+" materiais";
   state_.importSummary+="\nSó recurso: guarda no projeto.\nImportar na cena: guarda, instancia e enquadra o modelo.";
-  if(model.skippedTextures||model.skippedAnimations||model.skippedSkins)
-    state_.importSummary+="\nNão suportado neste perfil: "+std::to_string(model.skippedTextures)+" texturas, "+
-      std::to_string(model.skippedAnimations)+" animações, "+std::to_string(model.skippedSkins)+" skins.";
+  // Texturas (M09.1): o que entrou, o que não entrou e por quê. Ausência de
+  // textura nunca pode parecer material final correto.
+  if(!model.textures.empty())
+    state_.importSummary+="\nTexturas: "+std::to_string(model.textures.size())+" aplicadas ("+
+      std::to_string((model.textureBytes+(u64{1}<<19))>>20)+" MB com mipmaps).";
+  if(model.reducedTextures)
+    state_.importSummary+="\nResolução reduzida em "+std::to_string(model.reducedTextures)+" textura(s), até "+
+      std::to_string(model.residentTextureDimension)+" px, para caber no limite do aparelho.";
+  if(model.skippedTextures)
+    state_.importSummary+="\nTexturas não aplicadas: "+std::to_string(model.skippedTextures)+"; esses slots ficam só com os fatores.";
+  for(const auto &note:model.textureNotes) state_.importSummary+="\n• "+note;
+  if(model.unappliedTextureTransforms)
+    state_.importSummary+="\nTransformação de UV (KHR_texture_transform) não aplicada em "+
+      std::to_string(model.unappliedTextureTransforms)+" slot(s): a textura aparece sem ela.";
+  if(model.unappliedOcclusion)
+    state_.importSummary+="\nOclusão não aplicada em "+std::to_string(model.unappliedOcclusion)+" material(is).";
+  if(model.skippedAnimations||model.skippedSkins)
+    state_.importSummary+="\nNão suportado neste perfil: "+std::to_string(model.skippedAnimations)+" animações, "+
+      std::to_string(model.skippedSkins)+" skins.";
   if(!model.appearanceExtensions.empty()) {
     state_.importSummary+="\nGeometria estática; aparência avançada não reproduzida:";
     for(const auto &extension:model.appearanceExtensions) state_.importSummary+="\n"+extension;

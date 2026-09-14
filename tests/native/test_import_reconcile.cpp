@@ -144,6 +144,7 @@ void start(EditorSession &session, FakeRenderer &renderer) {
   session.setGeometryPublisher([&renderer](std::span<const u8> v, std::span<const u32> i,
                                            std::span<const renderer::MapDrawRecord> d,
                                            std::span<const renderer::MapMaterialRecord> m,
+                                           std::span<const renderer::SharedAuthoringTexture>,
                                            EditorSession::PublishedGeometry &out) { return renderer.publish(v, i, d, m, out); });
 }
 
@@ -513,7 +514,13 @@ int probeReimportGlb(const char *path) {
   std::vector<u8> bytes;
   if (!EditorImportTransaction::read(EditorImportTransaction::fromUtf8(path), bytes)) { std::fprintf(stderr, "READ %s\n", path); return 2; }
   resources::GltfImport model;
+  const auto parseStart = Clock::now();
   if (!resources::importGlb(bytes, {}, {}, model)) { std::fprintf(stderr, "PARSE: %s\n", model.diagnostic.c_str()); return 1; }
+  const auto parseEnd = Clock::now();
+  std::printf("%s: parse_ms=%.1f textures=%zu texture_mb=%.1f reduced=%u generated_tangents=%u skipped_textures=%u unapplied_transforms=%u unapplied_occlusion=%u\n",
+              path, ms(parseStart, parseEnd), model.textures.size(), static_cast<double>(model.textureBytes) / 1048576.0,
+              model.reducedTextures, model.generatedTangentPrimitives,model.skippedTextures,model.unappliedTextureTransforms, model.unappliedOcclusion);
+  for (const auto &note : model.textureNotes) std::printf("  nota: %s\n", note.c_str());
   Project project;
   EditorSession session;
   FakeRenderer renderer;

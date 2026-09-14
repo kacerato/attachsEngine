@@ -2006,7 +2006,7 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     push.alphaCutoffUvSlot[0]=material.alphaCutoff;
     push.alphaCutoffUvSlot[1]=(material.textureCoordinates&3u)==1u?1.0f:0.0f;
     const u32 texture=material.textureIndices[0];
-    push.baseTextureIndex[0]=useBindless_ && texture!=renderer::InvalidMapTexture
+    push.baseTextureIndex[0]=useBindless_ && texture!=renderer::InvalidMapTexture && texture<dirtTextureSlots_.size()
                                  ? dirtTextureSlots_[texture] : baseTextureIndex_;
     vkCmdPushConstants(commandBuffer_,shadowPipelineLayout_,
                        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -3820,6 +3820,7 @@ void InstancedRenderer::shutdown() {
   materialResources_.shutdown();
   dirtRoadResources_.shutdown();
   dirtTextureSlots_.clear();
+  authoringTextureSlots_.clear();
   dirtMaterialSets_.clear();
   solidDrawOrder_.clear();
   coverageDrawOrder_.clear();
@@ -3890,7 +3891,8 @@ void InstancedRenderer::endGpuRegion(GpuPassClass pass) {
 // invisivel sem nenhum erro.
 bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, std::span<const u32> indices,
                                                 std::span<const renderer::MapDrawRecord> draws,
-                                                std::span<const renderer::MapMaterialRecord> materials) {
+                                                std::span<const renderer::MapMaterialRecord> materials,
+                                                std::span<const renderer::SharedAuthoringTexture> textures) {
   if(!dirtRoadPreview_ || !rhiDevice_ || device_==VK_NULL_HANDLE) {
     __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] renderer sem contexto para absorver geometria.");
     return false;
@@ -3899,7 +3901,36 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   // liberada. Importar é raro e explícito: esperar é a resposta certa aqui, e
   // não uma fila de destruição diferida que ninguém mais no renderer usa.
   vkDeviceWaitIdle(device_);
-  if(!dirtRoadResources_.rebuildAuthoringLibrary(*rhiDevice_,uploadContext_,vertices,indices,draws,materials)) {
+  // Slots das texturas importadas: devolvidos ANTES da troca, porque apontam para
+  // imagens que a reconstrução solta. Se ela falhar, a biblioteca antiga fica e
+  // os slots dela voltam a ser registrados logo abaixo.
+  const auto packageTextures=dirtRoadResources_.packageTextureCount();
+  const auto registerAuthoringTextures=[&] {
+    authoringTextureSlots_.clear();
+    if(dirtTextureSlots_.size()>packageTextures) dirtTextureSlots_.resize(packageTextures);
+    if(!useBindless_) {
+      if(dirtRoadResources_.textureCount()>packageTextures)
+        __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] texturas importadas exigem descritores bindless; desenhadas sem textura.");
+      return;
+    }
+    dirtTextureSlots_.resize(packageTextures,baseTextureIndex_);
+    for(u32 texture=packageTextures;texture<dirtRoadResources_.textureCount();++texture) {
+      u32 slot=bindlessRegistry_.registerTexture(dirtRoadResources_.view(texture),dirtRoadResources_.sampler(texture),
+                                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+      if(slot==rhi::kBindlessIndexInvalid) {
+        // Capacidade esgotada: a textura fica branca, e isso é dito.
+        __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] capacidade bindless esgotada na textura %u.",texture);
+        dirtTextureSlots_.push_back(baseTextureIndex_);
+        continue;
+      }
+      authoringTextureSlots_.push_back(slot);
+      dirtTextureSlots_.push_back(slot);
+    }
+  };
+  if(useBindless_) for(const auto slot:authoringTextureSlots_) bindlessRegistry_.unregisterTexture(slot);
+  authoringTextureSlots_.clear();
+  if(!dirtRoadResources_.rebuildAuthoringLibrary(*rhiDevice_,uploadContext_,vertices,indices,draws,materials,textures)) {
+    registerAuthoringTextures();
     __android_log_print(ANDROID_LOG_ERROR,LogTag,
         "[Import] biblioteca recusada: vertices=%zu indices=%zu desenhos=%zu materiais=%zu",
         vertices.size()/renderer::MapVertexStride,indices.size(),draws.size(),materials.size());
@@ -3908,6 +3939,9 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   // A cena publicada descreve a lista ANTERIOR de desenhos. Descartá-la obriga
   // o próximo quadro a republicar tudo, em vez de casar poses novas com
   // topologia velha.
+  registerAuthoringTextures();
+  __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] texturas importadas: %zu publicadas, %zu slots bindless.",
+      textures.size(),authoringTextureSlots_.size());
   pendingScene_.clear();pendingMapPoseCount_=0;pendingAuthoredStateValid_=false;
   authoredMaterials_.clear();authoredVisibility_.clear();authoredShadows_.clear();
   authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();
@@ -4634,7 +4668,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       }
       for (u32 slot = 0; slot < 4; ++slot) {
         const u32 texture = material.textureIndices[slot];
-        push.textureIndices[slot] = useBindless_ && texture != renderer::InvalidMapTexture
+        // O limite protege contra um material que chegue antes dos slots das
+        // texturas importadas: branco neutro, nunca leitura fora do vetor.
+        push.textureIndices[slot] = useBindless_ && texture != renderer::InvalidMapTexture && texture < dirtTextureSlots_.size()
                                         ? dirtTextureSlots_[texture] : baseTextureIndex_;
       }
       push.materialFlags[0]=material.flags;

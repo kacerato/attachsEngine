@@ -318,9 +318,12 @@ public:
   // Quem sabe subir geometria para a GPU é o shell; a sessão não conhece Vulkan.
   // Recebe a biblioteca importada INTEIRA (ver `rebuildAuthoringLibrary`) e
   // devolve o pacote resultante.
+  // As texturas vêm na MESMA chamada: `MapMaterialRecord::textureIndices` já
+  // aponta para esta lista, e publicar uma sem a outra deixaria índices soltos.
   using GeometryPublisher = std::function<bool(std::span<const u8>, std::span<const u32>,
                                                std::span<const renderer::MapDrawRecord>,
                                                std::span<const renderer::MapMaterialRecord>,
+                                               std::span<const renderer::SharedAuthoringTexture>,
                                                PublishedGeometry &)>;
   void setGeometryPublisher(GeometryPublisher publisher) { publishGeometry_ = std::move(publisher); }
   // Republica a geometria importada para um consumidor gráfico NOVO.
@@ -591,6 +594,8 @@ private:
     resources::ImportNodeMap map;
     // Nomes dos materiais da fonte, alinhados a `materials`.
     std::vector<std::string> materialNames;
+    // Texturas decodificadas da fonte; `materials[i].textureIndices` indexa aqui.
+    std::vector<renderer::SharedAuthoringTexture> textures;
   };
   struct ImportedLibrary {
     std::vector<u8> vertices;
@@ -599,6 +604,8 @@ private:
     std::vector<renderer::MapMaterialRecord> materials;
     std::vector<resources::AssetGuid> identities;
     std::vector<std::string> names;
+    // Texturas de todas as fontes, com os índices dos materiais já deslocados.
+    std::vector<renderer::SharedAuthoringTexture> textures;
     // Pivô por desenho, em espaço do mesh. Geometria importada gira em torno da
     // origem do NÓ; ver `EditorMapScene::adoptPackage`.
     std::vector<float> pivots;

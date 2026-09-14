@@ -1,6 +1,8 @@
 #pragma once
 #include "core/base.h"
+#include "renderer/authoring_texture.h"
 #include "renderer/map_package.h"
+#include "resources/image_decode.h"
 #include <span>
 #include <string>
 #include <vector>
@@ -17,14 +19,14 @@ namespace ae::resources {
 // | hierarquia de nós, com TRS e `matrix` | skins e animações |
 // | instâncias (o mesmo mesh em vários nós) | câmeras e luzes do arquivo |
 // | TRIANGLES, TRIANGLE_STRIP e TRIANGLE_FAN | pontos e linhas |
-// | POSITION, NORMAL, TEXCOORD_0/1, TANGENT, COLOR_0 | texturas (imagens) |
+// | POSITION, NORMAL, TEXCOORD_0/1, TANGENT, COLOR_0 | KTX2/BasisU, WebP e imagens externas |
 // | fatores PBR, emissivo, alfa e dupla face | Draco, meshopt e materiais avançados |
+// | texturas PNG/JPEG embutidas (cor, normal, MR, emissiva) | oclusão e KHR_texture_transform |
 //
-// Texturas ficam de fora por um motivo concreto, não por preguiça: o runtime
-// não decodifica PNG nem JPEG, e o decodificador do sistema (`AImageDecoder`)
-// só existe a partir do Android 11 enquanto o mínimo suportado é o 8. Trazer
-// meia textura seria pior do que não trazer nenhuma — o material chega com os
-// fatores, que é o que o shader consome sem imagem.
+// Texturas (Entrega 3) são decodificadas com stb_image vendorizado, porque o
+// decodificador do sistema (`AImageDecoder`) só existe a partir do Android 11
+// e o mínimo suportado é o 8. Oclusão e transformação de UV são contadas como
+// não aplicadas: o bloco de push constants do shader já está cheio.
 //
 // Conversão de coordenadas: **nenhuma**. glTF é destro, +Y para cima, e é assim
 // que o pacote de mapa desta engine já guarda geometria — o cozinhador offline
@@ -40,6 +42,21 @@ struct GltfImportLimits {
   u32 maximumDraws = 4096;
   u64 maximumVertices = 4ull << 20;
   u64 maximumIndices = 12ull << 20;
+  // Memória das texturas DEPOIS de decodificadas, com mipmaps. O tamanho
+  // comprimido do GLB não diz nada sobre isto: um JPEG de 2 MB vira 85 MB de
+  // RGBA 4096² com mips.
+  u64 maximumTextureBytes = 256ull << 20;
+  // Resolução RESIDENTE máxima de cada textura. Uma imagem maior perde os mips
+  // de cima (o nível residente fica com o maior lado <= este valor) em vez de
+  // ser descartada inteira — é o que o pacote de mapa já faz com o orçamento.
+  u32 maximumTextureDimension = 2048;
+  // Quando o arquivo inteiro não cabe em `maximumTextureBytes` nem com o limite
+  // acima, o limite é reduzido PARA TODAS as texturas (metade por vez) até este
+  // piso, antes de qualquer textura ser descartada. Descartar em ordem de
+  // declaração deixaria o fim do arquivo sem textura enquanto o começo fica em
+  // resolução cheia.
+  u32 minimumTextureDimension = 256;
+  ImageDecodeLimits image{};
 };
 
 // Progresso e cancelamento. A importação chama `report` em pontos onde o
@@ -98,13 +115,32 @@ struct GltfImport {
   // Motivo concreto quando `importGlb` devolve falso. Nunca "erro ao importar".
   std::string diagnostic;
   bool cancelled = false;
+  // Texturas decodificadas (Entrega 3), indexadas por
+  // `MapMaterialRecord::textureIndices`. Uma mesma imagem usada como cor (sRGB)
+  // e como dado (linear) vira duas texturas: o espaço de cor é da textura.
+  std::vector<renderer::SharedAuthoringTexture> textures;
+  u64 textureBytes = 0;
   // O que o arquivo trazia e esta importação deliberadamente não trouxe. Quem
   // chama publica isso: o usuário precisa saber que a animação ficou para trás.
+  // `skippedTextures` conta referências de textura que NÃO foram aplicadas
+  // (formato sem decodificador, imagem externa, orçamento, erro de decodificação).
   u32 skippedTextures = 0, skippedAnimations = 0, skippedSkins = 0;
   u32 skippedPrimitives = 0, skippedCameras = 0, skippedLights = 0;
+  // Aparência que o perfil ainda não reproduz, contada por slot: a textura é
+  // aplicada sem a transformação de UV, e a oclusão não entra no shader.
+  u32 unappliedTextureTransforms = 0, unappliedOcclusion = 0;
+  // Texturas aplicadas com resolução reduzida por `maximumTextureDimension`.
+  u32 reducedTextures = 0;
+  // Primitivas com mapa normal que chegaram sem TANGENT e tiveram as tangentes
+  // geradas na importação.
+  u32 generatedTangentPrimitives = 0;
+  // Maior lado residente escolhido para este arquivo (0 sem texturas).
+  u32 residentTextureDimension = 0;
+  // Motivos concretos das texturas não aplicadas, sem repetição.
+  std::vector<std::string> textureNotes;
   bool anythingSkipped() const noexcept {
     return !appearanceExtensions.empty() || skippedTextures || skippedAnimations || skippedSkins || skippedPrimitives ||
-           skippedCameras || skippedLights;
+           skippedCameras || skippedLights || unappliedTextureTransforms || unappliedOcclusion;
   }
 };
 

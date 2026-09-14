@@ -1,0 +1,16 @@
+Primeira medição do perfil de texturas (M09.1) com arquivos reais, host de depuração (build/editor-host), 14/09/2026.
+Comando: aether_tests --reimport-glb <arquivo>. Tempos são de build de depuração no PC, não do aparelho.
+Orçamento de texturas decodificadas: 256 MB por importação; sem limite de resolução residente nesta medição.
+
+torre.glb:      parse_ms=0.3    textures=0  texture_mb=0.0   skipped_textures=0  unapplied_transforms=0  unapplied_occlusion=0
+ford-lotus.glb: parse_ms=1578.7 textures=18 texture_mb=148.1 skipped_textures=0  unapplied_transforms=0  unapplied_occlusion=2
+CarConcept.glb: parse_ms=41.3   textures=0  texture_mb=0.0   skipped_textures=25 unapplied_transforms=12 unapplied_occlusion=25
+  nota: Textura só em extensão (KTX2/BasisU ou WebP) sem decodificador neste perfil.
+porsche.glb:    parse_ms=4856.6 textures=52 texture_mb=255.0 skipped_textures=21 unapplied_transforms=1  unapplied_occlusion=3
+  nota: Orçamento de memória de texturas da importação esgotado; texturas restantes ficaram de fora.
+
+Reimportação/identidade continuou igual à Entrega 1 em todos (same_content=1, reopen_identical=1).
+
+Leitura: o orçamento total sozinho descarta texturas inteiras do Porsche e ainda deixa ~255 MB para subir à GPU
+de um telefone. Próximo passo: limitar a resolução residente (descartar mips mais altos) antes de descartar
+texturas, e medir de novo.

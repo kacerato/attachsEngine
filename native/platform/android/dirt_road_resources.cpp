@@ -292,7 +292,8 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
 bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload,
                                                std::span<const u8> extraVertices, std::span<const u32> extraIndices,
                                                std::span<const renderer::MapDrawRecord> extraDraws,
-                                               std::span<const renderer::MapMaterialRecord> extraMaterials) {
+                                               std::span<const renderer::MapMaterialRecord> extraMaterials,
+                                               std::span<const renderer::SharedAuthoringTexture> extraTextures) {
   if(extraVertices.size()%renderer::MapVertexStride) return false;
   // As primitivas internas vêm primeiro e mantêm seus índices: o catálogo de
   // criação ("Cubo", "Chão") aponta para elas, e reordená-las trocaria o que
@@ -305,7 +306,17 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   const auto materialBase=static_cast<u32>(materials.size());
   vertices.insert(vertices.end(),extraVertices.begin(),extraVertices.end());
   indices.insert(indices.end(),extraIndices.begin(),extraIndices.end());
-  materials.insert(materials.end(),extraMaterials.begin(),extraMaterials.end());
+  // Os materiais importados numeram as texturas da própria biblioteca a partir
+  // de zero; no renderer elas vêm depois das do pacote.
+  const auto textureBase=static_cast<u32>(images_.size());
+  for(auto material:extraMaterials) {
+    for(auto &texture:material.textureIndices) {
+      if(texture==renderer::InvalidMapTexture) continue;
+      if(u64(texture)>=extraTextures.size()) return false;
+      texture+=textureBase;
+    }
+    materials.push_back(material);
+  }
   const auto vertexCount=vertices.size()/renderer::MapVertexStride;
   for(const auto &source:extraDraws) {
     auto draw=source;
@@ -333,7 +344,35 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   buffer.sizeBytes=indices.size()*sizeof(u32);buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
   if(!allocator.createBuffer(buffer,&nextIndices) ||
      !upload.uploadBuffer(allocator,indices.data(),buffer.sizeBytes,nextIndices,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_ACCESS_INDEX_READ_BIT)) return false;
+  // Texturas importadas: imagem com todos os mips e sampler de cada uma, antes
+  // de trocar qualquer coisa. Uma falha aqui mantém a biblioteca anterior.
+  std::vector<rhi::VulkanImage> nextImages(extraTextures.size());
+  std::vector<rhi::VulkanSampler> nextSamplers(extraTextures.size());
+  for(usize t=0;t<extraTextures.size();++t) {
+    const auto &texture=extraTextures[t];
+    if(!texture || !texture->valid()) return false;
+    rhi::ImageDesc image{};
+    image.width=texture->width;image.height=texture->height;image.mipLevels=texture->levels;
+    image.format=texture->srgb?VK_FORMAT_R8G8B8A8_SRGB:VK_FORMAT_R8G8B8A8_UNORM;
+    image.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
+    image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;image.memoryClass=rhi::MemoryClass::Texture;
+    if(rhi::sampledChainByteSize(image)!=texture->mipChain.size() || !allocator.createImage(image,&nextImages[t]) ||
+       !upload.uploadSampledMipChain(allocator,texture->mipChain.data(),texture->mipChain.size(),nextImages[t])) return false;
+    const u32 flags=texture->samplerFlags;
+    const auto wrap=[flags](u32 repeat,u32 mirror) {
+      return (flags&mirror)?VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT:
+             (flags&repeat)?VK_SAMPLER_ADDRESS_MODE_REPEAT:VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    };
+    rhi::SamplerDesc sampling{};
+    sampling.minFilter=sampling.magFilter=(flags&renderer::AuthoringTextureLinearFilter)?VK_FILTER_LINEAR:VK_FILTER_NEAREST;
+    sampling.mipmapMode=(flags&renderer::AuthoringTextureLinearMip)?VK_SAMPLER_MIPMAP_MODE_LINEAR:VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sampling.addressU=wrap(renderer::AuthoringTextureRepeatU,renderer::AuthoringTextureMirrorU);
+    sampling.addressV=wrap(renderer::AuthoringTextureRepeatV,renderer::AuthoringTextureMirrorV);
+    sampling.maxLod=static_cast<float>(texture->levels-1);
+    if(!nextSamplers[t].initialize(device.handle(),sampling)) return false;
+  }
   vertices_=std::move(nextVertices);indices_=std::move(nextIndices);
+  authoringImages_=std::move(nextImages);authoringSamplers_=std::move(nextSamplers);
   pickingVertices_=std::move(vertices);pickingIndices_=std::move(indices);
   draws_=std::move(draws);materials_=std::move(materials);
   header_.vertexStride=renderer::MapVertexStride;
@@ -413,6 +452,8 @@ void DirtRoadResources::shutdown() {
   collisionMesh_.clear();
   for (auto &sampler : samplers_) sampler.shutdown();
   for (auto &image : images_) image.reset();
+  authoringSamplers_.clear();
+  authoringImages_.clear();
   samplers_.clear();
   images_.clear();
   indices_.reset();

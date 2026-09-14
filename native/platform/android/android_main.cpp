@@ -722,8 +722,9 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
         [&shell](std::span<const ae::u8> vertices, std::span<const ae::u32> indices,
                  std::span<const ae::renderer::MapDrawRecord> draws,
                  std::span<const ae::renderer::MapMaterialRecord> materials,
+                 std::span<const ae::renderer::SharedAuthoringTexture> textures,
                  ae::editor::EditorSession::PublishedGeometry &out) {
-          if(!shell.instancedRenderer.rebuildAuthoringGeometry(vertices,indices,draws,materials)) return false;
+          if(!shell.instancedRenderer.rebuildAuthoringGeometry(vertices,indices,draws,materials,textures)) return false;
           out={shell.instancedRenderer.mapDraws(),shell.instancedRenderer.mapMaterials(),
                shell.instancedRenderer.pickingVertices(),shell.instancedRenderer.pickingIndices()};
           // A republicação da cena é obrigatória depois de trocar o pacote: as
@@ -2072,7 +2073,7 @@ void android_main(android_app *app) {
               else {session.showImportFailure("Recurso guardado; instanciação falhou: "+instance.diagnostic);instanceFailed=true;}
             }
             if(report.skippedTextures || report.skippedAnimations || report.skippedSkins)
-              message+=" Perfil sem texturas, animações ou skins; omissões informadas na preparação.";
+              message+=" Há omissões do perfil (texturas não aplicadas, animações ou skins); detalhes na preparação.";
             if(!instanceFailed) session.setImportStatus(message,(report.skippedTextures || report.skippedAnimations || report.skippedSkins)?
                 ae::editor::EditorConsoleSeverity::Warning:ae::editor::EditorConsoleSeverity::Info);
           }

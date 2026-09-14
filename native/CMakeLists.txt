@@ -209,6 +209,7 @@ add_library(aether_assets STATIC
   resources/gltf_import.cpp
   resources/import_node_map.cpp
   resources/material_asset.cpp
+  resources/image_decode.cpp
 )
 target_include_directories(aether_assets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # aether_renderer pelo formato do pacote de mapa: a importacao produz
@@ -451,6 +452,7 @@ if(NOT ANDROID)
     ../tests/native/test_gltf_import.cpp
     ../tests/native/test_editor_model_import.cpp
     ../tests/native/test_import_reconcile.cpp
+    ../tests/native/test_image_decode.cpp
     ../tests/native/test_editor_script_templates.cpp
     ../tests/native/test_editor_code_catalog.cpp
     ../tests/native/test_editor_play_scripts.cpp
