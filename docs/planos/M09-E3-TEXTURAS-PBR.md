@@ -18,7 +18,7 @@
 
 ## Limitações declaradas
 
-- **Oclusão e `KHR_texture_transform` não são aplicadas.** O bloco de push constants do material (8 × vec4 = 128 bytes, o mínimo garantido pelo Vulkan) já está cheio; são contadas e mostradas na prévia, nunca aproximadas.
+- **Oclusão e `KHR_texture_transform` não são aplicadas.** (Atualização da Entrega 4: a transformação de UV passou a ser assada nas UVs na importação quando o material concorda; ver [M08-M09-E4](M08-M09-E4-DEPENDENCIAS-CODECS.md). A oclusão continua não aplicada.) O bloco de push constants do material (8 × vec4 = 128 bytes, o mínimo garantido pelo Vulkan) já está cheio; são contadas e mostradas na prévia, nunca aproximadas.
 - **KTX2/BasisU, WebP e imagens externas ou em data URI não são lidas** (CarConcept: 25 texturas só em KTX2 ficam de fora). Entrega 4.
 - **Materiais avançados** (`KHR_materials_clearcoat`, `specular`, `transmission`…) continuam listados como extensões preservadas na fonte, não reproduzidas.
 - **Dupla face não muda o culling:** todas as pipelines usam `VK_CULL_MODE_NONE`, então materiais de face única também mostram o verso.

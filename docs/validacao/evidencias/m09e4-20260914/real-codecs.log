@@ -27,6 +27,11 @@ ford.gltf (20 companheiros):  dependencies=20 unused=0 packed_mb=14.1 pack_ms=30
 ford.gltf (bin + 3 PNG):      RECUSADO: Faltam arquivos referenciados pelo glTF: textura 2.png, textura 3.png, … Selecione-os junto
                               com o arquivo principal (seleção múltipla no seletor).
 
+KHR_texture_transform assado nas UVs (depois do commit 705fc830):
+ford-lotus-meshopt.glb: meshopt_views=5 textures=18 baked_transforms=19 unapplied_transforms=0   (antes: unapplied_transforms=19)
+CarConcept.glb:         ktx2=12 textures=13 baked_transforms=12 unapplied_transforms=0          (antes: unapplied_transforms=12)
+ford-lotus.glb:         baked_transforms=0 unapplied_transforms=0                               (sem a extensão, sem mudança)
+
 Achados:
   1. Draco reorganiza vértices e descarta triângulos degenerados: a esfera de 4753 vértices e 27648 índices decodifica
      em 4751 vértices e 27090 índices. O primeiro GLB montado com as contagens do OBJ foi RECUSADO pelo importador
@@ -35,4 +40,5 @@ Achados:
   2. O gltfpack, por padrão, quantiza UV e compensa com KHR_texture_transform. Como a transformação de UV não é
      aplicada (limitação da Entrega 3), ford-lotus-meshopt.glb teria texturas desalinhadas; o probe mostra
      unapplied_transforms=19. A conferência no aparelho usa a variante -noq.
+     Resolvido depois: a transformação passou a ser assada nas UVs quando o material concorda (baked_transforms=19).
   3. O gltfpack também separa nós (42 -> 63 no Ford); a identidade da Entrega 1 trata como estrutura nova do arquivo.

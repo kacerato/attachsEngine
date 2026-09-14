@@ -424,6 +424,78 @@ AE_TEST(m09e4_negative_scale_becomes_positive_trs_with_mirrored_geometry_and_the
                  "cisalhamento recusado com o nome do nó, sem aproximação");
 }
 
+namespace {
+// Quadrado com UV = posição e uma textura KTX2; o material é o do teste.
+std::vector<u8> transformGlb(const std::string &material) {
+  const float positions[12]{0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0};
+  const float uvs[8]{0, 0, 1, 0, 1, 1, 0, 1};
+  const u16 indices[6]{0, 1, 2, 0, 2, 3};
+  std::vector<u8> binary(92);
+  std::memcpy(binary.data(), positions, 48);
+  std::memcpy(binary.data() + 48, uvs, 32);
+  std::memcpy(binary.data() + 80, indices, 12);
+  binary.insert(binary.end(), kGradUastc.begin(), kGradUastc.end());
+  pad4(binary);
+  const std::string json =
+      std::string(R"({"asset":{"version":"2.0"},"extensionsUsed":["KHR_texture_basisu","KHR_texture_transform"],)") +
+      R"("buffers":[{"byteLength":)" + std::to_string(binary.size()) + R"(}],"bufferViews":[)" +
+      R"({"buffer":0,"byteOffset":0,"byteLength":48},{"buffer":0,"byteOffset":48,"byteLength":32},)" +
+      R"({"buffer":0,"byteOffset":80,"byteLength":12},{"buffer":0,"byteOffset":92,"byteLength":)" +
+      std::to_string(kGradUastc.size()) + R"(}],)" +
+      R"("accessors":[{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},)" +
+      R"({"bufferView":1,"componentType":5126,"count":4,"type":"VEC2"},{"bufferView":2,"componentType":5123,"count":6,"type":"SCALAR"}],)" +
+      R"("images":[{"bufferView":3,"mimeType":"image/ktx2"}],"textures":[{"extensions":{"KHR_texture_basisu":{"source":0}}}],)" +
+      R"("materials":[)" + material + R"(],)" +
+      R"("meshes":[{"name":"Tela","primitives":[{"attributes":{"POSITION":0,"TEXCOORD_0":1},"indices":2,"material":0}]}],)" +
+      R"("nodes":[{"name":"Tela","mesh":0}],"scenes":[{"nodes":[0]}],"scene":0})";
+  return buildGlb(json, binary);
+}
+} // namespace
+
+AE_TEST(m09e4_texture_transform_is_baked_into_uvs_when_the_material_agrees) {
+  // Rotação de 90° anti-horária, escala (2, 1) e deslocamento (0.5, 0), pela matriz do glTF:
+  // u' = cos·2·u − sin·1·v + 0.5 e v' = sin·2·u + cos·1·v.
+  const auto transformed = transformGlb(
+      R"({"pbrMetallicRoughness":{"baseColorTexture":{"index":0,"extensions":{"KHR_texture_transform":)"
+      R"({"offset":[0.5,0],"rotation":1.5707963267948966,"scale":[2,1]}}}}})");
+  resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(transformed, {}, {}, model), model.diagnostic.c_str());
+  AE_EXPECT_EQ(model.bakedTextureTransforms, 1u, "a transformação foi assada nas UVs");
+  AE_EXPECT_EQ(model.unappliedTextureTransforms, 0u, "e não aparece mais como omissão");
+  const float expected[8]{0.5f, 0, 0.5f, 2, -0.5f, 2, -0.5f, 0};
+  bool uvs = model.vertices.size() / renderer::MapVertexStride == 4;
+  for (usize v = 0; uvs && v < 4; ++v)
+    uvs &= std::fabs(vertexFloat(model.vertices, v, 28) - expected[v * 2]) < 1e-5f &&
+           std::fabs(vertexFloat(model.vertices, v, 32) - expected[v * 2 + 1]) < 1e-5f;
+  AE_EXPECT_TRUE(uvs, "UVs iguais às que o shader do glTF amostraria");
+
+  // Normal no mesmo conjunto de UV sem a transformação: o material discorda,
+  // nada é assado e a omissão continua declarada.
+  const auto conflicting = transformGlb(
+      R"({"pbrMetallicRoughness":{"baseColorTexture":{"index":0,"extensions":{"KHR_texture_transform":{"scale":[2,2]}}}},)"
+      R"("normalTexture":{"index":0}})");
+  resources::GltfImport disagreement;
+  AE_EXPECT_TRUE(resources::importGlb(conflicting, {}, {}, disagreement), disagreement.diagnostic.c_str());
+  AE_EXPECT_EQ(disagreement.bakedTextureTransforms, 0u, "nada assado quando o material discorda");
+  AE_EXPECT_EQ(disagreement.unappliedTextureTransforms, 1u, "a transformação continua contada como não aplicada");
+  AE_EXPECT_TRUE(disagreement.vertices.size() >= renderer::MapVertexStride * 2 &&
+                     vertexFloat(disagreement.vertices, 1, 28) == 1.0f && vertexFloat(disagreement.vertices, 1, 32) == 0.0f,
+                 "UVs intactas");
+
+  // `texCoord` da extensão troca o conjunto: a textura passa a TEXCOORD_1 e é
+  // esse conjunto que recebe a transformação (sem TEXCOORD_1, UV zero vira o deslocamento).
+  const auto overridden = transformGlb(
+      R"({"pbrMetallicRoughness":{"baseColorTexture":{"index":0,"extensions":{"KHR_texture_transform":)"
+      R"({"offset":[0.5,0.25],"texCoord":1}}}}})");
+  resources::GltfImport swapped;
+  AE_EXPECT_TRUE(resources::importGlb(overridden, {}, {}, swapped), swapped.diagnostic.c_str());
+  AE_EXPECT_TRUE(!swapped.materials.empty() && (swapped.materials.front().textureCoordinates & 1u), "cor base em TEXCOORD_1");
+  AE_EXPECT_TRUE(swapped.vertices.size() >= renderer::MapVertexStride &&
+                     vertexFloat(swapped.vertices, 0, 36) == 0.5f && vertexFloat(swapped.vertices, 0, 40) == 0.25f &&
+                     vertexFloat(swapped.vertices, 1, 28) == 1.0f,
+                 "só o conjunto 1 foi transformado");
+}
+
 AE_TEST(m09e4_basisu_only_texture_is_applied_through_the_same_texture_pipeline) {
   std::vector<u8> binary;
   const float positions[12]{0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0};

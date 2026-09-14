@@ -600,16 +600,30 @@ struct Importer {
     return result;
   }
 
+  // KHR_texture_transform assado nas UVs (Entrega 4). Por material e por conjunto
+  // de UV guarda-se a matriz 2x3 comum a todas as texturas APLICADAS naquele
+  // conjunto; se duas discordam, nenhuma é assada e as transformadas são contadas
+  // como não aplicadas. Linhas: u' = m0·u + m1·v + m2, v' = m3·u + m4·v + m5.
+  struct UvTransform {
+    float m[6]{1, 0, 0, 0, 1, 0};
+    bool used = false, conflict = false;
+    u32 transformed = 0;
+  };
+  std::vector<std::array<UvTransform, 2>> uvTransforms{};
+
   // Liga uma `textureInfo` do material a um slot. Devolve se a textura foi
   // aplicada; toda referência não aplicada é contada em `skippedTextures`.
   bool assignTexture(const Node &root, const Node &owner, std::string_view name, bool srgb, u32 slot,
-                     renderer::MapMaterialRecord &target, u32 feature) {
+                     renderer::MapMaterialRecord &target, u32 feature, u32 material) {
     const auto *info = json->member(owner, name);
     if (!info || info->kind != Kind::Object) return false;
-    if (const auto *extensions = json->member(*info, "extensions");
-        extensions && extensions->kind == Kind::Object && json->member(*extensions, "KHR_texture_transform"))
-      ++out->unappliedTextureTransforms;
-    const auto coordinate = json->index(*info, "texCoord");
+    const Node *transform = nullptr;
+    if (const auto *extensions = json->member(*info, "extensions"); extensions && extensions->kind == Kind::Object)
+      if (const auto *value = json->member(*extensions, "KHR_texture_transform"); value && value->kind == Kind::Object)
+        transform = value;
+    auto coordinate = json->index(*info, "texCoord");
+    // A extensão pode trocar o conjunto de UV da textura.
+    if (transform && json->index(*transform, "texCoord") >= 0) coordinate = json->index(*transform, "texCoord");
     if (coordinate > 1) {
       noteTexture("Textura usa TEXCOORD_" + std::to_string(coordinate) + "; só TEXCOORD_0 e TEXCOORD_1 são lidos.");
       ++out->skippedTextures;
@@ -623,6 +637,42 @@ struct Importer {
     target.textureIndices[slot] = index;
     target.flags |= feature;
     if (coordinate == 1) target.textureCoordinates |= 1u << (slot * 2);
+    // Matriz do glTF (GLSL, colunas): translação · rotação anti-horária · escala.
+    float m[6]{1, 0, 0, 0, 1, 0};
+    if (transform) {
+      float offset[2]{0, 0}, scale[2]{1, 1};
+      const auto pair = [&](std::string_view field, float *values) {
+        const auto *list = json->member(*transform, field);
+        if (!list) return true;
+        if (list->kind != Kind::Array || list->childCount != 2) return false;
+        for (u32 k = 0; k < 2; ++k) {
+          const auto *value = json->child(*list, k);
+          if (!value || value->kind != Kind::Number) return false;
+          values[k] = static_cast<float>(value->number);
+        }
+        return true;
+      };
+      const float rotation = static_cast<float>(json->number(*transform, "rotation", 0));
+      bool valid = pair("offset", offset) && pair("scale", scale);
+      const float c = std::cos(rotation), s = std::sin(rotation);
+      const float candidate[6]{c * scale[0], -s * scale[1], offset[0], s * scale[0], c * scale[1], offset[1]};
+      for (const float value : candidate) valid &= std::isfinite(value);
+      if (valid) std::copy(candidate, candidate + 6, m);
+      else ++out->unappliedTextureTransforms; // malformada: a textura entra sem ela
+    }
+    if (material < uvTransforms.size()) {
+      auto &entry = uvTransforms[material][coordinate == 1 ? 1 : 0];
+      if (!entry.used) {
+        std::copy(m, m + 6, entry.m);
+        entry.used = true;
+      } else {
+        for (u32 k = 0; k < 6; ++k) entry.conflict |= std::fabs(entry.m[k] - m[k]) > 1e-6f;
+      }
+      const float neutral[6]{1, 0, 0, 0, 1, 0};
+      bool identity = true;
+      for (u32 k = 0; k < 6; ++k) identity &= std::fabs(m[k] - neutral[k]) <= 1e-6f;
+      if (!identity) ++entry.transformed;
+    }
     return true;
   }
 
@@ -634,6 +684,7 @@ struct Importer {
     // e precisa de alguma coisa para apontar.
     out->materials.resize(count + 1);
     out->materialNames.assign(count + 1, std::string());
+    uvTransforms.assign(count + 1, {});
     for (auto &material : out->materials) {
       material.baseColorFactor[0] = material.baseColorFactor[1] = material.baseColorFactor[2] = 1;
       material.baseColorFactor[3] = 1;
@@ -657,17 +708,17 @@ struct Importer {
         target.roughness = static_cast<float>(json->number(*pbr, "roughnessFactor", 1));
         target.metallic = static_cast<float>(json->number(*pbr, "metallicFactor", 1));
         // Cor base em sRGB; metálico/rugosidade é dado linear (canais G e B).
-        assignTexture(root, *pbr, "baseColorTexture", true, 0, target, 0);
-        assignTexture(root, *pbr, "metallicRoughnessTexture", false, 2, target, renderer::MapMaterialMetallicRoughnessMap);
+        assignTexture(root, *pbr, "baseColorTexture", true, 0, target, 0, i);
+        assignTexture(root, *pbr, "metallicRoughnessTexture", false, 2, target, renderer::MapMaterialMetallicRoughnessMap, i);
       }
       float emissive[3]{0, 0, 0};
       if (!readVector(source, "emissiveFactor", emissive, 3)) return false;
       std::copy(emissive, emissive + 3, target.emissiveFactorAndStrength);
       target.emissiveFactorAndStrength[3] = 1;
-      if (assignTexture(root, source, "normalTexture", false, 1, target, renderer::MapMaterialNormalMap))
+      if (assignTexture(root, source, "normalTexture", false, 1, target, renderer::MapMaterialNormalMap, i))
         if (const auto *normal = json->member(source, "normalTexture"); normal && normal->kind == Kind::Object)
           target.normalScale = static_cast<float>(json->number(*normal, "scale", 1));
-      assignTexture(root, source, "emissiveTexture", true, 3, target, renderer::MapMaterialEmissiveMap);
+      assignTexture(root, source, "emissiveTexture", true, 3, target, renderer::MapMaterialEmissiveMap, i);
       // Oclusão não tem slot no quadro de material deste renderer: declarada,
       // nunca aproximada em silêncio.
       if (json->member(source, "occlusionTexture")) ++out->unappliedOcclusion;
@@ -679,6 +730,11 @@ struct Importer {
       }
       if (json->boolean(source, "doubleSided", false)) target.flags |= renderer::MapMaterialDoubleSided;
     }
+    for (const auto &sets : uvTransforms)
+      for (const auto &entry : sets) {
+        if (entry.conflict) out->unappliedTextureTransforms += entry.transformed;
+        else out->bakedTextureTransforms += entry.transformed;
+      }
     return true;
   }
 
@@ -899,6 +955,24 @@ struct Importer {
     range.material = material >= 0 && static_cast<usize>(material) + 1 < out->materials.size()
                          ? static_cast<u32>(material)
                          : static_cast<u32>(out->materials.size() - 1);
+    // KHR_texture_transform: quando todas as texturas do material num conjunto de
+    // UV concordam, a transformação é assada nas UVs desta primitiva — antes das
+    // tangentes geradas, que precisam seguir as UVs que o shader amostra.
+    if (range.material < uvTransforms.size())
+      for (u32 set = 0; set < 2; ++set) {
+        const auto &entry = uvTransforms[range.material][set];
+        if (!entry.transformed || entry.conflict) continue;
+        for (u32 v = 0; v < position.count; ++v) {
+          u8 *vertex = write + static_cast<usize>(v) * renderer::MapVertexStride;
+          float uv[2];
+          std::memcpy(uv, vertex + 28 + set * 8, 8);
+          const float u = entry.m[0] * uv[0] + entry.m[1] * uv[1] + entry.m[2];
+          const float w = entry.m[3] * uv[0] + entry.m[4] * uv[1] + entry.m[5];
+          uv[0] = u;
+          uv[1] = w;
+          std::memcpy(vertex + 28 + set * 8, uv, 8);
+        }
+      }
     // glTF: sem TANGENT, quem importa gera as tangentes quando o material tem
     // mapa normal. Tangente zero vira NaN na base TBN e a superfície fica preta
     // (visto no Porsche real: 46 primitivas com mapa normal e sem TANGENT).

@@ -21,7 +21,8 @@ namespace ae::resources {
 // | TRIANGLES, TRIANGLE_STRIP e TRIANGLE_FAN | pontos e linhas |
 // | POSITION, NORMAL, TEXCOORD_0/1, TANGENT, COLOR_0 | WebP, AVIF e imagens externas |
 // | fatores PBR, emissivo, alfa e dupla face | materiais avançados |
-// | texturas PNG/JPEG/KTX2 embutidas (cor, normal, MR, emissiva) | oclusão e KHR_texture_transform |
+// | texturas PNG/JPEG/KTX2 embutidas (cor, normal, MR, emissiva) | oclusão |
+// | KHR_texture_transform assado nas UVs quando o material concorda | transformação que diverge no material |
 // | Draco e meshopt (resources/gltf_codecs.h) | KTX2 HDR, cubemap e array |
 //
 // Texturas (Entrega 3) são decodificadas com stb_image vendorizado, porque o
@@ -134,6 +135,10 @@ struct GltfImport {
   // Aparência que o perfil ainda não reproduz, contada por slot: a textura é
   // aplicada sem a transformação de UV, e a oclusão não entra no shader.
   u32 unappliedTextureTransforms = 0, unappliedOcclusion = 0;
+  // Referências com KHR_texture_transform assadas nas UVs (Entrega 4): todas as
+  // texturas do material naquele conjunto de UV concordavam na transformação.
+  // As que divergem continuam em `unappliedTextureTransforms`.
+  u32 bakedTextureTransforms = 0;
   // Texturas aplicadas com resolução reduzida por `maximumTextureDimension`.
   u32 reducedTextures = 0;
   // Uso efetivo dos codecs (Entrega 4): primitivas Draco decodificadas,

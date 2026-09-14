@@ -5,6 +5,7 @@
 [ok] m09e4_draco_primitive_decodes_the_quantized_quad_with_its_orientation
 [ok] m09e4_ktx2_etc1s_and_uastc_transcode_to_rgba8
 [ok] m09e4_negative_scale_becomes_positive_trs_with_mirrored_geometry_and_the_same_world
+[ok] m09e4_texture_transform_is_baked_into_uvs_when_the_material_agrees
 [ok] m09e4_basisu_only_texture_is_applied_through_the_same_texture_pipeline
 
-8/8 testes passaram
+9/9 testes passaram

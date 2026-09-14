@@ -36,11 +36,21 @@ Escala negativa continua proibida no grafo de cena (`isTransformValid`), no edit
 
 Decisão registrada: guardar o GLB empacotado em vez dos arquivos soltos. Os bytes das dependências ficam no projeto do mesmo jeito, a transação atômica continua sendo de um arquivo, e a identidade de nós (Entrega 1) e a reimportação seguem o mesmo caminho do GLB.
 
+## Transformação de UV assada (implementada)
+
+A Entrega 3 deixava `KHR_texture_transform` sem efeito porque o bloco de push constants do material não tem espaço para a matriz. A transformação passou a ser aplicada nas UVs da primitiva, na importação:
+
+- A matriz é a do glTF (translação · rotação anti-horária · escala, em colunas), inclusive o `texCoord` da extensão, que troca o conjunto de UV da textura.
+- Por material e por conjunto de UV, todas as texturas aplicadas precisam concordar. Se uma usa a transformação e outra no mesmo conjunto não usa (ou usa outra), nada é assado naquele conjunto e as transformações continuam contadas como não aplicadas, com a prévia dizendo isso.
+- A aplicação acontece antes da geração de tangentes, que seguem as UVs que o shader amostra; espelhamento e empacotamento usam as UVs já transformadas.
+- Efeito medido: o Ford comprimido pelo `gltfpack` (UV quantizada) passou de 19 transformações não aplicadas para 19 assadas; o CarConcept, de 12 para 12 assadas.
+
 ## Limitações declaradas
 
 - KTX2 é transcodificado para RGBA8 na CPU. Não há negociação de formato comprimido de GPU (ASTC/ETC2) com o aparelho: a memória de GPU de uma textura KTX2 é a mesma de um PNG da mesma resolução.
 - KTX2 HDR, cubemap e array são recusados com motivo; só o nível 0 é transcodificado e os mips são refeitos.
-- `gltfpack` quantiza UV por padrão e compensa com `KHR_texture_transform`, que continua não aplicado (Entrega 3). Arquivos assim importam com a geometria certa e as texturas desalinhadas, e a prévia conta as transformações não aplicadas.
+- A transformação de UV é assada pelo material da FONTE. Se o usuário trocar o slot para outro material da mesma fonte com transformação diferente, as UVs continuam com a transformação do material original.
+- Materiais cujas texturas discordam na transformação de UV dentro do mesmo conjunto continuam sem ela (contadas na prévia).
 - O orçamento de expansão é por importação. A decodificação Draco aloca internamente antes de o orçamento da saída ser conferido.
 - A reflexão duplica a geometria de primitivas usadas por nós refletidos e não refletidos ao mesmo tempo.
 

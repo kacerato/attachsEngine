@@ -517,10 +517,10 @@ int probeReimportGlb(const char *path) {
   const auto parseStart = Clock::now();
   if (!resources::importGlb(bytes, {}, {}, model)) { std::fprintf(stderr, "PARSE: %s\n", model.diagnostic.c_str()); return 1; }
   const auto parseEnd = Clock::now();
-  std::printf("%s: parse_ms=%.1f textures=%zu texture_mb=%.1f reduced=%u generated_tangents=%u draco=%u meshopt_views=%u ktx2=%u mirrored=%u skipped_textures=%u unapplied_transforms=%u unapplied_occlusion=%u\n",
+  std::printf("%s: parse_ms=%.1f textures=%zu texture_mb=%.1f reduced=%u generated_tangents=%u draco=%u meshopt_views=%u ktx2=%u mirrored=%u baked_transforms=%u skipped_textures=%u unapplied_transforms=%u unapplied_occlusion=%u\n",
               path, ms(parseStart, parseEnd), model.textures.size(), static_cast<double>(model.textureBytes) / 1048576.0,
               model.reducedTextures, model.generatedTangentPrimitives, model.dracoPrimitives, model.meshoptViews,
-              model.ktx2Images, model.mirroredNodes, model.skippedTextures,model.unappliedTextureTransforms, model.unappliedOcclusion);
+              model.ktx2Images, model.mirroredNodes, model.bakedTextureTransforms, model.skippedTextures,model.unappliedTextureTransforms, model.unappliedOcclusion);
   for (const auto &note : model.textureNotes) std::printf("  nota: %s\n", note.c_str());
   Project project;
   EditorSession session;

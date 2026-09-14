@@ -2215,6 +2215,9 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   if(!model.textures.empty())
     state_.importSummary+="\nTexturas: "+std::to_string(model.textures.size())+" aplicadas ("+
       std::to_string((model.textureBytes+(u64{1}<<19))>>20)+" MB com mipmaps).";
+  if(model.bakedTextureTransforms)
+    state_.importSummary+="\nTransformação de UV (KHR_texture_transform) aplicada nas UVs em "+
+      std::to_string(model.bakedTextureTransforms)+" referência(s) de textura.";
   if(model.mirroredNodes)
     state_.importSummary+="\nReflexão (escala negativa) resolvida em "+std::to_string(model.mirroredNodes)+
       " nó(s): geometria espelhada e pose com escala positiva.";
