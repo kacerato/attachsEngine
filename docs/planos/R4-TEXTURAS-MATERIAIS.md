@@ -152,6 +152,56 @@ Limites desta fatia, ditos explicitamente:
 - acima de **1024 desenhos** com transformação, os excedentes ficam sem ela, com um aviso único no log;
 - rotação com escala não uniforme aproxima o referencial do mapa normal (a rotação é correta; a escala desigual inclina a base).
 
+## 11. Auditoria contra o relatório e sexta fatia: extensão de material por desenho
+
+Uma auditoria linha a linha contra a seção 7.2 e a seção 8 do relatório mostrou que o R4 ainda não estava completo. Esta fatia fecha T04, T06, T20, T21 e o tratamento de sombras de T22.
+
+| Parte | O que faz | Host | Aparelho |
+|---|---|---|---|
+| Oclusão (T21) | origem por slot: da fonte / sem / canal do metal-rugosidade / **textura própria do projeto**; **força** 0–1 e canal; a textura própria é dado linear e usa o conjunto de UV e a amostragem do metal/rugosidade | sim (`r4_occlusion_channels_normal_and_alpha_source_resolve_reach_the_extension_and_persist`) | pendente |
+| Canais (T20) | de qual canal da imagem vêm rugosidade, metal e oclusão (R, G, B, A) | sim | pendente |
+| Normal (T06) | inversão Y (convenção DirectX), além da intensidade que já existia | sim (`r4_material_tab_isolates_a_channel_and_flips_normal_y_per_instance`) | pendente |
+| Origem do alfa (T04) | alfa da cor base, ignorar (opaco) ou luminância da cor base; vale no sombreamento, na cobertura e na sombra | sim | pendente |
+| Isolar na prévia (T21) | mostra só oclusão, rugosidade, metal, alfa ou normal no slot em edição; transitório, nunca salvo, nunca em Play | sim | pendente |
+| Sombra pelo material efetivo (T22) | a sombra recorta pela textura, corte, conjunto de UV, transformação de UV e origem do alfa do material trocado (antes: sempre da fonte); `ShadowPushConstants` em 128 bytes | shaders validados | pendente |
+| GPU | a entrada da tabela por desenho (set=1, binding=16) passou de 8 para 12 linhas vec4; o padrão da fonte é resolvido na CPU; a textura de oclusão própria só existe com descritores bindless | sim (entrada) | pendente |
+| Formatos | `MeshRenderer` **v8** e `MaterialAsset` **v6** (canais, oclusão, textura de oclusão, normal, alfa); versões anteriores abrem | sim | pendente |
+| Interface | aba Material com sete linhas novas (Oclusão, Textura de oclusão, Força, Canais, Mapa normal, Origem do alfa, Isolar na prévia); o seletor de textura serve à oclusão | sim | pendente |
+
+Limites: a oclusão própria não existe no caminho sem bindless (quatro samplers fixos por material); o caminho indireto em lote não recebe a extensão.
+
+## 12. Sétima fatia: perfil por textura e anisotropia aplicada
+
+| Parte | O que faz | Host | Aparelho |
+|---|---|---|---|
+| Perfil por textura | `.astra/textures/<guid>.profile`: interpretação (pelo uso / cor sRGB / dado linear, T03), tamanho máximo (T07, nunca acima do teto do projeto), mipmaps sim/não (T10), bordas sem halo (T05: dilatação da cor sob alfa zero antes dos mips, sem mudar o alfa) e anisotropia desligável (T13) | sim (`r4_texture_profile_round_trips_fails_closed_and_dilates_edges`, `r4_texture_profile_changes_interpretation_mips_anisotropy_and_is_read_back_on_reopen`) | sim (Mipmaps: não aplicado e revertido na `imagem-1.png`) |
+| Aplicar | grava o perfil, invalida a decodificação daquela textura e republica; lido de novo na reabertura | sim | sim |
+| Residência por textura (T08/T16) | "Na GPU: L×A · níveis · MB" depois do perfil e do orçamento, por combinação de uso | sim | sim ("Na GPU: não usada" numa textura sem usos) |
+| **Anisotropia (T13) — defeito encontrado** | a política calculava a anisotropia e a registrava no log, mas **nenhum sampler a usava** e, pior, o dispositivo Vulkan era criado **sem pedir a feature `samplerAnisotropy`**: o limite ficava 1 e o log dizia "reduzido por capability" em qualquer aparelho. Agora a feature é pedida quando a GPU suporta e a anisotropia chega aos samplers do pacote e da autoria, salvo quando o perfil da textura a desliga | sim | antes da correção: "aniso=1.0 … reduzido por capability"; depois (APK `1AD975F7…FCEA`): "aniso=8.0" na política e "anisotropia de material=8.0" nos samplers |
+
+Limite: texturas embutidas nas fontes seguem o perfil de importação da fonte (R3); para escolher por textura, extraia a imagem.
+
+## 13. Oitava fatia: textura em Propriedades e gerenciador de texturas
+
+| Parte | O que faz | Host | Aparelho |
+|---|---|---|---|
+| Textura em Propriedades (T01/T11/T14/T15/T18) | tocar numa textura em Arquivos mostra em Propriedades o visualizador (canal, mip, zoom, fundo), o perfil, a residência e **os usuários** (objetos da cena, selecionáveis, e materiais do projeto); mudar a seleção da cena devolve Propriedades ao objeto | sim (`r4_texture_manager_filters_searches_and_the_inspector_lists_users`) | sim ("Usuários (0)", perfil e visualizador da `imagem-1.png`) |
+| Gerenciador (seção 6 do relatório) | tocar na pasta Texturas (ou numa subpasta) abre a grade com miniaturas paginada | sim | sim (19 texturas, 3 páginas) |
+| Busca | por nome ou pasta, sem diferenciar maiúsculas, pelo teclado do aparelho ("Buscar textura") | sim | pendente |
+| Filtros | Todas, Não usadas, Ausentes (arquivo ilegível), Alteradas (conteúdo diferente do hash registrado), Sem alfa (nenhum texel com alfa abaixo de 255, analisado pela miniatura) e Acima do teto | sim | sim (Não usadas: 19; Sem alfa: 16, sem a `imagem-1.png`, que tem transparência) |
+
+Limites: "Sem alfa" só conhece as texturas cuja miniatura já foi gerada (50 primeiras); substituir fonte, relocalizar e duplicar variante são W05/W07 do R6.
+
+## 14. Nona fatia: publicação incremental da biblioteca (critério do R2 e do R4)
+
+| Parte | O que faz | Host | Aparelho |
+|---|---|---|---|
+| Texturas | uma textura que chega como o mesmo objeto compartilhado da publicação anterior mantém a imagem (e o sampler, se a anisotropia não mudou) na GPU; só as novas sobem | sim (`r2_r4_authoring_library_reuses_only_the_same_shared_textures`) | sim: abertura "122 publicadas (0 reaproveitadas, 122 enviadas); geometria enviada"; mudar o perfil de uma textura sem usos: "**122 reaproveitadas, 0 enviadas; geometria reaproveitada**" |
+| Geometria | vértices e índices com os mesmos bytes mantêm os buffers | — (Vulkan) | sim (idem) |
+| Falha fechada | nada da biblioteca antiga muda de dono antes de todas as partes novas existirem | — | — |
+
+Limites: buffers de instância, filas de desenho e descritores ainda são recriados a cada publicação (custo de CPU e de alocação pequena); uma textura reduzida pelo orçamento agregado vira cópia nova e sobe de novo.
+
 ## 5. Fora desta fatia, dito explicitamente
 
 - ~~Miniaturas, visualizador de canais e mips, zoom/fundo~~: feitos na seção 8 (zoom só no centro).

@@ -78,3 +78,11 @@ Suíte do host: 898/900 (as duas falhas antigas de R0). APK com R2: `53A52678…
 - Na quente, parte do tempo por fonte é ler a fonte inteira e calcular o SHA-256 dela. Nesta medição o log ainda somava isso em `leitura_derivado_ms`; o log agora separa `leitura_fonte_hash_ms`. Validar o conteúdo sem reler a fonte (tamanho e data com o hash do registro) é a próxima redução possível, e exige cuidado para não aceitar uma fonte trocada.
 
 Fora deste bloco, e dito explicitamente: carregamento sob demanda por cena, separação entre handles autorais e posições de buffer, publicação incremental com épocas, cache de derivados GPU e contabilização de geometria e staging no orçamento continuam como trabalho de R2 que não foi feito.
+
+**Atualização (15/09/2026, R4 §14):** a publicação da biblioteca de autoria ficou incremental para texturas e geometria. Uma textura que chega como o mesmo objeto compartilhado mantém a imagem na GPU, e vértices e índices com os mesmos bytes mantêm os buffers. No aparelho, mudar o perfil de uma textura sem usos republicou com "122 reaproveitadas, 0 enviadas; geometria reaproveitada", contra "122 enviadas" na abertura. Continuam de fora:
+- buffers de instância, filas de desenho e descritores, ainda recriados a cada publicação;
+- texturas reduzidas pelo orçamento, que viram cópia nova e sobem de novo;
+- épocas explícitas;
+- carregamento sob demanda;
+- cache de derivados GPU;
+- geometria e staging no orçamento.

@@ -89,28 +89,28 @@ Estados do relatório: **E** existente a preservar · **P** parcial · **N** lac
 
 | ID | Função | Rel. | Implementado | Integrado ao editor | Host | Aparelho | Pacote |
 |---|---|---|---|---|---|---|---|
-| T01 | Identidade de textura | N | parcial (R4: recurso Texture com GUID e reuso por conteúdo; sem lista de usuários) | parcial (seletor) | sim | parcial | R4 |
+| T01 | Identidade de textura | N | sim (R4: recurso Texture com GUID e reuso por conteúdo; R4 §13: textura em Propriedades com a lista de usuários) | sim (Arquivos > textura) | sim | sim (usuários da `imagem-1.png`) | R4 |
 | T02 | Extração de embutidas | N | sim (R4: PNG/JPEG com bytes originais; KTX2 fica de fora) | sim (Arquivos > Texturas) | sim | sim | R4/R6 |
-| T03 | Cor/dados | E/P | sim (pelo uso) | — | sim | sim | R4 |
-| T04 | Origem do alpha | P | parcial (alpha da cor base) | — | sim | — | R4 |
-| T05 | Bordas transparentes | N | — | — | — | — | R4 |
-| T06 | Convenção de normal | P | parcial (escala; sem inversão Y) | — | sim | — | R4 |
-| T07 | Resolução por recurso | P | parcial (limite automático + R3: textura máxima no perfil da fonte; ainda não por textura) | sim (aba Perfil) | sim | parcial (limite automático conferido na E3) | R2/R4 |
+| T03 | Cor/dados | E/P | sim (pelo uso; R4 §12: interpretação cor/dado no perfil da textura) | sim (perfil da textura) | sim | sim (pelo uso) | R4 |
+| T04 | Origem do alpha | P | sim (R4 §11: cor base, opaco ou luminância, no sombreamento, cobertura e sombra) | sim (aba Material) | sim | pendente | R4 |
+| T05 | Bordas transparentes | N | sim (R4 §12: dilatação da cor sob alfa zero no perfil da textura) | sim (perfil da textura) | sim | pendente | R4 |
+| T06 | Convenção de normal | P | sim (escala; R4 §11: inversão Y por slot) | sim (aba Material) | sim | pendente | R4 |
+| T07 | Resolução por recurso | P | sim (R3: teto no perfil da fonte; R4 §12: tamanho máximo por textura do projeto) | sim (aba Perfil e perfil da textura) | sim | parcial (limite automático conferido na E3) | R2/R4 |
 | T08 | Formato de plataforma | P | parcial (ASTC 4x4 para KTX2 com mips) | parcial (prévia) | sim | sim | R2/R4 |
 | T09 | Compressão e qualidade | P | — | — | — | — | R4/R9 |
-| T10 | Mipmaps | E/P | sim (gerados ou do KTX2) | — | sim | sim | R4 |
+| T10 | Mipmaps | E/P | sim (gerados ou do KTX2; R4 §12: desligáveis por textura do projeto) | sim (perfil da textura) | sim | sim (Mipmaps: não aplicado e revertido) | R4 |
 | T11 | Inspeção de mip | N | sim (R4 §8: cadeia gerada do arquivo, nível e dimensões) | sim (seletor > Ver) | sim | sim (nível 5 de 10 · 32×32) | R4 |
 | T12 | Filtro e repetição | E/P | sim (sampler do arquivo; R4 §9: repetir/limitar/espelhar e linear/próximo por binding para textura do projeto) | sim (seletor de textura) | sim | parcial (limitar/próximo aplicados e revertidos; efeito visual não isolado) | R4 |
-| T13 | Anisotropia | A | parcial (política global do renderer) | — | — | — | R4/R9 |
+| T13 | Anisotropia | A | sim (auditada: política calculada mas nunca aplicada e feature Vulkan nunca pedida; R4 §12: feature pedida, aplicada aos samplers, desligável por textura) | sim (perfil da textura) | sim | sim (antes: "aniso=1.0 … reduzido por capability"; depois: "aniso=8.0", "anisotropia de material=8.0") | R4/R9 |
 | T14 | Canais RGBA | N | sim (R4 §8: RGBA, R, G, B, A) | sim (seletor > Ver) | sim | sim (Vermelho) | R4 |
 | T15 | Zoom e fundo | N | parcial (R4 §8: zoom 1–8× só no centro, sem arrastar; fundo xadrez/preto/branco) | sim (seletor > Ver) | sim | sim (4×, preto) | R4 |
-| T16 | Memória e resolução efetiva | P | parcial (MB por importação; R2: pedidos × residentes do projeto) | parcial (console e log) | sim | parcial (log `[Residencia]` 339 MB) | R2/R4 |
+| T16 | Memória e resolução efetiva | P | sim (MB por importação; R2: pedidos × residentes do projeto; R4 §12: fonte e residência por textura do projeto) | sim (textura em Propriedades: "Na GPU") | sim | parcial (log `[Residencia]` 339 MB; "Na GPU" conferido só numa textura sem usos) | R2/R4 |
 | T17 | Streaming por orçamento | A | parcial (R2: teto agregado reduz mips na publicação; sem streaming por uso) | parcial | sim | — (projeto medido cabe no teto; redução não exercitada) | R2/R9 |
-| T18 | Textura no material | N | parcial (R4: 4 bindings por instância e compartilhado; miniaturas no seletor; sem sampler/UV por binding) | sim (aba Material + seletor) | sim | parcial (instância) | R4 |
+| T18 | Textura no material | N | sim (R4: 4 bindings e oclusão por instância e compartilhado; miniaturas; sampler, UV e transformação por binding; localizar recurso e usuários) | sim (aba Material, seletor, Arquivos) | sim | parcial (instância no aparelho; compartilhado só no host) | R4 |
 | T19 | Transformação por uso | P | sim (assada na importação quando o material concorda; R4 §9–10: canal de UV e deslocamento/escala/rotação por binding, lidos no shader) | sim (seletor de textura) | sim | sim (importação); sim (canal de UV); sim (transformação por binding: escala 2 e rotação 90° visíveis na carroceria, revertido; giro do mapa normal não isolado) | R4 |
-| T20 | Empacotamento de canais | P | parcial (MR importado) | — | sim | — | R4 |
-| T21 | Oclusão | N | parcial (R4: ORM no canal R do metal/rugosidade; textura própria segue declarada) | sim (prévia diz aplicada/não aplicada) | sim | parcial | R4 |
-| T22 | Corte alfa e transparência | P | sim (R4: modo e corte por instância e material; fila segue o modo efetivo) | sim (aba Material) | sim | parcial (fluxo; efeito não observável no modelo) | R4 |
+| T20 | Empacotamento de canais | P | sim (MR importado; R4 §11: canais de rugosidade, metal e oclusão por slot) | sim (aba Material) | sim | pendente | R4 |
+| T21 | Oclusão | N | sim (R4: ORM do glTF; R4 §11: textura própria, força, canal e isolar na prévia; só com bindless) | sim (aba Material) | sim | parcial (ORM sem regressão; oclusão própria pendente) | R4 |
+| T22 | Corte alfa e transparência | P | sim (R4: modo e corte por instância e material; fila segue o modo efetivo; §11: sombra recorta pelo material efetivo) | sim (aba Material) | sim | parcial (fluxo; efeito não observável no modelo; sombra pendente) | R4 |
 | T23 | Dupla face | P | sim (R4: culling real por material com estado dinâmico; sem ele, declarado) | sim (aba Material) | sim | parcial (culling ativo sem regressão; troca sem efeito visível no modelo) | R4 |
 | T24 | Verniz | N | — | — | — | — | R9 |
 | T25 | Cubemap, array e HDR | N | — (recusados) | — | sim (recusa) | — | R9 |
