@@ -809,7 +809,10 @@ AE_TEST(m08e2_legacy_parts_become_slots_only_when_nothing_is_lost) {
     AE_EXPECT_TRUE(render && render->slotCount() == 3u, "três slots no objeto do nó");
     AE_EXPECT_TRUE(render && render->slotMaterial(1).enabled && render->slotMaterial(1).baseColor[0] == .25f,
                    "o material local da segunda parte foi preservado no slot");
-    AE_EXPECT_EQ(session.importLinkOverrides(panel), 0u, "a base migrou junto: nada aparece como alteração");
+    // A base migrou junto: malha, pose e pai não aparecem como alteração. O
+    // material local da segunda parte é alteração real e aparece (R4).
+    AE_EXPECT_EQ(session.importLinkOverrides(panel), static_cast<u32>(ImportOverrideMaterial),
+                 "a base migrou junto: só o material local aparece como alteração");
     std::vector<renderer::MapDrawState> states;
     AE_EXPECT_TRUE(session.extractMap(states), "extração depois da migração");
   }

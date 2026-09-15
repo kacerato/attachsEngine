@@ -46,7 +46,7 @@ Medido no aparelho:
 - reabrir um projeto cuja cena usa textura do projeto custa **uma segunda publicação** depois da cena (`cena_ms`=3242 contra 29 sem troca), como previsto na seção 2;
 - as imagens do GLB do Ford não têm nome no arquivo e viram `imagem-N.png`; o seletor mostra dimensões e caminho para distinguir.
 
-Visto no aparelho e **ainda não corrigido**: o cartão do vínculo com a fonte continua dizendo "igual à fonte" com uma textura trocada nesta instância, porque a contagem de substituições do vínculo (M08.2) não inclui texturas.
+Visto no aparelho e **corrigido depois**: o cartão do vínculo com a fonte dizia "igual à fonte" com uma textura trocada nesta instância, porque a contagem de substituições do vínculo (M08.2) não olhava material nenhum. Agora `ImportOverrideMaterial` conta qualquer material local do objeto (valores, material do projeto ou textura trocada em algum slot). O menu do vínculo ganhou "Reverter material à fonte", que desfaz os três em todos os slots pelo histórico. O teste `m08e2_legacy_parts_become_slots_only_when_nothing_is_lost` passou a exigir exatamente esse bit para a peça legada que tem material local, em vez de zero. Conferido no host (`r4_textures_extract_from_source_and_resolve_per_instance_and_shared_scope`, 903/905); **ainda não conferido no aparelho**.
 
 Estado do projeto de validação: as 19 texturas extraídas ficaram em `Texturas/` e no registro; a troca na cena foi revertida com Herdar e a cena salva não cita a textura.
 

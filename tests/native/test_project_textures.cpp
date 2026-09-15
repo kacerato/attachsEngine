@@ -304,4 +304,14 @@ AE_TEST(r4_textures_extract_from_source_and_resolve_per_instance_and_shared_scop
   AE_EXPECT_TRUE(session.setSlotTexture(object, 0, 0, EditorSession::MaterialScope::Instance, texture, diagnostic), diagnostic.c_str());
   AE_EXPECT_TRUE(effective(0) != renderer::InvalidMapTexture && effective(0) != scene::MaterialTextureKeep,
                  "a instância volta a ter cor base sobre o compartilhado");
+
+  // Visto no aparelho: o vínculo com a fonte dizia "igual à fonte" com textura trocada.
+  AE_EXPECT_TRUE((session.importLinkOverrides(object) & ImportOverrideMaterial) != 0,
+                 "material local conta como alteração do vínculo");
+  AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");
+  const auto *reverted = meshRenderer(*session.document().find(object));
+  AE_EXPECT_TRUE(!reverted->textures[0].valid() && !reverted->materialAsset.valid() && !reverted->material.enabled,
+                 "textura, material do projeto e valores locais voltam à fonte");
+  AE_EXPECT_EQ(effective(0), scene::MaterialTextureKeep, "cor base de novo a da fonte");
+  AE_EXPECT_EQ(session.importLinkOverrides(object) & ImportOverrideMaterial, 0u, "vínculo volta a ser igual à fonte no material");
 }

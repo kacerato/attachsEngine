@@ -46,7 +46,9 @@ enum ImportOverride : u32 {
   ImportOverrideScale = 8,
   ImportOverrideParent = 16,
   ImportOverrideMesh = 32,
-  ImportOverrideAll = 63
+  // R4: material local de algum slot (valores, material do projeto ou textura trocada).
+  ImportOverrideMaterial = 64,
+  ImportOverrideAll = 127
 };
 
 // Pose local de um nó do mapa em TRS. Falso quando a matriz não cabe em TRS.

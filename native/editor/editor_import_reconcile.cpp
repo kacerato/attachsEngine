@@ -614,6 +614,11 @@ u32 importOverrides(const EditorDocument &document, EditorEntityId id) {
       mask |= ImportOverrideParent;
   }
   if (slotAssets(*entity) != link->baseSlots()) mask |= ImportOverrideMesh;
+  // A fonte decide o material enquanto nenhum slot troca valores, material do
+  // projeto ou textura; qualquer um desses é alteração local visível no vínculo.
+  if (const auto *render = meshRenderer(*entity))
+    for (u32 slot = 0; slot < render->slotCount(); ++slot)
+      if (slotCarriesMaterial(*render, slot)) { mask |= ImportOverrideMaterial; break; }
   return mask;
 }
 
@@ -631,6 +636,13 @@ bool revertImportOverrides(EditorDocument &document, EditorHistory &history, Edi
   if (mask & ImportOverrideRotation) copyVector(values.transform.rotationDegrees, link.baseRotation);
   if (mask & ImportOverrideScale) copyVector(values.transform.scale, link.baseScale);
   if (mask & ImportOverrideMesh) setSlots(values, link.baseSlots(), slotOf);
+  if (mask & ImportOverrideMaterial)
+    if (auto *render = editMeshRenderer(values))
+      for (u32 slot = 0; slot < render->slotCount(); ++slot) {
+        render->editSlotMaterial(slot)->enabled = false;
+        *render->editSlotMaterialAsset(slot) = {};
+        *render->editSlotTextures(slot) = {};
+      }
   history.begin("Reverter à fonte");
   bool ok = history.applyValues(document, id, values);
   if (ok && (mask & ImportOverrideParent)) {

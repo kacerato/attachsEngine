@@ -1162,7 +1162,8 @@ void buildImportLinkCard(ScreenBuilder &builder, UiRect &content) {
       const struct {u32 bit;const char *label;} fields[]{
           {ImportOverrideName,"Reverter nome à fonte"},{ImportOverridePosition,"Reverter posição à fonte"},
           {ImportOverrideRotation,"Reverter rotação à fonte"},{ImportOverrideScale,"Reverter escala à fonte"},
-          {ImportOverrideParent,"Reverter pai à fonte"},{ImportOverrideMesh,"Reverter malha à fonte"}};
+          {ImportOverrideParent,"Reverter pai à fonte"},{ImportOverrideMesh,"Reverter malha à fonte"},
+          {ImportOverrideMaterial,"Reverter material à fonte"}};
       for(const auto &field:fields) if(view.overrides&field.bit) actions.push_back({field.label,widgetId(EditorWidget::ImportLinkRevertBase)+field.bit});
       if(std::popcount(view.overrides)>1) actions.push_back({"Reverter tudo à fonte",widgetId(EditorWidget::ImportLinkRevertBase)+ImportOverrideAll});
       actions.push_back({"Desvincular instância",widgetId(EditorWidget::ImportLinkUnlink)});

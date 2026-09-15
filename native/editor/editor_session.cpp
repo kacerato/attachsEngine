@@ -1049,7 +1049,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::MeshChoose)) {state_.meshPicker=true;state_.meshPage=0;return true;}
     // Vínculo com a fonte importada (M08.2).
     if(key==widgetId(EditorWidget::ImportLinkMenu)) {state_.importLinkMenu=!state_.importLinkMenu;return true;}
-    if(key>=widgetId(EditorWidget::ImportLinkRevertBase) && key<widgetId(EditorWidget::ImportLinkRevertBase)+64u) {
+    if(key>=widgetId(EditorWidget::ImportLinkRevertBase) && key<widgetId(EditorWidget::ImportLinkRevertBase)+128u) {
       state_.status=revertImportLink(state_.selection,key-widgetId(EditorWidget::ImportLinkRevertBase))?"Revertido para a fonte":"Nada a reverter";
       state_.importLinkMenu=false;return true;
     }
