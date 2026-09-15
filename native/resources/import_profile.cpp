@@ -1,0 +1,77 @@
+#include "resources/import_profile.h"
+#include "resources/json_reader.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+
+namespace ae::resources {
+namespace {
+bool isScaleStep(float scale) noexcept {
+  return std::any_of(ImportScaleSteps.begin(), ImportScaleSteps.end(),
+                     [scale](float step) { return std::fabs(step - scale) <= step * 1e-5f; });
+}
+bool isTextureStep(u32 dimension) noexcept {
+  return std::find(ImportTextureDimensionSteps.begin(), ImportTextureDimensionSteps.end(), dimension) !=
+         ImportTextureDimensionSteps.end();
+}
+} // namespace
+
+bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept {
+  return std::fabs(a.scale - b.scale) <= std::max(a.scale, b.scale) * 1e-5f &&
+         a.maximumTextureDimension == b.maximumTextureDimension;
+}
+
+bool validImportProfile(const ImportProfile &profile) noexcept {
+  return std::isfinite(profile.scale) && isScaleStep(profile.scale) && isTextureStep(profile.maximumTextureDimension);
+}
+
+std::string serializeImportProfile(const ImportProfile &profile) {
+  char scale[32];
+  std::snprintf(scale, sizeof scale, "%.9g", static_cast<double>(profile.scale));
+  return "{\"schema\":" + std::to_string(ImportProfileSchema) + ",\"scale\":" + scale +
+         ",\"maximumTextureDimension\":" + std::to_string(profile.maximumTextureDimension) + "}\n";
+}
+
+bool parseImportProfile(std::string_view text, ImportProfile &out) {
+  out = {};
+  JsonDocument document;
+  if (!JsonDocument::parse(text, document) || !document.root() || document.root()->kind != JsonDocument::Kind::Object)
+    return false;
+  const auto &root = *document.root();
+  if (document.index(root, "schema") != static_cast<i64>(ImportProfileSchema)) return false;
+  const auto *scale = document.member(root, "scale");
+  const auto dimension = document.index(root, "maximumTextureDimension");
+  if (!scale || scale->kind != JsonDocument::Kind::Number || dimension < 0) return false;
+  ImportProfile parsed;
+  parsed.scale = static_cast<float>(scale->number);
+  parsed.maximumTextureDimension = static_cast<u32>(std::min<i64>(dimension, 1 << 20));
+  if (!validImportProfile(parsed)) return false;
+  out = parsed;
+  return true;
+}
+
+GltfImportLimits applyImportProfile(GltfImportLimits limits, const ImportProfile &profile) {
+  if (!validImportProfile(profile)) return limits;
+  limits.rootScale = profile.scale;
+  limits.maximumTextureDimension = std::min(limits.maximumTextureDimension, profile.maximumTextureDimension);
+  limits.minimumTextureDimension = std::min(limits.minimumTextureDimension, limits.maximumTextureDimension);
+  return limits;
+}
+
+std::string importProfilePath(const AssetGuid &source) { return ".astra/imports/" + source.text() + ".profile"; }
+
+u32 nearestImportScaleStep(float scale) noexcept {
+  u32 best = 4;
+  float distance = INFINITY;
+  for (u32 i = 0; i < ImportScaleSteps.size(); ++i) {
+    // Distância em escala logarítmica: 0,5 está mais perto de 1 que de 0,1.
+    const float d = std::isfinite(scale) && scale > 0 ? std::fabs(std::log(scale / ImportScaleSteps[i])) : INFINITY;
+    if (d < distance) {
+      distance = d;
+      best = i;
+    }
+  }
+  return best;
+}
+} // namespace ae::resources

@@ -105,6 +105,11 @@ std::string importCacheKey(std::string_view sourceContentHash, const GltfImportL
                      "|textureDimension=" + number(limits.maximumTextureDimension) +
                      "|minimumTextureDimension=" + number(limits.minimumTextureDimension) +
                      "|expanded=" + number(limits.maximumExpandedBytes) + "|astc4x4=" + number(limits.astc4x4 ? 1 : 0) +
+                     "|rootScale=" + [&] {
+                       u32 bits = 0;
+                       std::memcpy(&bits, &limits.rootScale, sizeof bits);
+                       return number(bits);
+                     }() +
                      "|imageDimension=" + number(limits.image.maximumDimension) +
                      "|imagePixels=" + number(limits.image.maximumPixels) +
                      "|imageEncoded=" + number(limits.image.maximumEncodedBytes);

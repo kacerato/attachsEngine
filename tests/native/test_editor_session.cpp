@@ -627,6 +627,39 @@ void revealProperty(Fixture &fixture,u32 widget) {
   }
 }
 }
+AE_TEST(r3_import_lives_in_properties_and_does_not_block_the_editor) {
+  Fixture fixture;
+  fixture.session.beginImportPreparation();
+  resources::GltfImport model;
+  model.nodes.emplace_back();
+  model.nodes[0].name = "Raiz";
+  fixture.session.showImportPreview("Fontes/modelo.glb", model, {}, {});
+  fixture.session.update();
+  const auto scene = locateWidget(fixture.session, widgetId(EditorWidget::ImportIntoScene));
+  AE_EXPECT_TRUE(scene.x >= 0, "publicar na cena está no painel");
+  const auto panel = fixture.session.layout().inspectorPanel;
+  AE_EXPECT_TRUE(!panel.isEmpty() && scene.x >= panel.x && scene.x <= panel.x + panel.width, "dentro de Propriedades");
+
+  // Sem janela modal: o viewport continua respondendo com o importador aberto.
+  const auto before = fixture.session.camera();
+  const auto centre = fixture.viewportCentre();
+  fixture.down(3, centre);
+  for (u32 step = 1; step <= 6; ++step) fixture.move(3, {centre.x + static_cast<float>(step) * 12.0f, centre.y});
+  fixture.up(3, {centre.x + 72.0f, centre.y});
+  AE_EXPECT_TRUE(std::fabs(fixture.session.camera().yaw - before.yaw) > 1e-4f, "órbita do viewport funciona com o importador aberto");
+
+  // Mudar o perfil tira a publicação até preparar de novo.
+  tapWidget(fixture, widgetId(EditorWidget::ImportTabProfile));
+  tapWidget(fixture, widgetId(EditorWidget::ImportScaleUp));
+  AE_EXPECT_EQ(fixture.session.screen().importScale, 2.f, "passo seguinte a 1");
+  AE_EXPECT_TRUE(locateWidget(fixture.session, widgetId(EditorWidget::ImportIntoScene)).x < 0, "publicar some com perfil pendente");
+  tapWidget(fixture, widgetId(EditorWidget::ImportApplyProfile));
+  AE_EXPECT_TRUE(fixture.session.takeImportReprepare(), "o shell recebe o pedido de nova preparação");
+  AE_EXPECT_TRUE(!fixture.session.screen().importReady, "a prévia antiga não publica mais");
+  tapWidget(fixture, widgetId(EditorWidget::ImportCancel));
+  AE_EXPECT_TRUE(!fixture.session.screen().importPanel, "cancelar fecha o painel");
+}
+
 AE_TEST(session_viewport_down_is_consumed_and_duplicate_down_does_not_leave_a_ghost_finger) {
   Fixture f;const auto at=f.viewportCentre();
   AE_EXPECT_TRUE(f.session.handlePointer({1,UiPointerPhase::Down,at,0}),"editor owns down");

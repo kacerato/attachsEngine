@@ -32,6 +32,7 @@
 #include "resources/import_node_map.h"
 #include "resources/material_asset.h"
 #include "resources/texture_budget.h"
+#include "resources/import_profile.h"
 #include "editor/editor_import_reconcile.h"
 #include "editor/editor_archive.h"
 #include "editor/editor_document.h"
@@ -425,7 +426,9 @@ public:
   bool commitModelImport(std::span<const u8> bytes, const resources::GltfImport &model,
                          const std::string &path, const std::string &expectedHash, ModelImportReport &report,
                          resources::ImportAmbiguityPolicy policy=resources::ImportAmbiguityPolicy::Refuse);
-  void showImportPreview(std::string path, const resources::GltfImport &model, std::string_view contentHash={});
+  // `prepared` é o perfil com que o worker preparou `model`.
+  void showImportPreview(std::string path, const resources::GltfImport &model, std::string_view contentHash={},
+                         const resources::ImportProfile &prepared={});
   // Linha extra na preparação, dita por quem preparou os bytes (por exemplo, as
   // dependências de um .gltf empacotadas no GLB).
   void noteImportPreview(std::string line) {state_.importSummary+="\n"+std::move(line);}
@@ -439,7 +442,22 @@ public:
   void setImportTextureBudget(u64 bytes) {importTextureBudget_=bytes;}
   u64 importTextureBudget() const {return importTextureBudget_;}
   const resources::TextureBudgetReport &textureResidency() const {return textureResidency_;}
-  void beginImportPreparation() {state_.importPanel=true;state_.importReady=false;state_.importError=false;state_.importPage=0;state_.importIntoScene=false;state_.importSummary.clear();state_.importPath.clear();state_.importAmbiguities=0;state_.importAmbiguityChoice=0;state_.importStatus="Preparando recurso…";}
+  // Abre o importador em Propriedades. `path` já conhecido (reimportação) carrega
+  // o perfil guardado daquela fonte; sem caminho, o padrão do projeto.
+  void beginImportPreparation(std::string_view path={});
+  // R3: perfis. Fonte → padrão do projeto → embutido; arquivo inválido cai no próximo.
+  resources::ImportProfile importProfileFor(const resources::AssetGuid &source) const;
+  resources::ImportProfile projectImportProfile() const;
+  resources::ImportProfile importProfileForPath(std::string_view path) const;
+  bool saveImportProfile(const resources::AssetGuid &source, const resources::ImportProfile &profile);
+  bool saveProjectImportProfile(const resources::ImportProfile &profile);
+  // Rascunho do painel e os limites que ele produz neste aparelho.
+  resources::ImportProfile importProfileDraft() const {return {state_.importScale,state_.importTextureDimension};}
+  resources::GltfImportLimits importLimitsFor(const resources::ImportProfile &profile) const {
+    return resources::applyImportProfile(importLimits_,profile);
+  }
+  // O painel pediu nova preparação com o rascunho; o shell refaz o worker.
+  bool takeImportReprepare() {return std::exchange(state_.importReprepare,false);}
   resources::ImportAmbiguityPolicy importAmbiguityPolicy() const {
     return state_.importAmbiguityChoice==1?resources::ImportAmbiguityPolicy::MatchInOrder:
            state_.importAmbiguityChoice==2?resources::ImportAmbiguityPolicy::TreatAsNew:resources::ImportAmbiguityPolicy::Refuse;

@@ -1,0 +1,33 @@
+09-15 08:25:19.423 I/ActivityTaskManager( 3328): Displayed dev.aether.editor/.shell.AstraShellActivity for user 0: +318ms
+09-15 08:25:23.541 I/ActivityTaskManager( 3328): Displayed dev.aether.editor/.AetherActivity for user 0: +73ms
+09-15 08:25:24.736 I/Aether.Android( 3555): [Import] KTX2 com mips vira ASTC 4x4.
+09-15 08:25:24.748 I/Aether.Android( 3555): [Open] preparando 8 fonte(s) em segundo plano.
+09-15 08:25:24.753 I/Aether.Android( 3555): [Open] fonte preparada: Fontes/Astra_M08_Paineis.glb bytes=776 cache=falta leitura_fonte_hash_ms=2 leitura_derivado_ms=1 preparo_ms=4 gravacao_derivado_ms=1
+09-15 08:25:24.767 I/Aether.Android( 3555): Primeiro frame após ativação apresentado: ciclo=1. latency_ms=1183.242 uptime_ms=99822788.091
+09-15 08:25:33.293 I/Aether.Android( 3555): [Open] fonte preparada: Fontes/1965_ford_lotus_cortina_mk1.glb bytes=8171096 cache=falta leitura_fonte_hash_ms=378 leitura_derivado_ms=0 preparo_ms=6493 gravacao_derivado_ms=2046
+09-15 08:26:15.763 I/Aether.Android( 3555): [Open] fonte preparada: Fontes/free_1975_porsche_911_930_turbo.glb bytes=90461732 cache=falta leitura_fonte_hash_ms=4839 leitura_derivado_ms=0 preparo_ms=36425 gravacao_derivado_ms=5997
+09-15 08:26:16.305 I/Aether.Android( 3555): [Open] fonte preparada: Fontes/m082-veiculo.glb bytes=1064 cache=falta leitura_fonte_hash_ms=3 leitura_derivado_ms=0 preparo_ms=3 gravacao_derivado_ms=1
+09-15 08:26:16.306 I/Aether.Android( 3555): [Open] fonte preparada: Fontes/m08e2-painel.glb bytes=1284 cache=falta leitura_fonte_hash_ms=0 leitura_derivado_ms=0 preparo_ms=1 gravacao_derivado_ms=0
+09-15 08:26:16.399 I/Aether.Android( 3555): [Open] fonte preparada: Fontes/esfera-draco.glb bytes=14608 cache=falta leitura_fonte_hash_ms=1 leitura_derivado_ms=0 preparo_ms=83 gravacao_derivado_ms=11
+09-15 08:26:18.061 I/Aether.Android( 3555): [Open] fonte preparada: Fontes/CarConcept.glb bytes=10267996 cache=falta leitura_fonte_hash_ms=616 leitura_derivado_ms=0 preparo_ms=1432 gravacao_derivado_ms=230
+09-15 08:26:28.625 I/Aether.Android( 3555): [Open] fonte preparada: Fontes/ford-lotus-espelho.glb bytes=8171148 cache=falta leitura_fonte_hash_ms=410 leitura_derivado_ms=0 preparo_ms=7098 gravacao_derivado_ms=3406
+09-15 08:26:28.674 I/Aether.Android( 3555): [Cache] derivado sem fonte removido: 1e31caac703c85a423b6f60767abc798d96f40d1141fcacb667f63f264f821e6.aic
+09-15 08:26:28.679 I/Aether.Android( 3555): [Cache] derivado sem fonte removido: 712ebca6f3822f64c6cc3956373a75944fec7cf34ca5318484db0ca580e61717.aic
+09-15 08:26:28.689 I/Aether.Android( 3555): [Cache] derivado sem fonte removido: 2e58e858146091774445e22a886f7732075dc1d42965633f581b745982ee66ca.aic
+09-15 08:26:28.689 I/Aether.Android( 3555): [Cache] derivado sem fonte removido: 7b6d4b3ef85bf7c5411e668bd6e8ac3e0eb2e6ca6b9ce63ef5882583a2aaa96d.aic
+09-15 08:26:28.689 I/Aether.Android( 3555): [Cache] derivado sem fonte removido: 373a9961ca7c6ed3b4f00a851d739b32fa93b11d7b8196fbbaa1d1807e72c2a4.aic
+09-15 08:26:28.689 I/Aether.Android( 3555): [Cache] derivado sem fonte removido: 3310d550a2b27ad0052dc7c622a437a34ebd72a1e6fc4549d2126e31e5e6fe04.aic
+09-15 08:26:28.690 I/Aether.Android( 3555): [Cache] derivado sem fonte removido: 03a4027feb88ca1209ded3f54b2faedebebf000856c704e0fe8154e39bba0405.aic
+09-15 08:26:28.694 I/Aether.Android( 3555): [Cache] derivado sem fonte removido: e6ab66c5356aed9d29c55ff2c3f3e1dd900f004d4aa19828601ccd675e0e1241.aic
+09-15 08:26:29.584 I/Aether.Android( 3555): [Import] texturas importadas: 122 publicadas, 122 slots bindless.
+09-15 08:26:29.585 I/Aether.Android( 3555): [Import] pacote absorvido: 275 desenhos, 459258 vertices.
+09-15 08:26:31.593 I/Aether.Android( 3555): [Import] fonte reaberta: Fontes/Astra_M08_Paineis.glb
+09-15 08:26:31.593 I/Aether.Android( 3555): [Import] fonte reaberta: Fontes/1965_ford_lotus_cortina_mk1.glb
+09-15 08:26:31.593 I/Aether.Android( 3555): [Import] fonte reaberta: Fontes/free_1975_porsche_911_930_turbo.glb
+09-15 08:26:31.593 I/Aether.Android( 3555): [Import] fonte reaberta: Fontes/m082-veiculo.glb
+09-15 08:26:31.593 I/Aether.Android( 3555): [Import] fonte reaberta: Fontes/m08e2-painel.glb
+09-15 08:26:31.593 I/Aether.Android( 3555): [Import] fonte reaberta: Fontes/esfera-draco.glb
+09-15 08:26:31.593 I/Aether.Android( 3555): [Import] fonte reaberta: Fontes/CarConcept.glb
+09-15 08:26:31.593 I/Aether.Android( 3555): [Import] fonte reaberta: Fontes/ford-lotus-espelho.glb
+09-15 08:26:31.593 I/Aether.Android( 3555): [Residencia] texturas=122 pedidos_mb=339.1 residentes_mb=339.1 teto_mb=1024.0 reduzidas=0 niveis_removidos=0 cabe=sim
+09-15 08:26:31.633 I/Aether.Android( 3555): [Open] projeto aberto: fontes=8 derivados_reaproveitados=0 falhas=0 preparo_ms=63947 publicacao_ms=2899 cena_ms=40 total_ms=66886

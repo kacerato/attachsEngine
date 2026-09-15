@@ -10,6 +10,9 @@
 #include "editor/editor_session.h"
 #include "renderer/authoring_geometry.h"
 #include "resources/import_node_map.h"
+#include "resources/import_cache.h"
+#include "resources/import_profile.h"
+#include <fstream>
 #include "scene/import_link.h"
 #include "scene/script_behavior.h"
 
@@ -299,6 +302,61 @@ AE_TEST(m082_ambiguous_repeated_names_are_never_matched_silently) {
   AE_EXPECT_TRUE(linkOf(session.document(), left)->node == leftNode, "pela ordem, por escolha explícita");
   AE_EXPECT_EQ(session.document().find(left)->transform.position[0], 2.f, "e a roda recebeu a pose nova");
   AE_EXPECT_EQ(children(session.document(), root).size(), 3u, "sem duplicar");
+}
+
+AE_TEST(r3_import_profile_scales_roots_persists_per_source_and_changes_the_cache_key) {
+  // Arquivo do perfil: escreve, lê e recusa o que não conhece.
+  const resources::ImportProfile profile{10.0f, 512};
+  resources::ImportProfile parsed;
+  AE_EXPECT_TRUE(resources::parseImportProfile(resources::serializeImportProfile(profile), parsed), "ida e volta");
+  AE_EXPECT_TRUE(resources::sameImportProfile(parsed, profile), "mesmo perfil");
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":1,"scale":3,"maximumTextureDimension":512})", parsed), "escala fora dos passos");
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":2,"scale":1,"maximumTextureDimension":512})", parsed), "schema desconhecido");
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":1,"scale":1,"maximumTextureDimension":300})", parsed), "textura fora dos passos");
+  AE_EXPECT_TRUE(!resources::parseImportProfile("{", parsed), "JSON quebrado");
+
+  // O perfil nunca sobe acima do teto do aparelho.
+  resources::GltfImportLimits device;
+  device.maximumTextureDimension = 1024;
+  AE_EXPECT_EQ(resources::applyImportProfile(device, {1.0f, 2048}).maximumTextureDimension, 1024u, "teto do aparelho vence");
+
+  // Escala só nas raízes; os filhos herdam pela hierarquia.
+  resources::GltfImport plain, scaled;
+  AE_EXPECT_TRUE(resources::importGlb(vehicleV2(), {}, {}, plain), plain.diagnostic.c_str());
+  AE_EXPECT_TRUE(resources::importGlb(vehicleV2(), resources::applyImportProfile({}, profile), {}, scaled), scaled.diagnostic.c_str());
+  AE_EXPECT_EQ(scaled.nodes[0].localMatrix[0], 10.f * plain.nodes[0].localMatrix[0], "raiz escalada");
+  AE_EXPECT_EQ(scaled.nodes[1].localMatrix[13], plain.nodes[1].localMatrix[13], "filho intacto");
+  AE_EXPECT_TRUE(resources::importCacheKey("abc", {}) != resources::importCacheKey("abc", resources::applyImportProfile({}, profile)),
+                 "perfil diferente, derivado diferente");
+
+  // Resolução: fonte -> padrão do projeto -> embutido.
+  Project project;
+  EditorSession session;
+  FakeRenderer renderer;
+  start(session, renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  AE_EXPECT_TRUE(resources::sameImportProfile(session.importProfileForPath(kSource), {}), "sem arquivos: embutido");
+  AE_EXPECT_TRUE(session.saveProjectImportProfile({0.01f, 1024}), "padrão do projeto gravado");
+  AE_EXPECT_EQ(session.importProfileForPath(kSource).maximumTextureDimension, 1024u, "fonte nova usa o padrão");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(commit(session, project, vehicleV1(), report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.saveImportProfile(report.source, profile), "perfil da fonte gravado");
+  AE_EXPECT_TRUE(resources::sameImportProfile(session.importProfileForPath(kSource), profile), "fonte registrada usa o próprio perfil");
+  {
+    std::ofstream corrupt(project.root / resources::importProfilePath(report.source), std::ios::binary | std::ios::trunc);
+    corrupt << "{\"schema\":1";
+  }
+  AE_EXPECT_EQ(session.importProfileForPath(kSource).maximumTextureDimension, 1024u, "perfil ilegível cai no padrão do projeto");
+
+  // O painel abre com o perfil resolvido e recebe saídas estruturadas.
+  session.beginImportPreparation(kSource);
+  AE_EXPECT_EQ(session.screen().importTextureDimension, 1024u, "painel abre com o perfil resolvido");
+  resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(vehicleV2(), {}, {}, model), model.diagnostic.c_str());
+  session.showImportPreview(kSource, model, Sha256::hex(vehicleV2()), {});
+  AE_EXPECT_EQ(session.screen().importNodes.size(), model.nodes.size(), "uma linha por nó");
+  AE_EXPECT_EQ(session.screen().importNodes[1].depth, 1u, "profundidade do filho");
+  AE_EXPECT_TRUE(session.screen().importHasExtent, "tamanho aproximado calculado");
 }
 
 AE_TEST(m082_reimport_preserves_local_edits_across_two_instances_and_reopen) {

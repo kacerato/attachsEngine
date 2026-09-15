@@ -60,7 +60,7 @@ Estados do relatório: **E** existente a preservar · **P** parcial · **N** lac
 
 | ID | Função | Rel. | Implementado | Integrado ao editor | Host | Aparelho | Pacote |
 |---|---|---|---|---|---|---|---|
-| I01 | Escala de importação | P | — | — | — | — | R3 |
+| I01 | Escala de importação | P | parcial (R3: escala uniforme por passos nas raízes; sem unidade declarada) | sim (aba Perfil) | sim | — | R3 |
 | I02 | Conversão de eixos | P | — (convenção glTF preservada, sem opção) | — | — | — | R3/R7 |
 | I03 | Preservar hierarquia | E/P | sim (árvore e pivôs) | sim | sim | sim | R3 |
 | I04 | Inclusão por nó | N | — | — | — | — | R3/R6 |
@@ -78,11 +78,11 @@ Estados do relatório: **E** existente a preservar · **P** parcial · **N** lac
 | I16 | Colisão na importação | P | parcial (ajuste de colisor no editor, slot 0) | parcial | — | — | R7 |
 | I17 | Extração/remapeamento de material | P | parcial (material do projeto a partir do slot) | sim | sim | sim | R4/R6 |
 | I18 | Política por categoria | P | — (reconciliação única) | — | — | — | R3/R6 |
-| I19 | Perfil reutilizável | N | — | — | — | — | R3 |
+| I19 | Perfil reutilizável | N | parcial (R3: perfil por fonte + padrão do projeto; sem presets nomeados) | sim | sim | — | R3 |
 | I20 | Pós-processamento | A | — | — | — | — | R6/R9 |
 | I21 | Clips de animação | N | — (contados como omitidos) | — | — | — | R8 |
 | I22 | Esqueleto | N | — (contado como omitido) | — | — | — | R8 |
-| I23 | Inspeção de saídas | P | parcial (contadores textuais na prévia) | parcial | sim | sim | R3 |
+| I23 | Inspeção de saídas | P | parcial (R3: abas Estrutura e Texturas com dados estruturados; sem prévia 3D) | sim | sim | parcial (contadores E4) | R3 |
 | I24 | Prévia de conflitos | P | parcial (política global de ambiguidade) | parcial | sim | parcial | R6 |
 
 ### 4.2 Texturas e materiais (26)
@@ -95,7 +95,7 @@ Estados do relatório: **E** existente a preservar · **P** parcial · **N** lac
 | T04 | Origem do alpha | P | parcial (alpha da cor base) | — | sim | — | R4 |
 | T05 | Bordas transparentes | N | — | — | — | — | R4 |
 | T06 | Convenção de normal | P | parcial (escala; sem inversão Y) | — | sim | — | R4 |
-| T07 | Resolução por recurso | P | parcial (limite automático do arquivo) | parcial (prévia informa) | sim | sim | R2/R4 |
+| T07 | Resolução por recurso | P | parcial (limite automático + R3: textura máxima no perfil da fonte; ainda não por textura) | sim (aba Perfil) | sim | parcial (limite automático conferido na E3) | R2/R4 |
 | T08 | Formato de plataforma | P | parcial (ASTC 4x4 para KTX2 com mips) | parcial (prévia) | sim | sim | R2/R4 |
 | T09 | Compressão e qualidade | P | — | — | — | — | R4/R9 |
 | T10 | Mipmaps | E/P | sim (gerados ou do KTX2) | — | sim | sim | R4 |
@@ -180,7 +180,7 @@ Estados do relatório: **E** existente a preservar · **P** parcial · **N** lac
 
 | ID | Função | Rel. | Implementado | Integrado ao editor | Host | Aparelho | Pacote |
 |---|---|---|---|---|---|---|---|
-| W01 | Importador no dock | N | — (janela modal) | — | — | — | R3 |
+| W01 | Importador no dock | N | sim (R3: contexto de Propriedades, janela modal removida) | sim | sim | — | R3 |
 | W02 | Navegação de subassets | P | parcial (vínculo → recurso; sem breadcrumbs) | parcial | — | — | R3/R5 |
 | W03 | Layout persistente | P/A | parcial (preferências do IDE) | parcial | — | — | R3 |
 | W04 | Histórico de recurso | N | — (material compartilhado fora do Desfazer) | — | — | — | R4/R6 |

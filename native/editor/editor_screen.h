@@ -181,6 +181,11 @@ enum class EditorWidget : u32 {
   ObjectFold, ObjectLayerPrevious, ObjectLayerNext, CreateChildGroup,
   TransformMenu, TransformCopy, TransformPaste, TransformReset,
   TransformResetPosition, TransformResetRotation, TransformResetScale,
+  // R3: importação no painel de Propriedades (abas, perfil e ações do perfil).
+  ImportTabSummary, ImportTabStructure, ImportTabTextures, ImportTabProfile,
+  ImportScaleDown, ImportScaleUp,
+  ImportTextureDimension256, ImportTextureDimension512, ImportTextureDimension1024, ImportTextureDimension2048,
+  ImportApplyProfile, ImportSaveDefaultProfile,
   // + máscara de ImportOverride.
   ImportLinkRevertBase=0x52000000u,
   // + índice do material do projeto / do campo numérico do material.
@@ -368,6 +373,22 @@ struct EditorScreenState final {
   // (0 nenhuma, 1 associar pela ordem, 2 tratar como novos).
   u32 importAmbiguities=0;
   u32 importAmbiguityChoice=0;
+  // R3: o importador vive em Propriedades, com dados estruturados por aba em vez
+  // de um texto paginado numa janela que bloqueava o editor inteiro.
+  enum class ImportTab : u8 { Summary, Structure, Textures, Profile };
+  ImportTab importTab=ImportTab::Summary;
+  struct ImportNodeRow { std::string name; u32 depth=0, draws=0; };
+  struct ImportTextureRow { u32 width=0,height=0,levels=0,uses=0; bool srgb=true,astc=false; u64 bytes=0; };
+  std::vector<ImportNodeRow> importNodes;
+  std::vector<ImportTextureRow> importTextures;
+  // Tamanho do modelo preparado, em unidades da cena, já com a escala preparada.
+  float importExtent[3]{};
+  bool importHasExtent=false;
+  // Perfil em edição (rascunho) e o perfil com que a prévia atual foi preparada.
+  // Publicar exige os dois iguais: a prévia tem de ser a do perfil mostrado.
+  float importScale=1,importPreparedScale=1;
+  u32 importTextureDimension=2048,importPreparedTextureDimension=2048;
+  bool importReprepare=false;
   // Vínculo do objeto selecionado com a fonte, preparado pela sessão.
   struct ImportLinkView { bool linked=false,orphan=false,root=false; std::string source,node; u32 overrides=0; };
   ImportLinkView importLink;

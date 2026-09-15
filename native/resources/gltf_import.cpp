@@ -1274,6 +1274,8 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
     stack.push_back({roots[index - 1], -1, false});
   }
   (void)identity;
+  if (!std::isfinite(limits.rootScale) || limits.rootScale < 1e-4f || limits.rootScale > 1e4f)
+    return giveUp("Escala de importação inválida.");
 
   while (!stack.empty()) {
     if (importer.cancelled()) return giveUp("Importação cancelada.");
@@ -1326,6 +1328,10 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
     GltfImportNode imported;
     imported.name = name.empty() ? nodeKey : std::string(name);
     imported.parent = entry.parent;
+    // Perfil (R3): escala uniforme só nas raízes, S·L. Uniforme e positiva, não
+    // interfere na reflexão nem no teste de cisalhamento acima.
+    if (entry.parent < 0)
+      for (const u32 i : {0u, 1u, 2u, 4u, 5u, 6u, 8u, 9u, 10u, 12u, 13u, 14u}) local[i] *= limits.rootScale;
     std::copy(local, local + 16, imported.localMatrix);
     // Identificador autoral: o primeiro campo textual reconhecido do `extras`.
     // Não é o nome — nome é rótulo, e rótulo se repete.

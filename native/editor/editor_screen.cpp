@@ -1219,7 +1219,236 @@ void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity
   }
 }
 
+namespace {
+// Número com vírgula decimal, sem depender de locale.
+std::string decimalText(double value,int digits) {
+  const long long factor=digits==0?1:digits==1?10:digits==2?100:1000;
+  const long long scaled=std::llround(std::fabs(value)*static_cast<double>(factor));
+  std::string text=std::to_string(scaled/factor);
+  if(digits>0) {
+    std::string fraction=std::to_string(scaled%factor);
+    fraction.insert(0,static_cast<usize>(digits)-fraction.size(),'0');
+    text+=","+fraction;
+  }
+  return (value<0 && scaled?"-":"")+text;
+}
+
+// Quebra por largura medida, respeitando parágrafos e sequências UTF-8.
+std::vector<std::string> wrapText(const UiDrawList &list,std::string_view text,float width,const UiTypeStyle &style) {
+  std::vector<std::string> wrapped;
+  usize start=0;
+  while(start<=text.size()) {
+    const auto end=std::min(text.find('\n',start),text.size());
+    std::string line(text.substr(start,end-start));
+    while(measureTextWidth(line,list.fontMetrics(),style)>width && line.size()>1) {
+      usize fit=0;
+      for(usize i=1;i<=line.size();++i) {
+        if(i<line.size() && (static_cast<unsigned char>(line[i])&0xc0)==0x80) continue;
+        if(fit && measureTextWidth(std::string_view(line).substr(0,i),list.fontMetrics(),style)>width) break;
+        fit=i;
+      }
+      usize split=line.rfind(' ',fit);
+      if(split==std::string::npos || split==0) split=fit;
+      wrapped.push_back(line.substr(0,split));line.erase(0,split);
+      if(!line.empty() && line.front()==' ') line.erase(0,1);
+    }
+    wrapped.push_back(std::move(line));
+    if(end==text.size()) break;
+    start=end+1;
+  }
+  return wrapped;
+}
+
+// R3: importador em Propriedades (W01). Substitui a janela modal que cobria o
+// editor: a prévia agora é um contexto do painel, com abas de saídas reais e o
+// perfil, e o resto do editor continua disponível enquanto ela está aberta.
+void buildImportDock(ScreenBuilder &builder,UiRect content) {
+  const auto &state=builder.state;const auto &theme=builder.theme;
+  auto &list=builder.list;auto &router=builder.router;
+  using Tab=EditorScreenState::ImportTab;
+
+  auto header=takeTop(content,kPanelHeaderHeight);
+  list.addImage(centred(takeLeft(header,26.0f),18.0f,18.0f),static_cast<UiImageId>(UiIcon::AssetsImport),theme.color.text);
+  const float half=header.height*.5f;
+  builder.label({header.x,header.y,header.width,half},"Importar recurso",theme.color.text,theme.type.cardName);
+  builder.label({header.x,header.y+half,header.width,half},state.importPath.empty()?"Escolhendo arquivo…":state.importPath,
+                theme.color.textDim,theme.type.caption); // caption: o caminho mantém a caixa do nome do arquivo
+  builder.label(takeTop(content,24),state.importStatus,theme.color.accent,theme.type.caption);
+
+  const struct {const char *label;Tab tab;EditorWidget widget;} tabs[]{
+      {"Resumo",Tab::Summary,EditorWidget::ImportTabSummary},{"Estrutura",Tab::Structure,EditorWidget::ImportTabStructure},
+      {"Texturas",Tab::Textures,EditorWidget::ImportTabTextures},{"Perfil",Tab::Profile,EditorWidget::ImportTabProfile}};
+  auto tabRow=takeTop(content,32);
+  const float tabWidth=tabRow.width/static_cast<float>(std::size(tabs));
+  for(const auto &tab:tabs) {
+    const auto cell=deflate(takeLeft(tabRow,tabWidth),UiInsets::all(2));
+    const bool on=state.importTab==tab.tab;
+    list.addRect(cell,on?withAlpha(theme.color.accent,.18f):theme.color.raised,theme.radius.control);
+    builder.label(cell,tab.label,on?theme.color.accent:theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(cell,widgetId(tab.widget));
+  }
+  takeTop(content,6);
+
+  const auto nearlyEqual=[](float a,float b) {return std::fabs(a-b)<=std::max(std::fabs(a),std::fabs(b))*1e-5f;};
+  const bool profileApplied=nearlyEqual(state.importScale,state.importPreparedScale) &&
+                            state.importTextureDimension==state.importPreparedTextureDimension;
+
+  // Rodapé: cancelar sempre; publicar só com prévia pronta, perfil aplicado e
+  // ambiguidades decididas. Apagado e sem toque até lá.
+  auto actions=takeBottom(content,40);
+  const auto cancel=deflate(takeLeft(actions,state.importReady?actions.width*.3f:actions.width),UiInsets::all(2));
+  list.addRect(cancel,theme.color.raised,theme.radius.control);
+  builder.label(cancel,state.importError?"Fechar":"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);
+  router.addRegion(cancel,widgetId(EditorWidget::ImportCancel));
+  if(state.importReady) {
+    const bool decided=(!state.importAmbiguities || state.importAmbiguityChoice) && profileApplied;
+    const auto resource=deflate(takeLeft(actions,actions.width*.5f),UiInsets::all(2));
+    const auto scene=deflate(actions,UiInsets::all(2));
+    list.addRect(resource,theme.color.raised,theme.radius.control);
+    builder.label(resource,"Só recurso",decided?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    list.addRect(scene,decided?theme.color.accent:theme.color.raised,theme.radius.control);
+    builder.label(scene,"Na cena",decided?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    if(decided) {
+      router.addRegion(resource,widgetId(EditorWidget::ImportAccept));
+      router.addRegion(scene,widgetId(EditorWidget::ImportIntoScene));
+    }
+    if(state.importAmbiguities) {
+      auto choice=takeBottom(content,36);
+      const auto order=deflate(takeLeft(choice,choice.width*.5f),UiInsets::all(2));
+      const auto fresh=deflate(choice,UiInsets::all(2));
+      const auto pill=[&](UiRect rect,const char *label,bool on,EditorWidget widget) {
+        list.addRect(rect,on?theme.color.accent:theme.color.raised,theme.radius.control);
+        builder.label(rect,label,on?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
+        router.addRegion(rect,widgetId(widget));
+      };
+      pill(order,"Pela ordem",state.importAmbiguityChoice==1,EditorWidget::ImportMatchInOrder);
+      pill(fresh,"Como novos",state.importAmbiguityChoice==2,EditorWidget::ImportTreatAsNew);
+    }
+    if(!profileApplied)
+      builder.label(takeBottom(content,22),"Perfil alterado: prepare de novo para publicar",theme.color.textDim,theme.type.caption);
+  }
+
+  // Paginação comum às abas de lista. Devolve o intervalo visível.
+  const auto paginate=[&](usize count,float rowHeight) {
+    u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height)/rowHeight));
+    if(count>perPage) perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-28)/rowHeight));
+    const u32 pages=std::max(1u,static_cast<u32>((count+perPage-1)/perPage));
+    const u32 page=std::min(state.importPage,pages-1);
+    if(pages>1) {
+      auto bar=takeBottom(content,28);
+      const auto previous=takeLeft(bar,70),next=takeRight(bar,70);
+      builder.label(bar,std::to_string(page+1)+" / "+std::to_string(pages),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      if(page) {builder.label(previous,"Anterior",theme.color.text,theme.type.caption);router.addRegion(previous,widgetId(EditorWidget::ImportPreviousPage));}
+      if(page+1<pages) {builder.label(next,"Próxima",theme.color.text,theme.type.caption,UiAlign::End);router.addRegion(next,widgetId(EditorWidget::ImportNextPage));}
+    }
+    return std::pair<usize,usize>{static_cast<usize>(page)*perPage,std::min(count,static_cast<usize>(page+1)*perPage)};
+  };
+
+  switch(state.importTab) {
+  case Tab::Summary: {
+    const auto lines=wrapText(list,state.importSummary,content.width,theme.type.caption);
+    const auto [first,last]=paginate(lines.size(),22);
+    list.pushClip(content);
+    for(usize i=first;i<last;++i) builder.label(takeTop(content,22),lines[i],theme.color.textDim,theme.type.caption);
+    list.popClip();
+    break;
+  }
+  case Tab::Structure: {
+    if(state.importNodes.empty()) {builder.label(takeTop(content,24),"Sem prévia de estrutura ainda",theme.color.textMuted,theme.type.caption);break;}
+    builder.label(takeTop(content,24),std::to_string(state.importNodes.size())+" nó(s) no arquivo",theme.color.textMuted,theme.type.caption);
+    const auto [first,last]=paginate(state.importNodes.size(),24);
+    list.pushClip(content);
+    for(usize i=first;i<last;++i) {
+      const auto &node=state.importNodes[i];
+      auto row=takeTop(content,24);
+      takeLeft(row,static_cast<float>(std::min(node.depth,8u))*10.0f);
+      if(node.draws) builder.label(takeRight(row,64),std::to_string(node.draws)+(node.draws==1?" malha":" malhas"),theme.color.textMuted,theme.type.caption,UiAlign::End);
+      builder.label(row,node.name,node.draws?theme.color.text:theme.color.textDim,theme.type.caption);
+    }
+    list.popClip();
+    break;
+  }
+  case Tab::Textures: {
+    if(state.importTextures.empty()) {builder.label(takeTop(content,24),"Nenhuma textura aplicada",theme.color.textMuted,theme.type.caption);break;}
+    u64 total=0;for(const auto &texture:state.importTextures) total+=texture.bytes;
+    builder.label(takeTop(content,24),std::to_string(state.importTextures.size())+" textura(s) · "+decimalText(static_cast<double>(total)/1048576.0,1)+" MB com mips",
+                  theme.color.textMuted,theme.type.caption);
+    const auto [first,last]=paginate(state.importTextures.size(),42);
+    list.pushClip(content);
+    for(usize i=first;i<last;++i) {
+      const auto &texture=state.importTextures[i];
+      auto row=takeTop(content,42);
+      builder.label(takeTop(row,20),"#"+std::to_string(i+1)+" · "+std::to_string(texture.width)+"×"+std::to_string(texture.height)+
+                    " · "+(texture.astc?"ASTC 4x4":"RGBA8"),theme.color.text,theme.type.caption);
+      builder.label(takeTop(row,20),std::string(texture.srgb?"cor (sRGB)":"dados (linear)")+" · "+
+                    decimalText(static_cast<double>(texture.bytes)/1048576.0,1)+" MB · "+std::to_string(texture.uses)+
+                    (texture.uses==1?" uso":" usos"),theme.color.textDim,theme.type.caption);
+    }
+    list.popClip();
+    break;
+  }
+  case Tab::Profile: {
+    const auto scaleText=[](float scale) {
+      return "×"+decimalText(scale,scale>=1?0:scale>=.1f?1:scale>=.01f?2:3);
+    };
+    auto scaleRow=takeTop(content,36);
+    builder.label(takeLeft(scaleRow,scaleRow.width*.4f),"Escala",theme.color.text,theme.type.caption);
+    const auto down=deflate(takeLeft(scaleRow,36),UiInsets::all(2)),up=deflate(takeRight(scaleRow,36),UiInsets::all(2));
+    for(const auto &[rect,label,widget]:{std::tuple{down,"-",EditorWidget::ImportScaleDown},std::tuple{up,"+",EditorWidget::ImportScaleUp}}) {
+      list.addRect(rect,theme.color.raised,theme.radius.control);
+      builder.label(rect,label,theme.color.text,theme.type.body,UiAlign::Center);
+      router.addRegion(rect,widgetId(widget));
+    }
+    builder.label(scaleRow,scaleText(state.importScale),theme.color.text,theme.type.body,UiAlign::Center);
+    // Tamanho que o modelo terá com a escala do rascunho (aproximado pelas
+    // esferas dos desenhos: é uma prévia, não uma medida).
+    const float ratio=state.importPreparedScale>0?state.importScale/state.importPreparedScale:1;
+    builder.label(takeTop(content,24),state.importHasExtent?
+                  "Tamanho aprox.: "+decimalText(state.importExtent[0]*ratio,2)+" × "+decimalText(state.importExtent[1]*ratio,2)+" × "+
+                  decimalText(state.importExtent[2]*ratio,2):std::string("Tamanho: sem geometria preparada"),
+                  theme.color.textDim,theme.type.caption);
+    builder.label(takeTop(content,24),"Textura máxima (px)",theme.color.text,theme.type.caption);
+    auto dimensions=takeTop(content,36);
+    const struct {u32 value;EditorWidget widget;} steps[]{{256,EditorWidget::ImportTextureDimension256},{512,EditorWidget::ImportTextureDimension512},
+                                                         {1024,EditorWidget::ImportTextureDimension1024},{2048,EditorWidget::ImportTextureDimension2048}};
+    const float stepWidth=dimensions.width/static_cast<float>(std::size(steps));
+    for(const auto &step:steps) {
+      const auto cell=deflate(takeLeft(dimensions,stepWidth),UiInsets::all(2));
+      const bool on=state.importTextureDimension==step.value;
+      list.addRect(cell,on?theme.color.accent:theme.color.raised,theme.radius.control);
+      builder.label(cell,std::to_string(step.value),on?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
+      router.addRegion(cell,widgetId(step.widget));
+    }
+    takeTop(content,8);
+    const bool canApply=state.importReady && !profileApplied;
+    const auto apply=deflate(takeTop(content,38),UiInsets::all(2));
+    list.addRect(apply,canApply?theme.color.accent:theme.color.raised,theme.radius.control);
+    builder.label(apply,"Preparar com este perfil",canApply?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    if(canApply) router.addRegion(apply,widgetId(EditorWidget::ImportApplyProfile));
+    const auto save=deflate(takeTop(content,38),UiInsets::all(2));
+    list.addRect(save,theme.color.raised,theme.radius.control);
+    builder.label(save,"Salvar como padrão do projeto",theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(save,widgetId(EditorWidget::ImportSaveDefaultProfile));
+    list.pushClip(content);
+    for(const auto &line:wrapText(list,"Guardado com a fonte ao publicar. Reimportar e reabrir o projeto usam o mesmo perfil.",
+                                  content.width,theme.type.caption)) {
+      if(content.height<20) break;
+      builder.label(takeTop(content,20),line,theme.color.textMuted,theme.type.caption);
+    }
+    list.popClip();
+    break;
+  }
+  }
+}
+} // namespace
+
 void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
+  if (builder.state.importPanel) {
+    builder.list.addRect(panel, builder.theme.color.surface);
+    builder.router.addBlocker(panel);
+    buildImportDock(builder, deflate(panel, UiInsets::all(builder.theme.spacing.small)));
+    return;
+  }
   const UiTheme &theme = builder.theme;
   const EditorEntity *entity = builder.state.document->find(builder.state.selection);
   builder.list.addRect(panel, theme.color.surface);
@@ -1861,73 +2090,6 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
 static void buildProjectDialogs(ScreenBuilder &builder) {
   const auto &state=builder.state;const auto &theme=builder.theme;
   auto &list=builder.list;auto &router=builder.router;
-    if(state.importPanel) {
-    list.addRect(state.surface,withAlpha(theme.color.voidBlack,.7f));router.addBlocker(state.surface);
-    const auto panel=centred(state.surface,std::min(600.0f,state.surface.width-24),std::min(430.0f,state.surface.height-24));
-    list.addRect(panel,theme.color.surface,12);list.addBorder(panel,theme.color.line,1,12);
-    auto content=deflate(panel,UiInsets::all(16));
-    auto title=takeTop(content,36);
-    list.addImage(centred(takeLeft(title,32),24,24),static_cast<UiImageId>(UiIcon::AssetsImport),0xffffffff);
-    builder.label(title,"Importar recurso",theme.color.text,theme.type.cardName);
-    builder.label(takeTop(content,28),state.importPath.c_str(),theme.color.textMuted,theme.type.caption);
-    builder.label(takeTop(content,30),state.importStatus.c_str(),theme.color.accent,theme.type.body);
-    auto actions=takeBottom(content,42);
-    auto cancel=takeLeft(actions,state.importReady?actions.width*.22f:actions.width);takeLeft(actions,8);
-    list.addRect(cancel,theme.color.raised,8);builder.label(cancel,state.importError?"Fechar":"Cancelar",theme.color.text,theme.type.body,UiAlign::Center);
-    router.addRegion(cancel,widgetId(EditorWidget::ImportCancel));
-    if(state.importReady) {
-      // Ambiguidade na correspondência de nós: publicar só depois de o usuário
-      // dizer como associar. Os botões aparecem apagados e sem toque até lá.
-      const bool decided=!state.importAmbiguities || state.importAmbiguityChoice;
-      auto resource=takeLeft(actions,actions.width*.4f);takeLeft(actions,8);
-      list.addRect(resource,theme.color.raised,8);builder.label(resource,"Só recurso",decided?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
-      if(decided) router.addRegion(resource,widgetId(EditorWidget::ImportAccept));
-      list.addRect(actions,decided?theme.color.accent:theme.color.raised,8);
-      builder.label(actions,"Importar na cena",decided?theme.color.accentInk:theme.color.textMuted,theme.type.body,UiAlign::Center);
-      if(decided) router.addRegion(actions,widgetId(EditorWidget::ImportIntoScene));
-      if(state.importAmbiguities) {
-        takeBottom(content,6);
-        auto choice=takeBottom(content,40);
-        auto order=takeLeft(choice,choice.width*.5f-4);takeLeft(choice,8);
-        const auto pill=[&](UiRect rect,const char *label,bool on,EditorWidget widget) {
-          list.addRect(rect,on?theme.color.accent:theme.color.raised,8);
-          builder.label(rect,label,on?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
-          router.addRegion(rect,widgetId(widget));
-        };
-        pill(order,"Associar pela ordem",state.importAmbiguityChoice==1,EditorWidget::ImportMatchInOrder);
-        pill(choice,"Tratar como novos",state.importAmbiguityChoice==2,EditorWidget::ImportTreatAsNew);
-      }
-    }
-    auto pages=takeBottom(content,30);
-    std::vector<std::string> wrapped;
-    std::istringstream paragraphs(state.importSummary);std::string line;
-    while(std::getline(paragraphs,line)) {
-      while(measureTextWidth(line,list.fontMetrics(),theme.type.caption)>content.width && line.size()>1) {
-        usize width=0;
-        for(usize i=1;i<=line.size();++i) {
-          if(i<line.size() && (static_cast<unsigned char>(line[i])&0xc0)==0x80) continue;
-          if(width && measureTextWidth(std::string_view(line).substr(0,i),list.fontMetrics(),theme.type.caption)>content.width) break;
-          width=i;
-        }
-        usize split=line.rfind(' ',width);
-        if(split==std::string::npos || split==0) split=width;
-        wrapped.push_back(line.substr(0,split));line.erase(0,split);if(!line.empty() && line.front()==' ') line.erase(0,1);
-      }
-      wrapped.push_back(line);
-    }
-    const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.f,content.height)/22));
-    const u32 count=std::max(1u,(static_cast<u32>(wrapped.size())+perPage-1)/perPage),page=std::min(state.importPage,count-1);
-    if(count>1) {
-      auto previous=takeLeft(pages,70),next=takeRight(pages,70);
-      builder.label(pages,std::to_string(page+1)+" / "+std::to_string(count),theme.color.textMuted,theme.type.caption,UiAlign::Center);
-      if(page) {builder.label(previous,"Anterior",theme.color.text,theme.type.caption);router.addRegion(previous,widgetId(EditorWidget::ImportPreviousPage));}
-      if(page+1<count) {builder.label(next,"Próxima",theme.color.text,theme.type.caption);router.addRegion(next,widgetId(EditorWidget::ImportNextPage));}
-    }
-    list.pushClip(content);
-    for(usize i=page*perPage;i<wrapped.size() && i<(page+1)*perPage;++i)
-      builder.label(takeTop(content,22),wrapped[i],theme.color.textDim,theme.type.caption);
-    list.popClip();
-  }
   if(state.codeRecoveryPending) {
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,.7f));router.addBlocker(state.surface);
     const auto panel=centred(state.surface,std::min(440.0f,state.surface.width-24),190);

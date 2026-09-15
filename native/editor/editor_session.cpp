@@ -833,20 +833,53 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     }
     return true;
   }
-  if(state_.importPanel) {
-    if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportPreviousPage) && state_.importPage) --state_.importPage;
-    if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportNextPage)) ++state_.importPage;
-    if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportCancel)) {state_.importCancel=!state_.importError;closeImportPreview();}
-    if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportMatchInOrder)) state_.importAmbiguityChoice=1;
-    if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportTreatAsNew)) state_.importAmbiguityChoice=2;
-    // Com ambiguidade, publicar só depois da escolha explícita.
-    if(routing.tapped && (routing.widgetId==widgetId(EditorWidget::ImportAccept) ||
-        routing.widgetId==widgetId(EditorWidget::ImportIntoScene)) && state_.importReady &&
-        (!state_.importAmbiguities || state_.importAmbiguityChoice)) {
-      state_.importIntoScene=routing.widgetId==widgetId(EditorWidget::ImportIntoScene);
-      state_.importAccept=true;state_.importReady=false;state_.importStatus="Publicando recurso…";
+  // R3: o importador é um painel, não uma janela. Os toques nos controles dele
+  // são tratados aqui; o resto do editor (viewport, hierarquia, arquivos)
+  // continua respondendo enquanto a prévia está aberta.
+  if(state_.importPanel && routing.tapped) {
+    const auto is=[&routing](EditorWidget widget) {return routing.widgetId==widgetId(widget);};
+    using Tab=EditorScreenState::ImportTab;
+    const bool profileApplied=resources::sameImportProfile(importProfileDraft(),
+        {state_.importPreparedScale,state_.importPreparedTextureDimension});
+    bool handled=true;
+    if(is(EditorWidget::ImportTabSummary)) {state_.importTab=Tab::Summary;state_.importPage=0;}
+    else if(is(EditorWidget::ImportTabStructure)) {state_.importTab=Tab::Structure;state_.importPage=0;}
+    else if(is(EditorWidget::ImportTabTextures)) {state_.importTab=Tab::Textures;state_.importPage=0;}
+    else if(is(EditorWidget::ImportTabProfile)) {state_.importTab=Tab::Profile;state_.importPage=0;}
+    else if(is(EditorWidget::ImportPreviousPage)) {if(state_.importPage) --state_.importPage;}
+    else if(is(EditorWidget::ImportNextPage)) ++state_.importPage;
+    else if(is(EditorWidget::ImportCancel)) {state_.importCancel=!state_.importError;closeImportPreview();}
+    else if(is(EditorWidget::ImportMatchInOrder)) state_.importAmbiguityChoice=1;
+    else if(is(EditorWidget::ImportTreatAsNew)) state_.importAmbiguityChoice=2;
+    else if(is(EditorWidget::ImportScaleDown) || is(EditorWidget::ImportScaleUp)) {
+      auto step=resources::nearestImportScaleStep(state_.importScale);
+      if(is(EditorWidget::ImportScaleDown) && step>0) --step;
+      if(is(EditorWidget::ImportScaleUp) && step+1<resources::ImportScaleSteps.size()) ++step;
+      state_.importScale=resources::ImportScaleSteps[step];
     }
-    return true;
+    else if(is(EditorWidget::ImportTextureDimension256)) state_.importTextureDimension=256;
+    else if(is(EditorWidget::ImportTextureDimension512)) state_.importTextureDimension=512;
+    else if(is(EditorWidget::ImportTextureDimension1024)) state_.importTextureDimension=1024;
+    else if(is(EditorWidget::ImportTextureDimension2048)) state_.importTextureDimension=2048;
+    else if(is(EditorWidget::ImportApplyProfile)) {
+      if(state_.importReady && !profileApplied) {
+        state_.importReprepare=true;state_.importReady=false;state_.importStatus="Preparando com o perfil…";
+      }
+    }
+    else if(is(EditorWidget::ImportSaveDefaultProfile))
+      setImportStatus(saveProjectImportProfile(importProfileDraft())?"Perfil salvo como padrão do projeto":
+                      "Não foi possível salvar o perfil padrão do projeto",
+                      EditorConsoleSeverity::Info);
+    else if(is(EditorWidget::ImportAccept) || is(EditorWidget::ImportIntoScene)) {
+      // Publicar só com a escolha explícita das ambiguidades e com a prévia do
+      // perfil que está na tela.
+      if(state_.importReady && profileApplied && (!state_.importAmbiguities || state_.importAmbiguityChoice)) {
+        state_.importIntoScene=is(EditorWidget::ImportIntoScene);
+        state_.importAccept=true;state_.importReady=false;state_.importStatus="Publicando recurso…";
+      }
+    }
+    else handled=false;
+    if(handled) return true;
   }
   // O console responde PRIMEIRO.
   //
@@ -2287,8 +2320,58 @@ bool EditorSession::commitModelImport(std::span<const u8> bytes,const resources:
   return false;
 }
 
-void EditorSession::showImportPreview(std::string path,const resources::GltfImport &model,std::string_view contentHash) {
+void EditorSession::showImportPreview(std::string path,const resources::GltfImport &model,std::string_view contentHash,
+                                     const resources::ImportProfile &prepared) {
   state_.importAmbiguities=0;state_.importAmbiguityChoice=0;
+  state_.importPreparedScale=prepared.scale;state_.importPreparedTextureDimension=prepared.maximumTextureDimension;
+  state_.importReprepare=false;
+  // R3: saídas estruturadas para as abas do painel (I23).
+  {
+    const auto nodeCount=model.nodes.size();
+    std::vector<u32> depth(nodeCount,0),draws(nodeCount,0);
+    std::vector<std::array<float,16>> world(nodeCount);
+    for(const auto node:model.drawNodes) if(node<nodeCount) ++draws[node];
+    state_.importNodes.clear();state_.importNodes.reserve(nodeCount);
+    float low[3]{INFINITY,INFINITY,INFINITY},high[3]{-INFINITY,-INFINITY,-INFINITY};
+    for(usize n=0;n<nodeCount;++n) {
+      const auto &node=model.nodes[n];
+      const bool child=node.parent>=0 && static_cast<usize>(node.parent)<n;
+      depth[n]=child?depth[static_cast<usize>(node.parent)]+1:0;
+      // Mundo = pai · local, colunas primeiro. Os pais vêm antes dos filhos na lista.
+      if(child) {
+        const auto &a=world[static_cast<usize>(node.parent)];
+        for(u32 c=0;c<4;++c) for(u32 r=0;r<4;++r) {
+          float sum=0;for(u32 k=0;k<4;++k) sum+=a[k*4+r]*node.localMatrix[c*4+k];
+          world[n][c*4+r]=sum;
+        }
+      } else std::copy(node.localMatrix,node.localMatrix+16,world[n].begin());
+      state_.importNodes.push_back({node.name,depth[n],draws[n]});
+    }
+    // Tamanho aproximado: esfera de cada desenho levada ao mundo do seu nó.
+    for(usize d=0;d<model.draws.size() && d<model.drawNodes.size();++d) {
+      const auto node=model.drawNodes[d];if(node>=nodeCount) continue;
+      const auto &m=world[node];const auto &draw=model.draws[d];
+      const float stretch=std::max({std::hypot(m[0],m[1],m[2]),std::hypot(m[4],m[5],m[6]),std::hypot(m[8],m[9],m[10])});
+      for(u32 axis=0;axis<3;++axis) {
+        const float centre=m[axis]*draw.boundsCenter[0]+m[4+axis]*draw.boundsCenter[1]+m[8+axis]*draw.boundsCenter[2]+m[12+axis];
+        low[axis]=std::min(low[axis],centre-draw.boundsRadius*stretch);
+        high[axis]=std::max(high[axis],centre+draw.boundsRadius*stretch);
+      }
+    }
+    state_.importHasExtent=low[0]<=high[0] && std::isfinite(low[0]) && std::isfinite(high[0]);
+    for(u32 axis=0;axis<3;++axis) state_.importExtent[axis]=state_.importHasExtent?high[axis]-low[axis]:0;
+    state_.importTextures.clear();state_.importTextures.reserve(model.textures.size());
+    for(usize t=0;t<model.textures.size();++t) {
+      EditorScreenState::ImportTextureRow row;
+      if(const auto &texture=model.textures[t]) {
+        row.width=texture->width;row.height=texture->height;row.levels=texture->levels;row.srgb=texture->srgb;
+        row.astc=texture->format==renderer::AuthoringTextureAstc4x4;row.bytes=texture->mipChain.size();
+      }
+      for(const auto &material:model.materials)
+        for(const auto index:material.textureIndices) if(index==t) ++row.uses;
+      state_.importTextures.push_back(row);
+    }
+  }
   state_.importPanel=true;state_.importReady=true;state_.importError=false;state_.importPage=0;state_.importPath=std::move(path);
   state_.importStatus=assets_.findByPath(state_.importPath)?"Atualizar recurso existente":"Registrar novo recurso";
   state_.importSummary=std::to_string(model.nodes.size())+" nós · "+std::to_string(model.draws.size())+" malhas · "+
@@ -2721,11 +2804,73 @@ bool EditorSession::persistImportMap(const resources::AssetGuid &source) {
   return !error && EditorImportTransaction::writeText(absolute,text);
 }
 
+namespace {
+bool readProjectImportProfile(const std::string &root,const std::string &relative,resources::ImportProfile &out) {
+  std::filesystem::path absolute;
+  if(root.empty() || !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),relative,absolute)) return false;
+  std::error_code error;
+  if(!std::filesystem::exists(absolute,error)) return false;
+  std::vector<u8> bytes;
+  return EditorImportTransaction::read(absolute,bytes,64u*1024u) &&
+         resources::parseImportProfile(std::string_view(reinterpret_cast<const char *>(bytes.data()),bytes.size()),out);
+}
+bool writeProjectImportProfile(const std::string &root,const std::string &relative,const resources::ImportProfile &profile) {
+  std::filesystem::path absolute;
+  if(root.empty() || !resources::validImportProfile(profile) ||
+     !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),relative,absolute)) return false;
+  std::error_code error;std::filesystem::create_directories(absolute.parent_path(),error);
+  return !error && EditorImportTransaction::writeText(absolute,resources::serializeImportProfile(profile));
+}
+} // namespace
+
+resources::ImportProfile EditorSession::projectImportProfile() const {
+  resources::ImportProfile profile;
+  if(!readProjectImportProfile(files_.rootPath(),resources::ImportProfileDefaultPath,profile)) profile={};
+  return profile;
+}
+
+resources::ImportProfile EditorSession::importProfileFor(const resources::AssetGuid &source) const {
+  resources::ImportProfile profile;
+  if(source.valid() && readProjectImportProfile(files_.rootPath(),resources::importProfilePath(source),profile)) return profile;
+  return projectImportProfile();
+}
+
+resources::ImportProfile EditorSession::importProfileForPath(std::string_view path) const {
+  if(!path.empty())
+    if(const auto *record=assets_.findByPath(std::string(path))) return importProfileFor(record->guid);
+  return projectImportProfile();
+}
+
+bool EditorSession::saveImportProfile(const resources::AssetGuid &source,const resources::ImportProfile &profile) {
+  return source.valid() && writeProjectImportProfile(files_.rootPath(),resources::importProfilePath(source),profile);
+}
+
+bool EditorSession::saveProjectImportProfile(const resources::ImportProfile &profile) {
+  return writeProjectImportProfile(files_.rootPath(),resources::ImportProfileDefaultPath,profile);
+}
+
+void EditorSession::beginImportPreparation(std::string_view path) {
+  state_.importPanel=true;state_.importReady=false;state_.importError=false;state_.importPage=0;state_.importIntoScene=false;
+  state_.importSummary.clear();state_.importPath=std::string(path);state_.importAmbiguities=0;state_.importAmbiguityChoice=0;
+  state_.importStatus="Preparando recurso…";state_.importTab=EditorScreenState::ImportTab::Summary;
+  state_.importNodes.clear();state_.importTextures.clear();state_.importHasExtent=false;state_.importReprepare=false;
+  const auto profile=importProfileForPath(path);
+  state_.importScale=state_.importPreparedScale=profile.scale;
+  state_.importTextureDimension=state_.importPreparedTextureDimension=profile.maximumTextureDimension;
+  // O importador é Propriedades: ele precisa estar à vista, inclusive no layout
+  // compacto e vindo do workspace de código.
+  if(state_.workspace==EditorWorkspace::Code) state_.workspace=EditorWorkspace::Scene;
+  state_.inspectorVisible=true;state_.compactPanel=EditorScreenState::CompactPanel::Inspector;
+}
+
 void EditorSession::removeImportMapFile(const resources::AssetGuid &source) {
   const auto root=files_.rootPath();
   std::filesystem::path absolute;
   if(root.empty() || !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),resources::importNodeMapPath(source),absolute)) return;
   std::error_code error;std::filesystem::remove(absolute,error);
+  // O perfil acompanha o mapa: é da mesma fonte.
+  if(EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),resources::importProfilePath(source),absolute))
+    std::filesystem::remove(absolute,error);
 }
 
 void EditorSession::reportImportReconcile(const ImportReconcileReport &report,const char *context) {

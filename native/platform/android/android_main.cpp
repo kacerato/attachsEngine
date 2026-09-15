@@ -149,6 +149,8 @@ struct AndroidShell final {
     // Entrega 4: manifesto das dependências de um .gltf empacotado (vazio para GLB autocontido).
     std::string manifest;
     ae::u32 dependencies=0,unusedCompanions=0;
+    // R3: perfil com que este modelo foi preparado; é o que fica com a fonte.
+    ae::resources::ImportProfile profile;
   };
   // The cancellation token outlives its worker, including shell teardown.
   std::shared_ptr<std::atomic<bool>> importCancellation;
@@ -716,9 +718,11 @@ bool startProjectReopen(AndroidShell &shell) {
   }
   // Publication replaces the registry storage. Keep an owning snapshot: a span
   // (or a copy of only the current record) leaves later iterations dangling.
-  std::vector<std::string> sources;
+  // R3: cada fonte com os limites do PRÓPRIO perfil (e, por eles, a própria chave de cache).
+  std::vector<std::pair<std::string,ae::resources::GltfImportLimits>> sources;
   for(const auto &record:shell.editorSession.assets().records())
-    if(record.type==ae::resources::AssetType::Mesh && !record.source.empty()) sources.push_back(record.source);
+    if(record.type==ae::resources::AssetType::Mesh && !record.source.empty())
+      sources.emplace_back(record.source,shell.editorSession.importLimitsFor(shell.editorSession.importProfileFor(record.guid)));
   if(sources.empty()) return false;
   shell.reopenCancellation=std::make_shared<std::atomic<bool>>(false);
   shell.reopenProgress=std::make_shared<AndroidShell::ReopenProgress>();
@@ -726,9 +730,8 @@ bool startProjectReopen(AndroidShell &shell) {
   shell.projectReopening=true;
   shell.reopenStartedMs=ae::platform::android::lifecycleUptimeMs();
   const std::string root(shell.editorProjectPath);
-  const auto limits=shell.editorSession.importLimits();
   const auto count=sources.size();
-  shell.reopenWork=std::async(std::launch::async,[root,sources=std::move(sources),limits,
+  shell.reopenWork=std::async(std::launch::async,[root,sources=std::move(sources),
                                                   cancel=shell.reopenCancellation,progress=shell.reopenProgress]() {
     using Transaction=ae::editor::EditorImportTransaction;
     AndroidShell::ProjectReopen result;
@@ -738,7 +741,7 @@ bool startProjectReopen(AndroidShell &shell) {
       progress->current=source;progress->stage=what;
     };
     std::unordered_set<std::string> usedKeys;
-    for(const auto &source:sources) {
+    for(const auto &[source,limits]:sources) {
       if(cancel->load()) break;
       const double started=ae::platform::android::lifecycleUptimeMs();
       stage(source,"lendo");
@@ -2179,13 +2182,15 @@ void android_main(android_app *app) {
         const auto launchImport=[&](ae::platform::android::ModelPickerResult picked,std::string path) {
           if(shell.importWork.valid() || shell.importPreview) {session.setImportStatus("Finalize a importação em andamento.");return;}
           if(shell.projectReopening) {session.setImportStatus("Aguarde os recursos do projeto terminarem de abrir.");return;}
-          session.beginImportPreparation();
+          session.beginImportPreparation(path);
           shell.importCancellation=std::make_shared<std::atomic<bool>>(false);
           auto cancel=shell.importCancellation;
           const auto root=session.codeProjectRoot();const auto epoch=session.sceneVersion().epoch;
-          const auto limits=session.importLimits();
-          shell.importWork=std::async(std::launch::async,[picked=std::move(picked),path=std::move(path),root,epoch,cancel,limits]() mutable {
-            AndroidShell::PreparedModel result;result.root=root;result.path=path;result.epoch=epoch;
+          // R3: perfil resolvido para esta fonte (dela, do projeto ou embutido).
+          const auto profile=session.importProfileDraft();
+          const auto limits=session.importLimitsFor(profile);
+          shell.importWork=std::async(std::launch::async,[picked=std::move(picked),path=std::move(path),root,epoch,cancel,limits,profile]() mutable {
+            AndroidShell::PreparedModel result;result.root=root;result.path=path;result.epoch=epoch;result.profile=profile;
             {
               std::filesystem::path absolute;
               if(!ae::editor::EditorImportTransaction::safePath(ae::editor::EditorImportTransaction::fromUtf8(root),path,absolute)) {
@@ -2264,6 +2269,29 @@ void android_main(android_app *app) {
         if(shell.projectReopening && shell.reopenWork.valid() &&
            shell.reopenWork.wait_for(std::chrono::seconds(0))==std::future_status::ready)
           finishProjectReopen(shell);
+        // R3: o painel mudou o perfil. A prévia volta ao worker com os MESMOS bytes
+        // (e o mesmo manifesto de dependências), preparada com o rascunho.
+        if(session.takeImportReprepare()) {
+          if(!shell.importPreview || shell.importWork.valid())
+            session.setImportStatus("Não há prévia para preparar de novo.",ae::editor::EditorConsoleSeverity::Warning);
+          else {
+            auto previous=std::move(*shell.importPreview);shell.importPreview.reset();
+            shell.importCancellation=std::make_shared<std::atomic<bool>>(false);
+            auto cancel=shell.importCancellation;
+            const auto profile=session.importProfileDraft();
+            const auto limits=session.importLimitsFor(profile);
+            shell.importWork=std::async(std::launch::async,[previous=std::move(previous),cancel,limits,profile]() mutable {
+              AndroidShell::PreparedModel result=std::move(previous);
+              result.model={};result.profile=profile;
+              ae::resources::GltfImportProgress progress{};
+              progress.context=cancel.get();
+              progress.cancelled=[](void *context) {return static_cast<std::atomic<bool> *>(context)->load();};
+              result.accepted=ae::resources::importGlb(result.bytes,limits,progress,result.model);
+              result.diagnostic=result.model.diagnostic;
+              return result;
+            });
+          }
+        }
         if(shell.importWork.valid() && shell.importWork.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
           auto prepared=shell.importWork.get();
           if(shell.importCancellation->load() || prepared.root!=session.codeProjectRoot() || prepared.epoch!=session.sceneVersion().epoch) {
@@ -2271,7 +2299,7 @@ void android_main(android_app *app) {
           } else if(!prepared.accepted) {
             session.showImportFailure(prepared.diagnostic.empty()?"O importador não conseguiu preparar este arquivo.":prepared.diagnostic);
           } else {
-            session.showImportPreview(prepared.path,prepared.model,prepared.contentHash);
+            session.showImportPreview(prepared.path,prepared.model,prepared.contentHash,prepared.profile);
             if(prepared.dependencies)
               session.noteImportPreview("Dependências copiadas para o projeto: "+std::to_string(prepared.dependencies)+" arquivo(s)"+
                 (prepared.unusedCompanions?"; "+std::to_string(prepared.unusedCompanions)+" escolhido(s) sem uso":std::string())+
@@ -2299,6 +2327,9 @@ void android_main(android_app *app) {
               else
                 __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] manifesto de dependências: %s.deps (%u arquivos)",prepared.path.c_str(),prepared.dependencies);
             }
+            // R3: o perfil publicado fica com a fonte; reimportar e reabrir usam este.
+            if(!session.saveImportProfile(report.source,prepared.profile))
+              __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] perfil da fonte não gravado: %s",prepared.path.c_str());
             std::string message=report.reimported?"Recurso reimportado; instâncias locais preservadas.":"Recurso registrado. Use Instanciar em Arquivos para adicioná-lo à cena.";
             bool instanceFailed=false;
             if(intoScene) {

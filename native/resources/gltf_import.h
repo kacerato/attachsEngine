@@ -70,6 +70,10 @@ struct GltfImportLimits {
   // cadeia completa de mips vira blocos ASTC — 8 bits por texel em vez de 32 —
   // sem RGBA intermediário. Sem isso, ou sem mips no arquivo, RGBA8 como antes.
   bool astc4x4 = false;
+  // Escala uniforme das raízes, vinda do perfil de importação (R3,
+  // `resources/import_profile.h`). Aplicada à pose local das raízes: a geometria
+  // continua no espaço do nó e os filhos herdam pela hierarquia.
+  float rootScale = 1.0f;
   ImageDecodeLimits image{};
 };
 
