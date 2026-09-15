@@ -52,7 +52,7 @@
 
 namespace ae::editor {
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -503,8 +503,18 @@ public:
     resources::AssetGuid guid;
     std::string path,name;
     u32 width=0,height=0; // do cabeçalho; zero quando o arquivo não abre
+    // O conteúdo do arquivo não bate com o registrado (foi trocado fora do editor).
+    bool changed=false;
   };
   const std::vector<ProjectTexture> &projectTextures() const {return textures_;}
+  // R4: textura escolhida em Arquivos mostrada em Propriedades (imagem, perfil,
+  // usuários) e gerenciador de texturas (grade, busca e filtros).
+  void openTextureInspector(u32 projectTextureIndex);
+  void openTextureManager(std::string folder={});
+  // 0 todas, 1 não usadas, 2 ausentes, 3 alteradas, 4 sem alfa, 5 acima do teto.
+  static constexpr u8 TextureFilterCount=6;
+  void setTextureFilter(u8 filter) {state_.textureFilter=filter<TextureFilterCount?filter:0;state_.textureManagerPage=0;}
+  void setTextureQuery(std::string query) {state_.textureQuery=std::move(query);state_.textureManagerPage=0;}
   // R4: perfil de uma textura do projeto (interpretação, tamanho, mips, bordas,
   // anisotropia). Aplicar grava o arquivo e republica as texturas.
   resources::TextureProfile textureProfileFor(const resources::AssetGuid &texture) const;
@@ -786,11 +796,17 @@ private:
   std::vector<UsedTexture> anticipatedTextures_;
   std::vector<std::pair<resources::AssetGuid,resources::TextureProfile>> textureProfiles_;
   std::vector<std::pair<EditorMapScene::TextureBinding,TextureResidency>> publishedTextures_;
+  // Seleção da cena quando a textura/gerenciador abriu: mudar a seleção devolve
+  // Propriedades ao objeto.
+  EditorEntityId texturePanelSelection_=kInvalidEntity;
+  bool textureInspectorFromManager_=false;
+  void refreshTexturePanels();
   TexturePreviewAtlas preview_;
   struct TextureThumbnail {
     resources::AssetGuid guid;
     std::string contentHash;
     ui::UiRect content{};
+    bool opaque=false; // nenhum texel com alfa abaixo de 255
   };
   std::vector<TextureThumbnail> thumbnails_; // na ordem das texturas do projeto
   struct ViewerChain {

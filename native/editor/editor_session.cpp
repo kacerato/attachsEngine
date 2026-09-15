@@ -440,6 +440,7 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   if(state_.creatingScript) {edit.purpose=EditorTextPurpose::ScriptName;return edit;}
   if(state_.searchingCode) {edit.purpose=EditorTextPurpose::CodeSearch;edit.text=state_.codeQuery;return edit;}
   if(state_.searchingConsole) {edit.purpose=EditorTextPurpose::ConsoleSearch;edit.text=state_.consoleQuery;return edit;}
+  if(state_.searchingTextures) {edit.purpose=EditorTextPurpose::TextureSearch;edit.text=state_.textureQuery;return edit;}
   if(state_.goingToLine) {edit.purpose=EditorTextPurpose::CodeLine;return edit;}
   if(state_.creatingCodeFolder) {edit.purpose=EditorTextPurpose::CodeFolder;return edit;}
   if(state_.editingComponentSearch) {edit.purpose=EditorTextPurpose::ComponentSearch;edit.text=state_.renameText;return edit;}
@@ -660,6 +661,7 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;
     state_.goingToLine=false;state_.creatingCodeFolder=false;state_.codeComposing=false;
     state_.searchingConsole=false;
+    state_.searchingTextures=false;
     state_.renamingResource=false;
     state_.choosingTemplate=false;
     state_.editingScriptInstance=0;state_.editingScriptEntity=0;state_.editingScriptProperty.clear();state_.editingScriptType.clear();
@@ -671,6 +673,9 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
   if(!accept) {close();return true;}
   if(edit.purpose==EditorTextPurpose::ConsoleSearch) {
     state_.consoleQuery=std::string(text);state_.consoleScroll=0;state_.consoleAnchor=0;close();return true;
+  }
+  if(edit.purpose==EditorTextPurpose::TextureSearch) {
+    state_.textureQuery=std::string(text);state_.textureManagerPage=0;close();return true;
   }
   if(edit.purpose==EditorTextPurpose::CodeLine) {
     u32 line=0;std::istringstream value{std::string(text)};
@@ -985,6 +990,29 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     return true;
   }
   if(routing.tapped && !isPlaying()) {
+    // R4: textura em Propriedades e gerenciador de texturas.
+    {
+      const auto key=routing.widgetId;
+      if(key==widgetId(EditorWidget::TextureManagerClose)) {state_.textureManager=false;return true;}
+      if(key==widgetId(EditorWidget::TextureSearch) && state_.textureManager) {state_.searchingTextures=true;return true;}
+      if(key>=widgetId(EditorWidget::TextureFilterBase) && key<widgetId(EditorWidget::TextureFilterBase)+TextureFilterCount) {
+        setTextureFilter(static_cast<u8>(key-widgetId(EditorWidget::TextureFilterBase)));return true;
+      }
+      if(key==widgetId(EditorWidget::TextureManagerPrevious)) {if(state_.textureManagerPage) --state_.textureManagerPage;return true;}
+      if(key==widgetId(EditorWidget::TextureManagerNext)) {++state_.textureManagerPage;return true;}
+      if(key>=widgetId(EditorWidget::TextureManagerRowBase) && key-widgetId(EditorWidget::TextureManagerRowBase)<textures_.size()) {
+        openTextureInspector(key-widgetId(EditorWidget::TextureManagerRowBase));return true;
+      }
+      if(key>=widgetId(EditorWidget::TextureUserBase) && key-widgetId(EditorWidget::TextureUserBase)<state_.textureUserEntities.size()) {
+        const auto id=state_.textureUserEntities[key-widgetId(EditorWidget::TextureUserBase)];
+        if(id!=kInvalidEntity && document_.find(id)) {
+          state_.textureInspector=false;state_.textureViewer=false;
+          setSelection(id);
+          state_.status="Objeto que usa a textura selecionado";
+        }
+        return true;
+      }
+    }
     if(state_.componentSelection!=state_.selection) {
       state_.componentSelection=state_.selection;state_.referenceInstance=0;state_.expandedComponent.clear();state_.expandedNative=0;state_.nativeMenu=0;
       state_.expandedScript=0;state_.scriptMenu=0;state_.meshPicker=false;state_.componentPage=0;state_.propertyPage=0;state_.addingComponent=false;
@@ -1120,7 +1148,12 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       if(!openTextureViewer(key-widgetId(EditorWidget::TextureViewBase))) state_.status=state_.textureViewerInfo;
       return true;
     }
-    if(key==widgetId(EditorWidget::TextureViewerClose)) {closeTextureViewer();return true;}
+    if(key==widgetId(EditorWidget::TextureViewerClose)) {
+      closeTextureViewer();
+      // Em Propriedades, voltar leva ao gerenciador quando a textura veio dele.
+      if(state_.textureInspector) {state_.textureInspector=false;state_.textureManager=textureInspectorFromManager_;}
+      return true;
+    }
     if(key==widgetId(EditorWidget::TextureViewerChannel)) {cycleTextureViewerChannel();return true;}
     if(key==widgetId(EditorWidget::TextureViewerZoom)) {cycleTextureViewerZoom();return true;}
     // R4: perfil da textura aberta no visualizador.
@@ -1489,6 +1522,11 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       // e possivel.
       state_.selectedFile=entry.relativePath;
       state_.pendingResourceDelete.clear();
+      // R4: a pasta Texturas (ou uma subpasta) abre o gerenciador em Propriedades;
+      // uma textura do projeto abre a própria textura, logo abaixo.
+      state_.textureManager=false;state_.textureInspector=false;
+      if(entry.directory && (entry.relativePath=="Texturas" || entry.relativePath.starts_with("Texturas/")))
+        openTextureManager(entry.relativePath=="Texturas"?std::string():entry.relativePath);
       if(entry.directory) files_.toggle(key-base);
       else if(entry.name.ends_with(".cs") || entry.name.ends_with(".json") || entry.name.ends_with(".md")) {
         state_.code=&code_;
@@ -1499,6 +1537,8 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
         requestedScenePath_=files_.resolveFile(entry.relativePath);
       else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::Texture) {
         const auto *texture=findProjectTexture(record->guid);
+        for(u32 index=0;index<textures_.size();++index)
+          if(textures_[index].guid==record->guid) {openTextureInspector(index);break;}
         const auto users=textureUsersOf(record->guid);
         state_.status=std::string("Textura do projeto")+
             (texture && texture->width?" · "+std::to_string(texture->width)+"×"+std::to_string(texture->height):std::string())+
@@ -2028,8 +2068,12 @@ bool EditorSession::generatePendingTextureThumbnail() {
     TextureThumbnail thumbnail{textures_[index].guid,hash,{}};
     resources::DecodedImage image;
     // Arquivo ilegível fica sem miniatura, mas registrado: não é tentado de novo a cada quadro.
-    if(readProjectImage(files_.rootPath(),textures_[index].path,importLimits_.image,image))
+    if(readProjectImage(files_.rootPath(),textures_[index].path,importLimits_.image,image)) {
       thumbnail.content=preview_.writeThumbnail(index,image.rgba,image.width,image.height);
+      // Mesma decodificação serve ao filtro "sem alfa" do gerenciador.
+      thumbnail.opaque=true;
+      for(usize at=3;at<image.rgba.size();at+=4) if(image.rgba[at]!=255) {thumbnail.opaque=false;break;}
+    }
     if(index<thumbnails_.size()) thumbnails_[index]=std::move(thumbnail);
     else thumbnails_.push_back(std::move(thumbnail));
     return true;
@@ -2906,7 +2950,7 @@ void EditorSession::frameSubtree(EditorEntityId root) {
 void EditorSession::update() {
   refreshImportLinkView();
   // R4: miniaturas nascem uma por atualização enquanto o seletor está aberto.
-  if(state_.texturePicker) generatePendingTextureThumbnail();
+  if(state_.texturePicker || state_.textureManager) generatePendingTextureThumbnail();
   refreshMaterialSlotView();
   if(const auto *selected=document_.find(state_.selection)) state_.routePoint=waterRoute(*selected).count?std::min(state_.routePoint,waterRoute(*selected).count-1):0;
   if (font_ == nullptr || icons_ == nullptr) return;
@@ -2967,6 +3011,7 @@ void EditorSession::refreshMaterialSlotView() {
   }
   const auto *entity=document_.find(state_.selection);
   const auto *render=entity?meshRenderer(*entity):nullptr;
+  refreshTexturePanels();
   // R4: isolar na prévia vale para o objeto e slot em edição, nunca em Play.
   {
     const EditorEntityId isolated=(render && !isPlaying() && state_.materialIsolate)?state_.selection:kInvalidEntity;
@@ -2976,7 +3021,8 @@ void EditorSession::refreshMaterialSlotView() {
   state_.projectTextureThumbs.assign(textures_.size(),{});
   for(usize index=0;index<thumbnails_.size() && index<textures_.size();++index)
     if(thumbnails_[index].guid==textures_[index].guid) state_.projectTextureThumbs[index]=thumbnails_[index].content;
-  if(!render) {state_.materialPicker=false;state_.texturePicker=false;state_.textureViewer=false;return;}
+  // A textura em Propriedades usa o mesmo visualizador sem objeto selecionado.
+  if(!render) {state_.materialPicker=false;state_.texturePicker=false;state_.textureViewer=state_.textureViewer && state_.textureInspector;return;}
   view.slots=render->slotCount();
   state_.materialSlot=std::min(state_.materialSlot,view.slots-1);
   const u32 slot=state_.materialSlot;
@@ -3158,6 +3204,70 @@ bool writeProjectTextureProfile(const std::string &root,const std::string &relat
 }
 } // namespace
 
+void EditorSession::openTextureInspector(u32 projectTextureIndex) {
+  if(projectTextureIndex>=textures_.size()) return;
+  textureInspectorFromManager_=state_.textureManager;
+  state_.textureManager=false;state_.textureInspector=true;
+  texturePanelSelection_=state_.selection;
+  openTextureViewer(projectTextureIndex);
+}
+
+void EditorSession::openTextureManager(std::string folder) {
+  state_.textureManager=true;state_.textureInspector=false;state_.textureViewer=false;
+  state_.textureFolder=std::move(folder);state_.textureManagerPage=0;
+  texturePanelSelection_=state_.selection;
+}
+
+void EditorSession::refreshTexturePanels() {
+  // Escolher outra coisa na cena devolve Propriedades ao objeto.
+  if((state_.textureInspector || state_.textureManager) && state_.selection!=texturePanelSelection_) {
+    state_.textureInspector=false;state_.textureManager=false;state_.textureViewer=false;
+  }
+  if(state_.textureInspector && state_.textureViewerIndex<textures_.size()) {
+    const auto guid=textures_[state_.textureViewerIndex].guid;
+    state_.textureUserLabels.clear();state_.textureUserEntities.clear();
+    std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
+    for(const auto id:ids) {
+      const auto *entity=document_.find(id);
+      const auto *render=entity?meshRenderer(*entity):nullptr;
+      if(!render) continue;
+      bool uses=false;
+      for(u32 slot=0;slot<render->slotCount() && !uses;++slot)
+        uses=std::find(render->slotTextures(slot).begin(),render->slotTextures(slot).end(),guid)!=render->slotTextures(slot).end() ||
+             render->slotOcclusionTexture(slot)==guid;
+      if(!uses) continue;
+      state_.textureUserLabels.push_back(std::string("Objeto: ")+entity->name);
+      state_.textureUserEntities.push_back(id);
+    }
+    for(const auto &material:materials_)
+      if(std::find(material.textures.begin(),material.textures.end(),guid)!=material.textures.end() || material.occlusionTexture==guid) {
+        state_.textureUserLabels.push_back("Material do projeto: "+material.name);
+        state_.textureUserEntities.push_back(kInvalidEntity);
+      }
+  }
+  if(state_.textureManager) {
+    const auto lower=[](std::string text) {for(auto &c:text) if(c>='A' && c<='Z') c=static_cast<char>(c-'A'+'a');return text;};
+    const auto query=lower(state_.textureQuery);
+    state_.textureManagerRows.clear();
+    for(u32 index=0;index<textures_.size();++index) {
+      const auto &texture=textures_[index];
+      if(!state_.textureFolder.empty() && !texture.path.starts_with(state_.textureFolder+"/")) continue;
+      if(!query.empty() && lower(texture.path).find(query)==std::string::npos) continue;
+      bool pass=true;
+      switch(state_.textureFilter) {
+      case 1: pass=textureUsersOf(texture.guid)==0;break;
+      case 2: pass=texture.width==0;break;
+      case 3: pass=texture.changed;break;
+      // Só texturas já analisadas pela miniatura entram em "sem alfa".
+      case 4: pass=index<thumbnails_.size() && thumbnails_[index].guid==texture.guid && thumbnails_[index].opaque;break;
+      case 5: pass=std::max(texture.width,texture.height)>importLimits_.maximumTextureDimension;break;
+      default: break;
+      }
+      if(pass) state_.textureManagerRows.push_back(index);
+    }
+  }
+}
+
 resources::TextureProfile EditorSession::textureProfileFor(const resources::AssetGuid &texture) const {
   for(const auto &[guid,profile]:textureProfiles_) if(guid==texture) return profile;
   return {};
@@ -3203,6 +3313,8 @@ void EditorSession::loadTextureAssets() {
        !EditorImportTransaction::read(absolute,bytes,importLimits_.image.maximumEncodedBytes) ||
        !resources::readImageDimensions(bytes,importLimits_.image,texture.width,texture.height))
       reportProblem(EditorConsoleSeverity::Warning,"Textura do projeto ausente ou ilegível: "+record.path+"; os bindings que a usam ficam com a textura da fonte.");
+    // Filtro "alteradas": o arquivo no disco não é mais o conteúdo registrado.
+    if(!bytes.empty()) texture.changed=Sha256::hex(bytes)!=record.contentHash;
     textures_.push_back(std::move(texture));
   }
 }

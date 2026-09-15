@@ -195,6 +195,7 @@ enum class EditorWidget : u32 {
   TextureViewerClose, TextureViewerChannel, TextureViewerMipDown, TextureViewerMipUp,
   TextureViewerZoom, TextureViewerBackground,
   TextureProfileInterpretation, TextureProfileDimension, TextureProfileMipmaps, TextureProfileEdges, TextureProfileAnisotropy,
+  TextureManagerClose, TextureSearch, TextureManagerPrevious, TextureManagerNext,
   TextureSamplingUv, TextureSamplingWrap, TextureSamplingFilter, TextureUvReset,
   // + máscara de ImportOverride.
   ImportLinkRevertBase=0x52000000u,
@@ -206,6 +207,8 @@ enum class EditorWidget : u32 {
   TextureViewBase=0x57000000u,
   // + campo*2 (+1 para somar): deslocamento U/V, escala U/V, rotação da UV do binding.
   TextureUvStepBase=0x58000000u,
+  // R4: filtro do gerenciador, textura da grade e usuário da textura em Propriedades.
+  TextureFilterBase=0x59000000u, TextureManagerRowBase=0x5A000000u, TextureUserBase=0x5B000000u,
   ComponentReferenceBase=0x7a000000u, ReferenceChoiceBase=0x7b000000u,
   ComponentNumberBase=0x78000000u,
   MeshChoiceBase=0x79000000u,
@@ -433,6 +436,14 @@ struct EditorScreenState final {
   u32 materialSlot=0,materialPage=0;
   // R4: dado do material isolado na prévia (MaterialIsolate*); transitório.
   u8 materialIsolate=0;
+  // R4: textura escolhida em Arquivos mostrada em Propriedades e gerenciador de texturas.
+  bool textureInspector=false,textureManager=false,searchingTextures=false;
+  u8 textureFilter=0;
+  u32 textureManagerPage=0;
+  std::string textureQuery,textureFolder;
+  std::vector<u32> textureManagerRows;
+  std::vector<std::string> textureUserLabels;
+  std::vector<EditorEntityId> textureUserEntities;
   bool materialShared=false,materialPicker=false;
   // R4: seletor de textura de um binding e as texturas do projeto para ele.
   bool texturePicker=false;

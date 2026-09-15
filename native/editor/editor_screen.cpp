@@ -1717,6 +1717,98 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
   }
   }
 }
+// R4: textura escolhida em Arquivos, em Propriedades: o visualizador (imagem,
+// canal, mip, zoom, fundo, perfil e residência) e quem usa a textura.
+void buildTextureInspector(ScreenBuilder &builder,UiRect content) {
+  const auto &state=builder.state;const auto &theme=builder.theme;
+  const float wanted=34.0f+static_cast<float>(std::max<usize>(1,state.textureUserLabels.size()))*28.0f;
+  auto users=takeBottom(content,std::min(content.height*.28f,wanted));
+  buildTextureViewer(builder,content);
+  builder.list.addRect({users.x,users.y,users.width,1},theme.color.lineSoft);
+  builder.label(takeTop(users,30),"Usuários ("+std::to_string(state.textureUserLabels.size())+")",theme.color.textDim,theme.type.caption);
+  if(state.textureUserLabels.empty()) {
+    if(users.height>=24) builder.label(takeTop(users,24),"Nenhum objeto ou material do projeto usa esta textura",theme.color.textMuted,theme.type.caption);
+    return;
+  }
+  builder.list.pushClip(users);
+  for(u32 i=0;i<state.textureUserLabels.size() && users.height>=26;++i) {
+    auto row=takeTop(users,28);
+    const bool entity=i<state.textureUserEntities.size() && state.textureUserEntities[i]!=kInvalidEntity;
+    builder.label(deflate(row,UiInsets::symmetric(6,0)),state.textureUserLabels[i],entity?theme.color.text:theme.color.textMuted,theme.type.caption);
+    if(entity) builder.router.addRegion(row,widgetId(EditorWidget::TextureUserBase)+i);
+  }
+  builder.list.popClip();
+}
+
+// R4: gerenciador de texturas: grade com miniaturas, busca por nome ou pasta e
+// filtros de uso, arquivo, alfa e teto.
+void buildTextureManager(ScreenBuilder &builder,UiRect content) {
+  const auto &state=builder.state;const auto &theme=builder.theme;
+  auto title=takeTop(content,36),back=takeLeft(title,36);
+  builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
+  builder.router.addRegion(back,widgetId(EditorWidget::TextureManagerClose));
+  builder.label(title,(state.textureFolder.empty()?std::string("Texturas do projeto"):state.textureFolder)+" · "+
+                std::to_string(state.textureManagerRows.size()),theme.color.text,theme.type.caption);
+  auto search=deflate(takeTop(content,36),UiInsets::all(2));
+  builder.list.addRect(search,theme.color.raised,theme.radius.control);
+  builder.label(deflate(search,UiInsets::symmetric(8,0)),
+                state.textureQuery.empty()?std::string("Buscar por nome ou pasta"):"Busca: "+state.textureQuery,
+                state.textureQuery.empty()?theme.color.textMuted:theme.color.text,theme.type.caption);
+  builder.router.addRegion(search,widgetId(EditorWidget::TextureSearch));
+  static constexpr const char *filters[]{"Todas","Não usadas","Ausentes","Alteradas","Sem alfa","Acima do teto"};
+  for(u32 line=0;line<2;++line) {
+    auto row=takeTop(content,32);
+    const float third=row.width/3;
+    for(u32 column=0;column<3;++column) {
+      const u32 index=line*3+column;
+      const auto box=deflate(column<2?takeLeft(row,third):row,UiInsets::all(2));
+      const bool on=state.textureFilter==index;
+      builder.list.addRect(box,on?theme.color.accent:theme.color.raised,theme.radius.control);
+      builder.label(box,filters[index],on?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(box,widgetId(EditorWidget::TextureFilterBase)+index);
+    }
+  }
+  const u32 rows=static_cast<u32>(state.textureManagerRows.size());
+  if(!rows) {
+    builder.label(takeTop(content,40),"Nenhuma textura neste filtro",theme.color.textMuted,theme.type.caption);
+    return;
+  }
+  auto footer=takeBottom(content,32);
+  const float cell=104.0f,caption=22.0f;
+  const u32 columns=std::max(1u,static_cast<u32>(content.width/cell));
+  const u32 lines=std::max(1u,static_cast<u32>(content.height/(cell+caption)));
+  const u32 perPage=columns*lines;
+  const u32 pages=(rows+perPage-1)/perPage,page=std::min(state.textureManagerPage,pages-1);
+  const float width=content.width/static_cast<float>(columns);
+  for(u32 slot=0;slot<perPage && page*perPage+slot<rows;++slot) {
+    const u32 index=state.textureManagerRows[page*perPage+slot];
+    const UiRect box{content.x+width*static_cast<float>(slot%columns),content.y+(cell+caption)*static_cast<float>(slot/columns),width,cell+caption};
+    const auto inner=deflate(box,UiInsets::all(3));
+    builder.list.addRect(inner,theme.color.raised,theme.radius.control);
+    const auto thumb=deflate(UiRect{inner.x,inner.y,inner.width,inner.height-caption},UiInsets::all(4));
+    if(index<state.projectTextureThumbs.size() && !state.projectTextureThumbs[index].isEmpty()) {
+      const auto &texels=state.projectTextureThumbs[index];
+      const float fit=std::min(thumb.width/texels.width,thumb.height/texels.height);
+      builder.list.addPreviewImage({thumb.x+(thumb.width-texels.width*fit)*.5f,thumb.y+(thumb.height-texels.height*fit)*.5f,
+                                    texels.width*fit,texels.height*fit},texels);
+    } else {
+      builder.list.addRect(thumb,theme.color.lineSoft,4);
+    }
+    const UiRect name{inner.x+4,inner.bottom()-caption,inner.width-8,caption-2};
+    builder.list.pushClip(name);
+    builder.label(name,index<state.projectTextureNames.size()?state.projectTextureNames[index]:std::string(),theme.color.text,theme.type.caption);
+    builder.list.popClip();
+    builder.router.addRegion(inner,widgetId(EditorWidget::TextureManagerRowBase)+index);
+  }
+  if(pages>1) {
+    const auto previous=takeLeft(footer,36),next=takeRight(footer,36);
+    builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.label(footer,std::to_string(page+1)+" / "+std::to_string(pages),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(previous,widgetId(EditorWidget::TextureManagerPrevious));
+    builder.router.addRegion(next,widgetId(EditorWidget::TextureManagerNext));
+  }
+}
 } // namespace
 
 void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
@@ -1724,6 +1816,15 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
     builder.list.addRect(panel, builder.theme.color.surface);
     builder.router.addBlocker(panel);
     buildImportDock(builder, deflate(panel, UiInsets::all(builder.theme.spacing.small)));
+    return;
+  }
+  // R4: textura escolhida em Arquivos e gerenciador da pasta Texturas.
+  if (builder.state.textureManager || builder.state.textureInspector) {
+    builder.list.addRect(panel, builder.theme.color.surface);
+    builder.router.addBlocker(panel);
+    const auto inner = deflate(panel, UiInsets::all(builder.theme.spacing.small));
+    if (builder.state.textureManager) buildTextureManager(builder, inner);
+    else buildTextureInspector(builder, inner);
     return;
   }
   const UiTheme &theme = builder.theme;
@@ -1870,7 +1971,7 @@ bool platformFieldActive(const EditorScreenState &state) {
          state.editingCreationSearch || state.editingComponentSearch || state.editingMeshSearch ||
          state.editingReferenceSearch || state.numericField != 0 ||
          state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode ||
-         state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole;
+         state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures;
 }
 
 const char *platformFieldTitle(const EditorScreenState &state) {
@@ -1878,6 +1979,7 @@ const char *platformFieldTitle(const EditorScreenState &state) {
   if (state.renamingResource) return "Arquivo";
   if (state.editingScriptInstance != 0) return "Campo";
   if (state.creatingScript) return state.scriptTemplate==EditorCodeWorkspace::HelperTemplate?"Auxiliar C#":"Componente C#";
+  if (state.searchingTextures) return "Buscar textura";
   if (state.searchingCode) return "Localizar";
   if (state.searchingConsole) return "Console";
   if (state.goingToLine) return "Ir para linha";

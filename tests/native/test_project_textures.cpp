@@ -888,3 +888,62 @@ AE_TEST(r4_texture_profile_changes_interpretation_mips_anisotropy_and_is_read_ba
   AE_EXPECT_TRUE(reopened.loadAssets(registry), "registro");
   AE_EXPECT_TRUE(resources::sameTextureProfile(reopened.textureProfileFor(texture), profile), "perfil lido na reabertura");
 }
+
+AE_TEST(r4_texture_manager_filters_searches_and_the_inspector_lists_users) {
+  Project project;
+  EditorSession session;
+  Publisher publisher;
+  start(session, publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  const auto glb = texturedPanel(png(4, 4, 200));
+  resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(glb, {}, {}, model), model.diagnostic.c_str());
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(glb, model, "Fontes/tela.glb", "", report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), report.diagnostic.c_str());
+  std::string diagnostic;
+  EditorSession::TextureExtraction extraction;
+  AE_EXPECT_TRUE(session.extractSourceTextures("Fontes/tela.glb", extraction, diagnostic), diagnostic.c_str());
+  const auto object = firstMeshObject(session);
+  const auto texture = extraction.textures.front();
+
+  session.openTextureManager();
+  session.update();
+  AE_EXPECT_TRUE(session.screen().textureManager && session.screen().textureManagerRows.size() == 1, "gerenciador lista a textura");
+  session.setTextureFilter(1);
+  session.update();
+  AE_EXPECT_EQ(session.screen().textureManagerRows.size(), usize{1}, "não usada aparece em Não usadas");
+  AE_EXPECT_TRUE(session.setSlotTexture(object, 0, 0, EditorSession::MaterialScope::Instance, texture, diagnostic), diagnostic.c_str());
+  session.update();
+  AE_EXPECT_EQ(session.screen().textureManagerRows.size(), usize{0}, "usada sai de Não usadas");
+  session.setTextureFilter(4);
+  session.update();
+  AE_EXPECT_EQ(session.screen().textureManagerRows.size(), usize{1}, "PNG sem transparência aparece em Sem alfa");
+  session.setTextureFilter(0);
+  session.setTextureQuery("PINTURA");
+  session.update();
+  AE_EXPECT_EQ(session.screen().textureManagerRows.size(), usize{1}, "busca sem diferenciar maiúsculas");
+  session.setTextureQuery("tijolo");
+  session.update();
+  AE_EXPECT_EQ(session.screen().textureManagerRows.size(), usize{0}, "busca sem resultado");
+  session.setTextureQuery("");
+
+  // Arquivo trocado fora do editor: o conteúdo não bate mais com o registro.
+  const auto path = session.assets().find(texture)->path;
+  AE_EXPECT_TRUE(EditorImportTransaction::write(project.root / path, png(4, 4, 10)), "arquivo trocado no disco");
+  AE_EXPECT_TRUE(session.loadAssets(session.serializeAssets()), "registro recarregado");
+  session.openTextureManager();
+  session.setTextureFilter(3);
+  session.update();
+  AE_EXPECT_EQ(session.screen().textureManagerRows.size(), usize{1}, "aparece em Alteradas");
+
+  session.openTextureInspector(0);
+  session.update();
+  AE_EXPECT_TRUE(session.screen().textureInspector && session.screen().textureViewer && !session.screen().textureManager,
+                 "textura em Propriedades com o visualizador");
+  AE_EXPECT_TRUE(session.screen().textureUserLabels.size() == 1 && session.screen().textureUserEntities[0] == object,
+                 "o objeto que usa a textura aparece e é selecionável");
+  session.setSelection(session.document().root());
+  session.update();
+  AE_EXPECT_TRUE(!session.screen().textureInspector, "mudar a seleção devolve Propriedades ao objeto");
+}

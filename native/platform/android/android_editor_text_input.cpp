@@ -254,7 +254,8 @@ Java_dev_aether_editor_EditorTextInput_poll(JNIEnv *env,jclass) {
       property?("Campo · "+request.propertyType):
       request.purpose==ae::editor::EditorTextPurpose::ScriptName?"Nova classe C#":
       request.purpose==ae::editor::EditorTextPurpose::ResourceName?"Renomear recurso":
-      request.purpose==ae::editor::EditorTextPurpose::Rename?"Renomear objeto":"Pesquisar",
+      request.purpose==ae::editor::EditorTextPurpose::Rename?"Renomear objeto":
+      request.purpose==ae::editor::EditorTextPurpose::TextureSearch?"Buscar textura":"Pesquisar",
     request.text,code?"524288":property?"4096":number?"47":"63",
     // Onde o cursor comeca, em BYTES. Para o codigo ele vem do toque -- a linha
     // que o dedo escolheu --, e nao do fim do arquivo.
