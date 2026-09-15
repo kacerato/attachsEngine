@@ -96,6 +96,34 @@ Limites desta fatia, ditos explicitamente:
 - miniaturas cobrem as 50 primeiras texturas do projeto; as seguintes aparecem sem miniatura (com o quadro vazio);
 - ASTC/KTX2 da fonte não entram no visualizador: texturas do projeto são PNG/JPEG por contrato (seção 2).
 
+## 9. Quarta fatia: canal de UV, repetição e filtro por binding
+
+| Parte | O que faz | Host | Aparelho |
+|---|---|---|---|
+| Dado persistido | `MaterialSampling{uvSet, wrap, filter}` por binding (0 herda) na instância (`MeshRenderer` **v6**, token `uvf` por binding de cada slot) e no material do projeto (`MaterialAsset` **v4**); versões anteriores continuam abrindo | sim (`r4_sampling_uv_set_wrap_and_filter_resolve_publish_variants_and_travel_to_the_project_material`, `mesh_component_v1_archive_still_loads_and_gains_identity_on_save`) | sim (ver conferência) |
+| Resolução | campo a campo: instância → material compartilhado → fonte, independente da textura e dos fatores | sim | sim (ver conferência) |
+| Canal de UV (T19) | UV 0 / UV 1 reescreve os dois bits do binding em `textureCoordinates`, o campo que o shader já lê (`selectedUv`); vale também com a textura da fonte | sim | sim (ver conferência) |
+| Repetição e filtro (T12) | Repetir / Limitar / Espelhar e Linear / Próximo viram as flags de sampler da textura do projeto publicada; a biblioteca passa a ser por (textura, espaço de cor, sampler) e só as combinações em uso sobem; trocar o sampler custa uma publicação | sim | sim (ver conferência) |
+| Interface | seletor de textura do binding com três botões (UV, Rep., Filtro); herdar mostra o que vale por baixo; repetição e filtro não recebem toque quando o binding usa a textura da fonte; a linha do binding na aba Material diz "amostragem própria" | parcial (resolução e rótulos; toque só no aparelho) | sim (ver conferência) |
+| Vínculo com a fonte | amostragem local conta como material local, "Reverter material à fonte" limpa; criar material do projeto leva a amostragem e limpa a da instância | sim | sim (ver conferência) |
+
+Suíte do host: 911/913 (as duas falhas antigas de R0). Commit `7ed4a6a0`, APK conferido: `B6A005F6…492C`. Evidência: `docs/validacao/evidencias/r4-amostragem-20260915/`.
+
+Conferência no aparelho (Ford, carroceria `Cortina:lod10_CaarPaint_0`, Material > Mapa: cor, esta instância):
+- com a textura da fonte, o seletor mostra "UV: Herdar", "Rep.: Herdar" e "Filtro: Herdar"; repetição e filtro aparecem apagados e o aviso "valem só com textura do projeto" fica visível;
+- **UV** trocado para UV 0: o cartão do vínculo passa de "igual à fonte" para "1 alteração local";
+- escolhida a `imagem-1.png` (textura do projeto): a linha diz "só esta instância · amostragem própria", o seletor mostra "1 uso" e repetição e filtro passam a receber toque;
+- **Rep.: Limitar** e **Filtro: Próximo** aplicados, sem erro de publicação;
+- **Reverter material à fonte** devolveu textura, UV, repetição e filtro: "igual à fonte", carroceria original, `imagem-1.png` com 0 usos; cena salva nesse estado.
+
+Não observado no aparelho: diferença visual de limitar/próximo na carroceria (a UV do Ford fica dentro de 0–1 e a câmera está longe demais para ver o filtro).
+
+Limites desta fatia, ditos explicitamente:
+- **transformação de UV por binding** (escala, deslocamento, rotação) continua **não feita**: o push constant do material (128 bytes) e o registro por instância (`GpuMeshInstance`, 128 bytes) estão cheios; pede um buffer de extensão de material por desenho, ligado ao conjunto de descritores do mapa e lido no vertex shader. Hoje a transformação só existe assada na importação, quando as texturas do material concordam;
+- repetição e filtro de uma **textura da fonte** não são editáveis (o sampler dela sobe com o pacote); para trocar, extraia a textura e use a do projeto;
+- trocar o canal de UV do mapa normal não recalcula tangentes: elas seguem o conjunto de UV em que foram geradas na importação;
+- duas amostragens da mesma imagem em uso ao mesmo tempo duplicam a cadeia de mips na CPU e na GPU.
+
 ## 5. Fora desta fatia, dito explicitamente
 
 - ~~Miniaturas, visualizador de canais e mips, zoom/fundo~~: feitos na seção 8 (zoom só no centro).
