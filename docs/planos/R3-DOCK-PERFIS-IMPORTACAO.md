@@ -55,7 +55,7 @@ Ambiguidades de reimportação continuam exigindo escolha explícita (“Pela or
 
 Suíte do host: 900/902 (as duas falhas antigas de R0). APK conferido: `2D7DFE39…3F03`. Evidência: `docs/validacao/evidencias/r3-painel-20260915/`.
 
-Defeitos vistos no aparelho e corrigidos depois (APK `962B755E…3F7F`, host 900/902), **ainda não reconferidos no aparelho**:
+Defeitos vistos no aparelho e corrigidos depois (APK `962B755E…3F7F`, host 900/902), **reconferidos no aparelho** (`correcao-caminho-caixa-adb.png`, `correcao-botao-diminuir-adb.png`, `correcao-escala-meio-adb.png`: ×0,5 com tamanho 1,73; cancelado sem gravar perfil; reabertura quente com perfis: 8/8 derivados, 17,1 s):
 - o botão de diminuir a escala saía vazio, porque o glifo “−” (U+2212) não existe no atlas da fonte; agora usa “-”;
 - o caminho da fonte usava o estilo de rótulo em maiúsculas, que esconde a caixa do nome do arquivo; agora usa o estilo de legenda.
 
