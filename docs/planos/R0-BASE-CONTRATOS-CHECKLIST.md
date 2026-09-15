@@ -99,14 +99,14 @@ Estados do relatório: **E** existente a preservar · **P** parcial · **N** lac
 | T08 | Formato de plataforma | P | parcial (ASTC 4x4 para KTX2 com mips) | parcial (prévia) | sim | sim | R2/R4 |
 | T09 | Compressão e qualidade | P | — | — | — | — | R4/R9 |
 | T10 | Mipmaps | E/P | sim (gerados ou do KTX2) | — | sim | sim | R4 |
-| T11 | Inspeção de mip | N | — | — | — | — | R4 |
+| T11 | Inspeção de mip | N | sim (R4 §8: cadeia gerada do arquivo, nível e dimensões) | sim (seletor > Ver) | sim | sim (nível 5 de 10 · 32×32) | R4 |
 | T12 | Filtro e repetição | E/P | sim (sampler do arquivo) | — | sim | — | R4 |
 | T13 | Anisotropia | A | parcial (política global do renderer) | — | — | — | R4/R9 |
-| T14 | Canais RGBA | N | — | — | — | — | R4 |
-| T15 | Zoom e fundo | N | — | — | — | — | R4 |
+| T14 | Canais RGBA | N | sim (R4 §8: RGBA, R, G, B, A) | sim (seletor > Ver) | sim | sim (Vermelho) | R4 |
+| T15 | Zoom e fundo | N | parcial (R4 §8: zoom 1–8× só no centro, sem arrastar; fundo xadrez/preto/branco) | sim (seletor > Ver) | sim | sim (4×, preto) | R4 |
 | T16 | Memória e resolução efetiva | P | parcial (MB por importação; R2: pedidos × residentes do projeto) | parcial (console e log) | sim | parcial (log `[Residencia]` 339 MB) | R2/R4 |
 | T17 | Streaming por orçamento | A | parcial (R2: teto agregado reduz mips na publicação; sem streaming por uso) | parcial | sim | — (projeto medido cabe no teto; redução não exercitada) | R2/R9 |
-| T18 | Textura no material | N | parcial (R4: 4 bindings por instância e compartilhado; sem miniatura) | sim (aba Material + seletor) | sim | parcial (instância) | R4 |
+| T18 | Textura no material | N | parcial (R4: 4 bindings por instância e compartilhado; miniaturas no seletor; sem sampler/UV por binding) | sim (aba Material + seletor) | sim | parcial (instância) | R4 |
 | T19 | Transformação por uso | P | parcial (assada quando o material concorda) | — | sim | sim | R4 |
 | T20 | Empacotamento de canais | P | parcial (MR importado) | — | sim | — | R4 |
 | T21 | Oclusão | N | parcial (R4: ORM no canal R do metal/rugosidade; textura própria segue declarada) | sim (prévia diz aplicada/não aplicada) | sim | parcial | R4 |

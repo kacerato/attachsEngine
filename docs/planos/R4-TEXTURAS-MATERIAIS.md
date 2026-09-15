@@ -68,9 +68,37 @@ Limites desta fatia, ditos explicitamente:
 - sombras seguem sem culling;
 - um modo de alfa diferente do da fonte usa o pipeline genérico da família quando a variante especializada não foi criada para o pacote (mesmo resultado, sem a especialização de features).
 
+## 8. Terceira fatia: miniaturas e visualizador de textura
+
+| Parte | O que faz | Host | Aparelho |
+|---|---|---|---|
+| Atlas de prévia | atlas RGBA8 1024×1024 composto na CPU pela sessão (`TexturePreviewAtlas`): grade de 50 miniaturas de 96 px e uma região de 512×512 para o visualizador; redução por média de caixa com proporção preservada; enviado ao renderer da interface só quando muda, como terceiro sampler do descritor da interface (`VulkanUiRenderer::setPreviewAtlas`, imagem nova a cada envio) | sim (`r4_texture_preview_atlas_fits_thumbnails_and_isolates_channels`) | sim (ver conferência) |
+| Tipo de instância `Preview` | `UiDrawList::addPreviewImage` leva o recorte em texels no próprio comando; o fragmento amostra o atlas de prévia com o tamanho em `outputFlags.zw`; mesma conversão sRGB dos ícones | sim (`r4_builder_turns_a_preview_image_into_a_preview_instance_with_its_texels`) | sim (ver conferência) |
+| Miniaturas no seletor (T18) | cada linha do seletor de textura mostra a miniatura, nome, dimensões/usos e o botão **Ver**; as miniaturas nascem uma por atualização enquanto o seletor está aberto e só são refeitas quando o conteúdo do arquivo muda | sim (`r4_texture_thumbnails_are_generated_once_and_viewer_walks_mips_and_channels`) | sim (ver conferência) |
+| Inspeção de mip (T11) | cadeia de mips gerada como na publicação (`buildMipChain`, sRGB); − / + percorrem os níveis com "Nível N de M · L×A" | sim | sim (ver conferência) |
+| Canais (T14) | RGBA, Vermelho, Verde, Azul, Alfa; canal isolado em cinza opaco | sim | sim (ver conferência) |
+| Zoom e fundo (T15) | zoom 1×/2×/4×/8× **no centro** da imagem (ampliação por vizinho, texel nítido); fundo xadrez, preto ou branco sob o alfa (só em RGBA) | sim | sim (ver conferência) |
+| Dados | dimensões originais, níveis, MB com mips, usos, teto de residência quando a imagem passa do limite do aparelho, caminho | sim | sim (ver conferência) |
+
+Suíte do host: 910/912 (as duas falhas antigas de R0). APK conferido: `FE2462D3…74A5`. Evidência: `docs/validacao/evidencias/r4-previa-20260915/`.
+
+Conferência no aparelho (Ford, carroceria `Cortina:lod10_CaarPaint_0`, aba Material > Mapa: cor):
+- o seletor mostra miniatura de cada uma das 19 texturas extraídas, com proporção certa (1024×2048 aparece estreita), nas páginas 1 e 2;
+- **Ver** abre `imagem-1.png`: 1024×1024, 11 níveis, 5.3 MB com mips, 0 usos, caminho; xadrez visível onde o alfa é zero;
+- canal **Vermelho**: amarelo vira branco e verde vira escuro, como esperado de R isolado;
+- **+** cinco vezes chega a "Nível 5 de 10 · 32×32", com texel ampliado nítido;
+- **−** volta ao nível 0; **Zoom 4× no centro** e **Fundo Preto** aplicados;
+- **<** volta ao seletor e fecha sem alterar a cena (nenhuma troca de textura foi feita).
+
+Limites desta fatia, ditos explicitamente:
+- o zoom é sempre centrado; **não há arrastar para mover** a região ampliada;
+- a prévia mostra o nível da cadeia gerada a partir do arquivo original, não a textura residente na GPU depois do teto de dimensão e do orçamento (o teto aparece escrito nos dados);
+- miniaturas cobrem as 50 primeiras texturas do projeto; as seguintes aparecem sem miniatura (com o quadro vazio);
+- ASTC/KTX2 da fonte não entram no visualizador: texturas do projeto são PNG/JPEG por contrato (seção 2).
+
 ## 5. Fora desta fatia, dito explicitamente
 
-- **Miniaturas** no seletor (hoje nome, dimensões e caminho), **visualizador de canais e mips** (T11/T14/T15) e **zoom/fundo**.
+- ~~Miniaturas, visualizador de canais e mips, zoom/fundo~~: feitos na seção 8 (zoom só no centro).
 - **Sampler, canal de UV e transformação por binding** (T12/T19): ainda não são campos do material. O push constant do material já ocupa os 128 bytes garantidos pelo Vulkan; trocar UV e transformação por binding pede um buffer de materiais por desenho, que é trabalho de renderer ainda não feito.
 - **Oclusão em textura própria** (fora do canal R do metal/rugosidade) ou com força diferente de 1: continua declarada como não aplicada (ver seção 7).
 - **Caminho indireto em lote do renderer**: aplica o material por lote, não por desenho; valia antes para os fatores e vale igual para as texturas. As cenas do editor usam o caminho por desenho.
