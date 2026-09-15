@@ -119,10 +119,38 @@ Conferência no aparelho (Ford, carroceria `Cortina:lod10_CaarPaint_0`, Material
 Não observado no aparelho: diferença visual de limitar/próximo na carroceria (a UV do Ford fica dentro de 0–1 e a câmera está longe demais para ver o filtro).
 
 Limites desta fatia, ditos explicitamente:
-- **transformação de UV por binding** (escala, deslocamento, rotação) continua **não feita**: o push constant do material (128 bytes) e o registro por instância (`GpuMeshInstance`, 128 bytes) estão cheios; pede um buffer de extensão de material por desenho, ligado ao conjunto de descritores do mapa e lido no vertex shader. Hoje a transformação só existe assada na importação, quando as texturas do material concordam;
+- **transformação de UV por binding** (escala, deslocamento, rotação) ficou para a fatia seguinte e foi feita na **seção 10**;
 - repetição e filtro de uma **textura da fonte** não são editáveis (o sampler dela sobe com o pacote); para trocar, extraia a textura e use a do projeto;
 - trocar o canal de UV do mapa normal não recalcula tangentes: elas seguem o conjunto de UV em que foram geradas na importação;
 - duas amostragens da mesma imagem em uso ao mesmo tempo duplicam a cadeia de mips na CPU e na GPU.
+
+## 10. Quinta fatia: transformação de UV por binding
+
+| Parte | O que faz | Host | Aparelho |
+|---|---|---|---|
+| Dado persistido | `MaterialSampling` ganha deslocamento (U, V), escala (U, V) e rotação em graus, com a identidade herdando; instância em `MeshRenderer` **v7** (cinco números por binding de cada slot) e material do projeto em `MaterialAsset` **v5**; versões anteriores continuam abrindo | sim (`r4_uv_transform_per_binding_resolves_reaches_the_shader_entry_and_persists`, `mesh_component_v1_archive_still_loads_and_gains_identity_on_save`) | sim (ver conferência) |
+| Resolução | a transformação é uma unidade: a da instância inteira, senão a do material compartilhado; resolvida em linhas 2x3 T·R·S (as do KHR_texture_transform) | sim | sim (ver conferência) |
+| Caminho até a GPU | o push constant e o `GpuMeshInstance` seguem nos 128 bytes: a tabela de transformações é um storage buffer em set=1, binding=16 (sempre presente, 1024 entradas, só desenhos que transformam ocupam entrada) e o índice+1 vai nos bits 1..31 de `materialFlags.z` (o bit 0 continua sendo a saída sRGB); atualizada ao publicar a cena e no caminho de Play | sim (entrada da tabela) | sim (ver conferência) |
+| Shader | `selectedUv` e a UV da cobertura aplicam a transformação (recorte e cor no mesmo texel); o mapa normal gira o detalhe pela rotação transposta, sem a escala | shaders validados e reproduzíveis | sim (ver conferência) |
+| Interface | no seletor de textura do binding, abaixo de Herdar e Sem textura: passos de ± para deslocamento U/V (0,05), escala U/V (0,1) e rotação (15°), e "Zerar transformação"; vale com qualquer textura, inclusive a da fonte | sim (a opção Sem textura continua alcançável: `r4_material_tab_lists_texture_bindings_and_the_picker_changes_the_instance`) | sim (ver conferência) |
+| Vínculo com a fonte | transformação local conta como material local; reverter e criar material do projeto seguem a amostragem | sim | sim (ver conferência) |
+
+Suíte do host: 912/914 (as duas falhas antigas de R0). Commit `3b8791be`, APK conferido: `615B171D…F85B`. Evidência: `docs/validacao/evidencias/r4-transformacao-uv-20260915/`.
+
+Conferência no aparelho (Ford, carroceria `Cortina:lod10_CaarPaint_0`, Material > Mapa: cor, esta instância):
+- o projeto abre e a cena desenha normalmente com o binding 16 novo no conjunto de descritores do mapa (sem erro de pipeline);
+- o seletor mostra Herdar e Sem textura no topo e, abaixo, UV/Rep./Filtro e os passos "Desl. U/V", "Esc. U/V", "Rot." e "Zerar transformação";
+- escala U e V em 2.00 e rotação 90° pelos passos: os rótulos seguem e o vínculo passa a "1 alteração local"; com a textura da fonte (quase branca) não há diferença visível;
+- com a `imagem-1.png` na cor base, a mesma câmera mostra outro desenho na carroceria do que sem transformação (faixas amarelas, verdes e brancas ao longo da lateral em vez do fundo preto com o logotipo na traseira): **a transformação chega ao shader**;
+- "Reverter material à fonte" volta a "igual à fonte" e à carroceria original; cena salva nesse estado.
+
+Não conferido no aparelho: o giro do detalhe do mapa normal (a normal da fonte não mostra relevo legível a essa distância) e o recorte alfa transformado (a carroceria é opaca).
+
+Limites desta fatia, ditos explicitamente:
+- **caminho indireto em lote** não recebe a transformação (como o resto do material por instância); as cenas do editor usam o caminho por desenho;
+- **sombras** usam o shader próprio e ignoram a transformação: o recorte alfa da sombra continua na UV da fonte;
+- acima de **1024 desenhos** com transformação, os excedentes ficam sem ela, com um aviso único no log;
+- rotação com escala não uniforme aproxima o referencial do mapa normal (a rotação é correta; a escala desigual inclina a base).
 
 ## 5. Fora desta fatia, dito explicitamente
 
