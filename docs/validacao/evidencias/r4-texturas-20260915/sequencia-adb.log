@@ -1,0 +1,29 @@
+R4 — texturas do projeto no aparelho, 15/09/2026.
+APK F6EB4BB92439D1B419EA6E8FC0B9CDBDD881C1C8FF408052968ED7A16A199638, projeto M08Recursos0913k (8 fontes).
+Log filtrado por Aether.Android; comandos adb somente dentro da pasta do app.
+
+Abertura antes da troca:
+09:06:26.908 [Open] projeto aberto: fontes=8 derivados_reaproveitados=8 falhas=0 preparo_ms=15133 publicacao_ms=2864 cena_ms=29 total_ms=18026
+
+Extração (Arquivos > 1965_ford_lotus_cortina_mk1.glb > Texturas):
+status: "19 textura(s) extraída(s), 0 já no projeto"
+Texturas/1965_ford_lotus_cortina_mk1/imagem-1.png … imagem-19.png (6,5 MB, bytes originais do GLB; imagens sem nome no arquivo)
+.astra/assets.astra: 19 registros "texture", ex.:
+1de512cb6297f1847d35a52ea0e365b9 texture "Texturas/1965_ford_lotus_cortina_mk1/imagem-1.png" "" "fbebc426…566387" 0 "extraida-de Fontes/1965_ford_lotus_cortina_mk1.glb imagem 0" 0 0
+
+Troca da cor base na instância Cortina:lod10_CaarPaint_0 (Material > Mapa: cor > imagem-1.png):
+09:09:53.333 [Import] texturas importadas: 123 publicadas, 123 slots bindless.   (122 das fontes + 1 do projeto; uma republicação)
+inspetor: "imagem-1.png · só esta instância"; barra: "Salvo" (salvamento automático)
+
+Reabertura com a troca salva:
+09:11:08.309 [Import] texturas importadas: 122 publicadas
+09:11:11.541 [Import] texturas importadas: 123 publicadas   (a cena carregada pede a textura do projeto: segunda publicação)
+09:11:13.513 [Open] projeto aberto: fontes=8 derivados_reaproveitados=8 falhas=0 preparo_ms=14855 publicacao_ms=2867 cena_ms=3242 total_ms=20964
+carroceria continua com imagem-1.png; inspetor "só esta instância"
+
+Reversão (Mapa: cor > Herdar):
+sem republicação (textura já publicada); cena salva 09:12:57; GUID 1de512cb… citado 0 vezes em scenes/editor.aescene
+carroceria de volta à textura da fonte
+
+Visto no aparelho e ainda não corrigido:
+- o cartão do vínculo com a fonte diz "igual à fonte" com a textura trocada: a contagem de substituições do vínculo não inclui texturas.

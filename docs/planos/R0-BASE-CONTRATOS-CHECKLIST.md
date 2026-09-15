@@ -89,8 +89,8 @@ Estados do relatório: **E** existente a preservar · **P** parcial · **N** lac
 
 | ID | Função | Rel. | Implementado | Integrado ao editor | Host | Aparelho | Pacote |
 |---|---|---|---|---|---|---|---|
-| T01 | Identidade de textura | N | — | — | — | — | R4 |
-| T02 | Extração de embutidas | N | — | — | — | — | R4/R6 |
+| T01 | Identidade de textura | N | parcial (R4: recurso Texture com GUID e reuso por conteúdo; sem lista de usuários) | parcial (seletor) | sim | parcial | R4 |
+| T02 | Extração de embutidas | N | sim (R4: PNG/JPEG com bytes originais; KTX2 fica de fora) | sim (Arquivos > Texturas) | sim | sim | R4/R6 |
 | T03 | Cor/dados | E/P | sim (pelo uso) | — | sim | sim | R4 |
 | T04 | Origem do alpha | P | parcial (alpha da cor base) | — | sim | — | R4 |
 | T05 | Bordas transparentes | N | — | — | — | — | R4 |
@@ -106,7 +106,7 @@ Estados do relatório: **E** existente a preservar · **P** parcial · **N** lac
 | T15 | Zoom e fundo | N | — | — | — | — | R4 |
 | T16 | Memória e resolução efetiva | P | parcial (MB por importação; R2: pedidos × residentes do projeto) | parcial (console e log) | sim | parcial (log `[Residencia]` 339 MB) | R2/R4 |
 | T17 | Streaming por orçamento | A | parcial (R2: teto agregado reduz mips na publicação; sem streaming por uso) | parcial | sim | — (projeto medido cabe no teto; redução não exercitada) | R2/R9 |
-| T18 | Textura no material | N | — | — | — | — | R4 |
+| T18 | Textura no material | N | parcial (R4: 4 bindings por instância e compartilhado; sem miniatura) | sim (aba Material + seletor) | sim | parcial (instância) | R4 |
 | T19 | Transformação por uso | P | parcial (assada quando o material concorda) | — | sim | sim | R4 |
 | T20 | Empacotamento de canais | P | parcial (MR importado) | — | sim | — | R4 |
 | T21 | Oclusão | N | — (contada como não aplicada) | — | — | — | R4 |
