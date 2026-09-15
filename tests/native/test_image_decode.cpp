@@ -196,7 +196,25 @@ AE_TEST(m091_glb_textures_map_to_slots_with_color_space_uv_and_sampler) {
   AE_EXPECT_TRUE(model.textures[base]->valid() && model.textures[base]->levels == 2, "mips completos");
   AE_EXPECT_EQ(model.skippedTextures, 1u, "uma referência não aplicada");
   AE_EXPECT_EQ(model.unappliedTextureTransforms, 1u, "transformação de UV declarada");
-  AE_EXPECT_EQ(model.unappliedOcclusion, 1u, "oclusão declarada");
+  // R4: a oclusão deste material está na MESMA textura e UV do metálico/rugosidade.
+  AE_EXPECT_EQ(model.appliedOcclusion, 1u, "oclusão empacotada no metálico/rugosidade é aplicada (ORM)");
+  AE_EXPECT_EQ(model.unappliedOcclusion, 0u, "nenhuma oclusão perdida");
+  AE_EXPECT_TRUE((material.flags & renderer::MapMaterialOcclusionInMetallicRoughness) != 0, "flag que o shader lê");
+  {
+    // Oclusão numa textura diferente da de metálico/rugosidade não tem slot: declarada.
+    const auto separate = texturedGlb(makePng(2, 2, checkerPixels()),
+        R"({"pbrMetallicRoughness":{"metallicRoughnessTexture":{"index":0}},"occlusionTexture":{"index":1}})");
+    resources::GltfImport other;
+    AE_EXPECT_TRUE(resources::importGlb(separate, {}, {}, other), other.diagnostic.c_str());
+    AE_EXPECT_TRUE(other.unappliedOcclusion == 1u && other.appliedOcclusion == 0u, "oclusão separada declarada como não aplicada");
+    AE_EXPECT_TRUE(!(other.materials.front().flags & renderer::MapMaterialOcclusionInMetallicRoughness), "sem flag de oclusão");
+    // Força diferente de 1 também não cabe na leitura direta do canal.
+    const auto weak = texturedGlb(makePng(2, 2, checkerPixels()),
+        R"({"pbrMetallicRoughness":{"metallicRoughnessTexture":{"index":0}},"occlusionTexture":{"index":0,"strength":0.5}})");
+    resources::GltfImport faint;
+    AE_EXPECT_TRUE(resources::importGlb(weak, {}, {}, faint), faint.diagnostic.c_str());
+    AE_EXPECT_EQ(faint.unappliedOcclusion, 1u, "força 0,5 declarada como não aplicada");
+  }
   bool webp = false;
   for (const auto &note : model.textureNotes) webp |= note.find("WebP") != std::string::npos;
   AE_EXPECT_TRUE(webp, "o motivo cita o formato sem decodificador");

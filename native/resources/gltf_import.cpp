@@ -790,9 +790,32 @@ struct Importer {
         if (const auto *normal = json->member(source, "normalTexture"); normal && normal->kind == Kind::Object)
           target.normalScale = static_cast<float>(json->number(*normal, "scale", 1));
       assignTexture(root, source, "emissiveTexture", true, 3, target, renderer::MapMaterialEmissiveMap, i);
-      // Oclusão não tem slot no quadro de material deste renderer: declarada,
-      // nunca aproximada em silêncio.
-      if (json->member(source, "occlusionTexture")) ++out->unappliedOcclusion;
+      // Oclusão (R4): o quadro de material não tem um quinto slot de textura.
+      // Entra só quando é a MESMA textura e o MESMO UV do metálico/rugosidade
+      // (ORM, canal R), sem transformação e com força 1 -- o caso em que ler o
+      // canal R é exatamente o que o arquivo pede. Qualquer outro caso é
+      // declarado, nunca aproximado em silêncio.
+      if (const auto *occlusion = json->member(source, "occlusionTexture")) {
+        const auto *pbr = json->member(source, "pbrMetallicRoughness");
+        const auto *packed = pbr && pbr->kind == Kind::Object ? json->member(*pbr, "metallicRoughnessTexture") : nullptr;
+        const auto transformed = [&](const Node *info) {
+          const auto *extensions = info && info->kind == Kind::Object ? json->member(*info, "extensions") : nullptr;
+          return extensions && extensions->kind == Kind::Object && json->member(*extensions, "KHR_texture_transform");
+        };
+        const bool applied = occlusion->kind == Kind::Object && packed && packed->kind == Kind::Object &&
+                             (target.flags & renderer::MapMaterialMetallicRoughnessMap) != 0 &&
+                             json->index(*occlusion, "index") >= 0 &&
+                             json->index(*occlusion, "index") == json->index(*packed, "index") &&
+                             std::max<i64>(0, json->index(*occlusion, "texCoord")) == std::max<i64>(0, json->index(*packed, "texCoord")) &&
+                             !transformed(occlusion) && !transformed(packed) &&
+                             std::fabs(json->number(*occlusion, "strength", 1) - 1) < 1e-6;
+        if (applied) {
+          target.flags |= renderer::MapMaterialOcclusionInMetallicRoughness;
+          ++out->appliedOcclusion;
+        } else {
+          ++out->unappliedOcclusion;
+        }
+      }
       const auto alphaMode = json->string(source, "alphaMode");
       if (alphaMode == "BLEND") target.flags |= renderer::MapMaterialBlend;
       else if (alphaMode == "MASK") {

@@ -2494,7 +2494,11 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
     state_.importSummary+="\nTransformação de UV (KHR_texture_transform) não aplicada em "+
       std::to_string(model.unappliedTextureTransforms)+" slot(s): a textura aparece sem ela.";
   if(model.unappliedOcclusion)
-    state_.importSummary+="\nOclusão não aplicada em "+std::to_string(model.unappliedOcclusion)+" material(is).";
+    state_.importSummary+="\nOclusão não aplicada em "+std::to_string(model.unappliedOcclusion)+
+        " material(is): só entra no canal R do mapa metal/rugosidade, no mesmo UV e com força 1.";
+  if(model.appliedOcclusion)
+    state_.importSummary+="\nOclusão aplicada pelo canal R do mapa metal/rugosidade em "+
+        std::to_string(model.appliedOcclusion)+" material(is).";
   if(model.skippedAnimations||model.skippedSkins)
     state_.importSummary+="\nNão suportado neste perfil: "+std::to_string(model.skippedAnimations)+" animações, "+
       std::to_string(model.skippedSkins)+" skins.";

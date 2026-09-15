@@ -7,7 +7,7 @@
 namespace ae::resources {
 namespace {
 constexpr char kMagic[8]{'A', 'S', 'T', 'R', 'A', 'I', 'C', '1'};
-constexpr u32 kCounterCount = 17;
+constexpr u32 kCounterCount = 18;
 
 struct Writer {
   std::vector<u8> &out;
@@ -163,7 +163,8 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
                                     model.unappliedTextureTransforms, model.unappliedOcclusion,
                                     model.bakedTextureTransforms, model.reducedTextures, model.dracoPrimitives,
                                     model.meshoptViews, model.ktx2Images, model.astcTextures, model.mirroredNodes,
-                                    model.generatedTangentPrimitives, model.residentTextureDimension};
+                                    model.generatedTangentPrimitives, model.residentTextureDimension,
+                                    model.appliedOcclusion};
   writer.u32v(kCounterCount);
   writer.raw(counters, sizeof counters);
   writer.texts(model.textureNotes);
@@ -239,6 +240,7 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
   model.mirroredNodes = counters[14];
   model.generatedTangentPrimitives = counters[15];
   model.residentTextureDimension = counters[16];
+  model.appliedOcclusion = counters[17];
   model.textureNotes = reader.texts();
   char trailer[8]{};
   if (!reader.raw(trailer, sizeof trailer) || std::memcmp(trailer, kMagic, sizeof trailer) != 0 ||

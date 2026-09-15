@@ -27,6 +27,9 @@ inline MapMaterialRecord applyMaterialOverride(const MapMaterialRecord &source,c
       if(texture==InvalidMapTexture) result.flags&=~bindingFlags[slot];
       else result.flags|=bindingFlags[slot];
     }
+    // A oclusão da fonte vive no canal R do mapa metálico/rugosidade dela; outra
+    // textura nesse binding não carrega essa promessa.
+    if(slot==2) result.flags&=~MapMaterialOcclusionInMetallicRoughness;
   }
   if(!value.enabled) return result;
   for(u32 i=0;i<3;++i) {result.baseColorFactor[i]=value.baseColor[i];result.emissiveFactorAndStrength[i]=value.emission[i];}

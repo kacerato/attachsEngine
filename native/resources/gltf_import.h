@@ -147,6 +147,8 @@ struct GltfImport {
   // Aparência que o perfil ainda não reproduz, contada por slot: a textura é
   // aplicada sem a transformação de UV, e a oclusão não entra no shader.
   u32 unappliedTextureTransforms = 0, unappliedOcclusion = 0;
+  // R4: materiais com oclusão lida do canal R do mapa metálico/rugosidade.
+  u32 appliedOcclusion = 0;
   // Referências com KHR_texture_transform assadas nas UVs (Entrega 4): todas as
   // texturas do material naquele conjunto de UV concordavam na transformação.
   // As que divergem continuam em `unappliedTextureTransforms`.

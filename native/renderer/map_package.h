@@ -60,6 +60,9 @@ inline constexpr u32 MapMaterialWater = 1u << 9;
 // The renderer scales to WaterProfile.maximumDistance and anchors to camera XZ.
 // Requires MapMaterialWater. Ordinary finite water meshes retain their transform.
 inline constexpr u32 MapMaterialWaterCameraGrid = 1u << 10;
+// R4: oclusão do glTF empacotada no canal R da textura de metálico/rugosidade
+// (ORM), no mesmo conjunto de UV. Os bits 11-13 são dos recursos de autoria.
+inline constexpr u32 MapMaterialOcclusionInMetallicRoughness = 1u << 14;
 
 struct MapTextureRecord {
   u32 flags;

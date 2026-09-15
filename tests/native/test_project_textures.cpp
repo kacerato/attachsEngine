@@ -217,6 +217,12 @@ AE_TEST(r4_material_v2_and_mesh_renderer_v4_round_trip_and_read_older_versions) 
   applied = renderer::applyMaterialOverride(source, value, 100);
   AE_EXPECT_TRUE(applied.textureIndices[1] == renderer::InvalidMapTexture && !(applied.flags & renderer::MapMaterialNormalMap),
                  "tirar a normal tira a flag");
+  source.flags = renderer::MapMaterialMetallicRoughnessMap | renderer::MapMaterialOcclusionInMetallicRoughness;
+  scene::MaterialParameters packed;
+  packed.textures[2] = 5;
+  applied = renderer::applyMaterialOverride(source, packed, 0);
+  AE_EXPECT_TRUE(!(applied.flags & renderer::MapMaterialOcclusionInMetallicRoughness),
+                 "trocar o mapa metal/rugosidade tira a oclusão empacotada da fonte");
 }
 
 AE_TEST(r4_textures_extract_from_source_and_resolve_per_instance_and_shared_scope) {

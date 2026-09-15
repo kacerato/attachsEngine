@@ -224,6 +224,11 @@ void main() {
     mr=mix(vec3(1),texture(MR_MAP,selectedUv(2)).rgb,mrDetailWeight);
   mediump float rough=clamp(mr.g*frame.materialFactors.x,.07,1);
   mediump float metal=clamp(mr.b*frame.materialFactors.y,0,1);
+  // R4: oclusão empacotada no canal R do mapa metal/rugosidade (ORM do glTF),
+  // só quando o importador provou mesma textura e mesmo UV. Atenua a luz
+  // ambiente e o reflexo do ambiente, nunca a luz direta. `mr` já volta a 1
+  // longe da câmera, então a oclusão some junto com o detalhe do mapa.
+  mediump float occlusion=((flags&16384u)!=0u && hasMaterialFeature(flags,4u))?mr.r:1.0;
   mediump vec3 n=normalize(vNormal);
   // For regular materials this is optional high-frequency detail. For an
   // impostor the atlas stores the geometry's replacement normal field, so it
@@ -278,7 +283,7 @@ void main() {
   mediump float ambientLuminance=dot(ambientIrradiance,vec3(.2126,.7152,.0722));
   ambientIrradiance=mix(vec3(ambientLuminance),ambientIrradiance,
                         clamp(environment.groundColorSaturation.w,0.0,2.0));
-  color+=(1-metal)*base.rgb*ambientIrradiance*environment.ambientColorStrength.w;
+  color+=(1-metal)*base.rgb*ambientIrradiance*environment.ambientColorStrength.w*occlusion;
   // Rough dielectrics carry almost no readable high-frequency reflection.
   // Skip that fetch coherently per material while retaining HDR reflections
   // on wet, polished and metallic surfaces.
@@ -294,7 +299,7 @@ void main() {
     mediump vec3 integratedSpecular=environment.parameters.w>1.5?
         f0*integratedBrdf.x+vec3(f90*integratedBrdf.y):
         fresnel(f0,f90,nv)*integratedBrdf.x;
-    color+=specularEnvironment*integratedSpecular*specularDetailWeight;
+    color+=specularEnvironment*integratedSpecular*specularDetailWeight*occlusion;
   }
   mediump float emissiveDetailWeight=materialDetailWeight(
       cameraDistance,environment.materialDistanceParameters.y);
