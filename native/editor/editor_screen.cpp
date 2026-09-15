@@ -759,7 +759,9 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
                 (state.materialShared?" · compartilhado":" · esta instância"),theme.color.text,theme.type.caption);
   // R4: amostragem do binding. O conjunto de UV vale para qualquer textura;
   // repetição e filtro são o sampler da textura do projeto e não recebem toque
-  // quando o binding usa a textura da fonte.
+  // quando o binding usa a textura da fonte. Vem depois de Herdar e Sem textura:
+  // as escolhas principais do seletor não podem sair da tela por causa dele.
+  const auto samplingControls=[&]() {
   if(content.height>=40) {
     auto sampling=takeTop(content,40);
     const float third=sampling.width/3;
@@ -775,6 +777,32 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
     if(!state.textureSamplerEditable && content.height>=22)
       builder.label(takeTop(content,22),"Repetição e filtro valem só com textura do projeto",theme.color.textMuted,theme.type.caption);
   }
+  // R4: transformação de UV do binding. Vale com qualquer textura: o shader a aplica.
+  if(content.height>=36*3) {
+    const auto stepper=[&](UiRect row,const std::string &text,u32 field) {
+      const auto down=deflate(takeLeft(row,34),UiInsets::all(2)),up=deflate(takeRight(row,34),UiInsets::all(2));
+      builder.list.addRect(down,theme.color.raised,theme.radius.control);
+      builder.label(down,"-",theme.color.text,theme.type.body,UiAlign::Center);
+      builder.router.addRegion(down,widgetId(EditorWidget::TextureUvStepBase)+field*2);
+      builder.list.addRect(up,theme.color.raised,theme.radius.control);
+      builder.label(up,"+",theme.color.text,theme.type.body,UiAlign::Center);
+      builder.router.addRegion(up,widgetId(EditorWidget::TextureUvStepBase)+field*2+1);
+      builder.label(row,text,theme.color.text,theme.type.caption,UiAlign::Center);
+    };
+    auto offsets=takeTop(content,36);
+    stepper(takeLeft(offsets,offsets.width*.5f),state.textureUvLabels[0],0);
+    stepper(offsets,state.textureUvLabels[1],1);
+    auto scales=takeTop(content,36);
+    stepper(takeLeft(scales,scales.width*.5f),state.textureUvLabels[2],2);
+    stepper(scales,state.textureUvLabels[3],3);
+    auto rotation=takeTop(content,36);
+    stepper(takeLeft(rotation,rotation.width*.5f),state.textureUvLabels[4],4);
+    const auto reset=deflate(rotation,UiInsets::all(2));
+    builder.list.addRect(reset,theme.color.raised,theme.radius.control);
+    builder.label(reset,"Zerar transformação",theme.color.text,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(reset,widgetId(EditorWidget::TextureUvReset));
+  }
+  };
   const auto option=[&](const std::string &label,const std::string &detail,u32 widget) {
     if(content.height<48) return;
     auto row=takeTop(content,48);const auto hit=row;
@@ -787,6 +815,7 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
   option("Herdar",state.materialShared?"volta à textura da fonte":"do material do projeto, senão da fonte",
          widgetId(EditorWidget::TextureUseInherited));
   option("Sem textura","o binding fica só com os fatores",widgetId(EditorWidget::TextureUseNone));
+  samplingControls();
   const u32 rows=static_cast<u32>(state.projectTextureNames.size());
   if(!rows) {
     builder.label(takeTop(content,40),"Nenhuma textura no projeto: em Arquivos, selecione um GLB e toque em Texturas.",

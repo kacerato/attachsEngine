@@ -34,7 +34,10 @@ const int PUNCTUAL_LIGHT_LIMIT=8;
 // the other, causing double shading/overdraw instead of a cross-fade.
 #include "lod_dither.glsl"
 #include "impostor_view.glsl"
-highp vec2 selectedUv(uint slot) { return ((frame.materialFlags.y>>(slot*2))&3u)==1u?vUv1:vUv0; }
+#include "material_uv_transform.glsl"
+highp vec2 selectedUv(uint slot) {
+  return aetherTransformUv(slot,((frame.materialFlags.y>>(slot*2))&3u)==1u?vUv1:vUv0);
+}
 bool hasMaterialFeature(uint flags,uint feature) {
   uint selected=MATERIAL_FEATURE_MASK==0xffffffffu?flags:MATERIAL_FEATURE_MASK;
   return (selected&feature)!=0u;
@@ -246,6 +249,8 @@ void main() {
     mediump vec3 detail=(impostor?
         textureGrad(NORMAL_MAP,impostorUv,impostorDx,impostorDy):
         texture(NORMAL_MAP,selectedUv(1))).xyz*2-1;
+    // UV girada: o detalhe volta aos eixos da tangente da malha.
+    if(!impostor) detail.xy=aetherUvTangentFrame(1u)*detail.xy;
     // Normalizing before and after an orthonormal TBN is redundant. Keep the
     // final normalization (same direction, one fewer reciprocal sqrt).
     detail=vec3(detail.xy*frame.materialFactors.z*normalDetailWeight,

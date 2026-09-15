@@ -127,6 +127,12 @@ public:
       if(result.uvSet==scene::MaterialUvKeep) result.uvSet=inherited.uvSet;
       if(result.wrap==scene::MaterialWrapKeep) result.wrap=inherited.wrap;
       if(result.filter==scene::MaterialFilterKeep) result.filter=inherited.filter;
+      // A transformação é uma unidade: a da instância inteira, senão a do material.
+      if(!result.transformed()) {
+        std::copy(std::begin(inherited.offset),std::end(inherited.offset),result.offset);
+        std::copy(std::begin(inherited.scale),std::end(inherited.scale),result.scale);
+        result.rotation=inherited.rotation;
+      }
     }
     return result;
   }
@@ -152,6 +158,10 @@ public:
       const auto sampling=slotSampling(render,slot,binding);
       value.textures[binding]=resolveTexture(slotTexture(render,slot,binding),binding,samplerFlags(sampling));
       value.uvSets[binding]=sampling.uvSet;
+      if(sampling.transformed()) {
+        value.uvTransformMask|=static_cast<std::uint8_t>(1u<<binding);
+        scene::materialUvTransformRows(sampling,value.uvTransforms[binding]);
+      }
     }
     const auto surface=slotSurface(render,slot);
     value.alphaMode=surface.alphaMode;value.sides=surface.sides;value.alphaCutoff=surface.alphaCutoff;

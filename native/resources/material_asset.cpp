@@ -26,6 +26,8 @@ std::string MaterialAsset::serialize() const {
   for (const auto &texture : textures) out << ' ' << scene::materialTextureToken(texture);
   out << ' ' << static_cast<unsigned>(surface.alphaMode) << ' ' << static_cast<unsigned>(surface.sides) << ' ' << surface.alphaCutoff;
   for (const auto &value : sampling) out << ' ' << scene::materialSamplingToken(value);
+  for (const auto &value : sampling)
+    out << ' ' << value.offset[0] << ' ' << value.offset[1] << ' ' << value.scale[0] << ' ' << value.scale[1] << ' ' << value.rotation;
   out << '\n';
   return out.str();
 }
@@ -60,6 +62,9 @@ bool MaterialAsset::deserialize(std::string_view text, MaterialAsset &out) {
       std::string token;
       if (!(in >> token) || !scene::parseMaterialSamplingToken(token, value)) return false;
     }
+  if (version >= 5)
+    for (auto &value : candidate.sampling)
+      if (!(in >> value.offset[0] >> value.offset[1] >> value.scale[0] >> value.scale[1] >> value.rotation)) return false;
   in >> std::ws;
   if (!in.eof() || !candidate.valid()) return false;
   out = std::move(candidate);

@@ -166,6 +166,10 @@ public:
     // v6: amostragem de cada binding de cada slot.
     for(u32 slot=0;slot<slotCount();++slot)
       for(const auto &value:slotSampling(slot)) out<<' '<<materialSamplingToken(value);
+    // v7: transformação de UV de cada binding de cada slot (deslocamento, escala, rotação).
+    for(u32 slot=0;slot<slotCount();++slot)
+      for(const auto &value:slotSampling(slot))
+        out<<' '<<value.offset[0]<<' '<<value.offset[1]<<' '<<value.scale[0]<<' '<<value.scale[1]<<' '<<value.rotation;
     out<<' ';
   }
   bool read(std::istream &in,u32 version) override {
@@ -176,7 +180,7 @@ public:
       return text=="-" || resources::AssetGuid::parse(text,out);
     };
     bool overridden=false;
-    if(version<1 || version>6 || !(in>>mesh>>enabled>>overridden)) return false;
+    if(version<1 || version>7 || !(in>>mesh>>enabled>>overridden)) return false;
     for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
     material.enabled=overridden;
     asset={};materialAsset={};textures={};surface={};sampling={};submeshes.clear();
@@ -219,6 +223,12 @@ public:
           if(!(in>>token) || !parseMaterialSamplingToken(token,value)) return false;
         }
     }
+    if(version>=7) {
+      for(u32 slot=0;slot<slotCount();++slot)
+        for(auto &value:*editSlotSampling(slot))
+          if(!(in>>value.offset[0]>>value.offset[1]>>value.scale[0]>>value.scale[1]>>value.rotation) ||
+             !validMaterialSampling(value)) return false;
+    }
     return true;
   }
 };
@@ -241,6 +251,6 @@ inline constexpr std::array<ComponentBoolean,1> meshRendererBooleans{{
   {"enabled","Renderizar",[](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).enabled;},[](ComponentValue &v,bool b){static_cast<MeshRenderer&>(v).enabled=b;}}
 }};
 inline const ComponentType MeshRenderer::descriptor{
-  "astra.render.mesh",6,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
+  "astra.render.mesh",7,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
 };
 }

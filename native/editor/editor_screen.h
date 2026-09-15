@@ -191,7 +191,7 @@ enum class EditorWidget : u32 {
   MaterialAlphaCycle, MaterialCutoffDown, MaterialCutoffUp, MaterialSidesCycle,
   TextureViewerClose, TextureViewerChannel, TextureViewerMipDown, TextureViewerMipUp,
   TextureViewerZoom, TextureViewerBackground,
-  TextureSamplingUv, TextureSamplingWrap, TextureSamplingFilter,
+  TextureSamplingUv, TextureSamplingWrap, TextureSamplingFilter, TextureUvReset,
   // + máscara de ImportOverride.
   ImportLinkRevertBase=0x52000000u,
   // + índice do material do projeto / do campo numérico do material.
@@ -200,6 +200,8 @@ enum class EditorWidget : u32 {
   MaterialTextureBase=0x55000000u, TextureChoiceBase=0x56000000u,
   // + índice da textura do projeto: abre o visualizador.
   TextureViewBase=0x57000000u,
+  // + campo*2 (+1 para somar): deslocamento U/V, escala U/V, rotação da UV do binding.
+  TextureUvStepBase=0x58000000u,
   ComponentReferenceBase=0x7a000000u, ReferenceChoiceBase=0x7b000000u,
   ComponentNumberBase=0x78000000u,
   MeshChoiceBase=0x79000000u,
@@ -433,6 +435,8 @@ struct EditorScreenState final {
   // R4: amostragem do binding aberto no seletor, no alcance em edição.
   std::string textureUvLabel,textureWrapLabel,textureFilterLabel;
   bool textureSamplerEditable=false;
+  // Deslocamento U/V, escala U/V e rotação efetivos da UV do binding.
+  std::string textureUvLabels[5];
   // R4: visualizador de textura em Propriedades.
   bool textureViewer=false;
   u32 textureViewerIndex=0,textureViewerLevel=0,textureViewerLevels=0;

@@ -9,9 +9,11 @@ layout(location=5) in mediump vec4 vColor;
 layout(location=6) in mediump float vDither;
 #include "lod_dither.glsl"
 #include "impostor_view.glsl"
+#include "material_uv_transform.glsl"
 
 highp vec2 selectedCoverageUv() {
-  return (frame.materialFlags.y&3u)==1u?vUv1:vUv0;
+  // A mesma UV do passe de cor: recorte e cor precisam cair no mesmo texel.
+  return aetherTransformUv(0u,(frame.materialFlags.y&3u)==1u?vUv1:vUv0);
 }
 
 void main() {

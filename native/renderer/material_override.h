@@ -17,6 +17,19 @@ inline MaterialOverride materialOverrideFrom(const MapMaterialRecord &source) {
 // começa na lista de texturas do renderer, o mesmo deslocamento aplicado aos
 // materiais importados. Trocar ou tirar normal, metálico/rugosidade ou emissão
 // atualiza a flag do binding: é ela que escolhe a variante de pipeline.
+// R4: uma entrada da tabela de transformações de UV que o shader lê
+// (`material_uv_transform.glsl`): duas linhas vec4 por binding, (a b c 0) e
+// (d e f 0), identidade onde o binding não transforma.
+inline constexpr u32 MaterialUvTransformFloats=scene::MaterialTextureCount*8;
+inline void materialUvTransformEntry(const MaterialOverride &value,float out[MaterialUvTransformFloats]) {
+  static constexpr float identity[6]{1,0,0,0,1,0};
+  for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {
+    const float *rows=((value.uvTransformMask>>binding)&1u)?value.uvTransforms[binding]:identity;
+    float *entry=out+binding*8;
+    entry[0]=rows[0];entry[1]=rows[1];entry[2]=rows[2];entry[3]=0;
+    entry[4]=rows[3];entry[5]=rows[4];entry[6]=rows[5];entry[7]=0;
+  }
+}
 inline MapMaterialRecord applyMaterialOverride(const MapMaterialRecord &source,const MaterialOverride &value,u32 textureBase=0) {
   auto result=source;
   static constexpr u32 bindingFlags[scene::MaterialTextureCount]{0,MapMaterialNormalMap,MapMaterialMetallicRoughnessMap,MapMaterialEmissiveMap};

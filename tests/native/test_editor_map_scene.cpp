@@ -865,12 +865,12 @@ AE_TEST(mesh_component_v1_archive_still_loads_and_gains_identity_on_save) {
   // Rebaixa o componente para a versão 1 e corta tudo o que veio depois dela —
   // identidade (v2), material compartilhado e contagem de slots (v3), texturas
   // do slot (v4) —, exatamente como um arquivo gravado antes dessas mudanças.
-  const std::string alvo="\"astra.render.mesh\" 6 ";
+  const std::string alvo="\"astra.render.mesh\" 7 ";
   const auto posicao=texto.find(alvo);
   AE_EXPECT_TRUE(posicao!=std::string::npos,"componente encontrado no arquivo");
   texto.replace(posicao,alvo.size(),"\"astra.render.mesh\" 1 ");
   const auto guid=meshRenderer(*document.find(id))->asset.text();
-  const std::string cauda=" - 0 - - - - 0 0 0.5 000 000 000 000 ";
+  const std::string cauda=" - 0 - - - - 0 0 0.5 000 000 000 000 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0 ";
   const auto comGuid=texto.find(guid+cauda);
   AE_EXPECT_TRUE(comGuid!=std::string::npos,"identidade e caudas v3/v4 presentes no arquivo");
   texto.erase(comGuid,guid.size()+cauda.size());

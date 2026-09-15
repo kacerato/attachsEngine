@@ -40,13 +40,35 @@ struct MaterialSampling {
   std::uint8_t uvSet=MaterialUvKeep;
   std::uint8_t wrap=MaterialWrapKeep;
   std::uint8_t filter=MaterialFilterKeep;
-  bool overrides() const noexcept {return uvSet!=MaterialUvKeep || wrap!=MaterialWrapKeep || filter!=MaterialFilterKeep;}
+  // Transformação de UV do binding (KHR_texture_transform): deslocamento, escala e
+  // rotação em graus, aplicada como T·R·S. A identidade herda. Diferente de
+  // repetição e filtro, vale para qualquer textura: é o shader que a aplica.
+  float offset[2]{0,0};
+  float scale[2]{1,1};
+  float rotation=0;
+  bool transformed() const noexcept {
+    return offset[0]!=0 || offset[1]!=0 || scale[0]!=1 || scale[1]!=1 || rotation!=0;
+  }
+  bool overrides() const noexcept {
+    return uvSet!=MaterialUvKeep || wrap!=MaterialWrapKeep || filter!=MaterialFilterKeep || transformed();
+  }
   friend bool operator==(const MaterialSampling &a,const MaterialSampling &b) {
-    return a.uvSet==b.uvSet && a.wrap==b.wrap && a.filter==b.filter;
+    return a.uvSet==b.uvSet && a.wrap==b.wrap && a.filter==b.filter && a.offset[0]==b.offset[0] && a.offset[1]==b.offset[1] &&
+           a.scale[0]==b.scale[0] && a.scale[1]==b.scale[1] && a.rotation==b.rotation;
   }
 };
 inline bool validMaterialSampling(const MaterialSampling &sampling) {
-  return sampling.uvSet<=MaterialUv1 && sampling.wrap<=MaterialWrapMirror && sampling.filter<=MaterialFilterNearest;
+  const auto within=[](float value,float limit) {return std::isfinite(value) && value>=-limit && value<=limit;};
+  return sampling.uvSet<=MaterialUv1 && sampling.wrap<=MaterialWrapMirror && sampling.filter<=MaterialFilterNearest &&
+         within(sampling.offset[0],100) && within(sampling.offset[1],100) && within(sampling.rotation,360) &&
+         within(sampling.scale[0],100) && within(sampling.scale[1],100) && sampling.scale[0]>=.01f && sampling.scale[1]>=.01f;
+}
+// Linhas 2x3 da transformação (a b c / d e f): uv' = (a·u + b·v + c, d·u + e·v + f).
+inline void materialUvTransformRows(const MaterialSampling &sampling,float out[6]) {
+  const double radians=static_cast<double>(sampling.rotation)*3.14159265358979323846/180.0;
+  const float c=static_cast<float>(std::cos(radians)),s=static_cast<float>(std::sin(radians));
+  out[0]=c*sampling.scale[0];out[1]=s*sampling.scale[1];out[2]=sampling.offset[0];
+  out[3]=-s*sampling.scale[0];out[4]=c*sampling.scale[1];out[5]=sampling.offset[1];
 }
 
 // Authored scalar overrides. Resource textures and pipeline selection remain
@@ -67,6 +89,10 @@ struct MaterialParameters {
   float alphaCutoff=.5f;
   // Conjunto de UV resolvido por binding (MaterialUvKeep, MaterialUv0, MaterialUv1).
   std::uint8_t uvSets[MaterialTextureCount]{};
+  // Transformação de UV resolvida: bit N ligado quando o binding N a tem, com as
+  // linhas 2x3 em uvTransforms[N].
+  std::uint8_t uvTransformMask=0;
+  float uvTransforms[MaterialTextureCount][6]{};
   // Comparação por valor, não por bytes: a struct tem padding depois do bool, e
   // um memcmp acusaria diferença onde não existe nenhuma.
   friend bool operator==(const MaterialParameters &a,const MaterialParameters &b) {
@@ -74,6 +100,10 @@ struct MaterialParameters {
        a.normalScale!=b.normalScale || a.specular!=b.specular || a.emissionStrength!=b.emissionStrength) return false;
     for(int i=0;i<3;++i) if(a.baseColor[i]!=b.baseColor[i] || a.emission[i]!=b.emission[i]) return false;
     for(std::uint32_t i=0;i<MaterialTextureCount;++i) if(a.textures[i]!=b.textures[i] || a.uvSets[i]!=b.uvSets[i]) return false;
+    if(a.uvTransformMask!=b.uvTransformMask) return false;
+    for(std::uint32_t i=0;i<MaterialTextureCount;++i)
+      if((a.uvTransformMask>>i)&1u)
+        for(int k=0;k<6;++k) if(a.uvTransforms[i][k]!=b.uvTransforms[i][k]) return false;
     return a.alphaMode==b.alphaMode && a.sides==b.sides && a.alphaCutoff==b.alphaCutoff;
   }
   friend bool operator!=(const MaterialParameters &a,const MaterialParameters &b) {return !(a==b);}
@@ -83,6 +113,8 @@ struct MaterialParameters {
 inline MaterialParameters withoutResolvedTextures(MaterialParameters value) {
   for(auto &texture:value.textures) texture=MaterialTextureKeep;
   for(auto &set:value.uvSets) set=MaterialUvKeep;
+  value.uvTransformMask=0;
+  for(auto &rows:value.uvTransforms) for(auto &entry:rows) entry=0;
   value.alphaMode=MaterialAlphaKeep;value.sides=MaterialSidesKeep;value.alphaCutoff=.5f;
   return value;
 }

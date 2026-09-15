@@ -1082,7 +1082,8 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::TexturePickerClose)) {state_.texturePicker=false;return true;}
     // R4: amostragem do binding aberto no seletor, no alcance em edição.
     if(key==widgetId(EditorWidget::TextureSamplingUv) || key==widgetId(EditorWidget::TextureSamplingWrap) ||
-       key==widgetId(EditorWidget::TextureSamplingFilter)) {
+       key==widgetId(EditorWidget::TextureSamplingFilter) || key==widgetId(EditorWidget::TextureUvReset) ||
+       (key>=widgetId(EditorWidget::TextureUvStepBase) && key<widgetId(EditorWidget::TextureUvStepBase)+10)) {
       const auto *entity=document_.find(state_.selection);
       const auto *render=entity?meshRenderer(*entity):nullptr;
       if(!render || state_.textureBinding>=scene::MaterialTextureCount) return true;
@@ -1092,7 +1093,22 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       auto sampling=shared?asset->sampling[state_.textureBinding]:render->slotSampling(state_.materialSlot)[state_.textureBinding];
       if(key==widgetId(EditorWidget::TextureSamplingUv)) sampling.uvSet=static_cast<std::uint8_t>((sampling.uvSet+1)%3);
       else if(key==widgetId(EditorWidget::TextureSamplingWrap)) sampling.wrap=static_cast<std::uint8_t>((sampling.wrap+1)%4);
-      else sampling.filter=static_cast<std::uint8_t>((sampling.filter+1)%3);
+      else if(key==widgetId(EditorWidget::TextureSamplingFilter)) sampling.filter=static_cast<std::uint8_t>((sampling.filter+1)%3);
+      else if(key==widgetId(EditorWidget::TextureUvReset)) {
+        sampling.offset[0]=sampling.offset[1]=0;sampling.scale[0]=sampling.scale[1]=1;sampling.rotation=0;
+      } else {
+        // Passos fixos e arredondados: somar floats repetidamente deixaria 0.30000001 no arquivo.
+        const u32 step=key-widgetId(EditorWidget::TextureUvStepBase);
+        const float sign=(step&1u)?1.0f:-1.0f;
+        const auto rounded=[](float value){return std::round(value*100.0f)/100.0f;};
+        switch(step/2) {
+        case 0: sampling.offset[0]=std::clamp(rounded(sampling.offset[0]+.05f*sign),-100.0f,100.0f); break;
+        case 1: sampling.offset[1]=std::clamp(rounded(sampling.offset[1]+.05f*sign),-100.0f,100.0f); break;
+        case 2: sampling.scale[0]=std::clamp(rounded(sampling.scale[0]+.1f*sign),.1f,100.0f); break;
+        case 3: sampling.scale[1]=std::clamp(rounded(sampling.scale[1]+.1f*sign),.1f,100.0f); break;
+        default: sampling.rotation=std::fmod(sampling.rotation+15.0f*sign,360.0f); break;
+        }
+      }
       std::string diagnostic;
       state_.status=setSlotSampling(state_.selection,state_.materialSlot,state_.textureBinding,
                                     shared?MaterialScope::Shared:MaterialScope::Instance,sampling,diagnostic)?
@@ -2937,6 +2953,11 @@ void EditorSession::refreshMaterialSlotView() {
       if(effective.uvSet==scene::MaterialUvKeep) effective.uvSet=sharedSampling.uvSet;
       if(effective.wrap==scene::MaterialWrapKeep) effective.wrap=sharedSampling.wrap;
       if(effective.filter==scene::MaterialFilterKeep) effective.filter=sharedSampling.filter;
+      if(!effective.transformed()) {
+        std::copy(std::begin(sharedSampling.offset),std::end(sharedSampling.offset),effective.offset);
+        std::copy(std::begin(sharedSampling.scale),std::end(sharedSampling.scale),effective.scale);
+        effective.rotation=sharedSampling.rotation;
+      }
     }
     if(effective.overrides()) view.textureOrigins[binding]+=" · amostragem própria";
     if(binding==state_.textureBinding) {
@@ -2950,6 +2971,14 @@ void EditorSession::refreshMaterialSlotView() {
       state_.textureWrapLabel=label("Rep.: ",wrapNames,edited.wrap,effective.wrap);
       state_.textureFilterLabel=label("Filtro: ",filterNames,edited.filter,effective.filter);
       state_.textureSamplerEditable=texture.valid() && texture!=scene::MaterialTextureNone;
+      const auto number=[](const char *format,float value) {
+        char text[32];std::snprintf(text,sizeof(text),format,static_cast<double>(value));return std::string(text);
+      };
+      state_.textureUvLabels[0]=number("Desl. U %.2f",effective.offset[0]);
+      state_.textureUvLabels[1]=number("Desl. V %.2f",effective.offset[1]);
+      state_.textureUvLabels[2]=number("Esc. U %.2f",effective.scale[0]);
+      state_.textureUvLabels[3]=number("Esc. V %.2f",effective.scale[1]);
+      state_.textureUvLabels[4]=number("Rot. %.0f°",effective.rotation);
     }
   }
   for(u32 field=0;field<scene::meshRendererNumbers.size() && field<std::size(view.values);++field)

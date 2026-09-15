@@ -14,6 +14,7 @@
 
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <sstream>
@@ -314,7 +315,7 @@ AE_TEST(r4_textures_extract_from_source_and_resolve_per_instance_and_shared_scop
   const auto *record = session.assets().find(shared);
   AE_EXPECT_TRUE(record && EditorImportTransaction::read(project.root / record->path, materialFile), "arquivo do material");
   const std::string text(materialFile.begin(), materialFile.end());
-  AE_EXPECT_TRUE(text.starts_with("ASTRA_MATERIAL 4") && text.find(texture.text()) != std::string::npos && text.find("none") != std::string::npos,
+  AE_EXPECT_TRUE(text.starts_with("ASTRA_MATERIAL 5") && text.find(texture.text()) != std::string::npos && text.find("none") != std::string::npos,
                  "material gravado na versão atual com as texturas");
 
   // Instância vence o compartilhado, binding a binding.
@@ -580,7 +581,7 @@ AE_TEST(r4_alpha_mode_cutoff_and_sides_persist_resolve_and_reach_renderer_flags)
                  "transparente e uma face pelo material compartilhado");
   std::vector<u8> file;
   AE_EXPECT_TRUE(EditorImportTransaction::read(project.root / session.assets().find(shared)->path, file) &&
-                 std::string(file.begin(), file.end()).starts_with("ASTRA_MATERIAL 4"), "material gravado na versão atual");
+                 std::string(file.begin(), file.end()).starts_with("ASTRA_MATERIAL 5"), "material gravado na versão atual");
 
   AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");
   effective = effectiveMaterial(session, object);
@@ -668,4 +669,78 @@ AE_TEST(r4_sampling_uv_set_wrap_and_filter_resolve_publish_variants_and_travel_t
 
   AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");
   AE_EXPECT_EQ(effectiveMaterial(session, object).uvSets[0], scene::MaterialUvKeep, "UV volta à fonte");
+}
+
+AE_TEST(r4_uv_transform_per_binding_resolves_reaches_the_shader_entry_and_persists) {
+  // Contrato puro: T·R·S do KHR_texture_transform e a entrada que o shader lê.
+  scene::MaterialSampling rotated{};
+  rotated.rotation = 90;
+  rotated.scale[0] = 2;
+  rotated.offset[0] = .5f;
+  float rows[6]{};
+  scene::materialUvTransformRows(rotated, rows);
+  const auto near = [](float a, float b) { return std::fabs(a - b) < 1e-5f; };
+  AE_EXPECT_TRUE(near(rows[0], 0) && near(rows[1], 1) && near(rows[2], .5f) && near(rows[3], -2) && near(rows[4], 0) && near(rows[5], 0),
+                 "linhas (cos·sx, sin·sy, dx / -sin·sx, cos·sy, dy)");
+  renderer::MaterialOverride value;
+  value.uvTransformMask = 1u << 2;
+  std::copy(rows, rows + 6, value.uvTransforms[2]);
+  float entry[renderer::MaterialUvTransformFloats]{};
+  renderer::materialUvTransformEntry(value, entry);
+  AE_EXPECT_TRUE(entry[0] == 1 && entry[1] == 0 && entry[4] == 0 && entry[5] == 1, "binding sem transformação é identidade");
+  AE_EXPECT_TRUE(near(entry[16 + 1], 1) && near(entry[16 + 2], .5f) && near(entry[16 + 4], -2) && entry[16 + 3] == 0,
+                 "linhas do metal/rugosidade na posição do binding 2");
+  scene::MaterialSampling flat{};
+  flat.scale[1] = 0;
+  AE_EXPECT_TRUE(!scene::validMaterialSampling(flat), "escala zero recusada");
+
+  Project project;
+  EditorSession session;
+  Publisher publisher;
+  start(session, publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  const auto glb = texturedPanel(png(4, 4, 200));
+  resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(glb, {}, {}, model), model.diagnostic.c_str());
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(glb, model, "Fontes/tela.glb", "", report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), report.diagnostic.c_str());
+  const auto object = firstMeshObject(session);
+  AE_EXPECT_TRUE(object != kInvalidEntity, "instância com malha");
+  std::string diagnostic;
+
+  // Normal ladrilhada 4x com deslocamento em V, na textura da fonte.
+  scene::MaterialSampling tiled{};
+  tiled.scale[0] = tiled.scale[1] = 4;
+  tiled.offset[1] = .25f;
+  const auto rebuilds = publisher.rebuilds;
+  AE_EXPECT_TRUE(session.setSlotSampling(object, 0, 1, EditorSession::MaterialScope::Instance, tiled, diagnostic), diagnostic.c_str());
+  AE_EXPECT_EQ(publisher.rebuilds, rebuilds, "transformação não publica textura nenhuma");
+  auto effective = effectiveMaterial(session, object);
+  AE_EXPECT_TRUE((effective.uvTransformMask & 2u) != 0 && effective.uvTransforms[1][0] == 4 && effective.uvTransforms[1][5] == .25f,
+                 "normal com escala 4 e deslocamento V resolvidos");
+  AE_EXPECT_EQ(effective.uvTransformMask & ~2u, 0u, "os outros bindings seguem sem transformação");
+  AE_EXPECT_TRUE((session.importLinkOverrides(object) & ImportOverrideMaterial) != 0, "transformação conta como material local");
+  {
+    const auto *render = meshRenderer(*session.document().find(object));
+    std::ostringstream out;
+    render->write(out);
+    scene::MeshRenderer back;
+    std::istringstream in(out.str());
+    AE_EXPECT_TRUE(back.read(in, 7) && back.sampling == render->sampling && back.sampling[1] == tiled, "v7 volta igual");
+  }
+
+  // Material do projeto leva a transformação; a instância herda dele.
+  const auto shared = session.createMaterialFromSlot(object, 0, diagnostic);
+  AE_EXPECT_TRUE(shared.valid(), diagnostic.c_str());
+  AE_EXPECT_TRUE(session.findMaterialAsset(shared)->sampling[1] == tiled, "material do projeto guarda a transformação");
+  AE_EXPECT_TRUE(!meshRenderer(*session.document().find(object))->sampling[1].transformed(), "instância limpa");
+  AE_EXPECT_TRUE((effectiveMaterial(session, object).uvTransformMask & 2u) != 0, "herdada do material compartilhado");
+  const auto serialized = session.findMaterialAsset(shared)->serialize();
+  resources::MaterialAsset back;
+  AE_EXPECT_TRUE(serialized.starts_with("ASTRA_MATERIAL 5") && resources::MaterialAsset::deserialize(serialized, back) &&
+                     back.sampling[1] == tiled, "MaterialAsset v5 volta igual");
+
+  AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");
+  AE_EXPECT_EQ(effectiveMaterial(session, object).uvTransformMask, u8{0}, "sem transformação depois de reverter");
 }

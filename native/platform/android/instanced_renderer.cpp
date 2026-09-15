@@ -851,6 +851,18 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   buffer.cpuAccess = rhi::CpuAccess::SequentialWrite;
   buffer.preferDeviceMemory = false;
   if (!memoryAllocator_->createBuffer(buffer, &environmentUniform_)) return false;
+  // R4: tabela de transformações de UV com capacidade fixa, pelo mesmo motivo da
+  // ondulação abaixo: o descritor é escrito uma vez.
+  {
+    rhi::BufferDesc transforms{};
+    transforms.sizeBytes = static_cast<u64>(MaterialUvTransformCapacity) * renderer::MaterialUvTransformFloats * sizeof(float);
+    transforms.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    transforms.cpuAccess = rhi::CpuAccess::SequentialWrite;
+    transforms.preferDeviceMemory = false;
+    if (!memoryAllocator_->createBuffer(transforms, &materialUvTransformBuffer_)) return false;
+    std::memset(materialUvTransformBuffer_.mappedData(), 0, static_cast<usize>(transforms.sizeBytes));
+    if (!memoryAllocator_->flushBuffer(materialUvTransformBuffer_)) return false;
+  }
   // Capacidade fixa no teto do contrato da grade: realocar no meio do laço de
   // quadro obrigaria a reescrever o descritor, e o tamanho aqui é modesto.
   if(waterSubpassActive_) {
@@ -881,7 +893,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[16]{};
+  VkDescriptorSetLayoutBinding bindings[17]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -916,6 +928,8 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   if (waterSubpassActive_)
     bindings[bindingCount++]={15,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,
      VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  // R4: transformações de UV, lidas pelo sombreamento e pela cobertura do mapa.
+  bindings[bindingCount++]={16,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   layout.bindingCount = bindingCount;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
@@ -924,11 +938,12 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
                                     spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)},
                                    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                    (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u)}};
+                                    (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 1u}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool.maxSets = 1;
-  pool.poolSizeCount = spectralWaterCount_>0 ? 4u : (waterSubpassActive_ ? 4u : 2u);
+  // O storage buffer das transformações de UV existe sempre: o tamanho 3 entra mesmo sem água.
+  pool.poolSizeCount = 4u;
   pool.pPoolSizes = sizes;
   if (vkCreateDescriptorPool(device_, &pool, nullptr, &environmentPool_) != VK_SUCCESS) return false;
   VkDescriptorSetAllocateInfo allocation{};
@@ -964,8 +979,9 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
       break;
     }
   }
-  VkWriteDescriptorSet writes[16]{};
+  VkWriteDescriptorSet writes[17]{};
   VkDescriptorBufferInfo rippleBuffer{};
+  VkDescriptorBufferInfo uvTransforms{materialUvTransformBuffer_.handle(), 0, materialUvTransformBuffer_.sizeBytes()};
   VkDescriptorImageInfo spectralImages[4]{};
   VkDescriptorBufferInfo spectralBuffers[4]{};
   writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1039,8 +1055,38 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
     writes[writeCount].pBufferInfo = &rippleBuffer;
     ++writeCount;
   }
+  writes[writeCount].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  writes[writeCount].dstSet = environmentSet_;
+  writes[writeCount].dstBinding = 16;
+  writes[writeCount].descriptorCount = 1;
+  writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  writes[writeCount].pBufferInfo = &uvTransforms;
+  ++writeCount;
   vkUpdateDescriptorSets(device_, writeCount, writes, 0, nullptr);
   return true;
+}
+
+bool InstancedRenderer::writeAuthoredUvTransforms() {
+  authoredUvTransformEntries_.assign(authoredMaterials_.size(), 0u);
+  auto *entries = static_cast<float *>(materialUvTransformBuffer_.mappedData());
+  if (entries == nullptr) return true; // sem o mapa em edição ninguém lê a tabela
+  u32 used = 0;
+  bool overflow = false;
+  for (usize draw = 0; draw < authoredMaterials_.size(); ++draw) {
+    if (authoredMaterials_[draw].uvTransformMask == 0) continue;
+    if (used >= MaterialUvTransformCapacity) { overflow = true; continue; }
+    renderer::materialUvTransformEntry(authoredMaterials_[draw],
+                                       entries + static_cast<usize>(used) * renderer::MaterialUvTransformFloats);
+    authoredUvTransformEntries_[draw] = ++used;
+  }
+  // Acima da capacidade o desenho fica sem transformação e isso é dito uma vez.
+  if (overflow && !uvTransformOverflowReported_) {
+    uvTransformOverflowReported_ = true;
+    __android_log_print(ANDROID_LOG_WARN, LogTag,
+        "[Material] mais de %u desenhos com transformação de UV; os excedentes usam a UV sem transformação.",
+        MaterialUvTransformCapacity);
+  }
+  return used == 0 || memoryAllocator_->flushBuffer(materialUvTransformBuffer_);
 }
 
 bool InstancedRenderer::createSkyPipeline() {
@@ -3836,6 +3882,7 @@ void InstancedRenderer::shutdown() {
   environmentSetLayout_ = VK_NULL_HANDLE;
   environmentSet_ = VK_NULL_HANDLE;
   waterRippleBuffer_.reset();
+  materialUvTransformBuffer_.reset();
   environmentUniform_.reset();
   indirectBuffer_.reset();
   indirectCommands_.clear();
@@ -3883,6 +3930,7 @@ void InstancedRenderer::shutdown() {
   memoryAllocator_ = nullptr;
   swapchain_ = nullptr;
   pendingScene_.clear();sourceMapDraws_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredMaterials_.clear();
+  authoredUvTransformEntries_.clear();
   fillInstanceBuffer_ = nullptr;
   extractScene_ = nullptr;
   dirtRoadPreview_ = false;
@@ -3977,7 +4025,7 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] texturas importadas: %zu publicadas, %zu slots bindless.",
       textures.size(),authoringTextureSlots_.size());
   pendingScene_.clear();pendingMapPoseCount_=0;pendingAuthoredStateValid_=false;
-  authoredMaterials_.clear();authoredVisibility_.clear();authoredShadows_.clear();
+  authoredMaterials_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredUvTransformEntries_.clear();
   authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();
   shadowCascadeDirtyMask_=0xffffffffu;
   if(!rebuildDrawOrders()) {
@@ -4187,6 +4235,7 @@ bool InstancedRenderer::commitAuthoredScene() {
   }
   dirtRoadResources_.setAuthoredDraws(std::move(records));
   if(!memoryAllocator_->flushBuffer(instanceBuffer_)) return false;
+  if(!writeAuthoredUvTransforms()) return false;
   pendingScene_.clear();shadowCascadeDirtyMask_=0xffffffffu;
   return true;
 }
@@ -4265,6 +4314,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       authoredVisibility_[i] = state.visible;
       authoredShadows_[i] = state.castShadow;
     }
+    if (!writeAuthoredUvTransforms()) return rhi::SwapchainStatus::FatalError;
     pendingAuthoredStateValid_ = false;
   }
   if (pendingMapPoseCount_ != 0) {
@@ -4724,7 +4774,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       // therefore preserve the old push-constant bit pattern.
       push.materialFlags[1]=material.textureCoordinates | (alphaCutoff << 8u) |
                             ((material.reserved & 0xffffu) << 16u);
-      push.materialFlags[2]=encodeSrgb?1u:0u;
+      // Bit 0: saída sRGB. Bits 1..31: entrada da transformação de UV do desenho (0 = nenhuma).
+      push.materialFlags[2]=(encodeSrgb?1u:0u) |
+          ((drawIndex<authoredUvTransformEntries_.size()?authoredUvTransformEntries_[drawIndex]:0u)<<1u);
       push.materialFlags[3]=std::bit_cast<u32>(sceneFarPlane());
       push.materialFactors[0]=material.roughness;push.materialFactors[1]=material.metallic;
       push.materialFactors[2]=material.normalScale;push.materialFactors[3]=material.specular;

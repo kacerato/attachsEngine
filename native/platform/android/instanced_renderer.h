@@ -419,6 +419,13 @@ private:
   bool commitAuthoredScene();
   std::vector<u8> authoredVisibility_, authoredShadows_;
   std::vector<renderer::MaterialOverride> authoredMaterials_;
+  // R4: tabela de transformações de UV por binding (set=1, binding=16). Só os
+  // desenhos que transformam ocupam entrada; o índice+1 vai em materialFlags.z.
+  static constexpr u32 MaterialUvTransformCapacity = 1024;
+  rhi::VulkanBuffer materialUvTransformBuffer_{};
+  std::vector<u32> authoredUvTransformEntries_;
+  bool uvTransformOverflowReported_ = false;
+  bool writeAuthoredUvTransforms();
   float environmentAdjustment_[4]{1,1,1,0};
 
   void applyRuntimeRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy,
