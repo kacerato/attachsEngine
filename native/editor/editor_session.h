@@ -33,6 +33,7 @@
 #include "resources/material_asset.h"
 #include "resources/texture_budget.h"
 #include "resources/import_profile.h"
+#include "resources/glb_images.h"
 #include "editor/editor_import_reconcile.h"
 #include "editor/editor_archive.h"
 #include "editor/editor_document.h"
@@ -487,6 +488,33 @@ public:
   // `field` indexa os números do componente de malha (cor, rugosidade...).
   bool setSlotMaterialValue(EditorEntityId id,u32 slot,MaterialScope scope,u32 field,float value,std::string &diagnostic);
   bool clearSlotMaterialOverride(EditorEntityId id,u32 slot);
+  // R4: texturas do projeto. Um recurso `Texture` é o próprio arquivo PNG/JPEG
+  // em `Texturas/`; a identidade no registro é o que slots e materiais guardam.
+  struct ProjectTexture {
+    resources::AssetGuid guid;
+    std::string path,name;
+    u32 width=0,height=0; // do cabeçalho; zero quando o arquivo não abre
+  };
+  const std::vector<ProjectTexture> &projectTextures() const {return textures_;}
+  const ProjectTexture *findProjectTexture(const resources::AssetGuid &guid) const {
+    for(const auto &texture:textures_) if(texture.guid==guid) return &texture;
+    return nullptr;
+  }
+  // Extrai as imagens PNG/JPEG embutidas de uma fonte GLB do projeto para
+  // `Texturas/<fonte>/`, com os bytes originais, e registra cada uma. Imagem com
+  // o mesmo conteúdo de uma textura já registrada é reaproveitada, não duplicada.
+  // Tudo ou nada: falha ao gravar não deixa registro parcial.
+  struct TextureExtraction {
+    u32 created=0,reused=0,skipped=0; // skipped: KTX2 ou formato sem arquivo próprio
+    std::vector<resources::AssetGuid> textures;
+  };
+  bool extractSourceTextures(const std::string &sourcePath,TextureExtraction &report,std::string &diagnostic);
+  // Troca a textura de um binding (0 cor base, 1 normal, 2 metálico/rugosidade,
+  // 3 emissão). `Instance`: no slot deste objeto, pelo histórico. `Shared`: no
+  // MaterialAsset do slot, em todos os usos. Identidade inválida herda;
+  // `scene::MaterialTextureNone` tira a textura.
+  bool setSlotTexture(EditorEntityId id,u32 slot,u32 binding,MaterialScope scope,const resources::AssetGuid &texture,
+                      std::string &diagnostic);
   // Nome do material da FONTE usado pela primitiva de identidade `draw`.
   std::string sourceMaterialName(const resources::AssetGuid &draw) const;
   // Editar um material compartilhado não muda a revisão do documento; o shell
@@ -691,9 +719,25 @@ private:
   void refreshImportLinkView();
   u64 importInstanceCounter_=0;
   std::vector<resources::MaterialAsset> materials_;
+  std::vector<ProjectTexture> textures_;
+  struct DecodedProjectTexture {
+    resources::AssetGuid guid;
+    bool srgb=true;
+    std::string contentHash;
+    renderer::SharedAuthoringTexture texture;
+  };
+  std::vector<DecodedProjectTexture> decodedTextures_;
   bool appearanceChanged_=false;
   void publishMaterialLibrary();
   void loadMaterialAssets();
+  void loadTextureAssets();
+  // Textura do projeto decodificada com mips para um espaço de cor, em cache
+  // enquanto o conteúdo registrado não muda. Nula quando o arquivo não abre.
+  renderer::SharedAuthoringTexture decodeProjectTexture(const resources::AssetGuid &guid,bool srgb);
+  // Pares (textura, sRGB) usados por slots da cena e por materiais do projeto.
+  void collectUsedTextures(std::vector<std::pair<resources::AssetGuid,bool>> &out) const;
+  // Publica de novo só se alguma textura usada ainda não está na biblioteca.
+  bool ensureTexturesPublished(std::string &diagnostic);
   void refreshMaterialSlotView();
   bool writeMaterialAsset(const resources::MaterialAsset &material,const std::string &path,std::string &diagnostic);
   double codeCheckpointAt_=0;

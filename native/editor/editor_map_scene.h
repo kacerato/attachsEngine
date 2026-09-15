@@ -66,19 +66,60 @@ public:
   bool pickSlotGeometry(const runtime::SceneGraph &document, EditorEntityId id, u32 slot, EditorPickCandidate &out) const;
   // Materiais do projeto (MaterialAsset) disponíveis para resolver slots. Trocar
   // a biblioteca não toca geometria: o próximo `extract` já usa os valores.
-  void setMaterialLibrary(std::vector<std::pair<resources::AssetGuid,scene::MaterialParameters>> library) {materialLibrary_=std::move(library);}
-  const scene::MaterialParameters *materialAsset(const resources::AssetGuid &guid) const {
+  struct SharedMaterial {
+    scene::MaterialParameters values;
+    scene::SlotTextures textures{};
+  };
+  void setMaterialLibrary(std::vector<std::pair<resources::AssetGuid,SharedMaterial>> library) {materialLibrary_=std::move(library);}
+  const SharedMaterial *sharedMaterial(const resources::AssetGuid &guid) const {
     if(!guid.valid()) return nullptr;
     for(const auto &[id,value]:materialLibrary_) if(id==guid) return &value;
     return nullptr;
   }
+  const scene::MaterialParameters *materialAsset(const resources::AssetGuid &guid) const {
+    const auto *shared=sharedMaterial(guid);
+    return shared?&shared->values:nullptr;
+  }
+  // R4: texturas do PROJETO publicadas na biblioteca, por identidade e espaço de
+  // cor (a mesma imagem usada como cor e como dado vira duas texturas).
+  struct TextureBinding {
+    resources::AssetGuid guid;
+    bool srgb=true;
+    u32 index=0; // posição na lista de texturas da biblioteca publicada
+  };
+  void setTextureLibrary(std::vector<TextureBinding> library) {textureLibrary_=std::move(library);}
+  const std::vector<TextureBinding> &textureLibrary() const {return textureLibrary_;}
+  // Cor base e emissão são cor (sRGB); normal e metálico/rugosidade são dados.
+  static bool bindingIsSrgb(u32 binding) {return binding==0 || binding==3;}
+  // Índice publicado de uma identidade num binding. Identidade que ainda não
+  // foi publicada devolve "herdar": a textura da fonte fica até a publicação.
+  u32 resolveTexture(const resources::AssetGuid &guid,u32 binding) const {
+    if(guid==scene::MaterialTextureNone) return renderer::InvalidMapTexture;
+    if(!guid.valid()) return scene::MaterialTextureKeep;
+    for(const auto &entry:textureLibrary_) if(entry.guid==guid && entry.srgb==bindingIsSrgb(binding)) return entry.index;
+    return scene::MaterialTextureKeep;
+  }
+  // Identidade efetiva de um binding: a trocada nesta instância, senão a do
+  // material compartilhado, senão nenhuma (vale a da fonte).
+  resources::AssetGuid slotTexture(const scene::MeshRenderer &render,u32 slot,u32 binding) const {
+    if(binding>=scene::MaterialTextureCount) return {};
+    const auto &local=render.slotTextures(slot)[binding];
+    if(local.valid()) return local;
+    if(const auto *shared=sharedMaterial(render.slotMaterialAsset(slot))) return shared->textures[binding];
+    return {};
+  }
   // Material efetivo de um slot: substituição da instância, senão o material
-  // compartilhado, senão o da fonte (`enabled` falso = valores do pacote).
+  // compartilhado, senão o da fonte (`enabled` falso = valores do pacote). As
+  // texturas resolvem binding a binding, independentes dos escalares.
   scene::MaterialParameters slotMaterial(const scene::MeshRenderer &render, u32 slot) const {
     const auto &local=render.slotMaterial(slot);
-    if(local.enabled) return local;
-    if(const auto *shared=materialAsset(render.slotMaterialAsset(slot))) {auto value=*shared;value.enabled=true;return value;}
-    return local;
+    scene::MaterialParameters value=local;
+    if(!local.enabled)
+      if(const auto *shared=materialAsset(render.slotMaterialAsset(slot))) {value=*shared;value.enabled=true;}
+    value=scene::withoutResolvedTextures(value);
+    for(u32 binding=0;binding<scene::MaterialTextureCount;++binding)
+      value.textures[binding]=resolveTexture(slotTexture(render,slot,binding),binding);
+    return value;
   }
   void hydrateMaterials(EditorDocument &document) const;
   renderer::MaterialOverride materialForAsset(u32 index) const;
@@ -87,7 +128,8 @@ public:
         ? materials_[source_[index].materialIndex].flags : 0;
   }
 private:
-  std::vector<std::pair<resources::AssetGuid,scene::MaterialParameters>> materialLibrary_;
+  std::vector<std::pair<resources::AssetGuid,SharedMaterial>> materialLibrary_;
+  std::vector<TextureBinding> textureLibrary_;
   std::vector<resources::AssetGuid> assets_;
   // Três floats por desenho; vazio significa "pivô no centro dos limites".
   std::vector<float> pivots_;

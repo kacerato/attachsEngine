@@ -22,6 +22,7 @@ std::string MaterialAsset::serialize() const {
   scene::MeshRenderer probe;
   probe.material = values;
   for (const auto &number : scene::MeshRenderer::descriptor.numbers) out << ' ' << number.read(probe);
+  for (const auto &texture : textures) out << ' ' << scene::materialTextureToken(texture);
   out << '\n';
   return out.str();
 }
@@ -34,12 +35,17 @@ bool MaterialAsset::deserialize(std::string_view text, MaterialAsset &out) {
   u32 version = 0;
   MaterialAsset candidate;
   if (!(in >> magic >> version >> guidText >> candidate.revision >> std::quoted(candidate.name)) || magic != "ASTRA_MATERIAL" ||
-      version != FormatVersion || !AssetGuid::parse(guidText, candidate.guid))
+      version < 1 || version > FormatVersion || !AssetGuid::parse(guidText, candidate.guid))
     return false;
   scene::MeshRenderer probe;
   for (const auto &number : scene::MeshRenderer::descriptor.numbers) if (!(in >> *number.write(probe))) return false;
-  candidate.values = probe.material;
+  candidate.values = scene::withoutResolvedTextures(probe.material);
   candidate.values.enabled = true;
+  if (version >= 2)
+    for (auto &texture : candidate.textures) {
+      std::string token;
+      if (!(in >> token) || !scene::parseMaterialTextureToken(token, texture)) return false;
+    }
   in >> std::ws;
   if (!in.eof() || !candidate.valid()) return false;
   out = std::move(candidate);

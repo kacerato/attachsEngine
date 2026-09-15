@@ -4657,7 +4657,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     visibilityTelemetry_ = {};
     auto pushMapMaterial = [&](u32 materialIndex, u32 drawIndex=0xffffffffu) {
       auto material = dirtRoadResources_.materials()[materialIndex];
-      if(drawIndex<authoredMaterials_.size()) material=renderer::applyMaterialOverride(material,authoredMaterials_[drawIndex]);
+      // R4: texturas trocadas indexam a biblioteca importada, que começa depois
+      // das texturas do pacote -- o mesmo deslocamento dos materiais importados.
+      if(drawIndex<authoredMaterials_.size())
+        material=renderer::applyMaterialOverride(material,authoredMaterials_[drawIndex],static_cast<u32>(dirtRoadResources_.packageTextureCount()));
       if (!useBindless_) {
         const VkDescriptorSet set = dirtMaterialSets_[materialIndex];
         vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
@@ -4700,10 +4703,15 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                          0,sizeof(push),&push);
     };
     auto materialPipeline = [&](u32 materialIndex, const VkPipeline *variants,
-                                VkPipeline fallback) {
+                                VkPipeline fallback, u32 drawIndex = 0xffffffffu) {
       if (variants == nullptr) return fallback;
-      const u32 variant = renderer::materialFeatureVariant(
-          dirtRoadResources_.materials()[materialIndex].flags);
+      u32 flags = dirtRoadResources_.materials()[materialIndex].flags;
+      // R4: trocar normal, metálico/rugosidade ou emissão numa instância muda a
+      // variante; a do material da fonte não amostraria o mapa novo.
+      if (drawIndex < authoredMaterials_.size())
+        flags = renderer::applyMaterialOverride(dirtRoadResources_.materials()[materialIndex],
+                                                authoredMaterials_[drawIndex]).flags;
+      const u32 variant = renderer::materialFeatureVariant(flags);
       return variants[variant] != VK_NULL_HANDLE ? variants[variant] : fallback;
     };
     // The generic pipeline was bound immediately before entering the map path.
@@ -4734,7 +4742,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       const bool distant = distantFallback != VK_NULL_HANDLE &&
                            usesDistantMaterialPipeline(drawIndex);
       bindMapPipeline(distant ? distantFallback
-                              : materialPipeline(draw.materialIndex, variants, fallback));
+                              : materialPipeline(draw.materialIndex, variants, fallback, drawIndex));
       pushMapMaterial(draw.materialIndex,drawIndex);
       const bool route=(dirtRoadResources_.materials()[draw.materialIndex].flags & renderer::WaterRouteResource)!=0;
       const VkDeviceSize zero=0;

@@ -52,7 +52,10 @@ std::vector<AssetGuid> slotAssets(const EditorEntity &entity) {
 }
 
 bool slotCarriesMaterial(const scene::MeshRenderer &render, u32 slot) {
-  return render.slotMaterial(slot).enabled || render.slotMaterialAsset(slot).valid();
+  if (render.slotMaterial(slot).enabled || render.slotMaterialAsset(slot).valid()) return true;
+  // R4: textura trocada nesta instância também é dado local do slot.
+  for (const auto &texture : render.slotTextures(slot)) if (texture.valid()) return true;
+  return false;
 }
 
 // Onde o objeto está pendurado, dito em termos da fonte: 0 no nível das
@@ -401,6 +404,7 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
           *render->editSlotMesh(slot) = partRender->mesh;
           *render->editSlotMaterial(slot) = partRender->material;
           *render->editSlotMaterialAsset(slot) = partRender->materialAsset;
+          *render->editSlotTextures(slot) = partRender->textures;
         }
         base.push_back(linkOf(part)->baseAsset);
       }

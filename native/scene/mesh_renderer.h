@@ -5,6 +5,22 @@
 #include <array>
 #include <vector>
 namespace ae::scene {
+// R4: textura de um binding de material, por identidade. Inválida herda (do
+// material compartilhado, senão da fonte); `MaterialTextureNone` tira a textura.
+inline constexpr resources::AssetGuid MaterialTextureNone{~0ull,~0ull};
+using SlotTextures=std::array<resources::AssetGuid,MaterialTextureCount>;
+// No arquivo: "-" herda, "none" sem textura, senão a identidade.
+inline std::string materialTextureToken(const resources::AssetGuid &value) {
+  if(value==MaterialTextureNone) return "none";
+  return value.valid()?value.text():std::string("-");
+}
+inline bool parseMaterialTextureToken(const std::string &text,resources::AssetGuid &out) {
+  out={};
+  if(text=="-") return true;
+  if(text=="none") {out=MaterialTextureNone;return true;}
+  return resources::AssetGuid::parse(text,out);
+}
+
 // Um slot de submesh além do primeiro (M07/M08, Entrega 2).
 //
 // Um nó com várias primitivas é UM objeto autoral: cada primitiva vira um slot
@@ -17,8 +33,10 @@ struct MeshSubmesh {
   resources::AssetGuid asset{};
   resources::AssetGuid materialAsset{};
   MaterialParameters material;
+  SlotTextures textures{};
   friend bool operator==(const MeshSubmesh &a, const MeshSubmesh &b) {
-    return a.mesh == b.mesh && a.asset == b.asset && a.materialAsset == b.materialAsset && a.material == b.material;
+    return a.mesh == b.mesh && a.asset == b.asset && a.materialAsset == b.materialAsset && a.material == b.material &&
+           a.textures == b.textures;
   }
 };
 
@@ -42,7 +60,17 @@ public:
   bool enabled=true;
   MaterialParameters material;
   resources::AssetGuid materialAsset{};
+  // R4: texturas trocadas nesta instância, por binding, do slot 0.
+  SlotTextures textures{};
   std::vector<MeshSubmesh> submeshes;
+
+  const SlotTextures &slotTextures(u32 slot) const noexcept {
+    static const SlotTextures none{};
+    return slot ? (slot - 1 < submeshes.size() ? submeshes[slot - 1].textures : none) : textures;
+  }
+  SlotTextures *editSlotTextures(u32 slot) noexcept {
+    return slot ? (slot - 1 < submeshes.size() ? &submeshes[slot - 1].textures : nullptr) : &textures;
+  }
 
   u32 slotCount() const noexcept { return static_cast<u32>(1 + submeshes.size()); }
   u32 slotMesh(u32 slot) const noexcept { return slot ? (slot - 1 < submeshes.size() ? submeshes[slot - 1].mesh : 0) : mesh; }
@@ -93,6 +121,9 @@ public:
       out<<' '<<slot.mesh<<' '<<guid(slot.asset)<<' '<<guid(slot.materialAsset)<<' '<<slot.material.enabled;
       for(const auto &p:descriptor.numbers) out<<' '<<p.read(probe);
     }
+    // v4: texturas por binding de cada slot, na ordem dos slots.
+    for(u32 slot=0;slot<slotCount();++slot)
+      for(const auto &texture:slotTextures(slot)) out<<' '<<materialTextureToken(texture);
     out<<' ';
   }
   bool read(std::istream &in,u32 version) override {
@@ -103,10 +134,10 @@ public:
       return text=="-" || resources::AssetGuid::parse(text,out);
     };
     bool overridden=false;
-    if(version<1 || version>3 || !(in>>mesh>>enabled>>overridden)) return false;
+    if(version<1 || version>4 || !(in>>mesh>>enabled>>overridden)) return false;
     for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
     material.enabled=overridden;
-    asset={};materialAsset={};submeshes.clear();
+    asset={};materialAsset={};textures={};submeshes.clear();
     if(version>=2) {
       std::string guid;
       if(!(in>>guid) || !parse(guid,asset)) return false;
@@ -123,6 +154,13 @@ public:
         for(const auto &p:descriptor.numbers) if(!(in>>*p.write(probe))) return false;
         slot.material=probe.material;slot.material.enabled=slotOverridden;
       }
+    }
+    if(version>=4) {
+      for(u32 slot=0;slot<slotCount();++slot)
+        for(auto &texture:*editSlotTextures(slot)) {
+          std::string token;
+          if(!(in>>token) || !parseMaterialTextureToken(token,texture)) return false;
+        }
     }
     return true;
   }
@@ -146,6 +184,6 @@ inline constexpr std::array<ComponentBoolean,1> meshRendererBooleans{{
   {"enabled","Renderizar",[](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).enabled;},[](ComponentValue &v,bool b){static_cast<MeshRenderer&>(v).enabled=b;}}
 }};
 inline const ComponentType MeshRenderer::descriptor{
-  "astra.render.mesh",3,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
+  "astra.render.mesh",4,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
 };
 }

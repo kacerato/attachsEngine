@@ -11,8 +11,24 @@ inline MaterialOverride materialOverrideFrom(const MapMaterialRecord &source) {
   result.normalScale=source.normalScale;result.specular=source.specular;
   result.emissionStrength=source.emissiveFactorAndStrength[3];return result;
 }
-inline MapMaterialRecord applyMaterialOverride(const MapMaterialRecord &source,const MaterialOverride &value) {
-  auto result=source;if(!value.enabled) return result;
+// R4: bindings de textura trocados valem mesmo sem substituição escalar
+// (`enabled`). `textureBase` é onde a biblioteca importada começa na lista de
+// texturas do renderer, o mesmo deslocamento aplicado aos materiais importados.
+// Trocar ou tirar normal, metálico/rugosidade ou emissão atualiza a flag do
+// binding: é ela que escolhe a variante de pipeline que amostra o mapa.
+inline MapMaterialRecord applyMaterialOverride(const MapMaterialRecord &source,const MaterialOverride &value,u32 textureBase=0) {
+  auto result=source;
+  static constexpr u32 bindingFlags[scene::MaterialTextureCount]{0,MapMaterialNormalMap,MapMaterialMetallicRoughnessMap,MapMaterialEmissiveMap};
+  for(u32 slot=0;slot<scene::MaterialTextureCount;++slot) {
+    const u32 texture=value.textures[slot];
+    if(texture==scene::MaterialTextureKeep) continue;
+    result.textureIndices[slot]=texture==InvalidMapTexture?InvalidMapTexture:texture+textureBase;
+    if(bindingFlags[slot]) {
+      if(texture==InvalidMapTexture) result.flags&=~bindingFlags[slot];
+      else result.flags|=bindingFlags[slot];
+    }
+  }
+  if(!value.enabled) return result;
   for(u32 i=0;i<3;++i) {result.baseColorFactor[i]=value.baseColor[i];result.emissiveFactorAndStrength[i]=value.emission[i];}
   result.roughness=value.roughness;result.metallic=value.metallic;
   result.normalScale=value.normalScale;result.specular=value.specular;

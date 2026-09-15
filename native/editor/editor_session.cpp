@@ -1739,6 +1739,10 @@ bool EditorSession::load(const char *path, u64 fingerprint) {
   mapScene_.hydrateMaterials(candidate);
   cancelPointers();document_=std::move(candidate);history_.clear();
   sceneEpoch_=nextSceneEpoch();
+  // R4: a cena aberta pode usar texturas do projeto que a biblioteca atual ainda
+  // não publicou.
+  if(std::string texturePublish;!ensureTexturesPublished(texturePublish))
+    reportProblem(EditorConsoleSeverity::Warning,"Texturas do projeto não publicadas: "+texturePublish);
   reportImportReconcile(reconcile,"Cena aberta");
   state_.selection=kInvalidEntity;state_.status="Cena restaurada";
   state_.collapsedEntities.clear();state_.hierarchyScroll=0;state_.renameEntity=kInvalidEntity;
@@ -1785,6 +1789,18 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   // derivado em cache) guardam as cadeias completas; subir o teto e republicar
   // devolve a resolução sem reimportar nada.
   auto textures=library.textures;
+  // R4: texturas do projeto usadas por slots e materiais entram depois das da
+  // biblioteca das fontes; a tabela de bindings diz onde cada uma ficou.
+  std::vector<EditorMapScene::TextureBinding> bindings;
+  {
+    std::vector<std::pair<resources::AssetGuid,bool>> used;
+    collectUsedTextures(used);
+    for(const auto &[guid,srgb]:used)
+      if(auto decoded=decodeProjectTexture(guid,srgb)) {
+        bindings.push_back({guid,srgb,static_cast<u32>(textures.size())});
+        textures.push_back(std::move(decoded));
+      }
+  }
   const auto residency=resources::applyTextureBudget(textures,importTextureBudget_,importLimits_.minimumTextureDimension);
   if(!publishGeometry_(library.vertices,library.indices,library.draws,library.materials,textures,published)) {
     diagnostic="O consumidor gráfico recusou a geometria importada.";return false;
@@ -1820,6 +1836,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
                              published.indices,identities,packageFingerprint_,pivots)) {
     diagnostic="O editor recusou o pacote publicado.";return false;
   }
+  mapScene_.setTextureLibrary(std::move(bindings));
   return true;
 }
 
@@ -2618,14 +2635,203 @@ void EditorSession::refreshMaterialSlotView() {
 }
 
 void EditorSession::publishMaterialLibrary() {
-  std::vector<std::pair<resources::AssetGuid,scene::MaterialParameters>> library;
+  std::vector<std::pair<resources::AssetGuid,EditorMapScene::SharedMaterial>> library;
   library.reserve(materials_.size());
-  for(const auto &material:materials_) library.emplace_back(material.guid,material.values);
+  for(const auto &material:materials_) library.push_back({material.guid,{material.values,material.textures}});
   mapScene_.setMaterialLibrary(std::move(library));
   appearanceChanged_=true;
 }
 
+namespace {
+std::string textureFileStem(std::string_view text) {
+  std::string stem;
+  for(unsigned char c:text) stem.push_back(c<32 || c==127 || c=='/' || c=='\\' || c==':' || c=='"' ? '_' : static_cast<char>(c));
+  while(!stem.empty() && (stem.back()==' ' || stem.back()=='.')) stem.pop_back();
+  if(stem.empty() || stem=="." || stem=="..") stem="textura";
+  return stem.size()>96?stem.substr(0,96):stem;
+}
+} // namespace
+
+void EditorSession::loadTextureAssets() {
+  textures_.clear();
+  const auto root=files_.rootPath();
+  for(const auto &record:assets_.records()) {
+    if(record.type!=resources::AssetType::Texture) continue;
+    ProjectTexture texture;
+    texture.guid=record.guid;texture.path=record.path;
+    const auto slash=record.path.find_last_of('/');
+    texture.name=slash==std::string::npos?record.path:record.path.substr(slash+1);
+    std::filesystem::path absolute;std::vector<u8> bytes;
+    if(root.empty() || !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),record.path,absolute) ||
+       !EditorImportTransaction::read(absolute,bytes,importLimits_.image.maximumEncodedBytes) ||
+       !resources::readImageDimensions(bytes,importLimits_.image,texture.width,texture.height))
+      reportProblem(EditorConsoleSeverity::Warning,"Textura do projeto ausente ou ilegível: "+record.path+"; os bindings que a usam ficam com a textura da fonte.");
+    textures_.push_back(std::move(texture));
+  }
+}
+
+renderer::SharedAuthoringTexture EditorSession::decodeProjectTexture(const resources::AssetGuid &guid,bool srgb) {
+  const auto *record=assets_.find(guid);
+  if(!record || record->type!=resources::AssetType::Texture) return {};
+  for(const auto &entry:decodedTextures_)
+    if(entry.guid==guid && entry.srgb==srgb && entry.contentHash==record->contentHash) return entry.texture;
+  const auto root=files_.rootPath();
+  std::filesystem::path absolute;std::vector<u8> bytes;std::string diagnostic;resources::DecodedImage image;
+  if(root.empty() || !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),record->path,absolute) ||
+     !EditorImportTransaction::read(absolute,bytes,importLimits_.image.maximumEncodedBytes) ||
+     !resources::decodeImageRgba8(bytes,importLimits_.image,image,diagnostic)) {
+    reportProblem(EditorConsoleSeverity::Warning,"Textura do projeto não decodificada: "+record->path+
+                  (diagnostic.empty()?std::string():" ("+diagnostic+")")+"; o binding usa a textura da fonte.");
+    return {};
+  }
+  auto texture=std::make_shared<renderer::AuthoringTexture>();
+  texture->width=image.width;texture->height=image.height;texture->srgb=srgb;
+  if(!resources::buildMipChain(image,srgb,texture->mipChain,texture->levels)) return {};
+  // Mesmo teto residente das texturas importadas: os níveis de cima saem.
+  while(texture->levels>1 && std::max(texture->width,texture->height)>importLimits_.maximumTextureDimension) {
+    const u64 top=u64{texture->width}*texture->height*4;
+    texture->mipChain.erase(texture->mipChain.begin(),texture->mipChain.begin()+static_cast<std::ptrdiff_t>(top));
+    texture->width=std::max<u32>(1,texture->width/2);texture->height=std::max<u32>(1,texture->height/2);--texture->levels;
+  }
+  if(!texture->valid()) return {};
+  std::erase_if(decodedTextures_,[&](const auto &entry){return entry.guid==guid && entry.srgb==srgb;});
+  decodedTextures_.push_back({guid,srgb,record->contentHash,texture});
+  return texture;
+}
+
+void EditorSession::collectUsedTextures(std::vector<std::pair<resources::AssetGuid,bool>> &out) const {
+  out.clear();
+  const auto add=[&](const resources::AssetGuid &guid,u32 binding) {
+    if(!guid.valid() || guid==scene::MaterialTextureNone) return;
+    const bool srgb=EditorMapScene::bindingIsSrgb(binding);
+    for(const auto &[known,space]:out) if(known==guid && space==srgb) return;
+    out.emplace_back(guid,srgb);
+  };
+  for(const auto &material:materials_)
+    for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) add(material.textures[binding],binding);
+  std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
+  for(const auto id:ids) {
+    const auto *entity=document_.find(id);
+    const auto *render=entity?meshRenderer(*entity):nullptr;
+    if(!render) continue;
+    for(u32 slot=0;slot<render->slotCount();++slot)
+      for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) add(render->slotTextures(slot)[binding],binding);
+  }
+}
+
+bool EditorSession::ensureTexturesPublished(std::string &diagnostic) {
+  if(importedSources_.empty()) return true;
+  std::vector<std::pair<resources::AssetGuid,bool>> used;
+  collectUsedTextures(used);
+  const auto &published=mapScene_.textureLibrary();
+  const bool complete=std::all_of(used.begin(),used.end(),[&](const auto &item) {
+    return std::any_of(published.begin(),published.end(),[&](const auto &entry){return entry.guid==item.first && entry.srgb==item.second;});
+  });
+  // Publicar de novo custa uma reconstrução da biblioteca (R2 ainda não publica
+  // textura incremental); só acontece quando falta alguma textura na GPU.
+  return complete || publishAndAdopt(flattenSources(importedSources_),diagnostic);
+}
+
+bool EditorSession::extractSourceTextures(const std::string &sourcePath,TextureExtraction &report,std::string &diagnostic) {
+  report={};diagnostic.clear();
+  if(isPlaying()) {diagnostic="Pare a execução antes de extrair texturas.";return false;}
+  const auto root=files_.rootPath();
+  std::filesystem::path absolute;std::vector<u8> bytes;
+  if(root.empty() || !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),sourcePath,absolute) ||
+     !EditorImportTransaction::read(absolute,bytes)) {
+    diagnostic="Não foi possível ler "+sourcePath+".";return false;
+  }
+  std::vector<resources::GlbEmbeddedImage> images;
+  if(!resources::listGlbEmbeddedImages(bytes,images,diagnostic)) return false;
+  if(images.empty()) {diagnostic="A fonte não tem imagens embutidas.";return false;}
+  const auto slash=sourcePath.find_last_of('/');
+  std::string stem=slash==std::string::npos?sourcePath:sourcePath.substr(slash+1);
+  if(const auto dot=stem.find_last_of('.');dot!=std::string::npos && dot>0) stem.erase(dot);
+  stem=textureFileStem(stem);
+  auto nextAssets=assets_;
+  struct Pending {std::filesystem::path target;std::vector<u8> bytes;};
+  std::vector<Pending> writes;
+  for(auto &image:images) {
+    const char *extension=image.container==resources::ImageContainer::Png?".png":
+                          image.container==resources::ImageContainer::Jpeg?".jpg":nullptr;
+    if(!extension) {++report.skipped;continue;}
+    const auto hash=Sha256::hex(image.bytes);
+    const resources::AssetRecord *existing=nullptr;
+    for(const auto &record:nextAssets.records())
+      if(record.type==resources::AssetType::Texture && record.contentHash==hash) {existing=&record;break;}
+    if(existing) {report.textures.push_back(existing->guid);++report.reused;continue;}
+    std::string name=image.name.empty()?"imagem-"+std::to_string(image.index+1):image.name;
+    for(const auto *suffix:{".png",".PNG",".jpg",".JPG",".jpeg",".JPEG"})
+      if(name.size()>std::strlen(suffix) && name.ends_with(suffix)) {name.resize(name.size()-std::strlen(suffix));break;}
+    name=textureFileStem(name);
+    std::string path="Texturas/"+stem+"/"+name+extension;
+    for(u32 n=2;nextAssets.findByPath(path) || files_.exists(path);++n) path="Texturas/"+stem+"/"+name+" "+std::to_string(n)+extension;
+    resources::AssetRecord record;
+    record.guid=resources::assetGuidFromSeed("texture:"+path+":"+hash+":"+
+        std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+":"+std::to_string(++importInstanceCounter_));
+    record.type=resources::AssetType::Texture;record.path=path;record.contentHash=hash;
+    // Proveniência, sem transformar a textura em fonte reimportável.
+    record.importerParameters="extraida-de "+sourcePath+" imagem "+std::to_string(image.index);
+    std::filesystem::path target;
+    if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),path,target) || !nextAssets.add(record)) {
+      diagnostic="O registro recusou "+path+"; nada foi extraído.";return false;
+    }
+    writes.push_back({target,std::move(image.bytes)});
+    report.textures.push_back(record.guid);++report.created;
+  }
+  std::vector<std::filesystem::path> written;
+  for(const auto &pending:writes) {
+    std::error_code error;std::filesystem::create_directories(pending.target.parent_path(),error);
+    if(error || !EditorImportTransaction::write(pending.target,pending.bytes)) {
+      for(const auto &path:written) std::filesystem::remove(path,error);
+      diagnostic="Não foi possível gravar as texturas extraídas; nada foi registrado.";return false;
+    }
+    written.push_back(pending.target);
+  }
+  if(report.created) {assets_=std::move(nextAssets);assetRegistryDirty_=true;}
+  loadTextureAssets();
+  files_.rebuildTree();
+  state_.status=std::to_string(report.created)+" textura(s) extraída(s), "+std::to_string(report.reused)+" já no projeto"+
+                (report.skipped?", "+std::to_string(report.skipped)+" sem arquivo próprio (KTX2)":std::string());
+  return true;
+}
+
+bool EditorSession::setSlotTexture(EditorEntityId id,u32 slot,u32 binding,MaterialScope scope,const resources::AssetGuid &texture,
+                                   std::string &diagnostic) {
+  diagnostic.clear();
+  const auto *entity=document_.find(id);
+  const auto *render=entity?meshRenderer(*entity):nullptr;
+  if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de trocar a textura.";return false;}
+  if(!render || slot>=render->slotCount() || binding>=scene::MaterialTextureCount) {diagnostic="Binding de textura inexistente.";return false;}
+  if(texture.valid() && texture!=scene::MaterialTextureNone && !findProjectTexture(texture)) {diagnostic="Textura fora do projeto.";return false;}
+  if(scope==MaterialScope::Shared) {
+    const auto guid=render->slotMaterialAsset(slot);
+    auto found=std::find_if(materials_.begin(),materials_.end(),[&](const auto &material){return material.guid==guid;});
+    if(!guid.valid() || found==materials_.end()) {
+      diagnostic="Este slot usa o material da fonte; crie um material do projeto para trocar a textura em todos os usos.";return false;
+    }
+    const auto *record=assets_.find(guid);
+    if(!record) {diagnostic="Material fora do registro.";return false;}
+    auto candidate=*found;
+    candidate.textures[binding]=texture;++candidate.revision;
+    if(!candidate.valid() || !writeMaterialAsset(candidate,record->path,diagnostic)) return false;
+    const auto serialized=candidate.serialize();
+    assets_.publishImport(guid,Sha256::hex(std::span<const u8>(reinterpret_cast<const u8 *>(serialized.data()),serialized.size())),0,"",{},{});
+    assetRegistryDirty_=true;
+    *found=std::move(candidate);
+    publishMaterialLibrary();
+  } else {
+    auto values=*entity;
+    (*editMeshRenderer(values)->editSlotTextures(slot))[binding]=texture;
+    if(!history_.applyValues(document_,id,values)) {diagnostic="O histórico recusou a troca de textura.";return false;}
+  }
+  std::string publish;
+  if(!ensureTexturesPublished(publish)) {diagnostic="Textura trocada, mas a publicação falhou: "+publish;return false;}
+  return true;
+}
+
 void EditorSession::loadMaterialAssets() {
+  loadTextureAssets();
   materials_.clear();
   const auto root=files_.rootPath();
   if(!root.empty()) for(const auto &record:assets_.records()) {
@@ -2680,9 +2886,12 @@ resources::AssetGuid EditorSession::createMaterialFromSlot(EditorEntityId id,u32
   if(material.name.empty()) material.name="Material";
   // Os valores que o usuário VÊ agora viram o recurso: substituição local, ou
   // material já compartilhado, ou o da fonte.
-  material.values=mapScene_.slotMaterial(*render,slot);
+  material.values=scene::withoutResolvedTextures(mapScene_.slotMaterial(*render,slot));
   if(!material.values.enabled && render->slotMesh(slot)) material.values=mapScene_.materialForAsset(render->slotMesh(slot)-1);
   material.values.enabled=true;
+  // R4: as texturas que o slot mostra agora (trocadas nesta instância ou já do
+  // material compartilhado) vão para o recurso novo.
+  for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) material.textures[binding]=mapScene_.slotTexture(*render,slot,binding);
   std::string stem;
   for(unsigned char c:material.name) stem.push_back(c<32 || c==127 || c=='/' || c=='\\' || c==':' || c=='"' ? '_' : static_cast<char>(c));
   if(stem.empty() || stem=="." || stem=="..") stem="Material";
@@ -2707,6 +2916,7 @@ resources::AssetGuid EditorSession::createMaterialFromSlot(EditorEntityId id,u32
   auto values=*entity;auto *edit=editMeshRenderer(values);
   *edit->editSlotMaterialAsset(slot)=material.guid;
   edit->editSlotMaterial(slot)->enabled=false;
+  *edit->editSlotTextures(slot)={};
   history_.applyValues(document_,id,values);
   state_.status="Material do projeto criado: "+path;
   return material.guid;
@@ -2756,7 +2966,7 @@ bool EditorSession::setSlotMaterialValue(EditorEntityId id,u32 slot,MaterialScop
   auto *material=edit->editSlotMaterial(slot);
   if(!material->enabled) {
     // Primeira substituição: parte do que está na tela, não de valores padrão.
-    *material=mapScene_.slotMaterial(*render,slot);
+    *material=scene::withoutResolvedTextures(mapScene_.slotMaterial(*render,slot));
     if(!material->enabled && render->slotMesh(slot)) *material=mapScene_.materialForAsset(render->slotMesh(slot)-1);
   }
   scene::MeshRenderer probe;probe.material=*material;
