@@ -757,6 +757,7 @@ bool startProjectReopen(AndroidShell &shell) {
       ae::editor::EditorSession::ReopenedSource reopened;
       reopened.sourceName=source;
       reopened.hash=ae::Sha256::hex(bytes);
+      const double hashedAt=ae::platform::android::lifecycleUptimeMs();
       // R2: derivado regenerável por conteúdo + limites. Acerto pula o importador
       // inteiro; arquivo ausente, velho ou corrompido cai no importador.
       const auto key=ae::resources::importCacheKey(reopened.hash,limits);
@@ -793,8 +794,8 @@ bool startProjectReopen(AndroidShell &shell) {
         ++result.cacheHits;
       }
       __android_log_print(ANDROID_LOG_INFO,LogTag,
-          "[Open] fonte preparada: %s bytes=%zu cache=%s leitura_derivado_ms=%.0f preparo_ms=%.0f gravacao_derivado_ms=%.0f",
-          source.c_str(),bytes.size(),cached?"acerto":"falta",derivedAt-started,
+          "[Open] fonte preparada: %s bytes=%zu cache=%s leitura_fonte_hash_ms=%.0f leitura_derivado_ms=%.0f preparo_ms=%.0f gravacao_derivado_ms=%.0f",
+          source.c_str(),bytes.size(),cached?"acerto":"falta",hashedAt-started,derivedAt-hashedAt,
           ae::platform::android::lifecycleUptimeMs()-started-writeMs,writeMs);
       result.sources.push_back(std::move(reopened));
       std::lock_guard<std::mutex> hold(progress->lock);++progress->done;

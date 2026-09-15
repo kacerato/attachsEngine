@@ -52,11 +52,29 @@ Teto padrão: 1 GiB (`setImportTextureBudget`). Não medido ainda contra a memó
 | Parte | Implementado | Integrado ao editor | Host | Aparelho |
 |---|---|---|---|---|
 | Worker de abertura + publicação única | sim | sim | sim (`r1_project_reopen_publishes_all_sources_once_and_matches_the_sequential_path`) | sim (1.216 ms até o primeiro quadro) |
-| Etapa real na barra de estado | sim | sim | — (shell) | pendente |
-| Shell Java sem espera fixa nem porcentagem | sim | sim | — | pendente |
-| Cache de derivados | sim | sim (abertura) | sim (`r2_import_cache_round_trips_the_prepared_model_and_refuses_stale_or_corrupt_files`) | pendente: medição fria × quente |
-| Orçamento agregado | sim | sim (publicação) | sim (`r2_texture_budget_reduces_residency_across_sources_without_touching_originals`, `m091_publication_offsets_texture_indices_per_source`) | pendente |
+| Etapa real na barra de estado | sim | sim | — (shell) | sim (`fria-8s-etapa-real-adb.png`: “recurso 2 de 8 · gravando derivado …”) |
+| Shell Java sem espera fixa nem porcentagem | sim | sim | — | sim (toque → `AetherActivity` exibida em ~4 s, antes ~6 s com a espera fixa) |
+| Cache de derivados | sim | sim (abertura) | sim (`r2_import_cache_round_trips_the_prepared_model_and_refuses_stale_or_corrupt_files`) | sim (fria × quente abaixo) |
+| Orçamento agregado | sim | sim (publicação) | sim (`r2_texture_budget_reduces_residency_across_sources_without_touching_originals`, `m091_publication_offsets_texture_indices_per_source`) | parcial: relatório conferido (339 MB pedidos, teto 1 GiB, nenhuma redução necessária); a redução em si só foi exercitada no host |
 
-Suíte do host: 898/900 (as duas falhas antigas de R0). APK com R2: `53A52678…9FCA`. A medição no aparelho foi interrompida porque a tela do telefone estava apagada; nada foi desbloqueado nem capturado fora do editor.
+Suíte do host: 898/900 (as duas falhas antigas de R0). APK com R2: `53A52678…9FCA`.
+
+## 6. Medição no aparelho: fria × quente
+
+15/09/2026, mesmo projeto `M08Recursos0913k` e as mesmas 8 fontes. Evidência: `docs/validacao/evidencias/r2-cache-20260915/`.
+
+| | Sem cache (R1, 14/09) | Fria: grava derivados | Quente: lê derivados |
+|---|---|---|---|
+| Primeiro quadro do editor | 1.216 ms | 1.178 ms | 1.155 ms |
+| Preparo das 8 fontes | 66,0 s | 96,3 s | **14,9 s** |
+| Publicação única | 3,5 s | 3,1 s | 2,9 s |
+| Projeto aberto | 69,6 s | 99,4 s | **17,8 s** |
+| Derivados reaproveitados | — | 0 | 8 |
+| Porsche (90 MB) | 44,7 s | 54,9 s + 10,8 s gravando | 8,9 s |
+
+- A cena recuperada é a mesma nas duas aberturas (`fria-aberto-adb.png` e `quente-aberto-adb.png`: mesmo conteúdo e o mesmo tamanho de PNG).
+- A abertura fria custa ~30 s a mais que sem cache: ~19,5 s gravando derivados, e o restante é preparo mais lento no mesmo aparelho. Ela só acontece na primeira abertura depois de mudar fonte, limites ou versão do importador.
+- **Disco:** os 8 derivados ocupam ~485 MB (Porsche: 188 MB para uma fonte de 90 MB, porque as texturas vão descomprimidas com mips). É o custo do cache e precisa aparecer para o usuário (limpeza e tamanho do cache no dock, R3).
+- Na quente, parte do tempo por fonte é ler a fonte inteira e calcular o SHA-256 dela. Nesta medição o log ainda somava isso em `leitura_derivado_ms`; o log agora separa `leitura_fonte_hash_ms`. Validar o conteúdo sem reler a fonte (tamanho e data com o hash do registro) é a próxima redução possível, e exige cuidado para não aceitar uma fonte trocada.
 
 Fora deste bloco, e dito explicitamente: carregamento sob demanda por cena, separação entre handles autorais e posições de buffer, publicação incremental com épocas, cache de derivados GPU e contabilização de geometria e staging no orçamento continuam como trabalho de R2 que não foi feito.
