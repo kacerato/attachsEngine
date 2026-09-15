@@ -63,6 +63,10 @@ inline constexpr u32 MapMaterialWaterCameraGrid = 1u << 10;
 // R4: oclusão do glTF empacotada no canal R da textura de metálico/rugosidade
 // (ORM), no mesmo conjunto de UV. Os bits 11-13 são dos recursos de autoria.
 inline constexpr u32 MapMaterialOcclusionInMetallicRoughness = 1u << 14;
+// R4: material de uma face com ordem de vértices conhecida (glTF, anti-horário):
+// o renderer pode descartar a face de trás. Sem esta flag nada é descartado --
+// primitivas internas e pacotes antigos não garantem a ordem.
+inline constexpr u32 MapMaterialCullBackFaces = 1u << 15;
 
 struct MapTextureRecord {
   u32 flags;

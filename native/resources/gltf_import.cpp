@@ -822,7 +822,9 @@ struct Importer {
         target.flags |= renderer::MapMaterialAlphaMask;
         target.alphaCutoff = static_cast<float>(json->number(source, "alphaCutoff", .5));
       }
+      // glTF: sem doubleSided, a face de trás não é visível (R4: culling real).
       if (json->boolean(source, "doubleSided", false)) target.flags |= renderer::MapMaterialDoubleSided;
+      else target.flags |= renderer::MapMaterialCullBackFaces;
     }
     for (const auto &sets : uvTransforms)
       for (const auto &entry : sets) {

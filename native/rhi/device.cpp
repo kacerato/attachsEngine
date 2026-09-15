@@ -411,6 +411,7 @@ void VulkanDevice::shutdown() {
     // O ponteiro pertence ao device destruido: mante-lo faria
     // drawIndirectCountSupported() mentir para quem reinicializa o RHI.
     cmdDrawIndexedIndirectCountFn_ = nullptr;
+    cmdSetCullModeFn_ = nullptr;
   }
   if (instance_ != VK_NULL_HANDLE) {
 #if AETHER_VULKAN_VALIDATION
@@ -749,6 +750,7 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   bool descriptorIndexingExtensionSupported = false;
   bool memoryBudgetExtensionSupported = false;
   bool drawIndirectCountExtensionSupported = false;
+  bool extendedDynamicStateSupported = false;
   {
     u32 extensionCount = 0;
     vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extensionCount, nullptr);
@@ -765,6 +767,8 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
         // mesmo que disponível aqui, e o piso do plano continua sendo 1.1.
         if (std::strcmp(ext.extensionName, VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME) == 0)
           drawIndirectCountExtensionSupported = true;
+        if (std::strcmp(ext.extensionName, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME) == 0)
+          extendedDynamicStateSupported = true;
       }
     }
   }
@@ -822,9 +826,34 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   if (!bindlessSupported) bindlessTextureCapacity_ = 0;
   auto enabledDescriptorIndexingFeatures = enabledBindlessTextureFeatures(bindlessSupported);
 
+  // R4: culling por material. A extensão enumerada não basta: a feature
+  // `extendedDynamicState` precisa ser confirmada e pedida explicitamente.
+  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT enabledDynamicState{};
+  enabledDynamicState.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
+  if (extendedDynamicStateSupported) {
+    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT supportedDynamicState{};
+    supportedDynamicState.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
+    auto getFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
+        vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceFeatures2KHR"));
+    if (getFeatures2 == nullptr)
+      getFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
+          vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceFeatures2"));
+    if (getFeatures2 != nullptr) {
+      VkPhysicalDeviceFeatures2 features2{};
+      features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+      features2.pNext = &supportedDynamicState;
+      getFeatures2(physicalDevice_, &features2);
+    }
+    extendedDynamicStateSupported = supportedDynamicState.extendedDynamicState == VK_TRUE;
+    enabledDynamicState.extendedDynamicState = extendedDynamicStateSupported ? VK_TRUE : VK_FALSE;
+  }
+
   VkDeviceCreateInfo deviceInfo{};
   deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  deviceInfo.pNext = bindlessSupported ? &enabledDescriptorIndexingFeatures : nullptr;
+  if (bindlessSupported && extendedDynamicStateSupported) enabledDescriptorIndexingFeatures.pNext = &enabledDynamicState;
+  deviceInfo.pNext = bindlessSupported ? static_cast<const void *>(&enabledDescriptorIndexingFeatures)
+                     : extendedDynamicStateSupported ? static_cast<const void *>(&enabledDynamicState)
+                                                     : nullptr;
   deviceInfo.queueCreateInfoCount = queueCreateCount;
   deviceInfo.pQueueCreateInfos = queueInfos;
   deviceInfo.pEnabledFeatures = &enabledFeatures;
@@ -839,6 +868,8 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   }
   if (memoryBudgetExtensionSupported)
     deviceExtensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+  if (extendedDynamicStateSupported)
+    deviceExtensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
   // `multiDrawIndirect` é a feature que permite mais de um comando por chamada;
   // sem ela, um `maxDrawCount` vindo da GPU não teria como ser respeitado e a
   // extensão não serviria para nada. Pedir as duas juntas evita habilitar uma
@@ -871,6 +902,8 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   // 1.1, onde chamá-lo entraria num ponteiro nulo do ICD. Resolver o alias KHR
   // pelo device é o caminho que só devolve algo quando a extensão foi de fato
   // habilitada logo acima — a mesma escolha já feita para debug_utils.
+  if (extendedDynamicStateSupported)
+    cmdSetCullModeFn_ = reinterpret_cast<CmdSetCullModeFn>(vkGetDeviceProcAddr(device_, "vkCmdSetCullModeEXT"));
   if (drawIndirectCountExtensionSupported) {
     cmdDrawIndexedIndirectCountFn_ = reinterpret_cast<PFN_vkCmdDrawIndexedIndirectCountKHR>(
         vkGetDeviceProcAddr(device_, "vkCmdDrawIndexedIndirectCountKHR"));

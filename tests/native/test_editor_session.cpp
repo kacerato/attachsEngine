@@ -806,6 +806,39 @@ AE_TEST(r4_material_tab_lists_texture_bindings_and_the_picker_changes_the_instan
   AE_EXPECT_TRUE(!meshRenderer(*f.session.document().find(f.cube))->textures[1].valid(),"a troca volta pelo histórico");
 }
 
+AE_TEST(r4_material_tab_edits_alpha_mode_cutoff_and_sides_per_instance) {
+  Fixture f;auto entity=*f.session.document().find(f.cube);editMeshRenderer(entity)->mesh=1;
+  f.session.document().applyEntityValues(f.cube,entity);f.session.setSelection(f.cube);f.session.history().clear();
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  tapWidget(f,widgetId(EditorWidget::MeshMaterialTab));
+  const u32 alpha=widgetId(EditorWidget::MaterialAlphaCycle);
+  revealProperty(f,alpha);
+  AE_EXPECT_TRUE(f.session.screen().materialSlotView.alphaOrigin=="da fonte","sem troca, a fonte decide");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::MaterialCutoffUp)).x<0,"corte só é editável no modo recorte");
+  tapWidget(f,alpha);
+  AE_EXPECT_EQ(meshRenderer(*f.session.document().find(f.cube))->surface.alphaMode,scene::MaterialAlphaOpaque,"opaco nesta instância");
+  tapWidget(f,alpha);
+  AE_EXPECT_EQ(meshRenderer(*f.session.document().find(f.cube))->surface.alphaMode,scene::MaterialAlphaMask,"recorte nesta instância");
+  // A linha do corte pode cair na página seguinte à do modo de alfa.
+  revealProperty(f,widgetId(EditorWidget::MaterialCutoffUp));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::MaterialCutoffUp)).x>=0,"corte editável em recorte");
+  tapWidget(f,widgetId(EditorWidget::MaterialCutoffUp));
+  AE_EXPECT_TRUE(std::fabs(meshRenderer(*f.session.document().find(f.cube))->surface.alphaCutoff-.55f)<1e-5f,"corte sobe 0,05");
+  std::vector<renderer::MapDrawState> extracted;
+  AE_EXPECT_TRUE(f.session.extractMap(extracted),"extração");
+  AE_EXPECT_TRUE(extracted[0].material.alphaMode==scene::MaterialAlphaMask,"o desenho recebe o recorte");
+  const u32 sides=widgetId(EditorWidget::MaterialSidesCycle);
+  revealProperty(f,sides);
+  f.session.setMaterialCullingAvailable(false);
+  AE_EXPECT_TRUE(locateWidget(f.session,sides).x<0,"faces sem culling no aparelho não recebe toque");
+  AE_EXPECT_TRUE(f.session.screen().materialSlotView.sidesOrigin.find("sem efeito")!=std::string::npos,"e diz por quê");
+  f.session.setMaterialCullingAvailable(true);
+  tapWidget(f,sides);
+  AE_EXPECT_EQ(meshRenderer(*f.session.document().find(f.cube))->surface.sides,scene::MaterialSidesSingle,"uma face nesta instância");
+  AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"desfazer");
+  AE_EXPECT_EQ(meshRenderer(*f.session.document().find(f.cube))->surface.sides,scene::MaterialSidesKeep,"faces voltam pelo histórico");
+}
+
 AE_TEST(session_inspector_exposes_only_consumed_resource_controls) {
   Fixture f;
   auto mesh=*f.session.document().find(f.cube);editMeshRenderer(mesh)->mesh=1;

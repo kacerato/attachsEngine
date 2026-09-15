@@ -34,9 +34,10 @@ struct MeshSubmesh {
   resources::AssetGuid materialAsset{};
   MaterialParameters material;
   SlotTextures textures{};
+  MaterialSurface surface{};
   friend bool operator==(const MeshSubmesh &a, const MeshSubmesh &b) {
     return a.mesh == b.mesh && a.asset == b.asset && a.materialAsset == b.materialAsset && a.material == b.material &&
-           a.textures == b.textures;
+           a.textures == b.textures && a.surface == b.surface;
   }
 };
 
@@ -62,6 +63,15 @@ public:
   resources::AssetGuid materialAsset{};
   // R4: texturas trocadas nesta instância, por binding, do slot 0.
   SlotTextures textures{};
+  // R4: modo de alfa, corte e faces trocados nesta instância, do slot 0.
+  MaterialSurface surface{};
+  const MaterialSurface &slotSurface(u32 slot) const noexcept {
+    static const MaterialSurface none{};
+    return slot ? (slot - 1 < submeshes.size() ? submeshes[slot - 1].surface : none) : surface;
+  }
+  MaterialSurface *editSlotSurface(u32 slot) noexcept {
+    return slot ? (slot - 1 < submeshes.size() ? &submeshes[slot - 1].surface : nullptr) : &surface;
+  }
   std::vector<MeshSubmesh> submeshes;
 
   const SlotTextures &slotTextures(u32 slot) const noexcept {
@@ -106,7 +116,8 @@ public:
   }
   bool valid() const override {
     if(!validMaterial(material) || submeshes.size()>MaximumSubmeshes) return false;
-    for(const auto &slot:submeshes) if(!validMaterial(slot.material)) return false;
+    if(!validMaterialSurface(surface)) return false;
+    for(const auto &slot:submeshes) if(!validMaterial(slot.material) || !validMaterialSurface(slot.surface)) return false;
     return true;
   }
   void write(std::ostream &out) const override {
@@ -124,6 +135,11 @@ public:
     // v4: texturas por binding de cada slot, na ordem dos slots.
     for(u32 slot=0;slot<slotCount();++slot)
       for(const auto &texture:slotTextures(slot)) out<<' '<<materialTextureToken(texture);
+    // v5: modo de alfa, faces e corte de cada slot.
+    for(u32 slot=0;slot<slotCount();++slot) {
+      const auto &value=slotSurface(slot);
+      out<<' '<<static_cast<unsigned>(value.alphaMode)<<' '<<static_cast<unsigned>(value.sides)<<' '<<value.alphaCutoff;
+    }
     out<<' ';
   }
   bool read(std::istream &in,u32 version) override {
@@ -134,10 +150,10 @@ public:
       return text=="-" || resources::AssetGuid::parse(text,out);
     };
     bool overridden=false;
-    if(version<1 || version>4 || !(in>>mesh>>enabled>>overridden)) return false;
+    if(version<1 || version>5 || !(in>>mesh>>enabled>>overridden)) return false;
     for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
     material.enabled=overridden;
-    asset={};materialAsset={};textures={};submeshes.clear();
+    asset={};materialAsset={};textures={};surface={};submeshes.clear();
     if(version>=2) {
       std::string guid;
       if(!(in>>guid) || !parse(guid,asset)) return false;
@@ -162,6 +178,14 @@ public:
           if(!(in>>token) || !parseMaterialTextureToken(token,texture)) return false;
         }
     }
+    if(version>=5) {
+      for(u32 slot=0;slot<slotCount();++slot) {
+        unsigned alpha=0,sides=0;float cutoff=.5f;
+        if(!(in>>alpha>>sides>>cutoff) || alpha>MaterialAlphaBlend || sides>MaterialSidesDouble) return false;
+        *editSlotSurface(slot)={static_cast<std::uint8_t>(alpha),static_cast<std::uint8_t>(sides),cutoff};
+        if(!validMaterialSurface(*editSlotSurface(slot))) return false;
+      }
+    }
     return true;
   }
 };
@@ -184,6 +208,6 @@ inline constexpr std::array<ComponentBoolean,1> meshRendererBooleans{{
   {"enabled","Renderizar",[](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).enabled;},[](ComponentValue &v,bool b){static_cast<MeshRenderer&>(v).enabled=b;}}
 }};
 inline const ComponentType MeshRenderer::descriptor{
-  "astra.render.mesh",4,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
+  "astra.render.mesh",5,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
 };
 }

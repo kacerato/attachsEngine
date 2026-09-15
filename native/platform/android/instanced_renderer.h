@@ -130,6 +130,8 @@ public:
   // Verdadeiro quando o aparelho amostra ASTC 4x4 (sRGB e UNORM) com filtro
   // linear: o importador então transcodifica KTX2 direto para blocos ASTC.
   bool supportsAstc4x4() const noexcept { return astc4x4_; }
+  // R4: as pipelines de mapa descartam a face de trás por material (dupla face real).
+  bool materialCulling() const noexcept { return materialCulling_; }
   bool rebuildAuthoringGeometry(std::span<const u8> vertices, std::span<const u32> indices,
                                 std::span<const renderer::MapDrawRecord> draws,
                                 std::span<const renderer::MapMaterialRecord> materials,
@@ -517,6 +519,7 @@ private:
   rhi::BindlessTextureRegistry bindlessRegistry_{};
   bool useBindless_ = false;
   bool astc4x4_ = false;
+  bool materialCulling_ = false;
   VkDescriptorSetLayout textureSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorPool texturePool_ = VK_NULL_HANDLE;
   VkDescriptorSet textureSet_ = VK_NULL_HANDLE;

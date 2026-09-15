@@ -69,6 +69,7 @@ public:
   struct SharedMaterial {
     scene::MaterialParameters values;
     scene::SlotTextures textures{};
+    scene::MaterialSurface surface{};
   };
   void setMaterialLibrary(std::vector<std::pair<resources::AssetGuid,SharedMaterial>> library) {materialLibrary_=std::move(library);}
   const SharedMaterial *sharedMaterial(const resources::AssetGuid &guid) const {
@@ -119,7 +120,23 @@ public:
     value=scene::withoutResolvedTextures(value);
     for(u32 binding=0;binding<scene::MaterialTextureCount;++binding)
       value.textures[binding]=resolveTexture(slotTexture(render,slot,binding),binding);
+    const auto surface=slotSurface(render,slot);
+    value.alphaMode=surface.alphaMode;value.sides=surface.sides;value.alphaCutoff=surface.alphaCutoff;
     return value;
+  }
+  // R4: superfície efetiva de um slot, campo a campo: a trocada nesta instância,
+  // senão a do material compartilhado, senão herdar (a fonte decide). O corte
+  // acompanha quem definiu o modo de alfa.
+  scene::MaterialSurface slotSurface(const scene::MeshRenderer &render,u32 slot) const {
+    const auto &local=render.slotSurface(slot);
+    const auto *shared=sharedMaterial(render.slotMaterialAsset(slot));
+    scene::MaterialSurface result;
+    if(local.alphaMode!=scene::MaterialAlphaKeep) {result.alphaMode=local.alphaMode;result.alphaCutoff=local.alphaCutoff;}
+    else if(shared && shared->surface.alphaMode!=scene::MaterialAlphaKeep) {
+      result.alphaMode=shared->surface.alphaMode;result.alphaCutoff=shared->surface.alphaCutoff;
+    }
+    result.sides=local.sides!=scene::MaterialSidesKeep?local.sides:shared?shared->surface.sides:scene::MaterialSidesKeep;
+    return result;
   }
   void hydrateMaterials(EditorDocument &document) const;
   renderer::MaterialOverride materialForAsset(u32 index) const;

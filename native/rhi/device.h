@@ -278,6 +278,13 @@ public:
   // habilitada explicitamente — nunca presumida a partir da versão da API.
   // Ausente, o consumidor mantém o caminho atual de instanceCount zerado.
   bool drawIndirectCountSupported() const { return cmdDrawIndexedIndirectCountFn_ != nullptr; }
+  // R4: culling por material. VK_EXT_extended_dynamic_state (core só em 1.3) é
+  // enumerada e habilitada explicitamente; nulo quando o aparelho não tem.
+  using CmdSetCullModeFn = void (VKAPI_PTR *)(VkCommandBuffer, VkCullModeFlags);
+  bool dynamicCullModeSupported() const { return cmdSetCullModeFn_ != nullptr; }
+  void cmdSetCullMode(VkCommandBuffer commandBuffer, VkCullModeFlags mode) const {
+    if (cmdSetCullModeFn_ != nullptr) cmdSetCullModeFn_(commandBuffer, mode);
+  }
   // No-op quando a extensão não está presente: quem grava o frame precisa poder
   // consultar `drawIndirectCountSupported()` uma vez, na criação dos recursos,
   // em vez de ramificar a cada draw.
@@ -308,6 +315,7 @@ private:
   // extensão foi enumerada E habilitada. Nulo é a resposta honesta de "este
   // aparelho não tem", e é ele que `drawIndirectCountSupported()` reporta.
   PFN_vkCmdDrawIndexedIndirectCountKHR cmdDrawIndexedIndirectCountFn_ = nullptr;
+  CmdSetCullModeFn cmdSetCullModeFn_ = nullptr;
   IVulkanPresentationScheduler *presentationScheduler_ = nullptr;
 
 #if AETHER_VULKAN_VALIDATION

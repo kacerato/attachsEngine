@@ -26,7 +26,7 @@ namespace ae::resources {
 inline constexpr u32 ImportCacheSchema = 2; // 2: contador de oclusão aplicada
 // Subir quando a SAÍDA de `importGlb` mudar para o mesmo arquivo e os mesmos
 // limites (correção de importador, nova derivação de dados).
-inline constexpr u32 ImportCacheImporterRevision = 2; // 2: oclusão ORM vira flag de material
+inline constexpr u32 ImportCacheImporterRevision = 3; // 2: oclusão ORM; 3: flag de culling de uma face
 
 std::string importCacheKey(std::string_view sourceContentHash, const GltfImportLimits &limits);
 // Caminho relativo à raiz do projeto.

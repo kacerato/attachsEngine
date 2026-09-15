@@ -955,6 +955,9 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
     // shell, e é ele que devolve o pacote resultante para o editor adotar.
     // Antes das fontes reabrirem, a sessão sabe se o aparelho amostra ASTC 4x4.
     shell.editorSession.setImportAstc4x4(shell.instancedRenderer.supportsAstc4x4());
+    shell.editorSession.setMaterialCullingAvailable(shell.instancedRenderer.materialCulling());
+    __android_log_print(ANDROID_LOG_INFO,LogTag,"[Material] culling por material (dupla face): %s.",
+                        shell.instancedRenderer.materialCulling()?"sim":"não (aparelho sem estado dinâmico de culling)");
     __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] KTX2 com mips vira %s.",
                         shell.instancedRenderer.supportsAstc4x4()?"ASTC 4x4":"RGBA8 (aparelho sem ASTC 4x4)");
     shell.editorSession.setGeometryPublisher(

@@ -188,6 +188,7 @@ enum class EditorWidget : u32 {
   ImportApplyProfile, ImportSaveDefaultProfile,
   // R4: textura por binding de material e extração das imagens de um GLB.
   TexturePickerClose, TextureUseInherited, TextureUseNone, AssetExtractTextures,
+  MaterialAlphaCycle, MaterialCutoffDown, MaterialCutoffUp, MaterialSidesCycle,
   // + máscara de ImportOverride.
   ImportLinkRevertBase=0x52000000u,
   // + índice do material do projeto / do campo numérico do material.
@@ -407,6 +408,10 @@ struct EditorScreenState final {
     float values[11]{};
     // R4: textura efetiva de cada binding no alcance em edição e de onde vem.
     std::string textureNames[4],textureOrigins[4];
+    // R4: modo de alfa, corte e faces efetivos no alcance em edição.
+    std::string alphaLabel,alphaOrigin,cutoffLabel,sidesLabel,sidesOrigin;
+    float alphaCutoff=.5f;
+    bool cutoffEditable=false;
   };
   MaterialSlotView materialSlotView;
   std::vector<std::string> projectMaterials;
@@ -414,6 +419,8 @@ struct EditorScreenState final {
   bool materialShared=false,materialPicker=false;
   // R4: seletor de textura de um binding e as texturas do projeto para ele.
   bool texturePicker=false;
+  // R4: o renderer do aparelho descarta faces por material (culling dinâmico).
+  bool materialCulling=true;
   u32 textureBinding=0;
   std::vector<std::string> projectTextureNames,projectTextureDetails;
   // Menu de ações do objeto (⋮ do cabeçalho do inspetor) e do card Transformação.

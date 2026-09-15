@@ -191,16 +191,24 @@ AE_TEST(r4_material_v2_and_mesh_renderer_v4_round_trip_and_read_older_versions) 
   render.write(out);
   scene::MeshRenderer read;
   std::istringstream in(out.str());
-  AE_EXPECT_TRUE(read.read(in, 4), "v4 lido");
+  AE_EXPECT_TRUE(read.read(in, 5), "v5 lido");
   AE_EXPECT_TRUE(read.textures == render.textures && read.submeshes[0].textures == render.submeshes[0].textures, "v4 preserva texturas");
   auto words = tokens(out.str());
-  words.resize(words.size() - 8); // 4 tokens por slot, dois slots
+  words.resize(words.size() - 14); // v4: 4 tokens de textura por slot; v5: 3 de superfície; dois slots
   std::string v3;
   for (const auto &word : words) v3 += word + ' ';
   scene::MeshRenderer legacy;
   std::istringstream legacyIn(v3);
   AE_EXPECT_TRUE(legacy.read(legacyIn, 3), "v3 lido");
   AE_EXPECT_TRUE(legacy.textures == scene::SlotTextures{}, "v3 herda texturas");
+  auto v4Words = tokens(out.str());
+  v4Words.resize(v4Words.size() - 6); // só os tokens de superfície (v5) saem
+  std::string v4;
+  for (const auto &word : v4Words) v4 += word + ' ';
+  scene::MeshRenderer older;
+  std::istringstream olderIn(v4);
+  AE_EXPECT_TRUE(older.read(olderIn, 4) && older.textures == render.textures && !older.surface.overrides(),
+                 "v4 lido com texturas e sem superfície trocada");
 
   // Aplicação no renderer: deslocamento da biblioteca e flag do binding.
   renderer::MapMaterialRecord source{};
@@ -303,8 +311,8 @@ AE_TEST(r4_textures_extract_from_source_and_resolve_per_instance_and_shared_scop
   const auto *record = session.assets().find(shared);
   AE_EXPECT_TRUE(record && EditorImportTransaction::read(project.root / record->path, materialFile), "arquivo do material");
   const std::string text(materialFile.begin(), materialFile.end());
-  AE_EXPECT_TRUE(text.starts_with("ASTRA_MATERIAL 2") && text.find(texture.text()) != std::string::npos && text.find("none") != std::string::npos,
-                 "material gravado em v2 com as texturas");
+  AE_EXPECT_TRUE(text.starts_with("ASTRA_MATERIAL 3") && text.find(texture.text()) != std::string::npos && text.find("none") != std::string::npos,
+                 "material gravado na versão atual com as texturas");
 
   // Instância vence o compartilhado, binding a binding.
   AE_EXPECT_TRUE(session.setSlotTexture(object, 0, 0, EditorSession::MaterialScope::Instance, texture, diagnostic), diagnostic.c_str());
@@ -442,4 +450,97 @@ AE_TEST(r4_reopen_publishes_scene_textures_once_and_warns_before_deleting_a_used
   AE_EXPECT_TRUE(session.projectTextures().empty(), "textura saiu do projeto");
   AE_EXPECT_EQ(effectiveTexture(session, firstMeshObject(session), 0), scene::MaterialTextureKeep,
                "o binding volta à textura da fonte, sem textura inexistente na GPU");
+}
+
+namespace {
+renderer::MaterialOverride effectiveMaterial(EditorSession &session, EditorEntityId object) {
+  std::vector<renderer::MapDrawState> draws;
+  if (session.extractMap(draws))
+    for (const auto &draw : draws) if (draw.objectId == object && draw.visible) return draw.material;
+  return {};
+}
+} // namespace
+
+AE_TEST(r4_alpha_mode_cutoff_and_sides_persist_resolve_and_reach_renderer_flags) {
+  // Formatos: componente v5 e material v3; material v2 lê sem superfície trocada.
+  scene::MeshRenderer render;
+  render.submeshes.resize(1);
+  render.surface = {scene::MaterialAlphaMask, scene::MaterialSidesDouble, .3f};
+  render.submeshes[0].surface.alphaMode = scene::MaterialAlphaBlend;
+  std::ostringstream out;
+  render.write(out);
+  scene::MeshRenderer read;
+  std::istringstream in(out.str());
+  AE_EXPECT_TRUE(read.read(in, 5) && read.surface == render.surface && read.submeshes[0].surface == render.submeshes[0].surface,
+                 "superfície por slot atravessa o arquivo");
+  resources::MaterialAsset asset;
+  asset.guid = resources::assetGuidFromSeed("r4-superficie");
+  asset.name = "Vidro";
+  asset.values.enabled = true;
+  asset.surface = {scene::MaterialAlphaBlend, scene::MaterialSidesSingle, .5f};
+  resources::MaterialAsset back;
+  AE_EXPECT_TRUE(resources::MaterialAsset::deserialize(asset.serialize(), back) && back.surface == asset.surface, "material v3 ida e volta");
+  const std::string v2 = "ASTRA_MATERIAL 2 " + asset.guid.text() + " 1 \"Velho\" 1 1 1 0.5 0 1 1 0 0 0 1 - - - -\n";
+  resources::MaterialAsset old;
+  AE_EXPECT_TRUE(resources::MaterialAsset::deserialize(v2, old) && !old.surface.overrides(), "material v2 herda alfa e faces");
+
+  // Flags do renderer.
+  renderer::MapMaterialRecord source{};
+  std::fill(std::begin(source.textureIndices), std::end(source.textureIndices), renderer::InvalidMapTexture);
+  source.flags = renderer::MapMaterialCullBackFaces;
+  scene::MaterialParameters value;
+  value.alphaMode = scene::MaterialAlphaMask;
+  value.alphaCutoff = .25f;
+  value.sides = scene::MaterialSidesDouble;
+  auto applied = renderer::applyMaterialOverride(source, value);
+  AE_EXPECT_TRUE((applied.flags & renderer::MapMaterialAlphaMask) && !(applied.flags & renderer::MapMaterialBlend), "recorte vai para a fila de corte");
+  AE_EXPECT_EQ(applied.alphaCutoff, .25f, "corte aplicado");
+  AE_EXPECT_TRUE((applied.flags & renderer::MapMaterialDoubleSided) && !(applied.flags & renderer::MapMaterialCullBackFaces), "duas faces sem culling");
+  value.alphaMode = scene::MaterialAlphaBlend;
+  value.sides = scene::MaterialSidesSingle;
+  applied = renderer::applyMaterialOverride(source, value);
+  AE_EXPECT_TRUE((applied.flags & renderer::MapMaterialBlend) && !(applied.flags & renderer::MapMaterialAlphaMask), "transparente");
+  AE_EXPECT_TRUE((applied.flags & renderer::MapMaterialCullBackFaces) && !(applied.flags & renderer::MapMaterialDoubleSided), "uma face com culling");
+  value.alphaMode = scene::MaterialAlphaOpaque;
+  applied = renderer::applyMaterialOverride(source, value);
+  AE_EXPECT_TRUE(!(applied.flags & (renderer::MapMaterialBlend | renderer::MapMaterialAlphaMask)), "opaco sai das filas de alfa");
+
+  // Alcances na sessão.
+  Project project;
+  EditorSession session;
+  Publisher publisher;
+  start(session, publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  const auto glb = texturedPanel(png(4, 4, 200));
+  resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(glb, {}, {}, model), model.diagnostic.c_str());
+  AE_EXPECT_TRUE((model.materials.front().flags & renderer::MapMaterialCullBackFaces) != 0, "glTF sem doubleSided pede culling");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(glb, model, "Fontes/tela.glb", "", report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), report.diagnostic.c_str());
+  const auto object = firstMeshObject(session);
+  std::string diagnostic;
+  AE_EXPECT_EQ(effectiveMaterial(session, object).alphaMode, scene::MaterialAlphaKeep, "sem troca, a fonte decide");
+  AE_EXPECT_TRUE(session.setSlotSurface(object, 0, EditorSession::MaterialScope::Instance,
+                                        {scene::MaterialAlphaMask, scene::MaterialSidesKeep, .4f}, diagnostic), diagnostic.c_str());
+  auto effective = effectiveMaterial(session, object);
+  AE_EXPECT_TRUE(effective.alphaMode == scene::MaterialAlphaMask && effective.alphaCutoff == .4f, "recorte desta instância resolvido");
+  AE_EXPECT_TRUE((session.importLinkOverrides(object) & ImportOverrideMaterial) != 0, "alfa trocado é alteração local do vínculo");
+
+  const auto shared = session.createMaterialFromSlot(object, 0, diagnostic);
+  AE_EXPECT_TRUE(shared.valid(), diagnostic.c_str());
+  AE_EXPECT_TRUE(session.findMaterialAsset(shared)->surface.alphaMode == scene::MaterialAlphaMask, "material do projeto leva o recorte");
+  AE_EXPECT_TRUE(!meshRenderer(*session.document().find(object))->surface.overrides(), "a instância deixa de trocar sozinha");
+  AE_EXPECT_TRUE(session.setSlotSurface(object, 0, EditorSession::MaterialScope::Shared,
+                                        {scene::MaterialAlphaBlend, scene::MaterialSidesSingle, .5f}, diagnostic), diagnostic.c_str());
+  effective = effectiveMaterial(session, object);
+  AE_EXPECT_TRUE(effective.alphaMode == scene::MaterialAlphaBlend && effective.sides == scene::MaterialSidesSingle,
+                 "transparente e uma face pelo material compartilhado");
+  std::vector<u8> file;
+  AE_EXPECT_TRUE(EditorImportTransaction::read(project.root / session.assets().find(shared)->path, file) &&
+                 std::string(file.begin(), file.end()).starts_with("ASTRA_MATERIAL 3"), "material gravado em v3");
+
+  AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");
+  effective = effectiveMaterial(session, object);
+  AE_EXPECT_TRUE(effective.alphaMode == scene::MaterialAlphaKeep && effective.sides == scene::MaterialSidesKeep, "de volta à fonte");
 }

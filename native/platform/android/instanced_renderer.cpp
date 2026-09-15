@@ -581,10 +581,15 @@ bool InstancedRenderer::createPipeline() {
   inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
   inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
-  VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+  // R4: culling por material nas pipelines de mapa, quando o aparelho tem estado
+  // dinâmico de culling. Cada desenho do mapa passa por `pushMapMaterial`, que
+  // define o modo antes do draw; a água volta a só viewport e scissor abaixo.
+  const bool materialCulling = dirtRoadPreview_ && rhiDevice_ != nullptr && rhiDevice_->dynamicCullModeSupported();
+  materialCulling_ = materialCulling;
+  VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_CULL_MODE_EXT};
   VkPipelineDynamicStateCreateInfo dynamicState{};
   dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-  dynamicState.dynamicStateCount = 2;
+  dynamicState.dynamicStateCount = materialCulling ? 3u : 2u;
   dynamicState.pDynamicStates = dynamicStates;
 
   VkPipelineViewportStateCreateInfo viewportState{};
@@ -766,6 +771,7 @@ bool InstancedRenderer::createPipeline() {
         // que declara a grade de ondulação. Reusar o vertex geral obrigava a
         // declarar o binding 15 em todas as pipelines da cena ou fazia a
         // interação simplesmente desaparecer quando FFT estava desligada.
+        dynamicState.dynamicStateCount = 2; // água não define culling por material
         stages[0].module = waterVertModule;
         stages[1].module = waterFragModule;
         stages[1].pSpecializationInfo = &gpuIsolationInfo;
@@ -4155,7 +4161,8 @@ bool InstancedRenderer::commitAuthoredScene() {
     dynamicMapDraws_[i]=1;hzbHysteresis_[i]={};
     // Authored view uses LOD0; derived package bounds are no longer a valid LOD selection cache.
     if(state.pose.draw.lodLevel!=0) continue;
-    const auto flags=dirtRoadResources_.materials()[state.pose.draw.materialIndex].flags;
+    // R4: a fila segue o modo de alfa efetivo (trocado na instância ou no material do projeto).
+    const auto flags=renderer::applyMaterialOverride(dirtRoadResources_.materials()[state.pose.draw.materialIndex],state.material).flags;
     if(state.visible && (flags & renderer::MapMaterialWaterCameraGrid)) cameraWaterHorizonFillActive_=true;
     if(flags & renderer::MapMaterialWater) waterDrawOrder_.push_back(i);
     else if(flags & renderer::MapMaterialBlend) transparentDrawOrder_.push_back(i);
@@ -4661,6 +4668,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       // das texturas do pacote -- o mesmo deslocamento dos materiais importados.
       if(drawIndex<authoredMaterials_.size())
         material=renderer::applyMaterialOverride(material,authoredMaterials_[drawIndex],static_cast<u32>(dirtRoadResources_.packageTextureCount()));
+      // R4: dupla face real. Só material que provou ordem de vértices (glTF de
+      // uma face ou "Uma face" escolhida) descarta a face de trás.
+      if(materialCulling_)
+        rhiDevice_->cmdSetCullMode(commandBuffer_,
+            (material.flags & renderer::MapMaterialCullBackFaces)!=0 && (material.flags & renderer::MapMaterialDoubleSided)==0
+                ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE);
       if (!useBindless_) {
         const VkDescriptorSet set = dirtMaterialSets_[materialIndex];
         vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,

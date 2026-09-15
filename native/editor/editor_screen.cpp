@@ -649,7 +649,9 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content) {
   // paginada. Cada linha mostra a textura efetiva no alcance e de onde ela vem.
   static constexpr const char *bindingNames[scene::MaterialTextureCount]{"Mapa: cor","Mapa: normal","Mapa: metal/rug.","Mapa: emissão"};
   const u32 textureRows=scene::MaterialTextureCount;
-  const u32 count=textureRows+static_cast<u32>(scene::meshRendererNumbers.size());
+  // R4: três linhas de superfície (alfa, corte, faces) depois das texturas.
+  const u32 surfaceRows=3;
+  const u32 count=textureRows+surfaceRows+static_cast<u32>(scene::meshRendererNumbers.size());
   const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-30)/40));
   const u32 pages=std::max(1u,(count+perPage-1)/perPage),page=std::min(state.propertyPage,pages-1);
   auto footer=pages>1?takeBottom(content,30):UiRect{};
@@ -664,7 +666,35 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content) {
       builder.router.addRegion(row,widgetId(EditorWidget::MaterialTextureBase)+entry);
       continue;
     }
-    const u32 field=entry-textureRows;
+    if(entry<textureRows+surfaceRows) {
+      const u32 kind=entry-textureRows;
+      static constexpr const char *surfaceNames[]{"Alfa","Corte alfa","Faces"};
+      builder.label(takeLeft(row,row.width*.42f),surfaceNames[kind],theme.color.textDim,theme.type.caption);
+      builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      auto inner=deflate(row,UiInsets::symmetric(8,2));
+      if(kind==1) {
+        if(view.cutoffEditable) {
+          const auto down=takeLeft(inner,32),up=takeRight(inner,32);
+          builder.label(down,"-",theme.color.text,theme.type.body,UiAlign::Center);
+          builder.label(up,"+",theme.color.text,theme.type.body,UiAlign::Center);
+          builder.router.addRegion(down,widgetId(EditorWidget::MaterialCutoffDown));
+          builder.router.addRegion(up,widgetId(EditorWidget::MaterialCutoffUp));
+          char cutoff[16];std::snprintf(cutoff,sizeof(cutoff),"%.2f",static_cast<double>(view.alphaCutoff));
+          builder.label(inner,cutoff,theme.color.text,theme.type.numeric,UiAlign::Center);
+        } else {
+          builder.label(inner,view.cutoffLabel,theme.color.textMuted,theme.type.caption);
+        }
+        continue;
+      }
+      const bool alpha=kind==0;
+      builder.label(takeTop(inner,inner.height*.55f),alpha?view.alphaLabel:view.sidesLabel,theme.color.text,theme.type.caption);
+      builder.label(inner,alpha?view.alphaOrigin:view.sidesOrigin,theme.color.textMuted,theme.type.caption);
+      // Faces sem culling no aparelho não recebe toque: não haveria efeito visível.
+      if(alpha || state.materialCulling)
+        builder.router.addRegion(row,widgetId(alpha?EditorWidget::MaterialAlphaCycle:EditorWidget::MaterialSidesCycle));
+      continue;
+    }
+    const u32 field=entry-textureRows-surfaceRows;
     builder.label(takeLeft(row,row.width*.62f),scene::meshRendererNumbers[field].name,theme.color.textDim,theme.type.caption);
     char value[32];std::snprintf(value,sizeof(value),"%.6g",static_cast<double>(view.values[field]));
     builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);

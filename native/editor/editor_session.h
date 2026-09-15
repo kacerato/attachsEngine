@@ -441,6 +441,9 @@ public:
   // só vira ASTC 4x4 quando o aparelho confirmou suporte. Vale para a importação
   // interativa e para a reabertura de fontes do projeto.
   void setImportAstc4x4(bool supported) {importLimits_.astc4x4=supported;}
+  // R4: o renderer deste aparelho descarta faces de trás por material? Sem isso,
+  // a escolha de faces fica guardada, mas o painel diz que não tem efeito aqui.
+  void setMaterialCullingAvailable(bool available) {state_.materialCulling=available;}
   const resources::GltfImportLimits &importLimits() const {return importLimits_;}
   // R2: teto da residência de texturas de TODAS as fontes juntas, aplicado a
   // cada publicação. O relatório é o da última publicação.
@@ -519,6 +522,8 @@ public:
   // 3 emissão). `Instance`: no slot deste objeto, pelo histórico. `Shared`: no
   // MaterialAsset do slot, em todos os usos. Identidade inválida herda;
   // `scene::MaterialTextureNone` tira a textura.
+  // R4: modo de alfa, corte e faces do slot, no mesmo contrato de alcance.
+  bool setSlotSurface(EditorEntityId id,u32 slot,MaterialScope scope,const scene::MaterialSurface &surface,std::string &diagnostic);
   bool setSlotTexture(EditorEntityId id,u32 slot,u32 binding,MaterialScope scope,const resources::AssetGuid &texture,
                       std::string &diagnostic);
   // Nome do material da FONTE usado pela primitiva de identidade `draw`.
