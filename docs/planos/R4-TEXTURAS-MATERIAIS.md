@@ -50,10 +50,29 @@ Visto no aparelho e **corrigido depois**: o cartão do vínculo com a fonte dizi
 
 Estado do projeto de validação: as 19 texturas extraídas ficaram em `Texturas/` e no registro; a troca na cena foi revertida com Herdar e a cena salva não cita a textura.
 
+## 7. Segunda fatia: reabertura, usos, oclusão, alfa e dupla face
+
+| Parte | O que faz | Host | Aparelho |
+|---|---|---|---|
+| Reabertura com uma publicação | `anticipateSceneTextures` lê as texturas do projeto usadas pela cena salva antes da publicação da reabertura; elas sobem junto com as fontes | sim (`r4_reopen_publishes_scene_textures_once_and_warns_before_deleting_a_used_texture`) | — (a cena de validação foi revertida sem textura do projeto) |
+| Reimportação preserva alcances | textura na instância e no material compartilhado atravessam a reimportação com fonte alterada | sim (`r4_reimport_keeps_texture_overrides_in_instance_and_shared_material`) | — |
+| Usos de textura (T01) | contagem por objeto e por material; aviso antes de apagar; apagar devolve o binding à textura da fonte; status "Textura do projeto · dimensões · N usos" em Arquivos e usos no seletor | sim | — |
+| Oclusão ORM (T21) | oclusão entra quando é a mesma textura e o mesmo UV do metal/rugosidade, sem transformação e com força 1 (canal R); atenua luz ambiente e reflexo do ambiente; trocar o mapa metal/rugosidade tira a oclusão da fonte; os outros casos seguem declarados na prévia com o motivo | sim (`m091_glb_textures_map_to_slots_with_color_space_uv_and_sampler`) | parcial (shader publicado sem regressão visual; efeito não isolado em captura) |
+| Modo de alfa e corte (T22) | Herdar / Opaco / Recorte / Transparente e corte por instância ou material do projeto; a fila de cada desenho segue o modo efetivo | sim (`r4_alpha_mode_cutoff_and_sides_persist_resolve_and_reach_renderer_flags`, `r4_material_tab_edits_alpha_mode_cutoff_and_sides_per_instance`) | parcial (fluxo, alcance e vínculo conferidos; efeito visual não observável na carroceria opaca) |
+| Dupla face real (T23) | glTF sem `doubleSided` marca `MapMaterialCullBackFaces`; o renderer descarta a face de trás por material com `VK_EXT_extended_dynamic_state` quando o aparelho confirma a feature; primitivas e pacotes antigos seguem sem culling; Herdar / Uma face / Duas faces por instância ou material; sem culling dinâmico a linha diz "sem efeito neste aparelho" e não recebe toque | sim | parcial ("culling por material: sim"; cena inteira sem peça do avesso; troca de faces sem efeito visível de fora) |
+
+Formatos: `MeshRenderer` v5 e `MaterialAsset` v3 (alfa, faces, corte), com leitura das versões anteriores. Cache de derivados: schema 2 e revisão do importador 3 (oclusão e flag de culling mudam a saída). Suíte do host: 907/909 (as duas falhas antigas). APK conferido: `A5582C59…BBEC`. Evidência: `docs/validacao/evidencias/r4-superficie-20260915/`.
+
+Limites desta fatia, ditos explicitamente:
+- o caminho indireto em lote aplica material por lote; o culling por desenho vale no caminho por desenho, que é o das cenas do editor;
+- sombras seguem sem culling;
+- um modo de alfa diferente do da fonte usa o pipeline genérico da família quando a variante especializada não foi criada para o pacote (mesmo resultado, sem a especialização de features).
+
 ## 5. Fora desta fatia, dito explicitamente
 
 - **Miniaturas** no seletor (hoje nome, dimensões e caminho), **visualizador de canais e mips** (T11/T14/T15) e **zoom/fundo**.
-- **Sampler, canal de UV e transformação por binding** (T12/T19), **alpha e dupla face** (T22/T23), **oclusão** (T21): ainda não são campos do material.
+- **Sampler, canal de UV e transformação por binding** (T12/T19): ainda não são campos do material. O push constant do material já ocupa os 128 bytes garantidos pelo Vulkan; trocar UV e transformação por binding pede um buffer de materiais por desenho, que é trabalho de renderer ainda não feito.
+- **Oclusão em textura própria** (fora do canal R do metal/rugosidade) ou com força diferente de 1: continua declarada como não aplicada (ver seção 7).
 - **Caminho indireto em lote do renderer**: aplica o material por lote, não por desenho; valia antes para os fatores e vale igual para as texturas. As cenas do editor usam o caminho por desenho.
 - **Passes de cobertura e sombra** usam a textura de cor da fonte para o recorte alfa; trocar a cor base não muda o recorte.
 - **Sem descritores bindless**: texturas importadas e do projeto não aparecem (limitação anterior, com aviso no log).

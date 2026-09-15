@@ -1,0 +1,17 @@
+R4 — oclusão ORM, alfa, corte e dupla face no aparelho, 15/09/2026.
+APK A5582C59D21F1E70791B2C33F217BD44DF1659F0FC95C7408414E3A4D5A2BBEC, projeto M08Recursos0913k (8 fontes).
+
+09:45:48.211 [Material] culling por material (dupla face): sim.
+09:46:50.399 [Import] texturas importadas: 122 publicadas, 122 slots bindless.
+09:46:52.370 [Open] projeto aberto: fontes=8 derivados_reaproveitados=0 falhas=0 preparo_ms=61130 publicacao_ms=2905 cena_ms=27 total_ms=64062
+(abertura fria: revisão do importador subiu para 3; os derivados antigos foram refeitos)
+
+Cena com culling ligado: mesmos modelos e mesma aparência das capturas anteriores (nenhuma peça do avesso).
+Cortina:lod10_CaarPaint_0 > Malha > Material:
+  Alfa: "Opaco · da fonte" -> dois toques -> "Recorte · só esta instância"; vínculo "1 alteração local"
+  página 2: "Corte alfa  -  0.50  +" (editável) e "Faces: Duas faces · da fonte"
+  dois toques -> "Opaco · da fonte"; vínculo "igual à fonte"; cena salva 09:49:28
+
+Não visível neste modelo: a carroceria é opaca e sem alfa na textura, então recorte/transparente não mudam a
+imagem; uma face/duas faces também não, vista de fora. A mudança de fila e de culling está coberta no host
+(r4_alpha_mode_cutoff_and_sides_persist_resolve_and_reach_renderer_flags).

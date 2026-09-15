@@ -109,9 +109,9 @@ Estados do relatório: **E** existente a preservar · **P** parcial · **N** lac
 | T18 | Textura no material | N | parcial (R4: 4 bindings por instância e compartilhado; sem miniatura) | sim (aba Material + seletor) | sim | parcial (instância) | R4 |
 | T19 | Transformação por uso | P | parcial (assada quando o material concorda) | — | sim | sim | R4 |
 | T20 | Empacotamento de canais | P | parcial (MR importado) | — | sim | — | R4 |
-| T21 | Oclusão | N | — (contada como não aplicada) | — | — | — | R4 |
-| T22 | Corte alfa e transparência | P | parcial (flags e filas) | — | — | — | R4 |
-| T23 | Dupla face | P | parcial (culling desligado em tudo) | — | — | — | R4 |
+| T21 | Oclusão | N | parcial (R4: ORM no canal R do metal/rugosidade; textura própria segue declarada) | sim (prévia diz aplicada/não aplicada) | sim | parcial | R4 |
+| T22 | Corte alfa e transparência | P | sim (R4: modo e corte por instância e material; fila segue o modo efetivo) | sim (aba Material) | sim | parcial (fluxo; efeito não observável no modelo) | R4 |
+| T23 | Dupla face | P | sim (R4: culling real por material com estado dinâmico; sem ele, declarado) | sim (aba Material) | sim | parcial (culling ativo sem regressão; troca sem efeito visível no modelo) | R4 |
 | T24 | Verniz | N | — | — | — | — | R9 |
 | T25 | Cubemap, array e HDR | N | — (recusados) | — | sim (recusa) | — | R9 |
 | T26 | Substituição em lote | N | — | — | — | — | R6 |
