@@ -34,6 +34,7 @@
 #include "resources/texture_budget.h"
 #include "resources/import_profile.h"
 #include "resources/glb_images.h"
+#include "editor/editor_texture_preview.h"
 #include "editor/editor_import_reconcile.h"
 #include "editor/editor_archive.h"
 #include "editor/editor_document.h"
@@ -505,6 +506,21 @@ public:
   const std::vector<ProjectTexture> &projectTextures() const {return textures_;}
   // Objetos da cena com um slot que usa a textura, mais materiais do projeto que a usam.
   u32 textureUsersOf(const resources::AssetGuid &guid) const;
+  // R4: prévia de texturas. Uma miniatura por chamada (o seletor chama a cada
+  // atualização); o visualizador escreve o nível e o canal escolhidos no atlas.
+  bool generatePendingTextureThumbnail();
+  bool openTextureViewer(u32 projectTextureIndex);
+  void closeTextureViewer() {state_.textureViewer=false;}
+  bool stepTextureViewerLevel(int delta);
+  bool cycleTextureViewerChannel();
+  bool cycleTextureViewerZoom();
+  bool cycleTextureViewerBackground();
+  // O atlas de prévia quando mudou desde a última entrega ao renderer; nulo senão.
+  const std::vector<u8> *takePreviewAtlas() {
+    if(!preview_.dirty()) return nullptr;
+    preview_.markClean();
+    return &preview_.pixels();
+  }
   const ProjectTexture *findProjectTexture(const resources::AssetGuid &guid) const {
     for(const auto &texture:textures_) if(texture.guid==guid) return &texture;
     return nullptr;
@@ -739,6 +755,20 @@ private:
   };
   std::vector<DecodedProjectTexture> decodedTextures_;
   std::vector<std::pair<resources::AssetGuid,bool>> anticipatedTextures_;
+  TexturePreviewAtlas preview_;
+  struct TextureThumbnail {
+    resources::AssetGuid guid;
+    std::string contentHash;
+    ui::UiRect content{};
+  };
+  std::vector<TextureThumbnail> thumbnails_; // na ordem das texturas do projeto
+  struct ViewerChain {
+    resources::AssetGuid guid;
+    std::string contentHash;
+    u32 width=0,height=0,levels=0;
+    std::vector<u8> chain;
+  } viewerChain_;
+  bool refreshTextureViewerImage();
   bool appearanceChanged_=false;
   void publishMaterialLibrary();
   void loadMaterialAssets();

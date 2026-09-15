@@ -1323,6 +1323,16 @@ void InstancedRenderer::createUiRenderer(AAssetManager *assets) {
 
 void InstancedRenderer::recordUiOverlay(u32 imageIndex) {
   if(!uiRenderer_.isReady() || uiInstances_.empty() || imageIndex>=uiFramebuffers_.size()) return;
+  // R4: atlas de prévia pendente. Aqui o quadro anterior já terminou (fence) e o
+  // conjunto de descritores da interface ainda não foi ligado neste quadro.
+  if(!pendingUiPreview_.empty()) {
+    rhi::VulkanUploadContext upload;
+    if(!upload.initialize(device_,rhiDevice_->graphicsQueueFamily()) ||
+       !uiRenderer_.setPreviewAtlas(upload,pendingUiPreview_,pendingUiPreviewWidth_,pendingUiPreviewHeight_))
+      __android_log_print(ANDROID_LOG_WARN,LogTag,"[UI] atlas de prévia recusado; miniaturas ficam vazias.");
+    upload.shutdown();
+    pendingUiPreview_.clear();
+  }
   VkRenderPassBeginInfo begin{};begin.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;begin.renderPass=uiRenderPass_;
   begin.framebuffer=uiFramebuffers_[imageIndex];begin.renderArea.extent={swapchain_->width(),swapchain_->height()};
   vkCmdBeginRenderPass(commandBuffer_,&begin,VK_SUBPASS_CONTENTS_INLINE);
@@ -1340,6 +1350,12 @@ float InstancedRenderer::sceneAspectRatio() const {
   const auto extent = swapchain_->displayExtent();
   const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
   return sceneViewport_.isEmpty() ? aspect : aspect * sceneViewport_.width / sceneViewport_.height;
+}
+
+void InstancedRenderer::setUiPreviewAtlas(std::span<const u8> rgba, u32 width, u32 height) {
+  pendingUiPreview_.assign(rgba.begin(), rgba.end());
+  pendingUiPreviewWidth_ = width;
+  pendingUiPreviewHeight_ = height;
 }
 
 void InstancedRenderer::setUiInstances(std::span<const ui::UiInstance> instances) {

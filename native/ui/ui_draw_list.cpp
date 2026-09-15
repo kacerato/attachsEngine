@@ -118,6 +118,23 @@ bool UiDrawList::addImage(const UiRect &bounds, UiImageId image, UiColor tint, f
   return push(command);
 }
 
+bool UiDrawList::addPreviewImage(const UiRect &bounds, const UiRect &texels, UiColor tint, float radius) {
+  if (texels.isEmpty() || !std::isfinite(texels.x) || !std::isfinite(texels.y) ||
+      !std::isfinite(texels.width) || !std::isfinite(texels.height))
+    return false;
+  if (!std::isfinite(radius) || radius < 0.0f) return false;
+  UiDrawCommand command{};
+  command.kind = UiPrimitive::Image;
+  command.bounds = bounds;
+  command.clip = currentClip();
+  command.color = tint;
+  command.gradientEnd = tint;
+  command.image = kUiPreviewImage;
+  command.atlas = texels;
+  command.radius = radius;
+  return push(command);
+}
+
 bool UiDrawList::addLine(UiPoint from, UiPoint to, UiColor color, float width) {
   if (!std::isfinite(width) || width <= 0.0f) return false;
   if (!std::isfinite(from.x) || !std::isfinite(from.y)) return false;

@@ -49,6 +49,9 @@ public:
   // pré-rotação leva o resultado ao espaço do display.
   bool record(VkCommandBuffer commandBuffer, std::span<const ui::UiInstance> instances,
               float surfaceWidth, float surfaceHeight, const SurfaceTransform &surfaceTransform, bool srgbTarget=false);
+  // R4: troca o atlas de prévia (texturas). Cria imagem nova, envia e atualiza o
+  // descritor; chamar só fora de gravação e com o quadro anterior concluído.
+  bool setPreviewAtlas(VulkanUploadContext &upload, std::span<const u8> rgba, u32 width, u32 height);
 
 private:
   struct PushConstants final {
@@ -71,6 +74,8 @@ private:
   VulkanBuffer instanceBuffer_{};
   VulkanImage fontAtlas_{};
   VulkanImage iconAtlas_{};
+  VulkanImage previewAtlas_{};
+  float previewAtlasSize_[2]{};
   VulkanSampler sampler_{};
   VulkanMemoryAllocator *allocator_ = nullptr;
   u32 capacity_ = 0;

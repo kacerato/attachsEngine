@@ -778,14 +778,94 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
   auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
   const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height)/48));
   const u32 pages=std::max(1u,(rows+perPage-1)/perPage),page=std::min(state.meshPage,pages-1);
-  for(u32 row=page*perPage;row<rows && row<(page+1)*perPage;++row)
-    option(state.projectTextureNames[row],row<state.projectTextureDetails.size()?state.projectTextureDetails[row]:std::string(),
-           widgetId(EditorWidget::TextureChoiceBase)+row);
+  for(u32 row=page*perPage;row<rows && row<(page+1)*perPage;++row) {
+    if(content.height<48) break;
+    auto line=takeTop(content,48);
+    const auto viewArea=takeRight(line,60);
+    const auto hit=line;
+    builder.list.addRect(deflate(line,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+    // R4: miniatura do atlas de prévia, com a proporção da imagem.
+    const auto thumb=deflate(takeLeft(line,48),UiInsets::all(5));
+    if(row<state.projectTextureThumbs.size() && !state.projectTextureThumbs[row].isEmpty()) {
+      const auto &texels=state.projectTextureThumbs[row];
+      const float fit=std::min(thumb.width/texels.width,thumb.height/texels.height);
+      const float w=texels.width*fit,h=texels.height*fit;
+      builder.list.addPreviewImage({thumb.x+(thumb.width-w)*.5f,thumb.y+(thumb.height-h)*.5f,w,h},texels);
+    } else {
+      builder.list.addRect(thumb,theme.color.lineSoft,4);
+    }
+    takeLeft(line,6);
+    builder.label(takeTop(line,25),state.projectTextureNames[row],theme.color.text,theme.type.body);
+    builder.label(line,row<state.projectTextureDetails.size()?state.projectTextureDetails[row]:std::string(),theme.color.textMuted,theme.type.caption);
+    builder.router.addRegion(hit,widgetId(EditorWidget::TextureChoiceBase)+row);
+    const auto viewButton=deflate(viewArea,UiInsets::all(4));
+    builder.list.addRect(viewButton,theme.color.raised,theme.radius.control);
+    builder.label(viewButton,"Ver",theme.color.text,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(viewButton,widgetId(EditorWidget::TextureViewBase)+row);
+  }
   builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
   builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
   if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
   if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::MeshNext));
   builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+}
+
+// R4: visualizador de textura. A imagem vem do atlas de prévia com o nível de
+// mip e o canal escolhidos; os dados do arquivo ficam embaixo.
+void buildTextureViewer(ScreenBuilder &builder,UiRect content) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  auto title=takeTop(content,36),back=takeLeft(title,36);
+  builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
+  builder.router.addRegion(back,widgetId(EditorWidget::TextureViewerClose));
+  builder.label(title,state.textureViewerTitle,theme.color.text,theme.type.caption);
+  auto controls=takeBottom(content,std::min(content.height*.55f,162.0f));
+  auto image=deflate(content,UiInsets::all(4));
+  builder.list.addRect(image,theme.color.raised,theme.radius.control);
+  if(!state.textureViewerImage.isEmpty() && !image.isEmpty()) {
+    const auto &texels=state.textureViewerImage;
+    const float fit=std::min(image.width/texels.width,image.height/texels.height);
+    const float w=texels.width*fit,h=texels.height*fit;
+    builder.list.addPreviewImage({image.x+(image.width-w)*.5f,image.y+(image.height-h)*.5f,w,h},texels);
+  } else {
+    builder.label(image,"Imagem indisponível",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  }
+  if(controls.height<38) return;
+  auto channel=takeTop(controls,38);
+  builder.label(takeLeft(channel,channel.width*.3f),"Canal",theme.color.textDim,theme.type.caption);
+  const auto channelBox=deflate(channel,UiInsets::all(2));
+  builder.list.addRect(channelBox,theme.color.raised,theme.radius.control);
+  builder.label(channelBox,state.textureViewerChannelLabel,theme.color.text,theme.type.caption,UiAlign::Center);
+  builder.router.addRegion(channelBox,widgetId(EditorWidget::TextureViewerChannel));
+  if(controls.height<38) return;
+  auto mip=takeTop(controls,38);
+  builder.label(takeLeft(mip,mip.width*.3f),"Mip",theme.color.textDim,theme.type.caption);
+  auto mipBox=deflate(mip,UiInsets::all(2));
+  builder.list.addRect(mipBox,theme.color.raised,theme.radius.control);
+  if(state.textureViewerLevels>1) {
+    const auto down=takeLeft(mipBox,32),up=takeRight(mipBox,32);
+    builder.label(down,"-",state.textureViewerLevel?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
+    builder.label(up,"+",state.textureViewerLevel+1<state.textureViewerLevels?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
+    if(state.textureViewerLevel) builder.router.addRegion(down,widgetId(EditorWidget::TextureViewerMipDown));
+    if(state.textureViewerLevel+1<state.textureViewerLevels) builder.router.addRegion(up,widgetId(EditorWidget::TextureViewerMipUp));
+  }
+  builder.label(mipBox,state.textureViewerLevelLabel,theme.color.text,theme.type.caption,UiAlign::Center);
+  if(controls.height<38) return;
+  // Zoom central e fundo sob o alfa (o fundo só aparece em RGBA; nos canais a
+  // imagem é opaca e o botão não recebe toque).
+  auto view=takeTop(controls,38);
+  auto zoomBox=deflate(takeLeft(view,view.width*.5f),UiInsets::all(2));
+  const auto backgroundBox=deflate(view,UiInsets::all(2));
+  builder.list.addRect(zoomBox,theme.color.raised,theme.radius.control);
+  builder.label(zoomBox,"Zoom "+state.textureViewerZoomLabel,theme.color.text,theme.type.caption,UiAlign::Center);
+  builder.router.addRegion(zoomBox,widgetId(EditorWidget::TextureViewerZoom));
+  const bool rgba=state.textureViewerChannel==0;
+  builder.list.addRect(backgroundBox,theme.color.raised,theme.radius.control);
+  builder.label(backgroundBox,"Fundo "+state.textureViewerBackgroundLabel,rgba?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  if(rgba) builder.router.addRegion(backgroundBox,widgetId(EditorWidget::TextureViewerBackground));
+  if(controls.height<20) return;
+  builder.list.pushClip(controls);
+  builder.label(controls,state.textureViewerInfo,theme.color.textMuted,theme.type.caption);
+  builder.list.popClip();
 }
 
 // Descriptor fields are addressed by stable instance/property IDs on edit.
@@ -1020,6 +1100,7 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   if(same && state.referenceInstance) {buildReferencePicker(builder,content,entity);return;}
   if(same && state.meshPicker && meshRenderer(entity)) {buildMeshPicker(builder,content,entity);return;}
   if(same && state.materialPicker && meshRenderer(entity)) {buildMaterialPicker(builder,content);return;}
+  if(same && state.textureViewer && meshRenderer(entity)) {buildTextureViewer(builder,content);return;}
   if(same && state.texturePicker && meshRenderer(entity)) {buildTexturePicker(builder,content);return;}
   auto footer=takeBottom(content,42);auto button=deflate(footer,UiInsets::all(2));
   builder.list.addRect(button,theme.color.raised,theme.radius.control);

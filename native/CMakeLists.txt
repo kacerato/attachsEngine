@@ -333,6 +333,7 @@ add_library(aether_editor STATIC
   editor/editor_gizmo.cpp
   editor/editor_screen.cpp
   editor/editor_session.cpp
+  editor/editor_texture_preview.cpp
   editor/editor_import_reconcile.cpp
   editor/editor_history.cpp
   editor/editor_view.cpp
@@ -536,6 +537,7 @@ if(NOT ANDROID)
     ../tests/native/test_import_reconcile.cpp
     ../tests/native/test_image_decode.cpp
     ../tests/native/test_project_textures.cpp
+    ../tests/native/test_texture_preview.cpp
     ../tests/native/test_gltf_codecs.cpp
     ../tests/native/test_gltf_package.cpp
     ../tests/native/test_editor_script_templates.cpp

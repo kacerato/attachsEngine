@@ -2398,6 +2398,9 @@ void android_main(android_app *app) {
         // tudo; agora ela testa profundidade como qualquer outro desenho.
         shell.instancedRenderer.setEditorGrid(shell.editorSession.gridPlan());
         shell.instancedRenderer.setUiInstances(shell.editorSession.instances());
+        // R4: atlas de prévia de texturas, só quando o editor recompôs.
+        if(const auto *preview=shell.editorSession.takePreviewAtlas())
+          shell.instancedRenderer.setUiPreviewAtlas(*preview,ae::editor::TexturePreviewAtlasSize,ae::editor::TexturePreviewAtlasSize);
         // A mesma escala vai ao renderer: e ela que o vertex shader usa para
         // levar as coordenadas logicas ao NDC da tela inteira.
         shell.instancedRenderer.setUiSurfaceSize(logicalWidth, logicalHeight);

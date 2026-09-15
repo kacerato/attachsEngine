@@ -101,6 +101,18 @@ AE_TEST(builder_turns_a_rect_command_into_one_instance) {
   AE_EXPECT_EQ(instances[0].colors[0], 0xFF141414u, "");
 }
 
+AE_TEST(r4_builder_turns_a_preview_image_into_a_preview_instance_with_its_texels) {
+  UiDrawList list = beginList();
+  AE_EXPECT_TRUE(list.addPreviewImage({40, 50, 96, 48}, {2, 514, 200, 100}, 0xFFFFFFFF, 4.0f), "prévia aceita");
+  AE_EXPECT_TRUE(!list.addPreviewImage({40, 50, 96, 48}, {}), "recorte vazio recusado");
+  std::vector<UiInstance> instances;
+  const UiInstanceBuildResult result = buildUiInstances(list, shippedFont(), shippedIcons(), 64, instances);
+  AE_EXPECT_EQ(result.emitted, 1u, "");
+  AE_EXPECT_TRUE(kindOf(instances[0]) == static_cast<u32>(UiInstanceKind::Preview), "tipo prévia, não ícone");
+  AE_EXPECT_TRUE(instances[0].atlas[1] == 514.0f && instances[0].atlas[2] == 200.0f, "os texels viajam do comando");
+  AE_EXPECT_TRUE(instances[0].params[0] == 4.0f && instances[0].bounds[2] == 96.0f, "raio e caixa preservados");
+}
+
 AE_TEST(builder_expands_text_into_one_instance_per_drawn_glyph) {
   UiDrawList list = beginList();
   UiTypeStyle style = defaultTheme().type.body;

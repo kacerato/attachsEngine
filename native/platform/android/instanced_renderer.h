@@ -86,6 +86,9 @@ public:
   // da tela é do editor, não do renderer) e valem para UM frame: quem não as
   // publicar de novo simplesmente não desenha interface, sem estado preso.
   void setUiInstances(std::span<const ui::UiInstance> instances);
+  // R4: atlas de prévia de texturas composto pelo editor; enviado à GPU no
+  // início da gravação da interface do próximo quadro.
+  void setUiPreviewAtlas(std::span<const u8> rgba, u32 width, u32 height);
   // Tamanho da superficie NO ESPACO EM QUE AS INSTANCIAS FORAM CONSTRUIDAS --
   // pixels logicos, nao fisicos. Zero volta a usar a extensao do display, que e
   // o comportamento certo so quando as duas escalas coincidem.
@@ -520,6 +523,8 @@ private:
   bool useBindless_ = false;
   bool astc4x4_ = false;
   bool materialCulling_ = false;
+  std::vector<u8> pendingUiPreview_;
+  u32 pendingUiPreviewWidth_ = 0, pendingUiPreviewHeight_ = 0;
   VkDescriptorSetLayout textureSetLayout_ = VK_NULL_HANDLE;
   VkDescriptorPool texturePool_ = VK_NULL_HANDLE;
   VkDescriptorSet textureSet_ = VK_NULL_HANDLE;

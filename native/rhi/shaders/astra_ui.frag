@@ -21,6 +21,7 @@ layout(std430, set = 0, binding = 0) readonly buffer Instances {
 
 layout(set = 0, binding = 1) uniform sampler2D fontAtlas;  // campo de distância, R8
 layout(set = 0, binding = 2) uniform sampler2D iconAtlas;  // RGBA8, alfa direto
+layout(set = 0, binding = 3) uniform sampler2D previewAtlas;  // R4: prévia de texturas, RGBA8
 
 layout(push_constant) uniform UiPushConstants {
   vec4 surface;
@@ -37,6 +38,7 @@ layout(location = 0) out vec4 outColor;
 #define UI_KIND_GLYPH 1u
 #define UI_KIND_ICON 2u
 #define UI_KIND_LINE 3u
+#define UI_KIND_PREVIEW 4u
 
 vec4 unpackColor(uint packed) {
   // 0xAARRGGBB, a mesma ordem do literal hexadecimal dos tokens.
@@ -103,6 +105,21 @@ void main() {
     const float softness = max(texelsPerPixel / (2.0 * max(instance.params.w, 0.001)), 0.0015);
     const float alpha = clamp((field - 0.5) / softness + 0.5, 0.0, 1.0);
     outColor = outputColor(vec4(fill.rgb, fill.a * alpha));
+    return;
+  }
+
+  if (kind == UI_KIND_PREVIEW) {
+    // O tamanho do atlas de prévia viaja em outputFlags.zw: ele muda quando a
+    // sessão recompõe o atlas, e o push constant já tem os outros dois tamanhos.
+    const vec2 uv = (instance.atlas.xy +
+                     (vPixel - instance.bounds.xy) / instance.bounds.zw * instance.atlas.zw) /
+                    max(push.outputFlags.zw, vec2(1.0));
+    vec4 color = texture(previewAtlas, uv) * fill;
+    if (instance.params.x > 0.0) {
+      color.a *= coverageFromDistance(
+          roundedBoxDistance(vPixel, instance.bounds, instance.params.x));
+    }
+    outColor = outputColor(color);
     return;
   }
 

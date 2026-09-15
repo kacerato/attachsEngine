@@ -1080,6 +1080,19 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       state_.texturePicker=true;state_.materialPicker=false;state_.meshPage=0;return true;
     }
     if(key==widgetId(EditorWidget::TexturePickerClose)) {state_.texturePicker=false;return true;}
+    // R4: visualizador de textura.
+    if(key>=widgetId(EditorWidget::TextureViewBase) && key-widgetId(EditorWidget::TextureViewBase)<textures_.size()) {
+      if(!openTextureViewer(key-widgetId(EditorWidget::TextureViewBase))) state_.status=state_.textureViewerInfo;
+      return true;
+    }
+    if(key==widgetId(EditorWidget::TextureViewerClose)) {closeTextureViewer();return true;}
+    if(key==widgetId(EditorWidget::TextureViewerChannel)) {cycleTextureViewerChannel();return true;}
+    if(key==widgetId(EditorWidget::TextureViewerZoom)) {cycleTextureViewerZoom();return true;}
+    if(key==widgetId(EditorWidget::TextureViewerBackground)) {cycleTextureViewerBackground();return true;}
+    if(key==widgetId(EditorWidget::TextureViewerMipDown) || key==widgetId(EditorWidget::TextureViewerMipUp)) {
+      stepTextureViewerLevel(key==widgetId(EditorWidget::TextureViewerMipUp)?1:-1);
+      return true;
+    }
     // R4: modo de alfa, corte e faces, no alcance em edição.
     if(key==widgetId(EditorWidget::MaterialAlphaCycle) || key==widgetId(EditorWidget::MaterialSidesCycle) ||
        key==widgetId(EditorWidget::MaterialCutoffDown) || key==widgetId(EditorWidget::MaterialCutoffUp)) {
@@ -1895,6 +1908,115 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
 
 // Quantos objetos da cena usam este recurso. E a pergunta que apagar precisa
 // responder ANTES de apagar.
+namespace {
+bool readProjectImage(const std::string &root,const std::string &relative,const resources::ImageDecodeLimits &limits,
+                      resources::DecodedImage &out) {
+  std::filesystem::path absolute;std::vector<u8> bytes;std::string diagnostic;
+  return !root.empty() && EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),relative,absolute) &&
+         EditorImportTransaction::read(absolute,bytes,limits.maximumEncodedBytes) &&
+         resources::decodeImageRgba8(bytes,limits,out,diagnostic);
+}
+} // namespace
+
+bool EditorSession::generatePendingTextureThumbnail() {
+  const u32 count=std::min<u32>(static_cast<u32>(textures_.size()),TextureThumbnailCapacity);
+  if(thumbnails_.size()>count) thumbnails_.resize(count);
+  for(u32 index=0;index<count;++index) {
+    const auto *record=assets_.find(textures_[index].guid);
+    const std::string hash=record?record->contentHash:std::string();
+    if(index<thumbnails_.size() && thumbnails_[index].guid==textures_[index].guid && thumbnails_[index].contentHash==hash) continue;
+    TextureThumbnail thumbnail{textures_[index].guid,hash,{}};
+    resources::DecodedImage image;
+    // Arquivo ilegível fica sem miniatura, mas registrado: não é tentado de novo a cada quadro.
+    if(readProjectImage(files_.rootPath(),textures_[index].path,importLimits_.image,image))
+      thumbnail.content=preview_.writeThumbnail(index,image.rgba,image.width,image.height);
+    if(index<thumbnails_.size()) thumbnails_[index]=std::move(thumbnail);
+    else thumbnails_.push_back(std::move(thumbnail));
+    return true;
+  }
+  return false;
+}
+
+bool EditorSession::openTextureViewer(u32 projectTextureIndex) {
+  if(projectTextureIndex>=textures_.size()) return false;
+  state_.textureViewer=true;state_.textureViewerIndex=projectTextureIndex;
+  state_.textureViewerLevel=0;state_.textureViewerChannel=0;state_.textureViewerZoom=0;
+  // O fundo escolhido vale entre texturas: é preferência de leitura, não da imagem.
+  return refreshTextureViewerImage();
+}
+
+bool EditorSession::cycleTextureViewerZoom() {
+  if(!state_.textureViewer) return false;
+  state_.textureViewerZoom=static_cast<u8>((state_.textureViewerZoom+1)%TexturePreviewZoomSteps);
+  return refreshTextureViewerImage();
+}
+
+bool EditorSession::cycleTextureViewerBackground() {
+  if(!state_.textureViewer) return false;
+  state_.textureViewerBackground=static_cast<u8>((state_.textureViewerBackground+1)%TexturePreviewBackgroundCount);
+  return refreshTextureViewerImage();
+}
+
+bool EditorSession::stepTextureViewerLevel(int delta) {
+  if(!state_.textureViewer) return false;
+  const int next=static_cast<int>(state_.textureViewerLevel)+delta;
+  if(next<0 || next>=static_cast<int>(state_.textureViewerLevels)) return false;
+  state_.textureViewerLevel=static_cast<u32>(next);
+  return refreshTextureViewerImage();
+}
+
+bool EditorSession::cycleTextureViewerChannel() {
+  if(!state_.textureViewer) return false;
+  state_.textureViewerChannel=static_cast<u8>((state_.textureViewerChannel+1)%TexturePreviewChannelCount);
+  return refreshTextureViewerImage();
+}
+
+bool EditorSession::refreshTextureViewerImage() {
+  if(!state_.textureViewer || state_.textureViewerIndex>=textures_.size()) return false;
+  const auto &texture=textures_[state_.textureViewerIndex];
+  const auto *record=assets_.find(texture.guid);
+  const std::string hash=record?record->contentHash:std::string();
+  state_.textureViewerTitle=texture.name;
+  if(viewerChain_.guid!=texture.guid || viewerChain_.contentHash!=hash || viewerChain_.chain.empty()) {
+    viewerChain_={};
+    resources::DecodedImage image;
+    if(!readProjectImage(files_.rootPath(),texture.path,importLimits_.image,image) ||
+       !resources::buildMipChain(image,true,viewerChain_.chain,viewerChain_.levels)) {
+      viewerChain_={};
+      state_.textureViewerImage={};state_.textureViewerLevels=0;
+      state_.textureViewerLevelLabel.clear();state_.textureViewerChannelLabel.clear();
+      state_.textureViewerInfo="Arquivo ilegível: "+texture.path;
+      return false;
+    }
+    viewerChain_.guid=texture.guid;viewerChain_.contentHash=hash;
+    viewerChain_.width=image.width;viewerChain_.height=image.height;
+  }
+  state_.textureViewerLevels=viewerChain_.levels;
+  state_.textureViewerLevel=std::min(state_.textureViewerLevel,viewerChain_.levels-1);
+  usize offset=0;u32 width=viewerChain_.width,height=viewerChain_.height;
+  for(u32 level=0;level<state_.textureViewerLevel;++level) {
+    offset+=static_cast<usize>(width)*height*4;
+    width=std::max<u32>(1,width/2);height=std::max<u32>(1,height/2);
+  }
+  const auto channel=static_cast<TexturePreviewChannel>(state_.textureViewerChannel);
+  const auto background=static_cast<TexturePreviewBackground>(state_.textureViewerBackground);
+  state_.textureViewerImage=preview_.writeViewer(std::span<const u8>(viewerChain_.chain).subspan(offset,static_cast<usize>(width)*height*4),
+                                                 width,height,channel,state_.textureViewerZoom,background);
+  state_.textureViewerZoomLabel=std::to_string(1u<<state_.textureViewerZoom)+"× no centro";
+  state_.textureViewerBackgroundLabel=texturePreviewBackgroundName(background);
+  state_.textureViewerLevelLabel="Nível "+std::to_string(state_.textureViewerLevel)+" de "+std::to_string(viewerChain_.levels-1)+
+                                 " · "+std::to_string(width)+"×"+std::to_string(height);
+  state_.textureViewerChannelLabel=texturePreviewChannelName(channel);
+  const auto users=textureUsersOf(texture.guid);
+  const double megabytes=static_cast<double>(viewerChain_.chain.size())/1048576.0;
+  char size[32];std::snprintf(size,sizeof(size),"%.1f",megabytes);
+  state_.textureViewerInfo=std::to_string(viewerChain_.width)+"×"+std::to_string(viewerChain_.height)+" · "+
+      std::to_string(viewerChain_.levels)+" níveis · "+size+" MB com mips · "+std::to_string(users)+(users==1?" uso":" usos")+
+      (std::max(viewerChain_.width,viewerChain_.height)>importLimits_.maximumTextureDimension?
+           " · residente até "+std::to_string(importLimits_.maximumTextureDimension)+" px":std::string())+" · "+texture.path;
+  return true;
+}
+
 u32 EditorSession::textureUsersOf(const resources::AssetGuid &guid) const {
   if(!guid.valid() || guid==scene::MaterialTextureNone) return 0;
   u32 users=sceneUsersOf(guid);
@@ -2659,6 +2781,8 @@ void EditorSession::frameSubtree(EditorEntityId root) {
 
 void EditorSession::update() {
   refreshImportLinkView();
+  // R4: miniaturas nascem uma por atualização enquanto o seletor está aberto.
+  if(state_.texturePicker) generatePendingTextureThumbnail();
   refreshMaterialSlotView();
   if(const auto *selected=document_.find(state_.selection)) state_.routePoint=waterRoute(*selected).count?std::min(state_.routePoint,waterRoute(*selected).count-1):0;
   if (font_ == nullptr || icons_ == nullptr) return;
@@ -2719,7 +2843,10 @@ void EditorSession::refreshMaterialSlotView() {
   }
   const auto *entity=document_.find(state_.selection);
   const auto *render=entity?meshRenderer(*entity):nullptr;
-  if(!render) {state_.materialPicker=false;state_.texturePicker=false;return;}
+  state_.projectTextureThumbs.assign(textures_.size(),{});
+  for(usize index=0;index<thumbnails_.size() && index<textures_.size();++index)
+    if(thumbnails_[index].guid==textures_[index].guid) state_.projectTextureThumbs[index]=thumbnails_[index].content;
+  if(!render) {state_.materialPicker=false;state_.texturePicker=false;state_.textureViewer=false;return;}
   view.slots=render->slotCount();
   state_.materialSlot=std::min(state_.materialSlot,view.slots-1);
   const u32 slot=state_.materialSlot;

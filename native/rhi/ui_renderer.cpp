@@ -56,6 +56,7 @@ void VulkanUiRenderer::shutdown() {
   sampler_.shutdown();
   fontAtlas_.reset();
   iconAtlas_.reset();
+  previewAtlas_.reset();
   instanceBuffer_.reset();
   allocator_ = nullptr;
   device_ = VK_NULL_HANDLE;
@@ -91,6 +92,18 @@ bool VulkanUiRenderer::createAtlas(VulkanMemoryAllocator &allocator, VulkanUploa
   if (!upload.uploadRgba8ToSampledImage(allocator, icons.pixels().data(), icons.pixels().size(),
                                         iconAtlas_))
     return false;
+
+  // R4: atlas de prévia começa transparente e mínimo; a sessão envia o de verdade
+  // quando alguma prévia de textura é aberta.
+  ImageDesc previewDesc = iconDesc;
+  previewDesc.width = 4;
+  previewDesc.height = 4;
+  if (!allocator.createImage(previewDesc, &previewAtlas_)) return false;
+  const std::vector<u8> emptyPreview(4 * 4 * 4, 0);
+  if (!upload.uploadRgba8ToSampledImage(allocator, emptyPreview.data(), emptyPreview.size(), previewAtlas_))
+    return false;
+  previewAtlasSize_[0] = 4.0f;
+  previewAtlasSize_[1] = 4.0f;
 
   SamplerDesc sampler{};
   // Preso à borda: repetir faria o último texel de um glifo amostrar o glifo do
@@ -238,15 +251,16 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
     return false;
   }
 
-  const VkDescriptorSetLayoutBinding bindings[3] = {
+  const VkDescriptorSetLayoutBinding bindings[4] = {
       {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
       {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
       {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+      {3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
   };
   VkDescriptorSetLayoutCreateInfo layoutInfo{};
   layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  layoutInfo.bindingCount = 3;
+  layoutInfo.bindingCount = 4;
   layoutInfo.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr, &descriptorLayout_) !=
       VK_SUCCESS) {
@@ -255,7 +269,7 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
   }
 
   const VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
-                                         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2}};
+                                         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3}};
   VkDescriptorPoolCreateInfo poolInfo{};
   poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   poolInfo.maxSets = 1;
@@ -280,10 +294,12 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
   VkDescriptorBufferInfo bufferInfo{instanceBuffer_.handle(), 0, VK_WHOLE_SIZE};
   VkDescriptorImageInfo fontInfo{sampler_.handle(), fontAtlas_.view(),
                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkDescriptorImageInfo previewInfo{sampler_.handle(), previewAtlas_.view(),
+                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkDescriptorImageInfo iconInfo{sampler_.handle(), iconAtlas_.view(),
                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  VkWriteDescriptorSet writes[3]{};
-  for (u32 index = 0; index < 3; ++index) {
+  VkWriteDescriptorSet writes[4]{};
+  for (u32 index = 0; index < 4; ++index) {
     writes[index].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[index].dstSet = descriptorSet_;
     writes[index].dstBinding = index;
@@ -295,7 +311,9 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
   writes[1].pImageInfo = &fontInfo;
   writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[2].pImageInfo = &iconInfo;
-  vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
+  writes[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  writes[3].pImageInfo = &previewInfo;
+  vkUpdateDescriptorSets(device_, 4, writes, 0, nullptr);
 
   if (!createPipeline(renderPass, subpass, pipelineCache)) {
     shutdown();
@@ -318,6 +336,8 @@ bool VulkanUiRenderer::record(VkCommandBuffer commandBuffer,
 
   PushConstants push{};
   push.outputFlags[0]=srgbTarget?1.0f:0.0f;
+  push.outputFlags[2]=previewAtlasSize_[0];
+  push.outputFlags[3]=previewAtlasSize_[1];
   push.surface[0] = surfaceWidth;
   push.surface[1] = surfaceHeight;
   push.surface[2] = 1.0f / surfaceWidth;
@@ -339,6 +359,40 @@ bool VulkanUiRenderer::record(VkCommandBuffer commandBuffer,
                      sizeof(push), &push);
   // Quatro vértices, uma instância por quad. É o frame inteiro da interface.
   vkCmdDraw(commandBuffer, 4, count, 0, 0);
+  return true;
+}
+
+bool VulkanUiRenderer::setPreviewAtlas(VulkanUploadContext &upload, std::span<const u8> rgba, u32 width, u32 height) {
+  if (!isReady() || allocator_ == nullptr || width == 0 || height == 0 ||
+      rgba.size() != static_cast<usize>(width) * height * 4)
+    return false;
+  ImageDesc desc{};
+  desc.width = width;
+  desc.height = height;
+  // Mesmo contrato do atlas de ícones: bytes sRGB codificados, uma conversão só
+  // no fragmento (astra_ui.frag).
+  desc.format = VK_FORMAT_R8G8B8A8_UNORM;
+  desc.mipLevels = 1;
+  desc.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  desc.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  VulkanImage next{};
+  if (!allocator_->createImage(desc, &next) ||
+      !upload.uploadRgba8ToSampledImage(*allocator_, rgba.data(), rgba.size(), next))
+    return false;
+  // Imagem nova em vez de reescrever a antiga: o contexto de upload só aceita
+  // imagem ainda não usada por outro comando.
+  VkDescriptorImageInfo info{sampler_.handle(), next.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet write{};
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.dstSet = descriptorSet_;
+  write.dstBinding = 3;
+  write.descriptorCount = 1;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  write.pImageInfo = &info;
+  vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+  previewAtlas_ = std::move(next);
+  previewAtlasSize_[0] = static_cast<float>(width);
+  previewAtlasSize_[1] = static_cast<float>(height);
   return true;
 }
 

@@ -35,6 +35,10 @@ enum class UiPrimitive : u8 { Rect, Text, Image, Line };
 // de imagem com id zero é recusado em vez de desenhar o primeiro slot do atlas.
 using UiImageId = u32;
 inline constexpr UiImageId kUiNoImage = 0;
+// R4: imagem do atlas DINÂMICO de prévia (miniaturas e visualizador de textura).
+// O retângulo em texels viaja no próprio comando (`atlas`): o conteúdo desse
+// atlas é composto pela sessão e não tem tabela fixa como o atlas de ícones.
+inline constexpr UiImageId kUiPreviewImage = 0x40000000u;
 
 struct UiDrawCommand final {
   UiPrimitive kind = UiPrimitive::Rect;
@@ -91,6 +95,9 @@ public:
                UiAlign vertical = UiAlign::Center);
   bool addImage(const UiRect &bounds, UiImageId image, UiColor tint = 0xFFFFFFFF,
                 float radius = 0.0f);
+  // R4: recorte `texels` do atlas de prévia desenhado em `bounds`.
+  bool addPreviewImage(const UiRect &bounds, const UiRect &texels, UiColor tint = 0xFFFFFFFF,
+                       float radius = 0.0f);
   // Segmento com extremidades arredondadas. `bounds` do comando guarda a caixa
   // envolvente, que é o que o recorte precisa; as pontas viajam em `atlas`.
   bool addLine(UiPoint from, UiPoint to, UiColor color, float width);

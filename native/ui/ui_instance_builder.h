@@ -38,6 +38,8 @@ enum class UiInstanceKind : u32 {
   // Segmento. `atlas` carrega as duas pontas e `params.y` a espessura; o
   // vértice monta um quad orientado e o fragmento mede a distância ao segmento.
   Line = 3,
+  // R4: recorte do atlas dinâmico de prévia (texturas), multiplicado pela cor.
+  Preview = 4,
 };
 
 struct alignas(16) UiInstance final {

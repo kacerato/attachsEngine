@@ -189,12 +189,16 @@ enum class EditorWidget : u32 {
   // R4: textura por binding de material e extração das imagens de um GLB.
   TexturePickerClose, TextureUseInherited, TextureUseNone, AssetExtractTextures,
   MaterialAlphaCycle, MaterialCutoffDown, MaterialCutoffUp, MaterialSidesCycle,
+  TextureViewerClose, TextureViewerChannel, TextureViewerMipDown, TextureViewerMipUp,
+  TextureViewerZoom, TextureViewerBackground,
   // + máscara de ImportOverride.
   ImportLinkRevertBase=0x52000000u,
   // + índice do material do projeto / do campo numérico do material.
   MaterialChoiceBase=0x53000000u, MaterialNumberBase=0x54000000u,
   // + binding de textura (0..3) / + índice da textura do projeto.
   MaterialTextureBase=0x55000000u, TextureChoiceBase=0x56000000u,
+  // + índice da textura do projeto: abre o visualizador.
+  TextureViewBase=0x57000000u,
   ComponentReferenceBase=0x7a000000u, ReferenceChoiceBase=0x7b000000u,
   ComponentNumberBase=0x78000000u,
   MeshChoiceBase=0x79000000u,
@@ -423,6 +427,15 @@ struct EditorScreenState final {
   bool materialCulling=true;
   u32 textureBinding=0;
   std::vector<std::string> projectTextureNames,projectTextureDetails;
+  // R4: miniatura de cada textura do projeto no atlas de prévia (vazia enquanto não gerada).
+  std::vector<ui::UiRect> projectTextureThumbs;
+  // R4: visualizador de textura em Propriedades.
+  bool textureViewer=false;
+  u32 textureViewerIndex=0,textureViewerLevel=0,textureViewerLevels=0;
+  u8 textureViewerChannel=0,textureViewerZoom=0,textureViewerBackground=0;
+  ui::UiRect textureViewerImage{};
+  std::string textureViewerTitle,textureViewerLevelLabel,textureViewerChannelLabel,textureViewerInfo;
+  std::string textureViewerZoomLabel,textureViewerBackgroundLabel;
   // Menu de ações do objeto (⋮ do cabeçalho do inspetor) e do card Transformação.
   bool inspectorMenu=false,transformMenu=false;
   // Transformação copiada, para colar em outro objeto.

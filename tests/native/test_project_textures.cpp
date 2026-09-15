@@ -330,6 +330,45 @@ AE_TEST(r4_textures_extract_from_source_and_resolve_per_instance_and_shared_scop
   AE_EXPECT_EQ(session.importLinkOverrides(object) & ImportOverrideMaterial, 0u, "vínculo volta a ser igual à fonte no material");
 }
 
+AE_TEST(r4_texture_thumbnails_are_generated_once_and_viewer_walks_mips_and_channels) {
+  Project project;
+  EditorSession session;
+  Publisher publisher;
+  start(session, publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  AE_EXPECT_TRUE(!session.generatePendingTextureThumbnail() && session.takePreviewAtlas() == nullptr, "sem texturas, nada a enviar");
+  const auto glb = texturedPanel(png(4, 4, 200));
+  resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(glb, {}, {}, model), model.diagnostic.c_str());
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(glb, model, "Fontes/tela.glb", "", report), report.diagnostic.c_str());
+  EditorSession::TextureExtraction extraction;
+  std::string diagnostic;
+  AE_EXPECT_TRUE(session.extractSourceTextures("Fontes/tela.glb", extraction, diagnostic), diagnostic.c_str());
+
+  AE_EXPECT_TRUE(session.generatePendingTextureThumbnail(), "miniatura da textura nova");
+  AE_EXPECT_TRUE(!session.generatePendingTextureThumbnail(), "a mesma textura não é decodificada de novo");
+  const auto *atlas = session.takePreviewAtlas();
+  AE_EXPECT_TRUE(atlas && atlas->size() == usize{TexturePreviewAtlasSize} * TexturePreviewAtlasSize * 4, "atlas entregue ao renderer");
+  AE_EXPECT_TRUE(session.takePreviewAtlas() == nullptr, "entregue uma vez só");
+
+  AE_EXPECT_TRUE(session.openTextureViewer(0), session.screen().textureViewerInfo.c_str());
+  const auto &screen = session.screen();
+  AE_EXPECT_TRUE(screen.textureViewer && screen.textureViewerLevels == 3 && !screen.textureViewerImage.isEmpty(), "4x4 tem três níveis");
+  AE_EXPECT_TRUE(screen.textureViewerInfo.find("4×4") != std::string::npos && screen.textureViewerInfo.find("Texturas/tela/Pintura.png") != std::string::npos,
+                 "dimensões e arquivo");
+  AE_EXPECT_TRUE(!session.stepTextureViewerLevel(-1), "não há nível abaixo do zero");
+  AE_EXPECT_TRUE(session.stepTextureViewerLevel(1) && screen.textureViewerLevelLabel.find("2×2") != std::string::npos,
+                 screen.textureViewerLevelLabel.c_str());
+  AE_EXPECT_TRUE(session.cycleTextureViewerChannel() && screen.textureViewerChannelLabel == "Vermelho", "canal seguinte");
+  AE_EXPECT_TRUE(session.takePreviewAtlas() != nullptr, "trocar nível e canal reenvia o atlas");
+  AE_EXPECT_TRUE(session.cycleTextureViewerZoom() && screen.textureViewerZoomLabel.starts_with("2×"), screen.textureViewerZoomLabel.c_str());
+  AE_EXPECT_TRUE(session.cycleTextureViewerBackground() && screen.textureViewerBackgroundLabel == "Preto", "fundo seguinte");
+  AE_EXPECT_TRUE(!session.openTextureViewer(7), "índice fora das texturas recusado");
+  session.closeTextureViewer();
+  AE_EXPECT_TRUE(!screen.textureViewer, "fechado");
+}
+
 namespace {
 EditorEntityId firstMeshObject(EditorSession &session) {
   std::vector<EditorEntityId> ids;

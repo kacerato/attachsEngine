@@ -84,6 +84,14 @@ UiInstanceBuildResult buildUiInstances(const UiDrawList &list, const UiFont &fon
         break;
       }
       case UiPrimitive::Image: {
+        if (command.image == kUiPreviewImage) {
+          if (command.atlas.isEmpty()) break;
+          writeRect(instance.bounds, command.bounds);
+          writeRect(instance.atlas, command.atlas);
+          instance.params[2] = static_cast<float>(UiInstanceKind::Preview);
+          push(instance);
+          break;
+        }
         const UiRect atlasRect = icons.rectOf(static_cast<UiIcon>(command.image));
         if (atlasRect.isEmpty()) break;  // atlas ausente: a forma do painel sobrevive
         writeRect(instance.bounds, command.bounds);
