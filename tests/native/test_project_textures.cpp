@@ -114,6 +114,7 @@ struct Publisher {
   std::vector<renderer::MapMaterialRecord> materials;
   usize textures = 0;
   u32 rebuilds = 0;
+  std::vector<u32> samplers; // flags de sampler de cada textura publicada, na ordem da biblioteca
 };
 
 void start(EditorSession &session, Publisher &publisher) {
@@ -129,6 +130,8 @@ void start(EditorSession &session, Publisher &publisher) {
     for (const auto &texture : t) if (!texture || !texture->valid()) return false;
     ++publisher.rebuilds;
     publisher.textures = t.size();
+    publisher.samplers.clear();
+    for (const auto &texture : t) publisher.samplers.push_back(texture->samplerFlags);
     publisher.vertices.clear(); publisher.indices.clear(); publisher.draws.clear(); publisher.materials.clear();
     if (!renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride, publisher.vertices, publisher.indices, publisher.draws, publisher.materials))
       return false;
@@ -311,7 +314,7 @@ AE_TEST(r4_textures_extract_from_source_and_resolve_per_instance_and_shared_scop
   const auto *record = session.assets().find(shared);
   AE_EXPECT_TRUE(record && EditorImportTransaction::read(project.root / record->path, materialFile), "arquivo do material");
   const std::string text(materialFile.begin(), materialFile.end());
-  AE_EXPECT_TRUE(text.starts_with("ASTRA_MATERIAL 3") && text.find(texture.text()) != std::string::npos && text.find("none") != std::string::npos,
+  AE_EXPECT_TRUE(text.starts_with("ASTRA_MATERIAL 4") && text.find(texture.text()) != std::string::npos && text.find("none") != std::string::npos,
                  "material gravado na versão atual com as texturas");
 
   // Instância vence o compartilhado, binding a binding.
@@ -577,9 +580,92 @@ AE_TEST(r4_alpha_mode_cutoff_and_sides_persist_resolve_and_reach_renderer_flags)
                  "transparente e uma face pelo material compartilhado");
   std::vector<u8> file;
   AE_EXPECT_TRUE(EditorImportTransaction::read(project.root / session.assets().find(shared)->path, file) &&
-                 std::string(file.begin(), file.end()).starts_with("ASTRA_MATERIAL 3"), "material gravado em v3");
+                 std::string(file.begin(), file.end()).starts_with("ASTRA_MATERIAL 4"), "material gravado na versão atual");
 
   AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");
   effective = effectiveMaterial(session, object);
   AE_EXPECT_TRUE(effective.alphaMode == scene::MaterialAlphaKeep && effective.sides == scene::MaterialSidesKeep, "de volta à fonte");
+}
+
+AE_TEST(r4_sampling_uv_set_wrap_and_filter_resolve_publish_variants_and_travel_to_the_project_material) {
+  // Contrato puro: dois bits por binding no registro e flags de sampler.
+  renderer::MapMaterialRecord record{};
+  record.textureCoordinates = 0;
+  renderer::MaterialOverride value;
+  value.uvSets[1] = scene::MaterialUv1;
+  AE_EXPECT_EQ(renderer::applyMaterialOverride(record, value).textureCoordinates, 1u << 2, "normal passa a UV1");
+  record.textureCoordinates = 0xffu;
+  value = {};
+  value.uvSets[3] = scene::MaterialUv0;
+  AE_EXPECT_EQ(renderer::applyMaterialOverride(record, value).textureCoordinates, 0x3fu, "emissão volta a UV0 sem tocar os outros");
+  const auto clampNearest = EditorMapScene::samplerFlags({scene::MaterialUvKeep, scene::MaterialWrapClamp, scene::MaterialFilterNearest});
+  AE_EXPECT_TRUE((clampNearest & (renderer::AuthoringTextureRepeatU | renderer::AuthoringTextureLinearFilter | renderer::AuthoringTextureLinearMip)) == 0,
+                 "limitar e mais próximo tiram repetição e filtro linear");
+  AE_EXPECT_TRUE(EditorMapScene::samplerFlags({0, scene::MaterialWrapMirror, 0}) & renderer::AuthoringTextureMirrorV, "espelhar");
+  AE_EXPECT_EQ(EditorMapScene::samplerFlags({}), EditorMapScene::DefaultTextureSampler, "herdar é o padrão");
+
+  Project project;
+  EditorSession session;
+  Publisher publisher;
+  start(session, publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  const auto glb = texturedPanel(png(4, 4, 200));
+  resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(glb, {}, {}, model), model.diagnostic.c_str());
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(glb, model, "Fontes/tela.glb", "", report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), report.diagnostic.c_str());
+  std::string diagnostic;
+  EditorSession::TextureExtraction extraction;
+  AE_EXPECT_TRUE(session.extractSourceTextures("Fontes/tela.glb", extraction, diagnostic), diagnostic.c_str());
+  const auto object = firstMeshObject(session);
+  AE_EXPECT_TRUE(object != kInvalidEntity, "instância com malha");
+
+  // Só o conjunto de UV, com a textura da fonte: vale e é alteração local.
+  const scene::MaterialSampling uv1{scene::MaterialUv1, scene::MaterialWrapKeep, scene::MaterialFilterKeep};
+  AE_EXPECT_TRUE(session.setSlotSampling(object, 0, 0, EditorSession::MaterialScope::Instance, uv1, diagnostic), diagnostic.c_str());
+  AE_EXPECT_EQ(effectiveMaterial(session, object).uvSets[0], scene::MaterialUv1, "UV1 resolvido na cor base");
+  AE_EXPECT_TRUE((session.importLinkOverrides(object) & ImportOverrideMaterial) != 0, "amostragem conta como material local");
+  AE_EXPECT_TRUE(!session.setSlotSampling(object, 0, 0, EditorSession::MaterialScope::Instance, {3, 0, 0}, diagnostic),
+                 "valor fora do contrato recusado");
+
+  // Textura do projeto com outro sampler: uma variante publicada, índice próprio.
+  AE_EXPECT_TRUE(session.setSlotTexture(object, 0, 0, EditorSession::MaterialScope::Instance, extraction.textures.front(), diagnostic),
+                 diagnostic.c_str());
+  const auto repeating = effectiveTexture(session, object, 0);
+  AE_EXPECT_TRUE(resolvesToProjectTexture(repeating), "textura do projeto com o sampler padrão");
+  const auto before = publisher.rebuilds;
+  const scene::MaterialSampling clamped{scene::MaterialUv1, scene::MaterialWrapClamp, scene::MaterialFilterNearest};
+  AE_EXPECT_TRUE(session.setSlotSampling(object, 0, 0, EditorSession::MaterialScope::Instance, clamped, diagnostic), diagnostic.c_str());
+  AE_EXPECT_EQ(publisher.rebuilds, before + 1, "sampler novo custa uma publicação");
+  const auto variant = effectiveTexture(session, object, 0);
+  // Só a combinação em uso sobe: a variante pode ocupar a posição da anterior.
+  AE_EXPECT_TRUE(resolvesToProjectTexture(variant) && variant < publisher.samplers.size() &&
+                     publisher.samplers[variant] == EditorMapScene::samplerFlags(clamped),
+                 "o binding resolve para a textura publicada com limitar e mais próximo");
+  AE_EXPECT_TRUE(repeating < publisher.samplers.size() || repeating == variant, "índice anterior coerente");
+
+  // O componente grava a amostragem e lê de volta.
+  {
+    const auto *render = meshRenderer(*session.document().find(object));
+    std::ostringstream out;
+    render->write(out);
+    AE_EXPECT_TRUE(out.str().find(" 222") != std::string::npos, "token uvf gravado");
+    scene::MeshRenderer back;
+    std::istringstream in(out.str());
+    AE_EXPECT_TRUE(back.read(in, 6) && back.sampling == render->sampling, "v6 volta igual");
+  }
+
+  // Criar material do projeto leva a amostragem; a instância deixa de trocar sozinha.
+  const auto shared = session.createMaterialFromSlot(object, 0, diagnostic);
+  AE_EXPECT_TRUE(shared.valid(), diagnostic.c_str());
+  AE_EXPECT_TRUE(session.findMaterialAsset(shared)->sampling[0] == clamped, "material do projeto guarda a amostragem");
+  AE_EXPECT_TRUE(!meshRenderer(*session.document().find(object))->sampling[0].overrides(), "instância limpa");
+  AE_EXPECT_EQ(effectiveTexture(session, object, 0), variant, "mesma textura publicada pelo material compartilhado");
+  resources::MaterialAsset roundTrip;
+  AE_EXPECT_TRUE(resources::MaterialAsset::deserialize(session.findMaterialAsset(shared)->serialize(), roundTrip) &&
+                 roundTrip.sampling[0] == clamped, "MaterialAsset v4 volta igual");
+
+  AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");
+  AE_EXPECT_EQ(effectiveMaterial(session, object).uvSets[0], scene::MaterialUvKeep, "UV volta à fonte");
 }

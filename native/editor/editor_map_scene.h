@@ -2,6 +2,7 @@
 #include "editor/editor_document.h"
 #include "runtime/transform_math.h"
 #include "renderer/map_draw_update.h"
+#include "renderer/authoring_texture.h"
 #include "editor/editor_view.h"
 #include "resources/asset_registry.h"
 
@@ -70,6 +71,7 @@ public:
     scene::MaterialParameters values;
     scene::SlotTextures textures{};
     scene::MaterialSurface surface{};
+    scene::SlotSampling sampling{};
   };
   void setMaterialLibrary(std::vector<std::pair<resources::AssetGuid,SharedMaterial>> library) {materialLibrary_=std::move(library);}
   const SharedMaterial *sharedMaterial(const resources::AssetGuid &guid) const {
@@ -83,22 +85,50 @@ public:
   }
   // R4: texturas do PROJETO publicadas na biblioteca, por identidade e espaço de
   // cor (a mesma imagem usada como cor e como dado vira duas texturas).
+  // A mesma imagem com outro sampler (repetição, filtro) também vira outra
+  // textura publicada: o sampler mora na textura, não no material.
   struct TextureBinding {
     resources::AssetGuid guid;
     bool srgb=true;
+    u32 sampler=DefaultTextureSampler;
     u32 index=0; // posição na lista de texturas da biblioteca publicada
   };
+  static constexpr u32 DefaultTextureSampler=renderer::AuthoringTextureLinearFilter|renderer::AuthoringTextureLinearMip|
+                                             renderer::AuthoringTextureRepeatU|renderer::AuthoringTextureRepeatV;
+  // Flags de sampler de uma textura do projeto com a amostragem pedida; herdar
+  // mantém o padrão (linear com mips, repetindo).
+  static u32 samplerFlags(const scene::MaterialSampling &sampling) {
+    u32 flags=DefaultTextureSampler;
+    if(sampling.wrap==scene::MaterialWrapClamp) flags&=~(renderer::AuthoringTextureRepeatU|renderer::AuthoringTextureRepeatV);
+    else if(sampling.wrap==scene::MaterialWrapMirror) flags|=renderer::AuthoringTextureMirrorU|renderer::AuthoringTextureMirrorV;
+    if(sampling.filter==scene::MaterialFilterNearest) flags&=~(renderer::AuthoringTextureLinearFilter|renderer::AuthoringTextureLinearMip);
+    return flags;
+  }
   void setTextureLibrary(std::vector<TextureBinding> library) {textureLibrary_=std::move(library);}
   const std::vector<TextureBinding> &textureLibrary() const {return textureLibrary_;}
   // Cor base e emissão são cor (sRGB); normal e metálico/rugosidade são dados.
   static bool bindingIsSrgb(u32 binding) {return binding==0 || binding==3;}
   // Índice publicado de uma identidade num binding. Identidade que ainda não
   // foi publicada devolve "herdar": a textura da fonte fica até a publicação.
-  u32 resolveTexture(const resources::AssetGuid &guid,u32 binding) const {
+  u32 resolveTexture(const resources::AssetGuid &guid,u32 binding,u32 sampler=DefaultTextureSampler) const {
     if(guid==scene::MaterialTextureNone) return renderer::InvalidMapTexture;
     if(!guid.valid()) return scene::MaterialTextureKeep;
-    for(const auto &entry:textureLibrary_) if(entry.guid==guid && entry.srgb==bindingIsSrgb(binding)) return entry.index;
+    for(const auto &entry:textureLibrary_)
+      if(entry.guid==guid && entry.srgb==bindingIsSrgb(binding) && entry.sampler==sampler) return entry.index;
     return scene::MaterialTextureKeep;
+  }
+  // R4: amostragem efetiva de um binding, campo a campo: instância, senão
+  // material compartilhado, senão herdar (a fonte decide).
+  scene::MaterialSampling slotSampling(const scene::MeshRenderer &render,u32 slot,u32 binding) const {
+    if(binding>=scene::MaterialTextureCount) return {};
+    auto result=render.slotSampling(slot)[binding];
+    if(const auto *shared=sharedMaterial(render.slotMaterialAsset(slot))) {
+      const auto &inherited=shared->sampling[binding];
+      if(result.uvSet==scene::MaterialUvKeep) result.uvSet=inherited.uvSet;
+      if(result.wrap==scene::MaterialWrapKeep) result.wrap=inherited.wrap;
+      if(result.filter==scene::MaterialFilterKeep) result.filter=inherited.filter;
+    }
+    return result;
   }
   // Identidade efetiva de um binding: a trocada nesta instância, senão a do
   // material compartilhado, senão nenhuma (vale a da fonte).
@@ -118,8 +148,11 @@ public:
     if(!local.enabled)
       if(const auto *shared=materialAsset(render.slotMaterialAsset(slot))) {value=*shared;value.enabled=true;}
     value=scene::withoutResolvedTextures(value);
-    for(u32 binding=0;binding<scene::MaterialTextureCount;++binding)
-      value.textures[binding]=resolveTexture(slotTexture(render,slot,binding),binding);
+    for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {
+      const auto sampling=slotSampling(render,slot,binding);
+      value.textures[binding]=resolveTexture(slotTexture(render,slot,binding),binding,samplerFlags(sampling));
+      value.uvSets[binding]=sampling.uvSet;
+    }
     const auto surface=slotSurface(render,slot);
     value.alphaMode=surface.alphaMode;value.sides=surface.sides;value.alphaCutoff=surface.alphaCutoff;
     return value;

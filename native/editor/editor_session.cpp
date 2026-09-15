@@ -1080,6 +1080,25 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       state_.texturePicker=true;state_.materialPicker=false;state_.meshPage=0;return true;
     }
     if(key==widgetId(EditorWidget::TexturePickerClose)) {state_.texturePicker=false;return true;}
+    // R4: amostragem do binding aberto no seletor, no alcance em edição.
+    if(key==widgetId(EditorWidget::TextureSamplingUv) || key==widgetId(EditorWidget::TextureSamplingWrap) ||
+       key==widgetId(EditorWidget::TextureSamplingFilter)) {
+      const auto *entity=document_.find(state_.selection);
+      const auto *render=entity?meshRenderer(*entity):nullptr;
+      if(!render || state_.textureBinding>=scene::MaterialTextureCount) return true;
+      const bool shared=state_.materialShared;
+      const auto *asset=findMaterialAsset(render->slotMaterialAsset(state_.materialSlot));
+      if(shared && !asset) {state_.status="Este slot usa o material da fonte: crie um material do projeto para editar todos os usos";return true;}
+      auto sampling=shared?asset->sampling[state_.textureBinding]:render->slotSampling(state_.materialSlot)[state_.textureBinding];
+      if(key==widgetId(EditorWidget::TextureSamplingUv)) sampling.uvSet=static_cast<std::uint8_t>((sampling.uvSet+1)%3);
+      else if(key==widgetId(EditorWidget::TextureSamplingWrap)) sampling.wrap=static_cast<std::uint8_t>((sampling.wrap+1)%4);
+      else sampling.filter=static_cast<std::uint8_t>((sampling.filter+1)%3);
+      std::string diagnostic;
+      state_.status=setSlotSampling(state_.selection,state_.materialSlot,state_.textureBinding,
+                                    shared?MaterialScope::Shared:MaterialScope::Instance,sampling,diagnostic)?
+          (shared?"Amostragem compartilhada atualizada em todos os usos":"Amostragem desta instância atualizada"):diagnostic;
+      return true;
+    }
     // R4: visualizador de textura.
     if(key>=widgetId(EditorWidget::TextureViewBase) && key-widgetId(EditorWidget::TextureViewBase)<textures_.size()) {
       if(!openTextureViewer(key-widgetId(EditorWidget::TextureViewBase))) state_.status=state_.textureViewerInfo;
@@ -1859,11 +1878,11 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   // biblioteca das fontes; a tabela de bindings diz onde cada uma ficou.
   std::vector<EditorMapScene::TextureBinding> bindings;
   {
-    std::vector<std::pair<resources::AssetGuid,bool>> used;
+    std::vector<UsedTexture> used;
     collectUsedTextures(used);
-    for(const auto &[guid,srgb]:used)
-      if(auto decoded=decodeProjectTexture(guid,srgb)) {
-        bindings.push_back({guid,srgb,static_cast<u32>(textures.size())});
+    for(const auto &item:used)
+      if(auto decoded=decodeProjectTexture(item.guid,item.srgb,item.sampler)) {
+        bindings.push_back({item.guid,item.srgb,item.sampler,static_cast<u32>(textures.size())});
         textures.push_back(std::move(decoded));
       }
   }
@@ -2036,12 +2055,13 @@ void EditorSession::anticipateSceneTextures(const char *path,u64 fingerprint) {
     if(!render) continue;
     for(u32 slot=0;slot<render->slotCount();++slot)
       for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {
-        const auto &guid=render->slotTextures(slot)[binding];
+        // Mesma resolução da extração: textura e amostragem da instância, senão do material.
+        const auto guid=mapScene_.slotTexture(*render,slot,binding);
         if(!guid.valid() || guid==scene::MaterialTextureNone) continue;
-        const bool srgb=EditorMapScene::bindingIsSrgb(binding);
-        if(std::none_of(anticipatedTextures_.begin(),anticipatedTextures_.end(),
-                        [&](const auto &item){return item.first==guid && item.second==srgb;}))
-          anticipatedTextures_.emplace_back(guid,srgb);
+        const UsedTexture item{guid,EditorMapScene::bindingIsSrgb(binding),
+                               EditorMapScene::samplerFlags(mapScene_.slotSampling(*render,slot,binding))};
+        if(std::find(anticipatedTextures_.begin(),anticipatedTextures_.end(),item)==anticipatedTextures_.end())
+          anticipatedTextures_.push_back(item);
       }
   }
 }
@@ -2908,6 +2928,29 @@ void EditorSession::refreshMaterialSlotView() {
       view.textureNames[binding]=project?project->name:std::string("Textura ausente");
     } else view.textureNames[binding]="Textura da fonte";
     view.textureOrigins[binding]=origin;
+    // R4: amostragem no alcance em edição; herdar mostra o que vale por baixo.
+    const scene::MaterialSampling noSampling{};
+    const auto &sharedSampling=shared?shared->sampling[binding]:noSampling;
+    const auto &edited=state_.materialShared?sharedSampling:render->slotSampling(slot)[binding];
+    auto effective=edited;
+    if(!state_.materialShared) {
+      if(effective.uvSet==scene::MaterialUvKeep) effective.uvSet=sharedSampling.uvSet;
+      if(effective.wrap==scene::MaterialWrapKeep) effective.wrap=sharedSampling.wrap;
+      if(effective.filter==scene::MaterialFilterKeep) effective.filter=sharedSampling.filter;
+    }
+    if(effective.overrides()) view.textureOrigins[binding]+=" · amostragem própria";
+    if(binding==state_.textureBinding) {
+      static constexpr const char *uvNames[]{"da fonte","UV 0","UV 1"};
+      static constexpr const char *wrapNames[]{"da fonte","Repetir","Limitar","Espelhar"};
+      static constexpr const char *filterNames[]{"da fonte","Linear","Próximo"};
+      const auto label=[](const char *prefix,const char *const *names,std::uint8_t own,std::uint8_t inherited) {
+        return std::string(prefix)+(own?names[own]:inherited?std::string("herda ")+names[inherited]:std::string("Herdar"));
+      };
+      state_.textureUvLabel=label("UV: ",uvNames,edited.uvSet,effective.uvSet);
+      state_.textureWrapLabel=label("Rep.: ",wrapNames,edited.wrap,effective.wrap);
+      state_.textureFilterLabel=label("Filtro: ",filterNames,edited.filter,effective.filter);
+      state_.textureSamplerEditable=texture.valid() && texture!=scene::MaterialTextureNone;
+    }
   }
   for(u32 field=0;field<scene::meshRendererNumbers.size() && field<std::size(view.values);++field)
     view.values[field]=scene::meshRendererNumbers[field].read(probe);
@@ -2916,7 +2959,8 @@ void EditorSession::refreshMaterialSlotView() {
 void EditorSession::publishMaterialLibrary() {
   std::vector<std::pair<resources::AssetGuid,EditorMapScene::SharedMaterial>> library;
   library.reserve(materials_.size());
-  for(const auto &material:materials_) library.push_back({material.guid,{material.values,material.textures,material.surface}});
+  for(const auto &material:materials_)
+    library.push_back({material.guid,{material.values,material.textures,material.surface,material.sampling}});
   mapScene_.setMaterialLibrary(std::move(library));
   appearanceChanged_=true;
 }
@@ -2949,11 +2993,16 @@ void EditorSession::loadTextureAssets() {
   }
 }
 
-renderer::SharedAuthoringTexture EditorSession::decodeProjectTexture(const resources::AssetGuid &guid,bool srgb) {
+renderer::SharedAuthoringTexture EditorSession::decodeProjectTexture(const resources::AssetGuid &guid,bool srgb,u32 sampler) {
   const auto *record=assets_.find(guid);
   if(!record || record->type!=resources::AssetType::Texture) return {};
+  renderer::SharedAuthoringTexture base;
   for(const auto &entry:decodedTextures_)
-    if(entry.guid==guid && entry.srgb==srgb && entry.contentHash==record->contentHash) return entry.texture;
+    if(entry.guid==guid && entry.srgb==srgb && entry.contentHash==record->contentHash) {
+      if(entry.sampler==sampler) return entry.texture;
+      base=entry.texture;
+    }
+  if(!base) {
   const auto root=files_.rootPath();
   std::filesystem::path absolute;std::vector<u8> bytes;std::string diagnostic;resources::DecodedImage image;
   if(root.empty() || !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),record->path,absolute) ||
@@ -2974,43 +3023,52 @@ renderer::SharedAuthoringTexture EditorSession::decodeProjectTexture(const resou
   }
   if(!texture->valid()) return {};
   std::erase_if(decodedTextures_,[&](const auto &entry){return entry.guid==guid && entry.srgb==srgb;});
-  decodedTextures_.push_back({guid,srgb,record->contentHash,texture});
-  return texture;
+  decodedTextures_.push_back({guid,srgb,texture->samplerFlags,record->contentHash,texture});
+  base=texture;
+  }
+  if(base->samplerFlags==sampler) return base;
+  // Outro sampler para a mesma imagem: cópia da cadeia com as flags pedidas. A
+  // cadeia fica duplicada na CPU e na GPU enquanto as duas amostragens forem usadas.
+  auto variant=std::make_shared<renderer::AuthoringTexture>(*base);
+  variant->samplerFlags=sampler;
+  decodedTextures_.push_back({guid,srgb,sampler,record->contentHash,variant});
+  return variant;
 }
 
-void EditorSession::collectUsedTextures(std::vector<std::pair<resources::AssetGuid,bool>> &out) const {
+void EditorSession::collectUsedTextures(std::vector<UsedTexture> &out) const {
   out.clear();
-  const auto add=[&](const resources::AssetGuid &guid,u32 binding) {
+  const auto add=[&](const resources::AssetGuid &guid,u32 binding,const scene::MaterialSampling &sampling) {
     if(!guid.valid() || guid==scene::MaterialTextureNone) return;
-    const bool srgb=EditorMapScene::bindingIsSrgb(binding);
-    for(const auto &[known,space]:out) if(known==guid && space==srgb) return;
-    out.emplace_back(guid,srgb);
+    const UsedTexture item{guid,EditorMapScene::bindingIsSrgb(binding),EditorMapScene::samplerFlags(sampling)};
+    if(std::find(out.begin(),out.end(),item)==out.end()) out.push_back(item);
   };
   for(const auto &material:materials_)
-    for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) add(material.textures[binding],binding);
+    for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) add(material.textures[binding],binding,material.sampling[binding]);
   // Texturas da cena que ainda vai ser aberta (reabertura do projeto).
-  for(const auto &[guid,srgb]:anticipatedTextures_) {
-    bool known=false;
-    for(const auto &[existing,space]:out) if(existing==guid && space==srgb) {known=true;break;}
-    if(!known) out.emplace_back(guid,srgb);
-  }
+  for(const auto &item:anticipatedTextures_)
+    if(std::find(out.begin(),out.end(),item)==out.end()) out.push_back(item);
   std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
   for(const auto id:ids) {
     const auto *entity=document_.find(id);
     const auto *render=entity?meshRenderer(*entity):nullptr;
     if(!render) continue;
+    // Combinação efetiva de cada binding: a textura pode vir do material e a
+    // amostragem da instância, e é essa textura com esse sampler que sobe.
     for(u32 slot=0;slot<render->slotCount();++slot)
-      for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) add(render->slotTextures(slot)[binding],binding);
+      for(u32 binding=0;binding<scene::MaterialTextureCount;++binding)
+        add(mapScene_.slotTexture(*render,slot,binding),binding,mapScene_.slotSampling(*render,slot,binding));
   }
 }
 
 bool EditorSession::ensureTexturesPublished(std::string &diagnostic) {
   if(importedSources_.empty()) return true;
-  std::vector<std::pair<resources::AssetGuid,bool>> used;
+  std::vector<UsedTexture> used;
   collectUsedTextures(used);
   const auto &published=mapScene_.textureLibrary();
   const bool complete=std::all_of(used.begin(),used.end(),[&](const auto &item) {
-    return std::any_of(published.begin(),published.end(),[&](const auto &entry){return entry.guid==item.first && entry.srgb==item.second;});
+    return std::any_of(published.begin(),published.end(),[&](const auto &entry){
+      return entry.guid==item.guid && entry.srgb==item.srgb && entry.sampler==item.sampler;
+    });
   });
   // Publicar de novo custa uma reconstrução da biblioteca (R2 ainda não publica
   // textura incremental); só acontece quando falta alguma textura na GPU.
@@ -3147,6 +3205,41 @@ bool EditorSession::setSlotSurface(EditorEntityId id,u32 slot,MaterialScope scop
   return true;
 }
 
+bool EditorSession::setSlotSampling(EditorEntityId id,u32 slot,u32 binding,MaterialScope scope,const scene::MaterialSampling &sampling,
+                                    std::string &diagnostic) {
+  diagnostic.clear();
+  const auto *entity=document_.find(id);
+  const auto *render=entity?meshRenderer(*entity):nullptr;
+  if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de mudar a amostragem.";return false;}
+  if(!render || slot>=render->slotCount() || binding>=scene::MaterialTextureCount) {diagnostic="Binding de textura inexistente.";return false;}
+  if(!scene::validMaterialSampling(sampling)) {diagnostic="Conjunto de UV, repetição ou filtro inválido.";return false;}
+  if(scope==MaterialScope::Shared) {
+    const auto guid=render->slotMaterialAsset(slot);
+    auto found=std::find_if(materials_.begin(),materials_.end(),[&](const auto &material){return material.guid==guid;});
+    if(!guid.valid() || found==materials_.end()) {
+      diagnostic="Este slot usa o material da fonte; crie um material do projeto para editar todos os usos.";return false;
+    }
+    const auto *record=assets_.find(guid);
+    if(!record) {diagnostic="Material fora do registro.";return false;}
+    auto candidate=*found;
+    candidate.sampling[binding]=sampling;++candidate.revision;
+    if(!candidate.valid() || !writeMaterialAsset(candidate,record->path,diagnostic)) return false;
+    const auto serialized=candidate.serialize();
+    assets_.publishImport(guid,Sha256::hex(std::span<const u8>(reinterpret_cast<const u8 *>(serialized.data()),serialized.size())),0,"",{},{});
+    assetRegistryDirty_=true;
+    *found=std::move(candidate);
+    publishMaterialLibrary();
+  } else {
+    auto values=*entity;
+    (*editMeshRenderer(values)->editSlotSampling(slot))[binding]=sampling;
+    if(!history_.applyValues(document_,id,values)) {diagnostic="O histórico recusou a troca de amostragem.";return false;}
+  }
+  // Outro sampler numa textura do projeto pode pedir uma textura publicada nova.
+  std::string publish;
+  if(!ensureTexturesPublished(publish)) {diagnostic="Amostragem trocada, mas a publicação falhou: "+publish;return false;}
+  return true;
+}
+
 void EditorSession::loadMaterialAssets() {
   loadTextureAssets();
   materials_.clear();
@@ -3210,6 +3303,7 @@ resources::AssetGuid EditorSession::createMaterialFromSlot(EditorEntityId id,u32
   // material compartilhado) vão para o recurso novo.
   for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) material.textures[binding]=mapScene_.slotTexture(*render,slot,binding);
   material.surface=mapScene_.slotSurface(*render,slot);
+  for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) material.sampling[binding]=mapScene_.slotSampling(*render,slot,binding);
   std::string stem;
   for(unsigned char c:material.name) stem.push_back(c<32 || c==127 || c=='/' || c=='\\' || c==':' || c=='"' ? '_' : static_cast<char>(c));
   if(stem.empty() || stem=="." || stem=="..") stem="Material";
@@ -3236,6 +3330,7 @@ resources::AssetGuid EditorSession::createMaterialFromSlot(EditorEntityId id,u32
   edit->editSlotMaterial(slot)->enabled=false;
   *edit->editSlotTextures(slot)={};
   *edit->editSlotSurface(slot)={};
+  *edit->editSlotSampling(slot)={};
   history_.applyValues(document_,id,values);
   state_.status="Material do projeto criado: "+path;
   return material.guid;

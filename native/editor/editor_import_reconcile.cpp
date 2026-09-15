@@ -56,6 +56,7 @@ bool slotCarriesMaterial(const scene::MeshRenderer &render, u32 slot) {
   // R4: textura trocada nesta instância também é dado local do slot.
   for (const auto &texture : render.slotTextures(slot)) if (texture.valid()) return true;
   if (render.slotSurface(slot).overrides()) return true;
+  for (const auto &sampling : render.slotSampling(slot)) if (sampling.overrides()) return true;
   return false;
 }
 
@@ -407,6 +408,7 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
           *render->editSlotMaterialAsset(slot) = partRender->materialAsset;
           *render->editSlotTextures(slot) = partRender->textures;
           *render->editSlotSurface(slot) = partRender->surface;
+          *render->editSlotSampling(slot) = partRender->sampling;
         }
         base.push_back(linkOf(part)->baseAsset);
       }
@@ -645,6 +647,7 @@ bool revertImportOverrides(EditorDocument &document, EditorHistory &history, Edi
         *render->editSlotMaterialAsset(slot) = {};
         *render->editSlotTextures(slot) = {};
         *render->editSlotSurface(slot) = {};
+        *render->editSlotSampling(slot) = {};
       }
   history.begin("Reverter à fonte");
   bool ok = history.applyValues(document, id, values);

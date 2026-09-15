@@ -20,6 +20,17 @@ inline bool parseMaterialTextureToken(const std::string &text,resources::AssetGu
   if(text=="none") {out=MaterialTextureNone;return true;}
   return resources::AssetGuid::parse(text,out);
 }
+// R4: amostragem de cada binding. No arquivo: três dígitos "uvf" (UV, repetição, filtro; 0 herda).
+using SlotSampling=std::array<MaterialSampling,MaterialTextureCount>;
+inline std::string materialSamplingToken(const MaterialSampling &value) {
+  return {static_cast<char>('0'+value.uvSet),static_cast<char>('0'+value.wrap),static_cast<char>('0'+value.filter)};
+}
+inline bool parseMaterialSamplingToken(const std::string &text,MaterialSampling &out) {
+  if(text.size()!=3) return false;
+  for(char c:text) if(c<'0' || c>'9') return false;
+  out={static_cast<std::uint8_t>(text[0]-'0'),static_cast<std::uint8_t>(text[1]-'0'),static_cast<std::uint8_t>(text[2]-'0')};
+  return validMaterialSampling(out);
+}
 
 // Um slot de submesh além do primeiro (M07/M08, Entrega 2).
 //
@@ -35,9 +46,10 @@ struct MeshSubmesh {
   MaterialParameters material;
   SlotTextures textures{};
   MaterialSurface surface{};
+  SlotSampling sampling{};
   friend bool operator==(const MeshSubmesh &a, const MeshSubmesh &b) {
     return a.mesh == b.mesh && a.asset == b.asset && a.materialAsset == b.materialAsset && a.material == b.material &&
-           a.textures == b.textures && a.surface == b.surface;
+           a.textures == b.textures && a.surface == b.surface && a.sampling == b.sampling;
   }
 };
 
@@ -73,6 +85,15 @@ public:
     return slot ? (slot - 1 < submeshes.size() ? &submeshes[slot - 1].surface : nullptr) : &surface;
   }
   std::vector<MeshSubmesh> submeshes;
+  // R4: amostragem trocada nesta instância, por binding, do slot 0.
+  SlotSampling sampling{};
+  const SlotSampling &slotSampling(u32 slot) const noexcept {
+    static const SlotSampling none{};
+    return slot ? (slot - 1 < submeshes.size() ? submeshes[slot - 1].sampling : none) : sampling;
+  }
+  SlotSampling *editSlotSampling(u32 slot) noexcept {
+    return slot ? (slot - 1 < submeshes.size() ? &submeshes[slot - 1].sampling : nullptr) : &sampling;
+  }
 
   const SlotTextures &slotTextures(u32 slot) const noexcept {
     static const SlotTextures none{};
@@ -118,6 +139,8 @@ public:
     if(!validMaterial(material) || submeshes.size()>MaximumSubmeshes) return false;
     if(!validMaterialSurface(surface)) return false;
     for(const auto &slot:submeshes) if(!validMaterial(slot.material) || !validMaterialSurface(slot.surface)) return false;
+    for(u32 slot=0;slot<slotCount();++slot)
+      for(const auto &value:slotSampling(slot)) if(!validMaterialSampling(value)) return false;
     return true;
   }
   void write(std::ostream &out) const override {
@@ -140,6 +163,9 @@ public:
       const auto &value=slotSurface(slot);
       out<<' '<<static_cast<unsigned>(value.alphaMode)<<' '<<static_cast<unsigned>(value.sides)<<' '<<value.alphaCutoff;
     }
+    // v6: amostragem de cada binding de cada slot.
+    for(u32 slot=0;slot<slotCount();++slot)
+      for(const auto &value:slotSampling(slot)) out<<' '<<materialSamplingToken(value);
     out<<' ';
   }
   bool read(std::istream &in,u32 version) override {
@@ -150,10 +176,10 @@ public:
       return text=="-" || resources::AssetGuid::parse(text,out);
     };
     bool overridden=false;
-    if(version<1 || version>5 || !(in>>mesh>>enabled>>overridden)) return false;
+    if(version<1 || version>6 || !(in>>mesh>>enabled>>overridden)) return false;
     for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
     material.enabled=overridden;
-    asset={};materialAsset={};textures={};surface={};submeshes.clear();
+    asset={};materialAsset={};textures={};surface={};sampling={};submeshes.clear();
     if(version>=2) {
       std::string guid;
       if(!(in>>guid) || !parse(guid,asset)) return false;
@@ -186,6 +212,13 @@ public:
         if(!validMaterialSurface(*editSlotSurface(slot))) return false;
       }
     }
+    if(version>=6) {
+      for(u32 slot=0;slot<slotCount();++slot)
+        for(auto &value:*editSlotSampling(slot)) {
+          std::string token;
+          if(!(in>>token) || !parseMaterialSamplingToken(token,value)) return false;
+        }
+    }
     return true;
   }
 };
@@ -208,6 +241,6 @@ inline constexpr std::array<ComponentBoolean,1> meshRendererBooleans{{
   {"enabled","Renderizar",[](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).enabled;},[](ComponentValue &v,bool b){static_cast<MeshRenderer&>(v).enabled=b;}}
 }};
 inline const ComponentType MeshRenderer::descriptor{
-  "astra.render.mesh",5,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
+  "astra.render.mesh",6,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
 };
 }

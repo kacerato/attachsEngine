@@ -9,6 +9,7 @@ namespace ae::resources {
 bool MaterialAsset::valid() const {
   if (!guid.valid() || !revision || name.empty() || name.size() > 128) return false;
   for (unsigned char c : name) if (c < 32 || c == 127) return false;
+  for (const auto &value : sampling) if (!scene::validMaterialSampling(value)) return false;
   return scene::MeshRenderer::validMaterial(values) && scene::validMaterialSurface(surface);
 }
 
@@ -24,6 +25,7 @@ std::string MaterialAsset::serialize() const {
   for (const auto &number : scene::MeshRenderer::descriptor.numbers) out << ' ' << number.read(probe);
   for (const auto &texture : textures) out << ' ' << scene::materialTextureToken(texture);
   out << ' ' << static_cast<unsigned>(surface.alphaMode) << ' ' << static_cast<unsigned>(surface.sides) << ' ' << surface.alphaCutoff;
+  for (const auto &value : sampling) out << ' ' << scene::materialSamplingToken(value);
   out << '\n';
   return out.str();
 }
@@ -53,6 +55,11 @@ bool MaterialAsset::deserialize(std::string_view text, MaterialAsset &out) {
     if (!(in >> alpha >> sides >> cutoff) || alpha > scene::MaterialAlphaBlend || sides > scene::MaterialSidesDouble) return false;
     candidate.surface = {static_cast<std::uint8_t>(alpha), static_cast<std::uint8_t>(sides), cutoff};
   }
+  if (version >= 4)
+    for (auto &value : candidate.sampling) {
+      std::string token;
+      if (!(in >> token) || !scene::parseMaterialSamplingToken(token, value)) return false;
+    }
   in >> std::ws;
   if (!in.eof() || !candidate.valid()) return false;
   out = std::move(candidate);

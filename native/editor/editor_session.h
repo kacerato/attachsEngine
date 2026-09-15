@@ -540,6 +540,9 @@ public:
   // `scene::MaterialTextureNone` tira a textura.
   // R4: modo de alfa, corte e faces do slot, no mesmo contrato de alcance.
   bool setSlotSurface(EditorEntityId id,u32 slot,MaterialScope scope,const scene::MaterialSurface &surface,std::string &diagnostic);
+  // R4: conjunto de UV, repetição e filtro de um binding, na instância ou no material do projeto.
+  bool setSlotSampling(EditorEntityId id,u32 slot,u32 binding,MaterialScope scope,const scene::MaterialSampling &sampling,
+                       std::string &diagnostic);
   bool setSlotTexture(EditorEntityId id,u32 slot,u32 binding,MaterialScope scope,const resources::AssetGuid &texture,
                       std::string &diagnostic);
   // Nome do material da FONTE usado pela primitiva de identidade `draw`.
@@ -750,11 +753,21 @@ private:
   struct DecodedProjectTexture {
     resources::AssetGuid guid;
     bool srgb=true;
+    u32 sampler=EditorMapScene::DefaultTextureSampler;
     std::string contentHash;
     renderer::SharedAuthoringTexture texture;
   };
   std::vector<DecodedProjectTexture> decodedTextures_;
-  std::vector<std::pair<resources::AssetGuid,bool>> anticipatedTextures_;
+  // Textura do projeto como sobe para a GPU: identidade, espaço de cor e sampler.
+  struct UsedTexture {
+    resources::AssetGuid guid;
+    bool srgb=true;
+    u32 sampler=EditorMapScene::DefaultTextureSampler;
+    friend bool operator==(const UsedTexture &a,const UsedTexture &b) {
+      return a.guid==b.guid && a.srgb==b.srgb && a.sampler==b.sampler;
+    }
+  };
+  std::vector<UsedTexture> anticipatedTextures_;
   TexturePreviewAtlas preview_;
   struct TextureThumbnail {
     resources::AssetGuid guid;
@@ -775,9 +788,10 @@ private:
   void loadTextureAssets();
   // Textura do projeto decodificada com mips para um espaço de cor, em cache
   // enquanto o conteúdo registrado não muda. Nula quando o arquivo não abre.
-  renderer::SharedAuthoringTexture decodeProjectTexture(const resources::AssetGuid &guid,bool srgb);
+  renderer::SharedAuthoringTexture decodeProjectTexture(const resources::AssetGuid &guid,bool srgb,
+                                                        u32 sampler=EditorMapScene::DefaultTextureSampler);
   // Pares (textura, sRGB) usados por slots da cena e por materiais do projeto.
-  void collectUsedTextures(std::vector<std::pair<resources::AssetGuid,bool>> &out) const;
+  void collectUsedTextures(std::vector<UsedTexture> &out) const;
   // Publica de novo só se alguma textura usada ainda não está na biblioteca.
   bool ensureTexturesPublished(std::string &diagnostic);
   void refreshMaterialSlotView();

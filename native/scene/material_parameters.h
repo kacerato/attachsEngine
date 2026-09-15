@@ -29,6 +29,26 @@ inline bool validMaterialSurface(const MaterialSurface &surface) {
          std::isfinite(surface.alphaCutoff) && surface.alphaCutoff>=0 && surface.alphaCutoff<=1;
 }
 
+// R4: amostragem de um binding. `Keep` herda (do material compartilhado, senão da
+// fonte). O conjunto de UV vale para qualquer textura do binding; repetição e
+// filtro são o sampler da textura publicada e só valem para textura do PROJETO
+// (a da fonte já sobe com o sampler que o arquivo pediu).
+inline constexpr std::uint8_t MaterialUvKeep=0,MaterialUv0=1,MaterialUv1=2;
+inline constexpr std::uint8_t MaterialWrapKeep=0,MaterialWrapRepeat=1,MaterialWrapClamp=2,MaterialWrapMirror=3;
+inline constexpr std::uint8_t MaterialFilterKeep=0,MaterialFilterLinear=1,MaterialFilterNearest=2;
+struct MaterialSampling {
+  std::uint8_t uvSet=MaterialUvKeep;
+  std::uint8_t wrap=MaterialWrapKeep;
+  std::uint8_t filter=MaterialFilterKeep;
+  bool overrides() const noexcept {return uvSet!=MaterialUvKeep || wrap!=MaterialWrapKeep || filter!=MaterialFilterKeep;}
+  friend bool operator==(const MaterialSampling &a,const MaterialSampling &b) {
+    return a.uvSet==b.uvSet && a.wrap==b.wrap && a.filter==b.filter;
+  }
+};
+inline bool validMaterialSampling(const MaterialSampling &sampling) {
+  return sampling.uvSet<=MaterialUv1 && sampling.wrap<=MaterialWrapMirror && sampling.filter<=MaterialFilterNearest;
+}
+
 // Authored scalar overrides. Resource textures and pipeline selection remain
 // with the referenced material; this value has no renderer dependency.
 //
@@ -45,13 +65,15 @@ struct MaterialParameters {
   std::uint32_t textures[MaterialTextureCount]{MaterialTextureKeep,MaterialTextureKeep,MaterialTextureKeep,MaterialTextureKeep};
   std::uint8_t alphaMode=MaterialAlphaKeep,sides=MaterialSidesKeep;
   float alphaCutoff=.5f;
+  // Conjunto de UV resolvido por binding (MaterialUvKeep, MaterialUv0, MaterialUv1).
+  std::uint8_t uvSets[MaterialTextureCount]{};
   // Comparação por valor, não por bytes: a struct tem padding depois do bool, e
   // um memcmp acusaria diferença onde não existe nenhuma.
   friend bool operator==(const MaterialParameters &a,const MaterialParameters &b) {
     if(a.enabled!=b.enabled || a.roughness!=b.roughness || a.metallic!=b.metallic ||
        a.normalScale!=b.normalScale || a.specular!=b.specular || a.emissionStrength!=b.emissionStrength) return false;
     for(int i=0;i<3;++i) if(a.baseColor[i]!=b.baseColor[i] || a.emission[i]!=b.emission[i]) return false;
-    for(std::uint32_t i=0;i<MaterialTextureCount;++i) if(a.textures[i]!=b.textures[i]) return false;
+    for(std::uint32_t i=0;i<MaterialTextureCount;++i) if(a.textures[i]!=b.textures[i] || a.uvSets[i]!=b.uvSets[i]) return false;
     return a.alphaMode==b.alphaMode && a.sides==b.sides && a.alphaCutoff==b.alphaCutoff;
   }
   friend bool operator!=(const MaterialParameters &a,const MaterialParameters &b) {return !(a==b);}
@@ -60,6 +82,7 @@ struct MaterialParameters {
 // faces): é o que se guarda num componente ou num MaterialAsset.
 inline MaterialParameters withoutResolvedTextures(MaterialParameters value) {
   for(auto &texture:value.textures) texture=MaterialTextureKeep;
+  for(auto &set:value.uvSets) set=MaterialUvKeep;
   value.alphaMode=MaterialAlphaKeep;value.sides=MaterialSidesKeep;value.alphaCutoff=.5f;
   return value;
 }

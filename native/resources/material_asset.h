@@ -17,16 +17,18 @@ namespace ae::resources {
 // Versão 1: fatores escalares (cor, rugosidade, metálico, normal, especular,
 // emissão). Versão 2 (R4): mais as texturas dos quatro bindings por identidade
 // de recurso de textura — "-" herda a da fonte, "none" tira. Versão 3 (R4): mais
-// modo de alfa, faces e corte (0 herda). Arquivos antigos leem sem essas trocas;
-// gravar sempre escreve a versão atual.
+// modo de alfa, faces e corte (0 herda). Versão 4 (R4): mais a amostragem de cada
+// binding (UV, repetição, filtro; "000" herda). Arquivos antigos leem sem essas
+// trocas; gravar sempre escreve a versão atual.
 struct MaterialAsset {
-  static constexpr u32 FormatVersion = 3;
+  static constexpr u32 FormatVersion = 4;
   AssetGuid guid;
   u32 revision = 1;
   std::string name;
   scene::MaterialParameters values;
   std::array<AssetGuid, scene::MaterialTextureCount> textures{};
   scene::MaterialSurface surface{};
+  std::array<scene::MaterialSampling, scene::MaterialTextureCount> sampling{};
   bool valid() const;
   std::string serialize() const;
   static bool deserialize(std::string_view text, MaterialAsset &out);

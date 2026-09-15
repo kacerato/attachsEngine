@@ -757,6 +757,24 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
   builder.router.addRegion(back,widgetId(EditorWidget::TexturePickerClose));
   builder.label(title,std::string("Textura de ")+bindings[std::min(state.textureBinding,scene::MaterialTextureCount-1)]+
                 (state.materialShared?" · compartilhado":" · esta instância"),theme.color.text,theme.type.caption);
+  // R4: amostragem do binding. O conjunto de UV vale para qualquer textura;
+  // repetição e filtro são o sampler da textura do projeto e não recebem toque
+  // quando o binding usa a textura da fonte.
+  if(content.height>=40) {
+    auto sampling=takeTop(content,40);
+    const float third=sampling.width/3;
+    const auto button=[&](UiRect box,const std::string &text,bool enabled,u32 widget) {
+      box=deflate(box,UiInsets::all(2));
+      builder.list.addRect(box,theme.color.raised,theme.radius.control);
+      builder.label(box,text,enabled?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      if(enabled) builder.router.addRegion(box,widget);
+    };
+    button(takeLeft(sampling,third),state.textureUvLabel,true,widgetId(EditorWidget::TextureSamplingUv));
+    button(takeLeft(sampling,third),state.textureWrapLabel,state.textureSamplerEditable,widgetId(EditorWidget::TextureSamplingWrap));
+    button(sampling,state.textureFilterLabel,state.textureSamplerEditable,widgetId(EditorWidget::TextureSamplingFilter));
+    if(!state.textureSamplerEditable && content.height>=22)
+      builder.label(takeTop(content,22),"Repetição e filtro valem só com textura do projeto",theme.color.textMuted,theme.type.caption);
+  }
   const auto option=[&](const std::string &label,const std::string &detail,u32 widget) {
     if(content.height<48) return;
     auto row=takeTop(content,48);const auto hit=row;
