@@ -2,6 +2,7 @@
 
 #include "platform/free_camera_controller.h"
 #include "renderer/authoring_texture.h"
+#include "renderer/authoring_library_plan.h"
 #include "renderer/map_package.h"
 #include "renderer/environment_map.h"
 #include "renderer/environment_lighting.h"
@@ -65,6 +66,10 @@ public:
   // (pacote e autoria) na próxima criação. Um valor de 1 ou menos desliga.
   void setSamplerAnisotropy(float value) { samplerAnisotropy_ = value > 1.0f ? value : 1.0f; }
   float samplerAnisotropy() const { return samplerAnisotropy_; }
+  // R2/R4: resultado da última reconstrução da biblioteca (publicação incremental).
+  u32 lastReusedTextures() const { return lastReusedTextures_; }
+  u32 lastUploadedTextures() const { return lastUploadedTextures_; }
+  bool lastGeometryReused() const { return lastGeometryReused_; }
   VkImageView environmentView() const { return environmentImage_.view(); }
   VkSampler environmentSampler() const { return environmentSampler_.handle(); }
   VkImageView environmentSpecularView() const {
@@ -120,6 +125,12 @@ private:
   std::vector<rhi::VulkanImage> authoringImages_;
   std::vector<rhi::VulkanSampler> authoringSamplers_;
   float samplerAnisotropy_ = 1.0f;
+  // Objetos de onde saiu cada imagem de autoria publicada, na mesma ordem: é por
+  // eles que a próxima publicação sabe o que já está na GPU.
+  std::vector<renderer::SharedAuthoringTexture> authoringTextureSources_;
+  float authoringAnisotropy_ = 1.0f;
+  u32 lastReusedTextures_ = 0, lastUploadedTextures_ = 0;
+  bool lastGeometryReused_ = false;
   rhi::VulkanImage environmentImage_;
   rhi::VulkanSampler environmentSampler_;
   rhi::VulkanImage environmentSpecularImage_;

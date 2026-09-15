@@ -1,6 +1,9 @@
 // R4 — perfil de textura do projeto: formato e processamento de bordas.
 #include "harness.h"
 #include "resources/texture_profile.h"
+#include "renderer/authoring_library_plan.h"
+
+#include <memory>
 
 using namespace ae;
 using namespace ae::resources;
@@ -36,4 +39,20 @@ AE_TEST(r4_texture_profile_round_trips_fails_closed_and_dilates_edges) {
   AE_EXPECT_TRUE(image.rgba[10] == 255 && image.rgba[8] == 0 && image.rgba[11] == 0, "azul no outro vizinho, alfa zero");
   DecodedImage empty;
   AE_EXPECT_EQ(dilateTransparentEdges(empty), 0u, "imagem vazia não muda");
+}
+
+AE_TEST(r2_r4_authoring_library_reuses_only_the_same_shared_textures) {
+  const auto make = [] { return std::make_shared<const renderer::AuthoringTexture>(); };
+  const renderer::SharedAuthoringTexture a = make(), b = make(), c = make();
+  const std::vector<renderer::SharedAuthoringTexture> previous{a, b};
+  // Ordem nova, uma textura nova, uma repetida e uma nula.
+  const std::vector<renderer::SharedAuthoringTexture> next{b, c, a, a, nullptr};
+  const auto plan = renderer::planAuthoringTextureReuse(previous, next);
+  AE_EXPECT_TRUE(plan.reuse.size() == 5 && plan.reuse[0] == 1 && plan.reuse[2] == 0, "mesma textura reaproveita a imagem anterior, em qualquer ordem");
+  AE_EXPECT_EQ(plan.reuse[1], renderer::AuthoringTextureNoReuse, "textura nova sobe");
+  AE_EXPECT_EQ(plan.reuse[3], renderer::AuthoringTextureNoReuse, "a imagem tem um dono só: a repetição sobe de novo");
+  AE_EXPECT_EQ(plan.reuse[4], renderer::AuthoringTextureNoReuse, "entrada nula não reaproveita nada");
+  AE_EXPECT_TRUE(plan.reused == 2 && plan.uploaded == 3, "contagem de reaproveitadas e enviadas");
+  const auto first = renderer::planAuthoringTextureReuse({}, previous);
+  AE_EXPECT_TRUE(first.reused == 0 && first.uploaded == 2, "primeira publicação envia tudo");
 }

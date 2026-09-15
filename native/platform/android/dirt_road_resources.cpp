@@ -342,14 +342,28 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
       if(u64(draw.vertexOffset)+indices[draw.firstIndex+i]>=vertexCount) return false;
 
   auto &allocator=device.memoryAllocator();
+  // R2/R4: geometria com os mesmos bytes da publicada mantém os buffers da GPU.
+  // Trocar só textura ou material não reenvia vértices nem índices.
+  const bool sameGeometry=vertices_.handle()!=VK_NULL_HANDLE && indices_.handle()!=VK_NULL_HANDLE &&
+                          vertices==pickingVertices_ && indices==pickingIndices_;
   rhi::VulkanBuffer nextVertices,nextIndices;
-  rhi::BufferDesc buffer{};buffer.preferDeviceMemory=true;buffer.cpuAccess=rhi::CpuAccess::None;
-  buffer.sizeBytes=vertices.size();buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-  if(!allocator.createBuffer(buffer,&nextVertices) ||
-     !upload.uploadBuffer(allocator,vertices.data(),vertices.size(),nextVertices,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT)) return false;
-  buffer.sizeBytes=indices.size()*sizeof(u32);buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-  if(!allocator.createBuffer(buffer,&nextIndices) ||
-     !upload.uploadBuffer(allocator,indices.data(),buffer.sizeBytes,nextIndices,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_ACCESS_INDEX_READ_BIT)) return false;
+  if(!sameGeometry) {
+    rhi::BufferDesc buffer{};buffer.preferDeviceMemory=true;buffer.cpuAccess=rhi::CpuAccess::None;
+    buffer.sizeBytes=vertices.size();buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    if(!allocator.createBuffer(buffer,&nextVertices) ||
+       !upload.uploadBuffer(allocator,vertices.data(),vertices.size(),nextVertices,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT)) return false;
+    buffer.sizeBytes=indices.size()*sizeof(u32);buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    if(!allocator.createBuffer(buffer,&nextIndices) ||
+       !upload.uploadBuffer(allocator,indices.data(),buffer.sizeBytes,nextIndices,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_ACCESS_INDEX_READ_BIT)) return false;
+  }
+  // R2/R4: texturas que chegam como o mesmo objeto da publicação anterior já
+  // estão na GPU; só as novas sobem. Lista anterior inconsistente não reaproveita.
+  const bool consistent=authoringTextureSources_.size()==authoringImages_.size() &&
+                        authoringImages_.size()==authoringSamplers_.size();
+  const auto plan=renderer::planAuthoringTextureReuse(
+      consistent?std::span<const renderer::SharedAuthoringTexture>(authoringTextureSources_):
+                 std::span<const renderer::SharedAuthoringTexture>{},extraTextures);
+  std::vector<u8> samplerReused(extraTextures.size());
   // Texturas importadas: imagem com todos os mips e sampler de cada uma, antes
   // de trocar qualquer coisa. Uma falha aqui mantém a biblioteca anterior.
   std::vector<rhi::VulkanImage> nextImages(extraTextures.size());
@@ -357,15 +371,20 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   for(usize t=0;t<extraTextures.size();++t) {
     const auto &texture=extraTextures[t];
     if(!texture || !texture->valid()) return false;
-    rhi::ImageDesc image{};
-    image.width=texture->width;image.height=texture->height;image.mipLevels=texture->levels;
-    image.format=texture->format==renderer::AuthoringTextureAstc4x4
-      ?(texture->srgb?VK_FORMAT_ASTC_4x4_SRGB_BLOCK:VK_FORMAT_ASTC_4x4_UNORM_BLOCK)
-      :(texture->srgb?VK_FORMAT_R8G8B8A8_SRGB:VK_FORMAT_R8G8B8A8_UNORM);
-    image.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
-    image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;image.memoryClass=rhi::MemoryClass::Texture;
-    if(rhi::sampledChainByteSize(image)!=texture->mipChain.size() || !allocator.createImage(image,&nextImages[t]) ||
-       !upload.uploadSampledMipChain(allocator,texture->mipChain.data(),texture->mipChain.size(),nextImages[t])) return false;
+    const bool reuseImage=plan.reuse[t]!=renderer::AuthoringTextureNoReuse;
+    if(!reuseImage) {
+      rhi::ImageDesc image{};
+      image.width=texture->width;image.height=texture->height;image.mipLevels=texture->levels;
+      image.format=texture->format==renderer::AuthoringTextureAstc4x4
+        ?(texture->srgb?VK_FORMAT_ASTC_4x4_SRGB_BLOCK:VK_FORMAT_ASTC_4x4_UNORM_BLOCK)
+        :(texture->srgb?VK_FORMAT_R8G8B8A8_SRGB:VK_FORMAT_R8G8B8A8_UNORM);
+      image.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
+      image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;image.memoryClass=rhi::MemoryClass::Texture;
+      if(rhi::sampledChainByteSize(image)!=texture->mipChain.size() || !allocator.createImage(image,&nextImages[t]) ||
+         !upload.uploadSampledMipChain(allocator,texture->mipChain.data(),texture->mipChain.size(),nextImages[t])) return false;
+    }
+    // O sampler reaproveitado só vale se a anisotropia da política não mudou.
+    if(reuseImage && authoringAnisotropy_==samplerAnisotropy_) {samplerReused[t]=1;continue;}
     const u32 flags=texture->samplerFlags;
     const auto wrap=[flags](u32 repeat,u32 mirror) {
       return (flags&mirror)?VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT:
@@ -383,8 +402,19 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
     }
     if(!nextSamplers[t].initialize(device.handle(),sampling)) return false;
   }
-  vertices_=std::move(nextVertices);indices_=std::move(nextIndices);
+  // Tudo o que é novo existe e subiu: só agora as imagens reaproveitadas mudam de
+  // dono. Uma falha acima deixou a biblioteca anterior intacta.
+  for(usize t=0;t<extraTextures.size();++t) {
+    const u32 previous=plan.reuse[t];
+    if(previous==renderer::AuthoringTextureNoReuse) continue;
+    nextImages[t]=std::move(authoringImages_[previous]);
+    if(samplerReused[t]) nextSamplers[t]=std::move(authoringSamplers_[previous]);
+  }
+  if(!sameGeometry) {vertices_=std::move(nextVertices);indices_=std::move(nextIndices);}
   authoringImages_=std::move(nextImages);authoringSamplers_=std::move(nextSamplers);
+  authoringTextureSources_.assign(extraTextures.begin(),extraTextures.end());
+  authoringAnisotropy_=samplerAnisotropy_;
+  lastReusedTextures_=plan.reused;lastUploadedTextures_=plan.uploaded;lastGeometryReused_=sameGeometry;
   pickingVertices_=std::move(vertices);pickingIndices_=std::move(indices);
   draws_=std::move(draws);materials_=std::move(materials);
   header_.vertexStride=renderer::MapVertexStride;

@@ -4062,8 +4062,10 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   // o próximo quadro a republicar tudo, em vez de casar poses novas com
   // topologia velha.
   registerAuthoringTextures();
-  __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] texturas importadas: %zu publicadas, %zu slots bindless.",
-      textures.size(),authoringTextureSlots_.size());
+  __android_log_print(ANDROID_LOG_INFO,LogTag,
+      "[Import] texturas importadas: %zu publicadas (%u reaproveitadas, %u enviadas), %zu slots bindless; geometria %s.",
+      textures.size(),dirtRoadResources_.lastReusedTextures(),dirtRoadResources_.lastUploadedTextures(),
+      authoringTextureSlots_.size(),dirtRoadResources_.lastGeometryReused()?"reaproveitada":"enviada");
   pendingScene_.clear();pendingMapPoseCount_=0;pendingAuthoredStateValid_=false;
   authoredMaterials_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredUvTransformEntries_.clear();
   authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();
