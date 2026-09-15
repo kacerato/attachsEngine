@@ -186,10 +186,14 @@ enum class EditorWidget : u32 {
   ImportScaleDown, ImportScaleUp,
   ImportTextureDimension256, ImportTextureDimension512, ImportTextureDimension1024, ImportTextureDimension2048,
   ImportApplyProfile, ImportSaveDefaultProfile,
+  // R4: textura por binding de material e extração das imagens de um GLB.
+  TexturePickerClose, TextureUseInherited, TextureUseNone, AssetExtractTextures,
   // + máscara de ImportOverride.
   ImportLinkRevertBase=0x52000000u,
   // + índice do material do projeto / do campo numérico do material.
   MaterialChoiceBase=0x53000000u, MaterialNumberBase=0x54000000u,
+  // + binding de textura (0..3) / + índice da textura do projeto.
+  MaterialTextureBase=0x55000000u, TextureChoiceBase=0x56000000u,
   ComponentReferenceBase=0x7a000000u, ReferenceChoiceBase=0x7b000000u,
   ComponentNumberBase=0x78000000u,
   MeshChoiceBase=0x79000000u,
@@ -401,11 +405,17 @@ struct EditorScreenState final {
     std::string name;
     bool shared=false,missing=false,overridden=false;
     float values[11]{};
+    // R4: textura efetiva de cada binding no alcance em edição e de onde vem.
+    std::string textureNames[4],textureOrigins[4];
   };
   MaterialSlotView materialSlotView;
   std::vector<std::string> projectMaterials;
   u32 materialSlot=0,materialPage=0;
   bool materialShared=false,materialPicker=false;
+  // R4: seletor de textura de um binding e as texturas do projeto para ele.
+  bool texturePicker=false;
+  u32 textureBinding=0;
+  std::vector<std::string> projectTextureNames,projectTextureDetails;
   // Menu de ações do objeto (⋮ do cabeçalho do inspetor) e do card Transformação.
   bool inspectorMenu=false,transformMenu=false;
   // Transformação copiada, para colar em outro objeto.

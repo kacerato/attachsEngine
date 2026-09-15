@@ -1074,6 +1074,26 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     }
     if(key==widgetId(EditorWidget::MaterialChoose)) {state_.materialPicker=true;state_.meshPage=0;return true;}
     if(key==widgetId(EditorWidget::MaterialPickerClose)) {state_.materialPicker=false;return true;}
+    // R4: textura por binding, no alcance em edição.
+    if(key>=widgetId(EditorWidget::MaterialTextureBase) && key<widgetId(EditorWidget::MaterialTextureBase)+scene::MaterialTextureCount) {
+      state_.textureBinding=key-widgetId(EditorWidget::MaterialTextureBase);
+      state_.texturePicker=true;state_.materialPicker=false;state_.meshPage=0;return true;
+    }
+    if(key==widgetId(EditorWidget::TexturePickerClose)) {state_.texturePicker=false;return true;}
+    const auto applyTexture=[&](const resources::AssetGuid &texture,const std::string &done) {
+      std::string diagnostic;
+      const bool applied=setSlotTexture(state_.selection,state_.materialSlot,state_.textureBinding,
+                                        state_.materialShared?MaterialScope::Shared:MaterialScope::Instance,texture,diagnostic);
+      state_.status=applied?done:diagnostic;
+      state_.texturePicker=false;
+      return true;
+    };
+    if(key==widgetId(EditorWidget::TextureUseInherited)) return applyTexture({},"O binding voltou a herdar a textura");
+    if(key==widgetId(EditorWidget::TextureUseNone)) return applyTexture(scene::MaterialTextureNone,"Binding sem textura");
+    if(key>=widgetId(EditorWidget::TextureChoiceBase) && key-widgetId(EditorWidget::TextureChoiceBase)<textures_.size()) {
+      const auto texture=textures_[key-widgetId(EditorWidget::TextureChoiceBase)];
+      return applyTexture(texture.guid,"O binding usa "+texture.name);
+    }
     if(key==widgetId(EditorWidget::MaterialClearOverride)) {
       state_.status=clearSlotMaterialOverride(state_.selection,state_.materialSlot)?"Substituição local removida":"Sem substituição local";
       return true;
@@ -1310,6 +1330,12 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       return true;
     }
     if(key==widgetId(EditorWidget::AssetReimport)) {reimportPath_=state_.selectedFile;return true;}
+    if(key==widgetId(EditorWidget::AssetExtractTextures)) {
+      TextureExtraction report;std::string diagnostic;
+      if(extractSourceTextures(state_.selectedFile,report,diagnostic)) setImportStatus(state_.status);
+      else setImportStatus(diagnostic.empty()?std::string("Não foi possível extrair as texturas."):diagnostic,EditorConsoleSeverity::Warning);
+      return true;
+    }
     if(key==widgetId(EditorWidget::FilesRename)) {
       if(!state_.selectedFile.empty()) state_.renamingResource=true;
       return true;
@@ -1347,7 +1373,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       }
       else if(entry.name.ends_with(".aescene"))
         requestedScenePath_=files_.resolveFile(entry.relativePath);
-      else state_.status=entry.name.ends_with(".glb")?"Recurso GLB · Instanciar adiciona à cena; Reimportar atualiza a fonte":"Arquivo de origem";
+      else state_.status=entry.name.ends_with(".glb")?"Recurso GLB · Instanciar adiciona à cena; Reimportar atualiza a fonte; Texturas extrai as imagens":"Arquivo de origem";
       return true;
     }
   }
@@ -2614,9 +2640,15 @@ void EditorSession::refreshMaterialSlotView() {
   auto &view=state_.materialSlotView;view={};
   state_.projectMaterials.clear();
   for(const auto &material:materials_) state_.projectMaterials.push_back(material.name);
+  state_.projectTextureNames.clear();state_.projectTextureDetails.clear();
+  for(const auto &texture:textures_) {
+    state_.projectTextureNames.push_back(texture.name);
+    state_.projectTextureDetails.push_back((texture.width?std::to_string(texture.width)+"×"+std::to_string(texture.height)+" · ":
+                                            std::string("ilegível · "))+texture.path);
+  }
   const auto *entity=document_.find(state_.selection);
   const auto *render=entity?meshRenderer(*entity):nullptr;
-  if(!render) {state_.materialPicker=false;return;}
+  if(!render) {state_.materialPicker=false;state_.texturePicker=false;return;}
   view.slots=render->slotCount();
   state_.materialSlot=std::min(state_.materialSlot,view.slots-1);
   const u32 slot=state_.materialSlot;
@@ -2630,6 +2662,25 @@ void EditorSession::refreshMaterialSlotView() {
   scene::MaterialParameters values=state_.materialShared?shared->values:mapScene_.slotMaterial(*render,slot);
   if(!state_.materialShared && !values.enabled && render->slotMesh(slot)) values=mapScene_.materialForAsset(render->slotMesh(slot)-1);
   scene::MeshRenderer probe;probe.material=values;
+  // R4: textura efetiva de cada binding no alcance em edição, e de onde vem.
+  for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {
+    const auto &local=render->slotTextures(slot)[binding];
+    resources::AssetGuid texture;const char *origin="da fonte";
+    if(state_.materialShared) {
+      texture=shared->textures[binding];
+      if(texture.valid()) origin="do material do projeto";
+    } else if(local.valid()) {
+      texture=local;origin="só esta instância";
+    } else if(shared && shared->textures[binding].valid()) {
+      texture=shared->textures[binding];origin="do material do projeto";
+    }
+    if(texture==scene::MaterialTextureNone) view.textureNames[binding]="Sem textura";
+    else if(texture.valid()) {
+      const auto *project=findProjectTexture(texture);
+      view.textureNames[binding]=project?project->name:std::string("Textura ausente");
+    } else view.textureNames[binding]="Textura da fonte";
+    view.textureOrigins[binding]=origin;
+  }
   for(u32 field=0;field<scene::meshRendererNumbers.size() && field<std::size(view.values);++field)
     view.values[field]=scene::meshRendererNumbers[field].read(probe);
 }

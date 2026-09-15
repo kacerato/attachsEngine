@@ -402,9 +402,11 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
   }
   if(builder.state.selectedFile.ends_with(".glb")) {
     auto actions=takeBottom(content,36);
-    for(const auto &item:std::array<std::pair<const char *,EditorWidget>,2>{{
-        {"Instanciar",EditorWidget::AssetInstantiate},{"Reimportar",EditorWidget::AssetReimport}}}) {
-      auto button=deflate(takeLeft(actions,content.width*.5f),UiInsets::all(3));
+    // R4: "Texturas" extrai as imagens embutidas do GLB para o projeto.
+    for(const auto &item:std::array<std::pair<const char *,EditorWidget>,3>{{
+        {"Instanciar",EditorWidget::AssetInstantiate},{"Reimportar",EditorWidget::AssetReimport},
+        {"Texturas",EditorWidget::AssetExtractTextures}}}) {
+      auto button=deflate(takeLeft(actions,content.width/3.0f),UiInsets::all(3));
       builder.list.addRect(button,theme.color.raised,theme.radius.control);
       builder.label(button,item.first,theme.color.text,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(button,widgetId(item.second));
@@ -643,12 +645,26 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content) {
     }
   }
 
-  const u32 count=static_cast<u32>(scene::meshRendererNumbers.size());
+  // R4: os quatro bindings de textura vêm antes dos números, na mesma lista
+  // paginada. Cada linha mostra a textura efetiva no alcance e de onde ela vem.
+  static constexpr const char *bindingNames[scene::MaterialTextureCount]{"Mapa: cor","Mapa: normal","Mapa: metal/rug.","Mapa: emissão"};
+  const u32 textureRows=scene::MaterialTextureCount;
+  const u32 count=textureRows+static_cast<u32>(scene::meshRendererNumbers.size());
   const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-30)/40));
   const u32 pages=std::max(1u,(count+perPage-1)/perPage),page=std::min(state.propertyPage,pages-1);
   auto footer=pages>1?takeBottom(content,30):UiRect{};
-  for(u32 field=page*perPage;field<count && field<(page+1)*perPage;++field) {
+  for(u32 entry=page*perPage;entry<count && entry<(page+1)*perPage;++entry) {
     auto row=takeTop(content,std::min(40.0f,content.height));
+    if(entry<textureRows) {
+      builder.label(takeLeft(row,row.width*.42f),bindingNames[entry],theme.color.textDim,theme.type.caption);
+      builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      auto inner=deflate(row,UiInsets::symmetric(8,2));
+      builder.label(takeTop(inner,inner.height*.55f),view.textureNames[entry],theme.color.text,theme.type.caption);
+      builder.label(inner,view.textureOrigins[entry],theme.color.textMuted,theme.type.caption);
+      builder.router.addRegion(row,widgetId(EditorWidget::MaterialTextureBase)+entry);
+      continue;
+    }
+    const u32 field=entry-textureRows;
     builder.label(takeLeft(row,row.width*.62f),scene::meshRendererNumbers[field].name,theme.color.textDim,theme.type.caption);
     char value[32];std::snprintf(value,sizeof(value),"%.6g",static_cast<double>(view.values[field]));
     builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
@@ -694,6 +710,47 @@ void buildMaterialPicker(ScreenBuilder &builder,UiRect content) {
              widgetId(EditorWidget::MaterialChoiceBase)+row);
     else option("Novo material do projeto","com os valores deste slot",false,widgetId(EditorWidget::MaterialCreateShared));
   }
+  builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
+  if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::MeshNext));
+  builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+}
+
+// R4: escolha da textura de um binding, no alcance em edição (esta instância ou
+// o material compartilhado do slot).
+void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  static constexpr const char *bindings[scene::MaterialTextureCount]{"cor base","normal","metal/rugosidade","emissão"};
+  auto title=takeTop(content,36),back=takeLeft(title,36);
+  builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
+  builder.router.addRegion(back,widgetId(EditorWidget::TexturePickerClose));
+  builder.label(title,std::string("Textura de ")+bindings[std::min(state.textureBinding,scene::MaterialTextureCount-1)]+
+                (state.materialShared?" · compartilhado":" · esta instância"),theme.color.text,theme.type.caption);
+  const auto option=[&](const std::string &label,const std::string &detail,u32 widget) {
+    if(content.height<48) return;
+    auto row=takeTop(content,48);const auto hit=row;
+    builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+    takeLeft(row,12);
+    builder.label(takeTop(row,25),label,theme.color.text,theme.type.body);
+    builder.label(row,detail,theme.color.textMuted,theme.type.caption);
+    builder.router.addRegion(hit,widget);
+  };
+  option("Herdar",state.materialShared?"volta à textura da fonte":"do material do projeto, senão da fonte",
+         widgetId(EditorWidget::TextureUseInherited));
+  option("Sem textura","o binding fica só com os fatores",widgetId(EditorWidget::TextureUseNone));
+  const u32 rows=static_cast<u32>(state.projectTextureNames.size());
+  if(!rows) {
+    builder.label(takeTop(content,40),"Nenhuma textura no projeto: em Arquivos, selecione um GLB e toque em Texturas.",
+                  theme.color.textMuted,theme.type.caption);
+    return;
+  }
+  auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
+  const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height)/48));
+  const u32 pages=std::max(1u,(rows+perPage-1)/perPage),page=std::min(state.meshPage,pages-1);
+  for(u32 row=page*perPage;row<rows && row<(page+1)*perPage;++row)
+    option(state.projectTextureNames[row],row<state.projectTextureDetails.size()?state.projectTextureDetails[row]:std::string(),
+           widgetId(EditorWidget::TextureChoiceBase)+row);
   builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
   builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
   if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
@@ -933,6 +990,7 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   if(same && state.referenceInstance) {buildReferencePicker(builder,content,entity);return;}
   if(same && state.meshPicker && meshRenderer(entity)) {buildMeshPicker(builder,content,entity);return;}
   if(same && state.materialPicker && meshRenderer(entity)) {buildMaterialPicker(builder,content);return;}
+  if(same && state.texturePicker && meshRenderer(entity)) {buildTexturePicker(builder,content);return;}
   auto footer=takeBottom(content,42);auto button=deflate(footer,UiInsets::all(2));
   builder.list.addRect(button,theme.color.raised,theme.radius.control);
   builder.router.addRegion(button,widgetId(EditorWidget::AddComponentMenu));

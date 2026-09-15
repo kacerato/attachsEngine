@@ -782,6 +782,30 @@ AE_TEST(session_rename_empty_rejected_and_cancel_preserves_document) {
   AE_EXPECT_TRUE(std::string(f.session.document().find(f.cube)->name)=="Cube","name preserved");
 }
 
+AE_TEST(r4_material_tab_lists_texture_bindings_and_the_picker_changes_the_instance) {
+  Fixture f;auto entity=*f.session.document().find(f.cube);editMeshRenderer(entity)->mesh=1;
+  f.session.document().applyEntityValues(f.cube,entity);f.session.setSelection(f.cube);f.session.history().clear();
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  tapWidget(f,widgetId(EditorWidget::MeshMaterialTab));
+  const u32 normal=widgetId(EditorWidget::MaterialTextureBase)+1u;
+  revealProperty(f,normal);
+  AE_EXPECT_TRUE(locateWidget(f.session,normal).x>=0,"binding de normal na aba Material");
+  AE_EXPECT_TRUE(f.session.screen().materialSlotView.textureNames[1]=="Textura da fonte","sem troca, herda a da fonte");
+  tapWidget(f,normal);
+  AE_EXPECT_TRUE(f.session.screen().texturePicker,"seletor de textura aberto");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::TextureUseNone)).x>=0,"opção sem textura");
+  tapWidget(f,widgetId(EditorWidget::TextureUseNone));
+  AE_EXPECT_TRUE(!f.session.screen().texturePicker,"seletor fecha ao escolher");
+  AE_EXPECT_TRUE(meshRenderer(*f.session.document().find(f.cube))->textures[1]==scene::MaterialTextureNone,"instância sem mapa normal");
+  AE_EXPECT_TRUE(f.session.screen().materialSlotView.textureNames[1]=="Sem textura" &&
+                 f.session.screen().materialSlotView.textureOrigins[1]=="só esta instância","linha mostra valor e alcance");
+  std::vector<renderer::MapDrawState> extracted;
+  AE_EXPECT_TRUE(f.session.extractMap(extracted),"extração");
+  AE_EXPECT_EQ(extracted[0].material.textures[1],renderer::InvalidMapTexture,"o desenho perde o mapa normal");
+  AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"desfazer");
+  AE_EXPECT_TRUE(!meshRenderer(*f.session.document().find(f.cube))->textures[1].valid(),"a troca volta pelo histórico");
+}
+
 AE_TEST(session_inspector_exposes_only_consumed_resource_controls) {
   Fixture f;
   auto mesh=*f.session.document().find(f.cube);editMeshRenderer(mesh)->mesh=1;
