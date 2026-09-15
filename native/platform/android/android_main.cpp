@@ -895,6 +895,10 @@ void finishProjectReopen(AndroidShell &shell) {
   }
   std::vector<ae::editor::EditorSession::ModelImportReport> reports;
   std::string diagnostic;
+  // R4: as texturas do projeto que a cena salva usa sobem nesta mesma publicação.
+  if(shell.editorProjectPath[0])
+    shell.editorSession.anticipateSceneTextures((std::string(shell.editorProjectPath)+"/scenes/editor.aescene").c_str(),
+                                                shell.editorPackageFingerprint);
   const bool published=shell.editorSession.reopenSources(result.sources,reports,diagnostic);
   ae::usize failures=result.missing.size()+result.refused.size();
   for(ae::usize i=0;i<result.sources.size() && i<reports.size();++i) {

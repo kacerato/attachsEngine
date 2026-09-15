@@ -1373,6 +1373,13 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       }
       else if(entry.name.ends_with(".aescene"))
         requestedScenePath_=files_.resolveFile(entry.relativePath);
+      else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::Texture) {
+        const auto *texture=findProjectTexture(record->guid);
+        const auto users=textureUsersOf(record->guid);
+        state_.status=std::string("Textura do projeto")+
+            (texture && texture->width?" · "+std::to_string(texture->width)+"×"+std::to_string(texture->height):std::string())+
+            " · "+std::to_string(users)+(users==1?" uso":" usos");
+      }
       else state_.status=entry.name.ends_with(".glb")?"Recurso GLB · Instanciar adiciona à cena; Reimportar atualiza a fonte; Texturas extrai as imagens":"Arquivo de origem";
       return true;
     }
@@ -1767,6 +1774,7 @@ bool EditorSession::load(const char *path, u64 fingerprint) {
   sceneEpoch_=nextSceneEpoch();
   // R4: a cena aberta pode usar texturas do projeto que a biblioteca atual ainda
   // não publicou.
+  anticipatedTextures_.clear();
   if(std::string texturePublish;!ensureTexturesPublished(texturePublish))
     reportProblem(EditorConsoleSeverity::Warning,"Texturas do projeto não publicadas: "+texturePublish);
   reportImportReconcile(reconcile,"Cena aberta");
@@ -1868,6 +1876,35 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
 
 // Quantos objetos da cena usam este recurso. E a pergunta que apagar precisa
 // responder ANTES de apagar.
+u32 EditorSession::textureUsersOf(const resources::AssetGuid &guid) const {
+  if(!guid.valid() || guid==scene::MaterialTextureNone) return 0;
+  u32 users=sceneUsersOf(guid);
+  for(const auto &material:materials_)
+    if(std::find(material.textures.begin(),material.textures.end(),guid)!=material.textures.end()) ++users;
+  return users;
+}
+
+void EditorSession::anticipateSceneTextures(const char *path,u64 fingerprint) {
+  anticipatedTextures_.clear();
+  EditorDocument scene;
+  if(!path || !loadEditorDocument(path,fingerprint,scene)) return;
+  std::vector<EditorEntityId> ids;scene.collectSubtree(scene.root(),ids);
+  for(const auto id:ids) {
+    const auto *entity=scene.find(id);
+    const auto *render=entity?meshRenderer(*entity):nullptr;
+    if(!render) continue;
+    for(u32 slot=0;slot<render->slotCount();++slot)
+      for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {
+        const auto &guid=render->slotTextures(slot)[binding];
+        if(!guid.valid() || guid==scene::MaterialTextureNone) continue;
+        const bool srgb=EditorMapScene::bindingIsSrgb(binding);
+        if(std::none_of(anticipatedTextures_.begin(),anticipatedTextures_.end(),
+                        [&](const auto &item){return item.first==guid && item.second==srgb;}))
+          anticipatedTextures_.emplace_back(guid,srgb);
+      }
+  }
+}
+
 u32 EditorSession::sceneUsersOf(const resources::AssetGuid &guid) const {
   u32 users=0;
   std::vector<EditorEntityId> subtree;
@@ -1878,7 +1915,8 @@ u32 EditorSession::sceneUsersOf(const resources::AssetGuid &guid) const {
     const auto *render=meshRenderer(*entity);
     // Um slot usa o recurso pela malha ou pelo material do projeto.
     if(render) for(u32 slot=0;slot<render->slotCount();++slot)
-      if(render->slotAsset(slot)==guid || render->slotMaterialAsset(slot)==guid) {++users;break;}
+      if(render->slotAsset(slot)==guid || render->slotMaterialAsset(slot)==guid ||
+         std::find(render->slotTextures(slot).begin(),render->slotTextures(slot).end(),guid)!=render->slotTextures(slot).end()) {++users;break;}
   }
   return users;
 }
@@ -1917,6 +1955,7 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
                                    ResourceChangeReport &report) {
   report={};
   if(relative.empty()) { report.diagnostic="Caminho vazio."; return false; }
+  u32 texturesDoomed=0;
   // Tudo que vive sob este caminho: apagar uma pasta apaga os recursos dela.
   std::vector<resources::AssetGuid> doomed;
   for(const auto &record:assets_.records()) {
@@ -1924,6 +1963,7 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
     if(path.size()<relative.size() || path.compare(0,relative.size(),relative)!=0) continue;
     if(path.size()!=relative.size() && path[relative.size()]!='/') continue;
     doomed.push_back(record.guid);
+    if(record.type==resources::AssetType::Texture) ++texturesDoomed;
   }
   for(const auto &guid:doomed) {
     report.sceneUsers+=sceneUsersOf(guid);
@@ -1934,6 +1974,11 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
     for(const auto &source:importedSources_)
       if(source.guid==guid)
         for(const auto &identity:source.identities) report.sceneUsers+=sceneUsersOf(identity);
+    // R4: materiais do projeto que usam esta textura dependem dela.
+    for(const auto &material:materials_) {
+      if(std::find(material.textures.begin(),material.textures.end(),guid)==material.textures.end()) continue;
+      if(std::find(doomed.begin(),doomed.end(),material.guid)==doomed.end()) ++report.registryDependents;
+    }
     for(const auto &dependent:assets_.dependents(guid)) {
       bool alsoDoomed=false;
       for(const auto &other:doomed) if(other==dependent) {alsoDoomed=true;break;}
@@ -1956,11 +2001,12 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
     // Material apagado: os slots que o usavam voltam ao da fonte, visivelmente
     // marcados como referência sem arquivo no inspetor.
     std::erase_if(materials_,[&](const auto &material){return material.guid==guid;});
+    std::erase_if(decodedTextures_,[&](const auto &entry){return entry.guid==guid;});
     assets_.remove(guid);
     ++report.retargeted;
   }
   assetRegistryDirty_=true;
-  if(!doomed.empty()) publishMaterialLibrary();
+  if(!doomed.empty()) {loadTextureAssets();publishMaterialLibrary();}
   std::string diagnostic;
   if(!doomed.empty() && !republishGeometry(diagnostic)) {
     report.diagnostic=diagnostic;
@@ -1970,9 +2016,10 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
   // reconciliacao ja faz isso: identidade ausente vira slot zero, em vez de
   // apontar para a malha que por acaso ocupar o indice antigo.
   mapScene_.reconcileAssets(document_);
-  state_.status=report.sceneUsers>0
-      ? std::to_string(report.sceneUsers)+" objeto(s) ficaram sem malha"
-      : "Apagado";
+  // Textura apagada não tira malha de ninguém: o binding volta à textura da fonte.
+  state_.status=report.sceneUsers==0 ? std::string("Apagado")
+      : texturesDoomed==doomed.size() ? std::to_string(report.sceneUsers)+" objeto(s) voltaram à textura da fonte"
+      : std::to_string(report.sceneUsers)+" objeto(s) ficaram sem malha";
   return true;
 }
 
@@ -2643,8 +2690,9 @@ void EditorSession::refreshMaterialSlotView() {
   state_.projectTextureNames.clear();state_.projectTextureDetails.clear();
   for(const auto &texture:textures_) {
     state_.projectTextureNames.push_back(texture.name);
-    state_.projectTextureDetails.push_back((texture.width?std::to_string(texture.width)+"×"+std::to_string(texture.height)+" · ":
-                                            std::string("ilegível · "))+texture.path);
+    const auto users=textureUsersOf(texture.guid);
+    state_.projectTextureDetails.push_back((texture.width?std::to_string(texture.width)+"×"+std::to_string(texture.height):std::string("ilegível"))+
+                                           " · "+std::to_string(users)+(users==1?" uso · ":" usos · ")+texture.path);
   }
   const auto *entity=document_.find(state_.selection);
   const auto *render=entity?meshRenderer(*entity):nullptr;
@@ -2760,6 +2808,12 @@ void EditorSession::collectUsedTextures(std::vector<std::pair<resources::AssetGu
   };
   for(const auto &material:materials_)
     for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) add(material.textures[binding],binding);
+  // Texturas da cena que ainda vai ser aberta (reabertura do projeto).
+  for(const auto &[guid,srgb]:anticipatedTextures_) {
+    bool known=false;
+    for(const auto &[existing,space]:out) if(existing==guid && space==srgb) {known=true;break;}
+    if(!known) out.emplace_back(guid,srgb);
+  }
   std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
   for(const auto id:ids) {
     const auto *entity=document_.find(id);

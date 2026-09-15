@@ -423,6 +423,10 @@ public:
   };
   bool reopenSources(std::vector<ReopenedSource> &sources, std::vector<ModelImportReport> &reports,
                      std::string &diagnostic);
+  // R4: texturas do projeto que a cena salva usa, lidas ANTES da publicação da
+  // reabertura. Assim elas sobem na mesma publicação das fontes, em vez de uma
+  // segunda publicação quando a cena é carregada. `load` descarta a antecipação.
+  void anticipateSceneTextures(const char *path, u64 fingerprint);
   bool instantiateModel(resources::AssetGuid source, ModelImportReport &report, bool wrapMultipleRoots=true);
   bool commitModelImport(std::span<const u8> bytes, const resources::GltfImport &model,
                          const std::string &path, const std::string &expectedHash, ModelImportReport &report,
@@ -496,6 +500,8 @@ public:
     u32 width=0,height=0; // do cabeçalho; zero quando o arquivo não abre
   };
   const std::vector<ProjectTexture> &projectTextures() const {return textures_;}
+  // Objetos da cena com um slot que usa a textura, mais materiais do projeto que a usam.
+  u32 textureUsersOf(const resources::AssetGuid &guid) const;
   const ProjectTexture *findProjectTexture(const resources::AssetGuid &guid) const {
     for(const auto &texture:textures_) if(texture.guid==guid) return &texture;
     return nullptr;
@@ -727,6 +733,7 @@ private:
     renderer::SharedAuthoringTexture texture;
   };
   std::vector<DecodedProjectTexture> decodedTextures_;
+  std::vector<std::pair<resources::AssetGuid,bool>> anticipatedTextures_;
   bool appearanceChanged_=false;
   void publishMaterialLibrary();
   void loadMaterialAssets();

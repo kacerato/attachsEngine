@@ -315,3 +315,125 @@ AE_TEST(r4_textures_extract_from_source_and_resolve_per_instance_and_shared_scop
   AE_EXPECT_EQ(effective(0), scene::MaterialTextureKeep, "cor base de novo a da fonte");
   AE_EXPECT_EQ(session.importLinkOverrides(object) & ImportOverrideMaterial, 0u, "vínculo volta a ser igual à fonte no material");
 }
+
+namespace {
+EditorEntityId firstMeshObject(EditorSession &session) {
+  std::vector<EditorEntityId> ids;
+  session.document().collectSubtree(session.document().root(), ids);
+  for (const auto id : ids)
+    if (const auto *render = meshRenderer(*session.document().find(id)); render && render->slotMesh(0)) return id;
+  return kInvalidEntity;
+}
+u32 effectiveTexture(EditorSession &session, EditorEntityId object, u32 binding) {
+  std::vector<renderer::MapDrawState> draws;
+  if (!session.extractMap(draws)) return 0xdeadbeef;
+  for (const auto &draw : draws) if (draw.objectId == object && draw.visible) return draw.material.textures[binding];
+  return 0xdeadbeef;
+}
+bool resolvesToProjectTexture(u32 value) {
+  return value != scene::MaterialTextureKeep && value != renderer::InvalidMapTexture && value != 0xdeadbeef;
+}
+} // namespace
+
+AE_TEST(r4_reimport_keeps_texture_overrides_in_instance_and_shared_material) {
+  Project project;
+  EditorSession session;
+  Publisher publisher;
+  start(session, publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  const auto glb = texturedPanel(png(4, 4, 200));
+  resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(glb, {}, {}, model), model.diagnostic.c_str());
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(glb, model, "Fontes/tela.glb", "", report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), report.diagnostic.c_str());
+  EditorSession::TextureExtraction extraction;
+  std::string diagnostic;
+  AE_EXPECT_TRUE(session.extractSourceTextures("Fontes/tela.glb", extraction, diagnostic), diagnostic.c_str());
+  const auto texture = extraction.textures.front();
+  auto object = firstMeshObject(session);
+
+  // Normal no material compartilhado; emissão só nesta instância.
+  AE_EXPECT_TRUE(session.setSlotTexture(object, 0, 1, EditorSession::MaterialScope::Instance, texture, diagnostic), diagnostic.c_str());
+  const auto shared = session.createMaterialFromSlot(object, 0, diagnostic);
+  AE_EXPECT_TRUE(shared.valid(), diagnostic.c_str());
+  AE_EXPECT_TRUE(session.setSlotTexture(object, 0, 3, EditorSession::MaterialScope::Instance, texture, diagnostic), diagnostic.c_str());
+
+  // Reimportação com a imagem da fonte alterada: mesma estrutura, outro conteúdo.
+  const auto revised = texturedPanel(png(4, 4, 90));
+  resources::GltfImport revisedModel;
+  AE_EXPECT_TRUE(resources::importGlb(revised, {}, {}, revisedModel), revisedModel.diagnostic.c_str());
+  std::vector<u8> current;
+  AE_EXPECT_TRUE(EditorImportTransaction::read(project.root / "Fontes/tela.glb", current), "fonte atual");
+  EditorSession::ModelImportReport again;
+  AE_EXPECT_TRUE(session.commitModelImport(revised, revisedModel, "Fontes/tela.glb", Sha256::hex(current), again), again.diagnostic.c_str());
+  AE_EXPECT_TRUE(again.reimported, "foi reimportação");
+
+  object = firstMeshObject(session);
+  const auto *render = meshRenderer(*session.document().find(object));
+  AE_EXPECT_TRUE(render && render->textures[3] == texture, "textura da instância atravessa a reimportação");
+  AE_EXPECT_TRUE(render && render->materialAsset == shared, "material compartilhado continua ligado");
+  AE_EXPECT_TRUE(session.findMaterialAsset(shared)->textures[1] == texture, "textura do material compartilhado preservada");
+  AE_EXPECT_TRUE(resolvesToProjectTexture(effectiveTexture(session, object, 1)), "normal resolvida depois da nova publicação");
+  AE_EXPECT_TRUE(resolvesToProjectTexture(effectiveTexture(session, object, 3)), "emissão resolvida depois da nova publicação");
+  AE_EXPECT_EQ(effectiveTexture(session, object, 0), scene::MaterialTextureKeep, "cor base segue a fonte revisada");
+}
+
+AE_TEST(r4_reopen_publishes_scene_textures_once_and_warns_before_deleting_a_used_texture) {
+  Project project;
+  const auto glb = texturedPanel(png(4, 4, 200));
+  const auto scenePath = project.root / "scenes" / "editor.aescene";
+  std::filesystem::create_directories(scenePath.parent_path());
+  std::string registry;
+  resources::AssetGuid texture;
+  std::string texturePath;
+  usize sourceTextures = 0;
+  {
+    EditorSession session;
+    Publisher publisher;
+    start(session, publisher);
+    AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+    resources::GltfImport model;
+    AE_EXPECT_TRUE(resources::importGlb(glb, {}, {}, model), model.diagnostic.c_str());
+    sourceTextures = model.textures.size();
+    EditorSession::ModelImportReport report;
+    AE_EXPECT_TRUE(session.commitModelImport(glb, model, "Fontes/tela.glb", "", report), report.diagnostic.c_str());
+    AE_EXPECT_TRUE(session.instantiateModel(report.source, report), report.diagnostic.c_str());
+    EditorSession::TextureExtraction extraction;
+    std::string diagnostic;
+    AE_EXPECT_TRUE(session.extractSourceTextures("Fontes/tela.glb", extraction, diagnostic), diagnostic.c_str());
+    texture = extraction.textures.front();
+    texturePath = session.projectTextures().front().path;
+    AE_EXPECT_EQ(session.textureUsersOf(texture), 0u, "extraída e ainda sem uso");
+    AE_EXPECT_TRUE(session.setSlotTexture(firstMeshObject(session), 0, 0, EditorSession::MaterialScope::Instance, texture, diagnostic),
+                   diagnostic.c_str());
+    AE_EXPECT_EQ(session.textureUsersOf(texture), 1u, "um objeto usa a textura");
+    AE_EXPECT_TRUE(session.save(scenePath.string().c_str(), 0), "cena salva");
+    registry = session.serializeAssets();
+  }
+
+  // Reabertura como no shell: registro, antecipação da cena, publicação das fontes, cena.
+  EditorSession session;
+  Publisher publisher;
+  start(session, publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto reaberto");
+  AE_EXPECT_TRUE(session.loadAssets(registry), "registro");
+  session.anticipateSceneTextures(scenePath.string().c_str(), 0);
+  std::vector<u8> bytes;
+  AE_EXPECT_TRUE(EditorImportTransaction::read(project.root / "Fontes/tela.glb", bytes), "fonte no projeto");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.importModel(bytes, "Fontes/tela.glb", {}, report), report.diagnostic.c_str());
+  AE_EXPECT_EQ(publisher.textures, sourceTextures + 1, "a textura da cena sobe junto com a fonte");
+  const auto rebuilds = publisher.rebuilds;
+  AE_EXPECT_TRUE(session.load(scenePath.string().c_str(), 0), "cena carregada");
+  AE_EXPECT_EQ(publisher.rebuilds, rebuilds, "carregar a cena não publica de novo");
+  AE_EXPECT_TRUE(resolvesToProjectTexture(effectiveTexture(session, firstMeshObject(session), 0)), "cor base da cena resolvida");
+
+  // Apagar textura em uso: primeiro o aviso, depois volta à textura da fonte.
+  EditorSession::ResourceChangeReport change;
+  AE_EXPECT_TRUE(!session.deleteResource(texturePath, false, change) && change.sceneUsers == 1u, "aviso de uso antes de apagar");
+  AE_EXPECT_TRUE(session.deleteResource(texturePath, true, change), "apagar mesmo assim");
+  AE_EXPECT_TRUE(session.projectTextures().empty(), "textura saiu do projeto");
+  AE_EXPECT_EQ(effectiveTexture(session, firstMeshObject(session), 0), scene::MaterialTextureKeep,
+               "o binding volta à textura da fonte, sem textura inexistente na GPU");
+}
