@@ -35,6 +35,7 @@
 #include "resources/import_profile.h"
 #include "resources/glb_images.h"
 #include "editor/editor_texture_preview.h"
+#include "resources/texture_profile.h"
 #include "editor/editor_import_reconcile.h"
 #include "editor/editor_archive.h"
 #include "editor/editor_document.h"
@@ -504,6 +505,19 @@ public:
     u32 width=0,height=0; // do cabeçalho; zero quando o arquivo não abre
   };
   const std::vector<ProjectTexture> &projectTextures() const {return textures_;}
+  // R4: perfil de uma textura do projeto (interpretação, tamanho, mips, bordas,
+  // anisotropia). Aplicar grava o arquivo e republica as texturas.
+  resources::TextureProfile textureProfileFor(const resources::AssetGuid &texture) const;
+  bool setTextureProfile(const resources::AssetGuid &texture,const resources::TextureProfile &profile,std::string &diagnostic);
+  // R4: o que subiu para a GPU de uma textura na última publicação, uma entrada
+  // por combinação de uso (espaço de cor e sampler); vazio quando não é usada.
+  struct TextureResidency {
+    u32 width=0,height=0,levels=0;
+    u64 bytes=0;
+    bool srgb=true;
+    u32 sampler=0;
+  };
+  std::vector<TextureResidency> textureResidencyOf(const resources::AssetGuid &texture) const;
   // Objetos da cena com um slot que usa a textura, mais materiais do projeto que a usam.
   u32 textureUsersOf(const resources::AssetGuid &guid) const;
   // R4: prévia de texturas. Uma miniatura por chamada (o seletor chama a cada
@@ -770,6 +784,8 @@ private:
     }
   };
   std::vector<UsedTexture> anticipatedTextures_;
+  std::vector<std::pair<resources::AssetGuid,resources::TextureProfile>> textureProfiles_;
+  std::vector<std::pair<EditorMapScene::TextureBinding,TextureResidency>> publishedTextures_;
   TexturePreviewAtlas preview_;
   struct TextureThumbnail {
     resources::AssetGuid guid;

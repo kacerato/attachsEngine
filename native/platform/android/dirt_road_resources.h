@@ -61,6 +61,10 @@ public:
   }
   u32 textureCount() const { return static_cast<u32>(images_.size() + authoringImages_.size()); }
   u32 packageTextureCount() const { return static_cast<u32>(images_.size()); }
+  // R4: anisotropia da política de qualidade aplicada aos samplers de material
+  // (pacote e autoria) na próxima criação. Um valor de 1 ou menos desliga.
+  void setSamplerAnisotropy(float value) { samplerAnisotropy_ = value > 1.0f ? value : 1.0f; }
+  float samplerAnisotropy() const { return samplerAnisotropy_; }
   VkImageView environmentView() const { return environmentImage_.view(); }
   VkSampler environmentSampler() const { return environmentSampler_.handle(); }
   VkImageView environmentSpecularView() const {
@@ -115,6 +119,7 @@ private:
   // Texturas das fontes importadas (M09.1), trocadas inteiras a cada publicação.
   std::vector<rhi::VulkanImage> authoringImages_;
   std::vector<rhi::VulkanSampler> authoringSamplers_;
+  float samplerAnisotropy_ = 1.0f;
   rhi::VulkanImage environmentImage_;
   rhi::VulkanSampler environmentSampler_;
   rhi::VulkanImage environmentSpecularImage_;

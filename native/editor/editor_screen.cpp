@@ -909,7 +909,7 @@ void buildTextureViewer(ScreenBuilder &builder,UiRect content) {
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
   builder.router.addRegion(back,widgetId(EditorWidget::TextureViewerClose));
   builder.label(title,state.textureViewerTitle,theme.color.text,theme.type.caption);
-  auto controls=takeBottom(content,std::min(content.height*.55f,162.0f));
+  auto controls=takeBottom(content,std::min(content.height*.62f,270.0f));
   auto image=deflate(content,UiInsets::all(4));
   builder.list.addRect(image,theme.color.raised,theme.radius.control);
   if(!state.textureViewerImage.isEmpty() && !image.isEmpty()) {
@@ -953,6 +953,22 @@ void buildTextureViewer(ScreenBuilder &builder,UiRect content) {
   builder.list.addRect(backgroundBox,theme.color.raised,theme.radius.control);
   builder.label(backgroundBox,"Fundo "+state.textureViewerBackgroundLabel,rgba?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
   if(rgba) builder.router.addRegion(backgroundBox,widgetId(EditorWidget::TextureViewerBackground));
+  // R4: perfil da textura (vale para todos os usos) e o que está na GPU.
+  if(controls.height>=36*3) {
+    const auto profileButton=[&](UiRect box,const std::string &text,u32 widget) {
+      box=deflate(box,UiInsets::all(2));
+      builder.list.addRect(box,theme.color.raised,theme.radius.control);
+      builder.label(box,text,theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(box,widget);
+    };
+    for(u32 line=0;line<3;++line) {
+      auto row=takeTop(controls,36);
+      const u32 first=line*2;
+      profileButton(takeLeft(row,row.width*.5f),state.textureProfileLabels[first],widgetId(EditorWidget::TextureProfileInterpretation)+first);
+      if(first+1<5) profileButton(row,state.textureProfileLabels[first+1],widgetId(EditorWidget::TextureProfileInterpretation)+first+1);
+      else builder.label(deflate(row,UiInsets::symmetric(6,2)),state.textureResidencyLabel,theme.color.textMuted,theme.type.caption);
+    }
+  }
   if(controls.height<20) return;
   builder.list.pushClip(controls);
   builder.label(controls,state.textureViewerInfo,theme.color.textMuted,theme.type.caption);

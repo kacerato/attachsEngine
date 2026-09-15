@@ -17,6 +17,8 @@ inline constexpr u32 AuthoringTextureRepeatU = 1u << 2;
 inline constexpr u32 AuthoringTextureRepeatV = 1u << 3;
 inline constexpr u32 AuthoringTextureMirrorU = 1u << 4;
 inline constexpr u32 AuthoringTextureMirrorV = 1u << 5;
+// R4: o perfil da textura desliga a anisotropia da qualidade escolhida (T13).
+inline constexpr u32 AuthoringTextureNoAnisotropy = 1u << 6;
 
 // Formato de `mipChain` (Entrega 4). RGBA8: 4 bytes por texel. ASTC 4x4: um bloco
 // de 16 bytes por 4x4 texels (arredondado para cima) — só quando o aparelho

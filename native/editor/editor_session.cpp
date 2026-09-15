@@ -1123,6 +1123,25 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::TextureViewerClose)) {closeTextureViewer();return true;}
     if(key==widgetId(EditorWidget::TextureViewerChannel)) {cycleTextureViewerChannel();return true;}
     if(key==widgetId(EditorWidget::TextureViewerZoom)) {cycleTextureViewerZoom();return true;}
+    // R4: perfil da textura aberta no visualizador.
+    if(key>=widgetId(EditorWidget::TextureProfileInterpretation) && key<=widgetId(EditorWidget::TextureProfileAnisotropy) &&
+       state_.textureViewer && state_.textureViewerIndex<textures_.size()) {
+      const auto texture=textures_[state_.textureViewerIndex];
+      auto profile=textureProfileFor(texture.guid);
+      if(key==widgetId(EditorWidget::TextureProfileInterpretation)) profile.interpretation=static_cast<u8>((profile.interpretation+1u)%3u);
+      else if(key==widgetId(EditorWidget::TextureProfileDimension)) {
+        const auto &steps=resources::TextureDimensionSteps;
+        const auto current=std::find(steps.begin(),steps.end(),profile.maximumDimension);
+        profile.maximumDimension=current==steps.end()||current+1==steps.end()?steps.front():*(current+1);
+      }
+      else if(key==widgetId(EditorWidget::TextureProfileMipmaps)) profile.mipmaps=!profile.mipmaps;
+      else if(key==widgetId(EditorWidget::TextureProfileEdges)) profile.dilateEdges=!profile.dilateEdges;
+      else profile.anisotropy=!profile.anisotropy;
+      std::string diagnostic;
+      state_.status=setTextureProfile(texture.guid,profile,diagnostic)?"Perfil aplicado a todos os usos de "+texture.name:diagnostic;
+      refreshTextureViewerImage();
+      return true;
+    }
     if(key==widgetId(EditorWidget::TextureViewerBackground)) {cycleTextureViewerBackground();return true;}
     if(key==widgetId(EditorWidget::TextureViewerMipDown) || key==widgetId(EditorWidget::TextureViewerMipUp)) {
       stepTextureViewerLevel(key==widgetId(EditorWidget::TextureViewerMipUp)?1:-1);
@@ -1941,6 +1960,13 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
       }
   }
   const auto residency=resources::applyTextureBudget(textures,importTextureBudget_,importLimits_.minimumTextureDimension);
+  // R4 (T16): o que cada textura do projeto ocupa de fato na GPU, depois do perfil e do orçamento.
+  std::vector<std::pair<EditorMapScene::TextureBinding,TextureResidency>> publishedResidency;
+  for(const auto &binding:bindings)
+    if(binding.index<textures.size() && textures[binding.index]) {
+      const auto &texture=*textures[binding.index];
+      publishedResidency.push_back({binding,{texture.width,texture.height,texture.levels,texture.expectedBytes(),texture.srgb,texture.samplerFlags}});
+    }
   if(!publishGeometry_(library.vertices,library.indices,library.draws,library.materials,textures,published)) {
     diagnostic="O consumidor gráfico recusou a geometria importada.";return false;
   }
@@ -1975,6 +2001,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
                              published.indices,identities,packageFingerprint_,pivots)) {
     diagnostic="O editor recusou o pacote publicado.";return false;
   }
+  publishedTextures_=std::move(publishedResidency);
   mapScene_.setTextureLibrary(std::move(bindings));
   return true;
 }
@@ -2076,6 +2103,26 @@ bool EditorSession::refreshTextureViewerImage() {
   state_.textureViewerImage=preview_.writeViewer(std::span<const u8>(viewerChain_.chain).subspan(offset,static_cast<usize>(width)*height*4),
                                                  width,height,channel,state_.textureViewerZoom,background);
   state_.textureViewerZoomLabel=std::to_string(1u<<state_.textureViewerZoom)+"× no centro";
+  // R4: perfil da textura (todos os usos) e o que está na GPU.
+  {
+    const auto profile=textureProfileFor(texture.guid);
+    static constexpr const char *interpretations[]{"Interp.: pelo uso","Interp.: cor (sRGB)","Interp.: dado (linear)"};
+    state_.textureProfileLabels[0]=interpretations[std::min<u32>(profile.interpretation,2u)];
+    state_.textureProfileLabels[1]=profile.maximumDimension?"Tamanho: até "+std::to_string(profile.maximumDimension)+" px":
+                                                            std::string("Tamanho: teto do projeto");
+    state_.textureProfileLabels[2]=profile.mipmaps?"Mipmaps: sim":"Mipmaps: não";
+    state_.textureProfileLabels[3]=profile.dilateEdges?"Bordas: sem halo":"Bordas: do arquivo";
+    state_.textureProfileLabels[4]=profile.anisotropy?"Anisotropia: da qualidade":"Anisotropia: desligada";
+    const auto residency=textureResidencyOf(texture.guid);
+    if(residency.empty()) state_.textureResidencyLabel="Na GPU: não usada";
+    else {
+      char text[96];
+      std::snprintf(text,sizeof(text),"Na GPU: %u×%u · %u níveis · %.1f MB%s",residency.front().width,residency.front().height,
+                    residency.front().levels,static_cast<double>(residency.front().bytes)/1048576.0,
+                    residency.size()>1?" · +usos":"");
+      state_.textureResidencyLabel=text;
+    }
+  }
   state_.textureViewerBackgroundLabel=texturePreviewBackgroundName(background);
   state_.textureViewerLevelLabel="Nível "+std::to_string(state_.textureViewerLevel)+" de "+std::to_string(viewerChain_.levels-1)+
                                  " · "+std::to_string(width)+"×"+std::to_string(height);
@@ -3092,13 +3139,63 @@ std::string textureFileStem(std::string_view text) {
 }
 } // namespace
 
+namespace {
+bool readProjectTextureProfile(const std::string &root,const std::string &relative,resources::TextureProfile &out) {
+  std::filesystem::path absolute;
+  if(root.empty() || !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),relative,absolute)) return false;
+  std::error_code error;
+  if(!std::filesystem::exists(absolute,error)) return false;
+  std::vector<u8> bytes;
+  return EditorImportTransaction::read(absolute,bytes,64u*1024u) &&
+         resources::parseTextureProfile(std::string_view(reinterpret_cast<const char *>(bytes.data()),bytes.size()),out);
+}
+bool writeProjectTextureProfile(const std::string &root,const std::string &relative,const resources::TextureProfile &profile) {
+  std::filesystem::path absolute;
+  if(root.empty() || !resources::validTextureProfile(profile) ||
+     !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),relative,absolute)) return false;
+  std::error_code error;std::filesystem::create_directories(absolute.parent_path(),error);
+  return !error && EditorImportTransaction::writeText(absolute,resources::serializeTextureProfile(profile));
+}
+} // namespace
+
+resources::TextureProfile EditorSession::textureProfileFor(const resources::AssetGuid &texture) const {
+  for(const auto &[guid,profile]:textureProfiles_) if(guid==texture) return profile;
+  return {};
+}
+
+bool EditorSession::setTextureProfile(const resources::AssetGuid &texture,const resources::TextureProfile &profile,std::string &diagnostic) {
+  diagnostic.clear();
+  if(isPlaying()) {diagnostic="Pare a execução antes de mudar o perfil da textura.";return false;}
+  if(!resources::validTextureProfile(profile)) {diagnostic="Perfil de textura inválido.";return false;}
+  const auto *record=assets_.find(texture);
+  if(!record || record->type!=resources::AssetType::Texture) {diagnostic="Textura fora do projeto.";return false;}
+  if(!writeProjectTextureProfile(files_.rootPath(),resources::textureProfilePath(texture),profile)) {
+    diagnostic="Não foi possível gravar o perfil da textura.";return false;
+  }
+  std::erase_if(textureProfiles_,[&](const auto &entry){return entry.first==texture;});
+  textureProfiles_.emplace_back(texture,profile);
+  // A decodificação muda (espaço de cor, mips, bordas, teto): nada do cache serve.
+  std::erase_if(decodedTextures_,[&](const auto &entry){return entry.guid==texture;});
+  if(importedSources_.empty()) return true;
+  return publishAndAdopt(flattenSources(importedSources_),diagnostic);
+}
+
+std::vector<EditorSession::TextureResidency> EditorSession::textureResidencyOf(const resources::AssetGuid &texture) const {
+  std::vector<TextureResidency> out;
+  for(const auto &[binding,residency]:publishedTextures_) if(binding.guid==texture) out.push_back(residency);
+  return out;
+}
+
 void EditorSession::loadTextureAssets() {
   textures_.clear();
+  textureProfiles_.clear();
   const auto root=files_.rootPath();
   for(const auto &record:assets_.records()) {
     if(record.type!=resources::AssetType::Texture) continue;
     ProjectTexture texture;
     texture.guid=record.guid;texture.path=record.path;
+    if(resources::TextureProfile profile;readProjectTextureProfile(root,resources::textureProfilePath(record.guid),profile))
+      textureProfiles_.emplace_back(record.guid,profile);
     const auto slash=record.path.find_last_of('/');
     texture.name=slash==std::string::npos?record.path:record.path.substr(slash+1);
     std::filesystem::path absolute;std::vector<u8> bytes;
@@ -3113,10 +3210,15 @@ void EditorSession::loadTextureAssets() {
 renderer::SharedAuthoringTexture EditorSession::decodeProjectTexture(const resources::AssetGuid &guid,bool srgb,u32 sampler) {
   const auto *record=assets_.find(guid);
   if(!record || record->type!=resources::AssetType::Texture) return {};
+  // R4: perfil da textura: interpretação, tamanho, mips, bordas e anisotropia.
+  const auto profile=textureProfileFor(guid);
+  const bool decodeSrgb=profile.interpretation==resources::TextureInterpretationColor?true:
+                        profile.interpretation==resources::TextureInterpretationData?false:srgb;
+  const u32 effectiveSampler=sampler|(profile.anisotropy?0u:renderer::AuthoringTextureNoAnisotropy);
   renderer::SharedAuthoringTexture base;
   for(const auto &entry:decodedTextures_)
     if(entry.guid==guid && entry.srgb==srgb && entry.contentHash==record->contentHash) {
-      if(entry.sampler==sampler) return entry.texture;
+      if(entry.sampler==effectiveSampler) return entry.texture;
       base=entry.texture;
     }
   if(!base) {
@@ -3130,25 +3232,32 @@ renderer::SharedAuthoringTexture EditorSession::decodeProjectTexture(const resou
     return {};
   }
   auto texture=std::make_shared<renderer::AuthoringTexture>();
-  texture->width=image.width;texture->height=image.height;texture->srgb=srgb;
-  if(!resources::buildMipChain(image,srgb,texture->mipChain,texture->levels)) return {};
-  // Mesmo teto residente das texturas importadas: os níveis de cima saem.
-  while(texture->levels>1 && std::max(texture->width,texture->height)>importLimits_.maximumTextureDimension) {
+  if(profile.dilateEdges) resources::dilateTransparentEdges(image);
+  texture->width=image.width;texture->height=image.height;texture->srgb=decodeSrgb;
+  if(!resources::buildMipChain(image,decodeSrgb,texture->mipChain,texture->levels)) return {};
+  // Teto residente: o do perfil da textura, nunca acima do das texturas importadas.
+  const u32 cap=profile.maximumDimension?std::min(profile.maximumDimension,importLimits_.maximumTextureDimension):
+                                         importLimits_.maximumTextureDimension;
+  while(texture->levels>1 && std::max(texture->width,texture->height)>cap) {
     const u64 top=u64{texture->width}*texture->height*4;
     texture->mipChain.erase(texture->mipChain.begin(),texture->mipChain.begin()+static_cast<std::ptrdiff_t>(top));
     texture->width=std::max<u32>(1,texture->width/2);texture->height=std::max<u32>(1,texture->height/2);--texture->levels;
+  }
+  // Sem mipmaps: só o nível mais alto que coube no teto.
+  if(!profile.mipmaps && texture->levels>1) {
+    texture->mipChain.resize(static_cast<usize>(texture->width)*texture->height*4);texture->levels=1;
   }
   if(!texture->valid()) return {};
   std::erase_if(decodedTextures_,[&](const auto &entry){return entry.guid==guid && entry.srgb==srgb;});
   decodedTextures_.push_back({guid,srgb,texture->samplerFlags,record->contentHash,texture});
   base=texture;
   }
-  if(base->samplerFlags==sampler) return base;
+  if(base->samplerFlags==effectiveSampler) return base;
   // Outro sampler para a mesma imagem: cópia da cadeia com as flags pedidas. A
   // cadeia fica duplicada na CPU e na GPU enquanto as duas amostragens forem usadas.
   auto variant=std::make_shared<renderer::AuthoringTexture>(*base);
-  variant->samplerFlags=sampler;
-  decodedTextures_.push_back({guid,srgb,sampler,record->contentHash,variant});
+  variant->samplerFlags=effectiveSampler;
+  decodedTextures_.push_back({guid,srgb,effectiveSampler,record->contentHash,variant});
   return variant;
 }
 

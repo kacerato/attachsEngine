@@ -116,6 +116,7 @@ struct Publisher {
   usize textures = 0;
   u32 rebuilds = 0;
   std::vector<u32> samplers; // flags de sampler de cada textura publicada, na ordem da biblioteca
+  std::vector<renderer::SharedAuthoringTexture> published;
 };
 
 void start(EditorSession &session, Publisher &publisher) {
@@ -133,6 +134,7 @@ void start(EditorSession &session, Publisher &publisher) {
     publisher.textures = t.size();
     publisher.samplers.clear();
     for (const auto &texture : t) publisher.samplers.push_back(texture->samplerFlags);
+    publisher.published.assign(t.begin(), t.end());
     publisher.vertices.clear(); publisher.indices.clear(); publisher.draws.clear(); publisher.materials.clear();
     if (!renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride, publisher.vertices, publisher.indices, publisher.draws, publisher.materials))
       return false;
@@ -830,4 +832,59 @@ AE_TEST(r4_occlusion_channels_normal_and_alpha_source_resolve_reach_the_extensio
   effective = effectiveMaterial(session, object);
   AE_EXPECT_TRUE(effective.channels == scene::MaterialChannels{} && effective.occlusionTexture == scene::MaterialTextureKeep,
                  "canais e oclusão voltam à fonte");
+}
+
+AE_TEST(r4_texture_profile_changes_interpretation_mips_anisotropy_and_is_read_back_on_reopen) {
+  Project project;
+  EditorSession session;
+  Publisher publisher;
+  start(session, publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  const auto glb = texturedPanel(png(4, 4, 200));
+  resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(glb, {}, {}, model), model.diagnostic.c_str());
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(glb, model, "Fontes/tela.glb", "", report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), report.diagnostic.c_str());
+  std::string diagnostic;
+  EditorSession::TextureExtraction extraction;
+  AE_EXPECT_TRUE(session.extractSourceTextures("Fontes/tela.glb", extraction, diagnostic), diagnostic.c_str());
+  const auto object = firstMeshObject(session);
+  const auto texture = extraction.textures.front();
+  AE_EXPECT_TRUE(session.setSlotTexture(object, 0, 0, EditorSession::MaterialScope::Instance, texture, diagnostic), diagnostic.c_str());
+  u32 index = effectiveTexture(session, object, 0);
+  AE_EXPECT_TRUE(index < publisher.published.size() && publisher.published[index]->levels == 3 && publisher.published[index]->srgb &&
+                     !(publisher.published[index]->samplerFlags & renderer::AuthoringTextureNoAnisotropy),
+                 "padrão: cor base com mips, sRGB pelo uso e anisotropia da qualidade");
+
+  resources::TextureProfile profile;
+  profile.interpretation = resources::TextureInterpretationData;
+  profile.mipmaps = false;
+  profile.dilateEdges = true;
+  profile.anisotropy = false;
+  const auto rebuilds = publisher.rebuilds;
+  AE_EXPECT_TRUE(session.setTextureProfile(texture, profile, diagnostic), diagnostic.c_str());
+  AE_EXPECT_EQ(publisher.rebuilds, rebuilds + 1, "perfil novo republica as texturas");
+  index = effectiveTexture(session, object, 0);
+  AE_EXPECT_TRUE(index < publisher.published.size(), "binding continua resolvido");
+  const auto &published = publisher.published[index];
+  AE_EXPECT_TRUE(published->levels == 1 && !published->srgb && (published->samplerFlags & renderer::AuthoringTextureNoAnisotropy),
+                 "sem mips, dado linear e sem anisotropia na textura publicada");
+  const auto residency = session.textureResidencyOf(texture);
+  AE_EXPECT_TRUE(!residency.empty() && residency.front().levels == 1 && residency.front().width == 4 && !residency.front().srgb &&
+                     residency.front().bytes == 16 * 4,
+                 "residência consultável por textura");
+  AE_EXPECT_TRUE(std::filesystem::exists(project.root / resources::textureProfilePath(texture)), "perfil gravado no projeto");
+  resources::TextureProfile invalid;
+  invalid.maximumDimension = 300;
+  AE_EXPECT_TRUE(!session.setTextureProfile(texture, invalid, diagnostic), "perfil fora dos passos recusado");
+
+  // Reabrir como o shell faz: diretório do projeto e o registro gravado.
+  const auto registry = session.serializeAssets();
+  EditorSession reopened;
+  Publisher other;
+  start(reopened, other);
+  AE_EXPECT_TRUE(reopened.setProjectDirectory(project.root.string().c_str()), "reabrir o projeto");
+  AE_EXPECT_TRUE(reopened.loadAssets(registry), "registro");
+  AE_EXPECT_TRUE(resources::sameTextureProfile(reopened.textureProfileFor(texture), profile), "perfil lido na reabertura");
 }

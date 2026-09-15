@@ -226,6 +226,12 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
                                              : VK_SAMPLER_MIPMAP_MODE_NEAREST;
     sampling.addressU = addressMode((flags & 4u) != 0);
     sampling.addressV = addressMode((flags & 8u) != 0);
+    // R4 (T13): a anisotropia da política chega de fato ao sampler. Antes ela era
+    // calculada e registrada no log, mas nenhum sampler de material a usava.
+    if (samplerAnisotropy_ > 1.0f && (flags & 1u) != 0) {
+      sampling.enableAnisotropy = true;
+      sampling.maxAnisotropy = samplerAnisotropy_;
+    }
     if (!loadAndroidTexture(device, upload, assets, name, maxDimension, perTextureBudget,
                             sampling, images_[index], samplers_[index], cancel, "DirtRoad")) return false;
   }
@@ -371,6 +377,10 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
     sampling.addressU=wrap(renderer::AuthoringTextureRepeatU,renderer::AuthoringTextureMirrorU);
     sampling.addressV=wrap(renderer::AuthoringTextureRepeatV,renderer::AuthoringTextureMirrorV);
     sampling.maxLod=static_cast<float>(texture->levels-1);
+    // R4 (T13): anisotropia da qualidade escolhida, salvo quando o perfil da textura a desliga.
+    if(samplerAnisotropy_>1.0f && (flags&renderer::AuthoringTextureLinearFilter) && !(flags&renderer::AuthoringTextureNoAnisotropy)) {
+      sampling.enableAnisotropy=true;sampling.maxAnisotropy=samplerAnisotropy_;
+    }
     if(!nextSamplers[t].initialize(device.handle(),sampling)) return false;
   }
   vertices_=std::move(nextVertices);indices_=std::move(nextIndices);

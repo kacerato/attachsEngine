@@ -194,6 +194,7 @@ enum class EditorWidget : u32 {
   MaterialNormalFlipCycle, MaterialAlphaSourceCycle, MaterialIsolateCycle,
   TextureViewerClose, TextureViewerChannel, TextureViewerMipDown, TextureViewerMipUp,
   TextureViewerZoom, TextureViewerBackground,
+  TextureProfileInterpretation, TextureProfileDimension, TextureProfileMipmaps, TextureProfileEdges, TextureProfileAnisotropy,
   TextureSamplingUv, TextureSamplingWrap, TextureSamplingFilter, TextureUvReset,
   // + máscara de ImportOverride.
   ImportLinkRevertBase=0x52000000u,
@@ -453,6 +454,8 @@ struct EditorScreenState final {
   ui::UiRect textureViewerImage{};
   std::string textureViewerTitle,textureViewerLevelLabel,textureViewerChannelLabel,textureViewerInfo;
   std::string textureViewerZoomLabel,textureViewerBackgroundLabel;
+  // R4: perfil da textura (interpretação, tamanho, mips, bordas, anisotropia) e residência.
+  std::string textureProfileLabels[5],textureResidencyLabel;
   // Menu de ações do objeto (⋮ do cabeçalho do inspetor) e do card Transformação.
   bool inspectorMenu=false,transformMenu=false;
   // Transformação copiada, para colar em outro objeto.

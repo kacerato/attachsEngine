@@ -3688,6 +3688,9 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     const u32 waterGridSegments = renderer::selectWaterGrid(
         renderingPolicy_.geometry.waterMesh,
         renderer::WaterSpectrumSettings{}.windSpeed, 8000.0f).segments;
+    dirtRoadResources_.setSamplerAnisotropy(renderingPolicy_.textures.samplerAnisotropy);
+    __android_log_print(ANDROID_LOG_INFO, LogTag, "[Textures] anisotropia de material=%.1f",
+                        static_cast<double>(dirtRoadResources_.samplerAnisotropy()));
     if (emptyScene_) {
       if(!dirtRoadResources_.initializePrimitives(device,uploadContext_)) return false;
     } else if (!dirtRoadResources_.initialize(device, uploadContext_, materialAssets,
@@ -4047,6 +4050,7 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   };
   if(useBindless_) for(const auto slot:authoringTextureSlots_) bindlessRegistry_.unregisterTexture(slot);
   authoringTextureSlots_.clear();
+  dirtRoadResources_.setSamplerAnisotropy(renderingPolicy_.textures.samplerAnisotropy);
   if(!dirtRoadResources_.rebuildAuthoringLibrary(*rhiDevice_,uploadContext_,vertices,indices,draws,materials,textures)) {
     registerAuthoringTextures();
     __android_log_print(ANDROID_LOG_ERROR,LogTag,

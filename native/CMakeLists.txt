@@ -290,6 +290,7 @@ add_library(aether_assets STATIC
   resources/import_cache.cpp
   resources/texture_budget.cpp
   resources/import_profile.cpp
+  resources/texture_profile.cpp
   resources/glb_images.cpp
 )
 target_include_directories(aether_assets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -538,6 +539,7 @@ if(NOT ANDROID)
     ../tests/native/test_image_decode.cpp
     ../tests/native/test_project_textures.cpp
     ../tests/native/test_texture_preview.cpp
+    ../tests/native/test_texture_profile.cpp
     ../tests/native/test_gltf_codecs.cpp
     ../tests/native/test_gltf_package.cpp
     ../tests/native/test_editor_script_templates.cpp
