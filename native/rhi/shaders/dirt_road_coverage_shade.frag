@@ -13,4 +13,6 @@ layout(set=0,binding=0) uniform sampler2D textures[];
 #define NORMAL_MAP textures[frame.textureIndices.y]
 #define MR_MAP textures[frame.textureIndices.z]
 #define EMISSIVE_MAP textures[frame.textureIndices.w]
+// R4: textura de oclusão própria, índice da extensão de material do desenho.
+#define OCCLUSION_MAP(index) textures[index]
 #include "dirt_road_shading.glsl"

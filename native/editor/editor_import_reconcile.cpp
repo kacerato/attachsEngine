@@ -57,6 +57,7 @@ bool slotCarriesMaterial(const scene::MeshRenderer &render, u32 slot) {
   for (const auto &texture : render.slotTextures(slot)) if (texture.valid()) return true;
   if (render.slotSurface(slot).overrides()) return true;
   for (const auto &sampling : render.slotSampling(slot)) if (sampling.overrides()) return true;
+  if (render.slotChannels(slot).overrides() || render.slotOcclusionTexture(slot).valid()) return true;
   return false;
 }
 
@@ -409,6 +410,8 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
           *render->editSlotTextures(slot) = partRender->textures;
           *render->editSlotSurface(slot) = partRender->surface;
           *render->editSlotSampling(slot) = partRender->sampling;
+          *render->editSlotChannels(slot) = partRender->channels;
+          *render->editSlotOcclusionTexture(slot) = partRender->occlusionTexture;
         }
         base.push_back(linkOf(part)->baseAsset);
       }
@@ -648,6 +651,8 @@ bool revertImportOverrides(EditorDocument &document, EditorHistory &history, Edi
         *render->editSlotTextures(slot) = {};
         *render->editSlotSurface(slot) = {};
         *render->editSlotSampling(slot) = {};
+        *render->editSlotChannels(slot) = {};
+        *render->editSlotOcclusionTexture(slot) = {};
       }
   history.begin("Reverter à fonte");
   bool ok = history.applyValues(document, id, values);

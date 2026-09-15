@@ -125,10 +125,13 @@ static_assert(sizeof(DirtRoadFrameUniform) == 1584);
 
 struct ShadowPushConstants {
   float lightViewProjection[16]{};
-  float alphaCutoffUvSlot[4]{};
+  float alphaCutoffUvSlot[4]{}; // x corte, y conjunto de UV, z origem do alfa (0 cor base, 1 opaco, 2 luminância)
   u32 baseTextureIndex[4]{};
+  // R4: transformação de UV da cor base (linhas a b c / d e f), a mesma do passe de cor.
+  float uvRow0[4]{1, 0, 0, 0};
+  float uvRow1[4]{0, 1, 0, 0};
 };
-static_assert(sizeof(ShadowPushConstants) == 96);
+static_assert(sizeof(ShadowPushConstants) == 128);
 
 // Teto de instancias da interface por frame. A tela cheia do editor com a
 // hierarquia aberta usa por volta de 500; o teto e folgado o bastante para uma
@@ -855,7 +858,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   // ondulação abaixo: o descritor é escrito uma vez.
   {
     rhi::BufferDesc transforms{};
-    transforms.sizeBytes = static_cast<u64>(MaterialUvTransformCapacity) * renderer::MaterialUvTransformFloats * sizeof(float);
+    transforms.sizeBytes = static_cast<u64>(MaterialUvTransformCapacity) * renderer::MaterialExtensionFloats * sizeof(float);
     transforms.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     transforms.cpuAccess = rhi::CpuAccess::SequentialWrite;
     transforms.preferDeviceMemory = false;
@@ -1072,18 +1075,35 @@ bool InstancedRenderer::writeAuthoredUvTransforms() {
   if (entries == nullptr) return true; // sem o mapa em edição ninguém lê a tabela
   u32 used = 0;
   bool overflow = false;
+  const u32 textureBase = static_cast<u32>(dirtRoadResources_.packageTextureCount());
   for (usize draw = 0; draw < authoredMaterials_.size(); ++draw) {
-    if (authoredMaterials_[draw].uvTransformMask == 0) continue;
+    const auto &material = authoredMaterials_[draw];
+    if (!renderer::needsMaterialExtension(material)) continue;
     if (used >= MaterialUvTransformCapacity) { overflow = true; continue; }
-    renderer::materialUvTransformEntry(authoredMaterials_[draw],
-                                       entries + static_cast<usize>(used) * renderer::MaterialUvTransformFloats);
+    // O padrão da fonte (oclusão empacotada ou não) vem das flags efetivas do desenho.
+    u32 flags = 0;
+    if (draw < dirtRoadResources_.draws().size()) {
+      const u32 materialIndex = dirtRoadResources_.draws()[draw].materialIndex;
+      if (materialIndex < dirtRoadResources_.materials().size())
+        flags = renderer::applyMaterialOverride(dirtRoadResources_.materials()[materialIndex], material, textureBase).flags;
+    }
+    // Textura de oclusão própria só existe com descritores bindless: o caminho de
+    // fallback tem exatamente quatro samplers por material.
+    u32 occlusionSlot = renderer::MaterialExtensionNoTexture;
+    if (useBindless_ && material.occlusionTexture != scene::MaterialTextureKeep &&
+        material.occlusionTexture != renderer::InvalidMapTexture) {
+      const u64 texture = u64{material.occlusionTexture} + textureBase;
+      if (texture < dirtTextureSlots_.size()) occlusionSlot = dirtTextureSlots_[texture];
+    }
+    renderer::materialExtensionEntry(material, flags, occlusionSlot,
+                                     entries + static_cast<usize>(used) * renderer::MaterialExtensionFloats);
     authoredUvTransformEntries_[draw] = ++used;
   }
-  // Acima da capacidade o desenho fica sem transformação e isso é dito uma vez.
+  // Acima da capacidade o desenho fica sem extensão e isso é dito uma vez.
   if (overflow && !uvTransformOverflowReported_) {
     uvTransformOverflowReported_ = true;
     __android_log_print(ANDROID_LOG_WARN, LogTag,
-        "[Material] mais de %u desenhos com transformação de UV; os excedentes usam a UV sem transformação.",
+        "[Material] mais de %u desenhos com extensão de material (UV, canais, oclusão, alfa); os excedentes usam o material sem ela.",
         MaterialUvTransformCapacity);
   }
   return used == 0 || memoryAllocator_->flushBuffer(materialUvTransformBuffer_);
@@ -2055,7 +2075,13 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
   auto pushAndDraw = [&](u32 cascade, u32 drawIndex, bool masked) {
     if (!authoredVisibility_.empty() && (!authoredVisibility_[drawIndex] || !authoredShadows_[drawIndex])) return;
     const auto &draw=dirtRoadResources_.draws()[drawIndex];
-    const auto &material=dirtRoadResources_.materials()[draw.materialIndex];
+    // R4: a sombra recorta pelo material EFETIVO do desenho (textura, corte,
+    // conjunto de UV e transformação trocados na instância ou no material do projeto).
+    auto material=dirtRoadResources_.materials()[draw.materialIndex];
+    const bool authored=drawIndex<authoredMaterials_.size();
+    if(authored)
+      material=renderer::applyMaterialOverride(material,authoredMaterials_[drawIndex],
+                                               static_cast<u32>(dirtRoadResources_.packageTextureCount()));
     // The animated receiver must not enter the static-caster cache. Ocean
     // self-shadowing is represented by its analytic normal; terrain and props
     // can still cast onto the water through the same cascade atlas.
@@ -2073,6 +2099,16 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
                 sizeof(push.lightViewProjection));
     push.alphaCutoffUvSlot[0]=material.alphaCutoff;
     push.alphaCutoffUvSlot[1]=(material.textureCoordinates&3u)==1u?1.0f:0.0f;
+    if(authored) {
+      const auto &value=authoredMaterials_[drawIndex];
+      if(value.channels.alphaSource!=scene::MaterialAlphaSourceKeep)
+        push.alphaCutoffUvSlot[2]=static_cast<float>(value.channels.alphaSource-1u);
+      if(value.uvTransformMask&1u) {
+        const auto *rows=value.uvTransforms[0];
+        push.uvRow0[0]=rows[0];push.uvRow0[1]=rows[1];push.uvRow0[2]=rows[2];
+        push.uvRow1[0]=rows[3];push.uvRow1[1]=rows[4];push.uvRow1[2]=rows[5];
+      }
+    }
     const u32 texture=material.textureIndices[0];
     push.baseTextureIndex[0]=useBindless_ && texture!=renderer::InvalidMapTexture && texture<dirtTextureSlots_.size()
                                  ? dirtTextureSlots_[texture] : baseTextureIndex_;

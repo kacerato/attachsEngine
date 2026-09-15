@@ -1147,6 +1147,44 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
           (shared?"Material compartilhado atualizado em todos os usos":"Material desta instância atualizado"):diagnostic;
       return true;
     }
+    // R4: oclusão, canais, normal e origem do alfa, no alcance em edição.
+    if(key==widgetId(EditorWidget::MaterialOcclusionSourceCycle) || key==widgetId(EditorWidget::MaterialOcclusionStrengthDown) ||
+       key==widgetId(EditorWidget::MaterialOcclusionStrengthUp) || key==widgetId(EditorWidget::MaterialChannelRoughness) ||
+       key==widgetId(EditorWidget::MaterialChannelMetallic) || key==widgetId(EditorWidget::MaterialChannelOcclusion) ||
+       key==widgetId(EditorWidget::MaterialNormalFlipCycle) || key==widgetId(EditorWidget::MaterialAlphaSourceCycle)) {
+      const auto *entity=document_.find(state_.selection);
+      const auto *render=entity?meshRenderer(*entity):nullptr;
+      if(!render) return true;
+      const bool shared=state_.materialShared;
+      const auto *asset=findMaterialAsset(render->slotMaterialAsset(state_.materialSlot));
+      if(shared && !asset) {state_.status="Este slot usa o material da fonte: crie um material do projeto para editar todos os usos";return true;}
+      auto channels=shared?asset->channels:render->slotChannels(state_.materialSlot);
+      const auto cycle=[](std::uint8_t value,unsigned count) {return static_cast<std::uint8_t>((value+1u)%count);};
+      if(key==widgetId(EditorWidget::MaterialOcclusionSourceCycle)) channels.occlusionSource=cycle(channels.occlusionSource,4);
+      else if(key==widgetId(EditorWidget::MaterialOcclusionStrengthDown) || key==widgetId(EditorWidget::MaterialOcclusionStrengthUp)) {
+        const float current=channels.occlusionStrength<0?1.0f:channels.occlusionStrength;
+        const float step=key==widgetId(EditorWidget::MaterialOcclusionStrengthUp)?.05f:-.05f;
+        channels.occlusionStrength=std::clamp(std::round((current+step)*100.0f)/100.0f,0.0f,1.0f);
+      }
+      else if(key==widgetId(EditorWidget::MaterialChannelRoughness)) channels.roughness=cycle(channels.roughness,5);
+      else if(key==widgetId(EditorWidget::MaterialChannelMetallic)) channels.metallic=cycle(channels.metallic,5);
+      else if(key==widgetId(EditorWidget::MaterialChannelOcclusion)) channels.occlusion=cycle(channels.occlusion,5);
+      else if(key==widgetId(EditorWidget::MaterialNormalFlipCycle)) channels.normalFlipY=cycle(channels.normalFlipY,3);
+      else channels.alphaSource=cycle(channels.alphaSource,4);
+      std::string diagnostic;
+      state_.status=setSlotChannels(state_.selection,state_.materialSlot,shared?MaterialScope::Shared:MaterialScope::Instance,channels,diagnostic)?
+          (shared?"Material compartilhado atualizado em todos os usos":"Material desta instância atualizado"):diagnostic;
+      return true;
+    }
+    if(key==widgetId(EditorWidget::MaterialIsolateCycle)) {
+      state_.materialIsolate=static_cast<u8>((state_.materialIsolate+1u)%6u);
+      state_.status=state_.materialIsolate?"Prévia isolando um dado do material (não é salvo)":"Prévia normal";
+      return true;
+    }
+    if(key==widgetId(EditorWidget::MaterialOcclusionTexture)) {
+      state_.textureBinding=scene::MaterialOcclusionTextureBinding;
+      state_.texturePicker=true;state_.materialPicker=false;state_.meshPage=0;return true;
+    }
     const auto applyTexture=[&](const resources::AssetGuid &texture,const std::string &done) {
       std::string diagnostic;
       const bool applied=setSlotTexture(state_.selection,state_.materialSlot,state_.textureBinding,
@@ -2056,7 +2094,7 @@ u32 EditorSession::textureUsersOf(const resources::AssetGuid &guid) const {
   if(!guid.valid() || guid==scene::MaterialTextureNone) return 0;
   u32 users=sceneUsersOf(guid);
   for(const auto &material:materials_)
-    if(std::find(material.textures.begin(),material.textures.end(),guid)!=material.textures.end()) ++users;
+    if(std::find(material.textures.begin(),material.textures.end(),guid)!=material.textures.end() || material.occlusionTexture==guid) ++users;
   return users;
 }
 
@@ -2070,12 +2108,14 @@ void EditorSession::anticipateSceneTextures(const char *path,u64 fingerprint) {
     const auto *render=entity?meshRenderer(*entity):nullptr;
     if(!render) continue;
     for(u32 slot=0;slot<render->slotCount();++slot)
-      for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {
-        // Mesma resolução da extração: textura e amostragem da instância, senão do material.
-        const auto guid=mapScene_.slotTexture(*render,slot,binding);
+      for(u32 binding=0;binding<=scene::MaterialOcclusionTextureBinding;++binding) {
+        // Mesma resolução da extração: textura e amostragem da instância, senão do
+        // material. O binding extra é a oclusão própria (linear, amostragem do binding 2).
+        const bool occlusion=binding==scene::MaterialOcclusionTextureBinding;
+        const auto guid=occlusion?mapScene_.slotOcclusionTexture(*render,slot):mapScene_.slotTexture(*render,slot,binding);
         if(!guid.valid() || guid==scene::MaterialTextureNone) continue;
-        const UsedTexture item{guid,EditorMapScene::bindingIsSrgb(binding),
-                               EditorMapScene::samplerFlags(mapScene_.slotSampling(*render,slot,binding))};
+        const UsedTexture item{guid,!occlusion && EditorMapScene::bindingIsSrgb(binding),
+                               EditorMapScene::samplerFlags(mapScene_.slotSampling(*render,slot,occlusion?2u:binding))};
         if(std::find(anticipatedTextures_.begin(),anticipatedTextures_.end(),item)==anticipatedTextures_.end())
           anticipatedTextures_.push_back(item);
       }
@@ -2093,7 +2133,8 @@ u32 EditorSession::sceneUsersOf(const resources::AssetGuid &guid) const {
     // Um slot usa o recurso pela malha ou pelo material do projeto.
     if(render) for(u32 slot=0;slot<render->slotCount();++slot)
       if(render->slotAsset(slot)==guid || render->slotMaterialAsset(slot)==guid ||
-         std::find(render->slotTextures(slot).begin(),render->slotTextures(slot).end(),guid)!=render->slotTextures(slot).end()) {++users;break;}
+         std::find(render->slotTextures(slot).begin(),render->slotTextures(slot).end(),guid)!=render->slotTextures(slot).end() ||
+         render->slotOcclusionTexture(slot)==guid) {++users;break;}
   }
   return users;
 }
@@ -2153,7 +2194,7 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
         for(const auto &identity:source.identities) report.sceneUsers+=sceneUsersOf(identity);
     // R4: materiais do projeto que usam esta textura dependem dela.
     for(const auto &material:materials_) {
-      if(std::find(material.textures.begin(),material.textures.end(),guid)==material.textures.end()) continue;
+      if(std::find(material.textures.begin(),material.textures.end(),guid)==material.textures.end() && material.occlusionTexture!=guid) continue;
       if(std::find(doomed.begin(),doomed.end(),material.guid)==doomed.end()) ++report.registryDependents;
     }
     for(const auto &dependent:assets_.dependents(guid)) {
@@ -2879,6 +2920,12 @@ void EditorSession::refreshMaterialSlotView() {
   }
   const auto *entity=document_.find(state_.selection);
   const auto *render=entity?meshRenderer(*entity):nullptr;
+  // R4: isolar na prévia vale para o objeto e slot em edição, nunca em Play.
+  {
+    const EditorEntityId isolated=(render && !isPlaying() && state_.materialIsolate)?state_.selection:kInvalidEntity;
+    if(mapScene_.setMaterialIsolation(isolated,state_.materialSlot,isolated==kInvalidEntity?std::uint8_t{0}:state_.materialIsolate))
+      appearanceChanged_=true;
+  }
   state_.projectTextureThumbs.assign(textures_.size(),{});
   for(usize index=0;index<thumbnails_.size() && index<textures_.size();++index)
     if(thumbnails_[index].guid==textures_[index].guid) state_.projectTextureThumbs[index]=thumbnails_[index].content;
@@ -2925,6 +2972,46 @@ void EditorSession::refreshMaterialSlotView() {
             scene::MaterialSidesSingle:scene::MaterialSidesDouble;
     view.sidesLabel=sides==scene::MaterialSidesSingle?"Uma face":"Duas faces";
     view.sidesOrigin=state_.materialCulling?sidesOrigin:"sem efeito neste aparelho (sem culling dinâmico)";
+  }
+  // R4: oclusão, canais, normal, origem do alfa e isolamento, e de onde vêm.
+  {
+    const u32 sourceFlags=render->slotMesh(slot)?mapScene_.materialFlagsForAsset(render->slotMesh(slot)-1):0u;
+    const scene::MaterialChannels none{};
+    const auto &sharedChannels=shared?shared->channels:none;
+    const auto &edited=state_.materialShared?sharedChannels:render->slotChannels(slot);
+    const bool inherits=!state_.materialShared;
+    const auto pick=[&](std::uint8_t own,std::uint8_t inherited) {return own?own:(inherits?inherited:std::uint8_t{0});};
+    const auto originOf=[&](std::uint8_t own,std::uint8_t inherited)->const char * {
+      if(own) return state_.materialShared?"do material do projeto":"só esta instância";
+      return inherits && inherited?"do material do projeto":"da fonte";
+    };
+    const auto source=pick(edited.occlusionSource,sharedChannels.occlusionSource);
+    static constexpr const char *sources[]{"","Sem oclusão","Canal do metal/rugosidade","Textura própria"};
+    view.occlusionLabel=source?sources[source]:
+        ((sourceFlags&renderer::MapMaterialOcclusionInMetallicRoughness)?"Canal do metal/rugosidade":"Sem oclusão");
+    view.occlusionOrigin=originOf(edited.occlusionSource,sharedChannels.occlusionSource);
+    resources::AssetGuid occlusionTexture=shared?shared->occlusionTexture:resources::AssetGuid{};
+    if(!state_.materialShared && render->slotOcclusionTexture(slot).valid()) occlusionTexture=render->slotOcclusionTexture(slot);
+    const auto *occlusionProject=occlusionTexture.valid()?findProjectTexture(occlusionTexture):nullptr;
+    view.occlusionTextureLabel=occlusionProject?occlusionProject->name:occlusionTexture.valid()?std::string("Textura ausente"):std::string("Nenhuma");
+    const float strength=edited.occlusionStrength>=0?edited.occlusionStrength:
+        (inherits && sharedChannels.occlusionStrength>=0?sharedChannels.occlusionStrength:1.0f);
+    char strengthText[16];std::snprintf(strengthText,sizeof(strengthText),"%.2f",static_cast<double>(strength));
+    view.occlusionStrengthLabel=strengthText;
+    static constexpr const char *letters[]{"R","G","B","A"};
+    const auto channelLabel=[&](const char *prefix,std::uint8_t own,std::uint8_t inherited,unsigned fallback) {
+      const auto chosen=pick(own,inherited);return std::string(prefix)+letters[chosen?chosen-1u:fallback];
+    };
+    view.channelLabels[0]=channelLabel("Rug. ",edited.roughness,sharedChannels.roughness,1);
+    view.channelLabels[1]=channelLabel("Metal ",edited.metallic,sharedChannels.metallic,2);
+    view.channelLabels[2]=channelLabel("Ocl. ",edited.occlusion,sharedChannels.occlusion,0);
+    view.normalFlipLabel=pick(edited.normalFlipY,sharedChannels.normalFlipY)==scene::MaterialToggleOn?"Y invertido (DirectX)":"Y como no arquivo (OpenGL)";
+    view.normalFlipOrigin=originOf(edited.normalFlipY,sharedChannels.normalFlipY);
+    static constexpr const char *alphaSources[]{"Alfa da cor base","Alfa da cor base","Ignorar alfa (opaco)","Luminância da cor base"};
+    view.alphaSourceLabel=alphaSources[pick(edited.alphaSource,sharedChannels.alphaSource)];
+    view.alphaSourceOrigin=originOf(edited.alphaSource,sharedChannels.alphaSource);
+    static constexpr const char *isolates[]{"Desligado","Oclusão","Rugosidade","Metal","Alfa","Normal"};
+    view.isolateLabel=isolates[std::min<unsigned>(state_.materialIsolate,5u)];
   }
   // R4: textura efetiva de cada binding no alcance em edição, e de onde vem.
   for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {
@@ -2989,7 +3076,8 @@ void EditorSession::publishMaterialLibrary() {
   std::vector<std::pair<resources::AssetGuid,EditorMapScene::SharedMaterial>> library;
   library.reserve(materials_.size());
   for(const auto &material:materials_)
-    library.push_back({material.guid,{material.values,material.textures,material.surface,material.sampling}});
+    library.push_back({material.guid,{material.values,material.textures,material.surface,material.sampling,material.channels,
+                                      material.occlusionTexture}});
   mapScene_.setMaterialLibrary(std::move(library));
   appearanceChanged_=true;
 }
@@ -3073,6 +3161,8 @@ void EditorSession::collectUsedTextures(std::vector<UsedTexture> &out) const {
   };
   for(const auto &material:materials_)
     for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) add(material.textures[binding],binding,material.sampling[binding]);
+  // Oclusão própria: dado linear, amostrada como o metal/rugosidade (binding 2).
+  for(const auto &material:materials_) add(material.occlusionTexture,2,material.sampling[2]);
   // Texturas da cena que ainda vai ser aberta (reabertura do projeto).
   for(const auto &item:anticipatedTextures_)
     if(std::find(out.begin(),out.end(),item)==out.end()) out.push_back(item);
@@ -3086,6 +3176,8 @@ void EditorSession::collectUsedTextures(std::vector<UsedTexture> &out) const {
     for(u32 slot=0;slot<render->slotCount();++slot)
       for(u32 binding=0;binding<scene::MaterialTextureCount;++binding)
         add(mapScene_.slotTexture(*render,slot,binding),binding,mapScene_.slotSampling(*render,slot,binding));
+    for(u32 slot=0;slot<render->slotCount();++slot)
+      add(mapScene_.slotOcclusionTexture(*render,slot),2,mapScene_.slotSampling(*render,slot,2));
   }
 }
 
@@ -3174,7 +3266,8 @@ bool EditorSession::setSlotTexture(EditorEntityId id,u32 slot,u32 binding,Materi
   const auto *entity=document_.find(id);
   const auto *render=entity?meshRenderer(*entity):nullptr;
   if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de trocar a textura.";return false;}
-  if(!render || slot>=render->slotCount() || binding>=scene::MaterialTextureCount) {diagnostic="Binding de textura inexistente.";return false;}
+  // O binding logo depois dos quatro do pacote é a textura de oclusão própria.
+  if(!render || slot>=render->slotCount() || binding>scene::MaterialOcclusionTextureBinding) {diagnostic="Binding de textura inexistente.";return false;}
   if(texture.valid() && texture!=scene::MaterialTextureNone && !findProjectTexture(texture)) {diagnostic="Textura fora do projeto.";return false;}
   if(scope==MaterialScope::Shared) {
     const auto guid=render->slotMaterialAsset(slot);
@@ -3185,7 +3278,9 @@ bool EditorSession::setSlotTexture(EditorEntityId id,u32 slot,u32 binding,Materi
     const auto *record=assets_.find(guid);
     if(!record) {diagnostic="Material fora do registro.";return false;}
     auto candidate=*found;
-    candidate.textures[binding]=texture;++candidate.revision;
+    if(binding==scene::MaterialOcclusionTextureBinding) candidate.occlusionTexture=texture;
+    else candidate.textures[binding]=texture;
+    ++candidate.revision;
     if(!candidate.valid() || !writeMaterialAsset(candidate,record->path,diagnostic)) return false;
     const auto serialized=candidate.serialize();
     assets_.publishImport(guid,Sha256::hex(std::span<const u8>(reinterpret_cast<const u8 *>(serialized.data()),serialized.size())),0,"",{},{});
@@ -3194,7 +3289,8 @@ bool EditorSession::setSlotTexture(EditorEntityId id,u32 slot,u32 binding,Materi
     publishMaterialLibrary();
   } else {
     auto values=*entity;
-    (*editMeshRenderer(values)->editSlotTextures(slot))[binding]=texture;
+    if(binding==scene::MaterialOcclusionTextureBinding) *editMeshRenderer(values)->editSlotOcclusionTexture(slot)=texture;
+    else (*editMeshRenderer(values)->editSlotTextures(slot))[binding]=texture;
     if(!history_.applyValues(document_,id,values)) {diagnostic="O histórico recusou a troca de textura.";return false;}
   }
   std::string publish;
@@ -3230,6 +3326,38 @@ bool EditorSession::setSlotSurface(EditorEntityId id,u32 slot,MaterialScope scop
   }
   auto values=*entity;
   *editMeshRenderer(values)->editSlotSurface(slot)=surface;
+  if(!history_.applyValues(document_,id,values)) {diagnostic="O histórico recusou a troca de material.";return false;}
+  return true;
+}
+
+bool EditorSession::setSlotChannels(EditorEntityId id,u32 slot,MaterialScope scope,const scene::MaterialChannels &channels,
+                                    std::string &diagnostic) {
+  diagnostic.clear();
+  const auto *entity=document_.find(id);
+  const auto *render=entity?meshRenderer(*entity):nullptr;
+  if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de mudar o material.";return false;}
+  if(!render || slot>=render->slotCount()) {diagnostic="Slot de material inexistente.";return false;}
+  if(!scene::validMaterialChannels(channels)) {diagnostic="Canal, oclusão, normal ou origem do alfa inválido.";return false;}
+  if(scope==MaterialScope::Shared) {
+    const auto guid=render->slotMaterialAsset(slot);
+    auto found=std::find_if(materials_.begin(),materials_.end(),[&](const auto &material){return material.guid==guid;});
+    if(!guid.valid() || found==materials_.end()) {
+      diagnostic="Este slot usa o material da fonte; crie um material do projeto para editar todos os usos.";return false;
+    }
+    const auto *record=assets_.find(guid);
+    if(!record) {diagnostic="Material fora do registro.";return false;}
+    auto candidate=*found;
+    candidate.channels=channels;++candidate.revision;
+    if(!candidate.valid() || !writeMaterialAsset(candidate,record->path,diagnostic)) return false;
+    const auto serialized=candidate.serialize();
+    assets_.publishImport(guid,Sha256::hex(std::span<const u8>(reinterpret_cast<const u8 *>(serialized.data()),serialized.size())),0,"",{},{});
+    assetRegistryDirty_=true;
+    *found=std::move(candidate);
+    publishMaterialLibrary();
+    return true;
+  }
+  auto values=*entity;
+  *editMeshRenderer(values)->editSlotChannels(slot)=channels;
   if(!history_.applyValues(document_,id,values)) {diagnostic="O histórico recusou a troca de material.";return false;}
   return true;
 }
@@ -3333,6 +3461,8 @@ resources::AssetGuid EditorSession::createMaterialFromSlot(EditorEntityId id,u32
   for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) material.textures[binding]=mapScene_.slotTexture(*render,slot,binding);
   material.surface=mapScene_.slotSurface(*render,slot);
   for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) material.sampling[binding]=mapScene_.slotSampling(*render,slot,binding);
+  material.channels=mapScene_.slotChannels(*render,slot);
+  material.occlusionTexture=mapScene_.slotOcclusionTexture(*render,slot);
   std::string stem;
   for(unsigned char c:material.name) stem.push_back(c<32 || c==127 || c=='/' || c=='\\' || c==':' || c=='"' ? '_' : static_cast<char>(c));
   if(stem.empty() || stem=="." || stem=="..") stem="Material";
@@ -3360,6 +3490,8 @@ resources::AssetGuid EditorSession::createMaterialFromSlot(EditorEntityId id,u32
   *edit->editSlotTextures(slot)={};
   *edit->editSlotSurface(slot)={};
   *edit->editSlotSampling(slot)={};
+  *edit->editSlotChannels(slot)={};
+  *edit->editSlotOcclusionTexture(slot)={};
   history_.applyValues(document_,id,values);
   state_.status="Material do projeto criado: "+path;
   return material.guid;

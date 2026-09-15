@@ -22,7 +22,9 @@ namespace ae::resources {
 // transformação de UV de cada binding (deslocamento, escala, rotação). Arquivos
 // antigos leem sem essas trocas; gravar sempre escreve a versão atual.
 struct MaterialAsset {
-  static constexpr u32 FormatVersion = 5;
+  // Versão 6 (R4): canais, oclusão (origem, força, textura própria), inversão Y
+  // do normal e origem do alfa.
+  static constexpr u32 FormatVersion = 6;
   AssetGuid guid;
   u32 revision = 1;
   std::string name;
@@ -30,6 +32,8 @@ struct MaterialAsset {
   std::array<AssetGuid, scene::MaterialTextureCount> textures{};
   scene::MaterialSurface surface{};
   std::array<scene::MaterialSampling, scene::MaterialTextureCount> sampling{};
+  scene::MaterialChannels channels{};
+  AssetGuid occlusionTexture{};
   bool valid() const;
   std::string serialize() const;
   static bool deserialize(std::string_view text, MaterialAsset &out);

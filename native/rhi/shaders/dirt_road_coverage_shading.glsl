@@ -30,7 +30,7 @@ void main() {
         frame.materialFlags.y>>16u,float(textureQueryLevels(BASE_MAP)-1));
   }
   mediump float sampledAlpha=impostor?
-      textureGrad(BASE_MAP,uv,dx,dy).a:texture(BASE_MAP,uv).a;
+      textureGrad(BASE_MAP,uv,dx,dy).a:aetherAlphaFromSource(texture(BASE_MAP,uv));
   mediump float alpha=sampledAlpha*frame.baseColorFactor.a*(impostor?1.0:vColor.a);
   mediump float alphaCutoff=float((frame.materialFlags.y>>8u)&255u)/255.0;
   if(alpha<alphaCutoff) discard;

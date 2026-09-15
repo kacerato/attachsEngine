@@ -315,7 +315,7 @@ AE_TEST(r4_textures_extract_from_source_and_resolve_per_instance_and_shared_scop
   const auto *record = session.assets().find(shared);
   AE_EXPECT_TRUE(record && EditorImportTransaction::read(project.root / record->path, materialFile), "arquivo do material");
   const std::string text(materialFile.begin(), materialFile.end());
-  AE_EXPECT_TRUE(text.starts_with("ASTRA_MATERIAL 5") && text.find(texture.text()) != std::string::npos && text.find("none") != std::string::npos,
+  AE_EXPECT_TRUE(text.starts_with("ASTRA_MATERIAL 6") && text.find(texture.text()) != std::string::npos && text.find("none") != std::string::npos,
                  "material gravado na versão atual com as texturas");
 
   // Instância vence o compartilhado, binding a binding.
@@ -581,7 +581,7 @@ AE_TEST(r4_alpha_mode_cutoff_and_sides_persist_resolve_and_reach_renderer_flags)
                  "transparente e uma face pelo material compartilhado");
   std::vector<u8> file;
   AE_EXPECT_TRUE(EditorImportTransaction::read(project.root / session.assets().find(shared)->path, file) &&
-                 std::string(file.begin(), file.end()).starts_with("ASTRA_MATERIAL 5"), "material gravado na versão atual");
+                 std::string(file.begin(), file.end()).starts_with("ASTRA_MATERIAL 6"), "material gravado na versão atual");
 
   AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");
   effective = effectiveMaterial(session, object);
@@ -738,9 +738,96 @@ AE_TEST(r4_uv_transform_per_binding_resolves_reaches_the_shader_entry_and_persis
   AE_EXPECT_TRUE((effectiveMaterial(session, object).uvTransformMask & 2u) != 0, "herdada do material compartilhado");
   const auto serialized = session.findMaterialAsset(shared)->serialize();
   resources::MaterialAsset back;
-  AE_EXPECT_TRUE(serialized.starts_with("ASTRA_MATERIAL 5") && resources::MaterialAsset::deserialize(serialized, back) &&
+  AE_EXPECT_TRUE(serialized.starts_with("ASTRA_MATERIAL 6") && resources::MaterialAsset::deserialize(serialized, back) &&
                      back.sampling[1] == tiled, "MaterialAsset v5 volta igual");
 
   AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");
   AE_EXPECT_EQ(effectiveMaterial(session, object).uvTransformMask, u8{0}, "sem transformação depois de reverter");
+}
+
+AE_TEST(r4_occlusion_channels_normal_and_alpha_source_resolve_reach_the_extension_and_persist) {
+  // Entrada da extensão: o padrão da fonte e as escolhas, já resolvidos para o shader.
+  renderer::MaterialOverride keep;
+  float entry[renderer::MaterialExtensionFloats]{};
+  AE_EXPECT_TRUE(!renderer::needsMaterialExtension(keep), "sem escolha, sem entrada");
+  renderer::materialExtensionEntry(keep, renderer::MapMaterialOcclusionInMetallicRoughness, renderer::MaterialExtensionNoTexture, entry);
+  AE_EXPECT_TRUE(entry[32] == 1 && entry[33] == 1 && entry[34] == 0 && entry[36] == 1 && entry[37] == 2 && entry[38] == 0 && entry[39] == 0,
+                 "padrão glTF: oclusão no R do metal/rugosidade, rugosidade G, metal B, alfa da cor base");
+  renderer::MaterialOverride chosen;
+  chosen.channels.occlusionSource = scene::MaterialOcclusionTexture;
+  chosen.channels.occlusionStrength = .5f;
+  chosen.channels.occlusion = scene::MaterialChannelG;
+  chosen.channels.roughness = scene::MaterialChannelR;
+  chosen.channels.alphaSource = scene::MaterialAlphaSourceLuminance;
+  chosen.channels.normalFlipY = scene::MaterialToggleOn;
+  chosen.isolate = scene::MaterialIsolateOcclusion;
+  AE_EXPECT_TRUE(renderer::needsMaterialExtension(chosen), "escolhas pedem entrada");
+  renderer::materialExtensionEntry(chosen, 0, 7, entry);
+  AE_EXPECT_TRUE(entry[32] == .5f && entry[33] == 2 && entry[34] == 1 && entry[35] == 7, "textura própria no índice 7, canal G, força 0,5");
+  AE_EXPECT_TRUE(entry[36] == 0 && entry[37] == 2 && entry[38] == 2 && entry[39] == 1 && entry[40] == 1,
+                 "rugosidade R, metal herdado B, luminância, Y invertido, isolando a oclusão");
+  renderer::materialExtensionEntry(chosen, 0, renderer::MaterialExtensionNoTexture, entry);
+  AE_EXPECT_EQ(entry[33], 0.0f, "textura própria sem textura publicada vira sem oclusão");
+  scene::MaterialChannels invalid{};
+  invalid.occlusionStrength = 2;
+  AE_EXPECT_TRUE(!scene::validMaterialChannels(invalid), "força acima de 1 recusada");
+
+  Project project;
+  EditorSession session;
+  Publisher publisher;
+  start(session, publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  const auto glb = texturedPanel(png(4, 4, 200));
+  resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(glb, {}, {}, model), model.diagnostic.c_str());
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(glb, model, "Fontes/tela.glb", "", report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source, report), report.diagnostic.c_str());
+  std::string diagnostic;
+  EditorSession::TextureExtraction extraction;
+  AE_EXPECT_TRUE(session.extractSourceTextures("Fontes/tela.glb", extraction, diagnostic), diagnostic.c_str());
+  const auto object = firstMeshObject(session);
+  AE_EXPECT_TRUE(object != kInvalidEntity, "instância com malha");
+
+  scene::MaterialChannels channels{};
+  channels.occlusionSource = scene::MaterialOcclusionTexture;
+  channels.occlusionStrength = .75f;
+  channels.normalFlipY = scene::MaterialToggleOn;
+  channels.alphaSource = scene::MaterialAlphaSourceOpaque;
+  AE_EXPECT_TRUE(session.setSlotChannels(object, 0, EditorSession::MaterialScope::Instance, channels, diagnostic), diagnostic.c_str());
+  const auto before = publisher.rebuilds;
+  AE_EXPECT_TRUE(session.setSlotTexture(object, 0, scene::MaterialOcclusionTextureBinding, EditorSession::MaterialScope::Instance,
+                                        extraction.textures.front(), diagnostic), diagnostic.c_str());
+  AE_EXPECT_EQ(publisher.rebuilds, before + 1, "textura de oclusão nova custa uma publicação");
+  auto effective = effectiveMaterial(session, object);
+  AE_EXPECT_TRUE(effective.channels == channels, "canais resolvidos");
+  AE_EXPECT_TRUE(resolvesToProjectTexture(effective.occlusionTexture) && effective.occlusionTexture < publisher.samplers.size(),
+                 "textura de oclusão resolvida na biblioteca publicada");
+  AE_EXPECT_TRUE((session.importLinkOverrides(object) & ImportOverrideMaterial) != 0, "canais contam como material local");
+  {
+    const auto *render = meshRenderer(*session.document().find(object));
+    std::ostringstream out;
+    render->write(out);
+    scene::MeshRenderer back;
+    std::istringstream in(out.str());
+    AE_EXPECT_TRUE(back.read(in, 8) && back.channels == render->channels && back.occlusionTexture == render->occlusionTexture, "v8 volta igual");
+  }
+
+  const auto shared = session.createMaterialFromSlot(object, 0, diagnostic);
+  AE_EXPECT_TRUE(shared.valid(), diagnostic.c_str());
+  AE_EXPECT_TRUE(session.findMaterialAsset(shared)->channels == channels &&
+                     session.findMaterialAsset(shared)->occlusionTexture == extraction.textures.front(),
+                 "material do projeto leva canais e textura de oclusão");
+  AE_EXPECT_TRUE(!meshRenderer(*session.document().find(object))->channels.overrides() &&
+                     !meshRenderer(*session.document().find(object))->occlusionTexture.valid(), "instância limpa");
+  AE_EXPECT_TRUE(effectiveMaterial(session, object).channels == channels, "herdados do material compartilhado");
+  resources::MaterialAsset back;
+  const auto serialized = session.findMaterialAsset(shared)->serialize();
+  AE_EXPECT_TRUE(serialized.starts_with("ASTRA_MATERIAL 6") && resources::MaterialAsset::deserialize(serialized, back) &&
+                     back.channels == channels && back.occlusionTexture == extraction.textures.front(), "MaterialAsset v6 volta igual");
+
+  AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");
+  effective = effectiveMaterial(session, object);
+  AE_EXPECT_TRUE(effective.channels == scene::MaterialChannels{} && effective.occlusionTexture == scene::MaterialTextureKeep,
+                 "canais e oclusão voltam à fonte");
 }

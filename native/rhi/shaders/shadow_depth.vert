@@ -10,8 +10,10 @@
 // lido.
 layout(push_constant) uniform ShadowPushConstants {
   mat4 lightViewProjection;   // mundo -> clip da cascata
-  vec4 alphaCutoffUvSlot;     // x=cutoff, y=slot de UV, zw reservados
+  vec4 alphaCutoffUvSlot;     // x=cutoff, y=slot de UV, z=origem do alfa, w reservado
   uvec4 baseTextureIndex;     // x = indice bindless da base color
+  vec4 uvRow0;                // R4: transformação de UV da cor base (a b c)
+  vec4 uvRow1;                //     (d e f), identidade sem troca
 } shadow;
 
 layout(location=0) in vec3 inPosition;
@@ -33,7 +35,9 @@ void main() {
   // Posicao permanece highp em toda a cadeia: a cascata distante cobre centenas
   // de unidades de mundo por texel e fp16 aqui produziria degraus na sombra.
   highp vec4 world = inModel * vec4(inPosition, 1.0);
-  vUv = shadow.alphaCutoffUvSlot.y > 0.5 ? inUv1 : inUv0;
+  highp vec3 uv = vec3(shadow.alphaCutoffUvSlot.y > 0.5 ? inUv1 : inUv0, 1.0);
+  // A mesma UV do passe de cor: recorte da sombra e da superfície no mesmo texel.
+  vUv = vec2(dot(shadow.uvRow0.xyz, uv), dot(shadow.uvRow1.xyz, uv));
   vAlpha = (inColor * inTint).a;
   gl_Position = shadow.lightViewProjection * world;
 }

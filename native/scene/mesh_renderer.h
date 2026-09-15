@@ -47,9 +47,12 @@ struct MeshSubmesh {
   SlotTextures textures{};
   MaterialSurface surface{};
   SlotSampling sampling{};
+  MaterialChannels channels{};
+  resources::AssetGuid occlusionTexture{};
   friend bool operator==(const MeshSubmesh &a, const MeshSubmesh &b) {
     return a.mesh == b.mesh && a.asset == b.asset && a.materialAsset == b.materialAsset && a.material == b.material &&
-           a.textures == b.textures && a.surface == b.surface && a.sampling == b.sampling;
+           a.textures == b.textures && a.surface == b.surface && a.sampling == b.sampling && a.channels == b.channels &&
+           a.occlusionTexture == b.occlusionTexture;
   }
 };
 
@@ -87,6 +90,22 @@ public:
   std::vector<MeshSubmesh> submeshes;
   // R4: amostragem trocada nesta instância, por binding, do slot 0.
   SlotSampling sampling{};
+  // R4: canais, oclusão, normal e alfa, e a textura de oclusão própria, do slot 0.
+  MaterialChannels channels{};
+  resources::AssetGuid occlusionTexture{};
+  const MaterialChannels &slotChannels(u32 slot) const noexcept {
+    static const MaterialChannels none{};
+    return slot ? (slot - 1 < submeshes.size() ? submeshes[slot - 1].channels : none) : channels;
+  }
+  MaterialChannels *editSlotChannels(u32 slot) noexcept {
+    return slot ? (slot - 1 < submeshes.size() ? &submeshes[slot - 1].channels : nullptr) : &channels;
+  }
+  resources::AssetGuid slotOcclusionTexture(u32 slot) const noexcept {
+    return slot ? (slot - 1 < submeshes.size() ? submeshes[slot - 1].occlusionTexture : resources::AssetGuid{}) : occlusionTexture;
+  }
+  resources::AssetGuid *editSlotOcclusionTexture(u32 slot) noexcept {
+    return slot ? (slot - 1 < submeshes.size() ? &submeshes[slot - 1].occlusionTexture : nullptr) : &occlusionTexture;
+  }
   const SlotSampling &slotSampling(u32 slot) const noexcept {
     static const SlotSampling none{};
     return slot ? (slot - 1 < submeshes.size() ? submeshes[slot - 1].sampling : none) : sampling;
@@ -141,6 +160,7 @@ public:
     for(const auto &slot:submeshes) if(!validMaterial(slot.material) || !validMaterialSurface(slot.surface)) return false;
     for(u32 slot=0;slot<slotCount();++slot)
       for(const auto &value:slotSampling(slot)) if(!validMaterialSampling(value)) return false;
+    for(u32 slot=0;slot<slotCount();++slot) if(!validMaterialChannels(slotChannels(slot))) return false;
     return true;
   }
   void write(std::ostream &out) const override {
@@ -170,6 +190,14 @@ public:
     for(u32 slot=0;slot<slotCount();++slot)
       for(const auto &value:slotSampling(slot))
         out<<' '<<value.offset[0]<<' '<<value.offset[1]<<' '<<value.scale[0]<<' '<<value.scale[1]<<' '<<value.rotation;
+    // v8: canais (rugosidade, metal, oclusão), origem e força da oclusão, inversão Y
+    // do normal, origem do alfa e a textura de oclusão própria de cada slot.
+    for(u32 slot=0;slot<slotCount();++slot) {
+      const auto &value=slotChannels(slot);
+      out<<' '<<static_cast<unsigned>(value.roughness)<<' '<<static_cast<unsigned>(value.metallic)<<' '<<static_cast<unsigned>(value.occlusion)
+         <<' '<<static_cast<unsigned>(value.occlusionSource)<<' '<<value.occlusionStrength<<' '<<static_cast<unsigned>(value.normalFlipY)
+         <<' '<<static_cast<unsigned>(value.alphaSource)<<' '<<materialTextureToken(slotOcclusionTexture(slot));
+    }
     out<<' ';
   }
   bool read(std::istream &in,u32 version) override {
@@ -180,10 +208,10 @@ public:
       return text=="-" || resources::AssetGuid::parse(text,out);
     };
     bool overridden=false;
-    if(version<1 || version>7 || !(in>>mesh>>enabled>>overridden)) return false;
+    if(version<1 || version>8 || !(in>>mesh>>enabled>>overridden)) return false;
     for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
     material.enabled=overridden;
-    asset={};materialAsset={};textures={};surface={};sampling={};submeshes.clear();
+    asset={};materialAsset={};textures={};surface={};sampling={};channels={};occlusionTexture={};submeshes.clear();
     if(version>=2) {
       std::string guid;
       if(!(in>>guid) || !parse(guid,asset)) return false;
@@ -229,6 +257,17 @@ public:
           if(!(in>>value.offset[0]>>value.offset[1]>>value.scale[0]>>value.scale[1]>>value.rotation) ||
              !validMaterialSampling(value)) return false;
     }
+    if(version>=8) {
+      for(u32 slot=0;slot<slotCount();++slot) {
+        unsigned roughness=0,metallic=0,occlusion=0,source=0,flip=0,alpha=0;float strength=-1;std::string token;
+        if(!(in>>roughness>>metallic>>occlusion>>source>>strength>>flip>>alpha>>token) || roughness>255 || metallic>255 ||
+           occlusion>255 || source>255 || flip>255 || alpha>255) return false;
+        auto &value=*editSlotChannels(slot);
+        value={static_cast<std::uint8_t>(roughness),static_cast<std::uint8_t>(metallic),static_cast<std::uint8_t>(occlusion),
+               static_cast<std::uint8_t>(source),strength,static_cast<std::uint8_t>(flip),static_cast<std::uint8_t>(alpha)};
+        if(!validMaterialChannels(value) || !parseMaterialTextureToken(token,*editSlotOcclusionTexture(slot))) return false;
+      }
+    }
     return true;
   }
 };
@@ -251,6 +290,6 @@ inline constexpr std::array<ComponentBoolean,1> meshRendererBooleans{{
   {"enabled","Renderizar",[](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).enabled;},[](ComponentValue &v,bool b){static_cast<MeshRenderer&>(v).enabled=b;}}
 }};
 inline const ComponentType MeshRenderer::descriptor{
-  "astra.render.mesh",7,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
+  "astra.render.mesh",8,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
 };
 }

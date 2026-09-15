@@ -193,6 +193,8 @@ void main() {
   }
   mediump vec4 baseSample=impostor?
       textureGrad(BASE_MAP,impostorUv,impostorDx,impostorDy):texture(BASE_MAP,selectedUv(0));
+  // R4: origem do alfa do material, antes do corte (igual à cobertura e à sombra).
+  if(!impostor) baseSample.a=aetherAlphaFromSource(baseSample);
   mediump vec4 vertexColor=impostor?vec4(vColor.rgb,1.0):vColor;
   mediump vec4 base=baseSample*frame.baseColorFactor*vertexColor;
   // O depth-only de coverage já descartou estes texels, mas discard no shader
@@ -222,16 +224,33 @@ void main() {
   highp float cameraDistance=length(eye-vPosition);
   mediump float mrDetailWeight=materialDetailWeight(
       cameraDistance,environment.materialDistanceParameters.x);
-  mediump vec3 mr=vec3(1);
+  mediump vec4 mr=vec4(1);
   if(hasMaterialFeature(flags,4u) && mrDetailWeight>0.0)
-    mr=mix(vec3(1),texture(MR_MAP,selectedUv(2)).rgb,mrDetailWeight);
-  mediump float rough=clamp(mr.g*frame.materialFactors.x,.07,1);
-  mediump float metal=clamp(mr.b*frame.materialFactors.y,0,1);
+    mr=mix(vec4(1),texture(MR_MAP,selectedUv(2)),mrDetailWeight);
+  bool materialExtension=aetherHasMaterialExtension();
+  // R4: canais do mapa escolhidos no material; sem extensão, o do glTF (G e B).
+  uint roughnessChannel=materialExtension?uint(aetherMaterialRow(9u).x+0.5):1u;
+  uint metallicChannel=materialExtension?uint(aetherMaterialRow(9u).y+0.5):2u;
+  mediump float rough=clamp(mr[roughnessChannel]*frame.materialFactors.x,.07,1);
+  mediump float metal=clamp(mr[metallicChannel]*frame.materialFactors.y,0,1);
   // R4: oclusão empacotada no canal R do mapa metal/rugosidade (ORM do glTF),
   // só quando o importador provou mesma textura e mesmo UV. Atenua a luz
   // ambiente e o reflexo do ambiente, nunca a luz direta. `mr` já volta a 1
   // longe da câmera, então a oclusão some junto com o detalhe do mapa.
   mediump float occlusion=((flags&16384u)!=0u && hasMaterialFeature(flags,4u))?mr.r:1.0;
+  if(materialExtension) {
+    // R4: origem, canal e força da oclusão escolhidos no material (T21).
+    highp vec4 occlusionRow=aetherMaterialRow(8u);
+    uint occlusionSource=uint(occlusionRow.y+0.5);
+    uint occlusionChannel=uint(occlusionRow.z+0.5);
+    mediump float sampledOcclusion=1.0;
+    if(occlusionSource==1u && hasMaterialFeature(flags,4u)) sampledOcclusion=mr[occlusionChannel];
+#ifdef OCCLUSION_MAP
+    if(occlusionSource==2u && mrDetailWeight>0.0)
+      sampledOcclusion=mix(1.0,texture(OCCLUSION_MAP(uint(occlusionRow.w+0.5)),selectedUv(2))[occlusionChannel],mrDetailWeight);
+#endif
+    occlusion=occlusionSource==0u?1.0:mix(1.0,sampledOcclusion,clamp(occlusionRow.x,0.0,1.0));
+  }
   mediump vec3 n=normalize(vNormal);
   // For regular materials this is optional high-frequency detail. For an
   // impostor the atlas stores the geometry's replacement normal field, so it
@@ -249,6 +268,8 @@ void main() {
     mediump vec3 detail=(impostor?
         textureGrad(NORMAL_MAP,impostorUv,impostorDx,impostorDy):
         texture(NORMAL_MAP,selectedUv(1))).xyz*2-1;
+    // R4: convenção do mapa normal (T06): inverter Y para mapas no padrão DirectX.
+    if(!impostor && materialExtension && aetherMaterialRow(9u).w>0.5) detail.y=-detail.y;
     // UV girada: o detalhe volta aos eixos da tangente da malha.
     if(!impostor) detail.xy=aetherUvTangentFrame(1u)*detail.xy;
     // Normalizing before and after an orthonormal TBN is redundant. Keep the
@@ -311,6 +332,18 @@ void main() {
   if(hasMaterialFeature(flags,8u) && emissiveDetailWeight>0.0)
     color+=texture(EMISSIVE_MAP,selectedUv(3)).rgb*frame.emissiveFactorStrength.rgb*
         frame.emissiveFactorStrength.a*emissiveDetailWeight;
+  // R4: isolar um dado do material na prévia do editor (a sessão só marca fora de Play).
+  if(materialExtension) {
+    uint isolate=uint(aetherMaterialRow(10u).x+0.5);
+    if(isolate!=0u) {
+      mediump vec3 shown=isolate==1u?vec3(occlusion):isolate==2u?vec3(rough):isolate==3u?vec3(metal):
+                         isolate==4u?vec3(base.a):n*0.5+0.5;
+      if((frame.materialFlags.z&1u)!=0u) shown=mix(12.92*shown,1.055*pow(shown,vec3(1.0/2.4))-.055,
+                                                 greaterThan(shown,vec3(.0031308)));
+      outColor=vec4(shown,1.0);
+      return;
+    }
+  }
   color=toneMapEnvironment(color);
   if((frame.materialFlags.z&1u)!=0u) color=mix(12.92*color,1.055*pow(color,vec3(1.0/2.4))-.055,
                                              greaterThan(color,vec3(.0031308)));

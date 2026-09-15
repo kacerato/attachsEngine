@@ -189,6 +189,9 @@ enum class EditorWidget : u32 {
   // R4: textura por binding de material e extração das imagens de um GLB.
   TexturePickerClose, TextureUseInherited, TextureUseNone, AssetExtractTextures,
   MaterialAlphaCycle, MaterialCutoffDown, MaterialCutoffUp, MaterialSidesCycle,
+  MaterialOcclusionSourceCycle, MaterialOcclusionTexture, MaterialOcclusionStrengthDown, MaterialOcclusionStrengthUp,
+  MaterialChannelRoughness, MaterialChannelMetallic, MaterialChannelOcclusion,
+  MaterialNormalFlipCycle, MaterialAlphaSourceCycle, MaterialIsolateCycle,
   TextureViewerClose, TextureViewerChannel, TextureViewerMipDown, TextureViewerMipUp,
   TextureViewerZoom, TextureViewerBackground,
   TextureSamplingUv, TextureSamplingWrap, TextureSamplingFilter, TextureUvReset,
@@ -419,10 +422,16 @@ struct EditorScreenState final {
     std::string alphaLabel,alphaOrigin,cutoffLabel,sidesLabel,sidesOrigin;
     float alphaCutoff=.5f;
     bool cutoffEditable=false;
+    // R4: oclusão, canais, normal, origem do alfa e isolamento no alcance em edição.
+    std::string occlusionLabel,occlusionOrigin,occlusionTextureLabel,occlusionStrengthLabel;
+    std::string channelLabels[3];
+    std::string normalFlipLabel,normalFlipOrigin,alphaSourceLabel,alphaSourceOrigin,isolateLabel;
   };
   MaterialSlotView materialSlotView;
   std::vector<std::string> projectMaterials;
   u32 materialSlot=0,materialPage=0;
+  // R4: dado do material isolado na prévia (MaterialIsolate*); transitório.
+  u8 materialIsolate=0;
   bool materialShared=false,materialPicker=false;
   // R4: seletor de textura de um binding e as texturas do projeto para ele.
   bool texturePicker=false;

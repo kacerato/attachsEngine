@@ -8,6 +8,10 @@ inline constexpr std::uint32_t MaterialTextureCount=4;
 // Valor RESOLVIDO de um binding que não foi trocado: vale a textura do material
 // da fonte. `renderer::InvalidMapTexture` (0xFFFFFFFF) é "sem textura".
 inline constexpr std::uint32_t MaterialTextureKeep=0xFFFFFFFEu;
+// R4: a textura de oclusão própria entra nos mesmos caminhos de seleção e
+// publicação como um binding extra, depois dos quatro do pacote. Ela usa o
+// conjunto de UV e a amostragem do mapa metal/rugosidade.
+inline constexpr std::uint32_t MaterialOcclusionTextureBinding=MaterialTextureCount;
 
 // R4: modo de alfa e faces. `Keep` herda (do material compartilhado, senão da fonte).
 inline constexpr std::uint8_t MaterialAlphaKeep=0,MaterialAlphaOpaque=1,MaterialAlphaMask=2,MaterialAlphaBlend=3;
@@ -27,6 +31,36 @@ struct MaterialSurface {
 inline bool validMaterialSurface(const MaterialSurface &surface) {
   return surface.alphaMode<=MaterialAlphaBlend && surface.sides<=MaterialSidesDouble &&
          std::isfinite(surface.alphaCutoff) && surface.alphaCutoff>=0 && surface.alphaCutoff<=1;
+}
+
+// R4: canais do mapa metal/rugosidade e da oclusão, convenção do normal e origem
+// do alfa (T04/T06/T20/T21). `Keep` herda do material compartilhado, senão da fonte.
+inline constexpr std::uint8_t MaterialChannelKeep=0,MaterialChannelR=1,MaterialChannelG=2,MaterialChannelB=3,MaterialChannelA=4;
+inline constexpr std::uint8_t MaterialOcclusionKeep=0,MaterialOcclusionNone=1,MaterialOcclusionPacked=2,MaterialOcclusionTexture=3;
+inline constexpr std::uint8_t MaterialToggleKeep=0,MaterialToggleOff=1,MaterialToggleOn=2;
+inline constexpr std::uint8_t MaterialAlphaSourceKeep=0,MaterialAlphaSourceBase=1,MaterialAlphaSourceOpaque=2,MaterialAlphaSourceLuminance=3;
+// Isolar na prévia do editor: transitório, nunca persistido nem usado em Play.
+inline constexpr std::uint8_t MaterialIsolateNone=0,MaterialIsolateOcclusion=1,MaterialIsolateRoughness=2,MaterialIsolateMetallic=3,
+                              MaterialIsolateAlpha=4,MaterialIsolateNormal=5;
+struct MaterialChannels {
+  std::uint8_t roughness=MaterialChannelKeep,metallic=MaterialChannelKeep,occlusion=MaterialChannelKeep;
+  std::uint8_t occlusionSource=MaterialOcclusionKeep;
+  float occlusionStrength=-1; // -1 herda; senão 0..1
+  std::uint8_t normalFlipY=MaterialToggleKeep;
+  std::uint8_t alphaSource=MaterialAlphaSourceKeep;
+  bool overrides() const noexcept {
+    return roughness || metallic || occlusion || occlusionSource || occlusionStrength>=0 || normalFlipY || alphaSource;
+  }
+  friend bool operator==(const MaterialChannels &a,const MaterialChannels &b) {
+    return a.roughness==b.roughness && a.metallic==b.metallic && a.occlusion==b.occlusion && a.occlusionSource==b.occlusionSource &&
+           a.occlusionStrength==b.occlusionStrength && a.normalFlipY==b.normalFlipY && a.alphaSource==b.alphaSource;
+  }
+};
+inline bool validMaterialChannels(const MaterialChannels &channels) {
+  return channels.roughness<=MaterialChannelA && channels.metallic<=MaterialChannelA && channels.occlusion<=MaterialChannelA &&
+         channels.occlusionSource<=MaterialOcclusionTexture && channels.normalFlipY<=MaterialToggleOn &&
+         channels.alphaSource<=MaterialAlphaSourceLuminance && std::isfinite(channels.occlusionStrength) &&
+         (channels.occlusionStrength==-1 || (channels.occlusionStrength>=0 && channels.occlusionStrength<=1));
 }
 
 // R4: amostragem de um binding. `Keep` herda (do material compartilhado, senão da
@@ -93,6 +127,11 @@ struct MaterialParameters {
   // linhas 2x3 em uvTransforms[N].
   std::uint8_t uvTransformMask=0;
   float uvTransforms[MaterialTextureCount][6]{};
+  // Canais, oclusão e alfa resolvidos (Keep onde a fonte decide), textura de
+  // oclusão resolvida como as dos bindings e o dado isolado na prévia.
+  MaterialChannels channels{};
+  std::uint32_t occlusionTexture=MaterialTextureKeep;
+  std::uint8_t isolate=MaterialIsolateNone;
   // Comparação por valor, não por bytes: a struct tem padding depois do bool, e
   // um memcmp acusaria diferença onde não existe nenhuma.
   friend bool operator==(const MaterialParameters &a,const MaterialParameters &b) {
@@ -104,6 +143,7 @@ struct MaterialParameters {
     for(std::uint32_t i=0;i<MaterialTextureCount;++i)
       if((a.uvTransformMask>>i)&1u)
         for(int k=0;k<6;++k) if(a.uvTransforms[i][k]!=b.uvTransforms[i][k]) return false;
+    if(!(a.channels==b.channels) || a.occlusionTexture!=b.occlusionTexture || a.isolate!=b.isolate) return false;
     return a.alphaMode==b.alphaMode && a.sides==b.sides && a.alphaCutoff==b.alphaCutoff;
   }
   friend bool operator!=(const MaterialParameters &a,const MaterialParameters &b) {return !(a==b);}
@@ -115,6 +155,7 @@ inline MaterialParameters withoutResolvedTextures(MaterialParameters value) {
   for(auto &set:value.uvSets) set=MaterialUvKeep;
   value.uvTransformMask=0;
   for(auto &rows:value.uvTransforms) for(auto &entry:rows) entry=0;
+  value.channels={};value.occlusionTexture=MaterialTextureKeep;value.isolate=MaterialIsolateNone;
   value.alphaMode=MaterialAlphaKeep;value.sides=MaterialSidesKeep;value.alphaCutoff=.5f;
   return value;
 }

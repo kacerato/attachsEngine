@@ -621,7 +621,8 @@ void tapWidget(Fixture &fixture,u32 widget) {
   fixture.down(77,at);fixture.up(77,at);fixture.session.update();
 }
 void revealProperty(Fixture &fixture,u32 widget) {
-  for(u32 page=0;page<16 && locateWidget(fixture.session,widget).x<0;++page) {
+  // Teto de segurança: a aba Material tem 25 linhas e a superfície de teste é baixa.
+  for(u32 page=0;page<64 && locateWidget(fixture.session,widget).x<0;++page) {
     AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::PropertyNext)).x>=0,"next property page exists");
     tapWidget(fixture,widgetId(EditorWidget::PropertyNext));
   }
@@ -804,6 +805,33 @@ AE_TEST(r4_material_tab_lists_texture_bindings_and_the_picker_changes_the_instan
   AE_EXPECT_EQ(extracted[0].material.textures[1],renderer::InvalidMapTexture,"o desenho perde o mapa normal");
   AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"desfazer");
   AE_EXPECT_TRUE(!meshRenderer(*f.session.document().find(f.cube))->textures[1].valid(),"a troca volta pelo histórico");
+}
+
+AE_TEST(r4_material_tab_isolates_a_channel_and_flips_normal_y_per_instance) {
+  Fixture f;auto entity=*f.session.document().find(f.cube);editMeshRenderer(entity)->mesh=1;
+  f.session.document().applyEntityValues(f.cube,entity);f.session.setSelection(f.cube);f.session.history().clear();
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  tapWidget(f,widgetId(EditorWidget::MeshMaterialTab));
+  // As linhas vêm na ordem da lista: normal antes de isolar (o helper só avança).
+  const u32 flip=widgetId(EditorWidget::MaterialNormalFlipCycle);
+  revealProperty(f,flip);
+  tapWidget(f,flip);
+  tapWidget(f,flip);
+  AE_EXPECT_EQ(meshRenderer(*f.session.document().find(f.cube))->channels.normalFlipY,scene::MaterialToggleOn,"Y invertido nesta instância");
+  AE_EXPECT_TRUE(f.session.screen().materialSlotView.normalFlipLabel.starts_with("Y invertido"),"linha mostra a convenção");
+  const auto depth=f.session.history().undoDepth();
+  const u32 isolate=widgetId(EditorWidget::MaterialIsolateCycle);
+  revealProperty(f,isolate);
+  AE_EXPECT_TRUE(locateWidget(f.session,isolate).x>=0,"linha de isolar na aba Material");
+  tapWidget(f,isolate);
+  AE_EXPECT_EQ(f.session.screen().materialIsolate,scene::MaterialIsolateOcclusion,"isolando a oclusão");
+  f.session.update();
+  std::vector<renderer::MapDrawState> extracted;
+  AE_EXPECT_TRUE(f.session.extractMap(extracted),"extração");
+  AE_EXPECT_EQ(extracted[0].material.isolate,scene::MaterialIsolateOcclusion,"o desenho selecionado isola a oclusão");
+  AE_EXPECT_EQ(f.session.history().undoDepth(),depth,"isolar não é edição do documento");
+  AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"desfazer");
+  AE_EXPECT_EQ(meshRenderer(*f.session.document().find(f.cube))->channels.normalFlipY,scene::MaterialToggleOff,"volta pelo histórico");
 }
 
 AE_TEST(r4_material_tab_edits_alpha_mode_cutoff_and_sides_per_instance) {

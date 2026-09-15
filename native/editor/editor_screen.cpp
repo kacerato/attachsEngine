@@ -651,7 +651,9 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content) {
   const u32 textureRows=scene::MaterialTextureCount;
   // R4: três linhas de superfície (alfa, corte, faces) depois das texturas.
   const u32 surfaceRows=3;
-  const u32 count=textureRows+surfaceRows+static_cast<u32>(scene::meshRendererNumbers.size());
+  // R4: sete linhas de oclusão, canais, normal, alfa e isolamento.
+  const u32 channelRows=7;
+  const u32 count=textureRows+surfaceRows+channelRows+static_cast<u32>(scene::meshRendererNumbers.size());
   const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-30)/40));
   const u32 pages=std::max(1u,(count+perPage-1)/perPage),page=std::min(state.propertyPage,pages-1);
   auto footer=pages>1?takeBottom(content,30):UiRect{};
@@ -694,7 +696,47 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content) {
         builder.router.addRegion(row,widgetId(alpha?EditorWidget::MaterialAlphaCycle:EditorWidget::MaterialSidesCycle));
       continue;
     }
-    const u32 field=entry-textureRows-surfaceRows;
+    if(entry<textureRows+surfaceRows+channelRows) {
+      const u32 kind=entry-textureRows-surfaceRows;
+      static constexpr const char *channelNames[]{"Oclusão","Textura de oclusão","Força da oclusão","Canais","Mapa normal","Origem do alfa","Isolar na prévia"};
+      builder.label(takeLeft(row,row.width*.42f),channelNames[kind],theme.color.textDim,theme.type.caption);
+      builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      auto inner=deflate(row,UiInsets::symmetric(8,2));
+      if(kind==2) {
+        const auto down=takeLeft(inner,32),up=takeRight(inner,32);
+        builder.label(down,"-",theme.color.text,theme.type.body,UiAlign::Center);
+        builder.label(up,"+",theme.color.text,theme.type.body,UiAlign::Center);
+        builder.router.addRegion(down,widgetId(EditorWidget::MaterialOcclusionStrengthDown));
+        builder.router.addRegion(up,widgetId(EditorWidget::MaterialOcclusionStrengthUp));
+        builder.label(inner,view.occlusionStrengthLabel,theme.color.text,theme.type.numeric,UiAlign::Center);
+        continue;
+      }
+      if(kind==3) {
+        const float third=inner.width/3;
+        for(u32 channel=0;channel<3;++channel) {
+          const auto box=channel<2?takeLeft(inner,third):inner;
+          builder.label(box,view.channelLabels[channel],theme.color.text,theme.type.caption,UiAlign::Center);
+          builder.router.addRegion(box,widgetId(EditorWidget::MaterialChannelRoughness)+channel);
+        }
+        continue;
+      }
+      static constexpr EditorWidget channelWidgets[]{EditorWidget::MaterialOcclusionSourceCycle,EditorWidget::MaterialOcclusionTexture,
+          EditorWidget::MaterialOcclusionStrengthDown,EditorWidget::MaterialChannelRoughness,EditorWidget::MaterialNormalFlipCycle,
+          EditorWidget::MaterialAlphaSourceCycle,EditorWidget::MaterialIsolateCycle};
+      std::string value,origin;
+      switch(kind) {
+      case 0: value=view.occlusionLabel;origin=view.occlusionOrigin;break;
+      case 1: value=view.occlusionTextureLabel;origin="vale quando a oclusão é textura própria";break;
+      case 4: value=view.normalFlipLabel;origin=view.normalFlipOrigin;break;
+      case 5: value=view.alphaSourceLabel;origin=view.alphaSourceOrigin;break;
+      default: value=view.isolateLabel;origin="só na prévia do editor; não é salvo";break;
+      }
+      builder.label(takeTop(inner,inner.height*.55f),value,theme.color.text,theme.type.caption);
+      builder.label(inner,origin,theme.color.textMuted,theme.type.caption);
+      builder.router.addRegion(row,widgetId(channelWidgets[kind]));
+      continue;
+    }
+    const u32 field=entry-textureRows-surfaceRows-channelRows;
     builder.label(takeLeft(row,row.width*.62f),scene::meshRendererNumbers[field].name,theme.color.textDim,theme.type.caption);
     char value[32];std::snprintf(value,sizeof(value),"%.6g",static_cast<double>(view.values[field]));
     builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
@@ -751,11 +793,11 @@ void buildMaterialPicker(ScreenBuilder &builder,UiRect content) {
 // o material compartilhado do slot).
 void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
   const auto &theme=builder.theme;const auto &state=builder.state;
-  static constexpr const char *bindings[scene::MaterialTextureCount]{"cor base","normal","metal/rugosidade","emissão"};
+  static constexpr const char *bindings[scene::MaterialTextureCount+1]{"cor base","normal","metal/rugosidade","emissão","oclusão"};
   auto title=takeTop(content,36),back=takeLeft(title,36);
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
   builder.router.addRegion(back,widgetId(EditorWidget::TexturePickerClose));
-  builder.label(title,std::string("Textura de ")+bindings[std::min(state.textureBinding,scene::MaterialTextureCount-1)]+
+  builder.label(title,std::string("Textura de ")+bindings[std::min(state.textureBinding,scene::MaterialTextureCount)]+
                 (state.materialShared?" · compartilhado":" · esta instância"),theme.color.text,theme.type.caption);
   // R4: amostragem do binding. O conjunto de UV vale para qualquer textura;
   // repetição e filtro são o sampler da textura do projeto e não recebem toque
@@ -815,7 +857,9 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
   option("Herdar",state.materialShared?"volta à textura da fonte":"do material do projeto, senão da fonte",
          widgetId(EditorWidget::TextureUseInherited));
   option("Sem textura","o binding fica só com os fatores",widgetId(EditorWidget::TextureUseNone));
-  samplingControls();
+  if(state.textureBinding<scene::MaterialTextureCount) samplingControls();
+  else if(content.height>=22)
+    builder.label(takeTop(content,22),"A oclusão usa o conjunto de UV e a amostragem do mapa metal/rugosidade",theme.color.textMuted,theme.type.caption);
   const u32 rows=static_cast<u32>(state.projectTextureNames.size());
   if(!rows) {
     builder.label(takeTop(content,40),"Nenhuma textura no projeto: em Arquivos, selecione um GLB e toque em Texturas.",

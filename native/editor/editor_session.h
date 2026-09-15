@@ -543,6 +543,8 @@ public:
   // R4: conjunto de UV, repetição e filtro de um binding, na instância ou no material do projeto.
   bool setSlotSampling(EditorEntityId id,u32 slot,u32 binding,MaterialScope scope,const scene::MaterialSampling &sampling,
                        std::string &diagnostic);
+  // R4: canais do metal/rugosidade, oclusão, inversão Y do normal e origem do alfa.
+  bool setSlotChannels(EditorEntityId id,u32 slot,MaterialScope scope,const scene::MaterialChannels &channels,std::string &diagnostic);
   bool setSlotTexture(EditorEntityId id,u32 slot,u32 binding,MaterialScope scope,const resources::AssetGuid &texture,
                       std::string &diagnostic);
   // Nome do material da FONTE usado pela primitiva de identidade `draw`.

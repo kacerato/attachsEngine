@@ -72,6 +72,8 @@ public:
     scene::SlotTextures textures{};
     scene::MaterialSurface surface{};
     scene::SlotSampling sampling{};
+    scene::MaterialChannels channels{};
+    resources::AssetGuid occlusionTexture{};
   };
   void setMaterialLibrary(std::vector<std::pair<resources::AssetGuid,SharedMaterial>> library) {materialLibrary_=std::move(library);}
   const SharedMaterial *sharedMaterial(const resources::AssetGuid &guid) const {
@@ -116,6 +118,33 @@ public:
     for(const auto &entry:textureLibrary_)
       if(entry.guid==guid && entry.srgb==bindingIsSrgb(binding) && entry.sampler==sampler) return entry.index;
     return scene::MaterialTextureKeep;
+  }
+  // R4: canais, oclusão, normal e alfa efetivos, campo a campo: instância, senão
+  // material compartilhado, senão herdar (a fonte decide).
+  scene::MaterialChannels slotChannels(const scene::MeshRenderer &render,u32 slot) const {
+    auto result=render.slotChannels(slot);
+    if(const auto *shared=sharedMaterial(render.slotMaterialAsset(slot))) {
+      const auto &inherited=shared->channels;
+      if(!result.roughness) result.roughness=inherited.roughness;
+      if(!result.metallic) result.metallic=inherited.metallic;
+      if(!result.occlusion) result.occlusion=inherited.occlusion;
+      if(!result.occlusionSource) result.occlusionSource=inherited.occlusionSource;
+      if(result.occlusionStrength<0) result.occlusionStrength=inherited.occlusionStrength;
+      if(!result.normalFlipY) result.normalFlipY=inherited.normalFlipY;
+      if(!result.alphaSource) result.alphaSource=inherited.alphaSource;
+    }
+    return result;
+  }
+  resources::AssetGuid slotOcclusionTexture(const scene::MeshRenderer &render,u32 slot) const {
+    const auto local=render.slotOcclusionTexture(slot);
+    if(local.valid()) return local;
+    if(const auto *shared=sharedMaterial(render.slotMaterialAsset(slot))) return shared->occlusionTexture;
+    return {};
+  }
+  // Isolar na prévia: um objeto e um slot por vez, só no documento autoral.
+  bool setMaterialIsolation(EditorEntityId entity,u32 slot,std::uint8_t channel) {
+    if(isolateEntity_==entity && isolateSlot_==slot && isolateChannel_==channel) return false;
+    isolateEntity_=entity;isolateSlot_=slot;isolateChannel_=channel;return true;
   }
   // R4: amostragem efetiva de um binding, campo a campo: instância, senão
   // material compartilhado, senão herdar (a fonte decide).
@@ -163,6 +192,9 @@ public:
         scene::materialUvTransformRows(sampling,value.uvTransforms[binding]);
       }
     }
+    value.channels=slotChannels(render,slot);
+    // A textura de oclusão é dado (linear) e usa a amostragem do metal/rugosidade.
+    value.occlusionTexture=resolveTexture(slotOcclusionTexture(render,slot),2,samplerFlags(slotSampling(render,slot,2)));
     const auto surface=slotSurface(render,slot);
     value.alphaMode=surface.alphaMode;value.sides=surface.sides;value.alphaCutoff=surface.alphaCutoff;
     return value;
@@ -190,6 +222,9 @@ public:
 private:
   std::vector<std::pair<resources::AssetGuid,SharedMaterial>> materialLibrary_;
   std::vector<TextureBinding> textureLibrary_;
+  EditorEntityId isolateEntity_=kInvalidEntity;
+  u32 isolateSlot_=0;
+  std::uint8_t isolateChannel_=0;
   std::vector<resources::AssetGuid> assets_;
   // Três floats por desenho; vazio significa "pivô no centro dos limites".
   std::vector<float> pivots_;

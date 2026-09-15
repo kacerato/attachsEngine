@@ -297,6 +297,7 @@ bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<Ed
       update.visible=inheritedVisible(document,id) && render->enabled;
       update.castShadow=entity->castShadow;
       update.material=slotMaterial(*render,slot);
+      if(isolateChannel_ && id==isolateEntity_ && slot==isolateSlot_) update.material.isolate=isolateChannel_;
       const auto &body=waterBody(*entity);
       update.waterLayers[0]=body.waveGain;update.waterLayers[1]=body.foamGain;
       update.waterLayers[2]=body.rippleGain;update.waterLayers[3]=body.opticalGain;

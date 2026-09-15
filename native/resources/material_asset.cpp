@@ -10,6 +10,7 @@ bool MaterialAsset::valid() const {
   if (!guid.valid() || !revision || name.empty() || name.size() > 128) return false;
   for (unsigned char c : name) if (c < 32 || c == 127) return false;
   for (const auto &value : sampling) if (!scene::validMaterialSampling(value)) return false;
+  if (!scene::validMaterialChannels(channels)) return false;
   return scene::MeshRenderer::validMaterial(values) && scene::validMaterialSurface(surface);
 }
 
@@ -28,6 +29,10 @@ std::string MaterialAsset::serialize() const {
   for (const auto &value : sampling) out << ' ' << scene::materialSamplingToken(value);
   for (const auto &value : sampling)
     out << ' ' << value.offset[0] << ' ' << value.offset[1] << ' ' << value.scale[0] << ' ' << value.scale[1] << ' ' << value.rotation;
+  out << ' ' << static_cast<unsigned>(channels.roughness) << ' ' << static_cast<unsigned>(channels.metallic) << ' '
+      << static_cast<unsigned>(channels.occlusion) << ' ' << static_cast<unsigned>(channels.occlusionSource) << ' ' << channels.occlusionStrength
+      << ' ' << static_cast<unsigned>(channels.normalFlipY) << ' ' << static_cast<unsigned>(channels.alphaSource) << ' '
+      << scene::materialTextureToken(occlusionTexture);
   out << '\n';
   return out.str();
 }
@@ -65,6 +70,16 @@ bool MaterialAsset::deserialize(std::string_view text, MaterialAsset &out) {
   if (version >= 5)
     for (auto &value : candidate.sampling)
       if (!(in >> value.offset[0] >> value.offset[1] >> value.scale[0] >> value.scale[1] >> value.rotation)) return false;
+  if (version >= 6) {
+    unsigned roughness = 0, metallic = 0, occlusion = 0, source = 0, flip = 0, alpha = 0;
+    float strength = -1;
+    std::string token;
+    if (!(in >> roughness >> metallic >> occlusion >> source >> strength >> flip >> alpha >> token) || roughness > 255 || metallic > 255 ||
+        occlusion > 255 || source > 255 || flip > 255 || alpha > 255 || !scene::parseMaterialTextureToken(token, candidate.occlusionTexture))
+      return false;
+    candidate.channels = {static_cast<std::uint8_t>(roughness), static_cast<std::uint8_t>(metallic), static_cast<std::uint8_t>(occlusion),
+                          static_cast<std::uint8_t>(source), strength, static_cast<std::uint8_t>(flip), static_cast<std::uint8_t>(alpha)};
+  }
   in >> std::ws;
   if (!in.eof() || !candidate.valid()) return false;
   out = std::move(candidate);

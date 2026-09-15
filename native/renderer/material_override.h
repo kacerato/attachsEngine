@@ -30,6 +30,47 @@ inline void materialUvTransformEntry(const MaterialOverride &value,float out[Mat
     entry[4]=rows[3];entry[5]=rows[4];entry[6]=rows[5];entry[7]=0;
   }
 }
+// R4: entrada completa da extensão de material por desenho: as oito linhas de
+// transformação de UV acima e mais quatro linhas, já com o padrão da fonte
+// resolvido (o shader não conhece "herdar"):
+//   linha 8:  força da oclusão, origem (0 nenhuma, 1 metal/rugosidade, 2 textura
+//             própria), canal da oclusão (0..3), índice bindless da textura
+//   linha 9:  canal da rugosidade, canal do metal, origem do alfa (0 cor base,
+//             1 opaco, 2 luminância), inversão Y do normal (0/1)
+//   linha 10: dado isolado na prévia (MaterialIsolate*)
+//   linha 11: reservada
+inline constexpr u32 MaterialExtensionFloats=12*4;
+inline constexpr u32 MaterialExtensionNoTexture=0xFFFFFFFFu;
+inline bool needsMaterialExtension(const MaterialOverride &value) {
+  return value.uvTransformMask!=0 || value.channels.overrides() || value.isolate!=scene::MaterialIsolateNone ||
+         (value.occlusionTexture!=scene::MaterialTextureKeep && value.occlusionTexture!=InvalidMapTexture);
+}
+// `effectiveFlags` são as flags do material depois de applyMaterialOverride;
+// `occlusionSlot` é o índice bindless da textura de oclusão, ou NoTexture.
+inline void materialExtensionEntry(const MaterialOverride &value,u32 effectiveFlags,u32 occlusionSlot,
+                                   float out[MaterialExtensionFloats]) {
+  materialUvTransformEntry(value,out);
+  const auto &channels=value.channels;
+  const auto channel=[](std::uint8_t chosen,u32 fallback) {return static_cast<float>(chosen?chosen-1u:fallback);};
+  u32 source=channels.occlusionSource;
+  if(source==scene::MaterialOcclusionKeep)
+    source=(effectiveFlags&MapMaterialOcclusionInMetallicRoughness)?scene::MaterialOcclusionPacked:scene::MaterialOcclusionNone;
+  if(source==scene::MaterialOcclusionTexture && occlusionSlot==MaterialExtensionNoTexture) source=scene::MaterialOcclusionNone;
+  float *row=out+32;
+  row[0]=channels.occlusionStrength<0?1.0f:channels.occlusionStrength;
+  row[1]=static_cast<float>(source-1u);
+  row[2]=channel(channels.occlusion,0);
+  row[3]=source==scene::MaterialOcclusionTexture?static_cast<float>(occlusionSlot):0.0f;
+  row+=4;
+  row[0]=channel(channels.roughness,1);
+  row[1]=channel(channels.metallic,2);
+  row[2]=static_cast<float>(channels.alphaSource==scene::MaterialAlphaSourceKeep?0u:channels.alphaSource-1u);
+  row[3]=channels.normalFlipY==scene::MaterialToggleOn?1.0f:0.0f;
+  row+=4;
+  row[0]=static_cast<float>(value.isolate);row[1]=row[2]=row[3]=0;
+  row+=4;
+  row[0]=row[1]=row[2]=row[3]=0;
+}
 inline MapMaterialRecord applyMaterialOverride(const MapMaterialRecord &source,const MaterialOverride &value,u32 textureBase=0) {
   auto result=source;
   static constexpr u32 bindingFlags[scene::MaterialTextureCount]{0,MapMaterialNormalMap,MapMaterialMetallicRoughnessMap,MapMaterialEmissiveMap};
