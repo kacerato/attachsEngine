@@ -869,3 +869,75 @@ AE_TEST(m08e2_slot_material_scope_is_instance_or_shared_resource_and_persists) {
   AE_EXPECT_EQ(drawn(reopened, b, 1).baseColor[1], .3f, "nas duas instâncias");
   AE_EXPECT_EQ(drawn(reopened, a, 2).baseColor[0], .9f, "e a substituição local de A");
 }
+
+// R1 — reabertura do projeto em lote. O caminho antigo publicava a biblioteca a
+// cada fonte (A, A+B, A+B+C); a reabertura agora publica uma vez e chega à mesma
+// cena. Uma fonte recusada não impede as outras.
+AE_TEST(r1_project_reopen_publishes_all_sources_once_and_matches_the_sequential_path) {
+  Project project;
+  EditorSession session;
+  FakeRenderer renderer;
+  start(session, renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+  const std::vector<std::pair<std::string, std::vector<u8>>> files{
+      {"Fontes/veiculo.glb", vehicleV1()}, {"Fontes/painel.glb", panelThree()}, {"Fontes/placa.glb", panelTwo()}};
+  for (const auto &[path, bytes] : files) {
+    resources::GltfImport model;
+    AE_EXPECT_TRUE(resources::importGlb(bytes, {}, {}, model), model.diagnostic.c_str());
+    EditorSession::ModelImportReport report;
+    AE_EXPECT_TRUE(session.commitModelImport(bytes, model, path, std::string(), report), report.diagnostic.c_str());
+    EditorSession::ModelImportReport instance;
+    AE_EXPECT_TRUE(session.instantiateModel(report.source, instance), instance.diagnostic.c_str());
+  }
+  const auto scenePath = project.root / "cena.aescene";
+  AE_EXPECT_TRUE(session.save(scenePath.string().c_str(), 0), "salvo");
+  const auto registry = session.serializeAssets();
+
+  EditorSession sequential;
+  FakeRenderer one;
+  start(sequential, one);
+  AE_EXPECT_TRUE(sequential.setProjectDirectory(project.root.string().c_str()), "projeto sequencial");
+  AE_EXPECT_TRUE(sequential.loadAssets(registry), "registro sequencial");
+  for (const auto &[path, original] : files) {
+    std::vector<u8> bytes;
+    AE_EXPECT_TRUE(EditorImportTransaction::read(project.root / path, bytes), "fonte gravada");
+    EditorSession::ModelImportReport report;
+    AE_EXPECT_TRUE(sequential.importModel(bytes, path, {}, report), report.diagnostic.c_str());
+  }
+  AE_EXPECT_TRUE(sequential.load(scenePath.string().c_str(), 0), "cena sequencial");
+  AE_EXPECT_EQ(one.rebuilds, 3u, "o caminho antigo publicava a cada fonte");
+
+  EditorSession batch;
+  FakeRenderer other;
+  start(batch, other);
+  AE_EXPECT_TRUE(batch.setProjectDirectory(project.root.string().c_str()), "projeto em lote");
+  AE_EXPECT_TRUE(batch.loadAssets(registry), "registro em lote");
+  std::vector<EditorSession::ReopenedSource> sources;
+  for (const auto &[path, original] : files) {
+    std::vector<u8> bytes;
+    AE_EXPECT_TRUE(EditorImportTransaction::read(project.root / path, bytes), "fonte gravada");
+    EditorSession::ReopenedSource reopened;
+    AE_EXPECT_TRUE(resources::importGlb(bytes, {}, {}, reopened.model), reopened.model.diagnostic.c_str());
+    reopened.hash = Sha256::hex(bytes);
+    reopened.sourceName = path;
+    sources.push_back(std::move(reopened));
+  }
+  EditorSession::ReopenedSource broken;
+  broken.sourceName = "Fontes/quebrado.glb";
+  sources.push_back(std::move(broken));
+  std::vector<EditorSession::ModelImportReport> reports;
+  std::string diagnostic;
+  AE_EXPECT_TRUE(batch.reopenSources(sources, reports, diagnostic), diagnostic.c_str());
+  AE_EXPECT_EQ(other.rebuilds, 1u, "uma publicação para as três fontes");
+  AE_EXPECT_EQ(reports.size(), usize{4}, "um relatório por fonte");
+  bool reopenedAll = reports.size() == 4;
+  for (usize i = 0; reopenedAll && i < 3; ++i) reopenedAll &= reports[i].diagnostic.empty() && reports[i].reimported;
+  AE_EXPECT_TRUE(reopenedAll, "as três fontes registradas reabriram sem criar objetos");
+  AE_EXPECT_TRUE(reports.size() == 4 && !reports[3].diagnostic.empty(), "a fonte recusada fica com o motivo e não derruba as outras");
+  AE_EXPECT_TRUE(batch.load(scenePath.string().c_str(), 0), "cena em lote");
+  AE_EXPECT_EQ(serializeEditorDocument(batch.document(), 0), serializeEditorDocument(sequential.document(), 0),
+               "mesma cena que o caminho sequencial");
+  std::vector<renderer::MapDrawState> batchStates, sequentialStates;
+  AE_EXPECT_TRUE(batch.extractMap(batchStates) && sequential.extractMap(sequentialStates), "as duas extraem");
+  AE_EXPECT_EQ(batchStates.size(), sequentialStates.size(), "mesmos desenhos");
+}

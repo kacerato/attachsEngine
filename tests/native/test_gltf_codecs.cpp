@@ -7,6 +7,7 @@
 #include "resources/gltf_codecs.h"
 #include "resources/gltf_import.h"
 #include "resources/image_decode.h"
+#include "resources/import_cache.h"
 
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -585,6 +586,58 @@ AE_TEST(m09e4_ktx2_with_full_mips_becomes_astc_blocks_only_when_the_device_sampl
   AE_EXPECT_TRUE(!capped.textures.empty() && capped.textures.front()->width == 4 && capped.textures.front()->levels == 3 &&
                      capped.reducedTextures == 1,
                  "limite residente vale para ASTC descartando níveis");
+}
+
+AE_TEST(r2_import_cache_round_trips_the_prepared_model_and_refuses_stale_or_corrupt_files) {
+  resources::GltfImportLimits astc;
+  astc.astc4x4 = true;
+  const std::string sourceHash(64, 'a');
+  const auto key = resources::importCacheKey(sourceHash, astc);
+  AE_EXPECT_EQ(key.size(), usize{64}, "chave SHA-256 em hexadecimal");
+  AE_EXPECT_TRUE(key != resources::importCacheKey(sourceHash, {}), "outro formato alvo, outra chave");
+  AE_EXPECT_TRUE(key != resources::importCacheKey(std::string(64, 'b'), astc), "outra fonte, outra chave");
+
+  // Modelo com texturas ASTC e mipmaps.
+  resources::GltfImport textured;
+  AE_EXPECT_TRUE(resources::importGlb(ktx2Quad(kGradUastcMips), astc, {}, textured), textured.diagnostic.c_str());
+  std::vector<u8> bytes;
+  AE_EXPECT_TRUE(resources::writeImportCache(textured, key, bytes), "cache gravado");
+  resources::GltfImport restored;
+  AE_EXPECT_TRUE(resources::readImportCache(bytes, key, restored), "cache lido");
+  std::vector<u8> again;
+  AE_EXPECT_TRUE(resources::writeImportCache(restored, key, again) && again == bytes,
+                 "o modelo lido grava os mesmos bytes: nada se perdeu na volta");
+  AE_EXPECT_TRUE(restored.textures.size() == 1 && restored.textures.front()->format == renderer::AuthoringTextureAstc4x4 &&
+                     restored.textures.front()->mipChain == textured.textures.front()->mipChain && restored.astcTextures == 1,
+                 "textura ASTC com a cadeia inteira e os contadores da prévia");
+
+  // Modelo com hierarquia e nós espelhados.
+  const auto mirrored = buildGlb(mirrorJson(R"({"name":"Espelho","mesh":0,"translation":[5,0,0],"scale":[-1,1,1],"children":[1]},)"
+                                            R"({"name":"Filho","mesh":0,"translation":[2,0,0]},{"name":"Direto","mesh":0})",
+                                            "0,2"),
+                                 mirrorBinary());
+  resources::GltfImport tree;
+  AE_EXPECT_TRUE(resources::importGlb(mirrored, {}, {}, tree), tree.diagnostic.c_str());
+  const auto treeKey = resources::importCacheKey(sourceHash, {});
+  std::vector<u8> treeBytes, treeAgain;
+  resources::GltfImport treeRestored;
+  AE_EXPECT_TRUE(resources::writeImportCache(tree, treeKey, treeBytes) && resources::readImportCache(treeBytes, treeKey, treeRestored) &&
+                     resources::writeImportCache(treeRestored, treeKey, treeAgain) && treeAgain == treeBytes,
+                 "árvore, pais, matrizes e geometria espelhada voltam iguais");
+  AE_EXPECT_TRUE(treeRestored.nodes.size() == 3 && treeRestored.nodes[1].parent == 0 && treeRestored.mirroredNodes == 2,
+                 "hierarquia e contador de espelhamento");
+
+  resources::GltfImport refused;
+  AE_EXPECT_TRUE(!resources::readImportCache(bytes, treeKey, refused) && refused.draws.empty(), "chave de outra configuração recusada");
+  std::vector<u8> truncated(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(bytes.size() / 2));
+  AE_EXPECT_TRUE(!resources::readImportCache(truncated, key, refused) && refused.draws.empty(), "arquivo cortado recusado");
+  std::vector<u8> corrupt = bytes;
+  corrupt[3] ^= 0xff;
+  AE_EXPECT_TRUE(!resources::readImportCache(corrupt, key, refused), "cabeçalho corrompido recusado");
+  std::vector<u8> tail = bytes;
+  tail.back() ^= 0xff;
+  AE_EXPECT_TRUE(!resources::readImportCache(tail, key, refused), "terminador corrompido recusado");
+  AE_EXPECT_TRUE(resources::importCacheRelativePath(key) == ".astra/cache/imports/" + key + ".aic", "caminho do derivado");
 }
 
 AE_TEST(m09e4_basisu_only_texture_is_applied_through_the_same_texture_pipeline) {

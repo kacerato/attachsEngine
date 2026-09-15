@@ -19,7 +19,6 @@ import dev.aether.editor.AetherActivity;
  */
 public final class AstraShellActivity extends Activity implements ShellView.Listener {
     private static final long SPLASH_MILLIS = 2200L;
-    private static final long LOAD_MILLIS = 1800L;
 
     private FrameLayout root;
     private ShellView shell;
@@ -44,14 +43,28 @@ public final class AstraShellActivity extends Activity implements ShellView.List
         shell.showSplash(SPLASH_MILLIS);
     }
 
-    @Override public void onLoadFinished(Project project) {
-        if (project == null) { shell.showProjects(); return; }
-        openInEditor(project);
+    @Override public void onSplashFinished() {
         shell.showProjects();
     }
 
     @Override public void onProjectPicked(Project project) {
-        shell.showLoading(project, LOAD_MILLIS);
+        beginOpening(project);
+    }
+
+    /**
+     * R1: a tela de carregamento cobre a troca de Activity pelo tempo que ela
+     * realmente leva. Antes havia 1,8 s de espera fixa com barra inventada antes
+     * de sequer pedir o editor. Se a abertura é recusada aqui, volta aos projetos.
+     */
+    private void beginOpening(Project project) {
+        shell.showLoading(project);
+        shell.post(() -> { if (!openInEditor(project)) shell.showProjects(); });
+    }
+
+    @Override protected void onStop() {
+        super.onStop();
+        // O editor já cobre o shell; ao voltar, a lista de projetos é o ponto de partida.
+        if (shell.screen() == ShellView.Screen.LOADING) shell.showProjects();
     }
 
     @Override public void onNewProjectRequested() {
@@ -64,7 +77,7 @@ public final class AstraShellActivity extends Activity implements ShellView.List
                     toast("Não foi possível criar a pasta do projeto.");
                     return;
                 }
-                shell.showLoading(created, LOAD_MILLIS);
+                beginOpening(created);
             }
 
             @Override public void onUnavailable(SceneTemplate template) {
@@ -80,16 +93,16 @@ public final class AstraShellActivity extends Activity implements ShellView.List
     }
 
     /** Abre o editor nativo Aether mantendo o projeto escolhido no shell. */
-    private void openInEditor(Project project) {
+    private boolean openInEditor(Project project) {
         SceneTemplate template = SceneTemplate.byId(project.templateId);
         if (template.previewExtra == null && !SceneTemplate.EMPTY.equals(template.id)) {
             toast(project.name + ": cena indisponível.");
-            return;
+            return false;
         }
         java.io.File scenes = new java.io.File(project.path, "scenes");
         if (!scenes.isDirectory() && !scenes.mkdirs()) {
             toast("Não foi possível abrir a pasta de cenas do projeto.");
-            return;
+            return false;
         }
         Intent intent = new Intent(this, AetherActivity.class);
         final boolean independent;
@@ -98,12 +111,12 @@ public final class AstraShellActivity extends Activity implements ShellView.List
         } catch (java.io.IOException error) {
             android.util.Log.e("AstraProjects", "Falha ao ler a origem da cena", error);
             toast("Não foi possível abrir a cena. O arquivo foi preservado.");
-            return;
+            return false;
         }
         if (!independent && !dev.aether.editor.BuildConfig.INCLUDE_LEGACY_DEMOS) {
             toast("Este projeto depende de um pacote de demonstração legado. Arquivos preservados.");
             android.util.Log.w("AstraProjects", "Projeto legado requer build de migração com pacotes: " + project.path);
-            return;
+            return false;
         }
         intent.putExtra("aether.empty_workspace", independent);
         intent.putExtra(template.previewExtra != null ? template.previewExtra : "aether.map_preview", true);
@@ -115,6 +128,7 @@ public final class AstraShellActivity extends Activity implements ShellView.List
         intent.putExtra("astra.project_path", project.path);
         intent.putExtra("astra.project_name", project.name);
         startActivity(intent);
+        return true;
     }
 
     private void toast(String message) {

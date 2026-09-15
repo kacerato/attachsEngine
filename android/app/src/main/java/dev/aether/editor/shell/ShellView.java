@@ -30,7 +30,7 @@ public final class ShellView extends View {
         void onProjectPicked(Project project);
         void onNewProjectRequested();
         void onNavUnavailable(String label);
-        void onLoadFinished(Project project);
+        void onSplashFinished();
     }
 
     public enum Screen { SPLASH, PROJECTS, LOADING }
@@ -47,9 +47,13 @@ public final class ShellView extends View {
     private float overflowX;
     private float overflowY;
 
-    private long progressStart;
-    private long progressDuration;
-    private boolean progressRunning;
+    // R1: a barra não finge porcentagem. O shell não enxerga o trabalho do
+    // editor nativo, então ela só diz "trabalhando" (varredura indeterminada).
+    // O splash mantém sua duração de marca; o carregamento dura o que a abertura
+    // real da Activity levar, sem espera fixa.
+    private long animationStart;
+    private long splashDeadline;
+    private boolean animating;
 
     private final Matrix stage = new Matrix();
     private final Matrix inverse = new Matrix();
@@ -118,35 +122,33 @@ public final class ShellView extends View {
 
     public void showSplash(long millis) {
         screen = Screen.SPLASH;
-        startProgress(millis);
+        startAnimation(System.nanoTime() + Math.max(1L, millis) * 1_000_000L);
     }
 
     public void showProjects() {
         screen = Screen.PROJECTS;
-        progressRunning = false;
+        animating = false;
         invalidate();
     }
 
-    public void showLoading(Project project, long millis) {
+    /** Cobre a troca para o editor; quem sai desta tela é a Activity, não um relógio. */
+    public void showLoading(Project project) {
         screen = Screen.LOADING;
         loadingProject = project;
-        startProgress(millis);
+        startAnimation(0L);
     }
 
-    private void startProgress(long millis) {
-        progressStart = System.nanoTime();
-        progressDuration = Math.max(1L, millis) * 1_000_000L;
-        progressRunning = true;
+    private void startAnimation(long deadline) {
+        animationStart = System.nanoTime();
+        splashDeadline = deadline;
+        animating = true;
         invalidate();
     }
 
-    private float progress() {
-        if (!progressRunning) return 0f;
-        float linear = (System.nanoTime() - progressStart) / (float) progressDuration;
-        if (linear >= 1f) return 1f;
-        // O fim de um carregamento sempre custa mais que o começo; uma rampa
-        // linear mentiria sobre isso e pareceria travar no final.
-        return 1f - (float) Math.pow(1f - linear, 2.1);
+    /** Fase da varredura em [0,1), ciclo de 1,4 s. */
+    private float sweepPhase() {
+        long elapsed = System.nanoTime() - animationStart;
+        return (elapsed % 1_400_000_000L) / 1_400_000_000f;
     }
 
     // ------------------------------------------------------------ desenho
@@ -180,16 +182,10 @@ public final class ShellView extends View {
         }
         target.restore();
 
-        if (progressRunning) {
-            if (progress() >= 1f) {
-                progressRunning = false;
-                Screen finished = screen;
-                Project project = loadingProject;
-                post(() -> {
-                    if (listener == null) return;
-                    if (finished == Screen.SPLASH) listener.onLoadFinished(null);
-                    else if (finished == Screen.LOADING) listener.onLoadFinished(project);
-                });
+        if (animating) {
+            if (screen == Screen.SPLASH && splashDeadline != 0L && System.nanoTime() >= splashDeadline) {
+                animating = false;
+                post(() -> { if (listener != null) listener.onSplashFinished(); });
             } else {
                 postInvalidateOnAnimation();
             }
@@ -259,8 +255,12 @@ public final class ShellView extends View {
     private void drawBar(Canvas target, float x, float y, float w, float h) {
         box.set(x, y, x + w, y + h);
         target.drawRoundRect(box, h * .5f, h * .5f, trackPaint);
-        float filled = Math.max(h, w * progress());
-        box.set(x, y, x + filled, y + h);
+        // Segmento de 28% da trilha entrando pela esquerda e saindo pela direita.
+        float segment = w * .28f;
+        float head = -segment + (w + segment) * sweepPhase();
+        float from = Math.max(x, x + head), to = Math.min(x + w, x + head + segment);
+        if (to - from < h) return;
+        box.set(from, y, to, y + h);
         target.drawRoundRect(box, h * .5f, h * .5f, accentPaint);
     }
 

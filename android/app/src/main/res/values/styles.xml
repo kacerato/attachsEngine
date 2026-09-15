@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="AetherTheme" parent="android:style/Theme.Material.NoActionBar">
+        <!-- R1: entre o carregamento do shell e o primeiro quadro Vulkan a janela
+             nativa mostra o mesmo fundo do shell, não o preto do tema padrão. -->
+        <item name="android:windowBackground">@color/astra_void</item>
         <item name="android:fontFamily">sans</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowFullscreen">true</item>

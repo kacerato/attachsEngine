@@ -287,6 +287,8 @@ add_library(aether_assets STATIC
   resources/image_decode.cpp
   resources/gltf_codecs.cpp
   resources/gltf_package.cpp
+  resources/import_cache.cpp
+  resources/texture_budget.cpp
 )
 target_include_directories(aether_assets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_assets PRIVATE aether_codecs)

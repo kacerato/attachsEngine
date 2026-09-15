@@ -1,0 +1,29 @@
+R1 — linha de base da abertura do projeto, ANTES da mudança, 14/09/2026.
+APK 2E0117F6DE8126234A2245CDF85939E8BE8E9C03A6D71706F05B5173D7BDE53E (commit 6c7991e8), projeto M08Recursos0913k
+com 8 fontes registradas (Painéis, Ford, Porsche, veículo M08.2, painel E2, esfera Draco, CarConcept, Ford espelhado).
+Abertura a frio: force-stop, lançador, toque no projeto. Log filtrado por Aether.Android e pelo "Displayed" do pacote
+(nenhuma linha de outro aplicativo).
+
+21:42:39.857 Displayed dev.aether.editor/.shell.AstraShellActivity: +376ms
+(toque no projeto; carregamento do shell com duração fixa LOAD_MILLIS=1800)
+21:42:47.589 Displayed dev.aether.editor/.AetherActivity: +85ms
+21:42:47.609 [EmptyWorkspace] initialization=loading
+21:42:48.756 [Import] KTX2 com mips vira ASTC 4x4.                          (renderer pronto; começa collectRendererInitialization)
+21:42:48.773 [Import] fonte reaberta: Fontes/Astra_M08_Paineis.glb
+21:42:55.277 [Import] fonte reaberta: Fontes/1965_ford_lotus_cortina_mk1.glb     (+6,5 s)
+21:43:31.693 [Import] fonte reaberta: Fontes/free_1975_porsche_911_930_turbo.glb (+36,4 s)
+21:43:34.165 [Import] fonte reaberta: Fontes/m082-veiculo.glb                    (+2,5 s)
+21:43:36.084 [Import] fonte reaberta: Fontes/m08e2-painel.glb                    (+1,9 s)
+21:43:38.148 [Import] fonte reaberta: Fontes/esfera-draco.glb                    (+2,1 s)
+21:43:42.380 [Import] fonte reaberta: Fontes/CarConcept.glb                      (+4,2 s)
+21:43:51.876 [Import] fonte reaberta: Fontes/ford-lotus-espelho.glb              (+9,5 s)
+21:43:51.943 [Editor] sessao pronta: 441 entidades no documento.
+21:43:51.959 Primeiro frame após ativação apresentado: latency_ms=64347.591
+
+Leitura:
+- Entre a janela do editor aparecer (21:42:47.6) e o primeiro quadro (21:43:51.9) passaram 64,3 s sem nenhum quadro do
+  editor. O relato do usuário era ~15 s com menos fontes; o projeto de conferência ganhou CarConcept, esfera e Ford
+  espelhado na Entrega 4.
+- Todo o intervalo é reabertura sequencial dentro de collectRendererInitialization: ler, interpretar (texturas,
+  codecs), publicar a biblioteca ACUMULADA e esperar a GPU, fonte por fonte, antes da cena e do primeiro quadro.
+- Cada linha "fonte reaberta" inclui a publicação acumulada daquela etapa; o log antigo não separa preparo de publicação.

@@ -1,0 +1,38 @@
+R1 — abertura do projeto DEPOIS da mudança, 14/09/2026.
+APK C436D3E4DD69D53866BA11434441650EDF4D87E61A070B80D94E2EE2964417B7 (worker de reabertura + publicação única),
+mesmo projeto M08Recursos0913k com as mesmas 8 fontes, mesma abertura a frio da linha de base
+(linha-de-base-adb.log). Log filtrado por Aether.Android e pelo "Displayed" do pacote.
+
+21:47:46.695 Displayed dev.aether.editor/.shell.AstraShellActivity: +389ms
+21:47:53.092 Displayed dev.aether.editor/.AetherActivity: +72ms
+21:47:53.121 [EmptyWorkspace] initialization=loading
+21:47:54.306 [Import] KTX2 com mips vira ASTC 4x4.
+21:47:54.316 [Open] preparando 8 fonte(s) em segundo plano.
+21:47:54.316 [Editor] sessao pronta: 1 entidades no documento.
+21:47:54.320 [EmptyWorkspace] initialization=ready
+21:47:54.337 Primeiro frame após ativação apresentado: latency_ms=1215.626
+21:48:01.029 [Open] fonte preparada: Fontes/1965_ford_lotus_cortina_mk1.glb bytes=8171096 preparo_ms=6711
+21:48:45.802 [Open] fonte preparada: Fontes/free_1975_porsche_911_930_turbo.glb bytes=90461732 preparo_ms=44725
+21:48:46.828 [Open] fonte preparada: Fontes/esfera-draco.glb bytes=14608 preparo_ms=137
+21:48:48.980 [Open] fonte preparada: Fontes/CarConcept.glb bytes=10267996 preparo_ms=2151
+21:49:00.253 [Open] fonte preparada: Fontes/ford-lotus-espelho.glb bytes=8171148 preparo_ms=11174
+21:49:03.878 [Import] fonte reaberta: (as 8 fontes, no mesmo instante, depois da publicação única)
+21:49:03.905 [Open] projeto aberto: fontes=8 falhas=0 preparo_ms=66030 publicacao_ms=3532 cena_ms=27 total_ms=69589
+
+Comparação com a linha de base:
+                                          antes          depois
+janela do editor -> primeiro quadro       64.347 ms      1.216 ms
+publicações da biblioteca                 8 (acumuladas) 1 (3.532 ms)
+preparo das fontes                        dentro do loop em worker (66.030 ms), editor apresentando quadros
+projeto utilizável (cena recuperada)      ~64,4 s        ~69,6 s depois do sessao pronta
+
+Leitura:
+- A tela preta entre o carregamento e o editor acabou: o editor apresenta quadros 1,2 s depois da janela abrir,
+  com a interação bloqueada até a cena ser recuperada (capturas carregando-6s-adb.png e carregando-20s-adb.png:
+  IDE, grade e árvore de arquivos visíveis, hierarquia ainda vazia; aberto-adb.png: cena recuperada).
+- DEFEITO visto nas capturas: a barra de estado mostrava "Código aplicado ao projeto" durante a abertura. A
+  publicação do código, que chega logo depois, sobrescrevia a mensagem de abertura. Corrigido depois desta
+  medição: a etapa real (recurso N de M, etapa, arquivo) é reafirmada a cada quadro enquanto a abertura dura.
+- O tempo total até a cena utilizável não caiu (e subiu ~5 s): o preparo continua refazendo o importador inteiro
+  para cada fonte, e agora concorre com a apresentação de quadros. Esse é o alvo do cache de derivados (R2).
+- Publicar uma vez custou 3,5 s; antes, as 8 publicações acumuladas estavam diluídas dentro dos 64 s.

@@ -1748,8 +1748,24 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
                                     usize *outPrimitives) {
   if(!publishGeometry_) { diagnostic="Este ambiente não publica geometria importada."; return false; }
   PublishedGeometry published;
-  if(!publishGeometry_(library.vertices,library.indices,library.draws,library.materials,library.textures,published)) {
+  // R2: o orçamento agregado reduz a residência antes de subir. As fontes (e o
+  // derivado em cache) guardam as cadeias completas; subir o teto e republicar
+  // devolve a resolução sem reimportar nada.
+  auto textures=library.textures;
+  const auto residency=resources::applyTextureBudget(textures,importTextureBudget_,importLimits_.minimumTextureDimension);
+  if(!publishGeometry_(library.vertices,library.indices,library.draws,library.materials,textures,published)) {
     diagnostic="O consumidor gráfico recusou a geometria importada.";return false;
+  }
+  const bool residencyChanged=residency.residentBytes!=textureResidency_.residentBytes ||
+                              residency.reducedTextures!=textureResidency_.reducedTextures ||
+                              residency.withinBudget()!=textureResidency_.withinBudget();
+  textureResidency_=residency;
+  if(residencyChanged && (residency.reducedTextures || !residency.withinBudget())) {
+    const auto mb=[](u64 bytes){return std::to_string((bytes+(u64{1}<<19))>>20);};
+    reportProblem(residency.withinBudget()?EditorConsoleSeverity::Info:EditorConsoleSeverity::Warning,
+        "Texturas do projeto: "+mb(residency.requestedBytes)+" MB pedidos, "+mb(residency.residentBytes)+
+        " MB residentes (teto "+mb(residency.budgetBytes)+" MB); "+std::to_string(residency.reducedTextures)+
+        " textura(s) com resolução reduzida"+(residency.withinBudget()?".":"; todas no piso e ainda acima do teto."));
   }
   // O pacote publicado é primitivas internas + biblioteca, nessa ordem. As
   // primitivas mantêm a identidade derivada da impressão digital.
@@ -1924,6 +1940,79 @@ bool EditorSession::publishModel(const resources::GltfImport &model, std::string
                                 resources::ImportAmbiguityPolicy policy) {
   report={};
   if(isPlaying() || history_.isOpen()) {report.diagnostic="Finalize a edição antes de publicar o recurso.";return false;}
+  // Candidato completo antes de publicar: a versão anterior continua valendo
+  // até a nova estar inteira na GPU e aceita pelo editor.
+  auto candidateSources=importedSources_;
+  auto nextAssets=assets_;
+  StagedSource staged;
+  if(!stageSource(model,hash,sourceName,policy,candidateSources,nextAssets,report,staged)) return false;
+  const auto previousDocument=document_;
+  const auto previousMap=mapScene_;
+  if(!publishAndAdopt(flattenSources(candidateSources),report.diagnostic)) {
+    std::string rollback;
+    if(!publishAndAdopt(flattenSources(importedSources_),rollback))
+      report.diagnostic+=" Falha ao restaurar a GPU: "+rollback;
+    document_=previousDocument;mapScene_=previousMap;return false;
+  }
+  importedSources_=std::move(candidateSources);
+  assets_=std::move(nextAssets);assetRegistryDirty_=true;
+  state_.status=report.reimported?"Recurso reimportado; instâncias preservadas":"Recurso registrado; pronto para instanciar";
+  reconcileStagedSource(staged,report);
+  return true;
+}
+
+bool EditorSession::reopenSources(std::vector<ReopenedSource> &sources, std::vector<ModelImportReport> &reports,
+                                  std::string &diagnostic) {
+  reports.assign(sources.size(),ModelImportReport{});
+  diagnostic.clear();
+  if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de reabrir as fontes.";return false;}
+  if(!publishGeometry_) {diagnostic="Este ambiente não publica geometria importada.";return false;}
+  auto candidateSources=importedSources_;
+  auto nextAssets=assets_;
+  std::vector<StagedSource> staged(sources.size());
+  std::vector<bool> accepted(sources.size(),false);
+  bool any=false;
+  for(usize i=0;i<sources.size();++i) {
+    if(sources[i].sourceName.empty()) {reports[i].diagnostic="Nome de arquivo vazio.";continue;}
+    accepted[i]=stageSource(sources[i].model,sources[i].hash,sources[i].sourceName,resources::ImportAmbiguityPolicy::Refuse,
+                            candidateSources,nextAssets,reports[i],staged[i]);
+    any=any||accepted[i];
+  }
+  if(!any) return true;
+  const auto previousDocument=document_;
+  const auto previousMap=mapScene_;
+  if(!publishAndAdopt(flattenSources(candidateSources),diagnostic)) {
+    std::string rollback;
+    if(!publishAndAdopt(flattenSources(importedSources_),rollback)) diagnostic+=" Falha ao restaurar a GPU: "+rollback;
+    document_=previousDocument;mapScene_=previousMap;
+    for(usize i=0;i<sources.size();++i) if(accepted[i]) reports[i].diagnostic=diagnostic;
+    return false;
+  }
+  importedSources_=std::move(candidateSources);
+  assets_=std::move(nextAssets);assetRegistryDirty_=true;
+  for(usize i=0;i<sources.size();++i) {
+    if(!accepted[i]) continue;
+    reconcileStagedSource(staged[i],reports[i]);
+    persistImportMap(reports[i].source);
+    // Mesmo contrato de `importModel`: fonte que ainda não estava no registro
+    // instancia seus nós; fonte registrada só reidrata a geometria.
+    if(!reports[i].reimported) {
+      ModelImportReport instance;
+      if(!instantiateModel(reports[i].source,instance,false)) {reports[i].diagnostic=instance.diagnostic;continue;}
+      reports[i].objects=instance.objects;reports[i].groups=instance.groups;
+    }
+  }
+  state_.status="Recursos do projeto reabertos";
+  return true;
+}
+
+// Valida a fonte, monta o mapa de nós e põe o bloco no candidato e o registro em
+// `nextAssets`. Nada é publicado aqui.
+bool EditorSession::stageSource(const resources::GltfImport &model, std::string_view hash, std::string_view sourceName,
+                                resources::ImportAmbiguityPolicy policy, std::vector<ImportedSource> &candidateSources,
+                                resources::AssetRegistry &nextAssets, ModelImportReport &report, StagedSource &staged) {
+  report={};
+  staged={};
   if(model.draws.empty() || model.nodes.empty()) {report.diagnostic="Modelo sem geometria utilizável.";return false;}
   const float identity[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
   for(usize n=0;n<model.nodes.size();++n) {
@@ -1943,15 +2032,19 @@ bool EditorSession::publishModel(const resources::GltfImport &model, std::string
   // Reimportar o arquivo editado precisa cair no mesmo recurso; é o hash que
   // muda, não a identidade.
   const std::string path(sourceName);
-  const auto *existing=assets_.findByPath(path);
+  // `nextAssets`, não `assets_`: numa reabertura em lote, uma fonte já posta no
+  // candidato conta como existente para a seguinte.
+  const auto *existing=nextAssets.findByPath(path);
   const resources::AssetGuid source=existing?existing->guid:resources::assetGuidFromSeed("fonte:"+path);
   report.source=source;
+  staged.source=source;
 
   // Mapa de nós (M08.2): a revisão anterior, em memória ou no projeto, é o ponto
   // de partida da correspondência. Sem ela as identidades nascem da fonte e das
   // chaves legadas — as mesmas que cenas anteriores ao mapa já gravaram.
-  resources::ImportNodeMap previousNodeMap;
-  const bool hasPrevious=existing && previousImportMap(source,previousNodeMap);
+  auto &previousNodeMap=staged.previousNodeMap;
+  staged.hasPrevious=existing && previousImportMap(source,previousNodeMap);
+  const bool hasPrevious=staged.hasPrevious;
   resources::ImportNodeMap nodeMap;
   std::string mapDiagnostic;
   if(!resources::buildImportNodeMap(model,source,hash,hasPrevious?&previousNodeMap:nullptr,policy,nodeMap,report.match,mapDiagnostic)) {
@@ -1982,9 +2075,6 @@ bool EditorSession::publishModel(const resources::GltfImport &model, std::string
   block.materialNames=model.materialNames;
   block.textures=model.textures;
 
-  // Candidato completo antes de publicar: a versão anterior continua valendo
-  // até a nova estar inteira na GPU e aceita pelo editor.
-  auto candidateSources=importedSources_;
   usize slot=candidateSources.size();
   for(usize i=0;i<candidateSources.size();++i) if(candidateSources[i].guid==source) {slot=i;break;}
   // Reimportação é decidida pelo REGISTRO, não pela biblioteca deste processo.
@@ -1992,48 +2082,42 @@ bool EditorSession::publishModel(const resources::GltfImport &model, std::string
   // se a decisão fosse pela biblioteca, cada abertura criaria os objetos de
   // novo e a cena cresceria sozinha a cada vez.
   report.reimported=existing!=nullptr;
+  staged.reimported=report.reimported;
   // Onde o bloco entra é decidido pela BIBLIOTECA (substituir o que já está
   // carregado); se objetos são criados, pelo REGISTRO. São perguntas diferentes:
   // ao reabrir o projeto a fonte está no registro e não na biblioteca.
   if(slot<candidateSources.size()) candidateSources[slot]=std::move(block);
   else candidateSources.push_back(std::move(block));
-  const auto candidate=flattenSources(candidateSources);
 
   resources::AssetRecord record=existing?*existing:resources::AssetRecord{};
   record.guid=source;record.type=resources::AssetType::Mesh;record.path=path;record.source=path;
   record.contentHash=std::string(hash);record.importerVersion=1;record.importerParameters="glb";
   record.derived.clear();
-  auto nextAssets=assets_;
   const bool registered=existing
       ?nextAssets.publishImport(source,record.contentHash,1,"glb",{},{})
       :nextAssets.add(record);
   if(!registered) {report.diagnostic="Registro recusou o recurso; publicação cancelada.";return false;}
-  const auto previousDocument=document_;
-  const auto previousMap=mapScene_;
-  if(!publishAndAdopt(candidate,report.diagnostic)) {
-    std::string rollback;
-    if(!publishAndAdopt(flattenSources(importedSources_),rollback))
-      report.diagnostic+=" Falha ao restaurar a GPU: "+rollback;
-    document_=previousDocument;mapScene_=previousMap;return false;
-  }
-  importedSources_=std::move(candidateSources);
-  assets_=std::move(nextAssets);assetRegistryDirty_=true;
-  state_.status=report.reimported?"Recurso reimportado; instâncias preservadas":"Recurso registrado; pronto para instanciar";
-  if(report.reimported) if(const auto *published=importNodeMap(source)) {
+  return true;
+}
+
+// Depois da biblioteca adotada: a reconciliação resolve slots pelo pacote novo.
+void EditorSession::reconcileStagedSource(const StagedSource &staged, ModelImportReport &report) {
+  if(!staged.reimported) return;
+  if(const auto *published=importNodeMap(staged.source)) {
     // Um passo de desfazer para tudo o que a reimportação fez na cena: vínculo
     // de objetos legados comprovados e reconciliação das instâncias.
     history_.begin("Reimportar recurso");
     // Objetos legados são provados contra a revisão que a cena USOU — a
     // anterior. Provar contra a nova faria os nós recém-chegados parecerem
     // conhecidos e apagados pelo usuário, e eles nunca entrariam.
-    adoptLegacyImportInstances(document_,&history_,source,hasPrevious?previousNodeMap:*published,report.reconcile);
-    reconcileImportInstances(document_,&history_,source,*published,report.reconcile,
+    adoptLegacyImportInstances(document_,&history_,staged.source,staged.hasPrevious?staged.previousNodeMap:*published,
+                               report.reconcile);
+    reconcileImportInstances(document_,&history_,staged.source,*published,report.reconcile,
                              [this](const resources::AssetGuid &guid){return mapScene_.assetSlot(guid);});
     history_.end();
     if(report.reconcile.changed()) mapScene_.hydrateMaterials(document_);
     reportImportReconcile(report.reconcile,"Reimportação");
   }
-  return true;
 }
 
 bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportReport &report,bool wrapMultipleRoots) {

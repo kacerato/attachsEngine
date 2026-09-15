@@ -8,6 +8,7 @@
 #include "renderer/authoring_geometry.h"
 #include "resources/gltf_import.h"
 #include "resources/image_decode.h"
+#include "resources/texture_budget.h"
 
 #include <array>
 #include <cstring>
@@ -328,4 +329,65 @@ AE_TEST(m091_publication_offsets_texture_indices_per_source) {
   AE_EXPECT_TRUE(publishedMaterials.size() >= 3, "materiais das duas fontes");
   const auto first = publishedMaterials[0].textureIndices[0], second = publishedMaterials[2].textureIndices[0];
   AE_EXPECT_TRUE(first < 2 && second == first + 2, "índices da segunda fonte deslocados pelo bloco da primeira");
+
+  // R2: a publicação passa pelo orçamento agregado e deixa o relatório.
+  AE_EXPECT_TRUE(session.textureResidency().textures >= 1u, "texturas contadas na publicação");
+  AE_EXPECT_TRUE(session.textureResidency().withinBudget(), "o teto padrão comporta o teste");
+  // Teto zero com piso padrão (256 px): nada abaixo do piso, e o relatório diz que não coube.
+  session.setImportTextureBudget(0);
+  AE_EXPECT_TRUE(session.publishModel(model, std::string(64, 'c'), "Fontes/c.glb", report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(!session.textureResidency().withinBudget(), "acima do teto é informado, não escondido");
+  AE_EXPECT_EQ(session.textureResidency().reducedTextures, 0u, "o piso protege texturas pequenas");
+}
+
+namespace {
+// Cadeia RGBA8 (ou ASTC 4x4) completa; cada byte guarda o número do nível, para
+// o teste ver qual fatia sobrou depois da redução.
+renderer::SharedAuthoringTexture chainTexture(u32 width, u32 height, u32 format = renderer::AuthoringTextureRgba8) {
+  auto texture = std::make_shared<renderer::AuthoringTexture>();
+  texture->width = width;
+  texture->height = height;
+  texture->format = format;
+  for (u32 w = width, h = height;; w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1) {
+    const u64 bytes = format == renderer::AuthoringTextureAstc4x4 ? u64{(w + 3) / 4} * ((h + 3) / 4) * 16 : u64{w} * h * 4;
+    texture->mipChain.insert(texture->mipChain.end(), static_cast<usize>(bytes), static_cast<u8>(texture->levels));
+    ++texture->levels;
+    if (w == 1 && h == 1) break;
+  }
+  return texture;
+}
+} // namespace
+
+AE_TEST(r2_texture_budget_reduces_residency_across_sources_without_touching_originals) {
+  const auto big = chainTexture(1024, 1024), mid = chainTexture(512, 512);
+  AE_EXPECT_TRUE(big->valid() && mid->valid(), "cadeias de teste válidas");
+  const u64 bigBytes = big->mipChain.size(), midBytes = mid->mipChain.size();
+
+  // A mesma textura duas vezes na lista conta uma vez e é reduzida uma vez.
+  std::vector<renderer::SharedAuthoringTexture> list{big, mid, big};
+  auto report = resources::applyTextureBudget(list, 3'000'000, 256);
+  AE_EXPECT_EQ(report.textures, 2u, "duas texturas distintas");
+  AE_EXPECT_EQ(report.requestedBytes, bigBytes + midBytes, "compartilhada contada uma vez");
+  AE_EXPECT_EQ(report.reducedTextures, 1u, "só a maior precisou cair");
+  AE_EXPECT_EQ(report.droppedLevels, 1u, "um nível basta");
+  AE_EXPECT_TRUE(report.withinBudget() && report.residentBytes <= 3'000'000u, "cabe no teto");
+  AE_EXPECT_TRUE(list[0] == list[2] && list[0] != big, "as duas entradas apontam para a mesma cópia reduzida");
+  AE_EXPECT_EQ(list[0]->width, 512u, "resolução residente");
+  AE_EXPECT_TRUE(list[0]->valid() && list[0]->mipChain.front() == 1, "a cadeia começa no antigo nível 1");
+  AE_EXPECT_TRUE(list[1] == mid, "a que cabia não foi copiada");
+  AE_EXPECT_TRUE(big->width == 1024 && big->mipChain.size() == bigBytes, "original intacta");
+
+  // Teto impossível: tudo desce até o piso e o relatório admite que não coube.
+  std::vector<renderer::SharedAuthoringTexture> floor{big, mid};
+  report = resources::applyTextureBudget(floor, 1000, 256);
+  AE_EXPECT_EQ(floor[0]->width, 256u, "maior para no piso");
+  AE_EXPECT_EQ(floor[1]->width, 256u, "menor para no piso");
+  AE_EXPECT_EQ(report.droppedLevels, 3u, "2 níveis da maior + 1 da menor");
+  AE_EXPECT_TRUE(!report.withinBudget(), "acima do teto é dito");
+
+  // ASTC 4x4: o nível de cima tem tamanho em blocos, não em pixels.
+  std::vector<renderer::SharedAuthoringTexture> astc{chainTexture(8, 8, renderer::AuthoringTextureAstc4x4)};
+  report = resources::applyTextureBudget(astc, 60, 1);
+  AE_EXPECT_EQ(report.requestedBytes, u64{112}, "64 + 16 + 16 + 16");
+  AE_EXPECT_TRUE(report.withinBudget() && astc[0]->width == 4 && astc[0]->valid(), "ASTC reduzido em blocos inteiros");
 }

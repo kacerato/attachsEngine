@@ -19,7 +19,7 @@ namespace ae::resources {
 // | hierarquia de nós, com TRS e `matrix` | skins e animações |
 // | instâncias (o mesmo mesh em vários nós) | câmeras e luzes do arquivo |
 // | TRIANGLES, TRIANGLE_STRIP e TRIANGLE_FAN | pontos e linhas |
-// | POSITION, NORMAL, TEXCOORD_0/1, TANGENT, COLOR_0 | WebP, AVIF e imagens externas |
+// | POSITION, NORMAL, TEXCOORD_0/1, TANGENT, COLOR_0 | WebP, AVIF e imagens por URI dentro deste leitor |
 // | fatores PBR, emissivo, alfa e dupla face | materiais avançados |
 // | texturas PNG/JPEG/KTX2 embutidas (cor, normal, MR, emissiva) | oclusão |
 // | KHR_texture_transform assado nas UVs quando o material concorda | transformação que diverge no material |
@@ -27,17 +27,21 @@ namespace ae::resources {
 //
 // Texturas (Entrega 3) são decodificadas com stb_image vendorizado, porque o
 // decodificador do sistema (`AImageDecoder`) só existe a partir do Android 11
-// e o mínimo suportado é o 8. Oclusão e transformação de UV são contadas como
-// não aplicadas: o bloco de push constants do shader já está cheio.
+// e o mínimo suportado é o 8. A oclusão é contada como não aplicada: o bloco de
+// push constants do material não tem espaço para ela. A transformação de UV é
+// assada nas UVs quando todas as texturas do material concordam no conjunto de
+// UV (Entrega 4); quando divergem, continua contada como não aplicada.
 //
 // Conversão de coordenadas: **nenhuma**. glTF é destro, +Y para cima, e é assim
 // que o pacote de mapa desta engine já guarda geometria — o cozinhador offline
 // (`tools/cook-gltf-map.py`) também não converte. Introduzir um espelhamento
 // aqui faria o mesmo arquivo chegar diferente conforme o caminho de entrada.
 //
-// Só GLB: um `.gltf` aponta para `.bin` e imagens ao lado dele, e o seletor do
-// Android entrega UM arquivo, não a pasta. Recusar com diagnóstico é honesto;
-// aceitar e importar sem geometria não é.
+// Este leitor recebe só GLB autocontido. Um `.gltf`, ou um GLB com URIs
+// externas, passa antes por `resources/gltf_package.h` (Entrega 4): o seletor
+// do Android entrega os arquivos escolhidos JUNTO com o principal, e as
+// dependências entram num GLB único, com manifesto `.deps` ao lado da fonte.
+// Uma URI que chegue até aqui sem ter sido empacotada é recusada com diagnóstico.
 struct GltfImportLimits {
   u64 maximumBytes = 256ull << 20;
   u32 maximumNodes = 8192;

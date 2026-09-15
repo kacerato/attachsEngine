@@ -1,5 +1,6 @@
 #include "editor/editor_import_transaction.h"
 #include "resources/gltf_package.h"
+#include "resources/import_cache.h"
 #include "editor/editor_water_settings_component.h"
 #include "editor/editor_scene_camera.h"
 #include <cstring>
@@ -46,6 +47,8 @@
 #include <filesystem>
 #include <future>
 #include <atomic>
+#include <mutex>
+#include <unordered_set>
 #include <time.h>
 
 namespace {
@@ -153,6 +156,29 @@ struct AndroidShell final {
   std::optional<PreparedModel> importPreview;
   std::string importPickerRoot;
   ae::u64 importPickerEpoch=0;
+  // R1 — abertura do projeto sem tela preta. As fontes registradas são lidas e
+  // interpretadas num worker; o loop continua apresentando quadros do editor.
+  // A publicação (uma só, para todas as fontes) e a recuperação da cena salva
+  // voltam à thread do editor quando o worker termina.
+  struct ProjectReopen {
+    std::string root;
+    std::vector<ae::editor::EditorSession::ReopenedSource> sources;
+    std::vector<std::string> missing;
+    std::vector<std::pair<std::string,std::string>> refused;
+    ae::usize cacheHits=0;
+  };
+  std::shared_ptr<std::atomic<bool>> reopenCancellation;
+  // Etapa real do worker de abertura: qual fonte, quantas já passaram e o que
+  // está acontecendo com ela. É o que a barra de estado mostra -- sem porcentagem.
+  struct ReopenProgress {
+    std::mutex lock;
+    ae::usize done=0,total=0;
+    std::string current,stage;
+  };
+  std::shared_ptr<ReopenProgress> reopenProgress;
+  std::future<ProjectReopen> reopenWork;
+  bool projectReopening=false;
+  double reopenStartedMs=0;
 
   std::optional<ae::platform::android::EditorLanguageQuery> languageNext,languageActive;
   std::chrono::steady_clock::time_point shellStartTime = std::chrono::steady_clock::now();
@@ -668,43 +694,240 @@ bool writeProjectAssetRegistry(const char *projectPath,const std::string &text) 
 // Reabre as fontes registradas e republica a geometria delas. Sem isto, uma cena
 // salva com um modelo importado abriria com os objetos apontando para recursos
 // que este processo ainda não carregou -- referência ausente, objeto invisível.
-void reimportProjectSources(AndroidShell &shell) {
+//
+// R1: o registro é lido aqui (rápido); ler e interpretar cada GLB vai para um
+// worker. Antes, isto rodava fonte por fonte no loop nativo e cada fonte
+// republicava a biblioteca acumulada com espera de GPU, tudo antes do primeiro
+// quadro do editor -- a tela preta entre o carregamento e o editor.
+// Devolve falso quando não há fonte a reabrir: a cena pode ser recuperada já.
+bool startProjectReopen(AndroidShell &shell) {
   const auto path=projectAssetRegistryPath(shell.editorProjectPath);
-  if(path.empty()) return;
+  if(path.empty()) return false;
   std::string text;
   if(FILE *file=std::fopen(path.c_str(),"rb")) {
     char chunk[4096];ae::usize read=0;
     while((read=std::fread(chunk,1,sizeof(chunk),file))>0) text.append(chunk,read);
     std::fclose(file);
   }
-  if(text.empty()) return;
+  if(text.empty()) return false;
   if(!shell.editorSession.loadAssets(text)) {
     __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] registro de recursos invalido; preservado no disco.");
-    return;
+    return false;
   }
   // Publication replaces the registry storage. Keep an owning snapshot: a span
   // (or a copy of only the current record) leaves later iterations dangling.
-  const auto recordView=shell.editorSession.assets().records();
-  const std::vector<ae::resources::AssetRecord> records(recordView.begin(),recordView.end());
-  for(const auto &record:records) {
-    if(record.type!=ae::resources::AssetType::Mesh || record.source.empty()) continue;
-    const std::string absolute=std::string(shell.editorProjectPath)+"/"+record.source;
-    std::vector<ae::u8> bytes;
-    if(FILE *file=std::fopen(absolute.c_str(),"rb")) {
-      char chunk[16384];ae::usize read=0;
-      while((read=std::fread(chunk,1,sizeof(chunk),file))>0)
-        bytes.insert(bytes.end(),reinterpret_cast<ae::u8 *>(chunk),reinterpret_cast<ae::u8 *>(chunk)+read);
-      std::fclose(file);
+  std::vector<std::string> sources;
+  for(const auto &record:shell.editorSession.assets().records())
+    if(record.type==ae::resources::AssetType::Mesh && !record.source.empty()) sources.push_back(record.source);
+  if(sources.empty()) return false;
+  shell.reopenCancellation=std::make_shared<std::atomic<bool>>(false);
+  shell.reopenProgress=std::make_shared<AndroidShell::ReopenProgress>();
+  shell.reopenProgress->total=sources.size();
+  shell.projectReopening=true;
+  shell.reopenStartedMs=ae::platform::android::lifecycleUptimeMs();
+  const std::string root(shell.editorProjectPath);
+  const auto limits=shell.editorSession.importLimits();
+  const auto count=sources.size();
+  shell.reopenWork=std::async(std::launch::async,[root,sources=std::move(sources),limits,
+                                                  cancel=shell.reopenCancellation,progress=shell.reopenProgress]() {
+    using Transaction=ae::editor::EditorImportTransaction;
+    AndroidShell::ProjectReopen result;
+    result.root=root;
+    const auto stage=[&progress](const std::string &source,const char *what) {
+      std::lock_guard<std::mutex> hold(progress->lock);
+      progress->current=source;progress->stage=what;
+    };
+    std::unordered_set<std::string> usedKeys;
+    for(const auto &source:sources) {
+      if(cancel->load()) break;
+      const double started=ae::platform::android::lifecycleUptimeMs();
+      stage(source,"lendo");
+      std::vector<ae::u8> bytes;
+      if(FILE *file=std::fopen((root+"/"+source).c_str(),"rb")) {
+        char chunk[16384];ae::usize read=0;
+        while((read=std::fread(chunk,1,sizeof(chunk),file))>0)
+          bytes.insert(bytes.end(),reinterpret_cast<ae::u8 *>(chunk),reinterpret_cast<ae::u8 *>(chunk)+read);
+        std::fclose(file);
+      }
+      if(bytes.empty()) {
+        result.missing.push_back(source);
+        std::lock_guard<std::mutex> hold(progress->lock);++progress->done;
+        continue;
+      }
+      ae::editor::EditorSession::ReopenedSource reopened;
+      reopened.sourceName=source;
+      reopened.hash=ae::Sha256::hex(bytes);
+      // R2: derivado regenerável por conteúdo + limites. Acerto pula o importador
+      // inteiro; arquivo ausente, velho ou corrompido cai no importador.
+      const auto key=ae::resources::importCacheKey(reopened.hash,limits);
+      usedKeys.insert(key);
+      const auto cachePath=Transaction::fromUtf8(root+"/"+ae::resources::importCacheRelativePath(key));
+      bool cached=false;
+      {
+        stage(source,"lendo derivado");
+        std::vector<ae::u8> derived;
+        if(Transaction::read(cachePath,derived,ae::usize{1}<<30))
+          cached=ae::resources::readImportCache(derived,key,reopened.model);
+      }
+      const double derivedAt=ae::platform::android::lifecycleUptimeMs();
+      double writeMs=0;
+      if(!cached) {
+        stage(source,"importando");
+        ae::resources::GltfImportProgress watch{};
+        watch.context=cancel.get();
+        watch.cancelled=[](void *context) {return static_cast<std::atomic<bool> *>(context)->load();};
+        if(!ae::resources::importGlb(bytes,limits,watch,reopened.model)) {
+          result.refused.emplace_back(source,reopened.model.diagnostic);
+          std::lock_guard<std::mutex> hold(progress->lock);++progress->done;
+          continue;
+        }
+        stage(source,"gravando derivado");
+        const double writeStarted=ae::platform::android::lifecycleUptimeMs();
+        std::vector<ae::u8> derived;
+        std::error_code error;
+        std::filesystem::create_directories(cachePath.parent_path(),error);
+        if(error || !ae::resources::writeImportCache(reopened.model,key,derived) || !Transaction::write(cachePath,derived))
+          __android_log_print(ANDROID_LOG_WARN,LogTag,"[Cache] derivado de %s não gravado; a próxima abertura importa de novo.",source.c_str());
+        writeMs=ae::platform::android::lifecycleUptimeMs()-writeStarted;
+      } else {
+        ++result.cacheHits;
+      }
+      __android_log_print(ANDROID_LOG_INFO,LogTag,
+          "[Open] fonte preparada: %s bytes=%zu cache=%s leitura_derivado_ms=%.0f preparo_ms=%.0f gravacao_derivado_ms=%.0f",
+          source.c_str(),bytes.size(),cached?"acerto":"falta",derivedAt-started,
+          ae::platform::android::lifecycleUptimeMs()-started-writeMs,writeMs);
+      result.sources.push_back(std::move(reopened));
+      std::lock_guard<std::mutex> hold(progress->lock);++progress->done;
     }
-    ae::editor::EditorSession::ModelImportReport report;
-    if(bytes.empty())
-      __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] fonte ausente: %s",record.source.c_str());
-    else if(!shell.editorSession.importModel(bytes,record.source,{},report))
-      __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] fonte %s recusada: %s",
-          record.source.c_str(),report.diagnostic.c_str());
-    else
-      __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] fonte reaberta: %s",record.source.c_str());
+    // Derivados que nenhuma fonte atual usa (fonte trocada, limites mudados) só
+    // ocupam disco. Numa abertura interrompida a lista está incompleta: não poda.
+    if(!cancel->load()) {
+      std::error_code error;
+      const auto directory=Transaction::fromUtf8(root+"/.astra/cache/imports");
+      for(std::filesystem::directory_iterator it(directory,error),end;!error && it!=end;it.increment(error)) {
+        const auto name=it->path().filename().string();
+        if(name.size()!=68 || !name.ends_with(".aic") || usedKeys.contains(name.substr(0,64))) continue;
+        std::error_code removal;
+        if(std::filesystem::remove(it->path(),removal))
+          __android_log_print(ANDROID_LOG_INFO,LogTag,"[Cache] derivado sem fonte removido: %s",name.c_str());
+      }
+    }
+    return result;
+  });
+  __android_log_print(ANDROID_LOG_INFO,LogTag,"[Open] preparando %zu fonte(s) em segundo plano.",count);
+  shell.editorSession.setImportStatus("Abrindo recursos do projeto…");
+  return true;
+}
+
+// Cena salva do projeto (ou migração do arquivo privado antigo). Só depois das
+// fontes: a cena referencia recursos que precisam estar na biblioteca adotada.
+// Até aqui `editorSavePath` fica vazio, e é isso que mantém o salvamento
+// automático desligado enquanto o documento ainda não é a cena do projeto.
+void recoverProjectScene(AndroidShell &shell) {
+  if (!shell.editorMapImported || !shell.app->activity->internalDataPath) return;
+  ae::u64 projectId=14695981039346656037ull;
+  for(const unsigned char *p=reinterpret_cast<const unsigned char *>(shell.editorProjectPath);*p;++p) {projectId^=*p;projectId*=1099511628211ull;}
+  const std::string legacyPath=std::string(shell.app->activity->internalDataPath)+"/editor-"+
+      std::to_string(projectId)+"-"+std::to_string(shell.instancedRenderer.contentFingerprint())+".aescene";
+  // The project owns authored data. Keep the old private archive as a migration backup.
+  shell.editorSavePath=shell.editorProjectPath[0]
+      ? std::string(shell.editorProjectPath)+"/scenes/editor.aescene" : legacyPath;
+  FILE *existing=std::fopen(shell.editorSavePath.c_str(),"rb");
+  if(existing) {
+    std::fclose(existing);
+    if(!shell.editorSession.load(shell.editorSavePath.c_str(),shell.editorPackageFingerprint)) {
+      __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Cena salva invalida; arquivo preservado.");
+      shell.editorSavePath += ".recovered";
+      FILE *recovery=std::fopen(shell.editorSavePath.c_str(),"rb");
+      if(recovery) {
+        std::fclose(recovery);
+        if(!shell.editorSession.load(shell.editorSavePath.c_str(),shell.editorPackageFingerprint)) {
+          __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Recuperacao invalida; salvamento automatico suspenso.");
+          shell.editorSavePath.clear();
+        }
+      }
+    }
+  } else if(shell.editorSavePath!=legacyPath) {
+    FILE *legacy=std::fopen(legacyPath.c_str(),"rb");
+    if(legacy) {
+      std::fclose(legacy);
+      if(!shell.editorSession.load(legacyPath.c_str(),shell.editorPackageFingerprint))
+        __android_log_print(ANDROID_LOG_WARN,LogTag,"[Editor] Arquivo legado invalido; original preservado.");
+    }
+    if(!shell.editorSession.save(shell.editorSavePath.c_str(),shell.editorPackageFingerprint))
+      __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Falha ao criar cena no projeto: %s",shell.editorSavePath.c_str());
   }
+  auto &document=shell.editorSession.document();
+  auto root=*document.find(document.root());
+  if(!shell.independentWorkspace && !ae::editor::waterSettings(root).enabled) {
+    const auto c=ae::platform::android::runtimeControlsSnapshot();
+    const float values[]{c.waveHeight,c.waveSpeed,c.waveSteepness,c.microWaves,c.surfaceOpacity,
+      c.absorption,c.foam,c.waterRoughness,c.waterTurbidity,c.waterIor,c.waveDirectionDegrees,c.waterLevel,c.fluidDensity};
+    if(auto *settings=ae::editor::editWaterSettings(root)) {for(ae::u32 i=0;i<13;++i) settings->legacyField(i)=values[i];document.applyEntityValues(root.id,root);}
+  }
+  if(!shell.independentWorkspace && !ae::editor::waterSettings(root).spectrumEnabled) {
+    const auto c=ae::platform::android::runtimeControlsSnapshot();
+    const float values[]{c.spectralWindSpeed,c.spectralFetch,c.spectralDepth,c.spectralSwell,
+      c.spectralSpread,c.spectralDamping,c.crossWindSpeed,c.crossDirectionDegrees,c.crossFetch,
+      c.crossSwellShape,c.crossSpread,c.crossWeight,c.cascadeDisplacement[0],c.cascadeDisplacement[1],
+      c.cascadeDisplacement[2],c.cascadeChoppiness[0],c.cascadeChoppiness[1],c.cascadeChoppiness[2],
+      c.foamCompression,c.foamGrowth,c.foamDecay};
+    if(auto *settings=ae::editor::editWaterSettings(root)) for(ae::u32 i=0;i<std::size(values);++i) settings->legacyField(13+i)=values[i];
+    document.applyEntityValues(root.id,root);
+  }
+  shell.editorSavedRevision=shell.editorSession.document().revision();
+}
+
+// R1: volta à thread do editor com as fontes preparadas. Uma publicação para
+// todas, depois a cena salva. Fonte ausente ou recusada vira aviso; o editor
+// abre com o resto do projeto em vez de parar na primeira falha.
+void finishProjectReopen(AndroidShell &shell) {
+  auto result=shell.reopenWork.get();
+  shell.projectReopening=false;
+  const double preparedAt=ae::platform::android::lifecycleUptimeMs();
+  if(result.root!=shell.editorProjectPath) {
+    __android_log_print(ANDROID_LOG_WARN,LogTag,"[Open] preparo descartado: o projeto mudou durante a abertura.");
+    return;
+  }
+  std::vector<ae::editor::EditorSession::ModelImportReport> reports;
+  std::string diagnostic;
+  const bool published=shell.editorSession.reopenSources(result.sources,reports,diagnostic);
+  ae::usize failures=result.missing.size()+result.refused.size();
+  for(ae::usize i=0;i<result.sources.size() && i<reports.size();++i) {
+    if(reports[i].diagnostic.empty())
+      __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] fonte reaberta: %s",result.sources[i].sourceName.c_str());
+    else {
+      ++failures;
+      __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] fonte %s recusada: %s",
+                          result.sources[i].sourceName.c_str(),reports[i].diagnostic.c_str());
+    }
+  }
+  for(const auto &source:result.missing)
+    __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] fonte ausente: %s",source.c_str());
+  for(const auto &[source,reason]:result.refused)
+    __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] fonte %s recusada: %s",source.c_str(),reason.c_str());
+  if(!published)
+    __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Open] publicacao das fontes falhou: %s",diagnostic.c_str());
+  {
+    const auto &residency=shell.editorSession.textureResidency();
+    __android_log_print(ANDROID_LOG_INFO,LogTag,
+        "[Residencia] texturas=%u pedidos_mb=%.1f residentes_mb=%.1f teto_mb=%.1f reduzidas=%u niveis_removidos=%u cabe=%s",
+        residency.textures,residency.requestedBytes/1048576.0,residency.residentBytes/1048576.0,
+        residency.budgetBytes/1048576.0,residency.reducedTextures,residency.droppedLevels,residency.withinBudget()?"sim":"nao");
+  }
+  const double publishedAt=ae::platform::android::lifecycleUptimeMs();
+  recoverProjectScene(shell);
+  shell.editorPublishedRevision=~ae::u64{0};
+  const double doneAt=ae::platform::android::lifecycleUptimeMs();
+  __android_log_print(ANDROID_LOG_INFO,LogTag,
+      "[Open] projeto aberto: fontes=%zu derivados_reaproveitados=%zu falhas=%zu preparo_ms=%.0f publicacao_ms=%.0f cena_ms=%.0f total_ms=%.0f",
+      result.sources.size(),result.cacheHits,failures,preparedAt-shell.reopenStartedMs,publishedAt-preparedAt,doneAt-publishedAt,
+      doneAt-shell.reopenStartedMs);
+  if(failures)
+    shell.editorSession.setImportStatus("Projeto aberto; "+std::to_string(failures)+" recurso(s) não carregado(s). Detalhes no console.",
+                                        ae::editor::EditorConsoleSeverity::Warning);
+  else
+    shell.editorSession.setImportStatus("Projeto aberto");
 }
 } // namespace
 
@@ -759,60 +982,9 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
         const auto initial=shell.instancedRenderer.defaultCamera();
         shell.editorSession.setCameraPose(initial.position,initial.yaw,initial.pitch);
       }
-      if (shell.editorMapImported) reimportProjectSources(shell);
-      if (shell.editorMapImported && shell.app->activity->internalDataPath) {
-        ae::u64 projectId=14695981039346656037ull;
-        for(const unsigned char *p=reinterpret_cast<const unsigned char *>(shell.editorProjectPath);*p;++p) {projectId^=*p;projectId*=1099511628211ull;}
-        const std::string legacyPath=std::string(shell.app->activity->internalDataPath)+"/editor-"+
-            std::to_string(projectId)+"-"+std::to_string(shell.instancedRenderer.contentFingerprint())+".aescene";
-        // The project owns authored data. Keep the old private archive as a migration backup.
-        shell.editorSavePath=shell.editorProjectPath[0]
-            ? std::string(shell.editorProjectPath)+"/scenes/editor.aescene" : legacyPath;
-        FILE *existing=std::fopen(shell.editorSavePath.c_str(),"rb");
-        if(existing) {
-          std::fclose(existing);
-          if(!shell.editorSession.load(shell.editorSavePath.c_str(),shell.editorPackageFingerprint)) {
-            __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Cena salva invalida; arquivo preservado.");
-            shell.editorSavePath += ".recovered";
-            FILE *recovery=std::fopen(shell.editorSavePath.c_str(),"rb");
-            if(recovery) {
-              std::fclose(recovery);
-              if(!shell.editorSession.load(shell.editorSavePath.c_str(),shell.editorPackageFingerprint)) {
-                __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Recuperacao invalida; salvamento automatico suspenso.");
-                shell.editorSavePath.clear();
-              }
-            }
-          }
-        } else if(shell.editorSavePath!=legacyPath) {
-          FILE *legacy=std::fopen(legacyPath.c_str(),"rb");
-          if(legacy) {
-            std::fclose(legacy);
-            if(!shell.editorSession.load(legacyPath.c_str(),shell.editorPackageFingerprint))
-              __android_log_print(ANDROID_LOG_WARN,LogTag,"[Editor] Arquivo legado invalido; original preservado.");
-          }
-          if(!shell.editorSession.save(shell.editorSavePath.c_str(),shell.editorPackageFingerprint))
-            __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Falha ao criar cena no projeto: %s",shell.editorSavePath.c_str());
-        }
-        auto &document=shell.editorSession.document();
-        auto root=*document.find(document.root());
-        if(!shell.independentWorkspace && !ae::editor::waterSettings(root).enabled) {
-          const auto c=ae::platform::android::runtimeControlsSnapshot();
-          const float values[]{c.waveHeight,c.waveSpeed,c.waveSteepness,c.microWaves,c.surfaceOpacity,
-            c.absorption,c.foam,c.waterRoughness,c.waterTurbidity,c.waterIor,c.waveDirectionDegrees,c.waterLevel,c.fluidDensity};
-          if(auto *settings=ae::editor::editWaterSettings(root)) {for(ae::u32 i=0;i<13;++i) settings->legacyField(i)=values[i];document.applyEntityValues(root.id,root);}
-        }
-        if(!shell.independentWorkspace && !ae::editor::waterSettings(root).spectrumEnabled) {
-          const auto c=ae::platform::android::runtimeControlsSnapshot();
-          const float values[]{c.spectralWindSpeed,c.spectralFetch,c.spectralDepth,c.spectralSwell,
-            c.spectralSpread,c.spectralDamping,c.crossWindSpeed,c.crossDirectionDegrees,c.crossFetch,
-            c.crossSwellShape,c.crossSpread,c.crossWeight,c.cascadeDisplacement[0],c.cascadeDisplacement[1],
-            c.cascadeDisplacement[2],c.cascadeChoppiness[0],c.cascadeChoppiness[1],c.cascadeChoppiness[2],
-            c.foamCompression,c.foamGrowth,c.foamDecay};
-          if(auto *settings=ae::editor::editWaterSettings(root)) for(ae::u32 i=0;i<std::size(values);++i) settings->legacyField(13+i)=values[i];
-          document.applyEntityValues(root.id,root);
-        }
-        shell.editorSavedRevision=shell.editorSession.document().revision();
-      }
+      // R1: com fontes registradas, a cena espera o worker (finishProjectReopen);
+      // sem fontes, a cena é recuperada já, como antes.
+      if (shell.editorMapImported && !startProjectReopen(shell)) recoverProjectScene(shell);
     }
     if (shell.independentWorkspace)
       __android_log_print(ANDROID_LOG_INFO, LogTag,"[Editor] independent resources=%zu fingerprint=%llu managed=off",
@@ -1271,6 +1443,9 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
   // A interface do editor ve o toque PRIMEIRO. Ela devolve se consumiu, e so o
   // que sobra chega aos controladores de camera e de personagem -- senao um
   // arraste no Inspector giraria a cena por tras do painel.
+  // R1: enquanto as fontes do projeto abrem, o documento ainda não é a cena
+  // salva. Um toque criaria edições que a recuperação da cena descartaria.
+  if (shell.editorUi && shell.instancedRendererReady && shell.projectReopening) return 1;
   if (shell.editorUi && shell.instancedRendererReady) {
     const size_t pointerCount = AMotionEvent_getPointerCount(event);
     const auto toLogical = [&](size_t index) {
@@ -1825,6 +2000,9 @@ void android_main(android_app *app) {
     if (result >= 0 && source != nullptr) source->process(app, source);
 
     if (app->destroyRequested != 0) {
+      // R1: o worker de reabertura para entre fontes; o future junta na saída
+      // sem esperar o resto do projeto ser interpretado.
+      if (shell.reopenCancellation) shell.reopenCancellation->store(true);
       applyEvent(shell, ae::platform::AppEvent::Destroy);
       continue;
     }
@@ -1999,6 +2177,7 @@ void android_main(android_app *app) {
         }
         const auto launchImport=[&](ae::platform::android::ModelPickerResult picked,std::string path) {
           if(shell.importWork.valid() || shell.importPreview) {session.setImportStatus("Finalize a importação em andamento.");return;}
+          if(shell.projectReopening) {session.setImportStatus("Aguarde os recursos do projeto terminarem de abrir.");return;}
           session.beginImportPreparation();
           shell.importCancellation=std::make_shared<std::atomic<bool>>(false);
           auto cancel=shell.importCancellation;
@@ -2069,6 +2248,21 @@ void android_main(android_app *app) {
             launchImport(std::move(picked),"Fontes/"+name);
           }
         }
+        // R1: etapa real da abertura na barra de estado enquanto o worker trabalha.
+        if(shell.projectReopening && shell.reopenProgress) {
+          std::string text;
+          {
+            std::lock_guard<std::mutex> hold(shell.reopenProgress->lock);
+            const auto &p=*shell.reopenProgress;
+            text="Abrindo projeto · recurso "+std::to_string(std::min(p.done+1,p.total))+" de "+std::to_string(p.total);
+            if(!p.current.empty()) text+=" · "+p.stage+" "+p.current;
+          }
+          shell.editorSession.setWorkStatus(text);
+        }
+        // R1: fontes do projeto prontas no worker -> uma publicação e a cena salva.
+        if(shell.projectReopening && shell.reopenWork.valid() &&
+           shell.reopenWork.wait_for(std::chrono::seconds(0))==std::future_status::ready)
+          finishProjectReopen(shell);
         if(shell.importWork.valid() && shell.importWork.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
           auto prepared=shell.importWork.get();
           if(shell.importCancellation->load() || prepared.root!=session.codeProjectRoot() || prepared.epoch!=session.sceneVersion().epoch) {

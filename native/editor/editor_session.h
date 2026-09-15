@@ -31,6 +31,7 @@
 #include "resources/gltf_import.h"
 #include "resources/import_node_map.h"
 #include "resources/material_asset.h"
+#include "resources/texture_budget.h"
 #include "editor/editor_import_reconcile.h"
 #include "editor/editor_archive.h"
 #include "editor/editor_document.h"
@@ -408,6 +409,18 @@ public:
   bool publishModel(const resources::GltfImport &model, std::string_view hash,
                     std::string_view sourceName, ModelImportReport &report,
                     resources::ImportAmbiguityPolicy policy=resources::ImportAmbiguityPolicy::Refuse);
+  // Reabertura do projeto em lote (R1). As fontes chegam já interpretadas por
+  // um worker; todas entram no mesmo candidato, a biblioteca é publicada UMA vez
+  // e só então cada fonte reconcilia a cena. Abrir N fontes deixa de custar N
+  // publicações acumuladas (A, A+B, A+B+C...). Uma fonte recusada fica com o
+  // diagnóstico no próprio relatório e não impede as outras.
+  struct ReopenedSource {
+    resources::GltfImport model;
+    std::string hash;
+    std::string sourceName;
+  };
+  bool reopenSources(std::vector<ReopenedSource> &sources, std::vector<ModelImportReport> &reports,
+                     std::string &diagnostic);
   bool instantiateModel(resources::AssetGuid source, ModelImportReport &report, bool wrapMultipleRoots=true);
   bool commitModelImport(std::span<const u8> bytes, const resources::GltfImport &model,
                          const std::string &path, const std::string &expectedHash, ModelImportReport &report,
@@ -421,6 +434,11 @@ public:
   // interativa e para a reabertura de fontes do projeto.
   void setImportAstc4x4(bool supported) {importLimits_.astc4x4=supported;}
   const resources::GltfImportLimits &importLimits() const {return importLimits_;}
+  // R2: teto da residência de texturas de TODAS as fontes juntas, aplicado a
+  // cada publicação. O relatório é o da última publicação.
+  void setImportTextureBudget(u64 bytes) {importTextureBudget_=bytes;}
+  u64 importTextureBudget() const {return importTextureBudget_;}
+  const resources::TextureBudgetReport &textureResidency() const {return textureResidency_;}
   void beginImportPreparation() {state_.importPanel=true;state_.importReady=false;state_.importError=false;state_.importPage=0;state_.importIntoScene=false;state_.importSummary.clear();state_.importPath.clear();state_.importAmbiguities=0;state_.importAmbiguityChoice=0;state_.importStatus="Preparando recurso…";}
   resources::ImportAmbiguityPolicy importAmbiguityPolicy() const {
     return state_.importAmbiguityChoice==1?resources::ImportAmbiguityPolicy::MatchInOrder:
@@ -485,6 +503,12 @@ public:
     const bool requested=state_.modelImportRequested;
     state_.modelImportRequested=false;
     return requested;
+  }
+  // Etapa corrente de um trabalho longo (R1): só a barra de estado, sem entrada
+  // no console a cada troca, e reafirmada enquanto o trabalho durar para que um
+  // aviso de outra origem não esconda que o projeto ainda está abrindo.
+  void setWorkStatus(std::string_view message) {
+    if(state_.status!=message) state_.status=std::string(message);
   }
   void setImportStatus(std::string message, EditorConsoleSeverity severity=EditorConsoleSeverity::Info) {
     state_.status=message;state_.importStatus=message;
@@ -625,8 +649,22 @@ private:
   // Sobe a biblioteca ao consumidor gráfico e adota o pacote que voltou.
   bool publishAndAdopt(const ImportedLibrary &library, std::string &diagnostic,
                        usize *outPrimitives = nullptr);
+  // Uma fonte validada e posta no candidato, ainda sem publicar. A reconciliação
+  // precisa do pacote adotado (slots), então acontece depois, em outra fase.
+  struct StagedSource {
+    resources::AssetGuid source{};
+    bool reimported = false;
+    bool hasPrevious = false;
+    resources::ImportNodeMap previousNodeMap;
+  };
+  bool stageSource(const resources::GltfImport &model, std::string_view hash, std::string_view sourceName,
+                   resources::ImportAmbiguityPolicy policy, std::vector<ImportedSource> &candidateSources,
+                   resources::AssetRegistry &nextAssets, ModelImportReport &report, StagedSource &staged);
+  void reconcileStagedSource(const StagedSource &staged, ModelImportReport &report);
   std::vector<ImportedSource> importedSources_;
   resources::GltfImportLimits importLimits_{};
+  u64 importTextureBudget_ = u64{1} << 30;
+  resources::TextureBudgetReport textureResidency_{};
   std::string reimportPath_;
   bool previousImportMap(const resources::AssetGuid &source, resources::ImportNodeMap &out) const;
   bool persistImportMap(const resources::AssetGuid &source);
