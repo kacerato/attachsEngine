@@ -740,6 +740,9 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   // enabled capability exposed below instead of re-querying physical support.
   enabledFeatures.multiDrawIndirect = supportedFeatures.multiDrawIndirect;
   enabledFeatures.drawIndirectFirstInstance = supportedFeatures.drawIndirectFirstInstance;
+  // R4 (T13): sem pedir a feature, o limite de anisotropia ficava sempre 1 e a
+  // política de qualidade era reduzida "por capability" em qualquer aparelho.
+  enabledFeatures.samplerAnisotropy = supportedFeatures.samplerAnisotropy;
 
   // Item 2.1.4 (bindless via descriptor_indexing): VK_EXT_descriptor_indexing é core no Vulkan
   // 1.2+, mas continua exigindo consulta explícita de suporte — extensão core não significa
