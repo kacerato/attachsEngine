@@ -1,0 +1,630 @@
+{
+  "date": "2026-09-15",
+  "scope": "Literal MenuItem GameObject paths in UnityCsReference, uGUI and downloaded packages. Excludes native registrations, dynamic/concatenated paths and Graphics Editor sources not collected. Some commands operate on existing objects instead of creating them.",
+  "entries": [
+    {
+      "menu": "GameObject/3D Object/Capsule",
+      "method": "CreateCapsule",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 304,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/3D Object/Cube",
+      "method": "CreateCube",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 292,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/3D Object/Cylinder",
+      "method": "CreateCylinder",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 310,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/3D Object/Legacy/TextMesh",
+      "method": "Create3DText",
+      "package": "UnityCsReference",
+      "path": "Modules/TextRenderingEditor/TextRenderingCommands.cs",
+      "line": 11,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Modules/TextRenderingEditor/TextRenderingCommands.cs"
+    },
+    {
+      "menu": "GameObject/3D Object/Plane",
+      "method": "CreatePlane",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 316,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/3D Object/Quad",
+      "method": "CreateQuad",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 322,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/3D Object/Ragdoll...",
+      "method": "CreateWindow",
+      "package": "UnityCsReference",
+      "path": "Modules/PhysicsEditor/RagdollBuilderWindow.cs",
+      "line": 18,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Modules/PhysicsEditor/RagdollBuilderWindow.cs"
+    },
+    {
+      "menu": "GameObject/3D Object/Sphere",
+      "method": "CreateSphere",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 298,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/3D Object/Terrain",
+      "method": "CreateTerrain",
+      "package": "UnityCsReference",
+      "path": "Modules/TerrainEditor/Utilities/TerrainMenus.cs",
+      "line": 13,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Modules/TerrainEditor/Utilities/TerrainMenus.cs"
+    },
+    {
+      "menu": "GameObject/3D Object/Tree",
+      "method": "CreateNewTree",
+      "package": "UnityCsReference",
+      "path": "Modules/TreeEditor/TreeEditor.cs",
+      "line": 271,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Modules/TreeEditor/TreeEditor.cs"
+    },
+    {
+      "menu": "GameObject/3D Object/Wind Zone",
+      "method": "CreateWindZone",
+      "package": "UnityCsReference",
+      "path": "Modules/TreeEditor/TreeEditor.cs",
+      "line": 449,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Modules/TreeEditor/TreeEditor.cs"
+    },
+    {
+      "menu": "GameObject/Align View to Selected",
+      "method": "MenuAlignViewToSelected",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/SceneView/SceneView.cs",
+      "line": 1928,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/SceneView/SceneView.cs"
+    },
+    {
+      "menu": "GameObject/Align With View %#f",
+      "method": "MenuAlignWithView",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/SceneView/SceneView.cs",
+      "line": 1915,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/SceneView/SceneView.cs"
+    },
+    {
+      "menu": "GameObject/Audio/Audio Reverb Zone",
+      "method": "CreateAudioReverbZone",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 399,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Audio/Audio Source",
+      "method": "CreateAudioSource",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 392,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Camera",
+      "method": "CreateCamera",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 454,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Create Empty %#n",
+      "method": "CreateEmpty",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 83,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Create Empty Child &#n",
+      "method": "CreateEmptyChild",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 90,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Create Empty Parent %#g",
+      "method": "CreateEmptyParent",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 112,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Effects/Line",
+      "method": "CreateLine",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 442,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Effects/Particle System",
+      "method": "CreateParticleSystem",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 413,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Effects/Particle System Force Field",
+      "method": "CreateParticleSystemForceField",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 426,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Effects/Trail",
+      "method": "CreateTrail",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 433,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Light/Area Light",
+      "method": "CreateAreaLight",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 363,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Light/Directional Light",
+      "method": "CreateDirectionalLight",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 328,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Light/Light Probe Group",
+      "method": "CreateLightProbeGroup",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 385,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Light/Point Light",
+      "method": "CreatePointLight",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 340,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Light/Reflection Probe",
+      "method": "CreateReflectionProbe",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 376,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Light/Spot Light",
+      "method": "CreateSpotLight",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 351,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/Move To View %&f",
+      "method": "MenuMoveToView",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/SceneView/SceneView.cs",
+      "line": 1902,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/SceneView/SceneView.cs"
+    },
+    {
+      "menu": "GameObject/Set as first sibling %=",
+      "method": "MenuMoveToFront",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/SceneView/SceneView.cs",
+      "line": 1866,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/SceneView/SceneView.cs"
+    },
+    {
+      "menu": "GameObject/Set as last sibling %-",
+      "method": "MenuMoveToBack",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/SceneView/SceneView.cs",
+      "line": 1884,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/SceneView/SceneView.cs"
+    },
+    {
+      "menu": "GameObject/Toggle Active State &#a",
+      "method": "ActivateSelection",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/SceneView/SceneView.cs",
+      "line": 1941,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/SceneView/SceneView.cs"
+    },
+    {
+      "menu": "GameObject/UI Toolkit/UI Document",
+      "method": "AddUIDocument",
+      "package": "UnityCsReference",
+      "path": "Modules/UIElementsEditor/GameObjects/PlayModeMenuItems.cs",
+      "line": 24,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Modules/UIElementsEditor/GameObjects/PlayModeMenuItems.cs"
+    },
+    {
+      "menu": "GameObject/Video/Video Player",
+      "method": "CreateVideoPlayer",
+      "package": "UnityCsReference",
+      "path": "Editor/Mono/Commands/GOCreationCommands.cs",
+      "line": 406,
+      "source": "https://github.com/Unity-Technologies/UnityCsReference/blob/a2a4a31aee6dfb63c2ef36eea79d817a6e31349b/Editor/Mono/Commands/GOCreationCommands.cs"
+    },
+    {
+      "menu": "GameObject/2D Object/Sprite Shape/Closed Shape",
+      "method": "MenuItem_GameObject2DObjectSpriteShapeClosedShape",
+      "package": "com.unity.2d.spriteshape",
+      "path": "package/Editor/ObjectMenuCreation/GameObjectCreation.cs",
+      "line": 27,
+      "source": "https://download.packages.unity.com/com.unity.2d.spriteshape/-/com.unity.2d.spriteshape-10.0.7.tgz"
+    },
+    {
+      "menu": "GameObject/2D Object/Sprite Shape/Open Shape",
+      "method": "MenuItem_GameObject2DObjectSpriteShapeOpenShape",
+      "package": "com.unity.2d.spriteshape",
+      "path": "package/Editor/ObjectMenuCreation/GameObjectCreation.cs",
+      "line": 13,
+      "source": "https://download.packages.unity.com/com.unity.2d.spriteshape/-/com.unity.2d.spriteshape-10.0.7.tgz"
+    },
+    {
+      "menu": "GameObject/AI/NavMesh Link",
+      "method": "CreateNavMeshLink",
+      "package": "com.unity.ai.navigation",
+      "path": "package/Editor/NavMeshLinkEditor.cs",
+      "line": 367,
+      "source": "https://download.packages.unity.com/com.unity.ai.navigation/-/com.unity.ai.navigation-2.0.5.tgz"
+    },
+    {
+      "menu": "GameObject/AI/NavMesh Modifier Volume",
+      "method": "CreateNavMeshModifierVolume",
+      "package": "com.unity.ai.navigation",
+      "path": "package/Editor/NavMeshModifierVolumeEditor.cs",
+      "line": 125,
+      "source": "https://download.packages.unity.com/com.unity.ai.navigation/-/com.unity.ai.navigation-2.0.5.tgz"
+    },
+    {
+      "menu": "GameObject/AI/NavMesh Surface",
+      "method": "CreateNavMeshSurface",
+      "package": "com.unity.ai.navigation",
+      "path": "package/Editor/NavMeshSurfaceEditor.cs",
+      "line": 372,
+      "source": "https://download.packages.unity.com/com.unity.ai.navigation/-/com.unity.ai.navigation-2.0.5.tgz"
+    },
+    {
+      "menu": "GameObject/XR/AR Debug Menu",
+      "method": "CreateARDebugMenu",
+      "package": "com.unity.xr.arfoundation",
+      "path": "package/Editor/ARFoundation/SceneUtils.cs",
+      "line": 120,
+      "source": "https://download.packages.unity.com/com.unity.xr.arfoundation/-/com.unity.xr.arfoundation-6.0.8.tgz"
+    },
+    {
+      "menu": "GameObject/XR/AR Default Face",
+      "method": "CreateARFaceVisualizer",
+      "package": "com.unity.xr.arfoundation",
+      "path": "package/Editor/ARFoundation/SceneUtils.cs",
+      "line": 98,
+      "source": "https://download.packages.unity.com/com.unity.xr.arfoundation/-/com.unity.xr.arfoundation-6.0.8.tgz"
+    },
+    {
+      "menu": "GameObject/XR/AR Default Plane",
+      "method": "CreateARPlaneVisualizer",
+      "package": "com.unity.xr.arfoundation",
+      "path": "package/Editor/ARFoundation/SceneUtils.cs",
+      "line": 79,
+      "source": "https://download.packages.unity.com/com.unity.xr.arfoundation/-/com.unity.xr.arfoundation-6.0.8.tgz"
+    },
+    {
+      "menu": "GameObject/XR/AR Default Point Cloud",
+      "method": "CreateARPointCloudVisualizer",
+      "package": "com.unity.xr.arfoundation",
+      "path": "package/Editor/ARFoundation/SceneUtils.cs",
+      "line": 45,
+      "source": "https://download.packages.unity.com/com.unity.xr.arfoundation/-/com.unity.xr.arfoundation-6.0.8.tgz"
+    },
+    {
+      "menu": "GameObject/XR/AR Session",
+      "method": "CreateARSession",
+      "package": "com.unity.xr.arfoundation",
+      "path": "package/Editor/ARFoundation/SceneUtils.cs",
+      "line": 29,
+      "source": "https://download.packages.unity.com/com.unity.xr.arfoundation/-/com.unity.xr.arfoundation-6.0.8.tgz"
+    },
+    {
+      "menu": "GameObject/XR/XR Origin (Mobile AR)",
+      "method": "CreateXROrigin",
+      "package": "com.unity.xr.arfoundation",
+      "path": "package/Editor/ARFoundation/XROriginCreateUtil.cs",
+      "line": 16,
+      "source": "https://download.packages.unity.com/com.unity.xr.arfoundation/-/com.unity.xr.arfoundation-6.0.8.tgz"
+    },
+    {
+      "menu": "GameObject/XR/Direct Interactor",
+      "method": "CreateDirectInteractor",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 57,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/Gaze Interactor",
+      "method": "CreateGazeInteractor",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 65,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/Grab Interactable",
+      "method": "CreateGrabInteractable",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 88,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/Interactable Snap Volume",
+      "method": "CreateInteractableSnapVolume",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 113,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/Interaction Manager",
+      "method": "CreateInteractionManager",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 141,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/Near-Far Interactor",
+      "method": "CreateNearFarInteractor",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 41,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/Ray Interactor",
+      "method": "CreateRayInteractor",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 49,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/Socket Interactor",
+      "method": "CreateSocketInteractor",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 73,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/Teleportation Anchor",
+      "method": "CreateTeleportationAnchor",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 157,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/Teleportation Area",
+      "method": "CreateTeleportationArea",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 147,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/UI Canvas",
+      "method": "CreateXRUICanvas",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 174,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/UI Event System",
+      "method": "CreateXRUIEventSystem",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 217,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/XR Origin (Mobile AR)",
+      "method": "CreateXROriginForAR",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 240,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/XR/XR Origin (VR)",
+      "method": "CreateXROriginForVR",
+      "package": "com.unity.xr.interaction.toolkit",
+      "path": "package/Editor/CreateUtils.cs",
+      "line": 231,
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz"
+    },
+    {
+      "menu": "GameObject/3D Object/Text - TextMeshPro",
+      "method": "CreateTextMeshProObjectPerform",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/TMP/TMPro_CreateObjectMenu.cs",
+      "line": 21,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/TMP/TMPro_CreateObjectMenu.cs"
+    },
+    {
+      "menu": "GameObject/UI/Button - TextMeshPro",
+      "method": "AddButton",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/TMP/TMPro_CreateObjectMenu.cs",
+      "line": 120,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/TMP/TMPro_CreateObjectMenu.cs"
+    },
+    {
+      "menu": "GameObject/UI/Canvas",
+      "method": "AddCanvas",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 281,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    },
+    {
+      "menu": "GameObject/UI/Dropdown - TextMeshPro",
+      "method": "AddDropdown",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/TMP/TMPro_CreateObjectMenu.cs",
+      "line": 141,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/TMP/TMPro_CreateObjectMenu.cs"
+    },
+    {
+      "menu": "GameObject/UI/Event System",
+      "method": "CreateEventSystem",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 366,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    },
+    {
+      "menu": "GameObject/UI/Image",
+      "method": "AddImage",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 205,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    },
+    {
+      "menu": "GameObject/UI/Input Field - TextMeshPro",
+      "method": "AddTextMeshProInputField",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/TMP/TMPro_CreateObjectMenu.cs",
+      "line": 133,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/TMP/TMPro_CreateObjectMenu.cs"
+    },
+    {
+      "menu": "GameObject/UI/Legacy/Button",
+      "method": "AddButton",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 308,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    },
+    {
+      "menu": "GameObject/UI/Legacy/Dropdown",
+      "method": "AddDropdown",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 317,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    },
+    {
+      "menu": "GameObject/UI/Legacy/Input Field",
+      "method": "AddInputField",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 326,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    },
+    {
+      "menu": "GameObject/UI/Legacy/Text",
+      "method": "AddText",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 299,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    },
+    {
+      "menu": "GameObject/UI/Panel",
+      "method": "AddPanel",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 223,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    },
+    {
+      "menu": "GameObject/UI/Raw Image",
+      "method": "AddRawImage",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 214,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    },
+    {
+      "menu": "GameObject/UI/Scroll View",
+      "method": "AddScrollView",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 270,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    },
+    {
+      "menu": "GameObject/UI/Scrollbar",
+      "method": "AddScrollbar",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 261,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    },
+    {
+      "menu": "GameObject/UI/Slider",
+      "method": "AddSlider",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 252,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    },
+    {
+      "menu": "GameObject/UI/Text - TextMeshPro",
+      "method": "CreateTextMeshProGuiObjectPerform",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/TMP/TMPro_CreateObjectMenu.cs",
+      "line": 80,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/TMP/TMPro_CreateObjectMenu.cs"
+    },
+    {
+      "menu": "GameObject/UI/Toggle",
+      "method": "AddToggle",
+      "package": "uGUI",
+      "path": "com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs",
+      "line": 241,
+      "source": "https://github.com/Unity-Technologies/uGUI/blob/4349121947c0f924de5ec82110ebf6cd53f77fcb/com.unity.ugui/Editor/UGUI/UI/MenuOptions.cs"
+    }
+  ]
+}

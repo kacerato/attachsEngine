@@ -106,8 +106,8 @@ int main(int argc, char **argv) {
     std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
     if(!renderer::appendWaterAuthoringGeometry(renderer::MapVertexStride,32,vertices,indices,draws,materials) || !map.import(document,draws,materials,false)) return 1;
     selection=document.createEntity(document.root(),editor::EditorEntityKind::Water,"River");
-    auto value=*document.find(selection);editMeshRenderer(value)->mesh=3;editWaterRoute(value)->count=3;
-    editWaterRoute(value)->points[0].position[2]=-12;editWaterRoute(value)->points[1].position[0]=8;editWaterRoute(value)->points[2].position[2]=12;
+    auto value=*document.find(selection);editMeshRenderer(value)->mesh=3;editor::editWaterRoute(value)->count=3;
+    editor::editWaterRoute(value)->points[0].position[2]=-12;editor::editWaterRoute(value)->points[1].position[0]=8;editor::editWaterRoute(value)->points[2].position[2]=12;
     if(!document.applyEntityValues(selection,value)) return 1;
     state.waterTab=std::string(argv[4])=="river-physics"?2:std::string(argv[4])=="river-effects"?3:1;
   }

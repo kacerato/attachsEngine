@@ -89,7 +89,7 @@ inline const std::array<ComponentSchema, 9> componentSchemas{{
     {}, colliderConflicts, PlayMutability::Never, PlayMutability::SafePoint},
   {&Joint::descriptor, "Junta", "Conexão, limites e motor entre corpos", ComponentCategory::Physics,
     jointRequirements, {}, PlayMutability::Never, PlayMutability::SafePoint},
-  {&Camera::descriptor, "Câmera", "Perspectiva e enquadramento", ComponentCategory::Camera,
+  {&Camera::descriptor, "Câmera", "Projeção e enquadramento", ComponentCategory::Camera,
     {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint},
   {&MeshRenderer::descriptor, "Malha", "Geometria e material", ComponentCategory::Visual,
     {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint},
@@ -131,6 +131,73 @@ inline const ComponentSchema *componentRemovalBlockedBy(std::string_view typeId,
       if (rule.typeId == typeId) return schema;
   }
   return nullptr;
+}
+
+// Resolve the closure before allocating any component. The inspector uses the
+// same resolver without cloning large resource/script payloads every frame.
+struct ComponentCompositionPlan {
+  Components candidate;
+  std::vector<std::string_view> addedTypes;
+  u64 requestedInstance=0;
+  const char *error=nullptr;
+  bool ready=false;
+};
+inline ComponentCompositionPlan planComponentAddition(const Components &source,
+    std::string_view requestedType, bool inPlay=false, bool materialize=true) {
+  ComponentCompositionPlan plan;
+  std::vector<std::string_view> visiting;
+  const auto present=[&](std::string_view id) {
+    return source.find(id) || std::find(plan.addedTypes.begin(),plan.addedTypes.end(),id)!=plan.addedTypes.end();
+  };
+  const auto add=[&](auto &&self,std::string_view id,bool dependency)->bool {
+    const auto *schema=findComponentSchema(id);
+    if(!schema) {plan.error="Tipo de componente não registrado";return false;}
+    if(dependency && present(id)) return true;
+    if(!dependency && !schema->allowMultiple() && present(id)) {
+      plan.error="Este objeto já possui este componente";return false;
+    }
+    if(std::find(visiting.begin(),visiting.end(),id)!=visiting.end()) {
+      plan.error="Dependências de componentes formam um ciclo";return false;
+    }
+    if(inPlay && schema->structuralInPlay==PlayMutability::Never) {
+      plan.error="Uma dependência não pode ser adicionada durante Play";return false;
+    }
+    visiting.push_back(id);
+    for(const auto &rule:schema->requirements) if(!self(self,rule.typeId,true)) return false;
+    for(const auto &rule:schema->conflicts) if(present(rule.typeId)) {plan.error=rule.message;return false;}
+    // Honor asymmetric declarations too; adding B cannot evade A's conflict.
+    for(const auto &existing:componentSchemas) {
+      if(present(existing.type->id)) for(const auto &rule:existing.conflicts) if(rule.typeId==id) {
+        plan.error="Incompatível com um componente já anexado";return false;
+      }
+    }
+    if(source.size()+plan.addedTypes.size()>=Components::MaximumCount) {
+      plan.error="Limite de componentes atingido";return false;
+    }
+    plan.addedTypes.push_back(id);
+    visiting.pop_back();return true;
+  };
+  plan.ready=add(add,requestedType,false);
+  if(plan.ready && materialize) {
+    plan.candidate=source;
+    for(const auto id:plan.addedTypes) {
+      auto *created=plan.candidate.add(*findComponentSchema(id)->type);
+      if(!created) {plan.error="Falha ao criar componente";plan.ready=false;break;}
+      if(id==requestedType) plan.requestedInstance=created->instanceId();
+    }
+  }
+  return plan;
+}
+inline const char *componentAdditionBlockedReason(const ComponentSchema &schema,const Components &source) {
+  return planComponentAddition(source,schema.type->id,false,false).error;
+}
+inline const ComponentSchema *componentInstanceRemovalBlockedBy(u64 instance,const Components &source) {
+  const auto *removed=source.findInstance(instance);if(!removed) return nullptr;
+  for(usize i=0;i<source.size();++i) {
+    const auto *other=source.at(i);
+    if(other->instanceId()!=instance && other->type().id==removed->type().id) return nullptr;
+  }
+  return componentRemovalBlockedBy(removed->type().id,source);
 }
 
 } // namespace ae::scene

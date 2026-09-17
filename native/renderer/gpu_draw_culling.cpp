@@ -8,13 +8,14 @@ namespace ae::renderer {
 namespace {
 
 // Os dois lados do contrato de layout. O kernel lê um std430 de 32 bytes por
-// registro e um bloco de push constants de 112; se um destes mudar sem o
+// registro e um bloco de push constants de 128; se um destes mudar sem o
 // shader, o build para aqui em vez de produzir corte silenciosamente errado.
 static_assert(sizeof(GpuCullDrawRecord) == 32);
 static_assert(offsetof(GpuCullDrawRecord, boundsRadius) == 12);
 static_assert(offsetof(GpuCullDrawRecord, stateIndex) == 16);
 static_assert(offsetof(GpuCullDrawRecord, flags) == 20);
-static_assert(sizeof(GpuCullParameters) == 112);
+static_assert(sizeof(GpuCullParameters) == 128);
+static_assert(offsetof(GpuCullParameters, orthographicHalfWidth) == 112);
 static_assert(offsetof(GpuCullParameters, cosineYaw) == 16);
 static_assert(offsetof(GpuCullParameters, tangentHalfHorizontal) == 32);
 static_assert(offsetof(GpuCullParameters, boundsMargin) == 48);
@@ -79,6 +80,13 @@ GpuCullMotionGuard buildGpuCullMotionGuard(const PerspectiveFrustum &frustum,
   };
   const float yawDelta = shortestAngle(frustum.yaw, pyramidYaw);
   const float pitchDelta = shortestAngle(frustum.pitch, pyramidPitch);
+  if (isOrthographic(frustum)) {
+    // A previous-frame depth image cannot certify newly exposed surfaces.
+    // Resume only at exactly the recorded pose; reset hysteresis while moving.
+    // Lens/viewport changes invalidate the pyramid in the renderer separately.
+    guard.valid = translationSquared == 0.0f && yawDelta == 0.0f && pitchDelta == 0.0f;
+    return guard;
+  }
   const float smallestTangent = std::min(frustum.tangentHalfHorizontal, frustum.tangentHalfVertical);
   if (!(smallestTangent > 0.0f) || !finite(smallestTangent)) return guard;
 
@@ -109,6 +117,10 @@ bool buildGpuCullParameters(const PerspectiveFrustum &frustum,
                             bool pyramidUsable, GpuCullParameters &out) {
   out = {};
   if (!frustum.valid || drawCount == 0) return false;
+  if (isOrthographic(frustum) && (!finite(frustum.orthographicHalfWidth) ||
+      !finite(frustum.orthographicHalfHeight) || frustum.orthographicHalfWidth<=0 ||
+      frustum.orthographicHalfHeight<=0)) return false;
+  if (!finite(frustum.roll) || std::abs(frustum.roll) > 1e-6f) return false;
   if (!finite(normalizedDepthBias) || normalizedDepthBias < 0.0f) return false;
   const float transformValues[] = {screenTransform.xx, screenTransform.xy,
                                    screenTransform.yx, screenTransform.yy};
@@ -159,6 +171,11 @@ bool buildGpuCullParameters(const PerspectiveFrustum &frustum,
   // correto, este número só limita quantos texels uma invocação compara.
   out.maximumScannedTexels = 64;
   out.flags = (usable && guarded) ? GpuCullPyramidUsable : 0u;
+  if (isOrthographic(frustum)) {
+    out.flags |= GpuCullOrthographic;
+    out.orthographicHalfWidth = frustum.orthographicHalfWidth;
+    out.orthographicHalfHeight = frustum.orthographicHalfHeight;
+  }
   return true;
 }
 
@@ -216,8 +233,9 @@ GpuCullOutcome cullDrawRecordReference(const GpuCullParameters &parameters,
   // próximo não pode ser limitada com segurança em tela e nunca oclui.
   if (!finite(nearDepth) || nearDepth < parameters.nearPlane) return notOccluded();
 
-  const float invHorizontal = 1.0f / (nearDepth * parameters.tangentHalfHorizontal);
-  const float invVertical = 1.0f / (nearDepth * parameters.tangentHalfVertical);
+  const bool orthographic = (parameters.flags & GpuCullOrthographic) != 0;
+  const float invHorizontal = 1.0f / (orthographic ? parameters.orthographicHalfWidth : nearDepth * parameters.tangentHalfHorizontal);
+  const float invVertical = 1.0f / (orthographic ? parameters.orthographicHalfHeight : nearDepth * parameters.tangentHalfVertical);
   const float ndcX[2] = {(viewX - expandedRadius) * invHorizontal,
                          (viewX + expandedRadius) * invHorizontal};
   const float ndcY[2] = {(viewY - expandedRadius) * invVertical,
@@ -250,13 +268,14 @@ GpuCullOutcome cullDrawRecordReference(const GpuCullParameters &parameters,
   // Dilatação lateral resolvida por candidato: o deslocamento em tela de uma
   // translação perpendicular é inversamente proporcional à profundidade.
   const float dilation = parameters.screenDilation +
-                         parameters.translationDilationScale / nearDepth;
+                         parameters.translationDilationScale / (orthographic ? 1.0f : nearDepth);
   float minU = std::clamp(surfaceMinX * 0.5f + 0.5f - dilation, 0.0f, 1.0f);
   float maxU = std::clamp(surfaceMaxX * 0.5f + 0.5f + dilation, 0.0f, 1.0f);
   float minV = std::clamp(surfaceMinY * 0.5f + 0.5f - dilation, 0.0f, 1.0f);
   float maxV = std::clamp(surfaceMaxY * 0.5f + 0.5f + dilation, 0.0f, 1.0f);
 
-  const float normalizedDepth =
+  const float normalizedDepth = orthographic ?
+      (nearDepth - parameters.nearPlane) / (parameters.farPlane - parameters.nearPlane) :
       (parameters.farPlane * nearDepth - parameters.nearPlane * parameters.farPlane) /
       ((parameters.farPlane - parameters.nearPlane) * nearDepth);
   if (!finite(normalizedDepth)) return notOccluded();

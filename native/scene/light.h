@@ -55,15 +55,17 @@ public:
     return true;
   }
 };
+inline bool lightHasRange(const ComponentValue &v) {return static_cast<const Light &>(v).kind!=LightKind::Directional;}
+inline bool lightHasCone(const ComponentValue &v) {return static_cast<const Light &>(v).kind==LightKind::Spot;}
 inline constexpr std::array<ComponentNumber, 7> lightNumbers{{
-#define AE_LIGHT_NUMBER(id, label, field, lo, hi, step) {label, lo, hi, step, [](const ComponentValue &v) -> const float & {return static_cast<const Light &>(v).field;}, [](ComponentValue &v) -> float * {return &static_cast<Light &>(v).field;}, id}
-  AE_LIGHT_NUMBER("color.r", "Cor R", color[0], 0, 1, .01f),
-  AE_LIGHT_NUMBER("color.g", "Cor G", color[1], 0, 1, .01f),
-  AE_LIGHT_NUMBER("color.b", "Cor B", color[2], 0, 1, .01f),
-  AE_LIGHT_NUMBER("intensity", "Intensidade", intensity, 0, 10000, .1f),
-  AE_LIGHT_NUMBER("range", "Alcance · m", range, .01f, 1000, .1f),
-  AE_LIGHT_NUMBER("inner_angle", "Cone interno · graus", innerAngle, 0, 89, 1),
-  AE_LIGHT_NUMBER("outer_angle", "Cone externo · graus", outerAngle, 0, 89, 1)
+#define AE_LIGHT_NUMBER(id, label, field, lo, hi, step, group, unit, visible) {label, lo, hi, step, [](const ComponentValue &v) -> const float & {return static_cast<const Light &>(v).field;}, [](ComponentValue &v) -> float * {return &static_cast<Light &>(v).field;}, id,{group,unit,nullptr,visible}}
+  AE_LIGHT_NUMBER("color.r", "Cor R", color[0], 0, 1, .01f,"Emissão","",nullptr),
+  AE_LIGHT_NUMBER("color.g", "Cor G", color[1], 0, 1, .01f,"Emissão","",nullptr),
+  AE_LIGHT_NUMBER("color.b", "Cor B", color[2], 0, 1, .01f,"Emissão","",nullptr),
+  AE_LIGHT_NUMBER("intensity", "Intensidade", intensity, 0, 10000, .1f,"Emissão","",nullptr),
+  AE_LIGHT_NUMBER("range", "Alcance", range, .01f, 1000, .1f,"Volume","m",lightHasRange),
+  AE_LIGHT_NUMBER("inner_angle", "Meio-cone interno", innerAngle, 0, 89, 1,"Volume","°",lightHasCone),
+  AE_LIGHT_NUMBER("outer_angle", "Meio-cone externo", outerAngle, 0, 89, 1,"Volume","°",lightHasCone)
 #undef AE_LIGHT_NUMBER
 }};
 inline constexpr std::array<ComponentEnumOption, 3> lightKindOptions{{
@@ -78,8 +80,11 @@ inline constexpr std::array<ComponentBoolean, 1> lightBooleans{{
   {"enabled", "Acesa", [](const ComponentValue &v) { return static_cast<const Light &>(v).enabled; },
    [](ComponentValue &v, bool b) { static_cast<Light &>(v).enabled = b; }}
 }};
+inline constexpr std::array<ComponentTriple,1> lightTriples{{
+  {"color","Cor linear",{"color.r","color.g","color.b"},ComponentTripleKind::LinearColor}
+}};
 inline const ComponentType Light::descriptor{
   "astra.render.light", 1, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<Light>(); },
-  lightNumbers, lightBooleans, lightEnums
+  lightNumbers, lightBooleans, lightEnums, nullptr, false, {}, lightTriples
 };
 }

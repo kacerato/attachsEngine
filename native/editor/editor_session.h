@@ -21,6 +21,8 @@
 #include "runtime/scene_lights.h"
 #include "editor/editor_character.h"
 #include "editor/editor_scene_camera.h"
+#include "editor/editor_camera_handles.h"
+#include "editor/editor_camera_preview.h"
 #include "editor/editor_camera_look.h"
 #include "platform/first_person_controller.h"
 #include "editor/editor_camera.h"
@@ -40,6 +42,7 @@
 #include "editor/editor_archive.h"
 #include "editor/editor_document.h"
 #include "editor/editor_history.h"
+#include "editor/editor_component_presets.h"
 #include "editor/editor_screen.h"
 #include "ui/ui_font.h"
 #include "ui/ui_icon_atlas.h"
@@ -52,7 +55,7 @@
 
 namespace ae::editor {
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -86,6 +89,9 @@ public:
   void setSurface(const ui::UiRect &surface, const ui::UiInsets &safeArea);
   void setProjectName(const char *name);
   bool setProjectDirectory(const char *path);
+  bool saveComponentPreset(EditorEntityId entity,u64 instance,std::string name,std::string &error);
+  bool applyComponentPreset(u64 preset,EditorEntityId entity,u64 instance,EditorSceneVersion expected,bool add,std::string &error);
+  bool openComponentPresets(EditorEntityId entity,u64 instance);
   bool needsScriptRuntime() const {return isPlaying()&&runtime::ScriptBridge::hasScripts(document_);}
   void setScriptRuntime(scene::ScriptRuntimeApi api) {playScene_.setScriptRuntime(api,files_.rootPath());}
   // O que um script escreve vai para o console ANTES de ir para onde o
@@ -286,6 +292,9 @@ public:
   EditorHistory &history() noexcept { return history_; }
   EditorEntityId selection() const noexcept { return state_.selection; }
   EditorSceneVersion sceneVersion() const noexcept { return {sceneEpoch_,document_.revision()}; }
+  // Backend integration seam; no UI preview is advertised until a real target
+  // renders this request and acknowledges publication successfully.
+  EditorCameraPreview &cameraPreview() noexcept {return cameraPreview_;}
   EditorActionResult dispatch(const EditorActionRequest &request);
   bool playRequested() const noexcept { return playRequested_; }
   void clearPlayRequest() noexcept { playRequested_ = false; }
@@ -494,6 +503,11 @@ public:
   resources::AssetGuid createMaterialFromSlot(EditorEntityId id,u32 slot,std::string &diagnostic);
   // Liga o slot a um material do projeto; identidade inválida volta à fonte.
   bool assignSlotMaterial(EditorEntityId id,u32 slot,const resources::AssetGuid &material);
+  bool repairComponentResource(EditorEntityId id,u64 instance,resources::AssetGuid from,resources::AssetGuid to,
+                               EditorSceneVersion expectedVersion,std::string &diagnostic);
+  bool repairSharedTexture(resources::AssetGuid material,resources::AssetGuid from,resources::AssetGuid to,
+                           u32 expectedMaterialRevision,EditorSceneVersion expectedVersion,std::string &diagnostic);
+  bool repairSceneResource(resources::AssetGuid from,resources::AssetGuid to,EditorSceneVersion expectedVersion,std::string &diagnostic);
   // `field` indexa os números do componente de malha (cor, rugosidade...).
   bool setSlotMaterialValue(EditorEntityId id,u32 slot,MaterialScope scope,u32 field,float value,std::string &diagnostic);
   bool clearSlotMaterialOverride(EditorEntityId id,u32 slot);
@@ -707,6 +721,8 @@ public:
 
 private:
   // Geometria importada neste processo, UM bloco por arquivo de origem.
+  EditorComponentPresets componentPresets_;
+  void refreshComponentPresets();
   //
   // Por fonte, e não uma lista achatada, porque reimportar substitui o bloco
   // daquele arquivo e preserva os outros. Numa lista achatada, reimportar
@@ -830,6 +846,7 @@ private:
   bool ensureTexturesPublished(std::string &diagnostic);
   void refreshMaterialSlotView();
   bool writeMaterialAsset(const resources::MaterialAsset &material,const std::string &path,std::string &diagnostic);
+  bool commitSharedMaterial(const resources::MaterialAsset &candidate,std::string &diagnostic,bool recordHistory=true);
   double codeCheckpointAt_=0;
   // A impressão digital do pacote base, guardada na importação inicial: é ela
   // que deriva a identidade das primitivas internas em toda adoção posterior.
@@ -879,6 +896,18 @@ private:
   std::vector<ui::UiInstance> instances_;
   std::vector<EditorPickCandidate> candidates_;
   std::vector<ViewportPointer> viewportPointers_;
+  bool cameraGestureOpen_=false;
+  EditorCameraPreview cameraPreview_{};
+  bool lensDragOpen_=false;
+  u32 lensDragPointer_=0,lensDragKind_=0;
+  float lensDragStart_=0;
+  EditorEntity lensDragInitial_{};
+  EditorCameraHandle lensDragHandle_{};
+  EditorViewport lensDragView_{};
+  EditorEntityId cameraGestureEntity_=0;
+  u64 cameraGestureInstance_=0;
+  void pilotCamera(ui::UiPoint delta,float dolly,bool translate);
+  void finishCameraGesture(bool cancel);
   // Distância entre dois dedos no frame anterior, para derivar a pinça.
   float pinchDistance_ = 0.0f;
   EditorGizmoDrag gizmoDrag_{};

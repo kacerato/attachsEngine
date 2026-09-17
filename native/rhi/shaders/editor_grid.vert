@@ -2,6 +2,7 @@
 #extension GL_GOOGLE_include_directive : require
 #include "dirt_road_frame.glsl"
 layout(location=0) out vec3 vRay;
+layout(location=1) out vec3 vOriginOffset;
 
 // O raio de camera de cada pixel, reconstruido invertendo EXATAMENTE a projecao
 // que o vertice da cena aplica (dirt_road_vertex.glsl):
@@ -35,8 +36,15 @@ void main() {
   // nao eram os da camera, e a grade saia torta e deslocada do horizonte da
   // cena. Interpolar o raio cru e normalizar no fragmento (quando precisar) e a
   // unica forma correta.
-  vRay=dirtRoadCameraRotation()*vec3(cameraNdc.x*frame.cameraFrame.x/focal,
+  vRay=dirtRoadCameraRotation(frame.baseColorFactor.z)*vec3(cameraNdc.x*frame.cameraFrame.x/focal,
                                      -cameraNdc.y/focal,1.0);
+  vOriginOffset=vec3(0);
+  float halfHeight=uintBitsToFloat(frame.textureIndices.w);
+  if(halfHeight>0.0) {
+    mat3 rotation=dirtRoadCameraRotation(frame.baseColorFactor.z);
+    vRay=rotation*vec3(0,0,1);
+    vOriginOffset=rotation*vec3(cameraNdc.x*frame.cameraFrame.x*halfHeight,-cameraNdc.y*halfHeight,0);
+  }
   // Profundidade 1: o fragmento escreve a sua propria, a partir do ponto de
   // interseccao. O que sai daqui so precisa cobrir a tela.
   gl_Position=vec4(ndc,1,1);

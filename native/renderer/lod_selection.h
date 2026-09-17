@@ -25,6 +25,9 @@ inline constexpr u32 LodMaximumLevelsPerGroup = MapMaximumLodLevels;
 // directly; it only compares this one projected number against a budget.
 //
 // screenSpaceError = geometricError * viewportHeightPx / (2 * distance * tan(fovY/2))
+// Positive orthographicHalfHeight instead uses geometricError * viewportHeightPx
+// / (2 * orthographicHalfHeight), ignoring distance/FOV. Zero retains perspective;
+// negative/non-finite extents fail safe. Selection and dither use the same metric.
 //
 // Fails safe throughout: degenerate input (non-finite/non-positive distance,
 // FOV outside (0,pi), non-positive viewport/budget) returns +infinity from
@@ -33,7 +36,7 @@ inline constexpr u32 LodMaximumLevelsPerGroup = MapMaximumLodLevels;
 // legacy (pre-LOD) content, which always decodes with geometricError=0.
 
 float computeScreenSpaceError(float geometricError, float distance, float fovYRadians,
-                              float viewportHeightPx);
+                              float viewportHeightPx, float orthographicHalfHeight = 0.0f);
 
 struct LodLevelInfo final {
   u32 level = 0;
@@ -82,7 +85,8 @@ LodDitherPair encodeLodDither(float factor);
 // must be reused for the same lodGroupId every frame (see MapDrawRecord::lodGroupId).
 LodSelection selectLodLevel(const LodLevelInfo *levels, u32 levelCount, float distance,
                             float fovYRadians, float viewportHeightPx, float pixelErrorBudget,
-                            float hysteresisBandRatio, LodHysteresisState &state);
+                            float hysteresisBandRatio, LodHysteresisState &state,
+                            float orthographicHalfHeight = 0.0f);
 
 struct LodRenderLevel final {
   LodLevelInfo selection{};

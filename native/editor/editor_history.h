@@ -25,6 +25,7 @@
 
 #include <string_view>
 #include <vector>
+#include <functional>
 
 namespace ae::editor {
 
@@ -61,7 +62,12 @@ public:
   // nenhuma está aberta, de modo que o caso simples não precisa de cerimônia.
   bool begin(std::string_view label);
   void end();
+  // Roll back an open gesture without consuming undo or discarding redo.
+  bool cancel(EditorDocument &document);
   bool isOpen() const noexcept { return open_; }
+  // Standalone resource transaction, already committed. Replay must be atomic:
+  // false leaves the history cursor in place. Never mixes with scene commands.
+  bool recordResource(std::string_view label,std::function<bool(bool)> replay);
 
   EditorEntityId createEntity(EditorDocument &document, EditorEntityId parent,
                               EditorEntityKind kind, std::string_view name);
@@ -95,6 +101,7 @@ private:
   struct Transaction final {
     char label[kLabelCapacity]{};
     std::vector<EditorCommand> commands;
+    std::function<bool(bool)> resourceReplay;
   };
 
   bool record(const EditorCommand &command);

@@ -34,7 +34,14 @@ public:
     return true;
   }
 };
-inline constexpr std::array<ComponentNumber,19> jointNumbers{{
+inline bool jointHasAxis(const ComponentValue &v) {
+  const auto kind=static_cast<const Joint&>(v).kind;
+  return kind==JointKind::Hinge||kind==JointKind::Slider;
+}
+inline bool jointHasLimits(const ComponentValue &v) {return static_cast<const Joint&>(v).kind!=JointKind::Point;}
+inline bool jointMotorActive(const ComponentValue &v) {return jointHasAxis(v)&&static_cast<const Joint&>(v).motor!=0;}
+inline constexpr auto jointNumbers=[] {
+std::array<ComponentNumber,19> properties{{
   {"Âncora A · X",-100000.0f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).anchorA[0];},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).anchorA[0];},"anchor_a_x"},
   {"Âncora A · Y",-100000.0f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).anchorA[1];},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).anchorA[1];},"anchor_a_y"},
   {"Âncora A · Z",-100000.0f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).anchorA[2];},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).anchorA[2];},"anchor_a_z"},
@@ -55,6 +62,16 @@ inline constexpr std::array<ComponentNumber,19> jointNumbers{{
   {"Frequência · Hz",0.001f,1000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).frequency;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).frequency;},"spring_frequency"},
   {"Amortecimento da mola",0.0f,10.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Joint&>(v).damping;},[](ComponentValue &v)->float*{return &static_cast<Joint&>(v).damping;},"spring_damping"}
 }};
+for(usize i=0;i<properties.size();++i) {
+  auto &p=properties[i].presentation;
+  p.group=i<6?"Âncoras":i<14?"Movimento":"Motor";
+  if(i>=6&&i<12) p.visible=jointHasAxis;
+  if(i>=12&&i<14) p.visible=jointHasLimits;
+  if(i>=14) p.visible=jointMotorActive;
+  if(i==17) p.unit="Hz";
+}
+return properties;
+}();
 inline constexpr std::array<ComponentEnumOption,4> jointKinds{{{0,"Ponto"},{1,"Dobradiça"},{2,"Deslizante"},{3,"Distância"}}};
 inline constexpr std::array<ComponentEnumOption,4> jointMotors{{{0,"Desligado"},{1,"Velocidade"},{2,"Posição"},{3,"Posição e velocidade"}}};
 inline constexpr std::array<ComponentEnum,2> jointEnums{{
@@ -62,16 +79,23 @@ inline constexpr std::array<ComponentEnum,2> jointEnums{{
     if(k==0||k==3) j.motor=0;
     if(k==3) {j.limitMin=std::max(0.0f,j.limitMin);j.limitMax=std::max(j.limitMin,j.limitMax);}
     if(k==1) {j.limitMin=std::clamp(j.limitMin,-180.0f,0.0f);j.limitMax=std::clamp(j.limitMax,0.0f,180.0f);}}},
-  {"motor","Motor",jointMotors,[](const ComponentValue &v){return static_cast<const Joint&>(v).motor;},[](ComponentValue &v,u32 k){static_cast<Joint&>(v).motor=k;}}
+  {"motor","Motor",jointMotors,[](const ComponentValue &v){return static_cast<const Joint&>(v).motor;},[](ComponentValue &v,u32 k){static_cast<Joint&>(v).motor=k;},{"Motor","",nullptr,jointHasAxis}}
 }};
 inline constexpr std::array<ComponentBoolean,1> jointBooleans{{
   {"enabled","Ativa",[](const ComponentValue &v){return static_cast<const Joint&>(v).enabled;},[](ComponentValue &v,bool b){static_cast<Joint&>(v).enabled=b;}}
 }};
 inline constexpr std::array<ComponentObjectReference,1> jointReferences{{
   {"connected_body","Conectar corpo","astra.physics.body",ObjectReferenceScope::Other,"Escolher corpo",
-    [](const ComponentValue &v){return static_cast<const Joint&>(v).connectedBody;},[](ComponentValue &v,u64 id){static_cast<Joint&>(v).connectedBody=id;}}
+    [](const ComponentValue &v){return static_cast<const Joint&>(v).connectedBody;},[](ComponentValue &v,u64 id){static_cast<Joint&>(v).connectedBody=id;},{"Âncoras"},
+    [](const ComponentValue &v){return static_cast<const Joint&>(v).enabled;}}
+}};
+inline constexpr std::array<ComponentTriple,4> jointTriples{{
+  {"anchor_a","Âncora A",{"anchor_a_x","anchor_a_y","anchor_a_z"}},
+  {"anchor_b","Âncora B",{"anchor_b_x","anchor_b_y","anchor_b_z"}},
+  {"axis_a","Eixo A",{"axis_a_x","axis_a_y","axis_a_z"}},
+  {"axis_b","Eixo B",{"axis_b_x","axis_b_y","axis_b_z"}}
 }};
 inline const ComponentType Joint::descriptor{
-  "astra.physics.joint",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Joint>();},jointNumbers,jointBooleans,jointEnums,nullptr,true,jointReferences
+  "astra.physics.joint",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Joint>();},jointNumbers,jointBooleans,jointEnums,nullptr,true,jointReferences,jointTriples
 };
 }

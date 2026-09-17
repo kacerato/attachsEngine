@@ -1,0 +1,1393 @@
+{
+  "date": "2026-09-15",
+  "reference": "Unity 6000.0 + pacotes fixados; inventário de código, não auditoria de paridade executada",
+  "stats": {
+    "types": 2476,
+    "categories": {
+      "Component": 575,
+      "Resource / contract": 61,
+      "Supporting type": 1625,
+      "UI Toolkit element": 150,
+      "Volume profile": 65
+    },
+    "componentPackages": {
+      "UnityEngine": 117,
+      "com.unity.2d.animation": 8,
+      "com.unity.2d.spriteshape": 2,
+      "com.unity.2d.tilemap.extras": 1,
+      "com.unity.addressables": 1,
+      "com.unity.ai.navigation": 4,
+      "com.unity.animation.rigging": 17,
+      "com.unity.cinemachine": 77,
+      "com.unity.inputsystem": 11,
+      "com.unity.localization": 10,
+      "com.unity.netcode.gameobjects": 18,
+      "com.unity.render-pipelines.core": 44,
+      "com.unity.render-pipelines.high-definition": 20,
+      "com.unity.render-pipelines.universal": 10,
+      "com.unity.splines": 5,
+      "com.unity.timeline": 1,
+      "com.unity.ugui": 54,
+      "com.unity.visualeffectgraph": 3,
+      "com.unity.xr.arfoundation": 45,
+      "com.unity.xr.core-utils": 2,
+      "com.unity.xr.interaction.toolkit": 125
+    },
+    "declaredMembers": 14030,
+    "componentMembers": 6742,
+    "coreApiPages": 117,
+    "sourceRecoveryTypes": 134
+  },
+  "manifests": [
+    {
+      "package": "UnityEngine",
+      "version": "6000.0",
+      "revision": "a2a4a31aee6dfb63c2ef36eea79d817a6e31349b",
+      "source": "https://github.com/Unity-Technologies/UnityCsReference",
+      "dependencies": {}
+    },
+    {
+      "package": "com.unity.2d.animation",
+      "version": "10.0.3",
+      "sha256": "9952eb361c0e9c97ad3c4e570c5e38c15f65f9f7f1e56fa1ea48e075a68a5e49",
+      "source": "https://download.packages.unity.com/com.unity.2d.animation/-/com.unity.2d.animation-10.0.3.tgz",
+      "dependencies": {
+        "com.unity.2d.common": "9.0.2",
+        "com.unity.2d.sprite": "1.0.0",
+        "com.unity.collections": "1.2.4",
+        "com.unity.modules.animation": "1.0.0",
+        "com.unity.modules.uielements": "1.0.0"
+      }
+    },
+    {
+      "package": "com.unity.2d.spriteshape",
+      "version": "10.0.7",
+      "sha256": "79d438b2a6ee2e3dfe69ea4c46edde6e7c1681cc686721cd7df35c867b3b0e6f",
+      "source": "https://download.packages.unity.com/com.unity.2d.spriteshape/-/com.unity.2d.spriteshape-10.0.7.tgz",
+      "dependencies": {
+        "com.unity.mathematics": "1.1.0",
+        "com.unity.2d.common": "9.0.7",
+        "com.unity.modules.physics2d": "1.0.0"
+      }
+    },
+    {
+      "package": "com.unity.2d.tilemap.extras",
+      "version": "4.0.2",
+      "sha256": "9a0ae84e3aeba3e328697965b677af554993699899096016520c30404f0db4f4",
+      "source": "https://download.packages.unity.com/com.unity.2d.tilemap.extras/-/com.unity.2d.tilemap.extras-4.0.2.tgz",
+      "dependencies": {
+        "com.unity.modules.tilemap": "1.0.0",
+        "com.unity.2d.tilemap": "1.0.0",
+        "com.unity.ugui": "1.0.0",
+        "com.unity.modules.jsonserialize": "1.0.0"
+      }
+    },
+    {
+      "package": "com.unity.addressables",
+      "version": "2.3.16",
+      "sha256": "3cd44f23282e399752f159f34cc06f1a5f13d832315871737e6a2686965eba36",
+      "source": "https://download.packages.unity.com/com.unity.addressables/-/com.unity.addressables-2.3.16.tgz",
+      "dependencies": {
+        "com.unity.scriptablebuildpipeline": "2.2.11",
+        "com.unity.modules.assetbundle": "1.0.0",
+        "com.unity.modules.imageconversion": "1.0.0",
+        "com.unity.modules.jsonserialize": "1.0.0",
+        "com.unity.modules.unitywebrequest": "1.0.0",
+        "com.unity.modules.unitywebrequestassetbundle": "1.0.0",
+        "com.unity.profiling.core": "1.0.2",
+        "com.unity.test-framework": "1.4.5"
+      }
+    },
+    {
+      "package": "com.unity.ai.navigation",
+      "version": "2.0.5",
+      "sha256": "e7c21b83c1e381bee1b9e73c9d13b8653eb17c7e893f59766401a51daa856321",
+      "source": "https://download.packages.unity.com/com.unity.ai.navigation/-/com.unity.ai.navigation-2.0.5.tgz",
+      "dependencies": {
+        "com.unity.modules.ai": "1.0.0"
+      }
+    },
+    {
+      "package": "com.unity.animation.rigging",
+      "version": "1.3.0",
+      "sha256": "671616abcb4161c9612c13fa5baf811c22efb8a9f482e0daf56373102f5bf0b9",
+      "source": "https://download.packages.unity.com/com.unity.animation.rigging/-/com.unity.animation.rigging-1.3.0.tgz",
+      "dependencies": {
+        "com.unity.burst": "1.4.1",
+        "com.unity.test-framework": "1.1.24"
+      }
+    },
+    {
+      "package": "com.unity.cinemachine",
+      "version": "3.1.3",
+      "sha256": "48f231e1ec0bbf29343ce6fc98d2964000359b6304ec3121f3b5d7e4b6de1b10",
+      "source": "https://download.packages.unity.com/com.unity.cinemachine/-/com.unity.cinemachine-3.1.3.tgz",
+      "dependencies": {
+        "com.unity.splines": "2.0.0",
+        "com.unity.modules.imgui": "1.0.0"
+      }
+    },
+    {
+      "package": "com.unity.inputsystem",
+      "version": "1.11.2",
+      "sha256": "90f9f82c61cd5607a1705704049d0bc16d1b9794efdbc2d08c8f36c3b182c52a",
+      "source": "https://download.packages.unity.com/com.unity.inputsystem/-/com.unity.inputsystem-1.11.2.tgz",
+      "dependencies": {
+        "com.unity.modules.uielements": "1.0.0"
+      }
+    },
+    {
+      "package": "com.unity.localization",
+      "version": "1.5.13",
+      "sha256": "1648d9803c9304eb658bfbb3c8a00bcf4b1d92d431c0ddb584f1c5efbbfb860c",
+      "source": "https://download.packages.unity.com/com.unity.localization/-/com.unity.localization-1.5.13.tgz",
+      "dependencies": {
+        "com.unity.addressables": "1.25.0",
+        "com.unity.nuget.newtonsoft-json": "3.0.2"
+      }
+    },
+    {
+      "package": "com.unity.netcode.gameobjects",
+      "version": "2.2.0",
+      "sha256": "61b284796d6d98d8d0ad76549aa87dc346526d6e46eb28a435dd92452871f18c",
+      "source": "https://download.packages.unity.com/com.unity.netcode.gameobjects/-/com.unity.netcode.gameobjects-2.2.0.tgz",
+      "dependencies": {
+        "com.unity.nuget.mono-cecil": "1.11.4",
+        "com.unity.transport": "2.4.0"
+      }
+    },
+    {
+      "package": "com.unity.splines",
+      "version": "2.7.2",
+      "sha256": "538e3a2bc3d74510d2a306e52b5bbfbbba9590807be64f6ba25b4f83eeed316d",
+      "source": "https://download.packages.unity.com/com.unity.splines/-/com.unity.splines-2.7.2.tgz",
+      "dependencies": {
+        "com.unity.settings-manager": "1.0.3",
+        "com.unity.mathematics": "1.2.1"
+      }
+    },
+    {
+      "package": "com.unity.timeline",
+      "version": "1.8.13",
+      "sha256": "73c048d58f1849c802b44d58ac29a294692df593b11749ef62aaca2b1d79b50f",
+      "source": "https://download.packages.unity.com/com.unity.timeline/-/com.unity.timeline-1.8.13.tgz",
+      "dependencies": {
+        "com.unity.modules.director": "1.0.0",
+        "com.unity.modules.animation": "1.0.0",
+        "com.unity.modules.audio": "1.0.0",
+        "com.unity.modules.particlesystem": "1.0.0"
+      }
+    },
+    {
+      "package": "com.unity.xr.arfoundation",
+      "version": "6.0.8",
+      "sha256": "73b28f12c013ba017af7ff92d6c51ff9811739720e13229f647d504dd3d61155",
+      "source": "https://download.packages.unity.com/com.unity.xr.arfoundation/-/com.unity.xr.arfoundation-6.0.8.tgz",
+      "dependencies": {
+        "com.unity.editorcoroutines": "1.0.0",
+        "com.unity.inputsystem": "1.6.3",
+        "com.unity.xr.core-utils": "2.3.0",
+        "com.unity.xr.management": "4.4.0",
+        "com.unity.ugui": "2.0.0",
+        "com.unity.mathematics": "1.2.6",
+        "com.unity.modules.particlesystem": "1.0.0",
+        "com.unity.modules.ui": "1.0.0",
+        "com.unity.modules.unityanalytics": "1.0.0",
+        "com.unity.modules.unitywebrequest": "1.0.0"
+      }
+    },
+    {
+      "package": "com.unity.xr.core-utils",
+      "version": "2.4.0",
+      "sha256": "e4b4f9f7fc2dfc2fcc5c7f8cb5ed912e84711dcab91f164f7f7f4ba469b9233e",
+      "source": "https://download.packages.unity.com/com.unity.xr.core-utils/-/com.unity.xr.core-utils-2.4.0.tgz",
+      "dependencies": {
+        "com.unity.modules.xr": "1.0.0"
+      }
+    },
+    {
+      "package": "com.unity.xr.interaction.toolkit",
+      "version": "3.0.9",
+      "sha256": "d5fab6eaab18d8cccd0d455f54d17b467ba6de54a1672894b26c3e80d8bfc61d",
+      "source": "https://download.packages.unity.com/com.unity.xr.interaction.toolkit/-/com.unity.xr.interaction.toolkit-3.0.9.tgz",
+      "dependencies": {
+        "com.unity.inputsystem": "1.8.1",
+        "com.unity.mathematics": "1.2.6",
+        "com.unity.ugui": "1.0.0",
+        "com.unity.xr.core-utils": "2.2.3",
+        "com.unity.modules.audio": "1.0.0",
+        "com.unity.modules.imgui": "1.0.0",
+        "com.unity.modules.physics": "1.0.0",
+        "com.unity.modules.xr": "1.0.0"
+      }
+    },
+    {
+      "package": "com.unity.ugui",
+      "version": "2.0 / branch 6000.0",
+      "revision": "4349121947c0f924de5ec82110ebf6cd53f77fcb",
+      "source": "https://github.com/Unity-Technologies/uGUI/tree/4349121947c0f924de5ec82110ebf6cd53f77fcb",
+      "dependencies": {}
+    },
+    {
+      "package": "com.unity.render-pipelines.core",
+      "version": "17.0.4",
+      "revision": "feb4de2d9a93a4ae10d287d3a6d7003d08ea3e53",
+      "source": "https://github.com/Unity-Technologies/Graphics/tree/feb4de2d9a93a4ae10d287d3a6d7003d08ea3e53/Packages/com.unity.render-pipelines.core",
+      "dependencies": {
+        "com.unity.burst": "1.8.20",
+        "com.unity.mathematics": "1.3.2",
+        "com.unity.ugui": "2.0.0",
+        "com.unity.collections": "2.4.3",
+        "com.unity.modules.physics": "1.0.0",
+        "com.unity.modules.terrain": "1.0.0",
+        "com.unity.modules.jsonserialize": "1.0.0",
+        "com.unity.rendering.light-transport": "1.0.1"
+      }
+    },
+    {
+      "package": "com.unity.render-pipelines.universal",
+      "version": "17.0.4",
+      "revision": "feb4de2d9a93a4ae10d287d3a6d7003d08ea3e53",
+      "source": "https://github.com/Unity-Technologies/Graphics/tree/feb4de2d9a93a4ae10d287d3a6d7003d08ea3e53/Packages/com.unity.render-pipelines.universal",
+      "dependencies": {
+        "com.unity.render-pipelines.core": "17.0.4",
+        "com.unity.shadergraph": "17.0.4",
+        "com.unity.render-pipelines.universal-config": "17.0.3"
+      }
+    },
+    {
+      "package": "com.unity.render-pipelines.high-definition",
+      "version": "17.0.4",
+      "revision": "feb4de2d9a93a4ae10d287d3a6d7003d08ea3e53",
+      "source": "https://github.com/Unity-Technologies/Graphics/tree/feb4de2d9a93a4ae10d287d3a6d7003d08ea3e53/Packages/com.unity.render-pipelines.high-definition",
+      "dependencies": {
+        "com.unity.modules.video": "1.0.0",
+        "com.unity.modules.animation": "1.0.0",
+        "com.unity.modules.imageconversion": "1.0.0",
+        "com.unity.render-pipelines.core": "17.0.4",
+        "com.unity.shadergraph": "17.0.4",
+        "com.unity.visualeffectgraph": "17.0.4",
+        "com.unity.render-pipelines.high-definition-config": "17.0.4"
+      }
+    },
+    {
+      "package": "com.unity.visualeffectgraph",
+      "version": "17.0.4",
+      "revision": "feb4de2d9a93a4ae10d287d3a6d7003d08ea3e53",
+      "source": "https://github.com/Unity-Technologies/Graphics/tree/feb4de2d9a93a4ae10d287d3a6d7003d08ea3e53/Packages/com.unity.visualeffectgraph",
+      "dependencies": {
+        "com.unity.shadergraph": "17.0.4",
+        "com.unity.render-pipelines.core": "17.0.4"
+      }
+    },
+    {
+      "package": "com.unity.shadergraph",
+      "version": "17.0.4",
+      "revision": "feb4de2d9a93a4ae10d287d3a6d7003d08ea3e53",
+      "source": "https://github.com/Unity-Technologies/Graphics/tree/feb4de2d9a93a4ae10d287d3a6d7003d08ea3e53/Packages/com.unity.shadergraph",
+      "dependencies": {
+        "com.unity.render-pipelines.core": "17.0.4",
+        "com.unity.searcher": "4.9.3"
+      }
+    }
+  ],
+  "parserWarnings": [
+    {
+      "path": "Modules/Animation/ScriptBindings/Animation.bindings.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Modules/HierarchyCore/Managed/HierarchyNodeChildren.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Modules/HierarchyCore/Managed/NativeSparseArray.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Modules/HierarchyCore/ScriptBindings/Hierarchy.bindings.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Modules/Physics/ScriptBindings/ContactModification.bindings.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Modules/Physics/ScriptBindings/Physics.bindings.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Modules/UIElements/Core/Events/EventDebugger/EventDebugger.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Modules/UIElements/Core/Layout/Model/Components/LayoutDataStore.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Modules/UIElements/Core/Layout/Native/LayoutNative.bindings.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Modules/UIElements/Core/Renderer/UIRenderer/UIRenderDevice.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Modules/UIElements/ScriptBindings/VisualNodeChildrenData.bindings.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Modules/UIElements/ScriptBindings/VisualNodeClassData.bindings.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Runtime/Export/Hashing/Hash128.bindings.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Runtime/Export/Rendering/GPUDrivenRendering.bindings.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Runtime/Export/SceneManager/SceneManager.bindings.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Runtime/Export/Scripting/AttributeHelperEngine.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Runtime/Export/Scripting/Coroutines.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Runtime/Export/Scripting/ManagedStreamHelpers.cs",
+      "package": "UnityEngine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/SpriteShapeController.cs",
+      "package": "com.unity.2d.spriteshape",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Addressables.cs",
+      "package": "com.unity.addressables",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/AddressablesImpl.cs",
+      "package": "com.unity.addressables",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/ResourceManager/ResourceProviders/AssetBundleProvider.cs",
+      "package": "com.unity.addressables",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/ResourceManager/Util/BinaryStorageBuffer.cs",
+      "package": "com.unity.addressables",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/ResourceManager/ResourceProviders/BundledAssetProvider.cs",
+      "package": "com.unity.addressables",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/ResourceProviders/ContentCatalogProvider.cs",
+      "package": "com.unity.addressables",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/ResourceManager/Util/UnityWebRequestUtilities.cs",
+      "package": "com.unity.addressables",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/NavMeshSurface.cs",
+      "package": "com.unity.ai.navigation",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Utils/BoneRenderer.cs",
+      "package": "com.unity.animation.rigging",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/PostProcessing/CinemachineAutoFocus.cs",
+      "package": "com.unity.cinemachine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Behaviours/CinemachineBrain.cs",
+      "package": "com.unity.cinemachine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Deprecated/CinemachineConfiner.cs",
+      "package": "com.unity.cinemachine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Behaviours/CinemachineGroupFraming.cs",
+      "package": "com.unity.cinemachine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Components/CinemachineThirdPersonFollow.cs",
+      "package": "com.unity.cinemachine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Helpers/CinemachineTriggerAction.cs",
+      "package": "com.unity.cinemachine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/ThirdParty/clipper.cs",
+      "package": "com.unity.cinemachine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Core/SplineSettings.cs",
+      "package": "com.unity.cinemachine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Core/UpdateTracker.cs",
+      "package": "com.unity.cinemachine",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/Android/AndroidSupport.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Controls/AxisControl.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Controls/ButtonControl.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/DualShock/DualShockGamepadHID.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/DualShock/DualShockSupport.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Devices/Precompiled/FastMouse.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Devices/Precompiled/FastMouse.partial.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Devices/Precompiled/FastTouchscreen.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/HID/HIDParser.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/HID/HIDSupport.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Events/IMECompositionEvent.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Actions/InputActionState.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/InputAnalytics.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Controls/InputControl.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Controls/InputControlExtensions.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Events/InputEventTrace.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/InputManager.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/InputSettings.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/State/InputStateBlock.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/State/InputStateBuffers.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/InputSystem.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/InputUpdateType.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Controls/IntegerControl.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/iOS/iOSSupport.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Utilities/JsonParser.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/Linux/LinuxSupport.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Utilities/MemoryHelpers.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/OnScreen/OnScreenSupport.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/OSX/OSXSupport.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/PlayerInput/PlayerInput.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/XR/Controls/PoseControl.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Controls/QuaternionControl.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Devices/Remote/RemoteInputPlayerConnection.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Utilities/SpriteUtilities.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/Steam/SteamSupport.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Utilities/StringHelpers.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/Switch/SwitchProControllerHID.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/Switch/SwitchSupportHID.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/EnhancedTouch/Touch.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Controls/TouchPhaseControl.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Devices/Touchscreen.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/UI/UISupport.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Controls/Vector2Control.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Controls/Vector3Control.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/WebGL/WebGLSupport.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/XInput/XInputSupport.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/InputSystem/Plugins/XR/XRSupport.cs",
+      "package": "com.unity.inputsystem",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Property Variants/Tracked Objects/JsonSerializerTrackedObject.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Settings/LocalizationSettings.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Localized Reference/LocalizedAsset.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Component Localizers/LocalizedAssetBehaviour.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Component Localizers/LocalizedMonoBehaviour.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Localized Reference/LocalizedString.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Localized Reference/LocalizedTable.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Localized Reference/LocalizedTable.deprecated.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Component Localizers/LocalizeStringEvent.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Component Localizers/LocalizeStringListEvent.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Smart Format/Extensions/Persistent Variables/PersistentVariables.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Utilities/SystemLanguageConverter.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Tables/TableReference.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Property Variants/Tracked Objects/TrackedMeshFilter.cs",
+      "package": "com.unity.localization",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Messaging/RpcTargets/BaseRpcTarget.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Serialization/BytePacker.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Serialization/ByteUnpacker.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Serialization/ByteUtility.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/NetworkVariable/Serialization/CollectionSerializationUtility.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/TestHelpers/Runtime/NetcodeIntegrationTest.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Core/NetworkManager.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Metrics/NetworkMetrics.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Core/NetworkObject.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Components/NetworkTransform.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/NetworkVariable/Serialization/NetworkVariableEquality.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Messaging/RpcTargets/ProxyRpcTargetGroup.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Transports/UTP/UnityTransport.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Hashing/XXHash.cs",
+      "package": "com.unity.netcode.gameobjects",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/SplineAnimate.cs",
+      "package": "com.unity.splines",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/SplineExtrude.cs",
+      "package": "com.unity.splines",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/SplineInstantiate.cs",
+      "package": "com.unity.splines",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Playables/PrefabControlPlayable.cs",
+      "package": "com.unity.timeline",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/TimelineAsset_CreateRemove.cs",
+      "package": "com.unity.timeline",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/ARFoundation/ARMeshManager.cs",
+      "package": "com.unity.xr.arfoundation",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/ARFoundation/ARSession.cs",
+      "package": "com.unity.xr.arfoundation",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/ARFoundation/ARSessionOrigin.cs",
+      "package": "com.unity.xr.arfoundation",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/ARFoundation/ARTrackedImageManager.cs",
+      "package": "com.unity.xr.arfoundation",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Simulation/Subsystems/CameraTextureProvider.cs",
+      "package": "com.unity.xr.arfoundation",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/ARSubsystems/GuidUtil.cs",
+      "package": "com.unity.xr.arfoundation",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/ARSubsystems/ImageTrackingSubsystem/MutableRuntimeReferenceImageLibrary.cs",
+      "package": "com.unity.xr.arfoundation",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Simulation/Subsystems/Plane/PlaneDiscoveryVoxelGrid.cs",
+      "package": "com.unity.xr.arfoundation",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Simulation/Subsystems/EnvironmentProbe/SimulationEnvironmentProbeDiscoverer.cs",
+      "package": "com.unity.xr.arfoundation",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Simulation/Subsystems/Plane/SimulationPlaneSubsystem.cs",
+      "package": "com.unity.xr.arfoundation",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Simulation/Subsystems/Plane/Visualizers/SimulationPlaneVisualizer.cs",
+      "package": "com.unity.xr.arfoundation",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/UnityObjectUtils.cs",
+      "package": "com.unity.xr.core-utils",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/AR/Gestures/GestureTouchesUtility.cs",
+      "package": "com.unity.xr.interaction.toolkit",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/AR/Interactables/GestureTransformationUtility.deprecated.cs",
+      "package": "com.unity.xr.interaction.toolkit",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Interaction/Interactables/XRBaseInteractable.cs",
+      "package": "com.unity.xr.interaction.toolkit",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Interaction/Controllers/XRController.cs",
+      "package": "com.unity.xr.interaction.toolkit",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Interaction/XRInteractionManager.cs",
+      "package": "com.unity.xr.interaction.toolkit",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "package/Runtime/Interaction/Interactors/XRRayInteractor.cs",
+      "package": "com.unity.xr.interaction.toolkit",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "com.unity.ugui/Runtime/TMP/TMP_InputField.cs",
+      "package": "com.unity.ugui",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "com.unity.ugui/Runtime/TMP/TextMeshPro.cs",
+      "package": "com.unity.ugui",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "com.unity.ugui/Runtime/TMP/TextMeshProUGUI.cs",
+      "package": "com.unity.ugui",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "com.unity.ugui/Runtime/UGUI/UI/Core/DefaultControls.cs",
+      "package": "com.unity.ugui",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "com.unity.ugui/Runtime/UGUI/UI/Core/Layout/AspectRatioFitter.cs",
+      "package": "com.unity.ugui",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "com.unity.ugui/Runtime/UGUI/UI/Core/Selectable.cs",
+      "package": "com.unity.ugui",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "com.unity.ugui/Runtime/UGUI/UI/Core/Toggle.cs",
+      "package": "com.unity.ugui",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/Common/ContextContainer.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/Common/CoreUnsafeUtils.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/Debugging/DebugFrameTiming.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/Debugging/DebugManager.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/Debugging/ShaderDebugPrintManager.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/GPUDriven/GPUResidentDrawer.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/GPUDriven/InstanceCullingBatcher.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/PostProcessing/LensFlareCommonSRP.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/RenderGraph/RenderGraph.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/RenderGraph/RenderGraphPass.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/RenderGraph/RenderGraphResourceRegistry.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/RenderGraph/RenderGraphUtilsBlit.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/RenderPipeline/RenderPipelineGraphicsSettingsContainer.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/Utilities/CoreUtils.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/Utilities/GPUPrefixSum/GPUPrefixSum.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/XR/XRGraphicsAutomatedTests.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/XR/XRPass.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.core/Runtime/XR/XRSystem.cs",
+      "package": "com.unity.render-pipelines.core",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/2D/Clipper.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/2D/Light2DManager.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/2D/RendererFeatures/ScriptableRenderPass2D.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/2D/Rendergraph/DrawRenderer2DPass.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/2D/Rendergraph/Renderer2DRendergraph.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/2D/Shadows/ShadowCaster2D.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/2D/UTess2D/ArraySlice.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/Data/UniversalRenderPipelineAsset.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/Decal/Entities/DecalUpdateCachedSystem.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/DeferredLights.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/FrameData/UniversalCameraData.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/MotionVectors.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/Passes/CopyDepthPass.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/Passes/DrawSkyboxPass.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/Passes/PostProcessPass.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/Passes/PostProcessPassRenderGraph.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/RenderGraph/RenderGraphGraphicsAutomatedTests.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/RenderPipelineResources/UniversalRenderPipelineDebugShaders.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/RendererFeatures/DecalRendererFeature.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/UniversalAdditionalCameraData.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/UniversalAdditionalLightData.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/UniversalRenderPipeline.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/UniversalRenderer.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/UniversalRendererData.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.universal/Runtime/UniversalRendererRenderGraph.cs",
+      "package": "com.unity.render-pipelines.universal",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/Lighting/Light/HDAdditionalLightData.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/Lighting/Light/HDGpuLightsBuilder.LightLoop.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/Lighting/Light/HDLightRenderDatabase.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/Lighting/LightLoop/LightLoop.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/Lighting/Shadow/HDShadowUtils.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/Lighting/VolumetricLighting/LocalVolumetricFog.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/Material/VTBufferManager.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/Camera/HDCamera.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/HDProfileId.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/HDRenderPipeline.LightLoop.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/HDRenderPipeline.PostProcess.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/HDRenderPipeline.Prepass.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/HDRenderPipeline.RenderGraph.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/HDRenderPipeline.SubsurfaceScattering.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/HDRenderPipeline.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/HDRenderPipelineAsset.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/HDRenderPipelineGlobalSettings.Migration.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/PathTracing/PathTracing.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/Raytracing/HDRaytracingManager.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/Settings/FrameSettingsHistory.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/Utility/HDUtils.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.render-pipelines.high-definition/Runtime/Water/Timeline/WaterSurfaceTrack.cs",
+      "package": "com.unity.render-pipelines.high-definition",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.visualeffectgraph/Runtime/Utilities/Playables/VisualEffectControl/VisualEffectControlTrack.cs",
+      "package": "com.unity.visualeffectgraph",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.visualeffectgraph/Runtime/Utilities/PropertyBinding/Implementation/VFXInputMouseBinder.cs",
+      "package": "com.unity.visualeffectgraph",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.visualeffectgraph/Runtime/Utilities/PropertyBinding/Implementation/VFXInputTouchBinder.cs",
+      "package": "com.unity.visualeffectgraph",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    },
+    {
+      "path": "Packages/com.unity.visualeffectgraph/Runtime/Utilities/PropertyBinding/Implementation/VFXVelocityBinder.cs",
+      "package": "com.unity.visualeffectgraph",
+      "reason": "parser reports syntax/preprocessor recovery; inspect linked source"
+    }
+  ],
+  "excludedCore": [
+    {
+      "name": "AudioBehaviour",
+      "base": "Behaviour",
+      "source": "Modules/Audio/Public/ScriptBindings/Audio.bindings.cs",
+      "abstract": false
+    },
+    {
+      "name": "InputSystemEventSystem",
+      "base": "MonoBehaviour",
+      "source": "Modules/UIElements/InputSystem/InputSystemEventSystem.cs",
+      "abstract": false
+    },
+    {
+      "name": "InputWrapper",
+      "base": "MonoBehaviour",
+      "source": "Modules/UIElements/InputSystem/InputWrapper.cs",
+      "abstract": false
+    },
+    {
+      "name": "MiniJSONTest",
+      "base": "MonoBehaviour",
+      "source": "External/JsonParsers/MiniJson/MiniJSON.cs",
+      "abstract": false
+    },
+    {
+      "name": "Painter2DExample",
+      "base": "MonoBehaviour",
+      "source": "Modules/UIElements/Core/Renderer/UIRPainter2D.cs",
+      "abstract": false
+    }
+  ],
+  "limits": [
+    "O ecossistema inclui pacotes e scripts arbitrários. A completude é relativa às fontes fixadas listadas.",
+    "Extrator não executa compilador C#: diretivas condicionais, obsoletos e APIs experimentais podem coexistir no inventário.",
+    "Propriedade pública não implica campo no Inspector; campo serializável candidato ainda depende de tipo suportado/custom inspector.",
+    "Não foram extraídos todos os CustomEditors/PropertyDrawers nem defaults/ranges de cada propriedade. Paridade visual/semântica por campo permanece a revisar.",
+    "As 117 páginas do núcleo foram consultadas. Pacotes foram consultados por fontes/manifestos; seu link API index não significa leitura de cada página de propriedade.",
+    "Relações tipadas não descobrem dependências dinâmicas via string/GetComponent/reflection/shader. Grafo funcional requer curadoria.",
+    "Dados de suporte incluem tipos internos e valores de execução para permitir resolver propriedades; não são comandos Add.",
+    "Pacotes adicionais/DOTS/serviços e Asset Store estão fora deste snapshot. Versões fixadas não comprovam compatibilidade conjunta."
+  ]
+}

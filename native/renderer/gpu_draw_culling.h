@@ -55,7 +55,7 @@ struct alignas(16) GpuCullDrawRecord final {
 inline constexpr u32 GpuCullRecordTestable = 1u << 0;
 inline constexpr u32 GpuCullRecordPresent = 1u << 1;
 
-// Espelho do bloco de push constants de draw_cull.comp. 112 bytes: cabe nos
+// Espelho do bloco de push constants de draw_cull.comp. 128 bytes: cabe nos
 // 128 garantidos pelo Vulkan mesmo no aparelho mais modesto do perfil C.
 struct alignas(16) GpuCullParameters final {
   float cameraPosition[3]{};
@@ -102,6 +102,10 @@ struct alignas(16) GpuCullParameters final {
   u32 maximumScannedTexels = 0;
   u32 flags = 0;
   float translationDilationScale = 0.0f;
+  float orthographicHalfWidth = 0.0f;
+  float orthographicHalfHeight = 0.0f;
+  float reservedProjection0 = 0.0f;
+  float reservedProjection1 = 0.0f;
 };
 
 // bit 0: a pirâmide desta chamada é utilizável. Zero faz o kernel escrever
@@ -109,6 +113,7 @@ struct alignas(16) GpuCullParameters final {
 // CPU aplica quando a pirâmide não é válida, sem exigir um caminho separado no
 // renderer.
 inline constexpr u32 GpuCullPyramidUsable = 1u << 0;
+inline constexpr u32 GpuCullOrthographic = 1u << 1;
 
 // Tamanho local X de draw_cull.comp. Compartilhado para que o dispatch e o
 // shader não possam divergir.

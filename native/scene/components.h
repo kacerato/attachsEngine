@@ -28,6 +28,18 @@ private:
   friend class Components;
   u64 instanceId_=0;
 };
+// Presentation is attached to persistent properties, not inspector indices.
+// Predicates are shared by UI and write validation. Hidden is not read-only:
+// scripts may configure inactive modes without changing the visible layout.
+struct PropertyPresentation {
+  std::string_view group{};
+  std::string_view unit{};
+  const char *help=nullptr;
+  bool (*visible)(const ComponentValue &)=nullptr;
+  bool (*editable)(const ComponentValue &)=nullptr;
+  bool isVisible(const ComponentValue &v) const {return !visible || visible(v);}
+  bool isEditable(const ComponentValue &v) const {return !editable || editable(v);}
+};
 struct ComponentNumber {
   const char *name;
   float minimum,maximum,dragStep;
@@ -36,12 +48,14 @@ struct ComponentNumber {
   // Persistent API identity, independent of label, layout and C++ member name.
   // Empty is reserved for legacy fields without a reflected public contract.
   std::string_view id{};
+  PropertyPresentation presentation{};
 };
 struct ComponentBoolean {
   std::string_view id;
   const char *name;
   bool (*read)(const ComponentValue &);
   void (*write)(ComponentValue &,bool);
+  PropertyPresentation presentation{};
 };
 struct ComponentEnumOption { u32 value; const char *name; };
 struct ComponentEnum {
@@ -50,6 +64,7 @@ struct ComponentEnum {
   std::span<const ComponentEnumOption> options;
   u32 (*read)(const ComponentValue &);
   void (*write)(ComponentValue &,u32);
+  PropertyPresentation presentation{};
 };
 enum class ObjectReferenceScope { Any, SelfOrAncestor, Other };
 struct ComponentObjectReference {
@@ -60,6 +75,20 @@ struct ComponentObjectReference {
   const char *nullLabel="Nenhum";
   u64 (*read)(const ComponentValue &)=nullptr;
   void (*write)(ComponentValue &,u64)=nullptr;
+  PropertyPresentation presentation{};
+  // Execution readiness is separate from authoring validity: incomplete drafts
+  // remain editable, serializable and undoable. Never infer this from visibility.
+  bool (*requiredForExecution)(const ComponentValue &)=nullptr;
+  bool isRequiredForExecution(const ComponentValue &value) const {
+    return requiredForExecution && requiredForExecution(value);
+  }
+};
+enum class ComponentTripleKind { Vector, LinearColor };
+struct ComponentTriple {
+  std::string_view id;
+  const char *name;
+  std::string_view channels[3];
+  ComponentTripleKind kind=ComponentTripleKind::Vector;
 };
 // Descriptors have static lifetime. IDs and versions are archive contracts;
 // pointer identity is only a checked, process-local type token (no RTTI).
@@ -74,6 +103,7 @@ struct ComponentType {
   bool (*migrate)(std::istream &,u32,Components &)=nullptr;
   bool allowMultiple=false;
   std::span<const ComponentObjectReference> references{};
+  std::span<const ComponentTriple> triples{};
 };
 enum class UnknownComponentPolicy { Reject, Preserve };
 // An unavailable type is authored data, never a successfully loaded behavior.

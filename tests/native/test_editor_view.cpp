@@ -1,6 +1,7 @@
 #include "editor/editor_view.h"
 #include "editor/editor_camera.h"
 #include "editor/editor_grid.h"
+#include "editor/editor_gizmo.h"
 #include "harness.h"
 
 #include <cmath>
@@ -30,6 +31,119 @@ bool nearlyEqual(float first, float second, float tolerance = 0.05f) {
 }
 
 } // namespace
+
+AE_TEST(camera_clip_selection_skips_hidden_objects_and_keeps_visible_mesh_surface) {
+  for(auto mode:{CameraProjection::Perspective,CameraProjection::Orthographic}) {
+    auto view=viewportLookingForward(800,400);
+    PerspectiveVisibilitySettings settings;settings.projection=mode;settings.nearPlane=2;settings.farPlane=10;
+    const float origin[3]{};view.frustum=buildPerspectiveFrustum(origin,0,0,2,settings);
+    auto ray=screenPointToRay(view,{400,200});
+    std::vector<EditorPickCandidate> candidates(3);
+    for(u32 i=0;i<3;++i) {candidates[i].id=i+1;candidates[i].radius=.2f;candidates[i].center[2]=i==0?1.f:i==1?5.f:12.f;}
+    AE_EXPECT_EQ(pickNearest(candidates,ray).id,2u,"clipped front object does not intercept touch");
+    candidates[1].selectable=false;
+    AE_EXPECT_TRUE(!pickNearest(candidates,ray).hit,"nothing selectable inside interval");
+    auto mesh=std::make_shared<EditorPickMesh>();
+    AE_EXPECT_TRUE(mesh->build({{-1,-1,1,1,-1,1,0,1,1},{-1,-1,6,1,-1,6,0,1,6}}),"two surfaces in one mesh");
+    candidates.resize(1);candidates[0].mesh=mesh;candidates[0].center[2]=3.5f;candidates[0].radius=4;
+    const auto hit=pickNearest(candidates,ray);
+    AE_EXPECT_TRUE(hit.hit && nearlyEqual(hit.distance,6,.001f),"visible second surface survives clipped first surface");
+    ray.maximumDistance=5;
+    AE_EXPECT_TRUE(!pickNearest(candidates,ray).hit,"triangle beyond far is rejected");
+  }
+}
+
+AE_TEST(camera_clip_selection_uses_view_depth_for_oblique_rays) {
+  auto view=viewportLookingForward(800,400);
+  const auto ray=screenPointToRay(view,{790,200});
+  AE_EXPECT_TRUE(ray.valid && ray.maximumDistance>view.frustum.farPlane,"oblique ray travel exceeds axial depth");
+  AE_EXPECT_TRUE(nearlyEqual(ray.maximumDistance*ray.direction[2],view.frustum.farPlane,.001f),"far boundary is a plane, not sphere");
+  AE_EXPECT_TRUE(nearlyEqual(ray.minimumDistance*ray.direction[2],view.frustum.nearPlane,.001f),"near boundary matches renderer");
+}
+
+AE_TEST(orthographic_projection_keeps_size_and_parallel_pick_rays) {
+  auto view=viewportLookingForward(800,400);
+  PerspectiveVisibilitySettings settings;
+  settings.projection=CameraProjection::Orthographic;settings.orthographicHalfHeight=2;
+  settings.nearPlane=.1f;settings.farPlane=100;settings.boundsScale=1;settings.boundsMargin=0;
+  const float origin[3]{};
+  view.frustum=buildPerspectiveFrustum(origin,0,0,2,settings);
+  const float nearPoint[3]{2,1,5},farPoint[3]{2,1,50};
+  const auto a=projectWorldToScreen(view,nearPoint),b=projectWorldToScreen(view,farPoint);
+  AE_EXPECT_TRUE(a.valid && b.valid,"both distances project");
+  AE_EXPECT_TRUE(nearlyEqual(a.screen.x,600)&&nearlyEqual(a.screen.y,100),"extent in scene units");
+  AE_EXPECT_TRUE(nearlyEqual(a.screen.x,b.screen.x)&&nearlyEqual(a.screen.y,b.screen.y),"distance does not change size");
+  const auto ray=screenPointToRay(view,a.screen),centre=screenPointToRay(view,{400,200});
+  AE_EXPECT_TRUE(ray.valid && centre.valid,"valid parallel rays");
+  AE_EXPECT_TRUE(nearlyEqual(ray.origin[0],2)&&nearlyEqual(ray.origin[1],1),"origin follows screen point");
+  AE_EXPECT_TRUE(nearlyEqual(ray.direction[0],centre.direction[0])&&nearlyEqual(ray.direction[2],1),"parallel direction");
+  std::vector<EditorPickCandidate> candidates(2);
+  for(u32 i=0;i<2;++i) {candidates[i].id=i+1;candidates[i].selectable=true;candidates[i].radius=.25f;
+    candidates[i].center[0]=2;candidates[i].center[1]=1;candidates[i].center[2]=i?50:5;}
+  const auto pick=pickNearest(candidates,ray);
+  AE_EXPECT_TRUE(pick.hit && pick.id==1,"parallel ray selects nearest actual object");
+}
+
+AE_TEST(orthographic_rotated_view_roundtrips_and_interpolates_ray_origins) {
+  auto view=viewportLookingForward(800,400);
+  PerspectiveVisibilitySettings settings;settings.projection=CameraProjection::Orthographic;
+  settings.orthographicHalfHeight=3;settings.roll=.6f;
+  const float position[3]{4,8,-3};view.frustum=buildPerspectiveFrustum(position,.7f,-.3f,2,settings);
+  view.surfaceTransform={0,-1,1,0};
+  const ui::UiPoint pixel{570,140};const auto ray=screenPointToRay(view,pixel);
+  float point[3];for(u32 k=0;k<3;++k) point[k]=ray.origin[k]+ray.direction[k]*20;
+  const auto projected=projectWorldToScreen(view,point);
+  AE_EXPECT_TRUE(projected.valid && nearlyEqual(projected.screen.x,pixel.x)&&nearlyEqual(projected.screen.y,pixel.y),"roll and display pre-rotation share inverse");
+  const float triangle[3][2]{{-1,-1},{3,-1},{-1,3}};
+  const auto interpolated=cameraRayIsAffineInNdc(view.frustum,view.surfaceTransform,triangle,.5f,.25f,.25f);
+  const auto direct=cameraRayFromNdc(view.frustum,view.surfaceTransform,0,0);
+  for(u32 k=0;k<3;++k) {
+    AE_EXPECT_TRUE(nearlyEqual(interpolated.originOffset[k],direct.originOffset[k]),"origins interpolate affinely");
+    AE_EXPECT_TRUE(nearlyEqual(interpolated.direction[k],direct.direction[k]),"directions remain parallel");
+  }
+}
+
+AE_TEST(orthographic_clipping_culling_and_hzb_use_box_and_linear_depth) {
+  auto view=viewportLookingForward(800,400);
+  PerspectiveVisibilitySettings settings;settings.projection=CameraProjection::Orthographic;
+  settings.orthographicHalfHeight=2;settings.nearPlane=1;settings.farPlane=101;
+  settings.boundsScale=1;settings.boundsMargin=0;const float position[3]{};
+  view.frustum=buildPerspectiveFrustum(position,0,0,2,settings);
+  const float inside[3]{0,0,51},outside[3]{5,0,90},behind[3]{0,0,110};
+  AE_EXPECT_TRUE(isSphereVisible(view.frustum,inside,.2f),"inside box");
+  AE_EXPECT_TRUE(!isSphereVisible(view.frustum,outside,.2f),"far depth does not widen box");
+  AE_EXPECT_TRUE(!isSphereVisible(view.frustum,behind,.2f),"far clipping");
+  ui::UiPoint a,b;const float left[3]{-20,0,50},right[3]{20,0,50};
+  AE_EXPECT_TRUE(projectSegmentToScreen(view,left,right,a,b),"clip crossing segment");
+  AE_EXPECT_TRUE(nearlyEqual(a.x,0)&&nearlyEqual(b.x,800),"side clipping at constant width");
+  const float otherBehind[3]{1,0,110};
+  AE_EXPECT_TRUE(!projectSegmentToScreen(view,behind,otherBehind,a,b),"reject segments beyond far");
+  const auto rect=projectBoundsToHzbScreenRect(view.frustum,inside,1,{});
+  AE_EXPECT_TRUE(rect.valid && nearlyEqual(rect.maxU-rect.minU,.25f,.001f),"orthographic screen bounds");
+  AE_EXPECT_TRUE(nearlyEqual(rect.nearDepth,.49f,.001f),"linear nearest depth");
+  AE_EXPECT_TRUE(nearlyEqual(cameraNormalizedDepth(view.frustum,51),.5f,.001f),"middle depth is half");
+  settings.orthographicHalfHeight=0;
+  AE_EXPECT_TRUE(!buildPerspectiveFrustum(position,0,0,2,settings).valid,"zero extent rejected");
+}
+
+AE_TEST(orthographic_gizmo_and_grid_scale_follow_extent_not_distance) {
+  auto view=viewportLookingForward(800,400);
+  PerspectiveVisibilitySettings settings;settings.projection=CameraProjection::Orthographic;
+  settings.orthographicHalfHeight=4;const float position[3]{0,10,0};
+  view.frustum=buildPerspectiveFrustum(position,0,.5f,2,settings);
+  const auto ray=screenPointToRay(view,{400,200});
+  float nearPoint[3],farPoint[3];
+  for(u32 k=0;k<3;++k) {nearPoint[k]=position[k]+ray.direction[k]*5;farPoint[k]=position[k]+ray.direction[k]*50;}
+  const auto nearGizmo=buildGizmoFrame(view,nearPoint,{}),farGizmo=buildGizmoFrame(view,farPoint,{});
+  AE_EXPECT_TRUE(nearGizmo.valid && farGizmo.valid,"gizmos at both depths");
+  AE_EXPECT_TRUE(nearlyEqual(nearGizmo.axisWorldLength,farGizmo.axisWorldLength,.0001f),"constant projected size");
+  const auto closeGrid=buildEditorGridPlan(view);
+  view.frustum.cameraPosition[1]=100;
+  const auto farGrid=buildEditorGridPlan(view);
+  AE_EXPECT_TRUE(closeGrid.enabled && farGrid.enabled,"grid policies valid");
+  AE_EXPECT_TRUE(nearlyEqual(closeGrid.minorSpacing,farGrid.minorSpacing,.0001f)&&
+                 nearlyEqual(closeGrid.minorOpacity,farGrid.minorOpacity,.0001f),"cell scale independent of camera altitude");
+}
 
 AE_TEST(view_projects_the_point_straight_ahead_to_the_centre) {
   const EditorViewport viewport = viewportLookingForward();

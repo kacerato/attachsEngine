@@ -49,7 +49,7 @@ enum class EditorWidget : u32 {
   ConsoleOpenSource,ConsoleCopy,ConsoleExport,ConsoleDetailClose,ConsoleDetailNext,ConsoleDetailPrevious,
   ConsoleResize,
   FileRowBase=0x66000000,
-  ConsoleRowBase=0x6F000000,
+  ConsoleRowBase=0x51000000,
   Undo=1,
   Redo,
   OpenProject,
@@ -209,7 +209,18 @@ enum class EditorWidget : u32 {
   TextureUvStepBase=0x58000000u,
   // R4: filtro do gerenciador, textura da grade e usuário da textura em Propriedades.
   TextureFilterBase=0x59000000u, TextureManagerRowBase=0x5A000000u, TextureUserBase=0x5B000000u,
+  ComponentGroupBase=0x5C000000u, ComponentVisualBase=0x5D000000u,
+  ComponentVisualsToggle=0x5E000000u, CameraView, CameraViewClose, CameraAlignView, CameraPilot,
   ComponentReferenceBase=0x7a000000u, ReferenceChoiceBase=0x7b000000u,
+  CameraLens=0x5E000010u, CameraNear, CameraFar,
+  CameraHandleBase=0x5E000020u,
+  CameraPreviewPin=0x5E000030u, CameraPreviewClose, CameraPreviewResolution, CameraPreviewFrequency, CameraPreviewRetry,
+  PresetOpen=0x5E000040u, PresetClose, PresetSave, PresetApply, PresetAdd, PresetRename, PresetDelete, PresetPrevious, PresetNext,
+  PresetChoiceBase=0x5E010000u,
+  ImpactOpenBase=0x60000000u, ImpactRowBase=0x63000000u, ImpactClose=0x64000000u, ImpactPrevious, ImpactNext, ImpactRepair, ImpactRepairApply, ImpactRepairShared, ImpactRepairScope,
+  ComponentColorBase=0x7e000000u,
+  ColorHueBase=0x5f000000u, ColorSvBase=0x5f000100u, ColorApply=0x5f000200u, ColorCancel,
+  ComponentTripleBase=0x7d000000u,
   ComponentNumberBase=0x78000000u,
   MeshChoiceBase=0x79000000u,
   ScriptAddBase=0x71000000u, ScriptFoldBase=0x72000000u, ScriptMenuBase=0x73000000u,
@@ -272,6 +283,7 @@ struct EditorScreenState final {
   const EditorFileSystem *files=nullptr;
   const EditorCodeWorkspace *code=nullptr;
   const EditorMapScene *resources=nullptr;
+  const resources::AssetRegistry *assetRegistry=nullptr;
   bool codeCompilerAvailable=false,codeBuildBusy=false;
   bool editingCode=false,creatingScript=false,searchingCode=false;
   u64 codeSearchRequest=0;
@@ -335,6 +347,13 @@ struct EditorScreenState final {
   EditorEntityId editingScriptEntity=0;
   std::string editingScriptProperty,editingScriptType;
   std::shared_ptr<const EditorComponentValue> componentClipboard;
+  bool presetPanel=false,presetNaming=false,presetRenaming=false,presetDeleteConfirm=false;
+  EditorEntityId presetEntity=0;
+  u64 presetInstance=0,presetSelected=0,presetEpoch=0,presetRevision=0;
+  u32 presetPage=0;
+  std::vector<std::pair<u64,std::string>> presetChoices;
+  std::vector<std::string> presetPreview;
+  std::string presetName;
   // Largura dos painéis em dp. Zero pede o padrão proporcional; qualquer outro
   // valor é o que o usuário arrastou e é preservado entre frames.
   float hierarchyWidth = 0.0f;
@@ -351,9 +370,34 @@ struct EditorScreenState final {
   // gizmo — que é exatamente a diferença entre um preview e um editor.
   const EditorViewport *view = nullptr;
   bool showGrid = true;
+  bool showComponentVisuals=true;
+  EditorEntityId cameraViewEntity=0;
+  EditorEntityId cameraPreviewEntity=0;
+  bool cameraPreviewReady=false,cameraPreviewFailed=false;
+  u32 cameraPreviewWidth=640,cameraPreviewHeight=360;
+  float cameraPreviewFrequency=15;
+  bool cameraPiloting=false;
+  std::string componentGroup;
   EditorNavigationMode navigation = EditorNavigationMode::Orbit;
   EditorGizmoHandle activeGizmoAxis = EditorGizmoHandle::None;
   const char *projectName = "Untitled";
+  u64 impactInstance=0;
+  EditorEntityId impactEntity=0;
+  u32 impactPage=0;
+  resources::AssetGuid impactAsset{};
+  std::vector<std::pair<resources::AssetGuid,u32>> impactTrail;
+  bool impactRepair=false;
+  bool impactRepairScene=false;
+  resources::AssetGuid impactReplacement{};
+  u64 impactRepairRevision=0;
+  u64 impactRepairEpoch=0;
+  resources::AssetGuid impactRepairMaterial{};
+  u32 impactRepairMaterialRevision=0;
+  u32 colorField=0;
+  EditorEntityId colorEntity=0;
+  u64 colorInstance=0,colorRevision=0;
+  std::string colorProperty;
+  float colorHue=0,colorSaturation=0,colorValue=1;
   u32 numericField = 0;
   u64 numericInstance=0;
   std::string numericProperty;

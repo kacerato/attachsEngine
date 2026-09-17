@@ -22,6 +22,7 @@ layout(std430, set = 0, binding = 0) readonly buffer Instances {
 layout(set = 0, binding = 1) uniform sampler2D fontAtlas;  // campo de distância, R8
 layout(set = 0, binding = 2) uniform sampler2D iconAtlas;  // RGBA8, alfa direto
 layout(set = 0, binding = 3) uniform sampler2D previewAtlas;  // R4: prévia de texturas, RGBA8
+layout(set = 0, binding = 4) uniform sampler2D cameraPreview;
 
 layout(push_constant) uniform UiPushConstants {
   vec4 surface;
@@ -108,6 +109,11 @@ void main() {
     return;
   }
 
+  if (kind == 5u) {
+    vec4 color=texture(cameraPreview,(vPixel-instance.bounds.xy)/instance.bounds.zw)*fill;
+    color.a*=coverageFromDistance(roundedBoxDistance(vPixel,instance.bounds,instance.params.x));
+    outColor=color;return;
+  }
   if (kind == UI_KIND_PREVIEW) {
     // O tamanho do atlas de prévia viaja em outputFlags.zw: ele muda quando a
     // sessão recompõe o atlas, e o push constant já tem os outros dois tamanhos.

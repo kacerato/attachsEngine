@@ -1,3 +1,5 @@
+#include "editor/editor_component_impact.h"
+#include "scene/component_properties.h"
 #include "renderer/authoring_geometry.h"
 #include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
@@ -892,7 +894,9 @@ AE_TEST(session_inspector_exposes_only_consumed_resource_controls) {
 AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   Fixture f;f.session.setSelection(f.cube);f.session.history().clear();
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
-  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)+2).x<0,"look requires camera");
+  tapWidget(f,widgetId(EditorWidget::ComponentCategory));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)+2).x>=0,"look resolves its camera dependency");
+  for(u32 category=0;category<4;++category) tapWidget(f,widgetId(EditorWidget::ComponentCategory));
   tapWidget(f,widgetId(EditorWidget::ComponentAddBase));
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))!=nullptr,"body added by catalog");
   AE_EXPECT_EQ(f.session.history().undoDepth(),1u,"single add command");
@@ -1406,4 +1410,636 @@ AE_TEST(inspector_object_card_and_actions_edit_the_selected_object_through_histo
   tapWidget(f,widgetId(EditorWidget::InspectorMenu));
   tapWidget(f,widgetId(EditorWidget::CreateChildGroup));
   AE_EXPECT_EQ(document.find(f.session.screen().selection)->parent,copy,"filho vazio criado sob o objeto selecionado");
+}
+
+AE_TEST(p01_composition_reuses_dependencies_and_undoes_the_whole_add) {
+  Fixture f;auto &d=f.session.document();
+  const auto id=f.session.history().createEntity(d,d.root(),EditorEntityKind::Folder,"Optics");
+  f.session.history().clear();
+  EditorActionRequest add;add.action=EditorAction::AddComponent;add.entity=id;
+  add.componentType=scene::CameraLook::descriptor.id;add.version=f.session.sceneVersion();
+  AE_EXPECT_TRUE(f.session.dispatch(add).status==EditorActionStatus::Applied,"add resolves camera and look");
+  AE_EXPECT_EQ(d.find(id)->components.size(),2u,"both required components published");
+  AE_EXPECT_EQ(f.session.history().undoDepth(),1u,"one authoring transaction");
+  AE_EXPECT_TRUE(f.session.history().undo(d),"undo composition");
+  AE_EXPECT_EQ(d.find(id)->components.size(),0u,"no partial dependency left");
+  AE_EXPECT_TRUE(f.session.history().redo(d),"redo composition");
+  const auto cameraId=cameraComponent(*d.find(id))->instanceId();
+  EditorActionRequest remove;remove.action=EditorAction::RemoveComponent;remove.entity=id;
+  remove.componentInstance=cameraId;remove.version=f.session.sceneVersion();
+  AE_EXPECT_TRUE(f.session.dispatch(remove).status==EditorActionStatus::InvalidValue,"used camera cannot be removed");
+  auto value=*d.find(id);editCamera(value)->verticalFov=43;
+  value.components.removeInstance(cameraLook(value)->instanceId());d.applyEntityValues(id,value);
+  add.version=f.session.sceneVersion();
+  AE_EXPECT_TRUE(f.session.dispatch(add).status==EditorActionStatus::Applied,"reuse existing camera");
+  AE_EXPECT_EQ(cameraComponent(*d.find(id))->instanceId(),cameraId,"identity preserved");
+  AE_EXPECT_EQ(cameraComponent(*d.find(id))->verticalFov,43.f,"lens not reset by dependency resolution");
+}
+
+AE_TEST(p01_removal_protects_a_typed_reference_on_another_object) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto a=h.createEntity(d,d.root(),EditorEntityKind::Folder,"A");
+  const auto b=h.createEntity(d,d.root(),EditorEntityKind::Folder,"B");
+  auto target=*d.find(a);auto *body=target.components.add(scene::PhysicsBody::descriptor);const auto bodyId=body->instanceId();
+  d.applyEntityValues(a,target);
+  auto source=*d.find(b);source.components.add(scene::PhysicsBody::descriptor);
+  auto *joint=static_cast<scene::Joint*>(source.components.add(scene::Joint::descriptor));joint->connectedBody=a;
+  d.applyEntityValues(b,source);
+  EditorActionRequest remove;remove.action=EditorAction::RemoveComponent;remove.entity=a;remove.componentInstance=bodyId;remove.version=f.session.sceneVersion();
+  AE_EXPECT_TRUE(f.session.dispatch(remove).status==EditorActionStatus::InvalidValue,"cross-object joint protects target body");
+  AE_EXPECT_TRUE(physicsBody(*d.find(a)),"body preserved");
+}
+
+AE_TEST(p03_camera_inspection_pilot_undo_and_cancel_preserve_editor_orbit) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");
+  auto value=*d.find(id);value.components.add(scene::Camera::descriptor);
+  value.transform.position[2]=-5;value.transform.rotationDegrees[2]=25;d.applyEntityValues(id,value);
+  f.session.setSelection(id);f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  const auto orbit=f.session.camera();const auto initial=d.find(id)->transform;
+  h.clear();tapWidget(f,widgetId(EditorWidget::CameraView));
+  AE_EXPECT_TRUE(std::abs(f.session.view().frustum.roll)>.4f,"authored roll reaches viewport");
+  const auto at=f.viewportCentre();const UiPoint to{at.x+30,at.y+15};
+  f.down(1,at);f.move(1,to);f.up(1,to);
+  AE_EXPECT_EQ(h.undoDepth(),0u,"inspection does not author a pose");
+  tapWidget(f,widgetId(EditorWidget::CameraPilot));
+  f.down(2,at);f.move(2,to);f.move(2,{to.x+10,to.y});f.up(2,to);f.session.update();
+  AE_EXPECT_EQ(h.undoDepth(),1u,"pilot drag is one transaction");
+  AE_EXPECT_TRUE(std::abs(d.find(id)->transform.rotationDegrees[1]-initial.rotationDegrees[1])>1.f,"pilot changes authored camera");
+  AE_EXPECT_EQ(f.session.camera().yaw,orbit.yaw,"editor orbit kept separate");
+  AE_EXPECT_TRUE(h.undo(d),"undo pilot");f.session.update();
+  AE_EXPECT_TRUE(std::abs(d.find(id)->transform.rotationDegrees[2]-25)<.01f,"roll restored");
+  f.down(3,at);f.move(3,to);f.session.handlePointer({3,UiPointerPhase::Cancel,to,0});
+  AE_EXPECT_EQ(h.undoDepth(),0u,"cancel does not create undo entry");
+  AE_EXPECT_EQ(h.redoDepth(),1u,"cancel preserves redo future");
+  AE_EXPECT_TRUE(std::abs(d.find(id)->transform.rotationDegrees[1]-initial.rotationDegrees[1])<.01f,"cancel restores pose");
+  tapWidget(f,widgetId(EditorWidget::CameraViewClose));
+  AE_EXPECT_EQ(f.session.screen().cameraViewEntity,0u,"camera view closed");
+  AE_EXPECT_EQ(f.session.camera().distance,orbit.distance,"orbit zoom restored");
+}
+
+AE_TEST(p03_orthographic_camera_migration_archive_zoom_and_play_pose) {
+  scene::Camera legacy;std::istringstream old("1 43 0.25 700 3");
+  AE_EXPECT_TRUE(legacy.read(old,1)&&legacy.valid(),"v1 camera remains readable");
+  AE_EXPECT_TRUE(legacy.projection==scene::CameraProjection::Perspective,"legacy remains perspective");
+  AE_EXPECT_EQ(legacy.verticalFov,43.f,"old lens preserved");
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Ortho");
+  auto value=*d.find(id);auto *lens=static_cast<scene::Camera*>(value.components.add(scene::Camera::descriptor));
+  lens->projection=scene::CameraProjection::Orthographic;lens->orthographicHalfHeight=4;const auto instance=lens->instanceId();
+  value.transform.position[2]=-5;value.transform.rotationDegrees[0]=31.123f;value.transform.rotationDegrees[2]=17.432f;d.applyEntityValues(id,value);
+  EditorDocument restored;
+  AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(d,0),0,restored),"v2 archive roundtrip");
+  AE_EXPECT_EQ(cameraComponent(*restored.find(id))->instanceId(),instance,"instance identity preserved");
+  AE_EXPECT_TRUE(resolveSceneCamera(restored).projection==scene::CameraProjection::Orthographic,"runtime resolves authored projection");
+  // A populated project console used to share IDs with component enums and
+  // consume their taps even while the console panel was closed.
+  const_cast<EditorScreenState&>(f.session.screen()).console=&f.session.console();
+  f.session.reportProblem(EditorConsoleSeverity::Info,"Project loaded");
+  f.session.setSelection(id);f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  tapWidget(f,widgetId(EditorWidget::ComponentEnumBase));
+  AE_EXPECT_TRUE(cameraComponent(*d.find(id))->projection==scene::CameraProjection::Perspective,"inspector switches projection");
+  tapWidget(f,widgetId(EditorWidget::ComponentEnumBase));
+  AE_EXPECT_TRUE(cameraComponent(*d.find(id))->projection==scene::CameraProjection::Orthographic,"inspector switches back");
+  tapWidget(f,widgetId(EditorWidget::CameraPilot));
+  AE_EXPECT_TRUE(renderer::isOrthographic(f.session.view().frustum),"lens reaches editor view");
+  auto &state=const_cast<EditorScreenState&>(f.session.screen());state.navigation=EditorNavigationMode::Zoom;
+  h.clear();const auto at=f.viewportCentre();const UiPoint to{at.x,at.y-35};
+  f.down(1,at);f.move(1,to);f.up(1,to);f.session.update();
+  AE_EXPECT_TRUE(cameraComponent(*d.find(id))->orthographicHalfHeight<4,"zoom changes extent");
+  AE_EXPECT_EQ(d.find(id)->transform.position[2],-5.f,"zoom does not dolly");
+  AE_EXPECT_EQ(d.find(id)->transform.rotationDegrees[0],31.123f,"lens-only zoom does not round-trip rotation");
+  AE_EXPECT_EQ(d.find(id)->transform.rotationDegrees[2],17.432f,"lens-only zoom preserves exact roll");
+  AE_EXPECT_EQ(h.undoDepth(),1u,"one gesture one history step");
+  AE_EXPECT_TRUE(h.undo(d),"undo lens zoom");
+  AE_EXPECT_EQ(cameraComponent(*d.find(id))->orthographicHalfHeight,4.f,"extent restored");
+  AE_EXPECT_TRUE(h.redo(d),"redo lens zoom");
+}
+
+AE_TEST(p03_camera_view_lens_controls_target_viewed_camera_and_validate_clip) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");
+  auto value=*d.find(id);value.components.add(scene::Camera::descriptor);d.applyEntityValues(id,value);
+  const auto other=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Other");
+  f.session.setSelection(id);f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  tapWidget(f,widgetId(EditorWidget::CameraView));f.session.setSelection(other);f.session.update();h.clear();
+  tapWidget(f,widgetId(EditorWidget::CameraLens));auto edit=f.session.pendingTextEdit();
+  AE_EXPECT_EQ(edit.entity,id,"lens targets viewed camera, not selection");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"75",true),"edit lens");f.session.update();
+  AE_EXPECT_EQ(cameraComponent(*d.find(id))->verticalFov,75.f,"authored FOV updated");
+  AE_EXPECT_EQ(f.session.screen().selection,other,"selection preserved");
+  AE_EXPECT_TRUE(h.undo(d),"lens undo");f.session.update();
+  AE_EXPECT_EQ(cameraComponent(*d.find(id))->verticalFov,60.f,"lens restored");
+  tapWidget(f,widgetId(EditorWidget::CameraFar));edit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(!f.session.completeTextEdit(edit,"0.01",true),"far before near rejected");
+  AE_EXPECT_EQ(cameraComponent(*d.find(id))->farPlane,2000.f,"invalid clip leaves scene intact");
+  f.session.completeTextEdit(edit,"",false);
+  auto changed=*d.find(id);auto *lens=editCamera(changed);lens->projection=scene::CameraProjection::Orthographic;
+  d.applyEntityValues(id,changed);f.session.update();
+  tapWidget(f,widgetId(EditorWidget::CameraLens));edit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"8",true),"edit orthographic extent");
+  AE_EXPECT_EQ(cameraComponent(*d.find(id))->orthographicHalfHeight,8.f,"extent updated");
+}
+
+AE_TEST(p03_camera_world_handles_drag_undo_cancel_and_clip_limits) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");
+  auto value=*d.find(id);auto *lens=editCamera(value);lens->nearPlane=1;lens->farPlane=8;
+  d.applyEntityValues(id,value);f.session.setSelection(id);
+  const float eye[]{6,4,-10};f.session.setCameraPose(eye,-.4f,.2f);f.session.update();
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));h.clear();
+  for(u32 kind=0;kind<3;++kind) {
+    const auto at=locateWidget(f.session,widgetId(EditorWidget::CameraHandleBase)+kind);
+    AE_EXPECT_TRUE(at.x>=0,"world handle reachable");
+    f.down(1,at);f.move(1,{at.x+25,at.y-20});f.up(1,{at.x+25,at.y-20});f.session.update();
+    AE_EXPECT_EQ(h.undoDepth(),1u,"entire handle drag is one command");
+    AE_EXPECT_TRUE(h.undo(d),"undo handle");f.session.update();
+    AE_EXPECT_EQ(cameraComponent(*d.find(id))->verticalFov,60.f,"FOV restored");
+    AE_EXPECT_EQ(cameraComponent(*d.find(id))->nearPlane,1.f,"near restored");
+    AE_EXPECT_EQ(cameraComponent(*d.find(id))->farPlane,8.f,"far restored");
+    f.down(2,at);f.move(2,{at.x+25,at.y-20});
+    f.session.handlePointer({2,UiPointerPhase::Cancel,{at.x+25,at.y-20},0});f.session.update();
+    AE_EXPECT_EQ(h.undoDepth(),0u,"cancel restores history");
+    AE_EXPECT_EQ(h.redoDepth(),1u,"cancel preserves redo");h.clear();
+  }
+  for(auto mode:{scene::CameraProjection::Perspective,scene::CameraProjection::Orthographic}) {
+    scene::Camera camera;camera.projection=mode;
+    AE_EXPECT_TRUE(applyCameraHandleDelta(camera,0,5,2),"lens manipulation valid for both projections");
+    AE_EXPECT_TRUE(mode==scene::CameraProjection::Perspective?camera.verticalFov>60:camera.orthographicHalfHeight==7,"lens changes in physical direction");
+    AE_EXPECT_TRUE(applyCameraHandleDelta(camera,1,5,100000),"near clamps below far");
+    AE_EXPECT_TRUE(applyCameraHandleDelta(camera,2,5,-100000),"far clamps above near");
+    AE_EXPECT_TRUE(camera.valid(),"ordered finite planes");
+  }
+}
+
+AE_TEST(p03_preview_view_budget_pin_schedule_and_stale_publication) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");
+  auto value=*d.find(id);auto *camera=editCamera(value);
+  camera->projection=scene::CameraProjection::Orthographic;camera->orthographicHalfHeight=3;
+  value.transform.rotationDegrees[2]=20;d.applyEntityValues(id,value);
+  const auto orbit=f.session.camera();auto &preview=f.session.cameraPreview();
+  AE_EXPECT_TRUE(!preview.pin(d,f.session.sceneVersion(),0),"must pin explicit camera");
+  AE_EXPECT_TRUE(preview.pin(d,f.session.sceneVersion(),id),"pin camera");
+  renderer::PreviewViewBudget budget;budget.maximumWidth=320;budget.maximumHeight=320;budget.maximumPixels=320*180;budget.updatesPerSecond=10;
+  AE_EXPECT_TRUE(preview.configure(1920,1080,budget),"bounded aspect preserving extent");
+  renderer::RenderViewSnapshot first,next;
+  AE_EXPECT_TRUE(!preview.request(d,f.session.sceneVersion(),0,false,false,first),"hidden preview idle");
+  AE_EXPECT_TRUE(preview.request(d,f.session.sceneVersion(),0,true,false,first),"first visible frame");
+  AE_EXPECT_EQ(first.width,320u,"width capped");AE_EXPECT_EQ(first.height,180u,"aspect retained");
+  AE_EXPECT_TRUE(renderer::isOrthographic(first.frustum),"independent projection");
+  AE_EXPECT_TRUE(std::abs(first.frustum.roll)>.3f,"full orientation retained");
+  AE_EXPECT_TRUE(!preview.request(d,f.session.sceneVersion(),1,true,false,next),"single outstanding request");
+  value=*d.find(id);value.transform.position[0]=2;d.applyEntityValues(id,value);
+  AE_EXPECT_TRUE(!preview.complete(first,f.session.sceneVersion(),true),"outdated image refused");
+  AE_EXPECT_TRUE(preview.request(d,f.session.sceneVersion(),1,true,false,next),"new revision scheduled");
+  AE_EXPECT_TRUE(!preview.complete(first,f.session.sceneVersion(),true),"old completion cannot consume new lease");
+  AE_EXPECT_TRUE(preview.complete(next,f.session.sceneVersion(),true),"matching publication accepted");
+  AE_EXPECT_TRUE(preview.hasCurrentImage(f.session.sceneVersion()),"published revision current");
+  AE_EXPECT_TRUE(!preview.request(d,f.session.sceneVersion(),2,true,false,first),"static scene costs no redraw");
+  AE_EXPECT_TRUE(preview.request(d,f.session.sceneVersion(),2,true,true,first),"animation refresh");
+  AE_EXPECT_TRUE(preview.complete(first,f.session.sceneVersion(),true),"animation published");
+  AE_EXPECT_TRUE(!preview.request(d,f.session.sceneVersion(),2.05,true,true,next),"rate capped");
+  preview.invalidateTarget();AE_EXPECT_TRUE(!preview.hasCurrentImage(f.session.sceneVersion()),"surface loss invalidates image");
+  AE_EXPECT_TRUE(preview.request(d,f.session.sceneVersion(),2.06,true,false,next),"surface recovery redraws");
+  AE_EXPECT_TRUE(!preview.complete(next,f.session.sceneVersion(),false),"backend failure cannot publish");
+  AE_EXPECT_TRUE(preview.failed(),"failure is visible to UI");
+  AE_EXPECT_TRUE(!preview.request(d,f.session.sceneVersion(),10,true,false,first),"failed backend does not retry forever");
+  preview.invalidateTarget();
+  AE_EXPECT_TRUE(preview.request(d,f.session.sceneVersion(),11,true,false,next),"explicit retry acquires new lease");
+  budget.maximumWidth=640;budget.maximumHeight=360;budget.maximumPixels=640*360;
+  AE_EXPECT_TRUE(preview.configure(640,360,budget),"resize invalidates pending lease");
+  AE_EXPECT_TRUE(!preview.complete(next,f.session.sceneVersion(),true),"old extent cannot publish");
+  AE_EXPECT_TRUE(preview.request(d,f.session.sceneVersion(),12,true,false,next),"resized image scheduled");
+  AE_EXPECT_EQ(next.width,640u,"new target width");
+  AE_EXPECT_TRUE(!preview.request(d,f.session.sceneVersion(),18,true,false,first),"lost completion times out");
+  AE_EXPECT_TRUE(preview.failed(),"timeout is actionable");
+  AE_EXPECT_TRUE(!preview.complete(next,f.session.sceneVersion(),true),"late completion cannot publish after timeout");
+  AE_EXPECT_TRUE(!preview.request(d,f.session.sceneVersion(),19,false,false,first),"hidden preview suspends");
+  AE_EXPECT_TRUE(!preview.failed(),"suspension resets failure for recovery");
+  AE_EXPECT_TRUE(preview.request(d,f.session.sceneVersion(),20,true,false,next),"returning view reacquires target");
+  preview.close();AE_EXPECT_TRUE(!preview.complete(next,f.session.sceneVersion(),true),"closed preview rejects in-flight work");
+  AE_EXPECT_EQ(f.session.camera().yaw,orbit.yaw,"main camera unchanged");
+  AE_EXPECT_EQ(f.session.camera().distance,orbit.distance,"main zoom unchanged");
+}
+
+AE_TEST(p03_preview_pin_ui_and_close_preserve_selection_and_orbit) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Preview camera");
+  auto value=*d.find(id);editCamera(value);d.applyEntityValues(id,value);
+  f.session.setSelection(id);f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  const auto orbit=f.session.camera();tapWidget(f,widgetId(EditorWidget::CameraPreviewPin));
+  AE_EXPECT_EQ(f.session.cameraPreview().camera(),id,"preview pins selected camera");
+  const auto other=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Other");
+  f.session.setSelection(other);f.session.update();
+  AE_EXPECT_EQ(f.session.screen().cameraPreviewEntity,id,"selection does not switch preview");
+  renderer::RenderViewSnapshot request;
+  AE_EXPECT_TRUE(f.session.cameraPreview().request(d,f.session.sceneVersion(),10,true,false,request),"wall clock schedules independent view");
+  AE_EXPECT_TRUE(f.session.cameraPreview().complete(request,f.session.sceneVersion(),true),"simulated backend completion");f.session.update();
+  AE_EXPECT_TRUE(f.session.screen().cameraPreviewReady,"image only exposed after completion");
+  tapWidget(f,widgetId(EditorWidget::CameraPreviewClose));
+  AE_EXPECT_EQ(f.session.cameraPreview().camera(),0u,"close releases pin");
+  AE_EXPECT_EQ(f.session.screen().selection,other,"selection preserved");
+  AE_EXPECT_EQ(f.session.camera().yaw,orbit.yaw,"orbit preserved");
+}
+
+AE_TEST(p01_composite_properties_are_atomic_and_keep_archive_contract) {
+  scene::Components values;
+  auto *joint=static_cast<scene::Joint*>(values.add(scene::Joint::descriptor));
+  joint->kind=scene::JointKind::Hinge;joint->limitMin=-90;joint->limitMax=90;
+  const auto id=joint->instanceId();
+  const float direction[3]{1,0,0},invalid[3]{0,0,0};
+  AE_EXPECT_TRUE(scene::setComponentTriple(values,"astra.physics.joint","axis_a",direction,id)==scene::ComponentPropertyStatus::Applied,"whole direction accepted");
+  AE_EXPECT_TRUE(scene::setComponentTriple(values,"astra.physics.joint","axis_a",invalid,id)==scene::ComponentPropertyStatus::InvalidValue,"zero direction rejected");
+  const auto *result=static_cast<const scene::Joint*>(values.findInstance(id));
+  AE_EXPECT_EQ(result->axisA[0],1.f,"rejection leaves previous direction intact");
+  std::stringstream archive;result->write(archive);scene::Joint loaded;
+  AE_EXPECT_TRUE(loaded.read(archive,1),"existing archive version reads composite edit");
+  AE_EXPECT_EQ(loaded.axisA[0],1.f,"archive keeps edited value");
+  values.add(scene::Joint::descriptor);
+  AE_EXPECT_TRUE(scene::setComponentTriple(values,"astra.physics.joint","axis_a",direction)==scene::ComponentPropertyStatus::AmbiguousProperty,"multiple instances require identity");
+  auto *light=values.add(scene::Light::descriptor);const auto lightId=light->instanceId();
+  const float color[3]{.25f,.5f,.75f},badColor[3]{.8f,2.f,.4f};
+  AE_EXPECT_TRUE(scene::setComponentTriple(values,"astra.render.light","color",color,lightId)==scene::ComponentPropertyStatus::Applied,"linear color accepted");
+  AE_EXPECT_TRUE(scene::setComponentTriple(values,"astra.render.light","color",badColor,lightId)==scene::ComponentPropertyStatus::InvalidValue,"existing color bounds retained");
+  AE_EXPECT_EQ(static_cast<const scene::Light*>(values.findInstance(lightId))->color[0],.25f,"invalid channel does not partially change color");
+}
+
+AE_TEST(p01_triple_editor_single_undo_invalid_input_and_cancel) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Light");
+  auto value=*d.find(id);value.components.add(scene::Light::descriptor);d.applyEntityValues(id,value);
+  f.session.setSelection(id);f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));f.session.update();h.clear();
+  tapWidget(f,widgetId(EditorWidget::ComponentTripleBase));auto edit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(edit.propertyType=="triple","composite editor request");
+  AE_EXPECT_TRUE(!f.session.completeTextEdit(edit,"0.2 2 0.4",true),"invalid channel rejects entire tuple");
+  AE_EXPECT_EQ(h.undoDepth(),0u,"rejection adds no history");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"0,2; 0,3; 0,4",true),"localized tuple accepted");
+  AE_EXPECT_EQ(h.undoDepth(),1u,"one operation for all channels");
+  const auto read=[&](){return static_cast<const scene::Light*>(d.find(id)->components.find(scene::Light::descriptor));};
+  AE_EXPECT_EQ(read()->color[0],.2f,"red applied");AE_EXPECT_EQ(read()->color[2],.4f,"blue applied");
+  AE_EXPECT_TRUE(h.undo(d),"undo composite");AE_EXPECT_EQ(read()->color[0],1.f,"red restored");AE_EXPECT_EQ(read()->color[2],1.f,"blue restored");
+  f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentTripleBase));edit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"0 0 0",false),"cancel editor");AE_EXPECT_EQ(read()->color[1],1.f,"cancel preserves green");
+}
+
+AE_TEST(p01_color_picker_stages_and_commits_one_history_entry) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Light");
+  auto entity=*d.find(id);entity.components.add(scene::Light::descriptor);d.applyEntityValues(id,entity);
+  f.session.setSelection(id);f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));f.session.update();h.clear();
+  tapWidget(f,widgetId(EditorWidget::ComponentColorBase));
+  AE_EXPECT_TRUE(f.session.screen().colorField!=0,"swatch opens picker");
+  tapWidget(f,widgetId(EditorWidget::ColorHueBase)+8);tapWidget(f,widgetId(EditorWidget::ColorSvBase)+10);
+  const auto read=[&](){return static_cast<const scene::Light*>(d.find(id)->components.find(scene::Light::descriptor));};
+  AE_EXPECT_EQ(read()->color[0],1.f,"draft leaves authored light unchanged");
+  tapWidget(f,widgetId(EditorWidget::ColorApply));AE_EXPECT_EQ(h.undoDepth(),1u,"single commit");
+  AE_EXPECT_EQ(read()->color[0],0.f,"green selection removes red");AE_EXPECT_EQ(read()->color[1],1.f,"green channel");
+  AE_EXPECT_TRUE(h.undo(d),"undo color");AE_EXPECT_EQ(read()->color[0],1.f,"white restored");
+  f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentColorBase));tapWidget(f,widgetId(EditorWidget::ColorCancel));
+  AE_EXPECT_EQ(read()->color[2],1.f,"cancel preserves blue");
+}
+
+AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");
+  auto value=*d.find(id);
+  value.components.add(scene::Camera::descriptor);value.components.add(scene::CameraLook::descriptor);d.applyEntityValues(id,value);
+  const auto *camera=d.find(id)->components.find(scene::Camera::descriptor);
+  const auto rows=componentImpact(d,id,camera->instanceId());
+  AE_EXPECT_TRUE(!rows.empty(),"camera reports look requirement");
+  AE_EXPECT_TRUE(rows[0].blocksRemoval,"required camera reports removal blocker");
+  f.session.setSelection(id);f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentMenuBase));
+  tapWidget(f,widgetId(EditorWidget::ImpactOpenBase));
+  AE_EXPECT_EQ(f.session.screen().impactInstance,camera->instanceId(),"panel pins component identity");
+  tapWidget(f,widgetId(EditorWidget::ImpactRowBase));
+  AE_EXPECT_EQ(f.session.screen().expandedNative,rows[0].instance,"navigate dependent component");
+}
+
+AE_TEST(p02_impact_typed_cross_object_reference_resolves_destination) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto body=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Body");
+  auto target=*d.find(body);auto *b=target.components.add(scene::PhysicsBody::descriptor);const auto bodyInstance=b->instanceId();
+  AE_EXPECT_TRUE(d.applyEntityValues(body,target),"body authored");
+  const auto linked=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Joint");
+  auto source=*d.find(linked);source.components.add(scene::PhysicsBody::descriptor);
+  auto *joint=static_cast<scene::Joint*>(source.components.add(scene::Joint::descriptor));joint->connectedBody=body;const auto jointInstance=joint->instanceId();
+  AE_EXPECT_TRUE(d.applyEntityValues(linked,source),"joint authored");
+  const auto outgoing=componentImpact(d,linked,jointInstance);bool found=false;
+  for(const auto &row:outgoing) if(row.object==body) {found=true;AE_EXPECT_EQ(row.instance,bodyInstance,"typed reference navigates to body");}
+  AE_EXPECT_TRUE(found,"outgoing relation exists");
+  const auto incoming=componentImpact(d,body,bodyInstance);found=false;
+  for(const auto &row:incoming) if(row.object==linked&&row.instance==jointInstance) {found=true;AE_EXPECT_TRUE(row.blocksRemoval,"typed reference blocks body removal");}
+  AE_EXPECT_TRUE(found,"reverse relationship retains source instance");
+}
+
+AE_TEST(p02_joint_execution_conditions_match_impact_and_activation) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto a=h.createEntity(d,d.root(),EditorEntityKind::Folder,"A");
+  const auto b=h.createEntity(d,d.root(),EditorEntityKind::Folder,"B");
+  auto first=*d.find(a),second=*d.find(b);
+  auto *bodyA=static_cast<scene::PhysicsBody*>(first.components.add(scene::PhysicsBody::descriptor));
+  auto *bodyB=static_cast<scene::PhysicsBody*>(second.components.add(scene::PhysicsBody::descriptor));
+  bodyA->motion=scene::BodyMotion::Static;bodyB->motion=scene::BodyMotion::Kinematic;
+  auto *joint=static_cast<scene::Joint*>(first.components.add(scene::Joint::descriptor));joint->connectedBody=b;
+  const auto instance=joint->instanceId();
+  AE_EXPECT_TRUE(d.applyEntityValues(a,first)&&d.applyEntityValues(b,second),"draft pair authored");
+  auto issues=runtime::jointRequirementIssues(d,a,*joint);
+  AE_EXPECT_EQ(issues.size(),usize(1),"static kinematic pair has one authored prerequisite failure");
+  AE_EXPECT_TRUE(issues[0].code=="joint.dynamic_body","stable diagnostic identity");
+  bool visible=false;for(const auto &row:componentImpact(d,a,instance)) if(row.relation=="Condição de execução") {
+    visible=true;AE_EXPECT_TRUE(row.invalid,"execution issue marked invalid");
+    AE_EXPECT_EQ(row.instance,bodyA->instanceId(),"repair navigation targets source body");
+  }
+  AE_EXPECT_TRUE(visible,"impact exposes runtime prerequisite");
+  bodyB->motion=scene::BodyMotion::Dynamic;AE_EXPECT_TRUE(d.applyEntityValues(b,second),"dynamic target authored");
+  AE_EXPECT_TRUE(runtime::jointRequirementIssues(d,a,*joint).empty(),"one dynamic body satisfies condition");
+  bodyB->motion=scene::BodyMotion::Static;d.applyEntityValues(b,second);
+  joint->enabled=false;
+  AE_EXPECT_TRUE(runtime::jointRequirementIssues(d,a,*joint).empty(),"disabled joint does not execute");
+  joint->enabled=true;first.active=false;d.applyEntityValues(a,first);
+  AE_EXPECT_TRUE(runtime::jointRequirementIssues(d,a,*joint).empty(),"inactive object does not execute");
+}
+
+AE_TEST(p02_conditional_reference_readiness_preserves_drafts) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Joint draft");
+  auto authored=*d.find(id);authored.components.add(scene::PhysicsBody::descriptor);
+  auto *joint=static_cast<scene::Joint*>(authored.components.add(scene::Joint::descriptor));
+  const auto instance=joint->instanceId();
+  AE_EXPECT_TRUE(d.applyEntityValues(id,authored),"active incomplete joint remains authorable");
+  AE_EXPECT_TRUE(runtime::referencesAccept(d,id,*joint),"draft validation accepts empty target");
+  AE_EXPECT_TRUE(!runtime::referencesReadyForExecution(d,id,*joint),"execution requires target");
+  bool missing=false;for(const auto &row:componentImpact(d,id,instance))
+    if(row.relation=="Requisito de execução ausente") missing=row.invalid;
+  AE_EXPECT_TRUE(missing,"impact exposes conditional missing target");
+  joint->enabled=false;
+  AE_EXPECT_TRUE(d.applyEntityValues(id,authored),"disabled draft accepted");
+  AE_EXPECT_TRUE(runtime::referencesReadyForExecution(d,id,*joint),"disabled joint has no mandatory target");
+  for(const auto &row:componentImpact(d,id,instance)) AE_EXPECT_TRUE(!row.invalid,"disabled draft has no missing reference warning");
+  const auto destination=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Anchor");
+  auto anchor=*d.find(destination);anchor.components.add(scene::PhysicsBody::descriptor);
+  AE_EXPECT_TRUE(d.applyEntityValues(destination,anchor),"target body authored");
+  joint->enabled=true;joint->connectedBody=destination;
+  AE_EXPECT_TRUE(runtime::referencesReadyForExecution(d,id,*joint),"compatible active target ready");
+  anchor.active=false;AE_EXPECT_TRUE(d.applyEntityValues(destination,anchor),"target deactivated");
+  AE_EXPECT_EQ(runtime::referenceReadiness(d,id,*joint,scene::jointReferences[0]),runtime::ReferenceReadiness::Inactive,"inactive target blocks execution readiness");
+  joint->connectedBody=id;
+  AE_EXPECT_EQ(runtime::referenceReadiness(d,id,*joint,scene::jointReferences[0]),runtime::ReferenceReadiness::Incompatible,"self target stays invalid");
+}
+
+AE_TEST(p02_impact_keeps_optional_empty_references_nonblocking) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Collider");
+  auto value=*d.find(id);const auto *collider=value.components.add(scene::Collider::descriptor);const auto instance=collider->instanceId();
+  AE_EXPECT_TRUE(d.applyEntityValues(id,value),"standalone collider authored");
+  const auto rows=componentImpact(d,id,instance);
+  AE_EXPECT_TRUE(!rows.empty(),"owner field is documented");
+  bool missingBody=false;
+  for(const auto &row:rows) {
+    AE_EXPECT_TRUE(!row.blocksRemoval,"null owner is not a removal dependency");
+    if(row.relation=="Referência vazia") AE_EXPECT_TRUE(!row.invalid,"null reference remains an authorable draft");
+    if(row.relation=="Condição de execução") missingBody|=row.invalid;
+  }
+  AE_EXPECT_TRUE(missingBody,"execution still needs the implicit owner body");
+  AE_EXPECT_TRUE(!scene::componentInstanceRemovalBlockedBy(instance,d.find(id)->components),"schema agrees with panel");
+  AE_EXPECT_TRUE(!runtime::componentRemovalReferenceUse(d,id,instance).object,"reference resolver agrees with panel");
+}
+
+AE_TEST(p02_physics_impact_resolves_shapes_and_matches_runtime_scale_rules) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Body");
+  auto authored=*d.find(id);
+  auto *body=authored.components.add(scene::PhysicsBody::descriptor);
+  const auto instance=body->instanceId();d.applyEntityValues(id,authored);
+  auto rows=physicsComponentImpact(d,id,*body);
+  AE_EXPECT_EQ(rows.size(),usize(1),"body missing all shapes reported");
+  auto *collider=static_cast<scene::Collider*>(authored.components.add(scene::Collider::descriptor));
+  collider->shape=scene::ColliderShape::Sphere;authored.transform.scale[0]=2;
+  d.applyEntityValues(id,authored);
+  rows=physicsComponentImpact(d,id,*body);bool shape=false,invalid=false;
+  for(const auto &row:rows) {shape|=row.relation=="Forma vinculada";invalid|=row.invalid;}
+  AE_EXPECT_TRUE(shape&&invalid,"linked sphere reports nonuniform scale before execution");
+  collider->shape=scene::ColliderShape::Box;d.applyEntityValues(id,authored);
+  rows=physicsComponentImpact(d,id,*body);
+  for(const auto &row:rows) AE_EXPECT_TRUE(!row.invalid,"unrotated box accepts nonuniform scale");
+  collider->rotationZ=45;d.applyEntityValues(id,authored);
+  rows=physicsComponentImpact(d,id,*body);invalid=false;
+  for(const auto &row:rows) invalid|=row.invalid;
+  AE_EXPECT_TRUE(invalid,"rotated box under nonuniform scale reports shear");
+  collider->enabled=false;d.applyEntityValues(id,authored);
+  AE_EXPECT_TRUE(physicsComponentImpact(d,id,*collider).empty(),"disabled shape skips execution diagnostics");
+  rows=physicsComponentImpact(d,id,*body);
+  AE_EXPECT_TRUE(rows.size()==1&&rows[0].invalid,"disabled shape cannot satisfy body requirement");
+  AE_EXPECT_EQ(d.find(id)->components.find(scene::PhysicsBody::descriptor)->instanceId(),instance,"query preserves identities");
+}
+
+AE_TEST(p02_component_presets_persist_preview_apply_and_undo_without_copying_references) {
+  namespace fs=std::filesystem;
+  const auto root=fs::temp_directory_path()/("astra-presets-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  fs::create_directories(root);Fixture f;AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"project opened");
+  auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Collider preset");
+  auto authored=*d.find(id);authored.components.add(scene::PhysicsBody::descriptor);
+  auto *collider=static_cast<scene::Collider*>(authored.components.add(scene::Collider::descriptor));
+  collider->shape=scene::ColliderShape::Sphere;collider->radius=3;collider->owner=id;const auto instance=collider->instanceId();
+  AE_EXPECT_TRUE(d.applyEntityValues(id,authored),"source values authored");
+  f.session.setSelection(id);f.session.update();
+  AE_EXPECT_TRUE(f.session.openComponentPresets(id,instance),"preset panel opened");f.session.update();
+  tapWidget(f,widgetId(EditorWidget::PresetSave));const auto request=f.session.pendingTextEdit();
+  AE_EXPECT_EQ(request.purpose,EditorTextPurpose::ComponentPresetName,"platform name request");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(request,"Esfera grande",true),"preset persisted through UI flow");
+  AE_EXPECT_EQ(f.session.screen().presetChoices.size(),usize(1),"compatible choice listed");
+  const auto preset=f.session.screen().presetChoices[0].first;
+  EditorComponentPresets reloaded;std::string error;AE_EXPECT_TRUE(reloaded.load(root.string(),error),"library reopened");
+  auto copy=reloaded.instantiate(preset,error);
+  AE_EXPECT_EQ(static_cast<scene::Collider*>(copy.get())->owner,u64(0),"stored preset has no scene identity");
+  collider->radius=1;collider->owner=0;d.applyEntityValues(id,authored);
+  AE_EXPECT_TRUE(f.session.openComponentPresets(id,instance),"reopen refreshes preview version");f.session.update();
+  const auto revision=d.revision();tapWidget(f,widgetId(EditorWidget::PresetChoiceBase));
+  AE_EXPECT_EQ(d.revision(),revision,"selecting preset only previews");
+  AE_EXPECT_TRUE(!f.session.screen().presetPreview.empty(),"preview generated");
+  tapWidget(f,widgetId(EditorWidget::PresetApply));
+  const auto *applied=static_cast<const scene::Collider*>(d.find(id)->components.findInstance(instance));
+  AE_EXPECT_EQ(applied->radius,3.f,"saved radius applied");AE_EXPECT_EQ(applied->owner,u64(0),"destination reference preserved");
+  AE_EXPECT_TRUE(h.undo(d),"preset has one undo");
+  AE_EXPECT_EQ(static_cast<const scene::Collider*>(d.find(id)->components.findInstance(instance))->radius,1.f,"undo restores destination values");
+  const auto before=d.find(id)->components.size();
+  AE_EXPECT_TRUE(f.session.applyComponentPreset(preset,id,instance,f.session.sceneVersion(),true,error),"new instance applied transactionally");
+  AE_EXPECT_EQ(d.find(id)->components.size(),before+1,"new instance added");
+  AE_EXPECT_TRUE(h.undo(d),"new instance undone");AE_EXPECT_EQ(d.find(id)->components.size(),before,"undo removes added instance");
+  auto stale=f.session.sceneVersion();h.createEntity(d,d.root(),EditorEntityKind::Folder,"Concurrent");
+  AE_EXPECT_TRUE(!f.session.applyComponentPreset(preset,id,instance,stale,false,error),"stale preview rejected");
+  // A preset can originate in a component menu and be added to an empty object;
+  // its required components belong to the same undo operation.
+  const auto cameraObject=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera preset");
+  auto camera=*d.find(cameraObject);camera.components.add(scene::Camera::descriptor);
+  auto *look=camera.components.add(scene::CameraLook::descriptor);const auto lookId=look->instanceId();
+  d.applyEntityValues(cameraObject,camera);
+  AE_EXPECT_TRUE(f.session.openComponentPresets(cameraObject,lookId),"camera preset source opened");
+  AE_EXPECT_TRUE(f.session.saveComponentPreset(cameraObject,lookId,"Olhar reutilizável",error),"look preset saved");
+  const auto empty=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Empty");
+  f.session.setSelection(empty);
+  AE_EXPECT_TRUE(f.session.openComponentPresets(empty,0),"all presets available on empty object");
+  const auto lookPreset=f.session.screen().presetChoices.back().first;
+  AE_EXPECT_TRUE(f.session.applyComponentPreset(lookPreset,empty,0,f.session.sceneVersion(),true,error),"add resolves camera dependency");
+  AE_EXPECT_EQ(d.find(empty)->components.size(),usize(2),"camera and look added together");
+  AE_EXPECT_TRUE(h.undo(d),"composition preset undo");AE_EXPECT_EQ(d.find(empty)->components.size(),usize(0),"both additions undone");
+  AE_EXPECT_TRUE(reloaded.load(root.string(),error),"refresh independent library before external rename");
+  AE_EXPECT_TRUE(reloaded.rename(preset,"Esfera renomeada",error),"rename persisted");
+  AE_EXPECT_TRUE(!f.session.saveComponentPreset(id,instance,"Concurrent save",error),"external library edit cannot be overwritten");
+  AE_EXPECT_TRUE(reloaded.erase(preset,error),"delete persisted");
+  AE_EXPECT_TRUE(reloaded.load(root.string(),error)&&reloaded.entries.size()==1,"deletion preserves unrelated preset");
+  auto meshObject=*d.find(f.cube);auto *mesh=static_cast<scene::MeshRenderer*>(meshObject.components.edit(scene::MeshRenderer::descriptor));
+  const auto meshInstance=mesh->instanceId();mesh->mesh=1;mesh->asset={};d.applyEntityValues(f.cube,meshObject);
+  AE_EXPECT_TRUE(f.session.openComponentPresets(f.cube,meshInstance),"mesh preset source");
+  AE_EXPECT_TRUE(f.session.saveComponentPreset(f.cube,meshInstance,"Mesh slot one",error),"legacy one-based mesh resolves persistent identity");
+  AE_EXPECT_TRUE(f.session.openComponentPresets(f.cube,meshInstance),"mesh choices refreshed");
+  const auto meshPreset=f.session.screen().presetChoices.back().first;
+  AE_EXPECT_TRUE(f.session.applyComponentPreset(meshPreset,f.cube,meshInstance,f.session.sceneVersion(),false,error),"mesh preset applied");
+  const auto *resolved=meshRenderer(*d.find(f.cube));
+  AE_EXPECT_EQ(resolved->mesh,1u,"resolved mesh index remains one based");
+  AE_EXPECT_TRUE(resolved->asset==f.session.screen().resources->assetGuid(0),"persistent geometry identity preserved");
+  std::error_code ec;fs::remove_all(root,ec);
+}
+
+AE_TEST(p02_impact_resources_use_persistent_ids_and_ignore_inheritance) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto first=h.createEntity(d,d.root(),EditorEntityKind::Folder,"First");
+  auto a=*d.find(first);auto *mesh=static_cast<scene::MeshRenderer*>(a.components.add(scene::MeshRenderer::descriptor));
+  const auto instance=mesh->instanceId();mesh->asset={10,20};mesh->materialAsset={30,40};mesh->textures[0]=scene::MaterialTextureNone;
+  scene::MeshSubmesh sub;sub.asset={50,60};sub.textures[2]={70,80};mesh->submeshes.push_back(sub);
+  AE_EXPECT_EQ(componentResources(*mesh).size(),4u,"collect mesh material submesh explicit texture only");
+  AE_EXPECT_TRUE(d.applyEntityValues(first,a),"first authored");
+  const auto second=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Second");
+  auto b=*d.find(second);auto *other=static_cast<scene::MeshRenderer*>(b.components.add(scene::MeshRenderer::descriptor));
+  const auto otherInstance=other->instanceId();other->materialAsset={30,40};
+  AE_EXPECT_TRUE(d.applyEntityValues(second,b),"second authored");
+  auto rows=componentImpact(d,first,instance);u32 shared=0;
+  for(const auto &row:rows) if(row.object==second&&row.instance==otherInstance) {++shared;AE_EXPECT_TRUE(!row.blocksRemoval,"shared asset does not block component removal");}
+  AE_EXPECT_EQ(shared,1u,"shared persistent material locates user");
+  b=*d.find(second);static_cast<scene::MeshRenderer*>(b.components.editInstance(otherInstance))->materialAsset={90,100};
+  AE_EXPECT_TRUE(d.applyEntityValues(second,b),"binding changed");
+  rows=componentImpact(d,first,instance);shared=0;for(const auto &row:rows) if(row.object==second) ++shared;
+  AE_EXPECT_EQ(shared,0u,"query refreshes after changing binding");
+}
+
+AE_TEST(p02_scene_repair_is_atomic_across_consumers_and_rejects_mixed_types) {
+  Fixture f;auto &s=f.session;auto &d=s.document();auto &h=s.history();
+  const resources::AssetGuid missing{700,800};const auto replacement=s.screen().resources->assetGuid(0);
+  resources::AssetRegistry registry;resources::AssetRecord record;record.guid=replacement;record.type=resources::AssetType::Mesh;record.path="Meshes/target.mesh";
+  AE_EXPECT_TRUE(registry.add(record)&&s.loadAssets(registry.serialize()),"mesh target available");
+  auto value=*d.find(f.cube);editMeshRenderer(value)->asset=missing;AE_EXPECT_TRUE(d.applyEntityValues(f.cube,value),"first binding");
+  const auto second=h.duplicateEntity(d,f.cube);value=*d.find(second);editMeshRenderer(value)->textures[0]=missing;
+  AE_EXPECT_TRUE(d.applyEntityValues(second,value),"corrupt mixed-type consumer");
+  std::string diagnostic;const auto depth=h.undoDepth();
+  AE_EXPECT_TRUE(!s.repairSceneResource(missing,replacement,s.sceneVersion(),diagnostic),"mixed types reject whole transaction");
+  AE_EXPECT_TRUE(meshRenderer(*d.find(f.cube))->asset==missing,"no partial first-object repair");
+  AE_EXPECT_EQ(h.undoDepth(),depth,"failed preparation preserves undo");
+  value=*d.find(second);editMeshRenderer(value)->textures[0]={};AE_EXPECT_TRUE(d.applyEntityValues(second,value),"remove corrupt fixture binding");
+  AE_EXPECT_TRUE(s.repairSceneResource(missing,replacement,s.sceneVersion(),diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(meshRenderer(*d.find(f.cube))->asset==replacement&&meshRenderer(*d.find(second))->asset==replacement,"all consumers updated");
+  AE_EXPECT_EQ(h.undoDepth(),depth+1,"one scene-wide transaction");
+  AE_EXPECT_TRUE(h.undo(d),"one undo");
+  AE_EXPECT_TRUE(meshRenderer(*d.find(f.cube))->asset==missing&&meshRenderer(*d.find(second))->asset==missing,"both consumers restored");
+  AE_EXPECT_TRUE(s.loadAssets(resources::AssetRegistry{}.serialize()),"empty project registry");
+  AE_EXPECT_TRUE(s.repairSceneResource(missing,replacement,s.sceneVersion(),diagnostic),"loaded package identities remain valid repair candidates");
+}
+
+AE_TEST(p02_resource_repair_previews_multiple_slots_and_undoes_atomically) {
+  Fixture f;auto &session=f.session;auto &d=session.document();auto &h=session.history();
+  const resources::AssetGuid missing{900,901};const auto target=session.screen().resources->assetGuid(0);
+  resources::AssetRegistry registry;resources::AssetRecord record;record.guid=target;record.type=resources::AssetType::Mesh;record.path="Meshes/replacement.mesh";
+  AE_EXPECT_TRUE(registry.add(record)&&session.loadAssets(registry.serialize()),"available mesh registered");
+  auto value=*d.find(f.cube);auto *mesh=editMeshRenderer(value);const auto instance=mesh->instanceId();mesh->asset=missing;mesh->mesh=0;
+  mesh->material.enabled=true;mesh->material.roughness=.37f;
+  scene::MeshSubmesh sub;sub.asset=missing;sub.textures[0]={88,99};mesh->submeshes.push_back(sub);
+  AE_EXPECT_TRUE(d.applyEntityValues(f.cube,value),"missing references authored");
+  session.setSelection(f.cube);session.update();tapWidget(f,widgetId(EditorWidget::ComponentMenuBase));tapWidget(f,widgetId(EditorWidget::ImpactOpenBase));
+  tapWidget(f,widgetId(EditorWidget::ImpactRowBase));tapWidget(f,widgetId(EditorWidget::ImpactRepair));
+  tapWidget(f,widgetId(EditorWidget::ImpactRowBase));
+  AE_EXPECT_TRUE(session.screen().impactReplacement==target,"candidate staged");
+  AE_EXPECT_TRUE(meshRenderer(*d.find(f.cube))->asset==missing,"preview never mutates");
+  const auto depth=h.undoDepth();tapWidget(f,widgetId(EditorWidget::ImpactRepairApply));
+  const auto *updated=meshRenderer(*d.find(f.cube));
+  AE_EXPECT_TRUE(updated->slotAsset(0)==target&&updated->slotAsset(1)==target,"both explicit mesh uses replaced");
+  AE_EXPECT_EQ(updated->slotMesh(1),1u,"package index resolved");
+  AE_EXPECT_EQ(updated->material.roughness,.37f,"material override preserved");
+  AE_EXPECT_TRUE(updated->submeshes[0].textures[0]==resources::AssetGuid({88,99}),"texture preserved");
+  AE_EXPECT_EQ(h.undoDepth(),depth+1,"one undo for all slots");
+  AE_EXPECT_TRUE(h.undo(d),"undo repair");
+  AE_EXPECT_TRUE(meshRenderer(*d.find(f.cube))->slotAsset(1)==missing,"undo restores missing identity");
+  const auto stale=session.sceneVersion();AE_EXPECT_TRUE(h.redo(d),"redo repair");std::string diagnostic;
+  AE_EXPECT_TRUE(!session.repairComponentResource(f.cube,instance,missing,target,stale,diagnostic),"stale preview rejected");
+}
+
+AE_TEST(p02_resource_panel_opens_and_returns_without_mutation) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Resource user");
+  auto value=*d.find(id);auto *mesh=static_cast<scene::MeshRenderer*>(value.components.add(scene::MeshRenderer::descriptor));
+  const auto instance=mesh->instanceId();const resources::AssetGuid asset{111,222};mesh->materialAsset=asset;
+  AE_EXPECT_TRUE(d.applyEntityValues(id,value),"binding authored");
+  f.session.setSelection(id);f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentMenuBase));
+  tapWidget(f,widgetId(EditorWidget::ImpactOpenBase));
+  tapWidget(f,widgetId(EditorWidget::ImpactRowBase));
+  AE_EXPECT_TRUE(f.session.screen().impactAsset==asset,"missing resource also opens details");
+  AE_EXPECT_EQ(f.session.screen().impactTrail.size(),1u,"origin retained");
+  tapWidget(f,widgetId(EditorWidget::ImpactClose));
+  AE_EXPECT_TRUE(!f.session.screen().impactAsset.valid(),"back returns to component relations");
+  AE_EXPECT_EQ(f.session.screen().impactInstance,instance,"component identity retained");
+  AE_EXPECT_TRUE(static_cast<const scene::MeshRenderer*>(d.find(id)->components.findInstance(instance))->materialAsset==asset,"query preserves binding");
+  tapWidget(f,widgetId(EditorWidget::ImpactClose));
+  AE_EXPECT_EQ(f.session.screen().impactInstance,0u,"second back closes panel");
+}
+
+AE_TEST(p02_resource_details_preserve_registry_edge_directions) {
+  EditorDocument document;resources::AssetRegistry registry;
+  const resources::AssetGuid texture{1,2},material{3,4};
+  resources::AssetRecord record;record.guid=texture;record.type=resources::AssetType::Texture;record.path="Textures/base.png";
+  AE_EXPECT_TRUE(registry.add(record),"texture registered");
+  record.guid=material;record.type=resources::AssetType::Material;record.path="Materials/shared.material";record.dependencies={texture};
+  AE_EXPECT_TRUE(registry.add(record),"material depends on texture");
+  auto rows=resourceImpact(document,material,&registry,nullptr);bool direct=false;
+  for(const auto &row:rows) if(row.asset==texture) direct=row.relation=="Depende de · registro";
+  AE_EXPECT_TRUE(direct,"dependency navigable by GUID");
+  rows=resourceImpact(document,texture,&registry,nullptr);bool reverse=false;
+  for(const auto &row:rows) if(row.asset==material) reverse=row.relation=="Usado por · registro";
+  AE_EXPECT_TRUE(reverse,"reverse dependency retains direction");
+}
+
+AE_TEST(p02_impact_resolves_material_inheritance_and_registry_diagnostics) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const resources::AssetGuid material{11,22},texture{33,44},wrong{55,66};
+  resources::AssetRegistry registry;
+  resources::AssetRecord record;record.guid=material;record.type=resources::AssetType::Material;record.path="Materiais/shared.material";
+  AE_EXPECT_TRUE(registry.add(record),"material registered");
+  record.guid=texture;record.type=resources::AssetType::Texture;record.path="Texturas/base.png";
+  AE_EXPECT_TRUE(registry.add(record),"texture registered");
+  record.guid=wrong;record.type=resources::AssetType::Mesh;record.path="Malhas/wrong.mesh";
+  AE_EXPECT_TRUE(registry.add(record),"wrong typed resource registered");
+  EditorMapScene library;EditorMapScene::SharedMaterial shared;shared.textures[0]=texture;
+  library.setMaterialLibrary({{material,shared}});
+  const auto first=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Inherited");
+  auto a=*d.find(first);auto *mesh=static_cast<scene::MeshRenderer*>(a.components.add(scene::MeshRenderer::descriptor));
+  const auto instance=mesh->instanceId();mesh->materialAsset=material;mesh->textures[1]=wrong;mesh->textures[3]={77,88};
+  AE_EXPECT_TRUE(d.applyEntityValues(first,a),"author bindings");
+  const auto second=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Explicit");
+  auto b=*d.find(second);auto *other=static_cast<scene::MeshRenderer*>(b.components.add(scene::MeshRenderer::descriptor));other->textures[0]=texture;
+  AE_EXPECT_TRUE(d.applyEntityValues(second,b),"author explicit consumer");
+  auto rows=componentImpact(d,first,instance,&registry,&library);
+  bool inherited=false,badType=false,missing=false,consumer=false;
+  for(const auto &row:rows) {
+    if(row.detail=="Texturas/base.png") {inherited=row.relation.find("herdada")!=std::string::npos;AE_EXPECT_TRUE(!row.invalid,"registered inherited texture resolves");}
+    if(row.detail=="Malhas/wrong.mesh") badType=row.invalid&&row.relation.find("tipo incompatível")!=std::string::npos;
+    if(row.detail==resources::AssetGuid{77,88}.text()) missing=row.invalid&&row.relation.find("não registrado")!=std::string::npos;
+    if(row.object==second) consumer=true;
+  }
+  AE_EXPECT_TRUE(inherited&&badType&&missing&&consumer,"inheritance status and reverse consumer resolved");
+  a=*d.find(first);static_cast<scene::MeshRenderer*>(a.components.editInstance(instance))->textures[0]=scene::MaterialTextureNone;
+  AE_EXPECT_TRUE(d.applyEntityValues(first,a),"explicit none overrides shared texture");
+  rows=componentImpact(d,first,instance,&registry,&library);
+  for(const auto &row:rows) {AE_EXPECT_TRUE(row.object!=second,"disabled texture no longer links consumer");AE_EXPECT_TRUE(row.detail!="Texturas/base.png","none suppresses inherited binding");}
+  library.setMaterialLibrary({});rows=componentImpact(d,first,instance,&registry,&library);
+  bool unloaded=false;for(const auto &row:rows) if(row.detail=="Materiais/shared.material") unloaded=row.invalid&&row.relation.find("não carregado")!=std::string::npos;
+  AE_EXPECT_TRUE(unloaded,"registered material without loaded library is not falsely resolved");
 }

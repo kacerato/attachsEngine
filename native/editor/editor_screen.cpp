@@ -1,3 +1,5 @@
+#include "editor/editor_component_impact.h"
+#include "editor/editor_color_picker.h"
 #include <sstream>
 #include "scene/script_behavior.h"
 #include "editor/editor_water_body_component.h"
@@ -13,6 +15,8 @@
 #include "editor/editor_component_catalog.h"
 #include "editor/editor_grid.h"
 #include "editor/editor_collider_geometry.h"
+#include "editor/editor_component_visuals.h"
+#include "editor/editor_camera_handles.h"
 #include "editor/editor_import_reconcile.h"
 #include <bit>
 
@@ -116,7 +120,7 @@ struct ScreenBuilder final {
     router.addRegion(bounds, widget, theme.touch.minimumTarget);
   }
 
-  void toggle(const UiRect &area, bool on, u32 widget) {
+  void toggle(const UiRect &area, bool on, u32 widget, bool editable=true) {
     const UiRect bounds{area.right() - kToggleWidth, area.y + (area.height - kToggleHeight) * 0.5f,
                         kToggleWidth, kToggleHeight};
     list.addRect(bounds, on ? withAlpha(theme.color.accent, 0.28f) : theme.color.line,
@@ -125,7 +129,7 @@ struct ScreenBuilder final {
     const float knobX = on ? bounds.right() - knob - 2.5f : bounds.x + 2.5f;
     list.addRect({knobX, bounds.y + 2.5f, knob, knob}, on ? theme.color.accent : theme.color.track,
                  knob * 0.5f);
-    router.addRegion(bounds, widget, theme.touch.minimumTarget);
+    if(editable) router.addRegion(bounds, widget, theme.touch.minimumTarget);
   }
 
   void label(const UiRect &bounds, std::string_view text, UiColor colour,
@@ -249,10 +253,36 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
   // renderer/grid_plan.h e editor/editor_grid.h. Aqui ficam só as ferramentas
   // e o HUD, que são coisas diferentes de "desenho no mundo".
 
-  buildPhysicsOverlay(builder);
+  if(state.workspace==EditorWorkspace::Scene && state.showComponentVisuals && !state.cameraViewEntity) {
+    const float aspect=state.view->frustum.tangentHalfHorizontal/state.view->frustum.tangentHalfVertical;
+    const auto visuals=collectComponentVisuals(*state.document,state.selection,aspect);
+    for(const auto &v:visuals) {
+      const auto color=v.enabled?theme.color.accent:theme.color.textMuted;
+      for(const auto &line:v.segments) {
+        UiPoint a,b;if(projectSegmentToScreen(*state.view,line.a,line.b,a,b)) builder.list.addLine(a,b,color,1.3f);
+      }
+      if(!v.marker) continue;
+      const auto p=projectWorldToScreen(*state.view,v.origin);
+      if(!p.valid || !viewport.contains(p.screen)) continue;
+      const UiRect icon{p.screen.x-14+v.markerIndex*32.f,p.screen.y-14,28,28};
+      if(v.markerIndex) builder.list.addLine(p.screen,{icon.x+14,icon.y+14},theme.color.textMuted,1);
+      builder.list.addRect(icon,withAlpha(theme.color.surface,.9f),8);
+      builder.list.addImage(deflate(icon,UiInsets::all(3)),static_cast<UiImageId>(v.icon),v.enabled?0xffffffff:theme.color.textMuted);
+      if(v.entity<0x01000000u) builder.router.addRegion(icon,widgetId(EditorWidget::ComponentVisualBase)+v.entity,32);
+    }
+  }
+  // Collider outlines now share the component visual registry. Joint anchors
+  // retain their specialized connection view until that provider is migrated.
+  const auto *selectedVisual=state.document->find(state.selection);
+  const auto *expandedVisual=selectedVisual?selectedVisual->components.findInstance(state.expandedNative):nullptr;
+  if(state.showComponentVisuals && !state.cameraViewEntity && expandedVisual && &expandedVisual->type()==&scene::Joint::descriptor) buildPhysicsOverlay(builder);
+  if(state.workspace==EditorWorkspace::Scene) {
+    const UiRect controls{viewport.right()-42,viewport.y+8,34,34};
+    builder.iconButton(controls,UiIcon::EditorAuthorCamera,widgetId(state.cameraViewEntity?EditorWidget::CameraViewClose:EditorWidget::ComponentVisualsToggle),state.cameraViewEntity || state.showComponentVisuals);
+  }
   const EditorEntity *entity = state.document->find(state.selection);
   if (entity != nullptr && state.tool != EditorGizmoMode::Select &&
-      state.workspace == EditorWorkspace::Scene && !(waterRoute(*entity).count && state.waterTab==1)) {
+      state.workspace == EditorWorkspace::Scene && !state.cameraViewEntity && !(waterRoute(*entity).count && state.waterTab==1)) {
     EditorGizmoSettings settings{};
     settings.screenLengthPixels = 72.0f;
     float world[16];
@@ -323,6 +353,24 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
       }
       builder.list.addRect({frame.originScreen.x - 4.0f, frame.originScreen.y - 4.0f, 8.0f, 8.0f},
                            theme.color.text, 4.0f);
+    }
+  }
+  if(entity && state.showComponentVisuals && !state.cameraViewEntity &&
+     state.workspace==EditorWorkspace::Scene && expandedVisual &&
+     &expandedVisual->type()==&scene::Camera::descriptor) {
+    const char *labels[]{"Lente","Próximo","Distante"};
+    for(u32 kind=0;kind<3;++kind) {
+      EditorCameraHandle handle;
+      if(!cameraHandleGeometry(*state.document,entity->id,kind,handle)) continue;
+      const auto p=projectWorldToScreen(*state.view,handle.point);float parameter;
+      if(!p.valid || !viewport.contains(p.screen) ||
+         !cameraHandleRayParameter(*state.view,handle,p.screen,parameter)) continue;
+      const UiRect target{p.screen.x-18,p.screen.y-18,36,36};
+      if(!viewport.contains({target.x,target.y}) || !viewport.contains({target.right(),target.bottom()})) continue;
+      builder.list.addRect(target,theme.color.surface,theme.radius.control);
+      builder.list.addRect({p.screen.x-6,p.screen.y-6,12,12},theme.color.accent,4);
+      builder.label({p.screen.x+20,p.screen.y-12,72,24},labels[kind],theme.color.text,theme.type.caption);
+      builder.router.addRegion(target,widgetId(EditorWidget::CameraHandleBase)+kind);
     }
   }
   builder.list.popClip();
@@ -981,7 +1029,22 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
                           const EditorComponentEntry &entry,u32 index) {
   const auto &theme=builder.theme;
   const auto *component=entity.components.at(index);if(!component || &component->type()!=entry.type) return;
-  if(const auto *reason=entry.unavailable(entity)) builder.label(takeTop(content,30),reason,theme.color.textMuted,theme.type.caption);
+  // An attached singleton is not an error. Show actual unmet requirements,
+  // rather than the Add menu's "already exists" state on its own inspector.
+  for(const auto &requirement:entry.schema->requirements) if(!entity.components.find(requirement.typeId))
+    builder.label(takeTop(content,28),requirement.message,theme.color.warning,theme.type.caption);
+  if(entry.type==&scene::Camera::descriptor) {
+    auto actions=takeTop(content,40);const float w=actions.width/4;
+    const EditorWidget commands[]{EditorWidget::CameraView,EditorWidget::CameraPilot,EditorWidget::CameraAlignView,EditorWidget::CameraPreviewPin};
+    const char *names[]{"Ver","Pilotar","Alinhar","Prévia"};
+    for(u32 i=0;i<4;++i) {
+      auto box=deflate(takeLeft(actions,w),UiInsets::all(3));
+      const auto hit=box;
+      builder.list.addRect(box,theme.color.raised,8);
+      builder.label(box,names[i],theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(hit,widgetId(commands[i]));
+    }
+  }
   if(entry.type==&scene::Joint::descriptor) {
     const auto &j=static_cast<const scene::Joint &>(*component);
     builder.label(takeTop(content,28),j.kind==scene::JointKind::Hinge?"Limites/alvo: graus · velocidade: graus/s":"Âncoras e limites: unidades de cena",theme.color.textMuted,theme.type.caption);
@@ -999,34 +1062,59 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
   // A aba Material é por SLOT, com alcance explícito; não é mais a lista de
   // números do componente, que só alcançava o primeiro slot.
   if(mesh && builder.state.meshTab) {buildMaterialSlots(builder,content);return;}
+  std::vector<std::string_view> groups;
+  const auto collectGroups=[&](const auto &properties) {
+    for(const auto &p:properties) if(p.presentation.isVisible(*component)&&!p.presentation.group.empty() &&
+        std::find(groups.begin(),groups.end(),p.presentation.group)==groups.end()) groups.push_back(p.presentation.group);
+  };
+  collectGroups(entry.type->numbers);collectGroups(entry.type->booleans);collectGroups(entry.type->enums);collectGroups(entry.type->references);
+  std::string_view group=builder.state.componentGroup;
+  if(!groups.empty() && std::find(groups.begin(),groups.end(),group)==groups.end()) group=groups.front();
+  if(groups.size()>1) {
+    auto tabs=takeTop(content,36);builder.list.addRect(tabs,theme.color.silhouette,10);
+    const float w=tabs.width/static_cast<float>(groups.size());
+    for(u32 i=0;i<groups.size();++i) {
+      auto tab=deflate(takeLeft(tabs,w),UiInsets::all(3));const bool active=group==groups[i];
+      if(active) {builder.list.addRect(tab,theme.color.raised,8);builder.list.addRect({tab.x+9,tab.bottom()-2,std::max(0.f,tab.width-18),2},theme.color.accent,1);}
+      builder.label(tab,groups[i],active?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(tab,widgetId(EditorWidget::ComponentGroupBase)+i);
+    }
+    takeTop(content,6);
+  }
+  const auto show=[&](const scene::PropertyPresentation &p) {return p.isVisible(*component)&&(p.group.empty()||p.group==group);};
   struct Field {u32 kind,index;}; // 0 boolean, 1 enum, 2 number, 3 action, 4 object reference
   std::vector<Field> fields;
   if(!mesh || !builder.state.meshTab) {
-    for(u32 i=0;i<entry.type->booleans.size();++i) fields.push_back({0,i});
+    for(u32 i=0;i<entry.type->booleans.size();++i) if(show(entry.type->booleans[i].presentation)) fields.push_back({0,i});
     for(u32 i=0;i<entry.type->enums.size();++i) {
-      if(entry.type==&scene::Joint::descriptor && i==1) {const auto &j=static_cast<const scene::Joint &>(*component);if(j.kind==scene::JointKind::Point||j.kind==scene::JointKind::Distance) continue;}
+      if(!show(entry.type->enums[i].presentation)) continue;
       fields.push_back({1,i});
     }
   }
-  for(u32 i=0;i<entry.type->references.size();++i) fields.push_back({4,i});
+  for(u32 i=0;i<entry.type->references.size();++i) if(show(entry.type->references[i].presentation)) fields.push_back({4,i});
   if(mesh && !builder.state.meshTab) {
     fields.push_back({3,widgetId(EditorWidget::MeshChoose)});
     fields.push_back({3,widgetId(EditorWidget::ToggleCastShadow)});
   } else {
     if(mesh) fields.push_back({3,widgetId(EditorWidget::MaterialRestore)});
-    if(entry.type==&EditorCollider::descriptor && meshAsset(entity)) fields.push_back({3,widgetId(EditorWidget::ColliderFit)});
+    if(entry.type==&EditorCollider::descriptor && group=="Forma" && meshAsset(entity)) fields.push_back({3,widgetId(EditorWidget::ColliderFit)});
     for(u32 i=0;i<entry.type->numbers.size();++i) {
-      if(entry.type==&EditorCollider::descriptor) {
-        const auto *c=static_cast<const scene::Collider *>(component);
-        if(i<5 && !(c->shape==scene::ColliderShape::Box?i<3:c->shape==scene::ColliderShape::Sphere?i==3:i>=3)) continue;
+      if(!show(entry.type->numbers[i].presentation)) continue;
+      bool grouped=false;
+      for(u32 t=0;t<entry.type->triples.size();++t) {
+        const auto &triple=entry.type->triples[t];
+        bool complete=true;
+        for(const auto channel:triple.channels) {
+          bool found=false;
+          for(const auto &p:entry.type->numbers) if(p.id==channel && show(p.presentation)) found=true;
+          complete=complete&&found;
+        }
+        if(!complete) continue;
+        for(u32 axis=0;axis<3;++axis) if(entry.type->numbers[i].id==triple.channels[axis]) {
+          grouped=true;if(axis==0) fields.push_back({5,t});
+        }
       }
-      if(entry.type==&scene::Joint::descriptor) {
-        const auto &j=static_cast<const scene::Joint &>(*component);
-        if(i>=6&&i<12&&(j.kind==scene::JointKind::Point||j.kind==scene::JointKind::Distance)) continue;
-        if(i>=12&&j.kind==scene::JointKind::Point) continue;
-        if(i>=14&&(!j.motor||j.kind==scene::JointKind::Distance)) continue;
-      }
-      fields.push_back({2,i});
+      if(!grouped) fields.push_back({2,i});
     }
   }
   if(content.height<40) return;
@@ -1039,7 +1127,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     if(f.kind==0) {
       const auto &property=entry.type->booleans[f.index];auto toggle=takeRight(slot,44);
       builder.label(slot,property.name,theme.color.textDim,theme.type.caption);
-      builder.toggle(toggle,property.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(f.index<<8));
+      builder.toggle(toggle,property.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(f.index<<8),property.presentation.isEditable(*component));
     } else if(f.kind==1) {
       const auto &property=entry.type->enums[f.index];
       builder.label(takeLeft(slot,slot.width*.38f),property.name,theme.color.textDim,theme.type.caption);
@@ -1047,21 +1135,67 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
       builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
       builder.label(slot,label,theme.color.text,theme.type.caption,UiAlign::Center);
-      builder.router.addRegion(hit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.index<<8));
+      if(property.presentation.isEditable(*component)) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.index<<8));
     } else if(f.kind==4) {
       const auto &property=entry.type->references[f.index];const auto target=property.read(*component);
       builder.label(takeTop(slot,17),property.name,theme.color.textMuted,theme.type.caption);
       const auto *object=target<=std::numeric_limits<EditorEntityId>::max()?builder.state.document->find(static_cast<EditorEntityId>(target)):nullptr;
-      builder.label(slot,!target?property.nullLabel:object?object->name:"Objeto ausente",theme.color.text,theme.type.caption);
+      const auto readiness=runtime::referenceReadiness(*builder.state.document,entity.id,*component,property);
+      const bool warning=readiness!=runtime::ReferenceReadiness::Ready && readiness!=runtime::ReferenceReadiness::OptionalEmpty;
+      std::string referenceLabel=!target?property.nullLabel:object?object->name:"Objeto ausente";
+      if(readiness==runtime::ReferenceReadiness::RequiredEmpty) referenceLabel="Obrigatório · "+referenceLabel;
+      else if(readiness==runtime::ReferenceReadiness::Inactive) referenceLabel+=" · inativo";
+      else if(readiness==runtime::ReferenceReadiness::Incompatible && object) referenceLabel+=" · incompatível";
+      builder.label(slot,referenceLabel,warning?theme.color.warning:theme.color.text,theme.type.caption);
       builder.list.addImage(centred(takeRight(slot,24),18,18),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.textDim);
-      builder.router.addRegion(hit,widgetId(EditorWidget::ComponentReferenceBase)+index+(f.index<<8));
+      if(property.presentation.isEditable(*component)) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentReferenceBase)+index+(f.index<<8));
+    } else if(f.kind==5) {
+      const auto &triple=entry.type->triples[f.index];
+      auto title=takeLeft(slot,slot.width*.30f);
+      builder.router.addRegion(title,widgetId(EditorWidget::ComponentTripleBase)+index+(f.index<<8));
+      if(triple.kind==scene::ComponentTripleKind::LinearColor) {
+        u32 color=0xff000000u;
+        for(u32 axis=0;axis<3;++axis) for(const auto &p:entry.type->numbers) if(p.id==triple.channels[axis]) {
+          const float linear=std::clamp(p.read(*component),0.f,1.f);
+          const float srgb=linear<=.0031308f?12.92f*linear:1.055f*std::pow(linear,1.f/2.4f)-.055f;
+          color|=static_cast<u32>(srgb*255.f+.5f)<<(16-8*axis);
+        }
+        const auto swatch=takeLeft(title,24);
+        builder.list.addRect(deflate(swatch,UiInsets{2,9,2,9}),color,4);
+        builder.router.addRegion(swatch,widgetId(EditorWidget::ComponentColorBase)+index+(f.index<<8));
+      }
+      std::string groupTitle=triple.name;
+      std::string_view unit;bool firstUnit=true,consistentUnit=true;
+      for(const auto channel:triple.channels) for(const auto &p:entry.type->numbers) if(p.id==channel) {
+        if(firstUnit) {unit=p.presentation.unit;firstUnit=false;}
+        else if(unit!=p.presentation.unit) consistentUnit=false;
+      }
+      if(consistentUnit && !unit.empty()) groupTitle+=" ("+std::string(unit)+")";
+      builder.label(title,groupTitle,theme.color.textDim,theme.type.caption);
+      const float cellWidth=slot.width/3;
+      for(u32 axis=0;axis<3;++axis) {
+        u32 channel=0;
+        while(channel<entry.type->numbers.size() && entry.type->numbers[channel].id!=triple.channels[axis]) ++channel;
+        if(channel==entry.type->numbers.size()) continue;
+        const auto &property=entry.type->numbers[channel];
+        const auto cell=takeLeft(slot,cellWidth);
+        auto body=deflate(cell,UiInsets::all(2));
+        builder.list.addRect(body,theme.color.silhouette,theme.radius.control);
+        const char *axisLabels[3]={"X","Y","Z"};const char *colorLabels[3]={"R","G","B"};
+        const UiColor colors[3]={theme.color.axisX,theme.color.axisY,theme.color.axisZ};
+        builder.label(takeLeft(body,13),triple.kind==scene::ComponentTripleKind::LinearColor?colorLabels[axis]:axisLabels[axis],colors[axis],theme.type.caption,UiAlign::Center);
+        char value[32];std::snprintf(value,sizeof(value),"%.4g",static_cast<double>(property.read(*component)));
+        builder.label(body,value,theme.color.text,theme.type.caption,UiAlign::Center);
+        if(property.presentation.isEditable(*component)) builder.router.addRegion(cell,widgetId(EditorWidget::ComponentNumberBase)+index+(channel<<8));
+      }
     } else if(f.kind==2) {
       const auto &property=entry.type->numbers[f.index];
       builder.label(takeLeft(slot,slot.width*.62f),property.name,theme.color.textDim,theme.type.caption);
       char value[32];std::snprintf(value,sizeof(value),"%.6g",static_cast<double>(property.read(*component)));
-      builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
-      builder.label(slot,value,theme.color.text,theme.type.numeric,UiAlign::Center);
-      builder.router.addRegion(slot,widgetId(EditorWidget::ComponentNumberBase)+index+(f.index<<8));
+      builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.silhouette,8);
+      if(!property.presentation.unit.empty()) builder.label(takeRight(slot,24),property.presentation.unit,theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      builder.label(slot,value,property.presentation.isEditable(*component)?theme.color.text:theme.color.textMuted,theme.type.numeric,UiAlign::Center);
+      if(property.presentation.isEditable(*component)) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentNumberBase)+index+(f.index<<8));
     } else if(f.index==widgetId(EditorWidget::MeshChoose)) {
       builder.list.addImage(centred(takeRight(slot,30),22,22),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.text);
       const auto ref=meshAsset(entity);const auto text=ref?"Malha "+std::to_string(ref):"Escolher malha";
@@ -1202,6 +1336,109 @@ void buildReferencePicker(ScreenBuilder &builder,UiRect content,const EditorEnti
 
 void buildObjectFields(ScreenBuilder &builder,UiRect content,const EditorEntity &entity);
 void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity &entity) {
+  if(builder.state.presetPanel && builder.state.presetEntity==entity.id) {
+    const auto &state=builder.state;const auto &theme=builder.theme;
+    const auto button=[&](UiRect rect,const char *label,EditorWidget id) {
+      const auto inset=deflate(rect,UiInsets::all(3));builder.list.addRect(inset,theme.color.raised,theme.radius.control);
+      builder.label(inset,label,theme.color.text,theme.type.caption,UiAlign::Center);builder.router.addRegion(rect,widgetId(id));
+    };
+    button(takeTop(content,36),"<  Presets do projeto",EditorWidget::PresetClose);
+    auto actions=takeTop(content,40);const auto save=takeLeft(actions,actions.width*.5f);
+    if(state.presetInstance) button(save,"Salvar atual",EditorWidget::PresetSave);
+    if(state.presetSelected) button(actions,"Renomear",EditorWidget::PresetRename);
+    builder.label(takeTop(content,26),"Referências de cena são preservadas ao aplicar",theme.color.textMuted,theme.type.caption);
+    if(state.presetSelected) {
+      auto apply=takeBottom(content,40);const auto values=takeLeft(apply,apply.width*.5f);
+      if(state.presetInstance) button(values,"Aplicar valores",EditorWidget::PresetApply);
+      button(apply,"Adicionar",EditorWidget::PresetAdd);
+      button(takeBottom(content,34),state.presetDeleteConfirm?"Confirmar exclusão":"Excluir preset",EditorWidget::PresetDelete);
+      auto preview=takeBottom(content,std::min(110.f,content.height*.4f));
+      builder.list.pushClip(preview);for(const auto &line:state.presetPreview) builder.label(takeTop(preview,22),line,theme.color.textMuted,theme.type.caption);builder.list.popClip();
+    }
+    auto pager=takeBottom(content,32);button(takeLeft(pager,36),"<",EditorWidget::PresetPrevious);button(takeRight(pager,36),">",EditorWidget::PresetNext);
+    const auto count=state.presetChoices.size();const u32 pages=std::max(1u,(static_cast<u32>(count)+3)/4),page=std::min(state.presetPage,pages-1);
+    builder.label(pager,std::to_string(page+1)+" / "+std::to_string(pages),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    builder.list.pushClip(content);
+    if(!count) builder.label(content,"Nenhum preset deste tipo",theme.color.textMuted,theme.type.caption);
+    for(u32 i=page*4;i<std::min<u32>(static_cast<u32>(count),page*4+4)&&content.height>=36;++i) {
+      const auto row=takeTop(content,40);const auto &entry=state.presetChoices[i];
+      builder.list.addRect(deflate(row,UiInsets::all(2)),entry.first==state.presetSelected?theme.color.accent:theme.color.raised,theme.radius.control);
+      builder.label(deflate(row,UiInsets::symmetric(8,2)),entry.second,entry.first==state.presetSelected?theme.color.accentInk:theme.color.text,theme.type.caption);
+      builder.router.addRegion(row,widgetId(EditorWidget::PresetChoiceBase)+i);
+    }
+    builder.list.popClip();return;
+  }
+  if(builder.state.impactInstance && builder.state.impactEntity==entity.id) {
+    const auto &state=builder.state;const auto &theme=builder.theme;
+    const auto close=takeTop(content,36);builder.label(close,state.impactRepair?"<  Cancelar reparo":state.impactAsset.valid()?"<  Recurso":"<  Dependências",theme.color.text,theme.type.body);
+    builder.router.addRegion(close,widgetId(EditorWidget::ImpactClose));
+    const auto *source=entity.components.findInstance(state.impactInstance);
+    const auto *sourceSchema=source?scene::findComponentSchema(source->type()):nullptr;
+    builder.label(takeTop(content,28),sourceSchema?sourceSchema->name:"Componente indisponível",theme.color.textMuted,theme.type.caption);
+    auto entries=state.impactAsset.valid()?resourceImpact(*state.document,state.impactAsset,state.assetRegistry,state.resources):
+        componentImpact(*state.document,entity.id,state.impactInstance,state.assetRegistry,state.resources);
+    const auto uses=localResourceUses(source,state.impactAsset);
+    const auto sharedContext=repairMaterialContext(state.impactTrail,state.impactAsset,state.resources);
+    if(state.impactRepair) {
+      const auto shared=sharedTextureBindings(state.impactRepairMaterial,state.resources);
+      entries=resourceRepairChoices(state.impactRepairMaterial.valid()?&shared:source,state.impactAsset,state.assetRegistry,state.resources);
+      if(state.impactReplacement.valid()) {
+        entries.clear();
+        const auto *replacement=state.assetRegistry?state.assetRegistry->find(state.impactReplacement):nullptr;
+        entries.push_back({0,0,"Novo recurso",replacement?replacement->path:state.impactReplacement.text()});
+        if(state.impactRepairMaterial.valid()) {
+          const auto affected=sharedTextureImpact(*state.document,state.impactRepairMaterial,state.impactAsset,state.resources);
+          entries.push_back({0,0,"Alcance do material","Inclui usos em outras cenas; lista abaixo: cena aberta"});
+          entries.insert(entries.end(),affected.begin(),affected.end());
+        } else if(state.impactRepairScene) {
+          const auto affected=sceneResourceRepairImpact(*state.document,state.impactAsset);entries.insert(entries.end(),affected.begin(),affected.end());
+        } else for(const auto &use:uses) entries.push_back({0,0,"Será substituído · slot "+std::to_string(use.slot+1),use.binding});
+      }
+    }
+    const bool blocked=scene::componentInstanceRemovalBlockedBy(state.impactInstance,entity.components) ||
+        runtime::componentRemovalReferenceUse(*state.document,entity.id,state.impactInstance).object;
+    builder.label(takeTop(content,28),state.impactRepair?(state.impactRepairMaterial.valid()?"Material compartilhado · com Undo":state.impactRepairScene?"Usos locais da cena · com Undo":"Somente usos locais deste componente"):state.impactAsset.valid()?"Registro e usos na cena":source?(blocked?"Remoção bloqueada pelas dependências":"Sem bloqueio de dependências para remover"):"Componente removido",blocked&&!state.impactAsset.valid()?theme.color.warning:theme.color.textMuted,theme.type.caption);
+    if((!state.impactRepair&&!uses.empty())||(state.impactRepair&&state.impactReplacement.valid())) {
+      const auto action=takeTop(content,40);
+      builder.list.addRect(deflate(action,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      builder.label(action,state.impactRepair?"Aplicar substituição":"Reparar usos locais",theme.color.accent,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(action,widgetId(state.impactRepair?EditorWidget::ImpactRepairApply:EditorWidget::ImpactRepair));
+    }
+    if(!state.impactRepair&&sharedContext.valid()) {
+      const auto action=takeTop(content,40);
+      builder.list.addRect(deflate(action,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      builder.label(action,"Reparar no material",theme.color.accent,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(action,widgetId(EditorWidget::ImpactRepairShared));
+    }
+    if(state.impactRepair&&!state.impactRepairMaterial.valid()) {
+      const auto scope=takeTop(content,36);
+      builder.label(scope,state.impactRepairScene?"Alcance: cena aberta  ›":"Alcance: componente  ›",theme.color.accent,theme.type.caption);
+      builder.router.addRegion(scope,widgetId(EditorWidget::ImpactRepairScope));
+    }
+    auto footer=takeBottom(content,32);
+    const u32 count=std::max(1u,static_cast<u32>(std::max(0.f,content.height)/58));
+    const u32 pages=std::max(1u,(static_cast<u32>(entries.size())+count-1)/count),page=std::min(state.impactPage,pages-1);
+    for(u32 i=page*count;i<entries.size()&&i<(page+1)*count;++i) {
+      const auto &entry=entries[i];auto row=takeTop(content,58);const auto hit=row;
+      builder.list.addRect(deflate(row,UiInsets{0,2,0,2}),theme.color.raised,theme.radius.control);
+      row=deflate(row,UiInsets{8,2,8,2});
+      const auto *target=state.document->find(entry.object);
+      builder.list.pushClip(hit);
+      builder.label(takeTop(row,28),entry.blocksRemoval?entry.relation+" · bloqueia remoção":entry.relation,
+          entry.blocksRemoval||entry.invalid?theme.color.warning:theme.color.accent,theme.type.caption);
+      builder.label(row,(target?std::string(target->name)+" · ":"")+entry.detail,theme.color.text,theme.type.caption);
+      builder.list.popClip();
+      if(target||entry.asset.valid()) builder.router.addRegion(hit,widgetId(EditorWidget::ImpactRowBase)+i);
+    }
+    if(entries.empty()) builder.label(content,state.impactRepair?"Nenhum recurso compatível disponível":"Sem relações declaradas",theme.color.textMuted,theme.type.caption);
+    const auto previous=takeLeft(footer,40),next=takeRight(footer,40);
+    builder.label(previous,"<",theme.color.text,theme.type.body);builder.label(next,">",theme.color.text,theme.type.body);
+    if(page) builder.router.addRegion(previous,widgetId(EditorWidget::ImpactPrevious));
+    if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::ImpactNext));
+    builder.label(footer,std::to_string(page+1)+" / "+std::to_string(pages),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    return;
+  }
+
   const auto &theme=builder.theme;const auto &state=builder.state;
   const bool same=state.componentSelection==entity.id,adding=same&&state.addingComponent;
   if(same && state.referenceInstance) {buildReferencePicker(builder,content,entity);return;}
@@ -1217,6 +1454,8 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   struct Card {const EditorComponentEntry *native=nullptr;const scene::ComponentValue *value=nullptr;u32 index=0;bool transform=false;bool object=false;};
   std::vector<Card> cards;
   if(adding) {
+    const auto presets=takeTop(content,34);builder.label(presets,"Presets do projeto  ›",theme.color.accent,theme.type.caption);
+    builder.router.addRegion(presets,widgetId(EditorWidget::PresetOpen));
     auto search=takeTop(content,34),clear=takeRight(search,32);builder.list.addRect(search,theme.color.raised,theme.radius.control);
     builder.label(search,state.componentQuery.empty()?"Buscar componente":state.componentQuery.c_str(),theme.color.textDim,theme.type.caption);
     builder.router.addRegion(search,widgetId(EditorWidget::ComponentSearch));
@@ -1287,7 +1526,20 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
     builder.list.addImage(centred(takeLeft(row,36),28,28),static_cast<UiImageId>(icon),0xffffffff);
     auto more=takeRight(row,adding||item.object?0:32);
     builder.label(adding?takeTop(row,27):row,title.c_str(),reason?theme.color.textMuted:theme.color.text,theme.type.body);
-    if(adding) builder.label(row,reason?reason:item.native?item.native->description:"Comportamento C#",theme.color.textMuted,theme.type.caption);
+    if(adding) {
+      std::string detail=reason?reason:item.native?item.native->description:"Comportamento C#";
+      if(!reason && item.native) {
+        const auto plan=scene::planComponentAddition(entity.components,item.native->type->id,false,false);
+        if(plan.ready && plan.addedTypes.size()>1) {
+          detail="Inclui ";
+          for(usize i=0;i+1<plan.addedTypes.size();++i) {
+            if(i) detail+=" · ";
+            detail+=scene::findComponentSchema(plan.addedTypes[i])->name;
+          }
+        }
+      }
+      builder.label(row,detail,theme.color.textMuted,theme.type.caption);
+    }
     if(adding) {
       if(!reason) builder.router.addRegion(hit,widgetId(item.native?EditorWidget::ComponentAddBase:EditorWidget::ScriptAddBase)+item.index);
     } else if(item.object||item.transform||item.native||script) {
@@ -1310,13 +1562,24 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
         }
       } else if(menu) {
         if(item.native) {
+          const auto impact=takeTop(content,34);builder.label(impact,"Dependências",theme.color.text,theme.type.caption);
+          builder.router.addRegion(impact,widgetId(EditorWidget::ImpactOpenBase)+item.index);
+          const auto presets=takeTop(content,34);builder.label(presets,"Presets",theme.color.text,theme.type.caption);
+          builder.router.addRegion(presets,widgetId(EditorWidget::PresetOpen));
           const EditorWidget actions[]{EditorWidget::ComponentCopyBase,EditorWidget::ComponentPasteBase,EditorWidget::ComponentResetBase};
           const char *labels[]{"Copiar valores","Colar valores","Restaurar padrão"};
           for(u32 i=0;i<3;++i) {auto action=takeTop(content,34);builder.label(action,labels[i],theme.color.text,theme.type.caption);
             if(i!=1||(state.componentClipboard && &state.componentClipboard->type()==item.native->type)) builder.router.addRegion(action,widgetId(actions[i])+item.index);}
         }
-        auto remove=takeTop(content,34);builder.label(remove,"Remover componente",theme.color.text,theme.type.caption);
-        builder.router.addRegion(remove,widgetId(item.native?EditorWidget::ComponentRemoveBase:EditorWidget::ScriptRemoveBase)+item.index);
+        const auto *dependent=item.native?scene::componentInstanceRemovalBlockedBy(item.value->instanceId(),entity.components):nullptr;
+        const auto use=item.native?runtime::componentRemovalReferenceUse(*state.document,entity.id,item.value->instanceId()):runtime::ComponentReferenceUse{};
+        auto remove=takeTop(content,34);
+        builder.label(remove,"Remover componente",dependent||use.object?theme.color.textMuted:theme.color.text,theme.type.caption);
+        if(!dependent && !use.object) builder.router.addRegion(remove,widgetId(item.native?EditorWidget::ComponentRemoveBase:EditorWidget::ScriptRemoveBase)+item.index);
+        else {
+          const auto reason=dependent?std::string("Necessário para ")+dependent->name:std::string("Referenciado por ")+state.document->find(use.object)->name;
+          builder.label(takeTop(content,28),reason,theme.color.warning,theme.type.caption);
+        }
       }
       if(open) {
         auto fields=takeTop(content,std::max(0.0f,content.height-(end-card-1)*48.0f-4));
@@ -1971,10 +2234,11 @@ bool platformFieldActive(const EditorScreenState &state) {
          state.editingCreationSearch || state.editingComponentSearch || state.editingMeshSearch ||
          state.editingReferenceSearch || state.numericField != 0 ||
          state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode ||
-         state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures;
+         state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures || state.presetNaming;
 }
 
 const char *platformFieldTitle(const EditorScreenState &state) {
+  if (state.presetNaming) return "Nome do preset";
   if (state.numericField != 0) return "Valor";
   if (state.renamingResource) return "Arquivo";
   if (state.editingScriptInstance != 0) return "Campo";
@@ -2617,6 +2881,66 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     router.addRegion(button,widgetId(EditorWidget::CompactPanelMenu));
   }
   if(state.workspace==EditorWorkspace::Scene) {
+    if(state.cameraViewEntity) {
+      const auto *cameraEntity=state.document->find(state.cameraViewEntity);
+      const auto *lens=cameraEntity?cameraComponent(*cameraEntity):nullptr;
+      if(lens && layout.viewport.width>=240 && layout.viewport.height>=240) {
+        const float panelWidth=std::min(390.f,layout.viewport.width-16.f);
+        const UiRect panel{layout.viewport.x+(layout.viewport.width-panelWidth)*.5f,
+          layout.viewport.y+(compact?146.f:50.f),panelWidth,48.f};
+        list.addRect(panel,theme.color.surface,theme.radius.control);
+        const bool ortho=lens->projection==scene::CameraProjection::Orthographic;
+        const char *labels[]{ortho?"Meia altura":"FOV", "Próximo", "Distante"};
+        const float values[]{ortho?lens->orthographicHalfHeight:lens->verticalFov,lens->nearPlane,lens->farPlane};
+        for(u32 i=0;i<3;++i) {
+          const UiRect cell{panel.x+i*panel.width/3+3,panel.y+3,panel.width/3-6,panel.height-6};
+          list.addRect(cell,theme.color.raised,theme.radius.control);
+          char value[48];std::snprintf(value,sizeof(value),"%.5g %s",static_cast<double>(values[i]),i==0&&!ortho?"°":"m");
+          list.pushClip(cell);
+          builder.label({cell.x,cell.y,cell.width,17},labels[i],theme.color.textMuted,theme.type.caption,UiAlign::Center);
+          builder.label({cell.x,cell.y+17,cell.width,25},value,theme.color.text,theme.type.caption,UiAlign::Center);
+          list.popClip();
+          router.addRegion(cell,widgetId(EditorWidget::CameraLens)+i);
+        }
+      }
+      // Reserve the framing controls and the compact tools rail before placing
+      // the camera identity. It must never sit underneath a toolbar button.
+      const UiRect badge{layout.viewport.x+(compact?8.f:104.f),layout.viewport.y+(compact?104.f:8.f),
+        std::max(0.f,std::min(250.f,layout.viewport.width-(compact?16.f:154.f))),34};
+      if(badge.width>0) {
+        list.addRect(badge,theme.color.surface,theme.radius.control);
+        list.pushClip(badge);
+        builder.label(deflate(badge,UiInsets{8,0,8,0}),cameraEntity?
+          std::string(state.cameraPiloting?"Pilotando · ":"Vista · ")+cameraEntity->name:"Câmera indisponível",
+          theme.color.text,theme.type.caption);
+        list.popClip();
+      }
+    }
+    if(state.cameraPreviewEntity && layout.viewport.width>=280 && layout.viewport.height>=300) {
+      const float width=std::min(280.f,layout.viewport.width*.48f),height=width*9.f/16.f;
+      const UiRect panel{layout.viewport.right()-width-10,layout.viewport.bottom()-height-160,width,height+94};
+      list.addRect(panel,theme.color.surface,theme.radius.control);router.addBlocker(panel);
+      const auto *camera=state.document->find(state.cameraPreviewEntity);
+      builder.label({panel.x+8,panel.y,panel.width-44,30},camera?camera->name:"Câmera",theme.color.text,theme.type.caption);
+      const UiRect close{panel.right()-34,panel.y,34,30};
+      builder.label(close,"×",theme.color.text,theme.type.title,UiAlign::Center);router.addRegion(close,widgetId(EditorWidget::CameraPreviewClose));
+      const UiRect image{panel.x+4,panel.y+30,panel.width-8,height-4};
+      if(state.cameraPreviewReady) list.addImage(image,kUiCameraPreviewImage,0xffffffff,6);
+      else {
+        builder.label(image,state.cameraPreviewFailed?"Falha · tocar para tentar":"Preparando prévia",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        if(state.cameraPreviewFailed) router.addRegion(image,widgetId(EditorWidget::CameraPreviewRetry));
+      }
+      const float controlWidth=(panel.width-20)/2;
+      const UiRect resolution{panel.x+8,panel.y+height+58,controlWidth,28};
+      const UiRect frequency{resolution.right()+4,resolution.y,controlWidth,28};
+      list.addRect(resolution,theme.color.raised,theme.radius.control);
+      list.addRect(frequency,theme.color.raised,theme.radius.control);
+      builder.label(resolution,std::to_string(state.cameraPreviewWidth)+"×"+std::to_string(state.cameraPreviewHeight),theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.label(frequency,std::to_string(static_cast<int>(state.cameraPreviewFrequency))+" Hz máx.",theme.color.text,theme.type.caption,UiAlign::Center);
+      router.addRegion(resolution,widgetId(EditorWidget::CameraPreviewResolution));
+      router.addRegion(frequency,widgetId(EditorWidget::CameraPreviewFrequency));
+      builder.label({panel.x+8,panel.y+height+30,panel.width-16,28},"Sem água, sombras ou pós",theme.color.textMuted,theme.type.caption);
+    }
     const UiIcon icons[]={UiIcon::EditorAuthorOrbit,UiIcon::EditorAuthorPan,UiIcon::EditorAuthorZoom};
     const EditorWidget actions[]={EditorWidget::NavigationOrbit,EditorWidget::NavigationPan,EditorWidget::NavigationZoom};
     const float width=std::min(64.0f,(layout.viewport.width-(compact?112:16))/3);
@@ -2671,7 +2995,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(row,widgetId(actions[i]));
     }
   }
-  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingMeshSearch || state.editingReferenceSearch)) {
+  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingMeshSearch || state.editingReferenceSearch || state.presetNaming)) {
     router.addBlocker(state.surface);
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,0.8f));
     const auto modal=centred(state.surface,std::min(560.0f,state.surface.width-16),std::min(320.0f,state.surface.height-16));
@@ -2823,6 +3147,11 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     UiRect content=deflate(modal,UiInsets::all(8.0f));
     builder.label(takeTop(content,36.0f),state.numericError ? "Valor invalido" : state.numericText,
                   theme.color.text,theme.type.numeric,UiAlign::Center);
+    if((state.numericField&0xff000000u)==widgetId(EditorWidget::ComponentTripleBase)) {
+      const auto separator=takeTop(content,28);
+      builder.label(separator,"Separar canais · espaço",theme.color.accent,theme.type.caption,UiAlign::Center);
+      router.addRegion(separator,widgetId(EditorWidget::NumericKeyBase)+12);
+    }
     const float cellWidth=content.width/4.0f,cellHeight=content.height/4.0f;
     const char *labels[16]={"1","2","3","Apagar","4","5","6","Limpar","7","8","9","Cancelar",".","0","-","Aplicar"};
     const u32 keys[16]={0,1,2,12,3,4,5,13,6,7,8,14,9,10,11,15};
@@ -2835,6 +3164,36 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       list.addRect(cell,theme.color.raised,theme.radius.control);
       builder.label(cell,labels[i],theme.color.text,theme.type.caption,UiAlign::Center);
       router.addRegion(cell,widget);
+    }
+  }
+  if(state.colorField) {
+    router.addBlocker(state.surface);
+    list.addRect(state.surface,withAlpha(theme.color.voidBlack,.8f));
+    const auto panel=centred(state.surface,std::min(360.f,state.surface.width-16),std::min(360.f,state.surface.height-16));
+    list.addRect(panel,theme.color.surface,theme.radius.control);
+    auto content=deflate(panel,UiInsets::all(12));
+    auto title=takeTop(content,32);list.addRect(takeRight(title,48),pickerColor(state.colorHue,state.colorSaturation,state.colorValue),6);
+    builder.label(title,"Cor · RGB linear",theme.color.text,theme.type.title);
+    auto footer=takeBottom(content,38);const auto cancel=takeLeft(footer,footer.width/2);
+    builder.label(cancel,"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);router.addRegion(cancel,widgetId(EditorWidget::ColorCancel));
+    builder.label(footer,"Aplicar",theme.color.accent,theme.type.caption,UiAlign::Center);router.addRegion(footer,widgetId(EditorWidget::ColorApply));
+    const auto outline=[&](UiRect r) {
+      list.addRect({r.x,r.y,r.width,2},0xffffffff,0);
+      list.addRect({r.x,r.bottom()-2,r.width,2},0xff000000,0);
+      list.addRect({r.x,r.y,2,r.height},0xffffffff,0);
+      list.addRect({r.right()-2,r.y,2,r.height},0xff000000,0);
+    };
+    const auto hue=takeBottom(content,30);
+    for(u32 h=0;h<24;++h) {
+      const UiRect cell{hue.x+h*hue.width/24,hue.y,hue.width/24,26};
+      list.addRect(cell,pickerColor(h/24.f,1,1),0);router.addRegion(cell,widgetId(EditorWidget::ColorHueBase)+h);
+      if(h==static_cast<u32>(std::round(state.colorHue*24))%24) outline(cell);
+    }
+    for(u32 y=0;y<11;++y) for(u32 x=0;x<11;++x) {
+      const UiRect cell{content.x+x*content.width/11,content.y+y*content.height/11,content.width/11,content.height/11};
+      list.addRect(cell,pickerColor(state.colorHue,x/10.f,1-y/10.f),0);
+      router.addRegion(cell,widgetId(EditorWidget::ColorSvBase)+y*11+x);
+      if(x==static_cast<u32>(std::round(state.colorSaturation*10)) && y==static_cast<u32>(std::round((1-state.colorValue)*10))) outline(cell);
     }
   }
   buildProjectDialogs(builder);
@@ -2887,6 +3246,24 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   // e desliza para fora desistiu dele.
   if (!routing.tapped) return outcome;
 
+  if(widget==widgetId(EditorWidget::ComponentVisualsToggle)) {state.showComponentVisuals=!state.showComponentVisuals;return outcome;}
+  if(widget==widgetId(EditorWidget::CameraViewClose)) {state.cameraViewEntity=0;return outcome;}
+  if(widget>=widgetId(EditorWidget::ComponentVisualBase)&&widget<widgetId(EditorWidget::ComponentVisualBase)+0x01000000u) {
+    const auto id=widget-widgetId(EditorWidget::ComponentVisualBase);
+    if(document.find(id)) {state.selection=id;state.textureInspector=false;state.textureViewer=false;state.propertyPage=0;}
+    return outcome;
+  }
+  if(widget>=widgetId(EditorWidget::ComponentGroupBase)&&widget<widgetId(EditorWidget::ComponentGroupBase)+0x01000000u) {
+    const auto *entity=document.find(state.selection);const auto *value=entity?entity->components.findInstance(state.expandedNative):nullptr;
+    if(!value) return outcome;
+    std::vector<std::string_view> groups;
+    const auto collect=[&](const auto &fields){for(const auto &p:fields) if(p.presentation.isVisible(*value)&&!p.presentation.group.empty() && std::find(groups.begin(),groups.end(),p.presentation.group)==groups.end()) groups.push_back(p.presentation.group);};
+    collect(value->type().numbers);collect(value->type().booleans);collect(value->type().enums);collect(value->type().references);
+    const auto i=widget-widgetId(EditorWidget::ComponentGroupBase);
+    if(i<groups.size()) {state.componentGroup=groups[i];state.propertyPage=0;}
+    return outcome;
+  }
+
   if(widget>=widgetId(EditorWidget::ComponentAddBase) && widget<widgetId(EditorWidget::ComponentEnumBase)+0x01000000u) {
     const auto *entity=document.find(state.selection);
     if(!entity || state.workspace!=EditorWorkspace::Scene) return outcome;
@@ -2911,9 +3288,17 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       auto value=*entity;
       if(adding) {
         if(const auto *reason=entry.unavailable(value)) {state.status=reason;return outcome;}
-        if(!value.components.add(*entry.type)) return outcome;
+        auto plan=scene::planComponentAddition(value.components,entry.type->id);
+        if(!plan.ready) {state.status=plan.error;return outcome;}
+        value.components=std::move(plan.candidate);
         state.expandedComponent.clear();state.expandedNative=0;state.expandedScript=0;state.componentPage=~u32{0};state.addingComponent=false;state.nativeMenu=0;
       } else if(operation==widgetId(EditorWidget::ComponentRemoveBase)) {
+        if(const auto *dependent=scene::componentInstanceRemovalBlockedBy(instance,value.components)) {
+          state.status=std::string("Usado por ")+dependent->name;return outcome;
+        }
+        if(const auto use=runtime::componentRemovalReferenceUse(document,entity->id,instance);use.object) {
+          state.status=std::string("Referenciado por ")+document.find(use.object)->name;return outcome;
+        }
         if(!value.components.removeInstance(instance)) return outcome;
         if(state.expandedNative==instance) state.expandedNative=0;
         state.nativeMenu=0;

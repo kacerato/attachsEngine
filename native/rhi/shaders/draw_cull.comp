@@ -65,7 +65,7 @@ layout(set = 0, binding = 7) uniform sampler2D hzbLevel3;
 layout(set = 0, binding = 8) uniform sampler2D hzbLevel4;
 layout(set = 0, binding = 9) uniform sampler2D hzbLevel5;
 
-// Espelho exato de renderer::GpuCullParameters: 28 escalares de 4 bytes, na
+// Espelho exato de renderer::GpuCullParameters: 32 escalares de 4 bytes, na
 // mesma ordem. Escalares soltos e não vec3/vec4 de propósito — um vec3 alinharia
 // o campo seguinte em 16 bytes e deslocaria silenciosamente o bloco inteiro.
 layout(push_constant) uniform CullPushConstants {
@@ -103,6 +103,10 @@ layout(push_constant) uniform CullPushConstants {
   uint maximumScannedTexels;
   uint flags;
   float translationDilationScale;
+  float orthographicHalfWidth;
+  float orthographicHalfHeight;
+  float reservedProjection0;
+  float reservedProjection1;
 } pushConstants;
 
 #define GPU_CULL_RECORD_TESTABLE 1u
@@ -178,8 +182,9 @@ void main() {
 
   if (record.boundsRadius >= 0.0 && !isinf(nearDepth) && !isnan(nearDepth) &&
       nearDepth >= pushConstants.nearPlane) {
-    const float invHorizontal = 1.0 / (nearDepth * pushConstants.tangentHalfHorizontal);
-    const float invVertical = 1.0 / (nearDepth * pushConstants.tangentHalfVertical);
+    const bool orthographic = (pushConstants.flags & 2u) != 0u;
+    const float invHorizontal = 1.0 / (orthographic ? pushConstants.orthographicHalfWidth : nearDepth * pushConstants.tangentHalfHorizontal);
+    const float invVertical = 1.0 / (orthographic ? pushConstants.orthographicHalfHeight : nearDepth * pushConstants.tangentHalfVertical);
     const vec2 ndcX = vec2((viewX - expandedRadius) * invHorizontal,
                            (viewX + expandedRadius) * invHorizontal);
     const vec2 ndcY = vec2((viewY - expandedRadius) * invVertical,
@@ -201,7 +206,8 @@ void main() {
     surfaceMinimum = clamp(surfaceMinimum, vec2(-1.0), vec2(1.0));
     surfaceMaximum = clamp(surfaceMaximum, vec2(-1.0), vec2(1.0));
 
-    const float normalizedDepth =
+    const float normalizedDepth = orthographic ?
+        (nearDepth - pushConstants.nearPlane) / (pushConstants.farPlane - pushConstants.nearPlane) :
         (pushConstants.farPlane * nearDepth - pushConstants.nearPlane * pushConstants.farPlane) /
         ((pushConstants.farPlane - pushConstants.nearPlane) * nearDepth);
 
@@ -210,7 +216,7 @@ void main() {
       // Dilatação lateral resolvida por candidato: o deslocamento em tela de uma
       // translação perpendicular é inversamente proporcional à profundidade.
       const float dilation = pushConstants.screenDilation +
-                             pushConstants.translationDilationScale / nearDepth;
+                             pushConstants.translationDilationScale / (orthographic ? 1.0 : nearDepth);
       const vec2 minimumUv = clamp(surfaceMinimum * 0.5 + 0.5 - dilation, vec2(0.0), vec2(1.0));
       const vec2 maximumUv = clamp(surfaceMaximum * 0.5 + 0.5 + dilation, vec2(0.0), vec2(1.0));
       const float testedDepth = clamp(normalizedDepth, 0.0, 1.0);

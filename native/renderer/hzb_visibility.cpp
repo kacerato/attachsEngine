@@ -197,8 +197,9 @@ HzbScreenRect projectBoundsToHzbScreenRect(const PerspectiveFrustum &frustum, co
   // exact CPU counterpart of transpose(dirtRoadCameraRotation()).
   const float yawX = cosineYaw * deltaX - sineYaw * deltaZ;
   const float yawZ = sineYaw * deltaX + cosineYaw * deltaZ;
-  const float viewX = yawX;
-  const float viewY = cosinePitch * deltaY + sinePitch * yawZ;
+  const float unrolledY=cosinePitch * deltaY + sinePitch * yawZ;
+  const float viewX = std::cos(frustum.roll)*yawX+std::sin(frustum.roll)*unrolledY;
+  const float viewY = -std::sin(frustum.roll)*yawX+std::cos(frustum.roll)*unrolledY;
   const float viewZ = -sinePitch * deltaY + cosinePitch * yawZ;
 
   const float expandedRadius = radius * frustum.boundsScale + frustum.boundsMargin;
@@ -209,8 +210,8 @@ HzbScreenRect projectBoundsToHzbScreenRect(const PerspectiveFrustum &frustum, co
   // culling upstream already owns the "is this even in view" decision.
   if (!std::isfinite(nearDepth) || nearDepth < frustum.nearPlane) return result;
 
-  const float invHorizontal = 1.0f / (nearDepth * frustum.tangentHalfHorizontal);
-  const float invVertical = 1.0f / (nearDepth * frustum.tangentHalfVertical);
+  const float invHorizontal = 1.0f / (projectionDivisor(frustum,nearDepth) * projectionHalfWidth(frustum));
+  const float invVertical = 1.0f / (projectionDivisor(frustum,nearDepth) * projectionHalfHeight(frustum));
   float ndcMinX = (viewX - expandedRadius) * invHorizontal;
   float ndcMaxX = (viewX + expandedRadius) * invHorizontal;
   float ndcMinY = (viewY - expandedRadius) * invVertical;
@@ -249,9 +250,7 @@ HzbScreenRect projectBoundsToHzbScreenRect(const PerspectiveFrustum &frustum, co
   // clipZ=(far*z-near*far)/(far-near), clipW=z. The HZB stores clipZ/clipW,
   // not view-space z. Expanded bounds already make this the nearest possible
   // point of the sphere, so the conversion preserves conservatism.
-  const float normalizedDepth =
-      (frustum.farPlane * nearDepth - frustum.nearPlane * frustum.farPlane) /
-      ((frustum.farPlane - frustum.nearPlane) * nearDepth);
+  const float normalizedDepth = cameraNormalizedDepth(frustum,nearDepth);
   if (!std::isfinite(normalizedDepth)) return HzbScreenRect{};
   result.nearDepth = std::clamp(normalizedDepth, 0.0f, 1.0f);
   result.valid = true;

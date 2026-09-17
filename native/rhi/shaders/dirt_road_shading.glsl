@@ -131,7 +131,7 @@ mediump vec3 punctualLighting(highp vec3 position,mediump vec3 n,mediump vec3 v,
 }
 mediump vec3 shadeWater(highp vec3 position,mediump vec3 n) {
   highp vec3 eye=frame.cameraPositionNear.xyz;
-  mediump vec3 v=normalize(eye-position);
+  mediump vec3 v=environment.worldToViewRow0.w>0.0?-environment.worldToViewRow2.xyz:normalize(eye-position);
   mediump float nv=max(dot(n,v),0.001);
   mediump float ior=clamp(environment.waterOptics.x,1.0,2.0);
   mediump float f0=(ior-1.0)/(ior+1.0); f0*=f0;
@@ -281,7 +281,7 @@ void main() {
   // A subtração fica em highp: `eye` e `vPosition` são coordenadas de mundo e o
   // mapa se estende por centenas de unidades, onde fp16 já perde resolução. Só
   // o resultado normalizado, que vive em [-1,1], desce para mediump.
-  mediump vec3 v=normalize(eye-vPosition);
+  mediump vec3 v=environment.worldToViewRow0.w>0.0?-environment.worldToViewRow2.xyz:normalize(eye-vPosition);
   mediump float dielectricSpecular=clamp(frame.materialFactors.w,0.0,1.0);
   mediump vec3 f0=mix(vec3(.04*dielectricSpecular),base.rgb,metal);
   mediump float f90=mix(dielectricSpecular,1.0,metal);

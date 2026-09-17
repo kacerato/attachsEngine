@@ -65,7 +65,8 @@ EditorGizmoFrame buildGizmoFrame(const EditorViewport &viewport, const float ori
   // porque é a dimensão a que o campo de visão vertical se refere; usar a
   // largura mudaria o tamanho do gizmo ao girar a tela.
   const float pixelsPerWorldUnit =
-      viewport.rect.height / (2.0f * viewport.frustum.tangentHalfVertical * projected.viewDepth);
+      viewport.rect.height / (2.0f * renderer::projectionHalfHeight(viewport.frustum) *
+                             renderer::projectionDivisor(viewport.frustum,projected.viewDepth));
   if (!std::isfinite(pixelsPerWorldUnit) || pixelsPerWorldUnit <= 0.0f) return frame;
 
   frame.axisWorldLength = settings.screenLengthPixels / pixelsPerWorldUnit;

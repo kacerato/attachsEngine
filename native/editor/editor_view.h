@@ -56,6 +56,10 @@ struct EditorRay final {
   // Normalizada.
   float direction[3]{};
   bool valid = false;
+  // Picking interval along the normalized ray; gizmo intersections are free
+  // to extend beyond this interval without changing their mathematical origin.
+  float minimumDistance = 0;
+  float maximumDistance = 3.402823466e+38F;
 };
 
 // Raio que sai da câmera e passa pelo pixel dado. Fora do retângulo da vista o

@@ -8,6 +8,18 @@
 using namespace ae;
 using namespace ae::renderer;
 
+AE_TEST(orthographic_lod_follows_extent_instead_of_distance) {
+  const LodLevelInfo levels[]{{0,0},{1,.1f},{2,.5f}};
+  LodHysteresisState nearState{},farState{},zoomState{};
+  const auto near=selectLodLevel(levels,3,1,1,1000,20,.8f,nearState,20);
+  const auto far=selectLodLevel(levels,3,1000,2,1000,20,.8f,farState,20);
+  AE_EXPECT_EQ(near.level,far.level,"distance and FOV do not affect parallel projection");
+  AE_EXPECT_EQ(nearState.currentLevel,2u,"coarse geometry fits pixel budget");
+  selectLodLevel(levels,3,1000,2,1000,20,.8f,zoomState,1);
+  AE_EXPECT_EQ(zoomState.currentLevel,0u,"zoom requires finer geometry");
+  AE_EXPECT_EQ(computeScreenSpaceError(.1f,999,1,1000,5),10.f,"world error maps to pixels by extent");
+}
+
 namespace {
 constexpr float kHalfPi = 1.57079632679f; // fovY = pi/2 -> tan(fovY/2) = tan(pi/4) = 1, round numbers.
 }

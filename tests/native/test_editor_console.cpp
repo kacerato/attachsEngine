@@ -153,14 +153,15 @@ AE_TEST(every_console_row_is_reachable_by_touch) {
 
   ui::UiDrawList list;
   ui::UiInputRouter router;
-  const auto layout = buildEditorScreen(state, editorTheme(), list, router);
+  state.consoleProblems=true;
+  auto layout = buildEditorScreen(state, editorTheme(), list, router);
   AE_EXPECT_TRUE(!layout.consolePanel.isEmpty(), "o painel do console existe");
-  AE_EXPECT_TRUE(layout.consoleRowCount == 3u, "as tres linhas contam");
+  AE_EXPECT_TRUE(layout.consoleRowCount == 2u, "Problemas contains compiler diagnostics only");
 
   // Cada linha visivel tem de responder, e responder COM O SEU proprio indice:
   // um deslocamento de um faz o usuario saltar para o lugar errado, que e pior
   // do que nao saltar.
-  const auto rows = console.filtered();
+  const auto rows = console.filtered(1);
   const auto visible = layout.consoleVisibleRows < rows.size()
                            ? static_cast<usize>(layout.consoleVisibleRows) : rows.size();
   u32 reachable = 0;
@@ -176,14 +177,24 @@ AE_TEST(every_console_row_is_reachable_by_touch) {
   AE_EXPECT_EQ(static_cast<usize>(reachable), visible, "toda linha visivel responde ao toque");
 
   // Os comandos do cabecalho tambem, senao filtrar vira decoracao.
-  bool clear = false, errors = false;
+  bool errors = false;
   for (float x = layout.consolePanel.x; x < layout.consolePanel.right(); x += 6.0f)
-    for (float y = layout.consolePanel.y; y < layout.consolePanel.y + 34.0f; y += 4.0f) {
+    for (float y = layout.consolePanel.y; y < layout.consolePanel.bottom(); y += 4.0f) {
       const auto hit = router.hitTest({x, y});
-      if (hit.widgetId == widgetId(EditorWidget::ConsoleClear)) clear = true;
       if (hit.widgetId == widgetId(EditorWidget::ConsoleError)) errors = true;
     }
-  AE_EXPECT_TRUE(clear && errors, "limpar e o filtro de erros respondem");
+  AE_EXPECT_TRUE(errors,"error filter reachable");
+  state.consoleProblems=false;
+  layout=buildEditorScreen(state,editorTheme(),list,router);
+  AE_EXPECT_EQ(layout.consoleRowCount,1u,"Logs excludes compiler diagnostics");
+  bool clear=false,log=false;
+  for(float y=layout.consolePanel.y;y<layout.consolePanel.bottom();y+=4)
+    for(float x=layout.consolePanel.x;x<layout.consolePanel.right();x+=6) {
+      const auto hit=router.hitTest({x,y});
+      if(hit.widgetId==widgetId(EditorWidget::ConsoleClear)) clear=true;
+      if(hit.widgetId==widgetId(EditorWidget::ConsoleRowBase)+2) log=true;
+    }
+  AE_EXPECT_TRUE(clear&&log,"clear and original log index remain reachable");
 }
 
 AE_TEST(clearing_the_compiler_block_does_not_leave_twins_behind) {

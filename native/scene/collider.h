@@ -31,36 +31,44 @@ public:
     return true;
   }
 };
+inline bool colliderIsBox(const ComponentValue &v) {return static_cast<const Collider&>(v).shape==ColliderShape::Box;}
+inline bool colliderHasRadius(const ComponentValue &v) {return static_cast<const Collider&>(v).shape!=ColliderShape::Box;}
+inline bool colliderIsCapsule(const ComponentValue &v) {return static_cast<const Collider&>(v).shape==ColliderShape::Capsule;}
 inline constexpr std::array<ComponentNumber,11> colliderNumbers{{
-#define AE_COLLIDER_NUMBER(id,label,field) {label,.01f,10000,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Collider&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<Collider&>(v).field;},id}
-  AE_COLLIDER_NUMBER("half_x","Meia extensão X",halfX),
-  AE_COLLIDER_NUMBER("half_y","Meia extensão Y",halfY),
-  AE_COLLIDER_NUMBER("half_z","Meia extensão Z",halfZ),
-  AE_COLLIDER_NUMBER("radius","Raio",radius),
-  AE_COLLIDER_NUMBER("half_height","Meia altura cilíndrica",halfHeight),
+#define AE_COLLIDER_NUMBER(id,label,field,visible) {label,.01f,10000,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Collider&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<Collider&>(v).field;},id,{"Forma","",nullptr,visible}}
+  AE_COLLIDER_NUMBER("half_x","Meia extensão X",halfX,colliderIsBox),
+  AE_COLLIDER_NUMBER("half_y","Meia extensão Y",halfY,colliderIsBox),
+  AE_COLLIDER_NUMBER("half_z","Meia extensão Z",halfZ,colliderIsBox),
+  AE_COLLIDER_NUMBER("radius","Raio",radius,colliderHasRadius),
+  AE_COLLIDER_NUMBER("half_height","Meia altura cilíndrica",halfHeight,colliderIsCapsule),
 #undef AE_COLLIDER_NUMBER
-#define AE_COLLIDER_CENTER(id,label,field) {label,-10000000,10000000,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Collider&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<Collider&>(v).field;},id}
-  AE_COLLIDER_CENTER("center_x","Centro X",centerX),
-  AE_COLLIDER_CENTER("center_y","Centro Y",centerY),
-  AE_COLLIDER_CENTER("center_z","Centro Z",centerZ),
-  AE_COLLIDER_CENTER("rotation_x","Rotação local X · graus",rotationX),
-  AE_COLLIDER_CENTER("rotation_y","Rotação local Y · graus",rotationY),
-  AE_COLLIDER_CENTER("rotation_z","Rotação local Z · graus",rotationZ)
+#define AE_COLLIDER_CENTER(id,label,field,unit) {label,-10000000,10000000,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Collider&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<Collider&>(v).field;},id,{"Pose",unit}}
+  AE_COLLIDER_CENTER("center_x","Centro X",centerX,""),
+  AE_COLLIDER_CENTER("center_y","Centro Y",centerY,""),
+  AE_COLLIDER_CENTER("center_z","Centro Z",centerZ,""),
+  AE_COLLIDER_CENTER("rotation_x","Rotação local X",rotationX,"°"),
+  AE_COLLIDER_CENTER("rotation_y","Rotação local Y",rotationY,"°"),
+  AE_COLLIDER_CENTER("rotation_z","Rotação local Z",rotationZ,"°")
 #undef AE_COLLIDER_CENTER
 }};
 inline constexpr std::array<ComponentEnumOption,3> colliderShapeOptions{{{0,"Caixa"},{1,"Esfera"},{2,"Cápsula"}}};
 inline constexpr std::array<ComponentEnum,1> colliderEnums{{
   {"shape","Forma",colliderShapeOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Collider&>(v).shape);},
-    [](ComponentValue &v,u32 value){static_cast<Collider&>(v).shape=static_cast<ColliderShape>(value);}}
+    [](ComponentValue &v,u32 value){static_cast<Collider&>(v).shape=static_cast<ColliderShape>(value);},{"Forma"}}
 }};
 inline constexpr std::array<ComponentBoolean,1> colliderBooleans{{
   {"enabled","Ativo",[](const ComponentValue &v){return static_cast<const Collider&>(v).enabled;},[](ComponentValue &v,bool enabled){static_cast<Collider&>(v).enabled=enabled;}}
 }};
 inline constexpr std::array<ComponentObjectReference,1> colliderReferences{{
   {"owner","Corpo proprietário","astra.physics.body",ObjectReferenceScope::SelfOrAncestor,"Neste objeto",
-    [](const ComponentValue &v){return static_cast<const Collider&>(v).owner;},[](ComponentValue &v,u64 id){static_cast<Collider&>(v).owner=id;}}
+    [](const ComponentValue &v){return static_cast<const Collider&>(v).owner;},[](ComponentValue &v,u64 id){static_cast<Collider&>(v).owner=id;},{"Vínculo"}}
+}};
+inline constexpr std::array<ComponentTriple,3> colliderTriples{{
+  {"half_extents","Meia extensão",{"half_x","half_y","half_z"}},
+  {"center","Centro",{"center_x","center_y","center_z"}},
+  {"rotation","Rotação",{"rotation_x","rotation_y","rotation_z"}}
 }};
 inline const ComponentType Collider::descriptor{
-  "astra.physics.collider",3,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider>();},colliderNumbers,colliderBooleans,colliderEnums,nullptr,true,colliderReferences
+  "astra.physics.collider",3,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Collider>();},colliderNumbers,colliderBooleans,colliderEnums,nullptr,true,colliderReferences,colliderTriples
 };
 }

@@ -32,13 +32,18 @@ struct CameraViewBasis final {
   float row2[3]{0, 0, 1};
 };
 
-inline CameraViewBasis buildCameraViewBasis(float yaw, float pitch) noexcept {
+inline CameraViewBasis buildCameraViewBasis(float yaw, float pitch,float roll=0) noexcept {
   const float cosineYaw = std::cos(yaw), sineYaw = std::sin(yaw);
   const float cosinePitch = std::cos(pitch), sinePitch = std::sin(pitch);
   CameraViewBasis basis{};
   basis.row0[0] = cosineYaw;            basis.row0[1] = 0.0f;         basis.row0[2] = -sineYaw;
   basis.row1[0] = sinePitch * sineYaw;  basis.row1[1] = cosinePitch;  basis.row1[2] = sinePitch * cosineYaw;
   basis.row2[0] = cosinePitch * sineYaw; basis.row2[1] = -sinePitch;  basis.row2[2] = cosinePitch * cosineYaw;
+  const float c=std::cos(roll),s=std::sin(roll);
+  for(u32 i=0;i<3;++i) {
+    const float x=basis.row0[i],y=basis.row1[i];
+    basis.row0[i]=c*x+s*y;basis.row1[i]=-s*x+c*y;
+  }
   return basis;
 }
 
@@ -61,6 +66,9 @@ struct CameraRay final {
   // Z = 1. Ela é entregue crua de propósito: veja `cameraRayIsAffineInNdc`.
   float direction[3]{};
   bool valid = false;
+  // Orthographic rays are parallel and originate at different points on the
+  // camera plane. This offset is in world space, relative to cameraPosition.
+  float originOffset[3]{};
 };
 
 // Desfaz a pré-rotação do display. A matriz é uma rotação de múltiplo de 90°,
@@ -89,10 +97,18 @@ inline CameraRay cameraRayFromNdc(const PerspectiveFrustum &frustum,
     return ray;
   float planeX = 0.0f, planeY = 0.0f;
   if (!undoSurfaceTransform(surfaceTransform, ndcX, ndcY, planeX, planeY)) return ray;
-  const float view[3] = {planeX * frustum.tangentHalfHorizontal,
-                         -planeY * frustum.tangentHalfVertical, 1.0f};
-  const CameraViewBasis basis = buildCameraViewBasis(frustum.yaw, frustum.pitch);
+  const bool orthographic=isOrthographic(frustum);
+  const float view[3] = {orthographic?0.f:planeX * frustum.tangentHalfHorizontal,
+                         orthographic?0.f:-planeY * frustum.tangentHalfVertical, 1.0f};
+  const CameraViewBasis basis = buildCameraViewBasis(frustum.yaw, frustum.pitch,frustum.roll);
   cameraViewToWorld(basis, view, ray.direction);
+  if(orthographic) {
+    if(!std::isfinite(frustum.orthographicHalfHeight)||frustum.orthographicHalfHeight<=0 ||
+       !std::isfinite(frustum.orthographicHalfWidth)||frustum.orthographicHalfWidth<=0) return ray;
+    const float origin[3]{planeX*frustum.orthographicHalfWidth,-planeY*frustum.orthographicHalfHeight,0};
+    cameraViewToWorld(basis,origin,ray.originOffset);
+    for(float value:ray.originOffset) if(!std::isfinite(value)) return ray;
+  }
   ray.valid = std::isfinite(ray.direction[0]) && std::isfinite(ray.direction[1]) &&
               std::isfinite(ray.direction[2]);
   return ray;
@@ -125,10 +141,13 @@ inline CameraRay cameraRayIsAffineInNdc(const PerspectiveFrustum &frustum,
       cameraRayFromNdc(frustum, surfaceTransform, triangleNdc[1][0], triangleNdc[1][1]),
       cameraRayFromNdc(frustum, surfaceTransform, triangleNdc[2][0], triangleNdc[2][1])};
   if (!corner[0].valid || !corner[1].valid || !corner[2].valid) return ray;
-  for (u32 axis = 0; axis < 3; ++axis)
+  for (u32 axis = 0; axis < 3; ++axis) {
     ray.direction[axis] = corner[0].direction[axis] * weight0 +
                           corner[1].direction[axis] * weight1 +
                           corner[2].direction[axis] * weight2;
+    ray.originOffset[axis] = corner[0].originOffset[axis]*weight0 +
+                            corner[1].originOffset[axis]*weight1 + corner[2].originOffset[axis]*weight2;
+  }
   ray.valid = true;
   return ray;
 }

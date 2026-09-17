@@ -1,0 +1,428 @@
+--------- beginning of main
+09-17 09:00:19.092 14703 14703 E Zygote  : process_name_ptr:14703 dev.aether.editor
+09-17 09:00:19.092 14703 14703 E Zygote  : SetMemoryProtected process_name_ptr:14703 dev.aether.editor
+09-17 09:00:19.098 14703 14703 I v.aether.editor: Late-enabling -Xcheck:jni
+09-17 09:00:19.126 14703 14703 I v.aether.editor: Using CollectorTypeCMC GC.
+09-17 09:00:19.133 14703 14703 D nativeloader: Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+--------- beginning of system
+09-17 09:00:19.136 14703 14703 I ActivityThread: Current dynamic renderEngine type=0
+09-17 09:00:19.152 14703 10827 D MiuiDownscaleImpl: set override inverted scale : 1.0
+09-17 09:00:19.153 14703 14703 I RENDER_TURBO: onActivityThreadCreate not in white list, pkg=dev.aether.editor, type=onyx
+09-17 09:00:19.157 14703 10827 D AppScoutStateMachine: 14703-ScoutStateMachinecreated
+09-17 09:00:19.163 14703 14703 D ActivityThread: setEmbeddedParam packageName=dev.aether.editor processName=dev.aether.editor isEmbedded=false isIsolated=false
+09-17 09:00:19.168 14703 14703 D nativeloader: Configuring clns-10 for other apk /data/app/~~-8egEb5I-D0072PmhXHOHA==/dev.aether.editor-7xAvkTPt3SQTM28t2vCM0Q==/base.apk. target_sdk_version=35, uses_libraries=, library_path=/data/app/~~-8egEb5I-D0072PmhXHOHA==/dev.aether.editor-7xAvkTPt3SQTM28t2vCM0Q==/lib/arm64:/data/app/~~-8egEb5I-D0072PmhXHOHA==/dev.aether.editor-7xAvkTPt3SQTM28t2vCM0Q==/base.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand:/data/user/0/dev.aether.editor
+09-17 09:00:19.168 14703 14703 D CompatChangeReporter: Compat change id reported: 202956589; UID 11091; state: ENABLED
+09-17 09:00:19.170 14703 14703 I v.aether.editor: AssetManager2(0xb4000070b84281b8) locale list changing from [] to [pt-BR]
+09-17 09:00:19.171 14703 14703 E MiuiPreloadClassImpl: invoke error.
+09-17 09:00:19.171 14703 14703 D MiuiMonitorThread: Shared singleton Thread for stability monitor start
+09-17 09:00:19.174 14703 14703 I Perf    : Connecting to perf service.
+09-17 09:00:19.177 14703 14703 D HWUI    : [HWUI] Flag vulkan_enhance_pipeline_cache enabled
+09-17 09:00:19.177 14703 14703 D HWUI    : [HWUI] EnhanceVkPipelineCache is enabled
+09-17 09:00:19.177 14703 14703 D HWUI    : [HWUI] Flag ddre enabled
+09-17 09:00:19.178 14703 14703 V GraphicsEnvironment: Currently set values for:
+09-17 09:00:19.178 14703 14703 V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+09-17 09:00:19.178 14703 14703 V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+09-17 09:00:19.178 14703 14703 V GraphicsEnvironment: dev.aether.editor is not listed in per-application setting
+09-17 09:00:19.178 14703 14703 V GraphicsEnvironment: ANGLE allowlist from config: 
+09-17 09:00:19.178 14703 14703 V GraphicsEnvironment: dev.aether.editor is not listed in ANGLE allowlist or settings, returning default
+09-17 09:00:19.178 14703 14703 V GraphicsEnvironment: All apps opt in to use updatable production driver.
+09-17 09:00:19.181 14703 14703 I ActivityThread: TrafficStats init done
+09-17 09:00:19.182 14703 14703 I ForceDarkHelperStubImpl: initialize for dev.aether.editor , ForceDarkAppConfig: null
+09-17 09:00:19.182 14703 14703 D nativeloader: Load libforcedarkimpl.so using system ns (caller=/system_ext/framework/miui-framework.jar): ok
+09-17 09:00:19.182 14703 14703 D HWUI    : JNI_OnLoad success
+09-17 09:00:19.183 14703 14703 I MiuiForceDarkConfig: setConfig density:3.250000, mainRule:0, secondaryRule:0, tertiaryRule:0
+09-17 09:00:19.189 14703 14703 E ashmem  : Pinning is deprecated since Android Q. Please use trim or other methods.
+09-17 09:00:19.190 14703 14703 I ActivityThread: Miui Feature Init done
+09-17 09:00:19.192 14703 14703 D ResMonitorStub: The current process type is: third_party_app, process name is: dev.aether.editor
+09-17 09:00:19.196 14703 14703 I ActivityThread: currentPkg not in xmlPackages
+09-17 09:00:19.207 14703 14703 D HWUI    : [HWUI] Flag vulkan_enhance_pipeline_cache enabled
+09-17 09:00:19.207 14703 14703 D HWUI    : [HWUI] EnhanceVkPipelineCache is enabled
+09-17 09:00:19.207 14703 14703 D HWUI    : [HWUI] Flag ddre enabled
+09-17 09:00:19.207 14703 14703 D v.aether.editor: blurUtils, initBackgroundBlurMinInterval processName(dev.aether.editor), inWhiteLists(0)
+09-17 09:00:19.207 14703 14703 I ActivityThread: HardwareRenderer preload  done
+09-17 09:00:19.209 14703 14703 I v.aether.editor: AssetManager2(0xb4000070b84236b8) locale list changing from [] to [pt-BR]
+09-17 09:00:19.209 14703 10868 I DisplayManager: Choreographer implicitly registered for the refresh rate.
+09-17 09:00:19.222 14703 10868 W libc    : Access denied finding property "vendor.mivk.log.debug"
+09-17 09:00:19.222 14703 10868 D vulkan  : searching for layers in '/data/app/~~-8egEb5I-D0072PmhXHOHA==/dev.aether.editor-7xAvkTPt3SQTM28t2vCM0Q==/lib/arm64'
+09-17 09:00:19.224 14703 14703 D WmSystemUiDebug: set navigation bar color,Alpha=1.0, RGB:0,0,0 caller:dev.aether.editor.shell.AstraShellActivity.onCreate:31 android.app.Activity.performCreate:9428 android.app.Activity.performCreate:9371 android.app.Instrumentation.callActivityOnCreate:1537 android.app.ActivityThread.performLaunchActivity:4703 android.app.ActivityThread.handleLaunchActivity:4950 android.app.servertransaction.LaunchActivityItem.execute:222 android.app.servertransaction.TransactionExecutor.executeNonLifecycleItem:136 android.app.servertransaction.TransactionExecutor.executeTransactionItems:106 android.app.servertransaction.TransactionExecutor.execute:83 
+09-17 09:00:19.226 14703 10868 D vulkan  : added global layer 'VK_LAYER_KHRONOS_validation' from library '/data/app/~~-8egEb5I-D0072PmhXHOHA==/dev.aether.editor-7xAvkTPt3SQTM28t2vCM0Q==/lib/arm64/libVkLayer_khronos_validation.so'
+09-17 09:00:19.228 14703 10868 D vulkan  : searching for layers in '/data/app/~~-8egEb5I-D0072PmhXHOHA==/dev.aether.editor-7xAvkTPt3SQTM28t2vCM0Q==/base.apk!/lib/arm64-v8a'
+09-17 09:00:19.230 14703 14703 D CompatChangeReporter: Compat change id reported: 312399441; UID 11091; state: ENABLED
+09-17 09:00:19.235 14703 10868 I AdrenoVK-0: ===== BEGIN DUMP OF OVERRIDDEN SETTINGS =====
+09-17 09:00:19.235 14703 10868 I AdrenoVK-0: ===== END DUMP OF OVERRIDDEN SETTINGS =====
+09-17 09:00:19.237 14703 10868 D qdgralloc: Fetching IMapper5 from QtiMapper5
+09-17 09:00:19.243 14703 10868 I SnapAlloc: Graphics lib is available
+09-17 09:00:19.249 14703 10868 I Adreno-UNKNOWN: Using previously loaded IMapper library.
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: QUALCOMM build          : 208ca19915, Iab05a79315
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Build Date              : 02/06/26
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Shader Compiler Version : E031.47.18.49
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Local Branch            : 
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Remote Branch           : refs/tags/AU_LINUX_ANDROID_LA.VENDOR.15.4.0.11.00.00.1088.862
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Remote Branch           : NONE
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Reconstruct Branch      : NOTHING
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Build Config            : S P 18.0.0 AArch64
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Driver Path             : /vendor/lib64/hw/vulkan.adreno.so
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Driver Version          : 0800.71
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: PFP                     : 0x01500081
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: ME                      : 0x01500022
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Application Name    : android framework
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Process Name        : dev.aether.editor
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Application Version : 0x00000000
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Engine Name         : android framework
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Engine Version      : 0x00000000
+09-17 09:00:19.252 14703 10868 I AdrenoVK-0: Api Version         : 0x00401000
+09-17 09:00:19.256 14703 14703 D CompatChangeReporter: Compat change id reported: 279646685; UID 11091; state: ENABLED
+09-17 09:00:19.256 14703 10868 I libEGL  : shader cache num entries: 42
+09-17 09:00:19.257 14703 10868 D HWUI    : [HWUI] Flag vulkan_enhance_pipeline_cache enabled
+09-17 09:00:19.257 14703 10868 D HWUI    : [HWUI] EnhanceVkPipelineCache is enabled
+09-17 09:00:19.257 14703 10868 D HWUI    : [HWUI] Flag ddre enabled
+09-17 09:00:19.257 14703 10868 D SKIA    : [Skia] Flag vulkan_enhance_pipeline_cache enabled
+09-17 09:00:19.257 14703 10868 D SKIA    : [Skia] EnhanceVkPipelineCache is true
+09-17 09:00:19.260 14703 14703 D CompatChangeReporter: Compat change id reported: 309578419; UID 11091; state: ENABLED
+09-17 09:00:19.261 14703 14703 D DesktopModeFlags: Toggle override initialized to: OVERRIDE_UNSET
+09-17 09:00:19.263 14703 14703 D DecorView: updateFreeformOutlineFromActivity, inFreeform=false,inFreeformWindowMode=false
+09-17 09:00:19.265 14703 14703 D Activity: Activity = ActivityInfo{c7b2c1d dev.aether.editor.shell.AstraShellActivity}, Resume onConfigurationChanged = {1.0 724mcc18mnc [pt_BR] ldltr sw394dp w853dp h394dp 520dpi nrml long hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2772, 1280) mAppBounds=Rect(0, 0 - 2772, 1280) mMaxBounds=Rect(0, 0 - 2772, 1280) mDisplayRotation=ROTATION_90 mWindowingMode=fullscreen mActivityType=standard mAlwaysOnTop=undefined mRotation=ROTATION_90 mInSplitScreen=false letterBoxed=false foScaled=false isSpecificEmbedded=false embeddingScale=1.0} as.3 s.2 fontWeightAdjustment=0/d/0 themeChanged=0 themeChangedFlags=0 display=0 extraData = Bundle[{}] screenType=0/0}
+09-17 09:00:19.270 14703 14703 D CompatChangeReporter: Compat change id reported: 352594277; UID 11091; state: ENABLED
+09-17 09:00:19.273 14703 14703 D RenderLite: trim renderNode enable: false
+09-17 09:00:19.275 14703 14703 D CompatChangeReporter: Compat change id reported: 349153669; UID 11091; state: ENABLED
+09-17 09:00:19.275 14703 14703 D FramePredict: FramePredict init: true
+09-17 09:00:19.276 14703 14703 D FramePredict: init success
+09-17 09:00:19.276 14703 14703 W libc    : Access denied finding property "vendor.boostfwk.frameprefetcher"
+09-17 09:00:19.277 14703 14703 E MI-PreRender: init cloud whiteList failed
+09-17 09:00:19.277 14703 10886 E FramePredict: registerContentObserver fail
+09-17 09:00:19.278 14703 14703 D v.aether.editor: MiuiProcessManagerServiceStub setSchedFifo
+09-17 09:00:19.278 14703 14703 I MiuiProcessManagerImpl: setSchedFifo pid:14703, mode:3
+09-17 09:00:19.281 14703 10868 D HWUI    : TAG_DDRE, CanvasContext::setDdreActivities: 
+09-17 09:00:19.281 14703 14703 I ForceDarkHelperStubImpl: setViewRootImplForceDark: false for dev.aether.editor.shell.AstraShellActivity@ce4568d, reason: AppDarkModeEnable
+09-17 09:00:19.282 14703 14703 D InsetsController: dev.aether.editor/dev.aether.editor.shell.AstraShellActivity hide: statusBars captionBar android.view.InsetsController@da60042 android.view.InsetsController.applyAnimation:2241 android.view.InsetsController.applyAnimation:2212 android.view.InsetsController.hide:1439 android.view.InsetsController.hide:1349 android.view.ViewRootImpl.controlInsetsForCompatibility:4456 android.view.ViewRootImpl.setView:2438 
+09-17 09:00:19.282 14703 14703 D InsetsController: Setting requestedVisibleTypes to -14 (was -9)
+09-17 09:00:19.283 14703 14703 D MiuiMultiWindowUtils: freeform resolution args raw data:{  "wide_default":{    "freeform_args": {        "vertical_portrait":{"aspect_ratio":0.626, "original_ratio":0.5643,"original_scale":0.74,"top_margin":0.168,"left_margin":0.484},        "horizontal_portrait":{"aspect_ratio":0.626, "original_ratio":0.5643,"original_scale":0.74,"top_margin":0.1222,"left_margin":0.59745},        "vertical_landscape":{"aspect_ratio":1.6, "original_ratio":0.6992,"original_scale":0.604,"top_margin":0.2596,"left_margin":0.2624},        "horizontal_landscape":{"aspect_ratio":1.6, "original_ratio":0.6992,"original_scale":0.604,"top_margin":0.213,"left_margin":0.3758}    },    "mini_freeform_args":{        "vertical_portrait":{"original_ratio":0.147},        "horizontal_portrait":{"original_ratio":0.147},        "vertical_landscape":{"original_ratio":0.165},        "horizontal_landscape":{"original_ratio":0.165}    }  },  "narrow_default": {    "freeform_args": {        "vertical_portrait":{"aspect_ratio":0.626, "original_ratio":1,"original_scale":0.74,"top_margin":0.0753,"left_margin":-1},        "horizontal_portrait":{"aspect_ratio":0.626, "original_ratio":1,"original_scale":0.5756,"top_margin":-1,"left_margin":0.0753},        "vertical_landscape":{"aspect_ratio":1.6, "original_ratio":1,"original_scale":0.587,"top_margin":0.0753,"left_margin":-1},        "horizontal_landscape":{"aspect_ratio":1.6, "original_ratio":1,"original_scale":0.587,"top_margin":-1,"left_margin":0.0753}    },    "mini_freeform_args":{        "vertical_portrait":{"original_ratio":0.26},        "horizontal_portrait":{"original_ratio":0.26},        "vertical_landscape":{"original_ratio":0.293},        "horizontal_landscape":{"original_ratio":0.293}    }  },  "regular_default": {    "freeform_args": {      "vertical_portrait":{"aspect_ratio":0.625, "original_ratio":1,"original_scale":0.7,"top_margin":0.109,"left_margin":-1},      "horizontal_portrait":{"aspect_ratio":0.6667, "original_ratio":1,"original_scale":0.6102,"top_margin":-1,"left_margin":0.026},      "vertical_landscape":{"aspect_ratio":1.6, "original_ratio":1,"original_scale":0.5899,"top_margin":0.109,"left_margin":-1},      "horizontal_landscape":{"aspect_ratio":1.6, "original_ratio":1,"original_scale":0.5899,"top_margin":-1,"left_margin":0.026}    },    "mini_freeform_args":{      "vertical_portrait":{"original_ratio":0.25},      "horizontal_portrait":{"original_ratio":0.25},      "vertical_landscape":{"original_ratio":0.25},      "horizontal_landscape":{"original_ratio":0.25}    }  },  "pad_default": {    "freeform_args": {      "vertical_portrait":{"aspect_ratio":0.5625, "original_ratio":0.375,"original_scale":0.835,"top_margin":0.049,"left_margin":0.2775},      "horizontal_portrait":{"aspect_ratio":0.5625, "original_ratio":0.375,"original_scale":0.835,"top_margin":-1,"left_margin":0.6525},      "vertical_landscape":{"aspect_ratio":-1, "original_ratio":1,"original_scale":0.468,"top_margin":0.049,"left_margin":-1},      "horizontal_landscape":{"aspect_ratio":-1, "original_ratio":1,"original_scale":0.468,"top_margin":-1,"left_margin":0.4976}    },    "mini_freeform_args":{      "vertical_portrait":{"original_ratio":0.144},      "horizontal_portrait":{"original_ratio":0.144},      "vertical_landscape":{"original_ratio":0.2},      "horizontal_landscape":{"original_ratio":0.2}    }  }}
+09-17 09:00:19.286 14703 14703 D MiuiMultiWindowUtils: initFreeFormResolutionArgs failed, device is onyx
+09-17 09:00:19.289 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.289 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.289 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.290 14703 10868 D HWUI    : [HWUI] Flag vulkan_enhance_pipeline_cache enabled
+09-17 09:00:19.290 14703 10868 D HWUI    : [HWUI] EnhanceVkPipelineCache is enabled
+09-17 09:00:19.290 14703 10868 D HWUI    : [HWUI] Flag ddre enabled
+09-17 09:00:19.296 14703 14703 D DecorViewImmersiveImpl: onAttachedToWindow. pkg: dev.aether.editor
+09-17 09:00:19.296 14703 14703 I ComputilityLevel: getComputilityLevel(): 5
+09-17 09:00:19.296 14703 14703 D DecorViewImmersiveImpl: dev.aether.editor.shell.AstraShellActivity@ce4568d already set forced E2E by app
+09-17 09:00:19.297 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.297 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.297 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.297 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.304 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.304 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.304 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.308 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.308 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.308 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.308 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.309 14703 14703 D VRI[AstraShellActivity]: vri.Setup new sync=wmsSync-VRI[AstraShellActivity]#0
+09-17 09:00:19.322 14703 14703 W HWUI    : Image decoding logging dropped!
+09-17 09:00:19.326 14703 14703 W HWUI    : Image decoding logging dropped!
+09-17 09:00:19.336 14703 10868 I AdrenoUtils: <ReadGpuID:366>: Reading chip ID through GSL
+09-17 09:00:19.342 14703 10868 I SKIA    : CreateGraphicsPipeline pipeline cache hit. elpased time: 1.10 ms.
+09-17 09:00:19.342 14703 10868 I SKIA    : CreateGraphicsPipeline pipeline cache hit. elpased time: 0.14 ms.
+09-17 09:00:19.343 14703 10868 I SKIA    : CreateGraphicsPipeline pipeline cache hit. elpased time: 0.16 ms.
+09-17 09:00:19.343 14703 10868 I SKIA    : CreateGraphicsPipeline pipeline cache hit. elpased time: 0.15 ms.
+09-17 09:00:19.344 14703 10868 I SKIA    : CreateGraphicsPipeline pipeline cache hit. elpased time: 0.13 ms.
+09-17 09:00:19.344 14703 10868 I SKIA    : CreateGraphicsPipeline pipeline cache hit. elpased time: 0.11 ms.
+09-17 09:00:19.344 14703 10868 I SKIA    : CreateGraphicsPipeline pipeline cache hit. elpased time: 0.26 ms.
+09-17 09:00:19.344 14703 10868 I SKIA    : CreateGraphicsPipeline pipeline cache hit. elpased time: 0.13 ms.
+09-17 09:00:19.348 14703 14703 D VRI[AstraShellActivity]: vri.reportDrawFinished 0 0 Rect(0, 0 - 2772, 1280)
+09-17 09:00:19.348 14703 14703 I NativeTurboSchedManager: Load libmiui_runtime
+09-17 09:00:19.351 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.351 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.351 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.351 14703 14703 D InsetsController: dev.aether.editor/dev.aether.editor.shell.AstraShellActivity hide: statusBars android.view.InsetsController@da60042 android.view.InsetsController.applyAnimation:2241 android.view.InsetsController.applyAnimation:2212 android.view.InsetsController.onControlsChanged:1155 android.view.ViewRootImpl.onActiveControlsChanged:3360 android.view.ViewRootImpl.handleInsetsControlChanged:3314 android.view.ViewRootImpl$W.insetsControlChanged:13894 
+09-17 09:00:19.356 14703 10902 D InsetsController: default animation onReady types: 1 controller=android.view.InsetsAnimationControlImpl@43f299f
+09-17 09:00:19.356 14703 10902 D ViewRootImplStubImpl: requestedTypes: 1
+09-17 09:00:19.359 14703 10902 D ViewRootImplStubImpl: notifyImeAnimEvent: isForShow = false, isAnimStart = true, has context = true, has AutofillManager = true, isMiuiAnim = false
+09-17 09:00:19.362 14703 14703 D VRI[AstraShellActivity]: vri.Setup new sync=wmsSync-VRI[AstraShellActivity]#2
+09-17 09:00:19.373 14703 14703 D VRI[AstraShellActivity]: vri.reportDrawFinished 0 0 Rect(0, 0 - 2772, 1280)
+09-17 09:00:19.384 14703 14703 D InsetsController: dev.aether.editor/dev.aether.editor.shell.AstraShellActivity hide: navigationBars android.view.InsetsController@da60042 android.view.InsetsController.applyAnimation:2241 android.view.InsetsController.applyAnimation:2212 android.view.InsetsController.hide:1439 android.view.InsetsController.hide:1349 dev.aether.editor.shell.AstraShellActivity.onWindowFocusChanged:149 com.android.internal.policy.DecorView.onWindowFocusChanged:2414 
+09-17 09:00:19.384 14703 14703 D InsetsController: Setting requestedVisibleTypes to -16 (was -14)
+09-17 09:00:19.385 14703 14703 I HandWritingStubImpl: refreshLastKeyboardType: 1
+09-17 09:00:19.385 14703 14703 I HandWritingStubImpl: getCurrentKeyboardType: 1
+09-17 09:00:19.387 14703 10902 D InsetsController: default animation onReady types: 2 controller=android.view.InsetsAnimationControlImpl@461b84
+09-17 09:00:19.387 14703 10902 D ViewRootImplStubImpl: requestedTypes: 2
+09-17 09:00:19.387 14703 10902 D ViewRootImplStubImpl: notifyImeAnimEvent: isForShow = false, isAnimStart = true, has context = true, has AutofillManager = true, isMiuiAnim = false
+09-17 09:00:19.396 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.396 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.396 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.396 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.401 14703 14703 D InsetsController: hide(ime(), fromIme=false)
+09-17 09:00:19.401 14703 14703 I ImeTracker: dev.aether.editor:f1903b3d: onCancelled at PHASE_CLIENT_ALREADY_HIDDEN
+09-17 09:00:19.422 14703 14703 I HandWritingStubImpl: getCurrentKeyboardType: 1
+09-17 09:00:19.449 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.449 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.449 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:19.549 14703 10902 D InsetsAnimationCtrlImpl: notifyFinished shown: false, currentAlpha: 1,000000, currentInsets: Insets{left=0, top=0, right=0, bottom=0}
+09-17 09:00:19.549 14703 10902 D InsetsAnimationCtrlImpl: Animation finished abruptly.
+09-17 09:00:19.549 14703 10902 D InsetsController: onAnimationFinish showOnFinish: false
+09-17 09:00:19.551 14703 10902 W InteractionJankMonitor: Initializing without READ_DEVICE_CONFIG permission. enabled=false, interval=1, missedFrameThreshold=3, frameTimeThreshold=64, package=dev.aether.editor
+09-17 09:00:19.552 14703 10902 D ViewRootImplStubImpl: notifyImeAnimEvent: isForShow = false, isAnimStart = false, has context = true, has AutofillManager = true, isMiuiAnim = false
+09-17 09:00:19.552 14703 14703 D InsetsController: cancelAnimation of types:1 animType:1 host:dev.aether.editor/dev.aether.editor.shell.AstraShellActivity invokeCallback=false
+09-17 09:00:19.552 14703 14703 D InsetsController: notifyFinished. shown: false runner=android.view.InsetsAnimationThreadControlRunner@43e8c33
+09-17 09:00:19.579 14703 10902 D InsetsAnimationCtrlImpl: notifyFinished shown: false, currentAlpha: 1,000000, currentInsets: Insets{left=0, top=0, right=0, bottom=0}
+09-17 09:00:19.580 14703 10902 D InsetsAnimationCtrlImpl: Animation finished abruptly.
+09-17 09:00:19.580 14703 10902 D InsetsController: onAnimationFinish showOnFinish: false
+09-17 09:00:19.581 14703 10902 D ViewRootImplStubImpl: notifyImeAnimEvent: isForShow = false, isAnimStart = false, has context = true, has AutofillManager = true, isMiuiAnim = false
+09-17 09:00:19.581 14703 14703 D InsetsController: cancelAnimation of types:2 animType:1 host:dev.aether.editor/dev.aether.editor.shell.AstraShellActivity invokeCallback=false
+09-17 09:00:19.581 14703 14703 D InsetsController: notifyFinished. shown: false runner=android.view.InsetsAnimationThreadControlRunner@fcb6bf0
+09-17 09:00:19.758 14703 10820 I v.aether.editor: Compiler allocated 6707KB to compile void android.view.ViewRootImpl.performTraversals()
+09-17 09:00:21.346 14703 14703 W RenderThread: type=1400 audit(0.0:222279): avc:  denied  { getattr } for  path="/sys/module/metis/parameters/minor_window_app" dev="sysfs" ino=74642 scontext=u:r:untrusted_app:s0:c67,c260,c512,c768 tcontext=u:object_r:sysfs_migt:s0 tclass=file permissive=0 app=dev.aether.editor
+09-17 09:00:21.502 14703 10868 I SKIA    : CreateGraphicsPipeline pipeline cache hit. elpased time: 0.34 ms.
+09-17 09:00:21.503 14703 10868 I SKIA    : CreateGraphicsPipeline pipeline cache hit. elpased time: 0.26 ms.
+09-17 09:00:21.503 14703 10868 I SKIA    : CreateGraphicsPipeline pipeline cache hit. elpased time: 0.19 ms.
+09-17 09:00:45.494 14703 14703 I MIUIInput: [MotionEvent] ViewRootImpl windowName 'dev.aether.editor/dev.aether.editor.shell.AstraShellActivity', { action=ACTION_DOWN, id[0]=0, pointerCount=1, eventTime=245790733, downTime=245790733, phoneEventTime=1789646445468 } moveCount:0
+09-17 09:00:45.500 14703 14703 D VRI[AstraShellActivity]: getMiuiFreeformStackInfo mTmpFrames.miuiFreeFormStackInfo: null
+09-17 09:00:45.504 14703 14703 I MIUIInput: [MotionEvent] ViewRootImpl windowName 'dev.aether.editor/dev.aether.editor.shell.AstraShellActivity', { action=ACTION_UP, id[0]=0, pointerCount=1, eventTime=245790733, downTime=245790733, phoneEventTime=1789646445469 } moveCount:0
+09-17 09:00:45.516 14703 10821 W v.aether.editor: userfaultfd: MOVE ioctl seems unsupported: Connection timed out
+09-17 09:00:45.530 14703 14703 W FinalizerDaemon: type=1400 audit(0.0:222782): avc:  denied  { getopt } for  path="/dev/socket/usap_pool_primary" scontext=u:r:untrusted_app:s0:c67,c260,c512,c768 tcontext=u:r:zygote:s0 tclass=unix_stream_socket permissive=0 app=dev.aether.editor
+09-17 09:00:45.541 14703 10868 E v.aether.editor: FrameInsert open fail: No such file or directory
+09-17 09:00:45.561 14703 14703 I ActivityThread: HardwareRenderer preload  done
+09-17 09:00:45.568 14703 14703 D nativeloader: Load /data/app/~~-8egEb5I-D0072PmhXHOHA==/dev.aether.editor-7xAvkTPt3SQTM28t2vCM0Q==/lib/arm64/libaether_android.so using class loader ns clns-10 (caller=/data/app/~~-8egEb5I-D0072PmhXHOHA==/dev.aether.editor-7xAvkTPt3SQTM28t2vCM0Q==/base.apk!classes3.dex): ok
+09-17 09:00:45.570 14703 14703 D DecorView: updateFreeformOutlineFromActivity, inFreeform=false,inFreeformWindowMode=false
+09-17 09:00:45.572 14703 14703 D nativeloader: Load /data/app/~~-8egEb5I-D0072PmhXHOHA==/dev.aether.editor-7xAvkTPt3SQTM28t2vCM0Q==/lib/arm64/libaether_android.so using class loader ns clns-10 (caller=<unknown>): ok
+09-17 09:00:45.572 14703 14703 V threaded_app: Creating: 0xb400007148468ad0
+09-17 09:00:45.572 14703 13635 V threaded_app: Config: mcc=724 mnc=18 lang=pt cnt=BR orien=2 touch=3 dens=520 keys=1 nav=1 keysHid=3 navHid=0 sdk=36 size=2 long=2 modetype=1 modenight=2
+09-17 09:00:45.573 14703 14703 V threaded_app: Start: 0xb400007148468ad0
+09-17 09:00:45.608 14703 13635 I Aether.Android: [SceneSelection] assets=other controller=free/locked hud=0
+09-17 09:00:45.608 14703 13635 I Aether.Android: [FramePolicy] painel máximo=120.00 Hz.
+09-17 09:00:45.609 14703 13635 I Aether.Android: [PerformancePolicy] sustained requested=true supported=false.
+09-17 09:00:45.613 14703 13635 I Aether.Android: [PerformancePolicy] ADPF prefer_power_efficiency=false resultado=0.
+09-17 09:00:45.613 14703 13635 I Aether.Android: [PerformancePolicy] ADPF ativo thread=13635 target_ms=8.333 update_ms=16.667 game_mode=2 gpu_work=true.
+09-17 09:00:45.615 14703 13635 I Aether.Android: [ThermalPolicy] sample=1 status=0 headroom=0.507 forecast_s=10 pressure=none changed=false.
+09-17 09:00:45.616 14703 13635 I Aether.Android: Shell nativo iniciado.
+09-17 09:00:45.616 14703 13635 I Aether.Android: [FramePolicy] render=120 Hz (8.333 ms), fixed tick=60 Hz, CPU<=6.500 ms, GPU<=7.333 ms.
+09-17 09:00:45.617 14703 13635 I Aether.Android: [FramePacer] VSYNC do Android controla a admissão de frames.
+09-17 09:00:45.617 14703 13635 V threaded_app: activityState=10
+09-17 09:00:45.617 14703 14703 D Activity: Activity = ActivityInfo{8c8bddd dev.aether.editor.AetherActivity}, Resume onConfigurationChanged = {1.0 724mcc18mnc [pt_BR] ldltr sw394dp w853dp h394dp 520dpi nrml long hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2772, 1280) mAppBounds=Rect(0, 0 - 2772, 1280) mMaxBounds=Rect(0, 0 - 2772, 1280) mDisplayRotation=ROTATION_90 mWindowingMode=fullscreen mActivityType=standard mAlwaysOnTop=undefined mRotation=ROTATION_90 mInSplitScreen=false letterBoxed=false foScaled=false isSpecificEmbedded=false embeddingScale=1.0} as.3 s.2 fontWeightAdjustment=0/d/0 themeChanged=0 themeChangedFlags=0 display=0 extraData = Bundle[{}] screenType=0/0}
+09-17 09:00:45.617 14703 13635 I Aether.Android: [Lifecycle] seq=1 cmd=START(10) phase=begin uptime_ms=245790882.175 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+09-17 09:00:45.617 14703 13635 I Aether.Android: [Lifecycle] seq=1 cmd=START(10) phase=end uptime_ms=245790882.215 elapsed_ms=0.042 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=10
+09-17 09:00:45.617 14703 14703 V threaded_app: Resume: 0xb400007148468ad0
+09-17 09:00:45.617 14703 13635 V threaded_app: activityState=11
+09-17 09:00:45.619 14703 13635 I Aether.Android: [Lifecycle] seq=2 cmd=RESUME(11) phase=begin uptime_ms=245790883.918 elapsed_ms=0.000 resumed=0 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+09-17 09:00:45.619 14703 13635 I Aether.Android: [Lifecycle] seq=2 cmd=RESUME(11) phase=end uptime_ms=245790883.939 elapsed_ms=0.022 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+09-17 09:00:45.623 14703 14703 D InsetsController: dev.aether.editor/dev.aether.editor.AetherActivity hide: statusBars navigationBars captionBar android.view.InsetsController@72acb95 android.view.InsetsController.applyAnimation:2241 android.view.InsetsController.applyAnimation:2212 android.view.InsetsController.hide:1439 android.view.InsetsController.hide:1349 android.view.ViewRootImpl.controlInsetsForCompatibility:4456 android.view.ViewRootImpl.setView:2438 
+09-17 09:00:45.623 14703 14703 D InsetsController: Setting requestedVisibleTypes to -16 (was -9)
+09-17 09:00:45.626 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.626 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.626 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.626 14703 14703 V threaded_app: InputQueueCreated: 0xb400007148468ad0 -- 0xb400007208437200
+09-17 09:00:45.626 14703 13635 V threaded_app: APP_CMD_INPUT_CHANGED
+09-17 09:00:45.626 14703 13635 V threaded_app: Attaching input queue to looper
+09-17 09:00:45.626 14703 13635 I Aether.Android: [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=begin uptime_ms=245790890.907 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+09-17 09:00:45.626 14703 13635 I Aether.Android: [Lifecycle] seq=3 cmd=INPUT_CHANGED(0) phase=end uptime_ms=245790890.961 elapsed_ms=0.056 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=0 glue_state=11
+09-17 09:00:45.627 14703 14703 D DecorViewImmersiveImpl: onAttachedToWindow. pkg: dev.aether.editor
+09-17 09:00:45.627 14703 14703 I ComputilityLevel: getComputilityLevel(): 5
+09-17 09:00:45.627 14703 14703 D DecorViewImmersiveImpl: dev.aether.editor.AetherActivity@d888438 already set forced E2E by app
+09-17 09:00:45.627 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.627 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.627 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.627 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.630 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.630 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.630 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.631 14703 14703 V threaded_app: NativeWindowCreated: 0xb400007148468ad0 -- 0xb40000709847f280
+09-17 09:00:45.631 14703 13635 V threaded_app: APP_CMD_INIT_WINDOW
+09-17 09:00:45.631 14703 14703 V threaded_app: NativeWindowResized: 0xb400007148468ad0 -- 0xb40000709847f280
+09-17 09:00:45.631 14703 14703 V threaded_app: ContentRectChanged: l=0,t=0,r=2772,b=1280
+09-17 09:00:45.631 14703 13635 I Aether.Android: [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=begin uptime_ms=245790896.067 elapsed_ms=0.000 resumed=1 focus=0 window=0 active=0 renderer=0 native_window=1 glue_state=11
+09-17 09:00:45.631 14703 13635 I Aether.Android: [Lifecycle] stage=create-surface-renderer phase=begin uptime_ms=245790896.076
+09-17 09:00:45.631 14703 14703 D VRI[AetherActivity]: vri.Setup new sync=wmsSync-VRI[AetherActivity]#4
+09-17 09:00:45.631 14703 14703 V threaded_app: NativeWindowRedrawNeeded: 0xb400007148468ad0 -- 0xb40000709847f280
+09-17 09:00:45.631 14703 14703 D VRI[AetherActivity]: vri.reportDrawFinished 0 0 Rect(0, 0 - 2772, 1280)
+09-17 09:00:45.632 14703 13635 I Aether.Android: [FramePolicy] solicitação da surface=120 Hz resultado=0.
+09-17 09:00:45.637 14703 13635 I vulkan  : Loaded layer VK_LAYER_KHRONOS_validation
+09-17 09:00:45.639 14703 13635 I Adreno-UNKNOWN: Using previously loaded IMapper library.
+09-17 09:00:45.642 14703 13635 I Adreno-UNKNOWN: Using previously loaded IMapper library.
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: QUALCOMM build          : 208ca19915, Iab05a79315
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Build Date              : 02/06/26
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Shader Compiler Version : E031.47.18.49
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Local Branch            : 
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Remote Branch           : refs/tags/AU_LINUX_ANDROID_LA.VENDOR.15.4.0.11.00.00.1088.862
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Remote Branch           : NONE
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Reconstruct Branch      : NOTHING
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Build Config            : S P 18.0.0 AArch64
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Driver Path             : /vendor/lib64/hw/vulkan.adreno.so
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Driver Version          : 0800.71
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: PFP                     : 0x01500081
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: ME                      : 0x01500022
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Application Name    : Aether Editor
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Process Name        : dev.aether.editor
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Application Version : 0x00400000
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Engine Name         : Aether
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Engine Version      : 0x00400000
+09-17 09:00:45.645 14703 13635 I AdrenoVK-0: Api Version         : 0x00401000
+09-17 09:00:45.645 14703 13635 I Aether.Vulkan: [CURRENT-VALIDATION-ENABLED] vkCreateInstance(): Current Validaiton Enabled:
+09-17 09:00:45.645 14703 13635 I Aether.Vulkan:   - Core Checks
+09-17 09:00:45.645 14703 13635 I Aether.Vulkan:   - Stateless Parameter
+09-17 09:00:45.645 14703 13635 I Aether.Vulkan:   - Object lifetime
+09-17 09:00:45.645 14703 13635 I Aether.Vulkan:   - Thread Safety
+09-17 09:00:45.645 14703 13635 I Aether.Vulkan:   - Handle Wrapping
+09-17 09:00:45.645 14703 13635 I Aether.Vulkan: [VulkanDiagnostics] validation=enabled debug_utils=enabled
+09-17 09:00:45.649 14703 13635 I Aether.Vulkan: [WARNING-cache-file-error] vkCreateDevice(): Cannot open shader validation cache at /tmp/shader_validation_cache-11091.bin for reading (it may not exist yet)
+09-17 09:00:45.649 14703 13635 I Aether.Android: Surface Vulkan pronta: janela=2772x1280, imagens=4..64, fila=0, transform=2, suportados=511.
+09-17 09:00:45.655 14703 13635 I Aether.Android: Swapchain pronta: 1280x2772, 5 imagens, formato=43.
+09-17 09:00:45.655 14703 13635 I Aether.Android: [RenderPolicy] features: vulkan1_3=1 descriptor_indexing=1 nonuniform=1 ray_query=0 mesh_shader=0 vrs=0 memoryless=0 -> perfil=1
+09-17 09:00:45.655 14703 13635 I Aether.Android: [RenderPolicy] preset=auto perfil=1 sombras=on(2 cascatas @1024, 9/1 taps, cache=static margem=1.08 blend=0.10 fade=0.12) ambiente=hemisferio pos=passe malha_agua=medium(116 seg) textura_mip_bias=0 aniso=8.0 escala=1.00 dinamica=on[0.50,1.00] clamps=3
+09-17 09:00:45.655 14703 13635 I Aether.Android: [RenderPolicy] shadows.cascadeResolution reduzido por capability.
+09-17 09:00:45.655 14703 13635 I Aether.Android: [RenderPolicy] dynamicResolution.enabled reduzido por budget.
+09-17 09:00:45.655 14703 13635 I Aether.Android: [RenderPolicy] dynamicResolution.minimumScale reduzido por budget.
+09-17 09:00:45.655 14703 13635 I Aether.Android: [RenderPolicy] lod=on erro_solido=2.50px erro_coverage=4.00px histerese=0.75 normal_ate=60.0 specular_ate=120.0 mr_ate=180.0 emissive_ate=240.0 variantes_material=off aa=fxaa bloom=0 sharpen=0.00 contraste=1.00 saturacao=1.00
+09-17 09:00:45.655 14703 13635 I Aether.Android: [Lifecycle] stage=rebuild-renderer phase=begin uptime_ms=245790920.381
+09-17 09:00:45.655 14703 13635 I Aether.Android: [EmptyWorkspace] initialization=loading
+09-17 09:00:45.655 14703 13635 I Aether.Android: [Lifecycle] stage=rebuild-renderer phase=end uptime_ms=245790920.446 elapsed_ms=0.065
+09-17 09:00:45.655 14703 13635 I Aether.Android: [Lifecycle] stage=create-surface-renderer phase=end uptime_ms=245790920.448 elapsed_ms=24.372
+09-17 09:00:45.655 14703 13635 I Aether.Android: [Lifecycle] seq=4 cmd=INIT_WINDOW(1) phase=end uptime_ms=245790920.451 elapsed_ms=24.385 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+09-17 09:00:45.655 14703 13635 I Aether.Android: [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=245790920.471 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+09-17 09:00:45.656 14703 13635 I Aether.Android: [Lifecycle] seq=5 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=245790920.484 elapsed_ms=0.013 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+09-17 09:00:45.656 14703 13635 I Aether.Android: [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=begin uptime_ms=245790920.488 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+09-17 09:00:45.656 14703 13635 I Aether.Android: [Lifecycle] seq=6 cmd=CONTENT_RECT_CHANGED(5) phase=end uptime_ms=245790920.491 elapsed_ms=0.002 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+09-17 09:00:45.656 14703 13635 I Aether.Android: [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=begin uptime_ms=245790920.494 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+09-17 09:00:45.656 14703 13635 I Aether.Android: [Lifecycle] seq=7 cmd=WINDOW_REDRAW_NEEDED(4) phase=end uptime_ms=245790920.496 elapsed_ms=0.002 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+09-17 09:00:45.656 14703 13644 I Aether.Android: [Textures] anisotropia de material=8.0
+09-17 09:00:45.658 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.658 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.658 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.658 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.658 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.658 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.658 14703 14703 V threaded_app: WindowFocusChanged: 0xb400007148468ad0 -- 1
+09-17 09:00:45.658 14703 13635 I Aether.Android: [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=begin uptime_ms=245790923.128 elapsed_ms=0.000 resumed=1 focus=0 window=1 active=0 renderer=0 native_window=1 glue_state=11
+09-17 09:00:45.658 14703 14703 I HandWritingStubImpl: refreshLastKeyboardType: 1
+09-17 09:00:45.658 14703 14703 I HandWritingStubImpl: getCurrentKeyboardType: 1
+09-17 09:00:45.659 14703 13635 I Aether.Android: [FramePolicy] solicitação da surface=120 Hz resultado=0.
+09-17 09:00:45.660 14703 13635 I Aether.Android: Aplicativo ativo.
+09-17 09:00:45.660 14703 13635 I Aether.Android: [Lifecycle] seq=8 cmd=GAINED_FOCUS(6) phase=end uptime_ms=245790925.012 elapsed_ms=1.885 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+09-17 09:00:45.670 14703 13644 I Aether.Android: [Authoring] primitive_library=1 packages=0 water=0 authored_objects=0
+09-17 09:00:45.674 14703 13644 I Aether.Android: [FrameGraph] depth 1280x2772: store=nao sampled=nao memoryless_pedido=sim lazily_allocated_concedido=sim.
+09-17 09:00:45.675 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.675 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.675 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.675 14703 14703 V threaded_app: NativeWindowResized: 0xb400007148468ad0 -- 0xb40000709847f280
+09-17 09:00:45.675 14703 13635 I Aether.Android: [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=begin uptime_ms=245790939.826 elapsed_ms=0.000 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+09-17 09:00:45.675 14703 13635 I Aether.Android: [Lifecycle] seq=9 cmd=WINDOW_RESIZED(3) phase=end uptime_ms=245790939.852 elapsed_ms=0.027 resumed=1 focus=1 window=1 active=1 renderer=0 native_window=1 glue_state=11
+09-17 09:00:45.675 14703 13644 I Aether.Android: [Shadow] PCF de hardware ativo: filtro=linear compare=LESS_OR_EQUAL.
+09-17 09:00:45.677 14703 13644 W Aether.Vulkan: [WARNING-Shader-OutputNotConsumed] vkCreateGraphicsPipelines(): pCreateInfos[0].pVertexInputState Vertex attribute at location 1 not consumed by vertex shader.
+09-17 09:00:45.677 14703 13644 W Aether.Vulkan: [WARNING-Shader-OutputNotConsumed] vkCreateGraphicsPipelines(): pCreateInfos[0].pVertexInputState Vertex attribute at location 2 not consumed by vertex shader.
+09-17 09:00:45.677 14703 13644 W Aether.Vulkan: [WARNING-Shader-OutputNotConsumed] vkCreateGraphicsPipelines(): pCreateInfos[0].pVertexInputState Vertex attribute at location 11 not consumed by vertex shader.
+09-17 09:00:45.677 14703 13644 W Aether.Vulkan: [WARNING-Shader-OutputNotConsumed] vkCreateGraphicsPipelines(): pCreateInfos[0].pVertexInputState Vertex attribute at location 12 not consumed by vertex shader.
+09-17 09:00:45.677 14703 13644 W Aether.Vulkan: [WARNING-Shader-OutputNotConsumed] vkCreateGraphicsPipelines(): pCreateInfos[0].pVertexInputState Vertex attribute at location 13 not consumed by vertex shader.
+09-17 09:00:45.689 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.689 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.689 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.689 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.689 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.689 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.691 14703 13644 W Aether.Vulkan: [WARNING-Shader-OutputNotConsumed] vkCreateGraphicsPipelines(): pCreateInfos[0].pVertexInputState Vertex attribute at location 1 not consumed by vertex shader.
+09-17 09:00:45.691 14703 13644 W Aether.Vulkan: [WARNING-Shader-OutputNotConsumed] vkCreateGraphicsPipelines(): pCreateInfos[0].pVertexInputState Vertex attribute at location 2 not consumed by vertex shader.
+09-17 09:00:45.691 14703 13644 W Aether.Vulkan: [WARNING-Shader-OutputNotConsumed] vkCreateGraphicsPipelines(): pCreateInfos[0].pVertexInputState Vertex attribute at location 11 not consumed by vertex shader.
+09-17 09:00:45.691 14703 13644 W Aether.Vulkan: [WARNING-Shader-OutputNotConsumed] vkCreateGraphicsPipelines(): pCreateInfos[0].pVertexInputState Vertex attribute at location 12 not consumed by vertex shader.
+09-17 09:00:45.691 14703 13644 W Aether.Vulkan: [WARNING-Shader-OutputNotConsumed] (Warning - This VUID has now been reported 10 times, which is the duplicate_message_limit value, this will be the last time reporting it).
+09-17 09:00:45.691 14703 13644 W Aether.Vulkan: vkCreateGraphicsPipelines(): pCreateInfos[0].pVertexInputState Vertex attribute at location 13 not consumed by vertex shader.
+09-17 09:00:45.911 14703 14703 D VRI[AstraShellActivity]: visibilityChanged oldVisibility=true newVisibility=false
+09-17 09:00:45.925 14703 10868 D BufferQueueProducer: [VRI[AstraShellActivity]#0(BLAST Consumer)0](id:396f00000000,api:1,p:14703,c:14703) disconnect: api 1 (caller=14703)
+09-17 09:00:45.932 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.932 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.932 14703 14703 W InsetsSource: Has no intersection or mTmpFrame.height(), return Insets.NONE mTmpFrame.height() =0 hasIntersection =false
+09-17 09:00:45.933 14703 14703 W v.aether.editor: Binder 0xb400007238437ea0 destroyed after setInheritRt before being parceled.
+09-17 09:00:45.933 14703 14703 D BufferQueueConsumer: [VRI[AstraShellActivity]#0(BLAST Consumer)0](id:396f00000000,api:0,p:-1,c:14703) disconnect: caller 14703
+09-17 09:00:46.933 14703 13644 I Aether.Android: [UI] pronta: fonte 2048x1024 icones 1024x1766 capacidade=16384.
+09-17 09:00:46.933 14703 13644 I Aether.Android: Descritores: caminho=bindless, capacidade bindless=16777216.
+09-17 09:00:46.933 14703 13644 I Aether.Android: RHI/VMA: buffer de instâncias=128 bytes; uso=1510656, limite=2411095449 bytes.
+09-17 09:00:46.933 14703 13644 I Aether.Android: InstancedRenderer pronto: capacidade=1, modo=empty-scene.
+09-17 09:00:46.933 14703 13644 I Aether.Android: [DirtRoad] passes solid=1 coverage=0 transparent=0 coverage_prepass=on; frustum_culling=conservador indirect=multi-draw.
+09-17 09:00:46.933 14703 13644 I Aether.Android: RHI/VMA [buffer]: uso=1510656, pico=1510656 bytes.
+09-17 09:00:46.933 14703 13644 I Aether.Android: RHI/VMA [texture]: uso=15745408, pico=15745408 bytes.
+09-17 09:00:46.933 14703 13644 I Aether.Android: RHI/VMA [render-target]: uso=45531136, pico=45531136 bytes.
+09-17 09:00:46.933 14703 13644 I Aether.Android: RHI/VMA [staging]: uso=0, pico=8388608 bytes.
+09-17 09:00:46.937 14703 13635 I Aether.Android: [Material] culling por material (dupla face): sim.
+09-17 09:00:46.937 14703 13635 I Aether.Android: [Import] KTX2 com mips vira ASTC 4x4.
+09-17 09:00:46.943 14703 13635 I Aether.Android: [Open] preparando 1 fonte(s) em segundo plano.
+09-17 09:00:46.943 14703 13635 I Aether.Android: [Editor] independent resources=1 fingerprint=0 managed=off
+09-17 09:00:46.943 14703 13635 I Aether.Android: [Editor] sessao pronta: 1 entidades no documento.
+09-17 09:00:46.943 14703 13635 I Aether.Android: [ThermalPolicy] applied=none lod=2.50/4.00 shadow=on/2c@1024/9t post=pass scale=1.00 dynamic=[0.50,1.00]
+09-17 09:00:46.948 14703 13635 I Aether.Android: [EmptyWorkspace] initialization=ready
+09-17 09:00:46.965 14703 13635 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=0 visible=0 culled=0 submitted_draws=0 triangles_visible=0/0 triangles_submitted=0 shadow_draws=0/0 shadow_cascades=2/2 shadow_cache_hit_frames=0 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:00:46.965 14703 13635 I Aether.Android: Primeiro frame após ativação apresentado: ciclo=1. latency_ms=1306.331 uptime_ms=245792230.235
+09-17 09:00:46.966 14703 13775 I Aether.Android: [Open] fonte preparada: Fontes/esfera-draco.glb bytes=14608 cache=acerto leitura_fonte_hash_ms=2 leitura_derivado_ms=20 preparo_ms=23 gravacao_derivado_ms=0
+09-17 09:00:46.991 14703 13635 I Aether.Android: [Import] texturas importadas: 0 publicadas (0 reaproveitadas, 0 enviadas), 0 slots bindless; geometria enviada.
+09-17 09:00:46.991 14703 13635 I Aether.Android: [Import] pacote absorvido: 2 desenhos, 4775 vertices.
+09-17 09:00:47.026 14703 13635 I Aether.Android: [Import] fonte reaberta: Fontes/esfera-draco.glb
+09-17 09:00:47.026 14703 13635 I Aether.Android: [Residencia] texturas=0 pedidos_mb=0.0 residentes_mb=0.0 teto_mb=1024.0 reduzidas=0 niveis_removidos=0 cabe=sim
+09-17 09:00:47.027 14703 13635 I Aether.Android: [Open] projeto aberto: fontes=1 derivados_reaproveitados=1 falhas=0 preparo_ms=37 publicacao_ms=47 cena_ms=0 total_ms=85
+09-17 09:00:47.719 14703 13635 I Aether.Android: [FramePacer] cadência VSYNC observada=60.06 Hz (120 intervalos).
+09-17 09:00:48.240 14703 13635 I Aether.Android: Extração de assets .NET concluída: 186 ok, 0 falharam.
+09-17 09:00:48.241 14703 13635 I Aether.Android: [ManagedBuild] id=5f5021f968d8996558df23560f5999607211829756621c66137fcfeb7b9e4f81 reused=1
+09-17 09:00:48.247 14703 13635 I Aether.Android: OpenSSL privado da Astra carregado.
+09-17 09:00:48.250 14703 14703 W Thread-102: type=1400 audit(0.0:222783): avc:  granted  { execute } for  path="/data/data/dev.aether.editor/files/dotnet/shared/Microsoft.NETCore.App/8.0.27/libhostpolicy.so" dev="dm-62" ino=2694282 scontext=u:r:untrusted_app:s0:c67,c260,c512,c768 tcontext=u:object_r:app_data_file:s0:c67,c260,c512,c768 tclass=file app=dev.aether.editor
+09-17 09:00:48.250 14703 14703 W Thread-102: type=1400 audit(0.0:222784): avc:  granted  { execute } for  path="/data/data/dev.aether.editor/files/dotnet/shared/Microsoft.NETCore.App/8.0.27/libcoreclr.so" dev="dm-62" ino=2695143 scontext=u:r:untrusted_app:s0:c67,c260,c512,c768 tcontext=u:object_r:app_data_file:s0:c67,c260,c512,c768 tclass=file app=dev.aether.editor
+09-17 09:00:48.286 14703 14703 W Thread-102: type=1400 audit(0.0:222785): avc:  granted  { execute } for  path="/data/data/dev.aether.editor/files/dotnet/shared/Microsoft.NETCore.App/8.0.27/libSystem.Native.so" dev="dm-62" ino=3032442 scontext=u:r:untrusted_app:s0:c67,c260,c512,c768 tcontext=u:object_r:app_data_file:s0:c67,c260,c512,c768 tclass=file app=dev.aether.editor
+09-17 09:00:48.321 14703 13635 I Aether.Android: Runtime hospedado: Mono/SGen; regioes GC nativas ativas.
+09-17 09:00:48.321 14703 13635 I Aether.Android: .NET carregado com sucesso via hostfxr (/data/user/0/dev.aether.editor/files/dotnet/Aether.Rendering.runtimeconfig.json).
+09-17 09:00:48.586 14703 14703 W Thread-102: type=1400 audit(0.0:222786): avc:  granted  { execute } for  path="/data/data/dev.aether.editor/files/dotnet/shared/Microsoft.NETCore.App/8.0.27/libSystem.Security.Cryptography.Native.OpenSsl.so" dev="dm-62" ino=2705339 scontext=u:r:untrusted_app:s0:c67,c260,c512,c768 tcontext=u:object_r:app_data_file:s0:c67,c260,c512,c768 tclass=file app=dev.aether.editor
+09-17 09:00:51.203 14703 13635 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=238 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:00:55.200 14703 13635 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=478 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:00:55.632 14703 13635 I Aether.Android: [ThermalPolicy] sample=2 status=0 headroom=0.510 forecast_s=10 pressure=none changed=false.
+09-17 09:00:59.202 14703 13635 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=718 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:03.195 14703 13635 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=958 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:03.859 14703 13635 I Aether.Android: Marco de renderização atingido: 1000 frames apresentados.
+09-17 09:01:05.637 14703 13635 I Aether.Android: [ThermalPolicy] sample=3 status=0 headroom=0.494 forecast_s=10 pressure=none changed=false.
+09-17 09:01:07.188 14703 13635 I Aether.Android: [Visibility] render=1280x2772 scale=1.000 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=1198 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:09.183 14703 14703 I MIUIInput: [MotionEvent] ViewRootImpl windowName 'dev.aether.editor/dev.aether.editor.AetherActivity', { action=ACTION_DOWN, id[0]=0, pointerCount=1, eventTime=245814443, downTime=245814443, phoneEventTime=1789646469179 } moveCount:0
+09-17 09:01:09.190 14703 13635 V threaded_app: New input event: type=2
+09-17 09:01:09.194 14703 14703 I MIUIInput: [MotionEvent] ViewRootImpl windowName 'dev.aether.editor/dev.aether.editor.AetherActivity', { action=ACTION_UP, id[0]=0, pointerCount=1, eventTime=245814443, downTime=245814443, phoneEventTime=1789646469179 } moveCount:0
+09-17 09:01:09.194 14703 13635 V threaded_app: New input event: type=2
+09-17 09:01:09.325 14703 14703 I MIUIInput: [MotionEvent] ViewRootImpl windowName 'dev.aether.editor/dev.aether.editor.AetherActivity', { action=ACTION_DOWN, id[0]=0, pointerCount=1, eventTime=245814588, downTime=245814588, phoneEventTime=1789646469324 } moveCount:0
+09-17 09:01:09.326 14703 13635 V threaded_app: New input event: type=2
+09-17 09:01:09.328 14703 14703 I MIUIInput: [MotionEvent] ViewRootImpl windowName 'dev.aether.editor/dev.aether.editor.AetherActivity', { action=ACTION_UP, id[0]=0, pointerCount=1, eventTime=245814588, downTime=245814588, phoneEventTime=1789646469324 } moveCount:0
+09-17 09:01:09.330 14703 13635 V threaded_app: New input event: type=2
+09-17 09:01:09.442 14703 14703 I MIUIInput: [MotionEvent] ViewRootImpl windowName 'dev.aether.editor/dev.aether.editor.AetherActivity', { action=ACTION_DOWN, id[0]=0, pointerCount=1, eventTime=245814705, downTime=245814705, phoneEventTime=1789646469441 } moveCount:0
+09-17 09:01:09.444 14703 13635 V threaded_app: New input event: type=2
+09-17 09:01:09.446 14703 14703 I MIUIInput: [MotionEvent] ViewRootImpl windowName 'dev.aether.editor/dev.aether.editor.AetherActivity', { action=ACTION_UP, id[0]=0, pointerCount=1, eventTime=245814705, downTime=245814705, phoneEventTime=1789646469441 } moveCount:0
+09-17 09:01:09.446 14703 13635 V threaded_app: New input event: type=2
+09-17 09:01:09.550 14703 13635 I Aether.Android: [DynamicResolution] scale=0.950 render=1216x2632 gpu=7.647ms budget=7.333ms.
+09-17 09:01:09.651 14703 13635 I Aether.Android: [DynamicResolution] scale=0.900 render=1152x2488 gpu=7.700ms budget=7.333ms.
+09-17 09:01:09.752 14703 13635 I Aether.Android: [DynamicResolution] scale=0.850 render=1088x2352 gpu=7.518ms budget=7.333ms.
+09-17 09:01:09.850 14703 13635 I Aether.Android: [DynamicResolution] scale=0.800 render=1016x2216 gpu=7.409ms budget=7.333ms.
+09-17 09:01:09.952 14703 13635 I Aether.Android: [DynamicResolution] scale=0.750 render=952x2072 gpu=7.522ms budget=7.333ms.
+09-17 09:01:11.185 14703 13635 I Aether.Android: [Visibility] render=952x2072 scale=0.750 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=1437 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:15.182 14703 13635 I Aether.Android: [Visibility] render=952x2072 scale=0.750 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=1677 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:15.645 14703 13635 I Aether.Android: [ThermalPolicy] sample=4 status=0 headroom=0.494 forecast_s=10 pressure=none changed=false.
+09-17 09:01:19.178 14703 13635 I Aether.Android: [Visibility] render=952x2072 scale=0.750 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=1917 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:23.176 14703 13635 I Aether.Android: [Visibility] render=952x2072 scale=0.750 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=2157 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:25.655 14703 13635 I Aether.Android: [ThermalPolicy] sample=5 status=0 headroom=0.492 forecast_s=10 pressure=none changed=false.
+09-17 09:01:27.172 14703 13635 I Aether.Android: [Visibility] render=952x2072 scale=0.750 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=2397 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:31.168 14703 13635 I Aether.Android: [Visibility] render=952x2072 scale=0.750 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=2637 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:31.644 14703 14703 I MIUIInput: [MotionEvent] ViewRootImpl windowName 'dev.aether.editor/dev.aether.editor.AetherActivity', { action=ACTION_DOWN, id[0]=0, pointerCount=1, eventTime=245836902, downTime=245836902, phoneEventTime=1789646491637 } moveCount:0
+09-17 09:01:31.645 14703 13635 V threaded_app: New input event: type=2
+09-17 09:01:31.651 14703 14703 I MIUIInput: [MotionEvent] ViewRootImpl windowName 'dev.aether.editor/dev.aether.editor.AetherActivity', { action=ACTION_UP, id[0]=0, pointerCount=1, eventTime=245836902, downTime=245836902, phoneEventTime=1789646491637 } moveCount:0
+09-17 09:01:31.652 14703 13635 V threaded_app: New input event: type=2
+09-17 09:01:33.877 14703 13635 I Aether.Android: [DynamicResolution] scale=0.775 render=984x2144 gpu=4.375ms budget=7.333ms.
+09-17 09:01:35.164 14703 13635 I Aether.Android: [Visibility] render=984x2144 scale=0.775 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=2876 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:35.662 14703 13635 I Aether.Android: [ThermalPolicy] sample=6 status=0 headroom=0.493 forecast_s=10 pressure=none changed=false.
+09-17 09:01:35.877 14703 13635 I Aether.Android: [DynamicResolution] scale=0.800 render=1016x2216 gpu=4.503ms budget=7.333ms.
+09-17 09:01:37.874 14703 13635 I Aether.Android: [DynamicResolution] scale=0.825 render=1048x2280 gpu=4.610ms budget=7.333ms.
+09-17 09:01:39.160 14703 13635 I Aether.Android: [Visibility] render=1048x2280 scale=0.825 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=3116 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:43.160 14703 13635 I Aether.Android: [Visibility] render=1048x2280 scale=0.825 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=3356 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:45.670 14703 13635 I Aether.Android: [ThermalPolicy] sample=7 status=0 headroom=0.495 forecast_s=10 pressure=none changed=false.
+09-17 09:01:47.154 14703 13635 I Aether.Android: [Visibility] render=1048x2280 scale=0.825 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=3596 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:47.283 14703 13635 I Aether.Android: [DynamicResolution] scale=0.850 render=1080x2352 gpu=4.727ms budget=7.333ms.
+09-17 09:01:51.148 14703 13635 I Aether.Android: [Visibility] render=1080x2352 scale=0.850 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=3836 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:54.960 14703 13635 I Aether.Android: [DynamicResolution] scale=0.875 render=1112x2424 gpu=4.855ms budget=7.333ms.
+09-17 09:01:55.144 14703 13635 I Aether.Android: [Visibility] render=1112x2424 scale=0.875 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=4076 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:01:55.675 14703 13635 I Aether.Android: [ThermalPolicy] sample=8 status=0 headroom=0.491 forecast_s=10 pressure=none changed=false.
+09-17 09:01:58.806 14703 13635 I Aether.Android: [DynamicResolution] scale=0.900 render=1144x2488 gpu=4.946ms budget=7.333ms.
+09-17 09:01:59.141 14703 13635 I Aether.Android: [Visibility] render=1144x2488 scale=0.900 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=4316 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:02:01.369 14703 13635 I Aether.Android: [DynamicResolution] scale=0.925 render=1176x2560 gpu=5.034ms budget=7.333ms.
+09-17 09:02:03.138 14703 13635 I Aether.Android: [Visibility] render=1176x2560 scale=0.925 candidates=2 visible=2 culled=0 submitted_draws=2 triangles_visible=9042/9042 triangles_submitted=9042 shadow_draws=0/0 shadow_cascades=0/2 shadow_cache_hit_frames=4556 hzb_tested=0 hzb_occluded=0 hzb_revived=0 hzb_motion_skip=0 hzb_budget_skip=0 gpu_cull=off gpu_cull_tested=0 gpu_cull_occluded=0 gpu_cull_revived=0 gpu_cull_visible=0
+09-17 09:02:03.721 14703 14703 I MIUIInput: [MotionEvent] ViewRootImpl windowName 'dev.aether.editor/dev.aether.editor.AetherActivity', { action=ACTION_DOWN, id[0]=0, pointerCount=1, eventTime=245868982, downTime=245868982, phoneEventTime=1789646523717 } moveCount:0
+09-17 09:02:03.722 14703 13635 V threaded_app: New input event: type=2
+09-17 09:02:03.725 14703 14703 I MIUIInput: [MotionEvent] ViewRootImpl windowName 'dev.aether.editor/dev.aether.editor.AetherActivity', { action=ACTION_UP, id[0]=0, pointerCount=1, eventTime=245868982, downTime=245868982, phoneEventTime=1789646523717 } moveCount:0
+09-17 09:02:03.726 14703 13635 V threaded_app: New input event: type=2
+09-17 09:02:03.835 14703 13635 I Aether.Android: [DynamicResolution] scale=0.875 render=1112x2424 gpu=7.651ms budget=7.333ms.
+09-17 09:02:03.935 14703 13635 I Aether.Android: [DynamicResolution] scale=0.825 render=1048x2280 gpu=7.557ms budget=7.333ms.

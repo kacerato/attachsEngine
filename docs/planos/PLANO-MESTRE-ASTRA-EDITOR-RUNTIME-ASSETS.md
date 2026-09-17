@@ -1451,3 +1451,8 @@ https://github.com/jkuhlmann/cgltf
 **[R16] cgltf: API de accessors e transforms** — Referência primária. Separar parsing, carregamento de buffers, validação, accessors e transformação. Pin de dependência obrigatório.
 
 https://github.com/jkuhlmann/cgltf/blob/master/cgltf.h
+
+
+## Adendo — aba Jogo e recarga durante execução (17/09/2026)
+
+Solicitação do usuário registrada em [Aba Jogo do viewport e recarga](ABA-JOGO-RECARGA-2026-09-17.md). A mini prévia atual é sob demanda; não equivale a execução contínua ou hot reload. O adendo define a futura aba Cena/Jogo, mundo Play único, RenderView independente, input/foco, atualização segura de propriedades/assets/código, versões, rollback e limites de preservação de estado. É arquitetura futura, não implementação nem ampliação automática do percentual; a sequência P01/P02 permanece ativa.

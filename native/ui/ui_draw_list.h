@@ -39,6 +39,7 @@ inline constexpr UiImageId kUiNoImage = 0;
 // O retângulo em texels viaja no próprio comando (`atlas`): o conteúdo desse
 // atlas é composto pela sessão e não tem tabela fixa como o atlas de ícones.
 inline constexpr UiImageId kUiPreviewImage = 0x40000000u;
+inline constexpr UiImageId kUiCameraPreviewImage = 0x40000001u;
 
 struct UiDrawCommand final {
   UiPrimitive kind = UiPrimitive::Rect;

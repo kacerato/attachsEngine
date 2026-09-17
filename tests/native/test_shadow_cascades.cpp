@@ -45,6 +45,19 @@ void transform(const float m[16], const float p[3], float out[4]) {
 
 } // namespace
 
+AE_TEST(orthographic_shadow_receivers_cover_parallel_near_and_far_faces) {
+  auto input=baseInput();input.orthographicHalfHeight=12;input.aspectRatio=2;
+  input.verticalFovRadians=0;input.nearPlane=1;input.shadowDistance=30;
+  ShadowCascade cascades[4]{};
+  AE_EXPECT_EQ(computeShadowCascades(input,4,.75f,cascades),4u,"orthographic does not need FOV");
+  for(const auto &cascade:cascades) for(float depth:{cascade.nearDistance,cascade.farDistance})
+    for(float x:{-24.f,24.f}) for(float y:{-12.f,12.f}) {
+      const float point[]{input.cameraPosition[0]+x,input.cameraPosition[1]+y,input.cameraPosition[2]+depth};float clip[4];
+      transform(cascade.viewProjection,point,clip);
+      AE_EXPECT_TRUE(std::abs(clip[0])<=1.003f&&std::abs(clip[1])<=1.003f&&clip[2]>=0&&clip[2]<=1.003f,"parallel corners stay inside light volume including texel snap");
+    }
+}
+
 AE_TEST(cascade_splits_crescem_e_terminam_na_distancia_pedida) {
   float splits[MaximumShadowCascades]{};
   AE_EXPECT_EQ(computeCascadeSplits(0.1f, 200.0f, 4, DefaultCascadeSplitLambda, splits), 4u,

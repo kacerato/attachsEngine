@@ -6,6 +6,7 @@
 #include "harness.h"
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_session.h"
+#include "editor/editor_component_impact.h"
 #include "renderer/authoring_geometry.h"
 #include "renderer/material_override.h"
 #include "resources/glb_images.h"
@@ -169,6 +170,51 @@ std::vector<std::string> tokens(const std::string &text) {
 }
 } // namespace
 
+AE_TEST(p02_shared_repair_history_persists_and_rejects_external_conflicts) {
+  Project project;EditorSession session;Publisher publisher;start(session,publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()),"open project");
+  const resources::AssetGuid material{110,220},missing{330,440},texture{550,660};
+  resources::MaterialAsset value;value.guid=material;value.name="Shared";value.values.enabled=true;
+  value.textures[0]=missing;value.occlusionTexture=missing;
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(project.root/"shared.material",value.serialize()),"material fixture");
+  AE_EXPECT_TRUE(EditorImportTransaction::write(project.root/"texture.png",png(4,4,120)),"texture fixture");
+  resources::AssetRegistry registry;resources::AssetRecord record;record.guid=material;record.type=resources::AssetType::Material;record.path="shared.material";
+  AE_EXPECT_TRUE(registry.add(record),"material record");record.guid=texture;record.type=resources::AssetType::Texture;record.path="texture.png";
+  AE_EXPECT_TRUE(registry.add(record)&&session.loadAssets(registry.serialize()),"load resources");
+  auto &d=session.document();auto &h=session.history();
+  const auto first=h.createEntity(d,d.root(),EditorEntityKind::Mesh,"Inherited");
+  auto entity=*d.find(first);auto *mesh=editMeshRenderer(entity);mesh->materialAsset=material;
+  AE_EXPECT_TRUE(d.applyEntityValues(first,entity),"first consumer");
+  const auto second=h.duplicateEntity(d,first);entity=*d.find(second);editMeshRenderer(entity)->textures[0]=scene::MaterialTextureNone;
+  AE_EXPECT_TRUE(d.applyEntityValues(second,entity),"second has local override");
+  // start() has no screen initialization; use the same public library contract in a standalone probe.
+  EditorMapScene probe;EditorMapScene::SharedMaterial shared;shared.textures=value.textures;shared.occlusionTexture=value.occlusionTexture;
+  probe.setMaterialLibrary({{material,shared}});
+  const auto impact=sharedTextureImpact(d,material,missing,&probe);u32 affected=0,preserved=0;
+  for(const auto &row:impact) {if(row.relation=="Consumidor afetado")++affected;else if(row.relation=="Override preservado")++preserved;}
+  AE_EXPECT_EQ(affected,3u,"three inherited bindings affected");AE_EXPECT_EQ(preserved,1u,"none override preserved");
+  std::string diagnostic;const auto depth=h.undoDepth();
+  AE_EXPECT_TRUE(session.repairSharedTexture(material,missing,texture,value.revision,session.sceneVersion(),diagnostic),diagnostic.c_str());
+  AE_EXPECT_EQ(h.undoDepth(),depth+1,"repair is one shared resource step");
+  AE_EXPECT_TRUE(session.findMaterialAsset(material)->occlusionTexture==texture,"all matching material bindings repaired");
+  const auto later=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Later scene edit");
+  AE_EXPECT_TRUE(h.undo(d)&&!d.find(later),"scene action undone before resource action");
+  AE_EXPECT_TRUE(session.findMaterialAsset(material)->textures[0]==texture,"scene undo leaves material unchanged");
+  AE_EXPECT_TRUE(h.undo(d),"undo can restore original missing GUID");
+  AE_EXPECT_TRUE(session.findMaterialAsset(material)->textures[0]==missing,"broken original retained honestly");
+  AE_EXPECT_TRUE(h.redo(d),"redo publishes repaired material");
+  auto external=*session.findMaterialAsset(material);external.name="External";
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(project.root/"shared.material",external.serialize()),"external edit");
+  const auto cursor=h.undoDepth();AE_EXPECT_TRUE(!h.undo(d),"conflicting disk state blocks undo");
+  AE_EXPECT_EQ(h.undoDepth(),cursor,"failed replay retains history cursor");
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(project.root/"shared.material",session.findMaterialAsset(material)->serialize()),"resolve fixture conflict");
+  AE_EXPECT_TRUE(h.undo(d)&&h.redo(d),"retry history after conflict resolved");
+  AE_EXPECT_TRUE(meshRenderer(*d.find(second))->textures[0]==scene::MaterialTextureNone,"local override unchanged");
+  std::vector<u8> bytes;resources::MaterialAsset persisted;
+  AE_EXPECT_TRUE(EditorImportTransaction::read(project.root/"shared.material",bytes)&&resources::MaterialAsset::deserialize(std::string(bytes.begin(),bytes.end()),persisted),"read committed file");
+  AE_EXPECT_TRUE(persisted.textures[0]==texture,"redo persists to disk");
+}
+
 AE_TEST(r4_material_v2_and_mesh_renderer_v4_round_trip_and_read_older_versions) {
   const auto texture = resources::assetGuidFromSeed("r4-textura");
   resources::MaterialAsset material;
@@ -319,6 +365,21 @@ AE_TEST(r4_textures_extract_from_source_and_resolve_per_instance_and_shared_scop
   const std::string text(materialFile.begin(), materialFile.end());
   AE_EXPECT_TRUE(text.starts_with("ASTRA_MATERIAL 6") && text.find(texture.text()) != std::string::npos && text.find("none") != std::string::npos,
                  "material gravado na versão atual com as texturas");
+  AE_EXPECT_TRUE(session.assets().dependents(texture)==std::vector<resources::AssetGuid>{shared},"shared edit keeps texture dependency");
+  std::vector<u8> registryFile;
+  AE_EXPECT_TRUE(EditorImportTransaction::read(project.root/".astra/assets.astra",registryFile),"registry committed with material");
+  resources::AssetRegistry persisted;
+  AE_EXPECT_TRUE(resources::AssetRegistry::deserialize(std::string(registryFile.begin(),registryFile.end()),persisted),"persisted registry readable");
+  AE_EXPECT_TRUE(persisted.find(shared)->dependencies==session.assets().find(shared)->dependencies,"disk and memory dependencies agree");
+  const auto original=*session.findMaterialAsset(shared);
+  auto external=original;external.name="External edit";
+  const auto materialPath=project.root/record->path;
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(materialPath,external.serialize()),"simulate external change");
+  AE_EXPECT_TRUE(!session.setSlotTexture(object,0,1,EditorSession::MaterialScope::Shared,scene::MaterialTextureNone,diagnostic),"external edit is not overwritten");
+  AE_EXPECT_TRUE(session.findMaterialAsset(shared)->serialize()==original.serialize(),"failed publication preserves memory");
+  AE_EXPECT_TRUE(EditorImportTransaction::writeText(materialPath,original.serialize()),"restore fixture material");
+  AE_EXPECT_TRUE(session.setSlotTexture(object,0,1,EditorSession::MaterialScope::Shared,scene::MaterialTextureNone,diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(session.assets().dependents(texture).empty(),"removing last shared binding removes registry edge");
 
   // Instância vence o compartilhado, binding a binding.
   AE_EXPECT_TRUE(session.setSlotTexture(object, 0, 0, EditorSession::MaterialScope::Instance, texture, diagnostic), diagnostic.c_str());

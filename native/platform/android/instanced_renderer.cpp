@@ -31,6 +31,7 @@
 #include "rhi/shaders/water_spectral_spirv.h"
 #include "renderer/sphere_mesh.h"
 #include "renderer/material_distance.h"
+#include "renderer/camera_ray.h"
 
 #include <android/log.h>
 #include <algorithm>
@@ -228,7 +229,7 @@ bool sameCameraPose(const platform::FreeCameraState &left,
   return left.position[0] == right.position[0] &&
          left.position[1] == right.position[1] &&
          left.position[2] == right.position[2] &&
-         left.yaw == right.yaw && left.pitch == right.pitch;
+         left.yaw == right.yaw && left.pitch == right.pitch && left.roll == right.roll;
 }
 
 VkShaderModule createShaderModule(VkDevice device, const uint32_t *code, uint32_t codeSize) {
@@ -365,7 +366,7 @@ bool InstancedRenderer::createRenderPass() {
   dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                              VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-  const VkAttachmentDescription attachments[] = {colorAttachment, depthAttachment};
+  VkAttachmentDescription attachments[] = {colorAttachment, depthAttachment};
 
   VkRenderPassCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -411,8 +412,12 @@ bool InstancedRenderer::createRenderPass() {
   info.dependencyCount = dependencyCount;
   info.pDependencies = dependencies;
 
-  return vkCreateRenderPass(device_, &info, nullptr, &renderPass_) == VK_SUCCESS;
+  if(vkCreateRenderPass(device_, &info, nullptr, &renderPass_)!=VK_SUCCESS) return false;
+  attachments[0].finalLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  return vkCreateRenderPass(device_,&info,nullptr,&previewRenderPass_)==VK_SUCCESS;
 }
+
+#include "platform/android/instanced_camera_preview.inl"
 
 bool InstancedRenderer::createPipeline() {
   VkShaderModule vertModule = dirtRoadPreview_
@@ -1683,13 +1688,17 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
   push.texelFlags[0] = 1.0f / static_cast<float>(renderTargetWidth());
   push.texelFlags[1] = 1.0f / static_cast<float>(renderTargetHeight());
   push.texelFlags[2] = renderingPolicy_.post.bloom ? 1.0f : 0.0f;
+  // The temporal shader currently reconstructs yaw/pitch only. Keep the
+  // spatial resolve for rolled cameras until its history ABI carries roll.
+  const bool temporalPoseSupported = std::abs(camera.roll) <= 1e-6f && sceneOrthographicHalfHeight_==0;
   if (temporalAaActive_ && temporalHistoryInitialized_ &&
-      temporalCameraCut(camera, temporalPreviousCamera_)) {
+      (!temporalPoseSupported || std::abs(temporalPreviousCamera_.roll) > 1e-6f ||
+       temporalCameraCut(camera, temporalPreviousCamera_))) {
     temporalHistoryInitialized_ = false;
   }
-  push.texelFlags[3] = temporalAaActive_
+  push.texelFlags[3] = temporalAaActive_ && temporalPoseSupported
                            ? (temporalHistoryInitialized_ ? 3.0f : 2.0f)
-                           : renderingPolicy_.post.antiAliasing ==
+                           : temporalAaActive_ || renderingPolicy_.post.antiAliasing ==
                                      renderer::AntiAliasingMode::Fxaa ? 1.0f : 0.0f;
   push.bloom[0] = renderingPolicy_.post.bloomThreshold;
   push.bloom[1] = renderingPolicy_.post.bloomIntensity;
@@ -1731,7 +1740,7 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
   vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
   vkCmdEndRenderPass(commandBuffer_);
   if (temporalAaActive_) {
-    if (recordTemporalHistoryCopy(imageIndex)) {
+    if (temporalPoseSupported && recordTemporalHistoryCopy(imageIndex)) {
       temporalPreviousCamera_ = camera;
       temporalPreviousJitter_[0] = temporalCurrentJitter_[0];
       temporalPreviousJitter_[1] = temporalCurrentJitter_[1];
@@ -1899,10 +1908,13 @@ bool InstancedRenderer::createShadowResources() {
     VkSubpassDependency dependencies[2]{};
     dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
     dependencies[0].dstSubpass = 0;
-    dependencies[0].srcStageMask = preserve ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-                                            : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    // Clear and cached passes share the shadow pipelines. Render-pass
+    // compatibility includes subpass dependencies (only attachment load/store
+    // operations and layouts may differ here). Both also have to wait for a
+    // previous frame sampling the atlas before writing it again.
+    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependencies[0].srcAccessMask = preserve ? VK_ACCESS_SHADER_READ_BIT : 0;
+    dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
     dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
                                     VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     dependencies[1].srcSubpass = 0;
@@ -2976,12 +2988,19 @@ void InstancedRenderer::readHzbPyramidFromPreviousFrame() {
   if (hzbPyramidCameraValid_) hzbPyramidCamera_ = hzbRecordedCamera_;
 }
 
+void InstancedRenderer::setSceneOrthographicHalfHeight(float halfHeight) {
+  sceneOrthographicHalfHeight_=std::isfinite(halfHeight)&&halfHeight>0?halfHeight:0;
+}
+
 renderer::PerspectiveFrustum InstancedRenderer::buildFrameFrustum(
     const platform::FreeCameraState &camera) const {
   renderer::PerspectiveVisibilitySettings settings = visibilitySettings_;
   settings.verticalFieldOfViewRadians = sceneFieldOfView();
   settings.nearPlane = sceneNearPlane();
   settings.farPlane = sceneFarPlane();
+  settings.roll = camera.roll;
+  settings.projection=sceneOrthographicHalfHeight_>0?renderer::CameraProjection::Orthographic:renderer::CameraProjection::Perspective;
+  settings.orthographicHalfHeight=sceneOrthographicHalfHeight_>0?sceneOrthographicHalfHeight_:5.f;
   return renderer::buildPerspectiveFrustum(
       camera.position, camera.yaw, camera.pitch,
       sceneAspectRatio(),
@@ -3111,6 +3130,10 @@ bool InstancedRenderer::createDrawCullResources() {
 void InstancedRenderer::recordDrawCullDispatch(const platform::FreeCameraState &camera) {
   drawCullDispatchedThisFrame_ = false;
   if (!sceneViewport_.isEmpty() || !hzbGpuCullingActive_ || !hzbComputeImagesInitialized_) return;
+  // The compute ABI has yaw/pitch only, including the previous HZB pose.
+  // Falling back to the CPU draw path is conservative for either rolled pose.
+  if (std::abs(camera.roll) > 1e-6f ||
+      (hzbRecordedCameraValid_ && std::abs(hzbRecordedCamera_.roll) > 1e-6f)) return;
 
   // A view descreve a FORMA da piramide, nao seu conteudo: os texels vivem em
   // seis imagens da GPU e nunca sao mapeados neste caminho. O ponteiro nulo e
@@ -3815,6 +3838,9 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
 void InstancedRenderer::shutdown() {
   if (device_ == VK_NULL_HANDLE) return;
   vkDeviceWaitIdle(device_);
+  destroyCameraPreview();
+  if(previewRenderPass_) vkDestroyRenderPass(device_,previewRenderPass_,nullptr);
+  previewRenderPass_=VK_NULL_HANDLE;pendingPreview_={};submittedPreview_={};completedPreview_={};
   // The UI owns VMA buffers and images too. Release them before its render pass
   // and before the surface destroys the allocator/device (including resume).
   uiRenderer_.shutdown();
@@ -4319,6 +4345,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       acquireStatus != rhi::SwapchainStatus::SuboptimalNeedsRecreate) {
     return acquireStatus;
   }
+  if(submittedPreview_.requestId) {
+    completedPreview_=submittedPreview_;submittedPreview_={};previewCompletionSuccess_=true;
+  }
+  if(previewCloseRequested_) {destroyCameraPreview();previewCloseRequested_=false;}
   if (gpuTimingEnabled()) {
     rhi::GpuFrameTimings gpuTimings{};
     if (gpuFrameTimer_.collectPrevious(gpuTimings)) {
@@ -4379,7 +4409,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     hzbPyramidValid_ = false;
     hzbPyramidCameraValid_ = false;
   }
-  const float projection[]{sceneFieldOfView(),sceneNearPlane(),sceneFarPlane(),sceneAspectRatio()};
+  const float projection[]{sceneFieldOfView(),sceneNearPlane(),sceneFarPlane(),sceneAspectRatio(),sceneOrthographicHalfHeight_};
   const bool projectionChanged=!std::equal(std::begin(projection),std::end(projection),previousSceneProjection_);
   std::copy(std::begin(projection),std::end(projection),previousSceneProjection_);
   if(projectionChanged) {
@@ -4402,7 +4432,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     temporalHistoryInitialized_ = false;
   }
   hzbReadbackRecordedThisFrame_ = false;
-  if (temporalAaActive_) {
+  if (temporalAaActive_ && std::abs(camera.roll) <= 1e-6f && sceneOrthographicHalfHeight_==0) {
     const u64 sample = temporalFrameIndex_ % 8u + 1u;
     temporalCurrentJitter_[0] =
         (halton(sample, 2u) - 0.5f) * 2.0f / static_cast<float>(renderWidth());
@@ -4447,11 +4477,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     auto *frame = static_cast<DirtRoadFrameUniform *>(environmentUniform_.mappedData());
     if(!renderer::adjustEnvironmentLighting(dirtRoadResources_.environmentLighting(),environmentAdjustment_,frame->environment))
       return rhi::SwapchainStatus::FatalError;
-    const float cy = std::cos(camera.yaw), sy = std::sin(camera.yaw);
-    const float cp = std::cos(camera.pitch), sp = std::sin(camera.pitch);
-    const float row0[4] = {cy, 0.0f, -sy, 0.0f};
-    const float row1[4] = {sy * sp, cp, cy * sp, 0.0f};
-    const float row2[4] = {sy * cp, -sp, cy * cp, 0.0f};
+    const auto basis=renderer::buildCameraViewBasis(camera.yaw,camera.pitch,camera.roll);
+    const float row0[4] = {basis.row0[0],basis.row0[1],basis.row0[2],sceneOrthographicHalfHeight_};
+    const float row1[4] = {basis.row1[0],basis.row1[1],basis.row1[2],0};
+    const float row2[4] = {basis.row2[0],basis.row2[1],basis.row2[2],0};
     std::memcpy(frame->worldToViewRow0, row0, sizeof(row0));
     std::memcpy(frame->worldToViewRow1, row1, sizeof(row1));
     std::memcpy(frame->worldToViewRow2, row2, sizeof(row2));
@@ -4593,6 +4622,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       std::memcpy(input.cameraUp, row1, sizeof(input.cameraUp));
       input.aspectRatio = sceneAspectRatio();
       input.verticalFovRadians = sceneFieldOfView();
+      input.orthographicHalfHeight = sceneOrthographicHalfHeight_;
       input.nearPlane = sceneNearPlane();
       input.shadowDistance = std::min(renderingPolicy_.shadows.maximumDistance,
                                       sceneFarPlane());
@@ -4640,6 +4670,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       return rhi::SwapchainStatus::FatalError;
   }
 
+  if(pendingPreview_.requestId && !prepareCameraPreview()) {
+    completedPreview_=pendingPreview_;pendingPreview_={};previewCompletionSuccess_=false;
+  }
   if (vkResetCommandBuffer(commandBuffer_, 0) != VK_SUCCESS) return rhi::SwapchainStatus::FatalError;
   VkCommandBufferBeginInfo beginInfo{};
   beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -4647,6 +4680,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     return rhi::SwapchainStatus::FatalError;
   }
   if (gpuTimingEnabled()) gpuFrameTimer_.begin(commandBuffer_);
+  recordCameraPreview(timeSeconds);
   beginGpuRegion(GpuPassClass::WaterSimulation);
   const float spectralTime=spectralWaterCount_>0?
     (authoredWaterTime_>=0?authoredWaterTime_*waterSpectralControls_.timeScale:
@@ -4939,7 +4973,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           const renderer::LodSelection selection = renderer::selectLodLevel(
               levelInfos, levelCount, distance, visibilitySettings.verticalFieldOfViewRadians,
               activeVerticalPixels, pixelErrorBudget, lodHysteresisBandRatio_,
-              group.hysteresis);
+              group.hysteresis, sceneOrthographicHalfHeight_);
           // Clear every draw in every level so a group leaving a transition
           // cannot retain stale coverage in its instance record.
           for (u32 level = 0; level < levelCount; ++level)
@@ -5247,8 +5281,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     beginGpuRegion(GpuPassClass::Sky);
 
     DirtRoadPushConstants skyPush{};
+    std::memcpy(&skyPush.textureIndices[3],&sceneOrthographicHalfHeight_,sizeof(float));
     skyPush.cameraFrame[0] = sceneAspectRatio();
     skyPush.materialFactors[3] = 1.0f/std::tan(sceneFieldOfView()*.5f);
+    skyPush.materialFactors[0] = camera.roll;
     skyPush.cameraFrame[1] = camera.yaw;
     skyPush.cameraFrame[2] = camera.pitch;
     skyPush.cameraFrame[3] = timeSeconds;
@@ -5272,11 +5308,13 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // não deve ocluir água nem vidro.
     if (editorGrid_.valid() && editorGridPipeline_ != VK_NULL_HANDLE) {
       DirtRoadPushConstants gridPush{};
+      std::memcpy(&gridPush.textureIndices[3],&sceneOrthographicHalfHeight_,sizeof(float));
       gridPush.cameraFrame[0] = sceneAspectRatio();
       gridPush.cameraFrame[1] = camera.yaw;
       gridPush.cameraFrame[2] = camera.pitch;
       gridPush.cameraFrame[3] = 1.0f; // opacidade global da grade
       gridPush.materialFactors[3] = 1.0f/std::tan(sceneFieldOfView()*.5f);
+      gridPush.baseColorFactor[2] = camera.roll; // xy jitter, z roll, w plane height
       gridPush.surfaceTransform[0] = surfaceTransform.xx;
       gridPush.surfaceTransform[1] = surfaceTransform.xy;
       gridPush.surfaceTransform[2] = surfaceTransform.yx;

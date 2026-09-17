@@ -67,8 +67,10 @@ u32 computeShadowCascades(const ShadowCascadeInput &input, u32 count, float lamb
   Vec3 lightDirection = load(input.lightDirection);
   const Vec3 eye = load(input.cameraPosition);
   if (!finite(eye) || !normalize(forward) || !normalize(lightDirection)) return 0;
-  if (!std::isfinite(input.verticalFovRadians) || input.verticalFovRadians <= 0.0f ||
-      input.verticalFovRadians >= 3.14159f) {
+  if (!std::isfinite(input.orthographicHalfHeight) || input.orthographicHalfHeight < 0.0f) return 0;
+  const bool orthographic = input.orthographicHalfHeight > 0.0f;
+  if (!orthographic && (!std::isfinite(input.verticalFovRadians) || input.verticalFovRadians <= 0.0f ||
+      input.verticalFovRadians >= 3.14159f)) {
     return 0;
   }
   if (!std::isfinite(input.aspectRatio) || input.aspectRatio <= 0.0f) return 0;
@@ -84,7 +86,7 @@ u32 computeShadowCascades(const ShadowCascadeInput &input, u32 count, float lamb
     return 0;
   }
 
-  const float tanHalfVertical = std::tan(input.verticalFovRadians * 0.5f);
+  const float tanHalfVertical = orthographic ? input.orthographicHalfHeight : std::tan(input.verticalFovRadians * 0.5f);
   const float tanHalfHorizontal = tanHalfVertical * input.aspectRatio;
 
   // Base da luz. Escolhe um "up" auxiliar que não seja paralelo à direção da luz,
@@ -117,10 +119,12 @@ u32 computeShadowCascades(const ShadowCascadeInput &input, u32 count, float lamb
     // jogador olhar em volta não pode mudar a resolução efetiva da sombra.
     const Vec3 nearCenter = add(eye, scale(forward, receiverNear));
     const Vec3 farCenter = add(eye, scale(forward, sliceFar));
-    const Vec3 farCorner = add(add(farCenter, scale(right, sliceFar * tanHalfHorizontal)),
-                               scale(up, sliceFar * tanHalfVertical));
-    const Vec3 nearCorner = add(add(nearCenter, scale(right, receiverNear * tanHalfHorizontal)),
-                                scale(up, receiverNear * tanHalfVertical));
+    const float farScale = orthographic ? 1.0f : sliceFar;
+    const float nearScale = orthographic ? 1.0f : receiverNear;
+    const Vec3 farCorner = add(add(farCenter, scale(right, farScale * tanHalfHorizontal)),
+                               scale(up, farScale * tanHalfVertical));
+    const Vec3 nearCorner = add(add(nearCenter, scale(right, nearScale * tanHalfHorizontal)),
+                                scale(up, nearScale * tanHalfVertical));
     // O centro da esfera fica no eixo de visão; o raio cobre os dois cantos.
     const Vec3 axisMidpoint = add(eye, scale(forward, (receiverNear + sliceFar) * 0.5f));
     const float exactRadius = std::max(length(sub(farCorner, axisMidpoint)),

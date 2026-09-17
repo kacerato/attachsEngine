@@ -14,8 +14,8 @@ using ui::UiPoint;
 // copias divergisse -- foi o que aconteceu com a grade.
 using ViewBasis = renderer::CameraViewBasis;
 
-ViewBasis buildViewBasis(float yaw, float pitch) noexcept {
-  return renderer::buildCameraViewBasis(yaw, pitch);
+ViewBasis buildViewBasis(float yaw, float pitch,float roll=0) noexcept {
+  return renderer::buildCameraViewBasis(yaw, pitch,roll);
 }
 
 void worldToView(const ViewBasis &basis, const float delta[3], float outView[3]) noexcept {
@@ -31,6 +31,9 @@ bool isFiniteTriple(const float values[3]) noexcept {
 bool isViewportValid(const EditorViewport &viewport) noexcept {
   if (!viewport.frustum.valid) return false;
   if (!ui::isFinite(viewport.rect) || viewport.rect.isEmpty()) return false;
+  if(renderer::isOrthographic(viewport.frustum) &&
+     (!std::isfinite(viewport.frustum.orthographicHalfHeight)||viewport.frustum.orthographicHalfHeight<=0 ||
+      !std::isfinite(viewport.frustum.orthographicHalfWidth)||viewport.frustum.orthographicHalfWidth<=0)) return false;
   if (!std::isfinite(viewport.frustum.tangentHalfHorizontal) ||
       viewport.frustum.tangentHalfHorizontal <= 0.0f)
     return false;
@@ -56,7 +59,7 @@ EditorProjectedPoint projectWorldToScreen(const EditorViewport &viewport,
   const float delta[3] = {world[0] - viewport.frustum.cameraPosition[0],
                           world[1] - viewport.frustum.cameraPosition[1],
                           world[2] - viewport.frustum.cameraPosition[2]};
-  const ViewBasis basis = buildViewBasis(viewport.frustum.yaw, viewport.frustum.pitch);
+  const ViewBasis basis = buildViewBasis(viewport.frustum.yaw, viewport.frustum.pitch,viewport.frustum.roll);
   float view[3]{};
   worldToView(basis, delta, view);
   result.viewDepth = view[2];
@@ -64,12 +67,14 @@ EditorProjectedPoint projectWorldToScreen(const EditorViewport &viewport,
   // lado da tela. Um gizmo desenhado ali apareceria invertido e responderia ao
   // contrário do arraste; dizer "não dá" é a única resposta honesta.
   if (!std::isfinite(view[2]) || view[2] < viewport.frustum.nearPlane) return result;
+  if(renderer::isOrthographic(viewport.frustum) && view[2]>viewport.frustum.farPlane) return result;
 
   // Mesma cadeia do vertex shader: Y do espaço de vista aponta para cima e o
   // clip do Vulkan aponta para baixo, então o sinal troca aqui e em nenhum
   // outro lugar.
-  const float planeX = view[0] / (view[2] * viewport.frustum.tangentHalfHorizontal);
-  const float planeY = -view[1] / (view[2] * viewport.frustum.tangentHalfVertical);
+  const float divisor=renderer::projectionDivisor(viewport.frustum,view[2]);
+  const float planeX = view[0] / (divisor * renderer::projectionHalfWidth(viewport.frustum));
+  const float planeY = -view[1] / (divisor * renderer::projectionHalfHeight(viewport.frustum));
   const float ndcX = viewport.surfaceTransform.xx * planeX + viewport.surfaceTransform.xy * planeY;
   const float ndcY = viewport.surfaceTransform.yx * planeX + viewport.surfaceTransform.yy * planeY;
   if (!std::isfinite(ndcX) || !std::isfinite(ndcY)) return result;
@@ -97,9 +102,13 @@ EditorRay screenPointToRay(const EditorViewport &viewport, ui::UiPoint screen) n
                                  raw.direction[1] * raw.direction[1] +
                                  raw.direction[2] * raw.direction[2]);
   if (!std::isfinite(length) || length <= 0.0f) return ray;
+  ray.minimumDistance=viewport.frustum.nearPlane*length;
+  ray.maximumDistance=viewport.frustum.farPlane*length;
+  if(!std::isfinite(ray.maximumDistance)||ray.minimumDistance<0 ||
+     ray.maximumDistance<=ray.minimumDistance) return ray;
 
   for (u32 axis = 0; axis < 3; ++axis) {
-    ray.origin[axis] = viewport.frustum.cameraPosition[axis];
+    ray.origin[axis] = viewport.frustum.cameraPosition[axis]+raw.originOffset[axis];
     ray.direction[axis] = raw.direction[axis] / length;
   }
   ray.valid = true;
@@ -109,7 +118,8 @@ EditorRay screenPointToRay(const EditorViewport &viewport, ui::UiPoint screen) n
 EditorPickResult pickNearest(std::span<const EditorPickCandidate> candidates,
                              const EditorRay &ray) noexcept {
   EditorPickResult result{};
-  if (!ray.valid) return result;
+  if (!ray.valid || !std::isfinite(ray.minimumDistance) || !std::isfinite(ray.maximumDistance) ||
+      ray.minimumDistance<0 || ray.maximumDistance<ray.minimumDistance) return result;
   for (const EditorPickCandidate &candidate : candidates) {
     if (!candidate.selectable || candidate.id == 0) continue;
     if (!std::isfinite(candidate.radius) || candidate.radius <= 0.0f) continue;
@@ -129,11 +139,19 @@ EditorPickResult pickNearest(std::span<const EditorPickCandidate> candidates,
     const float halfChord = std::sqrt(radiusSquared - perpendicularSquared);
     const float nearHit = projection - halfChord;
     const float farHit = projection + halfChord;
-    if (farHit < 0.0f) continue;  // inteiramente atrás da câmera
-    // Câmera dentro da esfera conta como acerto na distância zero: o usuário
-    // está dentro do objeto e tocar a tela deve selecioná-lo.
-    float distance = nearHit >= 0.0f ? nearHit : 0.0f;
-    if(candidate.mesh && !candidate.mesh->intersect(ray.origin,ray.direction,candidate.model,distance)) continue;
+    if (farHit < ray.minimumDistance || nearHit > ray.maximumDistance) continue;
+    // Bounds-only fallback: an enclosing sphere starts at the first allowed
+    // distance. Meshes below still require an actual visible triangle hit.
+    float distance = std::max(nearHit,ray.minimumDistance);
+    if(candidate.mesh) {
+      // Start the triangle query at the near plane. Filtering the first hit
+      // afterwards would lose a second, visible surface of the same mesh.
+      float clippedOrigin[3];
+      for(u32 k=0;k<3;++k) clippedOrigin[k]=ray.origin[k]+ray.direction[k]*ray.minimumDistance;
+      if(!candidate.mesh->intersect(clippedOrigin,ray.direction,candidate.model,distance)) continue;
+      distance+=ray.minimumDistance;
+    }
+    if(!std::isfinite(distance)||distance>ray.maximumDistance) continue;
     // Estritamente menor: empate fica com quem foi registrado antes, o que
     // torna a seleção a mesma entre frames com a mesma lista.
     if (result.hit && distance >= result.distance) continue;
@@ -150,15 +168,15 @@ bool projectSegmentToScreen(const EditorViewport &viewport, const float from[3],
   if (!isViewportValid(viewport) || from == nullptr || to == nullptr) return false;
   if (!isFiniteTriple(from) || !isFiniteTriple(to)) return false;
 
-  const ViewBasis basis=buildViewBasis(viewport.frustum.yaw,viewport.frustum.pitch);
+  const ViewBasis basis=buildViewBasis(viewport.frustum.yaw,viewport.frustum.pitch,viewport.frustum.roll);
   double clip[2][3]{};
   for(unsigned endpoint=0;endpoint<2;++endpoint) {
     const float *world=endpoint?to:from;double view[3]{};
     const float *rows[]{basis.row0,basis.row1,basis.row2};
     for(unsigned r=0;r<3;++r) for(unsigned k=0;k<3;++k)
       view[r]+=rows[r][k]*(static_cast<double>(world[k])-viewport.frustum.cameraPosition[k]);
-    const double x=view[0]/viewport.frustum.tangentHalfHorizontal;
-    const double y=-view[1]/viewport.frustum.tangentHalfVertical;
+    const double x=view[0]/renderer::projectionHalfWidth(viewport.frustum);
+    const double y=-view[1]/renderer::projectionHalfHeight(viewport.frustum);
     clip[endpoint][0]=viewport.surfaceTransform.xx*x+viewport.surfaceTransform.xy*y;
     clip[endpoint][1]=viewport.surfaceTransform.yx*x+viewport.surfaceTransform.yy*y;
     clip[endpoint][2]=view[2];
@@ -173,10 +191,12 @@ bool projectSegmentToScreen(const EditorViewport &viewport, const float from[3],
     return first<=last;
   };
   if(!plane(clip[0][2]-viewport.frustum.nearPlane,clip[1][2]-viewport.frustum.nearPlane)) return false;
+  const bool orthographic=renderer::isOrthographic(viewport.frustum);
+  if(orthographic && !plane(viewport.frustum.farPlane-clip[0][2],viewport.frustum.farPlane-clip[1][2])) return false;
   for(unsigned axis=0;axis<2;++axis) for(int sign:{-1,1})
-    if(!plane(clip[0][2]+sign*clip[0][axis],clip[1][2]+sign*clip[1][axis])) return false;
+    if(!plane((orthographic?1:clip[0][2])+sign*clip[0][axis],(orthographic?1:clip[1][2])+sign*clip[1][axis])) return false;
   const auto project=[&](double t) {
-    const double depth=clip[0][2]+t*(clip[1][2]-clip[0][2]);
+    const double depth=orthographic?1:clip[0][2]+t*(clip[1][2]-clip[0][2]);
     const double x=(clip[0][0]+t*(clip[1][0]-clip[0][0]))/depth;
     const double y=(clip[0][1]+t*(clip[1][1]-clip[0][1]))/depth;
     return UiPoint{static_cast<float>(viewport.rect.x+(x*.5+.5)*viewport.rect.width),

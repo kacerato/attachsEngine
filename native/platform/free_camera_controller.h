@@ -8,6 +8,7 @@ struct FreeCameraState {
   float position[3]{};
   float yaw = 0.0f;
   float pitch = 0.0f;
+  float roll = 0.0f;
 };
 
 struct FreeCameraTouch {

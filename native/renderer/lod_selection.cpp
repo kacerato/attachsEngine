@@ -11,7 +11,15 @@ constexpr float kPi = 3.14159265358979323846f;
 }
 
 float computeScreenSpaceError(float geometricError, float distance, float fovYRadians,
-                              float viewportHeightPx) {
+                              float viewportHeightPx, float orthographicHalfHeight) {
+  if (!std::isfinite(orthographicHalfHeight) || orthographicHalfHeight < 0.0f)
+    return std::numeric_limits<float>::infinity();
+  if (orthographicHalfHeight > 0.0f) {
+    if (!std::isfinite(geometricError) || geometricError < 0.0f ||
+        !std::isfinite(viewportHeightPx) || viewportHeightPx <= 0.0f)
+      return std::numeric_limits<float>::infinity();
+    return geometricError * viewportHeightPx / (2.0f * orthographicHalfHeight);
+  }
   if (!std::isfinite(geometricError) || geometricError < 0.0f || !std::isfinite(distance) ||
       distance <= 0.0f || !std::isfinite(fovYRadians) || fovYRadians <= 0.0f || fovYRadians >= kPi ||
       !std::isfinite(viewportHeightPx) || viewportHeightPx <= 0.0f) {
@@ -32,7 +40,8 @@ LodDitherPair encodeLodDither(float factor) {
 
 LodSelection selectLodLevel(const LodLevelInfo *levels, u32 levelCount, float distance,
                             float fovYRadians, float viewportHeightPx, float pixelErrorBudget,
-                            float hysteresisBandRatio, LodHysteresisState &state) {
+                            float hysteresisBandRatio, LodHysteresisState &state,
+                            float orthographicHalfHeight) {
   LodSelection result{};
   if (levels == nullptr || levelCount == 0 || !std::isfinite(pixelErrorBudget) ||
       pixelErrorBudget <= 0.0f || !std::isfinite(hysteresisBandRatio) || hysteresisBandRatio <= 0.0f ||
@@ -41,7 +50,7 @@ LodSelection selectLodLevel(const LodLevelInfo *levels, u32 levelCount, float di
   }
 
   auto errorAt = [&](u32 index) {
-    return computeScreenSpaceError(levels[index].geometricError, distance, fovYRadians, viewportHeightPx);
+    return computeScreenSpaceError(levels[index].geometricError, distance, fovYRadians, viewportHeightPx, orthographicHalfHeight);
   };
   // Largest index whose error still fits `budget`. Full scan (not an
   // early-break binary search) so a caller that violates the "non-decreasing

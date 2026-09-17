@@ -52,6 +52,8 @@ public:
   // R4: troca o atlas de prévia (texturas). Cria imagem nova, envia e atualiza o
   // descritor; chamar só fora de gravação e com o quadro anterior concluído.
   bool setPreviewAtlas(VulkanUploadContext &upload, std::span<const u8> rgba, u32 width, u32 height);
+  // Borrowed view. Caller keeps it alive until previous UI submissions finish.
+  void setCameraPreview(VkImageView view);
 
 private:
   struct PushConstants final {
@@ -75,6 +77,7 @@ private:
   VulkanImage fontAtlas_{};
   VulkanImage iconAtlas_{};
   VulkanImage previewAtlas_{};
+  VkImageView cameraPreviewView_=VK_NULL_HANDLE;
   float previewAtlasSize_[2]{};
   VulkanSampler sampler_{};
   VulkanMemoryAllocator *allocator_ = nullptr;

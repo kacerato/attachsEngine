@@ -39,7 +39,7 @@ inline renderer::GridPlan buildEditorGridPlan(const EditorViewport &view,
   const float facing = (settings.planeHeight - ray.origin[1]) * ray.direction[1];
   if (facing > 0) depth = std::max(depth, altitude / std::max(std::abs(ray.direction[1]), .1f));
 
-  const float wanted = std::clamp(2 * depth * view.frustum.tangentHalfVertical *
+  const float wanted = std::clamp(2 * renderer::projectionDivisor(view.frustum,depth) * renderer::projectionHalfHeight(view.frustum) *
                                       settings.desiredCellPixels / view.rect.height,
                                   settings.minimumSpacing, settings.maximumSpacing);
   plan.enabled = true;

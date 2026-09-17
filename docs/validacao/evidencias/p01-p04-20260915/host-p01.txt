@@ -1,0 +1,4 @@
+[ok] p01_composition_reuses_dependencies_and_undoes_the_whole_add
+[ok] p01_removal_protects_a_typed_reference_on_another_object
+
+2/2 testes passaram

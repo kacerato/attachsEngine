@@ -9,9 +9,11 @@ layout(push_constant) uniform DirtRoadPushConstants {
   vec4 materialFactors;          // roughness, metallic, normal scale, specular
 } frame;
 
-mat3 dirtRoadCameraRotation() {
+mat3 dirtRoadCameraRotation(float roll) {
   float yaw=frame.cameraFrame.y, pitch=frame.cameraFrame.z;
   mat3 ry=mat3(cos(yaw),0,-sin(yaw),0,1,0,sin(yaw),0,cos(yaw));
   mat3 rx=mat3(1,0,0,0,cos(pitch),sin(pitch),0,-sin(pitch),cos(pitch));
-  return ry*rx;
+  mat3 rz=mat3(cos(roll),sin(roll),0,-sin(roll),cos(roll),0,0,0,1);
+  return ry*rx*rz;
 }
+mat3 dirtRoadCameraRotation() {return dirtRoadCameraRotation(0.0);}

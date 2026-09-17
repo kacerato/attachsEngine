@@ -37,6 +37,7 @@
 #include "renderer/shadow_cascades.h"
 #include "renderer/water_surface.h"
 #include "platform/android/material_preview_resources.h"
+#include "renderer/render_view.h"
 #include "platform/android/dirt_road_resources.h"
 #include "platform/free_camera_controller.h"
 
@@ -89,6 +90,15 @@ public:
   // R4: atlas de prévia de texturas composto pelo editor; enviado à GPU no
   // início da gravação da interface do próximo quadro.
   void setUiPreviewAtlas(std::span<const u8> rgba, u32 width, u32 height);
+  void requestCameraPreview(const renderer::RenderViewSnapshot &view) {pendingPreview_=view;}
+  void closeCameraPreview() {
+    pendingPreview_={};
+    if(previewColor_.isReady() || submittedPreview_.requestId) previewCloseRequested_=true;
+  }
+  bool takeCameraPreviewCompletion(renderer::RenderViewSnapshot &view,bool &success) {
+    if(!completedPreview_.requestId) return false;
+    view=completedPreview_;success=previewCompletionSuccess_;completedPreview_={};return true;
+  }
   // Tamanho da superficie NO ESPACO EM QUE AS INSTANCIAS FORAM CONSTRUIDAS --
   // pixels logicos, nao fisicos. Zero volta a usar a extensao do display, que e
   // o comportamento certo so quando as duas escalas coincidem.
@@ -107,6 +117,9 @@ public:
   }
   // Zero restores the renderer's configured field of view.
   void setSceneFieldOfView(float radians) { sceneFieldOfView_=radians; }
+  // Zero selects perspective; positive values are a world-space half height.
+  // Orthographic currently uses spatial AA and CPU visibility (no GPU HZB).
+  void setSceneOrthographicHalfHeight(float halfHeight);
   void setEditorBackground(bool enabled) { editorBackground_=enabled; }
   void setEnvironmentAdjustment(const float values[4]) { std::copy(values,values+4,environmentAdjustment_); }
   const std::vector<renderer::MapMaterialRecord> &mapMaterials() const { return dirtRoadResources_.materials(); }
@@ -409,7 +422,8 @@ public:
 private:
   bool editorBackground_=false;
   float sceneNearPlane_ = 0, sceneFarPlane_ = 0, sceneFieldOfView_=0;
-  float previousSceneProjection_[4]{};
+  float previousSceneProjection_[5]{};
+  float sceneOrthographicHalfHeight_=0;
   float sceneFieldOfView() const {return sceneFieldOfView_>0?sceneFieldOfView_:visibilitySettings_.verticalFieldOfViewRadians;}
   float sceneNearPlane() const { return sceneNearPlane_ > 0 ? sceneNearPlane_ : dirtRoadResources_.header().nearPlane; }
   float sceneFarPlane() const { return sceneFarPlane_ > sceneNearPlane_ ? sceneFarPlane_ : dirtRoadResources_.header().farPlane; }
@@ -520,6 +534,17 @@ private:
   VkQueue graphicsQueue_ = VK_NULL_HANDLE;
 
   VkRenderPass renderPass_ = VK_NULL_HANDLE;
+  VkRenderPass previewRenderPass_=VK_NULL_HANDLE;
+  VkFramebuffer previewFramebuffer_=VK_NULL_HANDLE;
+  rhi::VulkanImage previewColor_,previewDepth_;
+  rhi::VulkanBuffer previewUniform_;
+  VkDescriptorPool previewPool_=VK_NULL_HANDLE;
+  VkDescriptorSet previewSet_=VK_NULL_HANDLE;
+  renderer::RenderViewSnapshot pendingPreview_{},submittedPreview_{},completedPreview_{};
+  bool previewCloseRequested_=false,previewCompletionSuccess_=false;
+  bool prepareCameraPreview();
+  void recordCameraPreview(float timeSeconds);
+  void destroyCameraPreview();
   // Item 2.1.4 do plano: em vez de um descriptor set por-objeto com 1 binding,
   // o pipeline instanciado consome o registro bindless (array único indexado
   // por materialIndex no shader) — ver rhi/bindless_registry.h. Esta PoC tem

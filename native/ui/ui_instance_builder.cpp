@@ -84,6 +84,10 @@ UiInstanceBuildResult buildUiInstances(const UiDrawList &list, const UiFont &fon
         break;
       }
       case UiPrimitive::Image: {
+        if(command.image==kUiCameraPreviewImage) {
+          writeRect(instance.bounds,command.bounds);instance.params[2]=static_cast<float>(UiInstanceKind::CameraPreview);
+          push(instance);break;
+        }
         if (command.image == kUiPreviewImage) {
           if (command.atlas.isEmpty()) break;
           writeRect(instance.bounds, command.bounds);

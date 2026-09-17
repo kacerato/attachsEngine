@@ -40,6 +40,7 @@ enum class UiInstanceKind : u32 {
   Line = 3,
   // R4: recorte do atlas dinâmico de prévia (texturas), multiplicado pela cor.
   Preview = 4,
+  CameraPreview = 5,
 };
 
 struct alignas(16) UiInstance final {

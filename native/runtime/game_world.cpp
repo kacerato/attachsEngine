@@ -1,4 +1,5 @@
 #include "runtime/game_world.h"
+#include "runtime/scene_components.h"
 
 #include <algorithm>
 #include <atomic>
@@ -239,6 +240,12 @@ u32 GameWorld::flush(std::vector<ObjectId> *destroyed) {
             graph_.reparent(command.object, command.parent, command.childIndex)) ++applied;
         break;
       case PendingCommand::Kind::RemoveComponent:
+        // A callback may have added a dependent after removal was queued.
+        // Re-resolve at the safe point before publishing the structural edit.
+        if(const auto *object=graph_.find(command.object)) {
+          if(scene::componentInstanceRemovalBlockedBy(command.instance,object->components) ||
+             componentRemovalReferenceUse(graph_,command.object,command.instance).object) break;
+        }
         if (auto *components = editComponents(command.object)) {
           if (components->removeInstance(command.instance)) ++applied;
         }
@@ -294,16 +301,17 @@ ComponentHandle GameWorld::addComponent(const ObjectHandle &h, std::string_view 
   const auto *schema = scene::findComponentSchema(typeId);
   if (!schema) { status = WorldStatus::UnknownComponent; return {}; }
   if (schema->structuralInPlay == scene::PlayMutability::Never) { status = WorldStatus::NotMutableInPlay; return {}; }
-  if (scene::componentUnavailableReason(*schema, object->components)) {
+  auto plan=scene::planComponentAddition(object->components,typeId,true);
+  if (!plan.ready) {
     status = WorldStatus::ComponentUnavailable;
     return {};
   }
   auto *components = editComponents(h.id);
   if (!components) { status = WorldStatus::StaleHandle; return {}; }
-  auto *created = components->add(*schema->type);
-  if (!created) { status = WorldStatus::LimitReached; return {}; }
+  const auto createdInstance=plan.requestedInstance;
+  *components=std::move(plan.candidate);
   status = WorldStatus::Ok;
-  return {h, created->instanceId()};
+  return {h, createdInstance};
 }
 
 WorldStatus GameWorld::removeComponent(const ComponentHandle &component) {
@@ -317,10 +325,8 @@ WorldStatus GameWorld::removeComponent(const ComponentHandle &component) {
   if (schema->structuralInPlay == scene::PlayMutability::Never) return WorldStatus::NotMutableInPlay;
   // Só bloqueia quando esta é a ÚLTIMA instância do tipo: remover um dos dois
   // colisores não quebra quem exige "um colisor".
-  u32 remaining = 0;
-  for (usize i = 0; i < object->components.size(); ++i)
-    if (object->components.at(i)->type().id == value->type().id) ++remaining;
-  if (remaining <= 1 && scene::componentRemovalBlockedBy(value->type().id, object->components))
+  if (scene::componentInstanceRemovalBlockedBy(component.instance,object->components) ||
+      componentRemovalReferenceUse(graph_,component.object.id,component.instance).object)
     return WorldStatus::ComponentInUse;
   if (!queue({PendingCommand::Kind::RemoveComponent, component.object.id, kInvalidObject, 0, component.instance}))
     return WorldStatus::LimitReached;

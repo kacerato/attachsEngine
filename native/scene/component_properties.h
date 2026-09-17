@@ -33,6 +33,9 @@ inline ComponentPropertyStatus setComponentProperty(Components &components,
   for(const auto &p:source->type().references) if(p.id==propertyId) {reference=&p;++matches;}
   if(!matches) return ComponentPropertyStatus::UnknownProperty;
   if(matches!=1) return ComponentPropertyStatus::AmbiguousProperty;
+  const auto &presentation=number?number->presentation:boolean?boolean->presentation:
+      enumeration?enumeration->presentation:reference->presentation;
+  if(!presentation.isEditable(*source)) return ComponentPropertyStatus::InvalidValue;
   if((number && !std::holds_alternative<float>(value)) ||
      (boolean && !std::holds_alternative<bool>(value)) ||
      (enumeration && !std::holds_alternative<u32>(value)) ||
@@ -59,4 +62,39 @@ inline ComponentPropertyStatus setComponentProperty(Components &components,
   if(!candidate->valid() || !components.replaceInstance(source->instanceId(),*candidate)) return ComponentPropertyStatus::InvalidValue;
   return ComponentPropertyStatus::Applied;
 }
+// Resolves persistent channel IDs and validates the completed tuple once.
+// Useful for direction vectors whose intermediate scalar edits can be invalid.
+inline ComponentPropertyStatus setComponentTriple(Components &components,std::string_view typeId,
+    std::string_view propertyId,const float (&values)[3],u64 instanceId=0) {
+  const auto *source=instanceId?components.findInstance(instanceId):components.find(typeId);
+  if(!source||source->type().id!=typeId) return ComponentPropertyStatus::MissingComponent;
+  if(!instanceId) {
+    u32 count=0;for(usize i=0;i<components.size();++i) if(components.at(i)->type().id==typeId) ++count;
+    if(count>1) return ComponentPropertyStatus::AmbiguousProperty;
+  }
+  const ComponentTriple *triple=nullptr;
+  for(const auto &p:source->type().triples) if(p.id==propertyId) {
+    if(triple) return ComponentPropertyStatus::AmbiguousProperty;
+    triple=&p;
+  }
+  if(!triple) return ComponentPropertyStatus::UnknownProperty;
+  auto candidate=source->clone();
+  if(!candidate || &candidate->type()!=&source->type()) return ComponentPropertyStatus::InvalidValue;
+  for(u32 axis=0;axis<3;++axis) {
+    const ComponentNumber *channel=nullptr;
+    for(const auto &p:source->type().numbers) if(p.id==triple->channels[axis]) {
+      if(channel) return ComponentPropertyStatus::AmbiguousProperty;
+      channel=&p;
+    }
+    if(!channel) return ComponentPropertyStatus::UnknownProperty;
+    if(!channel->write || !channel->presentation.isEditable(*source) || !std::isfinite(values[axis]) ||
+       values[axis]<channel->minimum || values[axis]>channel->maximum) return ComponentPropertyStatus::InvalidValue;
+    auto *destination=channel->write(*candidate);
+    if(!destination) return ComponentPropertyStatus::InvalidValue;
+    *destination=values[axis];
+  }
+  if(!candidate->valid() || !components.replaceInstance(source->instanceId(),*candidate)) return ComponentPropertyStatus::InvalidValue;
+  return ComponentPropertyStatus::Applied;
+}
+
 }

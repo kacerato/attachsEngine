@@ -39,6 +39,24 @@ void EditorHistory::end() {
   if (!open_) return;
   commitOpenTransaction();
 }
+bool EditorHistory::recordResource(std::string_view label,std::function<bool(bool)> replay) {
+  if(open_||replaying_||!replay) return false;
+  Transaction transaction;assignLabel(transaction.label,label);transaction.resourceReplay=std::move(replay);
+  undoStack_.push_back(std::move(transaction));redoStack_.clear();
+  if(undoStack_.size()>kMaximumTransactions) undoStack_.erase(undoStack_.begin());
+  return true;
+}
+
+bool EditorHistory::cancel(EditorDocument &document) {
+  if(!open_) return false;
+  auto candidate=document;
+  for(usize i=pending_.commands.size();i>0;--i)
+    if(!applyBackward(candidate,pending_.commands[i-1])) return false;
+  document=std::move(candidate);
+  pending_=Transaction{};
+  open_=false;
+  return true;
+}
 
 void EditorHistory::commitOpenTransaction() {
   open_ = false;
@@ -298,6 +316,11 @@ bool EditorHistory::undo(EditorDocument &document) {
   // metade viva no documento. Fechar primeiro torna o passo inteiro.
   if (open_) commitOpenTransaction();
   if (undoStack_.empty()) return false;
+  if(undoStack_.back().resourceReplay) {
+    replaying_=true;const bool ok=undoStack_.back().resourceReplay(false);replaying_=false;
+    if(!ok) return false;
+    redoStack_.push_back(std::move(undoStack_.back()));undoStack_.pop_back();return true;
+  }
   Transaction transaction = std::move(undoStack_.back());
   undoStack_.pop_back();
   replaying_ = true;
@@ -312,6 +335,11 @@ bool EditorHistory::undo(EditorDocument &document) {
 bool EditorHistory::redo(EditorDocument &document) {
   if (open_) commitOpenTransaction();
   if (redoStack_.empty()) return false;
+  if(redoStack_.back().resourceReplay) {
+    replaying_=true;const bool ok=redoStack_.back().resourceReplay(true);replaying_=false;
+    if(!ok) return false;
+    undoStack_.push_back(std::move(redoStack_.back()));redoStack_.pop_back();return true;
+  }
   Transaction transaction = std::move(redoStack_.back());
   redoStack_.pop_back();
   replaying_ = true;

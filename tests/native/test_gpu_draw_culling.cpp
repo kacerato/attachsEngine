@@ -52,7 +52,7 @@ AE_TEST(GpuCull_layout_matches_the_shader_contract) {
   // sem atualizar draw_cull.comp produziria corte silenciosamente errado, e não
   // um erro de compilação, se este teste não existisse.
   AE_EXPECT_EQ(sizeof(GpuCullDrawRecord), static_cast<usize>(32), "registro tem 32 bytes");
-  AE_EXPECT_EQ(sizeof(GpuCullParameters), static_cast<usize>(112),
+  AE_EXPECT_EQ(sizeof(GpuCullParameters), static_cast<usize>(128),
                "push constants cabem nos 128 bytes garantidos");
   AE_EXPECT_EQ(offsetof(GpuCullParameters, surfaceTransform), static_cast<usize>(64),
                "transformada de superfície no quinto bloco de 16 bytes");
@@ -309,4 +309,46 @@ AE_TEST(GpuCull_padding_slots_are_never_written) {
   const GpuCullOutcome outcome = cullDrawRecordReference(parameters, padding, view, streak);
   AE_EXPECT_TRUE(!outcome.present, "slot de sobra é reconhecido como ausente");
   AE_EXPECT_EQ(streak, 4u, "e o estado do slot permanece intocado");
+}
+
+AE_TEST(GpuCull_orthographic_matches_cpu_and_discards_moving_history) {
+  const auto pyramid = buildWallPyramid(64, 64, 0.3f);
+  GpuCullHzbView view{};
+  AE_EXPECT_TRUE(buildGpuCullHzbView(pyramid, view), "pyramid view");
+  PerspectiveVisibilitySettings settings{};
+  settings.projection = CameraProjection::Orthographic;
+  settings.orthographicHalfHeight = 20;
+  settings.nearPlane = 0.1f;
+  settings.farPlane = 200;
+  const float position[3] = {3, 2, -4};
+  u32 occluded = 0, visible = 0;
+  for (float yaw : {0.0f, 0.7f, -1.2f}) {
+    auto frustum = buildPerspectiveFrustum(position, yaw, 0.15f, 1.5f, settings);
+    for (auto transform : {HzbScreenTransform{}, HzbScreenTransform{0,-1,1,0}}) {
+      GpuCullParameters parameters{};
+      auto guard = buildGpuCullMotionGuard(frustum, position, yaw, 0.15f);
+      AE_EXPECT_TRUE(buildGpuCullParameters(frustum, transform, view, guard, 1e-5f, 0, 1, true, parameters), "orthographic parameters");
+      AE_EXPECT_TRUE((parameters.flags & GpuCullOrthographic) != 0, "explicit projection flag");
+      for (int x = -20; x <= 20; x += 4) for (int z = 0; z <= 160; z += 20) {
+        const auto record = recordAt(position[0]+std::cos(yaw)*x+std::sin(yaw)*z,
+                                     position[1], position[2]-std::sin(yaw)*x+std::cos(yaw)*z, 1, 0);
+        const auto rect = projectBoundsToHzbScreenRect(frustum, record.boundsCenter, record.boundsRadius, transform);
+        const bool expected = isOccludedByHzb(pyramid, rect, 1e-5f);
+        u32 streak = 0;
+        const auto outcome = cullDrawRecordReference(parameters, record, view, streak);
+        AE_EXPECT_EQ(outcome.occludedThisFrame, expected, "linear depth and parallel footprint match CPU");
+        if (expected) ++occluded; else ++visible;
+      }
+      const float previous[3] = {position[0]+0.001f, position[1], position[2]};
+      guard = buildGpuCullMotionGuard(frustum, previous, yaw, 0.15f);
+      AE_EXPECT_TRUE(!guard.valid, "even small orthographic movement invalidates previous depth");
+      AE_EXPECT_TRUE(buildGpuCullParameters(frustum, transform, view, guard, 0, 3, 1, true, parameters), "moving camera remains representable");
+      u32 streak = 9;
+      const auto outcome = cullDrawRecordReference(parameters, recordAt(0,0,100,1,0), view, streak);
+      AE_EXPECT_TRUE(outcome.visible && !outcome.tested, "uncertain history fails open");
+      AE_EXPECT_EQ(streak, 0u, "motion clears old occlusion streak");
+      AE_EXPECT_TRUE(!buildGpuCullMotionGuard(frustum, position, yaw+0.01f, 0.15f).valid, "rotation invalidates history");
+    }
+  }
+  AE_EXPECT_TRUE(occluded > 0 && visible > 0, "corpus contains both outcomes");
 }

@@ -12,7 +12,9 @@ void main() {
   // inteira -- cujos cantos ficam em NDC 3 -- e interpolar devolve, no meio da
   // tela, uma direcao dezenas de graus fora da que o pixel realmente enxerga.
   // O ceu e um gradiente e tolerava o erro; o fragmento normaliza.
-  vDirection=dirtRoadCameraRotation()*vec3(cameraNdc.x*frame.cameraFrame.x/focal,
+  vDirection=dirtRoadCameraRotation(frame.materialFactors.x)*vec3(cameraNdc.x*frame.cameraFrame.x/focal,
                                            -cameraNdc.y/focal,1.0);
+  if(uintBitsToFloat(frame.textureIndices.w)>0.0)
+    vDirection=dirtRoadCameraRotation(frame.materialFactors.x)*vec3(0,0,1);
   gl_Position=vec4(ndc,1,1);
 }

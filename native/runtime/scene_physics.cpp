@@ -3,15 +3,14 @@
 #include <cmath>
 #include <unordered_map>
 #include "scene/joint.h"
+#include "runtime/joint_requirements.h"
+#include "runtime/physics_requirements.h"
 namespace ae::runtime {
 namespace {
 AetherQuat physicsRotation(const Transform &t) {
   const float x=t.rotationDegrees[0]*.00872664626f,y=t.rotationDegrees[1]*.00872664626f,z=t.rotationDegrees[2]*.00872664626f;
   const float sx=std::sin(x),cx=std::cos(x),sy=std::sin(y),cy=std::cos(y),sz=std::sin(z),cz=std::cos(z);
   return {sx*cy*cz-cx*sy*sz,cx*sy*cz+sx*cy*sz,cx*cy*sz-sx*sy*cz,cx*cy*cz+sx*sy*sz};
-}
-void multiplyPhysicsMatrix(const float *a,const float *b,float *out) {
-  for(u32 c=0;c<4;++c) for(u32 r=0;r<4;++r) {out[c*4+r]=0;for(u32 k=0;k<4;++k) out[c*4+r]+=a[k*4+r]*b[c*4+k];}
 }
 AetherVec3 transformPhysicsPoint(const float *m,const float *v,bool direction=false) {
   return {m[0]*v[0]+m[4]*v[1]+m[8]*v[2]+(direction?0:m[12]),
@@ -50,13 +49,8 @@ bool ScenePhysics::start(GameWorld &gameWorld) {
     for(usize i=0;i<entity.components.size();++i) {
       const auto *v=entity.components.at(i);if(&v->type()!=&scene::Collider::descriptor) continue;
       const auto &c=static_cast<const scene::Collider &>(*v);if(!c.enabled) continue;
-      if(!c.valid()||!referenceAccepts(document,id,scene::colliderReferences[0],c.owner,true))
-        return fail(entity,"colisor #"+std::to_string(c.instanceId())+" requer um corpo neste objeto ou em um ancestral explícito");
-      const auto owner=c.owner?static_cast<ObjectId>(c.owner):id;
-      if(!document.activeInHierarchy(owner)) return fail(entity,"corpo proprietário inativo");
-      // A collider may not cross a separately simulated body in the hierarchy.
-      for(auto p=id;p!=owner;p=document.find(p)->parent)
-        if(physicsBody(*document.find(p))) return fail(entity,"colisor não pode atravessar outro corpo físico até seu proprietário");
+      ObjectId owner=0;
+      if(const auto *error=colliderOwnerForPhysics(document,id,c,owner)) return fail(entity,error);
       auto &parts=colliders[owner];if(parts.size()>=256) return fail(entity,"limite de 256 colisores por corpo");
       parts.push_back({id,&c});
       // O objeto que contribui a forma também tem a pose congelada pelo corpo:
@@ -67,27 +61,16 @@ bool ScenePhysics::start(GameWorld &gameWorld) {
   for(auto id:ids) {
     const auto &entity=*document.find(id);const auto *body=physicsBody(entity);
     if(!body||!document.activeInHierarchy(id)) continue;
-    if(!body->valid()||characterComponent(entity)) return fail(entity,"corpo inválido ou incompatível com Personagem");
-    for(auto p=entity.parent;p;p=document.find(p)->parent) {
-      const auto &ancestor=*document.find(p);const auto *parentBody=physicsBody(ancestor);
-      if(characterComponent(ancestor)||(parentBody&&parentBody->motion!=scene::BodyMotion::Static))
-        return fail(entity,"corpos independentes devem ficar fora da hierarquia de um corpo móvel; conecte-os por Junta");
-    }
+    if(const auto *error=bodyHierarchyForPhysics(document,id)) return fail(entity,error);
     auto found=colliders.find(id);
     if(found==colliders.end()||found->second.empty()) return fail(entity,"corpo sem colisores ativos vinculados");
-    float world[16],identity[16]{};identity[0]=identity[5]=identity[10]=identity[15]=1;Transform transform;
-    if(!worldMatrix(document,id,world)||!localTransformForWorld(world,identity,transform)) return fail(entity,"transformação física inválida ou com shear");
-    auto rigid=transform;rigid.scale[0]=rigid.scale[1]=rigid.scale[2]=1;float bodyFrame[16];transformMatrix(rigid,bodyFrame);
+    float world[16],bodyFrame[16];Transform transform;
+    if(const auto *error=bodyFrameForPhysics(document,id,world,transform,bodyFrame)) return fail(entity,error);
     std::vector<AetherCompoundPart> parts;parts.reserve(found->second.size());
     for(const auto &source:found->second) {
-      const auto &c=*source.value;Transform local;local.position[0]=c.centerX;local.position[1]=c.centerY;local.position[2]=c.centerZ;
-      local.rotationDegrees[0]=c.rotationX;local.rotationDegrees[1]=c.rotationY;local.rotationDegrees[2]=c.rotationZ;
-      float localMatrix[16],objectMatrix[16],shapeWorld[16];transformMatrix(local,localMatrix);
-      if(!worldMatrix(document,source.object,objectMatrix)) return fail(entity,"objeto do colisor ausente");
-      multiplyPhysicsMatrix(objectMatrix,localMatrix,shapeWorld);Transform partTransform;
-      if(!localTransformForWorld(shapeWorld,bodyFrame,partTransform)) return fail(*document.find(source.object),"colisor rotacionado sob escala não uniforme produz shear");
+      const auto &c=*source.value;Transform partTransform;
+      if(const auto *error=colliderPoseForPhysics(document,source.object,c,bodyFrame,partTransform)) return fail(*document.find(source.object),error);
       const float x=std::abs(partTransform.scale[0]),y=std::abs(partTransform.scale[1]),z=std::abs(partTransform.scale[2]);
-      if(c.shape!=scene::ColliderShape::Box && (std::abs(x-y)>1e-4f*x||std::abs(x-z)>1e-4f*x)) return fail(entity,"esfera e cápsula requerem escala global uniforme");
       AetherCompoundPart part{};part.position={partTransform.position[0],partTransform.position[1],partTransform.position[2]};part.rotation=physicsRotation(partTransform);
       switch(c.shape) {
         case scene::ColliderShape::Box:part.shape.kind=AetherShapeKind::Box;part.shape.boxHalfExtent={c.halfX*x,c.halfY*y,c.halfZ*z};break;
@@ -122,11 +105,10 @@ bool ScenePhysics::start(GameWorld &gameWorld) {
     for(usize i=0;i<entity.components.size();++i) {
       const auto *v=entity.components.at(i);if(&v->type()!=&scene::Joint::descriptor) continue;
       const auto &joint=static_cast<const scene::Joint &>(*v);if(!joint.enabled) continue;
-      if(!joint.valid()||!physicsBody(entity)||!referenceAccepts(document,id,scene::jointReferences[0],joint.connectedBody,true)) return fail(entity,"junta requer dois corpos distintos e campos válidos");
+      const auto issues=jointRequirementIssues(document,id,joint);
+      if(!issues.empty()) return fail(entity,issues.front().message);
       const Binding *a=nullptr,*b=nullptr;for(const auto &binding:bindings_) {if(binding.id==id) a=&binding;if(binding.id==joint.connectedBody) b=&binding;}
       if(!a||!b) return fail(entity,"corpo conectado à junta está inativo");
-      if(physicsBody(entity)->motion!=scene::BodyMotion::Dynamic&&physicsBody(*document.find(b->id))->motion!=scene::BodyMotion::Dynamic)
-        return fail(entity,"junta requer pelo menos um corpo dinâmico");
       float ma[16],mb[16];if(!worldMatrix(document,id,ma)||!worldMatrix(document,b->id,mb)) return fail(entity,"referencial da junta inválido");
       AetherJointDescV2 desc{};desc.structSize=sizeof(desc);desc.apiVersion=AetherJointApiVersionV2;desc.kind=static_cast<AetherJointKind>(joint.kind);desc.space=AetherJointSpace::World;
       desc.point1=transformPhysicsPoint(ma,joint.anchorA);desc.point2=transformPhysicsPoint(mb,joint.anchorB);

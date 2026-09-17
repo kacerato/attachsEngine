@@ -4,6 +4,10 @@
 
 namespace ae::renderer {
 
+enum class CameraProjection : u32 { Perspective, Orthographic };
+
+// Historical Perspective* names are retained for source compatibility. The
+// projection tag is explicit: orthographic extents never masquerade as tangents.
 // Backend-independent camera data used by scene visibility. The renderer
 // builds this once per frame and every backend can consume the same result.
 // Invalid input deliberately fails open: uncertain objects remain visible.
@@ -14,6 +18,9 @@ struct PerspectiveVisibilitySettings final {
   float boundsScale = 1.05f;
   float boundsMargin = 0.5f;
   bool enabled = true;
+  float roll = 0.0f;
+  CameraProjection projection = CameraProjection::Perspective;
+  float orthographicHalfHeight = 5.0f;
 };
 
 struct PerspectiveFrustum final {
@@ -27,7 +34,28 @@ struct PerspectiveFrustum final {
   float boundsScale = 1.05f;
   float boundsMargin = 0.5f;
   bool valid = false;
+  float roll = 0.0f;
+  CameraProjection projection = CameraProjection::Perspective;
+  float orthographicHalfHeight = 5.0f;
+  float orthographicHalfWidth = 5.0f;
 };
+
+inline bool isOrthographic(const PerspectiveFrustum &view) noexcept {
+  return view.projection == CameraProjection::Orthographic;
+}
+inline float projectionHalfWidth(const PerspectiveFrustum &view) noexcept {
+  return isOrthographic(view) ? view.orthographicHalfWidth : view.tangentHalfHorizontal;
+}
+inline float projectionHalfHeight(const PerspectiveFrustum &view) noexcept {
+  return isOrthographic(view) ? view.orthographicHalfHeight : view.tangentHalfVertical;
+}
+inline float projectionDivisor(const PerspectiveFrustum &view,float depth) noexcept {
+  return isOrthographic(view) ? 1.f : depth;
+}
+inline float cameraNormalizedDepth(const PerspectiveFrustum &view,float depth) noexcept {
+  if(isOrthographic(view)) return (depth-view.nearPlane)/(view.farPlane-view.nearPlane);
+  return (view.farPlane*depth-view.nearPlane*view.farPlane)/((view.farPlane-view.nearPlane)*depth);
+}
 
 PerspectiveFrustum buildPerspectiveFrustum(const float cameraPosition[3], float yaw,
                                            float pitch, float aspectRatio,

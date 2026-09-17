@@ -967,6 +967,7 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
                  std::span<const ae::renderer::SharedAuthoringTexture> textures,
                  ae::editor::EditorSession::PublishedGeometry &out) {
           if(!shell.instancedRenderer.rebuildAuthoringGeometry(vertices,indices,draws,materials,textures)) return false;
+          shell.editorSession.cameraPreview().invalidateTarget();
           out={shell.instancedRenderer.mapDraws(),shell.instancedRenderer.mapMaterials(),
                shell.instancedRenderer.pickingVertices(),shell.instancedRenderer.pickingIndices()};
           // A republicação da cena é obrigatória depois de trocar o pacote: as
@@ -2415,27 +2416,43 @@ void android_main(android_app *app) {
       ae::platform::FreeCameraState sceneCamera = shell.cameraController.state();
       shell.instancedRenderer.setSceneClipPlanes(0, 0);
       shell.instancedRenderer.setSceneFieldOfView(0);
+      shell.instancedRenderer.setSceneOrthographicHalfHeight(0);
       shell.instancedRenderer.setEditorBackground(editorActive && !editorPlaying);
       if (editorActive) {
         const auto &projection = shell.editorSession.view().frustum;
         shell.instancedRenderer.setSceneClipPlanes(projection.nearPlane, projection.farPlane);
         shell.instancedRenderer.setSceneFieldOfView(2*std::atan(projection.tangentHalfVertical));
-        const ae::editor::EditorCamera &editorCamera = shell.editorSession.camera();
-        ae::editor::editorCameraPosition(editorCamera, sceneCamera.position);
-        sceneCamera.yaw = editorCamera.yaw;
-        sceneCamera.pitch = editorCamera.pitch;
+        shell.instancedRenderer.setSceneOrthographicHalfHeight(ae::renderer::isOrthographic(projection)?projection.orthographicHalfHeight:0);
+        std::copy(projection.cameraPosition,projection.cameraPosition+3,sceneCamera.position);
+        sceneCamera.yaw = projection.yaw;
+        sceneCamera.pitch = projection.pitch;
+        sceneCamera.roll = projection.roll;
         if(editorPlaying) {
           const auto authoredCamera=shell.editorSession.sceneCameraPose();
           if(authoredCamera.entity) {
             std::copy(authoredCamera.position,authoredCamera.position+3,sceneCamera.position);
             sceneCamera.yaw=authoredCamera.yaw;sceneCamera.pitch=authoredCamera.pitch;
+            sceneCamera.roll=authoredCamera.roll;
             shell.instancedRenderer.setSceneClipPlanes(authoredCamera.nearPlane,authoredCamera.farPlane);
             shell.instancedRenderer.setSceneFieldOfView(authoredCamera.verticalFov*0.017453292519943295f);
+            shell.instancedRenderer.setSceneOrthographicHalfHeight(authoredCamera.projection==ae::scene::CameraProjection::Orthographic?authoredCamera.orthographicHalfHeight:0);
           }
         }
       }
+      ae::renderer::RenderViewSnapshot previewRequest;
+      auto &preview=shell.editorSession.cameraPreview();
+      const bool previewVisible=editorActive && !editorPlaying &&
+          shell.editorSession.screen().workspace==ae::editor::EditorWorkspace::Scene;
+      if(preview.request(shell.editorSession.document(),shell.editorSession.sceneVersion(),
+                         currentMonotonicNanoseconds()*1e-9,previewVisible,false,previewRequest))
+        shell.instancedRenderer.requestCameraPreview(previewRequest);
+      if(!preview.camera() || !previewVisible) shell.instancedRenderer.closeCameraPreview();
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, sceneCamera, hud);
+      ae::renderer::RenderViewSnapshot previewCompleted;bool previewSuccess=false;
+      if(shell.instancedRenderer.takeCameraPreviewCompletion(previewCompleted,previewSuccess))
+        preview.complete(previewCompleted,shell.editorSession.sceneVersion(),previewSuccess);
+      if(frameStatus!=ae::rhi::SwapchainStatus::Ok) preview.invalidateTarget();
       const ae::u64 frameThreadCpuFinished = currentThreadCpuNanoseconds();
       const ae::u64 frameMonotonicFinished = currentMonotonicNanoseconds();
       const ae::u64 threadCpuNs = frameThreadCpuFinished > frameThreadCpuStarted

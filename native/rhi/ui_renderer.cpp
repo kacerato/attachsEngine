@@ -57,6 +57,7 @@ void VulkanUiRenderer::shutdown() {
   fontAtlas_.reset();
   iconAtlas_.reset();
   previewAtlas_.reset();
+  cameraPreviewView_=VK_NULL_HANDLE;
   instanceBuffer_.reset();
   allocator_ = nullptr;
   device_ = VK_NULL_HANDLE;
@@ -251,16 +252,17 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
     return false;
   }
 
-  const VkDescriptorSetLayoutBinding bindings[4] = {
+  const VkDescriptorSetLayoutBinding bindings[5] = {
       {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
       {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
       {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
       {3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+      {4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
   };
   VkDescriptorSetLayoutCreateInfo layoutInfo{};
   layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  layoutInfo.bindingCount = 4;
+  layoutInfo.bindingCount = 5;
   layoutInfo.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr, &descriptorLayout_) !=
       VK_SUCCESS) {
@@ -269,7 +271,7 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
   }
 
   const VkDescriptorPoolSize sizes[2] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1},
-                                         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3}};
+                                         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4}};
   VkDescriptorPoolCreateInfo poolInfo{};
   poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   poolInfo.maxSets = 1;
@@ -298,8 +300,8 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkDescriptorImageInfo iconInfo{sampler_.handle(), iconAtlas_.view(),
                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  VkWriteDescriptorSet writes[4]{};
-  for (u32 index = 0; index < 4; ++index) {
+  VkWriteDescriptorSet writes[5]{};
+  for (u32 index = 0; index < 5; ++index) {
     writes[index].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[index].dstSet = descriptorSet_;
     writes[index].dstBinding = index;
@@ -313,7 +315,9 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
   writes[2].pImageInfo = &iconInfo;
   writes[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[3].pImageInfo = &previewInfo;
-  vkUpdateDescriptorSets(device_, 4, writes, 0, nullptr);
+  writes[4].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  writes[4].pImageInfo=&previewInfo;
+  vkUpdateDescriptorSets(device_, 5, writes, 0, nullptr);
 
   if (!createPipeline(renderPass, subpass, pipelineCache)) {
     shutdown();
@@ -391,9 +395,20 @@ bool VulkanUiRenderer::setPreviewAtlas(VulkanUploadContext &upload, std::span<co
   write.pImageInfo = &info;
   vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
   previewAtlas_ = std::move(next);
+  if(!cameraPreviewView_) setCameraPreview(VK_NULL_HANDLE);
   previewAtlasSize_[0] = static_cast<float>(width);
   previewAtlasSize_[1] = static_cast<float>(height);
   return true;
+}
+
+void VulkanUiRenderer::setCameraPreview(VkImageView view) {
+  if(!device_ || !descriptorSet_) return;
+  cameraPreviewView_=view;
+  VkDescriptorImageInfo image{sampler_.handle(),view?view:previewAtlas_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet write{};write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.dstSet=descriptorSet_;write.dstBinding=4;write.descriptorCount=1;
+  write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&image;
+  vkUpdateDescriptorSets(device_,1,&write,0,nullptr);
 }
 
 } // namespace ae::rhi

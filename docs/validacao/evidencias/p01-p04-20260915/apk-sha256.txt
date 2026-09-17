@@ -1,0 +1,5 @@
+
+Algorithm : SHA256
+Hash      : 539CD7D999BE5C373F8DE736BE42EB1D89F1C480F7728A20DC5BBE9871BBF17D
+Path      : C:\Users\donod\Downloads\atchengine\android\app\build\outputs\apk\debug\app-debug.apk
+

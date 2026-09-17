@@ -35,6 +35,7 @@ layout(set=0,binding=0,std140) uniform EnvironmentLightingBlock {
 } environment;
 
 layout(location=0) in vec3 vRay;
+layout(location=1) in vec3 vOriginOffset;
 layout(location=0) out vec4 outColor;
 
 // UMA familia de linhas: as perpendiculares a um eixo, de passo `spacing`.
@@ -67,7 +68,7 @@ void main() {
   // escala do raio (`travel` escala pelo inverso), entao normalizar aqui seria
   // trabalho sem efeito -- e normalizar no vertice era o defeito.
   vec3 direction=vRay;
-  vec3 origin=frame.cameraPositionNear.xyz;
+  vec3 origin=frame.cameraPositionNear.xyz+vOriginOffset;
   float planeHeight=frame.baseColorFactor.w;
   // Raio paralelo ao plano nunca cruza: descartar e a resposta certa, e nao um
   // denominador enorme que produziria uma linha explosiva no horizonte.
@@ -79,7 +80,7 @@ void main() {
   // A MESMA profundidade do vertice da cena, a partir da MESMA linha de
   // worldToView. Qualquer divergencia aqui coloca a grade sistematicamente na
   // frente ou atras da geometria que ela deveria acompanhar.
-  float viewZ=dot(environment.worldToViewRow2.xyz,hit-origin);
+  float viewZ=dot(environment.worldToViewRow2.xyz,hit-frame.cameraPositionNear.xyz);
   float nearPlane=frame.cameraPositionNear.w;
   float farPlane=uintBitsToFloat(frame.materialFlags.w);
   if(viewZ<=nearPlane || viewZ>=farPlane) discard;
@@ -88,7 +89,9 @@ void main() {
   // de contato cintila. Por ser relativo ele acompanha a perda de precisao com a
   // distancia e nao descola a grade do chao perto da camera.
   float biased=viewZ*1.0005;
-  gl_FragDepth=((farPlane*biased-nearPlane*farPlane)/(farPlane-nearPlane))/biased;
+  gl_FragDepth=uintBitsToFloat(frame.textureIndices.w)>0.0?
+    (biased-nearPlane)/(farPlane-nearPlane):
+    ((farPlane*biased-nearPlane*farPlane)/(farPlane-nearPlane))/biased;
 
   vec2 position=hit.xz;
   vec2 derivative=fwidth(position);

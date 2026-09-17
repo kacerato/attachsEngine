@@ -73,6 +73,9 @@ struct ShadowCascadeInput final {
   // A cascata seguinte também cobre a faixa anterior usada pelo crossfade.
   // Deve ser o mesmo valor enviado ao shader, independente do guard band do cache.
   float cascadeBlendRatio = 0.0f;
+  // Zero selects perspective; positive values describe the parallel receiver
+  // volume in world units. Independent of FOV and object distance.
+  float orthographicHalfHeight = 0.0f;
 };
 
 // Fator de mistura entre divisão uniforme (0) e logarítmica (1). 0,75 é o ponto que

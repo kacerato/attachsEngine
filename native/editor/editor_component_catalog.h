@@ -25,7 +25,7 @@ struct EditorComponentEntry {
   ui::UiIcon icon;
   // Motivo pelo qual o tipo não pode ser anexado a esta entidade, ou nullptr.
   const char *unavailable(const EditorEntity &entity) const {
-    return scene::componentUnavailableReason(*schema, entity.components);
+    return scene::componentAdditionBlockedReason(*schema, entity.components);
   }
 };
 

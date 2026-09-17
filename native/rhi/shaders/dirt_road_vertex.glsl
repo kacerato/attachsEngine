@@ -114,6 +114,7 @@ void main() {
   if(impostor) {
     highp vec3 worldCenter=inModel[3].xyz;
     highp vec2 planarToObject=worldCenter.xz-frame.cameraPositionNear.xz;
+    if(environment.worldToViewRow0.w>0.0) planarToObject=environment.worldToViewRow2.xz;
     highp float planarLength=length(planarToObject);
     highp vec2 forward=planarLength>1.0e-5?planarToObject/planarLength:
         vec2(sin(frame.cameraFrame.y),cos(frame.cameraFrame.y));
@@ -305,10 +306,15 @@ void main() {
   highp float farPlane=uintBitsToFloat(frame.materialFlags.w);
   highp float nearPlane=frame.cameraPositionNear.w;
   highp float focal=environment.shadowTransitionParameters.z>0.0?environment.shadowTransitionParameters.z:1.732050808;
+  highp float halfHeight=environment.worldToViewRow0.w;
+  bool orthographic=halfHeight>0.0;
+  if(orthographic) focal=1.0/halfHeight;
   highp vec2 xy=vec2(view.x*focal/frame.cameraFrame.x,-view.y*focal);
   highp vec2 projected=vec2(dot(frame.surfaceTransform.xy,xy),
                             dot(frame.surfaceTransform.zw,xy));
-  projected += environment.shadowFilterParameters.zw * view.z;
+  highp float clipW=orthographic?1.0:view.z;
+  projected += environment.shadowFilterParameters.zw * clipW;
   gl_Position=vec4(projected,
-      (farPlane*view.z-nearPlane*farPlane)/(farPlane-nearPlane),view.z);
+      orthographic?(view.z-nearPlane)/(farPlane-nearPlane):
+      (farPlane*view.z-nearPlane*farPlane)/(farPlane-nearPlane),clipW);
 }

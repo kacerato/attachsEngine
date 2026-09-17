@@ -42,6 +42,7 @@ mediump float pow5(mediump float value) {
 }
 
 highp float viewDepthFromDevice(highp float depth,highp float nearPlane,highp float farPlane) {
+  if(environment.worldToViewRow0.w>0.0) return nearPlane+depth*(farPlane-nearPlane);
   return nearPlane*farPlane/max(farPlane-depth*(farPlane-nearPlane),1.0e-5);
 }
 
@@ -92,12 +93,15 @@ void main() {
   highp float opaqueDeviceDepth=subpassLoad(sceneDepthInput).r;
   highp float opaqueDepth=viewDepthFromDevice(opaqueDeviceDepth,nearPlane,farPlane);
   highp float cameraDistance=length(eye-vPosition);
+  bool orthographic=environment.worldToViewRow0.w>0.0;
+  highp vec3 viewDirection=orthographic?-environment.worldToViewRow2.xyz:normalize(eye-vPosition);
   // Depth is axial, Beer-Lambert needs distance along the camera ray.
   // Missing opaque geometry represents deep water, not a transparent sky floor.
   highp float thickness=max(opaqueDepth-waterDepth,0.0)*
-      (cameraDistance/max(waterDepth,nearPlane));
+      (orthographic?1.0:cameraDistance/max(waterDepth,nearPlane));
   thickness=min(thickness,farPlane);
-  if(authoredSurface) thickness=min(thickness,(routeSurface?vUv0.y:frame.baseColorFactor.z)*cameraDistance/max(abs(eye.y-vPosition.y),.1));
+  if(authoredSurface) thickness=min(thickness,(routeSurface?vUv0.y:frame.baseColorFactor.z)*
+      (orthographic?1.0/max(abs(viewDirection.y),.0001):cameraDistance/max(abs(eye.y-vPosition.y),.1)));
   mediump vec2 micro=isolation==WATER_ISOLATION_NO_MICRO_NORMAL?vec2(0.0):
       microSlope(vPosition.xz-flowOffset,environment.waterParameters.z)*waterLayers.x;
   highp vec2 rippleDetailSlope=vec2(0.0);
@@ -141,7 +145,7 @@ void main() {
   }
 #endif
   mediump vec3 n=normalize(vec3(vNormal.x-micro.x*vNormal.y,vNormal.y,vNormal.z-micro.y*vNormal.y));
-  mediump vec3 v=normalize(eye-vPosition);
+  mediump vec3 v=viewDirection;
   mediump float nv=max(dot(n,v),0.001);
   mediump float ior=clamp(environment.waterOptics.x,1.0,2.0);
   mediump float f0=(ior-1.0)/(ior+1.0); f0*=f0;
