@@ -21,6 +21,7 @@ bool UiInputRouter::addRegion(const UiRect &rect, u32 widgetId, float minimumTou
   if (!std::isfinite(minimumTouchSide) || minimumTouchSide < 0.0f) return false;
   Region region{};
   region.rect = minimumTouchSide > 0.0f ? expandToMinimumTouchTarget(rect, minimumTouchSide) : rect;
+  region.exact = rect;
   region.widgetId = widgetId;
   regions_.push_back(region);
   return true;
@@ -31,6 +32,7 @@ bool UiInputRouter::addBlocker(const UiRect &rect) {
   if (!isFinite(rect) || rect.isEmpty()) return false;
   Region region{};
   region.rect = rect;
+  region.exact = rect;
   region.blocker = true;
   regions_.push_back(region);
   return true;
@@ -61,12 +63,25 @@ UiPointerRouting UiInputRouter::hitTest(UiPoint position) const noexcept {
   UiPointerRouting result{};result.position=position;
   if(!std::isfinite(position.x) || !std::isfinite(position.y)) return result;
   result.target=UiPointerTarget::Viewport;
+  // A expansão até o alvo mínimo serve para o toque que cai PERTO de um alvo
+  // pequeno, nunca para o que cai DENTRO de outro (a regra do TouchDelegate do
+  // Android e dos alvos de toque da web). Sem isso, numa lista de linhas mais
+  // baixas que o alvo mínimo, a expansão da linha de baixo tomava a metade de
+  // baixo da linha de cima — o toque no meio de uma linha pegava a vizinha.
+  // A ordem continua valendo: um bloqueador por cima encerra a busca.
+  const Region *expanded=nullptr;
   for(usize i=regions_.size();i>0;--i) {
     const auto &region=regions_[i-1];
     if(!region.rect.contains(position)) continue;
-    result.target=region.blocker?UiPointerTarget::None:UiPointerTarget::Widget;
-    result.widgetId=region.widgetId;break;
+    if(region.blocker || region.exact.contains(position)) {
+      const auto &chosen=region.blocker && expanded?*expanded:region;
+      result.target=chosen.blocker?UiPointerTarget::None:UiPointerTarget::Widget;
+      result.widgetId=chosen.widgetId;
+      return result;
+    }
+    if(!expanded) expanded=&region;
   }
+  if(expanded) {result.target=UiPointerTarget::Widget;result.widgetId=expanded->widgetId;}
   return result;
 }
 

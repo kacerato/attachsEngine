@@ -10,7 +10,7 @@ Vocabulário (o mesmo da §9 do plano): **inventariado** → **especificado** �
 **Escopo de validação desta rodada:**
 
 1. Suíte inteira de host (`build/editor-host`, Ninja + g++ com `-Werror`,
-   incluindo o Jolt): **1009 de 1009 verdes**. As falhas antigas foram
+   incluindo o Jolt): **1011 de 1011 verdes**. As falhas antigas foram
    corrigidas; a seção "Suíte do host" abaixo diz como. Dos testes desta rodada, 55 são novos e
    verdes (`test_component_contracts`, `test_component_preset`,
    `test_component_recipes`, `test_import_geometry_profile`,
@@ -29,8 +29,7 @@ Vocabulário (o mesmo da §9 do plano): **inventariado** → **especificado** �
    ambos os casos o projeto usado foi devolvido ao estado inicial — componente
    removido, preset excluído, valor restaurado.
 
-**O que NÃO foi validado:** a aba Perfil da importação no aparelho (exige abrir
-o seletor de arquivos do sistema com um GLB de verdade), o caminho completo de
+**O que NÃO foi validado:** o caminho completo de
 importação com uma fonte real (as normais/tangentes derivadas têm teste de host, não medição em
 GLB de produção), desempenho e qualquer comparação visual controlada.
 
@@ -82,9 +81,9 @@ slot, e o painel deixou de precisar do aviso.
 | Câmera em nó com geometria ou filhos é **recusada com motivo**, em vez de girar a geometria do autor para acertar o enquadramento | `gltf_import.cpp` | validado no host |
 | **Diff da cena aberta antes de publicar**: quantos objetos desta cena estão presos à fonte, quais saem, quais ficam órfãos (com os nomes) e quantos nós novos entram em cada instância | `importSceneImpact()` em `editor_import_reconcile.*` | validado no host |
 | **Perfil por nó — excluir nó da importação**: o nó (e a subárvore) não vem para a cena, mas **continua no mapa com a identidade dele**. Para a cena ele sai pela mesma regra de nó removido (sem edição local sai, com edição fica órfão); reincluir traz de volta o **mesmo** nó, reintroduzido na revisão nova para não ser confundido com "apagado pelo autor". Mudar só a exclusão, com os mesmos bytes, avança a revisão do mapa | `import_node_map.*` (`excluded`, `markExcludedNodes`), `import_profile.*` (schema 4), `editor_import_reconcile.cpp` | validado no host, inclusive a reconciliação que remove e traz de volta |
-| Interruptor por nó na aba **Estrutura**, com a herança do pai visível (filho de excluído aparece apagado e sem toque); o impacto na cena é refeito a cada toque sem reler o arquivo, e excluir não pede nova preparação | `editor_screen.cpp`, `editor_session.cpp` | implementado, compila para o alvo; sem evidência em aparelho |
+| Interruptor por nó na aba **Estrutura**, com a herança do pai visível (filho de excluído aparece apagado e sem toque); o impacto na cena é refeito a cada toque sem reler o arquivo, e excluir não pede nova preparação | `editor_screen.cpp`, `editor_session.cpp` | **visto no aparelho** com um GLB real de 443 nós (`docs/capturas/g3/importacao-estrutura-no-excluido-herda.png`) |
 | Reabrir o projeto usa a exclusão com que a fonte foi publicada | `EditorSession::reopenSources` | implementado |
-| Controles no painel de importação (aba Perfil) e as linhas novas no relatório | `native/editor/editor_screen.cpp`, `editor_session.cpp` | implementado, compila para o alvo; sem evidência em aparelho |
+| Controles no painel de importação (aba Perfil) e as linhas novas no relatório | `native/editor/editor_screen.cpp`, `editor_session.cpp` | **visto no aparelho** (`importacao-perfil-normais-pendente.png`). O aparelho achou dois defeitos, corrigidos: (1) a tela só considerava escala e textura para "perfil pendente", e Normais/Modo/Tangentes/câmeras deixavam publicar a prévia antiga — agora a tela faz a mesma pergunta que a sessão, com teste por campo; (2) numa tela baixa as linhas de baixo ficavam cortadas sem como alcançá-las — o Perfil é paginado como as outras abas, com as ações fixas no rodapé |
 
 **Limites declarados:**
 
@@ -169,6 +168,19 @@ Uma falha **deste** trabalho foi achada e corrigida pela suíte: os campos novos
 da aba Perfil empurravam "Preparar com este perfil" para fora de uma tela baixa
 (`r3_import_lives_in_properties_and_does_not_block_the_editor`). As ações
 passaram para o rodapé fixo, como Revert/Apply no Import Settings da Unity.
+
+## Toque: a expansão até o alvo mínimo roubava a linha vizinha
+
+Achado no aparelho, na aba Estrutura: tocar no meio de uma linha desligava a de
+baixo. O roteador expande regiões pequenas até o alvo mínimo de toque e escolhia
+a primeira região cuja área **expandida** continha o dedo — numa lista de linhas
+mais baixas que o alvo mínimo, a expansão da linha de baixo cobria metade da de
+cima. Agora vale a regra do TouchDelegate do Android e dos alvos de toque da
+web: a expansão só ajuda o toque que cai **perto** de um alvo, nunca o que cai
+**dentro** de outro; um bloqueador por cima continua encerrando a busca
+(`native/ui/ui_input.cpp`, teste `input_touch_expansion_never_steals_a_touch_inside_a_neighbour`).
+Vale para toda lista do editor. **Pendente:** repetir o toque no aparelho — ele
+ficou bloqueado antes da reinstalação.
 
 ## G4–G6
 

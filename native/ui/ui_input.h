@@ -111,6 +111,8 @@ public:
 private:
   struct Region final {
     UiRect rect{};
+    // A área desenhada, antes da expansão para o alvo mínimo de toque.
+    UiRect exact{};
     u32 widgetId = 0;
     bool blocker = false;
   };

@@ -663,6 +663,34 @@ AE_TEST(r3_import_lives_in_properties_and_does_not_block_the_editor) {
   AE_EXPECT_TRUE(!fixture.session.screen().importPanel, "cancelar fecha o painel");
 }
 
+AE_TEST(every_profile_field_blocks_publishing_until_prepared_again) {
+  // A geometria derivada é perfil como a escala: mudar Normais, Modo, Tangentes
+  // ou câmeras sem preparar de novo publicaria a prévia antiga. Achado no
+  // aparelho: só escala e textura bloqueavam.
+  const EditorWidget fields[] = {EditorWidget::ImportNormalsCycle, EditorWidget::ImportNormalWeightingCycle,
+                                 EditorWidget::ImportTangentsCycle, EditorWidget::ImportCamerasToggle};
+  for (const auto field : fields) {
+    Fixture fixture;
+    fixture.session.beginImportPreparation();
+    resources::GltfImport model;
+    model.nodes.emplace_back();
+    model.nodes[0].name = "Raiz";
+    fixture.session.showImportPreview("Fontes/modelo.glb", model, {}, {});
+    fixture.session.update();
+    tapWidget(fixture, widgetId(EditorWidget::ImportTabProfile));
+    AE_EXPECT_TRUE(locateWidget(fixture.session, widgetId(EditorWidget::ImportIntoScene)).x >= 0, "publicar antes da mudança");
+    // Numa tela baixa o perfil é paginado: a linha pedida tem de ser alcançável.
+    for (u32 page = 0; page < 8 && locateWidget(fixture.session, widgetId(field)).x < 0 &&
+                       locateWidget(fixture.session, widgetId(EditorWidget::ImportNextPage)).x >= 0; ++page)
+      tapWidget(fixture, widgetId(EditorWidget::ImportNextPage));
+    tapWidget(fixture, widgetId(field));
+    AE_EXPECT_TRUE(locateWidget(fixture.session, widgetId(EditorWidget::ImportIntoScene)).x < 0,
+                   "publicar some com o campo pendente");
+    AE_EXPECT_TRUE(locateWidget(fixture.session, widgetId(EditorWidget::ImportApplyProfile)).x >= 0,
+                   "e preparar de novo fica disponível");
+  }
+}
+
 AE_TEST(session_viewport_down_is_consumed_and_duplicate_down_does_not_leave_a_ghost_finger) {
   Fixture f;const auto at=f.viewportCentre();
   AE_EXPECT_TRUE(f.session.handlePointer({1,UiPointerPhase::Down,at,0}),"editor owns down");

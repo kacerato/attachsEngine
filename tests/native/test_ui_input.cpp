@@ -59,6 +59,27 @@ AE_TEST(input_topmost_region_wins_when_two_overlap) {
   AE_EXPECT_EQ(routing.widgetId, 2u, "a ultima registrada esta por cima");
 }
 
+AE_TEST(input_touch_expansion_never_steals_a_touch_inside_a_neighbour) {
+  // Linhas de 24 com alvo mínimo de 44, como a aba Estrutura do importador:
+  // a expansão da linha de baixo cobria a metade de baixo da de cima, e o
+  // toque no meio de uma linha pegava a vizinha (visto no aparelho).
+  UiInputRouter router;
+  router.beginFrame();
+  for (u32 row = 0; row < 3; ++row)
+    router.addRegion({0, static_cast<float>(row) * 24.0f, 200, 24}, 10 + row, 44.0f);
+  for (u32 row = 0; row < 3; ++row)
+    for (const float offset : {2.0f, 12.0f, 22.0f})
+      AE_EXPECT_EQ(router.hitTest({100, static_cast<float>(row) * 24.0f + offset}).widgetId, 10 + row,
+                   "o toque dentro da linha é da própria linha");
+  // Fora de todas as linhas, a expansão continua ajudando o dedo.
+  AE_EXPECT_EQ(router.hitTest({100, 80}).widgetId, 12u, "logo abaixo da última linha, a expansão dela vale");
+
+  // Um bloqueador por cima continua encerrando a busca: o que está embaixo
+  // dele não recebe o toque, nem pela área exata.
+  router.addBlocker({0, 0, 200, 30});
+  AE_EXPECT_TRUE(router.hitTest({100, 12}).target == UiPointerTarget::None, "o bloqueador por cima vence");
+}
+
 AE_TEST(input_a_drag_that_starts_on_a_widget_never_becomes_a_camera_orbit) {
   // Este é o defeito que o módulo existe para impedir: arrastar um slider e ver
   // a câmera girar assim que o dedo sai do painel.

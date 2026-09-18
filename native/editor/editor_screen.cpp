@@ -1873,8 +1873,15 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
   takeTop(content,6);
 
   const auto nearlyEqual=[](float a,float b) {return std::fabs(a-b)<=std::max(std::fabs(a),std::fabs(b))*1e-5f;};
+  // Tem de ser a mesma pergunta que a sessão faz (`sameImportPreparation`):
+  // campo do perfil fora desta conta deixava publicar a prévia antiga com o
+  // perfil novo na tela — o autor pedia normais calculadas e recebia as do arquivo.
   const bool profileApplied=nearlyEqual(state.importScale,state.importPreparedScale) &&
-                            state.importTextureDimension==state.importPreparedTextureDimension;
+                            state.importTextureDimension==state.importPreparedTextureDimension &&
+                            state.importNormals==state.importPreparedNormals &&
+                            state.importNormalWeighting==state.importPreparedNormalWeighting &&
+                            state.importTangents==state.importPreparedTangents &&
+                            state.importCameras==state.importPreparedCameras;
 
   // Rodapé: cancelar sempre; publicar só com prévia pronta, perfil aplicado e
   // ambiguidades decididas. Apagado e sem toque até lá.
@@ -1957,7 +1964,9 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
         return false;
       }();
       if(node.node.valid()) {
-        auto mark=takeRight(row,36);
+        // Coluna do tamanho do interruptor (kToggleWidth) com folga: mais estreita,
+        // o interruptor transbordava por cima da contagem de malhas.
+        auto mark=takeRight(row,kToggleWidth+10);
         if(inherited) builder.label(mark,"—",theme.color.textMuted,theme.type.caption,UiAlign::Center);
         else {
           builder.toggle(deflate(mark,UiInsets::all(3)),!node.excluded,widgetId(EditorWidget::ImportNodeToggleBase)+static_cast<u32>(i));
@@ -2008,62 +2017,73 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     builder.label(save,"Salvar como padrão do projeto",theme.color.text,theme.type.caption,UiAlign::Center);
     router.addRegion(save,widgetId(EditorWidget::ImportSaveDefaultProfile));
     takeBottom(content,6);
-    auto scaleRow=takeTop(content,36);
-    builder.label(takeLeft(scaleRow,scaleRow.width*.4f),"Escala",theme.color.text,theme.type.caption);
-    const auto down=deflate(takeLeft(scaleRow,36),UiInsets::all(2)),up=deflate(takeRight(scaleRow,36),UiInsets::all(2));
-    for(const auto &[rect,label,widget]:{std::tuple{down,"-",EditorWidget::ImportScaleDown},std::tuple{up,"+",EditorWidget::ImportScaleUp}}) {
-      list.addRect(rect,theme.color.raised,theme.radius.control);
-      builder.label(rect,label,theme.color.text,theme.type.body,UiAlign::Center);
-      router.addRegion(rect,widgetId(widget));
-    }
-    builder.label(scaleRow,scaleText(state.importScale),theme.color.text,theme.type.body,UiAlign::Center);
-    // Tamanho que o modelo terá com a escala do rascunho (aproximado pelas
-    // esferas dos desenhos: é uma prévia, não uma medida).
-    const float ratio=state.importPreparedScale>0?state.importScale/state.importPreparedScale:1;
-    builder.label(takeTop(content,24),state.importHasExtent?
-                  "Tamanho aprox.: "+decimalText(state.importExtent[0]*ratio,2)+" × "+decimalText(state.importExtent[1]*ratio,2)+" × "+
-                  decimalText(state.importExtent[2]*ratio,2):std::string("Tamanho: sem geometria preparada"),
-                  theme.color.textDim,theme.type.caption);
-    builder.label(takeTop(content,24),"Textura máxima (px)",theme.color.text,theme.type.caption);
-    auto dimensions=takeTop(content,36);
-    const struct {u32 value;EditorWidget widget;} steps[]{{256,EditorWidget::ImportTextureDimension256},{512,EditorWidget::ImportTextureDimension512},
-                                                         {1024,EditorWidget::ImportTextureDimension1024},{2048,EditorWidget::ImportTextureDimension2048}};
-    const float stepWidth=dimensions.width/static_cast<float>(std::size(steps));
-    for(const auto &step:steps) {
-      const auto cell=deflate(takeLeft(dimensions,stepWidth),UiInsets::all(2));
-      const bool on=state.importTextureDimension==step.value;
-      list.addRect(cell,on?theme.color.accent:theme.color.raised,theme.radius.control);
-      builder.label(cell,std::to_string(step.value),on?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
-      router.addRegion(cell,widgetId(step.widget));
-    }
-    // Geometria derivada (G2). Os rótulos seguem o Model Import Settings da
-    // Unity — Normals / Normals Mode / Tangents — porque é o vocabulário que o
-    // autor já traz de fora; a ponderação só aparece quando há o que ponderar.
-    takeTop(content,8);
-    const auto cycle=[&](const char *label,const char *value,EditorWidget widget,bool active=true) {
-      auto row=takeTop(content,36);
-      builder.label(takeLeft(row,row.width*.45f),label,active?theme.color.text:theme.color.textMuted,theme.type.caption);
+    // Oito linhas de controle, paginadas como as outras abas: numa tela baixa
+    // (um celular deitado tem ~400 de altura útil) a lista corrida cortava as
+    // linhas de baixo sem aviso nem como alcançá-las.
+    enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Normals,Weighting,Tangents,Cameras,ProfileRowCount};
+    const auto [firstRow,lastRow]=paginate(ProfileRowCount,40);
+    const auto cycle=[&](UiRect row,const char *label,const char *value,EditorWidget widget) {
+      builder.label(takeLeft(row,row.width*.45f),label,theme.color.text,theme.type.caption);
       const auto cell=deflate(row,UiInsets::all(2));
       list.addRect(cell,theme.color.raised,theme.radius.control);
-      builder.label(cell,value,active?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
-      if(active) router.addRegion(cell,widgetId(widget));
+      builder.label(cell,value,theme.color.text,theme.type.caption,UiAlign::Center);
+      router.addRegion(cell,widgetId(widget));
     };
-    cycle("Normais",state.importNormals==resources::GltfNormalsCalculate?"Calcular":"Importar",EditorWidget::ImportNormalsCycle);
-    cycle("Modo das normais",state.importNormalWeighting==resources::GltfNormalWeightAngle?"Por ângulo":"Por área",
-          EditorWidget::ImportNormalWeightingCycle);
-    cycle("Tangentes",state.importTangents==resources::GltfTangentsCalculate?"Calcular":"Importar",EditorWidget::ImportTangentsCycle);
-    cycle("Importar câmeras",state.importCameras?"Sim":"Não",EditorWidget::ImportCamerasToggle);
-    list.pushClip(content);
-    for(const auto &line:wrapText(list,"Importar usa o que vem no arquivo e gera só o que falta. Uma malha sem normal não é "
-                                       "desenhável aqui, então nunca fica sem.",content.width,theme.type.caption)) {
-      if(content.height<20) break;
-      builder.label(takeTop(content,20),line,theme.color.textMuted,theme.type.caption);
+    for(usize index=firstRow;index<lastRow;++index) {
+      auto row=takeTop(content,40);
+      switch(static_cast<ProfileRow>(index)) {
+      case Scale: {
+        builder.label(takeLeft(row,row.width*.4f),"Escala",theme.color.text,theme.type.caption);
+        const auto down=deflate(takeLeft(row,36),UiInsets::all(2)),up=deflate(takeRight(row,36),UiInsets::all(2));
+        for(const auto &[rect,label,widget]:{std::tuple{down,"-",EditorWidget::ImportScaleDown},std::tuple{up,"+",EditorWidget::ImportScaleUp}}) {
+          list.addRect(rect,theme.color.raised,theme.radius.control);
+          builder.label(rect,label,theme.color.text,theme.type.body,UiAlign::Center);
+          router.addRegion(rect,widgetId(widget));
+        }
+        builder.label(row,scaleText(state.importScale),theme.color.text,theme.type.body,UiAlign::Center);
+        break;
+      }
+      case Size: {
+        // Tamanho que o modelo terá com a escala do rascunho (aproximado pelas
+        // esferas dos desenhos: é uma prévia, não uma medida).
+        const float ratio=state.importPreparedScale>0?state.importScale/state.importPreparedScale:1;
+        builder.label(row,state.importHasExtent?
+                      "Tamanho aprox.: "+decimalText(state.importExtent[0]*ratio,2)+" × "+decimalText(state.importExtent[1]*ratio,2)+" × "+
+                      decimalText(state.importExtent[2]*ratio,2):std::string("Tamanho: sem geometria preparada"),
+                      theme.color.textDim,theme.type.caption);
+        break;
+      }
+      case TextureLabel:builder.label(row,"Textura máxima (px)",theme.color.text,theme.type.caption);break;
+      case TextureSteps: {
+        const struct {u32 value;EditorWidget widget;} steps[]{{256,EditorWidget::ImportTextureDimension256},{512,EditorWidget::ImportTextureDimension512},
+                                                             {1024,EditorWidget::ImportTextureDimension1024},{2048,EditorWidget::ImportTextureDimension2048}};
+        const float stepWidth=row.width/static_cast<float>(std::size(steps));
+        for(const auto &step:steps) {
+          const auto cell=deflate(takeLeft(row,stepWidth),UiInsets::all(2));
+          const bool on=state.importTextureDimension==step.value;
+          list.addRect(cell,on?theme.color.accent:theme.color.raised,theme.radius.control);
+          builder.label(cell,std::to_string(step.value),on?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
+          router.addRegion(cell,widgetId(step.widget));
+        }
+        break;
+      }
+      // Geometria derivada (G2). Os rótulos seguem o Model Import Settings da
+      // Unity — Normals / Normals Mode / Tangents — porque é o vocabulário que o
+      // autor já traz de fora.
+      case Normals:cycle(row,"Normais",state.importNormals==resources::GltfNormalsCalculate?"Calcular":"Importar",EditorWidget::ImportNormalsCycle);break;
+      case Weighting:cycle(row,"Modo das normais",state.importNormalWeighting==resources::GltfNormalWeightAngle?"Por ângulo":"Por área",
+                           EditorWidget::ImportNormalWeightingCycle);break;
+      case Tangents:cycle(row,"Tangentes",state.importTangents==resources::GltfTangentsCalculate?"Calcular":"Importar",EditorWidget::ImportTangentsCycle);break;
+      case Cameras:cycle(row,"Importar câmeras",state.importCameras?"Sim":"Não",EditorWidget::ImportCamerasToggle);break;
+      case ProfileRowCount:break;
+      }
     }
-    list.popClip();
+    // As notas só aparecem no espaço que sobrar: são explicação, não controle.
     takeTop(content,8);
     list.pushClip(content);
-    for(const auto &line:wrapText(list,"Guardado com a fonte ao publicar. Reimportar e reabrir o projeto usam o mesmo perfil.",
-                                  content.width,theme.type.caption)) {
+    for(const auto &line:wrapText(list,"Importar usa o que vem no arquivo e gera só o que falta. Uma malha sem normal não é "
+                                       "desenhável aqui, então nunca fica sem. Guardado com a fonte ao publicar; reimportar e "
+                                       "reabrir o projeto usam o mesmo perfil.",content.width,theme.type.caption)) {
       if(content.height<20) break;
       builder.label(takeTop(content,20),line,theme.color.textMuted,theme.type.caption);
     }
