@@ -347,3 +347,9 @@
 12846	44517	8114548775430081	CMakeFiles/aether_editor.dir/editor/editor_session.cpp.o	e7fdd3a151fc705b
 44518	45664	8114548786259087	libaether_editor.a	645f9b14bf7a9996
 45664	48322	8114548812023670	C:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/libaether_android.so	4cb5aaddbf3a5173
+246	25329	8114691404588285	CMakeFiles/aether_android.dir/platform/android/android_editor_text_input.cpp.o	de44c499cf90cd9
+312	29168	8114691442647899	CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.o	1f609f2b3b49504e
+180	32395	8114691474574742	CMakeFiles/aether_android.dir/platform/android/android_main.cpp.o	71f336cf680d3abf
+277	35043	8114691500154369	CMakeFiles/aether_editor.dir/editor/editor_session.cpp.o	e7fdd3a151fc705b
+35044	35934	8114691509824496	libaether_editor.a	645f9b14bf7a9996
+35935	38811	8114691536992679	C:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/Debug/1y1q5570/obj/arm64-v8a/libaether_android.so	4cb5aaddbf3a5173
