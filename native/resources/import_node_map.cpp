@@ -81,8 +81,15 @@ bool ImportNodeMap::deserialize(std::string_view text, ImportNodeMap &out) {
   u32 version = 0;
   usize count = 0;
   ImportNodeMap candidate;
+  // Versões ANTERIORES são lidas, com os campos que ainda não existiam no valor
+  // que reproduz o comportamento de então. Recusar o mapa da versão 1 faria a
+  // próxima reimportação de um projeto existente começar sem mapa — e as
+  // identidades voltariam às chaves legadas, justamente o que o mapa existe
+  // para evitar: renomeações e mudanças de pai deixariam de casar. Só versão
+  // NOVA demais é recusada, porque ela pode carregar algo que este leitor não
+  // sabe preservar.
   if (!(in >> magic >> version >> candidate.revision >> std::quoted(candidate.sourceHash) >> count) ||
-      magic != "ASTRA_NODEMAP" || version != FormatVersion || count > MaximumNodes)
+      magic != "ASTRA_NODEMAP" || version < 1 || version > FormatVersion || count > MaximumNodes)
     return false;
   candidate.nodes.reserve(count);
   for (usize i = 0; i < count; ++i) {
@@ -100,8 +107,10 @@ bool ImportNodeMap::deserialize(std::string_view text, ImportNodeMap &out) {
       if (!(in >> draw) || !AssetGuid::parse(draw, parsed)) return false;
       node.draws.push_back(parsed);
     }
-    if (!(in >> node.camera >> node.cameraOrthographic >> node.cameraVerticalFov >> node.cameraNear >>
-          node.cameraFar >> node.cameraHalfHeight))
+    // v2: câmera do nó. Mapa v1 não tinha câmera nenhuma — o padrão do registro
+    // (sem câmera) é exatamente o que ele descrevia.
+    if (version >= 2 && !(in >> node.camera >> node.cameraOrthographic >> node.cameraVerticalFov >> node.cameraNear >>
+                          node.cameraFar >> node.cameraHalfHeight))
       return false;
     candidate.nodes.push_back(std::move(node));
   }

@@ -1,0 +1,73 @@
+// Formatos antigos continuam legíveis depois que um campo novo entra.
+//
+// Estes testes existem porque a falta deles deixou passar um defeito real:
+// subir a versão do mapa de nós e do perfil de importação fez os arquivos que
+// JÁ ESTÃO nos projetos serem recusados. Recusa, nesses dois arquivos, não é
+// erro visível — o mapa ausente faz a reimportação voltar às identidades
+// legadas, e o perfil ausente faz a escala escolhida voltar ao padrão. Os dois
+// em silêncio. Aqui ficam fixados os textos exatos que as versões anteriores
+// escreviam, e o que cada um precisa significar hoje.
+#include "harness.h"
+
+#include "resources/import_node_map.h"
+#include "resources/import_profile.h"
+
+using namespace ae;
+using namespace ae::resources;
+
+AE_TEST(import_profile_schema_1_keeps_the_authors_scale) {
+  // Exatamente o que o editor gravava antes das normais e das câmeras.
+  ImportProfile parsed;
+  AE_EXPECT_TRUE(parseImportProfile(R"({"schema":1,"scale":100,"maximumTextureDimension":1024})", parsed),
+                 "o perfil salvo antes dos campos novos continua valendo");
+  AE_EXPECT_TRUE(parsed.scale == 100.f, "a escala escolhida pelo autor sobrevive");
+  AE_EXPECT_EQ(parsed.maximumTextureDimension, 1024u, "e a dimensão de textura também");
+  AE_EXPECT_EQ(parsed.normals, GltfNormalsImport, "normais no comportamento de então");
+  AE_EXPECT_EQ(parsed.tangents, GltfTangentsImport, "tangentes no comportamento de então");
+  AE_EXPECT_TRUE(!parsed.importCameras, "e câmeras continuam de fora, como eram");
+}
+
+AE_TEST(import_profile_schema_2_reads_without_the_camera_field) {
+  ImportProfile parsed;
+  AE_EXPECT_TRUE(parseImportProfile(
+                     R"({"schema":2,"scale":1,"maximumTextureDimension":512,"normals":1,"normalWeighting":1,"tangents":0})",
+                     parsed),
+                 "o schema 2 não tinha câmera e continua legível");
+  AE_EXPECT_EQ(parsed.normals, GltfNormalsCalculate, "a escolha de normais do schema 2 é preservada");
+  AE_EXPECT_TRUE(!parsed.importCameras, "o campo que ele não conhecia fica no padrão");
+}
+
+AE_TEST(import_profile_refuses_a_future_schema_and_a_truncated_current_one) {
+  ImportProfile parsed;
+  AE_EXPECT_TRUE(!parseImportProfile(R"({"schema":99,"scale":1,"maximumTextureDimension":512})", parsed),
+                 "schema novo demais pode carregar escolha que este leitor não honra");
+  AE_EXPECT_TRUE(!parseImportProfile(R"({"schema":2,"scale":1,"maximumTextureDimension":512})", parsed),
+                 "o schema 2 declara normais; sem elas o arquivo está truncado");
+}
+
+AE_TEST(import_node_map_version_1_is_still_read) {
+  // Um mapa v1 com dois nós, pai e filho, do jeito que a primeira versão gravava.
+  const std::string v1 =
+      "ASTRA_NODEMAP 1 3 \"abc\" 2\n"
+      "0000000000000000000000000000000a - 1 0 \"Raiz\" \"\" 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0\n"
+      "0000000000000000000000000000000b 0000000000000000000000000000000a 2 7 \"Roda\" \"id-roda\" "
+      "1 0 0 0 0 1 0 0 0 0 1 0 2 0 0 1 1 0000000000000000000000000000000c\n";
+  ImportNodeMap map;
+  AE_EXPECT_TRUE(ImportNodeMap::deserialize(v1, map), "o mapa v1 continua legível");
+  AE_EXPECT_EQ(map.revision, 3u, "a revisão é preservada");
+  AE_EXPECT_EQ(map.nodes.size(), 2u, "os dois nós voltaram");
+  AE_EXPECT_EQ(map.nodes[1].authoredId, std::string("id-roda"), "com a identidade do autor");
+  AE_EXPECT_EQ(map.nodes[1].introduced, 2u, "e a revisão em que o nó apareceu");
+  AE_EXPECT_TRUE(!map.nodes[1].camera, "um mapa v1 não tinha câmera, e o padrão diz isso");
+
+  // Ida e volta: o que foi lido como v1 é gravado na versão atual e relido igual.
+  ImportNodeMap again;
+  AE_EXPECT_TRUE(ImportNodeMap::deserialize(map.serialize(), again), "o mapa regravado relê");
+  AE_EXPECT_EQ(again.nodes[1].authoredId, std::string("id-roda"), "sem perder nada no caminho");
+}
+
+AE_TEST(import_node_map_refuses_a_future_version) {
+  const std::string future = "ASTRA_NODEMAP 99 1 \"abc\" 0\n";
+  ImportNodeMap map;
+  AE_EXPECT_TRUE(!ImportNodeMap::deserialize(future, map), "versão nova demais é recusada");
+}

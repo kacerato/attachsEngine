@@ -47,26 +47,38 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
   if (!JsonDocument::parse(text, document) || !document.root() || document.root()->kind != JsonDocument::Kind::Object)
     return false;
   const auto &root = *document.root();
-  if (document.index(root, "schema") != static_cast<i64>(ImportProfileSchema)) return false;
+  // Schemas ANTERIORES são lidos: um perfil salvo antes de um campo existir
+  // continua valendo, com o campo novo no padrão que reproduz o comportamento
+  // de então. Recusá-lo faria o arquivo cair no próximo nível em silêncio — a
+  // escala ×100 que o autor escolheu voltaria a ×1 na reimportação seguinte.
+  // Só schema NOVO demais é recusado: ele pode carregar escolha que este
+  // leitor não sabe honrar.
+  const auto schema = document.index(root, "schema");
+  if (schema < 1 || schema > static_cast<i64>(ImportProfileSchema)) return false;
   const auto *scale = document.member(root, "scale");
   const auto dimension = document.index(root, "maximumTextureDimension");
   if (!scale || scale->kind != JsonDocument::Kind::Number || dimension < 0) return false;
   ImportProfile parsed;
   parsed.scale = static_cast<float>(scale->number);
   parsed.maximumTextureDimension = static_cast<u32>(std::min<i64>(dimension, 1 << 20));
-  // Campo ausente é recusa, não padrão silencioso: o schema já identifica a
-  // versão do arquivo, então a falta de um campo declarado por ele significa
-  // arquivo truncado ou escrito por outra coisa.
-  const auto normals = document.index(root, "normals");
-  const auto weighting = document.index(root, "normalWeighting");
-  const auto tangents = document.index(root, "tangents");
-  if (normals < 0 || weighting < 0 || tangents < 0) return false;
-  parsed.normals = static_cast<u8>(std::min<i64>(normals, 255));
-  parsed.normalWeighting = static_cast<u8>(std::min<i64>(weighting, 255));
-  parsed.tangents = static_cast<u8>(std::min<i64>(tangents, 255));
-  const auto *cameras = document.member(root, "importCameras");
-  if (!cameras || cameras->kind != JsonDocument::Kind::Boolean) return false;
-  parsed.importCameras = cameras->boolean;
+  // Dentro do schema DECLARADO, campo ausente é recusa, não padrão silencioso:
+  // o schema diz quais campos o arquivo tem, e a falta de um deles significa
+  // arquivo truncado ou escrito por outra coisa. O que o schema declarado não
+  // conhecia fica no padrão da struct, que é o comportamento daquela época.
+  if (schema >= 2) {
+    const auto normals = document.index(root, "normals");
+    const auto weighting = document.index(root, "normalWeighting");
+    const auto tangents = document.index(root, "tangents");
+    if (normals < 0 || weighting < 0 || tangents < 0) return false;
+    parsed.normals = static_cast<u8>(std::min<i64>(normals, 255));
+    parsed.normalWeighting = static_cast<u8>(std::min<i64>(weighting, 255));
+    parsed.tangents = static_cast<u8>(std::min<i64>(tangents, 255));
+  }
+  if (schema >= 3) {
+    const auto *cameras = document.member(root, "importCameras");
+    if (!cameras || cameras->kind != JsonDocument::Kind::Boolean) return false;
+    parsed.importCameras = cameras->boolean;
+  }
   if (!validImportProfile(parsed)) return false;
   out = parsed;
   return true;

@@ -552,6 +552,7 @@ if(NOT ANDROID)
     ../tests/native/test_component_recipes.cpp
     ../tests/native/test_import_geometry_profile.cpp
     ../tests/native/test_import_scene_impact.cpp
+    ../tests/native/test_import_format_compat.cpp
     ../tests/native/test_editor_document.cpp
     ../tests/native/test_editor_gizmo.cpp
     ../tests/native/test_editor_screen.cpp
