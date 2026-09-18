@@ -209,3 +209,85 @@ AE_TEST(import_does_not_flag_even_texel_density) {
   AE_EXPECT_TRUE(importGlb(buildGlb(asset.json, asset.binary), {}, {}, model), model.diagnostic.c_str());
   AE_EXPECT_EQ(model.stretchedUvPrimitives, 0u, "UV proporcional não é apontada como defeito");
 }
+
+namespace {
+// Um no com camera perspectiva e nada mais, do jeito que um exportador produz:
+// a camera fica sozinha no no, e a malha vive em outro.
+Asset cameraScene(const char *cameraJson, bool cameraOnMeshNode = false) {
+  auto asset = triangle(true);
+  const auto meshNode = std::string(R"("nodes":[{"name":"Triangulo","mesh":0}])");
+  const auto replacement = cameraOnMeshNode
+      ? std::string(R"("nodes":[{"name":"Triangulo","mesh":0,"camera":0}])")
+      : std::string(R"("nodes":[{"name":"Triangulo","mesh":0},{"name":"Camera","camera":0,"translation":[0,2,-5]}])");
+  asset.json.replace(asset.json.find(meshNode), meshNode.size(), replacement);
+  const auto scene = std::string(R"("scenes":[{"nodes":[0]}])");
+  asset.json.replace(asset.json.find(scene), scene.size(),
+                     cameraOnMeshNode ? scene : std::string(R"("scenes":[{"nodes":[0,1]}])"));
+  asset.json.insert(asset.json.find(R"("meshes":)"), std::string(R"("cameras":[)") + cameraJson + "],");
+  return asset;
+}
+} // namespace
+
+AE_TEST(import_leaves_cameras_out_until_the_profile_asks) {
+  const auto asset = cameraScene(R"({"type":"perspective","perspective":{"yfov":0.7,"znear":0.2,"zfar":300}})");
+  GltfImport model;
+  AE_EXPECT_TRUE(importGlb(buildGlb(asset.json, asset.binary), {}, {}, model), model.diagnostic.c_str());
+  AE_EXPECT_TRUE(model.cameras.empty(), "sem o perfil, a câmera não entra");
+  AE_EXPECT_EQ(model.skippedCameras, 1u, "e continua contada como perdida, para o autor saber que existe");
+}
+
+AE_TEST(import_brings_the_camera_lens_and_turns_it_to_engine_forward) {
+  const auto asset = cameraScene(R"({"type":"perspective","perspective":{"yfov":0.7,"znear":0.2,"zfar":300}})");
+  GltfImportLimits limits;
+  limits.importCameras = true;
+  GltfImport model;
+  AE_EXPECT_TRUE(importGlb(buildGlb(asset.json, asset.binary), limits, {}, model), model.diagnostic.c_str());
+  AE_EXPECT_EQ(model.cameras.size(), 1u, "a câmera do arquivo entrou");
+  AE_EXPECT_EQ(model.skippedCameras, 0u, "e não é mais perda");
+  const auto &camera = model.cameras.front();
+  AE_EXPECT_TRUE(!camera.orthographic, "perspectiva");
+  AE_EXPECT_TRUE(std::fabs(camera.verticalFovDegrees - 40.1070f) < 0.01f, "yfov em radianos vira graus");
+  AE_EXPECT_TRUE(camera.nearPlane == 0.2f && camera.farPlane == 300.f, "os planos vêm do arquivo");
+
+  // O glTF olha para -Z e esta engine para +Z: a pose do nó leva meia volta,
+  // senão a câmera importada enquadra o lado oposto ao que o autor escolheu.
+  const auto &matrix = model.nodes[camera.node].localMatrix;
+  AE_EXPECT_TRUE(matrix[10] == -1.f, "a coluna Z foi invertida");
+  AE_EXPECT_TRUE(matrix[0] == -1.f, "e a X junto, para a base seguir destra");
+  AE_EXPECT_TRUE(matrix[5] == 1.f, "o eixo Y e a posição não mudam");
+  AE_EXPECT_TRUE(matrix[13] == 2.f && matrix[14] == -5.f, "a posição do nó é preservada");
+}
+
+AE_TEST(import_reads_an_orthographic_camera_by_its_own_field) {
+  const auto asset = cameraScene(R"({"type":"orthographic","orthographic":{"xmag":4,"ymag":3,"znear":0.1,"zfar":100}})");
+  GltfImportLimits limits;
+  limits.importCameras = true;
+  GltfImport model;
+  AE_EXPECT_TRUE(importGlb(buildGlb(asset.json, asset.binary), limits, {}, model), model.diagnostic.c_str());
+  AE_EXPECT_EQ(model.cameras.size(), 1u, "a câmera ortográfica entrou");
+  AE_EXPECT_TRUE(model.cameras.front().orthographic, "o tipo do arquivo é respeitado");
+  AE_EXPECT_TRUE(model.cameras.front().orthographicHalfHeight == 3.f, "ymag é a meia altura visível");
+}
+
+AE_TEST(import_refuses_a_camera_that_would_rotate_geometry_with_it) {
+  // Câmera no MESMO nó da malha: girar o nó para acertar o enquadramento giraria
+  // a geometria do autor junto. A câmera fica de fora, com motivo.
+  const auto asset = cameraScene(R"({"type":"perspective","perspective":{"yfov":0.7,"znear":0.2}})", true);
+  GltfImportLimits limits;
+  limits.importCameras = true;
+  GltfImport model;
+  AE_EXPECT_TRUE(importGlb(buildGlb(asset.json, asset.binary), limits, {}, model), model.diagnostic.c_str());
+  AE_EXPECT_TRUE(model.cameras.empty(), "a câmera no nó com geometria não entra");
+  AE_EXPECT_EQ(model.skippedCameras, 1u, "e é contada como não importada");
+  AE_EXPECT_TRUE(!model.notes.empty(), "com o motivo escrito no relatório");
+  AE_EXPECT_TRUE(model.nodes[0].localMatrix[10] == 1.f, "e a geometria não foi girada");
+}
+
+AE_TEST(import_refuses_a_camera_with_an_impossible_lens) {
+  const auto asset = cameraScene(R"({"type":"perspective","perspective":{"yfov":0.7,"znear":10,"zfar":1}})");
+  GltfImportLimits limits;
+  limits.importCameras = true;
+  GltfImport model;
+  AE_EXPECT_TRUE(!importGlb(buildGlb(asset.json, asset.binary), limits, {}, model),
+                 "plano distante atrás do próximo é arquivo inválido, não valor a corrigir");
+}

@@ -1323,7 +1323,11 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
 
   if (const auto *animations = importer.array(*root, "animations")) result.skippedAnimations = animations->childCount;
   if (const auto *skins = importer.array(*root, "skins")) result.skippedSkins = skins->childCount;
-  if (const auto *cameras = importer.array(*root, "cameras")) result.skippedCameras = cameras->childCount;
+  // Uma câmera só conta como perdida quando o perfil NÃO pede para importá-la:
+  // com "Import Cameras" ligado, ela vira dado e o nó que a carrega recebe o
+  // componente de câmera no editor.
+  const auto *sourceCameras = importer.array(*root, "cameras");
+  if (sourceCameras && !limits.importCameras) result.skippedCameras = sourceCameras->childCount;
 
   if (!importer.readMaterials(*root)) return giveUp(result.diagnostic.c_str());
   importer.report(.1f, "Materiais");
@@ -1479,7 +1483,39 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
       }
     result.nodes.push_back(std::move(imported));
 
-    if (document.member(node, "camera")) ++result.skippedCameras;
+    // A câmera do nó. Sem "Import Cameras" ela já foi contada como perdida na
+    // varredura do arquivo; com ele, vira um registro ligado a ESTE nó — é o nó
+    // que carrega a pose, e a pose é o que faz a câmera enquadrar o que o autor
+    // enquadrou no editor 3D.
+    if (const auto cameraIndex = document.index(node, "camera");
+        cameraIndex >= 0 && limits.importCameras && sourceCameras &&
+        cameraIndex < static_cast<i64>(sourceCameras->childCount)) {
+      const auto &source = *document.child(*sourceCameras, static_cast<u32>(cameraIndex));
+      GltfImportCamera camera;
+      camera.node = static_cast<u32>(result.nodes.size() - 1);
+      const auto type = document.string(source, "type");
+      camera.orthographic = type == "orthographic";
+      const auto *lens = document.member(source, camera.orthographic ? "orthographic" : "perspective");
+      if (!lens || lens->kind != Kind::Object) return giveUp("Câmera do arquivo sem parâmetros de lente.");
+      camera.nearPlane = static_cast<float>(document.number(*lens, "znear", .1));
+      camera.farPlane = static_cast<float>(document.number(*lens, "zfar", 0));
+      if (camera.orthographic) {
+        // `ymag` é a metade da altura visível — a mesma grandeza que a câmera
+        // desta engine chama de meia altura.
+        camera.orthographicHalfHeight = static_cast<float>(document.number(*lens, "ymag", 5));
+      } else {
+        camera.verticalFovDegrees = static_cast<float>(document.number(*lens, "yfov", 1.0472) * 57.2957795130823);
+      }
+      const auto finite = [](float value) { return std::isfinite(value) && value > 0; };
+      // Valor não finito, negativo ou com o plano distante atrás do próximo é
+      // arquivo inválido, não valor a corrigir por conta própria.
+      if (!finite(camera.nearPlane) || (camera.farPlane != 0 && camera.farPlane <= camera.nearPlane) ||
+          !std::isfinite(camera.farPlane) || camera.farPlane < 0 ||
+          (camera.orthographic ? !finite(camera.orthographicHalfHeight)
+                               : !finite(camera.verticalFovDegrees) || camera.verticalFovDegrees >= 180))
+        return giveUp("Câmera do arquivo com lente inválida.");
+      result.cameras.push_back(camera);
+    }
     const auto meshIndex = document.index(node, "mesh");
     if (meshIndex >= 0 && meshIndex < meshes->childCount) {
       if (document.index(node, "skin") >= 0) ++result.skippedSkins;
@@ -1531,6 +1567,39 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
                                ". A pose não cabe em posição, rotação e escala e não é aproximada; aplique a "
                                "transformação no editor 3D e exporte de novo.";
     return giveUp(reason.c_str());
+  }
+
+  // Orientação da câmera importada.
+  //
+  // O glTF olha para -Z; esta engine olha para +Z (a mesma convenção da luz
+  // direcional e do spot). Sem converter, a câmera do arquivo chega apontada
+  // para o lado oposto ao que o autor enquadrou. A conversão é meia volta em Y
+  // na pose do NÓ, e não um campo novo no componente — mas ela leva junto tudo
+  // o que estiver pendurado no nó, então só se aplica quando o nó carrega a
+  // câmera E MAIS NADA. Um nó com malha ou filhos tem a câmera recusada, com
+  // motivo: girar a geometria do autor para acertar o enquadramento seria
+  // trocar um defeito visível por um invisível.
+  if (!result.cameras.empty()) {
+    std::vector<u8> hasChild(result.nodes.size(), 0), hasDraw(result.nodes.size(), 0);
+    for (const auto &node : result.nodes)
+      if (node.parent >= 0 && static_cast<usize>(node.parent) < hasChild.size()) hasChild[static_cast<usize>(node.parent)] = 1;
+    for (const auto node : result.drawNodes)
+      if (node < hasDraw.size()) hasDraw[node] = 1;
+    std::vector<GltfImportCamera> kept;
+    for (const auto &camera : result.cameras) {
+      if (camera.node >= result.nodes.size() || hasChild[camera.node] || hasDraw[camera.node]) {
+        ++result.skippedCameras;
+        continue;
+      }
+      // Meia volta em Y: nega as colunas X e Z da base, preservando escala,
+      // posição e a coluna Y.
+      auto &matrix = result.nodes[camera.node].localMatrix;
+      for (const u32 i : {0u, 1u, 2u, 8u, 9u, 10u}) matrix[i] = -matrix[i];
+      kept.push_back(camera);
+    }
+    if (kept.size() != result.cameras.size())
+      result.notes.emplace_back("Câmera do arquivo em nó com geometria ou filhos: não importada, para não girar a geometria junto.");
+    result.cameras = std::move(kept);
   }
 
   if (result.draws.empty())

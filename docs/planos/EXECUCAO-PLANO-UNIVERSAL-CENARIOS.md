@@ -72,12 +72,23 @@ que colapsa os dois alcances de aplicação num só.
 | Chave do cache de derivados inclui a geometria derivada: um perfil novo não reusa o derivado do antigo | `native/resources/import_cache.cpp` | validado no host |
 | Diagnóstico **sem UV com textura declarada**: a fonte declara textura e a primitiva não tem TEXCOORD | `gltf_import.cpp` → relatório de importação | validado no host |
 | Diagnóstico **densidade de texel desigual**: razão entre a maior e a menor densidade dentro da primitiva, com a pior razão do arquivo. É a medida que não depende da resolução da textura — e por isso a que explica por que trocar a imagem por uma maior não conserta estiramento | `gltf_import.cpp` → relatório de importação | validado no host |
+| **Importar câmeras** (Import Cameras da Unity): a câmera do arquivo vira componente `Camera` no objeto do nó, com lente (perspectiva/ortográfica), planos e a meia volta que converte o −Z do glTF no +Z desta engine | `gltf_import.cpp`, `import_node_map.*`, `editor_import_reconcile.cpp` | validado no host |
+| Câmera em nó com geometria ou filhos é **recusada com motivo**, em vez de girar a geometria do autor para acertar o enquadramento | `gltf_import.cpp` | validado no host |
 | Controles no painel de importação (aba Perfil) e as linhas novas no relatório | `native/editor/editor_screen.cpp`, `editor_session.cpp` | implementado, compila para o alvo; sem evidência em aparelho |
 
-**Limite declarado:** não há a opção "None" de normais da Unity (aqui ela só
-produziria superfície preta), nem **Smoothing Angle** — ângulo de suavização
-exige duplicar vértices na borda dura, que é mudança de topologia e não de
-atributo. Enquanto isso não existir, o controle não é oferecido.
+**Limites declarados:**
+
+- não há a opção "None" de normais da Unity (aqui ela só produziria superfície
+  preta), nem **Smoothing Angle** — ângulo de suavização exige duplicar vértices
+  na borda dura, que é mudança de topologia e não de atributo;
+- **Import Lights não entra aqui.** O glTF usa unidades fotométricas (lux para
+  direcional, candela para pontual/spot) e a escala de intensidade desta engine
+  ainda não é calibrada — importar os valores do arquivo produziria cenas
+  estouradas. A capacidade `render.light.photometric` está declarada como
+  *planejada* no registro do motor, e a importação de luzes vai junto com ela no
+  bloco de iluminação (G4);
+- a câmera importada entra **desligada** (`enabled = false`): trazer o
+  enquadramento do editor 3D não pode sequestrar a câmera do Play.
 
 ## G3–G6
 

@@ -91,6 +91,9 @@ struct GltfImportLimits {
   u8 normals = GltfNormalsImport;
   u8 normalWeighting = GltfNormalWeightArea;
   u8 tangents = GltfTangentsImport;
+  // "Import Cameras" do Model Import Settings. Desligado reproduz o
+  // comportamento anterior, em que a câmera do arquivo era contada como perdida.
+  bool importCameras = false;
   ImageDecodeLimits image{};
 };
 
@@ -116,6 +119,28 @@ struct GltfImportNode {
   // Identificador que o autor gravou no `extras` do nó, quando existe. É a
   // evidência mais forte de que um nó reexportado é o mesmo (M08.2).
   std::string authoredId;
+};
+
+// Uma câmera do arquivo, ligada ao nó que a carrega.
+//
+// Ela chega como DADO da importação, não como componente: quem monta a cena é o
+// editor, que sabe transformar nó em objeto. O importador não conhece
+// `scene::Camera` — se conhecesse, a camada de recursos passaria a depender da
+// de cena e o cozinhador offline teria de conhecê-la também.
+//
+// glTF guarda `yfov` em radianos e `zfar` opcional (câmera infinita). Os dois
+// viram os campos que a câmera desta engine já tem, com a conversão explícita
+// aqui e não espalhada por quem consome.
+struct GltfImportCamera {
+  u32 node = 0;
+  bool orthographic = false;
+  float verticalFovDegrees = 60;
+  float nearPlane = .1f;
+  // Zero significa "o arquivo não declarou": quem monta escolhe o próprio
+  // padrão em vez de receber um infinito que o componente recusaria.
+  float farPlane = 0;
+  // Metade da altura visível na projeção ortográfica (`ymag` do glTF).
+  float orthographicHalfHeight = 5;
 };
 
 struct GltfImport {
@@ -147,6 +172,8 @@ struct GltfImport {
   // A árvore do arquivo e, por desenho, o índice do nó dono.
   std::vector<GltfImportNode> nodes;
   std::vector<u32> drawNodes;
+  // Câmeras do arquivo, quando o perfil pede para importá-las.
+  std::vector<GltfImportCamera> cameras;
   // Motivo concreto quando `importGlb` devolve falso. Nunca "erro ao importar".
   std::string diagnostic;
   bool cancelled = false;
@@ -202,6 +229,10 @@ struct GltfImport {
   u32 residentTextureDimension = 0;
   // Motivos concretos das texturas não aplicadas, sem repetição.
   std::vector<std::string> textureNotes;
+  // Diagnósticos que não são de textura — câmera recusada, nó ignorado, o que
+  // vier depois. Existe para que o próximo diagnóstico não acabe hospedado em
+  // `textureNotes` só porque já havia uma lista ali.
+  std::vector<std::string> notes;
   bool anythingSkipped() const noexcept {
     return !appearanceExtensions.empty() || skippedTextures || skippedAnimations || skippedSkins || skippedPrimitives ||
            skippedCameras || skippedLights || unappliedTextureTransforms || unappliedOcclusion;

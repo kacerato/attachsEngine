@@ -43,6 +43,14 @@ bool ImportNodeMap::valid() const {
     if (!node.introduced || node.introduced > revision || node.draws.size() > 65536) return false;
     for (const auto &draw : node.draws) if (!draw.valid() || !draws.insert(draw).second) return false;
     for (float value : node.localMatrix) if (!std::isfinite(value)) return false;
+    // Lente inválida no mapa criaria uma câmera que o componente recusaria na
+    // hora de aplicar — falha tardia e sem explicação. Recusa aqui.
+    if (node.camera && (!std::isfinite(node.cameraNear) || node.cameraNear <= 0 || !std::isfinite(node.cameraFar) ||
+                        node.cameraFar < 0 || (node.cameraFar != 0 && node.cameraFar <= node.cameraNear) ||
+                        !std::isfinite(node.cameraVerticalFov) || node.cameraVerticalFov <= 0 ||
+                        node.cameraVerticalFov >= 180 || !std::isfinite(node.cameraHalfHeight) ||
+                        node.cameraHalfHeight <= 0))
+      return false;
   }
   return true;
 }
@@ -58,6 +66,8 @@ std::string ImportNodeMap::serialize() const {
     for (float value : node.localMatrix) out << ' ' << value;
     out << ' ' << node.draws.size();
     for (const auto &draw : node.draws) out << ' ' << draw.text();
+    out << ' ' << node.camera << ' ' << node.cameraOrthographic << ' ' << node.cameraVerticalFov << ' '
+        << node.cameraNear << ' ' << node.cameraFar << ' ' << node.cameraHalfHeight;
     out << '\n';
   }
   return out.str();
@@ -90,6 +100,9 @@ bool ImportNodeMap::deserialize(std::string_view text, ImportNodeMap &out) {
       if (!(in >> draw) || !AssetGuid::parse(draw, parsed)) return false;
       node.draws.push_back(parsed);
     }
+    if (!(in >> node.camera >> node.cameraOrthographic >> node.cameraVerticalFov >> node.cameraNear >>
+          node.cameraFar >> node.cameraHalfHeight))
+      return false;
     candidate.nodes.push_back(std::move(node));
   }
   in >> std::ws;
@@ -359,6 +372,19 @@ bool buildImportNodeMap(const GltfImport &model, const AssetGuid &source, std::s
     record.authoredId = node.authoredId;
     record.signature = signatures[n];
     std::copy(node.localMatrix, node.localMatrix + 16, record.localMatrix);
+    // A câmera do arquivo acompanha o nó dela. O importador já validou a lente;
+    // aqui é só transporte, para que a reconciliação saiba criar o componente
+    // junto com o objeto.
+    for (const auto &camera : model.cameras)
+      if (camera.node == n) {
+        record.camera = true;
+        record.cameraOrthographic = camera.orthographic;
+        record.cameraVerticalFov = camera.verticalFovDegrees;
+        record.cameraNear = camera.nearPlane;
+        record.cameraFar = camera.farPlane;
+        record.cameraHalfHeight = camera.orthographicHalfHeight;
+        break;
+      }
     record.parent = node.parent < 0 ? AssetGuid{} : candidate.nodes[static_cast<usize>(node.parent)].id;
     const ImportNodeRecord *old = match[n] >= 0 ? &previous->nodes[static_cast<usize>(match[n])] : nullptr;
     if (old) {

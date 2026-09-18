@@ -147,6 +147,32 @@ void setSlots(EditorEntity &values, const std::vector<AssetGuid> &assets, const 
   }
 }
 
+// Câmera do arquivo no objeto recém-criado.
+//
+// Só no CRIAR: numa reimportação, uma câmera que o autor removeu ou reajustou
+// fica como ele deixou — é a mesma regra que a reconciliação já aplica ao resto
+// da edição local. A pose não entra aqui porque já é a do nó: a meia volta que
+// converte o -Z do glTF no +Z desta engine é aplicada pelo importador, na pose
+// do nó, e só em nó que carrega a câmera e mais nada.
+void setImportedCamera(EditorEntity &values, const ImportNodeRecord &node) {
+  if (!node.camera) return;
+  auto *camera = editCamera(values);
+  if (!camera) return;
+  camera->projection = node.cameraOrthographic ? scene::CameraProjection::Orthographic
+                                               : scene::CameraProjection::Perspective;
+  if (!node.cameraOrthographic) camera->verticalFov = node.cameraVerticalFov;
+  else camera->orthographicHalfHeight = node.cameraHalfHeight;
+  camera->nearPlane = node.cameraNear;
+  // `zfar` é opcional no glTF (câmera infinita). Zero aqui significa "o arquivo
+  // não declarou": o padrão do componente vale, em vez de um infinito que ele
+  // recusaria.
+  if (node.cameraFar > node.cameraNear) camera->farPlane = node.cameraFar;
+  // A câmera importada não rouba o Play de quem já existe na cena: entra como
+  // enquadramento disponível, e a escolha continua sendo do autor.
+  camera->enabled = false;
+  if (!camera->valid()) values.components.remove(scene::Camera::descriptor);
+}
+
 void note(ImportReconcileReport &report, std::string text) {
   if (report.notes.size() < 32) report.notes.push_back(std::move(text));
 }
@@ -451,6 +477,7 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
       auto values = *document.find(id);
       values.transform = transform;
       setSlots(values, node.draws, slotOf);
+      setImportedCamera(values, node);
       auto *link = scene::editImportLink(values.components);
       if (!link) continue;
       link->source = source;

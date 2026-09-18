@@ -1006,7 +1006,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     using Tab=EditorScreenState::ImportTab;
     const bool profileApplied=resources::sameImportProfile(importProfileDraft(),
         {state_.importPreparedScale,state_.importPreparedTextureDimension,state_.importPreparedNormals,
-         state_.importPreparedNormalWeighting,state_.importPreparedTangents});
+         state_.importPreparedNormalWeighting,state_.importPreparedTangents,state_.importPreparedCameras});
     bool handled=true;
     if(is(EditorWidget::ImportTabSummary)) {state_.importTab=Tab::Summary;state_.importPage=0;}
     else if(is(EditorWidget::ImportTabStructure)) {state_.importTab=Tab::Structure;state_.importPage=0;}
@@ -1034,6 +1034,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
           resources::GltfNormalWeightAngle:resources::GltfNormalWeightArea;
     else if(is(EditorWidget::ImportTangentsCycle))
       state_.importTangents=state_.importTangents==resources::GltfTangentsImport?resources::GltfTangentsCalculate:resources::GltfTangentsImport;
+    else if(is(EditorWidget::ImportCamerasToggle)) state_.importCameras=!state_.importCameras;
     else if(is(EditorWidget::ImportApplyProfile)) {
       if(state_.importReady && !profileApplied) {
         state_.importReprepare=true;state_.importReady=false;state_.importStatus="Preparando com o perfil…";
@@ -3130,7 +3131,7 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   state_.importAmbiguities=0;state_.importAmbiguityChoice=0;
   state_.importPreparedScale=prepared.scale;state_.importPreparedTextureDimension=prepared.maximumTextureDimension;
   state_.importPreparedNormals=prepared.normals;state_.importPreparedNormalWeighting=prepared.normalWeighting;
-  state_.importPreparedTangents=prepared.tangents;
+  state_.importPreparedTangents=prepared.tangents;state_.importPreparedCameras=prepared.importCameras;
   state_.importReprepare=false;
   // R3: saídas estruturadas para as abas do painel (I23).
   {
@@ -3207,6 +3208,7 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   if(model.skippedTextures)
     state_.importSummary+="\nTexturas não aplicadas: "+std::to_string(model.skippedTextures)+"; esses slots ficam só com os fatores.";
   for(const auto &note:model.textureNotes) state_.importSummary+="\n• "+note;
+  for(const auto &note:model.notes) state_.importSummary+="\n• "+note;
   if(model.unappliedTextureTransforms)
     state_.importSummary+="\nTransformação de UV (KHR_texture_transform) não aplicada em "+
       std::to_string(model.unappliedTextureTransforms)+" slot(s): a textura aparece sem ela.";
@@ -3235,6 +3237,12 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
     state_.importSummary+="\nDensidade de texel muito desigual em "+std::to_string(model.stretchedUvPrimitives)+
       " primitiva(s) (pior razão "+std::to_string(static_cast<u32>(model.worstTexelDensityRatio+.5f))+
       "×): textura esticada vem da UV da fonte.";
+  if(!model.cameras.empty())
+    state_.importSummary+="\nCâmeras importadas: "+std::to_string(model.cameras.size())+
+      "; entram desligadas, o enquadramento fica disponível sem trocar a câmera do Play.";
+  if(model.skippedCameras)
+    state_.importSummary+="\nCâmeras não importadas: "+std::to_string(model.skippedCameras)+
+      "; ligue \"Importar câmeras\" no perfil para trazê-las.";
   if(model.skippedAnimations||model.skippedSkins)
     state_.importSummary+="\nNão suportado neste perfil: "+std::to_string(model.skippedAnimations)+" animações, "+
       std::to_string(model.skippedSkins)+" skins.";
@@ -4466,6 +4474,7 @@ void EditorSession::beginImportPreparation(std::string_view path) {
   state_.importNormals=state_.importPreparedNormals=profile.normals;
   state_.importNormalWeighting=state_.importPreparedNormalWeighting=profile.normalWeighting;
   state_.importTangents=state_.importPreparedTangents=profile.tangents;
+  state_.importCameras=state_.importPreparedCameras=profile.importCameras;
   // O importador é Propriedades: ele precisa estar à vista, inclusive no layout
   // compacto e vindo do workspace de código.
   if(state_.workspace==EditorWorkspace::Code) state_.workspace=EditorWorkspace::Scene;

@@ -310,13 +310,13 @@ AE_TEST(r3_import_profile_scales_roots_persists_per_source_and_changes_the_cache
   resources::ImportProfile parsed;
   AE_EXPECT_TRUE(resources::parseImportProfile(resources::serializeImportProfile(profile), parsed), "ida e volta");
   AE_EXPECT_TRUE(resources::sameImportProfile(parsed, profile), "mesmo perfil");
-  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":2,"scale":3,"maximumTextureDimension":512,"normals":0,"normalWeighting":0,"tangents":0})", parsed), "escala fora dos passos");
-  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":9,"scale":1,"maximumTextureDimension":512,"normals":0,"normalWeighting":0,"tangents":0})", parsed), "schema desconhecido");
-  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":2,"scale":1,"maximumTextureDimension":300,"normals":0,"normalWeighting":0,"tangents":0})", parsed), "textura fora dos passos");
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":3,"scale":3,"maximumTextureDimension":512,"normals":0,"normalWeighting":0,"tangents":0,"importCameras":false})", parsed), "escala fora dos passos");
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":9,"scale":1,"maximumTextureDimension":512,"normals":0,"normalWeighting":0,"tangents":0,"importCameras":false})", parsed), "schema desconhecido");
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":3,"scale":1,"maximumTextureDimension":300,"normals":0,"normalWeighting":0,"tangents":0,"importCameras":false})", parsed), "textura fora dos passos");
   // Campo do schema atual ausente é recusa, não padrão silencioso.
-  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":2,"scale":1,"maximumTextureDimension":512})", parsed), "perfil truncado");
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":3,"scale":1,"maximumTextureDimension":512})", parsed), "perfil truncado");
   // Modo desconhecido de normal ou tangente também falha fechado.
-  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":2,"scale":1,"maximumTextureDimension":512,"normals":7,"normalWeighting":0,"tangents":0})", parsed), "modo de normal inválido");
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":3,"scale":1,"maximumTextureDimension":512,"normals":7,"normalWeighting":0,"tangents":0,"importCameras":false})", parsed), "modo de normal inválido");
   AE_EXPECT_TRUE(!resources::parseImportProfile("{", parsed), "JSON quebrado");
 
   // O perfil nunca sobe acima do teto do aparelho.
@@ -335,6 +335,11 @@ AE_TEST(r3_import_profile_scales_roots_persists_per_source_and_changes_the_cache
   // perfil antigo.
   resources::ImportProfile recalculated = profile;
   recalculated.normals = resources::GltfNormalsCalculate;
+  resources::ImportProfile withCameras = profile;
+  withCameras.importCameras = true;
+  AE_EXPECT_TRUE(resources::importCacheKey("abc", resources::applyImportProfile({}, profile)) !=
+                     resources::importCacheKey("abc", resources::applyImportProfile({}, withCameras)),
+                 "importar cameras muda a saida e por isso muda a chave");
   AE_EXPECT_TRUE(resources::importCacheKey("abc", resources::applyImportProfile({}, profile)) !=
                      resources::importCacheKey("abc", resources::applyImportProfile({}, recalculated)),
                  "normais recalculadas mudam a chave do cache");

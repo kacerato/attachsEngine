@@ -2015,6 +2015,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     cycle("Modo das normais",state.importNormalWeighting==resources::GltfNormalWeightAngle?"Por ângulo":"Por área",
           EditorWidget::ImportNormalWeightingCycle);
     cycle("Tangentes",state.importTangents==resources::GltfTangentsCalculate?"Calcular":"Importar",EditorWidget::ImportTangentsCycle);
+    cycle("Importar câmeras",state.importCameras?"Sim":"Não",EditorWidget::ImportCamerasToggle);
     list.pushClip(content);
     for(const auto &line:wrapText(list,"Importar usa o que vem no arquivo e gera só o que falta. Uma malha sem normal não é "
                                        "desenhável aqui, então nunca fica sem.",content.width,theme.type.caption)) {

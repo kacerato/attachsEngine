@@ -200,7 +200,7 @@ enum class EditorWidget : u32 {
   ImportTextureDimension256, ImportTextureDimension512, ImportTextureDimension1024, ImportTextureDimension2048,
   ImportApplyProfile, ImportSaveDefaultProfile,
   // G2: geometria derivada no perfil — normais, ponderação e tangentes.
-  ImportNormalsCycle, ImportNormalWeightingCycle, ImportTangentsCycle,
+  ImportNormalsCycle, ImportNormalWeightingCycle, ImportTangentsCycle, ImportCamerasToggle,
   // R4: textura por binding de material e extração das imagens de um GLB.
   TexturePickerClose, TextureUseInherited, TextureUseNone, AssetExtractTextures,
   MaterialAlphaCycle, MaterialCutoffDown, MaterialCutoffUp, MaterialSidesCycle,
@@ -488,6 +488,7 @@ struct EditorScreenState final {
   u8 importNormals=0,importPreparedNormals=0;
   u8 importNormalWeighting=0,importPreparedNormalWeighting=0;
   u8 importTangents=0,importPreparedTangents=0;
+  bool importCameras=false,importPreparedCameras=false;
   bool importReprepare=false;
   // Vínculo do objeto selecionado com a fonte, preparado pela sessão.
   struct ImportLinkView { bool linked=false,orphan=false,root=false; std::string source,node; u32 overrides=0; };

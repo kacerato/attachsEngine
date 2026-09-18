@@ -41,10 +41,20 @@ struct ImportNodeRecord {
   // anterior sem este nó recebe o nó; uma que já o conhecia e não o tem mais
   // foi editada localmente, e a remoção é respeitada.
   u32 introduced = 1;
+  // Câmera que o nó carregava no arquivo, quando o perfil pediu para importar.
+  //
+  // Ela viaja pelo mapa, e não direto do importador para a cena, porque é o mapa
+  // que sobrevive à reimportação: é ele que diz qual objeto da cena corresponde
+  // a este nó. O componente de câmera é criado só quando o OBJETO é criado —
+  // numa reimportação, uma câmera que o autor removeu ou reconfigurou fica como
+  // ele deixou, pela mesma regra que vale para o resto da edição local.
+  bool camera = false;
+  bool cameraOrthographic = false;
+  float cameraVerticalFov = 60, cameraNear = .1f, cameraFar = 0, cameraHalfHeight = 5;
 };
 
 struct ImportNodeMap {
-  static constexpr u32 FormatVersion = 1;
+  static constexpr u32 FormatVersion = 2; // 2: camera do no
   static constexpr usize MaximumNodes = 65536;
   u32 revision = 0;
   std::string sourceHash;

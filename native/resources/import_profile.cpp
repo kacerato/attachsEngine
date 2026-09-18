@@ -20,7 +20,8 @@ bool isTextureStep(u32 dimension) noexcept {
 bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept {
   return std::fabs(a.scale - b.scale) <= std::max(a.scale, b.scale) * 1e-5f &&
          a.maximumTextureDimension == b.maximumTextureDimension && a.normals == b.normals &&
-         a.normalWeighting == b.normalWeighting && a.tangents == b.tangents;
+         a.normalWeighting == b.normalWeighting && a.tangents == b.tangents &&
+         a.importCameras == b.importCameras;
 }
 
 bool validImportProfile(const ImportProfile &profile) noexcept {
@@ -36,7 +37,8 @@ std::string serializeImportProfile(const ImportProfile &profile) {
          ",\"maximumTextureDimension\":" + std::to_string(profile.maximumTextureDimension) +
          ",\"normals\":" + std::to_string(profile.normals) +
          ",\"normalWeighting\":" + std::to_string(profile.normalWeighting) +
-         ",\"tangents\":" + std::to_string(profile.tangents) + "}\n";
+         ",\"tangents\":" + std::to_string(profile.tangents) +
+         ",\"importCameras\":" + (profile.importCameras ? "true" : "false") + "}\n";
 }
 
 bool parseImportProfile(std::string_view text, ImportProfile &out) {
@@ -62,6 +64,9 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
   parsed.normals = static_cast<u8>(std::min<i64>(normals, 255));
   parsed.normalWeighting = static_cast<u8>(std::min<i64>(weighting, 255));
   parsed.tangents = static_cast<u8>(std::min<i64>(tangents, 255));
+  const auto *cameras = document.member(root, "importCameras");
+  if (!cameras || cameras->kind != JsonDocument::Kind::Boolean) return false;
+  parsed.importCameras = cameras->boolean;
   if (!validImportProfile(parsed)) return false;
   out = parsed;
   return true;
@@ -73,6 +78,7 @@ GltfImportLimits applyImportProfile(GltfImportLimits limits, const ImportProfile
   limits.normals = profile.normals;
   limits.normalWeighting = profile.normalWeighting;
   limits.tangents = profile.tangents;
+  limits.importCameras = profile.importCameras;
   limits.maximumTextureDimension = std::min(limits.maximumTextureDimension, profile.maximumTextureDimension);
   limits.minimumTextureDimension = std::min(limits.minimumTextureDimension, limits.maximumTextureDimension);
   return limits;

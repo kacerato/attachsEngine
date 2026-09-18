@@ -482,7 +482,7 @@ public:
   // Rascunho do painel e os limites que ele produz neste aparelho.
   resources::ImportProfile importProfileDraft() const {
     return {state_.importScale,state_.importTextureDimension,state_.importNormals,state_.importNormalWeighting,
-            state_.importTangents};
+            state_.importTangents,state_.importCameras};
   }
   resources::GltfImportLimits importLimitsFor(const resources::ImportProfile &profile) const {
     return resources::applyImportProfile(importLimits_,profile);

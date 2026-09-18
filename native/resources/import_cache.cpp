@@ -113,6 +113,7 @@ std::string importCacheKey(std::string_view sourceContentHash, const GltfImportL
                      }() +
                      "|normals=" + number(limits.normals) + "|normalWeighting=" + number(limits.normalWeighting) +
                      "|tangents=" + number(limits.tangents) +
+                     "|cameras=" + number(limits.importCameras ? 1 : 0) +
                      "|imageDimension=" + number(limits.image.maximumDimension) +
                      "|imagePixels=" + number(limits.image.maximumPixels) +
                      "|imageEncoded=" + number(limits.image.maximumEncodedBytes);
@@ -146,6 +147,7 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
     writer.text(node.authoredId);
   }
   writer.pods(model.drawNodes);
+  writer.pods(model.cameras);
   writer.u32v(static_cast<u32>(model.textures.size()));
   for (const auto &texture : model.textures) {
     if (!texture || !texture->valid()) {
@@ -176,6 +178,7 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
   writer.u32v(kCounterCount);
   writer.raw(counters, sizeof counters);
   writer.texts(model.textureNotes);
+  writer.texts(model.notes);
   // Terminador: um arquivo cortado no meio da escrita nunca passa por inteiro.
   writer.raw(kMagic, sizeof kMagic);
   return true;
@@ -212,6 +215,7 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
     if (node.parent < -1 || node.parent >= static_cast<i32>(i)) return refuse();
   }
   model.drawNodes = reader.pods<u32>();
+  model.cameras = reader.pods<GltfImportCamera>();
   const u32 textureCount = reader.u32v();
   if (!reader.ok || textureCount > bytes.size()) return refuse();
   model.textures.reserve(textureCount);
@@ -255,6 +259,7 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
   std::memcpy(&model.worstTexelDensityRatio, &counters[21], 4);
   if (!std::isfinite(model.worstTexelDensityRatio) || model.worstTexelDensityRatio < 0) return refuse();
   model.textureNotes = reader.texts();
+  model.notes = reader.texts();
   char trailer[8]{};
   if (!reader.raw(trailer, sizeof trailer) || std::memcmp(trailer, kMagic, sizeof trailer) != 0 ||
       reader.at != bytes.size())
@@ -265,6 +270,13 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
     return refuse();
   for (const auto node : model.drawNodes)
     if (node >= model.nodes.size()) return refuse();
+  // Uma câmera do cache aponta para um nó: índice fora da árvore é arquivo
+  // corrompido, e ler lente inválida de volta seria pior que reimportar.
+  for (const auto &camera : model.cameras)
+    if (camera.node >= model.nodes.size() || !std::isfinite(camera.nearPlane) || camera.nearPlane <= 0 ||
+        !std::isfinite(camera.farPlane) || camera.farPlane < 0 ||
+        !std::isfinite(camera.verticalFovDegrees) || !std::isfinite(camera.orthographicHalfHeight))
+      return refuse();
   for (const auto &material : model.materials)
     for (const auto texture : material.textureIndices)
       if (texture != renderer::InvalidMapTexture && texture >= model.textures.size()) return refuse();
