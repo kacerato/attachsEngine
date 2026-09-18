@@ -1926,7 +1926,10 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
 
   switch(state.importTab) {
   case Tab::Summary: {
-    const auto lines=wrapText(list,state.importSummary,content.width,theme.type.caption);
+    // O impacto na cena vem depois do resumo da fonte e é refeito a cada nó
+    // marcado ou desmarcado na Estrutura; o resumo não muda com isso.
+    const auto text=state.importImpact.empty()?state.importSummary:state.importSummary+"\n"+state.importImpact;
+    const auto lines=wrapText(list,text,content.width,theme.type.caption);
     const auto [first,last]=paginate(lines.size(),22);
     list.pushClip(content);
     for(usize i=first;i<last;++i) builder.label(takeTop(content,22),lines[i],theme.color.textDim,theme.type.caption);
@@ -1941,9 +1944,26 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     for(usize i=first;i<last;++i) {
       const auto &node=state.importNodes[i];
       auto row=takeTop(content,24);
+      const auto hit=row;
+      // O interruptor diz "este nó vem para a cena". Filho de nó excluído mostra
+      // o estado herdado, apagado e sem toque: desmarcá-lo sozinho não teria
+      // efeito, e um botão sem efeito é pior do que nenhum. Sem identidade (a
+      // correspondência ainda está ambígua), não há o que escolher.
+      const bool inherited=node.excluded && i>0 && [&] {
+        for(usize p=i;p-->0;) if(state.importNodes[p].depth<node.depth) return state.importNodes[p].excluded;
+        return false;
+      }();
+      if(node.node.valid()) {
+        auto mark=takeRight(row,36);
+        if(inherited) builder.label(mark,"—",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        else {
+          builder.toggle(deflate(mark,UiInsets::all(3)),!node.excluded,widgetId(EditorWidget::ImportNodeToggleBase)+static_cast<u32>(i));
+          router.addRegion(hit,widgetId(EditorWidget::ImportNodeToggleBase)+static_cast<u32>(i));
+        }
+      }
       takeLeft(row,static_cast<float>(std::min(node.depth,8u))*10.0f);
       if(node.draws) builder.label(takeRight(row,64),std::to_string(node.draws)+(node.draws==1?" malha":" malhas"),theme.color.textMuted,theme.type.caption,UiAlign::End);
-      builder.label(row,node.name,node.draws?theme.color.text:theme.color.textDim,theme.type.caption);
+      builder.label(row,node.name,node.excluded?theme.color.textMuted:node.draws?theme.color.text:theme.color.textDim,theme.type.caption);
     }
     list.popClip();
     break;

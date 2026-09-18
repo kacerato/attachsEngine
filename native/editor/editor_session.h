@@ -428,9 +428,13 @@ public:
   // editor thread. Registering a resource never creates scene objects.
   // Ambiguidade na correspondência de nós nunca é resolvida pela ordem da lista
   // sem escolha explícita: `Refuse` devolve falso com `report.match` preenchido.
+  // `excludedNodes`: nós que o perfil da fonte não traz para a cena (G2). A
+  // lista chega explícita, e não de um estado escondido da sessão, porque é o
+  // perfil QUE ESTÁ SENDO PUBLICADO que manda — não o salvo da vez anterior.
   bool publishModel(const resources::GltfImport &model, std::string_view hash,
                     std::string_view sourceName, ModelImportReport &report,
-                    resources::ImportAmbiguityPolicy policy=resources::ImportAmbiguityPolicy::Refuse);
+                    resources::ImportAmbiguityPolicy policy=resources::ImportAmbiguityPolicy::Refuse,
+                    std::span<const resources::AssetGuid> excludedNodes={});
   // Reabertura do projeto em lote (R1). As fontes chegam já interpretadas por
   // um worker; todas entram no mesmo candidato, a biblioteca é publicada UMA vez
   // e só então cada fonte reconcilia a cena. Abrir N fontes deixa de custar N
@@ -450,7 +454,8 @@ public:
   bool instantiateModel(resources::AssetGuid source, ModelImportReport &report, bool wrapMultipleRoots=true);
   bool commitModelImport(std::span<const u8> bytes, const resources::GltfImport &model,
                          const std::string &path, const std::string &expectedHash, ModelImportReport &report,
-                         resources::ImportAmbiguityPolicy policy=resources::ImportAmbiguityPolicy::Refuse);
+                         resources::ImportAmbiguityPolicy policy=resources::ImportAmbiguityPolicy::Refuse,
+                         std::span<const resources::AssetGuid> excludedNodes={});
   // `prepared` é o perfil com que o worker preparou `model`.
   void showImportPreview(std::string path, const resources::GltfImport &model, std::string_view contentHash={},
                          const resources::ImportProfile &prepared={});
@@ -482,7 +487,7 @@ public:
   // Rascunho do painel e os limites que ele produz neste aparelho.
   resources::ImportProfile importProfileDraft() const {
     return {state_.importScale,state_.importTextureDimension,state_.importNormals,state_.importNormalWeighting,
-            state_.importTangents,state_.importCameras};
+            state_.importTangents,state_.importCameras,state_.importExcludedNodes};
   }
   resources::GltfImportLimits importLimitsFor(const resources::ImportProfile &profile) const {
     return resources::applyImportProfile(importLimits_,profile);
@@ -739,6 +744,15 @@ public:
 private:
   // Geometria importada neste processo, UM bloco por arquivo de origem.
   EditorComponentPresets componentPresets_;
+  // O mapa que a publicação gravaria, calculado na prévia. É dele que sai a
+  // identidade de cada nó na aba Estrutura, e é nele que a exclusão é refeita a
+  // cada toque — sem reler o arquivo, porque a exclusão não muda o importador.
+  resources::ImportNodeMap importPreviewMap_;
+  resources::ImportMatchReport importPreviewMatch_;
+  resources::AssetGuid importPreviewSource_{};
+  bool importPreviewMapped_=false;
+  void refreshImportImpact();
+  bool toggleImportNodeExclusion(usize row);
   void refreshComponentPresets();
   // Valida e reconcilia os recursos de um componente vindo de preset contra
   // ESTE projeto. `only` restringe aos endereços que vão de fato ser aplicados;
@@ -798,7 +812,8 @@ private:
   };
   bool stageSource(const resources::GltfImport &model, std::string_view hash, std::string_view sourceName,
                    resources::ImportAmbiguityPolicy policy, std::vector<ImportedSource> &candidateSources,
-                   resources::AssetRegistry &nextAssets, ModelImportReport &report, StagedSource &staged);
+                   resources::AssetRegistry &nextAssets, ModelImportReport &report, StagedSource &staged,
+                   std::span<const resources::AssetGuid> excludedNodes);
   void reconcileStagedSource(const StagedSource &staged, ModelImportReport &report);
   std::vector<ImportedSource> importedSources_;
   resources::GltfImportLimits importLimits_{};

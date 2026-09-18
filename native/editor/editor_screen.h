@@ -236,6 +236,8 @@ enum class EditorWidget : u32 {
   PresetChoiceBase=0x5E010000u,
   // + índice da linha do diff: alterna levar ou não aquele campo.
   PresetFieldBase=0x5E020000u,
+  // + linha da aba Estrutura da importação: inclui ou exclui aquele nó.
+  ImportNodeToggleBase=0x5E030000u,
   ImpactOpenBase=0x60000000u, ImpactRowBase=0x63000000u, ImpactClose=0x64000000u, ImpactPrevious, ImpactNext, ImpactRepair, ImpactRepairApply, ImpactRepairShared, ImpactRepairScope,
   ComponentColorBase=0x7e000000u,
   ColorHueBase=0x5f000000u, ColorSvBase=0x5f000100u, ColorApply=0x5f000200u, ColorCancel,
@@ -472,7 +474,10 @@ struct EditorScreenState final {
   // de um texto paginado numa janela que bloqueava o editor inteiro.
   enum class ImportTab : u8 { Summary, Structure, Textures, Profile };
   ImportTab importTab=ImportTab::Summary;
-  struct ImportNodeRow { std::string name; u32 depth=0, draws=0; };
+  // Uma linha da aba Estrutura. `node` é a identidade que o nó terá no mapa —
+  // a MESMA que a publicação vai gravar —, e é por ela que a exclusão é pedida.
+  // `excluded` já vem propagado: filho de nó excluído também não vem.
+  struct ImportNodeRow { std::string name; u32 depth=0, draws=0; resources::AssetGuid node{}; bool excluded=false; };
   struct ImportTextureRow { u32 width=0,height=0,levels=0,uses=0; bool srgb=true,astc=false; u64 bytes=0; };
   std::vector<ImportNodeRow> importNodes;
   std::vector<ImportTextureRow> importTextures;
@@ -489,6 +494,12 @@ struct EditorScreenState final {
   u8 importNormalWeighting=0,importPreparedNormalWeighting=0;
   u8 importTangents=0,importPreparedTangents=0;
   bool importCameras=false,importPreparedCameras=false;
+  // Nós que o autor tirou da importação. Não pede nova preparação: a saída do
+  // importador é a mesma; muda o que a reconciliação instancia.
+  std::vector<resources::AssetGuid> importExcludedNodes;
+  // O que a publicação faz com a cena aberta. Separado do resumo porque muda a
+  // cada nó marcado ou desmarcado, sem reler o arquivo.
+  std::string importImpact;
   bool importReprepare=false;
   // Vínculo do objeto selecionado com a fonte, preparado pela sessão.
   struct ImportLinkView { bool linked=false,orphan=false,root=false; std::string source,node; u32 overrides=0; };

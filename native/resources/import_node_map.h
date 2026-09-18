@@ -2,6 +2,7 @@
 #include "core/base.h"
 #include "resources/asset_registry.h"
 #include "resources/gltf_import.h"
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -51,10 +52,20 @@ struct ImportNodeRecord {
   bool camera = false;
   bool cameraOrthographic = false;
   float cameraVerticalFov = 60, cameraNear = .1f, cameraFar = 0, cameraHalfHeight = 5;
+  // O perfil da fonte pediu para não trazer este nó — ou um ancestral dele —
+  // para a cena.
+  //
+  // O nó CONTINUA no mapa, com a identidade dele. Excluir não é a fonte ter
+  // perdido o nó: se a exclusão apagasse o registro, reincluir depois criaria
+  // uma identidade nova, e os objetos que o autor tinha montado em cima do nó
+  // não voltariam a casar. Para a cena, o excluído se comporta como removido —
+  // sai quem não tem edição local, fica órfão quem tem — pela mesma regra que
+  // a reconciliação já aplica.
+  bool excluded = false;
 };
 
 struct ImportNodeMap {
-  static constexpr u32 FormatVersion = 2; // 2: camera do no
+  static constexpr u32 FormatVersion = 3; // 2: camera do no; 3: no excluido pelo perfil
   static constexpr usize MaximumNodes = 65536;
   u32 revision = 0;
   std::string sourceHash;
@@ -81,7 +92,12 @@ struct ImportAmbiguity {
 struct ImportMatchReport {
   u32 byAuthoredId = 0, byStructure = 0, renamed = 0, reparented = 0;
   u32 added = 0, removed = 0;
+  // Mesmos BYTES da revisão anterior. Não quer dizer "nada muda na cena": a
+  // exclusão de nós pode mudar com o mesmo arquivo, e é contada à parte.
   bool sameContent = false;
+  // Nós que entraram na exclusão (`excluded`) ou saíram dela (`included`) em
+  // relação à revisão anterior. Qualquer um dos dois avança a revisão do mapa.
+  u32 excluded = 0, included = 0;
   std::vector<AssetGuid> removedNodes;
   std::vector<ImportAmbiguity> ambiguities;
 };
@@ -96,9 +112,19 @@ std::vector<u64> importNodeSignatures(const GltfImport &model);
 //
 // Devolve falso quando há ambiguidade e a política é `Refuse`, ou quando o
 // modelo é incoerente; `report` explica.
+//
+// `excludedNodes` são identidades de nó que o perfil da fonte pede para não
+// trazer à cena; a exclusão vale para a subárvore inteira.
 bool buildImportNodeMap(const GltfImport &model, const AssetGuid &source, std::string_view contentHash,
                         const ImportNodeMap *previous, ImportAmbiguityPolicy policy, ImportNodeMap &out,
-                        ImportMatchReport &report, std::string &diagnostic);
+                        ImportMatchReport &report, std::string &diagnostic,
+                        std::span<const AssetGuid> excludedNodes = {});
+
+// Marca `excluded` nos nós pedidos e em toda a subárvore deles. Não mexe em
+// revisão nem em `introduced` — isso é decisão de publicação, feita pelo
+// `buildImportNodeMap`. Existe separada porque a prévia precisa refazer a marca
+// a cada toque do autor sem reler o arquivo; e é a MESMA regra nos dois lugares.
+void markExcludedNodes(ImportNodeMap &map, std::span<const AssetGuid> excluded);
 
 // Caminho do mapa dentro do projeto.
 std::string importNodeMapPath(const AssetGuid &source);

@@ -224,9 +224,13 @@ u32 adoptLegacyImportInstances(EditorDocument &document, EditorHistory *history,
                                const ImportNodeMap &map, ImportReconcileReport &report) {
   struct Owner { u32 node; i32 primitive; };
   std::unordered_map<AssetGuid, Owner, GuidHash> owners;
+  // Nó excluído pelo perfil não adota objeto legado: ligar o objeto e em
+  // seguida removê-lo por exclusão apagaria algo que o autor já tinha, sem que
+  // ele tenha pedido nada sobre ESTE objeto.
   for (usize n = 0; n < map.nodes.size(); ++n)
-    for (usize p = 0; p < map.nodes[n].draws.size(); ++p)
-      owners[map.nodes[n].draws[p]] = {static_cast<u32>(n), map.nodes[n].draws.size() == 1 ? -1 : static_cast<i32>(p)};
+    if (!map.nodes[n].excluded)
+      for (usize p = 0; p < map.nodes[n].draws.size(); ++p)
+        owners[map.nodes[n].draws[p]] = {static_cast<u32>(n), map.nodes[n].draws.size() == 1 ? -1 : static_cast<i32>(p)};
   u32 roots = 0;
   for (const auto &node : map.nodes) if (!node.parent.valid()) ++roots;
 
@@ -457,6 +461,9 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
 
     // A. Nós que a instância ainda não conhecia, já com os slots.
     for (const auto &node : map.nodes) {
+      // Excluído pelo perfil: não entra na cena. Não é "apagado pelo autor",
+      // então não conta em keptDeleted — é uma escolha de importação.
+      if (node.excluded) continue;
       if (instance.nodes.count(node.id)) continue;
       if (node.introduced <= instance.revision) { ++report.keptDeleted; continue; }
       const EditorEntityId parent = node.parent.valid()
@@ -496,6 +503,9 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
     };
     std::vector<std::pair<EditorEntityId, AssetGuid>> reparents;
     for (const auto &node : map.nodes) {
+      // O excluído vai sair na etapa C; atualizar antes só produziria conflito
+      // falso num objeto que está de saída.
+      if (node.excluded) continue;
       const auto found = instance.nodes.find(node.id);
       if (found == instance.nodes.end() || created.count(found->second) || !document.exists(found->second)) continue;
       const auto id = found->second;
@@ -603,7 +613,10 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
       if (!document.exists(id) || id == instance.wrapper) continue;
       const auto &link = *linkOf(*document.find(id));
       const auto *node = map.find(link.node);
-      const bool missing = !node || (link.primitive >= 0 &&
+      // Excluído pelo perfil sai pela MESMA regra de quem sumiu da fonte: sem
+      // edição local, sai; com edição local, fica órfão. O nó continua no mapa,
+      // e reincluir depois o traz de volta com a mesma identidade.
+      const bool missing = !node || node->excluded || (link.primitive >= 0 &&
                                      (node->draws.size() <= 1 || static_cast<usize>(link.primitive) >= node->draws.size()));
       if (missing) gone.push_back(id);
     }
@@ -633,7 +646,8 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
 }
 
 ImportSceneImpact importSceneImpact(const EditorDocument &document, const resources::AssetGuid &source,
-                                    const resources::ImportMatchReport &match) {
+                                    const resources::ImportMatchReport &match,
+                                    const resources::ImportNodeMap *candidate) {
   ImportSceneImpact impact;
   std::unordered_set<AssetGuid, GuidHash> removed(match.removedNodes.begin(), match.removedNodes.end());
   std::unordered_set<AssetGuid, GuidHash> instances;
@@ -649,7 +663,10 @@ ImportSceneImpact importSceneImpact(const EditorDocument &document, const resour
     ++impact.linked;
     const u32 overrides = importOverrides(document, id);
     if (overrides) ++impact.editedObjects;
-    if (!link->node.valid() || !removed.count(link->node)) continue;
+    const auto *record = candidate ? candidate->find(link->node) : nullptr;
+    const bool excluded = record && record->excluded;
+    if (!link->node.valid() || (!removed.count(link->node) && !excluded)) continue;
+    if (excluded) ++impact.excludedObjects;
     // A mesma regra da reconciliação: o que não carrega nada do autor sai com a
     // fonte; o que carrega fica na cena, desligado, esperando decisão.
     if (overrides) {

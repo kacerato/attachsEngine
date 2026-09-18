@@ -2317,12 +2317,18 @@ void android_main(android_app *app) {
         }
         if(session.takeImportAccept() && shell.importPreview) {
           const bool intoScene=session.takeImportIntoScene();
+          // A exclusão de nós é escolhida DEPOIS da preparação, na aba
+          // Estrutura, sem reler o arquivo. Ela entra aqui, no perfil que vai
+          // ser publicado — e é esse perfil, com ela, que fica salvo com a fonte.
+          const auto excludedNodes=session.importProfileDraft().excludedNodes;
           session.closeImportPreview();
           auto prepared=std::move(*shell.importPreview);shell.importPreview.reset();
+          prepared.profile.excludedNodes=excludedNodes;
           ae::editor::EditorSession::ModelImportReport report;
           if(prepared.root!=session.codeProjectRoot() || prepared.epoch!=session.sceneVersion().epoch)
             session.setImportStatus("Publicação descartada: o projeto ou a cena mudou.",ae::editor::EditorConsoleSeverity::Warning);
-          else if(!session.commitModelImport(prepared.bytes,prepared.model,prepared.path,prepared.expectedHash,report,session.importAmbiguityPolicy()))
+          else if(!session.commitModelImport(prepared.bytes,prepared.model,prepared.path,prepared.expectedHash,report,
+                                             session.importAmbiguityPolicy(),prepared.profile.excludedNodes))
             session.showImportFailure(report.diagnostic);
           else {
             // Manifesto ao lado da fonte, só depois da fonte gravada: descreve de

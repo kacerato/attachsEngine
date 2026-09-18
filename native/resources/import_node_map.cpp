@@ -67,7 +67,7 @@ std::string ImportNodeMap::serialize() const {
     out << ' ' << node.draws.size();
     for (const auto &draw : node.draws) out << ' ' << draw.text();
     out << ' ' << node.camera << ' ' << node.cameraOrthographic << ' ' << node.cameraVerticalFov << ' '
-        << node.cameraNear << ' ' << node.cameraFar << ' ' << node.cameraHalfHeight;
+        << node.cameraNear << ' ' << node.cameraFar << ' ' << node.cameraHalfHeight << ' ' << node.excluded;
     out << '\n';
   }
   return out.str();
@@ -112,6 +112,8 @@ bool ImportNodeMap::deserialize(std::string_view text, ImportNodeMap &out) {
     if (version >= 2 && !(in >> node.camera >> node.cameraOrthographic >> node.cameraVerticalFov >> node.cameraNear >>
                           node.cameraFar >> node.cameraHalfHeight))
       return false;
+    // v3: exclusão pelo perfil. Antes dela nada era excluído, que é o padrão.
+    if (version >= 3 && !(in >> node.excluded)) return false;
     candidate.nodes.push_back(std::move(node));
   }
   in >> std::ws;
@@ -121,6 +123,19 @@ bool ImportNodeMap::deserialize(std::string_view text, ImportNodeMap &out) {
 }
 
 std::string importNodeMapPath(const AssetGuid &source) { return ".astra/imports/" + source.text() + ".nodes"; }
+
+void markExcludedNodes(ImportNodeMap &map, std::span<const AssetGuid> excluded) {
+  const std::unordered_set<AssetGuid, GuidHash> requested(excluded.begin(), excluded.end());
+  std::unordered_map<AssetGuid, usize, GuidHash> index;
+  index.reserve(map.nodes.size());
+  // Pai antes do filho é invariante do mapa: basta uma passada.
+  for (usize n = 0; n < map.nodes.size(); ++n) {
+    auto &node = map.nodes[n];
+    const auto parent = node.parent.valid() ? index.find(node.parent) : index.end();
+    node.excluded = requested.count(node.id) || (parent != index.end() && map.nodes[parent->second].excluded);
+    index.emplace(node.id, n);
+  }
+}
 
 std::vector<u64> importNodeSignatures(const GltfImport &model) {
   std::vector<u64> signatures(model.nodes.size(), 0);
@@ -141,7 +156,8 @@ std::vector<u64> importNodeSignatures(const GltfImport &model) {
 
 bool buildImportNodeMap(const GltfImport &model, const AssetGuid &source, std::string_view contentHash,
                         const ImportNodeMap *previous, ImportAmbiguityPolicy policy, ImportNodeMap &out,
-                        ImportMatchReport &report, std::string &diagnostic) {
+                        ImportMatchReport &report, std::string &diagnostic,
+                        std::span<const AssetGuid> excludedNodes) {
   report = {};
   diagnostic.clear();
   const usize count = model.nodes.size();
@@ -426,6 +442,33 @@ bool buildImportNodeMap(const GltfImport &model, const AssetGuid &source, std::s
       ++report.removed;
       report.removedNodes.push_back(previous->nodes[j].id);
     }
+
+  // Exclusão pelo perfil, resolvida DEPOIS das identidades porque é pedida por
+  // identidade. Vale para a subárvore: um filho não pode ser criado sem o pai,
+  // e dizer isso no mapa evita que a reconciliação descubra nó por nó.
+  if (!excludedNodes.empty() || (previous && !fresh)) {
+    markExcludedNodes(candidate, excludedNodes);
+    std::vector<u8> returning(count, 0);
+    for (usize n = 0; n < count; ++n) {
+      const auto &record = candidate.nodes[n];
+      const ImportNodeRecord *old = match[n] >= 0 ? &previous->nodes[static_cast<usize>(match[n])] : nullptr;
+      if (!old || old->excluded == record.excluded) continue;
+      if (record.excluded) ++report.excluded;
+      else { ++report.included; returning[n] = 1; }
+    }
+    // Mesmos bytes, exclusão diferente: a revisão AVANÇA mesmo assim. Ela
+    // descreve o que a cena deve receber, não só o arquivo; sem avançar, o nó
+    // que volta teria a mesma revisão da instância e cairia na regra "o autor
+    // apagou este objeto, respeite" — e a reinclusão nunca aconteceria.
+    if ((report.excluded || report.included) && report.sameContent) {
+      if (candidate.revision == std::numeric_limits<u32>::max()) { diagnostic = "Revisão do mapa esgotada."; return false; }
+      ++candidate.revision;
+    }
+    // O nó que sai da exclusão é REINTRODUZIDO: entra de novo nas instâncias
+    // reconciliadas antes desta revisão, com a mesma identidade de antes.
+    for (usize n = 0; n < count; ++n)
+      if (returning[n]) candidate.nodes[n].introduced = candidate.revision;
+  }
   if (!candidate.valid()) { diagnostic = "Mapa de nós inconsistente; fonte anterior preservada."; return false; }
   out = std::move(candidate);
   return true;

@@ -57,6 +57,7 @@ struct ImportSceneImpact {
   u32 removedObjects = 0; // presos a nó que sumiu da fonte e sem edição local
   u32 orphanObjects = 0;  // presos a nó que sumiu da fonte e COM edição local
   u32 newNodes = 0;       // nós novos da fonte, que entram em cada instância
+  u32 excludedObjects = 0; // presos a nó que o perfil exclui (já somados em removidos/órfãos)
   u32 editedObjects = 0;  // objetos com alguma alteração local hoje
   // Nomes dos que ficariam órfãos, para o aviso citar o que o autor reconhece.
   std::vector<std::string> orphanNames;
@@ -64,8 +65,11 @@ struct ImportSceneImpact {
     return removedObjects || orphanObjects || (newNodes && instances);
   }
 };
+// `candidate` é o mapa que a publicação vai gravar; com ele, nó excluído pelo
+// perfil conta como saída pela mesma regra de nó removido da fonte.
 ImportSceneImpact importSceneImpact(const EditorDocument &document, const resources::AssetGuid &source,
-                                    const resources::ImportMatchReport &match);
+                                    const resources::ImportMatchReport &match,
+                                    const resources::ImportNodeMap *candidate = nullptr);
 
 enum ImportOverride : u32 {
   ImportOverrideName = 1,

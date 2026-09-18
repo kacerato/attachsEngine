@@ -9,10 +9,11 @@ Vocabulário (o mesmo da §9 do plano): **inventariado** → **especificado** �
 
 **Escopo de validação desta rodada:**
 
-1. Testes de host compilados e executados com g++ 16 (MinGW-w64): 36 testes
+1. Testes de host compilados e executados com g++ 16 (MinGW-w64): 48 testes
    novos verdes (`test_component_contracts`, `test_component_preset`,
    `test_component_recipes`, `test_import_geometry_profile`,
-   `test_import_scene_impact`), todos registrados em `native/CMakeLists.txt`.
+   `test_import_scene_impact`, `test_import_format_compat`,
+   `test_import_node_exclusion`), todos registrados em `native/CMakeLists.txt`.
 2. **Build nativo completo para arm64-v8a pelo Gradle/NDK, com `-Wall -Wextra
    -Wpedantic -Werror`: `BUILD SUCCESSFUL`**, APK gerado. Este é o build que
    valida o código no compilador de verdade do alvo — o host local não tem os
@@ -79,6 +80,9 @@ slot, e o painel deixou de precisar do aviso.
 | **Importar câmeras** (Import Cameras da Unity): a câmera do arquivo vira componente `Camera` no objeto do nó, com lente (perspectiva/ortográfica), planos e a meia volta que converte o −Z do glTF no +Z desta engine | `gltf_import.cpp`, `import_node_map.*`, `editor_import_reconcile.cpp` | validado no host |
 | Câmera em nó com geometria ou filhos é **recusada com motivo**, em vez de girar a geometria do autor para acertar o enquadramento | `gltf_import.cpp` | validado no host |
 | **Diff da cena aberta antes de publicar**: quantos objetos desta cena estão presos à fonte, quais saem, quais ficam órfãos (com os nomes) e quantos nós novos entram em cada instância | `importSceneImpact()` em `editor_import_reconcile.*` | validado no host |
+| **Perfil por nó — excluir nó da importação**: o nó (e a subárvore) não vem para a cena, mas **continua no mapa com a identidade dele**. Para a cena ele sai pela mesma regra de nó removido (sem edição local sai, com edição fica órfão); reincluir traz de volta o **mesmo** nó, reintroduzido na revisão nova para não ser confundido com "apagado pelo autor". Mudar só a exclusão, com os mesmos bytes, avança a revisão do mapa | `import_node_map.*` (`excluded`, `markExcludedNodes`), `import_profile.*` (schema 4), `editor_import_reconcile.cpp` | validado no host, inclusive a reconciliação que remove e traz de volta |
+| Interruptor por nó na aba **Estrutura**, com a herança do pai visível (filho de excluído aparece apagado e sem toque); o impacto na cena é refeito a cada toque sem reler o arquivo, e excluir não pede nova preparação | `editor_screen.cpp`, `editor_session.cpp` | implementado, compila para o alvo; sem evidência em aparelho |
+| Reabrir o projeto usa a exclusão com que a fonte foi publicada | `EditorSession::reopenSources` | implementado |
 | Controles no painel de importação (aba Perfil) e as linhas novas no relatório | `native/editor/editor_screen.cpp`, `editor_session.cpp` | implementado, compila para o alvo; sem evidência em aparelho |
 
 **Limites declarados:**

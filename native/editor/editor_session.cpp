@@ -1004,9 +1004,13 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   if(state_.importPanel && routing.tapped) {
     const auto is=[&routing](EditorWidget widget) {return routing.widgetId==widgetId(widget);};
     using Tab=EditorScreenState::ImportTab;
-    const bool profileApplied=resources::sameImportProfile(importProfileDraft(),
-        {state_.importPreparedScale,state_.importPreparedTextureDimension,state_.importPreparedNormals,
-         state_.importPreparedNormalWeighting,state_.importPreparedTangents,state_.importPreparedCameras});
+    // Só o que muda a SAÍDA do importador pede nova preparação: desmarcar um nó
+    // na Estrutura não relê o arquivo.
+    resources::ImportProfile prepared;
+    prepared.scale=state_.importPreparedScale;prepared.maximumTextureDimension=state_.importPreparedTextureDimension;
+    prepared.normals=state_.importPreparedNormals;prepared.normalWeighting=state_.importPreparedNormalWeighting;
+    prepared.tangents=state_.importPreparedTangents;prepared.importCameras=state_.importPreparedCameras;
+    const bool profileApplied=resources::sameImportPreparation(importProfileDraft(),prepared);
     bool handled=true;
     if(is(EditorWidget::ImportTabSummary)) {state_.importTab=Tab::Summary;state_.importPage=0;}
     else if(is(EditorWidget::ImportTabStructure)) {state_.importTab=Tab::Structure;state_.importPage=0;}
@@ -1035,6 +1039,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     else if(is(EditorWidget::ImportTangentsCycle))
       state_.importTangents=state_.importTangents==resources::GltfTangentsImport?resources::GltfTangentsCalculate:resources::GltfTangentsImport;
     else if(is(EditorWidget::ImportCamerasToggle)) state_.importCameras=!state_.importCameras;
+    else if(routing.widgetId>=widgetId(EditorWidget::ImportNodeToggleBase) &&
+            routing.widgetId<widgetId(EditorWidget::ImportNodeToggleBase)+65536)
+      toggleImportNodeExclusion(routing.widgetId-widgetId(EditorWidget::ImportNodeToggleBase));
     else if(is(EditorWidget::ImportApplyProfile)) {
       if(state_.importReady && !profileApplied) {
         state_.importReprepare=true;state_.importReady=false;state_.importStatus="Preparando com o perfil…";
@@ -2757,7 +2764,13 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
   if(!resources::importGlb(bytes,importLimits_,progress,model)) {
     report.diagnostic=model.diagnostic;report.cancelled=model.cancelled;return false;
   }
-  if(!publishModel(model,Sha256::hex(bytes),sourceName,report)) return false;
+  // Mesmo contrato da reabertura: a exclusão que vale é a salva com a fonte.
+  // Publicar por esta porta sem ela traria de volta, em silêncio, o nó que o
+  // autor tirou da cena.
+  const auto *known=assets_.findByPath(std::string(sourceName));
+  const auto profile=importProfileFor(known?known->guid:resources::assetGuidFromSeed("fonte:"+std::string(sourceName)));
+  if(!publishModel(model,Sha256::hex(bytes),sourceName,report,resources::ImportAmbiguityPolicy::Refuse,
+                   profile.excludedNodes)) return false;
   // Reabertura: o mapa acompanha a fonte no projeto. Mesmo conteúdo produz o
   // mesmo mapa, e nada é regravado; um mapa novo (fonte trocada fora do editor,
   // ou projeto anterior ao mapa) é gravado para a próxima revisão partir dele.
@@ -2776,7 +2789,8 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
 
 bool EditorSession::publishModel(const resources::GltfImport &model, std::string_view hash,
                                 std::string_view sourceName, ModelImportReport &report,
-                                resources::ImportAmbiguityPolicy policy) {
+                                resources::ImportAmbiguityPolicy policy,
+                                std::span<const resources::AssetGuid> excludedNodes) {
   report={};
   if(isPlaying() || history_.isOpen()) {report.diagnostic="Finalize a edição antes de publicar o recurso.";return false;}
   // Candidato completo antes de publicar: a versão anterior continua valendo
@@ -2784,7 +2798,7 @@ bool EditorSession::publishModel(const resources::GltfImport &model, std::string
   auto candidateSources=importedSources_;
   auto nextAssets=assets_;
   StagedSource staged;
-  if(!stageSource(model,hash,sourceName,policy,candidateSources,nextAssets,report,staged)) return false;
+  if(!stageSource(model,hash,sourceName,policy,candidateSources,nextAssets,report,staged,excludedNodes)) return false;
   const auto previousDocument=document_;
   const auto previousMap=mapScene_;
   if(!publishAndAdopt(flattenSources(candidateSources),report.diagnostic)) {
@@ -2813,8 +2827,14 @@ bool EditorSession::reopenSources(std::vector<ReopenedSource> &sources, std::vec
   bool any=false;
   for(usize i=0;i<sources.size();++i) {
     if(sources[i].sourceName.empty()) {reports[i].diagnostic="Nome de arquivo vazio.";continue;}
+    // Reabrir usa a exclusão com que a fonte foi PUBLICADA — o perfil salvo com
+    // ela. Sem isso, reabrir o projeto traria de volta à cena o nó que o autor
+    // tirou na importação.
+    const auto *known=nextAssets.findByPath(sources[i].sourceName);
+    const auto source=known?known->guid:resources::assetGuidFromSeed("fonte:"+sources[i].sourceName);
+    const auto profile=importProfileFor(source);
     accepted[i]=stageSource(sources[i].model,sources[i].hash,sources[i].sourceName,resources::ImportAmbiguityPolicy::Refuse,
-                            candidateSources,nextAssets,reports[i],staged[i]);
+                            candidateSources,nextAssets,reports[i],staged[i],profile.excludedNodes);
     any=any||accepted[i];
   }
   if(!any) return true;
@@ -2849,7 +2869,8 @@ bool EditorSession::reopenSources(std::vector<ReopenedSource> &sources, std::vec
 // `nextAssets`. Nada é publicado aqui.
 bool EditorSession::stageSource(const resources::GltfImport &model, std::string_view hash, std::string_view sourceName,
                                 resources::ImportAmbiguityPolicy policy, std::vector<ImportedSource> &candidateSources,
-                                resources::AssetRegistry &nextAssets, ModelImportReport &report, StagedSource &staged) {
+                                resources::AssetRegistry &nextAssets, ModelImportReport &report, StagedSource &staged,
+                                std::span<const resources::AssetGuid> excludedNodes) {
   report={};
   staged={};
   if(model.draws.empty() || model.nodes.empty()) {report.diagnostic="Modelo sem geometria utilizável.";return false;}
@@ -2886,7 +2907,8 @@ bool EditorSession::stageSource(const resources::GltfImport &model, std::string_
   const bool hasPrevious=staged.hasPrevious;
   resources::ImportNodeMap nodeMap;
   std::string mapDiagnostic;
-  if(!resources::buildImportNodeMap(model,source,hash,hasPrevious?&previousNodeMap:nullptr,policy,nodeMap,report.match,mapDiagnostic)) {
+  if(!resources::buildImportNodeMap(model,source,hash,hasPrevious?&previousNodeMap:nullptr,policy,nodeMap,report.match,mapDiagnostic,
+                                    excludedNodes)) {
     report.diagnostic=mapDiagnostic.empty()?"Mapa de nós recusado; fonte anterior preservada.":mapDiagnostic;
     return false;
   }
@@ -3088,7 +3110,8 @@ bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportRep
 
 bool EditorSession::commitModelImport(std::span<const u8> bytes,const resources::GltfImport &model,
                                       const std::string &path,const std::string &expectedHash,ModelImportReport &report,
-                                      resources::ImportAmbiguityPolicy policy) {
+                                      resources::ImportAmbiguityPolicy policy,
+                                      std::span<const resources::AssetGuid> excludedNodes) {
   report={};
   if(isPlaying()) {report.diagnostic="Pare a execução antes de publicar.";return false;}
   // O mapa de nós entra na MESMA transação que fonte e registro.
@@ -3102,7 +3125,7 @@ bool EditorSession::commitModelImport(std::span<const u8> bytes,const resources:
   const auto previousSources=importedSources_;const auto previousAssets=assets_;
   const auto previousDocument=document_;const auto previousMap=mapScene_;const auto previousHistory=history_;
   const bool previousDirty=assetRegistryDirty_;
-  bool published=publishModel(model,Sha256::hex(bytes),path,report,policy);
+  bool published=publishModel(model,Sha256::hex(bytes),path,report,policy,excludedNodes);
   const auto *nodeMap=published?importNodeMap(report.source):nullptr;
   if(published && nodeMap && transaction.commit(bytes,assets_.serialize(),nodeMap->serialize())) {
     assetRegistryDirty_=false;files_.rebuildTree();state_.selectedFile=path;
@@ -3250,43 +3273,39 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
     state_.importSummary+="\nGeometria estática; aparência avançada não reproduzida:";
     for(const auto &extension:model.appearanceExtensions) state_.importSummary+="\n"+extension;
   }
-  if(const auto *record=assets_.findByPath(state_.importPath)) {
-    // A mesma correspondência que a publicação fará, sem publicar: o usuário
-    // vê o que muda nas instâncias ANTES de aceitar.
-    resources::ImportNodeMap previous,candidate;resources::ImportMatchReport match;std::string diagnostic;
-    const bool hasPrevious=previousImportMap(record->guid,previous);
-    resources::buildImportNodeMap(model,record->guid,contentHash,hasPrevious?&previous:nullptr,
-                                  resources::ImportAmbiguityPolicy::Refuse,candidate,match,diagnostic);
+  // A mesma correspondência que a publicação fará, sem publicar — também para
+  // fonte NOVA: a identidade da fonte nova é determinística ("fonte:"+caminho),
+  // e é com ela que o autor escolhe o que excluir já na primeira importação.
+  const auto *record=assets_.findByPath(state_.importPath);
+  importPreviewSource_=record?record->guid:resources::assetGuidFromSeed("fonte:"+state_.importPath);
+  importPreviewMap_={};importPreviewMatch_={};
+  resources::ImportNodeMap previous;
+  const bool hasPrevious=record && previousImportMap(importPreviewSource_,previous);
+  {
+    std::string mapDiagnostic;
+    importPreviewMapped_=resources::buildImportNodeMap(model,importPreviewSource_,contentHash,hasPrevious?&previous:nullptr,
+        resources::ImportAmbiguityPolicy::Refuse,importPreviewMap_,importPreviewMatch_,mapDiagnostic,state_.importExcludedNodes);
+    // O mapa segue a ordem do arquivo, a mesma das linhas da Estrutura. Sem mapa
+    // (correspondência ambígua), as linhas ficam sem identidade e sem escolha de
+    // exclusão até o autor decidir a ambiguidade.
+    if(importPreviewMapped_ && importPreviewMap_.nodes.size()==state_.importNodes.size())
+      for(usize n=0;n<state_.importNodes.size();++n) {
+        state_.importNodes[n].node=importPreviewMap_.nodes[n].id;
+        state_.importNodes[n].excluded=importPreviewMap_.nodes[n].excluded;
+      }
+  }
+  refreshImportImpact();
+  if(record) {
+    const auto &match=importPreviewMatch_;
     auto &summary=state_.importSummary;
-    if(match.sameContent) summary+="\nMesmo conteúdo da versão publicada; nada muda nas instâncias.";
+    if(match.sameContent&&!match.excluded&&!match.included) summary+="\nMesmo conteúdo da versão publicada; nada muda nas instâncias.";
+    else if(match.sameContent) summary+="\nMesmo conteúdo da versão publicada; muda só o que o perfil exclui.";
     else if(hasPrevious) {
       summary+="\nCorrespondência: "+std::to_string(match.byAuthoredId)+" por id do autor · "+std::to_string(match.byStructure)+
           " por estrutura · "+std::to_string(match.renamed)+" renomeados · "+std::to_string(match.reparented)+" com pai novo";
       if(match.ambiguities.empty())
         summary+="\nNós novos: "+std::to_string(match.added)+" · removidos da fonte: "+std::to_string(match.removed);
     } else summary+="\nSem mapa anterior: identidades derivadas das chaves da fonte.";
-    // O relatório acima fala da FONTE. Esta parte fala da CENA ABERTA, que é o
-    // que o autor tem na mão ao decidir: quantos objetos dele estão presos a
-    // esta fonte, quais somem, quais ficam órfãos com as edições dentro.
-    const auto impact=importSceneImpact(document_,record->guid,match);
-    if(impact.linked||impact.alreadyOrphan||impact.unlinked) {
-      summary+="\nNesta cena: "+std::to_string(impact.instances)+" instância(s), "+std::to_string(impact.linked)+
-          " objeto(s) vinculado(s)";
-      if(impact.editedObjects) summary+=", "+std::to_string(impact.editedObjects)+" com edição local";
-      if(impact.unlinked) summary+=", "+std::to_string(impact.unlinked)+" desvinculado(s)";
-      if(impact.alreadyOrphan) summary+=", "+std::to_string(impact.alreadyOrphan)+" já órfão(s)";
-      summary+=".";
-      if(impact.removedObjects)
-        summary+="\nSaem da cena: "+std::to_string(impact.removedObjects)+" objeto(s) sem edição local.";
-      if(impact.orphanObjects) {
-        summary+="\nFicam órfãos (com as edições dentro): "+std::to_string(impact.orphanObjects)+" objeto(s)";
-        for(const auto &name:impact.orphanNames) summary+="\n• "+name;
-        if(impact.orphanObjects>impact.orphanNames.size()) summary+="\n• …";
-      }
-      if(impact.newNodes&&impact.instances)
-        summary+="\nEntram em cada instância: "+std::to_string(impact.newNodes)+" nó(s) novo(s) da fonte.";
-      if(!impact.touchesScene()) summary+="\nNenhum objeto desta cena muda de lugar na reimportação.";
-    }
     summary+="\nInstâncias: alterações locais preservadas; removidos com dados locais ficam órfãos.";
     if(!match.ambiguities.empty()) {
       state_.importAmbiguities=static_cast<u32>(match.ambiguities.size());
@@ -3296,6 +3315,63 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
             std::to_string(item.previous)+" anteriores, "+std::to_string(item.incoming)+" novos";
     }
   }
+}
+
+// O que a publicação faz com a CENA ABERTA, refeito a cada nó marcado ou
+// desmarcado na Estrutura. O resumo acima dele fala da FONTE e não muda com a
+// exclusão; este fala do que o autor já montou, que é o que muda.
+void EditorSession::refreshImportImpact() {
+  auto &text=state_.importImpact;
+  text.clear();
+  u32 excludedRows=0;
+  for(const auto &row:state_.importNodes) if(row.excluded) ++excludedRows;
+  if(excludedRows)
+    text+="Excluídos pelo perfil: "+std::to_string(excludedRows)+" nó(s). Não entram na cena, e a identidade deles "
+          "fica guardada: reincluir depois traz de volta o mesmo nó.";
+  // Fonte que ainda não está no projeto não tem objeto nenhum na cena.
+  if(!assets_.findByPath(state_.importPath)) return;
+  const auto impact=importSceneImpact(document_,importPreviewSource_,importPreviewMatch_,
+                                      importPreviewMapped_?&importPreviewMap_:nullptr);
+  if(!impact.linked && !impact.alreadyOrphan && !impact.unlinked) return;
+  const auto line=[&](const std::string &value) {if(!text.empty()) text+="\n";text+=value;};
+  std::string scene="Nesta cena: "+std::to_string(impact.instances)+" instância(s), "+std::to_string(impact.linked)+
+                    " objeto(s) vinculado(s)";
+  if(impact.editedObjects) scene+=", "+std::to_string(impact.editedObjects)+" com edição local";
+  if(impact.unlinked) scene+=", "+std::to_string(impact.unlinked)+" desvinculado(s)";
+  if(impact.alreadyOrphan) scene+=", "+std::to_string(impact.alreadyOrphan)+" já órfão(s)";
+  line(scene+".");
+  if(impact.removedObjects)
+    line("Saem da cena: "+std::to_string(impact.removedObjects)+" objeto(s) sem edição local"+
+         (impact.excludedObjects?" (inclui os de nós excluídos).":"."));
+  if(impact.orphanObjects) {
+    line("Ficam órfãos (com as edições dentro): "+std::to_string(impact.orphanObjects)+" objeto(s)");
+    for(const auto &name:impact.orphanNames) line("• "+name);
+    if(impact.orphanObjects>impact.orphanNames.size()) line("• …");
+  }
+  if(impact.newNodes&&impact.instances)
+    line("Entram em cada instância: "+std::to_string(impact.newNodes)+" nó(s) novo(s) da fonte.");
+  if(!impact.touchesScene()) line("Nenhum objeto desta cena muda de lugar na reimportação.");
+}
+
+// Marca ou desmarca um nó na Estrutura. Só o nó cujo pai NÃO está excluído
+// aceita a escolha: o filho de um excluído já não vem, e desmarcá-lo sozinho
+// não teria efeito — oferecer o toque seria oferecer um botão que não faz nada.
+bool EditorSession::toggleImportNodeExclusion(usize row) {
+  if(row>=state_.importNodes.size() || !importPreviewMapped_) return false;
+  const auto node=state_.importNodes[row].node;
+  if(!node.valid()) return false;
+  const auto *record=importPreviewMap_.find(node);
+  if(!record) return false;
+  if(record->parent.valid()) if(const auto *parent=importPreviewMap_.find(record->parent); parent&&parent->excluded) return false;
+  auto &excluded=state_.importExcludedNodes;
+  const auto at=std::find(excluded.begin(),excluded.end(),node);
+  if(at!=excluded.end()) excluded.erase(at);
+  else excluded.push_back(node);
+  resources::markExcludedNodes(importPreviewMap_,excluded);
+  for(usize n=0;n<state_.importNodes.size() && n<importPreviewMap_.nodes.size();++n)
+    state_.importNodes[n].excluded=importPreviewMap_.nodes[n].excluded;
+  refreshImportImpact();
+  return true;
 }
 
 bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices, u64 packageFingerprint) {
@@ -4497,6 +4573,7 @@ void EditorSession::beginImportPreparation(std::string_view path) {
   state_.importNormalWeighting=state_.importPreparedNormalWeighting=profile.normalWeighting;
   state_.importTangents=state_.importPreparedTangents=profile.tangents;
   state_.importCameras=state_.importPreparedCameras=profile.importCameras;
+  state_.importExcludedNodes=profile.excludedNodes;state_.importImpact.clear();
   // O importador é Propriedades: ele precisa estar à vista, inclusive no layout
   // compacto e vindo do workspace de código.
   if(state_.workspace==EditorWorkspace::Code) state_.workspace=EditorWorkspace::Scene;

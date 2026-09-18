@@ -5,6 +5,7 @@
 #include <array>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ae::resources {
 // Perfil de importação (R3): as escolhas AUTORAIS de como uma fonte vira recurso.
@@ -23,7 +24,7 @@ namespace ae::resources {
 //    (preset reutilizável, I19).
 // Arquivo ausente ou inválido cai no próximo nível (fonte → projeto → embutido),
 // com o valor embutido igual ao comportamento anterior ao perfil.
-inline constexpr u32 ImportProfileSchema = 3; // 2: normais e tangentes; 3: camaras do arquivo
+inline constexpr u32 ImportProfileSchema = 4; // 2: normais e tangentes; 3: camaras do arquivo; 4: nos excluidos
 // Escala uniforme aplicada às raízes (I01). Passos, não campo livre: o toque no
 // aparelho erra fácil um número digitado, e os casos reais são conversões de unidade.
 inline constexpr std::array<float, 9> ImportScaleSteps{0.001f, 0.01f, 0.1f, 0.5f, 1.0f, 2.0f, 10.0f, 100.0f, 1000.0f};
@@ -45,8 +46,23 @@ struct ImportProfile {
   // cena recebe (objetos com componente de câmera) e o padrão precisa ser o
   // comportamento que os projetos já publicados tiveram.
   bool importCameras = false;
+  // Nós da fonte que NÃO vêm para a cena, por identidade do mapa de nós. A
+  // exclusão vale para a subárvore. Identidade, e não nome nem caminho: o nó
+  // renomeado no editor 3D continua excluído, porque o mapa o reconhece como o
+  // mesmo nó. Não muda a saída do importador — muda o que a reconciliação
+  // instancia —, e por isso não entra nos limites nem na chave do cache.
+  std::vector<AssetGuid> excludedNodes;
+  bool excludes(const AssetGuid &node) const noexcept {
+    for (const auto &excluded : excludedNodes) if (excluded == node) return true;
+    return false;
+  }
 };
 bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept;
+// O que muda a SAÍDA DO IMPORTADOR para os mesmos bytes. A exclusão de nós não
+// entra: ela muda o que a cena recebe, não a geometria preparada. É esta
+// comparação que decide se a prévia precisa ser preparada de novo — pedir nova
+// preparação por um nó desmarcado seria reler o arquivo inteiro à toa.
+bool sameImportPreparation(const ImportProfile &a, const ImportProfile &b) noexcept;
 bool validImportProfile(const ImportProfile &profile) noexcept;
 std::string serializeImportProfile(const ImportProfile &profile);
 // Falha fechada: schema diferente, campo fora dos passos ou JSON inválido.

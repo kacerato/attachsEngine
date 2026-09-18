@@ -17,17 +17,34 @@ bool isTextureStep(u32 dimension) noexcept {
 }
 } // namespace
 
+namespace {
+// A ordem em que o autor excluiu não é escolha: dois perfis que excluem os
+// mesmos nós são o mesmo perfil.
+bool sameExcludedNodes(const ImportProfile &a, const ImportProfile &b) noexcept {
+  if (a.excludedNodes.size() != b.excludedNodes.size()) return false;
+  for (const auto &node : a.excludedNodes) if (!b.excludes(node)) return false;
+  return true;
+}
+} // namespace
+
 bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept {
   return std::fabs(a.scale - b.scale) <= std::max(a.scale, b.scale) * 1e-5f &&
          a.maximumTextureDimension == b.maximumTextureDimension && a.normals == b.normals &&
          a.normalWeighting == b.normalWeighting && a.tangents == b.tangents &&
-         a.importCameras == b.importCameras;
+         a.importCameras == b.importCameras && sameExcludedNodes(a, b);
+}
+
+bool sameImportPreparation(const ImportProfile &a, const ImportProfile &b) noexcept {
+  auto left = a, right = b;
+  left.excludedNodes.clear();
+  right.excludedNodes.clear();
+  return sameImportProfile(left, right);
 }
 
 bool validImportProfile(const ImportProfile &profile) noexcept {
   return std::isfinite(profile.scale) && isScaleStep(profile.scale) && isTextureStep(profile.maximumTextureDimension) &&
          profile.normals <= GltfNormalsCalculate && profile.normalWeighting <= GltfNormalWeightAngle &&
-         profile.tangents <= GltfTangentsCalculate;
+         profile.tangents <= GltfTangentsCalculate && profile.excludedNodes.size() <= 65536;
 }
 
 std::string serializeImportProfile(const ImportProfile &profile) {
@@ -38,7 +55,14 @@ std::string serializeImportProfile(const ImportProfile &profile) {
          ",\"normals\":" + std::to_string(profile.normals) +
          ",\"normalWeighting\":" + std::to_string(profile.normalWeighting) +
          ",\"tangents\":" + std::to_string(profile.tangents) +
-         ",\"importCameras\":" + (profile.importCameras ? "true" : "false") + "}\n";
+         ",\"importCameras\":" + (profile.importCameras ? "true" : "false") + ",\"excludedNodes\":[" + [&] {
+           std::string list;
+           for (const auto &node : profile.excludedNodes) {
+             if (!list.empty()) list += ',';
+             list += '"' + node.text() + '"';
+           }
+           return list;
+         }() + "]}\n";
 }
 
 bool parseImportProfile(std::string_view text, ImportProfile &out) {
@@ -78,6 +102,20 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
     const auto *cameras = document.member(root, "importCameras");
     if (!cameras || cameras->kind != JsonDocument::Kind::Boolean) return false;
     parsed.importCameras = cameras->boolean;
+  }
+  if (schema >= 4) {
+    const auto *excluded = document.member(root, "excludedNodes");
+    if (!excluded || excluded->kind != JsonDocument::Kind::Array || excluded->childCount > 65536) return false;
+    for (u32 i = 0; i < excluded->childCount; ++i) {
+      const auto *item = document.child(*excluded, i);
+      AssetGuid node;
+      // Identidade ilegível não vira "nenhum nó": o arquivo inteiro é recusado,
+      // porque aceitar o resto traria de volta, em silêncio, o nó excluído.
+      if (!item || item->kind != JsonDocument::Kind::String || !AssetGuid::parse(document.textOf(*item), node) ||
+          !node.valid())
+        return false;
+      if (!parsed.excludes(node)) parsed.excludedNodes.push_back(node);
+    }
   }
   if (!validImportProfile(parsed)) return false;
   out = parsed;
