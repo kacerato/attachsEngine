@@ -2377,7 +2377,16 @@ void android_main(android_app *app) {
             if(ready) ready=shell.authoredWaterPlay.update(timeSeconds,authored) && shell.instancedRenderer.setWaterRipples(shell.authoredWaterPlay.ripples());
             if(ready) shell.instancedRenderer.setWaterSimulationClock(shell.authoredWaterPlay.simulationTime());
           }
-          if (ready && (changed?shell.instancedRenderer.queueMapScene(authored):shell.instancedRenderer.queueAuthoredPoses(authored))) {
+          // Scripts may create or destroy mesh instances without touching the
+          // authoring document revision. Pose publication requires the exact
+          // previous draw topology; publish the full scene when it changes.
+          bool queued=false;
+          if(ready) {
+            queued=changed? shell.instancedRenderer.queueMapScene(authored)
+                : shell.instancedRenderer.queueAuthoredPoses(authored);
+            if(!queued && !changed) queued=shell.instancedRenderer.queueMapScene(authored);
+          }
+          if (queued) {
             shell.editorPublishedRevision = shell.editorSession.document().revision();
             // As luzes seguem o mesmo quadro dos desenhos. Republicar sempre é
             // barato (são poucas) e evita um segundo conceito de "sujo" para um
