@@ -35,8 +35,10 @@ const int PUNCTUAL_LIGHT_LIMIT=8;
 #include "lod_dither.glsl"
 #include "impostor_view.glsl"
 #include "material_uv_transform.glsl"
+#include "world_uv.glsl"
 highp vec2 selectedUv(uint slot) {
-  return aetherTransformUv(slot,((frame.materialFlags.y>>(slot*2))&3u)==1u?vUv1:vUv0);
+  uint set=(frame.materialFlags.y>>(slot*2))&3u;
+  return aetherTransformUv(slot,set==2u?aetherWorldUv(vPosition,vNormal):set==1u?vUv1:vUv0);
 }
 bool hasMaterialFeature(uint flags,uint feature) {
   uint selected=MATERIAL_FEATURE_MASK==0xffffffffu?flags:MATERIAL_FEATURE_MASK;
@@ -261,10 +263,11 @@ void main() {
   // Tangente degenerada (zero) faria normalize() devolver NaN e a superfície
   // inteira ficar preta; sem base válida o detalhe do mapa normal é omitido.
   mediump vec3 tangentAxis=vTangent.xyz-n*dot(n,vTangent.xyz);
+  bool worldNormal=((frame.materialFlags.y>>2u)&3u)==2u;
   if(hasMaterialFeature(flags,2u) && isolation!=1u && normalDetailWeight>0.0 &&
-     (impostor || dot(tangentAxis,tangentAxis)>1.0e-6)) {
-    mediump vec3 t=normalize(tangentAxis);
-    mediump vec3 b=cross(n,t)*(impostor?1.0:vTangent.w);
+     (impostor || worldNormal || dot(tangentAxis,tangentAxis)>1.0e-6)) {
+    mediump vec3 t=worldNormal?vec3(1,0,0):normalize(tangentAxis);
+    mediump vec3 b=worldNormal?vec3(0,1,0):cross(n,t)*(impostor?1.0:vTangent.w);
     mediump vec3 detail=(impostor?
         textureGrad(NORMAL_MAP,impostorUv,impostorDx,impostorDy):
         texture(NORMAL_MAP,selectedUv(1))).xyz*2-1;
@@ -276,7 +279,7 @@ void main() {
     // final normalization (same direction, one fewer reciprocal sqrt).
     detail=vec3(detail.xy*frame.materialFactors.z*normalDetailWeight,
                 mix(1.0,detail.z,normalDetailWeight));
-    n=impostor?normalize(detail):normalize(mat3(t,b,n)*detail);
+    n=impostor?normalize(detail):worldNormal?normalize(aetherWorldUvBasis(n)*detail):normalize(mat3(t,b,n)*detail);
   }
   // A subtração fica em highp: `eye` e `vPosition` são coordenadas de mundo e o
   // mapa se estende por centenas de unidades, onde fp16 já perde resolução. Só

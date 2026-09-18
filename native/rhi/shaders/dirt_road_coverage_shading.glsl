@@ -3,6 +3,8 @@ precision mediump int;
 precision highp float;
 // Mesma precisao de varying declarada em dirt_road.vert; divergir aqui faria os
 // dois estagios discordarem sobre a mesma interface.
+layout(location=0) in highp vec3 vPosition;
+layout(location=1) in mediump vec3 vNormal;
 layout(location=3) in highp vec2 vUv0;
 layout(location=4) in highp vec2 vUv1;
 layout(location=5) in mediump vec4 vColor;
@@ -10,10 +12,12 @@ layout(location=6) in mediump float vDither;
 #include "lod_dither.glsl"
 #include "impostor_view.glsl"
 #include "material_uv_transform.glsl"
+#include "world_uv.glsl"
 
 highp vec2 selectedCoverageUv() {
   // A mesma UV do passe de cor: recorte e cor precisam cair no mesmo texel.
-  return aetherTransformUv(0u,(frame.materialFlags.y&3u)==1u?vUv1:vUv0);
+  uint set=frame.materialFlags.y&3u;
+  return aetherTransformUv(0u,set==2u?aetherWorldUv(vPosition,vNormal):set==1u?vUv1:vUv0);
 }
 
 void main() {

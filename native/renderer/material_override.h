@@ -89,7 +89,7 @@ inline MapMaterialRecord applyMaterialOverride(const MapMaterialRecord &source,c
   // Conjunto de UV por binding: dois bits por slot, o mesmo campo que o shader lê.
   for(u32 slot=0;slot<scene::MaterialTextureCount;++slot) {
     const u32 set=value.uvSets[slot];
-    if(set==scene::MaterialUvKeep || set>scene::MaterialUv1) continue;
+    if(set==scene::MaterialUvKeep || set>scene::MaterialUvWorld) continue;
     result.textureCoordinates=(result.textureCoordinates&~(3u<<(slot*2)))|((set-1)<<(slot*2));
   }
   // Modo de alfa decide a fila (sólido, recorte, transparente) e o corte.

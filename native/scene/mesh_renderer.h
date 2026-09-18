@@ -376,8 +376,8 @@ inline constexpr std::array<ComponentEnumOption,4> materialAlphaSourceOptions{{
   {MaterialAlphaSourceKeep,"Herdar"},{MaterialAlphaSourceBase,"Alfa da cor base"},{MaterialAlphaSourceOpaque,"Sempre opaco"},
   {MaterialAlphaSourceLuminance,"Luminância da cor base"}
 }};
-inline constexpr std::array<ComponentEnumOption,3> materialUvSetOptions{{
-  {MaterialUvKeep,"Herdar"},{MaterialUv0,"UV 0"},{MaterialUv1,"UV 1"}
+inline constexpr std::array<ComponentEnumOption,4> materialUvSetOptions{{
+  {MaterialUvKeep,"Herdar"},{MaterialUv0,"UV 0"},{MaterialUv1,"UV 1"},{MaterialUvWorld,"Mundo (triplanar)"}
 }};
 inline constexpr std::array<ComponentEnumOption,4> materialWrapOptions{{
   {MaterialWrapKeep,"Herdar"},{MaterialWrapRepeat,"Repetir"},{MaterialWrapClamp,"Fixar na borda"},{MaterialWrapMirror,"Espelhar"}

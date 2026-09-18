@@ -690,7 +690,10 @@ AE_TEST(r4_sampling_uv_set_wrap_and_filter_resolve_publish_variants_and_travel_t
   AE_EXPECT_TRUE(session.setSlotSampling(object, 0, 0, EditorSession::MaterialScope::Instance, uv1, diagnostic), diagnostic.c_str());
   AE_EXPECT_EQ(effectiveMaterial(session, object).uvSets[0], scene::MaterialUv1, "UV1 resolvido na cor base");
   AE_EXPECT_TRUE((session.importLinkOverrides(object) & ImportOverrideMaterial) != 0, "amostragem conta como material local");
-  AE_EXPECT_TRUE(!session.setSlotSampling(object, 0, 0, EditorSession::MaterialScope::Instance, {3, 0, 0}, diagnostic),
+  // O primeiro valor depois do último conjunto conhecido (Mundo) é o que fica
+  // fora do contrato; escrito em função da constante, para não envelhecer.
+  AE_EXPECT_TRUE(!session.setSlotSampling(object, 0, 0, EditorSession::MaterialScope::Instance,
+                                          {static_cast<u8>(scene::MaterialUvWorld + 1), 0, 0}, diagnostic),
                  "valor fora do contrato recusado");
 
   // Textura do projeto com outro sampler: uma variante publicada, índice próprio.

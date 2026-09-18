@@ -2110,7 +2110,7 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     std::memcpy(push.lightViewProjection,shadowCascades_[cascade].viewProjection,
                 sizeof(push.lightViewProjection));
     push.alphaCutoffUvSlot[0]=material.alphaCutoff;
-    push.alphaCutoffUvSlot[1]=(material.textureCoordinates&3u)==1u?1.0f:0.0f;
+    push.alphaCutoffUvSlot[1]=static_cast<float>(material.textureCoordinates&3u);
     if(authored) {
       const auto &value=authoredMaterials_[drawIndex];
       if(value.channels.alphaSource!=scene::MaterialAlphaSourceKeep)
@@ -4197,6 +4197,10 @@ bool InstancedRenderer::queueMapScene(std::span<const renderer::MapDrawState> dr
        a.vertexOffset!=b.vertexOffset || a.materialIndex!=b.materialIndex) return false;
   }
   pendingScene_.assign(draws.begin(),draws.end());
+  // A cena completa supersede qualquer lote de poses/material preparado para
+  // a topologia anterior no mesmo quadro.
+  pendingMapPoseCount_=0;
+  pendingAuthoredStateValid_=false;
   return true;
 }
 

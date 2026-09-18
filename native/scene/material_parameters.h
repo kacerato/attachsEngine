@@ -67,7 +67,9 @@ inline bool validMaterialChannels(const MaterialChannels &channels) {
 // fonte). O conjunto de UV vale para qualquer textura do binding; repetição e
 // filtro são o sampler da textura publicada e só valem para textura do PROJETO
 // (a da fonte já sobe com o sampler que o arquivo pediu).
-inline constexpr std::uint8_t MaterialUvKeep=0,MaterialUv0=1,MaterialUv1=2;
+// Mundo projeta a textura em metros sobre o eixo dominante da superfície.
+// Serve para arquitetura escalada; modelos com UV autoral continuam em Keep.
+inline constexpr std::uint8_t MaterialUvKeep=0,MaterialUv0=1,MaterialUv1=2,MaterialUvWorld=3;
 inline constexpr std::uint8_t MaterialWrapKeep=0,MaterialWrapRepeat=1,MaterialWrapClamp=2,MaterialWrapMirror=3;
 inline constexpr std::uint8_t MaterialFilterKeep=0,MaterialFilterLinear=1,MaterialFilterNearest=2;
 struct MaterialSampling {
@@ -93,7 +95,7 @@ struct MaterialSampling {
 };
 inline bool validMaterialSampling(const MaterialSampling &sampling) {
   const auto within=[](float value,float limit) {return std::isfinite(value) && value>=-limit && value<=limit;};
-  return sampling.uvSet<=MaterialUv1 && sampling.wrap<=MaterialWrapMirror && sampling.filter<=MaterialFilterNearest &&
+  return sampling.uvSet<=MaterialUvWorld && sampling.wrap<=MaterialWrapMirror && sampling.filter<=MaterialFilterNearest &&
          within(sampling.offset[0],100) && within(sampling.offset[1],100) && within(sampling.rotation,360) &&
          within(sampling.scale[0],100) && within(sampling.scale[1],100) && sampling.scale[0]>=.01f && sampling.scale[1]>=.01f;
 }
