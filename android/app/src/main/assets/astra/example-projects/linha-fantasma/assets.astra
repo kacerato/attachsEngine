@@ -1,0 +1,7 @@
+AETHER_ASSETS 1 6
+5bd07969cc0d0b9cc230fdddc83f59fb mesh "Assets/world.glb" "Assets/world.glb" "a4120768121b0a263d88205c852a41ca8d0db490cc5dbdbd3badbb1930d24879" 1 "glb" 0 0
+75c0d97d7bbf4704ca71a1221a943c4b mesh "Assets/station.glb" "Assets/station.glb" "29d621d458158242c220bcb774e22abeef8339e3bb6f0dedc9f8435480f3a727" 1 "glb" 0 0
+c6dc2062e60cb243a582e25b47566115 mesh "Assets/power_box_01.glb" "Assets/power_box_01.glb" "a4b9f29f7d3f2cca354971a80a4c48dc65b0895dc33f8300b9c37aeb5065954b" 1 "glb" 0 0
+e779db958c1a7088123399b8887faf44 mesh "Assets/vintage_flashlight.glb" "Assets/vintage_flashlight.glb" "244324a2ce306444f4f9d02f2f57fc864d338061d3ac5e44bf225fb55f0651e7" 1 "glb" 0 0
+f9065a48e734d756d868be06205018db mesh "Assets/retro_multimeter.glb" "Assets/retro_multimeter.glb" "b7123edb59d0dc54feaf557481c017a542deb22c3528333b66565035e8f06a63" 1 "glb" 0 0
+47440f8e83bbd7de98e4ff49d0eff7d4 mesh "Assets/portable_generator.glb" "Assets/portable_generator.glb" "7ffec8f85344a84c8f0b63498af70465f76ba72359baf18ce5b1ea16f8d5b199" 1 "glb" 0 0

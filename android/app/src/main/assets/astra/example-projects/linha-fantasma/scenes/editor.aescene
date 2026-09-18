@@ -1,0 +1,100 @@
+AETHER_EDITOR 12 0 97
+1 0 0 "Cena" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+2 1 0 "Mundo" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+3 2 0 "Estação GLB otimizada" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+4 3 1 "Estação · concrete" 0 0 0 0 0 0 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 8e4e9629d40c2db5593d8d0ae8333d9d"
+5 3 1 "Estação · shell" 0 0 0 0 0 0 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 5260f1bd5f3da3de4a5b58d14fcf05de"
+6 3 1 "Estação · warn" 0 0 0 0 0 0 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 df9af84c0a2eb3dee627e0106fb3bb71"
+7 3 1 "Estação · dark" 0 0 0 0 0 0 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 9e2d48d2c9df5d0c37fd56e55b5721e3"
+8 3 1 "Estação · steel" 0 0 0 0 0 0 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 4e6ff0c4f79c5cf7ed434ecda06eec97"
+9 3 1 "Estação · rubber" 0 0 0 0 0 0 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 db2e34f97185f7126dd0851894ab523e"
+10 3 1 "Estação · accent" 0 0 0 0 0 0 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 675c09bd3a8e1a69c8781fb07c9115ea"
+11 3 1 "Estação · glass" 0 0 0 0 0 0 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 6b20e2bc038aade0c29842d2dcfa88c1"
+12 2 0 "Colisões arquitetônicas" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+13 2 0 "Objetivos interativos" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+14 2 0 "Objetos reais e físicos" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+15 2 0 "Luzes de emergência" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+16 2 0 "Luzes restauradas" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+17 12 0 "Piso da plataforma" 0 0.79 0 0 0 0 3 0.79 18 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 2 3 1 "astra.physics.body" 3 "0 1 0.65 0.05 0 0 0 0 0 0 0.05 0.05 1 0 1" 2 "astra.physics.collider" 3 "0 1 1 1 0.5 0.5 0 0 0 0 0 0 0 1"
+18 12 0 "Limite lateral -1" -3.15 1.9 0 0 0 0 0.14 1.6 18 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 2 3 1 "astra.physics.body" 3 "0 1 0.65 0.05 0 0 0 0 0 0 0.05 0.05 1 0 1" 2 "astra.physics.collider" 3 "0 1 1 1 0.5 0.5 0 0 0 0 0 0 0 1"
+19 12 0 "Limite lateral 1" 3.15 1.9 0 0 0 0 0.14 1.6 18 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 2 3 1 "astra.physics.body" 3 "0 1 0.65 0.05 0 0 0 0 0 0 0.05 0.05 1 0 1" 2 "astra.physics.collider" 3 "0 1 1 1 0.5 0.5 0 0 0 0 0 0 0 1"
+20 12 0 "Túnel bloqueado" 0 2 -18.1 0 0 0 3 2 0.2 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 2 3 1 "astra.physics.body" 3 "0 1 0.65 0.05 0 0 0 0 0 0 0.05 0.05 1 0 1" 2 "astra.physics.collider" 3 "0 1 1 1 0.5 0.5 0 0 0 0 0 0 0 1"
+21 13 1 "Fusível 1" -1.65 2.25 -11.8 0 0 0 0.24 0.28 0.18 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 3 4 1 "astra.render.mesh" 7 "1 1 1 0.99 0.68 0.23 0.33 0.2 1 1 0.5 0.23 0.02 2.4 044ba2f177d5f0840ab544fb37717ee5 - 0 - - - - 0 0 0.5 300 300 300 300 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0" 2 "astra.physics.body" 3 "0 0.5 0.65 0.05 0 0 0 0 0 0 0.05 0.05 1 0 1" 3 "astra.physics.collider" 3 "0 1 1 1 0.5 0.5 0 0 0 0 0 0 0 1"
+22 15 2 "Sinal do fusível 1" -1.65 2.6 -11.8 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.49 0.11 5.5 3 20 35"
+23 13 1 "Fusível 2" 1.7 2.25 -1.5 0 0 0 0.24 0.28 0.18 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 3 4 1 "astra.render.mesh" 7 "1 1 1 0.99 0.68 0.23 0.33 0.2 1 1 0.5 0.23 0.02 2.4 044ba2f177d5f0840ab544fb37717ee5 - 0 - - - - 0 0 0.5 300 300 300 300 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0" 2 "astra.physics.body" 3 "0 0.5 0.65 0.05 0 0 0 0 0 0 0.05 0.05 1 0 1" 3 "astra.physics.collider" 3 "0 1 1 1 0.5 0.5 0 0 0 0 0 0 0 1"
+24 15 2 "Sinal do fusível 2" 1.7 2.6 -1.5 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.49 0.11 5.5 3 20 35"
+25 13 1 "Fusível 3" -1.55 2.25 8.5 0 0 0 0.24 0.28 0.18 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 3 4 1 "astra.render.mesh" 7 "1 1 1 0.99 0.68 0.23 0.33 0.2 1 1 0.5 0.23 0.02 2.4 044ba2f177d5f0840ab544fb37717ee5 - 0 - - - - 0 0 0.5 300 300 300 300 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0" 2 "astra.physics.body" 3 "0 0.5 0.65 0.05 0 0 0 0 0 0 0.05 0.05 1 0 1" 3 "astra.physics.collider" 3 "0 1 1 1 0.5 0.5 0 0 0 0 0 0 0 1"
+26 15 2 "Sinal do fusível 3" -1.55 2.6 8.5 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.49 0.11 5.5 3 20 35"
+27 13 1 "Painel de energia" 1.8 2.38 13.2 0 0 0 0.58 0.72 0.24 1 1 1 1 1 0 0 0 0 0 0 0 1 0 0 3 4 1 "astra.render.mesh" 7 "1 1 1 0.58 0.65 0.68 0.38 0.58 1 1 0 0 0 1 5d47a12d2f8683c8fe67d1a9092a4c38 - 0 - - - - 0 0 0.5 300 300 300 300 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0 0 0 1 1 0" 2 "astra.physics.body" 3 "0 0.5 0.65 0.05 0 0 0 0 0 0 0.05 0.05 1 0 1" 3 "astra.physics.collider" 3 "0 1 1 1 0.5 0.5 0 0 0 0 0 0 0 1"
+28 13 1 "Indicador vermelho" 1.65 2.66 12.94 0 0 0 0.11 0.11 0.06 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 1 1 0.16 0.08 0.2 0 1 1 0.85 0.06 0.02 3 b00dc74118d48e323518e5e09bda87c6"
+29 13 1 "Indicador verde" 1.95 2.66 12.94 0 0 0 0.11 0.11 0.06 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 1 0.12 1 0.36 0.2 0 1 1 0.04 0.7 0.15 3 b00dc74118d48e323518e5e09bda87c6"
+30 13 1 "Barreira de segurança" 0 2.45 16.2 0 0 0 2.6 0.85 0.12 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 3 4 1 "astra.render.mesh" 2 "1 1 1 0.8 0.82 0.8 0.53 0.22 1 1 0 0 0 1 044ba2f177d5f0840ab544fb37717ee5" 2 "astra.physics.body" 3 "1 0.5 0.65 0.05 0 0 0 0 0 0 0.05 0.05 1 0 1" 3 "astra.physics.collider" 3 "0 1 1 1 0.5 0.5 0 0 0 0 0 0 0 1"
+31 13 1 "Zona de extração" 0 1.68 17.6 0 0 0 0.85 0.07 0.32 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 1 0.11 1 0.43 0.35 0 1 1 0.04 0.5 0.13 2 b00dc74118d48e323518e5e09bda87c6"
+32 14 0 "Gerador real" -2.15 1.57 -14.5 0 0 0 1.3 1.3 1.3 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+33 32 0 "portable_generator" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+34 33 1 "portable_generator · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 68f0cc1850a11a19e0396f6cb10c1799"
+35 33 1 "portable_generator · material 2" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 c00021c58d876fef1d475a2c7dc160fd"
+36 32 0 "portable_generator_dial" 0.0922518298 0.416306138 0.24030219 -11.826104 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+37 36 1 "portable_generator_dial · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 19ad3cd16641de855307b1c84843b9d7"
+38 32 0 "portable_generator_switch" -0.260182649 0.437927067 0.23846513 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+39 38 1 "portable_generator_switch · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 58523cdca8d2ac9d23955f12b5ea78fa"
+40 32 0 "portable_generator_toggle" 0.0123603353 0.429083943 0.234245598 -11.826104 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+41 40 1 "portable_generator_toggle · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 e093f11c22e27324a538760b0133e948"
+42 14 0 "Quadro elétrico real" 2.12 2.05 13.4 0 0 0 0.75 0.75 0.75 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+43 42 0 "power_box_01_door" -0.163829714 4.99561429e-06 0.0431810431 180 -70.7703442 180 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+44 43 1 "power_box_01_door · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 786456ac3fb849b9e8d0f453796d9cfc"
+45 42 0 "power_box_01_box" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+46 45 1 "power_box_01_box · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 62544dda09cc5f43535041e626b21517"
+47 14 0 "Multímetro real" 1.25 1.63 12.9 0 0 0 0.8 0.8 0.8 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+48 47 0 "retro_multimeter_LOD0" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+49 48 1 "retro_multimeter_LOD0 · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 0dde35dce2ff59d2f31ecc6bd6ed5694"
+50 48 1 "retro_multimeter_LOD0 · material 2" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 1b540afa9bdc58f3a09a7259be543634"
+51 47 0 "retro_multimeter_buttons_LOD0" 0 0 -0.0272016153 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+52 51 1 "retro_multimeter_buttons_LOD0 · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 bb0b46dca260cc337ba9f64ae609aea0"
+53 47 0 "retro_multimeter_handle_LOD0" 0 0.202324003 0.00279838406 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+54 53 1 "retro_multimeter_handle_LOD0 · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 9fb144c80609199006e968f81116a03f"
+55 47 0 "retro_multimeter_dial_LOD0" 0 0 -0.0272016153 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+56 55 1 "retro_multimeter_dial_LOD0 · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 db8f8e35e82e570dc104123100fa6395"
+57 47 0 "retro_multimeter_knob_LOD0" 0 0 -0.0272016153 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+58 57 1 "retro_multimeter_knob_LOD0 · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 470dd5a928b9f9a7a985c5e44f67cbcf"
+59 47 0 "retro_multimeter_cables_LOD0" 0 0 -0.0272016153 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+60 59 1 "retro_multimeter_cables_LOD0 · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 a98d60e83ae0594c18cdf6d4a1140820"
+61 47 0 "retro_multimeter_needle_LOD0" 0 0.145000458 0.0240251645 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+62 61 1 "retro_multimeter_needle_LOD0 · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 edf9e35695350148b4f9abd4eb63c630"
+63 14 1 "Caixa móvel 1" -2.15 2.5 -7 0 0 0 0.4 0.4 0.4 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 3 4 1 "astra.render.mesh" 2 "1 1 1 0.62 0.55 0.44 0.83 0 1 1 0 0 0 1 7bac1daea412a20034435fd83600aa60" 2 "astra.physics.body" 3 "2 0.5 0.65 0.05 0 0 0 0 0 0 0.05 0.05 1 0 1" 3 "astra.physics.collider" 3 "0 1 1 1 0.5 0.5 0 0 0 0 0 0 0 1"
+64 14 1 "Caixa móvel 2" 2.05 2.5 3.5 0 0 0 0.4 0.4 0.4 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 3 4 1 "astra.render.mesh" 2 "1 1 1 0.62 0.55 0.44 0.83 0 1 1 0 0 0 1 7bac1daea412a20034435fd83600aa60" 2 "astra.physics.body" 3 "2 0.5 0.65 0.05 0 0 0 0 0 0 0.05 0.05 1 0 1" 3 "astra.physics.collider" 3 "0 1 1 1 0.5 0.5 0 0 0 0 0 0 0 1"
+65 14 1 "Caixa móvel 3" -2.1 2.5 11.6 0 0 0 0.4 0.4 0.4 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 3 4 1 "astra.render.mesh" 2 "1 1 1 0.62 0.55 0.44 0.83 0 1 1 0 0 0 1 7bac1daea412a20034435fd83600aa60" 2 "astra.physics.body" 3 "2 0.5 0.65 0.05 0 0 0 0 0 0 0.05 0.05 1 0 1" 3 "astra.physics.collider" 3 "0 1 1 1 0.5 0.5 0 0 0 0 0 0 0 1"
+66 15 2 "Emergência -1 -14" -2.6 3.4 -14 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.18 0.09 7 5 20 35"
+67 16 2 "Plafon -1 -14" -1.65 4.8 -14 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 0.78 0.9 1 12 7 20 35"
+68 15 2 "Emergência 1 -14" 2.6 3.4 -14 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.18 0.09 7 5 20 35"
+69 16 2 "Plafon 1 -14" 1.65 4.8 -14 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 0.78 0.9 1 12 7 20 35"
+70 15 2 "Emergência -1 -8" -2.6 3.4 -8 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.18 0.09 7 5 20 35"
+71 16 2 "Plafon -1 -8" -1.65 4.8 -8 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 0.78 0.9 1 12 7 20 35"
+72 15 2 "Emergência 1 -8" 2.6 3.4 -8 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.18 0.09 7 5 20 35"
+73 16 2 "Plafon 1 -8" 1.65 4.8 -8 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 0.78 0.9 1 12 7 20 35"
+74 15 2 "Emergência -1 -2" -2.6 3.4 -2 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.18 0.09 7 5 20 35"
+75 16 2 "Plafon -1 -2" -1.65 4.8 -2 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 0.78 0.9 1 12 7 20 35"
+76 15 2 "Emergência 1 -2" 2.6 3.4 -2 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.18 0.09 7 5 20 35"
+77 16 2 "Plafon 1 -2" 1.65 4.8 -2 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 0.78 0.9 1 12 7 20 35"
+78 15 2 "Emergência -1 4" -2.6 3.4 4 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.18 0.09 7 5 20 35"
+79 16 2 "Plafon -1 4" -1.65 4.8 4 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 0.78 0.9 1 12 7 20 35"
+80 15 2 "Emergência 1 4" 2.6 3.4 4 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.18 0.09 7 5 20 35"
+81 16 2 "Plafon 1 4" 1.65 4.8 4 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 0.78 0.9 1 12 7 20 35"
+82 15 2 "Emergência -1 10" -2.6 3.4 10 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.18 0.09 7 5 20 35"
+83 16 2 "Plafon -1 10" -1.65 4.8 10 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 0.78 0.9 1 12 7 20 35"
+84 15 2 "Emergência 1 10" 2.6 3.4 10 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.18 0.09 7 5 20 35"
+85 16 2 "Plafon 1 10" 1.65 4.8 10 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 0.78 0.9 1 12 7 20 35"
+86 15 2 "Emergência -1 15" -2.6 3.4 15 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.18 0.09 7 5 20 35"
+87 16 2 "Plafon -1 15" -1.65 4.8 15 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 0.78 0.9 1 12 7 20 35"
+88 15 2 "Emergência 1 15" 2.6 3.4 15 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 1 0.18 0.09 7 5 20 35"
+89 16 2 "Plafon 1 15" 1.65 4.8 15 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "1 1 0.78 0.9 1 12 7 20 35"
+90 2 2 "Luz ambiente" 0 12 0 70 30 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "0 1 0.62 0.7 0.83 0.28 12 20 35"
+91 2 0 "Técnica de manutenção" 0 1.61 -15.2 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 2 3 1 "astra.physics.character" 2 "0.42 0.55 1.62 5.2 47 5.2" 2 "astra.script.behavior" 1 "\"project.MetroPlayer\" \"Scripts/MetroPlayer.cs\" 1 0"
+92 91 3 "Câmera dos olhos" 0 1.62 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 2 3 1 "astra.camera" 2 "1 75 0.08 280 100 5 0" 2 "astra.camera.look" 1 "245 155 80"
+93 92 0 "Lanterna real" 0.3 -0.31 0.55 0 0 0 0.34 0.34 0.34 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+94 93 0 "vintage_flashlight" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 0 1
+95 94 1 "vintage_flashlight · material 1" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 4abb07b449415c526b41ade14dc7ee41"
+96 94 1 "vintage_flashlight · material 2" 0 0 0 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.mesh" 2 "1 1 0 1 1 1 0.5 0 1 1 0 0 0 1 2d753a05f6fa9f20b3eee57d23fc5898"
+97 93 2 "Facho da lanterna" 0 0 0.34 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 1 0 0 1 2 1 "astra.render.light" 1 "2 1 1 0.87 0.65 17 11 20 35"
+LAYERS 1 "Padrão" 4294967295
+INPUT 4 "Mover" "Olhar" "Saltar" "Mover" 2 0.119999997 1 "" 2 1 0 0 0 1 0 1 0 0 1 1 0 "Olhar" 2 0 1 "" 2 2 0 0 0 1 0 2 0 0 1 1 0 "Saltar" 0 0 1 "" 1 3 0 0 0 1 0 "Interagir" 0 0 1 "" 1 3 1 0 0 1 0

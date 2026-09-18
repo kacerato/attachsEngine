@@ -42,6 +42,7 @@ public final class ShellView extends View {
 
     private Screen screen = Screen.SPLASH;
     private int navIndex = 0;
+    private int projectPage = 0;
     private Project loadingProject;
 
     private float overflowX;
@@ -367,12 +368,27 @@ public final class ShellView extends View {
         // 16:9 elas crescem em vez de se afastarem: espalhar os cards deixaria
         // buracos onde o master tem uma prateleira contínua.
         List<Project> list = store.projects();
+        int pages = Math.max(1, (list.size() + 3) / 4);
+        projectPage = Math.min(projectPage, pages - 1);
+        if (pages > 1) {
+            float pagerLeft = railEnd + 174f;
+            drawCapText(target, "\u2039 Anterior", pagerLeft, 310f, projectPage > 0 ? navTextOn : navText);
+            hits.add(new Hit(pagerLeft - 12f, 290f, pagerLeft + 110f, 335f, () -> {
+                if (projectPage > 0) { --projectPage; invalidate(); }
+            }));
+            drawCapText(target, (projectPage + 1) + " / " + pages, pagerLeft + 125f, 310f, labelText);
+            drawCapText(target, "Próximos \u203a", pagerLeft + 205f, 310f, projectPage + 1 < pages ? navTextOn : navText);
+            hits.add(new Hit(pagerLeft + 195f, 290f, pagerLeft + 325f, 335f, () -> {
+                if (projectPage + 1 < pages) { ++projectPage; invalidate(); }
+            }));
+        }
         float gridLeft = railEnd + 32f;
         float span = (right - 46f) - gridLeft;
         float cardWidth = Math.max(317f, (span - 3f * 22f) / 4f);
         for (int i = 0; i < 4; ++i) {
             float cardLeft = gridLeft + i * (cardWidth + 22f);
-            if (i < list.size()) drawProjectCard(target, list.get(i), cardLeft, cardWidth);
+            int index = projectPage * 4 + i;
+            if (index < list.size()) drawProjectCard(target, list.get(index), cardLeft, cardWidth);
             else { drawEmptySlot(target, cardLeft, cardWidth); break; }
         }
     }

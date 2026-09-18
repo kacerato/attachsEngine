@@ -1,0 +1,4 @@
+AETHER_ASSETS 1 3
+5bd07969cc0d0b9cc230fdddc83f59fb mesh "Assets/world.glb" "Assets/world.glb" "a4120768121b0a263d88205c852a41ca8d0db490cc5dbdbd3badbb1930d24879" 1 "glb" 0 0
+cff62f1f2c29fd177661bf9b77e91ee6 mesh "Assets/Barrel_01.glb" "Assets/Barrel_01.glb" "61d722dff328ef7b3e6fa737dcbdf97cb830eb0c053120caed521b14b19472f5" 1 "glb" 0 0
+47440f8e83bbd7de98e4ff49d0eff7d4 mesh "Assets/portable_generator.glb" "Assets/portable_generator.glb" "7ffec8f85344a84c8f0b63498af70465f76ba72359baf18ce5b1ea16f8d5b199" 1 "glb" 0 0

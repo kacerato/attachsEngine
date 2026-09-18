@@ -1,6 +1,7 @@
 package dev.aether.editor.shell;
 
 import android.content.Context;
+import android.content.res.AssetManager;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -8,6 +9,7 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -37,6 +39,8 @@ public final class ProjectStore {
     public ProjectStore(Context context) {
         this(context.getFilesDir(), new File(context.getExternalFilesDir(null) != null
                 ? context.getExternalFilesDir(null) : context.getFilesDir(), "Projetos"));
+        installExamples(context.getAssets());
+        load();
     }
 
     ProjectStore(File privateRoot, File projectRoot) {
@@ -54,6 +58,62 @@ public final class ProjectStore {
     }
 
     private File indexFile() { return new File(privateRoot, INDEX); }
+
+    /** Install each bundled game once. Existing authored projects are never replaced. */
+    private void installExamples(AssetManager assets) {
+        final String[][] examples = {
+                {"cristais", "Cristais do Templo", "example-cristais.png"},
+                {"circuito", "Circuito Neon", "example-circuito.png"},
+                {"arena", "Arena de Drones", "example-arena.png"},
+                {"quarentena", "Quarentena 04 · GLB", "example-quarentena.png"},
+                {"resgate", "Resgate na Mina · GLB", "example-resgate.png"},
+                {"perimetro", "Perímetro Delta · GLB", "example-perimetro.png"},
+                {"linha-fantasma", "Linha Fantasma · GLB", "example-linha-fantasma.png"}
+        };
+        for (String[] example : examples) {
+            File destination = new File(root(), example[1]);
+            if (destination.exists()) continue;
+            File staging = new File(root(), ".astra-example-install-" + example[0]);
+            if (staging.exists() && !staging.isDirectory()) continue;
+            try {
+                String packagePath = "astra/example-projects/" + example[0];
+                copyExampleTree(assets, packagePath + "/Assets", new File(staging, "Assets"));
+                copyExampleTree(assets, packagePath + "/Scripts", new File(staging, "Scripts"));
+                copyExampleTree(assets, packagePath + "/scenes", new File(staging, "scenes"));
+                copyExampleTree(assets, packagePath + "/assets.astra", new File(staging, ".astra/assets.astra"));
+                copyExampleTree(assets, packagePath + "/LEIA-ME.md", new File(staging, "LEIA-ME.md"));
+                Project project = new Project(example[1], destination.getAbsolutePath(),
+                        SceneTemplate.EMPTY, example[2], 1, 1);
+                JSONObject data = new JSONObject();
+                data.put("format", "ASTRA-PROJECT-1");
+                data.put("resourceSource", "independent");
+                data.put("project", project.toJson());
+                data.put("mainScene", "scenes/main.ascene");
+                data.put("editorScene", "scenes/editor.aescene");
+                writeAtomic(new File(staging, "project.json"), data.toString(2));
+                if (!staging.renameTo(destination)) throw new IOException("publicação: " + destination);
+            } catch (Exception error) {
+                LOG.log(Level.WARNING, "exemplo não instalado: " + example[1], error);
+            }
+        }
+    }
+
+    private static void copyExampleTree(AssetManager assets, String source, File destination) throws IOException {
+        String[] children = assets.list(source);
+        if (children == null) throw new IOException("pacote ausente: " + source);
+        if (children.length != 0) {
+            if (!destination.isDirectory() && !destination.mkdirs()) throw new IOException("pasta: " + destination);
+            for (String child : children) copyExampleTree(assets, source + "/" + child, new File(destination, child));
+            return;
+        }
+        File parent = destination.getParentFile();
+        if (!parent.isDirectory() && !parent.mkdirs()) throw new IOException("pasta: " + parent);
+        try (InputStream input = assets.open(source); FileOutputStream output = new FileOutputStream(destination)) {
+            byte[] buffer = new byte[8192];
+            for (int count; (count = input.read(buffer)) != -1; ) output.write(buffer, 0, count);
+            output.getFD().sync();
+        }
+    }
 
     private void load() {
         projects.clear();
@@ -81,6 +141,7 @@ public final class ProjectStore {
         File[] directories = projectRoot.listFiles(File::isDirectory);
         if (directories == null) return;
         for (File directory : directories) {
+            if (directory.getName().startsWith(".astra-example-install-")) continue;
             File descriptor = new File(directory, "project.json");
             if (!descriptor.isFile()) continue;
             try {
