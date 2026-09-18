@@ -60,6 +60,11 @@ struct PropertyContract {
   std::string domain;
   bool conditional = false; // tem predicado de visibilidade
   bool readOnly = false;    // tem predicado de edição, ou não tem escrita
+  // A propriedade existe uma vez POR SLOT do componente, não uma por componente.
+  // `slots` é quantos endereços um valor recém-criado tem; a matriz publica isso
+  // porque o "corte do alfa" de uma malha de seis primitivas são seis valores.
+  bool perSlot = false;
+  u32 slots = 0;
   std::string_view capability;
   std::string_view consumer;
   u32 invalidates = 0;
@@ -165,6 +170,32 @@ inline std::vector<PropertyContract> componentContracts(const ComponentSchema &s
     }
     rows.push_back(std::move(row));
   }
+  for (const auto &property : type.slotNumbers) {
+    auto row = propertyContractBase(schema, property.id, property.name, PropertyKind::Number, property.presentation);
+    row.minimum = property.minimum;
+    row.maximum = property.maximum;
+    row.step = property.dragStep;
+    row.perSlot = true;
+    row.readOnly = row.readOnly || property.write == nullptr;
+    if (probe) {
+      row.slots = property.slotCount(*probe);
+      if (row.slots && property.read) row.defaultValue = detail::formatNumber(property.read(*probe, 0));
+    }
+    row.domain = detail::formatNumber(property.minimum) + " … " + detail::formatNumber(property.maximum);
+    rows.push_back(std::move(row));
+  }
+  for (const auto &property : type.slotEnums) {
+    auto row = propertyContractBase(schema, property.id, property.name, PropertyKind::Enum, property.presentation);
+    row.perSlot = true;
+    row.readOnly = row.readOnly || property.write == nullptr;
+    if (probe) row.slots = property.slotCount(*probe);
+    for (const auto &option : property.options) {
+      if (!row.domain.empty()) row.domain += " | ";
+      row.domain += option.name;
+      if (probe && row.slots && property.read && property.read(*probe, 0) == option.value) row.defaultValue = option.name;
+    }
+    rows.push_back(std::move(row));
+  }
   for (const auto &property : type.references) {
     auto row = propertyContractBase(schema, property.id, property.name, PropertyKind::Reference, property.presentation);
     row.readOnly = row.readOnly || property.write == nullptr;
@@ -237,14 +268,15 @@ inline std::string componentMatrixMarkdown() {
                (binding.none.valid() ? "sim" : "não") + " |\n";
       out += "\n**Propriedades**\n\n";
     }
-    out += "| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional |\n";
-    out += "|---|---|---|---|---|---|---|---|---|---|\n";
+    out += "| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot |\n";
+    out += "|---|---|---|---|---|---|---|---|---|---|---|\n";
     for (const auto &row : componentContracts(schema)) {
       out += "| `" + std::string(row.propertyId) + "` | " + escapeTableCell(row.label) + " | " +
              propertyKindName(row.kind) + " | " + escapeTableCell(row.group) + " | " +
              escapeTableCell(row.defaultValue) + " | " + escapeTableCell(row.domain) + " | " +
              escapeTableCell(row.unit) + " | " + escapeTableCell(row.consumer) + " | " +
-             describeInvalidation(row.invalidates) + " | " + (row.conditional ? "sim" : "não") + " |\n";
+             describeInvalidation(row.invalidates) + " | " + (row.conditional ? "sim" : "não") + " | " +
+             (row.perSlot ? "sim" : "não") + " |\n";
     }
   }
   out += "\n## Capacidades do motor\n\n";
@@ -286,6 +318,10 @@ inline std::vector<ContractIssue> auditComponentContracts() {
           report(type.id, row.propertyId, "identidade de propriedade repetida");
       if (row.consumer.empty())
         report(type.id, row.propertyId, "propriedade sem consumidor");
+      // Uma propriedade por slot que não escreve é um endereço que a API e o
+      // preset enxergam e não conseguem aplicar — pior que não existir.
+      if (row.perSlot && row.readOnly)
+        report(type.id, row.propertyId, "propriedade por slot sem escrita endereçável");
       if (!core::engineCapabilityDeclared(row.capability))
         report(type.id, row.propertyId, "capacidade não registrada: " + std::string(row.capability));
       else if (!core::engineCapabilityAuthorable(row.capability))

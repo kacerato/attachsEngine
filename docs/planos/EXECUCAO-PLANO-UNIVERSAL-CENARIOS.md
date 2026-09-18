@@ -56,11 +56,10 @@ substitui a avaliação de qualidade de fonte.
 | Receita multi componente: captura do objeto inteiro, formato de biblioteca v2 com leitura da v1, aplicação em uma transação com Add resolvendo exigências | `native/editor/editor_component_presets.h`, `EditorSession::applyComponentRecipe` | biblioteca validada no host; aplicação implementada, sem teste de sessão |
 | Painel de presets com diff interativo (marcar campo a campo, marcar tudo, desmarcar), preview de receita com o que é adicionado, atualizado e exigido | `native/editor/editor_screen.cpp`, `editor_session.cpp` | implementado, sem evidência em aparelho |
 
-**Limite declarado, não escondido:** amostragem, canais e superfície por slot
-(R4) são dados do MeshRenderer **sem PropertyId**. Por isso a aplicação seletiva
-não os endereça, e o painel diz isso em vez de deixar o autor descobrir depois.
-Dar identidade a esse estado por slot é tarefa do bloco de materiais (G3) e é o
-que colapsa os dois alcances de aplicação num só.
+**Lacuna fechada em seguida (ver G3 abaixo):** amostragem, canais, superfície e
+fatores por slot eram dados do MeshRenderer **sem PropertyId**, o que deixava a
+aplicação seletiva sem alcançá-los. Passaram a ter identidade endereçável por
+slot, e o painel deixou de precisar do aviso.
 
 ## G2 · importação autorável — parcial (geometria derivada e diagnóstico de UV)
 
@@ -90,6 +89,26 @@ que colapsa os dois alcances de aplicação num só.
 - a câmera importada entra **desligada** (`enabled = false`): trazer o
   enquadramento do editor 3D não pode sequestrar a câmera do Play.
 
-## G3–G6
+## G3 · materiais e malhas — parcial (endereço por slot)
+
+Fecha a lacuna declarada no G1 e atende a §5.4 do plano ("Material: UV set e
+transform por binding", "canais", "superfície") na granularidade que ela pede.
+
+| Entrega | Onde vive | Estado |
+|---|---|---|
+| `ComponentSlotNumber` / `ComponentSlotEnum`: propriedade que existe uma vez **por slot**, com identidade persistente e escrita que nunca cria slot | `native/scene/components.h` | validado no host |
+| MeshRenderer declara por slot: tipo de superfície, faces, corte do alfa; canais de rugosidade/metálico/oclusão, origem e força da oclusão, inversão Y da normal, origem do alfa; conjunto de UV, repetição, filtro, deslocamento, escala e rotação; os 11 fatores PBR; e o próprio interruptor de override | `native/scene/mesh_renderer.h` | validado no host |
+| Matriz, auditoria, diff e aplicação seletiva passam a endereçar slot; a auditoria recusa propriedade por slot sem escrita | `component_reflection.h`, `component_preset.h` | validado no host |
+| Rótulos no vocabulário do URP Lit (Surface Type, Alpha Clipping, Render Face, Tiling, Offset) | `mesh_renderer.h` | implementado |
+
+**Limite declarado:** as propriedades de amostragem escrevem o valor em **todos
+os bindings do slot** e leem o binding de cor base. Endereçar (slot × binding)
+por propriedade multiplicaria a lista por cinco; a escolha por binding continua
+no editor de material, que endereça os dois índices. Também permanece: aplicar
+valores nunca cria slot — trocar a quantidade de slots é mudar a geometria do
+objeto, e só a substituição completa do componente faz isso. O painel diz isso
+quando (e só quando) o preset tem outra quantidade de slots.
+
+## G4–G6
 
 Ainda **inventariados/especificados** pelo plano; nada implementado nesta rodada.

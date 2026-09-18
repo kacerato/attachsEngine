@@ -4617,11 +4617,16 @@ void EditorSession::refreshComponentPresets() {
   for(const auto &row:state_.presetFields) if(!row.applicable) ++blocked;
   if(blocked) state_.presetPreview.push_back(std::to_string(blocked)+" não aplicáveis neste objeto");
   if(!changes) state_.presetPreview.push_back("Este preset já é o valor atual");
-  // Enquanto amostragem, canais e superfície por slot não tiverem PropertyId,
-  // eles só viajam na substituição completa. Dizer isso é melhor do que deixar
-  // o autor descobrir depois que uma escolha parcial não levou tudo.
-  if(&preset->type()==&scene::MeshRenderer::descriptor && changes)
-    state_.presetPreview.push_back("Desmarcar deixa amostragem, canais e superfície de fora");
+  // A única diferença que sobrou entre marcar tudo e escolher campo a campo é
+  // ESTRUTURAL: substituir o componente pode trocar a quantidade de slots;
+  // aplicar valores nunca cria slot, porque isso é mudar a geometria do objeto.
+  // Amostragem, canais, superfície e fatores por slot já são endereçáveis.
+  if(&preset->type()==&scene::MeshRenderer::descriptor && changes) {
+    const auto *mesh=static_cast<const scene::MeshRenderer*>(source);
+    const auto *incoming=static_cast<const scene::MeshRenderer*>(preset.get());
+    if(mesh->slotCount()!=incoming->slotCount())
+      state_.presetPreview.push_back("Marcar tudo também ajusta a quantidade de slots; escolher campo a campo, não");
+  }
 }
 
 bool EditorSession::saveComponentPreset(EditorEntityId entity,u64 instance,std::string name,std::string &error) {

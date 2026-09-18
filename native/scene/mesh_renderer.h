@@ -335,8 +335,173 @@ inline constexpr std::array<ComponentResourceBinding,7> meshRendererResources{{
      *target=value;return true;},
    {"Material"},true,MaterialTextureNone}
 }};
+// Superfície, canais e amostragem POR SLOT, com identidade persistente.
+//
+// R4 trouxe esses valores como dado do componente, editáveis só pelo inspetor.
+// Sem PropertyId eles ficavam fora de tudo o que endereça propriedade: API em
+// C#, preset seletivo, animação e a matriz de contratos. Declarados aqui, o
+// slot 2 de uma malha passa a ser tão alcançável quanto a cor base.
+//
+// Os rótulos seguem o vocabulário do URP Lit (Surface Type, Alpha Clipping,
+// Render Face, Tiling, Offset), que é o que o autor já traz de fora.
+//
+// Amostragem: o binding (cor base, normal, …) é uma terceira dimensão de
+// endereço, e endereçar (slot × binding) por propriedade multiplicaria a lista
+// por cinco. Estas propriedades escrevem o valor em TODOS os bindings do slot —
+// que é o caso de autoria comum, "esta peça repete a textura duas vezes" — e a
+// escolha por binding continua no editor de material, que endereça os dois
+// índices. O que a propriedade LÊ é o binding de cor base, e isso está dito.
+// O próprio interruptor de override é endereçável: sem ele, um preset poderia
+// ligar a substituição de material (ao escrever um fator) e nunca desligá-la.
+inline constexpr std::array<ComponentEnumOption,2> materialOverrideOptions{{
+  {0,"Herdado da fonte"},{1,"Substituído nesta instância"}
+}};
+inline constexpr std::array<ComponentEnumOption,4> materialAlphaModeOptions{{
+  {MaterialAlphaKeep,"Herdar"},{MaterialAlphaOpaque,"Opaco"},{MaterialAlphaMask,"Recorte"},{MaterialAlphaBlend,"Mistura"}
+}};
+inline constexpr std::array<ComponentEnumOption,3> materialSidesOptions{{
+  {MaterialSidesKeep,"Herdar"},{MaterialSidesSingle,"Face única"},{MaterialSidesDouble,"Face dupla"}
+}};
+inline constexpr std::array<ComponentEnumOption,5> materialChannelOptions{{
+  {MaterialChannelKeep,"Herdar"},{MaterialChannelR,"R"},{MaterialChannelG,"G"},{MaterialChannelB,"B"},{MaterialChannelA,"A"}
+}};
+inline constexpr std::array<ComponentEnumOption,4> materialOcclusionSourceOptions{{
+  {MaterialOcclusionKeep,"Herdar"},{MaterialOcclusionNone,"Sem oclusão"},{MaterialOcclusionPacked,"No mapa metal/rugosidade"},
+  {MaterialOcclusionTexture,"Textura própria"}
+}};
+inline constexpr std::array<ComponentEnumOption,3> materialToggleOptions{{
+  {MaterialToggleKeep,"Herdar"},{MaterialToggleOff,"Não"},{MaterialToggleOn,"Sim"}
+}};
+inline constexpr std::array<ComponentEnumOption,4> materialAlphaSourceOptions{{
+  {MaterialAlphaSourceKeep,"Herdar"},{MaterialAlphaSourceBase,"Alfa da cor base"},{MaterialAlphaSourceOpaque,"Sempre opaco"},
+  {MaterialAlphaSourceLuminance,"Luminância da cor base"}
+}};
+inline constexpr std::array<ComponentEnumOption,4> materialUvSetOptions{{
+  {MaterialUvKeep,"Herdar"},{MaterialUv0,"UV 0"},{MaterialUv1,"UV 1"},{MaterialUvWorld,"Mundo (triplanar)"}
+}};
+inline constexpr std::array<ComponentEnumOption,4> materialWrapOptions{{
+  {MaterialWrapKeep,"Herdar"},{MaterialWrapRepeat,"Repetir"},{MaterialWrapClamp,"Fixar na borda"},{MaterialWrapMirror,"Espelhar"}
+}};
+inline constexpr std::array<ComponentEnumOption,3> materialFilterOptions{{
+  {MaterialFilterKeep,"Herdar"},{MaterialFilterLinear,"Linear"},{MaterialFilterNearest,"Vizinho mais próximo"}
+}};
+
+inline constexpr std::array<ComponentSlotEnum,12> meshRendererSlotEnums{{
+  {"material.override","Material",materialOverrideOptions,detail::meshSlots,
+   [](const ComponentValue &v,u32 slot)->u32{return static_cast<const MeshRenderer&>(v).slotMaterial(slot).enabled?1u:0u;},
+   [](ComponentValue &v,u32 slot,u32 value)->bool{
+     auto *m=static_cast<MeshRenderer&>(v).editSlotMaterial(slot);
+     if(!m) return false;
+     m->enabled=value!=0;return true;},{"Cor"}},
+#define AE_SLOT_ENUM(id,label,options,group,getter,setter) {id,label,options,detail::meshSlots,\
+  [](const ComponentValue &v,u32 slot)->u32{const auto &m=static_cast<const MeshRenderer&>(v);(void)m;return getter;},\
+  [](ComponentValue &v,u32 slot,u32 value)->bool{auto &m=static_cast<MeshRenderer&>(v);(void)m;(void)value;setter},{group}}
+  AE_SLOT_ENUM("surface.alpha_mode","Tipo de superfície",materialAlphaModeOptions,"Superfície",
+    m.slotSurface(slot).alphaMode,
+    {auto *s=m.editSlotSurface(slot);if(!s) return false;s->alphaMode=static_cast<std::uint8_t>(value);return true;}),
+  AE_SLOT_ENUM("surface.sides","Faces",materialSidesOptions,"Superfície",
+    m.slotSurface(slot).sides,
+    {auto *s=m.editSlotSurface(slot);if(!s) return false;s->sides=static_cast<std::uint8_t>(value);return true;}),
+  AE_SLOT_ENUM("channels.roughness","Canal da rugosidade",materialChannelOptions,"Canais",
+    m.slotChannels(slot).roughness,
+    {auto *c=m.editSlotChannels(slot);if(!c) return false;c->roughness=static_cast<std::uint8_t>(value);return true;}),
+  AE_SLOT_ENUM("channels.metallic","Canal do metálico",materialChannelOptions,"Canais",
+    m.slotChannels(slot).metallic,
+    {auto *c=m.editSlotChannels(slot);if(!c) return false;c->metallic=static_cast<std::uint8_t>(value);return true;}),
+  AE_SLOT_ENUM("channels.occlusion","Canal da oclusão",materialChannelOptions,"Canais",
+    m.slotChannels(slot).occlusion,
+    {auto *c=m.editSlotChannels(slot);if(!c) return false;c->occlusion=static_cast<std::uint8_t>(value);return true;}),
+  AE_SLOT_ENUM("channels.occlusion_source","Origem da oclusão",materialOcclusionSourceOptions,"Canais",
+    m.slotChannels(slot).occlusionSource,
+    {auto *c=m.editSlotChannels(slot);if(!c) return false;c->occlusionSource=static_cast<std::uint8_t>(value);return true;}),
+  AE_SLOT_ENUM("channels.normal_flip_y","Inverter Y da normal",materialToggleOptions,"Canais",
+    m.slotChannels(slot).normalFlipY,
+    {auto *c=m.editSlotChannels(slot);if(!c) return false;c->normalFlipY=static_cast<std::uint8_t>(value);return true;}),
+  AE_SLOT_ENUM("channels.alpha_source","Origem do alfa",materialAlphaSourceOptions,"Canais",
+    m.slotChannels(slot).alphaSource,
+    {auto *c=m.editSlotChannels(slot);if(!c) return false;c->alphaSource=static_cast<std::uint8_t>(value);return true;}),
+  AE_SLOT_ENUM("sampling.uv_set","Conjunto de UV",materialUvSetOptions,"Amostragem",
+    m.slotSampling(slot)[0].uvSet,
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.uvSet=static_cast<std::uint8_t>(value);return true;}),
+  AE_SLOT_ENUM("sampling.wrap","Repetição",materialWrapOptions,"Amostragem",
+    m.slotSampling(slot)[0].wrap,
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.wrap=static_cast<std::uint8_t>(value);return true;}),
+  AE_SLOT_ENUM("sampling.filter","Filtro",materialFilterOptions,"Amostragem",
+    m.slotSampling(slot)[0].filter,
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.filter=static_cast<std::uint8_t>(value);return true;})
+#undef AE_SLOT_ENUM
+}};
+inline constexpr std::array<ComponentSlotNumber,7> meshRendererSlotNumbers{{
+#define AE_SLOT_NUMBER(id,label,lo,hi,step,group,getter,setter) {id,label,lo,hi,step,detail::meshSlots,\
+  [](const ComponentValue &v,u32 slot)->float{const auto &m=static_cast<const MeshRenderer&>(v);(void)m;return getter;},\
+  [](ComponentValue &v,u32 slot,float value)->bool{auto &m=static_cast<MeshRenderer&>(v);(void)m;(void)value;setter},{group}}
+  AE_SLOT_NUMBER("surface.alpha_cutoff","Corte do alfa",0,1,.01f,"Superfície",
+    m.slotSurface(slot).alphaCutoff,
+    {auto *s=m.editSlotSurface(slot);if(!s) return false;s->alphaCutoff=value;return true;}),
+  // -1 é a herança declarada da força de oclusão: o domínio começa nela de
+  // propósito, para que "herdar" seja um valor endereçável e não uma ausência.
+  AE_SLOT_NUMBER("channels.occlusion_strength","Força da oclusão",-1,1,.01f,"Canais",
+    m.slotChannels(slot).occlusionStrength,
+    {auto *c=m.editSlotChannels(slot);if(!c) return false;c->occlusionStrength=value;return true;}),
+  AE_SLOT_NUMBER("sampling.offset_u","Deslocamento U",-100,100,.01f,"Amostragem",
+    m.slotSampling(slot)[0].offset[0],
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.offset[0]=value;return true;}),
+  AE_SLOT_NUMBER("sampling.offset_v","Deslocamento V",-100,100,.01f,"Amostragem",
+    m.slotSampling(slot)[0].offset[1],
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.offset[1]=value;return true;}),
+  AE_SLOT_NUMBER("sampling.scale_u","Escala U",.01f,100,.01f,"Amostragem",
+    m.slotSampling(slot)[0].scale[0],
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.scale[0]=value;return true;}),
+  AE_SLOT_NUMBER("sampling.scale_v","Escala V",.01f,100,.01f,"Amostragem",
+    m.slotSampling(slot)[0].scale[1],
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.scale[1]=value;return true;}),
+  AE_SLOT_NUMBER("sampling.rotation","Rotação da UV",-360,360,1,"Amostragem",
+    m.slotSampling(slot)[0].rotation,
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.rotation=value;return true;})
+#undef AE_SLOT_NUMBER
+}};
+// Os fatores PBR de CADA slot.
+//
+// `meshRendererNumbers` (acima) endereça os mesmos valores, mas só do slot 0:
+// é a API publicada de quando a malha tinha um material só, e continua valendo
+// para não quebrar preset salvo nem script escrito. O que faltava era alcançar
+// o slot 2 de uma malha de seis primitivas — por API, por preset seletivo ou
+// por animação —, e é isso que estas identidades fazem.
+//
+// Escrever um fator liga o override daquele slot, pela mesma razão que a versão
+// de slot 0 liga: um valor autoral que não substitui nada não teria efeito.
+inline constexpr std::array<ComponentSlotNumber,11> meshRendererSlotMaterial{{
+#define AE_SLOT_MATERIAL(id,label,field,lo,hi,step,group) {id,label,lo,hi,step,detail::meshSlots,\
+  [](const ComponentValue &v,u32 slot)->float{return static_cast<const MeshRenderer&>(v).slotMaterial(slot).field;},\
+  [](ComponentValue &v,u32 slot,float value)->bool{\
+    auto *m=static_cast<MeshRenderer&>(v).editSlotMaterial(slot);\
+    if(!m) return false;\
+    m->enabled=true;m->field=value;return true;},{group}}
+  AE_SLOT_MATERIAL("material.base_color.r","Cor R",baseColor[0],0,1,.01f,"Cor"),
+  AE_SLOT_MATERIAL("material.base_color.g","Cor G",baseColor[1],0,1,.01f,"Cor"),
+  AE_SLOT_MATERIAL("material.base_color.b","Cor B",baseColor[2],0,1,.01f,"Cor"),
+  AE_SLOT_MATERIAL("material.roughness","Rugosidade",roughness,0,1,.01f,"Superfície"),
+  AE_SLOT_MATERIAL("material.metallic","Metálico",metallic,0,1,.01f,"Superfície"),
+  AE_SLOT_MATERIAL("material.normal_scale","Intensidade da normal",normalScale,0,16,.02f,"Superfície"),
+  AE_SLOT_MATERIAL("material.specular","Especular",specular,0,1,.01f,"Superfície"),
+  AE_SLOT_MATERIAL("material.emission.r","Emissão R",emission[0],0,1,.01f,"Emissão"),
+  AE_SLOT_MATERIAL("material.emission.g","Emissão G",emission[1],0,1,.01f,"Emissão"),
+  AE_SLOT_MATERIAL("material.emission.b","Emissão B",emission[2],0,1,.01f,"Emissão"),
+  AE_SLOT_MATERIAL("material.emission_strength","Potência de emissão",emissionStrength,0,10000,.1f,"Emissão")
+#undef AE_SLOT_MATERIAL
+}};
+// As duas listas por slot viram uma só no descritor: para quem endereça
+// propriedade, "corte do alfa" e "rugosidade" são a mesma espécie de campo.
+inline const std::array<ComponentSlotNumber,18> meshRendererAllSlotNumbers=[]{
+  std::array<ComponentSlotNumber,18> all{};
+  usize at=0;
+  for(const auto &p:meshRendererSlotNumbers) all[at++]=p;
+  for(const auto &p:meshRendererSlotMaterial) all[at++]=p;
+  return all;
+}();
 inline const ComponentType MeshRenderer::descriptor{
   "astra.render.mesh",8,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},
-  meshRendererNumbers,meshRendererBooleans,{},nullptr,false,{},{},meshRendererResources
+  meshRendererNumbers,meshRendererBooleans,{},nullptr,false,{},{},meshRendererResources,
+  meshRendererAllSlotNumbers,meshRendererSlotEnums
 };
 }

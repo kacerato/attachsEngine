@@ -25,10 +25,10 @@
 
 namespace ae::scene {
 
-enum class FieldKind : u32 { Number, Boolean, Enum, Reference, Resource };
+enum class FieldKind : u32 { Number, Boolean, Enum, Reference, Resource, SlotNumber, SlotEnum };
 
-// Endereço de um campo dentro de um componente. `slot` só é usado por recurso:
-// um binding com vários slots é o mesmo campo em endereços diferentes.
+// Endereço de um campo dentro de um componente. `slot` é usado por recurso e
+// por propriedade de slot: o mesmo campo em endereços diferentes do mesmo valor.
 struct FieldAddress {
   std::string_view id;
   u32 slot = 0;
@@ -124,6 +124,42 @@ inline std::vector<FieldDelta> componentDelta(const ComponentValue &current, con
     row.differs = property.read(current) != property.read(candidate);
     rows.push_back(std::move(row));
   }
+  for (const auto &property : type.slotNumbers) {
+    if (property.id.empty() || !property.read) continue;
+    const u32 slots = std::max(property.slotCount(current), property.slotCount(candidate));
+    for (u32 slot = 0; slot < slots; ++slot) {
+      FieldDelta row;
+      row.address = {property.id, slot, FieldKind::SlotNumber};
+      row.label = property.name;
+      row.group = property.presentation.group;
+      const bool inCurrent = slot < property.slotCount(current), inCandidate = slot < property.slotCount(candidate);
+      row.current = inCurrent ? detail::formatNumber(property.read(current, slot)) : "sem slot";
+      row.candidate = inCandidate ? detail::formatNumber(property.read(candidate, slot)) : "sem slot";
+      row.applicable = inCurrent && inCandidate && property.write != nullptr;
+      row.differs = row.current != row.candidate;
+      rows.push_back(std::move(row));
+    }
+  }
+  for (const auto &property : type.slotEnums) {
+    if (property.id.empty() || !property.read) continue;
+    const auto name = [&](u32 value) {
+      for (const auto &option : property.options) if (option.value == value) return std::string(option.name);
+      return std::to_string(value);
+    };
+    const u32 slots = std::max(property.slotCount(current), property.slotCount(candidate));
+    for (u32 slot = 0; slot < slots; ++slot) {
+      FieldDelta row;
+      row.address = {property.id, slot, FieldKind::SlotEnum};
+      row.label = property.name;
+      row.group = property.presentation.group;
+      const bool inCurrent = slot < property.slotCount(current), inCandidate = slot < property.slotCount(candidate);
+      row.current = inCurrent ? name(property.read(current, slot)) : "sem slot";
+      row.candidate = inCandidate ? name(property.read(candidate, slot)) : "sem slot";
+      row.applicable = inCurrent && inCandidate && property.write != nullptr;
+      row.differs = row.current != row.candidate;
+      rows.push_back(std::move(row));
+    }
+  }
   for (const auto &binding : type.resourceBindings) {
     if (binding.id.empty() || !binding.read) continue;
     const u32 slots = std::max(binding.slotCount(current), binding.slotCount(candidate));
@@ -213,6 +249,31 @@ inline ComponentApplyOutcome applyComponentFields(Components &components, const 
         matched = true;
         if (!property.write || !property.read || !property.presentation.isEditable(*current)) { ++outcome.rejected; break; }
         property.write(*candidate, property.read(source));
+        ++outcome.applied;
+      }
+      break;
+    case FieldKind::SlotNumber:
+      for (const auto &property : type.slotNumbers) {
+        if (property.id != field.id) continue;
+        matched = true;
+        if (!property.write || !property.read || field.slot >= property.slotCount(source) ||
+            field.slot >= property.slotCount(*candidate)) { ++outcome.rejected; break; }
+        const float value = property.read(source, field.slot);
+        if (!std::isfinite(value) || value < property.minimum || value > property.maximum) { ++outcome.rejected; break; }
+        if (!property.write(*candidate, field.slot, value)) { ++outcome.rejected; break; }
+        ++outcome.applied;
+      }
+      break;
+    case FieldKind::SlotEnum:
+      for (const auto &property : type.slotEnums) {
+        if (property.id != field.id) continue;
+        matched = true;
+        if (!property.write || !property.read || field.slot >= property.slotCount(source) ||
+            field.slot >= property.slotCount(*candidate)) { ++outcome.rejected; break; }
+        const u32 value = property.read(source, field.slot);
+        bool known = false;
+        for (const auto &option : property.options) if (option.value == value) known = true;
+        if (!known || !property.write(*candidate, field.slot, value)) { ++outcome.rejected; break; }
         ++outcome.applied;
       }
       break;

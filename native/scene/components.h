@@ -120,6 +120,39 @@ struct ComponentObjectReference {
     return requiredForExecution && requiredForExecution(value);
   }
 };
+// Propriedade endereçada por SLOT.
+//
+// Um nó com várias primitivas é UM objeto autoral com N slots, e cada slot tem
+// a própria superfície, os próprios canais e a própria amostragem. Sem endereço
+// de slot, esses valores existem só pelo dedo no inspetor: API, preset e
+// animação não alcançam o slot 2. É a mesma razão de `ComponentNumber` existir
+// para o resto — identidade persistente independente de rótulo e de layout —
+// com um índice a mais, porque o valor não é um por componente.
+//
+// `slots` responde quantos endereços existem NESTE valor; zero esconde a
+// propriedade. `write` devolve falso para endereço inexistente e nunca cria
+// slot: criar slot é mudar a geometria do objeto, não escrever um valor.
+struct ComponentSlotNumber {
+  std::string_view id;
+  const char *name;
+  float minimum,maximum,dragStep;
+  u32 (*slots)(const ComponentValue &)=nullptr;
+  float (*read)(const ComponentValue &,u32 slot)=nullptr;
+  bool (*write)(ComponentValue &,u32 slot,float value)=nullptr;
+  PropertyPresentation presentation{};
+  u32 slotCount(const ComponentValue &v) const {return slots?slots(v):0;}
+};
+struct ComponentSlotEnum {
+  std::string_view id;
+  const char *name;
+  std::span<const ComponentEnumOption> options;
+  u32 (*slots)(const ComponentValue &)=nullptr;
+  u32 (*read)(const ComponentValue &,u32 slot)=nullptr;
+  bool (*write)(ComponentValue &,u32 slot,u32 value)=nullptr;
+  PropertyPresentation presentation{};
+  u32 slotCount(const ComponentValue &v) const {return slots?slots(v):0;}
+};
+
 // Referência a RECURSO, que não é referência a objeto.
 //
 // Um objeto vive na cena e tem InstanceId/ObjectId; um recurso vive no projeto
@@ -186,6 +219,9 @@ struct ComponentType {
   std::span<const ComponentTriple> triples{};
   // Recursos do projeto que este componente endereça por identidade.
   std::span<const ComponentResourceBinding> resourceBindings{};
+  // Propriedades que existem uma vez POR SLOT, não uma por componente.
+  std::span<const ComponentSlotNumber> slotNumbers{};
+  std::span<const ComponentSlotEnum> slotEnums{};
 };
 enum class UnknownComponentPolicy { Reject, Preserve };
 // An unavailable type is authored data, never a successfully loaded behavior.

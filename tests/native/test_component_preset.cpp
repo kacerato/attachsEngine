@@ -179,3 +179,76 @@ AE_TEST(changed_fields_reproduces_a_full_apply_through_the_same_path) {
   const auto *applied = static_cast<const scene::Light *>(components.find(scene::Light::descriptor));
   AE_EXPECT_TRUE(applied->intensity == 30 && applied->range == 55, "os dois campos entraram");
 }
+
+AE_TEST(slot_properties_address_every_slot_not_only_the_first) {
+  scene::MeshRenderer current, candidate;
+  current.submeshes.push_back({});
+  candidate.submeshes.push_back({});
+  // Slot 1 com recorte e corte próprios: é o caso que antes só o dedo alcançava.
+  candidate.submeshes[0].surface = {scene::MaterialAlphaMask, scene::MaterialSidesDouble, .25f};
+  candidate.submeshes[0].channels.occlusionStrength = .5f;
+
+  const auto delta = scene::componentDelta(current, candidate);
+  const auto *mode = findDelta(delta, "surface.alpha_mode", 1);
+  AE_EXPECT_TRUE(mode && mode->differs, "o modo de alfa do slot 1 entra no diff");
+  AE_EXPECT_EQ(mode->candidate, std::string("Recorte"), "e vem pelo nome da opção");
+  AE_EXPECT_TRUE(findDelta(delta, "surface.alpha_mode", 0) != nullptr, "o slot 0 também é endereçado");
+  AE_EXPECT_TRUE(!findDelta(delta, "surface.alpha_mode", 0)->differs, "e não muda");
+
+  const auto *cutoff = findDelta(delta, "surface.alpha_cutoff", 1);
+  AE_EXPECT_TRUE(cutoff && cutoff->differs && cutoff->candidate == "0.25", "o corte do slot 1 também");
+}
+
+AE_TEST(applying_a_slot_property_touches_only_that_slot) {
+  scene::Components components;
+  auto *value = components.add(scene::MeshRenderer::descriptor);
+  auto &mesh = static_cast<scene::MeshRenderer &>(*value);
+  mesh.submeshes.push_back({});
+
+  scene::MeshRenderer preset;
+  preset.submeshes.push_back({});
+  preset.surface.sides = scene::MaterialSidesSingle;
+  preset.submeshes[0].surface.sides = scene::MaterialSidesDouble;
+
+  const scene::FieldAddress only[]{{"surface.sides", 1, scene::FieldKind::SlotEnum}};
+  const auto outcome = scene::applyComponentFields(components, preset, only);
+  AE_EXPECT_TRUE(outcome.ok() && outcome.applied == 1u, "o slot 1 recebeu o valor");
+
+  const auto *applied = static_cast<const scene::MeshRenderer *>(components.find(scene::MeshRenderer::descriptor));
+  AE_EXPECT_EQ(applied->slotSurface(1).sides, scene::MaterialSidesDouble, "face dupla no slot escolhido");
+  AE_EXPECT_EQ(applied->slotSurface(0).sides, scene::MaterialSidesKeep, "e o slot 0 continua herdando");
+}
+
+AE_TEST(a_slot_that_does_not_exist_is_rejected_not_created) {
+  scene::Components components;
+  components.add(scene::MeshRenderer::descriptor); // um slot só
+  scene::MeshRenderer preset;
+  preset.submeshes.push_back({});
+  preset.submeshes[0].surface.sides = scene::MaterialSidesDouble;
+
+  const scene::FieldAddress missing[]{{"surface.sides", 1, scene::FieldKind::SlotEnum}};
+  const auto outcome = scene::applyComponentFields(components, preset, missing);
+  AE_EXPECT_TRUE(!outcome.ok(), "criar slot é mudar a geometria, não aplicar um valor");
+  AE_EXPECT_EQ(outcome.rejected, 1u, "o endereço inexistente é recusado com contagem");
+  const auto *applied = static_cast<const scene::MeshRenderer *>(components.find(scene::MeshRenderer::descriptor));
+  AE_EXPECT_EQ(applied->slotCount(), 1u, "e nenhum slot foi inventado");
+}
+
+AE_TEST(per_slot_material_factors_reach_the_second_slot) {
+  scene::Components components;
+  auto *value = components.add(scene::MeshRenderer::descriptor);
+  static_cast<scene::MeshRenderer &>(*value).submeshes.push_back({});
+
+  scene::MeshRenderer preset;
+  preset.submeshes.push_back({});
+  preset.submeshes[0].material.roughness = .125f;
+
+  const scene::FieldAddress only[]{{"material.roughness", 1, scene::FieldKind::SlotNumber}};
+  const auto outcome = scene::applyComponentFields(components, preset, only);
+  AE_EXPECT_TRUE(outcome.ok() && outcome.applied == 1u, "a rugosidade do slot 1 foi aplicada");
+
+  const auto *applied = static_cast<const scene::MeshRenderer *>(components.find(scene::MeshRenderer::descriptor));
+  AE_EXPECT_TRUE(applied->slotMaterial(1).roughness == .125f, "o valor entrou no slot 1");
+  AE_EXPECT_TRUE(applied->slotMaterial(1).enabled, "e ligou o override daquele slot");
+  AE_EXPECT_TRUE(!applied->slotMaterial(0).enabled, "sem tocar no slot 0");
+}
