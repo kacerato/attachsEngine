@@ -23,7 +23,7 @@ namespace ae::resources {
 //    (preset reutilizável, I19).
 // Arquivo ausente ou inválido cai no próximo nível (fonte → projeto → embutido),
 // com o valor embutido igual ao comportamento anterior ao perfil.
-inline constexpr u32 ImportProfileSchema = 1;
+inline constexpr u32 ImportProfileSchema = 2; // 2: normais e tangentes derivadas
 // Escala uniforme aplicada às raízes (I01). Passos, não campo livre: o toque no
 // aparelho erra fácil um número digitado, e os casos reais são conversões de unidade.
 inline constexpr std::array<float, 9> ImportScaleSteps{0.001f, 0.01f, 0.1f, 0.5f, 1.0f, 2.0f, 10.0f, 100.0f, 1000.0f};
@@ -34,6 +34,13 @@ inline constexpr const char *ImportProfileDefaultPath = ".astra/import-default.p
 struct ImportProfile {
   float scale = 1.0f;
   u32 maximumTextureDimension = 2048;
+  // Geometria derivada (G2). Os nomes seguem o Model Import Settings da Unity —
+  // Normals, Normals Mode, Tangents — e os valores são os de `gltf_import.h`,
+  // para não existir uma segunda tabela de constantes entre perfil e importador.
+  // Os padrões reproduzem exatamente o comportamento anterior ao campo.
+  u8 normals = GltfNormalsImport;
+  u8 normalWeighting = GltfNormalWeightArea;
+  u8 tangents = GltfTangentsImport;
 };
 bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept;
 bool validImportProfile(const ImportProfile &profile) noexcept;

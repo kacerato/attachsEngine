@@ -757,8 +757,10 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
   if(edit.purpose==EditorTextPurpose::ComponentPresetName) {
     if(edit.componentInstance!=state_.presetInstance || edit.version.revision!=document_.revision()) {state_.status="Cena alterada; reabra os presets";close();return false;}
     std::string error;const bool saved=state_.presetRenaming?
-      componentPresets_.rename(state_.presetSelected,std::string(text),error):saveComponentPreset(edit.entity,edit.componentInstance,std::string(text),error);
-    state_.status=saved?"Preset salvo no projeto":error;
+      componentPresets_.rename(state_.presetSelected,std::string(text),error):
+      state_.presetRecipeNaming?saveComponentRecipe(edit.entity,std::string(text),error):
+      saveComponentPreset(edit.entity,edit.componentInstance,std::string(text),error);
+    state_.status=saved?(state_.presetRecipeNaming?"Receita salva no projeto":"Preset salvo no projeto"):error;
     if(saved) {refreshComponentPresets();close();}return saved;
   }
   if(edit.purpose==EditorTextPurpose::ConsoleSearch) {
@@ -1003,7 +1005,8 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     const auto is=[&routing](EditorWidget widget) {return routing.widgetId==widgetId(widget);};
     using Tab=EditorScreenState::ImportTab;
     const bool profileApplied=resources::sameImportProfile(importProfileDraft(),
-        {state_.importPreparedScale,state_.importPreparedTextureDimension});
+        {state_.importPreparedScale,state_.importPreparedTextureDimension,state_.importPreparedNormals,
+         state_.importPreparedNormalWeighting,state_.importPreparedTangents});
     bool handled=true;
     if(is(EditorWidget::ImportTabSummary)) {state_.importTab=Tab::Summary;state_.importPage=0;}
     else if(is(EditorWidget::ImportTabStructure)) {state_.importTab=Tab::Structure;state_.importPage=0;}
@@ -1024,6 +1027,13 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     else if(is(EditorWidget::ImportTextureDimension512)) state_.importTextureDimension=512;
     else if(is(EditorWidget::ImportTextureDimension1024)) state_.importTextureDimension=1024;
     else if(is(EditorWidget::ImportTextureDimension2048)) state_.importTextureDimension=2048;
+    else if(is(EditorWidget::ImportNormalsCycle))
+      state_.importNormals=state_.importNormals==resources::GltfNormalsImport?resources::GltfNormalsCalculate:resources::GltfNormalsImport;
+    else if(is(EditorWidget::ImportNormalWeightingCycle))
+      state_.importNormalWeighting=state_.importNormalWeighting==resources::GltfNormalWeightArea?
+          resources::GltfNormalWeightAngle:resources::GltfNormalWeightArea;
+    else if(is(EditorWidget::ImportTangentsCycle))
+      state_.importTangents=state_.importTangents==resources::GltfTangentsImport?resources::GltfTangentsCalculate:resources::GltfTangentsImport;
     else if(is(EditorWidget::ImportApplyProfile)) {
       if(state_.importReady && !profileApplied) {
         state_.importReprepare=true;state_.importReady=false;state_.importStatus="Preparando com o perfil…";
@@ -1150,14 +1160,37 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   if(routing.tapped && !isPlaying()) {
     const auto presetKey=routing.widgetId;
     if(presetKey==widgetId(EditorWidget::PresetOpen)) {openComponentPresets(state_.selection,state_.addingComponent?0:state_.nativeMenu);return true;}
-    if(state_.presetPanel && ((presetKey>=widgetId(EditorWidget::PresetClose)&&presetKey<=widgetId(EditorWidget::PresetNext)) ||
-        (presetKey>=widgetId(EditorWidget::PresetChoiceBase)&&presetKey<widgetId(EditorWidget::PresetChoiceBase)+256))) {
+    if(state_.presetPanel && ((presetKey>=widgetId(EditorWidget::PresetClose)&&presetKey<=widgetId(EditorWidget::PresetSaveRecipe)) ||
+        (presetKey>=widgetId(EditorWidget::PresetChoiceBase)&&presetKey<widgetId(EditorWidget::PresetChoiceBase)+256) ||
+        (presetKey>=widgetId(EditorWidget::PresetFieldBase)&&presetKey<widgetId(EditorWidget::PresetFieldBase)+4096))) {
       if(state_.selection!=state_.presetEntity || state_.presetEpoch!=sceneEpoch_) {state_.presetPanel=false;return true;}
       if(presetKey==widgetId(EditorWidget::PresetClose)) {state_.presetPanel=false;state_.presetNaming=false;return true;}
       if(presetKey==widgetId(EditorWidget::PresetPrevious)) {if(state_.presetPage) --state_.presetPage;return true;}
       if(presetKey==widgetId(EditorWidget::PresetNext)) {if((state_.presetPage+1)*4<state_.presetChoices.size()) ++state_.presetPage;return true;}
-      if(presetKey==widgetId(EditorWidget::PresetSave)||presetKey==widgetId(EditorWidget::PresetRename)) {
+      // Escolha por campo: marcar, desmarcar e paginar o diff não tocam a cena.
+      if(presetKey>=widgetId(EditorWidget::PresetFieldBase)) {
+        const auto index=presetKey-widgetId(EditorWidget::PresetFieldBase);
+        if(index<state_.presetFields.size()&&state_.presetFields[index].applicable)
+          state_.presetFields[index].selected=!state_.presetFields[index].selected;
+        return true;
+      }
+      if(presetKey==widgetId(EditorWidget::PresetSelectAll)||presetKey==widgetId(EditorWidget::PresetSelectNone)) {
+        const bool value=presetKey==widgetId(EditorWidget::PresetSelectAll);
+        for(auto &field:state_.presetFields) if(field.applicable) field.selected=value;
+        return true;
+      }
+      if(presetKey==widgetId(EditorWidget::PresetFieldsPrevious)) {if(state_.presetFieldPage) --state_.presetFieldPage;return true;}
+      if(presetKey==widgetId(EditorWidget::PresetFieldsNext)) {
+        // Quantas linhas cabem por página depende da altura do painel, que é da
+        // tela; aqui só se garante que a página nunca passa do número de linhas
+        // (uma por página no pior caso). A tela limita a página ao total real.
+        if(state_.presetFieldPage+1<state_.presetFields.size()) ++state_.presetFieldPage;
+        return true;
+      }
+      if(presetKey==widgetId(EditorWidget::PresetSave)||presetKey==widgetId(EditorWidget::PresetRename)||
+         presetKey==widgetId(EditorWidget::PresetSaveRecipe)) {
         state_.presetRenaming=presetKey==widgetId(EditorWidget::PresetRename);
+        state_.presetRecipeNaming=presetKey==widgetId(EditorWidget::PresetSaveRecipe);
         const auto *entry=componentPresets_.find(state_.presetSelected);
         state_.presetName=state_.presetRenaming&&entry?entry->name:document_.find(state_.presetEntity)->name;
         std::snprintf(state_.renameText,sizeof(state_.renameText),"%s",state_.presetName.c_str());
@@ -1174,8 +1207,12 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
         const bool erased=componentPresets_.erase(state_.presetSelected,error);state_.status=erased?"Preset excluído":error;
         if(erased) {state_.presetSelected=0;refreshComponentPresets();}state_.presetDeleteConfirm=false;return true;
       }
-      const bool applied=applyComponentPreset(state_.presetSelected,state_.presetEntity,state_.presetInstance,
-        {state_.presetEpoch,state_.presetRevision},presetKey==widgetId(EditorWidget::PresetAdd),error);
+      // Uma receita não tem "aplicar valores" e "adicionar" separados: ela
+      // resolve os dois de uma vez, componente a componente, na transação.
+      const bool applied=state_.presetSelectedIsRecipe?
+        applyComponentRecipe(state_.presetSelected,state_.presetEntity,{state_.presetEpoch,state_.presetRevision},error):
+        applyComponentPreset(state_.presetSelected,state_.presetEntity,state_.presetInstance,
+          {state_.presetEpoch,state_.presetRevision},presetKey==widgetId(EditorWidget::PresetAdd),error);
       state_.status=error;if(applied) {state_.presetPanel=false;state_.nativeMenu=0;state_.addingComponent=false;}return true;
     }
     const auto impactKey=routing.widgetId;
@@ -1459,7 +1496,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       const auto *asset=findMaterialAsset(render->slotMaterialAsset(state_.materialSlot));
       if(shared && !asset) {state_.status="Este slot usa o material da fonte: crie um material do projeto para editar todos os usos";return true;}
       auto sampling=shared?asset->sampling[state_.textureBinding]:render->slotSampling(state_.materialSlot)[state_.textureBinding];
-      if(key==widgetId(EditorWidget::TextureSamplingUv)) sampling.uvSet=static_cast<std::uint8_t>((sampling.uvSet+1)%3);
+      if(key==widgetId(EditorWidget::TextureSamplingUv)) sampling.uvSet=static_cast<std::uint8_t>((sampling.uvSet+1)%4);
       else if(key==widgetId(EditorWidget::TextureSamplingWrap)) sampling.wrap=static_cast<std::uint8_t>((sampling.wrap+1)%4);
       else if(key==widgetId(EditorWidget::TextureSamplingFilter)) sampling.filter=static_cast<std::uint8_t>((sampling.filter+1)%3);
       else if(key==widgetId(EditorWidget::TextureUvReset)) {
@@ -1796,6 +1833,10 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     if(isPlaying()&&!state_.playPaused) jumpPressed_=true;
     return true;
   }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::PlaySecondaryAction)) {
+    if(isPlaying()&&!state_.playPaused) secondaryPressed_=true;
+    return true;
+  }
   if(routing.widgetId==widgetId(EditorWidget::FilesSplitter)) {
     if(routing.dragging && !state_.filesCollapsed) {
       const float height=layout_.hierarchyPanel.height+layout_.filesPanel.height;
@@ -1894,7 +1935,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     const auto *controlled=document_.find(state_.selection);
     const auto view=sceneCameraPose();const auto *cameraEntity=document_.find(view.entity);
     const bool canLook=cameraEntity&&cameraLook(*cameraEntity);
-    if(((!controlled || !characterComponent(*controlled))&&!canLook) || state_.playPaused) return true;
+    if((!state_.playHasScripts && (!controlled || !characterComponent(*controlled)) && !canLook) || state_.playPaused) return true;
     const float x=event.position.x-layout_.viewport.x,y=event.position.y-layout_.viewport.y;
     if(event.phase==UiPointerPhase::Down) playTouches_.pointerDown(event.pointerId,x,y,layout_.viewport.width,layout_.viewport.height);
     else if(event.phase==UiPointerPhase::Move) playTouches_.pointerMove(event.pointerId,x,y,layout_.viewport.width,layout_.viewport.height);
@@ -2194,7 +2235,27 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   }
   const EditorPointerOutcome outcome =
       applyEditorPointer(state_, layout_, routing, document_, history_);
-  if (outcome.requestPlay) { playRequested_ = true; cancelPointers(); }
+  if (outcome.requestPlay) {
+    state_.playHasScripts=runtime::ScriptBridge::hasScripts(document_);
+    state_.playSecondaryActionLabel.clear();state_.playHudMessage.clear();
+    for(const auto &action:document_.inputActions().actions()) {
+      if(action.kind!=runtime::ActionKind::Button) continue;
+      for(const auto &binding:action.bindings)
+        if(binding.source==runtime::InputSource::TouchButton && binding.code==1) {
+          state_.playSecondaryActionLabel=action.id;break;
+        }
+      if(!state_.playSecondaryActionLabel.empty()) break;
+    }
+    const auto view=resolveSceneCamera(document_);
+    const auto *camera=document_.find(view.entity);
+    state_.playFirstPerson=camera&&cameraLook(*camera);
+    state_.playHasCharacter=false;
+    for(auto *ancestor=camera;ancestor;ancestor=document_.find(ancestor->parent))
+      if(characterComponent(*ancestor)) {state_.playHasCharacter=true;break;}
+    playRequested_ = true;
+    cancelPointers();
+  }
+  if(!isPlaying()) {jumpPressed_=false;secondaryPressed_=false;}
   return outcome.consumed;
 }
 
@@ -2202,6 +2263,7 @@ void EditorSession::cancelPointers() {
   if(lensDragOpen_) {history_.cancel(document_);lensDragOpen_=false;}
   finishCameraGesture(true);
   playTouches_.cancel();
+  jumpPressed_=false;secondaryPressed_=false;
   state_.draggingAsset=false;
   state_.draggingEntity=kInvalidEntity;
   router_.cancelAllPointers();
@@ -3067,6 +3129,8 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
                                      const resources::ImportProfile &prepared) {
   state_.importAmbiguities=0;state_.importAmbiguityChoice=0;
   state_.importPreparedScale=prepared.scale;state_.importPreparedTextureDimension=prepared.maximumTextureDimension;
+  state_.importPreparedNormals=prepared.normals;state_.importPreparedNormalWeighting=prepared.normalWeighting;
+  state_.importPreparedTangents=prepared.tangents;
   state_.importReprepare=false;
   // R3: saídas estruturadas para as abas do painel (I23).
   {
@@ -3152,6 +3216,25 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   if(model.appliedOcclusion)
     state_.importSummary+="\nOclusão aplicada pelo canal R do mapa metal/rugosidade em "+
         std::to_string(model.appliedOcclusion)+" material(is).";
+  // G2: o que a importação DERIVOU e o que ela encontrou de errado na fonte.
+  // Geração de normal não é defeito — é o glTF permitindo o que este renderer
+  // não aceita —, mas precisa aparecer para o autor saber por que a malha
+  // sombreia diferente do editor 3D de origem.
+  if(model.generatedNormalPrimitives)
+    state_.importSummary+="\nNormais calculadas em "+std::to_string(model.generatedNormalPrimitives)+
+      " primitiva(s): o arquivo não trazia NORMAL ou o perfil pediu recálculo.";
+  if(model.generatedTangentPrimitives)
+    state_.importSummary+="\nTangentes calculadas em "+std::to_string(model.generatedTangentPrimitives)+
+      " primitiva(s) com mapa normal.";
+  // Estes dois são da FONTE, e nenhuma escolha de importação conserta. Trocar a
+  // textura por uma maior não melhora um mapeamento que não existe.
+  if(model.texturedPrimitivesWithoutUv)
+    state_.importSummary+="\nSem UV com textura declarada em "+std::to_string(model.texturedPrimitivesWithoutUv)+
+      " primitiva(s): a fonte precisa trazer TEXCOORD, não há coordenada a inventar.";
+  if(model.stretchedUvPrimitives)
+    state_.importSummary+="\nDensidade de texel muito desigual em "+std::to_string(model.stretchedUvPrimitives)+
+      " primitiva(s) (pior razão "+std::to_string(static_cast<u32>(model.worstTexelDensityRatio+.5f))+
+      "×): textura esticada vem da UV da fonte.";
   if(model.skippedAnimations||model.skippedSkins)
     state_.importSummary+="\nNão suportado neste perfil: "+std::to_string(model.skippedAnimations)+" animações, "+
       std::to_string(model.skippedSkins)+" skins.";
@@ -3527,7 +3610,7 @@ void EditorSession::refreshMaterialSlotView() {
     }
     if(effective.overrides()) view.textureOrigins[binding]+=" · amostragem própria";
     if(binding==state_.textureBinding) {
-      static constexpr const char *uvNames[]{"da fonte","UV 0","UV 1"};
+      static constexpr const char *uvNames[]{"da fonte","UV 0","UV 1","Mundo (m)"};
       static constexpr const char *wrapNames[]{"da fonte","Repetir","Limitar","Espelhar"};
       static constexpr const char *filterNames[]{"da fonte","Linear","Próximo"};
       const auto label=[](const char *prefix,const char *const *names,std::uint8_t own,std::uint8_t inherited) {
@@ -4380,6 +4463,9 @@ void EditorSession::beginImportPreparation(std::string_view path) {
   const auto profile=importProfileForPath(path);
   state_.importScale=state_.importPreparedScale=profile.scale;
   state_.importTextureDimension=state_.importPreparedTextureDimension=profile.maximumTextureDimension;
+  state_.importNormals=state_.importPreparedNormals=profile.normals;
+  state_.importNormalWeighting=state_.importPreparedNormalWeighting=profile.normalWeighting;
+  state_.importTangents=state_.importPreparedTangents=profile.tangents;
   // O importador é Propriedades: ele precisa estar à vista, inclusive no layout
   // compacto e vindo do workspace de código.
   if(state_.workspace==EditorWorkspace::Code) state_.workspace=EditorWorkspace::Scene;
@@ -4454,15 +4540,48 @@ bool EditorSession::openComponentPresets(EditorEntityId entity,u64 instance) {
   std::string error;if(!componentPresets_.load(files_.rootPath(),error)) {state_.status=error;return false;}
   state_.presetPanel=true;state_.presetEntity=entity;state_.presetInstance=instance;
   state_.presetSelected=0;state_.presetPage=0;state_.presetDeleteConfirm=false;state_.presetNaming=false;
+  state_.presetRenaming=false;state_.presetRecipeNaming=false;
   state_.impactInstance=0;refreshComponentPresets();return true;
 }
 
 void EditorSession::refreshComponentPresets() {
-  state_.presetChoices.clear();state_.presetPreview.clear();state_.presetEpoch=sceneEpoch_;state_.presetRevision=document_.revision();
+  state_.presetChoices.clear();state_.presetPreview.clear();state_.presetFields.clear();state_.presetFieldPage=0;
+  state_.presetEpoch=sceneEpoch_;state_.presetRevision=document_.revision();state_.presetSelectedIsRecipe=false;
   const auto *object=document_.find(state_.presetEntity);const auto *source=object?object->components.findInstance(state_.presetInstance):nullptr;
   if(!object||(state_.presetInstance&&!source)) {state_.presetPanel=false;return;}
-  for(const auto &entry:componentPresets_.entries) if(!source||entry.type==source->type().id) state_.presetChoices.push_back({entry.id,entry.name});
+  // Com um componente em contexto, a lista mostra o que serve NELE. Sem
+  // componente (painel aberto pelo Adicionar), mostra tudo — inclusive as
+  // receitas, que é justamente o caso de "montar um objeto de uma vez".
+  for(const auto &entry:componentPresets_.entries) {
+    if(source&&!entry.contains(source->type().id)) continue;
+    state_.presetChoices.push_back({entry.id,entry.recipe()?entry.name+"  ·  "+std::to_string(entry.entries.size())+" componentes":entry.name});
+  }
   if(!state_.presetSelected) return;
+  const auto *record=componentPresets_.find(state_.presetSelected);
+  state_.presetSelectedIsRecipe=record&&record->recipe();
+  if(state_.presetSelectedIsRecipe) {
+    // Receita: o preview responde o que vai ser ADICIONADO, o que vai ser
+    // ATUALIZADO e o que a receita exige e não traz. Sem essa terceira linha, o
+    // autor descobre o requisito externo só quando a transação inteira falha.
+    std::string recipeError;auto values=componentPresets_.instantiateAll(state_.presetSelected,recipeError);
+    if(values.empty()) {state_.presetPreview.push_back(recipeError);return;}
+    for(const auto &value:values) {
+      const auto *schema=scene::findComponentSchema(value->type().id);
+      const bool present=object->components.find(value->type().id)!=nullptr;
+      state_.presetPreview.push_back(std::string(present?"Atualizar: ":"Adicionar: ")+(schema?schema->name:std::string(value->type().id).c_str()));
+    }
+    for(const auto &value:values) {
+      const auto *schema=scene::findComponentSchema(value->type().id);
+      if(!schema) continue;
+      for(const auto &rule:schema->requirements) {
+        bool satisfied=object->components.find(rule.typeId)!=nullptr;
+        for(const auto &other:values) if(other->type().id==rule.typeId) satisfied=true;
+        if(!satisfied) state_.presetPreview.push_back(std::string("Exige e não traz: ")+rule.message);
+      }
+    }
+    state_.presetPreview.push_back("Referências de cena deste objeto são preservadas");
+    return;
+  }
   std::string error;auto preset=componentPresets_.instantiate(state_.presetSelected,error);
   if(!preset) {state_.presetPreview.push_back(error);return;}
   if(!source) {
@@ -4471,20 +4590,29 @@ void EditorSession::refreshComponentPresets() {
     else for(const auto type:plan.addedTypes) state_.presetPreview.push_back(std::string("Adicionar: ")+scene::findComponentSchema(type)->name);
     state_.presetPreview.push_back("Novas referências de cena começam vazias");return;
   }
+  // O diff vem da reflexão do componente, não de um resumo escrito por tipo.
+  // Antes havia um texto fixo para MeshRenderer ("substitui geometria e
+  // materiais") justamente porque o resumo genérico não enxergava recurso
+  // nenhum: ele percorria números, booleanos e enumerações e parava aí. Agora a
+  // mesma lista cobre referência e binding de recurso, e cada linha é uma
+  // escolha — o autor leva a rugosidade sem levar a malha.
+  const auto delta=scene::componentDelta(*source,*preset);
   u32 changes=0;
-  const auto add=[&](const char *name,const auto &before,const auto &after) {
-    if(before==after) return;
+  for(const auto &row:delta) {
+    if(!row.differs) continue;
     ++changes;
-    if(state_.presetPreview.size()<3) {std::ostringstream line;line<<name<<": "<<before<<" → "<<after;state_.presetPreview.push_back(line.str());}
-  };
-  for(const auto &p:preset->type().numbers) add(p.name,p.read(*source),p.read(*preset));
-  for(const auto &p:preset->type().booleans) add(p.name,std::string(p.read(*source)?"Sim":"Não"),std::string(p.read(*preset)?"Sim":"Não"));
-  for(const auto &p:preset->type().enums) {
-    const auto label=[&](u32 value){for(const auto &option:p.options) if(option.value==value) return option.name;return "Inválido";};
-    add(p.name,std::string(label(p.read(*source))),std::string(label(p.read(*preset))));
+    state_.presetFields.push_back({row.address,std::string(row.label),row.current,row.candidate,true,row.applicable,row.applicable});
   }
-  state_.presetPreview.insert(state_.presetPreview.begin(),std::to_string(changes)+" campos refletidos diferentes");
-  if(&preset->type()==&scene::MeshRenderer::descriptor) state_.presetPreview={"Substitui geometria e materiais dos slots","Recursos resolvidos por GUID no projeto","Valores, canais e amostragem incluídos"};
+  state_.presetPreview.push_back(std::to_string(changes)+(changes==1?" campo diferente":" campos diferentes"));
+  u32 blocked=0;
+  for(const auto &row:state_.presetFields) if(!row.applicable) ++blocked;
+  if(blocked) state_.presetPreview.push_back(std::to_string(blocked)+" não aplicáveis neste objeto");
+  if(!changes) state_.presetPreview.push_back("Este preset já é o valor atual");
+  // Enquanto amostragem, canais e superfície por slot não tiverem PropertyId,
+  // eles só viajam na substituição completa. Dizer isso é melhor do que deixar
+  // o autor descobrir depois que uma escolha parcial não levou tudo.
+  if(&preset->type()==&scene::MeshRenderer::descriptor && changes)
+    state_.presetPreview.push_back("Desmarcar deixa amostragem, canais e superfície de fora");
 }
 
 bool EditorSession::saveComponentPreset(EditorEntityId entity,u64 instance,std::string name,std::string &error) {
@@ -4503,6 +4631,94 @@ bool EditorSession::saveComponentPreset(EditorEntityId entity,u64 instance,std::
   return componentPresets_.capture(std::move(name),*copy,error);
 }
 
+// Um preset é portátil por identidade; o PROJETO é que precisa ter o recurso.
+// A verificação percorre os bindings declarados pelo componente — não há aqui
+// uma lista de campos do MeshRenderer escrita à mão — e reconcilia o slot
+// resolvido no pacote, que é índice de processo e não identidade.
+bool EditorSession::resolvePresetResources(scene::ComponentValue &value,const std::vector<scene::FieldAddress> *only,std::string &error) {
+  const auto applies=[&](const scene::FieldAddress &address) {
+    if(!only) return true;
+    for(const auto &field:*only) if(field==address) return true;
+    return false;
+  };
+  auto *mesh=&value.type()==&scene::MeshRenderer::descriptor?static_cast<scene::MeshRenderer*>(&value):nullptr;
+  if(mesh) for(u32 slot=0;slot<mesh->slotCount();++slot) {
+    if(!applies({"mesh",slot,scene::FieldKind::Resource})) continue;
+    const auto resolved=mapScene_.assetSlot(mesh->slotAsset(slot));
+    if(!resolved) {error="Malha do preset não está carregada neste projeto";return false;}
+    *mesh->editSlotMesh(slot)=resolved;
+  }
+  for(const auto &binding:value.type().resourceBindings) {
+    if(binding.kind==resources::AssetType::Mesh||!binding.read) continue;
+    for(u32 slot=0;slot<binding.slotCount(value);++slot) {
+      if(!applies({binding.id,slot,scene::FieldKind::Resource})) continue;
+      const auto asset=binding.read(value,slot);
+      if(!asset.valid()||binding.declaresNone(asset)) continue;
+      if(binding.kind==resources::AssetType::Material&&!mapScene_.sharedMaterial(asset)) {error="Material do preset indisponível";return false;}
+      if(binding.kind==resources::AssetType::Texture) {
+        const auto *record=assets_.find(asset);
+        if(!record||record->type!=resources::AssetType::Texture||!decodeProjectTexture(asset,true,EditorMapScene::DefaultTextureSampler)) {
+          error="Textura do preset indisponível ou inválida";return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
+bool EditorSession::saveComponentRecipe(EditorEntityId entity,std::string name,std::string &error) {
+  if(isPlaying()||history_.isOpen()) {error="Conclua a edição antes de salvar preset";return false;}
+  const auto *object=document_.find(entity);
+  if(!object) {error="Objeto ausente";return false;}
+  // A malha precisa da identidade persistente antes de virar preset, senão a
+  // receita levaria um índice de pacote que não significa nada em outro projeto.
+  auto components=object->components;
+  for(usize i=0;i<components.size();++i) {
+    auto *value=components.editInstance(components.at(i)->instanceId());
+    if(&value->type()!=&scene::MeshRenderer::descriptor) continue;
+    auto &mesh=static_cast<scene::MeshRenderer&>(*value);
+    for(u32 slot=0;slot<mesh.slotCount();++slot) {
+      if(!mesh.slotAsset(slot).valid()&&mesh.slotMesh(slot)) *mesh.editSlotAsset(slot)=mapScene_.assetGuid(mesh.slotMesh(slot)-1);
+      if(!mesh.slotAsset(slot).valid()) {error="Malha sem identidade persistente; importe antes de salvar receita";return false;}
+      *mesh.editSlotMesh(slot)=0;
+    }
+  }
+  return componentPresets_.captureRecipe(std::move(name),components,error);
+}
+
+bool EditorSession::applyComponentRecipe(u64 preset,EditorEntityId entity,EditorSceneVersion expected,std::string &error) {
+  if(isPlaying()||history_.isOpen()||expected.epoch!=sceneEpoch_||expected.revision!=document_.revision()) {error="Cena alterada; selecione novamente o preset";return false;}
+  const auto *object=document_.find(entity);
+  if(!object) {error="Objeto ausente";return false;}
+  auto values=componentPresets_.instantiateAll(preset,error);
+  if(values.empty()) return false;
+  auto candidate=*object;u32 added=0,updated=0;
+  for(auto &value:values) {
+    if(!resolvePresetResources(*value,nullptr,error)) return false;
+    const auto *existing=candidate.components.find(value->type().id);
+    u64 target=0;
+    if(existing&&!value->type().allowMultiple) {
+      target=existing->instanceId();
+      // O que é da CENA fica na cena: um preset nunca carrega ObjectId, então a
+      // referência já escolhida neste objeto é preservada em vez de zerada.
+      for(const auto &p:value->type().references) if(p.read&&p.write) p.write(*value,p.read(*existing));
+      ++updated;
+    } else {
+      auto plan=scene::planComponentAddition(candidate.components,value->type().id);
+      if(!plan.ready) {error=plan.error;return false;}
+      target=plan.requestedInstance;candidate.components=std::move(plan.candidate);
+      ++added;
+    }
+    if(!value->valid()||!editorReferencesAccept(document_,entity,*value)) {error="Referências ou valores incompatíveis";return false;}
+    if(!candidate.components.replaceInstance(target,*value)) {error="Não foi possível preparar a receita";return false;}
+  }
+  if(!history_.applyValues(document_,entity,candidate)) {error="Não foi possível aplicar a receita";return false;}
+  state_.propertyPage=0;appearanceChanged_=true;
+  error="Receita aplicada: "+std::to_string(added)+" adicionados e "+std::to_string(updated)+" atualizados; disponível em Desfazer";
+  std::string publication;if(!ensureTexturesPublished(publication)) error+="; publicação pendente: "+publication;
+  return true;
+}
+
 bool EditorSession::applyComponentPreset(u64 preset,EditorEntityId entity,u64 instance,EditorSceneVersion expected,bool add,std::string &error) {
   if(isPlaying()||history_.isOpen()||expected.epoch!=sceneEpoch_||expected.revision!=document_.revision()) {error="Cena alterada; selecione novamente o preset";return false;}
   const auto *object=document_.find(entity);const auto *destination=object?object->components.findInstance(instance):nullptr;
@@ -4511,33 +4727,66 @@ bool EditorSession::applyComponentPreset(u64 preset,EditorEntityId entity,u64 in
   // Portable presets do not copy scene-local object IDs. Applying values keeps
   // the destination's references; a new instance starts with null references.
   if(!add) for(const auto &p:replacement->type().references) if(p.read&&p.write) p.write(*replacement,p.read(*destination));
-  if(&replacement->type()==&scene::MeshRenderer::descriptor) {
-    auto &mesh=static_cast<scene::MeshRenderer&>(*replacement);
-    for(u32 slot=0;slot<mesh.slotCount();++slot) {
-      const auto resolved=mapScene_.assetSlot(mesh.slotAsset(slot));
-      if(!resolved) {error="Malha do preset não está carregada neste projeto";return false;}
-      *mesh.editSlotMesh(slot)=resolved;
-    }
-    for(const auto &use:componentResources(mesh,&mapScene_)) {
-      if(use.kind==ComponentResourceKind::Material&&!mapScene_.sharedMaterial(use.asset)) {error="Material do preset indisponível";return false;}
-      if(use.kind==ComponentResourceKind::Texture) {
-        const auto *record=assets_.find(use.asset);
-        if(!record||record->type!=resources::AssetType::Texture||!decodeProjectTexture(use.asset,true,EditorMapScene::DefaultTextureSampler)) {
-          error="Textura do preset indisponível ou inválida";return false;
-        }
+  // Os campos que vão entrar. Ao ADICIONAR não há destino com que comparar: o
+  // preset inteiro vira o componente novo. Ao aplicar valores, entra apenas o
+  // que difere E o que o autor deixou marcado no diff — por isso a validação de
+  // recurso abaixo pergunta pelos endereços escolhidos, e não pelo preset
+  // inteiro: levar a rugosidade não pode ser recusado porque a MALHA do preset
+  // não existe neste projeto.
+  //
+  // Há DOIS alcances, e a diferença é honesta em vez de escondida:
+  //
+  //  - com tudo marcado, o componente é SUBSTITUÍDO. Isso leva também o que
+  //    ainda não é propriedade refletida — a estrutura de slots, a amostragem,
+  //    os canais e a superfície por slot que R4 introduziu como dado do
+  //    componente sem PropertyId. É o comportamento que sempre existiu;
+  //  - com algum campo desmarcado, entram só os campos endereçáveis. Enquanto
+  //    aquele estado por slot não tiver identidade de propriedade (tarefa do
+  //    bloco de materiais), ele não pode ser escolhido nem recusado linha a
+  //    linha, e por isso não viaja no caminho seletivo.
+  std::vector<scene::FieldAddress> fields;
+  bool selective=false;
+  if(!add) {
+    const auto delta=scene::componentDelta(*destination,*replacement);
+    const bool chosen=state_.presetSelected==preset&&!state_.presetFields.empty();
+    for(const auto &row:delta) {
+      if(!row.differs||!row.applicable) continue;
+      bool marked=true;
+      if(chosen) {
+        marked=false;
+        for(const auto &choice:state_.presetFields) if(choice.address==row.address&&choice.selected) marked=true;
       }
+      if(marked) fields.push_back(row.address);
+      else selective=true;
     }
+    if(fields.empty()) {error="Nenhum campo marcado para aplicar";return false;}
   }
+  if(!resolvePresetResources(*replacement,add||!selective?nullptr:&fields,error)) return false;
   if(!replacement->valid()||!editorReferencesAccept(document_,entity,*replacement)) {error="Referências ou valores incompatíveis";return false;}
   auto candidate=*object;u64 target=instance;
-  if(add) {
-    auto plan=scene::planComponentAddition(candidate.components,replacement->type().id);
-    if(!plan.ready) {error=plan.error;return false;}
-    target=plan.requestedInstance;candidate.components=std::move(plan.candidate);
+  if(add||!selective) {
+    if(add) {
+      auto plan=scene::planComponentAddition(candidate.components,replacement->type().id);
+      if(!plan.ready) {error=plan.error;return false;}
+      target=plan.requestedInstance;candidate.components=std::move(plan.candidate);
+    }
+    if(!candidate.components.replaceInstance(target,*replacement)) {error="Não foi possível preparar o preset";return false;}
+  } else {
+    const auto outcome=scene::applyComponentFields(candidate.components,*replacement,fields,target);
+    if(!outcome.ok()) {error=outcome.error;return false;}
+    // O slot resolvido é índice de processo: depois de trocar a IDENTIDADE da
+    // malha por campo, ele precisa voltar a apontar para o pacote carregado.
+    auto *applied=candidate.components.editInstance(target);
+    if(applied&&&applied->type()==&scene::MeshRenderer::descriptor) {
+      auto &mesh=static_cast<scene::MeshRenderer&>(*applied);
+      for(u32 slot=0;slot<mesh.slotCount();++slot)
+        if(auto *resolved=mesh.editSlotMesh(slot)) *resolved=mapScene_.assetSlot(mesh.slotAsset(slot));
+    }
   }
-  if(!candidate.components.replaceInstance(target,*replacement)) {error="Não foi possível preparar o preset";return false;}
   if(!history_.applyValues(document_,entity,candidate)) {error="Não foi possível aplicar o preset";return false;}
-  state_.expandedNative=target;state_.propertyPage=0;appearanceChanged_=true;error="Preset aplicado; disponível em Desfazer";
+  state_.expandedNative=target;state_.propertyPage=0;appearanceChanged_=true;
+  error=selective?std::to_string(fields.size())+" campos do preset aplicados; disponível em Desfazer"
+                 :std::string("Preset aplicado; disponível em Desfazer");
   if(&replacement->type()==&scene::MeshRenderer::descriptor) {std::string publication;if(!ensureTexturesPublished(publication)) error+="; publicação pendente: "+publication;}
   return true;
 }

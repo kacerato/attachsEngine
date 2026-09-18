@@ -90,7 +90,15 @@ public:
   void setProjectName(const char *name);
   bool setProjectDirectory(const char *path);
   bool saveComponentPreset(EditorEntityId entity,u64 instance,std::string name,std::string &error);
+  // A receita do objeto inteiro: todos os componentes com preset portátil, na
+  // ordem em que estão nele. É o que permite salvar "porta interativa" e não
+  // quatro presets soltos que o autor precisa lembrar de combinar.
+  bool saveComponentRecipe(EditorEntityId entity,std::string name,std::string &error);
   bool applyComponentPreset(u64 preset,EditorEntityId entity,u64 instance,EditorSceneVersion expected,bool add,std::string &error);
+  // Aplica uma receita em UMA transação: o que falta é adicionado (resolvendo
+  // exigências), o que já existe tem os valores atualizados, e o histórico
+  // registra um passo só.
+  bool applyComponentRecipe(u64 preset,EditorEntityId entity,EditorSceneVersion expected,std::string &error);
   bool openComponentPresets(EditorEntityId entity,u64 instance);
   bool needsScriptRuntime() const {return isPlaying()&&runtime::ScriptBridge::hasScripts(document_);}
   void setScriptRuntime(scene::ScriptRuntimeApi api) {playScene_.setScriptRuntime(api,files_.rootPath());}
@@ -103,6 +111,7 @@ public:
       EditorConsoleEntry entry;
       entry.origin=EditorConsoleOrigin::Script;
       entry.message=std::string(text);
+      if(isPlaying()) state_.playHudMessage=entry.message;
       entry.object=object;
       entry.project=files_.rootPath();entry.playSession=playScene_.world().worldId();
       entry.buildGeneration=runtimeCodeGeneration_;
@@ -471,7 +480,10 @@ public:
   bool saveImportProfile(const resources::AssetGuid &source, const resources::ImportProfile &profile);
   bool saveProjectImportProfile(const resources::ImportProfile &profile);
   // Rascunho do painel e os limites que ele produz neste aparelho.
-  resources::ImportProfile importProfileDraft() const {return {state_.importScale,state_.importTextureDimension};}
+  resources::ImportProfile importProfileDraft() const {
+    return {state_.importScale,state_.importTextureDimension,state_.importNormals,state_.importNormalWeighting,
+            state_.importTangents};
+  }
   resources::GltfImportLimits importLimitsFor(const resources::ImportProfile &profile) const {
     return resources::applyImportProfile(importLimits_,profile);
   }
@@ -677,8 +689,9 @@ public:
     runtime::InputDeviceState device;
     device.moveX=actions.moveRight;device.moveY=actions.moveForward;
     device.lookX=actions.lookScreenX;device.lookY=actions.lookScreenY;
-    device.touchButtons=jumpPressed_?1u:0u;
+    device.touchButtons=(jumpPressed_?1u:0u)|(secondaryPressed_?2u:0u);
     jumpPressed_=false;
+    secondaryPressed_=false;
     playScene_.setInputFocus(!state_.playPaused);
     playScene_.submitInput(device);
     const auto &input=playScene_.input();
@@ -691,8 +704,12 @@ public:
     if(viewEntity&&cameraLook(*viewEntity)) {
       if(!applyCameraLook(*playScene_.executionGraph(),view.entity,look[0],look[1])) return false;
       view=resolveSceneCamera(playScene_.document());
+      viewEntity=playScene_.document().find(view.entity);
     }
     const auto *controlled=playScene_.document().find(state_.selection);
+    for(auto *ancestor=viewEntity;ancestor;ancestor=playScene_.document().find(ancestor->parent))
+      if(characterComponent(*ancestor)) {controlled=ancestor;break;}
+    if(!controlled) controlled=playScene_.document().find(state_.selection);
     if(controlled && characterComponent(*controlled)) {
       if(!playScene_.setCharacterMove(controlled->id,move[0],move[1],view.entity?view.yaw:0)) return false;
       if(input.justPressed(map.jumpAction())) playScene_.jumpCharacter(controlled->id);
@@ -723,6 +740,10 @@ private:
   // Geometria importada neste processo, UM bloco por arquivo de origem.
   EditorComponentPresets componentPresets_;
   void refreshComponentPresets();
+  // Valida e reconcilia os recursos de um componente vindo de preset contra
+  // ESTE projeto. `only` restringe aos endereços que vão de fato ser aplicados;
+  // nulo cobre o componente inteiro.
+  bool resolvePresetResources(scene::ComponentValue &value,const std::vector<scene::FieldAddress> *only,std::string &error);
   //
   // Por fonte, e não uma lista achatada, porque reimportar substitui o bloco
   // daquele arquivo e preserva os outros. Numa lista achatada, reimportar
@@ -929,6 +950,7 @@ private:
   // Pulso de um quadro: o botão de salto da interface vira um BOTÃO DE
   // DISPOSITIVO, e o mapa de ações decide o que ele aciona.
   bool jumpPressed_ = false;
+  bool secondaryPressed_ = false;
   float sceneTime_ = 0.0f;
   float lastWallSeconds_ = 0.0f;
   bool clockPrimed_ = false;

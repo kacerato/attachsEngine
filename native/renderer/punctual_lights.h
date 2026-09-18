@@ -1,5 +1,6 @@
 #pragma once
 #include "core/base.h"
+#include "core/engine_capability.h"
 #include <array>
 #include <cmath>
 #include <span>
@@ -69,6 +70,24 @@ inline constexpr bool lightCastsShadow(LightModality modality) {
     if (entry.modality == modality) return entry.shadows;
   return false;
 }
+
+// Esta tabela e o registro de capacidades do motor (`core/engine_capability.h`)
+// respondem à MESMA pergunta. Enquanto eram duas listas independentes, implementar
+// o atlas de sombra local e esquecer de atualizar uma delas deixaria o inspetor
+// escondendo um controle que o renderer já sabe desenhar — ou oferecendo um que
+// ele não sabe. O compilador recusa a divergência.
+namespace detail {
+inline constexpr bool capabilityImplemented(std::string_view id) {
+  const auto *entry = core::findEngineCapability(id);
+  return entry && entry->state == core::CapabilityState::Implemented;
+}
+} // namespace detail
+static_assert(lightCastsShadow(LightModality::Directional) ==
+              detail::capabilityImplemented("render.shadow.directional"));
+static_assert(lightCastsShadow(LightModality::Point) ==
+              detail::capabilityImplemented("render.shadow.punctual"));
+static_assert(lightCastsShadow(LightModality::Spot) ==
+              detail::capabilityImplemented("render.shadow.punctual"));
 
 inline bool finiteVector(const float v[3]) {
   return std::isfinite(v[0]) && std::isfinite(v[1]) && std::isfinite(v[2]);

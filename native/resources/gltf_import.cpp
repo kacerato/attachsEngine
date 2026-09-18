@@ -681,6 +681,11 @@ struct Importer {
     u32 transformed = 0;
   };
   std::vector<std::array<UvTransform, 2>> uvTransforms{};
+  // O material DECLAROU alguma textura no arquivo, mesmo que ela não tenha sido
+  // aplicada (formato sem decodificador, imagem externa, orçamento). O
+  // diagnóstico de UV precisa desta pergunta, e não de "a textura entrou?": uma
+  // fonte com textura declarada e malha sem UV está quebrada nos dois casos.
+  std::vector<u8> declaresTexture{};
 
   // Liga uma `textureInfo` do material a um slot. Devolve se a textura foi
   // aplicada; toda referência não aplicada é contada em `skippedTextures`.
@@ -688,6 +693,7 @@ struct Importer {
                      renderer::MapMaterialRecord &target, u32 feature, u32 material) {
     const auto *info = json->member(owner, name);
     if (!info || info->kind != Kind::Object) return false;
+    if (material < declaresTexture.size()) declaresTexture[material] = 1;
     const Node *transform = nullptr;
     if (const auto *extensions = json->member(*info, "extensions"); extensions && extensions->kind == Kind::Object)
       if (const auto *value = json->member(*extensions, "KHR_texture_transform"); value && value->kind == Kind::Object)
@@ -756,6 +762,7 @@ struct Importer {
     out->materials.resize(count + 1);
     out->materialNames.assign(count + 1, std::string());
     uvTransforms.assign(count + 1, {});
+    declaresTexture.assign(count + 1, 0);
     for (auto &material : out->materials) {
       material.baseColorFactor[0] = material.baseColorFactor[1] = material.baseColorFactor[2] = 1;
       material.baseColorFactor[3] = 1;
@@ -1069,13 +1076,113 @@ struct Importer {
           std::memcpy(vertex + 28 + set * 8, uv, 8);
         }
       }
+    const auto &owner = out->materials[range.material];
+    // Normais: o glTF permite uma primitiva sem NORMAL — o cliente deve sombreá-la
+    // pela face — mas este renderer lê a normal do vértice, e (0,0,0) apaga a
+    // superfície. Por isso "Importar" GERA o que faltar e "Calcular" regenera
+    // tudo. Não existe aqui a opção "None" do Model Import Settings da Unity:
+    // neste renderer ela seria só um jeito de pedir preto.
+    const bool recomputeNormals = (limits->normals == GltfNormalsCalculate || !hasNormal) && range.indexCount >= 3;
+    if (recomputeNormals) {
+      std::vector<std::array<float, 3>> accumulated(position.count, std::array<float, 3>{});
+      for (u32 i = range.firstIndex; i + 2 < range.firstIndex + range.indexCount; i += 3) {
+        if (((i - range.firstIndex) & 0xffff) == 0 && cancelled()) return false;
+        const u32 corner[3]{out->indices[i], out->indices[i + 1], out->indices[i + 2]};
+        float p[3][3];
+        for (u32 k = 0; k < 3; ++k)
+          std::memcpy(p[k], write + static_cast<usize>(corner[k]) * renderer::MapVertexStride, 12);
+        const float e1[3]{p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]};
+        const float e2[3]{p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]};
+        float face[3]{e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]};
+        const float doubleArea = std::hypot(face[0], face[1], face[2]);
+        if (!std::isfinite(doubleArea) || doubleArea <= 0) continue;
+        // O comprimento do produto vetorial já é o dobro da área: acumular sem
+        // normalizar É a ponderação por área, sem conta extra.
+        if (limits->normalWeighting == GltfNormalWeightAngle)
+          for (auto &axis : face) axis /= doubleArea;
+        for (u32 k = 0; k < 3; ++k) {
+          float weight = 1;
+          if (limits->normalWeighting == GltfNormalWeightAngle) {
+            // Ângulo no canto: dois triângulos finos no mesmo vértice deixam de
+            // dominar a média só por serem dois.
+            const float *a = p[k], *b = p[(k + 1) % 3], *c = p[(k + 2) % 3];
+            const float u[3]{b[0] - a[0], b[1] - a[1], b[2] - a[2]};
+            const float v[3]{c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+            const float lengths = std::hypot(u[0], u[1], u[2]) * std::hypot(v[0], v[1], v[2]);
+            const float cosine = lengths > 0 ? (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / lengths : 0;
+            weight = std::acos(std::fmin(std::fmax(cosine, -1.f), 1.f));
+            if (!std::isfinite(weight)) weight = 0;
+          }
+          for (u32 axis = 0; axis < 3; ++axis) accumulated[corner[k]][axis] += face[axis] * weight;
+        }
+      }
+      for (u32 v = 0; v < position.count; ++v) {
+        const auto &n = accumulated[v];
+        const float length = std::hypot(n[0], n[1], n[2]);
+        // Vértice sem triângulo nenhum fica com o que veio do arquivo, quando
+        // havia: recalcular não pode piorar o que já estava correto.
+        if (!std::isfinite(length) || length <= 0) continue;
+        i16 packed[4]{0, 0, 0, 0};
+        for (u32 axis = 0; axis < 3; ++axis) packed[axis] = packSnorm(n[axis] / length);
+        std::memcpy(write + static_cast<usize>(v) * renderer::MapVertexStride + 12, packed, 8);
+      }
+      ++out->generatedNormalPrimitives;
+    }
+    // Diagnóstico de mapeamento: um material que amostra textura numa primitiva
+    // sem o conjunto de UV correspondente não tem conserto dentro da engine —
+    // não existe coordenada para inventar. É o caso que o autor precisa ver
+    // nomeado, em vez de descobrir como "a textura ficou errada".
+    const bool declaresMaterialTexture = range.material < declaresTexture.size() && declaresTexture[range.material];
+    if (!hasUv0 && !hasUv1 && declaresMaterialTexture) ++out->texturedPrimitivesWithoutUv;
+    // Densidade de texel: a razão entre o tamanho da ilha em UV e o tamanho da
+    // face no mundo. Ela não depende da resolução da textura — é por isso que
+    // trocar a imagem por uma maior nunca conserta "textura esticada" — e uma
+    // variação grande dentro da MESMA primitiva é o sintoma direto do defeito.
+    // Medida aqui, na importação, porque é onde o autor ainda pode voltar à
+    // fonte; o relatório diz qual a pior razão observada no arquivo.
+    if (declaresMaterialTexture && hasUv0 && range.indexCount >= 3) {
+      const u32 set = (owner.textureCoordinates & 1u) && hasUv1 ? 1 : 0;
+      float smallest = 0, largest = 0;
+      for (u32 i = range.firstIndex; i + 2 < range.firstIndex + range.indexCount; i += 3) {
+        const u32 corner[3]{out->indices[i], out->indices[i + 1], out->indices[i + 2]};
+        float p[3][3], uv[3][2];
+        for (u32 k = 0; k < 3; ++k) {
+          const u8 *vertex = write + static_cast<usize>(corner[k]) * renderer::MapVertexStride;
+          std::memcpy(p[k], vertex, 12);
+          std::memcpy(uv[k], vertex + 28 + set * 8, 8);
+        }
+        const float e1[3]{p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]};
+        const float e2[3]{p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]};
+        const float cross[3]{e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]};
+        const float worldArea = std::hypot(cross[0], cross[1], cross[2]);
+        const float uvArea = std::fabs((uv[1][0] - uv[0][0]) * (uv[2][1] - uv[0][1]) -
+                                       (uv[2][0] - uv[0][0]) * (uv[1][1] - uv[0][1]));
+        // Triângulo degenerado em qualquer um dos dois espaços não descreve
+        // densidade nenhuma: entra como ausência de dado, não como zero.
+        if (!(worldArea > 1e-12f) || !(uvArea > 1e-12f)) continue;
+        const float density = std::sqrt(uvArea / worldArea);
+        if (!std::isfinite(density) || density <= 0) continue;
+        if (!(smallest > 0) || density < smallest) smallest = density;
+        if (density > largest) largest = density;
+      }
+      if (smallest > 0 && largest > 0) {
+        const float ratio = largest / smallest;
+        if (ratio > out->worstTexelDensityRatio) out->worstTexelDensityRatio = ratio;
+        // Oito vezes é três níveis de mip de diferença dentro da mesma peça:
+        // abaixo disso a variação é o que qualquer UV manual produz.
+        if (ratio > 8.0f) ++out->stretchedUvPrimitives;
+      }
+    }
     // glTF: sem TANGENT, quem importa gera as tangentes quando o material tem
     // mapa normal. Tangente zero vira NaN na base TBN e a superfície fica preta
     // (visto no Porsche real: 46 primitivas com mapa normal e sem TANGENT).
     // Acúmulo por triângulo a partir das derivadas de UV, ortogonalizado contra
-    // a normal; não é MikkTSpace bit a bit.
-    const auto &owner = out->materials[range.material];
-    if (!hasTangent && (owner.flags & renderer::MapMaterialNormalMap)) {
+    // a normal; não é MikkTSpace bit a bit. "Calcular" no perfil força a geração
+    // mesmo com TANGENT no arquivo — o caso de a UV ter sido assada aqui.
+    const bool generateTangents = limits->tangents == GltfTangentsCalculate
+                                      ? (hasUv0 || hasUv1)
+                                      : (!hasTangent && (owner.flags & renderer::MapMaterialNormalMap) != 0);
+    if (generateTangents) {
       const u32 set = (owner.textureCoordinates >> 2) & 1u; // conjunto de UV do slot 1 (normal)
       std::vector<std::array<float, 6>> accumulated(position.count, std::array<float, 6>{});
       for (u32 i = range.firstIndex; i < range.firstIndex + range.indexCount; i += 3) {
@@ -1301,6 +1408,11 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
   (void)identity;
   if (!std::isfinite(limits.rootScale) || limits.rootScale < 1e-4f || limits.rootScale > 1e4f)
     return giveUp("Escala de importação inválida.");
+  // Falha fechada também aqui: um modo desconhecido significaria escolher um
+  // comportamento por omissão, e a saída do importador entra no cache por chave.
+  if (limits.normals > GltfNormalsCalculate || limits.normalWeighting > GltfNormalWeightAngle ||
+      limits.tangents > GltfTangentsCalculate)
+    return giveUp("Modo de normal ou tangente desconhecido no perfil de importação.");
 
   while (!stack.empty()) {
     if (importer.cancelled()) return giveUp("Importação cancelada.");

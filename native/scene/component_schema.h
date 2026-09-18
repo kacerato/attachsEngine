@@ -52,6 +52,14 @@ struct ComponentSchema {
   std::span<const ComponentRule> conflicts{};
   PlayMutability structuralInPlay = PlayMutability::Never;
   PlayMutability propertiesInPlay = PlayMutability::SafePoint;
+  // Contrato do plano universal de cenários (§6), na granularidade do TIPO:
+  // quem lê os valores em execução, que capacidade do motor o componente exige
+  // e o que precisa ser reconstruído quando qualquer propriedade dele muda.
+  // Cada propriedade pode estreitar a capacidade e acrescentar invalidação;
+  // nenhuma pode ficar sem consumidor (ver `scene/component_reflection.h`).
+  std::string_view consumer{};
+  std::string_view capability{};
+  u32 invalidates = 0;
   bool allowMultiple() const noexcept { return type->allowMultiple; }
 };
 
@@ -80,23 +88,33 @@ inline constexpr std::array<ComponentRule, 1> jointRequirements{{
 
 inline const std::array<ComponentSchema, 9> componentSchemas{{
   {&PhysicsBody::descriptor, "Corpo físico", "Massa e resposta física", ComponentCategory::Physics,
-    {}, bodyConflicts, PlayMutability::Never, PlayMutability::SafePoint},
+    {}, bodyConflicts, PlayMutability::Never, PlayMutability::SafePoint,
+    "runtime/scene_physics.cpp → Jolt", {}, Invalidate::PhysicsBody},
   {&Character::descriptor, "Personagem", "Locomoção com cápsula", ComponentCategory::Physics,
-    {}, characterConflicts, PlayMutability::Never, PlayMutability::SafePoint},
+    {}, characterConflicts, PlayMutability::Never, PlayMutability::SafePoint,
+    "runtime/scene_physics.cpp → CharacterVirtual", {}, Invalidate::PhysicsBody|Invalidate::PhysicsShape},
   {&CameraLook::descriptor, "Olhar", "Rotação da câmera por toque", ComponentCategory::Camera,
-    lookRequirements, {}, PlayMutability::SafePoint, PlayMutability::SafePoint},
+    lookRequirements, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
+    "runtime/game_world.cpp → pose da câmera", {}, Invalidate::Input},
   {&Collider::descriptor, "Colisor 3D", "Volume de contato", ComponentCategory::Physics,
-    {}, colliderConflicts, PlayMutability::Never, PlayMutability::SafePoint},
+    {}, colliderConflicts, PlayMutability::Never, PlayMutability::SafePoint,
+    "runtime/scene_physics.cpp → forma do Jolt", {}, Invalidate::PhysicsShape},
   {&Joint::descriptor, "Junta", "Conexão, limites e motor entre corpos", ComponentCategory::Physics,
-    jointRequirements, {}, PlayMutability::Never, PlayMutability::SafePoint},
+    jointRequirements, {}, PlayMutability::Never, PlayMutability::SafePoint,
+    "runtime/scene_physics.cpp → constraint do Jolt", {}, Invalidate::PhysicsBody},
   {&Camera::descriptor, "Câmera", "Projeção e enquadramento", ComponentCategory::Camera,
-    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint},
+    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
+    "renderer/render_view.h → matriz de projeção e culling", {}, Invalidate::Draw},
   {&MeshRenderer::descriptor, "Malha", "Geometria e material", ComponentCategory::Visual,
-    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint},
+    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
+    "renderer/map_draw_update.h → instância e material efetivo", "render.material.pbr",
+    Invalidate::Draw|Invalidate::MaterialDescriptor},
   {&Light::descriptor, "Luz", "Direcional, pontual ou spot", ComponentCategory::Visual,
-    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint},
+    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
+    "runtime/scene_lights.cpp → renderer/punctual_lights.h", {}, Invalidate::LightCluster},
   {&ScriptBehavior::descriptor, "Comportamento", "Código C# do projeto", ComponentCategory::Script,
-    {}, {}, PlayMutability::Never, PlayMutability::Never}
+    {}, {}, PlayMutability::Never, PlayMutability::Never,
+    "runtime/script_bridge.cpp → runtime .NET", {}, Invalidate::Script}
 }};
 
 inline const ComponentSchema *findComponentSchema(std::string_view id) {

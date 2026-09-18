@@ -1346,14 +1346,54 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
     auto actions=takeTop(content,40);const auto save=takeLeft(actions,actions.width*.5f);
     if(state.presetInstance) button(save,"Salvar atual",EditorWidget::PresetSave);
     if(state.presetSelected) button(actions,"Renomear",EditorWidget::PresetRename);
+    // Salvar o OBJETO inteiro como receita fica junto do resto: montar "porta
+    // interativa" uma vez e reusar é a razão de a receita existir.
+    button(takeTop(content,38),"Salvar objeto como receita",EditorWidget::PresetSaveRecipe);
     builder.label(takeTop(content,26),"Referências de cena são preservadas ao aplicar",theme.color.textMuted,theme.type.caption);
     if(state.presetSelected) {
       auto apply=takeBottom(content,40);const auto values=takeLeft(apply,apply.width*.5f);
-      if(state.presetInstance) button(values,"Aplicar valores",EditorWidget::PresetApply);
-      button(apply,"Adicionar",EditorWidget::PresetAdd);
+      if(state.presetSelectedIsRecipe) button(apply,"Aplicar receita",EditorWidget::PresetApply);
+      else {
+        if(state.presetInstance) button(values,"Aplicar valores",EditorWidget::PresetApply);
+        button(apply,"Adicionar",EditorWidget::PresetAdd);
+      }
       button(takeBottom(content,34),state.presetDeleteConfirm?"Confirmar exclusão":"Excluir preset",EditorWidget::PresetDelete);
-      auto preview=takeBottom(content,std::min(110.f,content.height*.4f));
-      builder.list.pushClip(preview);for(const auto &line:state.presetPreview) builder.label(takeTop(preview,22),line,theme.color.textMuted,theme.type.caption);builder.list.popClip();
+      // O diff é a parte interessante do painel, então ele fica logo acima das
+      // ações e é a primeira coisa a ganhar espaço quando o inspetor cresce.
+      // Cada linha é uma escolha: o preset deixa de ser tudo-ou-nada.
+      auto diff=takeBottom(content,std::min(std::max(120.f,content.height*.55f),content.height));
+      builder.list.pushClip(diff);
+      for(const auto &line:state.presetPreview) builder.label(takeTop(diff,22),line,theme.color.textMuted,theme.type.caption);
+      if(!state.presetFields.empty()) {
+        auto marks=takeTop(diff,32);
+        button(takeLeft(marks,marks.width*.5f),"Marcar tudo",EditorWidget::PresetSelectAll);
+        button(marks,"Desmarcar",EditorWidget::PresetSelectNone);
+        auto pager=takeBottom(diff,26);
+        const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.f,diff.height)/42));
+        const u32 pages=std::max(1u,(static_cast<u32>(state.presetFields.size())+perPage-1)/perPage);
+        const u32 page=std::min(state.presetFieldPage,pages-1);
+        for(u32 i=page*perPage;i<state.presetFields.size()&&i<(page+1)*perPage&&diff.height>=42;++i) {
+          const auto &field=state.presetFields[i];
+          auto row=takeTop(diff,42);const auto hit=row;
+          builder.list.addRect(deflate(row,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+          auto mark=takeRight(row,40);
+          // Um campo não aplicável mostra o motivo no lugar da marca, em vez de
+          // oferecer um interruptor que não faria nada.
+          if(field.applicable) builder.toggle(deflate(mark,UiInsets::all(6)),field.selected,widgetId(EditorWidget::PresetFieldBase)+i);
+          else builder.label(mark,"—",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+          auto text=deflate(row,UiInsets::symmetric(10,3));
+          builder.label(takeTop(text,20),field.label.c_str(),
+              field.applicable?theme.color.text:theme.color.textMuted,theme.type.caption);
+          builder.label(text,(field.current+"  →  "+field.candidate).c_str(),theme.color.textMuted,theme.type.caption);
+          if(field.applicable) builder.router.addRegion(hit,widgetId(EditorWidget::PresetFieldBase)+i);
+        }
+        if(pages>1) {
+          button(takeLeft(pager,34),"<",EditorWidget::PresetFieldsPrevious);
+          button(takeRight(pager,34),">",EditorWidget::PresetFieldsNext);
+          builder.label(pager,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        }
+      }
+      builder.list.popClip();
     }
     auto pager=takeBottom(content,32);button(takeLeft(pager,36),"<",EditorWidget::PresetPrevious);button(takeRight(pager,36),">",EditorWidget::PresetNext);
     const auto count=state.presetChoices.size();const u32 pages=std::max(1u,(static_cast<u32>(count)+3)/4),page=std::min(state.presetPage,pages-1);
@@ -1959,6 +1999,29 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
       builder.label(cell,std::to_string(step.value),on?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
       router.addRegion(cell,widgetId(step.widget));
     }
+    // Geometria derivada (G2). Os rótulos seguem o Model Import Settings da
+    // Unity — Normals / Normals Mode / Tangents — porque é o vocabulário que o
+    // autor já traz de fora; a ponderação só aparece quando há o que ponderar.
+    takeTop(content,8);
+    const auto cycle=[&](const char *label,const char *value,EditorWidget widget,bool active=true) {
+      auto row=takeTop(content,36);
+      builder.label(takeLeft(row,row.width*.45f),label,active?theme.color.text:theme.color.textMuted,theme.type.caption);
+      const auto cell=deflate(row,UiInsets::all(2));
+      list.addRect(cell,theme.color.raised,theme.radius.control);
+      builder.label(cell,value,active?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      if(active) router.addRegion(cell,widgetId(widget));
+    };
+    cycle("Normais",state.importNormals==resources::GltfNormalsCalculate?"Calcular":"Importar",EditorWidget::ImportNormalsCycle);
+    cycle("Modo das normais",state.importNormalWeighting==resources::GltfNormalWeightAngle?"Por ângulo":"Por área",
+          EditorWidget::ImportNormalWeightingCycle);
+    cycle("Tangentes",state.importTangents==resources::GltfTangentsCalculate?"Calcular":"Importar",EditorWidget::ImportTangentsCycle);
+    list.pushClip(content);
+    for(const auto &line:wrapText(list,"Importar usa o que vem no arquivo e gera só o que falta. Uma malha sem normal não é "
+                                       "desenhável aqui, então nunca fica sem.",content.width,theme.type.caption)) {
+      if(content.height<20) break;
+      builder.label(takeTop(content,20),line,theme.color.textMuted,theme.type.caption);
+    }
+    list.popClip();
     takeTop(content,8);
     const bool canApply=state.importReady && !profileApplied;
     const auto apply=deflate(takeTop(content,38),UiInsets::all(2));
@@ -2833,14 +2896,36 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   if (state.workspace == EditorWorkspace::Play) {
     list.addRect({layout.viewport.x+8,layout.viewport.y+4,std::min(390.0f,layout.viewport.width-16),32},withAlpha(theme.color.surface,.90f),3);
     const auto *controlled=state.document?state.document->find(state.selection):nullptr;
-    if(controlled&&characterComponent(*controlled)&&characterComponent(*controlled)->jumpSpeed>0) {
-      const UiRect jump{layout.viewport.x+layout.viewport.width-108,layout.viewport.y+layout.viewport.height-76,92,56};
+    const bool hasSecondary=!state.playSecondaryActionLabel.empty();
+    const bool showJump=hasSecondary?state.playHasCharacter:
+        state.playHasScripts || (controlled&&characterComponent(*controlled)&&characterComponent(*controlled)->jumpSpeed>0);
+    if(showJump) {
+      const UiRect jump{layout.viewport.x+layout.viewport.width-(hasSecondary?208.0f:108.0f),layout.viewport.y+layout.viewport.height-76,92,56};
       list.addRect(jump,theme.color.raised,theme.radius.control);
-      builder.label(jump,"Saltar",state.playPaused?theme.color.textFaint:theme.color.text,theme.type.body,UiAlign::Center);
+      builder.label(jump,hasSecondary?"Saltar":state.playHasScripts?"Ação":"Saltar",state.playPaused?theme.color.textFaint:theme.color.text,theme.type.body,UiAlign::Center);
       if(!state.playPaused) router.addRegion(jump,widgetId(EditorWidget::JumpCharacter),theme.touch.minimumTarget);
     }
+    if(hasSecondary) {
+      const UiRect action{layout.viewport.x+layout.viewport.width-108,layout.viewport.y+layout.viewport.height-76,92,56};
+      list.addRect(action,theme.color.raised,theme.radius.control);
+      builder.label(action,state.playSecondaryActionLabel,state.playPaused?theme.color.textFaint:theme.color.text,theme.type.body,UiAlign::Center);
+      if(!state.playPaused) router.addRegion(action,widgetId(EditorWidget::PlaySecondaryAction),theme.touch.minimumTarget);
+    }
+    if(state.playFirstPerson) {
+      const float cx=layout.viewport.x+layout.viewport.width*.5f,cy=layout.viewport.y+layout.viewport.height*.5f;
+      list.addRect({cx-1,cy-9,2,18},theme.color.accent);
+      list.addRect({cx-9,cy-1,18,2},theme.color.accent);
+    }
     builder.label({layout.viewport.x+12,layout.viewport.y+8,layout.viewport.width-24,24},
+                  state.playFirstPerson?"Esquerda: mover · direita: olhar · botões: saltar e agir":
+                  state.playHasScripts?"Arraste à esquerda para mover · Ação ativa a habilidade":
                   controlled&&characterComponent(*controlled)?"Arraste à esquerda para mover o personagem":"Simulação - use o quadrado no topo para parar", theme.color.textDim,theme.type.caption);
+    if(!state.playHudMessage.empty()) {
+      const float width=std::max(120.0f,std::min(510.0f,layout.viewport.width-(hasSecondary?222.0f:122.0f)));
+      const UiRect status{layout.viewport.x+8,layout.viewport.y+layout.viewport.height-62,width,40};
+      list.addRect(status,withAlpha(theme.color.surface,.92f),theme.radius.control);
+      builder.label(deflate(status,UiInsets::symmetric(8,4)),state.playHudMessage,theme.color.text,theme.type.caption);
+    }
     return layout;
   }
   buildViewportOverlay(builder, layout.viewport);

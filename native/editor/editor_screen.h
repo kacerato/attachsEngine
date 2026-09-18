@@ -28,6 +28,7 @@
 #include "editor/editor_gizmo.h"
 #include "editor/editor_history.h"
 #include "editor/editor_view.h"
+#include "scene/component_preset.h"
 #include "ui/ui_draw_list.h"
 #include "ui/ui_input.h"
 #include "ui/ui_theme.h"
@@ -35,6 +36,17 @@
 
 namespace ae::editor {
 class EditorMapScene;
+
+// Uma linha do diff de um preset, já com a escolha do autor.
+//
+// O endereço vem de `scene::FieldAddress` e aponta para a identidade
+// persistente da propriedade — nunca para o índice da linha na tela. Uma lista
+// reordenada, paginada ou filtrada continua aplicando o mesmo campo.
+struct EditorPresetField {
+  scene::FieldAddress address;
+  std::string label,current,candidate;
+  bool differs=false,applicable=false,selected=false;
+};
 
 // Identidade dos controles. Os valores fixos são os controles únicos; as faixas
 // no fim são para os que existem por entidade ou por eixo, onde o índice entra
@@ -162,6 +174,7 @@ enum class EditorWidget : u32 {
   StepPlay,
   ToggleCharacter,
   JumpCharacter,
+  PlaySecondaryAction,
   ToggleCameraLook,
   AddComponentMenu,
   CodeOpen, CodeScene, CodeNew, CodeEdit, CodeSave, CodeUndo, CodeRedo, CodeSearch, CodeClose, CodeApply,
@@ -186,6 +199,8 @@ enum class EditorWidget : u32 {
   ImportScaleDown, ImportScaleUp,
   ImportTextureDimension256, ImportTextureDimension512, ImportTextureDimension1024, ImportTextureDimension2048,
   ImportApplyProfile, ImportSaveDefaultProfile,
+  // G2: geometria derivada no perfil — normais, ponderação e tangentes.
+  ImportNormalsCycle, ImportNormalWeightingCycle, ImportTangentsCycle,
   // R4: textura por binding de material e extração das imagens de um GLB.
   TexturePickerClose, TextureUseInherited, TextureUseNone, AssetExtractTextures,
   MaterialAlphaCycle, MaterialCutoffDown, MaterialCutoffUp, MaterialSidesCycle,
@@ -216,7 +231,11 @@ enum class EditorWidget : u32 {
   CameraHandleBase=0x5E000020u,
   CameraPreviewPin=0x5E000030u, CameraPreviewClose, CameraPreviewResolution, CameraPreviewFrequency, CameraPreviewRetry,
   PresetOpen=0x5E000040u, PresetClose, PresetSave, PresetApply, PresetAdd, PresetRename, PresetDelete, PresetPrevious, PresetNext,
+  // Escolha por campo do preset: marcar tudo, desmarcar tudo e paginar o diff.
+  PresetSelectAll, PresetSelectNone, PresetFieldsPrevious, PresetFieldsNext, PresetSaveRecipe,
   PresetChoiceBase=0x5E010000u,
+  // + índice da linha do diff: alterna levar ou não aquele campo.
+  PresetFieldBase=0x5E020000u,
   ImpactOpenBase=0x60000000u, ImpactRowBase=0x63000000u, ImpactClose=0x64000000u, ImpactPrevious, ImpactNext, ImpactRepair, ImpactRepairApply, ImpactRepairShared, ImpactRepairScope,
   ComponentColorBase=0x7e000000u,
   ColorHueBase=0x5f000000u, ColorSvBase=0x5f000100u, ColorApply=0x5f000200u, ColorCancel,
@@ -327,6 +346,9 @@ struct EditorScreenState final {
   u32 pressedWidget = 0;
   EditorGizmoMode tool = EditorGizmoMode::Translate;
   EditorWorkspace workspace = EditorWorkspace::Scene;
+  bool playHasScripts=false;
+  bool playFirstPerson=false,playHasCharacter=false;
+  std::string playSecondaryActionLabel,playHudMessage;
   bool playPaused=false;
   bool playStepRequested=false;
   EditorInspectorTab tab = EditorInspectorTab::Transform;
@@ -348,11 +370,21 @@ struct EditorScreenState final {
   std::string editingScriptProperty,editingScriptType;
   std::shared_ptr<const EditorComponentValue> componentClipboard;
   bool presetPanel=false,presetNaming=false,presetRenaming=false,presetDeleteConfirm=false;
+  // Salvar o OBJETO como receita é um terceiro destino do mesmo campo de nome;
+  // sem distinguir, renomear e salvar disputariam o mesmo estado.
+  bool presetRecipeNaming=false;
+  // O preset em foco traz vários componentes; o painel troca o rótulo da ação.
+  bool presetSelectedIsRecipe=false;
   EditorEntityId presetEntity=0;
   u64 presetInstance=0,presetSelected=0,presetEpoch=0,presetRevision=0;
   u32 presetPage=0;
   std::vector<std::pair<u64,std::string>> presetChoices;
   std::vector<std::string> presetPreview;
+  // O diff campo a campo do preset selecionado. `selected` é a escolha do autor
+  // sobre LEVAR aquele campo; começa marcado no que difere e é aplicável, que é
+  // o comportamento antigo de "aplicar tudo" expresso pelo mesmo caminho.
+  std::vector<EditorPresetField> presetFields;
+  u32 presetFieldPage=0;
   std::string presetName;
   // Largura dos painéis em dp. Zero pede o padrão proporcional; qualquer outro
   // valor é o que o usuário arrastou e é preservado entre frames.
@@ -451,6 +483,11 @@ struct EditorScreenState final {
   // Publicar exige os dois iguais: a prévia tem de ser a do perfil mostrado.
   float importScale=1,importPreparedScale=1;
   u32 importTextureDimension=2048,importPreparedTextureDimension=2048;
+  // Geometria derivada do perfil (G2). O campo `Prepared` é o que a prévia na
+  // tela já reflete; divergir dele é o que habilita "Preparar com este perfil".
+  u8 importNormals=0,importPreparedNormals=0;
+  u8 importNormalWeighting=0,importPreparedNormalWeighting=0;
+  u8 importTangents=0,importPreparedTangents=0;
   bool importReprepare=false;
   // Vínculo do objeto selecionado com a fonte, preparado pela sessão.
   struct ImportLinkView { bool linked=false,orphan=false,root=false; std::string source,node; u32 overrides=0; };

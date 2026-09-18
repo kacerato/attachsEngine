@@ -19,18 +19,24 @@ bool isTextureStep(u32 dimension) noexcept {
 
 bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept {
   return std::fabs(a.scale - b.scale) <= std::max(a.scale, b.scale) * 1e-5f &&
-         a.maximumTextureDimension == b.maximumTextureDimension;
+         a.maximumTextureDimension == b.maximumTextureDimension && a.normals == b.normals &&
+         a.normalWeighting == b.normalWeighting && a.tangents == b.tangents;
 }
 
 bool validImportProfile(const ImportProfile &profile) noexcept {
-  return std::isfinite(profile.scale) && isScaleStep(profile.scale) && isTextureStep(profile.maximumTextureDimension);
+  return std::isfinite(profile.scale) && isScaleStep(profile.scale) && isTextureStep(profile.maximumTextureDimension) &&
+         profile.normals <= GltfNormalsCalculate && profile.normalWeighting <= GltfNormalWeightAngle &&
+         profile.tangents <= GltfTangentsCalculate;
 }
 
 std::string serializeImportProfile(const ImportProfile &profile) {
   char scale[32];
   std::snprintf(scale, sizeof scale, "%.9g", static_cast<double>(profile.scale));
   return "{\"schema\":" + std::to_string(ImportProfileSchema) + ",\"scale\":" + scale +
-         ",\"maximumTextureDimension\":" + std::to_string(profile.maximumTextureDimension) + "}\n";
+         ",\"maximumTextureDimension\":" + std::to_string(profile.maximumTextureDimension) +
+         ",\"normals\":" + std::to_string(profile.normals) +
+         ",\"normalWeighting\":" + std::to_string(profile.normalWeighting) +
+         ",\"tangents\":" + std::to_string(profile.tangents) + "}\n";
 }
 
 bool parseImportProfile(std::string_view text, ImportProfile &out) {
@@ -46,6 +52,16 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
   ImportProfile parsed;
   parsed.scale = static_cast<float>(scale->number);
   parsed.maximumTextureDimension = static_cast<u32>(std::min<i64>(dimension, 1 << 20));
+  // Campo ausente é recusa, não padrão silencioso: o schema já identifica a
+  // versão do arquivo, então a falta de um campo declarado por ele significa
+  // arquivo truncado ou escrito por outra coisa.
+  const auto normals = document.index(root, "normals");
+  const auto weighting = document.index(root, "normalWeighting");
+  const auto tangents = document.index(root, "tangents");
+  if (normals < 0 || weighting < 0 || tangents < 0) return false;
+  parsed.normals = static_cast<u8>(std::min<i64>(normals, 255));
+  parsed.normalWeighting = static_cast<u8>(std::min<i64>(weighting, 255));
+  parsed.tangents = static_cast<u8>(std::min<i64>(tangents, 255));
   if (!validImportProfile(parsed)) return false;
   out = parsed;
   return true;
@@ -54,6 +70,9 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
 GltfImportLimits applyImportProfile(GltfImportLimits limits, const ImportProfile &profile) {
   if (!validImportProfile(profile)) return limits;
   limits.rootScale = profile.scale;
+  limits.normals = profile.normals;
+  limits.normalWeighting = profile.normalWeighting;
+  limits.tangents = profile.tangents;
   limits.maximumTextureDimension = std::min(limits.maximumTextureDimension, profile.maximumTextureDimension);
   limits.minimumTextureDimension = std::min(limits.minimumTextureDimension, limits.maximumTextureDimension);
   return limits;

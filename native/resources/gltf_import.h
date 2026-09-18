@@ -42,6 +42,18 @@ namespace ae::resources {
 // do Android entrega os arquivos escolhidos JUNTO com o principal, e as
 // dependências entram num GLB único, com manifesto `.deps` ao lado da fonte.
 // Uma URI que chegue até aqui sem ter sido empacotada é recusada com diagnóstico.
+// Normais e tangentes: escolha AUTORAL, do perfil de importação, e não detecção
+// silenciosa. Os nomes seguem o Model Import Settings da Unity (Normals,
+// Normals Mode, Tangents), com uma diferença deliberada: não existe a opção
+// "None". Uma normal (0,0,0) vira base TBN degenerada e superfície preta neste
+// renderer, então oferecer "sem normal" seria oferecer um defeito.
+inline constexpr u8 GltfNormalsImport = 0;    // usa NORMAL do arquivo; gera o que faltar
+inline constexpr u8 GltfNormalsCalculate = 1; // ignora NORMAL do arquivo e gera tudo
+inline constexpr u8 GltfNormalWeightArea = 0;  // contribuição proporcional à área do triângulo
+inline constexpr u8 GltfNormalWeightAngle = 1; // contribuição proporcional ao ângulo no vértice
+inline constexpr u8 GltfTangentsImport = 0;    // usa TANGENT do arquivo; gera quando faltar e houver mapa normal
+inline constexpr u8 GltfTangentsCalculate = 1; // gera sempre que houver UV, mesmo com TANGENT no arquivo
+
 struct GltfImportLimits {
   u64 maximumBytes = 256ull << 20;
   u32 maximumNodes = 8192;
@@ -74,6 +86,11 @@ struct GltfImportLimits {
   // `resources/import_profile.h`). Aplicada à pose local das raízes: a geometria
   // continua no espaço do nó e os filhos herdam pela hierarquia.
   float rootScale = 1.0f;
+  // Geometria derivada, também do perfil. `GltfNormalsImport` e
+  // `GltfTangentsImport` reproduzem o comportamento anterior ao perfil.
+  u8 normals = GltfNormalsImport;
+  u8 normalWeighting = GltfNormalWeightArea;
+  u8 tangents = GltfTangentsImport;
   ImageDecodeLimits image{};
 };
 
@@ -167,6 +184,20 @@ struct GltfImport {
   // Primitivas com mapa normal que chegaram sem TANGENT e tiveram as tangentes
   // geradas na importação.
   u32 generatedTangentPrimitives = 0;
+  // Primitivas cujas normais foram calculadas aqui — porque o arquivo não trazia
+  // NORMAL (o glTF permite; este renderer não, uma normal nula apaga a
+  // superfície) ou porque o perfil pediu recálculo.
+  u32 generatedNormalPrimitives = 0;
+  // Diagnóstico de mapeamento (o caso "textura esticada" do plano): primitivas
+  // que o material manda texturizar e que chegaram SEM o conjunto de UV que ele
+  // amostra. Não há correção automática possível — sem UV não existe mapeamento
+  // — então o relatório aponta a fonte em vez de a engine inventar coordenadas.
+  u32 texturedPrimitivesWithoutUv = 0;
+  // Primitivas cuja densidade de texel varia muito entre triângulos no mesmo
+  // material: é o sintoma de UV esticada que sobrevive a qualquer resolução de
+  // textura. Contado por primitiva, com a pior razão observada no arquivo.
+  u32 stretchedUvPrimitives = 0;
+  float worstTexelDensityRatio = 0;
   // Maior lado residente escolhido para este arquivo (0 sem texturas).
   u32 residentTextureDimension = 0;
   // Motivos concretos das texturas não aplicadas, sem repetição.

@@ -1,13 +1,14 @@
 #include "resources/import_cache.h"
 #include "core/sha256.h"
 
+#include <cmath>
 #include <cstring>
 #include <memory>
 
 namespace ae::resources {
 namespace {
 constexpr char kMagic[8]{'A', 'S', 'T', 'R', 'A', 'I', 'C', '1'};
-constexpr u32 kCounterCount = 18;
+constexpr u32 kCounterCount = 22;
 
 struct Writer {
   std::vector<u8> &out;
@@ -110,6 +111,8 @@ std::string importCacheKey(std::string_view sourceContentHash, const GltfImportL
                        std::memcpy(&bits, &limits.rootScale, sizeof bits);
                        return number(bits);
                      }() +
+                     "|normals=" + number(limits.normals) + "|normalWeighting=" + number(limits.normalWeighting) +
+                     "|tangents=" + number(limits.tangents) +
                      "|imageDimension=" + number(limits.image.maximumDimension) +
                      "|imagePixels=" + number(limits.image.maximumPixels) +
                      "|imageEncoded=" + number(limits.image.maximumEncodedBytes);
@@ -164,7 +167,12 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
                                     model.bakedTextureTransforms, model.reducedTextures, model.dracoPrimitives,
                                     model.meshoptViews, model.ktx2Images, model.astcTextures, model.mirroredNodes,
                                     model.generatedTangentPrimitives, model.residentTextureDimension,
-                                    model.appliedOcclusion};
+                                    model.appliedOcclusion, model.generatedNormalPrimitives,
+                                    model.texturedPrimitivesWithoutUv, model.stretchedUvPrimitives,
+                                    // A pior razão de densidade é o único diagnóstico não inteiro:
+                                    // vai como os bits do float, para não perder a casa decimal nem
+                                    // abrir um segundo bloco de formato só para ele.
+                                    [&] { u32 bits = 0; std::memcpy(&bits, &model.worstTexelDensityRatio, 4); return bits; }()};
   writer.u32v(kCounterCount);
   writer.raw(counters, sizeof counters);
   writer.texts(model.textureNotes);
@@ -241,6 +249,11 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
   model.generatedTangentPrimitives = counters[15];
   model.residentTextureDimension = counters[16];
   model.appliedOcclusion = counters[17];
+  model.generatedNormalPrimitives = counters[18];
+  model.texturedPrimitivesWithoutUv = counters[19];
+  model.stretchedUvPrimitives = counters[20];
+  std::memcpy(&model.worstTexelDensityRatio, &counters[21], 4);
+  if (!std::isfinite(model.worstTexelDensityRatio) || model.worstTexelDensityRatio < 0) return refuse();
   model.textureNotes = reader.texts();
   char trailer[8]{};
   if (!reader.raw(trailer, sizeof trailer) || std::memcmp(trailer, kMagic, sizeof trailer) != 0 ||

@@ -1,5 +1,7 @@
 #pragma once
 #include "core/base.h"
+#include "core/engine_capability.h"
+#include "resources/asset_registry.h"
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -28,17 +30,52 @@ private:
   friend class Components;
   u64 instanceId_=0;
 };
+// O que muda quando a propriedade muda. É um conjunto de bits porque uma única
+// edição costuma atingir mais de um derivado — trocar a malha invalida o
+// desenho E os derivados dela (tangente, LOD, colisão cozida).
+//
+// Zero não é "nada acontece": é "nada ALÉM do que o componente já declara".
+// A invalidação efetiva é `esquema | propriedade`, o que evita repetir em toda
+// linha o que vale para o componente inteiro e evita um sentinela ambíguo.
+namespace Invalidate {
+inline constexpr u32 Draw=1u<<0;               // descritor/uniforme do desenho
+inline constexpr u32 MaterialDescriptor=1u<<1; // material efetivo e seu descritor
+inline constexpr u32 MeshDerived=1u<<2;        // tangente, LOD, colisão e bake da malha
+inline constexpr u32 TextureResidency=1u<<3;   // mips e bytes residentes
+inline constexpr u32 LightCluster=1u<<4;       // seleção e orçamento de luzes do quadro
+inline constexpr u32 ShadowMap=1u<<5;          // cascatas e mapas de profundidade
+inline constexpr u32 Probes=1u<<6;             // irradiância/reflexão assadas
+inline constexpr u32 PhysicsShape=1u<<7;       // forma cozida no solver
+inline constexpr u32 PhysicsBody=1u<<8;        // corpo recriado no solver
+inline constexpr u32 Policy=1u<<9;             // nova época da política resolvida
+inline constexpr u32 Script=1u<<10;            // recompilação/religação de comportamento
+inline constexpr u32 Transform=1u<<11;         // pose de mundo e bounds propagados
+inline constexpr u32 Input=1u<<12;             // mapeamento de entrada e câmera
+}
+
 // Presentation is attached to persistent properties, not inspector indices.
 // Predicates are shared by UI and write validation. Hidden is not read-only:
 // scripts may configure inactive modes without changing the visible layout.
+//
+// Os três últimos campos são o contrato do plano universal de cenários (§6):
+// qual capacidade do motor a propriedade exige, quem lê o valor e o que
+// precisa ser reconstruído. Vazio/zero HERDA o que o esquema do componente
+// declara — a matriz de propriedades é gerada dessa resolução, nunca à mão.
 struct PropertyPresentation {
   std::string_view group{};
   std::string_view unit{};
   const char *help=nullptr;
   bool (*visible)(const ComponentValue &)=nullptr;
   bool (*editable)(const ComponentValue &)=nullptr;
+  std::string_view capability{};
+  std::string_view consumer{};
+  u32 invalidates=0;
   bool isVisible(const ComponentValue &v) const {return !visible || visible(v);}
   bool isEditable(const ComponentValue &v) const {return !editable || editable(v);}
+  // Uma propriedade só é editável quando o consumidor dela existe. Não há
+  // caminho que persista uma escolha sem efeito: a validação de escrita e a
+  // interface leem esta mesma resposta.
+  bool hasConsumer() const {return core::engineCapabilityAuthorable(capability);}
 };
 struct ComponentNumber {
   const char *name;
@@ -83,6 +120,49 @@ struct ComponentObjectReference {
     return requiredForExecution && requiredForExecution(value);
   }
 };
+// Referência a RECURSO, que não é referência a objeto.
+//
+// Um objeto vive na cena e tem InstanceId/ObjectId; um recurso vive no projeto
+// e tem AssetGuid. Confundir os dois é o defeito que faz um preset levado para
+// outro projeto apontar para "a malha número 3" em vez de "esta malha", e é o
+// que obriga o plano universal a exigir "referência tipada" e "remapeamento".
+//
+// Até aqui só o MeshRenderer tinha recursos, e quem precisava listá-los — grafo
+// de impacto, reparo de referência quebrada, preset, relatório de dependências
+// — fazia `static_cast<const MeshRenderer&>` e percorria os slots à mão. Todo
+// componente futuro com recurso (LODGroup, Decal, Volume com perfil, Terrain)
+// teria de reabrir cada um desses lugares. Declarado aqui, o binding é
+// enumerável como número, booleano e enumeração já são.
+//
+// `slots` existe porque um binding pode ter mais de um endereço no MESMO valor:
+// uma malha com várias primitivas é UM objeto autoral com N slots de material.
+struct ComponentResourceBinding {
+  std::string_view id;
+  const char *name;
+  resources::AssetType kind;
+  // Quantos endereços este binding tem neste valor. Zero esconde o binding.
+  u32 (*slots)(const ComponentValue &)=nullptr;
+  resources::AssetGuid (*read)(const ComponentValue &,u32 slot)=nullptr;
+  // Falso quando o slot não existe mais; nunca cria slot novo.
+  bool (*write)(ComponentValue &,u32 slot,resources::AssetGuid value)=nullptr;
+  PropertyPresentation presentation{};
+  // Alguns bindings distinguem "herda da fonte" de "sem recurso". Quem só
+  // pergunta "que recursos este componente usa?" não precisa saber disso; quem
+  // remapeia entre projetos precisa, para não transformar herança em ausência.
+  // `none` é o valor que significa AUSÊNCIA DECLARADA nesse binding; identidade
+  // inválida significa herdar. Sem os dois declarados aqui, cada consumidor
+  // reinventaria a sentinela — e um deles a escreveria errado.
+  bool inheritable=false;
+  resources::AssetGuid none{};
+  bool declaresNone(const resources::AssetGuid &value) const noexcept {
+    return none.valid() && value==none;
+  }
+  u32 slotCount(const ComponentValue &v) const {return slots?slots(v):0;}
+  resources::AssetGuid at(const ComponentValue &v,u32 slot) const {
+    return read&&slot<slotCount(v)?read(v,slot):resources::AssetGuid{};
+  }
+};
+
 enum class ComponentTripleKind { Vector, LinearColor };
 struct ComponentTriple {
   std::string_view id;
@@ -104,6 +184,8 @@ struct ComponentType {
   bool allowMultiple=false;
   std::span<const ComponentObjectReference> references{};
   std::span<const ComponentTriple> triples{};
+  // Recursos do projeto que este componente endereça por identidade.
+  std::span<const ComponentResourceBinding> resourceBindings{};
 };
 enum class UnknownComponentPolicy { Reject, Preserve };
 // An unavailable type is authored data, never a successfully loaded behavior.

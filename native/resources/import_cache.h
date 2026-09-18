@@ -23,7 +23,7 @@ namespace ae::resources {
 // ou corrompido é recusado inteiro e o importador roda de novo.
 //
 // O cache nunca é fonte de verdade: apagar `.astra/cache/` custa só tempo.
-inline constexpr u32 ImportCacheSchema = 2; // 2: contador de oclusão aplicada
+inline constexpr u32 ImportCacheSchema = 3; // 2: oclusão aplicada; 3: normais geradas e diagnóstico de UV
 // Subir quando a SAÍDA de `importGlb` mudar para o mesmo arquivo e os mesmos
 // limites (correção de importador, nova derivação de dados).
 inline constexpr u32 ImportCacheImporterRevision = 3; // 2: oclusão ORM; 3: flag de culling de uma face

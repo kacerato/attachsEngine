@@ -20,14 +20,18 @@ public:
     return true;
   }
 };
+// A cápsula e a locomoção são grupos distintos pela mesma razão que o Character
+// Controller da Unity separa a forma (Radius/Height/Center) do movimento
+// (Slope Limit/Step Offset): mexer na forma invalida o contato, mexer na
+// locomoção não.
 inline constexpr std::array<ComponentNumber,6> characterNumbers{{
-#define AE_CHAR_NUMBER(id,label,field,lo,hi) {label,lo,hi,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Character&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<Character&>(v).field;},id}
-  AE_CHAR_NUMBER("radius","Raio m",radius,.01f,10),
-  AE_CHAR_NUMBER("half_height","Meia altura do cilindro m",halfHeight,.01f,10),
-  AE_CHAR_NUMBER("eye_height","Altura dos olhos m",eyeHeight,.02f,20),
-  AE_CHAR_NUMBER("speed","Velocidade m/s",speed,.01f,100),
-  AE_CHAR_NUMBER("slope_degrees","Inclinação máxima graus",slopeDegrees,1,89),
-  AE_CHAR_NUMBER("jump_speed","Velocidade do salto m/s",jumpSpeed,0,100)
+#define AE_CHAR_NUMBER(id,label,field,lo,hi,group,unit) {label,lo,hi,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Character&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<Character&>(v).field;},id,{group,unit}}
+  AE_CHAR_NUMBER("radius","Raio m",radius,.01f,10,"Cápsula","m"),
+  AE_CHAR_NUMBER("half_height","Meia altura do cilindro m",halfHeight,.01f,10,"Cápsula","m"),
+  AE_CHAR_NUMBER("eye_height","Altura dos olhos m",eyeHeight,.02f,20,"Cápsula","m"),
+  AE_CHAR_NUMBER("speed","Velocidade m/s",speed,.01f,100,"Locomoção","m/s"),
+  AE_CHAR_NUMBER("slope_degrees","Inclinação máxima graus",slopeDegrees,1,89,"Locomoção","°"),
+  AE_CHAR_NUMBER("jump_speed","Velocidade do salto m/s",jumpSpeed,0,100,"Locomoção","m/s")
 #undef AE_CHAR_NUMBER
 }};
 inline const ComponentType Character::descriptor{

@@ -310,9 +310,13 @@ AE_TEST(r3_import_profile_scales_roots_persists_per_source_and_changes_the_cache
   resources::ImportProfile parsed;
   AE_EXPECT_TRUE(resources::parseImportProfile(resources::serializeImportProfile(profile), parsed), "ida e volta");
   AE_EXPECT_TRUE(resources::sameImportProfile(parsed, profile), "mesmo perfil");
-  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":1,"scale":3,"maximumTextureDimension":512})", parsed), "escala fora dos passos");
-  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":2,"scale":1,"maximumTextureDimension":512})", parsed), "schema desconhecido");
-  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":1,"scale":1,"maximumTextureDimension":300})", parsed), "textura fora dos passos");
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":2,"scale":3,"maximumTextureDimension":512,"normals":0,"normalWeighting":0,"tangents":0})", parsed), "escala fora dos passos");
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":9,"scale":1,"maximumTextureDimension":512,"normals":0,"normalWeighting":0,"tangents":0})", parsed), "schema desconhecido");
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":2,"scale":1,"maximumTextureDimension":300,"normals":0,"normalWeighting":0,"tangents":0})", parsed), "textura fora dos passos");
+  // Campo do schema atual ausente é recusa, não padrão silencioso.
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":2,"scale":1,"maximumTextureDimension":512})", parsed), "perfil truncado");
+  // Modo desconhecido de normal ou tangente também falha fechado.
+  AE_EXPECT_TRUE(!resources::parseImportProfile(R"({"schema":2,"scale":1,"maximumTextureDimension":512,"normals":7,"normalWeighting":0,"tangents":0})", parsed), "modo de normal inválido");
   AE_EXPECT_TRUE(!resources::parseImportProfile("{", parsed), "JSON quebrado");
 
   // O perfil nunca sobe acima do teto do aparelho.
@@ -326,6 +330,14 @@ AE_TEST(r3_import_profile_scales_roots_persists_per_source_and_changes_the_cache
   AE_EXPECT_TRUE(resources::importGlb(vehicleV2(), resources::applyImportProfile({}, profile), {}, scaled), scaled.diagnostic.c_str());
   AE_EXPECT_EQ(scaled.nodes[0].localMatrix[0], 10.f * plain.nodes[0].localMatrix[0], "raiz escalada");
   AE_EXPECT_EQ(scaled.nodes[1].localMatrix[13], plain.nodes[1].localMatrix[13], "filho intacto");
+  // Geometria derivada também muda a saída do importador para os mesmos bytes,
+  // então precisa entrar na chave: um perfil novo não pode reusar o derivado do
+  // perfil antigo.
+  resources::ImportProfile recalculated = profile;
+  recalculated.normals = resources::GltfNormalsCalculate;
+  AE_EXPECT_TRUE(resources::importCacheKey("abc", resources::applyImportProfile({}, profile)) !=
+                     resources::importCacheKey("abc", resources::applyImportProfile({}, recalculated)),
+                 "normais recalculadas mudam a chave do cache");
   AE_EXPECT_TRUE(resources::importCacheKey("abc", {}) != resources::importCacheKey("abc", resources::applyImportProfile({}, profile)),
                  "perfil diferente, derivado diferente");
 

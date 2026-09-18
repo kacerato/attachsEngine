@@ -136,18 +136,17 @@ inline constexpr auto editorNumericProperties=[] {
   return result;
 }();
 #undef AE_ACCESS
+// A condição de aparecer é DECLARADA no descritor da propriedade, junto com o
+// domínio e a unidade. Antes ela estava reescrita aqui em função do índice do
+// widget — uma segunda cópia da mesma regra, que divergia da API assim que uma
+// forma nova de colisor ou um modo novo de corpo entrasse só de um lado.
 inline bool editorPropertyVisible(const EditorEntity &entity,u32 index) {
   const auto &p=editorNumericProperties[index];
-  if(p.group==EditorPropertyGroup::Collider) {
-    const auto *c=colliderComponent(entity);if(!c) return false;
-    if(p.slot>=5) return true;
-    return c->shape==scene::ColliderShape::Box?p.slot<3:
-      c->shape==scene::ColliderShape::Sphere?p.slot==3:p.slot>=3;
-  }
-  if(p.group==EditorPropertyGroup::ScenePhysics) {
-    const auto *body=physicsBody(entity);if(!body) return false;
-    if(p.slot==0) return body->motion==scene::BodyMotion::Dynamic;
-    if(p.slot>=3) return body->motion!=scene::BodyMotion::Static;
+  if(p.component) {
+    const auto *value=entity.components.find(p.component->id);
+    if(!value) return false;
+    for(const auto &number:p.component->numbers)
+      if(number.id==p.propertyId) return number.presentation.isVisible(*value);
   }
   return true;
 }

@@ -65,25 +65,38 @@ enum class ComponentResourceKind { Mesh, Material, Texture };
 struct ComponentResourceUse {
   resources::AssetGuid asset;ComponentResourceKind kind;u32 slot;std::string binding;
 };
+// A biblioteca de mapa endereça textura por ÍNDICE de binding do pacote; a
+// reflexão de componente endereça por IDENTIDADE. Esta função é a única
+// tradução entre as duas, para que a herança do material compartilhado não
+// volte a ser um laço reescrito em cada consumidor.
+inline u32 packageTextureBinding(std::string_view id) {
+  constexpr std::string_view names[]{"texture.base_color","texture.normal","texture.metallic_roughness","texture.emissive"};
+  for(u32 i=0;i<scene::MaterialTextureCount;++i) if(names[i]==id) return i;
+  return id=="texture.occlusion"?scene::MaterialOcclusionTextureBinding:~0u;
+}
+// Percorre os bindings DECLARADOS pelo componente, slot a slot. Não há mais um
+// caminho especial de MeshRenderer aqui: um componente novo com recurso entra
+// no grafo de impacto, no reparo e no relatório só por declarar seus bindings.
 inline std::vector<ComponentResourceUse> componentResources(const scene::ComponentValue &value, const EditorMapScene *library=nullptr) {
   std::vector<ComponentResourceUse> result;
-  if(&value.type()!=&scene::MeshRenderer::descriptor) return result;
-  const auto &mesh=static_cast<const scene::MeshRenderer&>(value);
-  const auto add=[&](resources::AssetGuid asset,ComponentResourceKind kind,u32 slot,std::string binding) {
-    if(asset.valid() && asset!=scene::MaterialTextureNone) result.push_back({asset,kind,slot,std::move(binding)});
-  };
-  for(u32 slot=0;slot<mesh.slotCount();++slot) {
-    add(mesh.slotAsset(slot),ComponentResourceKind::Mesh,slot,"Malha");
-    add(mesh.slotMaterialAsset(slot),ComponentResourceKind::Material,slot,"Material");
-    constexpr const char *names[]={"Cor base","Normal","Metal / rugosidade","Emissão"};
-    for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {
-      const auto local=mesh.slotTextures(slot)[binding];
-      const auto effective=library?library->slotTexture(mesh,slot,binding):local;
-      add(effective,ComponentResourceKind::Texture,slot,std::string(names[binding])+(!local.valid()&&effective.valid()?" · herdada":""));
+  const auto bindings=value.type().resourceBindings;
+  if(bindings.empty()) return result;
+  const auto *mesh=&value.type()==&scene::MeshRenderer::descriptor?static_cast<const scene::MeshRenderer*>(&value):nullptr;
+  u32 slots=0;
+  for(const auto &binding:bindings) slots=std::max(slots,binding.slotCount(value));
+  for(u32 slot=0;slot<slots;++slot) for(const auto &binding:bindings) {
+    if(slot>=binding.slotCount(value) || !binding.read) continue;
+    const auto local=binding.read(value,slot);
+    auto effective=local;
+    if(mesh && library && binding.kind==resources::AssetType::Texture) {
+      const auto index=packageTextureBinding(binding.id);
+      if(index==scene::MaterialOcclusionTextureBinding) effective=library->slotOcclusionTexture(*mesh,slot);
+      else if(index<scene::MaterialTextureCount) effective=library->slotTexture(*mesh,slot,index);
     }
-    const auto local=mesh.slotOcclusionTexture(slot);
-    const auto effective=library?library->slotOcclusionTexture(mesh,slot):local;
-    add(effective,ComponentResourceKind::Texture,slot,std::string("Oclusão")+(!local.valid()&&effective.valid()?" · herdada":""));
+    if(!effective.valid() || effective==scene::MaterialTextureNone) continue;
+    const auto kind=binding.kind==resources::AssetType::Mesh?ComponentResourceKind::Mesh:
+        binding.kind==resources::AssetType::Material?ComponentResourceKind::Material:ComponentResourceKind::Texture;
+    result.push_back({effective,kind,slot,std::string(binding.name)+(!local.valid()&&effective.valid()?" · herdada":"")});
   }
   return result;
 }
@@ -246,17 +259,25 @@ inline std::vector<ComponentImpactEntry> resourceRepairChoices(const scene::Comp
 }
 // Caller validates target availability/type and scene revision before committing.
 // Preserve every other authored field, including local material/sampler overrides.
-inline u32 replaceLocalResource(scene::MeshRenderer &mesh,resources::AssetGuid from,resources::AssetGuid to,
+//
+// Percorre os bindings declarados, e não os campos de um tipo específico: o
+// mesmo comando de reparo passa a valer para qualquer componente que enderece
+// recursos. A única parte que continua sendo do MeshRenderer é reconciliar o
+// SLOT resolvido no pacote com a nova identidade — slot é índice de processo,
+// identidade é o que sobrevive ao arquivo.
+inline u32 replaceLocalResource(scene::ComponentValue &value,resources::AssetGuid from,resources::AssetGuid to,
     ComponentResourceKind kind,const EditorMapScene &library) {
   u32 count=0;
-  const auto replace=[&](resources::AssetGuid *value) {if(*value!=from)return false;*value=to;++count;return true;};
-  for(u32 slot=0;slot<mesh.slotCount();++slot) {
-    if(kind==ComponentResourceKind::Mesh) {
-      if(replace(mesh.editSlotAsset(slot))) *mesh.editSlotMesh(slot)=library.assetSlot(to);
-    } else if(kind==ComponentResourceKind::Material) replace(mesh.editSlotMaterialAsset(slot));
-    else {
-      for(auto &texture:*mesh.editSlotTextures(slot)) replace(&texture);
-      replace(mesh.editSlotOcclusionTexture(slot));
+  auto *mesh=&value.type()==&scene::MeshRenderer::descriptor?static_cast<scene::MeshRenderer*>(&value):nullptr;
+  for(const auto &binding:value.type().resourceBindings) {
+    const auto bindingKind=binding.kind==resources::AssetType::Mesh?ComponentResourceKind::Mesh:
+        binding.kind==resources::AssetType::Material?ComponentResourceKind::Material:ComponentResourceKind::Texture;
+    if(bindingKind!=kind || !binding.read || !binding.write) continue;
+    for(u32 slot=0;slot<binding.slotCount(value);++slot) {
+      if(binding.read(value,slot)!=from || !binding.write(value,slot,to)) continue;
+      ++count;
+      if(mesh && binding.kind==resources::AssetType::Mesh)
+        if(auto *resolved=mesh->editSlotMesh(slot)) *resolved=library.assetSlot(to);
     }
   }
   return count;

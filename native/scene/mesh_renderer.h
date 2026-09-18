@@ -289,7 +289,54 @@ inline constexpr std::array<ComponentNumber,11> meshRendererNumbers{{
 inline constexpr std::array<ComponentBoolean,1> meshRendererBooleans{{
   {"enabled","Renderizar",[](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).enabled;},[](ComponentValue &v,bool b){static_cast<MeshRenderer&>(v).enabled=b;}}
 }};
+// Os recursos que este componente endereça, declarados como as demais
+// propriedades. O grafo de impacto, o reparo de referência quebrada, o preset
+// e o relatório de dependências passam a ler ESTA lista em vez de repetir, cada
+// um, o passeio pelos slots.
+//
+// A ordem importa: é a ordem em que um slot é apresentado no inspetor e no
+// relatório — malha, material compartilhado e os bindings de textura na ordem
+// do pacote de mapa, com a oclusão própria por último, como o shader lê.
+namespace detail {
+inline u32 meshSlots(const ComponentValue &v) {return static_cast<const MeshRenderer&>(v).slotCount();}
+} // namespace detail
+inline constexpr std::array<ComponentResourceBinding,7> meshRendererResources{{
+  {"mesh","Malha",resources::AssetType::Mesh,detail::meshSlots,
+   [](const ComponentValue &v,u32 slot){return static_cast<const MeshRenderer&>(v).slotAsset(slot);},
+   [](ComponentValue &v,u32 slot,resources::AssetGuid value){
+     auto *target=static_cast<MeshRenderer&>(v).editSlotAsset(slot);
+     if(!target) return false;
+     *target=value;return true;},
+   {"Geometria"}},
+  {"material","Material",resources::AssetType::Material,detail::meshSlots,
+   [](const ComponentValue &v,u32 slot){return static_cast<const MeshRenderer&>(v).slotMaterialAsset(slot);},
+   [](ComponentValue &v,u32 slot,resources::AssetGuid value){
+     auto *target=static_cast<MeshRenderer&>(v).editSlotMaterialAsset(slot);
+     if(!target) return false;
+     *target=value;return true;},
+   {"Material"},true,MaterialTextureNone},
+#define AE_MESH_TEXTURE(id,label,binding) {id,label,resources::AssetType::Texture,detail::meshSlots,\
+   [](const ComponentValue &v,u32 slot){return static_cast<const MeshRenderer&>(v).slotTextures(slot)[binding];},\
+   [](ComponentValue &v,u32 slot,resources::AssetGuid value){\
+     auto *target=static_cast<MeshRenderer&>(v).editSlotTextures(slot);\
+     if(target) (*target)[binding]=value;\
+     return target!=nullptr;},\
+   {"Material"},true,MaterialTextureNone}
+  AE_MESH_TEXTURE("texture.base_color","Cor base",0),
+  AE_MESH_TEXTURE("texture.normal","Normal",1),
+  AE_MESH_TEXTURE("texture.metallic_roughness","Metal / rugosidade",2),
+  AE_MESH_TEXTURE("texture.emissive","Emissão",3),
+#undef AE_MESH_TEXTURE
+  {"texture.occlusion","Oclusão",resources::AssetType::Texture,detail::meshSlots,
+   [](const ComponentValue &v,u32 slot){return static_cast<const MeshRenderer&>(v).slotOcclusionTexture(slot);},
+   [](ComponentValue &v,u32 slot,resources::AssetGuid value){
+     auto *target=static_cast<MeshRenderer&>(v).editSlotOcclusionTexture(slot);
+     if(!target) return false;
+     *target=value;return true;},
+   {"Material"},true,MaterialTextureNone}
+}};
 inline const ComponentType MeshRenderer::descriptor{
-  "astra.render.mesh",8,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},meshRendererNumbers,meshRendererBooleans
+  "astra.render.mesh",8,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},
+  meshRendererNumbers,meshRendererBooleans,{},nullptr,false,{},{},meshRendererResources
 };
 }

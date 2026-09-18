@@ -1,5 +1,6 @@
 #pragma once
 #include "scene/components.h"
+#include <array>
 #include <cstdint>
 
 namespace ae::scene {
@@ -59,9 +60,19 @@ struct ScriptBehavior final : ComponentValue {
     enabled=candidate.enabled;properties=std::move(candidate.properties);return true;
   }
 };
+// As propriedades DO SCRIPT vêm da reflexão do tipo em C# e por isso não estão
+// aqui. `enabled` é diferente: pertence ao componente, não ao código do autor, e
+// precisa da mesma identidade persistente das demais — sem ela, desligar um
+// comportamento seria possível pelo dedo no inspetor e impossível por API,
+// preset ou animação, que é exatamente a divergência que o schema existe para
+// impedir.
+inline constexpr std::array<ComponentBoolean,1> scriptBehaviorBooleans{{
+  {"enabled","Ativo",[](const ComponentValue &v){return static_cast<const ScriptBehavior&>(v).enabled;},
+   [](ComponentValue &v,bool b){static_cast<ScriptBehavior&>(v).enabled=b;},{"Execução"}}
+}};
 inline const ComponentType ScriptBehavior::descriptor{
   "astra.script.behavior",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<ScriptBehavior>();},
-  {},{},{},nullptr,true
+  {},scriptBehaviorBooleans,{},nullptr,true
 };
 inline const ScriptBehavior *scriptBehavior(const ComponentValue *value) {
   return value && &value->type()==&ScriptBehavior::descriptor?static_cast<const ScriptBehavior *>(value):nullptr;

@@ -21,10 +21,10 @@ public:
   }
 };
 inline constexpr std::array<ComponentNumber,3> cameraLookNumbers{{
-#define AE_LOOK_NUMBER(id,label,field,lo,hi) {label,lo,hi,1,[](const ComponentValue &v)->const float&{return static_cast<const CameraLook&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<CameraLook&>(v).field;},id}
-  AE_LOOK_NUMBER("yaw_sensitivity","Sensibilidade horizontal graus/tela",yawSensitivity,0,720),
-  AE_LOOK_NUMBER("pitch_sensitivity","Sensibilidade vertical graus/tela",pitchSensitivity,0,720),
-  AE_LOOK_NUMBER("pitch_limit","Limite vertical graus",pitchLimit,1,89)
+#define AE_LOOK_NUMBER(id,label,field,lo,hi,group) {label,lo,hi,1,[](const ComponentValue &v)->const float&{return static_cast<const CameraLook&>(v).field;},[](ComponentValue &v)->float*{return &static_cast<CameraLook&>(v).field;},id,{group,"°"}}
+  AE_LOOK_NUMBER("yaw_sensitivity","Sensibilidade horizontal graus/tela",yawSensitivity,0,720,"Sensibilidade"),
+  AE_LOOK_NUMBER("pitch_sensitivity","Sensibilidade vertical graus/tela",pitchSensitivity,0,720,"Sensibilidade"),
+  AE_LOOK_NUMBER("pitch_limit","Limite vertical graus",pitchLimit,1,89,"Limites")
 #undef AE_LOOK_NUMBER
 }};
 inline const ComponentType CameraLook::descriptor{
