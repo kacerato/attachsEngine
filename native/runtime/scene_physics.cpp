@@ -1,6 +1,7 @@
 #include "runtime/scene_physics.h"
 #include "runtime/transform_math.h"
 #include <cmath>
+#include <cstring>
 #include <unordered_map>
 #include "scene/joint.h"
 #include "runtime/joint_requirements.h"
@@ -27,7 +28,45 @@ ObjectId ScenePhysics::objectForBody(AetherBodyHandle body) const {
   const auto found=objects_.find(body);
   return found==objects_.end()?kInvalidObject:found->second;
 }
-bool ScenePhysics::start(GameWorld &gameWorld) {
+namespace {
+// A malha do objeto inteiro (todos os slots, como o Mesh Collider que recebe a
+// malha do MeshFilter) no referencial da parte, com a escala aplicada. Vértices
+// iguais são soldados: a malha de desenho repete o vértice por triângulo, e a
+// de colisão precisa das arestas compartilhadas para não prender em costuras.
+bool collisionMesh(const CollisionGeometrySource &geometry,const scene::MeshRenderer &render,const float scale[3],
+                   std::vector<AetherVec3> &vertices,std::vector<u32> &indices) {
+  std::vector<float> triangles;
+  for(u32 slot=0;slot<=render.submeshes.size();++slot) {
+    const u32 mesh=render.slotMesh(slot);if(!mesh) continue;
+    // A mesma malha em dois slots é a mesma forma: contar duas vezes só
+    // duplicaria triângulos sobrepostos.
+    bool repeated=false;for(u32 earlier=0;earlier<slot;++earlier) repeated=repeated||render.slotMesh(earlier)==mesh;
+    if(!repeated&&!geometry.meshTriangles(mesh,triangles)) return false;
+  }
+  if(triangles.empty()||triangles.size()%9) return false;
+  // Escala espelhada inverte a ordem dos vértices; a face continua para fora.
+  const bool mirrored=scale[0]*scale[1]*scale[2]<0;
+  struct Key {u32 bits[3];bool operator==(const Key &o) const {return bits[0]==o.bits[0]&&bits[1]==o.bits[1]&&bits[2]==o.bits[2];}};
+  struct Hash {usize operator()(const Key &k) const {return (static_cast<usize>(k.bits[0])*73856093u)^(static_cast<usize>(k.bits[1])*19349663u)^(static_cast<usize>(k.bits[2])*83492791u);}};
+  std::unordered_map<Key,u32,Hash> welded;welded.reserve(triangles.size()/3);
+  vertices.clear();indices.clear();indices.reserve(triangles.size()/3);
+  for(usize t=0;t<triangles.size();t+=9) {
+    u32 corner[3];
+    for(u32 v=0;v<3;++v) {
+      const float p[3]{triangles[t+v*3]*scale[0],triangles[t+v*3+1]*scale[1],triangles[t+v*3+2]*scale[2]};
+      if(!std::isfinite(p[0])||!std::isfinite(p[1])||!std::isfinite(p[2])) return false;
+      Key key{};std::memcpy(key.bits,p,sizeof(key.bits));
+      const auto [found,inserted]=welded.emplace(key,static_cast<u32>(vertices.size()));
+      if(inserted) vertices.push_back({p[0],p[1],p[2]});
+      corner[v]=found->second;
+    }
+    if(corner[0]==corner[1]||corner[1]==corner[2]||corner[0]==corner[2]) continue; // degenerado após soldar
+    indices.push_back(corner[0]);indices.push_back(corner[mirrored?2:1]);indices.push_back(corner[mirrored?1:2]);
+  }
+  return !indices.empty();
+}
+}
+bool ScenePhysics::start(GameWorld &gameWorld,const CollisionGeometrySource *geometry) {
   stop();gameWorld.clearAuthorities();error_="Falha ao iniciar a física da cena";
   const auto &document=gameWorld.graph();
   std::vector<ObjectId> ids;document.collectSubtree(document.root(),ids);
@@ -66,16 +105,30 @@ bool ScenePhysics::start(GameWorld &gameWorld) {
     if(found==colliders.end()||found->second.empty()) return fail(entity,"corpo sem colisores ativos vinculados");
     float world[16],bodyFrame[16];Transform transform;
     if(const auto *error=bodyFrameForPhysics(document,id,world,transform,bodyFrame)) return fail(entity,error);
-    std::vector<AetherCompoundPart> parts;parts.reserve(found->second.size());
-    for(const auto &source:found->second) {
-      const auto &c=*source.value;Transform partTransform;
-      if(const auto *error=colliderPoseForPhysics(document,source.object,c,bodyFrame,partTransform)) return fail(*document.find(source.object),error);
+    std::vector<AetherCompoundPartV2> parts;parts.reserve(found->second.size());
+    // Geometria das partes Malha; vive até a criação do corpo, que a copia.
+    std::vector<std::vector<AetherVec3>> meshVertices(found->second.size());
+    std::vector<std::vector<u32>> meshIndices(found->second.size());
+    for(usize index=0;index<found->second.size();++index) {
+      const auto &source=found->second[index];
+      const auto &c=*source.value;Transform partTransform;const auto &object=*document.find(source.object);
+      if(const auto *error=colliderPoseForPhysics(document,source.object,c,bodyFrame,partTransform)) return fail(object,error);
       const float x=std::abs(partTransform.scale[0]),y=std::abs(partTransform.scale[1]),z=std::abs(partTransform.scale[2]);
-      AetherCompoundPart part{};part.position={partTransform.position[0],partTransform.position[1],partTransform.position[2]};part.rotation=physicsRotation(partTransform);
+      AetherCompoundPartV2 part{};part.base.position={partTransform.position[0],partTransform.position[1],partTransform.position[2]};part.base.rotation=physicsRotation(partTransform);
       switch(c.shape) {
-        case scene::ColliderShape::Box:part.shape.kind=AetherShapeKind::Box;part.shape.boxHalfExtent={c.halfX*x,c.halfY*y,c.halfZ*z};break;
-        case scene::ColliderShape::Sphere:part.shape.kind=AetherShapeKind::Sphere;part.shape.sphereRadius=c.radius*x;break;
-        case scene::ColliderShape::Capsule:part.shape.kind=AetherShapeKind::Capsule;part.shape.sphereRadius=c.radius*x;part.shape.capsuleHalfHeight=c.halfHeight*y;break;
+        case scene::ColliderShape::Box:part.base.shape.kind=AetherShapeKind::Box;part.base.shape.boxHalfExtent={c.halfX*x,c.halfY*y,c.halfZ*z};break;
+        case scene::ColliderShape::Sphere:part.base.shape.kind=AetherShapeKind::Sphere;part.base.shape.sphereRadius=c.radius*x;break;
+        case scene::ColliderShape::Capsule:part.base.shape.kind=AetherShapeKind::Capsule;part.base.shape.sphereRadius=c.radius*x;part.base.shape.capsuleHalfHeight=c.halfHeight*y;break;
+        case scene::ColliderShape::Mesh: {
+          if(const auto *error=colliderMeshForPhysics(document,source.object,c,id)) return fail(object,error);
+          if(!geometry) return fail(object,"geometria de colisão indisponível neste mundo");
+          if(!collisionMesh(*geometry,*meshRenderer(object),partTransform.scale,meshVertices[index],meshIndices[index]))
+            return fail(object,"malha sem triângulos válidos para colisão");
+          part.geometry=c.convex?AetherPartGeometry::ConvexHull:AetherPartGeometry::TriangleMesh;
+          part.vertices=meshVertices[index].data();part.vertexCount=static_cast<u32>(meshVertices[index].size());
+          part.indices=meshIndices[index].data();part.indexCount=static_cast<u32>(meshIndices[index].size());
+          break;
+        }
       }
       parts.push_back(part);
     }
@@ -84,8 +137,9 @@ bool ScenePhysics::start(GameWorld &gameWorld) {
     desc.motionType=static_cast<AetherMotionType>(body->motion);desc.friction=body->friction;desc.restitution=body->restitution;desc.isSensor=body->sensor;
     AetherBodyDynamicsV1 dynamics{sizeof(AetherBodyDynamicsV1),1,body->linearDamping,body->angularDamping,body->gravityFactor,
       {body->angularX,body->angularY,body->angularZ},body->allowSleep?1u:0u};
-    const auto handle=AetherPhysics_CreateCompoundBodyV1(world_,&desc,parts.data(),static_cast<u32>(parts.size()),&dynamics);
-    if(handle==AetherBodyHandle_Invalid||(body->motion==scene::BodyMotion::Dynamic&&!AetherPhysics_SetMassV2(world_,handle,body->mass))) return fail(entity,"Jolt recusou a composição ou a massa");
+    const auto handle=AetherPhysics_CreateCompoundBodyV2(world_,&desc,parts.data(),static_cast<u32>(parts.size()),&dynamics);
+    if(handle==AetherBodyHandle_Invalid||(body->motion==scene::BodyMotion::Dynamic&&!AetherPhysics_SetMassV2(world_,handle,body->mass)))
+      return fail(entity,"Jolt recusou a composição ou a massa (malha convexa plana não tem casco sólido)");
     if(body->motion!=scene::BodyMotion::Static) AetherPhysics_SetLinearVelocity(world_,handle,{body->velocityX,body->velocityY,body->velocityZ});
     objects_.emplace(handle,id);
     gameWorld.setAuthority(id,TransformAuthority::PhysicsBody);

@@ -212,6 +212,14 @@ u32 linkedCount(const EditorDocument &document) {
 }
 } // namespace
 
+// Perfil com escala e teto de textura; o resto fica no padrão do formato.
+static resources::ImportProfile profileOf(float scale, u32 maximumTextureDimension) {
+  resources::ImportProfile profile;
+  profile.scale = scale;
+  profile.maximumTextureDimension = maximumTextureDimension;
+  return profile;
+}
+
 AE_TEST(m082_node_map_starts_from_legacy_keys_and_round_trips) {
   resources::GltfImport model;
   AE_EXPECT_TRUE(resources::importGlb(vehicleV1(), {}, {}, model), model.diagnostic.c_str());
@@ -306,7 +314,7 @@ AE_TEST(m082_ambiguous_repeated_names_are_never_matched_silently) {
 
 AE_TEST(r3_import_profile_scales_roots_persists_per_source_and_changes_the_cache_key) {
   // Arquivo do perfil: escreve, lê e recusa o que não conhece.
-  const resources::ImportProfile profile{10.0f, 512};
+  const auto profile = profileOf(10.0f, 512);
   resources::ImportProfile parsed;
   AE_EXPECT_TRUE(resources::parseImportProfile(resources::serializeImportProfile(profile), parsed), "ida e volta");
   AE_EXPECT_TRUE(resources::sameImportProfile(parsed, profile), "mesmo perfil");
@@ -322,7 +330,7 @@ AE_TEST(r3_import_profile_scales_roots_persists_per_source_and_changes_the_cache
   // O perfil nunca sobe acima do teto do aparelho.
   resources::GltfImportLimits device;
   device.maximumTextureDimension = 1024;
-  AE_EXPECT_EQ(resources::applyImportProfile(device, {1.0f, 2048}).maximumTextureDimension, 1024u, "teto do aparelho vence");
+  AE_EXPECT_EQ(resources::applyImportProfile(device, profileOf(1.0f, 2048)).maximumTextureDimension, 1024u, "teto do aparelho vence");
 
   // Escala só nas raízes; os filhos herdam pela hierarquia.
   resources::GltfImport plain, scaled;
@@ -353,7 +361,7 @@ AE_TEST(r3_import_profile_scales_roots_persists_per_source_and_changes_the_cache
   start(session, renderer);
   AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
   AE_EXPECT_TRUE(resources::sameImportProfile(session.importProfileForPath(kSource), {}), "sem arquivos: embutido");
-  AE_EXPECT_TRUE(session.saveProjectImportProfile({0.01f, 1024}), "padrão do projeto gravado");
+  AE_EXPECT_TRUE(session.saveProjectImportProfile(profileOf(0.01f, 1024)), "padrão do projeto gravado");
   AE_EXPECT_EQ(session.importProfileForPath(kSource).maximumTextureDimension, 1024u, "fonte nova usa o padrão");
   EditorSession::ModelImportReport report;
   AE_EXPECT_TRUE(commit(session, project, vehicleV1(), report), report.diagnostic.c_str());

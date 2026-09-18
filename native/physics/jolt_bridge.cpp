@@ -17,6 +17,7 @@
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Character/CharacterVirtual.h>
@@ -172,18 +173,23 @@ AetherQuat FromJolt(JPH::Quat q) { return {q.GetX(), q.GetY(), q.GetZ(), q.GetW(
 /// shapecast/overlap (item 4.1.4), que precisam da mesma conversão AetherShapeDesc->JPH::Shape
 /// sem criar um corpo. Devolve shape nulo (RefConst vazio) em erro de criação — mesma
 /// disciplina do resto da fronteira, chamador confere antes de usar.
-JPH::RefConst<JPH::Shape> ToJoltShape(const AetherShapeDesc &desc) {
+// `userData` vai na forma FOLHA: `Shape::GetSubShapeUserData` de um composto
+// devolve o dado da folha acertada, não o da entrada do composto.
+JPH::RefConst<JPH::Shape> ToJoltShape(const AetherShapeDesc &desc, ae::u64 userData = 0) {
   if (desc.kind == AetherShapeKind::Box) {
     JPH::BoxShapeSettings settings(ToJolt(desc.boxHalfExtent));
+    settings.mUserData = userData;
     auto result = settings.Create();
     return result.HasError() ? nullptr : result.Get();
   }
   if (desc.kind == AetherShapeKind::Capsule) {
     JPH::CapsuleShapeSettings settings(desc.capsuleHalfHeight, desc.sphereRadius);
+    settings.mUserData = userData;
     auto result = settings.Create();
     return result.HasError() ? nullptr : result.Get();
   }
   JPH::SphereShapeSettings settings(desc.sphereRadius);
+  settings.mUserData = userData;
   auto result = settings.Create();
   return result.HasError() ? nullptr : result.Get();
 }
@@ -805,7 +811,7 @@ void ReportUpdateErrors(AetherPhysicsWorld &world, ae::u32 flags) {
 }
 
 AetherBodyHandle CreateBodyInternal(AetherPhysicsWorld &world, const AetherBodyDescV2 &desc, AetherVec3 localCenter={0,0,0},
-    JPH::RefConst<JPH::Shape> suppliedShape=nullptr,const AetherBodyDynamicsV1 *dynamics=nullptr) {
+    JPH::RefConst<JPH::Shape> suppliedShape=nullptr,const AetherBodyDynamicsV1 *dynamics=nullptr,bool massless=false) {
   JPH::RefConst<JPH::Shape> shape = suppliedShape != nullptr ? suppliedShape : ToJoltShape(desc.shape);
   if (shape == nullptr) return AetherBodyHandle_Invalid;
   if(localCenter.x!=0 || localCenter.y!=0 || localCenter.z!=0) {
@@ -832,6 +838,13 @@ AetherBodyHandle CreateBodyInternal(AetherPhysicsWorld &world, const AetherBodyD
     bodySettings.mGravityFactor=dynamics->gravityFactor;
     bodySettings.mAngularVelocity=ToJolt(dynamics->angularVelocity);
     bodySettings.mAllowSleeping=dynamics->allowSleeping!=0;
+  }
+  // Corpo cinemático com malha de triângulos: a malha não tem volume, e o Jolt
+  // ainda monta propriedades de movimento para ele. Massa fornecida evita a
+  // massa inválida; um cinemático nunca a usa para responder a forças.
+  if(massless) {
+    bodySettings.mOverrideMassProperties=JPH::EOverrideMassProperties::MassAndInertiaProvided;
+    bodySettings.mMassPropertiesOverride.SetMassAndInertiaOfSolidBox(JPH::Vec3::sReplicate(1.0f),1.0f);
   }
   bodySettings.mIsSensor = desc.isSensor != 0;
   // Sensores cinemáticos precisam enxergar volumes estáticos. O default do
@@ -961,11 +974,68 @@ AetherBodyHandle AetherPhysics_CreateCompoundBodyV1(AetherPhysicsWorld *world,
       if(!finite(shape.boxHalfExtent)||shape.boxHalfExtent.x<=0||shape.boxHalfExtent.y<=0||shape.boxHalfExtent.z<=0) return AetherBodyHandle_Invalid;
     } else if(!std::isfinite(shape.sphereRadius)||shape.sphereRadius<=0||
         (shape.kind==AetherShapeKind::Capsule&&(!std::isfinite(shape.capsuleHalfHeight)||shape.capsuleHalfHeight<=0))) return AetherBodyHandle_Invalid;
-    const auto native=ToJoltShape(shape);if(native==nullptr) return AetherBodyHandle_Invalid;
+    const auto native=ToJoltShape(shape,i);if(native==nullptr) return AetherBodyHandle_Invalid;
     compound.AddShape(ToJolt(p.position),ToJolt(p.rotation),native.GetPtr(),i);
   }
   const auto result=compound.Create();if(result.HasError()) return AetherBodyHandle_Invalid;
   return CreateBodyInternal(*world,*desc,{0,0,0},result.Get(),dynamics);
+}
+
+AetherBodyHandle AetherPhysics_CreateCompoundBodyV2(AetherPhysicsWorld *world,
+    const AetherBodyDescV2 *desc,const AetherCompoundPartV2 *parts,ae::u32 count,
+    const AetherBodyDynamicsV1 *dynamics) {
+  const auto finite=[](AetherVec3 v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z);};
+  const auto unit=[](AetherQuat q){const float n=q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w;return std::isfinite(n)&&std::abs(n-1)<.001f;};
+  if(!world||!desc||!parts||count<1||count>256||!dynamics||dynamics->structSize<sizeof(*dynamics)||dynamics->apiVersion!=1||
+      desc->structSize<sizeof(*desc)||desc->apiVersion!=AetherBodyApiVersionV2||(desc->eventLayerMask&~3u)||
+      static_cast<ae::u32>(desc->motionType)>2||!finite(desc->position)||!unit(desc->rotation)||
+      !std::isfinite(desc->friction)||desc->friction<0||!std::isfinite(desc->restitution)||desc->restitution<0||desc->restitution>1||
+      !std::isfinite(dynamics->linearDamping)||dynamics->linearDamping<0||dynamics->linearDamping>10||
+      !std::isfinite(dynamics->angularDamping)||dynamics->angularDamping<0||dynamics->angularDamping>10||
+      !std::isfinite(dynamics->gravityFactor)||std::abs(dynamics->gravityFactor)>100||!finite(dynamics->angularVelocity)) return AetherBodyHandle_Invalid;
+  JPH::StaticCompoundShapeSettings compound;
+  bool mesh=false;
+  for(ae::u32 i=0;i<count;++i) {
+    const auto &p=parts[i];const auto &shape=p.base.shape;
+    if(!finite(p.base.position)||!unit(p.base.rotation)||static_cast<ae::u32>(p.geometry)>2) return AetherBodyHandle_Invalid;
+    JPH::RefConst<JPH::Shape> native;
+    if(p.geometry==AetherPartGeometry::Primitive) {
+      if(static_cast<ae::u32>(shape.kind)>2) return AetherBodyHandle_Invalid;
+      if(shape.kind==AetherShapeKind::Box) {
+        if(!finite(shape.boxHalfExtent)||shape.boxHalfExtent.x<=0||shape.boxHalfExtent.y<=0||shape.boxHalfExtent.z<=0) return AetherBodyHandle_Invalid;
+      } else if(!std::isfinite(shape.sphereRadius)||shape.sphereRadius<=0||
+          (shape.kind==AetherShapeKind::Capsule&&(!std::isfinite(shape.capsuleHalfHeight)||shape.capsuleHalfHeight<=0))) return AetherBodyHandle_Invalid;
+      native=ToJoltShape(shape,i);
+    } else {
+      const bool hull=p.geometry==AetherPartGeometry::ConvexHull;
+      if(!p.vertices||p.vertexCount<(hull?4u:3u)) return AetherBodyHandle_Invalid;
+      for(ae::u32 v=0;v<p.vertexCount;++v) if(!finite(p.vertices[v])) return AetherBodyHandle_Invalid;
+      if(hull) {
+        JPH::Array<JPH::Vec3> points;points.reserve(p.vertexCount);
+        for(ae::u32 v=0;v<p.vertexCount;++v) points.push_back(JPH::Vec3(p.vertices[v].x,p.vertices[v].y,p.vertices[v].z));
+        JPH::ConvexHullShapeSettings settings(points);
+        settings.mUserData=i;
+        const auto result=settings.Create();if(result.HasError()) return AetherBodyHandle_Invalid;
+        native=result.Get();
+      } else {
+        if(desc->motionType==AetherMotionType::Dynamic||!p.indices||p.indexCount<3||p.indexCount%3) return AetherBodyHandle_Invalid;
+        for(ae::u32 k=0;k<p.indexCount;++k) if(p.indices[k]>=p.vertexCount) return AetherBodyHandle_Invalid;
+        JPH::VertexList vertices;vertices.reserve(p.vertexCount);
+        for(ae::u32 v=0;v<p.vertexCount;++v) vertices.emplace_back(p.vertices[v].x,p.vertices[v].y,p.vertices[v].z);
+        JPH::IndexedTriangleList triangles;triangles.reserve(p.indexCount/3);
+        for(ae::u32 k=0;k<p.indexCount;k+=3) triangles.emplace_back(p.indices[k],p.indices[k+1],p.indices[k+2],0);
+        JPH::MeshShapeSettings settings(std::move(vertices),std::move(triangles));
+        settings.mBuildQuality=JPH::MeshShapeSettings::EBuildQuality::FavorRuntimePerformance;
+        settings.mUserData=i;
+        const auto result=settings.Create();if(result.HasError()) return AetherBodyHandle_Invalid;
+        native=result.Get();mesh=true;
+      }
+    }
+    if(native==nullptr) return AetherBodyHandle_Invalid;
+    compound.AddShape(ToJolt(p.base.position),ToJolt(p.base.rotation),native.GetPtr(),i);
+  }
+  const auto result=compound.Create();if(result.HasError()) return AetherBodyHandle_Invalid;
+  return CreateBodyInternal(*world,*desc,{0,0,0},result.Get(),dynamics,mesh&&desc->motionType==AetherMotionType::Kinematic);
 }
 
 ae::i32 AetherPhysics_CreateBodiesV2(AetherPhysicsWorld *world,

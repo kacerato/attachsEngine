@@ -13,15 +13,35 @@ inline const char *bodyFrameForPhysics(const SceneGraph &graph,ObjectId id,
 }
 inline const char *colliderPoseForPhysics(const SceneGraph &graph,ObjectId id,
     const scene::Collider &collider,const float frame[16],Transform &pose) {
-  Transform local;local.position[0]=collider.centerX;local.position[1]=collider.centerY;local.position[2]=collider.centerZ;
-  local.rotationDegrees[0]=collider.rotationX;local.rotationDegrees[1]=collider.rotationY;local.rotationDegrees[2]=collider.rotationZ;
+  // Malha não tem centro nem rotação próprios (os campos ficam guardados, mas
+  // escondidos): a geometria já está no referencial do objeto.
+  const bool mesh=collider.shape==scene::ColliderShape::Mesh;
+  Transform local;
+  if(!mesh) {
+    local.position[0]=collider.centerX;local.position[1]=collider.centerY;local.position[2]=collider.centerZ;
+    local.rotationDegrees[0]=collider.rotationX;local.rotationDegrees[1]=collider.rotationY;local.rotationDegrees[2]=collider.rotationZ;
+  }
   float localMatrix[16],objectMatrix[16],world[16];transformMatrix(local,localMatrix);
   if(!worldMatrix(graph,id,objectMatrix)) return "Transformação global do colisor inválida";
   multiplyMatrix(objectMatrix,localMatrix,world);
   if(!localTransformForWorld(world,frame,pose)) return "Colisor rotacionado sob escala não uniforme produz shear";
   const float x=std::abs(pose.scale[0]),y=std::abs(pose.scale[1]),z=std::abs(pose.scale[2]);
-  if(collider.shape!=scene::ColliderShape::Box && (std::abs(x-y)>1e-4f*x||std::abs(x-z)>1e-4f*x))
+  if((collider.shape==scene::ColliderShape::Sphere||collider.shape==scene::ColliderShape::Capsule) &&
+     (std::abs(x-y)>1e-4f*x||std::abs(x-z)>1e-4f*x))
     return "Esfera e cápsula requerem escala global uniforme";
+  return nullptr;
+}
+// O que a forma Malha exige além da pose. A malha vem do Renderizador de malha
+// do próprio objeto; sem ele não há forma, e não se inventa uma caixa no lugar.
+// Não convexa em corpo dinâmico é recusada pela mesma razão da Unity: triângulos
+// soltos não têm volume, logo não têm massa nem inércia.
+inline const char *colliderMeshForPhysics(const SceneGraph &graph,ObjectId id,const scene::Collider &collider,ObjectId owner) {
+  if(collider.shape!=scene::ColliderShape::Mesh) return nullptr;
+  const auto *entity=graph.find(id);const auto *render=entity?meshRenderer(*entity):nullptr;
+  if(!render||!render->mesh) return "Colisor de malha requer Renderizador de malha com malha neste objeto";
+  const auto *object=graph.find(owner);const auto *body=object?physicsBody(*object):nullptr;
+  if(!collider.convex&&body&&body->motion==scene::BodyMotion::Dynamic)
+    return "Malha não convexa só em corpo estático ou cinemático; ligue Convexo para corpo dinâmico";
   return nullptr;
 }
 inline const char *colliderOwnerForPhysics(const SceneGraph &graph,ObjectId id,const scene::Collider &value,ObjectId &owner) {

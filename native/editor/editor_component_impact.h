@@ -25,6 +25,8 @@ inline std::vector<ComponentImpactEntry> physicsComponentImpact(const EditorDocu
       issue(owner,0,error);
     else if(const auto *error=runtime::colliderPoseForPhysics(document,source,collider,frame,shapePose))
       issue(source,collider.instanceId(),error);
+    if(const auto *error=runtime::colliderMeshForPhysics(document,source,collider,owner))
+      issue(source,collider.instanceId(),error);
   };
   if(&value.type()==&scene::Collider::descriptor) {
     const auto &collider=static_cast<const scene::Collider&>(value);if(!collider.enabled) return rows;

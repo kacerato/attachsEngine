@@ -18,6 +18,22 @@ namespace ae::editor {
 //
 // Uma thread só, sem dependência de plataforma.
 class EditorPlayScene final {
+  // A forma do colisor Malha sai da MESMA geometria que a seleção e o ajuste de
+  // colisor usam, no referencial do objeto em que o renderer a desenha.
+  class CollisionGeometry final : public runtime::CollisionGeometrySource {
+  public:
+    explicit CollisionGeometry(const EditorMapScene &resources) : resources_(resources) {}
+    bool meshTriangles(u32 mesh,std::vector<float> &out) const override {
+      std::span<const EditorPickMesh::Triangle> triangles;float m[16];
+      if(!resources_.localGeometry(mesh,triangles,m)) return false;
+      out.reserve(out.size()+triangles.size()*9);
+      for(const auto &t:triangles) for(u32 v=0;v<3;++v) for(u32 k=0;k<3;++k)
+        out.push_back(m[12+k]+m[k]*t[v*3]+m[4+k]*t[v*3+1]+m[8+k]*t[v*3+2]);
+      return true;
+    }
+  private:
+    const EditorMapScene &resources_;
+  };
 public:
   ~EditorPlayScene(){stop();}
   void setScriptRuntime(scene::ScriptRuntimeApi api,const std::string &root) {scripts_.configure(api,root);}
@@ -49,7 +65,8 @@ public:
     if(!world_.load(source)) return false;
     std::vector<renderer::MapDrawState> validated;
     if(!resources.extract(world_.graph(),validated)) {world_.clear();return false;}
-    if(!physics_.start(world_)) {world_.clear();return false;}
+    const CollisionGeometry geometry(resources);
+    if(!physics_.start(world_,&geometry)) {world_.clear();return false;}
     input_.setMap(world_.graph().inputActions());
     input_.reset();
     input_.setGameplayFocus(true);

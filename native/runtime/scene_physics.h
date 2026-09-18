@@ -67,6 +67,17 @@ struct ContactEvent {
   float normal[3]{};
 };
 
+// De onde vem a forma do colisor Malha. A física não conhece o pacote de mapa
+// nem o editor: quem monta o mundo entrega os triângulos da malha `mesh` (o
+// índice que o MeshRenderer guarda por slot) no referencial do OBJETO que a
+// desenha — o mesmo em que o renderer a põe —, 9 floats por triângulo,
+// acrescentados ao fim de `out`.
+class CollisionGeometrySource {
+public:
+  virtual ~CollisionGeometrySource() = default;
+  virtual bool meshTriangles(u32 mesh, std::vector<float> &out) const = 0;
+};
+
 class ScenePhysics final {
 public:
   ~ScenePhysics() { stop(); }
@@ -76,7 +87,9 @@ public:
 
   // Monta corpos, juntas e personagens a partir do grafo do mundo e registra as
   // autoridades de pose. Falha deixa o mundo sem autoridades e o erro em error().
-  bool start(GameWorld &gameWorld);
+  // Sem `geometry`, um colisor Malha recusa o início com motivo, em vez de
+  // simular sem a forma.
+  bool start(GameWorld &gameWorld, const CollisionGeometrySource *geometry = nullptr);
   bool advance(double elapsed, GameWorld &world, bool (*beforeStep)(void *, float) = nullptr,
                void *context = nullptr, bool (*trigger)(void *, ObjectId, ObjectId, u32) = nullptr,
                bool (*contact)(void *, const ContactEvent &) = nullptr);

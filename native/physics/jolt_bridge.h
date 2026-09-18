@@ -245,6 +245,33 @@ AetherBodyHandle AetherPhysics_CreateCompoundBodyV1(AetherPhysicsWorld *world,
     const AetherBodyDescV2 *desc,const AetherCompoundPart *parts,ae::u32 count,
     const AetherBodyDynamicsV1 *dynamics);
 
+// Geometria de uma parte de composto (Mesh Collider da Unity). `Primitive` usa
+// `base.shape`; as outras duas usam os vértices, já no referencial da parte e com
+// a escala aplicada. Os ponteiros só precisam viver durante a chamada.
+//
+// - `ConvexHull` (Convex ligado): casco convexo dos vértices; índices ignorados.
+//   Serve a qualquer tipo de movimento.
+// - `TriangleMesh` (Convex desligado): os triângulos exatos. Só em corpo estático
+//   ou cinemático — uma malha arbitrária não tem volume, logo não tem massa, e o
+//   Jolt não resolve malha contra malha. É a mesma recusa da Unity para
+//   MeshCollider não convexo em Rigidbody não cinemático.
+enum class AetherPartGeometry : ae::u32 { Primitive = 0, ConvexHull = 1, TriangleMesh = 2 };
+struct AetherCompoundPartV2 {
+  AetherCompoundPart base;
+  AetherPartGeometry geometry;
+  const AetherVec3 *vertices;
+  ae::u32 vertexCount;
+  const ae::u32 *indices;
+  ae::u32 indexCount;
+};
+// Mesmo contrato da V1 (1..256 partes, o dado de usuário da subforma é o índice
+// da parte), com partes de malha. Devolve Invalid para malha não convexa em corpo
+// dinâmico, geometria vazia/não finita, índice fora do intervalo ou casco
+// degenerado (malha plana não tem casco sólido).
+AetherBodyHandle AetherPhysics_CreateCompoundBodyV2(AetherPhysicsWorld *world,
+    const AetherBodyDescV2 *desc,const AetherCompoundPartV2 *parts,ae::u32 count,
+    const AetherBodyDynamicsV1 *dynamics);
+
 ae::i32 AetherPhysics_CreateBodiesV2(AetherPhysicsWorld *world,
                                      const AetherBodyDescV2 *descs,
                                      AetherBodyHandle *outHandles,
@@ -488,7 +515,8 @@ ae::i32 AetherPhysics_SetBodyGameplayLayerV1(AetherPhysicsWorld *world, AetherBo
 ae::u32 AetherPhysics_GetBodyGameplayLayerV1(const AetherPhysicsWorld *world, AetherBodyHandle body);
 
 /// Dado de usuário da subforma acertada por uma query. `AetherPhysics_CreateCompoundBodyV1`
-/// grava nele o ÍNDICE da parte na ordem em que foi passada, então é por aqui que
+/// e a V2 gravam nele o ÍNDICE da parte na ordem em que foi passada (na forma
+/// folha: é ela que o Jolt devolve, não o dado da entrada do composto), então é por aqui que
 /// um chamador volta de "acertei o corpo X, subforma S" para "acertei o colisor
 /// que eu mesmo montei na posição N". Devolve 1 em sucesso.
 ae::i32 AetherPhysics_GetSubShapeUserDataV1(AetherPhysicsWorld *world, AetherBodyHandle body,

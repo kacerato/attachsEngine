@@ -9,8 +9,10 @@ Vocabulário (o mesmo da §9 do plano): **inventariado** → **especificado** �
 
 **Escopo de validação desta rodada:**
 
-1. Testes de host compilados e executados com g++ 16 (MinGW-w64): 48 testes
-   novos verdes (`test_component_contracts`, `test_component_preset`,
+1. Suíte inteira de host (`build/editor-host`, Ninja + g++ com `-Werror`,
+   incluindo o Jolt): 1003 de 1009 verdes; as 6 falhas estão listadas na seção
+   "Falhas conhecidas da suíte" abaixo. Dos testes desta rodada, 55 são novos e
+   verdes (`test_component_contracts`, `test_component_preset`,
    `test_component_recipes`, `test_import_geometry_profile`,
    `test_import_scene_impact`, `test_import_format_compat`,
    `test_import_node_exclusion`), todos registrados em `native/CMakeLists.txt`.
@@ -118,6 +120,42 @@ no editor de material, que endereça os dois índices. Também permanece: aplica
 valores nunca cria slot — trocar a quantidade de slots é mudar a geometria do
 objeto, e só a substituição completa do componente faz isso. O painel diz isso
 quando (e só quando) o preset tem outra quantidade de slots.
+
+### Colisão derivada da malha (Mesh Collider)
+
+| Entrega | Onde vive | Estado |
+|---|---|---|
+| Forma **Malha** no Colisor, com **Convexo** — o Mesh Collider da Unity. A forma é a malha que o Renderizador de malha do próprio objeto desenha (todos os slots, a mesma malha em dois slots conta uma vez), com a escala do objeto; como na Unity, não tem centro nem rotação próprios | `native/scene/collider.h` (v4, lê v1–v3 com Convexo desligado) | validado no host |
+| Convexo ligado: casco convexo, aceito em qualquer corpo. Desligado: os triângulos exatos, **recusados em corpo dinâmico com o motivo** ("ligue Convexo") — a mesma regra da Unity, porque triângulos soltos não têm volume nem massa | `runtime/physics_requirements.h`, `runtime/scene_physics.cpp` | validado no host, inclusive um caixote convexo caindo e parando sobre um piso de malha |
+| Ponte com o Jolt: `AetherPhysics_CreateCompoundBodyV2` com partes de casco e de malha na mesma composição que as primitivas; a V1 fica congelada | `native/physics/jolt_bridge.*` | validado no host |
+| A física não conhece o editor: quem monta o mundo entrega a geometria por `CollisionGeometrySource`; o Play usa a MESMA geometria da seleção e do ajuste de colisor | `runtime/scene_physics.h`, `editor/editor_play_scene.h` | implementado |
+| O Inspector mostra o motivo antes do Play (sem Renderizador de malha, não convexo em corpo dinâmico) | `editor/editor_component_impact.h` | implementado |
+| **Defeito antigo corrigido:** uma consulta física (raio, varredura, sobreposição) num corpo com várias formas sempre respondia com o PRIMEIRO colisor. O índice da parte ia na entrada do composto, e o Jolt devolve o dado da forma folha | `jolt_bridge.cpp` (`ToJoltShape` com dado de usuário) | validado no host |
+
+**Limite declarado:** uma malha de colisão **diferente** da malha desenhada (o
+`sharedMesh` trocado à mão na Unity, ou uma versão simplificada) ainda não existe.
+Ela entra junto com o documento de malha e os níveis de LOD, que é de onde a
+versão simplificada deve sair, e não como um segundo campo solto no colisor.
+
+## Falhas conhecidas da suíte
+
+Conferidas contra uma build da suíte em `a80fcb28`, o commit anterior ao
+plano: as cinco primeiras já falhavam lá, e nenhuma é consequência destes blocos.
+
+- `picking_with_the_camera_inside_the_sphere_hits_at_zero`
+- `the_ide_toolbar_is_icons_and_the_rest_lives_in_one_menu`
+- `session_asset_browser_recreates_geometry_in_an_empty_document`
+- `session_river_popup_points_and_all_point_properties_work_through_touch`
+- `session_explicit_camera_creation_is_undoable`
+- `r4_sampling_uv_set_wrap_and_filter_resolve_publish_variants_and_travel_to_the_project_material`:
+  vem da projeção triplanar (`MaterialUvWorld`), ainda fora de commit no working
+  tree. O teste espera que o conjunto de UV 3 seja recusado, e com a projeção ele
+  passa a ser aceito como válido.
+
+Uma falha **deste** trabalho foi achada e corrigida pela suíte: os campos novos
+da aba Perfil empurravam "Preparar com este perfil" para fora de uma tela baixa
+(`r3_import_lives_in_properties_and_does_not_block_the_editor`). As ações
+passaram para o rodapé fixo, como Revert/Apply no Import Settings da Unity.
 
 ## G4–G6
 

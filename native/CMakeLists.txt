@@ -530,6 +530,7 @@ if(NOT ANDROID)
     ../tests/native/test_gpu_draw_compaction.cpp
     ../tests/native/test_runtime_world.cpp
     ../tests/native/test_runtime_physics_access.cpp
+    ../tests/native/test_mesh_collider.cpp
     ../tests/native/test_runtime_input.cpp
     ../tests/native/test_runtime_lights.cpp
     ../tests/native/test_asset_registry.cpp

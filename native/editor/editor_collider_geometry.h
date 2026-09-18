@@ -4,6 +4,9 @@
 namespace ae::editor {
 template<class Segment> void editorColliderSegments(const scene::Collider &c,Segment segment) {
   using Point=std::array<float,3>;constexpr float pi=3.14159265359f;
+  // Malha: a forma É a geometria desenhada do objeto; repetir o contorno em
+  // linhas não acrescenta nada e custaria um segmento por aresta.
+  if(c.shape==scene::ColliderShape::Mesh) return;
   if(c.shape==scene::ColliderShape::Box) {
     const float half[]{c.halfX,c.halfY,c.halfZ};
     for(u32 corner=0;corner<8;++corner) for(u32 axis=0;axis<3;++axis) if(!(corner&(1u<<axis))) {

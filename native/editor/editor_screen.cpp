@@ -1991,6 +1991,20 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     const auto scaleText=[](float scale) {
       return "×"+decimalText(scale,scale>=1?0:scale>=.1f?1:scale>=.01f?2:3);
     };
+    // As ações ficam no rodapé, como Revert/Apply no Import Settings da Unity:
+    // cada campo novo do perfil empurrava "Preparar" para fora de uma tela
+    // baixa, e um perfil pendente sem o botão de aplicar vira beco sem saída.
+    // Os campos ocupam o que sobra acima.
+    const bool canApply=state.importReady && !profileApplied;
+    const auto save=deflate(takeBottom(content,38),UiInsets::all(2));
+    const auto apply=deflate(takeBottom(content,38),UiInsets::all(2));
+    list.addRect(apply,canApply?theme.color.accent:theme.color.raised,theme.radius.control);
+    builder.label(apply,"Preparar com este perfil",canApply?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    if(canApply) router.addRegion(apply,widgetId(EditorWidget::ImportApplyProfile));
+    list.addRect(save,theme.color.raised,theme.radius.control);
+    builder.label(save,"Salvar como padrão do projeto",theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(save,widgetId(EditorWidget::ImportSaveDefaultProfile));
+    takeBottom(content,6);
     auto scaleRow=takeTop(content,36);
     builder.label(takeLeft(scaleRow,scaleRow.width*.4f),"Escala",theme.color.text,theme.type.caption);
     const auto down=deflate(takeLeft(scaleRow,36),UiInsets::all(2)),up=deflate(takeRight(scaleRow,36),UiInsets::all(2));
@@ -2044,15 +2058,6 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     }
     list.popClip();
     takeTop(content,8);
-    const bool canApply=state.importReady && !profileApplied;
-    const auto apply=deflate(takeTop(content,38),UiInsets::all(2));
-    list.addRect(apply,canApply?theme.color.accent:theme.color.raised,theme.radius.control);
-    builder.label(apply,"Preparar com este perfil",canApply?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
-    if(canApply) router.addRegion(apply,widgetId(EditorWidget::ImportApplyProfile));
-    const auto save=deflate(takeTop(content,38),UiInsets::all(2));
-    list.addRect(save,theme.color.raised,theme.radius.control);
-    builder.label(save,"Salvar como padrão do projeto",theme.color.text,theme.type.caption,UiAlign::Center);
-    router.addRegion(save,widgetId(EditorWidget::ImportSaveDefaultProfile));
     list.pushClip(content);
     for(const auto &line:wrapText(list,"Guardado com a fonte ao publicar. Reimportar e reabrir o projeto usam o mesmo perfil.",
                                   content.width,theme.type.caption)) {
