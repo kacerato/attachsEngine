@@ -142,6 +142,12 @@
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\Debug\\1y1q5570\\obj\\arm64-v8a\\benchmark_physics2d_jolt",
       "runtimeFiles": []
     },
+    "aether_codecs::@6890427a1f51a3e7e1df": {
+      "artifactName": "aether_codecs",
+      "abi": "arm64-v8a",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\Debug\\1y1q5570\\arm64-v8a\\libaether_codecs.a",
+      "runtimeFiles": []
+    },
     "benchmark_physics2d_box2d::@6890427a1f51a3e7e1df": {
       "artifactName": "benchmark_physics2d_box2d",
       "abi": "arm64-v8a",

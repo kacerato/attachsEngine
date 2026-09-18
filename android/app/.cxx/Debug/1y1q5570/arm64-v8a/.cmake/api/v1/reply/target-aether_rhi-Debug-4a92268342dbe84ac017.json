@@ -3,7 +3,7 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "libaether_platform.a"
+			"path" : "libaether_rhi.a"
 		}
 	],
 	"backtrace" : 1,
@@ -28,25 +28,25 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 151,
+				"line" : 363,
 				"parent" : 0
 			},
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 161,
+				"line" : 391,
 				"parent" : 0
 			},
 			{
 				"command" : 2,
 				"file" : 0,
-				"line" : 95,
+				"line" : 170,
 				"parent" : 0
 			},
 			{
 				"command" : 3,
 				"file" : 0,
-				"line" : 160,
+				"line" : 383,
 				"parent" : 0
 			}
 		]
@@ -96,6 +96,10 @@
 				{
 					"backtrace" : 4,
 					"path" : "C:/Users/donod/Downloads/atchengine/native"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "C:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include"
 				}
 			],
 			"language" : "CXX",
@@ -115,7 +119,18 @@
 				3,
 				4,
 				5,
-				6
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16,
+				17
 			],
 			"sysroot" : 
 			{
@@ -128,11 +143,19 @@
 		{
 			"backtrace" : 2,
 			"id" : "aether_core::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "aether_rendergraph::@6890427a1f51a3e7e1df"
+		},
+		{
+			"backtrace" : 2,
+			"id" : "aether_ui::@6890427a1f51a3e7e1df"
 		}
 	],
-	"id" : "aether_platform::@6890427a1f51a3e7e1df",
-	"name" : "aether_platform",
-	"nameOnDisk" : "libaether_platform.a",
+	"id" : "aether_rhi::@6890427a1f51a3e7e1df",
+	"name" : "aether_rhi",
+	"nameOnDisk" : "libaether_rhi.a",
 	"paths" : 
 	{
 		"build" : ".",
@@ -150,7 +173,18 @@
 				3,
 				4,
 				5,
-				6
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16,
+				17
 			]
 		}
 	],
@@ -159,43 +193,109 @@
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "platform/app_lifecycle.cpp",
+			"path" : "rhi/bindless_index_allocator.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "platform/atomic_asset_file.cpp",
+			"path" : "rhi/bindless_registry.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "platform/camera_route.cpp",
+			"path" : "rhi/compute.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "platform/first_person_controller.cpp",
+			"path" : "rhi/water_spectral_compute.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "platform/free_camera_controller.cpp",
+			"path" : "rhi/compute_validation.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "platform/process_memory.cpp",
+			"path" : "rhi/descriptor_cache.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "platform/virtual_joystick.cpp",
+			"path" : "rhi/device_profile.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "rhi/device.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "rhi/gpu_frame_timer.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "rhi/memory_allocator.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "rhi/memory_budget.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "rhi/pipeline_cache.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "rhi/resource.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "rhi/resource_desc.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "rhi/render_graph_vulkan.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "rhi/render_graph_vulkan_mapping.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "rhi/ui_renderer.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "rhi/upload_context.cpp",
 			"sourceGroupIndex" : 0
 		}
 	],

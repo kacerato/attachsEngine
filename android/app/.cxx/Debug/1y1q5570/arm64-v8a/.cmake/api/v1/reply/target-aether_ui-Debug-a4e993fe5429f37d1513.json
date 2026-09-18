@@ -3,7 +3,7 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "libaether_core.a"
+			"path" : "libaether_ui.a"
 		}
 	],
 	"backtrace" : 1,
@@ -12,8 +12,8 @@
 		"commands" : 
 		[
 			"add_library",
-			"add_compile_options",
 			"target_link_libraries",
+			"add_compile_options",
 			"target_include_directories"
 		],
 		"files" : 
@@ -28,25 +28,25 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 141,
+				"line" : 349,
 				"parent" : 0
 			},
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 95,
+				"line" : 360,
 				"parent" : 0
 			},
 			{
 				"command" : 2,
 				"file" : 0,
-				"line" : 148,
+				"line" : 170,
 				"parent" : 0
 			},
 			{
 				"command" : 3,
 				"file" : 0,
-				"line" : 147,
+				"line" : 359,
 				"parent" : 0
 			}
 		]
@@ -60,31 +60,31 @@
 					"fragment" : "-g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -fno-limit-debug-info  -fPIC"
 				},
 				{
-					"backtrace" : 2,
+					"backtrace" : 3,
 					"fragment" : "-Wall"
 				},
 				{
-					"backtrace" : 2,
+					"backtrace" : 3,
 					"fragment" : "-Wextra"
 				},
 				{
-					"backtrace" : 2,
+					"backtrace" : 3,
 					"fragment" : "-Wpedantic"
 				},
 				{
-					"backtrace" : 2,
+					"backtrace" : 3,
 					"fragment" : "-Werror"
 				},
 				{
-					"backtrace" : 2,
+					"backtrace" : 3,
 					"fragment" : "-fno-rtti"
 				},
 				{
-					"backtrace" : 2,
+					"backtrace" : 3,
 					"fragment" : "-fno-exceptions"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 2,
 					"fragment" : "-pthread"
 				},
 				{
@@ -112,7 +112,11 @@
 				0,
 				1,
 				2,
-				3
+				3,
+				4,
+				5,
+				6,
+				7
 			],
 			"sysroot" : 
 			{
@@ -120,9 +124,16 @@
 			}
 		}
 	],
-	"id" : "aether_core::@6890427a1f51a3e7e1df",
-	"name" : "aether_core",
-	"nameOnDisk" : "libaether_core.a",
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 2,
+			"id" : "aether_core::@6890427a1f51a3e7e1df"
+		}
+	],
+	"id" : "aether_ui::@6890427a1f51a3e7e1df",
+	"name" : "aether_ui",
+	"nameOnDisk" : "libaether_ui.a",
 	"paths" : 
 	{
 		"build" : ".",
@@ -137,7 +148,11 @@
 				0,
 				1,
 				2,
-				3
+				3,
+				4,
+				5,
+				6,
+				7
 			]
 		}
 	],
@@ -146,25 +161,49 @@
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "core/assert.cpp",
+			"path" : "ui/ui_draw_list.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "core/job_system.cpp",
+			"path" : "ui/ui_font.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "profiler/frame_pressure.cpp",
+			"path" : "ui/ui_icon_atlas.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "profiler/frame_statistics.cpp",
+			"path" : "ui/ui_icon_id.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "ui/ui_instance_builder.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "ui/ui_input.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "ui/ui_layout.cpp",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "ui/ui_text.cpp",
 			"sourceGroupIndex" : 0
 		}
 	],
