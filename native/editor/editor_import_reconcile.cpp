@@ -632,6 +632,38 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
   return true;
 }
 
+ImportSceneImpact importSceneImpact(const EditorDocument &document, const resources::AssetGuid &source,
+                                    const resources::ImportMatchReport &match) {
+  ImportSceneImpact impact;
+  std::unordered_set<AssetGuid, GuidHash> removed(match.removedNodes.begin(), match.removedNodes.end());
+  std::unordered_set<AssetGuid, GuidHash> instances;
+  std::vector<EditorEntityId> ids;
+  document.collectSubtree(document.root(), ids);
+  for (const auto id : ids) {
+    const auto *entity = document.find(id);
+    const auto *link = entity ? linkOf(*entity) : nullptr;
+    if (!link || link->source != source) continue;
+    if (link->instance.valid()) instances.insert(link->instance);
+    if (link->unlinked) { ++impact.unlinked; continue; }
+    if (link->orphan) { ++impact.alreadyOrphan; continue; }
+    ++impact.linked;
+    const u32 overrides = importOverrides(document, id);
+    if (overrides) ++impact.editedObjects;
+    if (!link->node.valid() || !removed.count(link->node)) continue;
+    // A mesma regra da reconciliação: o que não carrega nada do autor sai com a
+    // fonte; o que carrega fica na cena, desligado, esperando decisão.
+    if (overrides) {
+      ++impact.orphanObjects;
+      if (impact.orphanNames.size() < 6) impact.orphanNames.push_back(entity->name);
+    } else {
+      ++impact.removedObjects;
+    }
+  }
+  impact.instances = static_cast<u32>(instances.size());
+  impact.newNodes = match.added;
+  return impact;
+}
+
 u32 importOverrides(const EditorDocument &document, EditorEntityId id) {
   const auto *entity = document.find(id);
   const auto *link = entity ? linkOf(*entity) : nullptr;

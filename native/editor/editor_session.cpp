@@ -3265,6 +3265,28 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
       if(match.ambiguities.empty())
         summary+="\nNós novos: "+std::to_string(match.added)+" · removidos da fonte: "+std::to_string(match.removed);
     } else summary+="\nSem mapa anterior: identidades derivadas das chaves da fonte.";
+    // O relatório acima fala da FONTE. Esta parte fala da CENA ABERTA, que é o
+    // que o autor tem na mão ao decidir: quantos objetos dele estão presos a
+    // esta fonte, quais somem, quais ficam órfãos com as edições dentro.
+    const auto impact=importSceneImpact(document_,record->guid,match);
+    if(impact.linked||impact.alreadyOrphan||impact.unlinked) {
+      summary+="\nNesta cena: "+std::to_string(impact.instances)+" instância(s), "+std::to_string(impact.linked)+
+          " objeto(s) vinculado(s)";
+      if(impact.editedObjects) summary+=", "+std::to_string(impact.editedObjects)+" com edição local";
+      if(impact.unlinked) summary+=", "+std::to_string(impact.unlinked)+" desvinculado(s)";
+      if(impact.alreadyOrphan) summary+=", "+std::to_string(impact.alreadyOrphan)+" já órfão(s)";
+      summary+=".";
+      if(impact.removedObjects)
+        summary+="\nSaem da cena: "+std::to_string(impact.removedObjects)+" objeto(s) sem edição local.";
+      if(impact.orphanObjects) {
+        summary+="\nFicam órfãos (com as edições dentro): "+std::to_string(impact.orphanObjects)+" objeto(s)";
+        for(const auto &name:impact.orphanNames) summary+="\n• "+name;
+        if(impact.orphanObjects>impact.orphanNames.size()) summary+="\n• …";
+      }
+      if(impact.newNodes&&impact.instances)
+        summary+="\nEntram em cada instância: "+std::to_string(impact.newNodes)+" nó(s) novo(s) da fonte.";
+      if(!impact.touchesScene()) summary+="\nNenhum objeto desta cena muda de lugar na reimportação.";
+    }
     summary+="\nInstâncias: alterações locais preservadas; removidos com dados locais ficam órfãos.";
     if(!match.ambiguities.empty()) {
       state_.importAmbiguities=static_cast<u32>(match.ambiguities.size());

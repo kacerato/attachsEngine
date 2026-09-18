@@ -39,6 +39,34 @@ struct ImportReconcileReport {
   bool changed() const noexcept { return updated || created || removed || orphaned || adopted || consolidated; }
 };
 
+// O que uma reimportação vai fazer com a CENA ABERTA, contado antes de publicar.
+//
+// O relatório de correspondência (`ImportMatchReport`) fala da FONTE: quantos
+// nós casaram, quantos nasceram, quantos sumiram. Isso não responde a pergunta
+// que o autor tem na mão na hora de aceitar — "o que acontece com o que eu já
+// montei?". Um nó removido da fonte só vira perda quando existe um objeto na
+// cena preso a ele, e só vira ÓRFÃO quando esse objeto carrega edição local.
+//
+// Contagem pura: não altera nada e não substitui a reconciliação, que é quem
+// decide de fato. É a estimativa que a mesma regra produz sobre o estado atual.
+struct ImportSceneImpact {
+  u32 instances = 0;      // instanciações desta fonte na cena aberta
+  u32 linked = 0;         // objetos ainda vinculados
+  u32 unlinked = 0;       // objetos que o autor desligou de propósito
+  u32 alreadyOrphan = 0;  // já órfãos de uma reimportação anterior
+  u32 removedObjects = 0; // presos a nó que sumiu da fonte e sem edição local
+  u32 orphanObjects = 0;  // presos a nó que sumiu da fonte e COM edição local
+  u32 newNodes = 0;       // nós novos da fonte, que entram em cada instância
+  u32 editedObjects = 0;  // objetos com alguma alteração local hoje
+  // Nomes dos que ficariam órfãos, para o aviso citar o que o autor reconhece.
+  std::vector<std::string> orphanNames;
+  bool touchesScene() const noexcept {
+    return removedObjects || orphanObjects || (newNodes && instances);
+  }
+};
+ImportSceneImpact importSceneImpact(const EditorDocument &document, const resources::AssetGuid &source,
+                                    const resources::ImportMatchReport &match);
+
 enum ImportOverride : u32 {
   ImportOverrideName = 1,
   ImportOverridePosition = 2,
