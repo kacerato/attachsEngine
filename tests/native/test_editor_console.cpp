@@ -238,14 +238,20 @@ AE_TEST(the_ide_toolbar_is_icons_and_the_rest_lives_in_one_menu) {
   // Sem arquivo aberto, salvar/desfazer/refazer/buscar estao desligados e NAO
   // registram toque: um icone aceso que nao faz nada e pior do que um apagado.
   // O que responde sempre e o que nao depende de buffer.
-  const EditorWidget always[] = {EditorWidget::CodeScene, EditorWidget::CodeFiles,
-                                 EditorWidget::CodeMenu};
+  const EditorWidget always[] = {EditorWidget::CodeFiles, EditorWidget::CodeMenu};
   for (const auto widget : always) {
     bool found = false;
     for (float x = 0; x < state.surface.width; x += 4.0f)
       if (router.hitTest({x, 24.0f}).widgetId == widgetId(widget)) found = true;
     AE_EXPECT_TRUE(found, "o icone responde na barra");
   }
+  // Voltar para a cena saiu da barra (88a1ca6a) e virou o "< Cena" da trilha,
+  // logo abaixo dela, ao lado do caminho do arquivo: continua sempre ativo.
+  bool back = false;
+  for (float y = 0; y < 120.0f && !back; y += 4.0f)
+    for (float x = 0; x < 200.0f; x += 4.0f)
+      if (router.hitTest({x, y}).widgetId == widgetId(EditorWidget::CodeScene)) back = true;
+  AE_EXPECT_TRUE(back, "voltar para a cena responde na trilha");
   // `Aplicar` NAO fica na barra: o build acontece sozinho quando a digitacao
   // para, e um botao permanente para algo que ja aconteceu ensina o gesto
   // errado.

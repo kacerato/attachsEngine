@@ -320,14 +320,17 @@ AE_TEST(picking_ties_go_to_the_first_registered_candidate) {
                "empate resolvido por ordem torna a selecao a mesma entre frames");
 }
 
-AE_TEST(picking_with_the_camera_inside_the_sphere_hits_at_zero) {
+AE_TEST(picking_with_the_camera_inside_the_sphere_hits_at_the_near_plane) {
+  // Desde a80fcb28 o raio começa no plano próximo: nada antes dele é
+  // visível, e é dali que a busca por triângulo parte. Estar dentro dos limites
+  // continua sendo acerto — na primeira distância que o raio permite.
   const EditorViewport viewport = viewportLookingForward();
   const EditorRay ray = screenPointToRay(viewport, {800.0f, 450.0f});
   std::vector<EditorPickCandidate> candidates;
   candidates.push_back({1, {0.0f, 0.0f, 0.0f}, 5.0f, true});
   const EditorPickResult result = pickNearest(candidates, ray);
-  AE_EXPECT_TRUE(result.hit && result.distance == 0.0f,
-                 "estar dentro do objeto e um acerto, nao um erro");
+  AE_EXPECT_TRUE(result.hit && result.distance == ray.minimumDistance,
+                 "estar dentro do objeto e um acerto no plano proximo, nao um erro");
 }
 
 AE_TEST(picking_ignores_malformed_candidates) {

@@ -10,16 +10,15 @@ Vocabulário (o mesmo da §9 do plano): **inventariado** → **especificado** �
 **Escopo de validação desta rodada:**
 
 1. Suíte inteira de host (`build/editor-host`, Ninja + g++ com `-Werror`,
-   incluindo o Jolt): 1003 de 1009 verdes; as 6 falhas estão listadas na seção
-   "Falhas conhecidas da suíte" abaixo. Dos testes desta rodada, 55 são novos e
+   incluindo o Jolt): **1009 de 1009 verdes**. As falhas antigas foram
+   corrigidas; a seção "Suíte do host" abaixo diz como. Dos testes desta rodada, 55 são novos e
    verdes (`test_component_contracts`, `test_component_preset`,
    `test_component_recipes`, `test_import_geometry_profile`,
    `test_import_scene_impact`, `test_import_format_compat`,
    `test_import_node_exclusion`), todos registrados em `native/CMakeLists.txt`.
 2. **Build nativo completo para arm64-v8a pelo Gradle/NDK, com `-Wall -Wextra
-   -Wpedantic -Werror`: `BUILD SUCCESSFUL`**, APK gerado. Este é o build que
-   valida o código no compilador de verdade do alvo — o host local não tem os
-   cabeçalhos do Vulkan e por isso não compila o alvo inteiro.
+   -Wpedantic -Werror`: `BUILD SUCCESSFUL`**, APK gerado. É o build que valida
+   o código no compilador de verdade do alvo.
 3. **Evidência no aparelho** (Xiaomi 25053PC47G, ARM64): APK instalado, shell
    ASTRA abre, projeto abre, seleção e gizmo funcionam. Duas coisas foram vistas
    funcionando na tela: o agrupamento novo do Corpo físico aparecendo como abas
@@ -132,25 +131,39 @@ quando (e só quando) o preset tem outra quantidade de slots.
 | O Inspector mostra o motivo antes do Play (sem Renderizador de malha, não convexo em corpo dinâmico) | `editor/editor_component_impact.h` | implementado |
 | **Defeito antigo corrigido:** uma consulta física (raio, varredura, sobreposição) num corpo com várias formas sempre respondia com o PRIMEIRO colisor. O índice da parte ia na entrada do composto, e o Jolt devolve o dado da forma folha | `jolt_bridge.cpp` (`ToJoltShape` com dado de usuário) | validado no host |
 
+**Evidência no aparelho** (projeto de teste G3MalhaColisor, `docs/capturas/g3/`):
+forma Malha com Convexo e sem a aba Pose (`colisor-forma-malha.png`); Play
+recusado com o motivo quando o chão de malha não convexa é dinâmico
+(`malha-nao-convexa-dinamico-recusada.png`); um cubo dinâmico com Malha +
+Convexo cai e para sobre o chão de malha estática
+(`cubo-convexo-repousa-no-chao-de-malha.png`). Com a forma Malha, "Ajustar à
+malha" deixa de aparecer: ele trocaria a malha por uma primitiva.
+
 **Limite declarado:** uma malha de colisão **diferente** da malha desenhada (o
 `sharedMesh` trocado à mão na Unity, ou uma versão simplificada) ainda não existe.
 Ela entra junto com o documento de malha e os níveis de LOD, que é de onde a
 versão simplificada deve sair, e não como um segundo campo solto no colisor.
 
-## Falhas conhecidas da suíte
+## Suíte do host — de 1003 para 1009 verdes
 
-Conferidas contra uma build da suíte em `a80fcb28`, o commit anterior ao
-plano: as cinco primeiras já falhavam lá, e nenhuma é consequência destes blocos.
+Havia cinco falhas **anteriores ao plano** (conferidas numa build de
+`a80fcb28`). Foram fechadas assim:
 
-- `picking_with_the_camera_inside_the_sphere_hits_at_zero`
-- `the_ide_toolbar_is_icons_and_the_rest_lives_in_one_menu`
-- `session_asset_browser_recreates_geometry_in_an_empty_document`
-- `session_river_popup_points_and_all_point_properties_work_through_touch`
-- `session_explicit_camera_creation_is_undoable`
-- `r4_sampling_uv_set_wrap_and_filter_resolve_publish_variants_and_travel_to_the_project_material`:
-  vem da projeção triplanar (`MaterialUvWorld`), ainda fora de commit no working
-  tree. O teste espera que o conjunto de UV 3 seja recusado, e com a projeção ele
-  passa a ser aceito como válido.
+- **Colisão de identidade de widget — defeito real, visto também no aparelho.**
+  `ImpactRowBase`/`ImpactClose` tinham os mesmos números de
+  `CreationCategoryBase`/`CreationRowBase`, e `ImpactOpenBase` o mesmo de
+  `AssetRowBase`. O painel de impacto engolia o toque na categoria do menu
+  Adicionar objeto: "Geometria" não abria, e três testes de sessão falhavam por
+  isso. O impacto ganhou faixas próprias, e um `static_assert` em
+  `editor_screen.h` confere na compilação que nenhuma faixa-base se cruza com
+  outra, cada uma com o seu tamanho. Evidência:
+  `docs/capturas/g3/menu-geometria-responde.png`.
+- **Dois testes atrás do design:** o "voltar para a cena" do IDE saiu da barra
+  para a trilha "< Cena" (88a1ca6a), e o raio de seleção passou a começar no
+  plano próximo (a80fcb28). Os testes passaram a exigir o comportamento atual,
+  em vez de desfazer o design.
+- `r4_sampling_…` falhava só com a projeção triplanar ainda fora de commit; o
+  teste agora recusa o primeiro valor depois de Mundo, escrito pela constante.
 
 Uma falha **deste** trabalho foi achada e corrigida pela suíte: os campos novos
 da aba Perfil empurravam "Preparar com este perfil" para fora de uma tela baixa

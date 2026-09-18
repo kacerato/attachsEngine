@@ -238,7 +238,10 @@ enum class EditorWidget : u32 {
   PresetFieldBase=0x5E020000u,
   // + linha da aba Estrutura da importação: inclui ou exclui aquele nó.
   ImportNodeToggleBase=0x5E030000u,
-  ImpactOpenBase=0x60000000u, ImpactRowBase=0x63000000u, ImpactClose=0x64000000u, ImpactPrevious, ImpactNext, ImpactRepair, ImpactRepairApply, ImpactRepairShared, ImpactRepairScope,
+  // Faixas próprias: o painel de impacto já dividiu números com
+  // AssetRowBase (0x60) e com CreationCategoryBase/CreationRowBase (0x63/0x64),
+  // e engolia o toque na categoria do menu Adicionar objeto.
+  ImpactOpenBase=0x90000000u, ImpactRowBase=0x91000000u, ImpactClose=0x92000000u, ImpactPrevious, ImpactNext, ImpactRepair, ImpactRepairApply, ImpactRepairShared, ImpactRepairScope,
   ComponentColorBase=0x7e000000u,
   ColorHueBase=0x5f000000u, ColorSvBase=0x5f000100u, ColorApply=0x5f000200u, ColorCancel,
   ComponentTripleBase=0x7d000000u,
@@ -276,6 +279,44 @@ enum class EditorWidget : u32 {
 };
 
 inline constexpr u32 widgetId(EditorWidget widget) noexcept { return static_cast<u32>(widget); }
+// Cada faixa-base (id + índice) reserva um intervalo inteiro de ids. Duas
+// faixas que se cruzam fazem um painel receber o toque do outro sem erro
+// nenhum — foi assim que o impacto engoliu o menu Adicionar objeto. Por isso a
+// lista é conferida na compilação. Faixa nova entra aqui, com o seu tamanho.
+namespace detail {
+struct WidgetRange {EditorWidget base;u32 span;};
+inline constexpr u32 kWideRange=0x1000'0000u,kRange=0x0100'0000u;
+inline constexpr WidgetRange widgetRanges[]{
+  {EditorWidget::HierarchyRowBase,kWideRange},{EditorWidget::HierarchyEyeBase,kWideRange},
+  {EditorWidget::TransformFieldBase,kWideRange},{EditorWidget::GizmoAxisBase,kWideRange},
+  {EditorWidget::NumericKeyBase,kRange},{EditorWidget::ConsoleRowBase,kRange},{EditorWidget::ImportLinkRevertBase,kRange},
+  {EditorWidget::MaterialChoiceBase,kRange},{EditorWidget::MaterialNumberBase,kRange},{EditorWidget::MaterialTextureBase,kRange},
+  {EditorWidget::TextureChoiceBase,kRange},{EditorWidget::TextureViewBase,kRange},{EditorWidget::TextureUvStepBase,kRange},
+  {EditorWidget::TextureFilterBase,kRange},{EditorWidget::TextureManagerRowBase,kRange},{EditorWidget::TextureUserBase,kRange},
+  {EditorWidget::ComponentGroupBase,kRange},{EditorWidget::ComponentVisualBase,kRange},{EditorWidget::ComponentVisualsToggle,kRange},
+  {EditorWidget::ColorHueBase,kRange},{EditorWidget::AssetRowBase,kRange},{EditorWidget::CodeBody,kRange},
+  {EditorWidget::RoutePointBase,kRange},{EditorWidget::CreationCategoryBase,kRange},{EditorWidget::CreationRowBase,kRange},
+  {EditorWidget::FilesUp,kRange},{EditorWidget::FileRowBase,kRange},{EditorWidget::ComponentAddBase,kRange},
+  {EditorWidget::ComponentFoldBase,kRange},{EditorWidget::ComponentRemoveBase,kRange},{EditorWidget::ComponentBooleanBase,kRange},
+  {EditorWidget::ComponentCopyBase,kRange},{EditorWidget::ComponentPasteBase,kRange},{EditorWidget::ComponentResetBase,kRange},
+  {EditorWidget::ComponentMenuBase,kRange},{EditorWidget::ComponentEnumBase,kRange},{EditorWidget::NameKeyBase,kRange},
+  {EditorWidget::ScriptAddBase,kRange},{EditorWidget::ScriptFoldBase,kRange},{EditorWidget::ScriptMenuBase,kRange},
+  {EditorWidget::ScriptRemoveBase,kRange},{EditorWidget::ScriptEnabledBase,kRange},{EditorWidget::ScriptSourceBase,kRange},
+  {EditorWidget::ScriptFieldBase,kRange},{EditorWidget::ComponentNumberBase,kRange},{EditorWidget::MeshChoiceBase,kRange},
+  {EditorWidget::ComponentReferenceBase,kRange},{EditorWidget::ReferenceChoiceBase,kRange},{EditorWidget::CodeTemplateBase,kRange},
+  {EditorWidget::ComponentTripleBase,kRange},{EditorWidget::ComponentColorBase,kRange},
+  {EditorWidget::HierarchyCollapseBase,kWideRange},
+  {EditorWidget::ImpactOpenBase,kRange},{EditorWidget::ImpactRowBase,kRange},{EditorWidget::ImpactClose,kRange}};
+inline constexpr bool widgetRangesDisjoint() {
+  for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
+    if(&a==&b) continue;
+    const u64 a0=widgetId(a.base),b0=widgetId(b.base);
+    if(a0<b0+b.span && b0<a0+a.span) return false;
+  }
+  return true;
+}
+}
+static_assert(detail::widgetRangesDisjoint(),"duas faixas de widget se cruzam");
 inline constexpr u32 hierarchyRowWidget(EditorEntityId entity) noexcept {
   return widgetId(EditorWidget::HierarchyRowBase) + entity;
 }

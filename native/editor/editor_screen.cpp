@@ -1097,7 +1097,10 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     fields.push_back({3,widgetId(EditorWidget::ToggleCastShadow)});
   } else {
     if(mesh) fields.push_back({3,widgetId(EditorWidget::MaterialRestore)});
-    if(entry.type==&EditorCollider::descriptor && group=="Forma" && meshAsset(entity)) fields.push_back({3,widgetId(EditorWidget::ColliderFit)});
+    // Ajustar escolhe a primitiva que contém a malha; com a forma Malha a forma
+    // já É a malha, e o botão só trocaria a escolha do autor por uma caixa.
+    if(entry.type==&EditorCollider::descriptor && group=="Forma" && meshAsset(entity) &&
+       !scene::colliderIsMesh(*component)) fields.push_back({3,widgetId(EditorWidget::ColliderFit)});
     for(u32 i=0;i<entry.type->numbers.size();++i) {
       if(!show(entry.type->numbers[i].presentation)) continue;
       bool grouped=false;
