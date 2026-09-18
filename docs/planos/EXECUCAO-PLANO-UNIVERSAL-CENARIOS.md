@@ -9,22 +9,27 @@ Vocabulário (o mesmo da §9 do plano): **inventariado** → **especificado** �
 
 **Escopo de validação desta rodada:**
 
-1. Testes de host compilados e executados com g++ 16 (MinGW-w64): 29 testes
+1. Testes de host compilados e executados com g++ 16 (MinGW-w64): 36 testes
    novos verdes (`test_component_contracts`, `test_component_preset`,
-   `test_component_recipes`, `test_import_geometry_profile`), todos registrados
-   em `native/CMakeLists.txt`.
+   `test_component_recipes`, `test_import_geometry_profile`,
+   `test_import_scene_impact`), todos registrados em `native/CMakeLists.txt`.
 2. **Build nativo completo para arm64-v8a pelo Gradle/NDK, com `-Wall -Wextra
    -Wpedantic -Werror`: `BUILD SUCCESSFUL`**, APK gerado. Este é o build que
    valida o código no compilador de verdade do alvo — o host local não tem os
    cabeçalhos do Vulkan e por isso não compila o alvo inteiro.
 3. **Evidência no aparelho** (Xiaomi 25053PC47G, ARM64): APK instalado, shell
-   ASTRA abre, projeto abre, seleção e gizmo funcionam, e o agrupamento novo do
-   Corpo físico aparece como abas **Corpo | Início** assim que o movimento deixa
-   de ser estático — que é exatamente a regra declarada no descritor. Capturas em
-   `build/astra-g2-*.png`. O projeto usado foi devolvido ao estado inicial.
+   ASTRA abre, projeto abre, seleção e gizmo funcionam. Duas coisas foram vistas
+   funcionando na tela: o agrupamento novo do Corpo físico aparecendo como abas
+   **Corpo | Início** assim que o movimento deixa de ser estático
+   (`build/astra-g2-body-dynamic.png`), e o **diff campo a campo do preset**, com
+   "1 campo diferente", "Marcar tudo / Desmarcar" e a linha `Renderizar: falso →
+   verdadeiro` com a marca de levar ou não (`build/astra-preset-diff.png`). Em
+   ambos os casos o projeto usado foi devolvido ao estado inicial — componente
+   removido, preset excluído, valor restaurado.
 
-**O que NÃO foi validado:** o caminho completo de importação com uma fonte real
-no aparelho (as normais/tangentes derivadas têm teste de host, não medição em
+**O que NÃO foi validado:** a aba Perfil da importação no aparelho (exige abrir
+o seletor de arquivos do sistema com um GLB de verdade), o caminho completo de
+importação com uma fonte real (as normais/tangentes derivadas têm teste de host, não medição em
 GLB de produção), desempenho e qualquer comparação visual controlada.
 
 ## G0 · matriz e corpus — implementado não validado em aparelho
@@ -54,7 +59,7 @@ substitui a avaliação de qualidade de fonte.
 | Aplicação **por campo** em uma transação: nada entra se a combinação deixar o componente inválido | `applyComponentFields()` | validado no host |
 | Dependências de recurso de um valor e remapeamento por identidade entre projetos | `componentResourceDependencies()`, `remapComponentResources()`, `missingResourceDependencies()` | validado no host |
 | Receita multi componente: captura do objeto inteiro, formato de biblioteca v2 com leitura da v1, aplicação em uma transação com Add resolvendo exigências | `native/editor/editor_component_presets.h`, `EditorSession::applyComponentRecipe` | biblioteca validada no host; aplicação implementada, sem teste de sessão |
-| Painel de presets com diff interativo (marcar campo a campo, marcar tudo, desmarcar), preview de receita com o que é adicionado, atualizado e exigido | `native/editor/editor_screen.cpp`, `editor_session.cpp` | implementado, sem evidência em aparelho |
+| Painel de presets com diff interativo (marcar campo a campo, marcar tudo, desmarcar), preview de receita com o que é adicionado, atualizado e exigido | `native/editor/editor_screen.cpp`, `editor_session.cpp` | **validado no aparelho** (`build/astra-preset-diff.png`) |
 
 **Lacuna fechada em seguida (ver G3 abaixo):** amostragem, canais, superfície e
 fatores por slot eram dados do MeshRenderer **sem PropertyId**, o que deixava a
