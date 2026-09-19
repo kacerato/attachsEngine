@@ -609,10 +609,14 @@ bool InstancedRenderer::createPipeline() {
   rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
   rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
   rasterizer.cullMode = VK_CULL_MODE_NONE;
-  // glTF uses counter-clockwise front faces. This was irrelevant while every
-  // pipeline disabled culling, but becomes part of the correctness contract
-  // as soon as solid geometry enables backface rejection.
-  rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  // Toda geometria desta engine — glTF importado sem conversão de eixos e as
+  // primitivas de autoria — tem a face da frente com o produto vetorial da
+  // ordem dos vértices apontando para fora. Neste mundo de mão esquerda
+  // (Z = frente) com o Y invertido do clip do Vulkan, esse triângulo chega à
+  // tela em sentido HORÁRIO. Declarar anti-horário descartava a frente de todo
+  // material de uma face: um cubo glTF correto aparecia do avesso no aparelho.
+  // Só importa onde há culling por material (`materialCulling`).
+  rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
   rasterizer.lineWidth = 1.0f;
 
   VkPipelineMultisampleStateCreateInfo multisample{};
