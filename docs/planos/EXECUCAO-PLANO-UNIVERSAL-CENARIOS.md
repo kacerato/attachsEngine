@@ -163,9 +163,36 @@ um modelo cujos nós seguem `Nome_LOD0`, `Nome_LOD1`... e receber o grupo pronto
 | **ForceLOD** como estado de execução: `force_level` (0 automático, n = LOD n-1) vence a altura, não aparece no Inspector e nunca é gravado — o Play sempre parte do automático | `LodGroup::forcedLevel` | validado no host |
 | **Reimportação que acrescenta níveis**: nós `_LOD<n>` novos entram no grupo que já existe (só em nível vazio, estendendo a sequência a partir do LOD 0), no mesmo Desfazer da reimportação; transições e tamanho do autor ficam | `extendImportedLodGroup`, `ImportReconcileReport::createdObjects` | validado no host, com duas importações reais |
 
+**Evidência no aparelho** (Xiaomi 25053PC47G, projeto de teste G3MalhaColisor,
+`docs/capturas/g3/`):
+
+- troca por distância na vista do editor, com a linha "Na vista" acompanhando:
+  Culled até 29%, LOD 1 a partir de 37%, LOD 0 a partir de 63%
+  (`lod-group-distancia-*.png`);
+- Cross Fade com largura 0,2: a 66–63% (faixa do LOD 0, 60–68%) os dois
+  níveis aparecem com a trama de Bayer complementar; fora da faixa, inteiros
+  (`lod-group-cross-fade-*.png`); o Inspector mostra Animate Cross-fading e a
+  largura por nível só com Cross Fade (`lod-group-fade-inspector.png`);
+- importação real de um GLB com `Coluna_LOD0`/`Coluna_LOD1`: o LOD Group nasce
+  na Coluna com os dois níveis, e a troca pirâmide → cubo acontece pela
+  distância (`lod-group-importado-*.png`).
+
+O aparelho achou um defeito de uso, corrigido: com a escada 60/30 da Unity, um
+grupo importado de dois níveis ficava Culled abaixo de 30% e o modelo sumia no
+próprio enquadramento pós-importação. Nos grupos gerados por nome, o último
+nível passa a valer até 1% da tela (adaptação da Astra; o autor muda no
+Inspector).
+
+**Visto e não resolvido aqui:** no GLB de teste (sem NORMAL, 8 vértices
+compartilhados no cubo) as faces verticais do LOD 0 saem pretas. A hipótese é a
+normal calculada média sobre quinas de 90° — o **Smoothing Angle** que o G2
+declara pendente —, não confirmada.
+
 **Diferenças da Unity:** sem o modo SpeedTree; a largura padrão do fade é 0,2
 (a documentação da Unity não fixa uma); um pai existente SEM LOD Group não
-ganha um na reimportação — a ausência ali pode ser escolha do autor.
+ganha um na reimportação — a ausência ali pode ser escolha do autor; grupo
+gerado por nome termina em 1% em vez de cortar no último degrau da escada;
+Animate Cross-fading tem teste de host, sem captura no aparelho.
 
 ## Suíte do host — de 1003 para 1009 verdes
 

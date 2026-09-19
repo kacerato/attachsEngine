@@ -155,6 +155,11 @@ inline u32 addImportedLodGroups(EditorDocument &document, EditorHistory &history
     if (!group) continue;
     group->levelCount = count;
     for (u32 i = 0; i < count; ++i) group->levels[i] = levels[i];
+    // O último nível que o arquivo traz fica até o objeto ocupar 1% da tela:
+    // a escada 60/30/10 da Unity supõe um nível de corte no fim, e com dois
+    // níveis o modelo recém-importado sumiria no próprio enquadramento.
+    // Adaptação da Astra; o autor ajusta as transições no Inspector.
+    group->transitions[count - 1] = 1;
     if (!fitLodGroupSize(resources, document, parentId, *group))
       notes.push_back(std::string(parent->name) + ": LOD 0 sem malha; use Recalcular tamanho no LOD Group.");
     if (group->valid() && history.applyValues(document, parentId, value)) ++groups;

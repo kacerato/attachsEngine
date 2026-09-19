@@ -776,6 +776,8 @@ AE_TEST(lod_suffix_nodes_become_a_lod_group_like_the_unity_model_importer) {
   AE_EXPECT_TRUE(group->levelCount == 2 && group->levels[0] == lod0 && group->levels[1] == lod1,
                  "cada filho no nível do sufixo, sem diferenciar maiúsculas");
   AE_EXPECT_TRUE(std::abs(group->size - 1) < 1e-4f, "tamanho medido pela malha do LOD 0 (triângulo de 1 m)");
+  AE_EXPECT_TRUE(group->transitions[0] == 60 && group->transitions[1] == 1,
+                 "o último nível do arquivo fica até 1% da tela: o modelo não some ao ser enquadrado");
 
   // Um Desfazer volta a instanciação inteira, grupo junto.
   AE_EXPECT_TRUE(session.history().undo(session.document()), "desfazer");
