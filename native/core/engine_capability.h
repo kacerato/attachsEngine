@@ -119,8 +119,8 @@ inline constexpr std::array<EngineCapability, 32> engineCapabilities{{
   // --- Geometria e visibilidade -------------------------------------------
   {"render.lod.package", "Níveis de detalhe do pacote de mapa", CapabilityState::Implemented,
    "renderer/lod_selection.cpp", ""},
-  {"render.lod.group", "Grupo de LOD autoral por objeto", CapabilityState::Planned,
-   "renderer/lod_selection.cpp", "Sem componente de grupo nem malhas derivadas por nível"},
+  {"render.lod.group", "Grupo de LOD autoral por objeto", CapabilityState::Implemented,
+   "runtime/lod_groups.h", "Troca direta por altura na tela, sem cross-fade; níveis são objetos do autor, sem simplificação automática"},
   {"render.visibility.hzb", "Oclusão por pirâmide de profundidade", CapabilityState::Implemented,
    "renderer/hzb_visibility.cpp", ""},
   {"render.instancing.gpu", "Culling e compactação de desenho em GPU", CapabilityState::Implemented,

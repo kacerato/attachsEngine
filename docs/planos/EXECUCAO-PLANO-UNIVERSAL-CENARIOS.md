@@ -143,6 +143,28 @@ malha" deixa de aparecer: ele trocaria a malha por uma primitiva.
 Ela entra junto com o documento de malha e os níveis de LOD, que é de onde a
 versão simplificada deve sair, e não como um segundo campo solto no colisor.
 
+### LOD Group (autoral, pela altura na tela)
+
+Fluxo de uso da Unity: **Add Component → LOD Group**, arrastar os objetos para
+cada nível, ajustar a transição de cada um em % da altura da tela; ou importar
+um modelo cujos nós seguem `Nome_LOD0`, `Nome_LOD1`... e receber o grupo pronto.
+
+| Entrega | Onde vive | Estado |
+|---|---|---|
+| Componente `LOD Group` (`astra.render.lod_group`): 1 a 4 níveis, objeto de cada nível, transição em % e tamanho; o nível escolhido fica visível com a subárvore, os outros somem, abaixo do último tudo some (Culled). Um objeto comum a dois níveis não some por estar no nível não escolhido | `native/scene/lod_group.h`, `native/runtime/lod_groups.h` | validado no host |
+| Métrica da Unity: tamanho do grupo × maior escala global sobre a altura que a vista enxerga àquela distância; ortográfica pela meia altura. Vale a câmera do Play quando há uma, e a do editor no resto | `scene::lodRelativeHeight`, `EditorSession::lodView` | validado no host |
+| A troca chega à tela pela publicação de **poses** (esconder desenhos não muda a topologia): o shell republica quando a câmera cruza uma transição, mesmo sem mudança de revisão | `EditorSession::lodSelectionChanged`, `android_main.cpp` | compila para o alvo |
+| Referência **Descendente**: cada nível só aceita objetos abaixo do grupo; o seletor lista só esses e a execução ignora o resto | `ObjectReferenceScope::Descendant` | validado no host |
+| Inspector: **Níveis** (contagem, objetos, transições) e **Limites** (tamanho, *Recalcular tamanho*); atribuir o LOD 0 mede o tamanho no mesmo comando (um Desfazer volta os dois); linha "Na vista: LOD n · x% da tela" como a barra de LOD da Unity | `editor_screen.cpp`, `editor_session.cpp`, `editor/editor_lod_group.h` | compila para o alvo |
+| **Importação `_LOD<n>`** (Model Importer da Unity): filhos diretos com o sufixo viram LOD Group no pai, medido pela malha do LOD 0, na mesma transação da instanciação; buraco na sequência ou nível além do quarto é avisado no console | `addImportedLodGroups` | validado no host, pela importação real de um GLB |
+| Script: `ComponentIds.LodGroup` com as propriedades pela reflexão comum (`level_count`, `transition_0..3`, `level_0..3`, `size`) | `managed/Astra.Scripting/World.cs` | implementado |
+
+**Diferenças da Unity:** troca direta, sem **Fade Mode** (cross-fade/SpeedTree);
+sem `ForceLOD` — na Unity é estado só de execução, e a reflexão atual
+serializa tudo o que expõe; sem `localReferencePoint`; o grupo importado nasce
+na instanciação, e uma reimportação que acrescente níveis não atualiza um grupo
+já existente.
+
 ## Suíte do host — de 1003 para 1009 verdes
 
 Havia cinco falhas **anteriores ao plano** (conferidas numa build de

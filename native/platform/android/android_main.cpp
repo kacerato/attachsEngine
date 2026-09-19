@@ -2348,7 +2348,8 @@ void android_main(android_app *app) {
             bool instanceFailed=false;
             if(intoScene) {
               ae::editor::EditorSession::ModelImportReport instance;
-              if(session.instantiateModel(report.source,instance)) message="Modelo importado na cena: "+std::to_string(instance.objects)+" objetos. Seleção e câmera enquadradas.";
+              if(session.instantiateModel(report.source,instance)) message="Modelo importado na cena: "+std::to_string(instance.objects)+" objetos"+
+                (instance.lodGroups?", "+std::to_string(instance.lodGroups)+" LOD Group(s) pelos nomes _LOD":std::string())+". Seleção e câmera enquadradas.";
               else {session.showImportFailure("Recurso guardado; instanciação falhou: "+instance.diagnostic);instanceFailed=true;}
             }
             if(report.skippedTextures || report.skippedAnimations || report.skippedSkins)
@@ -2360,10 +2361,13 @@ void android_main(android_app *app) {
         // Material compartilhado editado: a cena não mudou de revisão, mas a
         // aparência de todos os slots que o usam mudou.
         if (shell.editorSession.takeAppearanceChanged()) shell.editorPublishedRevision=~ae::u64{0};
-        if (shell.editorMapImported && (editorPlaying || shell.editorPublishedRevision != shell.editorSession.document().revision())) {
+        // A câmera do editor cruzou a transição de um LOD Group: a revisão não
+        // mudou, mas o conjunto de desenhos visíveis sim.
+        const bool lodChanged=shell.editorMapImported && !editorPlaying && shell.editorSession.lodSelectionChanged();
+        if (shell.editorMapImported && (editorPlaying || lodChanged || shell.editorPublishedRevision != shell.editorSession.document().revision())) {
           auto &authored=shell.authoredDraws;
           const bool changed=shell.editorPublishedRevision!=shell.editorSession.document().revision();
-          bool ready=!changed || shell.editorSession.extractMap(authored);
+          bool ready=!(changed || lodChanged) || shell.editorSession.extractMap(authored);
           if(editorPlaying && shell.independentWorkspace)
             ready=shell.editorSession.extractPlayMap(authored);
           if(changed && shell.authoredWaterPlay.active()) shell.authoredWaterPlay.stop();

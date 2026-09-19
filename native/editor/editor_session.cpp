@@ -2,6 +2,7 @@
 #include "editor/editor_color_picker.h"
 #include "editor/editor_component_catalog.h"
 #include "editor/editor_collider_fit.h"
+#include "editor/editor_lod_group.h"
 #include "scene/script_behavior.h"
 #include "editor/editor_water_body_component.h"
 #include "editor/editor_route_component.h"
@@ -1376,6 +1377,23 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
         if(index>=choices.size()) return true;
         target=choices[index];
       }
+      // Como na Unity, pôr objetos no LOD 0 recalcula os limites do grupo. Vai
+      // num comando só com a referência: um Desfazer volta os dois.
+      if(!state_.referenceScript && state_.referenceProperty=="level_0" && !history_.isOpen() &&
+         &entity->components.findInstance(state_.referenceInstance)->type()==&scene::LodGroup::descriptor &&
+         editorReferenceAccepts(document_,entity->id,*property,target)) {
+        auto value=*entity;
+        auto *group=static_cast<scene::LodGroup *>(value.components.editInstance(state_.referenceInstance));
+        if(group) {
+          group->levels[0]=target;
+          const bool measured=target && fitLodGroupSize(mapScene_,document_,entity->id,*group);
+          if(group->valid() && history_.applyValues(document_,entity->id,value)) {
+            state_.referenceInstance=0;
+            state_.status=measured?"LOD 0 atribuído; tamanho medido pela malha":"Referência atualizada";
+            return true;
+          }
+        }
+      }
       EditorActionRequest request;request.version=sceneVersion();request.entity=entity->id;request.componentInstance=state_.referenceInstance;request.componentProperty=state_.referenceProperty;
       if(state_.referenceScript) {request.action=EditorAction::ScriptProperty;request.scriptPropertyType="object";request.scriptPropertyValue=std::to_string(target);}
       else {request.action=EditorAction::ComponentProperty;request.componentType=entity->components.findInstance(state_.referenceInstance)->type().id;request.componentValue=scene::ObjectReference{target};}
@@ -1695,6 +1713,17 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
         if(collider && fitEditorCollider(mapScene_,document_,entity->id,*collider) && history_.applyValues(document_,entity->id,value))
           state_.status="Colisor ajustado pela geometria; forma e centro continuam editáveis";
         else state_.status="Não foi possível ajustar: geometria ausente, escala ou dimensões incompatíveis";
+      }
+      return true;
+    }
+    if(key==widgetId(EditorWidget::LodGroupFit)) {
+      const auto *entity=document_.find(state_.selection);
+      const auto *current=entity?static_cast<const scene::LodGroup *>(entity->components.find(scene::LodGroup::descriptor)):nullptr;
+      if(current && !history_.isOpen()) {
+        auto value=*entity;auto *group=static_cast<scene::LodGroup *>(value.components.edit(scene::LodGroup::descriptor));
+        if(group && fitLodGroupSize(mapScene_,document_,entity->id,*group) && history_.applyValues(document_,entity->id,value))
+          state_.status="Tamanho do LOD Group medido pela malha do LOD 0";
+        else state_.status="Não foi possível medir: o LOD 0 não tem malha";
       }
       return true;
     }
@@ -2783,6 +2812,7 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
     // use a movable wrapper when the source scene contains independent roots.
     if(!instantiateModel(report.source,instance,false)) {report.diagnostic=instance.diagnostic;return false;}
     report.objects=instance.objects;report.groups=instance.groups;
+    report.lodGroups=instance.lodGroups;report.lodNotes=std::move(instance.lodNotes);
   }
   return true;
 }
@@ -3076,10 +3106,21 @@ bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportRep
       history_.applyValues(document_,target,value);
     }
     for(usize n=0;n<tree.nodes.size();++n) if(!placed[n]) ++report.groups;
+    // Convenção `_LOD<n>` do Model Importer da Unity: com os slots já no lugar,
+    // o grupo nasce medido e entra no mesmo Desfazer da instanciação. O grupo
+    // da importação também conta como pai, porque modelos costumam trazer os
+    // níveis como raízes; a raiz da cena nunca recebe o componente.
+    {
+      std::vector<EditorEntityId> candidates(created.begin(),created.end());
+      if(instanceParent!=document_.root()) candidates.push_back(instanceParent);
+      report.lodGroups=addImportedLodGroups(document_,history_,mapScene_,candidates,report.lodNotes);
+    }
     history_.end();
   }
 
-  state_.status="Recurso instanciado: "+std::to_string(report.objects)+" objetos";
+  state_.status="Recurso instanciado: "+std::to_string(report.objects)+" objetos"+
+      (report.lodGroups?" · "+std::to_string(report.lodGroups)+(report.lodGroups==1?" LOD Group":" LOD Groups")+" pelos nomes _LOD":std::string());
+  for(const auto &note:report.lodNotes) reportProblem(EditorConsoleSeverity::Warning,note);
   // The newly imported object must be discoverable immediately. Fit only this
   // instance (all its roots), preserving authored scale and source transforms.
   if(!newRoots.empty()) {
@@ -3507,6 +3548,16 @@ void EditorSession::frameSubtree(EditorEntityId root) {
   frameEditorCamera(camera_, center, std::max(0.01f, std::sqrt(radiusSquared)), fit);
 }
 
+void EditorSession::refreshLodStatus() {
+  state_.lodStatus.clear();
+  const auto &graph=isPlaying()&&playScene_.active()?playScene_.document():document_;
+  float relative=0;u32 level=0;
+  if(!runtime::lodGroupViewLevel(graph,state_.selection,lodView(),relative,level)) return;
+  const auto *group=static_cast<const scene::LodGroup *>(graph.find(state_.selection)->components.find(scene::LodGroup::descriptor));
+  const std::string height=std::isinf(relative)?std::string("dentro do grupo"):
+      std::to_string(static_cast<int>(std::lround(std::min(relative,99.99f)*100)))+"% da tela";
+  state_.lodStatus="Na vista: "+(level<group->levelCount?"LOD "+std::to_string(level):std::string("Culled"))+" · "+height;
+}
 void EditorSession::update() {
   state_.cameraPreviewEntity=cameraPreview_.camera();
   state_.cameraPreviewReady=cameraPreview_.hasCurrentImage(sceneVersion());
@@ -3517,6 +3568,7 @@ void EditorSession::update() {
   // R4: miniaturas nascem uma por atualização enquanto o seletor está aberto.
   if(state_.texturePicker || state_.textureManager) generatePendingTextureThumbnail();
   refreshMaterialSlotView();
+  refreshLodStatus();
   if(const auto *selected=document_.find(state_.selection)) state_.routePoint=waterRoute(*selected).count?std::min(state_.routePoint,waterRoute(*selected).count-1):0;
   if (font_ == nullptr || icons_ == nullptr) return;
   state_.assetCount=mapScene_.assetCount();

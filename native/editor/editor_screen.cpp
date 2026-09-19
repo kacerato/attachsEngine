@@ -1101,6 +1101,9 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     // já É a malha, e o botão só trocaria a escolha do autor por uma caixa.
     if(entry.type==&EditorCollider::descriptor && group=="Forma" && meshAsset(entity) &&
        !scene::colliderIsMesh(*component)) fields.push_back({3,widgetId(EditorWidget::ColliderFit)});
+    if(entry.type==&scene::LodGroup::descriptor && group=="Limites") fields.push_back({3,widgetId(EditorWidget::LodGroupFit)});
+    if(entry.type==&scene::LodGroup::descriptor && group=="Níveis" && !builder.state.lodStatus.empty())
+      fields.push_back({3,widgetId(EditorWidget::LodGroupStatus)});
     for(u32 i=0;i<entry.type->numbers.size();++i) {
       if(!show(entry.type->numbers[i].presentation)) continue;
       bool grouped=false;
@@ -1207,8 +1210,12 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     } else if(f.index==widgetId(EditorWidget::ToggleCastShadow)) {
       auto toggle=takeRight(slot,44);builder.label(slot,"Projetar sombra",theme.color.textDim,theme.type.caption);
       builder.toggle(toggle,entity.castShadow,f.index);
+    } else if(f.index==widgetId(EditorWidget::LodGroupStatus)) {
+      // Leitura, não controle: sem região de toque.
+      builder.label(slot,builder.state.lodStatus.c_str(),theme.color.accent,theme.type.caption);
     } else {
-      builder.label(slot,f.index==widgetId(EditorWidget::MaterialRestore)?"Restaurar material da origem":"Ajustar à malha",theme.color.text,theme.type.caption);
+      builder.label(slot,f.index==widgetId(EditorWidget::MaterialRestore)?"Restaurar material da origem":
+                    f.index==widgetId(EditorWidget::LodGroupFit)?"Recalcular tamanho":"Ajustar à malha",theme.color.text,theme.type.caption);
       builder.router.addRegion(hit,f.index);
     }
   }

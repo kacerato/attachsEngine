@@ -61,6 +61,8 @@ public static class ComponentIds
     public const string CameraLook = "astra.camera.look";
     public const string MeshRenderer = "astra.render.mesh";
     public const string Light = "astra.render.light";
+    /// <summary>LOD Group: `level_count`, `transition_0..3` (% da altura da tela), `level_0..3` (objeto do nível) e `size`.</summary>
+    public const string LodGroup = "astra.render.lod_group";
     public const string ScriptBehavior = "astra.script.behavior";
 }
 

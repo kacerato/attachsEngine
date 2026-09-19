@@ -180,7 +180,7 @@ enum class EditorWidget : u32 {
   CodeOpen, CodeScene, CodeNew, CodeEdit, CodeSave, CodeUndo, CodeRedo, CodeSearch, CodeClose, CodeApply,
   CodeMenu, CodeSaveAll, CodeFiles, CodeTabsPrevious, CodeTabsNext, CodeFindPrevious, CodeFindNext,
   CodeGoLine, CodeNewFolder, CodeNewHelper, CodeTemplates,
-  ColliderFit, ComponentPrevious, ComponentNext, ScriptFieldsPrevious, ScriptFieldsNext,
+  ColliderFit, LodGroupFit, LodGroupStatus, ComponentPrevious, ComponentNext, ScriptFieldsPrevious, ScriptFieldsNext,
   TransformFold, ComponentSearch, ComponentSearchClear, ComponentCategory,
   MeshGeometryTab, MeshMaterialTab, MeshChoose, MeshPickerClose, MeshClear, MeshSearch, MeshPrevious, MeshNext, MaterialRestore,
   ReferenceClose, ReferenceSearch, ReferenceClear, ReferencePrevious, ReferenceNext,
@@ -624,6 +624,9 @@ struct EditorScreenState final {
   ui::UiPoint assetDragPosition{};
   bool saveRequested = false;
   std::string status;
+  // Nível que a câmera da vista escolhe no LOD Group selecionado, com a altura
+  // relativa — a leitura da barra de LOD do Inspector da Unity. Vazio sem grupo.
+  std::string lodStatus;
   bool canUndo = false;
   bool canRedo = false;
 };

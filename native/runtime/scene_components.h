@@ -86,6 +86,7 @@ inline bool referenceAccepts(const SceneGraph &graph, ObjectId source,
   const auto *object = graph.find(id);
   if (!object || (!property.requiredType.empty() && !object->components.find(property.requiredType))) return false;
   if (property.scope == scene::ObjectReferenceScope::Other && id == source) return false;
+  if (property.scope == scene::ObjectReferenceScope::Descendant && (id == source || !graph.isDescendantOf(id, source))) return false;
   if (property.scope == scene::ObjectReferenceScope::SelfOrAncestor && id != source && !graph.isDescendantOf(source, id)) return false;
   if (property.scope == scene::ObjectReferenceScope::SelfOrAncestor && !property.requiredType.empty())
     for (auto p = source; p != id; p = graph.find(p)->parent)

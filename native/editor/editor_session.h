@@ -19,6 +19,7 @@
 #include "core/base.h"
 #include "editor/editor_play_scene.h"
 #include "runtime/scene_lights.h"
+#include "runtime/lod_groups.h"
 #include "editor/editor_character.h"
 #include "editor/editor_scene_camera.h"
 #include "editor/editor_camera_handles.h"
@@ -291,6 +292,8 @@ public:
 
   // Reconstrói a lista de desenho e as instâncias do frame.
   void update();
+  // A linha "Na vista" do LOD Group selecionado, refeita a cada atualização.
+  void refreshLodStatus();
 
   std::span<const ui::UiInstance> instances() const noexcept { return instances_; }
   const EditorScreenLayout &layout() const noexcept { return layout_; }
@@ -410,6 +413,10 @@ public:
     // Campo legado do relatório. Matrizes incompatíveis agora recusam a
     // publicação, preservando a transformação em vez de aplicar identidade.
     u32 shearedNodes = 0;
+    // LOD Groups gerados pela convenção `_LOD0`, `_LOD1`... dos nós, e o que
+    // ficou de fora deles.
+    u32 lodGroups = 0;
+    std::vector<std::string> lodNotes;
     std::string diagnostic;
     bool cancelled = false;
     resources::AssetGuid source{};
@@ -657,7 +664,38 @@ public:
     loadMaterialAssets();
     return true;
   }
-  bool extractMap(std::vector<renderer::MapDrawState> &out) const { return mapScene_.extract(document_, out); }
+  bool extractMap(std::vector<renderer::MapDrawState> &out) const {
+    if(!mapScene_.extract(document_, out)) return false;
+    applyLodGroups(document_, out);
+    return true;
+  }
+  // A vista que escolhe os níveis dos LOD Groups: a câmera da cena no Play,
+  // quando existe, e a do editor no resto — a mesma que desenha o quadro.
+  runtime::LodView lodView() const {
+    runtime::LodView lod;
+    if(isPlaying() && playScene_.active()) {
+      const auto camera=resolveSceneCamera(playScene_.document());
+      if(camera.entity) {
+        std::copy(camera.position,camera.position+3,lod.position);
+        lod.verticalFov=camera.verticalFov*.017453292519943295f;
+        lod.orthographicHalfHeight=camera.projection==scene::CameraProjection::Orthographic?camera.orthographicHalfHeight:0;
+        return lod;
+      }
+    }
+    const auto &frustum=view_.frustum;
+    std::copy(frustum.cameraPosition,frustum.cameraPosition+3,lod.position);
+    lod.verticalFov=2*std::atan(frustum.tangentHalfVertical);
+    lod.orthographicHalfHeight=renderer::isOrthographic(frustum)?frustum.orthographicHalfHeight:0;
+    return lod;
+  }
+  // Verdadeiro quando a câmera cruzou uma transição desde a última extração.
+  // Fora do Play a cena só é republicada quando a revisão muda; é esta pergunta
+  // que faz a troca de nível chegar à tela — pela publicação de poses, porque
+  // esconder desenhos não muda a topologia.
+  bool lodSelectionChanged() const {
+    const auto &graph=isPlaying()&&playScene_.active()?playScene_.document():document_;
+    return runtime::lodHiddenObjects(graph,lodView())!=lodHidden_;
+  }
   // As luzes saem do MESMO grafo que a câmera e os desenhos: em execução, o
   // mundo de Play; fora dele, o documento autoral. É o que faz um script mover
   // ou apagar uma luz e a tela mudar, sem nenhum caminho separado de execução.
@@ -725,7 +763,9 @@ public:
     }
     if(!playScene_.advance(elapsed)) return false;
     if(!playScene_.scriptDiagnostics().empty()) state_.status=playScene_.scriptDiagnostics();
-    return playScene_.extract(mapScene_,out);
+    if(!playScene_.extract(mapScene_,out)) return false;
+    applyLodGroups(playScene_.document(),out);
+    return true;
   }
   EditorEntityId instantiateAsset(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options=nullptr);
   EditorEntityId createWaterSurface(bool cameraRelative);
@@ -742,6 +782,15 @@ public:
 
 
 private:
+  // Os objetos que os LOD Groups escondem na vista atual. Guardado pela última
+  // extração para `lodSelectionChanged` comparar sem refazer o desenho.
+  mutable std::vector<runtime::ObjectId> lodHidden_;
+  void applyLodGroups(const runtime::SceneGraph &graph,std::vector<renderer::MapDrawState> &draws) const {
+    lodHidden_=runtime::lodHiddenObjects(graph,lodView());
+    if(lodHidden_.empty()) return;
+    for(auto &draw:draws)
+      if(std::binary_search(lodHidden_.begin(),lodHidden_.end(),static_cast<runtime::ObjectId>(draw.objectId))) draw.visible=false;
+  }
   // Geometria importada neste processo, UM bloco por arquivo de origem.
   EditorComponentPresets componentPresets_;
   // O mapa que a publicação gravaria, calculado na prévia. É dele que sai a

@@ -195,6 +195,23 @@ Direcional, pontual ou spot. **Consumidor:** runtime/scene_lights.cpp → render
 | `enabled` | Acesa | booleano |  | verdadeiro | verdadeiro \| falso |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
 | `kind` | Modalidade | enumeração |  | Pontual | Direcional \| Pontual \| Spot |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
 
+## LOD Group · `astra.render.lod_group` v1
+
+Nível de detalhe pela altura na tela. **Consumidor:** runtime/lod_groups.h → visibilidade do desenho por vista. **Capacidade:** `render.lod.group` (implementada). **Invalida:** desenho.
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `transition_0` | Transição LOD 0 | número | Níveis | 60 | 0.1 … 100 | % | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | não | não |
+| `transition_1` | Transição LOD 1 | número | Níveis | 30 | 0.1 … 100 | % | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
+| `transition_2` | Transição LOD 2 | número | Níveis | 10 | 0.1 … 100 | % | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
+| `transition_3` | Transição LOD 3 | número | Níveis | 5 | 0.1 … 100 | % | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
+| `size` | Tamanho | número | Limites | 1 | 0.001 … 1000000 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | não | não |
+| `level_count` | Níveis | enumeração | Níveis | 3 | 1 \| 2 \| 3 \| 4 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | não | não |
+| `level_0` | Objetos LOD 0 | referência | Níveis | Nenhum | qualquer objeto · abaixo deste objeto |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | não | não |
+| `level_1` | Objetos LOD 1 | referência | Níveis | Nenhum | qualquer objeto · abaixo deste objeto |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
+| `level_2` | Objetos LOD 2 | referência | Níveis | Nenhum | qualquer objeto · abaixo deste objeto |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
+| `level_3` | Objetos LOD 3 | referência | Níveis | Nenhum | qualquer objeto · abaixo deste objeto |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
+
 ## Comportamento · `astra.script.behavior` v1
 
 Código C# do projeto. **Consumidor:** runtime/script_bridge.cpp → runtime .NET. **Invalida:** comportamento.
@@ -230,7 +247,7 @@ Código C# do projeto. **Consumidor:** runtime/script_bridge.cpp → runtime .NE
 | `render.texture.anisotropy` | Filtragem anisotrópica | limitada pelo aparelho | rhi/ (feature samplerAnisotropy) | Depende da GPU expor samplerAnisotropy |
 | `render.texture.bindless` | Indexação sem limite de descritor | limitada pelo aparelho | rhi/bindless_registry | Depende de descriptor indexing no backend |
 | `render.lod.package` | Níveis de detalhe do pacote de mapa | implementada | renderer/lod_selection.cpp | — |
-| `render.lod.group` | Grupo de LOD autoral por objeto | planejada | renderer/lod_selection.cpp | Sem componente de grupo nem malhas derivadas por nível |
+| `render.lod.group` | Grupo de LOD autoral por objeto | implementada | runtime/lod_groups.h | Troca direta por altura na tela, sem cross-fade; níveis são objetos do autor, sem simplificação automática |
 | `render.visibility.hzb` | Oclusão por pirâmide de profundidade | implementada | renderer/hzb_visibility.cpp | — |
 | `render.instancing.gpu` | Culling e compactação de desenho em GPU | implementada | renderer/gpu_draw_culling.cpp | — |
 | `render.motion_vectors` | Vetores de movimento por objeto | planejada | renderer/frame_graph.cpp | Sem pose anterior por instância nem alvo de velocidade |

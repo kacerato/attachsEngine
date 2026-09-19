@@ -27,9 +27,8 @@ void appendFloat(std::vector<u8> &out, float value) {
   appendU32(out, bits);
 }
 
-// Um GLB com dois nós nomeados apontando para a mesma malha: instâncias, que é
-// o caso que separa "a importação funciona" de "a importação duplica tudo".
-std::vector<u8> twoNodeGlb() {
+// Um GLB de um triângulo, com os nós e as raízes da cena dados por quem chama.
+std::vector<u8> triangleGlb(const std::string &nodes, const std::string &sceneNodes) {
   std::vector<u8> binary;
   const float positions[9]{0, 0, 0, 1, 0, 0, 0, 1, 0};
   for (float value : positions) appendFloat(binary, value);
@@ -45,9 +44,8 @@ std::vector<u8> twoNodeGlb() {
       R"({"bufferView":1,"componentType":5123,"count":3,"type":"SCALAR"}],)" +
       R"("meshes":[{"name":"Placa","primitives":[{"attributes":{"POSITION":0},"indices":1,"material":0}]}],)" +
       R"("materials":[{"pbrMetallicRoughness":{"baseColorFactor":[1,0,0,1]}}],)" +
-      R"("nodes":[{"name":"Esquerda","mesh":0,"translation":[-2,0,0]},)"
-      R"({"name":"Direita","mesh":0,"translation":[2,0,0]}],)" +
-      R"("scenes":[{"nodes":[0,1]}],"scene":0})";
+      R"("nodes":)" + nodes + "," +
+      R"("scenes":[{"nodes":)" + sceneNodes + R"(}],"scene":0})";
 
   std::string paddedJson = json;
   while (paddedJson.size() % 4) paddedJson.push_back(' ');
@@ -62,6 +60,13 @@ std::vector<u8> twoNodeGlb() {
   appendU32(glb, 0x004E4942);
   glb.insert(glb.end(), binary.begin(), binary.end());
   return glb;
+}
+
+// Dois nós nomeados apontando para a mesma malha: instâncias, que é o caso que
+// separa "a importação funciona" de "a importação duplica tudo".
+std::vector<u8> twoNodeGlb() {
+  return triangleGlb(R"([{"name":"Esquerda","mesh":0,"translation":[-2,0,0]},{"name":"Direita","mesh":0,"translation":[2,0,0]}])",
+                     "[0,1]");
 }
 
 // Duplo do consumidor gráfico: monta o pacote como o renderer monta — primitivas
@@ -741,3 +746,39 @@ AE_TEST(m06_m08_draft_recovery_preserves_external_source_conflict) {
   std::vector<u8> bytes;EditorImportTransaction::read(project.root/"Draft.cs",bytes);
   AE_EXPECT_EQ(std::string(bytes.begin(),bytes.end()),std::string("class External {}"),"disk preserved");
 }
+
+AE_TEST(lod_suffix_nodes_become_a_lod_group_like_the_unity_model_importer) {
+  // "Porta" com filhos Porta_LOD0 e porta_lod1: a Unity cria o LOD Group no
+  // pai, com cada filho no seu nível. Um filho sem sufixo fica fora.
+  EditorSession session;
+  FakeRenderer renderer;
+  startSession(session, renderer);
+  const auto glb = triangleGlb(
+      R"([{"name":"Porta","children":[1,2,3]},{"name":"Porta_LOD0","mesh":0},{"name":"porta_lod1","mesh":0},)"
+      R"({"name":"Dobradica","mesh":0}])",
+      "[0]");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.importModel(glb, "Fontes/porta.glb", {}, report), report.diagnostic.c_str());
+  AE_EXPECT_EQ(report.lodGroups, 1u, "um LOD Group gerado pelos nomes");
+  const auto &doc = session.document();
+  EditorEntityId porta = 0, lod0 = 0, lod1 = 0;
+  std::vector<EditorEntityId> ids;
+  doc.collectSubtree(doc.root(), ids);
+  for (const auto id : ids) {
+    const std::string name = doc.find(id)->name;
+    if (name == "Porta") porta = id;
+    if (name == "Porta_LOD0") lod0 = id;
+    if (name == "porta_lod1") lod1 = id;
+  }
+  const auto *group = porta ? static_cast<const scene::LodGroup *>(doc.find(porta)->components.find(scene::LodGroup::descriptor)) : nullptr;
+  AE_EXPECT_TRUE(group != nullptr, "o pai recebeu o LOD Group");
+  if (!group) return;
+  AE_EXPECT_TRUE(group->levelCount == 2 && group->levels[0] == lod0 && group->levels[1] == lod1,
+                 "cada filho no nível do sufixo, sem diferenciar maiúsculas");
+  AE_EXPECT_TRUE(std::abs(group->size - 1) < 1e-4f, "tamanho medido pela malha do LOD 0 (triângulo de 1 m)");
+
+  // Um Desfazer volta a instanciação inteira, grupo junto.
+  AE_EXPECT_TRUE(session.history().undo(session.document()), "desfazer");
+  AE_EXPECT_TRUE(!session.document().find(porta), "grupo e objetos saem juntos");
+}
+

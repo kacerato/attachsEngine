@@ -40,9 +40,9 @@ inline EditorComponentEntry catalogEntry(std::string_view id, EditorPropertyGrou
 }
 } // namespace detail
 
-// Os oito tipos com consumidor implementado. Comportamento C# é anexado pela
+// Os nove tipos com consumidor implementado. Comportamento C# é anexado pela
 // área de código, não por esta lista, e por isso não aparece aqui.
-inline const std::array<EditorComponentEntry, 8> editorComponentCatalog{{
+inline const std::array<EditorComponentEntry, 9> editorComponentCatalog{{
   detail::catalogEntry("astra.physics.body", EditorPropertyGroup::ScenePhysics, ui::UiIcon::ComponentPhysics),
   detail::catalogEntry("astra.physics.character", EditorPropertyGroup::Character, ui::UiIcon::ComponentCharacter),
   detail::catalogEntry("astra.camera.look", EditorPropertyGroup::CameraLook, ui::UiIcon::ComponentLook),
@@ -50,7 +50,8 @@ inline const std::array<EditorComponentEntry, 8> editorComponentCatalog{{
   detail::catalogEntry("astra.physics.joint", EditorPropertyGroup::ScenePhysics, ui::UiIcon::ComponentJoint),
   detail::catalogEntry("astra.camera", EditorPropertyGroup::CameraLook, ui::UiIcon::EditorAuthorCamera),
   detail::catalogEntry("astra.render.mesh", EditorPropertyGroup::Material, ui::UiIcon::EditorAuthorObject),
-  detail::catalogEntry("astra.render.light", EditorPropertyGroup::Material, ui::UiIcon::LightingSun)
+  detail::catalogEntry("astra.render.light", EditorPropertyGroup::Material, ui::UiIcon::LightingSun),
+  detail::catalogEntry("astra.render.lod_group", EditorPropertyGroup::Material, ui::UiIcon::SceneLayers)
 }};
 
 inline const EditorComponentEntry *findEditorComponent(std::string_view id) {
