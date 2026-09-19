@@ -179,8 +179,9 @@ cima. Agora vale a regra do TouchDelegate do Android e dos alvos de toque da
 web: a expansão só ajuda o toque que cai **perto** de um alvo, nunca o que cai
 **dentro** de outro; um bloqueador por cima continua encerrando a busca
 (`native/ui/ui_input.cpp`, teste `input_touch_expansion_never_steals_a_touch_inside_a_neighbour`).
-Vale para toda lista do editor. **Pendente:** repetir o toque no aparelho — ele
-ficou bloqueado antes da reinstalação.
+Vale para toda lista do editor. **Validado no aparelho:** o mesmo toque no meio
+da linha que antes pegava a vizinha agora desliga o próprio nó, e os filhos
+herdam (`docs/capturas/g3/estrutura-toque-no-meio-da-linha-acerta.png`).
 
 ## G4–G6
 
