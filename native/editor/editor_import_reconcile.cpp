@@ -493,6 +493,7 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
       edit.apply(id, values);
       instance.nodes[node.id] = id;
       created.insert(id);
+      report.createdObjects.push_back(id);
       ++report.created;
     }
 

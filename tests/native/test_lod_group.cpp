@@ -125,7 +125,7 @@ AE_TEST(lod_group_file_round_trips_and_refuses_bad_transitions) {
   std::stringstream out;
   group.write(out);
   scene::LodGroup read;
-  AE_EXPECT_TRUE(read.read(out, 1), "relê");
+  AE_EXPECT_TRUE(read.read(out, 2), "relê");
   AE_EXPECT_TRUE(read.valid() && read.levelCount == 2 && read.levels[1] == 9 && read.size == 3.5f, "igual ao gravado");
 
   scene::LodGroup bad;
@@ -134,4 +134,81 @@ AE_TEST(lod_group_file_round_trips_and_refuses_bad_transitions) {
   bad.transitions = {60, 30, 10, 5};
   bad.size = 0;
   AE_EXPECT_TRUE(!bad.valid(), "tamanho zero não projeta nada");
+}
+
+namespace {
+const runtime::LodObjectState *stateOf(const std::vector<runtime::LodObjectState> &states, runtime::ObjectId id) {
+  for (const auto &state : states) if (state.object == id) return &state;
+  return nullptr;
+}
+void setFade(Rig &rig, bool animate) {
+  auto values = *rig.doc.find(rig.group);
+  auto *lod = static_cast<scene::LodGroup *>(values.components.edit(scene::LodGroup::descriptor));
+  lod->fadeMode = scene::LodFadeMode::CrossFade;
+  lod->animateCrossFading = animate;
+  rig.doc.applyEntityValues(rig.group, values);
+}
+} // namespace
+
+AE_TEST(cross_fade_band_draws_both_levels_with_complementary_coverage) {
+  // Largura 0,2: o LOD 0 (100% a 60%) cruza com o LOD 1 entre 68% e 60%. A
+  // 2,706 m a altura é 64%, o meio da faixa: metade de cada um.
+  Rig rig;
+  build(rig);
+  setFade(rig, false);
+  auto states = runtime::lodObjectStates(rig.doc, at(1.7320508f / .64f));
+  const auto *out = stateOf(states, rig.mesh[0]), *in = stateOf(states, rig.mesh[1]), *far = stateOf(states, rig.mesh[2]);
+  AE_EXPECT_TRUE(out && !out->hidden && std::abs(out->dither - .5f) < 1e-3f, "o nível que sai leva cobertura positiva");
+  AE_EXPECT_TRUE(in && !in->hidden && std::abs(in->dither + .5f) < 1e-3f, "o que entra leva a complementar, negativa");
+  AE_EXPECT_TRUE(far && far->hidden, "o terceiro nível não participa");
+
+  // Fora da faixa, nenhuma cobertura: o nível está inteiro.
+  states = runtime::lodObjectStates(rig.doc, at(2));
+  AE_EXPECT_TRUE(stateOf(states, rig.mesh[0])->dither == 0 && stateOf(states, rig.mesh[1])->hidden, "LOD 0 inteiro");
+
+  // O último nível some aos poucos: a 12% (faixa de 14% a 10%) só ele aparece,
+  // saindo pela metade, e não há ninguém entrando.
+  states = runtime::lodObjectStates(rig.doc, at(1.7320508f / .12f));
+  AE_EXPECT_TRUE(std::abs(stateOf(states, rig.mesh[2])->dither - .5f) < 1e-3f, "o último nível sai em cobertura");
+  AE_EXPECT_TRUE(stateOf(states, rig.mesh[0])->hidden && stateOf(states, rig.mesh[1])->hidden, "os outros ficam escondidos");
+}
+
+AE_TEST(animated_cross_fade_runs_over_time_and_settles) {
+  Rig rig;
+  build(rig);
+  setFade(rig, true);
+  runtime::LodCrossFadeClock clock;
+  auto states = runtime::lodObjectStates(rig.doc, at(2), &clock, 0);
+  AE_EXPECT_TRUE(stateOf(states, rig.mesh[0])->dither == 0, "partida parada no LOD 0");
+  // A câmera se afasta para o LOD 1 no instante 10: a troca leva 0,5 s.
+  runtime::lodObjectStates(rig.doc, at(4), &clock, 10);
+  states = runtime::lodObjectStates(rig.doc, at(4), &clock, 10.25);
+  AE_EXPECT_TRUE(std::abs(stateOf(states, rig.mesh[0])->dither - .5f) < 1e-3f &&
+                     std::abs(stateOf(states, rig.mesh[1])->dither + .5f) < 1e-3f,
+                 "no meio do tempo, metade de cada nível");
+  AE_EXPECT_TRUE(runtime::lodCrossFadeRunning(clock, 10.25), "a troca ainda corre");
+  states = runtime::lodObjectStates(rig.doc, at(4), &clock, 10.6);
+  AE_EXPECT_TRUE(stateOf(states, rig.mesh[0])->hidden && stateOf(states, rig.mesh[1])->dither == 0, "terminada, só o LOD 1");
+  AE_EXPECT_TRUE(!runtime::lodCrossFadeRunning(clock, 10.6), "e o relógio para");
+}
+
+AE_TEST(force_lod_wins_over_height_and_never_reaches_the_file) {
+  Rig rig;
+  build(rig);
+  auto values = *rig.doc.find(rig.group);
+  auto *lod = static_cast<scene::LodGroup *>(values.components.edit(scene::LodGroup::descriptor));
+  lod->forcedLevel = 3; // LOD 2
+  rig.doc.applyEntityValues(rig.group, values);
+  const auto hidden = runtime::lodHiddenObjects(rig.doc, at(2));
+  AE_EXPECT_TRUE(!contains(hidden, rig.mesh[2]) && contains(hidden, rig.mesh[0]), "perto, mas forçado no LOD 2");
+
+  std::stringstream out;
+  lod->write(out);
+  scene::LodGroup read;
+  AE_EXPECT_TRUE(read.read(out, 2) && read.forcedLevel == 0, "ForceLOD é estado de execução: o arquivo volta ao automático");
+
+  // Arquivo da versão 1 (sem Fade Mode) lê como None.
+  std::stringstream v1("2 3.5 50 7 12 9 5 0 1 0");
+  scene::LodGroup old;
+  AE_EXPECT_TRUE(old.read(v1, 1) && old.fadeMode == scene::LodFadeMode::None && old.valid(), "v1 relê sem fade");
 }

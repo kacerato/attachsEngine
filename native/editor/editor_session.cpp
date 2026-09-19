@@ -3005,7 +3005,11 @@ void EditorSession::reconcileStagedSource(const StagedSource &staged, ModelImpor
                                report.reconcile);
     reconcileImportInstances(document_,&history_,staged.source,*published,report.reconcile,
                              [this](const resources::AssetGuid &guid){return mapScene_.assetSlot(guid);});
+    // Nós `_LOD<n>` que chegaram agora: grupo novo num pai novo, ou níveis
+    // novos num grupo que já existia. Mesmo passo de Desfazer.
+    report.lodGroups=addImportedLodGroups(document_,history_,mapScene_,report.reconcile.createdObjects,report.lodNotes);
     history_.end();
+    for(const auto &note:report.lodNotes) reportProblem(EditorConsoleSeverity::Info,note);
     if(report.reconcile.changed()) mapScene_.hydrateMaterials(document_);
     reportImportReconcile(report.reconcile,"Reimportação");
   }

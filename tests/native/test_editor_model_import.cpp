@@ -782,3 +782,35 @@ AE_TEST(lod_suffix_nodes_become_a_lod_group_like_the_unity_model_importer) {
   AE_EXPECT_TRUE(!session.document().find(porta), "grupo e objetos saem juntos");
 }
 
+
+AE_TEST(reimport_that_adds_a_lod_level_extends_the_existing_group) {
+  // A fonte ganha Porta_LOD2 depois do grupo existir: o nível novo entra no
+  // grupo que já estava na cena, sem tocar nos níveis e no tamanho do autor.
+  EditorSession session;
+  FakeRenderer renderer;
+  startSession(session, renderer);
+  EditorSession::ModelImportReport first;
+  AE_EXPECT_TRUE(session.importModel(triangleGlb(R"([{"name":"Porta","children":[1,2]},{"name":"Porta_LOD0","mesh":0},{"name":"Porta_LOD1","mesh":0}])", "[0]"),
+                                     "Fontes/porta.glb", {}, first),
+                 first.diagnostic.c_str());
+  const auto &doc = session.document();
+  const auto find = [&](const char *name) {
+    std::vector<EditorEntityId> ids;
+    doc.collectSubtree(doc.root(), ids);
+    for (const auto id : ids) if (std::string(doc.find(id)->name) == name) return id;
+    return EditorEntityId{0};
+  };
+  const auto porta = find("Porta");
+  const auto groupOf = [&] { return static_cast<const scene::LodGroup *>(doc.find(porta)->components.find(scene::LodGroup::descriptor)); };
+  AE_EXPECT_TRUE(groupOf() && groupOf()->levelCount == 2, "grupo de dois níveis na primeira importação");
+
+  EditorSession::ModelImportReport second;
+  AE_EXPECT_TRUE(session.importModel(triangleGlb(R"([{"name":"Porta","children":[1,2,3]},{"name":"Porta_LOD0","mesh":0},)"
+                                                 R"({"name":"Porta_LOD1","mesh":0},{"name":"Porta_LOD2","mesh":0}])", "[0]"),
+                                     "Fontes/porta.glb", {}, second),
+                 second.diagnostic.c_str());
+  AE_EXPECT_TRUE(second.reimported, "a mesma fonte, reimportada");
+  const auto *group = groupOf();
+  AE_EXPECT_TRUE(group && group->levelCount == 3 && group->levels[2] == find("Porta_LOD2"), "o nível novo entrou no grupo");
+  AE_EXPECT_TRUE(group && group->transitions[2] < group->transitions[1], "com transição abaixo da anterior");
+}

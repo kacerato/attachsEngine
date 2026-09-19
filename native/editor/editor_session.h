@@ -694,7 +694,10 @@ public:
   // esconder desenhos não muda a topologia.
   bool lodSelectionChanged() const {
     const auto &graph=isPlaying()&&playScene_.active()?playScene_.document():document_;
-    return runtime::lodHiddenObjects(graph,lodView())!=lodHidden_;
+    // Uma troca animada muda a cobertura a cada quadro até terminar.
+    if(runtime::lodCrossFadeRunning(lodClock_,lastWallSeconds_)) return true;
+    auto probe=lodClock_;
+    return runtime::lodObjectStates(graph,lodView(),&probe,lastWallSeconds_)!=lodStates_;
   }
   // As luzes saem do MESMO grafo que a câmera e os desenhos: em execução, o
   // mundo de Play; fora dele, o documento autoral. É o que faz um script mover
@@ -782,14 +785,26 @@ public:
 
 
 private:
-  // Os objetos que os LOD Groups escondem na vista atual. Guardado pela última
-  // extração para `lodSelectionChanged` comparar sem refazer o desenho.
-  mutable std::vector<runtime::ObjectId> lodHidden_;
+  // O que os LOD Groups fazem na vista atual, guardado pela última extração
+  // para `lodSelectionChanged` comparar sem refazer o desenho, e o relógio das
+  // trocas animadas (estado de execução, nunca gravado).
+  mutable std::vector<runtime::LodObjectState> lodStates_;
+  mutable runtime::LodCrossFadeClock lodClock_;
   void applyLodGroups(const runtime::SceneGraph &graph,std::vector<renderer::MapDrawState> &draws) const {
-    lodHidden_=runtime::lodHiddenObjects(graph,lodView());
-    if(lodHidden_.empty()) return;
-    for(auto &draw:draws)
-      if(std::binary_search(lodHidden_.begin(),lodHidden_.end(),static_cast<runtime::ObjectId>(draw.objectId))) draw.visible=false;
+    lodStates_=runtime::lodObjectStates(graph,lodView(),&lodClock_,lastWallSeconds_);
+    if(lodStates_.empty()) return;
+    for(auto &draw:draws) {
+      const auto found=std::lower_bound(lodStates_.begin(),lodStates_.end(),static_cast<runtime::ObjectId>(draw.objectId),
+          [](const runtime::LodObjectState &state,runtime::ObjectId id){return state.object<id;});
+      if(found==lodStates_.end()||found->object!=draw.objectId) continue;
+      if(found->hidden) {draw.visible=false;continue;}
+      // Cobertura do cross-fade no MESMO campo que o LOD do pacote usa
+      // (GpuMeshInstance::normalColumns[7]); o shader faz o dither complementar.
+      draw.pose.instance.normalColumns[7]=found->dither;
+      // Durante a troca, só o nível que sai projeta sombra: as duas sombras
+      // somadas escureceriam o chão no meio do fade.
+      if(found->dither<0) draw.castShadow=false;
+    }
   }
   // Geometria importada neste processo, UM bloco por arquivo de origem.
   EditorComponentPresets componentPresets_;

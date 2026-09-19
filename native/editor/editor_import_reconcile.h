@@ -36,6 +36,9 @@ struct ImportReconcileReport {
   // ficaram como estavam porque migrar perderia algo.
   u32 consolidated = 0, legacyParts = 0;
   std::vector<std::string> notes;
+  // Objetos criados nesta passada (nós novos da fonte), para quem precisa
+  // completar o que depende deles — um LOD Group que ganhou um nível, por exemplo.
+  std::vector<EditorEntityId> createdObjects;
   bool changed() const noexcept { return updated || created || removed || orphaned || adopted || consolidated; }
 };
 

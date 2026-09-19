@@ -4208,8 +4208,13 @@ bool InstancedRenderer::queueAuthoredPoses(std::span<const renderer::MapDrawStat
   const auto &current=dirtRoadResources_.draws();
   if(draws.size()!=current.size()) return false;
   u32 count=0;
+  // A cobertura do cross-fade de LOD Group (normalColumns[7]) vive no registro
+  // da instância: mudar só ela, com a mesma matriz, também é pose a publicar.
+  const auto *published=static_cast<const renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
   for(u32 i=0;i<draws.size();++i) {
-    if(std::memcmp(draws[i].pose.draw.model,current[i].model,sizeof(current[i].model))==0) continue;
+    const bool sameDither=!published || i>=instanceCount_ ||
+        published[i].normalColumns[7]==draws[i].pose.instance.normalColumns[7];
+    if(sameDither && std::memcmp(draws[i].pose.draw.model,current[i].model,sizeof(current[i].model))==0) continue;
     if(count==pendingMapPoses_.size() || draws[i].route) return false;
     auto update=draws[i].pose;
     // Topology remains owned by the committed scene, including generated meshes.

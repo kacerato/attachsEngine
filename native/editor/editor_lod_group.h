@@ -75,15 +75,62 @@ inline int importLodSuffix(std::string_view name) {
   return value;
 }
 
+// Um LOD Group que já existe, completado pelos filhos `_LOD<n>` recém-criados
+// (reimportação que acrescentou níveis). Só ocupa nível vazio e só estende a
+// contagem enquanto a sequência a partir do LOD 0 continuar; nível que o autor
+// preencheu, transições e tamanho ficam como estão. Devolve se mudou algo.
+inline bool extendImportedLodGroup(EditorDocument &document, EditorHistory &history, EditorEntityId parentId,
+                                   std::span<const EditorEntityId> created) {
+  const auto *parent = document.find(parentId);
+  const auto *current = parent ? static_cast<const scene::LodGroup *>(parent->components.find(scene::LodGroup::descriptor)) : nullptr;
+  if (!current) return false;
+  auto value = *parent;
+  auto *group = static_cast<scene::LodGroup *>(value.components.edit(scene::LodGroup::descriptor));
+  bool changed = false;
+  for (const auto childId : created) {
+    const auto *child = document.find(childId);
+    if (!child || child->parent != parentId) continue;
+    const int level = importLodSuffix(child->name);
+    if (level < 0 || level >= static_cast<int>(scene::LodGroupMaximumLevels) || group->levels[static_cast<usize>(level)]) continue;
+    group->levels[static_cast<usize>(level)] = childId;
+    changed = true;
+  }
+  if (!changed) return false;
+  // A contagem cresce até o primeiro nível vazio; as transições dos níveis
+  // novos continuam a escada abaixo da última, se a atual não servir.
+  u32 count = group->levelCount;
+  while (count < scene::LodGroupMaximumLevels && group->levels[count]) {
+    if (group->transitions[count] >= group->transitions[count - 1]) group->transitions[count] = group->transitions[count - 1] * .5f;
+    ++count;
+  }
+  group->levelCount = count;
+  return group->valid() && history.applyValues(document, parentId, value);
+}
+
 // Como o Model Importer da Unity: filhos diretos com `_LOD0`, `_LOD1`...
 // ganham um LOD Group no pai, com cada filho no seu nível e o tamanho medido
 // pelo LOD 0. Exige o LOD 0 e níveis contíguos a partir dele; um nível além do
 // quarto, ou um buraco na sequência, deixa o grupo com os níveis até ali e é
-// dito em `notes`. Pai que já tem LOD Group não é tocado. Roda dentro da
-// transação de quem chama. Devolve quantos grupos criou.
+// dito em `notes`. Os pais candidatos são os da lista (recém-criados); o pai de
+// um objeto recém-criado que JÁ tem LOD Group é completado pelos níveis novos,
+// e o que não tem nunca ganha um — ausência ali pode ser escolha do autor.
+// Roda dentro da transação de quem chama. Devolve quantos grupos criou ou
+// completou.
 inline u32 addImportedLodGroups(EditorDocument &document, EditorHistory &history, const EditorMapScene &resources,
                                 std::span<const EditorEntityId> created, std::vector<std::string> &notes) {
   u32 groups = 0;
+  std::vector<EditorEntityId> extended;
+  for (const auto childId : created) {
+    const auto *child = document.find(childId);
+    if (!child || std::find(created.begin(), created.end(), child->parent) != created.end() ||
+        std::find(extended.begin(), extended.end(), child->parent) != extended.end())
+      continue;
+    extended.push_back(child->parent);
+    if (extendImportedLodGroup(document, history, child->parent, created)) {
+      ++groups;
+      notes.push_back(std::string(document.find(child->parent)->name) + ": LOD Group completado com os níveis novos da fonte.");
+    }
+  }
   for (const auto parentId : created) {
     const auto *parent = document.find(parentId);
     if (!parent || parent->components.find(scene::LodGroup::descriptor)) continue;

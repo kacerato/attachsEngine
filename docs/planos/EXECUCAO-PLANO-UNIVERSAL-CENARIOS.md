@@ -159,11 +159,13 @@ um modelo cujos nós seguem `Nome_LOD0`, `Nome_LOD1`... e receber o grupo pronto
 | **Importação `_LOD<n>`** (Model Importer da Unity): filhos diretos com o sufixo viram LOD Group no pai, medido pela malha do LOD 0, na mesma transação da instanciação; buraco na sequência ou nível além do quarto é avisado no console | `addImportedLodGroups` | validado no host, pela importação real de um GLB |
 | Script: `ComponentIds.LodGroup` com as propriedades pela reflexão comum (`level_count`, `transition_0..3`, `level_0..3`, `size`) | `managed/Astra.Scripting/World.cs` | implementado |
 
-**Diferenças da Unity:** troca direta, sem **Fade Mode** (cross-fade/SpeedTree);
-sem `ForceLOD` — na Unity é estado só de execução, e a reflexão atual
-serializa tudo o que expõe; sem `localReferencePoint`; o grupo importado nasce
-na instanciação, e uma reimportação que acrescente níveis não atualiza um grupo
-já existente.
+| **Fade Mode = Cross Fade**, como na Unity: os dois níveis são desenhados com cobertura complementar pelo mesmo dither do LOD do pacote (`GpuMeshInstance::normalColumns[7]`, `lod_dither.glsl`). **Fade Transition Width** por nível (proporção do comprimento do nível, 0..1) ou **Animate Cross-fading** (troca por tempo, 0,5 s como `crossFadeAnimationDuration`); o último nível some aos poucos; durante a troca só o nível que sai projeta sombra | `scene::lodGroupFadeFactor`, `runtime::lodObjectStates`, `LodCrossFadeClock` | validado no host |
+| **ForceLOD** como estado de execução: `force_level` (0 automático, n = LOD n-1) vence a altura, não aparece no Inspector e nunca é gravado — o Play sempre parte do automático | `LodGroup::forcedLevel` | validado no host |
+| **Reimportação que acrescenta níveis**: nós `_LOD<n>` novos entram no grupo que já existe (só em nível vazio, estendendo a sequência a partir do LOD 0), no mesmo Desfazer da reimportação; transições e tamanho do autor ficam | `extendImportedLodGroup`, `ImportReconcileReport::createdObjects` | validado no host, com duas importações reais |
+
+**Diferenças da Unity:** sem o modo SpeedTree; a largura padrão do fade é 0,2
+(a documentação da Unity não fixa uma); um pai existente SEM LOD Group não
+ganha um na reimportação — a ausência ali pode ser escolha do autor.
 
 ## Suíte do host — de 1003 para 1009 verdes
 
