@@ -493,8 +493,12 @@ public:
   bool saveProjectImportProfile(const resources::ImportProfile &profile);
   // Rascunho do painel e os limites que ele produz neste aparelho.
   resources::ImportProfile importProfileDraft() const {
-    return {state_.importScale,state_.importTextureDimension,state_.importNormals,state_.importNormalWeighting,
-            state_.importTangents,state_.importCameras,state_.importExcludedNodes};
+    resources::ImportProfile draft;
+    draft.scale=state_.importScale;draft.maximumTextureDimension=state_.importTextureDimension;
+    draft.normals=state_.importNormals;draft.normalWeighting=state_.importNormalWeighting;
+    draft.smoothingAngle=state_.importSmoothingAngle;draft.tangents=state_.importTangents;
+    draft.importCameras=state_.importCameras;draft.excludedNodes=state_.importExcludedNodes;
+    return draft;
   }
   resources::GltfImportLimits importLimitsFor(const resources::ImportProfile &profile) const {
     return resources::applyImportProfile(importLimits_,profile);

@@ -51,6 +51,11 @@ inline constexpr u8 GltfNormalsImport = 0;    // usa NORMAL do arquivo; gera o q
 inline constexpr u8 GltfNormalsCalculate = 1; // ignora NORMAL do arquivo e gera tudo
 inline constexpr u8 GltfNormalWeightArea = 0;  // contribuição proporcional à área do triângulo
 inline constexpr u8 GltfNormalWeightAngle = 1; // contribuição proporcional ao ângulo no vértice
+// Smoothing Angle do Model Import Settings: entre faces cujo ângulo passa deste
+// limite a aresta fica dura — o vértice é dividido e cada lado leva a própria
+// normal. 180 suaviza tudo (o comportamento de antes do campo).
+inline constexpr float GltfSmoothingAngleDefault = 60.0f;
+inline constexpr float GltfSmoothingAngleNone = 180.0f;
 inline constexpr u8 GltfTangentsImport = 0;    // usa TANGENT do arquivo; gera quando faltar e houver mapa normal
 inline constexpr u8 GltfTangentsCalculate = 1; // gera sempre que houver UV, mesmo com TANGENT no arquivo
 
@@ -90,6 +95,9 @@ struct GltfImportLimits {
   // `GltfTangentsImport` reproduzem o comportamento anterior ao perfil.
   u8 normals = GltfNormalsImport;
   u8 normalWeighting = GltfNormalWeightArea;
+  // Vale para toda normal que a importação GERA: Calcular, ou arquivo sem
+  // NORMAL. 180 aqui reproduz quem chama o importador sem perfil.
+  float smoothingAngle = GltfSmoothingAngleNone;
   u8 tangents = GltfTangentsImport;
   // "Import Cameras" do Model Import Settings. Desligado reproduz o
   // comportamento anterior, em que a câmera do arquivo era contada como perdida.

@@ -30,7 +30,7 @@ bool sameExcludedNodes(const ImportProfile &a, const ImportProfile &b) noexcept 
 bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept {
   return std::fabs(a.scale - b.scale) <= std::max(a.scale, b.scale) * 1e-5f &&
          a.maximumTextureDimension == b.maximumTextureDimension && a.normals == b.normals &&
-         a.normalWeighting == b.normalWeighting && a.tangents == b.tangents &&
+         a.normalWeighting == b.normalWeighting && a.smoothingAngle == b.smoothingAngle && a.tangents == b.tangents &&
          a.importCameras == b.importCameras && sameExcludedNodes(a, b);
 }
 
@@ -44,6 +44,7 @@ bool sameImportPreparation(const ImportProfile &a, const ImportProfile &b) noexc
 bool validImportProfile(const ImportProfile &profile) noexcept {
   return std::isfinite(profile.scale) && isScaleStep(profile.scale) && isTextureStep(profile.maximumTextureDimension) &&
          profile.normals <= GltfNormalsCalculate && profile.normalWeighting <= GltfNormalWeightAngle &&
+         profile.smoothingAngle <= 180 &&
          profile.tangents <= GltfTangentsCalculate && profile.excludedNodes.size() <= 65536;
 }
 
@@ -54,6 +55,7 @@ std::string serializeImportProfile(const ImportProfile &profile) {
          ",\"maximumTextureDimension\":" + std::to_string(profile.maximumTextureDimension) +
          ",\"normals\":" + std::to_string(profile.normals) +
          ",\"normalWeighting\":" + std::to_string(profile.normalWeighting) +
+         ",\"smoothingAngle\":" + std::to_string(profile.smoothingAngle) +
          ",\"tangents\":" + std::to_string(profile.tangents) +
          ",\"importCameras\":" + (profile.importCameras ? "true" : "false") + ",\"excludedNodes\":[" + [&] {
            std::string list;
@@ -98,6 +100,12 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
     parsed.normalWeighting = static_cast<u8>(std::min<i64>(weighting, 255));
     parsed.tangents = static_cast<u8>(std::min<i64>(tangents, 255));
   }
+  parsed.smoothingAngle = 180;
+  if (schema >= 5) {
+    const auto angle = document.index(root, "smoothingAngle");
+    if (angle < 0) return false;
+    parsed.smoothingAngle = static_cast<u32>(std::min<i64>(angle, 1000));
+  }
   if (schema >= 3) {
     const auto *cameras = document.member(root, "importCameras");
     if (!cameras || cameras->kind != JsonDocument::Kind::Boolean) return false;
@@ -127,6 +135,7 @@ GltfImportLimits applyImportProfile(GltfImportLimits limits, const ImportProfile
   limits.rootScale = profile.scale;
   limits.normals = profile.normals;
   limits.normalWeighting = profile.normalWeighting;
+  limits.smoothingAngle = static_cast<float>(profile.smoothingAngle);
   limits.tangents = profile.tangents;
   limits.importCameras = profile.importCameras;
   limits.maximumTextureDimension = std::min(limits.maximumTextureDimension, profile.maximumTextureDimension);

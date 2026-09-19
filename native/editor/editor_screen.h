@@ -201,6 +201,7 @@ enum class EditorWidget : u32 {
   ImportApplyProfile, ImportSaveDefaultProfile,
   // G2: geometria derivada no perfil — normais, ponderação e tangentes.
   ImportNormalsCycle, ImportNormalWeightingCycle, ImportTangentsCycle, ImportCamerasToggle,
+  ImportSmoothingDown, ImportSmoothingUp,
   // R4: textura por binding de material e extração das imagens de um GLB.
   TexturePickerClose, TextureUseInherited, TextureUseNone, AssetExtractTextures,
   MaterialAlphaCycle, MaterialCutoffDown, MaterialCutoffUp, MaterialSidesCycle,
@@ -533,6 +534,7 @@ struct EditorScreenState final {
   // tela já reflete; divergir dele é o que habilita "Preparar com este perfil".
   u8 importNormals=0,importPreparedNormals=0;
   u8 importNormalWeighting=0,importPreparedNormalWeighting=0;
+  u32 importSmoothingAngle=60,importPreparedSmoothingAngle=60;
   u8 importTangents=0,importPreparedTangents=0;
   bool importCameras=false,importPreparedCameras=false;
   // Nós que o autor tirou da importação. Não pede nova preparação: a saída do

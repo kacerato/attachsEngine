@@ -1887,6 +1887,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
                             state.importTextureDimension==state.importPreparedTextureDimension &&
                             state.importNormals==state.importPreparedNormals &&
                             state.importNormalWeighting==state.importPreparedNormalWeighting &&
+                            state.importSmoothingAngle==state.importPreparedSmoothingAngle &&
                             state.importTangents==state.importPreparedTangents &&
                             state.importCameras==state.importPreparedCameras;
 
@@ -2027,7 +2028,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     // Oito linhas de controle, paginadas como as outras abas: numa tela baixa
     // (um celular deitado tem ~400 de altura útil) a lista corrida cortava as
     // linhas de baixo sem aviso nem como alcançá-las.
-    enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Normals,Weighting,Tangents,Cameras,ProfileRowCount};
+    enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Normals,Weighting,Smoothing,Tangents,Cameras,ProfileRowCount};
     const auto [firstRow,lastRow]=paginate(ProfileRowCount,40);
     const auto cycle=[&](UiRect row,const char *label,const char *value,EditorWidget widget) {
       builder.label(takeLeft(row,row.width*.45f),label,theme.color.text,theme.type.caption);
@@ -2080,6 +2081,19 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
       case Normals:cycle(row,"Normais",state.importNormals==resources::GltfNormalsCalculate?"Calcular":"Importar",EditorWidget::ImportNormalsCycle);break;
       case Weighting:cycle(row,"Modo das normais",state.importNormalWeighting==resources::GltfNormalWeightAngle?"Por ângulo":"Por área",
                            EditorWidget::ImportNormalWeightingCycle);break;
+      case Smoothing: {
+        // Smoothing Angle: vale para toda normal gerada (Calcular, ou arquivo
+        // sem NORMAL). Arestas mais agudas que o ângulo ficam duras.
+        builder.label(takeLeft(row,row.width*.45f),"Ângulo de suavização",theme.color.text,theme.type.caption);
+        const auto down=deflate(takeLeft(row,36),UiInsets::all(2)),up=deflate(takeRight(row,36),UiInsets::all(2));
+        for(const auto &[rect,label,widget]:{std::tuple{down,"-",EditorWidget::ImportSmoothingDown},std::tuple{up,"+",EditorWidget::ImportSmoothingUp}}) {
+          list.addRect(rect,theme.color.raised,theme.radius.control);
+          builder.label(rect,label,theme.color.text,theme.type.body,UiAlign::Center);
+          router.addRegion(rect,widgetId(widget));
+        }
+        builder.label(row,std::to_string(state.importSmoothingAngle)+"°",theme.color.text,theme.type.body,UiAlign::Center);
+        break;
+      }
       case Tangents:cycle(row,"Tangentes",state.importTangents==resources::GltfTangentsCalculate?"Calcular":"Importar",EditorWidget::ImportTangentsCycle);break;
       case Cameras:cycle(row,"Importar câmeras",state.importCameras?"Sim":"Não",EditorWidget::ImportCamerasToggle);break;
       case ProfileRowCount:break;

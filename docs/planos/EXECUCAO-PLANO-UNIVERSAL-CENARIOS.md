@@ -85,11 +85,12 @@ slot, e o painel deixou de precisar do aviso.
 | Reabrir o projeto usa a exclusão com que a fonte foi publicada | `EditorSession::reopenSources` | implementado |
 | Controles no painel de importação (aba Perfil) e as linhas novas no relatório | `native/editor/editor_screen.cpp`, `editor_session.cpp` | **visto no aparelho** (`importacao-perfil-normais-pendente.png`). O aparelho achou dois defeitos, corrigidos: (1) a tela só considerava escala e textura para "perfil pendente", e Normais/Modo/Tangentes/câmeras deixavam publicar a prévia antiga — agora a tela faz a mesma pergunta que a sessão, com teste por campo; (2) numa tela baixa as linhas de baixo ficavam cortadas sem como alcançá-las — o Perfil é paginado como as outras abas, com as ações fixas no rodapé |
 
+| **Smoothing Angle** (Model Import Settings da Unity): em toda normal gerada, a aresta entre faces com ângulo acima do limite fica dura — o vértice é dividido e cada lado leva a própria normal; a divisão respeita o Modo das normais. Perfil novo nasce com os 60° da Unity; perfil gravado antes (schema < 5) lê 180°, que é o que ele publicou. Entra na chave do cache e na pergunta "perfil pendente"; no painel, passos de 15° | `GltfImportLimits::smoothingAngle`, `splitHardEdges`, `ImportProfile` schema 5 | validado no host (cubo de 8 vértices vira 24 com normais nos eixos; plano não se parte) e **no aparelho**: o mesmo cubo reimportado com 60° passa de degradê a faces planas (`smoothing-angle-60-vs-180.png`) |
+
 **Limites declarados:**
 
 - não há a opção "None" de normais da Unity (aqui ela só produziria superfície
-  preta), nem **Smoothing Angle** — ângulo de suavização exige duplicar vértices
-  na borda dura, que é mudança de topologia e não de atributo;
+  preta);
 - **Import Lights não entra aqui.** O glTF usa unidades fotométricas (lux para
   direcional, candela para pontual/spot) e a escala de intensidade desta engine
   ainda não é calibrada — importar os valores do arquivo produziria cenas
@@ -183,10 +184,19 @@ próprio enquadramento pós-importação. Nos grupos gerados por nome, o último
 nível passa a valer até 1% da tela (adaptação da Astra; o autor muda no
 Inspector).
 
-**Visto e não resolvido aqui:** no GLB de teste (sem NORMAL, 8 vértices
-compartilhados no cubo) as faces verticais do LOD 0 saem pretas. A hipótese é a
-normal calculada média sobre quinas de 90° — o **Smoothing Angle** que o G2
-declara pendente —, não confirmada.
+**As faces pretas do GLB de teste eram três causas, separadas por experimento
+no aparelho** (`culling-*.png`):
+
+1. **Face da frente invertida — defeito real, corrigido.** O pipeline com
+   culling por material declarava anti-horário; neste mundo de mão esquerda com
+   o Y invertido do Vulkan, a frente glTF chega à tela em sentido horário, e o
+   culling descartava a frente de TODO material de uma face: os cubos
+   apareciam do avesso. Materiais de face dupla nunca ligam o culling e
+   escondiam o defeito.
+2. **Metal sem textura:** o `metallicFactor` padrão do glTF é 1, e metal não
+   tem difuso — só reflete o ambiente. O cubo do teste era metal; com
+   `metallicFactor` 0 as laterais iluminam. Não é defeito; é o material.
+3. **Normais médias nas quinas:** resolvido pelo Smoothing Angle (acima).
 
 **Diferenças da Unity:** sem o modo SpeedTree; a largura padrão do fade é 0,2
 (a documentação da Unity não fixa uma); um pai existente SEM LOD Group não

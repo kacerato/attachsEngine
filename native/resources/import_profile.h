@@ -24,7 +24,7 @@ namespace ae::resources {
 //    (preset reutilizável, I19).
 // Arquivo ausente ou inválido cai no próximo nível (fonte → projeto → embutido),
 // com o valor embutido igual ao comportamento anterior ao perfil.
-inline constexpr u32 ImportProfileSchema = 4; // 2: normais e tangentes; 3: camaras do arquivo; 4: nos excluidos
+inline constexpr u32 ImportProfileSchema = 5; // 2: normais e tangentes; 3: camaras do arquivo; 4: nos excluidos
 // Escala uniforme aplicada às raízes (I01). Passos, não campo livre: o toque no
 // aparelho erra fácil um número digitado, e os casos reais são conversões de unidade.
 inline constexpr std::array<float, 9> ImportScaleSteps{0.001f, 0.01f, 0.1f, 0.5f, 1.0f, 2.0f, 10.0f, 100.0f, 1000.0f};
@@ -41,6 +41,10 @@ struct ImportProfile {
   // Os padrões reproduzem exatamente o comportamento anterior ao campo.
   u8 normals = GltfNormalsImport;
   u8 normalWeighting = GltfNormalWeightArea;
+  // Smoothing Angle, em graus inteiros. Perfil NOVO nasce com os 60° da Unity;
+  // um perfil gravado antes do campo (schema < 5) lê 180, que é suavizar tudo —
+  // o comportamento com que ele foi publicado.
+  u32 smoothingAngle = 60;
   u8 tangents = GltfTangentsImport;
   // "Import Cameras" da Unity. Padrão desligado porque ligá-lo muda o que a
   // cena recebe (objetos com componente de câmera) e o padrão precisa ser o

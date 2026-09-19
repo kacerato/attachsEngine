@@ -8,6 +8,7 @@
 
 #include "resources/gltf_import.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <string>
@@ -290,4 +291,67 @@ AE_TEST(import_refuses_a_camera_with_an_impossible_lens) {
   GltfImport model;
   AE_EXPECT_TRUE(!importGlb(buildGlb(asset.json, asset.binary), limits, {}, model),
                  "plano distante atrás do próximo é arquivo inválido, não valor a corrigir");
+}
+
+namespace {
+// Cubo unitário com 8 vértices compartilhados e sem NORMAL — a forma em que
+// um exportador entrega "caixa de quinas vivas" e o importador precisa decidir
+// se a quina é aresta dura ou superfície curva.
+Asset sharedCube() {
+  std::vector<u8> binary;
+  const float corners[24]{-.5f, -.5f, -.5f, .5f, -.5f, -.5f, .5f, .5f, -.5f, -.5f, .5f, -.5f,
+                          -.5f, -.5f, .5f,  .5f, -.5f, .5f,  .5f, .5f, .5f,  -.5f, .5f, .5f};
+  for (float value : corners) appendFloat(binary, value);
+  const u16 faces[36]{0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4,
+                      3, 6, 2, 3, 7, 6, 0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6, 5};
+  for (u16 value : faces) { binary.push_back(static_cast<u8>(value)); binary.push_back(static_cast<u8>(value >> 8)); }
+  std::string json = std::string(R"({"asset":{"version":"2.0"},)") +
+    R"("buffers":[{"byteLength":)" + std::to_string(binary.size()) + R"(}],)" +
+    R"("bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":96},{"buffer":0,"byteOffset":96,"byteLength":72}],)" +
+    R"("accessors":[{"bufferView":0,"componentType":5126,"count":8,"type":"VEC3"},)"
+    R"({"bufferView":1,"componentType":5123,"count":36,"type":"SCALAR"}],)" +
+    R"("meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1,"material":0}]}],)" +
+    R"("materials":[{"pbrMetallicRoughness":{"baseColorFactor":[1,1,1,1]}}],)" +
+    R"("nodes":[{"name":"Caixa","mesh":0}],"scenes":[{"nodes":[0]}],"scene":0})";
+  return {json, binary};
+}
+} // namespace
+
+AE_TEST(smoothing_angle_splits_the_hard_edges_of_a_shared_vertex_cube) {
+  // 60° (o padrão da Unity): as quinas de 90° ficam duras. Cada canto passa a
+  // ter a normal só da própria face — 24 vértices, normais nos eixos.
+  const auto asset = sharedCube();
+  GltfImportLimits limits;
+  limits.smoothingAngle = GltfSmoothingAngleDefault;
+  GltfImport model;
+  AE_EXPECT_TRUE(importGlb(buildGlb(asset.json, asset.binary), limits, {}, model), model.diagnostic.c_str());
+  const auto vertices = model.vertices.size() / renderer::MapVertexStride;
+  AE_EXPECT_EQ(vertices, usize{24}, "8 quinas × 3 faces: cada lado da aresta dura com o próprio vértice");
+  for (usize v = 0; v < vertices; ++v) {
+    float normal[3];
+    readNormal(model, static_cast<u32>(v), normal);
+    const float biggest = std::max({std::fabs(normal[0]), std::fabs(normal[1]), std::fabs(normal[2])});
+    AE_EXPECT_TRUE(biggest > .99f, "normal no eixo da face, não na diagonal da quina");
+  }
+  // O desenho continua o mesmo: 12 triângulos, agora sobre os vértices divididos.
+  AE_EXPECT_EQ(model.draws.front().indexCount, 36u, "a topologia de triângulos não muda");
+
+  // 180°: tudo suave, como antes do campo — 8 vértices e normais diagonais.
+  limits.smoothingAngle = GltfSmoothingAngleNone;
+  GltfImport smooth;
+  AE_EXPECT_TRUE(importGlb(buildGlb(asset.json, asset.binary), limits, {}, smooth), smooth.diagnostic.c_str());
+  AE_EXPECT_EQ(smooth.vertices.size() / renderer::MapVertexStride, usize{8}, "sem divisão");
+  float corner[3];
+  readNormal(smooth, 0, corner);
+  AE_EXPECT_TRUE(std::fabs(std::fabs(corner[0]) - .577f) < .02f, "a normal da quina é a média das três faces");
+}
+
+AE_TEST(smoothing_angle_keeps_a_flat_surface_in_one_piece) {
+  // Dois triângulos coplanares não têm aresta dura em ângulo nenhum, nem 0°.
+  const auto asset = stretchedQuad();
+  GltfImportLimits limits;
+  limits.smoothingAngle = 0;
+  GltfImport model;
+  AE_EXPECT_TRUE(importGlb(buildGlb(asset.json, asset.binary), limits, {}, model), model.diagnostic.c_str());
+  AE_EXPECT_EQ(model.vertices.size() / renderer::MapVertexStride, usize{4}, "o plano não se parte");
 }

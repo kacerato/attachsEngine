@@ -37,6 +37,25 @@ AE_TEST(import_profile_schema_2_reads_without_the_camera_field) {
   AE_EXPECT_TRUE(!parsed.importCameras, "o campo que ele não conhecia fica no padrão");
 }
 
+AE_TEST(import_profile_before_schema_5_keeps_every_normal_smooth) {
+  // O schema 4 não tinha Smoothing Angle: o que ele publicou foi normal toda
+  // suave. Ler com os 60° de um perfil novo mudaria a malha na reimportação.
+  ImportProfile parsed;
+  AE_EXPECT_TRUE(parseImportProfile(
+                     R"({"schema":4,"scale":1,"maximumTextureDimension":512,"normals":1,"normalWeighting":0,"tangents":0,"importCameras":false,"excludedNodes":[]})",
+                     parsed),
+                 "o schema 4 continua legível");
+  AE_EXPECT_EQ(parsed.smoothingAngle, 180u, "sem o campo, tudo suave, como era");
+  AE_EXPECT_EQ(ImportProfile{}.smoothingAngle, 60u, "um perfil NOVO nasce com os 60° da Unity");
+
+  ImportProfile sharp;
+  sharp.smoothingAngle = 30;
+  ImportProfile read;
+  AE_EXPECT_TRUE(parseImportProfile(serializeImportProfile(sharp), read) && read.smoothingAngle == 30u, "ida e volta");
+  AE_EXPECT_TRUE(!sameImportPreparation(sharp, ImportProfile{}), "outro ângulo pede nova preparação");
+  AE_EXPECT_EQ(applyImportProfile({}, sharp).smoothingAngle, 30.0f, "e chega ao importador");
+}
+
 AE_TEST(import_profile_refuses_a_future_schema_and_a_truncated_current_one) {
   ImportProfile parsed;
   AE_EXPECT_TRUE(!parseImportProfile(R"({"schema":99,"scale":1,"maximumTextureDimension":512})", parsed),

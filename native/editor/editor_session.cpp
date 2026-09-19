@@ -1010,6 +1010,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     resources::ImportProfile prepared;
     prepared.scale=state_.importPreparedScale;prepared.maximumTextureDimension=state_.importPreparedTextureDimension;
     prepared.normals=state_.importPreparedNormals;prepared.normalWeighting=state_.importPreparedNormalWeighting;
+    prepared.smoothingAngle=state_.importPreparedSmoothingAngle;
     prepared.tangents=state_.importPreparedTangents;prepared.importCameras=state_.importPreparedCameras;
     const bool profileApplied=resources::sameImportPreparation(importProfileDraft(),prepared);
     bool handled=true;
@@ -1040,6 +1041,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     else if(is(EditorWidget::ImportTangentsCycle))
       state_.importTangents=state_.importTangents==resources::GltfTangentsImport?resources::GltfTangentsCalculate:resources::GltfTangentsImport;
     else if(is(EditorWidget::ImportCamerasToggle)) state_.importCameras=!state_.importCameras;
+    // Passos de 15°: o controle deslizante da Unity em toque, sem arrasto fino.
+    else if(is(EditorWidget::ImportSmoothingDown)) state_.importSmoothingAngle=state_.importSmoothingAngle>=15?state_.importSmoothingAngle-15:0;
+    else if(is(EditorWidget::ImportSmoothingUp)) state_.importSmoothingAngle=std::min(180u,state_.importSmoothingAngle+15);
     else if(routing.widgetId>=widgetId(EditorWidget::ImportNodeToggleBase) &&
             routing.widgetId<widgetId(EditorWidget::ImportNodeToggleBase)+65536)
       toggleImportNodeExclusion(routing.widgetId-widgetId(EditorWidget::ImportNodeToggleBase));
@@ -3199,6 +3203,7 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   state_.importAmbiguities=0;state_.importAmbiguityChoice=0;
   state_.importPreparedScale=prepared.scale;state_.importPreparedTextureDimension=prepared.maximumTextureDimension;
   state_.importPreparedNormals=prepared.normals;state_.importPreparedNormalWeighting=prepared.normalWeighting;
+  state_.importPreparedSmoothingAngle=prepared.smoothingAngle;
   state_.importPreparedTangents=prepared.tangents;state_.importPreparedCameras=prepared.importCameras;
   state_.importReprepare=false;
   // R3: saídas estruturadas para as abas do painel (I23).
@@ -4627,6 +4632,7 @@ void EditorSession::beginImportPreparation(std::string_view path) {
   state_.importTextureDimension=state_.importPreparedTextureDimension=profile.maximumTextureDimension;
   state_.importNormals=state_.importPreparedNormals=profile.normals;
   state_.importNormalWeighting=state_.importPreparedNormalWeighting=profile.normalWeighting;
+  state_.importSmoothingAngle=state_.importPreparedSmoothingAngle=profile.smoothingAngle;
   state_.importTangents=state_.importPreparedTangents=profile.tangents;
   state_.importCameras=state_.importPreparedCameras=profile.importCameras;
   state_.importExcludedNodes=profile.excludedNodes;state_.importImpact.clear();

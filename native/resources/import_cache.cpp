@@ -112,6 +112,11 @@ std::string importCacheKey(std::string_view sourceContentHash, const GltfImportL
                        return number(bits);
                      }() +
                      "|normals=" + number(limits.normals) + "|normalWeighting=" + number(limits.normalWeighting) +
+                     "|smoothingAngle=" + [&] {
+                       u32 bits = 0;
+                       std::memcpy(&bits, &limits.smoothingAngle, sizeof bits);
+                       return number(bits);
+                     }() +
                      "|tangents=" + number(limits.tangents) +
                      "|cameras=" + number(limits.importCameras ? 1 : 0) +
                      "|imageDimension=" + number(limits.image.maximumDimension) +

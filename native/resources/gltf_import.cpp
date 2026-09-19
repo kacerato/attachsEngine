@@ -887,6 +887,104 @@ struct Importer {
     return true;
   }
 
+  // Normais com Smoothing Angle. Em cada canto de triângulo, a normal soma só as
+  // faces do mesmo vértice que formam com a dele um ângulo dentro do limite; um
+  // vértice cujos cantos chegam a conjuntos diferentes é dividido, e é aí que a
+  // aresta fica dura. A contribuição de cada face segue o Modo das normais (por
+  // área ou por ângulo no canto), como no caminho sem limite. As cópias entram
+  // no fim do bloco da primitiva — que é o último escrito —, e `write` e
+  // `vertexCount` voltam atualizados para quem vem depois (UV, tangentes).
+  bool splitHardEdges(const PrimitiveRange &range, u8 *&write, u32 &vertexCount) {
+    const u32 corners = range.indexCount - range.indexCount % 3;
+    std::vector<std::array<float, 3>> contribution(corners), unit(corners / 3);
+    for (u32 t = 0; t < corners / 3; ++t) {
+      if ((t & 0xffff) == 0 && cancelled()) return false;
+      float p[3][3];
+      for (u32 k = 0; k < 3; ++k)
+        std::memcpy(p[k], write + static_cast<usize>(out->indices[range.firstIndex + t * 3 + k]) * renderer::MapVertexStride, 12);
+      const float e1[3]{p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]};
+      const float e2[3]{p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]};
+      const float face[3]{e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]};
+      const float doubleArea = std::hypot(face[0], face[1], face[2]);
+      if (!std::isfinite(doubleArea) || doubleArea <= 0) continue; // degenerado: sem normal e sem voto
+      for (u32 axis = 0; axis < 3; ++axis) unit[t][axis] = face[axis] / doubleArea;
+      for (u32 k = 0; k < 3; ++k) {
+        float weight = 1;
+        const float *vector = face;
+        if (limits->normalWeighting == GltfNormalWeightAngle) {
+          const float *a = p[k], *b = p[(k + 1) % 3], *c = p[(k + 2) % 3];
+          const float u[3]{b[0] - a[0], b[1] - a[1], b[2] - a[2]};
+          const float v[3]{c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+          const float lengths = std::hypot(u[0], u[1], u[2]) * std::hypot(v[0], v[1], v[2]);
+          const float cosine = lengths > 0 ? (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / lengths : 0;
+          weight = std::acos(std::fmin(std::fmax(cosine, -1.f), 1.f));
+          if (!std::isfinite(weight)) weight = 0;
+          vector = unit[t].data();
+        }
+        for (u32 axis = 0; axis < 3; ++axis) contribution[t * 3 + k][axis] = vector[axis] * weight;
+      }
+    }
+    // Cantos agrupados por vértice (ordenação por contagem).
+    std::vector<u32> start(vertexCount + 1, 0), order(corners);
+    for (u32 c = 0; c < corners; ++c) ++start[out->indices[range.firstIndex + c] + 1];
+    for (u32 v = 0; v < vertexCount; ++v) start[v + 1] += start[v];
+    {
+      auto cursor = start;
+      for (u32 c = 0; c < corners; ++c) order[cursor[out->indices[range.firstIndex + c]]++] = c;
+    }
+    const float limit = std::cos(std::clamp(limits->smoothingAngle, 0.0f, 180.0f) * 0.017453292519943295f) - 1e-5f;
+    std::vector<u8> appended;
+    u32 added = 0;
+    std::vector<u8> member;
+    std::vector<std::vector<u8>> groups;
+    for (u32 v = 0; v < vertexCount; ++v) {
+      if ((v & 0xffff) == 0 && cancelled()) return false;
+      const u32 first = start[v], count = start[v + 1] - start[v];
+      if (!count) continue;
+      groups.clear();
+      std::vector<u32> groupOf(count);
+      for (u32 i = 0; i < count; ++i) {
+        const auto &ui = unit[order[first + i] / 3];
+        member.assign(count, 0);
+        for (u32 j = 0; j < count; ++j) {
+          const auto &uj = unit[order[first + j] / 3];
+          member[j] = i == j || ui[0] * uj[0] + ui[1] * uj[1] + ui[2] * uj[2] >= limit;
+        }
+        const auto found = std::find(groups.begin(), groups.end(), member);
+        groupOf[i] = static_cast<u32>(found - groups.begin());
+        if (found == groups.end()) groups.push_back(member);
+      }
+      for (u32 g = 0; g < groups.size(); ++g) {
+        float normal[3]{0, 0, 0};
+        for (u32 j = 0; j < count; ++j)
+          if (groups[g][j]) for (u32 axis = 0; axis < 3; ++axis) normal[axis] += contribution[order[first + j]][axis];
+        const float length = std::hypot(normal[0], normal[1], normal[2]);
+        i16 packed[4]{0, 0, 0, 0};
+        if (std::isfinite(length) && length > 0)
+          for (u32 axis = 0; axis < 3; ++axis) packed[axis] = packSnorm(normal[axis] / length);
+        u32 target = v;
+        u8 *vertex = write + static_cast<usize>(v) * renderer::MapVertexStride;
+        if (g) {
+          if (static_cast<u64>(out->vertices.size() / renderer::MapVertexStride) + added + 1 > limits->maximumVertices)
+            return fail("O arquivo passa do limite de vértices desta importação ao dividir as arestas duras.");
+          target = vertexCount + added++;
+          appended.insert(appended.end(), vertex, vertex + renderer::MapVertexStride);
+          vertex = appended.data() + appended.size() - renderer::MapVertexStride;
+        }
+        if (length > 0 && std::isfinite(length)) std::memcpy(vertex + 12, packed, 8);
+        for (u32 i = 0; i < count; ++i)
+          if (groupOf[i] == g) out->indices[range.firstIndex + order[first + i]] = target;
+      }
+    }
+    if (added) {
+      const usize base = static_cast<usize>(write - out->vertices.data());
+      out->vertices.insert(out->vertices.end(), appended.begin(), appended.end());
+      write = out->vertices.data() + base;
+      vertexCount += added;
+    }
+    return true;
+  }
+
   bool readPrimitive(const Node &root, const Node &primitive, PrimitiveRange &range) {
     const auto *primitiveExtensions = json->member(primitive, "extensions");
     const auto *dracoExtension = primitiveExtensions && primitiveExtensions->kind == Kind::Object
@@ -1083,7 +1181,10 @@ struct Importer {
     // tudo. Não existe aqui a opção "None" do Model Import Settings da Unity:
     // neste renderer ela seria só um jeito de pedir preto.
     const bool recomputeNormals = (limits->normals == GltfNormalsCalculate || !hasNormal) && range.indexCount >= 3;
-    if (recomputeNormals) {
+    if (recomputeNormals && limits->smoothingAngle < GltfSmoothingAngleNone) {
+      if (!splitHardEdges(range, write, position.count)) return false;
+      ++out->generatedNormalPrimitives;
+    } else if (recomputeNormals) {
       std::vector<std::array<float, 3>> accumulated(position.count, std::array<float, 3>{});
       for (u32 i = range.firstIndex; i + 2 < range.firstIndex + range.indexCount; i += 3) {
         if (((i - range.firstIndex) & 0xffff) == 0 && cancelled()) return false;
