@@ -49,6 +49,9 @@ public:
     }
     return false;
   }
+  bool meshTriangles(const resources::AssetGuid &asset, std::vector<float> &out) const override {
+    return asset==resources::assetGuidFromSeed("teste:malha-colisao:cubo") && meshTriangles(2,out);
+  }
 };
 
 EditorEntityId meshBody(EditorDocument &doc, const char *name, u32 mesh, scene::BodyMotion motion, bool convex,
@@ -129,6 +132,26 @@ AE_TEST(flat_mesh_has_no_convex_hull) {
   AE_EXPECT_TRUE(!start(world, physics, doc, &geometry), "casco degenerado é recusado, não vira caixa");
 }
 
+AE_TEST(compound_body_v3_validates_and_accepts_authored_mesh_cooking) {
+  AetherPhysicsWorld *native=AetherPhysics_CreateWorld({0,-9.81f,0},16);
+  AE_EXPECT_TRUE(native!=nullptr,"mundo Jolt disponível");
+  const AetherVec3 points[]{{-.5f,-.5f,-.5f},{.5f,-.5f,-.5f},{.5f,.5f,-.5f},{-.5f,.5f,-.5f},
+                            {-.5f,-.5f,.5f},{.5f,-.5f,.5f},{.5f,.5f,.5f},{-.5f,.5f,.5f}};
+  AetherCompoundPartV3 part{};part.base.rotation={0,0,0,1};part.geometry=AetherPartGeometry::ConvexHull;
+  part.vertices=points;part.vertexCount=8;part.cooking=AetherMeshCookingDefaultsV1;
+  part.cooking.flags=0;part.cooking.hullTolerance=.01f;part.cooking.activeEdgeAngleDegrees=27;
+  AetherBodyDescV2 desc{};desc.structSize=sizeof(desc);desc.apiVersion=AetherBodyApiVersionV2;
+  desc.rotation={0,0,0,1};desc.motionType=AetherMotionType::Static;desc.friction=.5f;
+  AetherBodyDynamicsV1 dynamics{sizeof(AetherBodyDynamicsV1),1,0,0,1,{0,0,0},1};
+  const auto body=AetherPhysics_CreateCompoundBodyV3(native,&desc,&part,1,&dynamics);
+  AE_EXPECT_TRUE(body!=AetherBodyHandle_Invalid,"V3 cria o casco com cooking autoral");
+  AetherPhysics_DestroyBody(native,body);
+  part.cooking.hullTolerance=0;
+  AE_EXPECT_TRUE(AetherPhysics_CreateCompoundBodyV3(native,&desc,&part,1,&dynamics)==AetherBodyHandle_Invalid,
+                 "tolerância fora do contrato é recusada na fronteira");
+  AetherPhysics_DestroyWorld(native);
+}
+
 AE_TEST(mesh_collider_without_renderer_or_geometry_refuses_with_a_reason) {
   EditorDocument doc;
   const auto id = meshBody(doc, "Piso", 1, scene::BodyMotion::Static, false);
@@ -146,6 +169,21 @@ AE_TEST(mesh_collider_without_renderer_or_geometry_refuses_with_a_reason) {
   ScenePhysics physics;
   AE_EXPECT_TRUE(!start(world, physics, doc, &geometry), "sem malha no objeto não há forma");
   AE_EXPECT_TRUE(physics.error().find("Renderizador de malha") != std::string::npos, "o motivo nomeia o requisito");
+}
+
+AE_TEST(mesh_collider_can_use_an_explicit_resource_without_a_visual_renderer) {
+  EditorDocument doc;
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Colisão simplificada");
+  auto values=*doc.find(id);
+  editPhysicsBody(values)->motion=scene::BodyMotion::Static;
+  auto *collider=editCollider(values);collider->shape=scene::ColliderShape::Mesh;
+  collider->collisionMesh=resources::assetGuidFromSeed("teste:malha-colisao:cubo");
+  AE_EXPECT_TRUE(doc.applyEntityValues(id,values),"colisor explícito criado sem renderer");
+  const Geometry geometry;GameWorld world;ScenePhysics physics;
+  AE_EXPECT_TRUE(start(world,physics,doc,&geometry),physics.error().c_str());
+  const float origin[3]{0,5,0},down[3]{0,-10,0};QueryHit hit;
+  AE_EXPECT_TRUE(physics.rayCast(origin,down,QueryFilter{},hit),"a forma usa o recurso físico");
+  AE_EXPECT_EQ(hit.object,id,"a consulta mantém a identidade do objeto autoral");
 }
 
 AE_TEST(query_reports_the_collider_that_was_hit_in_a_multi_shape_body) {
@@ -183,11 +221,21 @@ AE_TEST(collider_file_reads_older_versions_and_keeps_convex) {
   scene::Collider collider;
   collider.shape = scene::ColliderShape::Mesh;
   collider.convex = true;
+  collider.hullTolerance=.025f;collider.activeEdgeAngle=17;collider.weldVertices=false;collider.optimizeCooking=false;
+  collider.collisionMesh=resources::assetGuidFromSeed("teste:serializacao-colisao");
   std::stringstream out;
   collider.write(out);
   scene::Collider read;
-  AE_EXPECT_TRUE(read.read(out, 4), "a versão atual relê");
-  AE_EXPECT_TRUE(read.shape == scene::ColliderShape::Mesh && read.convex, "forma e convexo voltam");
+  AE_EXPECT_TRUE(read.read(out, 6), "a versão atual relê");
+  AE_EXPECT_TRUE(read.shape == scene::ColliderShape::Mesh && read.convex && read.collisionMesh==collider.collisionMesh &&
+                 std::abs(read.hullTolerance-.025f)<1e-6f && read.activeEdgeAngle==17 &&
+                 !read.weldVertices&&!read.optimizeCooking,"forma, recurso e cooking voltam");
+
+  std::stringstream v5("3 .5 .5 .5 .5 .5 0 0 0 0 0 0 0 1 1 -");
+  scene::Collider previous;
+  AE_EXPECT_TRUE(previous.read(v5,5),"a versão 5 continua legível");
+  AE_EXPECT_TRUE(previous.weldVertices&&previous.optimizeCooking&&std::abs(previous.hullTolerance-.001f)<1e-7f&&
+                 previous.activeEdgeAngle==5,"arquivo anterior recebe o cooking que reproduz o comportamento antigo");
 
   // A versão 3 só conhecia as primitivas: lê Convexo desligado e recusa a forma 3.
   std::stringstream v3("0 .5 .5 .5 .5 .5 0 0 0 0 0 0 0 1");

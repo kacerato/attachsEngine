@@ -3,6 +3,7 @@
 #include "editor/editor_route_component.h"
 #include "editor/editor_archive.h"
 #include "editor/editor_map_scene.h"
+#include "editor/editor_component_visuals.h"
 #include "editor/editor_history.h"
 #include "editor/editor_properties.h"
 #include "renderer/environment_lighting.h"
@@ -265,11 +266,14 @@ AE_TEST(editor_archive_v7_migrates_v6_and_keeps_defaults_stable) {
 )ARCHIVE";
   EditorDocument document;
   AE_EXPECT_TRUE(deserializeEditorDocument(legacy,0,document),"read v6");
+  // Antes da versão 13 não havia vistas salvas: o arquivo antigo abre sem
+  // nenhuma, que é exatamente o que ele sempre teve.
+  AE_EXPECT_TRUE(document.views().empty(),"arquivo antigo abre sem vistas");
   const EditorEntity defaults;
   for(u32 i=9;i<editorNumericProperties.size();++i)
     AE_EXPECT_EQ(editorPropertyValue(*document.find(document.root()),i),editorPropertyValue(defaults,i),"v7 omitted defaults remain compatible with v6");
   const auto sparse=serializeEditorDocument(document,0);
-  AE_EXPECT_TRUE(sparse.starts_with("AETHER_EDITOR 12 "),"write current version");
+  AE_EXPECT_TRUE(sparse.starts_with("AETHER_EDITOR 13 "),"write current version");
   AE_EXPECT_TRUE(sparse.size()<legacy.size()/2,"default arrays are not repeated");
   EditorDocument restored;
   AE_EXPECT_TRUE(deserializeEditorDocument(sparse,0,restored),"read v7");
@@ -518,6 +522,31 @@ AE_TEST(editor_pick_resources_share_bvh_and_reject_bad_indices_transactionally) 
   AE_EXPECT_TRUE(!scene.import(doc,draws,materials,false,vertices,indices),"invalid topology rejected");
   AE_EXPECT_EQ(serializeEditorDocument(doc,0),before,"document retained");
   AE_EXPECT_TRUE(scene.pickGeometry(doc,id,second) && first.mesh==second.mesh,"old resource retained");
+}
+AE_TEST(mesh_collider_visual_uses_the_bound_resource_geometry_with_a_segment_budget) {
+  std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;
+  std::vector<renderer::MapMaterialRecord> materials;
+  AE_EXPECT_TRUE(renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride,vertices,indices,draws,materials),"resource");
+  EditorMapScene resources;EditorDocument doc;
+  AE_EXPECT_TRUE(resources.import(doc,draws,materials,false,vertices,indices,77),"biblioteca com geometria CPU");
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Mesh,"Collider preview");
+  auto value=*doc.find(id);auto *render=editMeshRenderer(value);render->mesh=1;render->asset=resources.assetGuid(0);
+  auto *collider=editCollider(value);AE_EXPECT_TRUE(collider!=nullptr,"colisor disponível");
+  collider->shape=scene::ColliderShape::Mesh;collider->collisionMesh=resources.assetGuid(0);collider->convex=true;
+  // Valores remanescentes de quando o componente era uma primitiva não podem
+  // deslocar a malha: o runtime ignora pose local em Mesh Collider.
+  collider->centerX=50;collider->rotationY=45;
+  AE_EXPECT_TRUE(doc.applyEntityValues(id,value),"objeto autoral válido");
+  const u32 slot=1;EditorMapScene::CollisionHullPreview preview;
+  AE_EXPECT_TRUE(resources.collisionHullPreview({&slot,1},collider->hullTolerance,preview),"Jolt cozinha a prévia convexa");
+  AE_EXPECT_EQ(preview.vertexCount,u32{8},"o cubo mantém oito vértices no casco");
+  AE_EXPECT_EQ(preview.faceCount,u32{6},"o casco expõe as seis faces finais");
+  const auto visuals=collectComponentVisuals(doc,id,1.6f,&resources);
+  const auto found=std::find_if(visuals.begin(),visuals.end(),[&](const auto &visual){return visual.instance==collider->instanceId();});
+  AE_EXPECT_TRUE(found!=visuals.end()&&!found->segments.empty(),"wireframe vem dos triângulos do recurso");
+  AE_EXPECT_TRUE(found->segments.size()<=2400,"prévia respeita o teto de comandos de UI");
+  for(const auto &segment:found->segments)
+    AE_EXPECT_TRUE(std::abs(segment.a[0])<2&&std::abs(segment.b[0])<2,"pose antiga da primitiva não desloca o casco");
 }
 #include "editor/editor_play_scene.h"
 AE_TEST(editor_play_scene_isolates_mutations_and_restarts_from_authoring) {

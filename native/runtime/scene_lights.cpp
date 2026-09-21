@@ -22,13 +22,16 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
     renderer::SceneLight entry{};
     entry.objectId = id;
     entry.modality = static_cast<renderer::LightModality>(light->kind);
+    float temperature[3]{1, 1, 1};
+    if (light->useColorTemperature) scene::lightTemperatureColor(light->colorTemperature, temperature);
     for (u32 axis = 0; axis < 3; ++axis) {
       entry.position[axis] = world[12 + axis];
       // Coluna 2 é o +Z de mundo do objeto: a frente, pela convenção da Câmera.
       entry.direction[axis] = world[8 + axis];
-      entry.color[axis] = light->color[axis];
+      entry.color[axis] = light->color[axis] * temperature[axis];
     }
-    entry.intensity = light->intensity;
+    entry.intensity = scene::lightIntensityForShader(light->kind, light->unit, light->intensity,
+                                                     light->innerAngle, light->outerAngle);
     entry.range = light->range;
     entry.innerAngle = light->innerAngle;
     entry.outerAngle = light->outerAngle;

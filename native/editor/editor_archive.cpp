@@ -42,7 +42,7 @@ EditorComponentRegistry defaultEditorComponentRegistry() {
 }
 std::string serializeEditorDocument(const EditorDocument &document, u64 fingerprint) {
   std::ostringstream stream;stream.imbue(std::locale::classic());
-  stream << "AETHER_EDITOR 12 " << fingerprint << ' ' << document.entityCount() << '\n';
+  stream << "AETHER_EDITOR 13 " << fingerprint << ' ' << document.entityCount() << '\n';
   stream << std::setprecision(std::numeric_limits<float>::max_digits10);
   std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
   for(auto id:ids) {
@@ -78,13 +78,14 @@ std::string serializeEditorDocument(const EditorDocument &document, u64 fingerpr
   // As ações de entrada do projeto vêm logo depois, pelo mesmo motivo: são
   // dados de CENA, e um arquivo v11 abre com o mapa padrão de toque.
   stream << "INPUT";document.inputActions().write(stream);stream << '\n';
+  stream << "VIEWS";document.views().write(stream);stream << '\n';
   return stream.str();
 }
 bool deserializeEditorDocument(std::string_view text,u64 fingerprint,EditorDocument &document,EditorComponentRegistry registry) {
   if(text.size()>kMaximumArchiveBytes) return false;
   std::istringstream stream{std::string(text)};stream.imbue(std::locale::classic());
   std::string magic;u32 version=0,count=0;u64 stored=0;
-  if(!(stream>>magic>>version>>stored>>count) || magic!="AETHER_EDITOR" || (version<1 || version>12) ||
+  if(!(stream>>magic>>version>>stored>>count) || magic!="AETHER_EDITOR" || (version<1 || version>13) ||
      stored!=fingerprint || count==0 || count>EditorDocument::kMaximumEntities) return false;
   EditorDocument prepared;
   for(u32 index=0;index<count;++index) {
@@ -175,6 +176,13 @@ bool deserializeEditorDocument(std::string_view text,u64 fingerprint,EditorDocum
     std::string section;runtime::InputActionMap actions;
     if(!(stream>>section) || section!="INPUT" || !actions.read(stream) ||
        !prepared.setInputActions(actions)) return false;
+  }
+  // Antes da versão 13 não havia vistas salvas: cena sem nenhuma, que é o que
+  // esses arquivos sempre tiveram.
+  if(version>=13) {
+    std::string section;runtime::SceneViews views;
+    if(!(stream>>section) || section!="VIEWS" || !views.read(stream)) return false;
+    prepared.setViews(views);
   }
   stream>>std::ws;if(!stream.eof()) return false;
   document=std::move(prepared);return true;

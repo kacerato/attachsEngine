@@ -8,6 +8,12 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   vec4 skyHorizonCloudDensity;
   vec4 groundColorSaturation;
   vec4 cloudLightWindSpeed;
+  vec4 sceneSky;
+  vec4 sceneFogColorDensity;
+  vec4 sceneFog;
+  vec4 scenePost;
+  vec4 sceneAo;
+  vec4 sceneAoDetail;
   vec4 worldToViewRow0;
   vec4 worldToViewRow1;
   vec4 worldToViewRow2;

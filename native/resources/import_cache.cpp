@@ -119,6 +119,7 @@ std::string importCacheKey(std::string_view sourceContentHash, const GltfImportL
                      }() +
                      "|tangents=" + number(limits.tangents) +
                      "|cameras=" + number(limits.importCameras ? 1 : 0) +
+                     "|lights=" + number(limits.importLights ? 1 : 0) +
                      "|imageDimension=" + number(limits.image.maximumDimension) +
                      "|imagePixels=" + number(limits.image.maximumPixels) +
                      "|imageEncoded=" + number(limits.image.maximumEncodedBytes);
@@ -153,6 +154,7 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
   }
   writer.pods(model.drawNodes);
   writer.pods(model.cameras);
+  writer.pods(model.lights);
   writer.u32v(static_cast<u32>(model.textures.size()));
   for (const auto &texture : model.textures) {
     if (!texture || !texture->valid()) {
@@ -221,6 +223,7 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
   }
   model.drawNodes = reader.pods<u32>();
   model.cameras = reader.pods<GltfImportCamera>();
+  model.lights = reader.pods<GltfImportLight>();
   const u32 textureCount = reader.u32v();
   if (!reader.ok || textureCount > bytes.size()) return refuse();
   model.textures.reserve(textureCount);
@@ -282,6 +285,16 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
         !std::isfinite(camera.farPlane) || camera.farPlane < 0 ||
         !std::isfinite(camera.verticalFovDegrees) || !std::isfinite(camera.orthographicHalfHeight))
       return refuse();
+  for (const auto &light : model.lights) {
+    if (light.node >= model.nodes.size() || light.kind > 2 || !std::isfinite(light.intensity) ||
+        light.intensity < 0 || light.intensity > 1000000 || !std::isfinite(light.range) ||
+        light.range <= 0 || light.range > 1000 || !std::isfinite(light.innerAngle) ||
+        !std::isfinite(light.outerAngle) || light.innerAngle < 0 || light.outerAngle > 89 ||
+        light.innerAngle > light.outerAngle)
+      return refuse();
+    for (const auto channel : light.color)
+      if (!std::isfinite(channel) || channel < 0 || channel > 1) return refuse();
+  }
   for (const auto &material : model.materials)
     for (const auto texture : material.textureIndices)
       if (texture != renderer::InvalidMapTexture && texture >= model.textures.size()) return refuse();

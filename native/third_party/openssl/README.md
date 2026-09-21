@@ -13,8 +13,9 @@ Arquivo: openssl-3.5.8.tar.gz, SHA256 oficial conferido:
 
 ## Reprodução
 
-`tools/build-android-openssl.sh` verifica o arquivo, configura android-arm64/API26
-e constrói com o NDK. Requer Bash, GNU make, curl, tar, sha256sum e Perl completo.
+`tools/build-android-openssl.sh` verifica o arquivo, configura android-arm64/API26,
+fixa os segmentos ELF em páginas de 16 KB e constrói com o NDK. Requer Bash,
+GNU make, curl, tar, sha256sum e Perl completo.
 Defina ANDROID_NDK_ROOT e, se necessário, MAKE/JOBS. Nesta rodada: NDK
 29.0.14206865, Git Bash e mingw32-make. O Perl reduzido do Git precisou das
 bibliotecas Perl da distribuição oficial Perl/perl5 v5.40.3 no PERL5LIB;

@@ -1,17 +1,18 @@
-meshoptimizer — decodificador de EXT_meshopt_compression (Entrega 4, M08/M09)
+meshoptimizer — decodificação de EXT_meshopt_compression e simplificação de malha
 
 Origem:   https://github.com/zeux/meshoptimizer
 Tag:      v1.2
 Commit:   9d9890c73011d75920af614485296d1e03e95448
 Licença:  MIT (LICENSE.md)
 
-Subconjunto vendorizado (só decodificação; nada de otimização/simplificação):
+Subconjunto vendorizado:
   meshoptimizer.h   FA3373E1017F186518BF9B16728E05EF7B85BDD4560E817B8E81FC41B429DA3B
   vertexcodec.cpp   A6F20F493E62831E78D85567A34DDDCA6CE8B74F3114A19A9FB937D9314D191D
   indexcodec.cpp    439BA263ECAD2D0C2C5388F82762E50C00CB94828B322EDFB4B13C533D01571B
   vertexfilter.cpp  5F1D0EAECA7045D9F09991370A9A8E368476697745495B14ED358A71DBFBCDA5
+  simplifier.cpp    DC40AADB307577ED3F7ADB5102A506263DE8B9FEA1D5582A24C04BFF2874A2CC
   LICENSE.md        2C420C79FF65DEA863CE1990A173EBD1E6E5778116D498E54738AE5002799509
 Arquivos sem modificação.
 
-Política de atualização: trocar a tag, recopiar os mesmos quatro fontes, atualizar os hashes acima e
+Política de atualização: trocar a tag, recopiar os fontes listados, atualizar os hashes acima e
 rodar os testes m09e4 de meshopt no host antes de publicar um APK.

@@ -15,6 +15,7 @@ class EditorMapScene {
 public:
   u32 assetCount() const { return static_cast<u32>(source_.size()); }
   const renderer::MapDrawRecord *asset(u32 index) const { return index<source_.size()?&source_[index]:nullptr; }
+  std::string_view assetName(u32 index) const { return index<assetNames_.size()?assetNames_[index]:std::string_view{}; }
   // Loading a resource library need not instantiate its contents in the scene.
   bool import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws,
               std::span<const renderer::MapMaterialRecord> materials = {}, bool instantiate = true, std::span<const u8> vertices = {}, std::span<const u32> indices = {},
@@ -53,7 +54,7 @@ public:
                     std::span<const renderer::MapMaterialRecord> materials,
                     std::span<const u8> vertices, std::span<const u32> indices,
                     std::span<const resources::AssetGuid> identities, u64 packageFingerprint,
-                    std::span<const float> pivots = {});
+                    std::span<const float> pivots = {}, std::span<const std::string> names = {});
   // O pivô do desenho `index` (0-based), em espaço do mesh.
   void pivotOf(u32 index, float out[3]) const;
   // Um desenho por SLOT de cada objeto, todos com o mesmo `objectId`.
@@ -63,6 +64,16 @@ public:
   // Limites de um desenho do pacote levado à pose do objeto.
   bool slotBounds(const runtime::SceneGraph &document, EditorEntityId entity, u32 assetIndex, float center[3], float &radius) const;
   bool localGeometry(u32 assetId,std::span<const EditorPickMesh::Triangle> &triangles,float relative[16]) const;
+  struct CollisionHullPreview {
+    std::span<const EditorPickMesh::Triangle> triangles;
+    u32 inputPointCount=0,vertexCount=0,faceCount=0;
+    std::string_view diagnostic;
+  };
+  // Casco que o Jolt efetivamente produz para uma ou mais malhas no espaço do
+  // objeto. O cache pertence à biblioteca: troca de pacote o invalida e editar
+  // a tolerância cria uma entrada distinta, sem cozinhar novamente por frame.
+  bool collisionHullPreview(std::span<const u32> assetSlots,float hullTolerance,
+                            CollisionHullPreview &out) const;
   bool pickGeometry(const runtime::SceneGraph &document, EditorEntityId id, EditorPickCandidate &out) const;
   bool pickSlotGeometry(const runtime::SceneGraph &document, EditorEntityId id, u32 slot, EditorPickCandidate &out) const;
   // Materiais do projeto (MaterialAsset) disponíveis para resolver slots. Trocar
@@ -226,11 +237,20 @@ private:
   u32 isolateSlot_=0;
   std::uint8_t isolateChannel_=0;
   std::vector<resources::AssetGuid> assets_;
+  std::vector<std::string> assetNames_;
   // Três floats por desenho; vazio significa "pivô no centro dos limites".
   std::vector<float> pivots_;
   std::vector<std::shared_ptr<const EditorPickMesh>> pickMeshes_;
   std::vector<renderer::MapMaterialRecord> materials_;
   std::vector<renderer::MapDrawRecord> source_;
+  struct CollisionHullCacheEntry {
+    std::vector<u32> slots;
+    float tolerance=0;
+    std::vector<EditorPickMesh::Triangle> triangles;
+    std::string diagnostic;
+    u32 inputPointCount=0,vertexCount=0,faceCount=0;
+  };
+  mutable std::vector<CollisionHullCacheEntry> collisionHullCache_;
 };
 // Column-major local/world matrices with Rz * Ry * Rx Euler convention.
 // A convenção mora em runtime/transform_math.h: o editor apenas a reexporta com

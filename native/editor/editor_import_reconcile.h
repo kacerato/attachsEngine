@@ -94,6 +94,10 @@ bool importNodeTransform(const resources::ImportNodeRecord &node, EditorTransfor
 void setImportLinkBase(scene::ImportLink &link, const resources::ImportNodeRecord &node,
                        const EditorTransform &transform, i32 primitive, u32 revision, bool slots = true);
 std::string importEntityName(std::string_view name);
+// Aplica componentes que pertencem ao nó importado na criação inicial do
+// objeto. Reimportações não chamam isto em objetos existentes, preservando a
+// autoria local (componente removido ou lente/luz reajustada).
+void applyImportedNodeComponents(EditorEntity &values, const resources::ImportNodeRecord &node);
 
 // Liga objetos de cenas anteriores ao vínculo, SÓ quando a prova existe: a
 // malha aponta para a identidade de um desenho do mapa e cada ancestral tem o

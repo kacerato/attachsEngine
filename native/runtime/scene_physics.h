@@ -76,6 +76,10 @@ class CollisionGeometrySource {
 public:
   virtual ~CollisionGeometrySource() = default;
   virtual bool meshTriangles(u32 mesh, std::vector<float> &out) const = 0;
+  // Referência autoral persistente. A implementação resolve o GUID na
+  // biblioteca carregada; o índice acima permanece para cenas antigas e para
+  // a herança das malhas visuais do MeshRenderer.
+  virtual bool meshTriangles(const resources::AssetGuid &, std::vector<float> &) const { return false; }
 };
 
 class ScenePhysics final {

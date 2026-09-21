@@ -784,6 +784,77 @@ AE_TEST(lod_suffix_nodes_become_a_lod_group_like_the_unity_model_importer) {
   AE_EXPECT_TRUE(!session.document().find(porta), "grupo e objetos saem juntos");
 }
 
+AE_TEST(generating_a_collision_mesh_persists_the_recipe_assigns_it_and_undoes_the_binding) {
+  namespace fs=std::filesystem;
+  const auto root=fs::temp_directory_path()/("aether-collision-derived-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  AE_EXPECT_TRUE(fs::create_directories(root),"projeto temporário");
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  EditorSession session;session.initialize(nullptr,nullptr);FakeRenderer renderer;startSession(session,renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(root.string().c_str()),"projeto conectado");
+  const auto bytes=twoNodeGlb();resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(bytes,{}, {},model),model.diagnostic.c_str());
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.publishModel(model,Sha256::hex(bytes),"Fontes/placa.glb",report),report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source,report),report.diagnostic.c_str());
+  std::vector<EditorEntityId> objects;session.document().collectSubtree(session.document().root(),objects);
+  EditorEntityId meshId=kInvalidEntity;
+  for(const auto id:objects) if(const auto *object=session.document().find(id);object&&meshRenderer(*object)) {meshId=id;break;}
+  AE_EXPECT_TRUE(meshId!=kInvalidEntity,"instância com malha");
+  auto values=*session.document().find(meshId);
+  auto *collider=static_cast<scene::Collider*>(values.components.add(scene::Collider::descriptor));
+  AE_EXPECT_TRUE(collider!=nullptr,"colisor criado");collider->shape=scene::ColliderShape::Mesh;
+  const auto colliderInstance=collider->instanceId();
+  AE_EXPECT_TRUE(session.document().applyEntityValues(meshId,values),"colisor publicado");
+  const auto previousAssets=session.screen().resources->assetCount();
+  EditorActionRequest request;request.version=session.sceneVersion();request.entity=meshId;
+  request.action=EditorAction::GenerateCollisionMesh;request.componentInstance=colliderInstance;
+  request.property=25;request.number=.02f;
+  AE_EXPECT_TRUE(session.dispatch(request).status==EditorActionStatus::Applied,"comando deriva e atribui");
+  const auto *assigned=static_cast<const scene::Collider*>(session.document().find(meshId)->components.findInstance(colliderInstance));
+  AE_EXPECT_TRUE(assigned&&assigned->collisionMesh.valid(),"o vínculo usa o recurso derivado");
+  AE_EXPECT_EQ(session.screen().resources->assetCount(),previousAssets+1,"a biblioteca recebeu outro recurso");
+  const auto derivedSlot=session.screen().resources->assetSlot(assigned->collisionMesh);
+  AE_EXPECT_TRUE(derivedSlot&&session.screen().resources->assetName(derivedSlot-1).find("Colisão 25%")!=std::string_view::npos,
+                 "o seletor conserva um nome autoral para o recurso derivado");
+  resources::ImportProfile profile;
+  AE_EXPECT_TRUE(resources::parseImportProfile([&]{std::ifstream in(root/resources::importProfilePath(report.source));return std::string(std::istreambuf_iterator<char>(in),{});}(),profile),
+                 "receita persistida com a fonte");
+  AE_EXPECT_EQ(profile.collisionMeshes.size(),usize{1},"uma receita por malha fonte");
+  const auto derived=assigned->collisionMesh;
+  request.version=session.sceneVersion();request.action=EditorAction::GenerateCollisionMesh;
+  request.componentInstance=colliderInstance;request.property=50;request.number=.05f;
+  AE_EXPECT_TRUE(session.dispatch(request).status==EditorActionStatus::Applied,"regeneração aplica outros parâmetros");
+  assigned=static_cast<const scene::Collider*>(session.document().find(meshId)->components.findInstance(colliderInstance));
+  AE_EXPECT_TRUE(assigned&&assigned->collisionMesh==derived,"regenerar preserva a identidade do recurso");
+  AE_EXPECT_EQ(session.screen().resources->assetCount(),previousAssets+1,"regenerar substitui o derivado existente");
+  AE_EXPECT_TRUE(resources::parseImportProfile([&]{std::ifstream in(root/resources::importProfilePath(report.source));return std::string(std::istreambuf_iterator<char>(in),{});}(),profile),
+                 "perfil regenerado é legível");
+  AE_EXPECT_TRUE(profile.collisionMeshes[0].trianglePercent==50 && profile.collisionMeshes[0].maximumError==.05f,
+                 "perfil recebe os novos parâmetros");
+  request.version=session.sceneVersion();request.action=EditorAction::Undo;
+  AE_EXPECT_TRUE(session.dispatch(request).status==EditorActionStatus::Applied,"desfazer restaura a receita anterior");
+  assigned=static_cast<const scene::Collider*>(session.document().find(meshId)->components.findInstance(colliderInstance));
+  AE_EXPECT_TRUE(assigned&&assigned->collisionMesh==derived,"a receita anterior mantém o mesmo vínculo");
+  AE_EXPECT_TRUE(resources::parseImportProfile([&]{std::ifstream in(root/resources::importProfilePath(report.source));return std::string(std::istreambuf_iterator<char>(in),{});}(),profile) &&
+                 profile.collisionMeshes[0].trianglePercent==25,"desfazer também restaura o perfil e a geometria");
+  request.version=session.sceneVersion();
+  AE_EXPECT_TRUE(session.dispatch(request).status==EditorActionStatus::Applied,"segundo desfazer remove a geração inicial");
+  assigned=static_cast<const scene::Collider*>(session.document().find(meshId)->components.findInstance(colliderInstance));
+  AE_EXPECT_TRUE(assigned&&!assigned->collisionMesh.valid(),"desfazer restaura a herança visual");
+  AE_EXPECT_EQ(session.screen().resources->assetCount(),previousAssets,"o recurso derivado sai junto com sua receita");
+  request.version=session.sceneVersion();request.action=EditorAction::Redo;
+  AE_EXPECT_TRUE(session.dispatch(request).status==EditorActionStatus::Applied,"refazer recompõe a geração inicial");
+  request.version=session.sceneVersion();
+  AE_EXPECT_TRUE(session.dispatch(request).status==EditorActionStatus::Applied,"refazer recompõe a regeneração");
+  assigned=static_cast<const scene::Collider*>(session.document().find(meshId)->components.findInstance(colliderInstance));
+  AE_EXPECT_TRUE(assigned&&assigned->collisionMesh==derived,"refazer preserva a identidade estável");
+  std::vector<EditorSession::ReopenedSource> reopened{{model,Sha256::hex(bytes),"Fontes/placa.glb"}};
+  std::vector<EditorSession::ModelImportReport> reopenedReports;std::string reopenDiagnostic;
+  AE_EXPECT_TRUE(session.reopenSources(reopened,reopenedReports,reopenDiagnostic),reopenDiagnostic.c_str());
+  AE_EXPECT_TRUE(session.screen().resources->assetSlot(derived)!=0,"reabrir a fonte recompõe o mesmo GUID derivado");
+}
+
 
 AE_TEST(reimport_that_adds_a_lod_level_extends_the_existing_group) {
   // A fonte ganha Porta_LOD2 depois do grupo existir: o nível novo entra no

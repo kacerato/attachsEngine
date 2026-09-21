@@ -51,6 +51,15 @@ bool ImportNodeMap::valid() const {
                         node.cameraVerticalFov >= 180 || !std::isfinite(node.cameraHalfHeight) ||
                         node.cameraHalfHeight <= 0))
       return false;
+    if (node.light) {
+      if (node.lightKind > 2 || !std::isfinite(node.lightIntensity) || node.lightIntensity < 0 ||
+          node.lightIntensity > 1000000 || !std::isfinite(node.lightRange) || node.lightRange <= 0 ||
+          node.lightRange > 1000 || !std::isfinite(node.lightInnerAngle) || !std::isfinite(node.lightOuterAngle) ||
+          node.lightInnerAngle < 0 || node.lightOuterAngle > 89 || node.lightInnerAngle > node.lightOuterAngle)
+        return false;
+      for (const auto channel : node.lightColor)
+        if (!std::isfinite(channel) || channel < 0 || channel > 1) return false;
+    }
   }
   return true;
 }
@@ -67,7 +76,10 @@ std::string ImportNodeMap::serialize() const {
     out << ' ' << node.draws.size();
     for (const auto &draw : node.draws) out << ' ' << draw.text();
     out << ' ' << node.camera << ' ' << node.cameraOrthographic << ' ' << node.cameraVerticalFov << ' '
-        << node.cameraNear << ' ' << node.cameraFar << ' ' << node.cameraHalfHeight << ' ' << node.excluded;
+        << node.cameraNear << ' ' << node.cameraFar << ' ' << node.cameraHalfHeight << ' ' << node.excluded << ' '
+        << node.light << ' ' << node.lightKind << ' ' << node.lightColor[0] << ' ' << node.lightColor[1] << ' '
+        << node.lightColor[2] << ' ' << node.lightIntensity << ' ' << node.lightRange << ' '
+        << node.lightInnerAngle << ' ' << node.lightOuterAngle;
     out << '\n';
   }
   return out.str();
@@ -114,6 +126,10 @@ bool ImportNodeMap::deserialize(std::string_view text, ImportNodeMap &out) {
       return false;
     // v3: exclusão pelo perfil. Antes dela nada era excluído, que é o padrão.
     if (version >= 3 && !(in >> node.excluded)) return false;
+    if (version >= 4 && !(in >> node.light >> node.lightKind >> node.lightColor[0] >> node.lightColor[1] >>
+                          node.lightColor[2] >> node.lightIntensity >> node.lightRange >> node.lightInnerAngle >>
+                          node.lightOuterAngle))
+      return false;
     candidate.nodes.push_back(std::move(node));
   }
   in >> std::ws;
@@ -408,6 +424,17 @@ bool buildImportNodeMap(const GltfImport &model, const AssetGuid &source, std::s
         record.cameraNear = camera.nearPlane;
         record.cameraFar = camera.farPlane;
         record.cameraHalfHeight = camera.orthographicHalfHeight;
+        break;
+      }
+    for (const auto &light : model.lights)
+      if (light.node == n) {
+        record.light = true;
+        record.lightKind = light.kind;
+        std::copy(light.color, light.color + 3, record.lightColor);
+        record.lightIntensity = light.intensity;
+        record.lightRange = light.range;
+        record.lightInnerAngle = light.innerAngle;
+        record.lightOuterAngle = light.outerAngle;
         break;
       }
     record.parent = node.parent < 0 ? AssetGuid{} : candidate.nodes[static_cast<usize>(node.parent)].id;

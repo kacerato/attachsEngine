@@ -23,6 +23,7 @@
 #include "scene/mesh_renderer.h"
 #include "scene/joint.h"
 #include "scene/light.h"
+#include "scene/environment.h"
 #include "scene/lod_group.h"
 #include "scene/script_behavior.h"
 
@@ -87,7 +88,7 @@ inline constexpr std::array<ComponentRule, 1> jointRequirements{{
   {"astra.physics.body", "Adicione Corpo físico a este objeto"}
 }};
 
-inline const std::array<ComponentSchema, 10> componentSchemas{{
+inline const std::array<ComponentSchema, 11> componentSchemas{{
   {&PhysicsBody::descriptor, "Corpo físico", "Massa e resposta física", ComponentCategory::Physics,
     {}, bodyConflicts, PlayMutability::Never, PlayMutability::SafePoint,
     "runtime/scene_physics.cpp → Jolt", {}, Invalidate::PhysicsBody},
@@ -113,6 +114,9 @@ inline const std::array<ComponentSchema, 10> componentSchemas{{
   {&Light::descriptor, "Luz", "Direcional, pontual ou spot", ComponentCategory::Visual,
     {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
     "runtime/scene_lights.cpp → renderer/punctual_lights.h", {}, Invalidate::LightCluster},
+  {&Environment::descriptor, "Ambiente", "Céu, atmosfera, neblina e pós globais ou por volume", ComponentCategory::Visual,
+    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
+    "runtime/scene_environment.cpp → renderer e pós", {}, Invalidate::Draw|Invalidate::Policy},
   {&LodGroup::descriptor, "LOD Group", "Nível de detalhe pela altura na tela", ComponentCategory::Visual,
     {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
     "runtime/lod_groups.h → visibilidade do desenho por vista", "render.lod.group", Invalidate::Draw},

@@ -1398,7 +1398,7 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
       name=="KHR_materials_transmission" || name=="KHR_materials_volume" || name=="KHR_materials_ior" ||
       name=="KHR_materials_specular" || name=="KHR_materials_sheen" || name=="KHR_materials_iridescence" ||
       name=="KHR_materials_anisotropy" || name=="KHR_materials_unlit" || name=="KHR_materials_pbrSpecularGlossiness" ||
-      name=="KHR_materials_variants" || name=="KHR_materials_emissive_strength" || name=="KHR_lights_punctual";
+      name=="KHR_materials_variants" || name=="KHR_materials_emissive_strength";
   };
   if(const auto *required=importer.array(*root,"extensionsRequired")) for(u32 i=0;i<required->childCount;++i) {
     const auto &extension=*document.child(*required,i);
@@ -1408,7 +1408,8 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
     // trilhas separadas: cada nome só entra aqui porque o consumidor dele existe.
     const bool codec=name=="KHR_draco_mesh_compression" || name=="EXT_meshopt_compression" ||
                      name=="KHR_meshopt_compression" || name=="KHR_texture_basisu";
-    if(name!="KHR_mesh_quantization" && !codec && !appearance(name)) {
+    const bool sceneExtension=name=="KHR_lights_punctual";
+    if(name!="KHR_mesh_quantization" && !codec && !appearance(name) && !sceneExtension) {
       const std::string reason="Extensão obrigatória sem decodificador: "+std::string(name)+". Fonte preservada; geometria não foi importada.";
       return giveUp(reason.c_str());
     }
@@ -1429,6 +1430,12 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
   // componente de câmera no editor.
   const auto *sourceCameras = importer.array(*root, "cameras");
   if (sourceCameras && !limits.importCameras) result.skippedCameras = sourceCameras->childCount;
+  const JsonDocument::Node *sourceLights = nullptr;
+  if (const auto *extensions = document.member(*root, "extensions"); extensions && extensions->kind == Kind::Object)
+    if (const auto *punctual = document.member(*extensions, "KHR_lights_punctual");
+        punctual && punctual->kind == Kind::Object)
+      sourceLights = importer.array(*punctual, "lights");
+  if (sourceLights && !limits.importLights) result.skippedLights = sourceLights->childCount;
 
   if (!importer.readMaterials(*root)) return giveUp(result.diagnostic.c_str());
   importer.report(.1f, "Materiais");
@@ -1617,6 +1624,64 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
         return giveUp("Câmera do arquivo com lente inválida.");
       result.cameras.push_back(camera);
     }
+    // KHR_lights_punctual: dados fotométricos em unidades que o componente
+    // Astra representa diretamente (lux/candela). A extensão do nó aponta para
+    // a tabela raiz, como a câmera aponta para `cameras`.
+    if (limits.importLights) {
+      const auto *nodeExtensions = document.member(node, "extensions");
+      const auto *punctual = nodeExtensions && nodeExtensions->kind == Kind::Object
+                                 ? document.member(*nodeExtensions, "KHR_lights_punctual")
+                                 : nullptr;
+      if (punctual) {
+        if (punctual->kind != Kind::Object || !sourceLights)
+          return giveUp("Nó declara KHR_lights_punctual sem a tabela de luzes da extensão.");
+        const auto lightIndex = document.index(*punctual, "light");
+        if (lightIndex < 0 || lightIndex >= static_cast<i64>(sourceLights->childCount))
+          return giveUp("Nó aponta para uma luz KHR_lights_punctual inexistente.");
+        const auto &source = *document.child(*sourceLights, static_cast<u32>(lightIndex));
+        if (source.kind != Kind::Object) return giveUp("Luz KHR_lights_punctual inválida.");
+        GltfImportLight light;
+        light.node = emitted;
+        const auto type = document.string(source, "type");
+        if (type == "directional") light.kind = 0;
+        else if (type == "point") light.kind = 1;
+        else if (type == "spot") light.kind = 2;
+        else return giveUp("Luz KHR_lights_punctual com tipo desconhecido.");
+        if (const auto *color = importer.array(source, "color")) {
+          if (color->childCount != 3) return giveUp("Cor de luz KHR_lights_punctual precisa ter três canais.");
+          for (u32 channel = 0; channel < 3; ++channel) {
+            const auto *value = document.child(*color, channel);
+            if (!value || value->kind != Kind::Number || value->number < 0 || value->number > 1)
+              return giveUp("Cor de luz KHR_lights_punctual fora do intervalo linear 0..1.");
+            light.color[channel] = static_cast<float>(value->number);
+          }
+        }
+        light.intensity = static_cast<float>(document.number(source, "intensity", 1));
+        if (!std::isfinite(light.intensity) || light.intensity < 0 || light.intensity > 1000000)
+          return giveUp("Intensidade de luz KHR_lights_punctual fora do contrato Astra.");
+        if (const auto *range = document.member(source, "range")) {
+          if (range->kind != Kind::Number || range->number <= 0 || range->number > 1000)
+            return giveUp("Alcance de luz KHR_lights_punctual fora de 0..1000 m.");
+          light.range = static_cast<float>(range->number);
+          light.rangeDeclared = true;
+        } else if (light.kind != 0) {
+          constexpr std::string_view note =
+              "Luz local sem alcance no glTF: representada com o alcance máximo Astra de 1000 m.";
+          if (std::find(result.notes.begin(), result.notes.end(), note) == result.notes.end())
+            result.notes.emplace_back(note);
+        }
+        if (light.kind == 2) {
+          const auto *spot = document.member(source, "spot");
+          if (!spot || spot->kind != Kind::Object) return giveUp("Luz spot sem parâmetros de cone.");
+          light.innerAngle = static_cast<float>(document.number(*spot, "innerConeAngle", 0) * 57.2957795130823);
+          light.outerAngle = static_cast<float>(document.number(*spot, "outerConeAngle", .7853981633974483) * 57.2957795130823);
+          if (!std::isfinite(light.innerAngle) || !std::isfinite(light.outerAngle) || light.innerAngle < 0 ||
+              light.outerAngle <= 0 || light.outerAngle > 89 || light.innerAngle > light.outerAngle)
+            return giveUp("Cone de luz spot fora do contrato Astra (0..89 graus).");
+        }
+        result.lights.push_back(light);
+      }
+    }
     const auto meshIndex = document.index(node, "mesh");
     if (meshIndex >= 0 && meshIndex < meshes->childCount) {
       if (document.index(node, "skin") >= 0) ++result.skippedSkins;
@@ -1670,7 +1735,7 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
     return giveUp(reason.c_str());
   }
 
-  // Orientação da câmera importada.
+  // Orientação das câmeras e luzes direcionais importadas.
   //
   // O glTF olha para -Z; esta engine olha para +Z (a mesma convenção da luz
   // direcional e do spot). Sem converter, a câmera do arquivo chega apontada
@@ -1680,12 +1745,19 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
   // câmera E MAIS NADA. Um nó com malha ou filhos tem a câmera recusada, com
   // motivo: girar a geometria do autor para acertar o enquadramento seria
   // trocar um defeito visível por um invisível.
-  if (!result.cameras.empty()) {
+  if (!result.cameras.empty() || !result.lights.empty()) {
     std::vector<u8> hasChild(result.nodes.size(), 0), hasDraw(result.nodes.size(), 0);
     for (const auto &node : result.nodes)
       if (node.parent >= 0 && static_cast<usize>(node.parent) < hasChild.size()) hasChild[static_cast<usize>(node.parent)] = 1;
     for (const auto node : result.drawNodes)
       if (node < hasDraw.size()) hasDraw[node] = 1;
+    std::vector<u8> rotated(result.nodes.size(), 0);
+    const auto rotateDirection = [&](u32 node) {
+      if (rotated[node]) return;
+      auto &matrix = result.nodes[node].localMatrix;
+      for (const u32 i : {0u, 1u, 2u, 8u, 9u, 10u}) matrix[i] = -matrix[i];
+      rotated[node] = 1;
+    };
     std::vector<GltfImportCamera> kept;
     for (const auto &camera : result.cameras) {
       if (camera.node >= result.nodes.size() || hasChild[camera.node] || hasDraw[camera.node]) {
@@ -1694,13 +1766,26 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
       }
       // Meia volta em Y: nega as colunas X e Z da base, preservando escala,
       // posição e a coluna Y.
-      auto &matrix = result.nodes[camera.node].localMatrix;
-      for (const u32 i : {0u, 1u, 2u, 8u, 9u, 10u}) matrix[i] = -matrix[i];
+      rotateDirection(camera.node);
       kept.push_back(camera);
     }
     if (kept.size() != result.cameras.size())
       result.notes.emplace_back("Câmera do arquivo em nó com geometria ou filhos: não importada, para não girar a geometria junto.");
     result.cameras = std::move(kept);
+    std::vector<GltfImportLight> keptLights;
+    for (const auto &light : result.lights) {
+      const bool directional = light.kind == 0 || light.kind == 2;
+      if (light.node >= result.nodes.size() ||
+          (directional && (hasChild[light.node] || hasDraw[light.node]))) {
+        ++result.skippedLights;
+        continue;
+      }
+      if (directional) rotateDirection(light.node);
+      keptLights.push_back(light);
+    }
+    if (keptLights.size() != result.lights.size())
+      result.notes.emplace_back("Luz direcional/spot em nó com geometria ou filhos: não importada, para não girar a geometria junto.");
+    result.lights = std::move(keptLights);
   }
 
   if (result.draws.empty())

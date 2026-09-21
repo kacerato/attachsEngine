@@ -39,7 +39,7 @@ AE_TEST(component_matrix_reports_default_domain_and_invalidation) {
   const auto *intensity = findContract(rows, "astra.render.light", "intensity");
   AE_EXPECT_TRUE(intensity != nullptr, "luz deve publicar a intensidade");
   AE_EXPECT_TRUE(intensity->kind == scene::PropertyKind::Number, "intensidade é numérica");
-  AE_EXPECT_EQ(intensity->defaultValue, std::string("8"), "o padrão vem do componente recém-criado");
+  AE_EXPECT_EQ(intensity->defaultValue, std::string("1000"), "o padrão vem do componente recém-criado");
   AE_EXPECT_TRUE(intensity->invalidates & scene::Invalidate::LightCluster, "mudar a luz refaz a seleção do quadro");
   AE_EXPECT_TRUE(!intensity->consumer.empty(), "toda propriedade herda o consumidor do componente");
 
@@ -57,6 +57,17 @@ AE_TEST(component_matrix_reports_default_domain_and_invalidation) {
   const auto *shape = findContract(rows, "astra.physics.collider", "shape");
   AE_EXPECT_TRUE(shape && shape->kind == scene::PropertyKind::Enum, "forma é enumeração");
   AE_EXPECT_EQ(shape->defaultValue, std::string("Caixa"), "o padrão enumerado vem pelo nome da opção");
+  AE_EXPECT_TRUE(scene::Collider::descriptor.resourceBindings.size()==1 &&
+                     scene::Collider::descriptor.resourceBindings[0].id=="collision_mesh" &&
+                     scene::Collider::descriptor.resourceBindings[0].kind==resources::AssetType::Mesh,
+                 "o colisor publica a malha física como binding de recurso tipado");
+  const auto *hullTolerance=findContract(rows,"astra.physics.collider","hull_tolerance");
+  const auto *activeEdge=findContract(rows,"astra.physics.collider","active_edge_angle");
+  const auto *weld=findContract(rows,"astra.physics.collider","weld_vertices");
+  const auto *optimize=findContract(rows,"astra.physics.collider","optimize_cooking");
+  AE_EXPECT_TRUE(hullTolerance&&activeEdge&&weld&&optimize,"cooking do colisor usa o contrato refletido comum");
+  AE_EXPECT_TRUE(hullTolerance->conditional&&activeEdge->conditional&&weld->conditional&&optimize->conditional,
+                 "controles de cooking aparecem somente no modo de malha pertinente");
 
   // O comportamento em C# passou a ter identidade para o próprio interruptor:
   // desligar por API, preset ou animação precisa do mesmo caminho do dedo.

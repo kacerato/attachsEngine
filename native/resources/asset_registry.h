@@ -44,7 +44,8 @@ enum class AssetType : u32 {
   Texture = 3,        // imagem cozida
   Script = 4,         // comportamento C# do projeto
   InputActionMap = 5, // mapa de ações do projeto
-  Scene = 6           // cena reutilizável
+  Scene = 6,          // cena reutilizável
+  EnvironmentProfile = 7 // aparência compartilhada por volumes de ambiente
 };
 const char *assetTypeName(AssetType type);
 bool parseAssetType(std::string_view text, AssetType &out);

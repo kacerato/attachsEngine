@@ -100,6 +100,12 @@ enum class EditorWidget : u32 {
   ViewModeImage,
   ViewModeSolid,
   Fullscreen,
+  SceneLightingToggle,
+  SceneEffectsToggle,
+  SceneEffectsMenu,
+  SceneSkyToggle,
+  SceneFogToggle,
+  ScenePostToggle,
 
   ToolSelect,
   ToolMove,
@@ -180,9 +186,13 @@ enum class EditorWidget : u32 {
   CodeOpen, CodeScene, CodeNew, CodeEdit, CodeSave, CodeUndo, CodeRedo, CodeSearch, CodeClose, CodeApply,
   CodeMenu, CodeSaveAll, CodeFiles, CodeTabsPrevious, CodeTabsNext, CodeFindPrevious, CodeFindNext,
   CodeGoLine, CodeNewFolder, CodeNewHelper, CodeTemplates,
-  ColliderFit, LodGroupFit, LodGroupStatus, ComponentPrevious, ComponentNext, ScriptFieldsPrevious, ScriptFieldsNext,
+  ColliderFit, LodGroupFit, LodGroupStatus, ComponentPrevious,
+  ViewsOpen, ViewsClose, ViewSave, ViewUpdate, ViewRename, ViewDelete, ComponentNext, ScriptFieldsPrevious, ScriptFieldsNext,
   TransformFold, ComponentSearch, ComponentSearchClear, ComponentCategory,
-  MeshGeometryTab, MeshMaterialTab, MeshChoose, MeshPickerClose, MeshClear, MeshSearch, MeshPrevious, MeshNext, MaterialRestore,
+  MeshGeometryTab, MeshMaterialTab, MeshChoose, MeshPickerClose, MeshClear, MeshSearch, MeshPrevious, MeshNext,
+  MeshGenerateCollision, MeshCollisionQualityDown, MeshCollisionQualityUp,
+  MeshCollisionErrorDown, MeshCollisionErrorUp, MaterialRestore,
+  EnvironmentProfileCreate, EnvironmentProfileUpdate,
   ReferenceClose, ReferenceSearch, ReferenceClear, ReferencePrevious, ReferenceNext,
   CodeTemplateClose, CodeConsole,
   ImportMatchInOrder, ImportTreatAsNew, ImportLinkMenu, ImportLinkUnlink, ImportLinkKeep, ImportLinkDelete,
@@ -200,7 +210,7 @@ enum class EditorWidget : u32 {
   ImportTextureDimension256, ImportTextureDimension512, ImportTextureDimension1024, ImportTextureDimension2048,
   ImportApplyProfile, ImportSaveDefaultProfile,
   // G2: geometria derivada no perfil — normais, ponderação e tangentes.
-  ImportNormalsCycle, ImportNormalWeightingCycle, ImportTangentsCycle, ImportCamerasToggle,
+  ImportNormalsCycle, ImportNormalWeightingCycle, ImportTangentsCycle, ImportCamerasToggle, ImportLightsToggle,
   ImportSmoothingDown, ImportSmoothingUp,
   // R4: textura por binding de material e extração das imagens de um GLB.
   TexturePickerClose, TextureUseInherited, TextureUseNone, AssetExtractTextures,
@@ -228,6 +238,8 @@ enum class EditorWidget : u32 {
   ComponentGroupBase=0x5C000000u, ComponentVisualBase=0x5D000000u,
   ComponentVisualsToggle=0x5E000000u, CameraView, CameraViewClose, CameraAlignView, CameraPilot,
   ComponentReferenceBase=0x7a000000u, ReferenceChoiceBase=0x7b000000u,
+  // + componente + binding<<8 + slot<<16. Abre o seletor do tipo do binding.
+  ComponentResourceBase=0x7f000000u,
   CameraLens=0x5E000010u, CameraNear, CameraFar,
   CameraHandleBase=0x5E000020u,
   CameraPreviewPin=0x5E000030u, CameraPreviewClose, CameraPreviewResolution, CameraPreviewFrequency, CameraPreviewRetry,
@@ -242,6 +254,8 @@ enum class EditorWidget : u32 {
   // Faixas próprias: o painel de impacto já dividiu números com
   // AssetRowBase (0x60) e com CreationCategoryBase/CreationRowBase (0x63/0x64),
   // e engolia o toque na categoria do menu Adicionar objeto.
+  // + índice da vista salva: aplica aquele enquadramento.
+  SceneViewRowBase=0x93000000u,
   ImpactOpenBase=0x90000000u, ImpactRowBase=0x91000000u, ImpactClose=0x92000000u, ImpactPrevious, ImpactNext, ImpactRepair, ImpactRepairApply, ImpactRepairShared, ImpactRepairScope,
   ComponentColorBase=0x7e000000u,
   ColorHueBase=0x5f000000u, ColorSvBase=0x5f000100u, ColorApply=0x5f000200u, ColorCancel,
@@ -305,9 +319,10 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ScriptRemoveBase,kRange},{EditorWidget::ScriptEnabledBase,kRange},{EditorWidget::ScriptSourceBase,kRange},
   {EditorWidget::ScriptFieldBase,kRange},{EditorWidget::ComponentNumberBase,kRange},{EditorWidget::MeshChoiceBase,kRange},
   {EditorWidget::ComponentReferenceBase,kRange},{EditorWidget::ReferenceChoiceBase,kRange},{EditorWidget::CodeTemplateBase,kRange},
-  {EditorWidget::ComponentTripleBase,kRange},{EditorWidget::ComponentColorBase,kRange},
+  {EditorWidget::ComponentTripleBase,kRange},{EditorWidget::ComponentColorBase,kRange},{EditorWidget::ComponentResourceBase,kRange},
   {EditorWidget::HierarchyCollapseBase,kWideRange},
-  {EditorWidget::ImpactOpenBase,kRange},{EditorWidget::ImpactRowBase,kRange},{EditorWidget::ImpactClose,kRange}};
+  {EditorWidget::ImpactOpenBase,kRange},{EditorWidget::ImpactRowBase,kRange},{EditorWidget::ImpactClose,kRange},
+  {EditorWidget::SceneViewRowBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -404,6 +419,15 @@ struct EditorScreenState final {
   std::string referenceProperty,referenceQuery;
   bool referenceScript=false,editingReferenceSearch=false;
   u32 referencePage=0;
+  // Destino do seletor de recurso. Instância zero mantém o seletor de malha
+  // visual existente; valor não zero endereça um binding refletido.
+  u64 resourceInstance=0;
+  std::string resourceProperty;
+  u32 resourceSlot=0;
+  // Receita em edição no seletor da malha física. Passos finitos deixam o
+  // controle utilizável por toque e mantêm a mesma validação da persistência.
+  u8 collisionTrianglePercent=25;
+  float collisionMaximumError=.02f;
   bool addingComponent=false;
   bool editingComponentSearch=false,editingMeshSearch=false,meshPicker=false;
   std::string componentQuery,meshQuery;
@@ -414,6 +438,11 @@ struct EditorScreenState final {
   std::string editingScriptProperty,editingScriptType;
   std::shared_ptr<const EditorComponentValue> componentClipboard;
   bool presetPanel=false,presetNaming=false,presetRenaming=false,presetDeleteConfirm=false;
+  // Vistas salvas da cena: painel aberto, linha escolhida e o fluxo de nome
+  // (salvar uma nova ou renomear a escolhida).
+  bool viewsPanel=false,viewNaming=false,viewRenaming=false;
+  u32 viewSelected=0;
+  std::string viewName;
   // Salvar o OBJETO como receita é um terceiro destino do mesmo campo de nome;
   // sem distinguir, renomear e salvar disputariam o mesmo estado.
   bool presetRecipeNaming=false;
@@ -447,6 +476,11 @@ struct EditorScreenState final {
   const EditorViewport *view = nullptr;
   bool showGrid = true;
   bool showComponentVisuals=true;
+  // Opções da câmera editorial, equivalentes à barra de visualização da Scene
+  // View. São estado do editor: não alteram o Ambiente salvo nem entram no
+  // histórico da cena.
+  bool sceneLighting=true,sceneEffects=true,sceneSky=true,sceneFog=true,scenePost=true;
+  bool sceneEffectsMenu=false;
   EditorEntityId cameraViewEntity=0;
   EditorEntityId cameraPreviewEntity=0;
   bool cameraPreviewReady=false,cameraPreviewFailed=false;
@@ -537,6 +571,7 @@ struct EditorScreenState final {
   u32 importSmoothingAngle=60,importPreparedSmoothingAngle=60;
   u8 importTangents=0,importPreparedTangents=0;
   bool importCameras=false,importPreparedCameras=false;
+  bool importLights=false,importPreparedLights=false;
   // Nós que o autor tirou da importação. Não pede nova preparação: a saída do
   // importador é a mesma; muda o que a reconciliação instancia.
   std::vector<resources::AssetGuid> importExcludedNodes;

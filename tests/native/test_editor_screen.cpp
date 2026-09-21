@@ -1,6 +1,8 @@
 #include "editor/editor_history.h"
+#include "editor/editor_map_scene.h"
 #include "editor/editor_screen.h"
 #include "harness.h"
+#include "renderer/authoring_geometry.h"
 #include "ui_software_raster.h"
 
 #include <cmath>
@@ -185,6 +187,24 @@ AE_TEST(screen_folded_components_open_into_available_inspector_space) {
   AE_EXPECT_TRUE(findWidget(expanded,widgetId(EditorWidget::AddComponentMenu),state.surface,point),"Add stays reachable while editing");
 }
 
+AE_TEST(screen_mesh_cooking_group_reports_the_jolt_hull_before_play) {
+  std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;
+  std::vector<renderer::MapMaterialRecord> materials;
+  AE_EXPECT_TRUE(renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride,vertices,indices,draws,materials),"cubo");
+  EditorDocument document;EditorMapScene resources;
+  AE_EXPECT_TRUE(resources.import(document,draws,materials,false,vertices,indices,91),"biblioteca CPU");
+  const auto id=document.createEntity(document.root(),EditorEntityKind::Mesh,"Casco de teste");
+  auto value=*document.find(id);editMeshRenderer(value)->mesh=1;
+  auto *collider=editCollider(value);collider->shape=scene::ColliderShape::Mesh;collider->convex=true;
+  const auto instance=collider->instanceId();AE_EXPECT_TRUE(document.applyEntityValues(id,value),"colisor convexo");
+  EditorScreenState state{};state.surface={0,0,1600,900};state.document=&document;state.resources=&resources;
+  state.selection=id;state.componentSelection=id;state.expandedNative=instance;state.componentGroup="Cozimento";
+  Frame frame;composeFrame(frame,state);bool summary=false;
+  for(const auto &command:frame.list.commands())
+    if(frame.list.textOf(command).find("Casco Jolt · 8 vértices · 6 faces")!=std::string_view::npos) summary=true;
+  AE_EXPECT_TRUE(summary,"o Inspector explica o resultado efetivo do cooking antes do Play");
+}
+
 namespace {
 
 // Toca e solta num ponto, devolvendo o que a tela fez com isso.
@@ -233,6 +253,29 @@ AE_TEST(screen_scene_menu_separates_authoring_context_from_play) {
   const EditorPointerOutcome outcome = tap(frame, state, lab, at);
   AE_EXPECT_TRUE(outcome.consumed, "");
   AE_EXPECT_TRUE(state.workspace == EditorWorkspace::Lighting, "e trocar de aba troca o contexto");
+}
+
+AE_TEST(scene_view_options_are_real_editor_state_and_expose_effect_parts) {
+  WaterLab lab;
+  EditorScreenState state=waterLabState(lab);
+  const auto historyBefore=lab.history.undoDepth();
+  Frame frame;composeFrame(frame,state);UiPoint point{};
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::SceneLightingToggle),frame.layout.viewport,point),
+                 "Lighting fica na barra superior do viewport");
+  tap(frame,state,lab,point);
+  AE_EXPECT_TRUE(!state.sceneLighting,"Lighting altera o estado editorial");
+
+  composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::SceneEffectsMenu),frame.layout.viewport,point),
+                 "Effects possui menu como a Scene View");
+  tap(frame,state,lab,point);
+  AE_EXPECT_TRUE(state.sceneEffectsMenu,"menu de efeitos abre");
+  composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::SceneSkyToggle),frame.layout.viewport,point),
+                 "Sky é uma opção funcional");
+  tap(frame,state,lab,point);
+  AE_EXPECT_TRUE(!state.sceneSky,"Sky alterna sem editar o documento");
+  AE_EXPECT_EQ(lab.history.undoDepth(),historyBefore,"opções da vista não criam Undo autoral");
 }
 
 AE_TEST(screen_tapping_a_row_selects_it) {

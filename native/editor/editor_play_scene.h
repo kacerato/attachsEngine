@@ -31,6 +31,10 @@ class EditorPlayScene final {
         out.push_back(m[12+k]+m[k]*t[v*3]+m[4+k]*t[v*3+1]+m[8+k]*t[v*3+2]);
       return true;
     }
+    bool meshTriangles(const resources::AssetGuid &asset,std::vector<float> &out) const override {
+      const auto mesh=resources_.assetSlot(asset);
+      return mesh && meshTriangles(mesh,out);
+    }
   private:
     const EditorMapScene &resources_;
   };

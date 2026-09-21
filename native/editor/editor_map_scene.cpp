@@ -2,6 +2,7 @@
 #include "editor/editor_route_component.h"
 #include "editor/editor_map_scene.h"
 #include "renderer/water_authoring_geometry.h"
+#include "physics/collision_cooking.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -71,7 +72,7 @@ bool EditorMapScene::adoptPackage(EditorDocument &document, std::span<const rend
                                   std::span<const renderer::MapMaterialRecord> materials,
                                   std::span<const u8> vertices, std::span<const u32> indices,
                                   std::span<const resources::AssetGuid> identities, u64 packageFingerprint,
-                                  std::span<const float> pivots) {
+                                  std::span<const float> pivots, std::span<const std::string> names) {
   std::vector<std::shared_ptr<const EditorPickMesh>> meshes;
   if(!buildPickMeshes(draws,vertices,indices,meshes)) return false;
   std::vector<resources::AssetGuid> assets(draws.size());
@@ -82,11 +83,14 @@ bool EditorMapScene::adoptPackage(EditorDocument &document, std::span<const rend
   // ordem da lista — exatamente o que a identidade existe para eliminar.
   for(u32 a=0;a<assets.size();++a) for(u32 b=0;b<a;++b) if(assets[a]==assets[b]) return false;
   if(!pivots.empty() && pivots.size()!=draws.size()*3) return false;
+  if(!names.empty() && names.size()!=draws.size()) return false;
   pickMeshes_=std::move(meshes);
   source_.assign(draws.begin(),draws.end());
   materials_.assign(materials.begin(),materials.end());
   assets_=std::move(assets);
+  assetNames_.assign(names.begin(),names.end());
   pivots_.assign(pivots.begin(),pivots.end());
+  collisionHullCache_.clear();
   reconcileAssets(document);
   return true;
 }
@@ -118,6 +122,8 @@ bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::
   assets_.resize(draws.size());
   for(u32 index=0;index<draws.size();++index) assets_[index]=packageAssetGuid(packageFingerprint,index);
   pivots_.clear();
+  assetNames_.clear();
+  collisionHullCache_.clear();
   document=std::move(prepared);
   return true;
 }
@@ -232,6 +238,53 @@ bool EditorMapScene::localGeometry(u32 assetId,std::span<const EditorPickMesh::T
   float pivot[3];pivotOf(assetId-1,pivot);
   for(u32 axis=0;axis<3;++axis) relative[12+axis]-=pivot[axis];
   triangles=pickMeshes_[assetId-1]->triangles();return !triangles.empty();
+}
+
+bool EditorMapScene::collisionHullPreview(std::span<const u32> slots,float tolerance,
+                                          CollisionHullPreview &out) const {
+  out={};
+  if(slots.empty()||!std::isfinite(tolerance)) return false;
+  const auto cached=std::find_if(collisionHullCache_.begin(),collisionHullCache_.end(),[&](const auto &entry) {
+    return entry.tolerance==tolerance && entry.slots.size()==slots.size() &&
+           std::equal(entry.slots.begin(),entry.slots.end(),slots.begin());
+  });
+  const CollisionHullCacheEntry *entry=nullptr;
+  if(cached!=collisionHullCache_.end()) entry=&*cached;
+  else {
+    CollisionHullCacheEntry created;created.slots.assign(slots.begin(),slots.end());created.tolerance=tolerance;
+    std::vector<AetherVec3> points;
+    for(const auto slot:slots) {
+      std::span<const EditorPickMesh::Triangle> triangles;float relative[16];
+      if(!localGeometry(slot,triangles,relative)) {created.diagnostic="A malha vinculada não tem geometria disponível";break;}
+      points.reserve(points.size()+triangles.size()*3);
+      for(const auto &triangle:triangles) for(u32 corner=0;corner<3;++corner) {
+        const auto *p=triangle.data()+corner*3;
+        points.push_back({relative[0]*p[0]+relative[4]*p[1]+relative[8]*p[2]+relative[12],
+                          relative[1]*p[0]+relative[5]*p[1]+relative[9]*p[2]+relative[13],
+                          relative[2]*p[0]+relative[6]*p[1]+relative[10]*p[2]+relative[14]});
+      }
+    }
+    created.inputPointCount=static_cast<u32>(points.size());
+    if(created.diagnostic.empty()) {
+      auto settings=AetherMeshCookingDefaultsV1;settings.hullTolerance=tolerance;
+      physics::CookedConvexHull hull;
+      if(physics::cookConvexHull(points,settings,hull,created.diagnostic)) {
+        created.vertexCount=static_cast<u32>(hull.vertices.size());created.faceCount=hull.faceCount;
+        created.triangles.resize(hull.indices.size()/3);
+        for(usize i=0;i<created.triangles.size();++i) for(u32 corner=0;corner<3;++corner) {
+          const auto &p=hull.vertices[hull.indices[i*3+corner]];
+          created.triangles[i][corner*3]=p.x;created.triangles[i][corner*3+1]=p.y;created.triangles[i][corner*3+2]=p.z;
+        }
+      }
+    }
+    // A UI pode experimentar muitos valores digitados; limite o cache sem
+    // esconder estado autoral nem crescer indefinidamente.
+    if(collisionHullCache_.size()>=32) collisionHullCache_.erase(collisionHullCache_.begin());
+    collisionHullCache_.push_back(std::move(created));entry=&collisionHullCache_.back();
+  }
+  out.triangles=entry->triangles;out.inputPointCount=entry->inputPointCount;
+  out.vertexCount=entry->vertexCount;out.faceCount=entry->faceCount;out.diagnostic=entry->diagnostic;
+  return entry->diagnostic.empty()&&!entry->triangles.empty();
 }
 bool EditorMapScene::pickGeometry(const runtime::SceneGraph &document,EditorEntityId id,EditorPickCandidate &out) const {
   return pickSlotGeometry(document,id,0,out);

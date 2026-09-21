@@ -1,0 +1,5 @@
+Point Light Intensity Test
+Source: https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/PointLightIntensityTest
+Downloaded GLB: https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/PointLightIntensityTest/glTF-Binary/PointLightIntensityTest.glb
+License: Creative Commons Zero v1.0 Universal (CC0-1.0)
+SHA-256: 025ea8e44840a88ded75fe0665f693a14558d345c2955b054aec4edbaa23a341

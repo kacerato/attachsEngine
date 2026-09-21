@@ -24,7 +24,7 @@ empacotado pelo Gradle. Os registros anteriores de Ping não cobriam compilaçã
 Roslyn nem GC concorrente com a thread do editor. Ver
 [rodada integrada](../../../docs/validacao/2026-09-10-componentes-codigo.md).
 
-Subconjunto do runtime .NET 8 (CoreCLR) compilado para `linux-bionic-arm64`
+Subconjunto nativo do runtime .NET 8 (CoreCLR) compilado para `linux-bionic-arm64`
 (Android arm64, libc bionic) — usado para hospedar C# gerenciado dentro do
 processo nativo do shell Android (item 0.1.4 do plano), via a API oficial de
 hospedagem `hostfxr`.
@@ -61,7 +61,7 @@ presentes (descoberto por tentativa e erro validando em hardware real — ver
   `hostfxr_get_runtime_delegate` → `load_assembly_and_get_function_pointer`,
   usados por `native/platform/android/dotnet_host.cpp`.
 
-## Publicação do lado gerenciado (Aether.Core.dll)
+## Publicação do lado gerenciado (Aether.Rendering.dll)
 
 `hostfxr_initialize_for_runtime_config` recusa um `.runtimeconfig.json`
 **self-contained** ("Initialization for self-contained components is not
@@ -69,15 +69,16 @@ supported", erro confirmado em hardware) — o assembly gerenciado precisa ser
 publicado **framework-dependent**:
 
 ```bash
-dotnet publish managed/Aether.Core/Aether.Core.csproj -c Release \
+dotnet publish managed/Aether.Rendering/Aether.Rendering.csproj -c Release \
   -r linux-bionic-arm64 --self-contained false \
-  -p:GenerateRuntimeConfigurationFiles=true -o <saída>
+  -p:GenerateRuntimeConfigurationFiles=true \
+  -p:RuntimeFrameworkVersion=8.0.27 -o <saída>
 ```
 
-`--self-contained false` é o que faz o `.runtimeconfig.json` gerado usar
-`"framework": { "name": "Microsoft.NETCore.App", "version": "8.0.0" }` em vez
-de `"includedFrameworks"` — só o primeiro formato é aceito pelo fluxo de
-hospedagem de componente que `DotNetHost` usa.
+`--self-contained false` mantém o contrato framework-dependent exigido pelo
+fluxo de hospedagem de componente. O código gerenciado continua compilado para
+`net8.0`, enquanto `RuntimeFrameworkVersion` fixa o runtime Android vendorizado
+em 8.0.27; o runtimeconfig não depende de uma instalação global no aparelho.
 
 O Gradle executa esse publish automaticamente (`publishManagedCore`), mantendo a
 BCL vendorizada e gerando assets/manifesto/build ID sob `android/app/build/`.
@@ -87,11 +88,11 @@ o app. A identidade é verificada por `tests/tools/test-android-managed-assets.p
 
 ## O que NÃO está aqui, de propósito
 
-- A Base Class Library gerenciada (`System.*.dll`) e os assemblies do próprio
-  projeto (`Aether.Core.dll` etc.) — esses são artefato de **build**
-  (`dotnet publish`), não binário de terceiros vendorizado. Empacotados pelo
-  Gradle a partir da saída do publish. A BCL legada está versionada sob assets;
-  os outputs novos do próprio projeto ficam em `build/`, ignorados pelo Git.
+- A Base Class Library gerenciada (`System.*.dll`) fica versionada em
+  `android/app/src/main/assets/dotnet/shared/`; os assemblies do projeto
+  (`Aether.Core.dll` etc.) são artefatos de **build** gerados por `dotnet
+  publish`. O Gradle reúne as duas origens e gera manifesto/build ID antes de
+  empacotar.
 - `apphost`/`libnethost.*` — resolvem o hostfxr via variável de ambiente ou
   registro global do SDK, que não existem dentro do processo de um app
   Android. O shell abre `libhostfxr.so` direto por caminho conhecido dentro
@@ -100,4 +101,5 @@ o app. A identidade é verificada por `tests/tools/test-android-managed-assets.p
 ## Origem e licença
 
 Ver `VENDORED_COMMIT.txt` para os pacotes NuGet exatos e a data. Distribuído
-sob a licença MIT da Microsoft — ver `LICENSE.TXT`.
+sob a licença MIT da Microsoft — ver `LICENSE.TXT` e
+`THIRD-PARTY-NOTICES.TXT`.

@@ -30,7 +30,7 @@ AE_TEST(component_delta_reports_every_field_and_marks_what_changes) {
   const auto *intensity = findDelta(delta, "intensity");
   AE_EXPECT_TRUE(intensity && intensity->differs, "a intensidade mudou");
   AE_EXPECT_EQ(intensity->candidate, std::string("42"), "o candidato mostra o valor que entraria");
-  AE_EXPECT_EQ(intensity->current, std::string("8"), "o atual continua visível para comparação");
+  AE_EXPECT_EQ(intensity->current, std::string("1000"), "o atual continua visível para comparação");
 
   // Campo igual permanece na lista: o autor precisa ver o que o preset NÃO leva.
   const auto *range = findDelta(delta, "range");

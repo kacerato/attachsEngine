@@ -101,6 +101,7 @@ add_library(aether_codecs STATIC
   third_party/meshoptimizer/vertexcodec.cpp
   third_party/meshoptimizer/indexcodec.cpp
   third_party/meshoptimizer/vertexfilter.cpp
+  third_party/meshoptimizer/simplifier.cpp
   third_party/basis_universal/transcoder/basisu_transcoder.cpp
   third_party/basis_universal/zstd/zstddeclib.c
   ${AETHER_DRACO_SOURCE}/attributes/attribute_octahedron_transform.cc
@@ -209,7 +210,10 @@ if(WIN32)
   set_target_properties(aether_transform PROPERTIES PREFIX "")
 endif()
 if(ANDROID)
-  target_link_options(aether_transform PRIVATE "-Wl,-z,max-page-size=16384")
+  target_link_options(aether_transform PRIVATE
+    "-Wl,-z,max-page-size=16384"
+    "-Wl,-z,common-page-size=16384"
+  )
 endif()
 
 # --- aether_core: tipos base, alocadores, job system -----------------------
@@ -246,6 +250,7 @@ target_link_libraries(aether_rendergraph PUBLIC aether_core)
 add_library(aether_renderer STATIC
   renderer/dynamic_resolution.cpp
   renderer/environment_map.cpp
+  renderer/scene_environment.cpp
   renderer/frame_graph.cpp
   renderer/frustum_visibility.cpp
   renderer/gpu_draw_compaction.cpp
@@ -284,12 +289,14 @@ add_library(aether_assets STATIC
   resources/gltf_import.cpp
   resources/import_node_map.cpp
   resources/material_asset.cpp
+  resources/environment_profile.cpp
   resources/image_decode.cpp
   resources/gltf_codecs.cpp
   resources/gltf_package.cpp
   resources/import_cache.cpp
   resources/texture_budget.cpp
   resources/import_profile.cpp
+  resources/mesh_derived.cpp
   resources/texture_profile.cpp
   resources/glb_images.cpp
 )
@@ -313,6 +320,7 @@ add_library(aether_runtime STATIC
   runtime/transform_math.cpp
   runtime/game_world.cpp
   runtime/scene_lights.cpp
+  runtime/scene_environment.cpp
   runtime/scene_physics.cpp
   runtime/script_bridge.cpp
 )
@@ -447,6 +455,7 @@ if(ANDROID)
   target_link_options(aether_android PRIVATE
     "-uANativeActivity_onCreate"
     "-Wl,-z,max-page-size=16384"
+    "-Wl,-z,common-page-size=16384"
   )
 endif()
 
@@ -456,6 +465,8 @@ endif()
 # POD simples (float, uint32_t, ponteiro opaco), nunca um tipo do Jolt exposto diretamente —
 # isso mantém o C# livre de conhecer qualquer detalhe interno do Jolt.
 add_library(aether_physics STATIC
+  physics/collision_cooking.cpp
+  physics/jolt_init.cpp
   physics/character_motor.cpp
   physics/jolt_bridge.cpp
   physics/water_buoyancy.cpp
@@ -480,6 +491,8 @@ endif()
 # duas vezes com flags divergentes por engano.
 if(NOT ANDROID)
   add_library(aether_physics_shared SHARED
+    physics/collision_cooking.cpp
+    physics/jolt_init.cpp
     physics/jolt_bridge.cpp
     physics/water_buoyancy.cpp
   )
@@ -532,8 +545,10 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_physics_access.cpp
     ../tests/native/test_mesh_collider.cpp
     ../tests/native/test_lod_group.cpp
+    ../tests/native/test_scene_views.cpp
     ../tests/native/test_runtime_input.cpp
     ../tests/native/test_runtime_lights.cpp
+    ../tests/native/test_runtime_environment.cpp
     ../tests/native/test_asset_registry.cpp
     ../tests/native/test_gltf_import.cpp
     ../tests/native/test_editor_model_import.cpp

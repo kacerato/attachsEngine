@@ -325,6 +325,56 @@ struct Fixture final {
 
 } // namespace
 
+AE_TEST(editor_lod_cross_fade_retains_the_transition_started_by_change_detection) {
+  EditorSession session;session.initialize(&font(),&icons());
+  AE_EXPECT_TRUE(session.importMap({}, {}, false),"cena independente");
+  auto &document=session.document();
+  const auto group=document.createEntity(document.root(),EditorEntityKind::Folder,"Grupo LOD");
+  const auto level0=document.createEntity(group,EditorEntityKind::Folder,"LOD0");
+  const auto level1=document.createEntity(group,EditorEntityKind::Folder,"LOD1");
+  auto values=*document.find(group);
+  auto *lod=static_cast<scene::LodGroup*>(values.components.add(scene::LodGroup::descriptor));
+  AE_EXPECT_TRUE(lod!=nullptr,"componente criado");
+  lod->levelCount=2;lod->transitions[1]=1;lod->size=2;
+  lod->levels[0]=level0;lod->levels[1]=level1;
+  lod->fadeMode=scene::LodFadeMode::CrossFade;lod->animateCrossFading=true;
+  AE_EXPECT_TRUE(document.applyEntityValues(group,values),"grupo configurado");
+
+  session.setSurface({0,0,800,600},{});
+  const float nearPosition[3]{0,0,-2};
+  session.setCameraPose(nearPosition,0,0);session.update();session.advanceClock(1);
+  std::vector<renderer::MapDrawState> draws;
+  AE_EXPECT_TRUE(session.extractMap(draws),"estado inicial no LOD 0");
+
+  const float farPosition[3]{0,0,-4};
+  session.setCameraPose(farPosition,0,0);session.update();session.advanceClock(10);
+  AE_EXPECT_TRUE(session.lodSelectionChanged(),"cruzar o limite inicia a republicação");
+  // O primeiro quadro tem fator zero e os mesmos estados visuais do anterior.
+  // A segunda consulta só continua verdadeira se a primeira reteve o relógio
+  // real da transição, em vez de iniciar a troca numa cópia descartável.
+  AE_EXPECT_TRUE(session.lodSelectionChanged(),"a transição iniciada permanece ativa");
+  session.advanceClock(10.25f);
+  AE_EXPECT_TRUE(session.lodSelectionChanged(),"o meio do cross-fade ainda republica");
+}
+
+AE_TEST(component_mesh_resource_command_uses_the_reflected_binding_and_undo) {
+  Fixture f;auto &session=f.session;auto &document=session.document();
+  auto values=*document.find(f.cube);auto *collider=editCollider(values);
+  collider->shape=scene::ColliderShape::Mesh;const auto instance=collider->instanceId();
+  AE_EXPECT_TRUE(document.applyEntityValues(f.cube,values),"colisor preparado");
+  const auto asset=session.screen().resources->assetGuid(0);
+  EditorActionRequest request;request.version=session.sceneVersion();request.entity=f.cube;
+  request.action=EditorAction::ComponentResource;request.componentInstance=instance;
+  request.componentProperty="collision_mesh";request.componentResource=asset;
+  AE_EXPECT_TRUE(session.dispatch(request).status==EditorActionStatus::Applied,"binding refletido aceita a malha carregada");
+  AE_EXPECT_TRUE(static_cast<const scene::Collider*>(document.find(f.cube)->components.findInstance(instance))->collisionMesh==asset,
+                 "o GUID autoral foi aplicado");
+  request.version=session.sceneVersion();request.action=EditorAction::Undo;
+  AE_EXPECT_TRUE(session.dispatch(request).status==EditorActionStatus::Applied,"um desfazer cobre a troca");
+  AE_EXPECT_TRUE(!static_cast<const scene::Collider*>(document.find(f.cube)->components.findInstance(instance))->collisionMesh.valid(),
+                 "desfazer restaura a herança da malha visual");
+}
+
 AE_TEST(session_starts_empty_and_library_loading_does_not_create_objects) {
   EditorSession session;session.initialize(&font(),&icons());
   AE_EXPECT_EQ(session.document().entityCount(),1u,"only the scene root");
@@ -342,6 +392,43 @@ AE_TEST(session_produces_instances_for_a_full_frame) {
   AE_EXPECT_TRUE(fixture.session.layout().viewport.width > 0.0f, "");
   AE_EXPECT_TRUE(isViewportValid(fixture.session.view()),
                  "a camera do editor produz uma vista utilizavel ja no primeiro frame");
+}
+
+AE_TEST(session_applies_a_multi_component_recipe_atomically_and_undoes_it_once) {
+  Fixture fixture;auto &session=fixture.session;auto &document=session.document();
+  const auto project=std::filesystem::temp_directory_path()/("aether-recipe-session-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  std::filesystem::create_directories(project);
+  struct Cleanup {std::filesystem::path path;~Cleanup(){std::error_code error;std::filesystem::remove_all(path,error);}} cleanup{project};
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.string().c_str()),"biblioteca de presets do projeto carregada");
+  auto authored=*document.find(fixture.cube);
+  auto *light=static_cast<scene::Light*>(authored.components.add(scene::Light::descriptor));
+  AE_EXPECT_TRUE(light!=nullptr,"a origem tem dois componentes");
+  light->intensity=4200;
+  auto *render=editMeshRenderer(authored);render->enabled=false;
+  AE_EXPECT_TRUE(document.applyEntityValues(fixture.cube,authored),"origem preparada");
+  std::string diagnostic;
+  AE_EXPECT_TRUE(session.openComponentPresets(fixture.cube,0),"painel carrega a biblioteca do projeto");
+  AE_EXPECT_TRUE(session.saveComponentRecipe(fixture.cube,"Objeto iluminado",diagnostic),diagnostic.c_str());
+
+  auto changed=*document.find(fixture.cube);
+  changed.components.remove(scene::Light::descriptor);
+  editMeshRenderer(changed)->enabled=true;
+  AE_EXPECT_TRUE(document.applyEntityValues(fixture.cube,changed),"destino diverge da receita");
+  AE_EXPECT_TRUE(session.openComponentPresets(fixture.cube,0),"seletor abre receitas de objeto");
+  AE_EXPECT_EQ(session.screen().presetChoices.size(),usize{1},"receita disponível na sessão");
+  const auto recipe=session.screen().presetChoices.front().first;
+  const auto before=session.history().undoDepth();
+  AE_EXPECT_TRUE(session.applyComponentRecipe(recipe,fixture.cube,session.sceneVersion(),diagnostic),diagnostic.c_str());
+  const auto *result=document.find(fixture.cube);
+  const auto *appliedLight=static_cast<const scene::Light*>(result->components.find(scene::Light::descriptor));
+  AE_EXPECT_TRUE(appliedLight&&appliedLight->intensity==4200,"componente ausente é adicionado com os valores");
+  AE_EXPECT_TRUE(!meshRenderer(*result)->enabled,"componente existente é atualizado");
+  AE_EXPECT_EQ(session.history().undoDepth(),before+1,"a receita inteira é um comando");
+  AE_EXPECT_TRUE(session.history().undo(document),"desfazer receita");
+  result=document.find(fixture.cube);
+  AE_EXPECT_TRUE(!result->components.find(scene::Light::descriptor)&&meshRenderer(*result)->enabled,
+                 "um Undo restaura o objeto inteiro");
 }
 
 AE_TEST(session_one_finger_on_the_scene_orbits_the_camera) {
@@ -668,7 +755,8 @@ AE_TEST(every_profile_field_blocks_publishing_until_prepared_again) {
   // ou câmeras sem preparar de novo publicaria a prévia antiga. Achado no
   // aparelho: só escala e textura bloqueavam.
   const EditorWidget fields[] = {EditorWidget::ImportNormalsCycle, EditorWidget::ImportNormalWeightingCycle,
-                                 EditorWidget::ImportTangentsCycle, EditorWidget::ImportCamerasToggle};
+                                 EditorWidget::ImportTangentsCycle, EditorWidget::ImportCamerasToggle,
+                                 EditorWidget::ImportLightsToggle};
   for (const auto field : fields) {
     Fixture fixture;
     fixture.session.beginImportPreparation();
@@ -680,7 +768,7 @@ AE_TEST(every_profile_field_blocks_publishing_until_prepared_again) {
     tapWidget(fixture, widgetId(EditorWidget::ImportTabProfile));
     AE_EXPECT_TRUE(locateWidget(fixture.session, widgetId(EditorWidget::ImportIntoScene)).x >= 0, "publicar antes da mudança");
     // Numa tela baixa o perfil é paginado: a linha pedida tem de ser alcançável.
-    for (u32 page = 0; page < 8 && locateWidget(fixture.session, widgetId(field)).x < 0 &&
+    for (u32 page = 0; page < 16 && locateWidget(fixture.session, widgetId(field)).x < 0 &&
                        locateWidget(fixture.session, widgetId(EditorWidget::ImportNextPage)).x >= 0; ++page)
       tapWidget(fixture, widgetId(EditorWidget::ImportNextPage));
     tapWidget(fixture, widgetId(field));

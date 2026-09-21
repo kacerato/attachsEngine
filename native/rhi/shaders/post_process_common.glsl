@@ -2,10 +2,24 @@ precision highp float;
 precision highp int;
 
 layout(set=0,binding=0) uniform sampler2D sceneColor;
-#if AETHER_TEMPORAL
 layout(set=0,binding=1) uniform sampler2D historyColor;
 layout(set=0,binding=2) uniform sampler2D sceneDepth;
-#endif
+layout(set=0,binding=3,std140) uniform EnvironmentLightingBlock {
+  vec4 sunDirectionIntensity;
+  vec4 sunColorAngularRadius;
+  vec4 ambientColorStrength;
+  vec4 parameters;
+  vec4 skyZenithCloudCoverage;
+  vec4 skyHorizonCloudDensity;
+  vec4 groundColorSaturation;
+  vec4 cloudLightWindSpeed;
+  vec4 sceneSky;
+  vec4 sceneFogColorDensity;
+  vec4 sceneFog;
+  vec4 scenePost;
+  vec4 sceneAo;
+  vec4 sceneAoDetail;
+} environment;
 layout(push_constant) uniform PostPushConstants {
   vec4 texelFlags; // xy=1/source extent, z=bloom, w=AA mode/history state
   vec4 bloom;      // threshold, intensity, sharpen, vignette intensity
@@ -26,7 +40,53 @@ vec2 clampSourceUv(vec2 uv) {
                post.sourceTransform.xy - post.texelFlags.xy * 0.5);
 }
 
-vec3 sampleScene(vec2 uv) { return texture(sceneColor, clampSourceUv(uv)).rgb; }
+float viewDistance(vec2 uv) {
+  float depth=texture(sceneDepth,clampSourceUv(uv)).r;
+  float nearPlane=post.currentPositionNear.w;
+  float farPlane=post.previousPositionFar.w;
+  if(post.sourceTransform.z<0.0) return mix(nearPlane,farPlane,depth);
+  return nearPlane*farPlane/max(farPlane-depth*(farPlane-nearPlane),1.0e-6);
+}
+
+vec3 sampleScene(vec2 uv) {
+  vec2 sourceUv=clampSourceUv(uv);
+  vec3 color=texture(sceneColor,sourceUv).rgb;
+  if(environment.sceneFog.x>0.5) {
+    float distance=max(0.0,viewDistance(sourceUv)-environment.sceneFog.y);
+    float fog=1.0-exp(-environment.sceneFogColorDensity.w*distance);
+    color=mix(color,environment.sceneFogColorDensity.rgb,clamp(fog,0.0,1.0));
+  }
+  return color;
+}
+
+float screenSpaceAmbientOcclusion(vec2 uv) {
+  if(environment.sceneAo.x<0.5) return 1.0;
+  float rawDepth=texture(sceneDepth,clampSourceUv(uv)).r;
+  if(rawDepth>=0.999999) return 1.0;
+  float center=viewDistance(uv);
+  float radius=max(environment.sceneAo.y,0.05);
+  float radiusPixels=clamp(radius*abs(post.sourceTransform.z)/
+      max(center*post.texelFlags.y*2.0,1.0e-5),1.0,48.0);
+  const vec2 directions[12]=vec2[12](
+    vec2(1,0),vec2(.866,.5),vec2(.5,.866),vec2(0,1),
+    vec2(-.5,.866),vec2(-.866,.5),vec2(-1,0),vec2(-.866,-.5),
+    vec2(-.5,-.866),vec2(0,-1),vec2(.5,-.866),vec2(.866,-.5));
+  float occlusion=0.0;
+  // Rotação barata por pixel evita que as doze direções apareçam como raios
+  // fixos, sem textura de ruído nem estado temporal adicional.
+  float angle=fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)*6.2831853;
+  mat2 rotation=mat2(cos(angle),-sin(angle),sin(angle),cos(angle));
+  for(int index=0;index<12;++index) {
+    float ring=.35+.65*float((index%3)+1)/3.0;
+    vec2 offset=rotation*directions[index]*post.texelFlags.xy*radiusPixels*ring;
+    float sampleDistance=viewDistance(uv+offset);
+    float delta=center-sampleDistance;
+    float range=max(0.0,1.0-abs(delta)/radius);
+    occlusion+=step(environment.sceneAoDetail.x,delta)*range;
+  }
+  float visibility=clamp(1.0-occlusion*(environment.sceneAo.z/12.0),0.0,1.0);
+  return pow(visibility,max(environment.sceneAo.w,0.1));
+}
 
 vec3 sampleFxaa(vec2 uv, out vec3 unfiltered, out vec3 crossAverage) {
   vec2 px = post.texelFlags.xy;
@@ -101,6 +161,12 @@ vec3 linearToSrgb(vec3 color) {
              greaterThan(color, vec3(0.0031308)));
 }
 
+vec3 toneMap(vec3 color) {
+  color=max(color*environment.parameters.x*exp2(environment.scenePost.x),vec3(0.0));
+  if(environment.scenePost.y<0.5) return color/(vec3(1.0)+color);
+  return clamp((color*(2.51*color+.03))/(color*(2.43*color+.59)+.14),0.0,1.0);
+}
+
 #if AETHER_TEMPORAL
 mat3 cameraRotation(float yaw, float pitch) {
   float cy=cos(yaw), sy=sin(yaw), cp=cos(pitch), sp=sin(pitch);
@@ -166,13 +232,23 @@ vec3 temporalResolve(vec2 sourceUv, vec3 current, vec3 unfiltered, vec3 crossAve
 }
 #endif
 
+float filmGrainNoise(vec2 pixel) {
+  // A câmera e o jitter variam a semente sem exigir outro campo no ABI de
+  // push constants. Sem TAA o padrão permanece estável quando a vista para,
+  // evitando cintilação gratuita em aparelhos de atualização baixa.
+  vec2 seed=post.currentCamera.xy*37.0+post.currentCamera.zw*8192.0;
+  return fract(sin(dot(pixel+seed,vec2(12.9898,78.233)))*43758.5453);
+}
+
 void main() {
   vec2 sourceUv = clampSourceUv(vUv * post.sourceTransform.xy);
   vec3 unfiltered;
   vec3 crossAverage;
   vec3 center = sampleFxaa(sourceUv, unfiltered, crossAverage);
+  center *= screenSpaceAmbientOcclusion(sourceUv);
   vec3 color = center + bloomNeighborhood(sourceUv);
   if (post.bloom.z > 0.0) color += (unfiltered-crossAverage)*post.bloom.z;
+  if(environment.scenePost.z>0.5) color=toneMap(color);
   float gray = luma(color);
   color = mix(vec3(gray), color, post.grade.y);
   color = (color - 0.5) * post.grade.x + 0.5;
@@ -185,5 +261,10 @@ void main() {
 #if AETHER_TEMPORAL
   color = temporalResolve(sourceUv, color, unfiltered, crossAverage);
 #endif
+  float grainIntensity=environment.sceneAoDetail.y;
+  if(grainIntensity>0.0) {
+    float response=0.35+0.65*(1.0-abs(luma(color)*2.0-1.0));
+    color+=(filmGrainNoise(gl_FragCoord.xy)-0.5)*grainIntensity*response;
+  }
   outColor = vec4(max(color, vec3(0.0)), 1.0);
 }

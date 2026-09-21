@@ -19,6 +19,7 @@
 #include "core/base.h"
 #include "editor/editor_play_scene.h"
 #include "runtime/scene_lights.h"
+#include "runtime/scene_environment.h"
 #include "runtime/lod_groups.h"
 #include "editor/editor_character.h"
 #include "editor/editor_scene_camera.h"
@@ -34,6 +35,7 @@
 #include "resources/gltf_import.h"
 #include "resources/import_node_map.h"
 #include "resources/material_asset.h"
+#include "resources/environment_profile.h"
 #include "resources/texture_budget.h"
 #include "resources/import_profile.h"
 #include "resources/glb_images.h"
@@ -56,7 +58,7 @@
 
 namespace ae::editor {
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -291,6 +293,53 @@ private:
 public:
 
   // Reconstrói a lista de desenho e as instâncias do frame.
+  // Vistas salvas (G6-A): comparar duas versões de um cenário exige repetir o
+  // MESMO enquadramento. A vista guarda a câmera de órbita e a lente, entra no
+  // documento e tem Desfazer como qualquer edição autoral.
+  runtime::SceneView currentSceneView(std::string_view name) const {
+    runtime::SceneView view;
+    view.name = std::string(name);
+    std::copy(camera_.target, camera_.target + 3, view.target);
+    view.distance = camera_.distance;
+    view.yaw = camera_.yaw;
+    view.pitch = camera_.pitch;
+    view.verticalFov = projection_.verticalFieldOfViewRadians;
+    return view;
+  }
+  bool saveSceneView(std::string_view name) {
+    if (isPlaying() || history_.isOpen()) return false;
+    auto views = document_.views();
+    if (!views.replace(currentSceneView(name))) return false;
+    return history_.setViews(document_, views);
+  }
+  bool applySceneView(u32 index) {
+    const auto *view = document_.views().at(index);
+    if (!view) return false;
+    finishCameraGesture(false);
+    std::copy(view->target, view->target + 3, camera_.target);
+    camera_.distance = view->distance;
+    camera_.yaw = view->yaw;
+    camera_.pitch = view->pitch;
+    // Lente zero é "a do editor": uma vista antiga não impõe um campo de visão
+    // que ela nunca guardou.
+    if (view->verticalFov > 0) projection_.verticalFieldOfViewRadians = view->verticalFov;
+    state_.viewSelected = index;
+    state_.status = "Vista \"" + view->name + "\"";
+    return true;
+  }
+  bool renameSceneView(u32 index, std::string_view name) {
+    if (isPlaying() || history_.isOpen()) return false;
+    auto views = document_.views();
+    if (!views.rename(index, name)) return false;
+    return history_.setViews(document_, views);
+  }
+  bool deleteSceneView(u32 index) {
+    if (isPlaying() || history_.isOpen()) return false;
+    auto views = document_.views();
+    if (!views.remove(index)) return false;
+    if (state_.viewSelected >= views.count()) state_.viewSelected = views.count() ? views.count() - 1 : 0;
+    return history_.setViews(document_, views);
+  }
   void update();
   // A linha "Na vista" do LOD Group selecionado, refeita a cada atualização.
   void refreshLodStatus();
@@ -497,7 +546,8 @@ public:
     draft.scale=state_.importScale;draft.maximumTextureDimension=state_.importTextureDimension;
     draft.normals=state_.importNormals;draft.normalWeighting=state_.importNormalWeighting;
     draft.smoothingAngle=state_.importSmoothingAngle;draft.tangents=state_.importTangents;
-    draft.importCameras=state_.importCameras;draft.excludedNodes=state_.importExcludedNodes;
+    draft.importCameras=state_.importCameras;draft.importLights=state_.importLights;
+    draft.excludedNodes=state_.importExcludedNodes;
     return draft;
   }
   resources::GltfImportLimits importLimitsFor(const resources::ImportProfile &profile) const {
@@ -529,6 +579,13 @@ public:
   // Cria `Materiais/<nome>.material` com os valores efetivos do slot e liga o
   // slot a ele. Devolve a identidade, ou inválida com `diagnostic`.
   resources::AssetGuid createMaterialFromSlot(EditorEntityId id,u32 slot,std::string &diagnostic);
+  const std::vector<resources::EnvironmentProfile> &environmentProfiles() const {return environmentProfiles_;}
+  const resources::EnvironmentProfile *findEnvironmentProfile(const resources::AssetGuid &guid) const {
+    for(const auto &profile:environmentProfiles_) if(profile.guid==guid) return &profile;
+    return nullptr;
+  }
+  resources::AssetGuid createEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic);
+  bool updateEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic);
   // Liga o slot a um material do projeto; identidade inválida volta à fonte.
   bool assignSlotMaterial(EditorEntityId id,u32 slot,const resources::AssetGuid &material);
   bool repairComponentResource(EditorEntityId id,u64 instance,resources::AssetGuid from,resources::AssetGuid to,
@@ -666,6 +723,7 @@ public:
   bool loadAssets(std::string_view text) {
     if(!resources::AssetRegistry::deserialize(text, assets_)) return false;
     loadMaterialAssets();
+    loadEnvironmentProfiles();
     return true;
   }
   bool extractMap(std::vector<renderer::MapDrawState> &out) const {
@@ -700,14 +758,27 @@ public:
     const auto &graph=isPlaying()&&playScene_.active()?playScene_.document():document_;
     // Uma troca animada muda a cobertura a cada quadro até terminar.
     if(runtime::lodCrossFadeRunning(lodClock_,lastWallSeconds_)) return true;
-    auto probe=lodClock_;
-    return runtime::lodObjectStates(graph,lodView(),&probe,lastWallSeconds_)!=lodStates_;
+    // A própria consulta inicia a troca quando a câmera cruza o limite. Esse
+    // primeiro quadro ainda tem fator zero e pode ser visualmente idêntico ao
+    // anterior; por isso o relógio real precisa reter a transição e o estado
+    // "correndo" também conta como mudança. Copiar o relógio aqui descartava
+    // o início, então a cena não era republicada nos quadros seguintes.
+    const auto next=runtime::lodObjectStates(graph,lodView(),&lodClock_,lastWallSeconds_);
+    return runtime::lodCrossFadeRunning(lodClock_,lastWallSeconds_)||next!=lodStates_;
   }
   // As luzes saem do MESMO grafo que a câmera e os desenhos: em execução, o
   // mundo de Play; fora dele, o documento autoral. É o que faz um script mover
   // ou apagar uma luz e a tela mudar, sem nenhum caminho separado de execução.
   bool extractLights(std::vector<renderer::SceneLight> &out) const {
     return runtime::collectSceneLights(isPlaying() && playScene_.active() ? playScene_.document() : document_, out);
+  }
+  bool extractEnvironment(renderer::SceneEnvironment &out) const {
+    return runtime::collectSceneEnvironment(
+        isPlaying() && playScene_.active() ? playScene_.document() : document_, out,environmentProfiles_);
+  }
+  bool extractEnvironmentVolumes(std::vector<renderer::SceneEnvironmentVolume> &out) const {
+    return runtime::collectSceneEnvironmentVolumes(
+        isPlaying() && playScene_.active() ? playScene_.document() : document_, out,environmentProfiles_);
   }
   SceneCameraPose sceneCameraPose() const {
     return resolveSceneCamera(isPlaying()&&playScene_.active()?playScene_.document():document_);
@@ -849,6 +920,10 @@ private:
     std::vector<std::string> materialNames;
     // Texturas decodificadas da fonte; `materials[i].textureIndices` indexa aqui.
     std::vector<renderer::SharedAuthoringTexture> textures;
+    // Faixa que veio da fonte. Recursos derivados compartilham os vértices e
+    // entram depois dela; regenerar começa sempre daqui.
+    usize sourceIndexCount = 0;
+    usize sourceDrawCount = 0;
   };
   struct ImportedLibrary {
     std::vector<u8> vertices;
@@ -882,6 +957,13 @@ private:
                    resources::ImportAmbiguityPolicy policy, std::vector<ImportedSource> &candidateSources,
                    resources::AssetRegistry &nextAssets, ModelImportReport &report, StagedSource &staged,
                    std::span<const resources::AssetGuid> excludedNodes);
+  bool applyCollisionMeshRecipes(ImportedSource &source, const resources::ImportProfile &profile,
+                                 std::string &diagnostic) const;
+  bool generateCollisionMesh(EditorEntityId entity, u64 componentInstance, u8 trianglePercent,
+                              float maximumError, std::string &diagnostic);
+  bool applyCollisionMeshEdit(const resources::AssetGuid &source,const resources::ImportProfile &profile,
+                              EditorEntityId entity,const EditorEntity &values,std::string &diagnostic);
+  void refreshCollisionMeshDraft();
   void reconcileStagedSource(const StagedSource &staged, ModelImportReport &report);
   std::vector<ImportedSource> importedSources_;
   resources::GltfImportLimits importLimits_{};
@@ -895,6 +977,7 @@ private:
   void refreshImportLinkView();
   u64 importInstanceCounter_=0;
   std::vector<resources::MaterialAsset> materials_;
+  std::vector<resources::EnvironmentProfile> environmentProfiles_;
   std::vector<ProjectTexture> textures_;
   struct DecodedProjectTexture {
     resources::AssetGuid guid;
@@ -939,6 +1022,7 @@ private:
   bool appearanceChanged_=false;
   void publishMaterialLibrary();
   void loadMaterialAssets();
+  void loadEnvironmentProfiles();
   void loadTextureAssets();
   // Textura do projeto decodificada com mips para um espaço de cor, em cache
   // enquanto o conteúdo registrado não muda. Nula quando o arquivo não abre.
@@ -951,6 +1035,9 @@ private:
   void refreshMaterialSlotView();
   bool writeMaterialAsset(const resources::MaterialAsset &material,const std::string &path,std::string &diagnostic);
   bool commitSharedMaterial(const resources::MaterialAsset &candidate,std::string &diagnostic,bool recordHistory=true);
+  bool writeEnvironmentProfile(const resources::EnvironmentProfile &profile,const std::string &path,std::string &diagnostic);
+  bool commitEnvironmentProfile(const resources::EnvironmentProfile &candidate,std::string &diagnostic,bool recordHistory=true);
+  void synchronizeEnvironmentProfile(const resources::EnvironmentProfile &profile);
   double codeCheckpointAt_=0;
   // A impressão digital do pacote base, guardada na importação inicial: é ela
   // que deriva a identidade das primitivas internas em toda adoção posterior.

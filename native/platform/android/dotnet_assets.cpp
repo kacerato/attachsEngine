@@ -23,7 +23,7 @@ int readAsset(void *context, void *buffer, size_t capacity) {
 
 // mkdir -p mínimo: cria cada segmento do caminho, ignorando EEXIST — os
 // manifestos de asset têm profundidade fixa e pequena (shared/Microsoft.
-// NETCore.App/8.0.27/...), então uma varredura simples por '/' é suficiente,
+// NETCore.App/<versão>/...), então uma varredura simples por '/' é suficiente,
 // sem precisar de uma lib de path.
 bool makeDirectoriesRecursive(char *path) {
   for (char *cursor = path + 1; *cursor != '\0'; ++cursor) {

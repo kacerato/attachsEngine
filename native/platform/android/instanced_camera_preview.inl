@@ -1,31 +1,40 @@
 // Included inside the renderer namespace; keeps frame ABI in one translation unit.
 void InstancedRenderer::destroyCameraPreview() {
   uiRenderer_.setCameraPreview(VK_NULL_HANDLE);
+  if(previewPostFramebuffer_) vkDestroyFramebuffer(device_,previewPostFramebuffer_,nullptr);
   if(previewFramebuffer_) vkDestroyFramebuffer(device_,previewFramebuffer_,nullptr);
+  if(previewPostPool_) vkDestroyDescriptorPool(device_,previewPostPool_,nullptr);
   if(previewPool_) vkDestroyDescriptorPool(device_,previewPool_,nullptr);
-  previewFramebuffer_=VK_NULL_HANDLE;previewPool_=VK_NULL_HANDLE;previewSet_=VK_NULL_HANDLE;
-  previewUniform_.reset();previewColor_.reset();previewDepth_.reset();
+  previewPostFramebuffer_=VK_NULL_HANDLE;previewFramebuffer_=VK_NULL_HANDLE;
+  previewPostPool_=VK_NULL_HANDLE;previewPostSet_=VK_NULL_HANDLE;
+  previewPool_=VK_NULL_HANDLE;previewSet_=VK_NULL_HANDLE;
+  previewUniform_.reset();previewSceneColor_.reset();previewColor_.reset();previewDepth_.reset();
 }
 bool InstancedRenderer::prepareCameraPreview() {
   if(!pendingPreview_.valid() || pendingPreview_.width>4096 || pendingPreview_.height>4096 ||
-     !dirtRoadPreview_ || !environmentUniform_.isReady() || !previewRenderPass_) return false;
+     !dirtRoadPreview_ || !environmentUniform_.isReady() || !previewRenderPass_ ||
+     !previewPostRenderPass_ || !postPipeline_ || !postSetLayout_) return false;
   if(!previewFramebuffer_ || previewColor_.width()!=pendingPreview_.width || previewColor_.height()!=pendingPreview_.height) {
     destroyCameraPreview();
-    rhi::ImageDesc color{};color.width=pendingPreview_.width;color.height=pendingPreview_.height;
-    color.format=swapchain_->imageFormat();color.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
-    color.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;color.memoryClass=rhi::MemoryClass::RenderTarget;
-    if(!memoryAllocator_->createImage(color,&previewColor_)) return false;
-    auto depth=color;depth.format=depthFormat_;depth.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    rhi::ImageDesc source{};source.width=pendingPreview_.width;source.height=pendingPreview_.height;
+    source.format=sceneColorFormat_;source.usage=VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
+    source.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;source.memoryClass=rhi::MemoryClass::RenderTarget;
+    if(!memoryAllocator_->createImage(source,&previewSceneColor_)) return false;
+    auto color=source;color.format=swapchain_->imageFormat();
+    if(!memoryAllocator_->createImage(color,&previewColor_)) {destroyCameraPreview();return false;}
+    auto depth=source;depth.format=depthFormat_;depth.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
     if(waterSubpassActive_) depth.usage|=VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-    if(frameAttachmentPolicy_.depthSampled) depth.usage|=VK_IMAGE_USAGE_SAMPLED_BIT;
     depth.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;
     if(hasStencil(depthFormat_)) depth.aspectMask|=VK_IMAGE_ASPECT_STENCIL_BIT;
-    if(!memoryAllocator_->createImage(depth,&previewDepth_)) return false;
-    VkImageView attachments[]{previewColor_.view(),previewDepth_.view()};
+    if(!memoryAllocator_->createImage(depth,&previewDepth_)) {destroyCameraPreview();return false;}
+    VkImageView attachments[]{previewSceneColor_.view(),previewDepth_.view()};
     VkFramebufferCreateInfo fb{};fb.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     fb.renderPass=previewRenderPass_;fb.attachmentCount=2;fb.pAttachments=attachments;
-    fb.width=color.width;fb.height=color.height;fb.layers=1;
-    if(vkCreateFramebuffer(device_,&fb,nullptr,&previewFramebuffer_)!=VK_SUCCESS) return false;
+    fb.width=source.width;fb.height=source.height;fb.layers=1;
+    if(vkCreateFramebuffer(device_,&fb,nullptr,&previewFramebuffer_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
+    const VkImageView finalAttachment=previewColor_.view();
+    fb.renderPass=previewPostRenderPass_;fb.attachmentCount=1;fb.pAttachments=&finalAttachment;
+    if(vkCreateFramebuffer(device_,&fb,nullptr,&previewPostFramebuffer_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
     rhi::BufferDesc buffer{};buffer.sizeBytes=sizeof(DirtRoadFrameUniform);
     buffer.usage=VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;buffer.cpuAccess=rhi::CpuAccess::SequentialWrite;buffer.preferDeviceMemory=false;
     if(!memoryAllocator_->createBuffer(buffer,&previewUniform_)) {destroyCameraPreview();return false;}
@@ -37,6 +46,29 @@ bool InstancedRenderer::prepareCameraPreview() {
     VkDescriptorSetAllocateInfo allocate{};allocate.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocate.descriptorPool=previewPool_;allocate.descriptorSetCount=1;allocate.pSetLayouts=&environmentSetLayout_;
     if(vkAllocateDescriptorSets(device_,&allocate,&previewSet_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
+
+    VkDescriptorPoolSize postSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,3},
+                                     {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1}};
+    pool.maxSets=1;pool.poolSizeCount=2;pool.pPoolSizes=postSizes;
+    if(vkCreateDescriptorPool(device_,&pool,nullptr,&previewPostPool_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
+    allocate.descriptorPool=previewPostPool_;allocate.pSetLayouts=&postSetLayout_;
+    if(vkAllocateDescriptorSets(device_,&allocate,&previewPostSet_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
+    VkDescriptorImageInfo postImages[3]{
+      {postSampler_.handle(),previewSceneColor_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+      {postSampler_.handle(),previewSceneColor_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+      {postDepthSampler_.handle(),previewDepth_.view(),VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL}};
+    VkDescriptorBufferInfo postBuffer{previewUniform_.handle(),0,sizeof(DirtRoadFrameUniform)};
+    VkWriteDescriptorSet postWrites[4]{};
+    for(u32 index=0;index<3;++index) {
+      postWrites[index].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+      postWrites[index].dstSet=previewPostSet_;postWrites[index].dstBinding=index;
+      postWrites[index].descriptorCount=1;postWrites[index].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+      postWrites[index].pImageInfo=&postImages[index];
+    }
+    postWrites[3].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;postWrites[3].dstSet=previewPostSet_;
+    postWrites[3].dstBinding=3;postWrites[3].descriptorCount=1;
+    postWrites[3].descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;postWrites[3].pBufferInfo=&postBuffer;
+    vkUpdateDescriptorSets(device_,4,postWrites,0,nullptr);
     uiRenderer_.setCameraPreview(previewColor_.view());
   }
   std::vector<VkCopyDescriptorSet> copies;
@@ -57,6 +89,9 @@ bool InstancedRenderer::prepareCameraPreview() {
   writes[1].pBufferInfo=nullptr;writes[1].pImageInfo=&depth;
   vkUpdateDescriptorSets(device_,waterSubpassActive_?2u:1u,writes,0,nullptr);
   auto frame=*static_cast<const DirtRoadFrameUniform*>(environmentUniform_.mappedData());
+  // O primeiro alvo guarda a cena linear/HDR. A segunda etapa usa este mesmo
+  // UBO para neblina, AO, bloom, gradação e tonemap.
+  frame.scenePost[2]=hdrSceneColor_?1.0f:0.0f;
   const auto &f=pendingPreview_.frustum;const auto basis=renderer::buildCameraViewBasis(f.yaw,f.pitch,f.roll);
   std::copy(basis.row0,basis.row0+3,frame.worldToViewRow0);std::copy(basis.row1,basis.row1+3,frame.worldToViewRow1);
   std::copy(basis.row2,basis.row2+3,frame.worldToViewRow2);
@@ -72,7 +107,7 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   std::copy(view.frustum.cameraPosition,view.frustum.cameraPosition+3,camera.position);
   camera.yaw=view.frustum.yaw;camera.pitch=view.frustum.pitch;camera.roll=view.frustum.roll;
   const renderer::HzbScreenTransform surfaceTransform{};
-  const bool encodeSrgb=previewColor_.format()!=VK_FORMAT_B8G8R8A8_SRGB && previewColor_.format()!=VK_FORMAT_R8G8B8A8_SRGB;
+  const bool encodeSrgb=false;
   VkMemoryBarrier before{};before.sType=VK_STRUCTURE_TYPE_MEMORY_BARRIER;
   before.srcAccessMask=VK_ACCESS_SHADER_READ_BIT;before.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
   vkCmdPipelineBarrier(commandBuffer_,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
@@ -179,5 +214,44 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   after.srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;after.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
   vkCmdPipelineBarrier(commandBuffer_,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
     0,1,&after,0,nullptr,0,nullptr);
+
+  VkRenderPassBeginInfo postBegin{};postBegin.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  postBegin.renderPass=previewPostRenderPass_;postBegin.framebuffer=previewPostFramebuffer_;
+  postBegin.renderArea.extent={view.width,view.height};
+  vkCmdBeginRenderPass(commandBuffer_,&postBegin,VK_SUBPASS_CONTENTS_INLINE);
+  vkCmdSetViewport(commandBuffer_,0,1,&viewport);vkCmdSetScissor(commandBuffer_,0,1,&scissor);
+  vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,postPipeline_);
+  vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,postPipelineLayout_,0,1,&previewPostSet_,0,nullptr);
+  PostPushConstants post{};
+  const bool authoredPost=sceneEnvironment_.active&&sceneEnvironment_.post;
+  post.texelFlags[0]=1.0f/view.width;post.texelFlags[1]=1.0f/view.height;
+  post.texelFlags[2]=(authoredPost?sceneEnvironment_.bloom:renderingPolicy_.post.bloom)?1.0f:0.0f;
+  post.texelFlags[3]=(renderingPolicy_.post.antiAliasing==renderer::AntiAliasingMode::Fxaa ||
+                      renderingPolicy_.post.antiAliasing==renderer::AntiAliasingMode::Temporal)?1.0f:0.0f;
+  post.bloom[0]=authoredPost?sceneEnvironment_.bloomThreshold:renderingPolicy_.post.bloomThreshold;
+  post.bloom[1]=authoredPost?sceneEnvironment_.bloomIntensity:renderingPolicy_.post.bloomIntensity;
+  post.bloom[2]=renderingPolicy_.post.sharpen;
+  post.bloom[3]=authoredPost?(sceneEnvironment_.vignette?sceneEnvironment_.vignetteIntensity:0.0f):
+      (renderingPolicy_.post.vignette?renderingPolicy_.post.vignetteIntensity:0.0f);
+  post.grade[0]=authoredPost?sceneEnvironment_.contrast:renderingPolicy_.post.contrast;
+  post.grade[1]=authoredPost?sceneEnvironment_.saturation:renderingPolicy_.post.saturation;
+  post.grade[2]=(previewColor_.format()==VK_FORMAT_B8G8R8A8_SRGB ||
+                 previewColor_.format()==VK_FORMAT_R8G8B8A8_SRGB)?0.0f:1.0f;
+  post.grade[3]=static_cast<float>(packSurfaceTransform(rhi::SurfaceTransform{}));
+  post.sourceTransform[0]=post.sourceTransform[1]=1.0f;
+  post.sourceTransform[2]=renderer::isOrthographic(view.frustum)?-1.0f:1.0f/view.frustum.tangentHalfVertical;
+  post.sourceTransform[3]=static_cast<float>(view.width)/view.height;
+  post.currentCamera[0]=post.previousCamera[0]=camera.yaw;
+  post.currentCamera[1]=post.previousCamera[1]=camera.pitch;
+  std::memcpy(post.currentPositionNear,camera.position,sizeof(camera.position));
+  std::memcpy(post.previousPositionFar,camera.position,sizeof(camera.position));
+  post.currentPositionNear[3]=view.frustum.nearPlane;post.previousPositionFar[3]=view.frustum.farPlane;
+  vkCmdPushConstants(commandBuffer_,postPipelineLayout_,VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(post),&post);
+  vkCmdDraw(commandBuffer_,3,1,0,0);
+  vkCmdEndRenderPass(commandBuffer_);
+  VkMemoryBarrier postAfter{};postAfter.sType=VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+  postAfter.srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;postAfter.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+  vkCmdPipelineBarrier(commandBuffer_,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+    0,1,&postAfter,0,nullptr,0,nullptr);
   submittedPreview_=view;pendingPreview_={};
 }

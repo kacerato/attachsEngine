@@ -1,6 +1,7 @@
 #pragma once
 #include "editor/editor_component_catalog.h"
 #include "editor/editor_collider_geometry.h"
+#include "editor/editor_map_scene.h"
 #include "editor/editor_scene_camera.h"
 
 namespace ae::editor {
@@ -16,7 +17,8 @@ struct ComponentVisual {
   float origin[3]{};
   std::vector<ComponentVisualSegment> segments;
 };
-using ComponentVisualBuilder=void (*)(const scene::ComponentValue &,const float *,float,bool,ComponentVisual &);
+using ComponentVisualBuilder=void (*)(const scene::ComponentValue &,const EditorEntity &,const EditorMapScene *,
+                                      const float *,float,bool,ComponentVisual &);
 struct ComponentVisualProvider {const scene::ComponentType *type;ui::UiIcon icon;bool marker;ComponentVisualBuilder build;};
 namespace visual_detail {
 inline void segment(ComponentVisual &out,const float *world,const float *a,const float *b) {
@@ -41,7 +43,8 @@ inline void ring(ComponentVisual &out,const float *world,float radius,float dept
 inline bool opticalFrame(const float *world,float *pose) {
   return editorOpticalFrame(world,pose);
 }
-inline void camera(const scene::ComponentValue &value,const float *world,float aspect,bool detail,ComponentVisual &out) {
+inline void camera(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
+                   float aspect,bool detail,ComponentVisual &out) {
   const auto &c=static_cast<const scene::Camera &>(value);out.enabled=c.enabled;
   if(!detail || !c.valid()) return;
   float pose[16];if(!opticalFrame(world,pose)) return;
@@ -63,7 +66,8 @@ inline void camera(const scene::ComponentValue &value,const float *world,float a
   const float a[3]{-.2f,.18f,0},b[3]{.2f,.18f,0},tip[3]{0,.38f,0};
   segment(out,pose,a,b);segment(out,pose,b,tip);segment(out,pose,tip,a);
 }
-inline void light(const scene::ComponentValue &value,const float *world,float,bool detail,ComponentVisual &out) {
+inline void light(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
+                  float,bool detail,ComponentVisual &out) {
   const auto &c=static_cast<const scene::Light &>(value);out.enabled=c.enabled;
   if(!detail || !c.valid()) return;
   float pose[16];if(!opticalFrame(world,pose)) return;
@@ -83,23 +87,96 @@ inline void light(const scene::ComponentValue &value,const float *world,float,bo
     }
   }
 }
-inline void collider(const scene::ComponentValue &value,const float *world,float,bool detail,ComponentVisual &out) {
+inline void multiply(const float *a,const float *b,float *out) {
+  float value[16]{};
+  for(u32 col=0;col<4;++col) for(u32 row=0;row<4;++row)
+    for(u32 k=0;k<4;++k) value[col*4+row]+=a[k*4+row]*b[col*4+k];
+  std::copy(value,value+16,out);
+}
+inline std::vector<u32> meshColliderSlots(const scene::Collider &c,const EditorEntity &entity,
+                                          const EditorMapScene &resources) {
+  std::vector<u32> slots;
+  if(c.collisionMesh.valid()) {
+    if(const auto slot=resources.assetSlot(c.collisionMesh)) slots.push_back(slot);
+  } else if(const auto *render=meshRenderer(entity)) {
+    for(u32 index=0;index<render->slotCount();++index) {
+      const auto slot=render->slotMesh(index);
+      if(slot && std::find(slots.begin(),slots.end(),slot)==slots.end()) slots.push_back(slot);
+    }
+  }
+  return slots;
+}
+inline void meshCollider(const scene::Collider &c,const EditorEntity &entity,const EditorMapScene &resources,
+                          const float *pose,ComponentVisual &out) {
+  constexpr usize MaximumMeshSegments=2400;
+  const auto slots=meshColliderSlots(c,entity,resources);
+  if(c.convex) {
+    EditorMapScene::CollisionHullPreview preview;
+    if(resources.collisionHullPreview(slots,c.hullTolerance,preview)) {
+      const auto remaining=MaximumMeshSegments/3;
+      const usize stride=std::max<usize>(1,(preview.triangles.size()+remaining-1)/remaining);
+      for(usize triangle=0;triangle<preview.triangles.size() && out.segments.size()+3<=MaximumMeshSegments;triangle+=stride) {
+        const auto &points=preview.triangles[triangle];
+        for(u32 edge=0;edge<3;++edge)
+          segment(out,pose,points.data()+edge*3,points.data()+((edge+1)%3)*3);
+      }
+    }
+    return;
+  }
+  for(const auto slot:slots) {
+    std::span<const EditorPickMesh::Triangle> triangles;float relative[16],meshPose[16];
+    if(!resources.localGeometry(slot,triangles,relative)) continue;
+    multiply(pose,relative,meshPose);
+    const auto remaining=(MaximumMeshSegments-out.segments.size())/3;
+    if(!remaining) break;
+    const usize stride=std::max<usize>(1,(triangles.size()+remaining-1)/remaining);
+    for(usize triangle=0;triangle<triangles.size() && out.segments.size()+3<=MaximumMeshSegments;triangle+=stride) {
+      const auto &points=triangles[triangle];
+      for(u32 edge=0;edge<3;++edge) {
+        const float *a=points.data()+edge*3,*b=points.data()+((edge+1)%3)*3;
+        segment(out,meshPose,a,b);
+      }
+    }
+  }
+}
+inline void collider(const scene::ComponentValue &value,const EditorEntity &entity,const EditorMapScene *resources,
+                     const float *world,float,bool detail,ComponentVisual &out) {
   const auto &c=static_cast<const scene::Collider &>(value);out.enabled=c.enabled;if(!detail||!c.valid()) return;
+  if(c.shape==scene::ColliderShape::Mesh) {
+    // Mesh Collider usa a pose do objeto; centro/rotação pertencem somente às
+    // primitivas e podem conter valores antigos depois de trocar a Forma.
+    if(resources) meshCollider(c,entity,*resources,world,out);
+    return;
+  }
   EditorTransform t;t.position[0]=c.centerX;t.position[1]=c.centerY;t.position[2]=c.centerZ;
   t.rotationDegrees[0]=c.rotationX;t.rotationDegrees[1]=c.rotationY;t.rotationDegrees[2]=c.rotationZ;
-  float local[16],pose[16]{};editorTransformMatrix(t,local);
-  for(u32 col=0;col<4;++col) for(u32 row=0;row<4;++row)
-    for(u32 k=0;k<4;++k) pose[col*4+row]+=world[k*4+row]*local[col*4+k];
+  float local[16],pose[16];editorTransformMatrix(t,local);multiply(world,local,pose);
   editorColliderSegments(c,[&](const auto &a,const auto &b) {const float p[3]{a[0],a[1],a[2]},q[3]{b[0],b[1],b[2]};segment(out,pose,p,q);});
 }
+inline void environment(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
+                        float,bool detail,ComponentVisual &out) {
+  const auto &environment=static_cast<const scene::Environment&>(value);
+  out.enabled=environment.values.active;
+  if(!detail||!environment.valid()||environment.shape==renderer::EnvironmentVolumeShape::Global) return;
+  if(environment.shape==renderer::EnvironmentVolumeShape::Sphere) {
+    for(u32 axis=0;axis<3;++axis) ring(out,world,environment.sphereRadius,0,axis);
+    return;
+  }
+  float corners[8][3];
+  for(u32 i=0;i<8;++i) for(u32 axis=0;axis<3;++axis)
+    corners[i][axis]=((i>>axis)&1?1.f:-1.f)*environment.boxSize[axis]*.5f;
+  constexpr u32 edges[12][2]{{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
+  for(const auto &edge:edges) segment(out,world,corners[edge[0]],corners[edge[1]]);
 }
-inline const std::array<ComponentVisualProvider,3> componentVisualProviders{{
+}
+inline const std::array<ComponentVisualProvider,4> componentVisualProviders{{
   {&scene::Camera::descriptor,ui::UiIcon::EditorAuthorCamera,true,visual_detail::camera},
   {&scene::Light::descriptor,ui::UiIcon::EditorAuthorSun,true,visual_detail::light},
-  {&scene::Collider::descriptor,ui::UiIcon::ComponentCollider,false,visual_detail::collider}
+  {&scene::Collider::descriptor,ui::UiIcon::ComponentCollider,false,visual_detail::collider},
+  {&scene::Environment::descriptor,ui::UiIcon::EditorAuthorObject,false,visual_detail::environment}
 }};
 inline std::vector<ComponentVisual> collectComponentVisuals(const EditorDocument &document,
-    EditorEntityId selected,float aspect) {
+    EditorEntityId selected,float aspect,const EditorMapScene *resources=nullptr) {
   std::vector<ComponentVisual> result;std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
   for(auto id:ids) {
     const auto *entity=document.find(id);if(!entity||id==document.root()) continue;
@@ -113,7 +190,7 @@ inline std::vector<ComponentVisual> collectComponentVisuals(const EditorDocument
       for(const auto &provider:componentVisualProviders) if(&value->type()==provider.type && (provider.marker||id==selected)) {
         ComponentVisual v;v.entity=id;v.instance=value->instanceId();v.icon=provider.icon;v.marker=provider.marker;
         if(v.marker) v.markerIndex=markerIndex++;
-        std::copy(world+12,world+15,v.origin);provider.build(*value,world,aspect,id==selected,v);
+        std::copy(world+12,world+15,v.origin);provider.build(*value,*entity,resources,world,aspect,id==selected,v);
         result.push_back(std::move(v));break;
       }
     }

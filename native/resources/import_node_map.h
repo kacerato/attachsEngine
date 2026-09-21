@@ -52,6 +52,13 @@ struct ImportNodeRecord {
   bool camera = false;
   bool cameraOrthographic = false;
   float cameraVerticalFov = 60, cameraNear = .1f, cameraFar = 0, cameraHalfHeight = 5;
+  // KHR_lights_punctual transportado com a identidade do nó. A cena cria o
+  // componente somente quando cria o objeto, preservando remoções e ajustes
+  // locais em reimportações posteriores.
+  bool light = false;
+  u32 lightKind = 1;
+  float lightColor[3]{1, 1, 1};
+  float lightIntensity = 1, lightRange = 1000, lightInnerAngle = 0, lightOuterAngle = 45;
   // O perfil da fonte pediu para não trazer este nó — ou um ancestral dele —
   // para a cena.
   //
@@ -65,7 +72,7 @@ struct ImportNodeRecord {
 };
 
 struct ImportNodeMap {
-  static constexpr u32 FormatVersion = 3; // 2: camera do no; 3: no excluido pelo perfil
+  static constexpr u32 FormatVersion = 4; // 4: luz KHR_lights_punctual do nó
   static constexpr usize MaximumNodes = 65536;
   u32 revision = 0;
   std::string sourceHash;

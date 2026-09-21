@@ -18,6 +18,7 @@
 #include "editor/editor_component_visuals.h"
 #include "editor/editor_camera_handles.h"
 #include "editor/editor_import_reconcile.h"
+#include "runtime/scene_environment.h"
 #include <bit>
 
 #include "ui/ui_icon_id.h"
@@ -255,7 +256,7 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
 
   if(state.workspace==EditorWorkspace::Scene && state.showComponentVisuals && !state.cameraViewEntity) {
     const float aspect=state.view->frustum.tangentHalfHorizontal/state.view->frustum.tangentHalfVertical;
-    const auto visuals=collectComponentVisuals(*state.document,state.selection,aspect);
+    const auto visuals=collectComponentVisuals(*state.document,state.selection,aspect,state.resources);
     for(const auto &v:visuals) {
       const auto color=v.enabled?theme.color.accent:theme.color.textMuted;
       for(const auto &line:v.segments) {
@@ -1067,23 +1068,39 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     for(const auto &p:properties) if(p.presentation.isVisible(*component)&&!p.presentation.group.empty() &&
         std::find(groups.begin(),groups.end(),p.presentation.group)==groups.end()) groups.push_back(p.presentation.group);
   };
-  collectGroups(entry.type->numbers);collectGroups(entry.type->booleans);collectGroups(entry.type->enums);collectGroups(entry.type->references);
+  collectGroups(entry.type->numbers);collectGroups(entry.type->booleans);collectGroups(entry.type->enums);
+  collectGroups(entry.type->references);collectGroups(entry.type->resourceBindings);
   std::string_view group=builder.state.componentGroup;
   if(!groups.empty() && std::find(groups.begin(),groups.end(),group)==groups.end()) group=groups.front();
   if(groups.size()>1) {
-    auto tabs=takeTop(content,36);builder.list.addRect(tabs,theme.color.silhouette,10);
-    const float w=tabs.width/static_cast<float>(groups.size());
-    for(u32 i=0;i<groups.size();++i) {
-      auto tab=deflate(takeLeft(tabs,w),UiInsets::all(3));const bool active=group==groups[i];
-      if(active) {builder.list.addRect(tab,theme.color.raised,8);builder.list.addRect({tab.x+9,tab.bottom()-2,std::max(0.f,tab.width-18),2},theme.color.accent,1);}
-      builder.label(tab,groups[i],active?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
-      builder.router.addRegion(tab,widgetId(EditorWidget::ComponentGroupBase)+i);
+    // Componentes extensos (Ambiente, materiais futuros) não espremem seis
+    // nomes em uma faixa ilegível. A mesma navegação vira uma grade estável de
+    // até quatro abas por linha, preservando IDs e área de toque.
+    constexpr u32 maximumColumns=4;
+    const u32 rows=(static_cast<u32>(groups.size())+maximumColumns-1)/maximumColumns;
+    auto tabs=takeTop(content,36.0f*static_cast<float>(rows));
+    builder.list.addRect(tabs,theme.color.silhouette,10);
+    u32 first=0;
+    for(u32 row=0;row<rows;++row) {
+      const u32 count=std::min(maximumColumns,static_cast<u32>(groups.size())-first);
+      UiRect rowTabs{tabs.x,tabs.y+36.0f*static_cast<float>(row),tabs.width,36};
+      const float width=rowTabs.width/static_cast<float>(count);
+      for(u32 column=0;column<count;++column) {
+        const u32 i=first+column;
+        auto tab=deflate(takeLeft(rowTabs,width),UiInsets::all(3));const bool active=group==groups[i];
+        if(active) {builder.list.addRect(tab,theme.color.raised,8);builder.list.addRect({tab.x+9,tab.bottom()-2,std::max(0.f,tab.width-18),2},theme.color.accent,1);}
+        builder.label(tab,groups[i],active?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        builder.router.addRegion(tab,widgetId(EditorWidget::ComponentGroupBase)+i);
+      }
+      first+=count;
     }
     takeTop(content,6);
   }
   const auto show=[&](const scene::PropertyPresentation &p) {return p.isVisible(*component)&&(p.group.empty()||p.group==group);};
-  struct Field {u32 kind,index;}; // 0 boolean, 1 enum, 2 number, 3 action, 4 object reference
+  struct Field {u32 kind,index,slot=0;}; // 0 bool, 1 enum, 2 number, 3 action, 4 object ref, 5 triple, 6 resource, 7 collider insight, 8 volume insight
   std::vector<Field> fields;
+  if(entry.type==&scene::Collider::descriptor && group=="Cozimento") fields.push_back({7,0});
+  if(entry.type==&scene::Environment::descriptor && group=="Volume") fields.push_back({8,0});
   if(!mesh || !builder.state.meshTab) {
     for(u32 i=0;i<entry.type->booleans.size();++i) if(show(entry.type->booleans[i].presentation)) fields.push_back({0,i});
     for(u32 i=0;i<entry.type->enums.size();++i) {
@@ -1092,6 +1109,15 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     }
   }
   for(u32 i=0;i<entry.type->references.size();++i) if(show(entry.type->references[i].presentation)) fields.push_back({4,i});
+  // O seletor de malha atende qualquer binding refletido de malha. Material e
+  // textura continuam nos editores próprios por slot, que também configuram
+  // superfície, canais e amostragem no mesmo contexto.
+  for(u32 i=0;i<entry.type->resourceBindings.size();++i) {
+    const auto &binding=entry.type->resourceBindings[i];
+    if(mesh||(binding.kind!=resources::AssetType::Mesh&&
+             binding.kind!=resources::AssetType::EnvironmentProfile)||!show(binding.presentation)) continue;
+    for(u32 slot=0;slot<binding.slotCount(*component);++slot) fields.push_back({6,i,slot});
+  }
   if(mesh && !builder.state.meshTab) {
     fields.push_back({3,widgetId(EditorWidget::MeshChoose)});
     fields.push_back({3,widgetId(EditorWidget::ToggleCastShadow)});
@@ -1130,7 +1156,39 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
   auto footer=pages>1?takeBottom(content,30):UiRect{};
   for(u32 row=page*perPage;row<fields.size() && row<(page+1)*perPage;++row) {
     const auto f=fields[row];auto slot=takeTop(content,std::min(40.0f,content.height));const auto hit=slot;
-    if(f.kind==0) {
+    if(f.kind==8) {
+      std::string summary="Influência indisponível";bool warning=true;
+      std::vector<renderer::SceneEnvironmentVolume> volumes;
+      if(builder.state.view && runtime::collectSceneEnvironmentVolumes(*builder.state.document,volumes))
+        for(const auto &volume:volumes) if(volume.stableId==entity.id) {
+          const float amount=renderer::sceneEnvironmentVolumeInfluence(volume,builder.state.view->frustum.cameraPosition);
+          summary="Na vista · "+std::to_string(static_cast<u32>(std::round(amount*100)))+"% · camada "+std::to_string(volume.layer);
+          warning=amount<=0;break;
+        }
+      const auto card=deflate(slot,UiInsets::all(2));builder.list.addRect(card,warning?withAlpha(theme.color.warning,.14f):withAlpha(theme.color.accent,.12f),8);
+      builder.list.addImage(centred(takeLeft(slot,26),18,18),static_cast<UiImageId>(warning?UiIcon::UiWarning:UiIcon::UiInfo),warning?theme.color.warning:theme.color.accent);
+      builder.label(slot,summary.c_str(),warning?theme.color.warning:theme.color.text,theme.type.caption);
+    } else if(f.kind==7) {
+      const auto &collider=static_cast<const scene::Collider &>(*component);
+      std::string summary;bool warning=false;
+      const auto slots=builder.state.resources?visual_detail::meshColliderSlots(collider,entity,*builder.state.resources):std::vector<u32>{};
+      if(collider.convex) {
+        EditorMapScene::CollisionHullPreview preview;
+        if(builder.state.resources&&builder.state.resources->collisionHullPreview(slots,collider.hullTolerance,preview))
+          summary="Casco Jolt · "+std::to_string(preview.vertexCount)+" vértices · "+std::to_string(preview.faceCount)+" faces";
+        else {warning=true;summary="Casco indisponível";if(!preview.diagnostic.empty()) summary+=" · "+std::string(preview.diagnostic);}
+      } else {
+        u32 triangles=0;
+        if(builder.state.resources) for(const auto assetSlot:slots)
+          if(const auto *asset=builder.state.resources->asset(assetSlot-1)) triangles+=asset->indexCount/3;
+        summary="Malha exata · "+std::to_string(triangles)+" tri · "+
+                (collider.weldVertices?"vértices soldados":"vértices separados");
+      }
+      const auto card=deflate(slot,UiInsets::all(2));builder.list.addRect(card,warning?withAlpha(theme.color.warning,.16f):theme.color.raised,8);
+      builder.list.addImage(centred(takeLeft(slot,26),18,18),static_cast<UiImageId>(warning?UiIcon::UiWarning:UiIcon::UiInfo),
+                            warning?theme.color.warning:theme.color.accent);
+      builder.label(slot,summary.c_str(),warning?theme.color.warning:theme.color.text,theme.type.caption);
+    } else if(f.kind==0) {
       const auto &property=entry.type->booleans[f.index];auto toggle=takeRight(slot,44);
       builder.label(slot,property.name,theme.color.textDim,theme.type.caption);
       builder.toggle(toggle,property.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(f.index<<8),property.presentation.isEditable(*component));
@@ -1202,6 +1260,25 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       if(!property.presentation.unit.empty()) builder.label(takeRight(slot,24),property.presentation.unit,theme.color.textMuted,theme.type.caption,UiAlign::Center);
       builder.label(slot,value,property.presentation.isEditable(*component)?theme.color.text:theme.color.textMuted,theme.type.numeric,UiAlign::Center);
       if(property.presentation.isEditable(*component)) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentNumberBase)+index+(f.index<<8));
+    } else if(f.kind==6) {
+      const auto &binding=entry.type->resourceBindings[f.index];const auto asset=binding.at(*component,f.slot);
+      std::string name=binding.name;
+      if(binding.slotCount(*component)>1) name+=" · "+std::to_string(f.slot+1);
+      builder.label(takeTop(slot,17),name.c_str(),theme.color.textMuted,theme.type.caption);
+      std::string value;
+      if(!asset.valid()) {
+        value=binding.kind==resources::AssetType::EnvironmentProfile?"Sem perfil":
+              binding.inheritable?"Herdar malha visual":"Sem recurso";
+      } else value=asset.text().substr(0,8);
+      if(const auto resolved=builder.state.resources?builder.state.resources->assetSlot(asset):0) {
+        const auto name=builder.state.resources->assetName(resolved-1);
+        value=name.empty()?"Malha "+std::to_string(resolved):std::string(name);
+      }
+      if(const auto *record=builder.state.assetRegistry?builder.state.assetRegistry->find(asset):nullptr) value=record->path;
+      builder.label(slot,value.c_str(),theme.color.text,theme.type.caption);
+      builder.list.addImage(centred(takeRight(slot,24),18,18),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.textDim);
+      if(binding.presentation.isEditable(*component))
+        builder.router.addRegion(hit,widgetId(EditorWidget::ComponentResourceBase)+index+(f.index<<8)+(f.slot<<16));
     } else if(f.index==widgetId(EditorWidget::MeshChoose)) {
       builder.list.addImage(centred(takeRight(slot,30),22,22),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.text);
       const auto ref=meshAsset(entity);const auto text=ref?"Malha "+std::to_string(ref):"Escolher malha";
@@ -1232,30 +1309,118 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
 
 void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
   const auto &theme=builder.theme;const auto &state=builder.state;
+  const scene::ComponentValue *resourceComponent=state.resourceInstance?entity.components.findInstance(state.resourceInstance):nullptr;
+  const scene::ComponentResourceBinding *resourceBinding=nullptr;
+  if(resourceComponent) for(const auto &binding:resourceComponent->type().resourceBindings)
+    if(binding.id==state.resourceProperty) {resourceBinding=&binding;break;}
+  const auto selectedResource=resourceBinding?resourceBinding->at(*resourceComponent,state.resourceSlot):resources::AssetGuid{};
   auto title=takeTop(content,36),back=takeLeft(title,36);
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);builder.router.addRegion(back,widgetId(EditorWidget::MeshPickerClose));
-  builder.label(title,"Geometria",theme.color.text,theme.type.body);
+  builder.label(title,resourceBinding?resourceBinding->name:"Geometria",theme.color.text,theme.type.body);
   auto search=takeTop(content,36);builder.list.addRect(search,theme.color.raised,theme.radius.control);
-  builder.label(search,state.meshQuery.empty()?"Buscar malha ou material":state.meshQuery.c_str(),theme.color.textDim,theme.type.caption);
+  builder.label(search,state.meshQuery.empty()?
+      (resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Buscar perfil":"Buscar malha"):
+      state.meshQuery.c_str(),theme.color.textDim,theme.type.caption);
   builder.router.addRegion(search,widgetId(EditorWidget::MeshSearch));
   auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
+  if(resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentProfile) {
+    const auto action=deflate(takeTop(content,40),UiInsets::all(2));
+    builder.list.addRect(action,theme.color.accent,theme.radius.control);
+    builder.label(action,selectedResource.valid()?"Atualizar perfil com estes valores":"Criar perfil com estes valores",
+                  theme.color.accentInk,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(action,widgetId(selectedResource.valid()?EditorWidget::EnvironmentProfileUpdate:
+                                               EditorWidget::EnvironmentProfileCreate));
+    std::vector<u32> matches;const auto query=editorSearchKey(state.meshQuery);
+    if(state.assetRegistry) for(u32 i=0;i<state.assetRegistry->records().size();++i) {
+      const auto &record=state.assetRegistry->records()[i];
+      if(record.type!=resources::AssetType::EnvironmentProfile) continue;
+      if(query.empty()||editorSearchKey(record.path).find(query)!=std::string::npos) matches.push_back(i);
+    }
+    const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-34)/50));
+    const u32 pages=std::max(1u,(static_cast<u32>(matches.size())+perPage-1)/perPage);
+    const u32 page=std::min(state.meshPage,pages-1);
+    auto clear=takeTop(content,34);builder.label(clear,"Sem perfil · conservar cópia local",theme.color.textDim,theme.type.caption);
+    builder.router.addRegion(clear,widgetId(EditorWidget::MeshClear));
+    for(u32 row=page*perPage;row<matches.size()&&row<(page+1)*perPage;++row) {
+      const auto index=matches[row];const auto &record=state.assetRegistry->records()[index];
+      auto slot=takeTop(content,50);const auto hit=slot;
+      builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      if(selectedResource==record.guid) builder.list.addRect({slot.x,slot.y+4,3,slot.height-8},theme.color.accent,1);
+      builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(UiIcon::LightingSun),0xffffffff);
+      const auto slash=record.path.find_last_of('/');const auto name=record.path.substr(slash==std::string::npos?0:slash+1);
+      builder.label(takeTop(slot,25),name.c_str(),theme.color.text,theme.type.body);
+      builder.label(slot,("GUID "+record.guid.text().substr(0,8)+" · compartilhado").c_str(),theme.color.textMuted,theme.type.caption);
+      builder.router.addRegion(hit,widgetId(EditorWidget::MeshChoiceBase)+index);
+    }
+    if(matches.empty()) builder.label(content,"Nenhum perfil no projeto",theme.color.textMuted,theme.type.caption);
+    builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
+    if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::MeshNext));
+    const auto text=std::to_string(page+1)+" / "+std::to_string(pages);
+    builder.label(footer,text.c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    return;
+  }
+  if(resourceBinding&&resourceBinding->id=="collision_mesh") {
+    auto settings=takeTop(content,38);
+    const auto quality=takeLeft(settings,settings.width*.5f),error=settings;
+    const auto stepped=[&](UiRect row,const char *label,const std::string &value,u32 down,u32 up) {
+      builder.label(takeLeft(row,row.width*.38f),label,theme.color.textMuted,theme.type.caption);
+      const auto less=takeLeft(row,28),more=takeRight(row,28);
+      builder.label(less,"−",theme.color.text,theme.type.body,UiAlign::Center);
+      builder.label(more,"+",theme.color.text,theme.type.body,UiAlign::Center);
+      builder.label(row,value.c_str(),theme.color.text,theme.type.numeric,UiAlign::Center);
+      builder.router.addRegion(less,down);builder.router.addRegion(more,up);
+    };
+    stepped(quality,"Triângulos",std::to_string(state.collisionTrianglePercent)+"%",
+            widgetId(EditorWidget::MeshCollisionQualityDown),widgetId(EditorWidget::MeshCollisionQualityUp));
+    char errorText[24];std::snprintf(errorText,sizeof errorText,"%.1f%%",state.collisionMaximumError*100.f);
+    stepped(error,"Erro",errorText,widgetId(EditorWidget::MeshCollisionErrorDown),widgetId(EditorWidget::MeshCollisionErrorUp));
+    const auto generate=deflate(takeTop(content,40),UiInsets::all(2));
+    builder.list.addRect(generate,theme.color.accent,theme.radius.control);
+    builder.label(generate,selectedResource.valid()?"Regenerar malha física":"Gerar da malha visual",
+                  theme.color.accentInk,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(generate,widgetId(EditorWidget::MeshGenerateCollision));
+    const auto *render=meshRenderer(entity);
+    auto visual=render?render->slotAsset(0):resources::AssetGuid{};
+    if(!visual.valid()&&render&&render->slotMesh(0)&&state.resources)
+      visual=state.resources->assetGuid(render->slotMesh(0)-1);
+    const auto visualSlot=state.resources?state.resources->assetSlot(visual):0;
+    const auto physicalSlot=state.resources?state.resources->assetSlot(selectedResource):0;
+    if(visualSlot) {
+      const auto visualTriangles=state.resources->asset(visualSlot-1)->indexCount/3;
+      std::string summary="Visual "+std::to_string(visualTriangles)+" tri";
+      if(physicalSlot) {
+        const auto *physical=state.resources->asset(physicalSlot-1);
+        char measured[32];std::snprintf(measured,sizeof measured,"%.3g%%",physical->geometricError*100.f);
+        summary+=" · física "+std::to_string(physical->indexCount/3)+" tri · erro geom. "+measured;
+      }
+      builder.label(takeTop(content,22),summary.c_str(),theme.color.textMuted,theme.type.caption);
+    }
+  }
   std::vector<u32> matches;const auto query=editorSearchKey(state.meshQuery);
   if(state.resources) for(u32 i=0;i<state.resources->assetCount();++i) {
     if(state.resources->materialFlagsForAsset(i)&renderer::MapMaterialWater) continue;
     const auto *asset=state.resources->asset(i);
-    const auto text="Malha "+std::to_string(i+1)+" material "+std::to_string(asset->materialIndex);
+    const auto resourceName=state.resources->assetName(i);
+    const auto text=(resourceName.empty()?"Malha "+std::to_string(i+1):std::string(resourceName))+" material "+std::to_string(asset->materialIndex);
     if(query.empty() || editorSearchKey(text).find(query)!=std::string::npos) matches.push_back(i);
   }
   const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-34)/50));
   const u32 pages=std::max(1u,(static_cast<u32>(matches.size())+perPage-1)/perPage),page=std::min(state.meshPage,pages-1);
-  auto clear=takeTop(content,34);builder.label(clear,"Sem malha",theme.color.textDim,theme.type.caption);builder.router.addRegion(clear,widgetId(EditorWidget::MeshClear));
+  auto clear=takeTop(content,34);
+  builder.label(clear,resourceBinding&&resourceBinding->inheritable?"Herdar malha visual":"Sem malha",theme.color.textDim,theme.type.caption);
+  builder.router.addRegion(clear,widgetId(EditorWidget::MeshClear));
   for(u32 row=page*perPage;row<matches.size() && row<(page+1)*perPage;++row) {
     if(content.height<40) break;
     const auto i=matches[row];const auto *asset=state.resources->asset(i);auto slot=takeTop(content,50);const auto hit=slot;
-    const bool selected=meshAsset(entity)==i+1;builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+    const bool selected=resourceBinding?selectedResource==state.resources->assetGuid(i):meshAsset(entity)==i+1;
+    builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
     if(selected) builder.list.addRect({slot.x,slot.y+4,3,slot.height-8},theme.color.accent,1);
     builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(UiIcon::EditorAuthorObject),0xffffffff);
-    const auto name="Malha "+std::to_string(i+1);builder.label(takeTop(slot,25),name.c_str(),theme.color.text,theme.type.body);
+    const auto authoredName=state.resources->assetName(i);
+    const auto name=authoredName.empty()?"Malha "+std::to_string(i+1):std::string(authoredName);
+    builder.label(takeTop(slot,25),name.c_str(),theme.color.text,theme.type.body);
     const auto detail=std::to_string(asset->indexCount/3)+" triângulos · material "+std::to_string(asset->materialIndex);
     builder.label(slot,detail.c_str(),theme.color.textMuted,theme.type.caption);
     builder.router.addRegion(hit,widgetId(EditorWidget::MeshChoiceBase)+i);
@@ -1492,7 +1657,8 @@ void buildComponents(ScreenBuilder &builder, UiRect content, const EditorEntity 
   const auto &theme=builder.theme;const auto &state=builder.state;
   const bool same=state.componentSelection==entity.id,adding=same&&state.addingComponent;
   if(same && state.referenceInstance) {buildReferencePicker(builder,content,entity);return;}
-  if(same && state.meshPicker && meshRenderer(entity)) {buildMeshPicker(builder,content,entity);return;}
+  const bool resourcePicker=state.resourceInstance&&entity.components.findInstance(state.resourceInstance);
+  if(same && state.meshPicker && (meshRenderer(entity)||resourcePicker)) {buildMeshPicker(builder,content,entity);return;}
   if(same && state.materialPicker && meshRenderer(entity)) {buildMaterialPicker(builder,content);return;}
   if(same && state.textureViewer && meshRenderer(entity)) {buildTextureViewer(builder,content);return;}
   if(same && state.texturePicker && meshRenderer(entity)) {buildTexturePicker(builder,content);return;}
@@ -1889,7 +2055,8 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
                             state.importNormalWeighting==state.importPreparedNormalWeighting &&
                             state.importSmoothingAngle==state.importPreparedSmoothingAngle &&
                             state.importTangents==state.importPreparedTangents &&
-                            state.importCameras==state.importPreparedCameras;
+                            state.importCameras==state.importPreparedCameras &&
+                            state.importLights==state.importPreparedLights;
 
   // Rodapé: cancelar sempre; publicar só com prévia pronta, perfil aplicado e
   // ambiguidades decididas. Apagado e sem toque até lá.
@@ -2028,7 +2195,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     // Oito linhas de controle, paginadas como as outras abas: numa tela baixa
     // (um celular deitado tem ~400 de altura útil) a lista corrida cortava as
     // linhas de baixo sem aviso nem como alcançá-las.
-    enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Normals,Weighting,Smoothing,Tangents,Cameras,ProfileRowCount};
+    enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Normals,Weighting,Smoothing,Tangents,Cameras,Lights,ProfileRowCount};
     const auto [firstRow,lastRow]=paginate(ProfileRowCount,40);
     const auto cycle=[&](UiRect row,const char *label,const char *value,EditorWidget widget) {
       builder.label(takeLeft(row,row.width*.45f),label,theme.color.text,theme.type.caption);
@@ -2096,6 +2263,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
       }
       case Tangents:cycle(row,"Tangentes",state.importTangents==resources::GltfTangentsCalculate?"Calcular":"Importar",EditorWidget::ImportTangentsCycle);break;
       case Cameras:cycle(row,"Importar câmeras",state.importCameras?"Sim":"Não",EditorWidget::ImportCamerasToggle);break;
+      case Lights:cycle(row,"Importar luzes",state.importLights?"Sim":"Não",EditorWidget::ImportLightsToggle);break;
       case ProfileRowCount:break;
       }
     }
@@ -2367,11 +2535,12 @@ bool platformFieldActive(const EditorScreenState &state) {
          state.editingCreationSearch || state.editingComponentSearch || state.editingMeshSearch ||
          state.editingReferenceSearch || state.numericField != 0 ||
          state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode ||
-         state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures || state.presetNaming;
+         state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures || state.presetNaming || state.viewNaming;
 }
 
 const char *platformFieldTitle(const EditorScreenState &state) {
   if (state.presetNaming) return "Nome do preset";
+  if (state.viewNaming) return state.viewRenaming ? "Novo nome da vista" : "Nome da vista";
   if (state.numericField != 0) return "Valor";
   if (state.renamingResource) return "Arquivo";
   if (state.editingScriptInstance != 0) return "Campo";
@@ -2863,6 +3032,58 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
   overlays();
 }
 
+// Painel das vistas salvas da cena (G6-A). Uma linha por enquadramento, com a
+// escolhida em destaque; tocar a linha LEVA a câmera até ela. O rodapé age
+// sobre a escolhida — atualizar com a vista atual, renomear, excluir — e
+// "Salvar vista atual" cria uma nova. A lista é curta de propósito: ela existe
+// para repetir um enquadramento, não para organizar um acervo.
+void buildSceneViewsPanel(ScreenBuilder &builder, const UiRect &viewport) {
+  const auto &state = builder.state;
+  const auto &theme = builder.theme;
+  auto &list = builder.list;
+  auto &router = builder.router;
+  const auto &views = state.document->views();
+  const float width = std::min(300.0f, std::max(180.0f, viewport.width - 32.0f));
+  const float rows = static_cast<float>(std::min<u32>(views.count(), 6));
+  const UiRect panel{viewport.x + 104.0f, viewport.y + 56.0f, width, 96.0f + rows * 34.0f};
+  list.addRect(panel, theme.color.surface, 6);
+  router.addBlocker(panel);
+  auto content = deflate(panel, UiInsets::all(10));
+  auto header = takeTop(content, 26);
+  const auto close = takeRight(header, 28);
+  builder.label(close, "X", theme.color.textDim, theme.type.caption, UiAlign::Center);
+  router.addRegion(close, widgetId(EditorWidget::ViewsClose));
+  builder.label(header, "Vistas", theme.color.text, theme.type.cardName);
+  if (views.empty())
+    builder.label(takeTop(content, 34), "Nenhuma vista salva ainda", theme.color.textMuted, theme.type.caption);
+  for (u32 index = 0; index < views.count() && index < 6; ++index) {
+    const auto *view = views.at(index);
+    auto row = takeTop(content, 34);
+    const bool chosen = state.viewSelected == index;
+    if (chosen) list.addRect(row, theme.color.raised, theme.radius.control);
+    builder.label(deflate(row, UiInsets::symmetric(8, 0)), view->name.c_str(),
+                  chosen ? theme.color.accent : theme.color.text, theme.type.caption);
+    router.addRegion(row, widgetId(EditorWidget::SceneViewRowBase) + index);
+  }
+  if (views.count() > 6)
+    builder.label(takeTop(content, 20), (std::to_string(views.count() - 6) + " além destas").c_str(),
+                  theme.color.textMuted, theme.type.caption);
+  takeTop(content, 4);
+  auto actions = takeTop(content, 34);
+  const auto button = [&](UiRect rect, const char *label, EditorWidget widget, bool enabled) {
+    rect = deflate(rect, UiInsets::all(2));
+    list.addRect(rect, enabled ? theme.color.raised : theme.color.silhouette, theme.radius.control);
+    builder.label(rect, label, enabled ? theme.color.text : theme.color.textMuted, theme.type.caption, UiAlign::Center);
+    if (enabled) router.addRegion(rect, widgetId(widget));
+  };
+  const bool hasChosen = state.viewSelected < views.count();
+  const float third = actions.width / 3.0f;
+  button(takeLeft(actions, third), "Atualizar", EditorWidget::ViewUpdate, hasChosen);
+  button(takeLeft(actions, third), "Renomear", EditorWidget::ViewRename, hasChosen);
+  button(actions, "Excluir", EditorWidget::ViewDelete, hasChosen);
+  button(takeTop(content, 34), "Salvar vista atual", EditorWidget::ViewSave, views.count() < runtime::SceneViews::kMaximum);
+}
+
 static void buildProjectDialogs(ScreenBuilder &builder) {
   const auto &state=builder.state;const auto &theme=builder.theme;
   auto &list=builder.list;auto &router=builder.router;
@@ -3029,13 +3250,48 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
                      UiIcon::EditorAuthorCamera, widgetId(EditorWidget::FrameSelection));
   builder.iconButton({layout.viewport.x + 56.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
                      UiIcon::EditorAuthorFrame, widgetId(EditorWidget::FrameAll));
+  // Vistas salvas: o enquadramento é o que torna duas medições comparáveis, e
+  // por isso fica ao lado dos controles de câmera, não escondido num menu.
+  builder.iconButton({layout.viewport.x + 104.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
+                     UiIcon::SceneLayers, widgetId(EditorWidget::ViewsOpen), state.viewsPanel);
+  if(state.viewsPanel && state.document) buildSceneViewsPanel(builder, layout.viewport);
   if(compact) {
-    const UiRect button{layout.viewport.x+104,layout.viewport.y+8,100,40};
+    const UiRect button{layout.viewport.x+104,layout.viewport.y+56,100,40};
     list.addRect(button,theme.color.raised,theme.radius.control);
     builder.label(button,"Painéis",theme.color.text,theme.type.caption,UiAlign::Center);
     router.addRegion(button,widgetId(EditorWidget::CompactPanelMenu));
   }
   if(state.workspace==EditorWorkspace::Scene) {
+    // Unity 6 agrupa Lighting e Effects no topo do Scene View. Aqui a mesma
+    // organização controla o renderer editorial real; a seta abre as partes
+    // que a Astra já consome (céu, neblina e pós).
+    const float optionsX=layout.viewport.x+104.0f;
+    const UiRect lighting{optionsX,layout.viewport.y+8.0f,40.0f,40.0f};
+    const UiRect effects{optionsX+48.0f,layout.viewport.y+8.0f,40.0f,40.0f};
+    const UiRect effectsMenu{optionsX+88.0f,layout.viewport.y+8.0f,28.0f,40.0f};
+    builder.iconButton(lighting,UiIcon::LightingSceneLighting,
+                       widgetId(EditorWidget::SceneLightingToggle),state.sceneLighting);
+    builder.iconButton(effects,UiIcon::LightingSceneEffects,
+                       widgetId(EditorWidget::SceneEffectsToggle),state.sceneEffects);
+    builder.iconButton(effectsMenu,state.sceneEffectsMenu?UiIcon::UiChevronUp:UiIcon::UiChevronDown,
+                       widgetId(EditorWidget::SceneEffectsMenu),state.sceneEffectsMenu);
+    if(state.sceneEffectsMenu) {
+      const UiRect panel{effects.x, effects.bottom()+6.0f, 218.0f, 126.0f};
+      list.addRect(panel,withAlpha(theme.color.surface,.97f),theme.radius.control);
+      // Construção explícita para preservar o retângulo completo como alvo.
+      const auto row=[&](float y,UiIcon glyph,const char *label,EditorWidget widget,bool active) {
+        UiRect bounds{panel.x+5.0f,y,panel.width-10.0f,36.0f};
+        list.addRect(bounds,active?theme.color.raised:theme.color.surface,theme.radius.control);
+        UiRect content=bounds;
+        list.addImage(centred(takeLeft(content,34.0f),18.0f,18.0f),static_cast<UiImageId>(glyph),
+                      active?theme.color.accent:theme.color.textDim);
+        builder.label(content,label,active?theme.color.text:theme.color.textDim,theme.type.caption);
+        router.addRegion(bounds,widgetId(widget),theme.touch.minimumTarget);
+      };
+      row(panel.y+6.0f,UiIcon::LightingSky,"Sky",EditorWidget::SceneSkyToggle,state.sceneSky);
+      row(panel.y+45.0f,UiIcon::LightingFog,"Fog",EditorWidget::SceneFogToggle,state.sceneFog);
+      row(panel.y+84.0f,UiIcon::LightingPostProcessing,"Post Processing",EditorWidget::ScenePostToggle,state.scenePost);
+    }
     if(state.cameraViewEntity) {
       const auto *cameraEntity=state.document->find(state.cameraViewEntity);
       const auto *lens=cameraEntity?cameraComponent(*cameraEntity):nullptr;
@@ -3094,7 +3350,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       builder.label(frequency,std::to_string(static_cast<int>(state.cameraPreviewFrequency))+" Hz máx.",theme.color.text,theme.type.caption,UiAlign::Center);
       router.addRegion(resolution,widgetId(EditorWidget::CameraPreviewResolution));
       router.addRegion(frequency,widgetId(EditorWidget::CameraPreviewFrequency));
-      builder.label({panel.x+8,panel.y+height+30,panel.width-16,28},"Sem água, sombras ou pós",theme.color.textMuted,theme.type.caption);
+      builder.label({panel.x+8,panel.y+height+30,panel.width-16,28},"Ambiente e pós da câmera",theme.color.textMuted,theme.type.caption);
     }
     const UiIcon icons[]={UiIcon::EditorAuthorOrbit,UiIcon::EditorAuthorPan,UiIcon::EditorAuthorZoom};
     const EditorWidget actions[]={EditorWidget::NavigationOrbit,EditorWidget::NavigationPan,EditorWidget::NavigationZoom};
@@ -3150,7 +3406,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addRegion(row,widgetId(actions[i]));
     }
   }
-  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingMeshSearch || state.editingReferenceSearch || state.presetNaming)) {
+  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingMeshSearch || state.editingReferenceSearch || state.presetNaming || state.viewNaming)) {
     router.addBlocker(state.surface);
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,0.8f));
     const auto modal=centred(state.surface,std::min(560.0f,state.surface.width-16),std::min(320.0f,state.surface.height-16));
@@ -3403,6 +3659,12 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
 
   if(widget==widgetId(EditorWidget::ComponentVisualsToggle)) {state.showComponentVisuals=!state.showComponentVisuals;return outcome;}
   if(widget==widgetId(EditorWidget::CameraViewClose)) {state.cameraViewEntity=0;return outcome;}
+  if(widget==widgetId(EditorWidget::SceneLightingToggle)) {state.sceneLighting=!state.sceneLighting;return outcome;}
+  if(widget==widgetId(EditorWidget::SceneEffectsToggle)) {state.sceneEffects=!state.sceneEffects;return outcome;}
+  if(widget==widgetId(EditorWidget::SceneEffectsMenu)) {state.sceneEffectsMenu=!state.sceneEffectsMenu;return outcome;}
+  if(widget==widgetId(EditorWidget::SceneSkyToggle)) {state.sceneSky=!state.sceneSky;return outcome;}
+  if(widget==widgetId(EditorWidget::SceneFogToggle)) {state.sceneFog=!state.sceneFog;return outcome;}
+  if(widget==widgetId(EditorWidget::ScenePostToggle)) {state.scenePost=!state.scenePost;return outcome;}
   if(widget>=widgetId(EditorWidget::ComponentVisualBase)&&widget<widgetId(EditorWidget::ComponentVisualBase)+0x01000000u) {
     const auto id=widget-widgetId(EditorWidget::ComponentVisualBase);
     if(document.find(id)) {state.selection=id;state.textureInspector=false;state.textureViewer=false;state.propertyPage=0;}

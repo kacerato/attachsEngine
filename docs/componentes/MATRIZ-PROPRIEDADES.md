@@ -50,9 +50,17 @@ Rotação da câmera por toque. **Consumidor:** runtime/game_world.cpp → pose 
 | `pitch_sensitivity` | Sensibilidade vertical graus/tela | número | Sensibilidade | 195 | 0 … 720 | ° | runtime/game_world.cpp → pose da câmera | entrada | não | não |
 | `pitch_limit` | Limite vertical graus | número | Limites | 83 | 1 … 89 | ° | runtime/game_world.cpp → pose da câmera | entrada | não | não |
 
-## Colisor 3D · `astra.physics.collider` v4
+## Colisor 3D · `astra.physics.collider` v6
 
 Volume de contato. **Consumidor:** runtime/scene_physics.cpp → forma do Jolt. **Invalida:** forma física.
+
+**Recursos endereçados**
+
+| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada |
+|---|---|---|---|---|
+| `collision_mesh` | Malha de colisão | mesh | sim | não |
+
+**Propriedades**
 
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -67,8 +75,12 @@ Volume de contato. **Consumidor:** runtime/scene_physics.cpp → forma do Jolt. 
 | `rotation_x` | Rotação local X | número | Pose | 0 | -10000000 … 10000000 | ° | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não |
 | `rotation_y` | Rotação local Y | número | Pose | 0 | -10000000 … 10000000 | ° | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não |
 | `rotation_z` | Rotação local Z | número | Pose | 0 | -10000000 … 10000000 | ° | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não |
+| `hull_tolerance` | Tolerância do casco | número | Cozimento | 0.001 | 0.00001 … 1 | u | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não |
+| `active_edge_angle` | Ângulo de aresta ativa | número | Cozimento | 5 | 0 … 90 | ° | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não |
 | `enabled` | Ativo | booleano |  | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não |
 | `convex` | Convexo | booleano | Forma | falso | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não |
+| `weld_vertices` | Soldar vértices iguais | booleano | Cozimento | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não |
+| `optimize_cooking` | Otimizar para o jogo | booleano | Cozimento | verdadeiro | verdadeiro \| falso |  | runtime/scene_physics.cpp → forma do Jolt | forma física | sim | não |
 | `shape` | Forma | enumeração | Forma | Caixa | Caixa \| Esfera \| Cápsula \| Malha |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não |
 | `owner` | Corpo proprietário | referência | Vínculo | Neste objeto | astra.physics.body · neste objeto ou ancestral |  | runtime/scene_physics.cpp → forma do Jolt | forma física | não | não |
 
@@ -102,7 +114,7 @@ Conexão, limites e motor entre corpos. **Consumidor:** runtime/scene_physics.cp
 | `motor` | Motor | enumeração | Motor | Desligado | Desligado \| Velocidade \| Posição \| Posição e velocidade |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | sim | não |
 | `connected_body` | Conectar corpo | referência | Âncoras | Escolher corpo | astra.physics.body · outro objeto |  | runtime/scene_physics.cpp → constraint do Jolt | corpo físico | não | não |
 
-## Câmera · `astra.camera` v2
+## Câmera · `astra.camera` v3
 
 Projeção e enquadramento. **Consumidor:** renderer/render_view.h → matriz de projeção e culling. **Invalida:** desenho.
 
@@ -115,6 +127,7 @@ Projeção e enquadramento. **Consumidor:** renderer/render_view.h → matriz de
 | `orthographic_half_height` | Meia altura | número | Lente | 5 | 0.001 … 100000 | m | renderer/render_view.h → matriz de projeção e culling | desenho | sim | não |
 | `enabled` | Usar no Play | booleano | Saída | verdadeiro | verdadeiro \| falso |  | renderer/render_view.h → matriz de projeção e culling | desenho | não | não |
 | `projection` | Projeção | enumeração | Lente | Perspectiva | Perspectiva \| Ortográfica |  | renderer/render_view.h → matriz de projeção e culling | desenho | não | não |
+| `environment_mask` | Ambientes | enumeração | Saída | Todos os ambientes | Todos os ambientes \| Ambiente 0 \| Ambiente 1 \| Ambiente 2 \| Ambiente 3 \| Ambiente 4 \| Ambiente 5 \| Ambiente 6 \| Ambiente 7 |  | renderer/scene_environment.cpp | desenho | não | não |
 
 ## Malha · `astra.render.mesh` v8
 
@@ -179,7 +192,7 @@ Geometria e material. **Consumidor:** renderer/map_draw_update.h → instância 
 | `sampling.wrap` | Repetição | enumeração | Amostragem | Herdar | Herdar \| Repetir \| Fixar na borda \| Espelhar |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
 | `sampling.filter` | Filtro | enumeração | Amostragem | Herdar | Herdar \| Linear \| Vizinho mais próximo |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
 
-## Luz · `astra.render.light` v1
+## Luz · `astra.render.light` v2
 
 Direcional, pontual ou spot. **Consumidor:** runtime/scene_lights.cpp → renderer/punctual_lights.h. **Invalida:** seleção de luzes.
 
@@ -188,14 +201,81 @@ Direcional, pontual ou spot. **Consumidor:** runtime/scene_lights.cpp → render
 | `color.r` | Cor R | número | Emissão | 1 | 0 … 1 |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
 | `color.g` | Cor G | número | Emissão | 1 | 0 … 1 |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
 | `color.b` | Cor B | número | Emissão | 1 | 0 … 1 |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
-| `intensity` | Intensidade | número | Emissão | 8 | 0 … 10000 |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
+| `color_temperature` | Temperatura | número | Emissão | 6500 | 1667 … 25000 | K | scene/light_units.h → RGB linear | seleção de luzes | sim | não |
+| `intensity` | Intensidade | número | Emissão | 1000 | 0 … 1000000 |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
 | `range` | Alcance | número | Volume | 10 | 0.01 … 1000 | m | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | sim | não |
 | `inner_angle` | Meio-cone interno | número | Volume | 20 | 0 … 89 | ° | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | sim | não |
 | `outer_angle` | Meio-cone externo | número | Volume | 35 | 0 … 89 | ° | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | sim | não |
-| `enabled` | Acesa | booleano |  | verdadeiro | verdadeiro \| falso |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
-| `kind` | Modalidade | enumeração |  | Pontual | Direcional \| Pontual \| Spot |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
+| `enabled` | Acesa | booleano | Geral | verdadeiro | verdadeiro \| falso |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
+| `use_color_temperature` | Filtro por temperatura | booleano | Emissão | falso | verdadeiro \| falso |  | scene/light_units.h → RGB linear | seleção de luzes | não | não |
+| `kind` | Modalidade | enumeração | Geral | Pontual | Direcional \| Pontual \| Spot |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
+| `unit` | Unidade | enumeração | Emissão | Lux / lúmen | Interna (legada) \| Lux / candela \| Lux / lúmen |  | scene/light_units.h → irradiância linear | seleção de luzes | não | não |
 
-## LOD Group · `astra.render.lod_group` v1
+## Ambiente · `astra.render.environment` v5
+
+Céu, atmosfera, neblina e pós globais ou por volume. **Consumidor:** runtime/scene_environment.cpp → renderer e pós. **Invalida:** desenho, política resolvida.
+
+**Recursos endereçados**
+
+| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada |
+|---|---|---|---|---|
+| `profile` | Perfil | environment_profile | sim | não |
+
+**Propriedades**
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `priority` | Prioridade | número | Geral | 0 | -1000 … 1000 |  | runtime/scene_environment.cpp → seleção | desenho, política resolvida | não | não |
+| `sky_zenith.r` | Zênite R | número | Atmosfera | 0.025 | 0 … 1 |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `sky_zenith.g` | Zênite G | número | Atmosfera | 0.1 | 0 … 1 |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `sky_zenith.b` | Zênite B | número | Atmosfera | 0.32 | 0 … 1 |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `sky_horizon.r` | Horizonte R | número | Atmosfera | 0.28 | 0 … 1 |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `sky_horizon.g` | Horizonte G | número | Atmosfera | 0.42 | 0 … 1 |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `sky_horizon.b` | Horizonte B | número | Atmosfera | 0.62 | 0 … 1 |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `ground.r` | Chão R | número | Atmosfera | 0.11 | 0 … 1 |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `ground.g` | Chão G | número | Atmosfera | 0.12 | 0 … 1 |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `ground.b` | Chão B | número | Atmosfera | 0.14 | 0 … 1 |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `atmosphere` | Força atmosférica | número | Atmosfera | 1 | 0 … 1 |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `sun_disk_degrees` | Diâmetro do sol | número | Atmosfera | 0.53 | 0.05 … 10 | ° | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `sun_disk_intensity` | Brilho do disco solar | número | Atmosfera | 8 | 0 … 100 |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `fog_color.r` | Neblina R | número | Neblina | 0.58 | 0 … 1 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `fog_color.g` | Neblina G | número | Neblina | 0.67 | 0 … 1 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `fog_color.b` | Neblina B | número | Neblina | 0.76 | 0 … 1 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `fog_density` | Densidade | número | Neblina | 0.008 | 0 … 1 | 1/m | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `fog_start` | Início | número | Neblina | 8 | 0 … 10000 | m | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `exposure_ev` | Compensação | número | Pós | 0 | -16 … 16 | EV | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `bloom_threshold` | Limiar do bloom | número | Pós | 1 | 0 … 64 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `bloom_intensity` | Intensidade do bloom | número | Pós | 0.1 | 0 … 2 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `contrast` | Contraste | número | Pós | 1 | 0.5 … 2 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `saturation` | Saturação | número | Pós | 1 | 0 … 2 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `vignette_intensity` | Intensidade da vinheta | número | Pós | 0.18 | 0 … 1 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `film_grain_intensity` | Intensidade do grão | número | Pós | 0.05 | 0 … 1 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `ambient_occlusion_radius` | Raio | número | Oclusão ambiente | 1 | 0.05 … 10 | m | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `ambient_occlusion_intensity` | Intensidade | número | Oclusão ambiente | 1 | 0 … 4 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `ambient_occlusion_power` | Potência | número | Oclusão ambiente | 1.5 | 0.1 … 4 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `ambient_occlusion_bias` | Viés | número | Oclusão ambiente | 0.02 | 0 … 1 | m | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `weight` | Peso | número | Volume | 1 | 0 … 1 |  | renderer/scene_environment.cpp | desenho, política resolvida | não | não |
+| `blend_distance` | Distância de mistura | número | Volume | 0 | 0 … 100000 | m | renderer/scene_environment.cpp | desenho, política resolvida | sim | não |
+| `box_size.x` | Tamanho X | número | Volume | 10 | 0.01 … 100000 | m | renderer/scene_environment.cpp | desenho, política resolvida | sim | não |
+| `box_size.y` | Tamanho Y | número | Volume | 10 | 0.01 … 100000 | m | renderer/scene_environment.cpp | desenho, política resolvida | sim | não |
+| `box_size.z` | Tamanho Z | número | Volume | 10 | 0.01 … 100000 | m | renderer/scene_environment.cpp | desenho, política resolvida | sim | não |
+| `sphere_radius` | Raio | número | Volume | 5 | 0.01 … 100000 | m | renderer/scene_environment.cpp | desenho, política resolvida | sim | não |
+| `enabled` | Ativo | booleano | Geral | verdadeiro | verdadeiro \| falso |  | runtime/scene_environment.cpp → renderer e pós | desenho, política resolvida | não | não |
+| `fog` | Neblina | booleano | Neblina | falso | verdadeiro \| falso |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | não | não |
+| `post` | Pós-processamento | booleano | Pós | verdadeiro | verdadeiro \| falso |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | não | não |
+| `bloom` | Bloom | booleano | Pós | verdadeiro | verdadeiro \| falso |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `vignette` | Vinheta | booleano | Pós | falso | verdadeiro \| falso |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `film_grain` | Grão de filme | booleano | Pós | falso | verdadeiro \| falso |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `ambient_occlusion` | Oclusão ambiente | booleano | Oclusão ambiente | falso | verdadeiro \| falso |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `override_sky` | Sobrescrever céu | booleano | Volume | verdadeiro | verdadeiro \| falso |  | renderer/scene_environment.cpp | desenho, política resolvida | não | não |
+| `override_fog` | Sobrescrever neblina | booleano | Volume | verdadeiro | verdadeiro \| falso |  | renderer/scene_environment.cpp | desenho, política resolvida | não | não |
+| `override_post` | Sobrescrever pós | booleano | Volume | verdadeiro | verdadeiro \| falso |  | renderer/scene_environment.cpp | desenho, política resolvida | não | não |
+| `sky` | Céu | enumeração | Atmosfera | Atmosfera | HDRI \| Atmosfera |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | não | não |
+| `tone_mapper` | Tonemapping | enumeração | Pós | ACES | Neutro \| ACES |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `volume_shape` | Modo | enumeração | Volume | Global | Global \| Caixa \| Esfera |  | runtime/scene_environment.cpp | desenho, política resolvida | não | não |
+| `volume_layer` | Camada | enumeração | Volume | Ambiente 0 | Ambiente 0 \| Ambiente 1 \| Ambiente 2 \| Ambiente 3 \| Ambiente 4 \| Ambiente 5 \| Ambiente 6 \| Ambiente 7 |  | renderer/scene_environment.cpp | desenho, política resolvida | não | não |
+
+## LOD Group · `astra.render.lod_group` v2
 
 Nível de detalhe pela altura na tela. **Consumidor:** runtime/lod_groups.h → visibilidade do desenho por vista. **Capacidade:** `render.lod.group` (implementada). **Invalida:** desenho.
 
@@ -206,7 +286,14 @@ Nível de detalhe pela altura na tela. **Consumidor:** runtime/lod_groups.h → 
 | `transition_2` | Transição LOD 2 | número | Níveis | 10 | 0.1 … 100 | % | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
 | `transition_3` | Transição LOD 3 | número | Níveis | 5 | 0.1 … 100 | % | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
 | `size` | Tamanho | número | Limites | 1 | 0.001 … 1000000 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | não | não |
+| `fade_width_0` | Largura do fade LOD 0 | número | Fade | 0.2 | 0 … 1 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
+| `fade_width_1` | Largura do fade LOD 1 | número | Fade | 0.2 | 0 … 1 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
+| `fade_width_2` | Largura do fade LOD 2 | número | Fade | 0.2 | 0 … 1 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
+| `fade_width_3` | Largura do fade LOD 3 | número | Fade | 0.2 | 0 … 1 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
+| `animate_cross_fading` | Animate Cross-fading | booleano | Fade | falso | verdadeiro \| falso |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
 | `level_count` | Níveis | enumeração | Níveis | 3 | 1 \| 2 \| 3 \| 4 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | não | não |
+| `fade_mode` | Fade Mode | enumeração | Fade | Nenhum | Nenhum \| Cross Fade |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | não | não |
+| `force_level` | Forçar nível | enumeração | Execução | Automático | Automático \| LOD 0 \| LOD 1 \| LOD 2 \| LOD 3 |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
 | `level_0` | Objetos LOD 0 | referência | Níveis | Nenhum | qualquer objeto · abaixo deste objeto |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | não | não |
 | `level_1` | Objetos LOD 1 | referência | Níveis | Nenhum | qualquer objeto · abaixo deste objeto |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
 | `level_2` | Objetos LOD 2 | referência | Níveis | Nenhum | qualquer objeto · abaixo deste objeto |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
@@ -226,8 +313,8 @@ Código C# do projeto. **Consumidor:** runtime/script_bridge.cpp → runtime .NE
 |---|---|---|---|---|
 | `render.light.directional` | Sol direcional | implementada | renderer/punctual_lights.h + rhi/shaders/material_shading.glsl | — |
 | `render.light.punctual` | Luzes pontuais e spot | implementada | renderer/punctual_lights.h (8 por quadro) | — |
-| `render.light.temperature` | Temperatura de cor em kelvin | planejada | scene/light_units.h | Sem conversão kelvin→RGB linear no caminho de autoria |
-| `render.light.photometric` | Unidades fotométricas (lux, lumen, candela) | planejada | scene/light_units.h | Sem calibração entre unidade autoral e irradiância do shader |
+| `render.light.temperature` | Temperatura de cor em kelvin | implementada | scene/light_units.h + runtime/scene_lights.cpp | — |
+| `render.light.photometric` | Unidades fotométricas (lux, lumen, candela) | implementada | scene/light_units.h + runtime/scene_lights.cpp | — |
 | `render.light.cookie` | Máscara projetada (cookie) | planejada | renderer/punctual_lights.h | Sem amostragem de textura por luz no shader de fragmento |
 | `render.light.area` | Luz de área | planejada | renderer/punctual_lights.h | Sem integração de fonte com extensão |
 | `render.shadow.directional` | Sombra do sol em cascatas | implementada | renderer/shadow_cascades.cpp + rhi/shaders/shadow_depth.vert | — |
@@ -247,12 +334,16 @@ Código C# do projeto. **Consumidor:** runtime/script_bridge.cpp → runtime .NE
 | `render.texture.anisotropy` | Filtragem anisotrópica | limitada pelo aparelho | rhi/ (feature samplerAnisotropy) | Depende da GPU expor samplerAnisotropy |
 | `render.texture.bindless` | Indexação sem limite de descritor | limitada pelo aparelho | rhi/bindless_registry | Depende de descriptor indexing no backend |
 | `render.lod.package` | Níveis de detalhe do pacote de mapa | implementada | renderer/lod_selection.cpp | — |
-| `render.lod.group` | Grupo de LOD autoral por objeto | implementada | runtime/lod_groups.h | Troca direta por altura na tela, sem cross-fade; níveis são objetos do autor, sem simplificação automática |
+| `render.lod.group` | Grupo de LOD autoral por objeto | implementada | runtime/lod_groups.h + renderer/lod_dither.glsl | Níveis são objetos do autor ou da convenção _LOD<n>; simplificação automática de malha ainda não existe |
 | `render.visibility.hzb` | Oclusão por pirâmide de profundidade | implementada | renderer/hzb_visibility.cpp | — |
 | `render.instancing.gpu` | Culling e compactação de desenho em GPU | implementada | renderer/gpu_draw_culling.cpp | — |
 | `render.motion_vectors` | Vetores de movimento por objeto | planejada | renderer/frame_graph.cpp | Sem pose anterior por instância nem alvo de velocidade |
+| `render.environment.atmosphere` | Céu atmosférico | implementada | runtime/scene_environment.cpp + rhi/shaders/dirt_road_sky.frag | — |
+| `render.environment.fog` | Neblina por profundidade | implementada | rhi/shaders/post_process_common.glsl | — |
+| `render.environment.volumes` | Volumes de ambiente por câmera | implementada | runtime/scene_environment.cpp + renderer/scene_environment.cpp | — |
 | `render.post.tonemap` | Exposição e mapeamento de tom | implementada | rhi/shaders/post_process_common.glsl | — |
 | `render.post.bloom` | Brilho estourado | implementada | rhi/shaders/post_process_common.glsl | — |
-| `render.post.ambient_occlusion` | Oclusão ambiente em tela | planejada | renderer/frame_graph.cpp | Sem passe de oclusão em espaço de tela |
+| `render.post.film_grain` | Grão de filme | implementada | rhi/shaders/post_process_common.glsl | — |
+| `render.post.ambient_occlusion` | Oclusão ambiente em tela | implementada | rhi/shaders/post_process_common.glsl | — |
 | `render.aa.fxaa` | Antisserrilhado espacial | implementada | rhi/shaders/post_process_common.glsl | — |
 | `render.aa.temporal` | Antisserrilhado temporal | limitada pelo aparelho | rhi/shaders/post_process_temporal.frag | Exige histórico e profundidade alocáveis no backend |

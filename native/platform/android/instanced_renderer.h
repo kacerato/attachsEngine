@@ -5,6 +5,7 @@
 #include "renderer/water_ripples.h"
 #include "renderer/map_draw_update.h"
 #include "renderer/punctual_lights.h"
+#include "renderer/scene_environment.h"
 #include "renderer/grid_plan.h"
 
 #include "core/base.h"
@@ -121,7 +122,22 @@ public:
   // Orthographic currently uses spatial AA and CPU visibility (no GPU HZB).
   void setSceneOrthographicHalfHeight(float halfHeight);
   void setEditorBackground(bool enabled) { editorBackground_=enabled; }
+  void setEditorViewportOptions(bool lighting,bool effects,bool sky,bool fog,bool post) {
+    editorSceneLighting_=lighting;editorSceneEffects_=effects;editorSceneSky_=sky;
+    editorSceneFog_=fog;editorScenePost_=post;
+  }
   void setEnvironmentAdjustment(const float values[4]) { std::copy(values,values+4,environmentAdjustment_); }
+  void setSceneEnvironment(const renderer::SceneEnvironment &environment) {
+    if (environment.valid()) sceneEnvironment_ = environment;
+  }
+  void queueSceneEnvironmentVolumes(std::span<const renderer::SceneEnvironmentVolume> volumes) {
+    sceneEnvironmentVolumes_.assign(volumes.begin(),volumes.end());
+    if(sceneEnvironmentVolumes_.empty()) sceneEnvironment_={};
+  }
+  void setSceneEnvironmentLayerMask(u32 mask) { sceneEnvironmentLayerMask_=mask; }
+  const renderer::SceneEnvironmentBlendReport &environmentBlendReport() const noexcept {
+    return environmentBlendReport_;
+  }
   const std::vector<renderer::MapMaterialRecord> &mapMaterials() const { return dirtRoadResources_.materials(); }
   bool queueMapScene(std::span<const renderer::MapDrawState> draws);
   bool queueAuthoredPoses(std::span<const renderer::MapDrawState> draws);
@@ -421,6 +437,8 @@ public:
 
 private:
   bool editorBackground_=false;
+  bool editorSceneLighting_=true,editorSceneEffects_=true,editorSceneSky_=true;
+  bool editorSceneFog_=true,editorScenePost_=true;
   float sceneNearPlane_ = 0, sceneFarPlane_ = 0, sceneFieldOfView_=0;
   float previousSceneProjection_[5]{};
   float sceneOrthographicHalfHeight_=0;
@@ -536,10 +554,14 @@ private:
   VkRenderPass renderPass_ = VK_NULL_HANDLE;
   VkRenderPass previewRenderPass_=VK_NULL_HANDLE;
   VkFramebuffer previewFramebuffer_=VK_NULL_HANDLE;
-  rhi::VulkanImage previewColor_,previewDepth_;
+  VkRenderPass previewPostRenderPass_=VK_NULL_HANDLE;
+  VkFramebuffer previewPostFramebuffer_=VK_NULL_HANDLE;
+  rhi::VulkanImage previewSceneColor_,previewColor_,previewDepth_;
   rhi::VulkanBuffer previewUniform_;
   VkDescriptorPool previewPool_=VK_NULL_HANDLE;
   VkDescriptorSet previewSet_=VK_NULL_HANDLE;
+  VkDescriptorPool previewPostPool_=VK_NULL_HANDLE;
+  VkDescriptorSet previewPostSet_=VK_NULL_HANDLE;
   renderer::RenderViewSnapshot pendingPreview_{},submittedPreview_{},completedPreview_{};
   bool previewCloseRequested_=false,previewCompletionSuccess_=false;
   bool prepareCameraPreview();
@@ -612,6 +634,8 @@ private:
   rhi::VulkanImage postHistory_{};
   rhi::VulkanSampler postSampler_{};
   rhi::VulkanSampler postDepthSampler_{};
+  VkFormat sceneColorFormat_ = VK_FORMAT_UNDEFINED;
+  bool hdrSceneColor_ = false;
   VkFramebuffer postFramebuffers_[kMaxFramebuffers]{};
   bool temporalAaActive_ = false;
   // Image layout and color validity are separate states. The descriptor is
@@ -800,6 +824,10 @@ private:
   bool pendingAuthoredStateValid_ = false;
   bool rebuildDrawOrders();
   std::vector<renderer::SceneLight> sceneLights_;
+  renderer::SceneEnvironment sceneEnvironment_{};
+  std::vector<renderer::SceneEnvironmentVolume> sceneEnvironmentVolumes_;
+  u32 sceneEnvironmentLayerMask_=~0u;
+  renderer::SceneEnvironmentBlendReport environmentBlendReport_{};
   renderer::LightBudgetReport lightBudget_{};
   std::vector<u8> dynamicMapDraws_;
   bool spectralWaterEnabled_=false;

@@ -10,7 +10,7 @@
 
 namespace ae::resources {
 namespace {
-const char *kTypeNames[]{"", "mesh", "material", "texture", "script", "input_actions", "scene"};
+const char *kTypeNames[]{"", "mesh", "material", "texture", "script", "input_actions", "scene", "environment_profile"};
 
 bool hexDigit(char c, u32 &out) {
   if (c >= '0' && c <= '9') { out = static_cast<u32>(c - '0'); return true; }

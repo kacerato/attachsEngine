@@ -11,6 +11,7 @@ struct SceneCameraPose {
   float verticalFov=60,nearPlane=.1f,farPlane=2000,priority=0;
   scene::CameraProjection projection=scene::CameraProjection::Perspective;
   float orthographicHalfHeight=5;
+  u32 environmentMask=~0u;
 };
 // Orthonormal optical frame: hierarchy determines orientation; object scale
 // does not change lens/range. Degenerate transforms have no valid camera pose.
@@ -49,6 +50,7 @@ inline SceneCameraPose resolveSceneCamera(const runtime::SceneGraph &document,Ed
     result.verticalFov=camera->verticalFov;result.nearPlane=camera->nearPlane;
     result.farPlane=camera->farPlane;result.priority=camera->priority;
     result.projection=camera->projection;result.orthographicHalfHeight=camera->orthographicHalfHeight;
+    result.environmentMask=camera->environmentMask;
     result.yaw=std::atan2(world[8],world[10]);
     result.pitch=std::asin(std::clamp(-world[9]/length,-1.0f,1.0f));
     const auto base=renderer::buildCameraViewBasis(result.yaw,result.pitch);

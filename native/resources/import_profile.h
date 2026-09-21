@@ -2,6 +2,7 @@
 #include "core/base.h"
 #include "resources/asset_registry.h"
 #include "resources/gltf_import.h"
+#include "resources/mesh_derived.h"
 #include <array>
 #include <string>
 #include <string_view>
@@ -24,7 +25,7 @@ namespace ae::resources {
 //    (preset reutilizável, I19).
 // Arquivo ausente ou inválido cai no próximo nível (fonte → projeto → embutido),
 // com o valor embutido igual ao comportamento anterior ao perfil.
-inline constexpr u32 ImportProfileSchema = 5; // 2: normais e tangentes; 3: camaras do arquivo; 4: nos excluidos
+inline constexpr u32 ImportProfileSchema = 8; // 8: luzes KHR_lights_punctual autoráveis
 // Escala uniforme aplicada às raízes (I01). Passos, não campo livre: o toque no
 // aparelho erra fácil um número digitado, e os casos reais são conversões de unidade.
 inline constexpr std::array<float, 9> ImportScaleSteps{0.001f, 0.01f, 0.1f, 0.5f, 1.0f, 2.0f, 10.0f, 100.0f, 1000.0f};
@@ -50,12 +51,16 @@ struct ImportProfile {
   // cena recebe (objetos com componente de câmera) e o padrão precisa ser o
   // comportamento que os projetos já publicados tiveram.
   bool importCameras = false;
+  bool importLights = false;
   // Nós da fonte que NÃO vêm para a cena, por identidade do mapa de nós. A
   // exclusão vale para a subárvore. Identidade, e não nome nem caminho: o nó
   // renomeado no editor 3D continua excluído, porque o mapa o reconhece como o
   // mesmo nó. Não muda a saída do importador — muda o que a reconciliação
   // instancia —, e por isso não entra nos limites nem na chave do cache.
   std::vector<AssetGuid> excludedNodes;
+  // Recursos derivados por primitiva. Não alteram o parse do GLB; são
+  // recompostos depois que as identidades persistentes das primitivas existem.
+  std::vector<CollisionMeshRecipe> collisionMeshes;
   bool excludes(const AssetGuid &node) const noexcept {
     for (const auto &excluded : excludedNodes) if (excluded == node) return true;
     return false;

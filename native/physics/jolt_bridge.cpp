@@ -5,6 +5,8 @@
 
 // O próprio Jolt pede para Jolt.h vir antes de qualquer outro header do Jolt.
 #include <Jolt/Jolt.h>
+#include "physics/collision_cooking_internal.h"
+#include "physics/jolt_init.h"
 
 #include <Jolt/RegisterTypes.h>
 #include <Jolt/Core/Factory.h>
@@ -321,57 +323,6 @@ AetherCharacterGroundState FromJoltGroundState(JPH::CharacterBase::EGroundState 
     case JPH::CharacterBase::EGroundState::NotSupported: return AetherCharacterGroundState::NotSupported;
     default: return AetherCharacterGroundState::InAir;
   }
-}
-
-// ------------------------------------------------------------ Trace/AssertFailed
-//
-// Os handlers padrão do Jolt (DummyTrace/DummyAssertFailed, ver
-// Jolt/Core/IssueReporting.cpp) descartam a mensagem e, no caso de assert,
-// simplesmente devolvem `true` — o que dispara JPH_BREAKPOINT (uma instrução
-// de trap) sem nenhum texto explicando o quê falhou. Isso combina mal com
-// nosso ambiente de teste: um assert interno do Jolt viraria um SIGTRAP puro
-// e indecifrável no meio do runner, em vez de uma mensagem legível. Instalamos
-// handlers reais aqui, no mesmo estilo stderr+detalhes de core/assert.cpp
-// (AE_CHECK) — consistência de diagnóstico entre nosso código e o do Jolt.
-void TraceImpl(const char *inFMT, ...) {
-  va_list args;
-  va_start(args, inFMT);
-  char buffer[1024];
-  std::vsnprintf(buffer, sizeof(buffer), inFMT, args);
-  va_end(args);
-  std::fprintf(stderr, "[Jolt] %s\n", buffer);
-  std::fflush(stderr);
-}
-
-#ifdef JPH_ENABLE_ASSERTS
-bool AssertFailedImpl(const char *inExpression, const char *inMessage, const char *inFile, JPH::uint inLine) {
-  std::fprintf(stderr, "[Jolt] asserção falhou: %s\n  motivo: %s\n  em %s:%u\n", inExpression,
-               inMessage != nullptr ? inMessage : "(sem mensagem)", inFile, inLine);
-  std::fflush(stderr);
-  return true; // dispara o breakpoint (JPH_BREAKPOINT) depois de já termos impresso o diagnóstico
-}
-#endif // JPH_ENABLE_ASSERTS
-
-// ------------------------------------------------------------ inicialização global
-//
-// Factory/RegisterTypes são estado GLOBAL do processo por design do Jolt (não
-// por mundo) — ver o comentário no HelloWorld do Jolt. Inicializado uma única
-// vez, na primeira criação de mundo; nunca desfeito (o processo do editor/jogo
-// vive pela mesma duração que precisaria manter isso vivo de qualquer forma, e
-// desfazer errado — antes do último mundo ser destruído — é pior que nunca
-// desfazer). Estática de função: inicialização thread-safe garantida pelo
-// C++11 sem precisar de <mutex>. Precisa vir DEPOIS de TraceImpl/AssertFailedImpl
-// acima (usa os dois por nome dentro do corpo do lambda).
-void EnsureGlobalTypesRegistered() {
-  static bool registered = [] {
-    JPH::Trace = TraceImpl;
-    JPH_IF_ENABLE_ASSERTS(JPH::AssertFailed = AssertFailedImpl;)
-    JPH::RegisterDefaultAllocator();
-    JPH::Factory::sInstance = new JPH::Factory();
-    JPH::RegisterTypes();
-    return true;
-  }();
-  (void)registered;
 }
 
 // ------------------------------------------------------------ triggers/sensors (GAP-PHY-03)
@@ -874,7 +825,7 @@ AetherPhysicsWorld *AetherPhysics_CreateWorld(AetherVec3 gravity, ae::u32 maxBod
 
 AetherPhysicsWorld *AetherPhysics_CreateWorldV2(const AetherPhysicsWorldDescV2 *desc) {
   if (!IsValidWorldDesc(desc)) return nullptr;
-  EnsureGlobalTypesRegistered();
+  ae::physics::ensureJoltInitialized();
   auto *world = new AetherPhysicsWorld(*desc);
   world->physicsSystem.SetGravity(ToJolt(desc->gravity));
   return world;
@@ -981,8 +932,8 @@ AetherBodyHandle AetherPhysics_CreateCompoundBodyV1(AetherPhysicsWorld *world,
   return CreateBodyInternal(*world,*desc,{0,0,0},result.Get(),dynamics);
 }
 
-AetherBodyHandle AetherPhysics_CreateCompoundBodyV2(AetherPhysicsWorld *world,
-    const AetherBodyDescV2 *desc,const AetherCompoundPartV2 *parts,ae::u32 count,
+AetherBodyHandle AetherPhysics_CreateCompoundBodyV3(AetherPhysicsWorld *world,
+    const AetherBodyDescV2 *desc,const AetherCompoundPartV3 *parts,ae::u32 count,
     const AetherBodyDynamicsV1 *dynamics) {
   const auto finite=[](AetherVec3 v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z);};
   const auto unit=[](AetherQuat q){const float n=q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w;return std::isfinite(n)&&std::abs(n-1)<.001f;};
@@ -997,7 +948,8 @@ AetherBodyHandle AetherPhysics_CreateCompoundBodyV2(AetherPhysicsWorld *world,
   bool mesh=false;
   for(ae::u32 i=0;i<count;++i) {
     const auto &p=parts[i];const auto &shape=p.base.shape;
-    if(!finite(p.base.position)||!unit(p.base.rotation)||static_cast<ae::u32>(p.geometry)>2) return AetherBodyHandle_Invalid;
+    if(!finite(p.base.position)||!unit(p.base.rotation)||static_cast<ae::u32>(p.geometry)>2 ||
+       !ae::physics::validMeshCooking(p.cooking)) return AetherBodyHandle_Invalid;
     JPH::RefConst<JPH::Shape> native;
     if(p.geometry==AetherPartGeometry::Primitive) {
       if(static_cast<ae::u32>(shape.kind)>2) return AetherBodyHandle_Invalid;
@@ -1011,11 +963,9 @@ AetherBodyHandle AetherPhysics_CreateCompoundBodyV2(AetherPhysicsWorld *world,
       if(!p.vertices||p.vertexCount<(hull?4u:3u)) return AetherBodyHandle_Invalid;
       for(ae::u32 v=0;v<p.vertexCount;++v) if(!finite(p.vertices[v])) return AetherBodyHandle_Invalid;
       if(hull) {
-        JPH::Array<JPH::Vec3> points;points.reserve(p.vertexCount);
-        for(ae::u32 v=0;v<p.vertexCount;++v) points.push_back(JPH::Vec3(p.vertices[v].x,p.vertices[v].y,p.vertices[v].z));
-        JPH::ConvexHullShapeSettings settings(points);
-        settings.mUserData=i;
-        const auto result=settings.Create();if(result.HasError()) return AetherBodyHandle_Invalid;
+        const auto result=ae::physics::detail::createConvexHullShape(
+            std::span<const AetherVec3>(p.vertices,p.vertexCount),p.cooking,i);
+        if(result.HasError()) return AetherBodyHandle_Invalid;
         native=result.Get();
       } else {
         if(desc->motionType==AetherMotionType::Dynamic||!p.indices||p.indexCount<3||p.indexCount%3) return AetherBodyHandle_Invalid;
@@ -1025,7 +975,10 @@ AetherBodyHandle AetherPhysics_CreateCompoundBodyV2(AetherPhysicsWorld *world,
         JPH::IndexedTriangleList triangles;triangles.reserve(p.indexCount/3);
         for(ae::u32 k=0;k<p.indexCount;k+=3) triangles.emplace_back(p.indices[k],p.indices[k+1],p.indices[k+2],0);
         JPH::MeshShapeSettings settings(std::move(vertices),std::move(triangles));
-        settings.mBuildQuality=JPH::MeshShapeSettings::EBuildQuality::FavorRuntimePerformance;
+        settings.mBuildQuality=(p.cooking.flags&AetherMeshCookingOptimizeRuntime)
+            ?JPH::MeshShapeSettings::EBuildQuality::FavorRuntimePerformance
+            :JPH::MeshShapeSettings::EBuildQuality::FavorBuildSpeed;
+        settings.mActiveEdgeCosThresholdAngle=std::cos(p.cooking.activeEdgeAngleDegrees*0.01745329252f);
         settings.mUserData=i;
         const auto result=settings.Create();if(result.HasError()) return AetherBodyHandle_Invalid;
         native=result.Get();mesh=true;
@@ -1036,6 +989,20 @@ AetherBodyHandle AetherPhysics_CreateCompoundBodyV2(AetherPhysicsWorld *world,
   }
   const auto result=compound.Create();if(result.HasError()) return AetherBodyHandle_Invalid;
   return CreateBodyInternal(*world,*desc,{0,0,0},result.Get(),dynamics,mesh&&desc->motionType==AetherMotionType::Kinematic);
+}
+
+AetherBodyHandle AetherPhysics_CreateCompoundBodyV2(AetherPhysicsWorld *world,
+    const AetherBodyDescV2 *desc,const AetherCompoundPartV2 *parts,ae::u32 count,
+    const AetherBodyDynamicsV1 *dynamics) {
+  if(!parts || count<1 || count>256) return AetherBodyHandle_Invalid;
+  std::vector<AetherCompoundPartV3> upgraded(count);
+  for(ae::u32 i=0;i<count;++i) {
+    upgraded[i].base=parts[i].base;upgraded[i].geometry=parts[i].geometry;
+    upgraded[i].vertices=parts[i].vertices;upgraded[i].vertexCount=parts[i].vertexCount;
+    upgraded[i].indices=parts[i].indices;upgraded[i].indexCount=parts[i].indexCount;
+    upgraded[i].cooking=AetherMeshCookingDefaultsV1;
+  }
+  return AetherPhysics_CreateCompoundBodyV3(world,desc,upgraded.data(),count,dynamics);
 }
 
 ae::i32 AetherPhysics_CreateBodiesV2(AetherPhysicsWorld *world,

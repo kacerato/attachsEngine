@@ -10,5 +10,6 @@ build local (o .NET SDK não compila seu próprio runtime a partir deste reposit
 por decisão explícita para manter o build offline depois da primeira vendorização — ver
 ESTADO.md, item 0.1.4, para o registro completo da decisão.
 
-Para atualizar: baixar os mesmos pacotes NuGet numa versão mais nova e substituir os arquivos em
-android-arm64/native/ e include/, atualizando os números de versão acima.
+Para atualizar: baixar os mesmos pacotes NuGet numa versão mais nova, substituir os arquivos em
+android-arm64/native/, android-arm64/shared/, include/ e a BCL sob
+android/app/src/main/assets/dotnet/shared/, atualizando os números de versão acima.

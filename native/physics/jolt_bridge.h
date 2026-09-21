@@ -272,6 +272,37 @@ AetherBodyHandle AetherPhysics_CreateCompoundBodyV2(AetherPhysicsWorld *world,
     const AetherBodyDescV2 *desc,const AetherCompoundPartV2 *parts,ae::u32 count,
     const AetherBodyDynamicsV1 *dynamics);
 
+// Opções de cooking consumidas pelo backend. O layout versionado mantém V2
+// congelada e permite que editor, runtime e futuros bindings usem a mesma
+// semântica sem conhecer tipos do Jolt.
+enum AetherMeshCookingFlags : ae::u32 {
+  AetherMeshCookingOptimizeRuntime = 1u << 0
+};
+struct AetherMeshCookingV1 {
+  ae::u32 structSize;
+  ae::u32 apiVersion;
+  ae::u32 flags;
+  float hullTolerance;
+  float activeEdgeAngleDegrees;
+};
+inline constexpr AetherMeshCookingV1 AetherMeshCookingDefaultsV1{
+  sizeof(AetherMeshCookingV1),1,AetherMeshCookingOptimizeRuntime,0.001f,5.0f
+};
+struct AetherCompoundPartV3 {
+  AetherCompoundPart base;
+  AetherPartGeometry geometry;
+  const AetherVec3 *vertices;
+  ae::u32 vertexCount;
+  const ae::u32 *indices;
+  ae::u32 indexCount;
+  AetherMeshCookingV1 cooking;
+};
+// V3 aplica qualidade da árvore de busca, tolerância do casco e limiar de
+// arestas ativas. V2 continua disponível e encaminha os padrões acima.
+AetherBodyHandle AetherPhysics_CreateCompoundBodyV3(AetherPhysicsWorld *world,
+    const AetherBodyDescV2 *desc,const AetherCompoundPartV3 *parts,ae::u32 count,
+    const AetherBodyDynamicsV1 *dynamics);
+
 ae::i32 AetherPhysics_CreateBodiesV2(AetherPhysicsWorld *world,
                                      const AetherBodyDescV2 *descs,
                                      AetherBodyHandle *outHandles,

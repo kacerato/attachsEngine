@@ -29,6 +29,9 @@ struct FrameGraphInputs {
   // histórico. É um consumidor independente de HZB e precisa produzir a mesma
   // política STORE+SAMPLED quando HZB está desligado.
   bool temporalAaEnabled = false;
+  // Neblina e outros efeitos de tela reconstroem distância a partir do depth
+  // no passe final, mesmo quando o antisserrilhado temporal está desligado.
+  bool postDepthEnabled = false;
   // A água é um segundo subpass fundido ao pass de cena e lê o depth do pixel
   // corrente como input attachment. Diferente de HZB/TAA, essa leitura não
   // escapa do tile: exige INPUT_ATTACHMENT, mas não STORE nem SAMPLED.

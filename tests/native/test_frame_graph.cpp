@@ -57,6 +57,18 @@ AE_TEST(frame_graph_taa_sozinho_preserva_depth_amostravel) {
   AE_EXPECT_TRUE(!policy.depthMemoryless, "depth lido fora do tile nao e memoryless");
 }
 
+AE_TEST(frame_graph_neblina_preserva_depth_para_o_pos) {
+  FrameGraphInputs input{};
+  input.width=1920;
+  input.height=1080;
+  input.postDepthEnabled=true;
+  const auto policy=resolveFrameAttachmentPolicy(input);
+  AE_EXPECT_TRUE(policy.valid,"grafo de pós compila");
+  AE_EXPECT_TRUE(policy.depthStored&&policy.depthSampled,
+                 "neblina recebe depth válido fora do pass da cena");
+  AE_EXPECT_TRUE(!policy.depthMemoryless,"depth de pós não pode ser descartado no tile");
+}
+
 AE_TEST(frame_graph_hzb_e_taa_compartilham_o_mesmo_depth_preservado) {
   FrameGraphInputs input{};
   input.width = 1920;

@@ -25,6 +25,7 @@ AE_TEST(import_profile_schema_1_keeps_the_authors_scale) {
   AE_EXPECT_EQ(parsed.normals, GltfNormalsImport, "normais no comportamento de então");
   AE_EXPECT_EQ(parsed.tangents, GltfTangentsImport, "tangentes no comportamento de então");
   AE_EXPECT_TRUE(!parsed.importCameras, "e câmeras continuam de fora, como eram");
+  AE_EXPECT_TRUE(!parsed.importLights, "e luzes também preservam o comportamento anterior");
 }
 
 AE_TEST(import_profile_schema_2_reads_without_the_camera_field) {
@@ -62,6 +63,11 @@ AE_TEST(import_profile_refuses_a_future_schema_and_a_truncated_current_one) {
                  "schema novo demais pode carregar escolha que este leitor não honra");
   AE_EXPECT_TRUE(!parseImportProfile(R"({"schema":2,"scale":1,"maximumTextureDimension":512})", parsed),
                  "o schema 2 declara normais; sem elas o arquivo está truncado");
+  auto current=serializeImportProfile({});
+  const auto field=current.find(",\"importLights\":false");
+  AE_EXPECT_TRUE(field!=std::string::npos,"o schema atual declara a escolha de luzes");
+  current.erase(field,std::string(",\"importLights\":false").size());
+  AE_EXPECT_TRUE(!parseImportProfile(current,parsed),"schema 8 sem Import Lights é arquivo truncado");
 }
 
 AE_TEST(import_node_map_version_1_is_still_read) {

@@ -106,6 +106,8 @@ struct AndroidShell final {
   ae::editor::EditorWaterPlay authoredWaterPlay;
   std::vector<ae::renderer::MapDrawState> authoredDraws;
   std::vector<ae::renderer::SceneLight> authoredLights;
+  std::vector<ae::renderer::SceneEnvironmentVolume> authoredEnvironmentVolumes;
+  ae::renderer::SceneEnvironment authoredEnvironment{};
   // Quantas luzes ficaram de fora no último aviso publicado. Sem isto o mesmo
   // excedente sairia no log a cada quadro e viraria ruído em vez de aviso.
   ae::u32 editorReportedLightOverflow = 0;
@@ -2397,6 +2399,8 @@ void android_main(android_app *app) {
             // estado que muda por script no meio do Play.
             if(shell.editorSession.extractLights(shell.authoredLights))
               shell.instancedRenderer.queueSceneLights(shell.authoredLights);
+            if(shell.editorSession.extractEnvironmentVolumes(shell.authoredEnvironmentVolumes))
+              shell.instancedRenderer.queueSceneEnvironmentVolumes(shell.authoredEnvironmentVolumes);
             // O relatório é o do último quadro desenhado: quem escolhe as luzes
             // é o quadro, com a câmera dele. Um excedente aparece no aviso
             // seguinte, nunca some.
@@ -2436,7 +2440,15 @@ void android_main(android_app *app) {
       shell.instancedRenderer.setSceneClipPlanes(0, 0);
       shell.instancedRenderer.setSceneFieldOfView(0);
       shell.instancedRenderer.setSceneOrthographicHalfHeight(0);
+      shell.instancedRenderer.setSceneEnvironmentLayerMask(~0u);
       shell.instancedRenderer.setEditorBackground(editorActive && !editorPlaying);
+      const auto &editorScreen=shell.editorSession.screen();
+      shell.instancedRenderer.setEditorViewportOptions(
+          !editorActive||editorPlaying||editorScreen.sceneLighting,
+          !editorActive||editorPlaying||editorScreen.sceneEffects,
+          !editorActive||editorPlaying||editorScreen.sceneSky,
+          !editorActive||editorPlaying||editorScreen.sceneFog,
+          !editorActive||editorPlaying||editorScreen.scenePost);
       if (editorActive) {
         const auto &projection = shell.editorSession.view().frustum;
         shell.instancedRenderer.setSceneClipPlanes(projection.nearPlane, projection.farPlane);
@@ -2455,6 +2467,7 @@ void android_main(android_app *app) {
             shell.instancedRenderer.setSceneClipPlanes(authoredCamera.nearPlane,authoredCamera.farPlane);
             shell.instancedRenderer.setSceneFieldOfView(authoredCamera.verticalFov*0.017453292519943295f);
             shell.instancedRenderer.setSceneOrthographicHalfHeight(authoredCamera.projection==ae::scene::CameraProjection::Orthographic?authoredCamera.orthographicHalfHeight:0);
+            shell.instancedRenderer.setSceneEnvironmentLayerMask(authoredCamera.environmentMask);
           }
         }
       }

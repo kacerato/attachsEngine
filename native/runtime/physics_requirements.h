@@ -31,14 +31,16 @@ inline const char *colliderPoseForPhysics(const SceneGraph &graph,ObjectId id,
     return "Esfera e cápsula requerem escala global uniforme";
   return nullptr;
 }
-// O que a forma Malha exige além da pose. A malha vem do Renderizador de malha
-// do próprio objeto; sem ele não há forma, e não se inventa uma caixa no lugar.
+// O que a forma Malha exige além da pose. Um recurso de colisão explícito vence
+// o Renderizador de malha do objeto; sem nenhum dos dois não há forma, e não se
+// inventa uma caixa no lugar.
 // Não convexa em corpo dinâmico é recusada pela mesma razão da Unity: triângulos
 // soltos não têm volume, logo não têm massa nem inércia.
 inline const char *colliderMeshForPhysics(const SceneGraph &graph,ObjectId id,const scene::Collider &collider,ObjectId owner) {
   if(collider.shape!=scene::ColliderShape::Mesh) return nullptr;
   const auto *entity=graph.find(id);const auto *render=entity?meshRenderer(*entity):nullptr;
-  if(!render||!render->mesh) return "Colisor de malha requer Renderizador de malha com malha neste objeto";
+  if(!collider.collisionMesh.valid()&&(!render||!render->mesh))
+    return "Colisor de malha requer uma Malha de colisão ou um Renderizador de malha neste objeto";
   const auto *object=graph.find(owner);const auto *body=object?physicsBody(*object):nullptr;
   if(!collider.convex&&body&&body->motion==scene::BodyMotion::Dynamic)
     return "Malha não convexa só em corpo estático ou cinemático; ligue Convexo para corpo dinâmico";

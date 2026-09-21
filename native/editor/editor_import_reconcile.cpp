@@ -173,6 +173,21 @@ void setImportedCamera(EditorEntity &values, const ImportNodeRecord &node) {
   if (!camera->valid()) values.components.remove(scene::Camera::descriptor);
 }
 
+void setImportedLight(EditorEntity &values, const ImportNodeRecord &node) {
+  if (!node.light) return;
+  auto *light = static_cast<scene::Light *>(values.components.edit(scene::Light::descriptor));
+  if (!light) return;
+  light->kind = static_cast<scene::LightKind>(node.lightKind);
+  light->unit = scene::LightUnit::LuxCandela;
+  light->useColorTemperature = false;
+  std::copy(node.lightColor, node.lightColor + 3, light->color);
+  light->intensity = node.lightIntensity;
+  light->range = node.lightRange;
+  light->innerAngle = node.lightInnerAngle;
+  light->outerAngle = node.lightOuterAngle;
+  if (!light->valid()) values.components.remove(scene::Light::descriptor);
+}
+
 void note(ImportReconcileReport &report, std::string text) {
   if (report.notes.size() < 32) report.notes.push_back(std::move(text));
 }
@@ -187,6 +202,11 @@ std::string importEntityName(std::string_view name) {
 bool importNodeTransform(const ImportNodeRecord &node, EditorTransform &out) {
   const float identity[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
   return runtime::localTransformForWorld(node.localMatrix, identity, out);
+}
+
+void applyImportedNodeComponents(EditorEntity &values, const ImportNodeRecord &node) {
+  setImportedCamera(values, node);
+  setImportedLight(values, node);
 }
 
 void setImportLinkBase(ImportLink &link, const ImportNodeRecord &node, const EditorTransform &transform, i32 primitive,
@@ -484,7 +504,7 @@ bool reconcileImportInstances(EditorDocument &document, EditorHistory *history, 
       auto values = *document.find(id);
       values.transform = transform;
       setSlots(values, node.draws, slotOf);
-      setImportedCamera(values, node);
+      applyImportedNodeComponents(values, node);
       auto *link = scene::editImportLink(values.components);
       if (!link) continue;
       link->source = source;

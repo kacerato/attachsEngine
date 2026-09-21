@@ -86,6 +86,18 @@ FrameAttachmentPolicy resolveFrameAttachmentPolicy(const FrameGraphInputs &input
     graph.addPass(temporal);
   }
 
+  if (inputs.postDepthEnabled) {
+    PassDesc post;
+    post.name = "PostDepth";
+    post.extentWidth = inputs.width;
+    post.extentHeight = inputs.height;
+    post.reads.push_back(read(depth));
+    const ResourceId output = graph.addResource(
+        ResourceDesc{"Post.Output", /*imported=*/true, /*isDepth=*/false, 0});
+    post.writes.push_back(fullWrite(output));
+    graph.addPass(post);
+  }
+
   rendergraph::CompileError error{};
   const auto compiled = graph.compile(&error);
   if (!compiled.has_value()) return policy;
@@ -99,7 +111,7 @@ FrameAttachmentPolicy resolveFrameAttachmentPolicy(const FrameGraphInputs &input
   policy.depthMemoryless = std::find(compiled->memorylessResources.begin(),
                                      compiled->memorylessResources.end(),
                                      depth) != compiled->memorylessResources.end();
-  // Amostrar é o que os passes de HZB/TAA fazem com o depth; o grafo já provou
+  // Amostrar é o que os passes de HZB/TAA/pós fazem com o depth; o grafo já provou
   // que ele sobrevive ao pass principal quando algum deles existe.
   policy.depthSampled = policy.depthStored;
   // Invariante do Vulkan, não preferência: TRANSIENT_ATTACHMENT proíbe SAMPLED.

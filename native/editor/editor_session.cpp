@@ -89,6 +89,41 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
         applied=history_.applyValues(document_,request.entity,values);
       break;
     }
+    case EditorAction::ComponentResource: {
+      const auto *source=entity->components.findInstance(request.componentInstance);
+      if(!source) break;
+      const scene::ComponentResourceBinding *binding=nullptr;
+      for(const auto &candidate:source->type().resourceBindings) if(candidate.id==request.componentProperty) {
+        if(binding) {binding=nullptr;break;}
+        binding=&candidate;
+      }
+      if(!binding||!binding->write||request.componentResourceSlot>=binding->slotCount(*source) ||
+         !binding->presentation.isEditable(*source)) break;
+      if(request.componentResource.valid()) {
+        const auto *record=assets_.find(request.componentResource);
+        if(record&&record->type!=binding->kind) break;
+        if(binding->kind==resources::AssetType::EnvironmentProfile&&
+           (!record||record->type!=resources::AssetType::EnvironmentProfile)) break;
+        if(binding->kind==resources::AssetType::Mesh&&!mapScene_.assetSlot(request.componentResource)) break;
+        if(binding->kind==resources::AssetType::Material&&!mapScene_.sharedMaterial(request.componentResource)) break;
+        if(binding->kind==resources::AssetType::Texture&&(!record||record->type!=resources::AssetType::Texture)) break;
+      } else if(!binding->inheritable && !binding->none.valid()) break;
+      const auto authored=request.componentResource.valid()?request.componentResource:
+          binding->inheritable?resources::AssetGuid{}:binding->none;
+      auto values=*entity;auto *candidate=values.components.editInstance(request.componentInstance);
+      if(candidate&&binding->write(*candidate,request.componentResourceSlot,authored)) {
+        if(binding->kind==resources::AssetType::EnvironmentProfile&&authored.valid()) {
+          auto *environment=&candidate->type()==&scene::Environment::descriptor?
+              static_cast<scene::Environment*>(candidate):nullptr;
+          const auto *profile=findEnvironmentProfile(authored);
+          if(!environment||!profile) break;
+          environment->values=resources::applyEnvironmentProfile(environment->values,*profile);
+        }
+      }
+      if(candidate&&candidate->valid())
+        applied=history_.applyValues(document_,request.entity,values);
+      break;
+    }
     case EditorAction::AddComponent: {
       const auto *entry=findEditorComponent(request.componentType);
       if(!entry) break;
@@ -137,6 +172,13 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
     case EditorAction::FitCollider: {
       auto values=*entity;auto *collider=editCollider(values,request.componentInstance);
       if(collider && fitEditorCollider(mapScene_,document_,request.entity,*collider)) applied=history_.applyValues(document_,request.entity,values);
+      break;
+    }
+    case EditorAction::GenerateCollisionMesh: {
+      std::string diagnostic;
+      applied=generateCollisionMesh(request.entity,request.componentInstance,
+                                    static_cast<u8>(request.property),request.number,diagnostic);
+      state_.status=diagnostic;
       break;
     }
     case EditorAction::AssignMesh: {
@@ -497,6 +539,9 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
     edit.purpose=EditorTextPurpose::ComponentPresetName;edit.entity=state_.presetEntity;
     edit.componentInstance=state_.presetInstance;edit.text=state_.presetName;return edit;
   }
+  if(state_.viewNaming) {
+    edit.purpose=EditorTextPurpose::SceneViewName;edit.field=state_.viewSelected;edit.text=state_.viewName;return edit;
+  }
   if(state_.editingCode && !state_.platformCodeView) {
     if(const auto *buffer=code_.active()) {
       edit.purpose=EditorTextPurpose::Code;edit.text=buffer->text;
@@ -741,6 +786,7 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
      current.entity!=edit.entity || current.field!=edit.field || edit.version.epoch!=sceneEpoch_) return false;
   const auto close=[&] {
     state_.presetNaming=false;
+    state_.viewNaming=false;state_.viewRenaming=false;
     code_.endTypingRun();
     state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;
     state_.goingToLine=false;state_.creatingCodeFolder=false;state_.codeComposing=false;
@@ -763,6 +809,21 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
       saveComponentPreset(edit.entity,edit.componentInstance,std::string(text),error);
     state_.status=saved?(state_.presetRecipeNaming?"Receita salva no projeto":"Preset salvo no projeto"):error;
     if(saved) {refreshComponentPresets();close();}return saved;
+  }
+  if(edit.purpose==EditorTextPurpose::SceneViewName) {
+    const auto name=trimmedName(text);
+    if(!runtime::SceneViews::validName(name)) {
+      state_.status="O nome da vista não pode ficar vazio nem passar de 48 caracteres";return false;
+    }
+    const bool renaming=state_.viewRenaming;
+    const bool ok=renaming?renameSceneView(state_.viewSelected,name):saveSceneView(name);
+    if(ok && !renaming)
+      for(u32 i=0;i<document_.views().count();++i)
+        if(document_.views().at(i)->name==name) state_.viewSelected=i;
+    state_.status=ok?(renaming?"Vista renomeada":"Vista salva com o enquadramento atual"):
+        "Já existe uma vista com esse nome";
+    if(ok) close();
+    return ok;
   }
   if(edit.purpose==EditorTextPurpose::ConsoleSearch) {
     state_.consoleQuery=std::string(text);state_.consoleScroll=0;state_.consoleAnchor=0;close();return true;
@@ -1012,6 +1073,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     prepared.normals=state_.importPreparedNormals;prepared.normalWeighting=state_.importPreparedNormalWeighting;
     prepared.smoothingAngle=state_.importPreparedSmoothingAngle;
     prepared.tangents=state_.importPreparedTangents;prepared.importCameras=state_.importPreparedCameras;
+    prepared.importLights=state_.importPreparedLights;
     const bool profileApplied=resources::sameImportPreparation(importProfileDraft(),prepared);
     bool handled=true;
     if(is(EditorWidget::ImportTabSummary)) {state_.importTab=Tab::Summary;state_.importPage=0;}
@@ -1041,6 +1103,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     else if(is(EditorWidget::ImportTangentsCycle))
       state_.importTangents=state_.importTangents==resources::GltfTangentsImport?resources::GltfTangentsCalculate:resources::GltfTangentsImport;
     else if(is(EditorWidget::ImportCamerasToggle)) state_.importCameras=!state_.importCameras;
+    else if(is(EditorWidget::ImportLightsToggle)) state_.importLights=!state_.importLights;
     // Passos de 15°: o controle deslizante da Unity em toque, sem arrasto fino.
     else if(is(EditorWidget::ImportSmoothingDown)) state_.importSmoothingAngle=state_.importSmoothingAngle>=15?state_.importSmoothingAngle-15:0;
     else if(is(EditorWidget::ImportSmoothingUp)) state_.importSmoothingAngle=std::min(180u,state_.importSmoothingAngle+15);
@@ -1333,7 +1396,8 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     }
     if(state_.componentSelection!=state_.selection) {
       state_.componentSelection=state_.selection;state_.referenceInstance=0;state_.expandedComponent.clear();state_.expandedNative=0;state_.nativeMenu=0;
-      state_.expandedScript=0;state_.scriptMenu=0;state_.meshPicker=false;state_.componentPage=0;state_.propertyPage=0;state_.addingComponent=false;
+      state_.expandedScript=0;state_.scriptMenu=0;state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();
+      state_.componentPage=0;state_.propertyPage=0;state_.addingComponent=false;
     }
     const u32 key=routing.widgetId;
     if(key==widgetId(EditorWidget::CameraViewClose)) {cancelPointers();state_.cameraViewEntity=0;state_.cameraPiloting=false;return true;}
@@ -1465,6 +1529,20 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       std::snprintf(state_.numericText,sizeof(state_.numericText),"%.9g",static_cast<double>(property.read(*component)));
       state_.numericReplace=true;state_.numericError=false;return true;
     }
+    if(key>=widgetId(EditorWidget::ComponentResourceBase) && key<widgetId(EditorWidget::ComponentResourceBase)+0x01000000u) {
+      const auto *entity=document_.find(state_.selection);const u32 encoded=key-widgetId(EditorWidget::ComponentResourceBase);
+      const u32 type=encoded&0xffu,bindingIndex=(encoded>>8)&0xffu,slot=(encoded>>16)&0xffu;
+      if(!entity||type>=entity->components.size()||history_.isOpen()) return true;
+      const auto *component=entity->components.at(type);
+      if(bindingIndex>=component->type().resourceBindings.size()) return true;
+      const auto &binding=component->type().resourceBindings[bindingIndex];
+      if((binding.kind!=resources::AssetType::Mesh&&binding.kind!=resources::AssetType::EnvironmentProfile)||
+         slot>=binding.slotCount(*component)||
+         !binding.presentation.isEditable(*component)) return true;
+      state_.resourceInstance=component->instanceId();state_.resourceProperty=std::string(binding.id);state_.resourceSlot=slot;
+      if(binding.id=="collision_mesh") refreshCollisionMeshDraft();
+      state_.meshPicker=true;state_.meshPage=0;return true;
+    }
     if(key==widgetId(EditorWidget::ComponentSearch) || key==widgetId(EditorWidget::MeshSearch)) {
       state_.editingComponentSearch=key==widgetId(EditorWidget::ComponentSearch);state_.editingMeshSearch=!state_.editingComponentSearch;
       const auto &query=state_.editingComponentSearch?state_.componentQuery:state_.meshQuery;
@@ -1481,7 +1559,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       state_.componentSelection=state_.selection;state_.expandedComponent=state_.expandedComponent=="astra.transform"?"":"astra.transform";
       state_.expandedNative=0;state_.expandedScript=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;state_.propertyPage=0;return true;
     }
-    if(key==widgetId(EditorWidget::MeshChoose)) {state_.meshPicker=true;state_.meshPage=0;return true;}
+    if(key==widgetId(EditorWidget::MeshChoose)) {
+      state_.resourceInstance=0;state_.resourceProperty.clear();state_.meshPicker=true;state_.meshPage=0;return true;
+    }
     // Vínculo com a fonte importada (M08.2).
     if(key==widgetId(EditorWidget::ImportLinkMenu)) {state_.importLinkMenu=!state_.importLinkMenu;return true;}
     if(key>=widgetId(EditorWidget::ImportLinkRevertBase) && key<widgetId(EditorWidget::ImportLinkRevertBase)+128u) {
@@ -1684,15 +1764,68 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       std::snprintf(state_.numericText,sizeof(state_.numericText),"%.9g",static_cast<double>(state_.materialSlotView.values[field]));
       state_.numericReplace=true;state_.numericError=false;return true;
     }
-    if(key==widgetId(EditorWidget::MeshPickerClose)) {state_.meshPicker=false;return true;}
+    if(key==widgetId(EditorWidget::MeshPickerClose)) {state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();return true;}
     if(key==widgetId(EditorWidget::MeshPrevious)) {if(state_.meshPage) --state_.meshPage;return true;}
     if(key==widgetId(EditorWidget::MeshNext)) {++state_.meshPage;return true;}
+    if(key==widgetId(EditorWidget::EnvironmentProfileCreate)||key==widgetId(EditorWidget::EnvironmentProfileUpdate)) {
+      std::string diagnostic;
+      const bool created=key==widgetId(EditorWidget::EnvironmentProfileCreate);
+      const bool ok=created?createEnvironmentProfile(state_.selection,state_.resourceInstance,diagnostic).valid():
+                            updateEnvironmentProfile(state_.selection,state_.resourceInstance,diagnostic);
+      state_.status=diagnostic;if(ok) {state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();}
+      return true;
+    }
+    constexpr u8 collisionQualitySteps[]{5,10,25,50,75,90};
+    constexpr float collisionErrorSteps[]{.001f,.005f,.01f,.02f,.05f,.1f,.25f};
+    const auto stepIndex=[](const auto &steps,auto value) {
+      u32 closest=0;auto distance=std::abs(steps[0]-value);
+      for(u32 i=1;i<std::size(steps);++i) if(const auto next=std::abs(steps[i]-value);next<distance) {closest=i;distance=next;}
+      return closest;
+    };
+    if(key==widgetId(EditorWidget::MeshCollisionQualityDown)||key==widgetId(EditorWidget::MeshCollisionQualityUp)) {
+      auto step=stepIndex(collisionQualitySteps,state_.collisionTrianglePercent);
+      if(key==widgetId(EditorWidget::MeshCollisionQualityDown)&&step) --step;
+      if(key==widgetId(EditorWidget::MeshCollisionQualityUp)&&step+1<std::size(collisionQualitySteps)) ++step;
+      state_.collisionTrianglePercent=collisionQualitySteps[step];return true;
+    }
+    if(key==widgetId(EditorWidget::MeshCollisionErrorDown)||key==widgetId(EditorWidget::MeshCollisionErrorUp)) {
+      auto step=stepIndex(collisionErrorSteps,state_.collisionMaximumError);
+      if(key==widgetId(EditorWidget::MeshCollisionErrorDown)&&step) --step;
+      if(key==widgetId(EditorWidget::MeshCollisionErrorUp)&&step+1<std::size(collisionErrorSteps)) ++step;
+      state_.collisionMaximumError=collisionErrorSteps[step];return true;
+    }
+    if(key==widgetId(EditorWidget::MeshGenerateCollision)) {
+      EditorActionRequest request;request.version=sceneVersion();request.entity=state_.selection;
+      request.action=EditorAction::GenerateCollisionMesh;request.componentInstance=state_.resourceInstance;
+      request.property=state_.collisionTrianglePercent;request.number=state_.collisionMaximumError;
+      dispatch(request);
+      return true;
+    }
     if(key==widgetId(EditorWidget::MeshGeometryTab)||key==widgetId(EditorWidget::MeshMaterialTab)) {state_.meshTab=key==widgetId(EditorWidget::MeshMaterialTab);state_.propertyPage=0;state_.meshPicker=false;return true;}
     if((key>=widgetId(EditorWidget::MeshChoiceBase) && key<widgetId(EditorWidget::MeshChoiceBase)+0x01000000u) || key==widgetId(EditorWidget::MeshClear) || key==widgetId(EditorWidget::MaterialRestore)) {
       EditorActionRequest request;request.version=sceneVersion();request.entity=state_.selection;
-      request.action=key==widgetId(EditorWidget::MaterialRestore)?EditorAction::RestoreMaterial:EditorAction::AssignMesh;
       request.property=key>=widgetId(EditorWidget::MeshChoiceBase)?key-widgetId(EditorWidget::MeshChoiceBase)+1:0;
-      if(dispatch(request).status==EditorActionStatus::Applied) {state_.meshPicker=false;state_.status=request.action==EditorAction::RestoreMaterial?"Material da origem restaurado":"Referência de malha atualizada";}
+      if(state_.resourceInstance&&key!=widgetId(EditorWidget::MaterialRestore)) {
+        request.action=EditorAction::ComponentResource;request.componentInstance=state_.resourceInstance;
+        request.componentProperty=state_.resourceProperty;request.componentResourceSlot=state_.resourceSlot;
+        if(request.property) {
+          const auto *object=document_.find(state_.selection);
+          const auto *component=object?object->components.findInstance(state_.resourceInstance):nullptr;
+          const scene::ComponentResourceBinding *binding=nullptr;
+          if(component) for(const auto &candidate:component->type().resourceBindings)
+            if(candidate.id==state_.resourceProperty) {binding=&candidate;break;}
+          if(binding&&binding->kind==resources::AssetType::EnvironmentProfile) {
+            const auto index=request.property-1;
+            if(index>=assets_.records().size()) return true;
+            request.componentResource=assets_.records()[index].guid;
+          } else request.componentResource=mapScene_.assetGuid(request.property-1);
+        }
+      } else request.action=key==widgetId(EditorWidget::MaterialRestore)?EditorAction::RestoreMaterial:EditorAction::AssignMesh;
+      if(dispatch(request).status==EditorActionStatus::Applied) {
+        state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();
+        state_.status=request.action==EditorAction::RestoreMaterial?"Material da origem restaurado":
+                      request.action==EditorAction::ComponentResource?"Recurso do componente atualizado":"Referência de malha atualizada";
+      }
       else state_.status="Referência incompatível com este objeto";
       return true;
     }
@@ -1997,7 +2130,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       state_.creationSelection=key-widgetId(EditorWidget::CreationRowBase);return true;
     }
   }
-  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.presetNaming) {
+  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.presetNaming || state_.viewNaming) {
     if(routing.tapped) {
       const auto key=routing.widgetId;
       auto n=std::strlen(state_.renameText);
@@ -2210,6 +2343,39 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   if (history_.isOpen() && (fieldWidget_ != 0 || gizmoTransactionOpen_) &&
       routing.target == UiPointerTarget::Widget &&
       routing.widgetId < widgetId(EditorWidget::GizmoAxisBase)) return true;
+  if (routing.tapped && routing.widgetId == widgetId(EditorWidget::ViewsOpen)) {
+    state_.viewsPanel=!state_.viewsPanel;return true;
+  }
+  if (state_.viewsPanel && routing.tapped) {
+    const auto key=routing.widgetId;
+    if(key==widgetId(EditorWidget::ViewsClose)) {state_.viewsPanel=false;return true;}
+    if(key>=widgetId(EditorWidget::SceneViewRowBase) &&
+       key<widgetId(EditorWidget::SceneViewRowBase)+runtime::SceneViews::kMaximum) {
+      if(!applySceneView(key-widgetId(EditorWidget::SceneViewRowBase))) state_.status="Vista indisponível";
+      return true;
+    }
+    if(key==widgetId(EditorWidget::ViewSave) || key==widgetId(EditorWidget::ViewRename)) {
+      if(isPlaying() || history_.isOpen()) {state_.status="Finalize a edição antes de mexer nas vistas.";return true;}
+      state_.viewRenaming=key==widgetId(EditorWidget::ViewRename);
+      const auto *chosen=document_.views().at(state_.viewSelected);
+      state_.viewName=state_.viewRenaming&&chosen?chosen->name:
+          "Vista "+std::to_string(document_.views().count()+1);
+      std::snprintf(state_.renameText,sizeof(state_.renameText),"%s",state_.viewName.c_str());
+      state_.viewNaming=true;return true;
+    }
+    if(key==widgetId(EditorWidget::ViewUpdate)) {
+      const auto *chosen=document_.views().at(state_.viewSelected);
+      // Atualizar guarda a vista ATUAL com o nome que já existe: é o gesto de
+      // "esta é a comparação daqui em diante".
+      state_.status=chosen&&saveSceneView(chosen->name)?"Vista atualizada com o enquadramento atual":
+          "Não foi possível atualizar a vista";
+      return true;
+    }
+    if(key==widgetId(EditorWidget::ViewDelete)) {
+      state_.status=deleteSceneView(state_.viewSelected)?"Vista excluída":"Não foi possível excluir a vista";
+      return true;
+    }
+  }
   if (routing.tapped && routing.widgetId == widgetId(EditorWidget::FrameSelection)) {
     state_.inspectorMenu=false;
     frameSelection(); return true;
@@ -2270,6 +2436,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       routing.widgetId==widgetId(EditorWidget::Redo)?EditorAction::Redo:
       routing.widgetId==widgetId(EditorWidget::DuplicateSelection)?EditorAction::Duplicate:EditorAction::Remove;
     const auto result=dispatch(command);
+    if(result.status==EditorActionStatus::Applied &&
+       (command.action==EditorAction::Undo||command.action==EditorAction::Redo) &&
+       state_.meshPicker&&state_.resourceProperty=="collision_mesh") refreshCollisionMeshDraft();
     state_.entityMenu=false;
     if(result.status!=EditorActionStatus::Applied) state_.status="Operação indisponível";
     return true;
@@ -2475,6 +2644,9 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   if(outPrimitives) *outPrimitives=primitives;
   std::vector<resources::AssetGuid> identities(primitives);
   identities.insert(identities.end(),library.identities.begin(),library.identities.end());
+  std::vector<std::string> names;names.reserve(published.draws.size());
+  for(usize i=0;i<primitives;++i) names.push_back("Primitiva "+std::to_string(i+1));
+  names.insert(names.end(),library.names.begin(),library.names.end());
   // Pivô: as primitivas internas mantêm a convenção do pacote (centro dos
   // limites), a geometria importada usa a origem do nó.
   std::vector<float> pivots;
@@ -2485,7 +2657,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   if(pivots.size()!=published.draws.size()*3) { diagnostic="Pacote publicado inconsistente."; return false; }
   cancelPointers();
   if(!mapScene_.adoptPackage(document_,published.draws,published.materials,published.vertices,
-                             published.indices,identities,packageFingerprint_,pivots)) {
+                             published.indices,identities,packageFingerprint_,pivots,names)) {
     diagnostic="O editor recusou o pacote publicado.";return false;
   }
   publishedTextures_=std::move(publishedResidency);
@@ -2969,6 +3141,11 @@ bool EditorSession::stageSource(const resources::GltfImport &model, std::string_
   block.map=std::move(nodeMap);
   block.materialNames=model.materialNames;
   block.textures=model.textures;
+  block.sourceIndexCount=block.indices.size();
+  block.sourceDrawCount=block.draws.size();
+  auto profile=importProfileFor(source);
+  profile.excludedNodes.assign(excludedNodes.begin(),excludedNodes.end());
+  if(!applyCollisionMeshRecipes(block,profile,report.diagnostic)) return false;
 
   usize slot=candidateSources.size();
   for(usize i=0;i<candidateSources.size();++i) if(candidateSources[i].guid==source) {slot=i;break;}
@@ -2993,6 +3170,132 @@ bool EditorSession::stageSource(const resources::GltfImport &model, std::string_
       :nextAssets.add(record);
   if(!registered) {report.diagnostic="Registro recusou o recurso; publicação cancelada.";return false;}
   return true;
+}
+
+bool EditorSession::applyCollisionMeshRecipes(ImportedSource &source,const resources::ImportProfile &profile,
+                                               std::string &diagnostic) const {
+  if(source.sourceDrawCount>source.draws.size() || source.sourceDrawCount>source.identities.size() ||
+     source.sourceDrawCount>source.names.size() || source.sourceIndexCount>source.indices.size()) {
+    diagnostic="Biblioteca fonte inconsistente; derivados não foram gerados.";return false;
+  }
+  source.draws.resize(source.sourceDrawCount);source.identities.resize(source.sourceDrawCount);
+  source.names.resize(source.sourceDrawCount);source.indices.resize(source.sourceIndexCount);
+  for(const auto &recipe:profile.collisionMeshes) {
+    const auto found=std::find(source.identities.begin(),source.identities.end(),recipe.source);
+    if(found==source.identities.end()) continue; // referência ausente fica preservada no perfil
+    const usize index=static_cast<usize>(found-source.identities.begin());
+    if(index>=source.sourceDrawCount) continue;
+    resources::CollisionMeshBuild build;
+    if(!resources::buildCollisionMesh(source.vertices,source.indices,source.draws[index],recipe,build,diagnostic)) return false;
+    auto draw=source.draws[index];draw.firstIndex=static_cast<u32>(source.indices.size());
+    draw.indexCount=static_cast<u32>(build.indices.size());draw.lodLevel=0;draw.geometricError=build.resultingError;
+    draw.lodGroupId=static_cast<u32>(source.draws.size());
+    source.indices.insert(source.indices.end(),build.indices.begin(),build.indices.end());
+    source.draws.push_back(draw);source.identities.push_back(resources::collisionMeshGuid(recipe));
+    source.names.push_back(source.names[index]+" · Colisão "+std::to_string(recipe.trianglePercent)+"%");
+  }
+  return true;
+}
+
+bool EditorSession::generateCollisionMesh(EditorEntityId id,u64 componentInstance,u8 trianglePercent,
+                                           float maximumError,std::string &diagnostic) {
+  diagnostic.clear();
+  const auto *entity=document_.find(id);const auto *render=entity?meshRenderer(*entity):nullptr;
+  const auto *component=entity?entity->components.findInstance(componentInstance):nullptr;
+  const scene::ComponentResourceBinding *binding=nullptr;
+  if(component) for(const auto &candidate:component->type().resourceBindings)
+    if(candidate.id=="collision_mesh") {binding=&candidate;break;}
+  if(!entity||!render||!component||!binding||!binding->write||!binding->presentation.isEditable(*component)) {
+    diagnostic="A malha visual ou o vínculo da malha física não está disponível.";return false;
+  }
+  auto visual=render->slotAsset(0);
+  if(!visual.valid()&&render->slotMesh(0)) visual=mapScene_.assetGuid(render->slotMesh(0)-1);
+  resources::CollisionMeshRecipe recipe{visual,trianglePercent,maximumError};
+  if(!resources::validCollisionMeshRecipe(recipe)) {diagnostic="Escolha uma malha visual importada e parâmetros válidos.";return false;}
+  usize sourceSlot=importedSources_.size();
+  for(usize i=0;i<importedSources_.size();++i)
+    if(std::find(importedSources_[i].identities.begin(),
+                 importedSources_[i].identities.begin()+static_cast<std::ptrdiff_t>(importedSources_[i].sourceDrawCount),visual)!=
+       importedSources_[i].identities.begin()+static_cast<std::ptrdiff_t>(importedSources_[i].sourceDrawCount)) {sourceSlot=i;break;}
+  if(sourceSlot==importedSources_.size()) {diagnostic="A malha visual não pertence a uma fonte importada carregada.";return false;}
+  const auto sourceGuid=importedSources_[sourceSlot].guid;
+  auto oldProfile=importProfileFor(sourceGuid),profile=oldProfile;
+  auto existing=std::find_if(profile.collisionMeshes.begin(),profile.collisionMeshes.end(),
+                             [&](const auto &entry){return entry.source==visual;});
+  // Parâmetros regeneram o conteúdo, mas a identidade autoral do recurso não
+  // muda. Perfis schema 6 chegam aqui com seu GUID legado já materializado.
+  if(existing==profile.collisionMeshes.end()) {
+    recipe.identity=resources::collisionMeshGuid(recipe);
+    profile.collisionMeshes.push_back(recipe);
+  } else {
+    recipe.identity=resources::collisionMeshGuid(*existing);
+    *existing=recipe;
+  }
+  const auto derived=resources::collisionMeshGuid(recipe);
+  auto values=*entity;auto *editable=values.components.editInstance(componentInstance);
+  if(!editable||!binding->write(*editable,0,derived)||!editable->valid()) {
+    diagnostic="O componente recusou a malha física derivada.";return false;
+  }
+  const auto previous=*entity;
+  if(!applyCollisionMeshEdit(sourceGuid,profile,id,values,diagnostic)) return false;
+  if(!history_.recordResource("Gerar malha física",
+      [this,sourceGuid,oldProfile,profile,id,previous,values](bool forward) {
+        std::string ignored;
+        return applyCollisionMeshEdit(sourceGuid,forward?profile:oldProfile,id,forward?values:previous,ignored);
+      })) {
+    std::string rollback;applyCollisionMeshEdit(sourceGuid,oldProfile,id,previous,rollback);
+    diagnostic="O histórico estava ocupado; a geração foi revertida.";return false;
+  }
+  const auto slot=mapScene_.assetSlot(derived);
+  const auto *draw=slot?mapScene_.asset(slot-1):nullptr;
+  diagnostic="Malha física gerada: "+std::to_string(draw?draw->indexCount/3:0)+" triângulos (alvo "+
+             std::to_string(trianglePercent)+"%) · disponível em Desfazer";
+  return true;
+}
+
+bool EditorSession::applyCollisionMeshEdit(const resources::AssetGuid &sourceGuid,
+    const resources::ImportProfile &profile,EditorEntityId id,const EditorEntity &values,std::string &diagnostic) {
+  usize sourceSlot=importedSources_.size();
+  for(usize i=0;i<importedSources_.size();++i) if(importedSources_[i].guid==sourceGuid) {sourceSlot=i;break;}
+  if(sourceSlot==importedSources_.size() || !document_.find(id) || !resources::validImportProfile(profile)) {
+    diagnostic="A fonte ou o objeto da malha física não está mais disponível.";return false;
+  }
+  auto candidateSources=importedSources_;
+  if(!applyCollisionMeshRecipes(candidateSources[sourceSlot],profile,diagnostic)) return false;
+  const auto previousDocument=document_;
+  const auto previousMap=mapScene_;
+  const auto previousProfile=importProfileFor(sourceGuid);
+  if(!publishAndAdopt(flattenSources(candidateSources),diagnostic)) {
+    std::string rollback;publishAndAdopt(flattenSources(importedSources_),rollback);
+    document_=previousDocument;mapScene_=previousMap;return false;
+  }
+  if(!saveImportProfile(sourceGuid,profile) || !document_.applyEntityValues(id,values)) {
+    saveImportProfile(sourceGuid,previousProfile);
+    std::string rollback;publishAndAdopt(flattenSources(importedSources_),rollback);
+    document_=previousDocument;mapScene_=previousMap;
+    diagnostic="Não foi possível persistir a receita e a alteração foi revertida.";return false;
+  }
+  importedSources_=std::move(candidateSources);
+  return true;
+}
+
+void EditorSession::refreshCollisionMeshDraft() {
+  state_.collisionTrianglePercent=25;state_.collisionMaximumError=.02f;
+  const auto *entity=document_.find(state_.selection);const auto *render=entity?meshRenderer(*entity):nullptr;
+  auto visual=render?render->slotAsset(0):resources::AssetGuid{};
+  if(!visual.valid()&&render&&render->slotMesh(0)) visual=mapScene_.assetGuid(render->slotMesh(0)-1);
+  for(const auto &source:importedSources_) {
+    const auto end=source.identities.begin()+static_cast<std::ptrdiff_t>(source.sourceDrawCount);
+    if(std::find(source.identities.begin(),end,visual)==end) continue;
+    const auto profile=importProfileFor(source.guid);
+    const auto recipe=std::find_if(profile.collisionMeshes.begin(),profile.collisionMeshes.end(),
+                                   [&](const auto &candidate){return candidate.source==visual;});
+    if(recipe!=profile.collisionMeshes.end()) {
+      state_.collisionTrianglePercent=recipe->trianglePercent;
+      state_.collisionMaximumError=recipe->maximumError;
+    }
+    break;
+  }
 }
 
 // Depois da biblioteca adotada: a reconciliação resolve slots pelo pacote novo.
@@ -3091,6 +3394,7 @@ bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportRep
         setImportLinkBase(*link,nodeMap.nodes[n],local,-1,nodeMap.revision);
         link->root=node.parent<0 && instanceParent==document_.root();
       }
+      if(linkable) applyImportedNodeComponents(value,nodeMap.nodes[n]);
       history_.applyValues(document_,id,value);
       ++report.objects;
     }
@@ -3205,6 +3509,7 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   state_.importPreparedNormals=prepared.normals;state_.importPreparedNormalWeighting=prepared.normalWeighting;
   state_.importPreparedSmoothingAngle=prepared.smoothingAngle;
   state_.importPreparedTangents=prepared.tangents;state_.importPreparedCameras=prepared.importCameras;
+  state_.importPreparedLights=prepared.importLights;
   state_.importReprepare=false;
   // R3: saídas estruturadas para as abas do painel (I23).
   {
@@ -4138,9 +4443,10 @@ bool EditorSession::repairSceneResource(resources::AssetGuid from,resources::Ass
         if(!findProjectTexture(to)||!decodeProjectTexture(to,true,EditorMapScene::DefaultTextureSampler)) {diagnostic="Textura não carregada; nada foi substituído.";return false;}
         textureChanged=true;
       }
-      auto *mesh=static_cast<scene::MeshRenderer*>(candidate.components.editInstance(component->instanceId()));
-      count+=replaceLocalResource(*mesh,from,to,uses.front().kind,mapScene_);changed=true;
-      if(!mesh->valid()) {diagnostic="Componente inválido; nada foi substituído.";return false;}
+      auto *editable=candidate.components.editInstance(component->instanceId());
+      if(!editable) {diagnostic="Componente ausente durante o reparo; nada foi substituído.";return false;}
+      count+=replaceLocalResource(*editable,from,to,uses.front().kind,mapScene_);changed=true;
+      if(!editable->valid()) {diagnostic="Componente inválido; nada foi substituído.";return false;}
     }
     if(changed&&!stagedHistory.applyValues(stagedDocument,id,candidate)) {diagnostic="Histórico recusou o reparo; cena preservada.";return false;}
   }
@@ -4187,9 +4493,9 @@ bool EditorSession::repairComponentResource(EditorEntityId id,u64 instance,resou
     diagnostic="Carregue a textura do projeto antes de reparar o vínculo.";return false;
   }
   auto candidate=*object;
-  auto *mesh=static_cast<scene::MeshRenderer*>(candidate.components.editInstance(instance));
-  const auto count=replaceLocalResource(*mesh,from,to,uses.front().kind,mapScene_);
-  if(!count||!mesh->valid()||!history_.applyValues(document_,id,candidate)) {
+  auto *editable=candidate.components.editInstance(instance);
+  const auto count=editable?replaceLocalResource(*editable,from,to,uses.front().kind,mapScene_):0;
+  if(!count||!editable->valid()||!history_.applyValues(document_,id,candidate)) {
     diagnostic="O histórico recusou o reparo.";return false;
   }
   diagnostic=std::to_string(count)+" vínculo(s) local(is) substituído(s)";
@@ -4336,6 +4642,158 @@ void EditorSession::loadMaterialAssets() {
     materials_.push_back(std::move(material));
   }
   publishMaterialLibrary();
+}
+
+void EditorSession::loadEnvironmentProfiles() {
+  environmentProfiles_.clear();
+  const auto root=files_.rootPath();
+  if(root.empty()) return;
+  for(const auto &record:assets_.records()) {
+    if(record.type!=resources::AssetType::EnvironmentProfile) continue;
+    std::filesystem::path absolute;std::vector<u8> bytes;resources::EnvironmentProfile profile;
+    if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),record.path,absolute) ||
+       !EditorImportTransaction::read(absolute,bytes,64u*1024u) ||
+       !resources::EnvironmentProfile::deserialize(
+          std::string_view(reinterpret_cast<const char*>(bytes.data()),bytes.size()),profile) ||
+       profile.guid!=record.guid) {
+      reportProblem(EditorConsoleSeverity::Warning,
+                    "Perfil de ambiente ilegível ou ausente: "+record.path+"; o volume conserva sua cópia local.");
+      continue;
+    }
+    environmentProfiles_.push_back(std::move(profile));
+  }
+}
+
+bool EditorSession::writeEnvironmentProfile(const resources::EnvironmentProfile &profile,
+                                            const std::string &path,std::string &diagnostic) {
+  std::filesystem::path absolute;
+  if(files_.rootPath().empty() || !EditorImportTransaction::safePath(
+      EditorImportTransaction::fromUtf8(files_.rootPath()),path,absolute)) {
+    diagnostic="Perfis de ambiente precisam de um projeto aberto.";return false;
+  }
+  std::error_code error;std::filesystem::create_directories(absolute.parent_path(),error);
+  if(error||!EditorImportTransaction::writeText(absolute,profile.serialize())) {
+    diagnostic="Não foi possível gravar "+path+".";return false;
+  }
+  return true;
+}
+
+bool EditorSession::commitEnvironmentProfile(const resources::EnvironmentProfile &candidate,
+                                             std::string &diagnostic,bool recordHistory) {
+  diagnostic.clear();
+  if(isPlaying()||history_.isOpen()) {diagnostic="Finalize a edição antes de alterar o perfil.";return false;}
+  auto found=std::find_if(environmentProfiles_.begin(),environmentProfiles_.end(),
+      [&](const auto &value){return value.guid==candidate.guid;});
+  const auto *record=assets_.find(candidate.guid);
+  if(!candidate.valid()||found==environmentProfiles_.end()||!record||
+     record->type!=resources::AssetType::EnvironmentProfile||
+     found->revision==std::numeric_limits<u32>::max()||candidate.revision!=found->revision+1) {
+    diagnostic="Perfil ou revisão indisponível; reabra o recurso.";return false;
+  }
+  const auto serialized=candidate.serialize();
+  const std::span<const u8> bytes{reinterpret_cast<const u8*>(serialized.data()),serialized.size()};
+  auto nextAssets=assets_;
+  if(!nextAssets.publishImport(candidate.guid,Sha256::hex(bytes),record->importerVersion,
+      record->importerParameters,record->derived,{})) {
+    diagnostic="Registro recusou a atualização do perfil.";return false;
+  }
+  std::filesystem::path absolute;std::vector<u8> previous;
+  if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),record->path,absolute)||
+     !EditorImportTransaction::read(absolute,previous)) {
+    diagnostic="Arquivo do perfil indisponível; nenhuma alteração aplicada.";return false;
+  }
+  resources::EnvironmentProfile onDisk;
+  if(!resources::EnvironmentProfile::deserialize(std::string(previous.begin(),previous.end()),onDisk)||
+     onDisk.serialize()!=found->serialize()) {
+    diagnostic="O perfil mudou no disco. Reabra o recurso antes de editar.";return false;
+  }
+  EditorImportTransaction transaction(files_.rootPath());
+  if(!transaction.begin(record->path,Sha256::hex(previous),diagnostic)) return false;
+  if(!transaction.commit(bytes,nextAssets.serialize())) {
+    diagnostic=transaction.rollback()?"Gravação recusada; perfil e registro anteriores restaurados.":
+        "Falha na recuperação; backups preservados no journal do projeto.";return false;
+  }
+  const auto before=*found;assets_=std::move(nextAssets);*found=candidate;assetRegistryDirty_=true;
+  synchronizeEnvironmentProfile(candidate);
+  if(recordHistory) {
+    const auto project=files_.rootPath();
+    history_.recordResource("Perfil de ambiente",[this,before,after=candidate,project](bool forward) {
+      const auto *current=findEnvironmentProfile(before.guid);
+      if(files_.rootPath()!=project||!current) {state_.status="Perfil do histórico indisponível neste projeto.";return false;}
+      auto expected=forward?before:after;expected.revision=current->revision;
+      if(expected.serialize()!=current->serialize()) {state_.status="O perfil mudou; histórico preservado sem sobrescrever.";return false;}
+      auto restored=forward?after:before;restored.revision=current->revision+1;
+      std::string error;if(!commitEnvironmentProfile(restored,error,false)) {state_.status=error;return false;}
+      state_.status=forward?"Perfil de ambiente refeito":"Perfil de ambiente desfeito";return true;
+    });
+  }
+  return true;
+}
+
+void EditorSession::synchronizeEnvironmentProfile(const resources::EnvironmentProfile &profile) {
+  std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
+  for(const auto id:ids) {
+    const auto *entity=document_.find(id);if(!entity) continue;
+    auto values=*entity;bool changed=false;
+    for(u32 index=0;index<values.components.size();++index) {
+      auto *component=values.components.editInstance(values.components.at(index)->instanceId());
+      if(!component||&component->type()!=&scene::Environment::descriptor) continue;
+      auto &environment=static_cast<scene::Environment&>(*component);
+      if(environment.profile!=profile.guid) continue;
+      environment.values=resources::applyEnvironmentProfile(environment.values,profile);changed=true;
+    }
+    // A cópia é o fallback serializado para recurso ausente. Sua sincronização
+    // faz parte da transação do recurso; o callback de undo/redo repete-a.
+    if(changed) document_.applyEntityValues(id,values);
+  }
+}
+
+resources::AssetGuid EditorSession::createEnvironmentProfile(EditorEntityId id,u64 instance,
+                                                              std::string &diagnostic) {
+  diagnostic.clear();const auto *entity=document_.find(id);
+  const auto *component=entity?entity->components.findInstance(instance):nullptr;
+  const auto *environment=component && &component->type()==&scene::Environment::descriptor?
+      static_cast<const scene::Environment*>(component):nullptr;
+  if(isPlaying()||history_.isOpen()||!environment) {diagnostic="Volume de ambiente indisponível.";return {};}
+  resources::EnvironmentProfile profile;profile.name=entity->name[0]?entity->name:"Ambiente";
+  profile.values=environment->values;profile.values.active=true;profile.values.priority=0;
+  std::string stem;for(unsigned char c:profile.name)
+    stem.push_back(c<32||c==127||c=='/'||c=='\\'||c==':'||c=='"'?'_':static_cast<char>(c));
+  if(stem.empty()||stem=="."||stem=="..") stem="Ambiente";
+  std::string path="Ambientes/"+stem+".environment";
+  for(u32 n=2;assets_.findByPath(path)||files_.exists(path);++n)
+    path="Ambientes/"+stem+" "+std::to_string(n)+".environment";
+  profile.guid=resources::assetGuidFromSeed("environment:"+path+":"+
+      std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+":"+
+      std::to_string(++importInstanceCounter_));
+  if(!profile.valid()) {diagnostic="Valores de ambiente inválidos.";return {};}
+  const auto serialized=profile.serialize();resources::AssetRecord record;
+  record.guid=profile.guid;record.type=resources::AssetType::EnvironmentProfile;record.path=path;
+  record.contentHash=Sha256::hex(std::span<const u8>(reinterpret_cast<const u8*>(serialized.data()),serialized.size()));
+  auto nextAssets=assets_;if(!nextAssets.add(record)) {diagnostic="O registro recusou o perfil.";return {};}
+  auto values=*entity;auto *editable=static_cast<scene::Environment*>(values.components.editInstance(instance));
+  if(!editable) {diagnostic="O volume mudou durante a criação.";return {};}
+  editable->profile=profile.guid;
+  auto stagedDocument=document_;auto stagedHistory=history_;
+  if(!stagedHistory.applyValues(stagedDocument,id,values)) {diagnostic="O histórico recusou o vínculo do perfil.";return {};}
+  // Valide toda a mutação autoral antes de criar o arquivo. Assim uma recusa do
+  // histórico não deixa um perfil órfão fora do registro do projeto.
+  if(!writeEnvironmentProfile(profile,path,diagnostic)) return {};
+  document_=std::move(stagedDocument);history_=std::move(stagedHistory);
+  assets_=std::move(nextAssets);assetRegistryDirty_=true;environmentProfiles_.push_back(profile);files_.rebuildTree();
+  diagnostic="Perfil criado: "+path;return profile.guid;
+}
+
+bool EditorSession::updateEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic) {
+  const auto *entity=document_.find(id);const auto *component=entity?entity->components.findInstance(instance):nullptr;
+  const auto *environment=component && &component->type()==&scene::Environment::descriptor?
+      static_cast<const scene::Environment*>(component):nullptr;
+  const auto *current=environment?findEnvironmentProfile(environment->profile):nullptr;
+  if(!environment||!current) {diagnostic="Escolha ou crie um perfil antes de atualizá-lo.";return false;}
+  auto candidate=*current;candidate.values=environment->values;
+  candidate.values.active=true;candidate.values.priority=0;++candidate.revision;
+  if(!commitEnvironmentProfile(candidate,diagnostic)) return false;
+  diagnostic="Perfil compartilhado atualizado: "+candidate.name;return true;
 }
 
 bool EditorSession::commitSharedMaterial(const resources::MaterialAsset &candidate,std::string &diagnostic,bool recordHistory) {
@@ -4635,6 +5093,7 @@ void EditorSession::beginImportPreparation(std::string_view path) {
   state_.importSmoothingAngle=state_.importPreparedSmoothingAngle=profile.smoothingAngle;
   state_.importTangents=state_.importPreparedTangents=profile.tangents;
   state_.importCameras=state_.importPreparedCameras=profile.importCameras;
+  state_.importLights=state_.importPreparedLights=profile.importLights;
   state_.importExcludedNodes=profile.excludedNodes;state_.importImpact.clear();
   // O importador é Propriedades: ele precisa estar à vista, inclusive no layout
   // compacto e vindo do workspace de código.
@@ -4824,11 +5283,19 @@ bool EditorSession::resolvePresetResources(scene::ComponentValue &value,const st
     *mesh->editSlotMesh(slot)=resolved;
   }
   for(const auto &binding:value.type().resourceBindings) {
-    if(binding.kind==resources::AssetType::Mesh||!binding.read) continue;
+    if(!binding.read) continue;
     for(u32 slot=0;slot<binding.slotCount(value);++slot) {
       if(!applies({binding.id,slot,scene::FieldKind::Resource})) continue;
       const auto asset=binding.read(value,slot);
       if(!asset.valid()||binding.declaresNone(asset)) continue;
+      if(binding.kind==resources::AssetType::Mesh) {
+        // O MeshRenderer já resolveu também o índice transitório acima. Outros
+        // componentes, como o Colisor, consomem a identidade diretamente.
+        if(&value.type()!=&scene::MeshRenderer::descriptor&&!mapScene_.assetSlot(asset)) {
+          error="Malha do preset não está carregada neste projeto";return false;
+        }
+        continue;
+      }
       if(binding.kind==resources::AssetType::Material&&!mapScene_.sharedMaterial(asset)) {error="Material do preset indisponível";return false;}
       if(binding.kind==resources::AssetType::Texture) {
         const auto *record=assets_.find(asset);

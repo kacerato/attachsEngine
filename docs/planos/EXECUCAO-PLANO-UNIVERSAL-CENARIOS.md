@@ -10,12 +10,13 @@ Vocabulário (o mesmo da §9 do plano): **inventariado** → **especificado** �
 **Escopo de validação desta rodada:**
 
 1. Suíte inteira de host (`build/editor-host`, Ninja + g++ com `-Werror`,
-   incluindo o Jolt): **1011 de 1011 verdes**. As falhas antigas foram
-   corrigidas; a seção "Suíte do host" abaixo diz como. Dos testes desta rodada, 55 são novos e
-   verdes (`test_component_contracts`, `test_component_preset`,
+   incluindo o Jolt): **1048 de 1048 verdes** na revisão de 2026-09-20. As
+   falhas antigas foram corrigidas; a seção "Suíte do host" abaixo diz como.
+   A cobertura acumulada deste plano inclui testes como
+   `test_component_contracts`, `test_component_preset`,
    `test_component_recipes`, `test_import_geometry_profile`,
    `test_import_scene_impact`, `test_import_format_compat`,
-   `test_import_node_exclusion`), todos registrados em `native/CMakeLists.txt`.
+   `test_import_node_exclusion`, todos registrados em `native/CMakeLists.txt`.
 2. **Build nativo completo para arm64-v8a pelo Gradle/NDK, com `-Wall -Wextra
    -Wpedantic -Werror`: `BUILD SUCCESSFUL`**, APK gerado. É o build que valida
    o código no compilador de verdade do alvo.
@@ -26,14 +27,29 @@ Vocabulário (o mesmo da §9 do plano): **inventariado** → **especificado** �
    (`build/astra-g2-body-dynamic.png`), e o **diff campo a campo do preset**, com
    "1 campo diferente", "Marcar tudo / Desmarcar" e a linha `Renderizar: falso →
    verdadeiro` com a marca de levar ou não (`build/astra-preset-diff.png`). Em
-   ambos os casos o projeto usado foi devolvido ao estado inicial — componente
-   removido, preset excluído, valor restaurado.
+    ambos os casos o projeto usado foi devolvido ao estado inicial — componente
+    removido, preset excluído, valor restaurado. No G4, o Inspector do componente
+    Luz mostrou unidade Lux/Lúmen, intensidade 1000 e o campo condicional de
+    temperatura; a edição de 6500 K para 2500 K foi aceita no aparelho sem falha
+    (`docs/capturas/g4/luz-fotometrica-6500k.png` e
+    `docs/capturas/g4/luz-fotometrica-2500k.png`). O objeto dessa conferência não foi
+    salvo no projeto.
 
-**O que NÃO foi validado:** o caminho completo de
-importação com uma fonte real (as normais/tangentes derivadas têm teste de host, não medição em
-GLB de produção), desempenho e qualquer comparação visual controlada.
+**O que NÃO foi validado:** comparação visual A/B controlada com outro renderer e
+desempenho do novo céu. No aparelho, o GLB oficial `PointLightIntensityTest`
+percorreu a leitura, a prévia, a opção **Importar luzes** e a nova preparação do
+perfil; a publicação foi cancelada de propósito para preservar o projeto aberto.
+O contrato até a criação dos componentes continua coberto no host.
 
-## G0 · matriz e corpus — implementado não validado em aparelho
+**Compatibilidade Android pendente:** o APK estável permanece em .NET 8.0.27 e
+abre projetos no aparelho ARM64 de página 4 KiB. A verificação explícita de 16
+KiB recusa esse runtime porque `libhostfxr.so` foi distribuída com `PT_LOAD
+0x1000`; portanto, o artefato gerenciado ainda não deve ser anunciado como
+compatível com dispositivos que exigem página de 16 KiB. O build comum não
+mascara essa limitação: a trava pode ser exigida com
+`-Pastra.require16kPages=true`.
+
+## G0 · matriz e corpus — concluído no escopo base
 
 | Entrega | Onde vive | Estado |
 |---|---|---|
@@ -45,12 +61,12 @@ GLB de produção), desempenho e qualquer comparação visual controlada.
 | Visibilidade condicional declarada no descritor, e não reescrita por índice de widget no inspetor | `native/editor/editor_properties.h` | implementado |
 | Grupos de Inspector em Corpo físico (Corpo / Início / Amortecimento), Personagem (Cápsula / Locomoção) e Olhar (Sensibilidade / Limites); triplas de velocidade e giro inicial | `physics_body.h`, `character.h`, `camera_look.h` | implementado |
 | `enabled` do Comportamento em C# passa a ter PropertyId — desligável por API, preset e animação, não só pelo dedo | `native/scene/script_behavior.h` | implementado |
+| Corpus de três fontes reais, com licença, URL, hash e referência visual no Android: `old_military_crate`, `portable_generator` e `medical_box` | `example-projects/*/Assets/FONTES-ARTE.md`, `docs/capturas/2026-09-17/` | hashes conferidos com os registros; capturas `perimetro-4-alvos-android.png`, `quarentena-play-android.png` e `resgate-play-android.png` |
 
-**O que o bloco NÃO fecha:** o corpus de três fontes representativas com
-proveniência e referência visual (§9 do plano) continua pendente; nada aqui
-substitui a avaliação de qualidade de fonte.
+O corpus não substitui uma comparação A/B de renderer; ele fecha proveniência,
+fonte real e referência visual reproduzível pedidas pelo G0.
 
-## G1 · composição e presets — parcial
+## G1 · composição e presets — concluído no escopo base
 
 | Entrega | Onde vive | Estado |
 |---|---|---|
@@ -59,7 +75,7 @@ substitui a avaliação de qualidade de fonte.
 | Diff campo a campo entre valor atual e candidato, com aplicável / não aplicável e motivo | `native/scene/component_preset.h` | validado no host |
 | Aplicação **por campo** em uma transação: nada entra se a combinação deixar o componente inválido | `applyComponentFields()` | validado no host |
 | Dependências de recurso de um valor e remapeamento por identidade entre projetos | `componentResourceDependencies()`, `remapComponentResources()`, `missingResourceDependencies()` | validado no host |
-| Receita multi componente: captura do objeto inteiro, formato de biblioteca v2 com leitura da v1, aplicação em uma transação com Add resolvendo exigências | `native/editor/editor_component_presets.h`, `EditorSession::applyComponentRecipe` | biblioteca validada no host; aplicação implementada, sem teste de sessão |
+| Receita multi componente: captura do objeto inteiro, formato de biblioteca v2 com leitura da v1, aplicação em uma transação com Add resolvendo exigências | `native/editor/editor_component_presets.h`, `EditorSession::applyComponentRecipe` | biblioteca e sessão validadas no host; o teste adiciona Luz, atualiza MeshRenderer e um único Undo restaura o objeto inteiro |
 | Painel de presets com diff interativo (marcar campo a campo, marcar tudo, desmarcar), preview de receita com o que é adicionado, atualizado e exigido | `native/editor/editor_screen.cpp`, `editor_session.cpp` | **validado no aparelho** (`build/astra-preset-diff.png`) |
 
 **Lacuna fechada em seguida (ver G3 abaixo):** amostragem, canais, superfície e
@@ -67,7 +83,7 @@ fatores por slot eram dados do MeshRenderer **sem PropertyId**, o que deixava a
 aplicação seletiva sem alcançá-los. Passaram a ter identidade endereçável por
 slot, e o painel deixou de precisar do aviso.
 
-## G2 · importação autorável — parcial (geometria derivada e diagnóstico de UV)
+## G2 · importação autorável — concluído no escopo base
 
 | Entrega | Onde vive | Estado |
 |---|---|---|
@@ -78,6 +94,7 @@ slot, e o painel deixou de precisar do aviso.
 | Diagnóstico **sem UV com textura declarada**: a fonte declara textura e a primitiva não tem TEXCOORD | `gltf_import.cpp` → relatório de importação | validado no host |
 | Diagnóstico **densidade de texel desigual**: razão entre a maior e a menor densidade dentro da primitiva, com a pior razão do arquivo. É a medida que não depende da resolução da textura — e por isso a que explica por que trocar a imagem por uma maior não conserta estiramento | `gltf_import.cpp` → relatório de importação | validado no host |
 | **Importar câmeras** (Import Cameras da Unity): a câmera do arquivo vira componente `Camera` no objeto do nó, com lente (perspectiva/ortográfica), planos e a meia volta que converte o −Z do glTF no +Z desta engine | `gltf_import.cpp`, `import_node_map.*`, `editor_import_reconcile.cpp` | validado no host |
+| **Importar luzes**: `KHR_lights_punctual` deixa de ser aparência perdida e vira componente `Light` no objeto do nó, com tipo, cor linear, lux/candela, alcance e cones; −Z é convertido para +Z sem girar geometria. Perfil schema 8, cache schema 5, mapa schema 4 e a primeira instanciação usam o mesmo contrato | `gltf_import.*`, `import_profile.*`, `import_cache.*`, `import_node_map.*`, `editor_import_reconcile.*` | validado no host do JSON ao componente e com o GLB CC0 oficial `PointLightIntensityTest`; no Android, prévia, opção ligada e reprocessamento concluídos (`docs/capturas/g2-import-lights-khronos-device.png`); perfil antigo mantém a opção desligada e arquivo truncado falha fechado |
 | Câmera em nó com geometria ou filhos é **recusada com motivo**, em vez de girar a geometria do autor para acertar o enquadramento | `gltf_import.cpp` | validado no host |
 | **Diff da cena aberta antes de publicar**: quantos objetos desta cena estão presos à fonte, quais saem, quais ficam órfãos (com os nomes) e quantos nós novos entram em cada instância | `importSceneImpact()` em `editor_import_reconcile.*` | validado no host |
 | **Perfil por nó — excluir nó da importação**: o nó (e a subárvore) não vem para a cena, mas **continua no mapa com a identidade dele**. Para a cena ele sai pela mesma regra de nó removido (sem edição local sai, com edição fica órfão); reincluir traz de volta o **mesmo** nó, reintroduzido na revisão nova para não ser confundido com "apagado pelo autor". Mudar só a exclusão, com os mesmos bytes, avança a revisão do mapa | `import_node_map.*` (`excluded`, `markExcludedNodes`), `import_profile.*` (schema 4), `editor_import_reconcile.cpp` | validado no host, inclusive a reconciliação que remove e traz de volta |
@@ -91,16 +108,10 @@ slot, e o painel deixou de precisar do aviso.
 
 - não há a opção "None" de normais da Unity (aqui ela só produziria superfície
   preta);
-- **Import Lights não entra aqui.** O glTF usa unidades fotométricas (lux para
-  direcional, candela para pontual/spot) e a escala de intensidade desta engine
-  ainda não é calibrada — importar os valores do arquivo produziria cenas
-  estouradas. A capacidade `render.light.photometric` está declarada como
-  *planejada* no registro do motor, e a importação de luzes vai junto com ela no
-  bloco de iluminação (G4);
 - a câmera importada entra **desligada** (`enabled = false`): trazer o
   enquadramento do editor 3D não pode sequestrar a câmera do Play.
 
-## G3 · materiais e malhas — parcial (endereço por slot)
+## G3 · materiais e malhas — concluído no escopo base
 
 Fecha a lacuna declarada no G1 e atende a §5.4 do plano ("Material: UV set e
 transform por binding", "canais", "superfície") na granularidade que ela pede.
@@ -124,9 +135,13 @@ quando (e só quando) o preset tem outra quantidade de slots.
 
 | Entrega | Onde vive | Estado |
 |---|---|---|
-| Forma **Malha** no Colisor, com **Convexo** — o Mesh Collider da Unity. A forma é a malha que o Renderizador de malha do próprio objeto desenha (todos os slots, a mesma malha em dois slots conta uma vez), com a escala do objeto; como na Unity, não tem centro nem rotação próprios | `native/scene/collider.h` (v4, lê v1–v3 com Convexo desligado) | validado no host |
+| Forma **Malha** no Colisor, com **Convexo** — o Mesh Collider da Unity. Por padrão a forma herda a malha que o Renderizador do próprio objeto desenha (todos os slots, a mesma malha em dois slots conta uma vez), com a escala do objeto; como na Unity, não tem centro nem rotação próprios | `native/scene/collider.h` (v6, lê v1–v5) | validado no host, inclusive round-trip v6 e leitura das versões anteriores; o overlay também ignora corretamente valores de Pose guardados antes da troca para Malha |
+| **Malha de colisão** separada da visual: binding tipado `collision_mesh` por `AssetGuid`, vazio para herdar a visual. O seletor refletido do Inspector, Undo/Redo, preset, remapeamento/reparo e grafo de impacto usam o contrato comum de recursos; o Play resolve o GUID na biblioteca e entrega os triângulos ao Jolt | `Collider::collisionMesh`, `ComponentResourceBinding`, `EditorAction::ComponentResource`, `CollisionGeometrySource` | consumidor físico e Undo validados no host; campo condicional, seletor e restauração por Undo observados no aparelho |
+| **Gerar/Regenerar malha física** cria um recurso derivado sem alterar a malha visual. O seletor expõe passos de 5–90% dos triângulos e erro relativo máximo de 0,1–25%, mostra contagens e erro medido. A identidade do derivado fica estável ao mudar os parâmetros; perfis schema 6 preservam seu GUID legado ao migrar para schema 7. Perfil, biblioteca e binding avançam e voltam juntos em Undo/Redo | `resources/mesh_derived.*`, `ImportProfile::collisionMeshes`, `EditorAction::GenerateCollisionMesh`, `EditorHistory::recordResource` | simplificador real, migração, regeneração, identidade e transação integral validados no host; autoria em 50%/5%, regeneração em 75% sem duplicar o recurso e Undo retornando controles e receita a 50%/5% observados no Android |
+| **Visual da colisão de malha** usa os triângulos do recurso efetivamente vinculado, ou todos os slots visuais distintos quando está herdando. No modo Convexo, cozinha com o Jolt e desenha as faces do `ConvexHullShape`; o resultado fica em cache por malhas+tolerância. O overlay limita a 2.400 segmentos por colisor | `physics/collision_cooking.*`, `EditorMapScene::collisionHullPreview`, `editor_component_visuals.h` | cubo validado no host com 8 vértices/6 faces finais, teto de segmentos e pose coerente; prévia observada no Android em `malha-colisao-autoria-50-5.png` |
+| **Cozimento** no Inspector: `Soldar vértices iguais` e `Otimizar para o jogo` correspondem às intenções de `WeldColocatedVertices` e `CookForFasterSimulation` da Unity 6. A Astra também expõe a tolerância do casco e o ângulo de aresta ativa porque são parâmetros reais do Jolt. Um cartão resume `Casco Jolt · vértices · faces` ou os triângulos exatos e mostra falha de cooking antes do Play | `Collider` v6, grupo `Cozimento`, `AetherMeshCookingV1` | persistência, reflexão, ABI, consumidor Jolt e UI Android validados |
 | Convexo ligado: casco convexo, aceito em qualquer corpo. Desligado: os triângulos exatos, **recusados em corpo dinâmico com o motivo** ("ligue Convexo") — a mesma regra da Unity, porque triângulos soltos não têm volume nem massa | `runtime/physics_requirements.h`, `runtime/scene_physics.cpp` | validado no host, inclusive um caixote convexo caindo e parando sobre um piso de malha |
-| Ponte com o Jolt: `AetherPhysics_CreateCompoundBodyV2` com partes de casco e de malha na mesma composição que as primitivas; a V1 fica congelada | `native/physics/jolt_bridge.*` | validado no host |
+| Ponte com o Jolt: `AetherPhysics_CreateCompoundBodyV3` acrescenta cooking versionado; V2 continua congelada e encaminha os padrões antigos. Inicialização global do Jolt é compartilhada pelo Play e pelo cooker autoral, então a prévia funciona antes de criar um mundo | `native/physics/jolt_bridge.*`, `physics/jolt_init.*` | V3 aceita parâmetros não padrão, recusa contrato inválido e mantém V2 compatível no host |
 | A física não conhece o editor: quem monta o mundo entrega a geometria por `CollisionGeometrySource`; o Play usa a MESMA geometria da seleção e do ajuste de colisor | `runtime/scene_physics.h`, `editor/editor_play_scene.h` | implementado |
 | O Inspector mostra o motivo antes do Play (sem Renderizador de malha, não convexo em corpo dinâmico) | `editor/editor_component_impact.h` | implementado |
 | **Defeito antigo corrigido:** uma consulta física (raio, varredura, sobreposição) num corpo com várias formas sempre respondia com o PRIMEIRO colisor. O índice da parte ia na entrada do composto, e o Jolt devolve o dado da forma folha | `jolt_bridge.cpp` (`ToJoltShape` com dado de usuário) | validado no host |
@@ -137,12 +152,21 @@ recusado com o motivo quando o chão de malha não convexa é dinâmico
 (`malha-nao-convexa-dinamico-recusada.png`); um cubo dinâmico com Malha +
 Convexo cai e para sobre o chão de malha estática
 (`cubo-convexo-repousa-no-chao-de-malha.png`). Com a forma Malha, "Ajustar à
-malha" deixa de aparecer: ele trocaria a malha por uma primitiva.
+malha" deixa de aparecer: ele trocaria a malha por uma primitiva. O novo campo
+condicional **Malha de colisão** abre o seletor tipado, mostra a escolha e volta
+à herança da malha visual por Undo (`malha-colisao-separada-seletor.png`).
+O mesmo seletor oferece a geração derivada (`malha-colisao-gerar-25.png`) e a
+atribuição resultante aparece no campo do componente
+(`malha-colisao-derivada-aplicada.png`); a edição temporária foi desfeita após a captura.
+Os controles editáveis, a regeneração sem recurso duplicado, o overlay e a
+sincronização visual depois de Undo estão registrados em
+`malha-colisao-autoria-50-5.png`, `malha-colisao-regenerada-75.png` e
+`malha-colisao-undo-sincronizado.png`. Depois da validação, o projeto foi
+restaurado ao perfil sem receita e ao objeto original com somente a Malha.
 
-**Limite declarado:** uma malha de colisão **diferente** da malha desenhada (o
-`sharedMesh` trocado à mão na Unity, ou uma versão simplificada) ainda não existe.
-Ela entra junto com o documento de malha e os níveis de LOD, que é de onde a
-versão simplificada deve sair, e não como um segundo campo solto no colisor.
+**Limite declarado:** o simplificador pode manter mais triângulos que o alvo
+quando o erro necessário ultrapassa o máximo escolhido. O modo Convexo continua
+produzindo um único casco; decomposição em vários cascos continua pendente.
 
 ### LOD Group (autoral, pela altura na tela)
 
@@ -154,9 +178,9 @@ um modelo cujos nós seguem `Nome_LOD0`, `Nome_LOD1`... e receber o grupo pronto
 |---|---|---|
 | Componente `LOD Group` (`astra.render.lod_group`): 1 a 4 níveis, objeto de cada nível, transição em % e tamanho; o nível escolhido fica visível com a subárvore, os outros somem, abaixo do último tudo some (Culled). Um objeto comum a dois níveis não some por estar no nível não escolhido | `native/scene/lod_group.h`, `native/runtime/lod_groups.h` | validado no host |
 | Métrica da Unity: tamanho do grupo × maior escala global sobre a altura que a vista enxerga àquela distância; ortográfica pela meia altura. Vale a câmera do Play quando há uma, e a do editor no resto | `scene::lodRelativeHeight`, `EditorSession::lodView` | validado no host |
-| A troca chega à tela pela publicação de **poses** (esconder desenhos não muda a topologia): o shell republica quando a câmera cruza uma transição, mesmo sem mudança de revisão | `EditorSession::lodSelectionChanged`, `android_main.cpp` | compila para o alvo |
+| A troca chega à tela pela publicação de **poses** (esconder desenhos não muda a topologia): o shell republica quando a câmera cruza uma transição, mesmo sem mudança de revisão. A detecção retém no relógio real o início do cross-fade, inclusive no primeiro quadro de fator zero | `EditorSession::lodSelectionChanged`, `android_main.cpp` | regressão focada no host, build Android e transição animada no aparelho validadas |
 | Referência **Descendente**: cada nível só aceita objetos abaixo do grupo; o seletor lista só esses e a execução ignora o resto | `ObjectReferenceScope::Descendant` | validado no host |
-| Inspector: **Níveis** (contagem, objetos, transições) e **Limites** (tamanho, *Recalcular tamanho*); atribuir o LOD 0 mede o tamanho no mesmo comando (um Desfazer volta os dois); linha "Na vista: LOD n · x% da tela" como a barra de LOD da Unity | `editor_screen.cpp`, `editor_session.cpp`, `editor/editor_lod_group.h` | compila para o alvo |
+| Inspector: **Níveis** (contagem, objetos, transições) e **Limites** (tamanho, *Recalcular tamanho*); atribuir o LOD 0 mede o tamanho no mesmo comando (um Desfazer volta os dois); linha "Na vista: LOD n · x% da tela" como a barra de LOD da Unity | `editor_screen.cpp`, `editor_session.cpp`, `editor/editor_lod_group.h` | compilado e observado no aparelho |
 | **Importação `_LOD<n>`** (Model Importer da Unity): filhos diretos com o sufixo viram LOD Group no pai, medido pela malha do LOD 0, na mesma transação da instanciação; buraco na sequência ou nível além do quarto é avisado no console | `addImportedLodGroups` | validado no host, pela importação real de um GLB |
 | Script: `ComponentIds.LodGroup` com as propriedades pela reflexão comum (`level_count`, `transition_0..3`, `level_0..3`, `size`) | `managed/Astra.Scripting/World.cs` | implementado |
 
@@ -174,9 +198,22 @@ um modelo cujos nós seguem `Nome_LOD0`, `Nome_LOD1`... e receber o grupo pronto
   níveis aparecem com a trama de Bayer complementar; fora da faixa, inteiros
   (`lod-group-cross-fade-*.png`); o Inspector mostra Animate Cross-fading e a
   largura por nível só com Cross Fade (`lod-group-fade-inspector.png`);
+- depois da correção do relógio persistente, **Animate Cross-fading** foi gravado
+  cruzando de LOD 1 para LOD 0 em 60%. Com a câmera já parada, a cobertura ainda
+  muda nos quadros seguintes durante os 0,5 s
+  (`lod-group-animate-cross-fade-pos-correcao.png`);
 - importação real de um GLB com `Coluna_LOD0`/`Coluna_LOD1`: o LOD Group nasce
   na Coluna com os dois níveis, e a troca pirâmide → cubo acontece pela
-  distância (`lod-group-importado-*.png`).
+  distância (`lod-group-importado-*.png`); reimportar a fonte com
+  `Coluna_LOD2` acrescenta o terceiro nível sem recriar o grupo
+  (`lod-group-reimportacao-acrescenta-nivel.png`).
+
+Antes da correção, as capturas de **Animate Cross-fading** ficavam idênticas.
+`lodSelectionChanged` iniciava a troca numa cópia de `LodCrossFadeClock`; como o
+fator do primeiro quadro é zero, não havia diferença visual e a cópia era
+descartada. O relógio persistente agora recebe esse início e mantém a
+republicação pelos 0,5 s; a regressão focada e a gravação no aparelho cobrem o
+defeito.
 
 O aparelho achou um defeito de uso, corrigido: com a escada 60/30 da Unity, um
 grupo importado de dois níveis ficava Culled abaixo de 30% e o modelo sumia no
@@ -204,7 +241,7 @@ ganha um na reimportação — a ausência ali pode ser escolha do autor; grupo
 gerado por nome termina em 1% em vez de cortar no último degrau da escada;
 Animate Cross-fading tem teste de host, sem captura no aparelho.
 
-## Suíte do host — de 1003 para 1009 verdes
+## Suíte do host — 1052 de 1052 verdes
 
 Havia cinco falhas **anteriores ao plano** (conferidas numa build de
 `a80fcb28`). Foram fechadas assim:
@@ -244,6 +281,99 @@ Vale para toda lista do editor. **Validado no aparelho:** o mesmo toque no meio
 da linha que antes pegava a vizinha agora desliga o próprio nó, e os filhos
 herdam (`docs/capturas/g3/estrutura-toque-no-meio-da-linha-acerta.png`).
 
-## G4–G6
+## G4 · luz e GI de base — concluído no escopo base
 
-Ainda **inventariados/especificados** pelo plano; nada implementado nesta rodada.
+| Entrega | Onde vive | Estado |
+|---|---|---|
+| Unidade autoral explícita: escala interna para cenas legadas; lux/candela conforme `KHR_lights_punctual`; ou lux/lúmen para fluxo de luz local. A conversão usa uma única ponte de 683 lm/W e, no spot, integra a mesma janela angular linear que o shader desenha | `scene/light_units.h`, `scene/light.h`, `runtime/scene_lights.cpp` | implementado e validado no host; a cena v1 migra para escala interna sem alterar o brilho |
+| Filtro por temperatura correlacionada de cor, 1667–25000 K, multiplicado pela cor linear e neutro em D65/6500 K | `scene/light_units.h`, propriedades `use_color_temperature` e `color_temperature` | implementado e validado no host; toggle e edição 6500 K → 2500 K observados no Android |
+| Propriedades disponíveis pelo Inspector, preset/reflexão e API comum de componentes; invalidação de seleção de luzes; capacidades `render.light.photometric` e `render.light.temperature` vinculadas ao consumidor | `scene/light.h`, `core/engine_capability.h`, `managed/Astra.Scripting/World.cs` | contrato auditado no host e Inspector observado no Android |
+| Luzes pontuais do GLB chegam pelo perfil autoral e usam o mesmo componente/unidade do Inspector e runtime; primeira instanciação e novos nós de reimportação compartilham a aplicação | `resources/gltf_import.cpp` → `ImportNodeMap` → `applyImportedNodeComponents` → `runtime/scene_lights.cpp` | validado no host de ponta a ponta; leitura, perfil e reprocessamento também observados no Android |
+
+Referência de autoria: Unity 6.0 usa **Filter and Temperature**, multiplicando a
+temperatura pelo filtro de cor, com D65 em 6500 K. A interoperabilidade segue a
+extensão ratificada `KHR_lights_punctual`: direcional em lux, ponto e spot em
+candela. A opção por lúmen converte fluxo para intensidade considerando o
+ângulo efetivo do spot.
+
+Sombras pontuais/spot, atlas local, lightmap, sondas e bake pertencem aos blocos
+avançados do plano e continuam com capacidade **Planned**, sem controles no
+Inspector nem setters anunciados como funcionais. O escopo base usa oito luzes
+locais, uma direcional e cascatas direcionais; excedentes são reportados.
+
+## G5 · ambiente, HDR e pós de cena — bloco concluído
+
+Referência de autoria: o **Volume/Profile** da URP separa os overrides de cena
+da política do pipeline; `RenderSettings` mantém céu e neblina por cena; a HDRP
+acrescenta céu físico e atmosfera. A Astra aplica essa intenção pelo componente
+universal `Ambiente`, sem copiar classes dos pipelines Unity.
+
+| Entrega | Onde vive | Estado |
+|---|---|---|
+| Componente `Ambiente` (`astra.render.environment`) com seleção determinística por prioridade e hierarquia; save/reopen, Undo/Redo, preset/reflexão e `ComponentIds.Environment` usam o contrato comum | `scene/environment.h`, `runtime/scene_environment.*`, `component_schema.h` | validado no host; inclusão, remoção por Undo e seis grupos do Inspector observados no Android |
+| Autoria agrupada em **Geral / Atmosfera / Pós / Oclusão ambiente / Volume / Neblina**: HDRI ou atmosfera, cores de zênite/horizonte/chão, disco solar, neblina exponencial, exposição EV, ACES/Neutro, bloom, contraste, saturação, vinheta e SSAO | `scene/environment.h`, Inspector refletido | controles condicionais observados no aparelho; propriedades sem efeito oculto não foram adicionadas |
+| Céu procedural usa direção do sol real da cena, gradiente atmosférico e disco solar; HDRI continua selecionável | `rhi/shaders/dirt_road_sky.frag` | SPIR-V validado e efeito consumido no Android |
+| Scene View no padrão de organização da Unity: botões superiores de Lighting e Effects, com menu Sky / Fog / Post Processing e ícones próprios. São opções editoriais transitórias; Play e câmera autorada continuam usando o ambiente da cena | `editor_screen.*`, `InstancedRenderer::setEditorViewportOptions` | Android: menu observado; desligar Sky removeu visualmente o passe e religar restaurou o céu, sem erro Vulkan |
+| Scene View sem `Ambiente` autorado recebe um look editorial transitório com céu, HDR, ACES, bloom, AO e gradação moderada. O fallback não entra no documento nem substitui a câmera de Play; o hemisfério inferior mantém leitura das superfícies e a grade tem contraste reduzido | `renderer::defaultSceneViewEnvironment`, `InstancedRenderer::updateUniformBuffer` e passe da grade | suíte host aprovada; céu, materiais e grade conferidos no Android em cenas distintas |
+| Atmosfera do viewport acrescenta espalhamento Rayleigh/Mie analítico, profundidade óptica de horizonte, disco solar antialias e corona, preservando as cores e a direção autoradas | `rhi/shaders/dirt_road_sky.frag` | SPIR-V regenerado de forma reproduzível e executado no Adreno |
+| Cena renderiza em `R16G16B16A16_SFLOAT` quando a GPU suporta anexo+amostragem linear; materiais preservam radiância e exposição/tonemapping acontecem uma vez no passe final | `InstancedRenderer::initialize`, `environment_lighting.glsl`, `post_process_common.glsl` | build Android e criação real no Adreno sem erro Vulkan; fallback explícito mantém o formato do display quando RGBA16F não está disponível |
+| Neblina reconstrói distância pelo depth para câmera perspectiva e ortográfica. O render graph declara o leitor de pós, obrigando STORE+SAMPLED e proibindo depth memoryless | `renderer/frame_graph.*`, `post_process_common.glsl` | política validada no host e log do aparelho confirmou `store=sim sampled=sim`; ligar Neblina alterou a cena e revelou os controles de cor/densidade/início |
+| Pós autoral sobre HDR: bloom antes da curva, exposição em EV, ACES ou Neutro, contraste, saturação e vinheta; o perfil global continua sendo o fallback quando a cena não sobrescreve | `InstancedRenderer::recordPostProcess`, `post_process_common.glsl` | `+2 EV` alterou a imagem no aparelho; valor e componente de teste foram desfeitos depois das capturas |
+| Grão de filme sensível à luminância é um override tipado de pós, serializado no componente e no perfil, misturado pelos volumes e aplicado depois da resolução temporal. Intensidade começa sutil e usa o UBO existente, sem aumentar os 128 bytes de push constants | `SceneEnvironment::filmGrain`, `scene/environment.h`, `resources/environment_profile.*`, `post_process_common.glsl` | migração/round-trip aprovados no host; toggle, controle de intensidade e alteração visual observados no Android |
+| Oclusão ambiente em espaço de tela usa o depth real, reconstrução perspectiva/ortográfica e 12 amostras rotacionadas; raio em metros, intensidade, potência e viés chegam pelo mesmo UBO do ambiente | `SceneEnvironment`, `DirtRoadFrameUniform::sceneAo*`, `post_process_common.glsl` | serialização/reflexão e resolução de volumes aprovadas no host; controles vistos e ativados no Android, com shader compilado e consumido pelo passe final |
+| Instância de ambiente global, caixa orientada ou esfera transformada, com peso, prioridade e faixa externa de mistura | `scene/environment.h`, `runtime/scene_environment.cpp`, `renderer/scene_environment.cpp` | cinco casos focados e suíte host completa aprovados; a posição da câmera resolve a influência a cada quadro, sem republicar a cena durante o deslocamento |
+| Overrides independentes de céu, neblina e pós; valores não marcados herdam o resultado anterior/padrão em vez de vazarem do volume | `EnvironmentOverride`, `resolveSceneEnvironment` | teste cobre volume local somente de pós com céu e neblina herdados |
+| Oito camadas autorais de ambiente; cada câmera escolhe todas ou uma camada. Perfil e AO são persistidos na versão 4 de Ambiente, máscara na versão 3 de Câmera, com leitura dos arquivos anteriores | `scene/environment.h`, `scene/camera.h`, `editor_scene_camera.h` | save/reopen de componentes e regressões de câmera aprovados no host |
+| `EnvironmentProfile` compartilhado separa recurso e instância: arquivo versionado, GUID no registro, seletor tipado, fallback local para referência ausente, atualização comum e Undo/Redo da edição compartilhada | `resources/environment_profile.*`, `EditorSession::createEnvironmentProfile`, `commitEnvironmentProfile` | round-trip, resolução e override local aprovados no host; criação, vínculo, arquivo no projeto e controles de atualização observados no Android |
+| A RenderView da câmera renderiza uma fonte HDR própria e executa o mesmo pipeline final da câmera de jogo, inclusive ambiente, neblina, AO, bloom, gradação, FXAA e tonemapping | `instanced_camera_preview.inl`, `InstancedRenderer::createPostResources` | no Android a prévia produziu o cubo; mudar a exposição de 0 para +3 EV alterou também a RenderView, sem erro Vulkan no log |
+| Visualização espacial no editor para caixas e esferas, mais cartão **Na vista** com influência percentual e camada | `editor_component_visuals.h`, `editor_screen.cpp` | compilado no host e observado no Android |
+
+Evidência no aparelho (Xiaomi 25053PC47G, `docs/capturas/`):
+`g5-atmosfera-editor.png`, `g5-post-editor.png`, `g5-neblina-editor.png`,
+`g5-neblina-ativa.png`, `g5-pos-exposicao-2ev.png`,
+`g5-perfil-criado.png`, `g5-oclusao-ativa.png`,
+`g5-camera-preview-cubo-visivel.png`, `g5-camera-preview-pos-3ev.png`,
+`g5-camera-preview-final.png`, `g5-perfil-vazio-final.png` e
+`g5-fechamento-apk-final.png`, `g5-scene-effects-menu-device.png`,
+`g5-scene-sky-off-device.png`, `g5-scene-fog-off-device.png` e
+`g5-fechamento-scene-view-unity.png`, `g5-inspector-grupos-em-duas-linhas.png`,
+`g5-grao-filme-ativo.png`, `g5-scene-view-look-padrao.png` e
+`g5-viewer-calibrado-sem-grade.png`.
+As mudanças autorais usadas na verificação foram desfeitas e o perfil temporário
+foi apagado ao terminar.
+
+O contrato foi comparado com o [Volume da URP no Unity 6](https://docs.unity3d.com/6000.0/Documentation/Manual/urp/volume-component-reference.html):
+modo global/local, prioridade, peso e distância de mistura têm equivalentes
+diretos; o collider separado foi adaptado para caixa/esfera próprias porque a
+Astra já possui Transform universal e não deve transformar um volume visual em
+contato físico. A filtragem por câmera segue a intenção do
+[Volume Mask e Volume Trigger](https://docs.unity3d.com/6000.0/Documentation/Manual/urp/camera-component-reference.html):
+a posição real da vista é o trigger e a máscara escolhe as camadas participantes.
+No Godot 4, [WorldEnvironment](https://docs.godotengine.org/en/4.5/classes/class_worldenvironment.html)
+referencia um recurso Environment reutilizável, e CameraAttributes pode
+sobrescrever a câmera. O `EnvironmentProfile` da Astra cumpre a mesma separação
+entre recurso compartilhado e instância, enquanto presets de componente
+continuam snapshots por cópia. AO e RenderView consomem o ambiente resolvido da
+câmera, portanto os controles deste bloco têm consumidor gráfico efetivo.
+
+## G6 · cena real de referência — em execução
+
+### G6-A · enquadramentos salvos (Vistas)
+
+Comparar duas versões de um cenário exige repetir o **mesmo** enquadramento:
+recolocar a câmera à mão entre duas medições muda o que está sendo comparado,
+porque o resultado passa a incluir a diferença de ângulo. A Unity 6 não traz
+isso de fábrica — a Scene view tem *Frame Selected* (F), *Lock View to Selected*
+(Shift+F) e a sobreposição **Camera** com Field of View, Clipping Planes e
+velocidade, mas guardar um ponto de vista com nome é prática de extensão de
+editor ("Set Bookmark" / "Move to Bookmark"). Na Astra a vista é **dado autoral
+da cena**: viaja no arquivo, vale para qualquer projeto e tem Desfazer.
+
+| Entrega | Onde vive | Estado |
+|---|---|---|
+| `SceneView` guarda a câmera de órbita (alvo, distância, yaw, pitch) e a lente (`verticalFov`, o *Field of View* da sobreposição Camera). Posição não é guardada: posição e alvo separados divergiriam e a órbita passaria a girar em torno de um ponto que não está na tela | `native/runtime/scene_views.h` | validado no host |
+| `SceneViews` endereça pelo nome: vazio, repetido, com aspas/quebra de linha ou distância não positiva é recusado; teto de 64 vistas e 48 caracteres. `replace` é o "atualizar com a vista atual" | `native/runtime/scene_views.h` | validado no host |
+| Seção `VIEWS` no arquivo da cena, versão **13**. Arquivos 1–12 abrem sem nenhuma vista, que é o que sempre tiveram; vista ilegível recusa o arquivo inteiro em vez de perder um enquadramento em silêncio | `native/editor/editor_archive.cpp` | round-trip e leitura de arquivo v6 validados no host |
+| Salvar, atualizar, renomear e excluir passam pelo histórico com rótulo próprio **Vistas**, e voltam em Desfazer/Refazer como qualquer edição autoral | `EditorCommandKind::Views`, `EditorHistory::setViews` | validado no host |
+| Painel **Vistas** no viewport, ao lado de Enquadrar: lista com a escolhida em destaque, toque na linha leva a câmera até ela, rodapé com Atualizar / Renomear / Excluir e "Salvar vista atual". Nome entra pelo teclado da tela (`EditorTextPurpose::SceneViewName`) | `editor_screen.cpp` (`buildSceneViewsPanel`), `editor_session.cpp` | compilado e coberto no host; falta evidência no aparelho (adb desligado a pedido) |
+| Aplicar uma vista antiga sem lente guardada mantém a lente atual do editor, em vez de impor um campo de visão que ela nunca teve | `EditorSession::applySceneView` | validado no host |

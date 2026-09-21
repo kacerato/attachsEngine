@@ -293,6 +293,9 @@ bool EditorHistory::applyForward(EditorDocument &document, const EditorCommand &
       return document.destroyEntity(command.id);
     case EditorCommandKind::Reparent:
       return document.reparent(command.id, command.afterParent, command.afterIndex);
+    case EditorCommandKind::Views:
+      document.setViews(command.afterViews);
+      return true;
   }
   return false;
 }
@@ -307,8 +310,27 @@ bool EditorHistory::applyBackward(EditorDocument &document, const EditorCommand 
       return document.restoreEntity(command.before, command.beforeIndex);
     case EditorCommandKind::Reparent:
       return document.reparent(command.id, command.beforeParent, command.beforeIndex);
+    case EditorCommandKind::Views:
+      document.setViews(command.beforeViews);
+      return true;
   }
   return false;
+}
+
+bool EditorHistory::setViews(EditorDocument &document, const runtime::SceneViews &views) {
+  if (document.views() == views) return true;
+  EditorCommand command{};
+  command.kind = EditorCommandKind::Views;
+  command.beforeViews = document.views();
+  command.afterViews = views;
+  document.setViews(views);
+  // Rótulo próprio: no menu de Desfazer, "Vistas" diz o que volta — o passo
+  // genérico "Edit" faria o autor achar que perderia a edição do objeto.
+  const bool standalone = !isOpen();
+  if (standalone) begin("Vistas");
+  const bool recorded = record(command);
+  if (standalone) end();
+  return recorded;
 }
 
 bool EditorHistory::undo(EditorDocument &document) {

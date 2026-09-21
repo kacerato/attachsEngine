@@ -102,6 +102,9 @@ struct GltfImportLimits {
   // "Import Cameras" do Model Import Settings. Desligado reproduz o
   // comportamento anterior, em que a câmera do arquivo era contada como perdida.
   bool importCameras = false;
+  // "Import Lights" do Model Import Settings. Segue a mesma política das
+  // câmeras: desligado preserva o comportamento dos perfis existentes.
+  bool importLights = false;
   ImageDecodeLimits image{};
 };
 
@@ -151,6 +154,23 @@ struct GltfImportCamera {
   float orthographicHalfHeight = 5;
 };
 
+// Luz KHR_lights_punctual ligada ao nó que a carrega. `kind` usa a ordem do
+// contrato da cena (direcional, pontual, spot), sem criar dependência da camada
+// de recursos com `scene::Light`.
+struct GltfImportLight {
+  u32 node = 0;
+  u8 kind = 1;
+  float color[3]{1, 1, 1};
+  float intensity = 1;
+  // O glTF permite alcance infinito; o componente autoral tem teto explícito.
+  // Quando `rangeDeclared` é falso, a reconciliação usa o maior alcance que o
+  // contrato Astra representa e o importador publica uma nota sobre a adaptação.
+  float range = 1000;
+  bool rangeDeclared = false;
+  float innerAngle = 0;
+  float outerAngle = 45;
+};
+
 struct GltfImport {
   // Explicit losses in the static geometry profile, shown before publication.
   // Required appearance extensions are preserved in the original GLB, not
@@ -182,6 +202,7 @@ struct GltfImport {
   std::vector<u32> drawNodes;
   // Câmeras do arquivo, quando o perfil pede para importá-las.
   std::vector<GltfImportCamera> cameras;
+  std::vector<GltfImportLight> lights;
   // Motivo concreto quando `importGlb` devolve falso. Nunca "erro ao importar".
   std::string diagnostic;
   bool cancelled = false;

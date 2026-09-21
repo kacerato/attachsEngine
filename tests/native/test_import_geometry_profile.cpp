@@ -7,10 +7,15 @@
 #include "harness.h"
 
 #include "resources/gltf_import.h"
+#include "resources/import_profile.h"
+#include "resources/mesh_derived.h"
+#include "resources/import_node_map.h"
+#include "editor/editor_import_reconcile.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -227,6 +232,19 @@ Asset cameraScene(const char *cameraJson, bool cameraOnMeshNode = false) {
   asset.json.insert(asset.json.find(R"("meshes":)"), std::string(R"("cameras":[)") + cameraJson + "],");
   return asset;
 }
+
+Asset lightScene() {
+  auto asset = triangle(true);
+  const auto meshNode = std::string(R"("nodes":[{"name":"Triangulo","mesh":0}])");
+  const auto replacement = std::string(
+      R"("nodes":[{"name":"Triangulo","mesh":0},{"name":"Luz pontual","translation":[1,2,3],"extensions":{"KHR_lights_punctual":{"light":0}}},{"name":"Spot","extensions":{"KHR_lights_punctual":{"light":1}}}])");
+  asset.json.replace(asset.json.find(meshNode), meshNode.size(), replacement);
+  const auto scene = std::string(R"("scenes":[{"nodes":[0]}])");
+  asset.json.replace(asset.json.find(scene), scene.size(), std::string(R"("scenes":[{"nodes":[0,1,2]}])"));
+  asset.json.insert(asset.json.find(R"("meshes":)"),
+      R"("extensionsUsed":["KHR_lights_punctual"],"extensions":{"KHR_lights_punctual":{"lights":[{"type":"point","color":[0.25,0.5,1],"intensity":800,"range":12},{"type":"spot","intensity":1500,"range":30,"spot":{"innerConeAngle":0.2,"outerConeAngle":0.6}}]}},)");
+  return asset;
+}
 } // namespace
 
 AE_TEST(import_leaves_cameras_out_until_the_profile_asks) {
@@ -293,6 +311,58 @@ AE_TEST(import_refuses_a_camera_with_an_impossible_lens) {
                  "plano distante atrás do próximo é arquivo inválido, não valor a corrigir");
 }
 
+AE_TEST(import_lights_are_explicit_profile_data_with_photometric_values_and_orientation) {
+  const auto asset = lightScene();
+  GltfImport model;
+  AE_EXPECT_TRUE(importGlb(buildGlb(asset.json, asset.binary), {}, {}, model), model.diagnostic.c_str());
+  AE_EXPECT_TRUE(model.lights.empty(), "perfil antigo não cria componentes novos");
+  AE_EXPECT_EQ(model.skippedLights, 2u, "as luzes omitidas continuam visíveis no relatório");
+
+  GltfImportLimits limits;limits.importLights=true;
+  AE_EXPECT_TRUE(importGlb(buildGlb(asset.json, asset.binary), limits, {}, model), model.diagnostic.c_str());
+  AE_EXPECT_EQ(model.lights.size(), 2u, "pontual e spot entram como dados autorais");
+  AE_EXPECT_EQ(model.skippedLights, 0u, "nenhuma luz válida foi perdida");
+  const auto &point=model.lights[0];
+  AE_EXPECT_TRUE(point.kind==1 && point.intensity==800 && point.range==12,"unidade, intensidade e alcance preservados");
+  AE_EXPECT_TRUE(point.color[0]==.25f && point.color[1]==.5f && point.color[2]==1,"cor linear preservada");
+  AE_EXPECT_TRUE(model.nodes[point.node].localMatrix[12]==1 && model.nodes[point.node].localMatrix[13]==2 &&
+                 model.nodes[point.node].localMatrix[14]==3,"a pose da luz pontual é a do nó");
+  const auto &spot=model.lights[1];
+  AE_EXPECT_TRUE(spot.kind==2 && std::fabs(spot.innerAngle-11.4592f)<.01f &&
+                 std::fabs(spot.outerAngle-34.3775f)<.01f,"cones em radianos viram meio-ângulos em graus");
+  AE_EXPECT_TRUE(model.nodes[spot.node].localMatrix[0]==-1 && model.nodes[spot.node].localMatrix[10]==-1,
+                 "o -Z do glTF vira o +Z da luz Astra");
+
+  ImportNodeMap map;ImportMatchReport report;std::string diagnostic;
+  const auto source=assetGuidFromSeed("teste:luzes-pontuais");
+  AE_EXPECT_TRUE(buildImportNodeMap(model,source,"conteudo",nullptr,ImportAmbiguityPolicy::Refuse,map,report,diagnostic),
+                 diagnostic.c_str());
+  AE_EXPECT_TRUE(map.nodes[point.node].light && map.nodes[spot.node].light,"o mapa persistente transporta a autoria");
+  editor::EditorEntity entity;
+  editor::applyImportedNodeComponents(entity,map.nodes[point.node]);
+  const auto *component=static_cast<const scene::Light*>(entity.components.find(scene::Light::descriptor));
+  AE_EXPECT_TRUE(component && component->unit==scene::LightUnit::LuxCandela && component->kind==scene::LightKind::Point,
+                 "o nó cria o componente que o runtime consome");
+  AE_EXPECT_TRUE(component->intensity==800 && component->range==12,"o componente recebe os valores fotométricos");
+}
+
+AE_TEST(import_reads_the_official_khronos_point_light_glb) {
+  std::ifstream input("tests/native/fixtures/gltf/PointLightIntensityTest.glb",std::ios::binary);
+  AE_EXPECT_TRUE(static_cast<bool>(input),"o corpus oficial está disponível");
+  const std::vector<u8> bytes{std::istreambuf_iterator<char>(input),std::istreambuf_iterator<char>()};
+  GltfImportLimits limits;limits.importLights=true;
+  GltfImport model;
+  AE_EXPECT_TRUE(importGlb(bytes,limits,{},model),model.diagnostic.c_str());
+  AE_EXPECT_TRUE(!model.lights.empty(),"o GLB oficial materializa as luzes pontuais");
+  AE_EXPECT_EQ(model.skippedLights,0u,"nenhuma luz oficial válida foi descartada");
+  AE_EXPECT_TRUE(std::all_of(model.lights.begin(),model.lights.end(),[](const auto &light) {
+    return light.kind==1 && light.intensity==1.0f;
+  }),"o teste oficial preserva tipo point e intensidade fotométrica 1");
+  AE_EXPECT_TRUE(std::find(model.appearanceExtensions.begin(),model.appearanceExtensions.end(),
+                           "KHR_lights_punctual")==model.appearanceExtensions.end(),
+                 "a extensão implementada não é relatada como aparência perdida");
+}
+
 namespace {
 // Cubo unitário com 8 vértices compartilhados e sem NORMAL — a forma em que
 // um exportador entrega "caixa de quinas vivas" e o importador precisa decidir
@@ -354,4 +424,58 @@ AE_TEST(smoothing_angle_keeps_a_flat_surface_in_one_piece) {
   GltfImport model;
   AE_EXPECT_TRUE(importGlb(buildGlb(asset.json, asset.binary), limits, {}, model), model.diagnostic.c_str());
   AE_EXPECT_EQ(model.vertices.size() / renderer::MapVertexStride, usize{4}, "o plano não se parte");
+}
+
+AE_TEST(collision_mesh_recipe_simplifies_without_changing_the_visual_mesh) {
+  std::vector<u8> vertices(11 * 11 * renderer::MapVertexStride);
+  for(u32 y=0;y<=10;++y) for(u32 x=0;x<=10;++x) {
+    const float position[3]{static_cast<float>(x),0,static_cast<float>(y)};
+    std::memcpy(vertices.data()+(y*11+x)*renderer::MapVertexStride,position,sizeof position);
+  }
+  std::vector<u32> indices;
+  for(u32 y=0;y<10;++y) for(u32 x=0;x<10;++x) {
+    const u32 a=y*11+x,b=a+1,c=a+11,d=c+1;
+    indices.insert(indices.end(),{a,c,b,b,c,d});
+  }
+  renderer::MapDrawRecord draw{};draw.indexCount=static_cast<u32>(indices.size());
+  const auto originalIndices = indices;
+  CollisionMeshRecipe recipe{assetGuidFromSeed("cubo-fonte"), 25, .02f};
+  CollisionMeshBuild derived;
+  std::string diagnostic;
+  AE_EXPECT_TRUE(buildCollisionMesh(vertices, indices, draw, recipe, derived, diagnostic),
+                 diagnostic.c_str());
+  AE_EXPECT_TRUE(derived.indices.size() < draw.indexCount,
+                 "o recurso físico tem menos triângulos que o visual");
+  AE_EXPECT_TRUE(derived.indices.size() >= 3 && derived.indices.size() % 3 == 0,
+                 "a saída continua sendo uma lista de triângulos");
+  AE_EXPECT_TRUE(indices == originalIndices, "a malha visual fonte não foi alterada");
+  AE_EXPECT_TRUE(collisionMeshGuid(recipe) == collisionMeshGuid(recipe), "a identidade derivada é determinística");
+}
+
+AE_TEST(import_profile_round_trips_collision_mesh_recipes) {
+  ImportProfile profile;
+  profile.collisionMeshes.push_back({assetGuidFromSeed("parede"), 25, .02f});
+  ImportProfile parsed;
+  AE_EXPECT_TRUE(parseImportProfile(serializeImportProfile(profile), parsed), "perfil atual é legível");
+  AE_EXPECT_TRUE(sameImportProfile(profile, parsed), "fonte e parâmetros do derivado sobrevivem ao arquivo");
+  AE_EXPECT_TRUE(sameImportPreparation(profile, ImportProfile{}),
+                 "uma receita pós importação não força reler o GLB");
+}
+
+AE_TEST(schema_six_collision_recipe_keeps_its_legacy_identity_when_upgraded) {
+  const auto source=assetGuidFromSeed("parede-legada");
+  const auto text="{\"schema\":6,\"scale\":1,\"maximumTextureDimension\":2048,\"normals\":0,"
+      "\"normalWeighting\":0,\"smoothingAngle\":180,\"tangents\":0,\"importCameras\":false,"
+      "\"excludedNodes\":[],\"collisionMeshes\":[{\"source\":\""+source.text()+
+      "\",\"trianglePercent\":25,\"maximumError\":0.02}]}";
+  ImportProfile parsed;
+  AE_EXPECT_TRUE(parseImportProfile(text,parsed),"perfil schema 6 continua legível");
+  const auto legacy=parsed.collisionMeshes[0].identity;
+  parsed.collisionMeshes[0].trianglePercent=50;
+  parsed.collisionMeshes[0].maximumError=.05f;
+  AE_EXPECT_TRUE(collisionMeshGuid(parsed.collisionMeshes[0])==legacy,
+                 "mudar parâmetros não quebra a referência criada pelo schema 6");
+  ImportProfile upgraded;
+  AE_EXPECT_TRUE(parseImportProfile(serializeImportProfile(parsed),upgraded),"perfil atualizado grava schema 7");
+  AE_EXPECT_TRUE(collisionMeshGuid(upgraded.collisionMeshes[0])==legacy,"round-trip conserva o GUID legado");
 }

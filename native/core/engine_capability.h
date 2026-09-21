@@ -61,16 +61,16 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 32> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 36> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
   {"render.light.punctual", "Luzes pontuais e spot", CapabilityState::Implemented,
    "renderer/punctual_lights.h (8 por quadro)", ""},
-  {"render.light.temperature", "Temperatura de cor em kelvin", CapabilityState::Planned,
-   "scene/light_units.h", "Sem conversão kelvin→RGB linear no caminho de autoria"},
-  {"render.light.photometric", "Unidades fotométricas (lux, lumen, candela)", CapabilityState::Planned,
-   "scene/light_units.h", "Sem calibração entre unidade autoral e irradiância do shader"},
+  {"render.light.temperature", "Temperatura de cor em kelvin", CapabilityState::Implemented,
+   "scene/light_units.h + runtime/scene_lights.cpp", ""},
+  {"render.light.photometric", "Unidades fotométricas (lux, lumen, candela)", CapabilityState::Implemented,
+   "scene/light_units.h + runtime/scene_lights.cpp", ""},
   {"render.light.cookie", "Máscara projetada (cookie)", CapabilityState::Planned,
    "renderer/punctual_lights.h", "Sem amostragem de textura por luz no shader de fragmento"},
   {"render.light.area", "Luz de área", CapabilityState::Planned, "renderer/punctual_lights.h",
@@ -120,7 +120,8 @@ inline constexpr std::array<EngineCapability, 32> engineCapabilities{{
   {"render.lod.package", "Níveis de detalhe do pacote de mapa", CapabilityState::Implemented,
    "renderer/lod_selection.cpp", ""},
   {"render.lod.group", "Grupo de LOD autoral por objeto", CapabilityState::Implemented,
-   "runtime/lod_groups.h", "Troca direta por altura na tela, sem cross-fade; níveis são objetos do autor, sem simplificação automática"},
+   "runtime/lod_groups.h + renderer/lod_dither.glsl",
+   "Níveis são objetos do autor ou da convenção _LOD<n>; simplificação automática de malha ainda não existe"},
   {"render.visibility.hzb", "Oclusão por pirâmide de profundidade", CapabilityState::Implemented,
    "renderer/hzb_visibility.cpp", ""},
   {"render.instancing.gpu", "Culling e compactação de desenho em GPU", CapabilityState::Implemented,
@@ -128,13 +129,23 @@ inline constexpr std::array<EngineCapability, 32> engineCapabilities{{
   {"render.motion_vectors", "Vetores de movimento por objeto", CapabilityState::Planned,
    "renderer/frame_graph.cpp", "Sem pose anterior por instância nem alvo de velocidade"},
 
+  // --- Céu e atmosfera ----------------------------------------------------
+  {"render.environment.atmosphere", "Céu atmosférico", CapabilityState::Implemented,
+   "runtime/scene_environment.cpp + rhi/shaders/dirt_road_sky.frag", ""},
+  {"render.environment.fog", "Neblina por profundidade", CapabilityState::Implemented,
+   "rhi/shaders/post_process_common.glsl", ""},
+  {"render.environment.volumes", "Volumes de ambiente por câmera", CapabilityState::Implemented,
+   "runtime/scene_environment.cpp + renderer/scene_environment.cpp", ""},
+
   // --- Pós-processamento ---------------------------------------------------
   {"render.post.tonemap", "Exposição e mapeamento de tom", CapabilityState::Implemented,
    "rhi/shaders/post_process_common.glsl", ""},
   {"render.post.bloom", "Brilho estourado", CapabilityState::Implemented,
    "rhi/shaders/post_process_common.glsl", ""},
-  {"render.post.ambient_occlusion", "Oclusão ambiente em tela", CapabilityState::Planned,
-   "renderer/frame_graph.cpp", "Sem passe de oclusão em espaço de tela"},
+  {"render.post.film_grain", "Grão de filme", CapabilityState::Implemented,
+   "rhi/shaders/post_process_common.glsl", ""},
+  {"render.post.ambient_occlusion", "Oclusão ambiente em tela", CapabilityState::Implemented,
+   "rhi/shaders/post_process_common.glsl", ""},
   {"render.aa.fxaa", "Antisserrilhado espacial", CapabilityState::Implemented,
    "rhi/shaders/post_process_common.glsl", ""},
   {"render.aa.temporal", "Antisserrilhado temporal", CapabilityState::DeviceLimited,

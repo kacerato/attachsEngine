@@ -25,27 +25,50 @@ bool sameExcludedNodes(const ImportProfile &a, const ImportProfile &b) noexcept 
   for (const auto &node : a.excludedNodes) if (!b.excludes(node)) return false;
   return true;
 }
+bool sameCollisionMeshes(const ImportProfile &a, const ImportProfile &b) noexcept {
+  if (a.collisionMeshes.size() != b.collisionMeshes.size()) return false;
+  for (const auto &recipe : a.collisionMeshes) {
+    const auto found=std::find_if(b.collisionMeshes.begin(), b.collisionMeshes.end(), [&](const auto &candidate) {
+      return candidate.source==recipe.source && candidate.trianglePercent==recipe.trianglePercent &&
+             candidate.maximumError==recipe.maximumError && collisionMeshGuid(candidate)==collisionMeshGuid(recipe);
+    });
+    if(found==b.collisionMeshes.end()) return false;
+  }
+  return true;
+}
 } // namespace
 
 bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept {
   return std::fabs(a.scale - b.scale) <= std::max(a.scale, b.scale) * 1e-5f &&
          a.maximumTextureDimension == b.maximumTextureDimension && a.normals == b.normals &&
          a.normalWeighting == b.normalWeighting && a.smoothingAngle == b.smoothingAngle && a.tangents == b.tangents &&
-         a.importCameras == b.importCameras && sameExcludedNodes(a, b);
+         a.importCameras == b.importCameras && a.importLights == b.importLights &&
+         sameExcludedNodes(a, b) && sameCollisionMeshes(a, b);
 }
 
 bool sameImportPreparation(const ImportProfile &a, const ImportProfile &b) noexcept {
   auto left = a, right = b;
   left.excludedNodes.clear();
   right.excludedNodes.clear();
+  left.collisionMeshes.clear();
+  right.collisionMeshes.clear();
   return sameImportProfile(left, right);
 }
 
 bool validImportProfile(const ImportProfile &profile) noexcept {
+  bool collisionRecipesValid=true;
+  for(usize i=0;i<profile.collisionMeshes.size() && collisionRecipesValid;++i) {
+    const auto &recipe=profile.collisionMeshes[i];
+    collisionRecipesValid=validCollisionMeshRecipe(recipe);
+    for(usize earlier=0;earlier<i && collisionRecipesValid;++earlier)
+      collisionRecipesValid=profile.collisionMeshes[earlier].source!=recipe.source &&
+          collisionMeshGuid(profile.collisionMeshes[earlier])!=collisionMeshGuid(recipe);
+  }
   return std::isfinite(profile.scale) && isScaleStep(profile.scale) && isTextureStep(profile.maximumTextureDimension) &&
          profile.normals <= GltfNormalsCalculate && profile.normalWeighting <= GltfNormalWeightAngle &&
          profile.smoothingAngle <= 180 &&
-         profile.tangents <= GltfTangentsCalculate && profile.excludedNodes.size() <= 65536;
+         profile.tangents <= GltfTangentsCalculate && profile.excludedNodes.size() <= 65536 &&
+         profile.collisionMeshes.size() <= 65536 && collisionRecipesValid;
 }
 
 std::string serializeImportProfile(const ImportProfile &profile) {
@@ -57,11 +80,22 @@ std::string serializeImportProfile(const ImportProfile &profile) {
          ",\"normalWeighting\":" + std::to_string(profile.normalWeighting) +
          ",\"smoothingAngle\":" + std::to_string(profile.smoothingAngle) +
          ",\"tangents\":" + std::to_string(profile.tangents) +
-         ",\"importCameras\":" + (profile.importCameras ? "true" : "false") + ",\"excludedNodes\":[" + [&] {
+         ",\"importCameras\":" + (profile.importCameras ? "true" : "false") +
+         ",\"importLights\":" + (profile.importLights ? "true" : "false") + ",\"excludedNodes\":[" + [&] {
            std::string list;
            for (const auto &node : profile.excludedNodes) {
              if (!list.empty()) list += ',';
              list += '"' + node.text() + '"';
+           }
+           return list;
+         }() + "],\"collisionMeshes\":[" + [&] {
+           std::string list;
+           for (const auto &recipe : profile.collisionMeshes) {
+             if (!list.empty()) list += ',';
+             char error[32]; std::snprintf(error, sizeof error, "%.9g", static_cast<double>(recipe.maximumError));
+             list += "{\"source\":\"" + recipe.source.text() + "\",\"identity\":\"" +
+                     collisionMeshGuid(recipe).text() + "\",\"trianglePercent\":" +
+                     std::to_string(recipe.trianglePercent) + ",\"maximumError\":" + error + "}";
            }
            return list;
          }() + "]}\n";
@@ -111,6 +145,11 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
     if (!cameras || cameras->kind != JsonDocument::Kind::Boolean) return false;
     parsed.importCameras = cameras->boolean;
   }
+  if (schema >= 8) {
+    const auto *lights = document.member(root, "importLights");
+    if (!lights || lights->kind != JsonDocument::Kind::Boolean) return false;
+    parsed.importLights = lights->boolean;
+  }
   if (schema >= 4) {
     const auto *excluded = document.member(root, "excludedNodes");
     if (!excluded || excluded->kind != JsonDocument::Kind::Array || excluded->childCount > 65536) return false;
@@ -123,6 +162,36 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
           !node.valid())
         return false;
       if (!parsed.excludes(node)) parsed.excludedNodes.push_back(node);
+    }
+  }
+  if (schema >= 6) {
+    const auto *recipes = document.member(root, "collisionMeshes");
+    if (!recipes || recipes->kind != JsonDocument::Kind::Array || recipes->childCount > 65536) return false;
+    for (u32 i = 0; i < recipes->childCount; ++i) {
+      const auto *item = document.child(*recipes, i);
+      if (!item || item->kind != JsonDocument::Kind::Object) return false;
+      const auto *source = document.member(*item, "source");
+      const auto *identity = document.member(*item, "identity");
+      const auto percent = document.index(*item, "trianglePercent");
+      const auto *error = document.member(*item, "maximumError");
+      CollisionMeshRecipe recipe;
+      if (!source || source->kind != JsonDocument::Kind::String ||
+          !AssetGuid::parse(document.textOf(*source), recipe.source) || percent < 0 || percent > 255 ||
+          !error || error->kind != JsonDocument::Kind::Number) return false;
+      recipe.trianglePercent = static_cast<u8>(percent);
+      recipe.maximumError = static_cast<float>(error->number);
+      if(schema>=7) {
+        if(!identity || identity->kind!=JsonDocument::Kind::String ||
+           !AssetGuid::parse(document.textOf(*identity),recipe.identity) || !recipe.identity.valid()) return false;
+      } else {
+        const auto rounded=static_cast<u32>(std::lround(recipe.maximumError*1000000.0f));
+        recipe.identity=assetGuidFromSeed("collision-mesh:v1:"+recipe.source.text()+":"+
+                                         std::to_string(recipe.trianglePercent)+":"+std::to_string(rounded));
+      }
+      if (!validCollisionMeshRecipe(recipe) ||
+          std::any_of(parsed.collisionMeshes.begin(), parsed.collisionMeshes.end(),
+                      [&](const auto &known) { return known.source == recipe.source; })) return false;
+      parsed.collisionMeshes.push_back(recipe);
     }
   }
   if (!validImportProfile(parsed)) return false;
@@ -138,6 +207,7 @@ GltfImportLimits applyImportProfile(GltfImportLimits limits, const ImportProfile
   limits.smoothingAngle = static_cast<float>(profile.smoothingAngle);
   limits.tangents = profile.tangents;
   limits.importCameras = profile.importCameras;
+  limits.importLights = profile.importLights;
   limits.maximumTextureDimension = std::min(limits.maximumTextureDimension, profile.maximumTextureDimension);
   limits.minimumTextureDimension = std::min(limits.minimumTextureDimension, limits.maximumTextureDimension);
   return limits;

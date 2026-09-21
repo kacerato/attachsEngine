@@ -90,6 +90,14 @@ static_assert(sizeof(DirtRoadPushConstants) == 128);
 // serialized ABI; the trailing rows are transient runtime data.
 struct DirtRoadFrameUniform {
   EnvironmentLighting environment{};
+  // Estado de aparência resolvido da cena. Fica depois do ABI persistente de
+  // EnvironmentLighting e antes das linhas transitórias, igual nos shaders.
+  float sceneSky[4]{};             // força, raio solar rad, brilho, modelo
+  float sceneFogColorDensity[4]{}; // rgb linear, densidade 1/m
+  float sceneFog[4]{};             // ativo, início em m, reservados
+  float scenePost[4]{};            // EV, curva, intermediário HDR, override
+  float sceneAo[4]{};              // ativo, raio m, intensidade, potência
+  float sceneAoDetail[4]{};        // viés em m, reservados
   float worldToViewRow0[4]{1.0f, 0.0f, 0.0f, 0.0f};
   float worldToViewRow1[4]{0.0f, 1.0f, 0.0f, 0.0f};
   float worldToViewRow2[4]{0.0f, 0.0f, 1.0f, 0.0f};
@@ -122,7 +130,7 @@ struct DirtRoadFrameUniform {
   float punctualLightParameters[4]{};
   renderer::PunctualLight punctualLights[renderer::MaximumPunctualLights]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 1584);
+static_assert(sizeof(DirtRoadFrameUniform) == 1680);
 
 struct ShadowPushConstants {
   float lightViewProjection[16]{};
@@ -201,6 +209,14 @@ bool formatSupportsDepthAttachment(VkPhysicalDevice physicalDevice, VkFormat for
   vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &properties);
   const VkFormatFeatureFlags required = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
       (requireSampling ? VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT : 0u);
+  return (properties.optimalTilingFeatures & required) == required;
+}
+
+bool formatSupportsHdrSceneColor(VkPhysicalDevice physicalDevice, VkFormat format) {
+  VkFormatProperties properties{};
+  vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &properties);
+  constexpr VkFormatFeatureFlags required = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+      VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
   return (properties.optimalTilingFeatures & required) == required;
 }
 
@@ -297,7 +313,7 @@ void InstancedRenderer::setRuntimeRenderingPolicy(
 
 bool InstancedRenderer::createRenderPass() {
   VkAttachmentDescription colorAttachment{};
-  colorAttachment.format = swapchain_->imageFormat();
+  colorAttachment.format = sceneColorFormat_;
   colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
   colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1448,7 +1464,7 @@ bool InstancedRenderer::createPostResources() {
   rhi::ImageDesc image{};
   image.width = renderTargetWidth();
   image.height = renderTargetHeight();
-  image.format = swapchain_->imageFormat();
+  image.format = sceneColorFormat_;
   image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
   image.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
   image.memoryClass = rhi::MemoryClass::RenderTarget;
@@ -1476,19 +1492,10 @@ bool InstancedRenderer::createPostResources() {
   sampler.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   sampler.addressW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   if (!postSampler_.initialize(device_, sampler)) return false;
-  if (temporalAaActive_) {
-    rhi::SamplerDesc depthSampler = sampler;
-    depthSampler.minFilter = VK_FILTER_NEAREST;
-    depthSampler.magFilter = VK_FILTER_NEAREST;
-    if (!postDepthSampler_.initialize(device_, depthSampler)) {
-      temporalAaActive_ = false;
-      postHistory_.reset();
-      renderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
-      resourceRenderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
-      __android_log_print(ANDROID_LOG_WARN, LogTag,
-                          "[TAA] sampler de depth indisponível; fallback FXAA ativo.");
-    }
-  }
+  rhi::SamplerDesc depthSampler = sampler;
+  depthSampler.minFilter = VK_FILTER_NEAREST;
+  depthSampler.magFilter = VK_FILTER_NEAREST;
+  if (!postDepthSampler_.initialize(device_, depthSampler)) return false;
 
   VkAttachmentDescription attachment{};
   attachment.format = swapchain_->imageFormat();
@@ -1508,17 +1515,11 @@ bool InstancedRenderer::createPostResources() {
   dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
   dependency.dstSubpass = 0;
   dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                            (temporalAaActive_
-                                 ? static_cast<VkPipelineStageFlags>(
-                                       VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)
-                                 : VkPipelineStageFlags{0});
+                            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
   dependency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
                             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                             (temporalAaActive_
-                                  ? static_cast<VkAccessFlags>(
-                                        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
-                                  : VkAccessFlags{0});
+                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
   dependency.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
   VkRenderPassCreateInfo renderPass{};
   renderPass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -1530,26 +1531,39 @@ bool InstancedRenderer::createPostResources() {
   renderPass.pDependencies = &dependency;
   if (vkCreateRenderPass(device_, &renderPass, nullptr, &postRenderPass_) != VK_SUCCESS) return false;
 
-  VkDescriptorSetLayoutBinding bindings[3]{};
-  const u32 bindingCount = temporalAaActive_ ? 3u : 1u;
-  for (u32 index = 0; index < bindingCount; ++index) {
+  // A prévia da Camera usa a mesma subpass/pipeline do pós principal, mas sua
+  // saída continua sendo uma textura amostrada pelo UI em vez de uma imagem de
+  // apresentação. Final layouts não participam da compatibilidade do render
+  // pass, portanto o mesmo pipeline permanece válido para as duas saídas.
+  attachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  if (vkCreateRenderPass(device_, &renderPass, nullptr, &previewPostRenderPass_) != VK_SUCCESS)
+    return false;
+
+  VkDescriptorSetLayoutBinding bindings[4]{};
+  constexpr u32 bindingCount = 4;
+  for (u32 index = 0; index < 3; ++index) {
     bindings[index].binding = index;
     bindings[index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[index].descriptorCount = 1;
     bindings[index].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
   }
+  bindings[3].binding = 3;
+  bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  bindings[3].descriptorCount = 1;
+  bindings[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
   VkDescriptorSetLayoutCreateInfo setLayout{};
   setLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   setLayout.bindingCount = bindingCount;
   setLayout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &setLayout, nullptr, &postSetLayout_) != VK_SUCCESS)
     return false;
-  VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, bindingCount};
+  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3},
+                                   {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool.maxSets = 1;
-  pool.poolSizeCount = 1;
-  pool.pPoolSizes = &poolSize;
+  pool.poolSizeCount = 2;
+  pool.pPoolSizes = poolSizes;
   if (vkCreateDescriptorPool(device_, &pool, nullptr, &postDescriptorPool_) != VK_SUCCESS)
     return false;
   VkDescriptorSetAllocateInfo allocate{};
@@ -1561,14 +1575,15 @@ bool InstancedRenderer::createPostResources() {
   VkDescriptorImageInfo images[3]{};
   images[0] = {postSampler_.handle(), postSceneColor_.view(),
                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-  if (temporalAaActive_) {
-    images[1] = {postSampler_.handle(), postHistory_.view(),
-                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    images[2] = {postDepthSampler_.handle(), depthImage_.view(),
-                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
-  }
-  VkWriteDescriptorSet writes[3]{};
-  for (u32 index = 0; index < bindingCount; ++index) {
+  images[1] = {postSampler_.handle(),
+               temporalAaActive_ ? postHistory_.view() : postSceneColor_.view(),
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  images[2] = {postDepthSampler_.handle(), depthImage_.view(),
+               VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
+  VkDescriptorBufferInfo environmentBuffer{environmentUniform_.handle(), 0,
+                                            sizeof(DirtRoadFrameUniform)};
+  VkWriteDescriptorSet writes[4]{};
+  for (u32 index = 0; index < 3; ++index) {
     writes[index].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[index].dstSet = postDescriptorSet_;
     writes[index].dstBinding = index;
@@ -1576,6 +1591,12 @@ bool InstancedRenderer::createPostResources() {
     writes[index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     writes[index].pImageInfo = &images[index];
   }
+  writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  writes[3].dstSet = postDescriptorSet_;
+  writes[3].dstBinding = 3;
+  writes[3].descriptorCount = 1;
+  writes[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  writes[3].pBufferInfo = &environmentBuffer;
   vkUpdateDescriptorSets(device_, bindingCount, writes, 0, nullptr);
 
   VkShaderModule vert = createShaderModule(device_, rhi::shaders::kPost_ProcessVertSpirv,
@@ -1689,9 +1710,14 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
   vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, postPipelineLayout_,
                           0, 1, &postDescriptorSet_, 0, nullptr);
   PostPushConstants push{};
+  const bool postEffectsEnabled=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
+  const auto look=sceneEnvironment_.active?sceneEnvironment_:
+      (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
+  const bool authoredPost=postEffectsEnabled&&look.active&&look.post;
   push.texelFlags[0] = 1.0f / static_cast<float>(renderTargetWidth());
   push.texelFlags[1] = 1.0f / static_cast<float>(renderTargetHeight());
-  push.texelFlags[2] = renderingPolicy_.post.bloom ? 1.0f : 0.0f;
+  const bool bloom=postEffectsEnabled&&(authoredPost?look.bloom:renderingPolicy_.post.bloom);
+  push.texelFlags[2] = bloom ? 1.0f : 0.0f;
   // The temporal shader currently reconstructs yaw/pitch only. Keep the
   // spatial resolve for rolled cameras until its history ABI carries roll.
   const bool temporalPoseSupported = std::abs(camera.roll) <= 1e-6f && sceneOrthographicHalfHeight_==0;
@@ -1704,12 +1730,14 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
                            ? (temporalHistoryInitialized_ ? 3.0f : 2.0f)
                            : temporalAaActive_ || renderingPolicy_.post.antiAliasing ==
                                      renderer::AntiAliasingMode::Fxaa ? 1.0f : 0.0f;
-  push.bloom[0] = renderingPolicy_.post.bloomThreshold;
-  push.bloom[1] = renderingPolicy_.post.bloomIntensity;
-  push.bloom[2] = renderingPolicy_.post.sharpen;
-  push.bloom[3] = renderingPolicy_.post.vignette ? renderingPolicy_.post.vignetteIntensity : 0.0f;
-  push.grade[0] = renderingPolicy_.post.contrast;
-  push.grade[1] = renderingPolicy_.post.saturation;
+  push.bloom[0] = authoredPost?look.bloomThreshold:renderingPolicy_.post.bloomThreshold;
+  push.bloom[1] = authoredPost?look.bloomIntensity:renderingPolicy_.post.bloomIntensity;
+  push.bloom[2] = postEffectsEnabled?renderingPolicy_.post.sharpen:0.0f;
+  push.bloom[3] = !postEffectsEnabled?0.0f:authoredPost
+      ? (look.vignette?look.vignetteIntensity:0.0f)
+      : (renderingPolicy_.post.vignette?renderingPolicy_.post.vignetteIntensity:0.0f);
+  push.grade[0] = !postEffectsEnabled?1.0f:(authoredPost?look.contrast:renderingPolicy_.post.contrast);
+  push.grade[1] = !postEffectsEnabled?1.0f:(authoredPost?look.saturation:renderingPolicy_.post.saturation);
   push.grade[2] = (swapchain_->imageFormat() == VK_FORMAT_B8G8R8A8_SRGB ||
                    swapchain_->imageFormat() == VK_FORMAT_R8G8B8A8_SRGB) ? 0.0f : 1.0f;
   const rhi::SurfaceTransform &surfaceTransform = swapchain_->surfaceTransform();
@@ -1720,6 +1748,7 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
   push.sourceTransform[1] = static_cast<float>(renderHeight()) /
                             static_cast<float>(renderTargetHeight());
   push.sourceTransform[2] = dirtRoadPreview_?1.0f/std::tan(sceneFieldOfView()*.5f):1.732050808f;
+  if(sceneOrthographicHalfHeight_>0) push.sourceTransform[2]=-1.0f;
   const VkExtent2D displayExtent = swapchain_->displayExtent();
   push.sourceTransform[3] = static_cast<float>(displayExtent.width) /
                             static_cast<float>(displayExtent.height);
@@ -1825,12 +1854,15 @@ void InstancedRenderer::destroyPostResources() {
   if (postSetLayout_ != VK_NULL_HANDLE)
     vkDestroyDescriptorSetLayout(device_, postSetLayout_, nullptr);
   if (postRenderPass_ != VK_NULL_HANDLE) vkDestroyRenderPass(device_, postRenderPass_, nullptr);
+  if (previewPostRenderPass_ != VK_NULL_HANDLE)
+    vkDestroyRenderPass(device_, previewPostRenderPass_, nullptr);
   postPipeline_ = VK_NULL_HANDLE;
   postPipelineLayout_ = VK_NULL_HANDLE;
   postDescriptorPool_ = VK_NULL_HANDLE;
   postDescriptorSet_ = VK_NULL_HANDLE;
   postSetLayout_ = VK_NULL_HANDLE;
   postRenderPass_ = VK_NULL_HANDLE;
+  previewPostRenderPass_ = VK_NULL_HANDLE;
   postDepthSampler_.shutdown();
   postSampler_.shutdown();
   postHistory_.reset();
@@ -2314,6 +2346,7 @@ bool InstancedRenderer::createDepthImage() {
   graphInputs.height = renderTargetHeight();
   graphInputs.hzbEnabled = hzbWorkloadEligible_;
   graphInputs.temporalAaEnabled = temporalAaActive_;
+  graphInputs.postDepthEnabled = dirtRoadPreview_ && renderingPolicy_.post.dedicatedPass;
   graphInputs.waterDepthInputEnabled = waterSubpassActive_;
   frameAttachmentPolicy_ = renderer::resolveFrameAttachmentPolicy(graphInputs);
   if (!frameAttachmentPolicy_.valid) {
@@ -2327,6 +2360,11 @@ bool InstancedRenderer::createDepthImage() {
   }
   depthFormat_ = chooseDepthFormat(physicalDevice_, frameAttachmentPolicy_.depthSampled);
   if (depthFormat_ == VK_FORMAT_UNDEFINED && frameAttachmentPolicy_.depthSampled) {
+    if(graphInputs.postDepthEnabled) {
+      __android_log_print(ANDROID_LOG_ERROR,LogTag,
+          "[Post] o device não oferece depth amostrável para neblina e pós.");
+      return false;
+    }
     // Optional capability failure must not take the renderer down. Fall back
     // to ordinary depth, disable HZB and replace temporal AA with FXAA.
     __android_log_print(ANDROID_LOG_WARN, LogTag,
@@ -3650,6 +3688,19 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   dirtRoadPreview_ = dirtRoadPreview || emptyScene;
   materialPreview_ = materialAssets != nullptr && !dirtRoadPreview_ && !emptyScene_;
   scenePreview_ = !dirtRoadPreview_ && (scenePreview || materialPreview_);
+  // A cena autoral sempre mantém a etapa final: mesmo com filtros opcionais
+  // desligados ela é responsável por exposição e conversão HDR -> display.
+  if(dirtRoadPreview_) {
+    renderingPolicy_.post.dedicatedPass=true;
+    resourceRenderingPolicy_.post.dedicatedPass=true;
+  }
+  sceneColorFormat_=swapchain_->imageFormat();
+  hdrSceneColor_=dirtRoadPreview_ &&
+      formatSupportsHdrSceneColor(physicalDevice_,VK_FORMAT_R16G16B16A16_SFLOAT);
+  if(hdrSceneColor_) sceneColorFormat_=VK_FORMAT_R16G16B16A16_SFLOAT;
+  else if(dirtRoadPreview_)
+    __android_log_print(ANDROID_LOG_WARN,LogTag,
+        "[Post] RGBA16F indisponível; pós continua ativo no formato do display.");
 
   // The temporal shader reprojects from FreeCameraState and the matching
   // projection jitter is currently part of the packaged-world vertex path.
@@ -4352,6 +4403,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   using Clock = std::chrono::steady_clock;
   const auto acquireStart = frameProfilingEnabled_ ? Clock::now() : Clock::time_point{};
   lastFrameTimings_ = {};
+  if(!sceneEnvironmentVolumes_.empty())
+    sceneEnvironment_=renderer::resolveSceneEnvironment(sceneEnvironmentVolumes_,camera.position,
+                                                         sceneEnvironmentLayerMask_,&environmentBlendReport_);
+  else environmentBlendReport_={};
   u32 imageIndex = 0;
   const rhi::SwapchainStatus acquireStatus = swapchain_->acquireNextImage(&imageIndex);
   if (acquireStatus != rhi::SwapchainStatus::Ok &&
@@ -4490,6 +4545,39 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     auto *frame = static_cast<DirtRoadFrameUniform *>(environmentUniform_.mappedData());
     if(!renderer::adjustEnvironmentLighting(dirtRoadResources_.environmentLighting(),environmentAdjustment_,frame->environment))
       return rhi::SwapchainStatus::FatalError;
+    const auto look=sceneEnvironment_.active?sceneEnvironment_:
+        (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
+    if(look.active) {
+      std::copy(look.skyZenith,look.skyZenith+3,frame->environment.skyZenithCloudCoverage);
+      std::copy(look.skyHorizon,look.skyHorizon+3,frame->environment.skyHorizonCloudDensity);
+      std::copy(look.ground,look.ground+3,frame->environment.groundColorSaturation);
+      for(u32 channel=0;channel<3;++channel)
+        frame->environment.ambientColorStrength[channel]=
+            look.skyHorizon[channel]*0.65f+look.skyZenith[channel]*0.35f;
+    }
+    frame->sceneSky[0]=look.active?look.atmosphere:0.0f;
+    frame->sceneSky[1]=look.sunDiskDegrees*0.5f*0.0174532925199433f;
+    frame->sceneSky[2]=look.sunDiskIntensity;
+    frame->sceneSky[3]=look.active && look.sky==renderer::SkyModel::Atmosphere?1.0f:0.0f;
+    for(u32 channel=0;channel<3;++channel)
+      frame->sceneFogColorDensity[channel]=look.fogColor[channel];
+    frame->sceneFogColorDensity[3]=look.fogDensity;
+    const bool editorFog=!editorBackground_||(editorSceneEffects_&&editorSceneFog_);
+    const bool editorPost=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
+    frame->sceneFog[0]=look.active&&look.fog&&editorFog?1.0f:0.0f;
+    frame->sceneFog[1]=look.fogStart;
+    frame->scenePost[0]=look.active&&look.post&&editorPost?look.exposureEv:0.0f;
+    frame->scenePost[1]=look.active&&look.post&&editorPost?
+        static_cast<float>(look.toneMapper):static_cast<float>(renderer::ToneMapper::Aces);
+    frame->scenePost[2]=hdrSceneColor_?1.0f:0.0f;
+    frame->scenePost[3]=look.active&&look.post&&editorPost?1.0f:0.0f;
+    frame->sceneAo[0]=look.active&&look.post&&look.ambientOcclusion&&editorPost?1.0f:0.0f;
+    frame->sceneAo[1]=look.ambientOcclusionRadius;
+    frame->sceneAo[2]=look.ambientOcclusionIntensity;
+    frame->sceneAo[3]=look.ambientOcclusionPower;
+    frame->sceneAoDetail[0]=look.ambientOcclusionBias;
+    frame->sceneAoDetail[1]=look.active&&look.post&&look.filmGrain&&editorPost?
+        look.filmGrainIntensity:0.0f;
     const auto basis=renderer::buildCameraViewBasis(camera.yaw,camera.pitch,camera.roll);
     const float row0[4] = {basis.row0[0],basis.row0[1],basis.row0[2],sceneOrthographicHalfHeight_};
     const float row1[4] = {basis.row1[0],basis.row1[1],basis.row1[2],0};
@@ -4583,15 +4671,17 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // Luzes da cena: a escolha do orçamento acontece aqui, com a câmera deste
     // quadro, e o que não coube fica contado em `lightBudget_`.
     {
+      const std::span<const renderer::SceneLight> lights=editorBackground_&&!editorSceneLighting_
+          ? std::span<const renderer::SceneLight>{}:std::span<const renderer::SceneLight>{sceneLights_};
       const u32 accepted = renderer::selectPunctualLights(
-          sceneLights_, camera.position, frame->punctualLights, lightBudget_);
+          lights, camera.position, frame->punctualLights, lightBudget_);
       frame->punctualLightParameters[0] = static_cast<float>(accepted);
       for (u32 i = accepted; i < renderer::MaximumPunctualLights; ++i)
         frame->punctualLights[i] = {};
       // Uma direcional autorada na cena passa a ser o sol: ela é a modalidade
       // que já tem consumidor com cascatas de sombra. Sem nenhuma, o sol do
       // recurso de ambiente continua valendo, como antes deste caminho existir.
-      if (const auto *sun = renderer::selectDirectionalLight(sceneLights_)) {
+      if (const auto *sun = renderer::selectDirectionalLight(lights)) {
         float direction[3];
         renderer::detail::normalized(sun->direction, direction);
         // `sunDirectionIntensity.xyz` é a direção PARA a luz, que é o oposto da
@@ -5314,7 +5404,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     vkCmdPushConstants(commandBuffer_, skyPipelineLayout_,
                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                        0, sizeof(skyPush), &skyPush);
-    if(!editorBackground_) vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
+    if(!editorBackground_||(editorSceneEffects_&&editorSceneSky_))
+      vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
 
     // A grade editorial, depois da geometria opaca e antes do transparente: ela
     // precisa da profundidade da cena já escrita para ser escondida por ela, e
@@ -5325,7 +5416,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       gridPush.cameraFrame[0] = sceneAspectRatio();
       gridPush.cameraFrame[1] = camera.yaw;
       gridPush.cameraFrame[2] = camera.pitch;
-      gridPush.cameraFrame[3] = 1.0f; // opacidade global da grade
+      gridPush.cameraFrame[3] = .50f; // referência visível sem competir com a cena
       gridPush.materialFactors[3] = 1.0f/std::tan(sceneFieldOfView()*.5f);
       gridPush.baseColorFactor[2] = camera.roll; // xy jitter, z roll, w plane height
       gridPush.surfaceTransform[0] = surfaceTransform.xx;
@@ -5348,7 +5439,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       gridPush.emissiveFactorAndStrength[2] = editorGrid_.minorOpacity;
       gridPush.emissiveFactorAndStrength[3] = editorGrid_.fadeDistance;
       // Cinza neutro: a grade é referência espacial, não um elemento de cena.
-      gridPush.materialFactors[0] = gridPush.materialFactors[1] = gridPush.materialFactors[2] = .55f;
+      gridPush.materialFactors[0] = gridPush.materialFactors[1] = gridPush.materialFactors[2] = .38f;
       vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, editorGridPipeline_);
       boundMapPipeline = VK_NULL_HANDLE;
       vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, editorGridPipelineLayout_,

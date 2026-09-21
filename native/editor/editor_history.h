@@ -29,7 +29,7 @@
 
 namespace ae::editor {
 
-enum class EditorCommandKind : u8 { ApplyValues, Create, Destroy, Reparent };
+enum class EditorCommandKind : u8 { ApplyValues, Create, Destroy, Reparent, Views };
 
 // Token de fusão. Comandos consecutivos sobre a mesma entidade com o mesmo
 // token não nulo viram um só: é o que faz um arraste de gizmo inteiro ocupar um
@@ -47,6 +47,9 @@ struct EditorCommand final {
   u32 beforeIndex = 0;
   u32 afterIndex = 0;
   EditorMergeToken mergeToken = kNoMerge;
+  // Estado de CENA, não de objeto (Views): salvar, renomear e excluir um
+  // enquadramento é edição autoral e tem de caber no mesmo Desfazer do resto.
+  runtime::SceneViews beforeViews{}, afterViews{};
 };
 
 class EditorHistory final {
@@ -80,6 +83,8 @@ public:
                     EditorMergeToken mergeToken = kNoMerge);
   bool reparent(EditorDocument &document, EditorEntityId id, EditorEntityId newParent,
                 u32 childIndex);
+  // Vistas salvas da cena, com o passo de Desfazer do resto da edição.
+  bool setViews(EditorDocument &document, const runtime::SceneViews &views);
 
   // Desfazer/refazer fecham qualquer transação aberta antes de agir: um undo no
   // meio de um arraste desfaria metade dele e deixaria a outra metade viva.

@@ -8,7 +8,9 @@ namespace ae::editor {
 // Chamadas são processadas na thread da sessão, nunca diretamente da UI Android.
 struct EditorSceneVersion { u64 epoch=0, revision=0; };
 enum class EditorAction { Select, Rename, Transform, NumericProperty, Duplicate, Remove,
-                          Reparent, Undo, Redo, FrameSelection, ComponentProperty, AddComponent, AddScript, RemoveComponent, ScriptProperty, ScriptEnabled, FitCollider, AssignMesh, RestoreMaterial };
+                          Reparent, Undo, Redo, FrameSelection, ComponentProperty, ComponentResource,
+                          AddComponent, AddScript, RemoveComponent, ScriptProperty, ScriptEnabled,
+                          FitCollider, GenerateCollisionMesh, AssignMesh, RestoreMaterial };
 enum class EditorActionStatus { Applied, StaleScene, Busy, InvalidTarget, InvalidValue };
 struct EditorActionRequest {
   EditorSceneVersion version;
@@ -21,6 +23,8 @@ struct EditorActionRequest {
   std::string componentType,componentProperty;
   scene::ComponentPropertyValue componentValue=0.0f;
   u64 componentInstance=0;
+  resources::AssetGuid componentResource{};
+  u32 componentResourceSlot=0;
   std::string scriptType,scriptPropertyType,scriptPropertyValue;
   bool enabled=true;
 };

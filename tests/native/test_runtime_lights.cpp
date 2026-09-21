@@ -10,6 +10,7 @@
 #include "scene/light.h"
 
 #include <string>
+#include <sstream>
 #include <vector>
 
 using namespace ae;
@@ -26,6 +27,7 @@ EditorEntityId lightAt(EditorDocument &doc, const char *name, scene::LightKind k
   auto *light = editLight(values);
   if (!light) return 0;
   light->kind = kind;
+  light->unit = scene::LightUnit::Engine;
   light->intensity = intensity;
   light->range = range;
   return doc.applyEntityValues(id, values) ? id : 0;
@@ -52,6 +54,9 @@ AE_TEST(scene_light_is_a_component_with_contract_and_survives_the_archive) {
   light->color[2] = .75f;
   light->innerAngle = 10;
   light->outerAngle = 40;
+  light->unit = scene::LightUnit::LuxCandela;
+  light->useColorTemperature = true;
+  light->colorTemperature = 3200;
   AE_EXPECT_TRUE(doc.applyEntityValues(id, values), "valores aceitos");
 
   const auto text = serializeEditorDocument(doc, 7);
@@ -64,12 +69,60 @@ AE_TEST(scene_light_is_a_component_with_contract_and_survives_the_archive) {
   AE_EXPECT_EQ(back->range, 7.f, "alcance preservado");
   AE_EXPECT_EQ(back->color[2], .75f, "cor preservada");
   AE_EXPECT_EQ(back->outerAngle, 40.f, "cone externo preservado");
+  AE_EXPECT_TRUE(back->unit == scene::LightUnit::LuxCandela, "unidade física preservada");
+  AE_EXPECT_TRUE(back->useColorTemperature, "uso de temperatura preservado");
+  AE_EXPECT_EQ(back->colorTemperature, 3200.f, "temperatura preservada");
 
   // Cone interno maior que o externo inverteria a janela e desenharia a borda
   // no lugar errado: recusa na autoria, não no shader.
   auto invalid = *doc.find(id);
   editLight(invalid)->innerAngle = 60;
   AE_EXPECT_TRUE(!doc.applyEntityValues(id, invalid), "cone interno maior que o externo é recusado");
+}
+
+AE_TEST(light_v1_migrates_without_changing_legacy_brightness) {
+  scene::Light light;
+  std::istringstream old("2 1 0.25 0.5 0.75 12 7 10 40");
+  AE_EXPECT_TRUE(light.read(old, 1), "payload v1 aceito");
+  AE_EXPECT_TRUE(light.kind == scene::LightKind::Spot, "modalidade antiga");
+  AE_EXPECT_TRUE(light.unit == scene::LightUnit::Engine, "v1 mantém escala interna");
+  AE_EXPECT_TRUE(!light.useColorTemperature, "v1 não ganha filtro novo");
+  AE_EXPECT_EQ(scene::lightIntensityForShader(light.kind, light.unit, light.intensity,
+                                               light.innerAngle, light.outerAngle),
+               12.f, "brilho antigo chega igual ao shader");
+}
+
+AE_TEST(physical_light_units_and_temperature_feed_the_runtime_consumer) {
+  constexpr float pi = 3.14159265358979323846f;
+  const float candela = scene::lightIntensityForShader(scene::LightKind::Point,
+      scene::LightUnit::LuxCandela, 683.f, 0, 45);
+  AE_EXPECT_TRUE(std::abs(candela - 1.f) < 1e-5f, "683 cd viram uma unidade radiométrica");
+  const float lumen = scene::lightIntensityForShader(scene::LightKind::Point,
+      scene::LightUnit::LuxLumen, 683.f * 4.f * pi, 0, 45);
+  AE_EXPECT_TRUE(std::abs(lumen - 1.f) < 1e-5f, "fluxo pontual usa quatro pi esterradianos");
+
+  float neutral[3]{}, warm[3]{}, cold[3]{};
+  scene::lightTemperatureColor(6500, neutral);
+  scene::lightTemperatureColor(2700, warm);
+  scene::lightTemperatureColor(12000, cold);
+  for (float channel : neutral)
+    AE_EXPECT_TRUE(std::abs(channel - 1.f) < 1e-4f, "D65 é filtro neutro");
+  AE_EXPECT_TRUE(warm[0] > warm[2], "2700 K favorece vermelho");
+  AE_EXPECT_TRUE(cold[2] > cold[0], "12000 K favorece azul");
+
+  EditorDocument doc;
+  const auto id = lightAt(doc, "Luz física", scene::LightKind::Point, 0, 2, 0, 683, 10);
+  auto values = *doc.find(id);
+  auto *light = editLight(values);
+  light->unit = scene::LightUnit::LuxCandela;
+  light->useColorTemperature = true;
+  light->colorTemperature = 2700;
+  AE_EXPECT_TRUE(doc.applyEntityValues(id, values), "luz física autorada");
+  std::vector<renderer::SceneLight> lights;
+  AE_EXPECT_TRUE(runtime::collectSceneLights(doc, lights), "consumidor coleta");
+  AE_EXPECT_EQ(lights.size(), 1u, "uma luz física");
+  AE_EXPECT_TRUE(std::abs(lights[0].intensity - 1.f) < 1e-5f, "candela convertida no consumidor");
+  AE_EXPECT_TRUE(lights[0].color[0] > lights[0].color[2], "temperatura multiplica a cor consumida");
 }
 
 AE_TEST(scene_lights_are_collected_with_world_pose_and_hierarchy_rules) {

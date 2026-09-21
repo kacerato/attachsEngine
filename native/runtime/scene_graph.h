@@ -12,6 +12,7 @@
 #pragma once
 #include "core/base.h"
 #include "runtime/gameplay_layers.h"
+#include "runtime/scene_views.h"
 #include "runtime/input_actions.h"
 #include "scene/components.h"
 
@@ -144,6 +145,14 @@ public:
     layers_ = value;
     ++revision_;
   }
+  // Enquadramentos salvos da cena: comparar duas versões de um cenário exige
+  // repetir a MESMA vista, então ela é dado do documento, não do aparelho.
+  const SceneViews &views() const noexcept { return views_; }
+  void setViews(const SceneViews &value) {
+    if (views_ == value) return;
+    views_ = value;
+    ++revision_;
+  }
   const InputActionMap &inputActions() const noexcept { return input_; }
   bool setInputActions(const InputActionMap &value) {
     if (!value.valid()) return false;
@@ -173,6 +182,7 @@ private:
 
   std::vector<Record> records_;  // indexado por id; a posição 0 nunca é usada
   GameplayLayers layers_{};
+  SceneViews views_{};
   InputActionMap input_{};
   ObjectId rootId_ = kInvalidObject;
   ObjectId nextId_ = 1;
