@@ -1,0 +1,15 @@
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\bin\Release\net10.0\Aether.Analyzers.deps.json
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\bin\Release\net10.0\Aether.Analyzers.runtimeconfig.json
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\bin\Release\net10.0\Aether.Analyzers.dll
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\bin\Release\net10.0\Aether.Analyzers.pdb
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\obj\Release\net10.0\Aether.Analyzers.csproj.AssemblyReference.cache
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\obj\Release\net10.0\Aether.Analyzers.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\obj\Release\net10.0\Aether.Analyzers.AssemblyInfoInputs.cache
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\obj\Release\net10.0\Aether.Analyzers.AssemblyInfo.cs
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\obj\Release\net10.0\Aether.Analyzers.csproj.CoreCompileInputs.cache
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\obj\Release\net10.0\Aether.Analyzers.sourcelink.json
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\obj\Release\net10.0\Aether.Analyzers.dll
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\obj\Release\net10.0\refint\Aether.Analyzers.dll
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\obj\Release\net10.0\Aether.Analyzers.pdb
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\obj\Release\net10.0\Aether.Analyzers.genruntimeconfig.cache
+C:\Users\donod\Downloads\atchengine\managed\Aether.Analyzers\obj\Release\net10.0\ref\Aether.Analyzers.dll

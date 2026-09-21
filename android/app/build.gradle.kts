@@ -1,4 +1,7 @@
 import java.security.MessageDigest
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import groovy.json.JsonSlurper
 
 plugins {
@@ -7,8 +10,64 @@ plugins {
 
 // The packaged engine must come from this checkout, never a stale checked-in DLL.
 // Keep the vendored BCL unchanged; publish only our framework-dependent component.
-val managedOutput = layout.buildDirectory.dir("managed/rendering")
+val managedTargetFramework = "net8.0"
+val managedRuntimeVersion = "8.0.27"
+val managedOutput = layout.buildDirectory.dir("managed/rendering-$managedTargetFramework-$managedRuntimeVersion")
 val generatedAssets = layout.buildDirectory.dir("generated/aetherAssets")
+fun elfLoadAlignments(library: File): Set<Long> = RandomAccessFile(library, "r").use { elf ->
+    fun bytesAt(offset: Long, count: Int): ByteBuffer {
+        val bytes = ByteArray(count)
+        elf.seek(offset)
+        elf.readFully(bytes)
+        return ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+    }
+    val ident = ByteArray(16)
+    elf.readFully(ident)
+    check(ident[0] == 0x7f.toByte() && ident[1] == 'E'.code.toByte() &&
+          ident[2] == 'L'.code.toByte() && ident[3] == 'F'.code.toByte()) {
+        "Biblioteca nativa sem cabecalho ELF: ${library.name}"
+    }
+    check(ident[4] == 2.toByte() && ident[5] == 1.toByte()) {
+        "A verificacao de pagina espera ELF64 little-endian: ${library.name}"
+    }
+    val programHeaderOffset = bytesAt(32, 8).long
+    val programHeaderSize = bytesAt(54, 2).short.toInt() and 0xffff
+    val programHeaderCount = bytesAt(56, 2).short.toInt() and 0xffff
+    buildSet {
+        repeat(programHeaderCount) { index ->
+            val offset = programHeaderOffset + index.toLong() * programHeaderSize
+            val type = bytesAt(offset, 4).int
+            if (type == 1) {
+                add(bytesAt(offset + 48, 8).long)
+            }
+        }
+    }
+}
+val verifyVendoredAndroid16kLibraries by tasks.registering {
+    val roots = listOf(
+        file("../../native/third_party/dotnet-runtime/android-arm64"),
+        file("../../native/third_party/openssl/arm64-v8a"),
+        file("../../native/third_party/vulkan-validation-layers/arm64-v8a"),
+    )
+    inputs.files(roots.map { root -> fileTree(root) { include("**/*.so", "**/*.so.*") } })
+    doLast {
+        val libraries = roots.flatMap { root ->
+            root.walkTopDown().filter { it.isFile && (it.name.endsWith(".so") || it.name.contains(".so.")) }.toList()
+        }
+        check(libraries.isNotEmpty()) { "Nenhuma biblioteca Android vendorizada foi localizada" }
+        libraries.forEach { library ->
+            val alignments = elfLoadAlignments(library)
+            check(alignments.isNotEmpty() && alignments.all { it >= 16384L }) {
+                "${library.relativeTo(projectDir).invariantSeparatorsPath} usa PT_LOAD " +
+                    "${alignments.joinToString { "0x${it.toString(16)}" }}; Android ARM64 requer 0x4000"
+            }
+        }
+    }
+}
+val requireAndroid16kPages = providers.gradleProperty("astra.require16kPages").map {
+    require(it == "true" || it == "false") { "astra.require16kPages must be true or false" }
+    it.toBoolean()
+}.getOrElse(false)
 val verifyPackagedOpenSsl by tasks.registering {
     val libraryRoot = file("../../native/third_party/openssl/arm64-v8a")
     inputs.dir(libraryRoot)
@@ -33,6 +92,8 @@ val verifyPackagedOpenSsl by tasks.registering {
     }
 }
 val publishManagedCore by tasks.registering(Exec::class) {
+    inputs.property("managedTargetFramework", managedTargetFramework)
+    inputs.property("managedRuntimeVersion", managedRuntimeVersion)
     inputs.files(fileTree("../../managed/Aether.Core") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
     inputs.files(fileTree("../../managed/Aether.Scene") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
     inputs.files(fileTree("../../managed/Aether.Rendering") { include("**/*.cs", "**/*.csproj"); exclude("bin/**", "obj/**") })
@@ -41,19 +102,37 @@ val publishManagedCore by tasks.registering(Exec::class) {
     inputs.files("../../Directory.Build.props", "../../NuGet.Config")
     outputs.dir(managedOutput)
     workingDir = rootProject.projectDir.parentFile
-    commandLine("dotnet", "publish", "managed/Aether.Rendering/Aether.Rendering.csproj", "-c", "Release",
+    val dotnetExecutable = providers.environmentVariable("ASTRA_DOTNET").getOrElse("dotnet")
+    commandLine(dotnetExecutable, "publish", "managed/Aether.Rendering/Aether.Rendering.csproj", "-c", "Release",
         "-r", "linux-bionic-arm64", "--self-contained", "false",
-        "-p:GenerateRuntimeConfigurationFiles=true", "-o", managedOutput.get().asFile.absolutePath)
+        "-p:TargetFramework=$managedTargetFramework", "-p:GenerateRuntimeConfigurationFiles=true",
+        "-p:RuntimeFrameworkVersion=$managedRuntimeVersion",
+        "-o", managedOutput.get().asFile.absolutePath)
 }
 // Legacy packages are only for explicit regression/migration builds.
 val includeLegacyDemos = providers.gradleProperty("astra.includeLegacyDemos").map {
     require(it == "true" || it == "false") { "astra.includeLegacyDemos must be true or false" }
     it.toBoolean()
 }.getOrElse(false)
+// O APK de uso real continua ARM64. Uma ABI alternativa pode ser solicitada
+// explicitamente para executar o shell nativo em um emulador do host, sem
+// alterar o artefato padrão nem manter outra configuração Gradle concorrente.
+val androidAbis = providers.gradleProperty("astra.androidAbis").map { value ->
+    val abis = value.split(',').map(String::trim).filter(String::isNotEmpty).distinct()
+    val supported = setOf("arm64-v8a", "x86_64")
+    require(abis.isNotEmpty() && abis.all(supported::contains)) {
+        "astra.androidAbis aceita apenas arm64-v8a e x86_64"
+    }
+    abis
+}.getOrElse(listOf("arm64-v8a"))
 val prepareEngineAssets by tasks.registering(Sync::class) {
     inputs.property("includeLegacyDemos", includeLegacyDemos)
+    inputs.property("requireAndroid16kPages", requireAndroid16kPages)
     dependsOn(publishManagedCore)
     dependsOn(verifyPackagedOpenSsl)
+    if (requireAndroid16kPages) {
+        dependsOn(verifyVendoredAndroid16kLibraries)
+    }
     from("../../native/third_party/openssl/LICENSE.txt") { into("licenses/openssl") }
     if (includeLegacyDemos) {
     inputs.file("../../samples/material-preview/manifest.json")
@@ -196,7 +275,7 @@ android {
         versionName = "0.2.0-editor-ui"
 
         ndk {
-            abiFilters += "arm64-v8a"
+            abiFilters.addAll(androidAbis)
         }
 
         externalNativeBuild {

@@ -35,6 +35,18 @@
       "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\build\\intermediates\\cxx\\RelWithDebInfo\\602j185f\\obj\\arm64-v8a\\libaether_android.so",
       "runtimeFiles": []
     },
+    "aether_assets::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_assets",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_assets.a"
+    },
+    "aether_codecs::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "aether_codecs",
+      "output": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\.cxx\\RelWithDebInfo\\602j185f\\arm64-v8a\\libaether_codecs.a"
+    },
     "aether_core::@6890427a1f51a3e7e1df": {
       "toolchain": "toolchain",
       "abi": "arm64-v8a",
@@ -159,6 +171,7 @@
   ],
   "cppFileExtensions": [
     "cxx",
-    "cpp"
+    "cpp",
+    "cc"
   ]
 }

@@ -23,8 +23,10 @@ C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Release\net8.0\
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Release\net8.0\linux-bionic-arm64\Aether.Rendering.pdb
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Release\net8.0\linux-bionic-arm64\Aether.Core.dll
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Release\net8.0\linux-bionic-arm64\Aether.Scene.dll
+C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Release\net8.0\linux-bionic-arm64\Astra.Scripting.dll
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Release\net8.0\linux-bionic-arm64\Aether.Core.pdb
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Release\net8.0\linux-bionic-arm64\Aether.Scene.pdb
+C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Release\net8.0\linux-bionic-arm64\Astra.Scripting.pdb
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\obj\Release\net8.0\linux-bionic-arm64\Aether.Rendering.csproj.AssemblyReference.cache
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\obj\Release\net8.0\linux-bionic-arm64\Aether.Rendering.GeneratedMSBuildEditorConfig.editorconfig
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\obj\Release\net8.0\linux-bionic-arm64\Aether.Rendering.AssemblyInfoInputs.cache
@@ -37,5 +39,3 @@ C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\obj\Release\net8.0\
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\obj\Release\net8.0\linux-bionic-arm64\Aether.Rendering.pdb
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\obj\Release\net8.0\linux-bionic-arm64\Aether.Rendering.genruntimeconfig.cache
 C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\obj\Release\net8.0\linux-bionic-arm64\ref\Aether.Rendering.dll
-C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Release\net8.0\linux-bionic-arm64\Astra.Scripting.dll
-C:\Users\donod\Downloads\atchengine\managed\Aether.Rendering\bin\Release\net8.0\linux-bionic-arm64\Astra.Scripting.pdb

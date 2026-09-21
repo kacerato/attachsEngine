@@ -6,6 +6,45 @@
                 {
                     "source": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\src\\main\\res\\values\\astra_colors.xml",
                     "from": {
+                        "startLines": "-1,-1",
+                        "startColumns": "-1,-1",
+                        "startOffsets": "-1,-1"
+                    },
+                    "to": {
+                        "startLines": "2,3",
+                        "startColumns": "4,4",
+                        "startOffsets": "55,102",
+                        "endColumns": "46,44",
+                        "endOffsets": "97,142"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\src\\main\\res\\values\\styles.xml",
+                    "from": {
+                        "startLines": "2,-1",
+                        "startColumns": "4,-1",
+                        "startOffsets": "57,-1",
+                        "endLines": "15,-1",
+                        "endColumns": "12,-1",
+                        "endOffsets": "929,-1"
+                    },
+                    "to": {
+                        "startLines": "4,17",
+                        "startColumns": "4,4",
+                        "startOffsets": "147,854",
+                        "endLines": "16,25",
+                        "endColumns": "12,12",
+                        "endOffsets": "849,1404"
+                    }
+                }
+            ]
+        },
+        {
+            "outputFile": "C:\\Users\\donod\\.gradle\\daemon\\8.10.2\\dev.aether.editor.app-mergeReleaseResources-2:\\values\\values.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\donod\\Downloads\\atchengine\\android\\app\\src\\main\\res\\values\\astra_colors.xml",
+                    "from": {
                         "startLines": "3,4",
                         "startColumns": "4,4",
                         "startOffsets": "136,184",

@@ -1,8 +1,10 @@
+C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a/CMakeFiles/aether_codecs.dir
 C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a/CMakeFiles/aether_transform.dir
 C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a/CMakeFiles/aether_core.dir
 C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a/CMakeFiles/aether_platform.dir
 C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a/CMakeFiles/aether_rendergraph.dir
 C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a/CMakeFiles/aether_renderer.dir
+C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a/CMakeFiles/aether_assets.dir
 C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a/CMakeFiles/aether_runtime.dir
 C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a/CMakeFiles/aether_editor.dir
 C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a/CMakeFiles/aether_ui.dir

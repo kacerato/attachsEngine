@@ -3,6 +3,8 @@
     <color name="astra_accent">#CAFB04</color>
     <color name="astra_void">#000000</color>
     <style name="AetherTheme" parent="android:style/Theme.Material.NoActionBar">
+        
+        <item name="android:windowBackground">@color/astra_void</item>
         <item name="android:fontFamily">sans</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowFullscreen">true</item>

@@ -1,0 +1,15 @@
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\bin\Release\net10.0\Astra.Scripting.deps.json
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\bin\Release\net10.0\Astra.Scripting.runtimeconfig.json
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\bin\Release\net10.0\Astra.Scripting.dll
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\bin\Release\net10.0\Astra.Scripting.pdb
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net10.0\Astra.Scripting.csproj.AssemblyReference.cache
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net10.0\Astra.Scripting.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net10.0\Astra.Scripting.AssemblyInfoInputs.cache
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net10.0\Astra.Scripting.AssemblyInfo.cs
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net10.0\Astra.Scripting.csproj.CoreCompileInputs.cache
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net10.0\Astra.Scripting.sourcelink.json
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net10.0\Astra.Scripting.dll
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net10.0\refint\Astra.Scripting.dll
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net10.0\Astra.Scripting.pdb
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net10.0\Astra.Scripting.genruntimeconfig.cache
+C:\Users\donod\Downloads\atchengine\managed\Astra.Scripting\obj\Release\net10.0\ref\Astra.Scripting.dll

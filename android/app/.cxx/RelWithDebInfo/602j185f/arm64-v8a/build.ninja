@@ -41,6 +41,431 @@ include CMakeFiles/rules.ninja
 
 cmake_ninja_workdir = C$:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a/
 # =============================================================================
+# Object build statements for STATIC_LIBRARY target aether_codecs
+
+
+#############################################
+# Order-only phony target for aether_codecs
+
+build cmake_object_order_depends_target_aether_codecs: phony || CMakeFiles/aether_codecs.dir
+
+build CMakeFiles/aether_codecs.dir/third_party/meshoptimizer/vertexcodec.cpp.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer/vertexcodec.cpp || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\meshoptimizer\vertexcodec.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\meshoptimizer
+
+build CMakeFiles/aether_codecs.dir/third_party/meshoptimizer/indexcodec.cpp.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer/indexcodec.cpp || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\meshoptimizer\indexcodec.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\meshoptimizer
+
+build CMakeFiles/aether_codecs.dir/third_party/meshoptimizer/vertexfilter.cpp.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer/vertexfilter.cpp || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\meshoptimizer\vertexfilter.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\meshoptimizer
+
+build CMakeFiles/aether_codecs.dir/third_party/meshoptimizer/simplifier.cpp.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer/simplifier.cpp || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\meshoptimizer\simplifier.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\meshoptimizer
+
+build CMakeFiles/aether_codecs.dir/third_party/basis_universal/transcoder/basisu_transcoder.cpp.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder/basisu_transcoder.cpp || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\basis_universal\transcoder\basisu_transcoder.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\basis_universal\transcoder
+
+build CMakeFiles/aether_codecs.dir/third_party/basis_universal/zstd/zstddeclib.c.o: C_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/zstd/zstddeclib.c || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\basis_universal\zstd\zstddeclib.c.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -O2 -g -DNDEBUG -fPIC -w
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\basis_universal\zstd
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/attributes/attribute_octahedron_transform.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/attributes/attribute_octahedron_transform.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\attributes\attribute_octahedron_transform.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\attributes
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/attributes/attribute_quantization_transform.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/attributes/attribute_quantization_transform.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\attributes\attribute_quantization_transform.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\attributes
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/attributes/attribute_transform.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/attributes/attribute_transform.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\attributes\attribute_transform.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\attributes
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/attributes/geometry_attribute.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/attributes/geometry_attribute.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\attributes\geometry_attribute.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\attributes
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/attributes/point_attribute.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/attributes/point_attribute.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\attributes\point_attribute.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\attributes
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/attributes_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/attributes/attributes_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes\attributes_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/kd_tree_attributes_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/attributes/kd_tree_attributes_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes\kd_tree_attributes_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/sequential_attribute_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/attributes/sequential_attribute_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes\sequential_attribute_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/sequential_attribute_decoders_controller.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/attributes/sequential_attribute_decoders_controller.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes\sequential_attribute_decoders_controller.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/sequential_integer_attribute_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/attributes/sequential_integer_attribute_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes\sequential_integer_attribute_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/sequential_normal_attribute_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/attributes/sequential_normal_attribute_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes\sequential_normal_attribute_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/sequential_quantization_attribute_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/attributes/sequential_quantization_attribute_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes\sequential_quantization_attribute_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\attributes
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/bit_coders/adaptive_rans_bit_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/bit_coders/adaptive_rans_bit_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\bit_coders\adaptive_rans_bit_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\bit_coders
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/bit_coders/direct_bit_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/bit_coders/direct_bit_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\bit_coders\direct_bit_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\bit_coders
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/bit_coders/rans_bit_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/bit_coders/rans_bit_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\bit_coders\rans_bit_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\bit_coders
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/bit_coders/symbol_bit_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/bit_coders/symbol_bit_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\bit_coders\symbol_bit_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\bit_coders
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/decode.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/decode.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\decode.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/mesh/mesh_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/mesh/mesh_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\mesh\mesh_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\mesh
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/mesh/mesh_edgebreaker_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/mesh/mesh_edgebreaker_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\mesh\mesh_edgebreaker_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\mesh
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/mesh/mesh_edgebreaker_decoder_impl.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/mesh/mesh_edgebreaker_decoder_impl.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\mesh\mesh_edgebreaker_decoder_impl.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\mesh
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/mesh/mesh_sequential_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/mesh/mesh_sequential_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\mesh\mesh_sequential_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\mesh
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/point_cloud/point_cloud_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/point_cloud/point_cloud_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\point_cloud\point_cloud_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\point_cloud
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/point_cloud/point_cloud_kd_tree_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/point_cloud/point_cloud_kd_tree_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\point_cloud\point_cloud_kd_tree_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\point_cloud
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/point_cloud/point_cloud_sequential_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/point_cloud/point_cloud_sequential_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\point_cloud\point_cloud_sequential_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\point_cloud
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/point_cloud/algorithms/dynamic_integer_points_kd_tree_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/point_cloud/algorithms/dynamic_integer_points_kd_tree_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\point_cloud\algorithms\dynamic_integer_points_kd_tree_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\point_cloud\algorithms
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/point_cloud/algorithms/float_points_tree_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/point_cloud/algorithms/float_points_tree_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\point_cloud\algorithms\float_points_tree_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\point_cloud\algorithms
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/entropy/symbol_decoding.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/compression/entropy/symbol_decoding.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\entropy\symbol_decoding.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\compression\entropy
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/bit_utils.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/core/bit_utils.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core\bit_utils.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/bounding_box.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/core/bounding_box.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core\bounding_box.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/data_buffer.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/core/data_buffer.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core\data_buffer.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/decoder_buffer.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/core/decoder_buffer.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core\decoder_buffer.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/divide.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/core/divide.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core\divide.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/draco_types.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/core/draco_types.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core\draco_types.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/hash_utils.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/core/hash_utils.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core\hash_utils.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/options.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/core/options.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core\options.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/quantization_utils.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/core/quantization_utils.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core\quantization_utils.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\core
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/mesh/corner_table.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/mesh/corner_table.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\mesh\corner_table.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\mesh
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/mesh/mesh.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/mesh/mesh.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\mesh\mesh.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\mesh
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/mesh/mesh_attribute_corner_table.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/mesh/mesh_attribute_corner_table.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\mesh\mesh_attribute_corner_table.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\mesh
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/mesh/mesh_misc_functions.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/mesh/mesh_misc_functions.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\mesh\mesh_misc_functions.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\mesh
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/point_cloud/point_cloud.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/point_cloud/point_cloud.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\point_cloud\point_cloud.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\point_cloud
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/metadata/geometry_metadata.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/metadata/geometry_metadata.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\metadata\geometry_metadata.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\metadata
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/metadata/metadata.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/metadata/metadata.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\metadata\metadata.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\metadata
+
+build CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/metadata/metadata_decoder.cc.o: CXX_COMPILER__aether_codecs_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/third_party/draco/src/draco/metadata/metadata_decoder.cc || cmake_object_order_depends_target_aether_codecs
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\metadata\metadata_decoder.cc.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -w -fno-rtti -fno-exceptions -std=c++20
+  INCLUDES = -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_codecs.dir\third_party\draco\src\draco\metadata
+
+
+# =============================================================================
+# Link build statements for STATIC_LIBRARY target aether_codecs
+
+
+#############################################
+# Link the static library libaether_codecs.a
+
+build libaether_codecs.a: CXX_STATIC_LIBRARY_LINKER__aether_codecs_RelWithDebInfo CMakeFiles/aether_codecs.dir/third_party/meshoptimizer/vertexcodec.cpp.o CMakeFiles/aether_codecs.dir/third_party/meshoptimizer/indexcodec.cpp.o CMakeFiles/aether_codecs.dir/third_party/meshoptimizer/vertexfilter.cpp.o CMakeFiles/aether_codecs.dir/third_party/meshoptimizer/simplifier.cpp.o CMakeFiles/aether_codecs.dir/third_party/basis_universal/transcoder/basisu_transcoder.cpp.o CMakeFiles/aether_codecs.dir/third_party/basis_universal/zstd/zstddeclib.c.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/attributes/attribute_octahedron_transform.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/attributes/attribute_quantization_transform.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/attributes/attribute_transform.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/attributes/geometry_attribute.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/attributes/point_attribute.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/attributes_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/kd_tree_attributes_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/sequential_attribute_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/sequential_attribute_decoders_controller.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/sequential_integer_attribute_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/sequential_normal_attribute_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/attributes/sequential_quantization_attribute_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/bit_coders/adaptive_rans_bit_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/bit_coders/direct_bit_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/bit_coders/rans_bit_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/bit_coders/symbol_bit_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/decode.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/mesh/mesh_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/mesh/mesh_edgebreaker_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/mesh/mesh_edgebreaker_decoder_impl.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/mesh/mesh_sequential_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/point_cloud/point_cloud_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/point_cloud/point_cloud_kd_tree_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/point_cloud/point_cloud_sequential_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/point_cloud/algorithms/dynamic_integer_points_kd_tree_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/point_cloud/algorithms/float_points_tree_decoder.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/compression/entropy/symbol_decoding.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/bit_utils.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/bounding_box.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/data_buffer.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/decoder_buffer.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/divide.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/draco_types.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/hash_utils.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/options.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/core/quantization_utils.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/mesh/corner_table.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/mesh/mesh.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/mesh/mesh_attribute_corner_table.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/mesh/mesh_misc_functions.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/point_cloud/point_cloud.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/metadata/geometry_metadata.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/metadata/metadata.cc.o CMakeFiles/aether_codecs.dir/third_party/draco/src/draco/metadata/metadata_decoder.cc.o
+  LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
+  OBJECT_DIR = CMakeFiles\aether_codecs.dir
+  POST_BUILD = cd .
+  PRE_LINK = cd .
+  TARGET_FILE = libaether_codecs.a
+  TARGET_PDB = aether_codecs.a.dbg
+
+# =============================================================================
 # Object build statements for SHARED_LIBRARY target aether_transform
 
 
@@ -67,7 +492,7 @@ build CMakeFiles/aether_transform.dir/transform/transform_bridge.cpp.o: CXX_COMP
 
 build C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/libaether_transform.so: CXX_SHARED_LIBRARY_LINKER__aether_transform_RelWithDebInfo CMakeFiles/aether_transform.dir/transform/transform_bridge.cpp.o
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
-  LINK_FLAGS = -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments  -Wl,--gc-sections   -Wl,-z,max-page-size=16384
+  LINK_FLAGS = -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments  -Wl,--gc-sections   -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384
   LINK_LIBRARIES = -latomic -lm
   OBJECT_DIR = CMakeFiles\aether_transform.dir
   POST_BUILD = cd .
@@ -259,6 +684,13 @@ build CMakeFiles/aether_renderer.dir/renderer/environment_map.cpp.o: CXX_COMPILE
   OBJECT_DIR = CMakeFiles\aether_renderer.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_renderer.dir\renderer
 
+build CMakeFiles/aether_renderer.dir/renderer/scene_environment.cpp.o: CXX_COMPILER__aether_renderer_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/renderer/scene_environment.cpp || cmake_object_order_depends_target_aether_renderer
+  DEP_FILE = CMakeFiles\aether_renderer.dir\renderer\scene_environment.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_renderer.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_renderer.dir\renderer
+
 build CMakeFiles/aether_renderer.dir/renderer/frame_graph.cpp.o: CXX_COMPILER__aether_renderer_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/renderer/frame_graph.cpp || cmake_object_order_depends_target_aether_renderer
   DEP_FILE = CMakeFiles\aether_renderer.dir\renderer\frame_graph.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
@@ -407,7 +839,7 @@ build CMakeFiles/aether_renderer.dir/renderer/water_cascades.cpp.o: CXX_COMPILER
 #############################################
 # Link the static library libaether_renderer.a
 
-build libaether_renderer.a: CXX_STATIC_LIBRARY_LINKER__aether_renderer_RelWithDebInfo CMakeFiles/aether_renderer.dir/renderer/dynamic_resolution.cpp.o CMakeFiles/aether_renderer.dir/renderer/environment_map.cpp.o CMakeFiles/aether_renderer.dir/renderer/frame_graph.cpp.o CMakeFiles/aether_renderer.dir/renderer/frustum_visibility.cpp.o CMakeFiles/aether_renderer.dir/renderer/gpu_draw_compaction.cpp.o CMakeFiles/aether_renderer.dir/renderer/gpu_draw_culling.cpp.o CMakeFiles/aether_renderer.dir/renderer/rendering_policy.cpp.o CMakeFiles/aether_renderer.dir/renderer/shadow_cascades.cpp.o CMakeFiles/aether_renderer.dir/renderer/hzb_visibility.cpp.o CMakeFiles/aether_renderer.dir/renderer/lod_selection.cpp.o CMakeFiles/aether_renderer.dir/renderer/spatial_render_chunks.cpp.o CMakeFiles/aether_renderer.dir/renderer/static_collision_mesh.cpp.o CMakeFiles/aether_renderer.dir/renderer/thermal_pressure_controller.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_grid.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_ripples.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_surface.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_field.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_world.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_spectral_mirror.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_fft.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_spectrum.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_cascades.cpp.o || libaether_core.a libaether_rendergraph.a
+build libaether_renderer.a: CXX_STATIC_LIBRARY_LINKER__aether_renderer_RelWithDebInfo CMakeFiles/aether_renderer.dir/renderer/dynamic_resolution.cpp.o CMakeFiles/aether_renderer.dir/renderer/environment_map.cpp.o CMakeFiles/aether_renderer.dir/renderer/scene_environment.cpp.o CMakeFiles/aether_renderer.dir/renderer/frame_graph.cpp.o CMakeFiles/aether_renderer.dir/renderer/frustum_visibility.cpp.o CMakeFiles/aether_renderer.dir/renderer/gpu_draw_compaction.cpp.o CMakeFiles/aether_renderer.dir/renderer/gpu_draw_culling.cpp.o CMakeFiles/aether_renderer.dir/renderer/rendering_policy.cpp.o CMakeFiles/aether_renderer.dir/renderer/shadow_cascades.cpp.o CMakeFiles/aether_renderer.dir/renderer/hzb_visibility.cpp.o CMakeFiles/aether_renderer.dir/renderer/lod_selection.cpp.o CMakeFiles/aether_renderer.dir/renderer/spatial_render_chunks.cpp.o CMakeFiles/aether_renderer.dir/renderer/static_collision_mesh.cpp.o CMakeFiles/aether_renderer.dir/renderer/thermal_pressure_controller.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_grid.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_ripples.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_surface.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_field.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_world.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_spectral_mirror.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_fft.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_spectrum.cpp.o CMakeFiles/aether_renderer.dir/renderer/water_cascades.cpp.o || libaether_core.a libaether_rendergraph.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
   OBJECT_DIR = CMakeFiles\aether_renderer.dir
   POST_BUILD = cd .
@@ -416,13 +848,158 @@ build libaether_renderer.a: CXX_STATIC_LIBRARY_LINKER__aether_renderer_RelWithDe
   TARGET_PDB = aether_renderer.a.dbg
 
 # =============================================================================
+# Object build statements for STATIC_LIBRARY target aether_assets
+
+
+#############################################
+# Order-only phony target for aether_assets
+
+build cmake_object_order_depends_target_aether_assets: phony || cmake_object_order_depends_target_aether_codecs cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph
+
+build CMakeFiles/aether_assets.dir/resources/asset_registry.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/asset_registry.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\asset_registry.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/json_reader.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/json_reader.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\json_reader.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/gltf_import.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/gltf_import.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\gltf_import.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/import_node_map.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/import_node_map.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\import_node_map.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/material_asset.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/material_asset.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\material_asset.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/environment_profile.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/environment_profile.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\environment_profile.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/image_decode.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/image_decode.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\image_decode.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/gltf_codecs.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/gltf_codecs.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\gltf_codecs.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/gltf_package.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/gltf_package.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\gltf_package.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/import_cache.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/import_cache.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\import_cache.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/texture_budget.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/texture_budget.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\texture_budget.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/import_profile.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/import_profile.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\import_profile.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/mesh_derived.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/mesh_derived.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\mesh_derived.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/texture_profile.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/texture_profile.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\texture_profile.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+build CMakeFiles/aether_assets.dir/resources/glb_images.cpp.o: CXX_COMPILER__aether_assets_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/resources/glb_images.cpp || cmake_object_order_depends_target_aether_assets
+  DEFINES = -DBASISD_SUPPORT_ATC=0 -DBASISD_SUPPORT_BC7_MODE5=0 -DBASISD_SUPPORT_DXT1=0 -DBASISD_SUPPORT_DXT5A=0 -DBASISD_SUPPORT_FXT1=0 -DBASISD_SUPPORT_KTX2=1 -DBASISD_SUPPORT_KTX2_ZSTD=1 -DBASISD_SUPPORT_PVRTC1=0 -DBASISD_SUPPORT_PVRTC2=0
+  DEP_FILE = CMakeFiles\aether_assets.dir\resources\glb_images.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -isystem C:/Users/donod/Downloads/atchengine/native/third_party/draco/src -isystem C:/Users/donod/Downloads/atchengine/native/third_party/meshoptimizer -isystem C:/Users/donod/Downloads/atchengine/native/third_party/basis_universal/transcoder
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_assets.dir\resources
+
+
+# =============================================================================
+# Link build statements for STATIC_LIBRARY target aether_assets
+
+
+#############################################
+# Link the static library libaether_assets.a
+
+build libaether_assets.a: CXX_STATIC_LIBRARY_LINKER__aether_assets_RelWithDebInfo CMakeFiles/aether_assets.dir/resources/asset_registry.cpp.o CMakeFiles/aether_assets.dir/resources/json_reader.cpp.o CMakeFiles/aether_assets.dir/resources/gltf_import.cpp.o CMakeFiles/aether_assets.dir/resources/import_node_map.cpp.o CMakeFiles/aether_assets.dir/resources/material_asset.cpp.o CMakeFiles/aether_assets.dir/resources/environment_profile.cpp.o CMakeFiles/aether_assets.dir/resources/image_decode.cpp.o CMakeFiles/aether_assets.dir/resources/gltf_codecs.cpp.o CMakeFiles/aether_assets.dir/resources/gltf_package.cpp.o CMakeFiles/aether_assets.dir/resources/import_cache.cpp.o CMakeFiles/aether_assets.dir/resources/texture_budget.cpp.o CMakeFiles/aether_assets.dir/resources/import_profile.cpp.o CMakeFiles/aether_assets.dir/resources/mesh_derived.cpp.o CMakeFiles/aether_assets.dir/resources/texture_profile.cpp.o CMakeFiles/aether_assets.dir/resources/glb_images.cpp.o || libaether_codecs.a libaether_core.a libaether_renderer.a libaether_rendergraph.a
+  LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
+  OBJECT_DIR = CMakeFiles\aether_assets.dir
+  POST_BUILD = cd .
+  PRE_LINK = cd .
+  TARGET_FILE = libaether_assets.a
+  TARGET_PDB = aether_assets.a.dbg
+
+# =============================================================================
 # Object build statements for STATIC_LIBRARY target aether_runtime
 
 
 #############################################
 # Order-only phony target for aether_runtime
 
-build cmake_object_order_depends_target_aether_runtime: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_physics
+build cmake_object_order_depends_target_aether_runtime: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_assets cmake_object_order_depends_target_aether_codecs cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph
 
 build CMakeFiles/aether_runtime.dir/runtime/scene_graph.cpp.o: CXX_COMPILER__aether_runtime_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/runtime/scene_graph.cpp || cmake_object_order_depends_target_aether_runtime
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\scene_graph.cpp.o.d
@@ -452,6 +1029,20 @@ build CMakeFiles/aether_runtime.dir/runtime/game_world.cpp.o: CXX_COMPILER__aeth
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
 
+build CMakeFiles/aether_runtime.dir/runtime/scene_lights.cpp.o: CXX_COMPILER__aether_runtime_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/runtime/scene_lights.cpp || cmake_object_order_depends_target_aether_runtime
+  DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\scene_lights.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_runtime.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
+
+build CMakeFiles/aether_runtime.dir/runtime/scene_environment.cpp.o: CXX_COMPILER__aether_runtime_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/runtime/scene_environment.cpp || cmake_object_order_depends_target_aether_runtime
+  DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\scene_environment.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_runtime.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_runtime.dir\runtime
+
 build CMakeFiles/aether_runtime.dir/runtime/scene_physics.cpp.o: CXX_COMPILER__aether_runtime_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/runtime/scene_physics.cpp || cmake_object_order_depends_target_aether_runtime
   DEP_FILE = CMakeFiles\aether_runtime.dir\runtime\scene_physics.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
@@ -474,7 +1065,7 @@ build CMakeFiles/aether_runtime.dir/runtime/script_bridge.cpp.o: CXX_COMPILER__a
 #############################################
 # Link the static library libaether_runtime.a
 
-build libaether_runtime.a: CXX_STATIC_LIBRARY_LINKER__aether_runtime_RelWithDebInfo CMakeFiles/aether_runtime.dir/runtime/scene_graph.cpp.o CMakeFiles/aether_runtime.dir/runtime/input_actions.cpp.o CMakeFiles/aether_runtime.dir/runtime/transform_math.cpp.o CMakeFiles/aether_runtime.dir/runtime/game_world.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_physics.cpp.o CMakeFiles/aether_runtime.dir/runtime/script_bridge.cpp.o || libaether_core.a libaether_physics.a third_party/JoltPhysics/Build/libJolt.a
+build libaether_runtime.a: CXX_STATIC_LIBRARY_LINKER__aether_runtime_RelWithDebInfo CMakeFiles/aether_runtime.dir/runtime/scene_graph.cpp.o CMakeFiles/aether_runtime.dir/runtime/input_actions.cpp.o CMakeFiles/aether_runtime.dir/runtime/transform_math.cpp.o CMakeFiles/aether_runtime.dir/runtime/game_world.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_lights.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_environment.cpp.o CMakeFiles/aether_runtime.dir/runtime/scene_physics.cpp.o CMakeFiles/aether_runtime.dir/runtime/script_bridge.cpp.o || libaether_assets.a libaether_codecs.a libaether_core.a libaether_physics.a libaether_renderer.a libaether_rendergraph.a third_party/JoltPhysics/Build/libJolt.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
   OBJECT_DIR = CMakeFiles\aether_runtime.dir
   POST_BUILD = cd .
@@ -489,7 +1080,7 @@ build libaether_runtime.a: CXX_STATIC_LIBRARY_LINKER__aether_runtime_RelWithDebI
 #############################################
 # Order-only phony target for aether_editor
 
-build cmake_object_order_depends_target_aether_editor: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_platform cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph cmake_object_order_depends_target_aether_runtime cmake_object_order_depends_target_aether_ui
+build cmake_object_order_depends_target_aether_editor: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_assets cmake_object_order_depends_target_aether_codecs cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_platform cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph cmake_object_order_depends_target_aether_runtime cmake_object_order_depends_target_aether_ui
 
 build CMakeFiles/aether_editor.dir/editor/editor_code_workspace.cpp.o: CXX_COMPILER__aether_editor_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/editor/editor_code_workspace.cpp || cmake_object_order_depends_target_aether_editor
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_code_workspace.cpp.o.d
@@ -554,6 +1145,20 @@ build CMakeFiles/aether_editor.dir/editor/editor_session.cpp.o: CXX_COMPILER__ae
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
 
+build CMakeFiles/aether_editor.dir/editor/editor_texture_preview.cpp.o: CXX_COMPILER__aether_editor_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/editor/editor_texture_preview.cpp || cmake_object_order_depends_target_aether_editor
+  DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_texture_preview.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_editor.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
+
+build CMakeFiles/aether_editor.dir/editor/editor_import_reconcile.cpp.o: CXX_COMPILER__aether_editor_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/editor/editor_import_reconcile.cpp || cmake_object_order_depends_target_aether_editor
+  DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_import_reconcile.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native
+  OBJECT_DIR = CMakeFiles\aether_editor.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_editor.dir\editor
+
 build CMakeFiles/aether_editor.dir/editor/editor_history.cpp.o: CXX_COMPILER__aether_editor_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/editor/editor_history.cpp || cmake_object_order_depends_target_aether_editor
   DEP_FILE = CMakeFiles\aether_editor.dir\editor\editor_history.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
@@ -576,7 +1181,7 @@ build CMakeFiles/aether_editor.dir/editor/editor_view.cpp.o: CXX_COMPILER__aethe
 #############################################
 # Link the static library libaether_editor.a
 
-build libaether_editor.a: CXX_STATIC_LIBRARY_LINKER__aether_editor_RelWithDebInfo CMakeFiles/aether_editor.dir/editor/editor_code_workspace.cpp.o CMakeFiles/aether_editor.dir/editor/editor_filesystem.cpp.o CMakeFiles/aether_editor.dir/editor/editor_archive.cpp.o CMakeFiles/aether_editor.dir/editor/editor_map_scene.cpp.o CMakeFiles/aether_editor.dir/editor/editor_camera.cpp.o CMakeFiles/aether_editor.dir/editor/editor_document.cpp.o CMakeFiles/aether_editor.dir/editor/editor_gizmo.cpp.o CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.o CMakeFiles/aether_editor.dir/editor/editor_session.cpp.o CMakeFiles/aether_editor.dir/editor/editor_history.cpp.o CMakeFiles/aether_editor.dir/editor/editor_view.cpp.o || libaether_core.a libaether_physics.a libaether_platform.a libaether_renderer.a libaether_rendergraph.a libaether_runtime.a libaether_ui.a third_party/JoltPhysics/Build/libJolt.a
+build libaether_editor.a: CXX_STATIC_LIBRARY_LINKER__aether_editor_RelWithDebInfo CMakeFiles/aether_editor.dir/editor/editor_code_workspace.cpp.o CMakeFiles/aether_editor.dir/editor/editor_filesystem.cpp.o CMakeFiles/aether_editor.dir/editor/editor_archive.cpp.o CMakeFiles/aether_editor.dir/editor/editor_map_scene.cpp.o CMakeFiles/aether_editor.dir/editor/editor_camera.cpp.o CMakeFiles/aether_editor.dir/editor/editor_document.cpp.o CMakeFiles/aether_editor.dir/editor/editor_gizmo.cpp.o CMakeFiles/aether_editor.dir/editor/editor_screen.cpp.o CMakeFiles/aether_editor.dir/editor/editor_session.cpp.o CMakeFiles/aether_editor.dir/editor/editor_texture_preview.cpp.o CMakeFiles/aether_editor.dir/editor/editor_import_reconcile.cpp.o CMakeFiles/aether_editor.dir/editor/editor_history.cpp.o CMakeFiles/aether_editor.dir/editor/editor_view.cpp.o || libaether_assets.a libaether_codecs.a libaether_core.a libaether_physics.a libaether_platform.a libaether_renderer.a libaether_rendergraph.a libaether_runtime.a libaether_ui.a third_party/JoltPhysics/Build/libJolt.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
   OBJECT_DIR = CMakeFiles\aether_editor.dir
   POST_BUILD = cd .
@@ -855,7 +1460,7 @@ build libaether_native_app_glue.a: C_STATIC_LIBRARY_LINKER__aether_native_app_gl
 #############################################
 # Order-only phony target for aether_android
 
-build cmake_object_order_depends_target_aether_android: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_editor cmake_object_order_depends_target_aether_native_app_glue cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_platform cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph cmake_object_order_depends_target_aether_rhi cmake_object_order_depends_target_aether_runtime cmake_object_order_depends_target_aether_ui cmake_object_order_depends_target_aether_water_runtime
+build cmake_object_order_depends_target_aether_android: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_assets cmake_object_order_depends_target_aether_codecs cmake_object_order_depends_target_aether_core cmake_object_order_depends_target_aether_editor cmake_object_order_depends_target_aether_native_app_glue cmake_object_order_depends_target_aether_physics cmake_object_order_depends_target_aether_platform cmake_object_order_depends_target_aether_renderer cmake_object_order_depends_target_aether_rendergraph cmake_object_order_depends_target_aether_rhi cmake_object_order_depends_target_aether_runtime cmake_object_order_depends_target_aether_ui cmake_object_order_depends_target_aether_water_runtime
 
 build CMakeFiles/aether_android.dir/platform/android/android_main.cpp.o: CXX_COMPILER__aether_android_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/platform/android/android_main.cpp || cmake_object_order_depends_target_aether_android
   DEFINES = -Daether_android_EXPORTS
@@ -876,6 +1481,14 @@ build CMakeFiles/aether_android.dir/platform/android/android_runtime_controls.cp
 build CMakeFiles/aether_android.dir/platform/android/android_editor_text_input.cpp.o: CXX_COMPILER__aether_android_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/platform/android/android_editor_text_input.cpp || cmake_object_order_depends_target_aether_android
   DEFINES = -Daether_android_EXPORTS
   DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_editor_text_input.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
+  OBJECT_DIR = CMakeFiles\aether_android.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_android.dir\platform\android
+
+build CMakeFiles/aether_android.dir/platform/android/android_model_picker.cpp.o: CXX_COMPILER__aether_android_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/platform/android/android_model_picker.cpp || cmake_object_order_depends_target_aether_android
+  DEFINES = -Daether_android_EXPORTS
+  DEP_FILE = CMakeFiles\aether_android.dir\platform\android\android_model_picker.cpp.o.d
   FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
   INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/dotnet-runtime/include -IC:/Users/donod/Downloads/atchengine/native/third_party/VulkanMemoryAllocator/include -IC:/Users/donod/AppData/Local/Android/Sdk/ndk/27.1.12297006/sources/android/native_app_glue -isystem C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/include
   OBJECT_DIR = CMakeFiles\aether_android.dir
@@ -1041,10 +1654,10 @@ build CMakeFiles/aether_android.dir/platform/android/water_spectral_probe.cpp.o:
 #############################################
 # Link the shared library C:\Users\donod\Downloads\atchengine\android\app\build\intermediates\cxx\RelWithDebInfo\602j185f\obj\arm64-v8a\libaether_android.so
 
-build C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/libaether_android.so: CXX_SHARED_LIBRARY_LINKER__aether_android_RelWithDebInfo CMakeFiles/aether_android.dir/platform/android/android_main.cpp.o CMakeFiles/aether_android.dir/platform/android/android_runtime_controls.cpp.o CMakeFiles/aether_android.dir/platform/android/android_editor_text_input.cpp.o CMakeFiles/aether_android.dir/platform/android/android_texture_loader.cpp.o CMakeFiles/aether_android.dir/platform/android/dirt_road_resources.cpp.o CMakeFiles/aether_android.dir/platform/android/android_launch_options.cpp.o CMakeFiles/aether_android.dir/platform/android/android_performance.cpp.o CMakeFiles/aether_android.dir/platform/android/android_thermal_monitor.cpp.o CMakeFiles/aether_android.dir/platform/android/android_frame_profiler.cpp.o CMakeFiles/aether_android.dir/platform/android/android_frame_pacer.cpp.o CMakeFiles/aether_android.dir/platform/android/android_swappy_scheduler.cpp.o CMakeFiles/aether_android.dir/platform/android/android_window.cpp.o CMakeFiles/aether_android.dir/platform/android/android_paths.cpp.o CMakeFiles/aether_android.dir/platform/android/android_vulkan_surface.cpp.o CMakeFiles/aether_android.dir/platform/android/android_triangle_renderer.cpp.o CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o CMakeFiles/aether_android.dir/platform/android/instanced_renderer_water.cpp.o CMakeFiles/aether_android.dir/platform/android/material_preview_resources.cpp.o CMakeFiles/aether_android.dir/platform/android/dotnet_host.cpp.o CMakeFiles/aether_android.dir/platform/android/dotnet_assets.cpp.o CMakeFiles/aether_android.dir/platform/android/astc_encode_probe.cpp.o CMakeFiles/aether_android.dir/platform/android/water_spectral_probe.cpp.o | libaether_core.a libaether_editor.a libaether_platform.a libaether_renderer.a libaether_rhi.a libaether_native_app_glue.a C$:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/libs/android.arm64-v8a/libswappy_static.a libaether_physics.a libaether_water_runtime.a libaether_runtime.a libaether_ui.a libaether_renderer.a libaether_rendergraph.a libaether_physics.a libaether_core.a third_party/JoltPhysics/Build/libJolt.a || libaether_core.a libaether_editor.a libaether_native_app_glue.a libaether_physics.a libaether_platform.a libaether_renderer.a libaether_rendergraph.a libaether_rhi.a libaether_runtime.a libaether_ui.a libaether_water_runtime.a third_party/JoltPhysics/Build/libJolt.a
+build C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/libaether_android.so: CXX_SHARED_LIBRARY_LINKER__aether_android_RelWithDebInfo CMakeFiles/aether_android.dir/platform/android/android_main.cpp.o CMakeFiles/aether_android.dir/platform/android/android_runtime_controls.cpp.o CMakeFiles/aether_android.dir/platform/android/android_editor_text_input.cpp.o CMakeFiles/aether_android.dir/platform/android/android_model_picker.cpp.o CMakeFiles/aether_android.dir/platform/android/android_texture_loader.cpp.o CMakeFiles/aether_android.dir/platform/android/dirt_road_resources.cpp.o CMakeFiles/aether_android.dir/platform/android/android_launch_options.cpp.o CMakeFiles/aether_android.dir/platform/android/android_performance.cpp.o CMakeFiles/aether_android.dir/platform/android/android_thermal_monitor.cpp.o CMakeFiles/aether_android.dir/platform/android/android_frame_profiler.cpp.o CMakeFiles/aether_android.dir/platform/android/android_frame_pacer.cpp.o CMakeFiles/aether_android.dir/platform/android/android_swappy_scheduler.cpp.o CMakeFiles/aether_android.dir/platform/android/android_window.cpp.o CMakeFiles/aether_android.dir/platform/android/android_paths.cpp.o CMakeFiles/aether_android.dir/platform/android/android_vulkan_surface.cpp.o CMakeFiles/aether_android.dir/platform/android/android_triangle_renderer.cpp.o CMakeFiles/aether_android.dir/platform/android/instanced_renderer.cpp.o CMakeFiles/aether_android.dir/platform/android/instanced_renderer_water.cpp.o CMakeFiles/aether_android.dir/platform/android/material_preview_resources.cpp.o CMakeFiles/aether_android.dir/platform/android/dotnet_host.cpp.o CMakeFiles/aether_android.dir/platform/android/dotnet_assets.cpp.o CMakeFiles/aether_android.dir/platform/android/astc_encode_probe.cpp.o CMakeFiles/aether_android.dir/platform/android/water_spectral_probe.cpp.o | libaether_core.a libaether_editor.a libaether_platform.a libaether_renderer.a libaether_rhi.a libaether_native_app_glue.a C$:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/libs/android.arm64-v8a/libswappy_static.a libaether_physics.a libaether_water_runtime.a libaether_runtime.a libaether_assets.a libaether_codecs.a libaether_ui.a libaether_renderer.a libaether_rendergraph.a libaether_physics.a libaether_core.a third_party/JoltPhysics/Build/libJolt.a || libaether_assets.a libaether_codecs.a libaether_core.a libaether_editor.a libaether_native_app_glue.a libaether_physics.a libaether_platform.a libaether_renderer.a libaether_rendergraph.a libaether_rhi.a libaether_runtime.a libaether_ui.a libaether_water_runtime.a third_party/JoltPhysics/Build/libJolt.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
-  LINK_FLAGS = -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments  -Wl,--gc-sections   -uANativeActivity_onCreate -Wl,-z,max-page-size=16384 -pthread
-  LINK_LIBRARIES = libaether_core.a  libaether_editor.a  libaether_platform.a  libaether_renderer.a  libaether_rhi.a  libaether_native_app_glue.a  -landroid  -llog  -lvulkan  -ldl  C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/libs/android.arm64-v8a/libswappy_static.a  libaether_physics.a  libaether_water_runtime.a  libaether_runtime.a  libaether_ui.a  libaether_renderer.a  libaether_rendergraph.a  libaether_physics.a  libaether_core.a  -pthread  third_party/JoltPhysics/Build/libJolt.a  -latomic -lm
+  LINK_FLAGS = -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments  -Wl,--gc-sections   -uANativeActivity_onCreate -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 -pthread
+  LINK_LIBRARIES = libaether_core.a  libaether_editor.a  libaether_platform.a  libaether_renderer.a  libaether_rhi.a  libaether_native_app_glue.a  -landroid  -llog  -lvulkan  -ldl  C:/Users/donod/.gradle/caches/8.10.2/transforms/9bab4a4d24e6f7a966f44deca28fb384/transformed/games-frame-pacing-2.1.3/prefab/modules/swappy_static/libs/android.arm64-v8a/libswappy_static.a  libaether_physics.a  libaether_water_runtime.a  libaether_runtime.a  libaether_assets.a  libaether_codecs.a  libaether_ui.a  libaether_renderer.a  libaether_rendergraph.a  libaether_physics.a  libaether_core.a  -pthread  third_party/JoltPhysics/Build/libJolt.a  -latomic -lm
   OBJECT_DIR = CMakeFiles\aether_android.dir
   POST_BUILD = cd .
   PRE_LINK = cd .
@@ -1061,6 +1674,22 @@ build C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/R
 # Order-only phony target for aether_physics
 
 build cmake_object_order_depends_target_aether_physics: phony || cmake_object_order_depends_target_Jolt cmake_object_order_depends_target_aether_core
+
+build CMakeFiles/aether_physics.dir/physics/collision_cooking.cpp.o: CXX_COMPILER__aether_physics_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/physics/collision_cooking.cpp || cmake_object_order_depends_target_aether_physics
+  DEFINES = -DJPH_ENABLE_ASSERTS -DJPH_USE_CPU_COMPUTE
+  DEP_FILE = CMakeFiles\aether_physics.dir\physics\collision_cooking.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/JoltPhysics/Build/..
+  OBJECT_DIR = CMakeFiles\aether_physics.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_physics.dir\physics
+
+build CMakeFiles/aether_physics.dir/physics/jolt_init.cpp.o: CXX_COMPILER__aether_physics_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/physics/jolt_init.cpp || cmake_object_order_depends_target_aether_physics
+  DEFINES = -DJPH_ENABLE_ASSERTS -DJPH_USE_CPU_COMPUTE
+  DEP_FILE = CMakeFiles\aether_physics.dir\physics\jolt_init.cpp.o.d
+  FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG -fPIC -Wall -Wextra -Wpedantic -Werror -fno-rtti -fno-exceptions -pthread -std=c++20
+  INCLUDES = -IC:/Users/donod/Downloads/atchengine/native -IC:/Users/donod/Downloads/atchengine/native/third_party/JoltPhysics/Build/..
+  OBJECT_DIR = CMakeFiles\aether_physics.dir
+  OBJECT_FILE_DIR = CMakeFiles\aether_physics.dir\physics
 
 build CMakeFiles/aether_physics.dir/physics/character_motor.cpp.o: CXX_COMPILER__aether_physics_RelWithDebInfo C$:/Users/donod/Downloads/atchengine/native/physics/character_motor.cpp || cmake_object_order_depends_target_aether_physics
   DEFINES = -DJPH_ENABLE_ASSERTS -DJPH_USE_CPU_COMPUTE
@@ -1094,7 +1723,7 @@ build CMakeFiles/aether_physics.dir/physics/water_buoyancy.cpp.o: CXX_COMPILER__
 #############################################
 # Link the static library libaether_physics.a
 
-build libaether_physics.a: CXX_STATIC_LIBRARY_LINKER__aether_physics_RelWithDebInfo CMakeFiles/aether_physics.dir/physics/character_motor.cpp.o CMakeFiles/aether_physics.dir/physics/jolt_bridge.cpp.o CMakeFiles/aether_physics.dir/physics/water_buoyancy.cpp.o || libaether_core.a third_party/JoltPhysics/Build/libJolt.a
+build libaether_physics.a: CXX_STATIC_LIBRARY_LINKER__aether_physics_RelWithDebInfo CMakeFiles/aether_physics.dir/physics/collision_cooking.cpp.o CMakeFiles/aether_physics.dir/physics/jolt_init.cpp.o CMakeFiles/aether_physics.dir/physics/character_motor.cpp.o CMakeFiles/aether_physics.dir/physics/jolt_bridge.cpp.o CMakeFiles/aether_physics.dir/physics/water_buoyancy.cpp.o || libaether_core.a third_party/JoltPhysics/Build/libJolt.a
   LANGUAGE_COMPILE_FLAGS = -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++20 -O2 -g -DNDEBUG
   OBJECT_DIR = CMakeFiles\aether_physics.dir
   POST_BUILD = cd .
@@ -3046,6 +3675,10 @@ build Jolt: phony third_party/JoltPhysics/Build/libJolt.a
 
 build aether_android: phony C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/libaether_android.so
 
+build aether_assets: phony libaether_assets.a
+
+build aether_codecs: phony libaether_codecs.a
+
 build aether_core: phony libaether_core.a
 
 build aether_editor: phony libaether_editor.a
@@ -3100,7 +3733,7 @@ build sqlite3: phony third_party/sqlite/libsqlite3.a
 #############################################
 # Folder: C:/Users/donod/Downloads/atchengine/android/app/.cxx/RelWithDebInfo/602j185f/arm64-v8a
 
-build all: phony C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/libaether_transform.so libaether_core.a libaether_platform.a libaether_rendergraph.a libaether_renderer.a libaether_runtime.a libaether_editor.a libaether_ui.a libaether_rhi.a libaether_native_app_glue.a C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/libaether_android.so libaether_physics.a libaether_water_runtime.a libaether_resources.a C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/benchmark_physics2d C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/benchmark_physics2d_jolt C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/benchmark_physics2d_box2d
+build all: phony libaether_codecs.a C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/libaether_transform.so libaether_core.a libaether_platform.a libaether_rendergraph.a libaether_renderer.a libaether_assets.a libaether_runtime.a libaether_editor.a libaether_ui.a libaether_rhi.a libaether_native_app_glue.a C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/libaether_android.so libaether_physics.a libaether_water_runtime.a libaether_resources.a C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/benchmark_physics2d C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/benchmark_physics2d_jolt C$:/Users/donod/Downloads/atchengine/android/app/build/intermediates/cxx/RelWithDebInfo/602j185f/obj/arm64-v8a/benchmark_physics2d_box2d
 
 # =============================================================================
 

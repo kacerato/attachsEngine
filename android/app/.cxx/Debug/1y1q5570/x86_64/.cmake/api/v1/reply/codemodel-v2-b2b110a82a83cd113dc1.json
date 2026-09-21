@@ -1,0 +1,355 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1,
+						2,
+						4
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Debug-d0094a50bb2071803777.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.6.0"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17,
+						18,
+						19
+					]
+				},
+				{
+					"build" : "third_party/JoltPhysics/Build",
+					"jsonFile" : "directory-third_party.JoltPhysics.Build-Debug-9c2349d13b543896a2c7.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.20"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "third_party/JoltPhysics/Build",
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"build" : "third_party/Box2D",
+					"childIndexes" : 
+					[
+						3
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-third_party.Box2D-Debug-29a8ff1de3f480bcdb20.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.22"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 2,
+					"source" : "third_party/Box2D"
+				},
+				{
+					"build" : "third_party/Box2D/src",
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-third_party.Box2D.src-Debug-0337ff28b29d31b6adae.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.22"
+					},
+					"parentIndex" : 2,
+					"projectIndex" : 2,
+					"source" : "third_party/Box2D/src",
+					"targetIndexes" : 
+					[
+						20
+					]
+				},
+				{
+					"build" : "third_party/sqlite",
+					"jsonFile" : "directory-third_party.sqlite-Debug-0824811dca3e8584ab5a.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.22"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 3,
+					"source" : "third_party/sqlite",
+					"targetIndexes" : 
+					[
+						21
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1,
+						2,
+						3
+					],
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "AetherNative",
+					"targetIndexes" : 
+					[
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12,
+						13,
+						14,
+						15,
+						16,
+						17,
+						18,
+						19
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						1
+					],
+					"name" : "JoltPhysics",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						2,
+						3
+					],
+					"name" : "box2d",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						20
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						4
+					],
+					"name" : "sqlite3",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						21
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 1,
+					"id" : "Jolt::@1d28f1fc98c8454a2bb1",
+					"jsonFile" : "target-Jolt-Debug-6133ec5fc079b7422f6c.json",
+					"name" : "Jolt",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_android::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_android-Debug-eb9829f43fffb4210ed3.json",
+					"name" : "aether_android",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_assets::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_assets-Debug-c87ccb43aef8d60d5801.json",
+					"name" : "aether_assets",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_codecs::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_codecs-Debug-2baa37f4dc1c1290d617.json",
+					"name" : "aether_codecs",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_core::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_core-Debug-8b8e68c2826a9bac3288.json",
+					"name" : "aether_core",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_editor::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_editor-Debug-32c55dc88ee9ea25e778.json",
+					"name" : "aether_editor",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_native_app_glue::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_native_app_glue-Debug-64facc35ba012c67f897.json",
+					"name" : "aether_native_app_glue",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_physics::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_physics-Debug-a9f123c187e551306ab4.json",
+					"name" : "aether_physics",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_platform::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_platform-Debug-79032ed98a458940159b.json",
+					"name" : "aether_platform",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_renderer::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_renderer-Debug-968945e09b9011e09a36.json",
+					"name" : "aether_renderer",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_rendergraph::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_rendergraph-Debug-1b9d8aa835333b48cf30.json",
+					"name" : "aether_rendergraph",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_resources::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_resources-Debug-6a66ac43fc1b36312be7.json",
+					"name" : "aether_resources",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_rhi::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_rhi-Debug-14d33faf3c66411ac90e.json",
+					"name" : "aether_rhi",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_runtime::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_runtime-Debug-61fbd681a449c4554996.json",
+					"name" : "aether_runtime",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_transform::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_transform-Debug-2da80a6a6acd0417cec6.json",
+					"name" : "aether_transform",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_ui::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_ui-Debug-95cf750d286eaf036692.json",
+					"name" : "aether_ui",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "aether_water_runtime::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-aether_water_runtime-Debug-65c9f3f3c69884a57fbe.json",
+					"name" : "aether_water_runtime",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "benchmark_physics2d::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-benchmark_physics2d-Debug-c66cda560926a191ae11.json",
+					"name" : "benchmark_physics2d",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "benchmark_physics2d_box2d::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-benchmark_physics2d_box2d-Debug-87d154a2ddd974adaac5.json",
+					"name" : "benchmark_physics2d_box2d",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "benchmark_physics2d_jolt::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-benchmark_physics2d_jolt-Debug-9e58053804493c871dee.json",
+					"name" : "benchmark_physics2d_jolt",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 3,
+					"id" : "box2d::@d5cf16edf171c907b709",
+					"jsonFile" : "target-box2d-Debug-2f51b07ba95d8fb3f273.json",
+					"name" : "box2d",
+					"projectIndex" : 2
+				},
+				{
+					"directoryIndex" : 4,
+					"id" : "sqlite3::@404bef308afbc8f16dd1",
+					"jsonFile" : "target-sqlite3-Debug-ba6f9592beabaa06ad40.json",
+					"name" : "sqlite3",
+					"projectIndex" : 3
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "C:/Users/donod/Downloads/atchengine/android/app/.cxx/Debug/1y1q5570/x86_64",
+		"source" : "C:/Users/donod/Downloads/atchengine/native"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

@@ -60,7 +60,12 @@ public static class ComponentIds
     public const string Camera = "astra.camera";
     public const string CameraLook = "astra.camera.look";
     public const string MeshRenderer = "astra.render.mesh";
+    /// <summary>Luz: `kind`, `enabled`, `color`, `intensity`, `range`, `inner_angle`,
+    /// `outer_angle`, `unit` (0 escala legada, 1 lux/candela, 2 lux/lúmen),
+    /// `use_color_temperature` e `color_temperature` em kelvin.</summary>
     public const string Light = "astra.render.light";
+    /// <summary>Ambiente autoral da cena: céu, atmosfera, neblina e pós.</summary>
+    public const string Environment = "astra.render.environment";
     /// <summary>LOD Group: `level_count`, `transition_0..3` (% da altura da tela), `level_0..3` (objeto do nível),
     /// `size`, `fade_mode` (0 nenhum, 1 cross-fade), `animate_cross_fading`, `fade_width_0..3` e `force_level`
     /// (ForceLOD da Unity: 0 automático, n força o LOD n-1; estado de execução, não vai para o arquivo).</summary>

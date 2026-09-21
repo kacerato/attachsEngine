@@ -991,6 +991,36 @@
         22,
         26
       ]
+    },
+    "lighting/scene-lighting": {
+      "source": "viewport-v1/scene-lighting.png",
+      "raster": "../viewport-v1/scene-lighting.png",
+      "dark_ui_ready": true,
+      "generation": "viewport-v1"
+    },
+    "lighting/scene-effects": {
+      "source": "viewport-v1/scene-effects.png",
+      "raster": "../viewport-v1/scene-effects.png",
+      "dark_ui_ready": true,
+      "generation": "viewport-v1"
+    },
+    "lighting/sky": {
+      "source": "viewport-v1/sky.png",
+      "raster": "../viewport-v1/sky.png",
+      "dark_ui_ready": true,
+      "generation": "viewport-v1"
+    },
+    "lighting/fog": {
+      "source": "viewport-v1/fog.png",
+      "raster": "../viewport-v1/fog.png",
+      "dark_ui_ready": true,
+      "generation": "viewport-v1"
+    },
+    "lighting/post-processing": {
+      "source": "viewport-v1/post-processing.png",
+      "raster": "../viewport-v1/post-processing.png",
+      "dark_ui_ready": true,
+      "generation": "viewport-v1"
     }
   },
   "unmapped": []

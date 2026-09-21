@@ -32,7 +32,8 @@ my %targets = (
     },
 );
 PERL
-perl Configure android-astra-arm64 -D__ANDROID_API__=26 shared no-tests no-apps no-docs no-module no-engine --prefix=/astra-openssl
+perl Configure android-astra-arm64 -D__ANDROID_API__=26 shared no-tests no-apps no-docs no-module no-engine \
+  -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 --prefix=/astra-openssl
 "$make_bin" -j"${JOBS:-8}" SHELL=sh "CC=bash '$root/tools/android-clang-response.sh'" build_libs
 destination="$root/native/third_party/openssl/arm64-v8a"
 mkdir -p "$destination"
