@@ -41,12 +41,18 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   vec4 waterRippleArea;
   vec4 waterSurfaceDetail; // foam elevation/coverage, micro height/wavelength
   // Luzes pontuais e spot. `x` e quantas valem neste quadro. O array e o mesmo
-  // `PunctualLight` do C++, tres vec4 por luz: posicao+alcance, cor*intensidade
-  // +escala do cone, direcao+deslocamento do cone. Estes membros ficam SO nesta
-  // copia do bloco: o vertice nao le luz, e std140 permite que um estagio
+  // `PunctualLight` do C++, quatro vec4 por luz: posicao+alcance, cor*intensidade
+  // +escala do cone, direcao+deslocamento do cone, e a sombra local (primeiro
+  // tile, tiles+16 se suave, forca, desvio na normal). Estes membros ficam SO
+  // nesta copia do bloco: o vertice nao le luz, e std140 permite que um estagio
   // declare menos membros no fim do mesmo buffer.
   vec4 punctualLightParameters;
-  vec4 punctualLights[24];
+  vec4 punctualLights[32];
+  // Atlas de sombra local (G6-B): quantos tiles valem e o inverso do lado; por
+  // tile, a matriz da luz e o retangulo normalizado (w = texel no alcance).
+  vec4 localShadowParameters;
+  mat4 localShadowViewProjection[16];
+  vec4 localShadowRect[16];
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 // sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de
@@ -55,6 +61,8 @@ layout(set=1,binding=1) uniform sampler2D environmentMap;
 layout(set=1,binding=2) uniform sampler2DShadow shadowAtlas;
 layout(set=1,binding=3) uniform sampler2D environmentSpecularMap;
 layout(set=1,binding=4) uniform sampler2D environmentBrdfLut;
+// Atlas das luzes locais, com o mesmo sampler de compare das cascatas.
+layout(set=1,binding=17) uniform sampler2DShadow localShadowAtlas;
 
 // A UV do panorama permanece highp: sao 1024 px por eixo com costura horizontal,
 // e o fract() perto da costura e exatamente onde fp16 produziria uma emenda

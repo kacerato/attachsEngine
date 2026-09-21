@@ -17,15 +17,35 @@ namespace ae::renderer {
 // entre shader e renderer, porque os dois precisam concordar exatamente.
 inline constexpr u32 MaximumPunctualLights = 8;
 
-// A forma que o shader lê. Três vec4 por luz, std140.
+// A forma que o shader lê. Quatro vec4 por luz, std140.
 struct PunctualLight {
   float positionRange[4]{};   // xyz posição de mundo, w alcance em metros
   float colorIntensity[4]{};  // rgb cor * intensidade, w escala do cone
   float directionOffset[4]{}; // xyz direção de emissão, w deslocamento do cone
+  // Sombra local (G6-B): x é o primeiro tile desta luz no atlas e -1 significa
+  // "sem sombra neste quadro"; y é quantos tiles (1 no spot, 6 no pontual);
+  // z é a força (o Strength do Light Inspector) e w o desvio ao longo da
+  // normal, em texels do mapa. O renderer preenche isto DEPOIS de montar o
+  // atlas — antes dele não existe tile a apontar.
+  float shadow[4]{-1, 0, 1, 1};
 };
-static_assert(sizeof(PunctualLight) == 48);
+static_assert(sizeof(PunctualLight) == 64);
 
 enum class LightModality : u32 { Directional = 0, Point = 1, Spot = 2 };
+
+// Sombra pedida pelo autor, por luz. É o Shadow Type do Light Inspector da
+// Unity (No Shadows / Hard Shadows / Soft Shadows) com a resolução, a força e
+// os desvios que ela também expõe.
+struct SceneLightShadow {
+  // 0 nenhuma, 1 dura, 2 suave.
+  u8 mode = 0;
+  // 0 automática (a política decide pelo tamanho na tela), 1..4 Baixa..Muito alta.
+  u8 resolution = 0;
+  float strength = 1;
+  float bias = .05f, normalBias = .4f;
+  float nearPlane = .2f;
+  bool casts() const noexcept { return mode != 0; }
+};
 
 // O que a extração produz, antes de qualquer política de orçamento.
 struct SceneLight {
@@ -38,6 +58,7 @@ struct SceneLight {
   float range = 10;
   float innerAngle = 20; // meio-ângulo, graus
   float outerAngle = 35;
+  SceneLightShadow shadow{};
 };
 
 // Nenhuma luz some em silêncio: o que não coube é contado, por modalidade, e
@@ -62,8 +83,8 @@ struct LightCapability {
 };
 inline constexpr std::array<LightCapability, 3> lightCapabilities{{
   {LightModality::Directional, "Direcional", true, true},
-  {LightModality::Point, "Pontual", true, false},
-  {LightModality::Spot, "Spot", true, false}
+  {LightModality::Point, "Pontual", true, true},
+  {LightModality::Spot, "Spot", true, true}
 }};
 inline constexpr bool lightCastsShadow(LightModality modality) {
   for (const auto &entry : lightCapabilities)
@@ -128,7 +149,8 @@ inline void normalized(const float source[3], float out[3]) {
 // primeiro e, em empate, menor `objectId` — dois quadros com a mesma cena
 // produzem a mesma lista, sem cintilação por ordem de iteração.
 inline u32 selectPunctualLights(std::span<const SceneLight> lights, const float camera[3],
-                                std::span<PunctualLight> out, LightBudgetReport &report) {
+                                std::span<PunctualLight> out, LightBudgetReport &report,
+                                std::span<u32> outSources = {}) {
   report = {};
   if (out.empty() || !camera) return 0;
   std::array<u32, 64> ordered{};
@@ -164,7 +186,13 @@ inline u32 selectPunctualLights(std::span<const SceneLight> lights, const float 
   report.punctualDropped += candidates - accepted;
   for (u32 i = 0; i < accepted; ++i) {
     const auto &light = lights[ordered[i]];
+    // De qual luz da cena veio esta vaga: sem isso o renderer não tem como
+    // reatar a sombra autorada ao slot que o shader lê.
+    if (i < outSources.size()) outSources[i] = ordered[i];
     auto &target = out[i];
+    // O bloco é memória persistente: sem isto a vaga herdaria o tile de sombra
+    // de outra luz do quadro anterior. O renderer escreve a sombra depois.
+    target.shadow[0] = -1; target.shadow[1] = 0; target.shadow[2] = 1; target.shadow[3] = 1;
     for (u32 axis = 0; axis < 3; ++axis) target.positionRange[axis] = light.position[axis];
     target.positionRange[3] = light.range;
     for (u32 axis = 0; axis < 3; ++axis)

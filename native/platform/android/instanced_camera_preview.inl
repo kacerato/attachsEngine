@@ -38,7 +38,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     rhi::BufferDesc buffer{};buffer.sizeBytes=sizeof(DirtRoadFrameUniform);
     buffer.usage=VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;buffer.cpuAccess=rhi::CpuAccess::SequentialWrite;buffer.preferDeviceMemory=false;
     if(!memoryAllocator_->createBuffer(buffer,&previewUniform_)) {destroyCameraPreview();return false;}
-    VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,9},
+    VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,10},
       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,6},{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,1}};
     VkDescriptorPoolCreateInfo pool{};pool.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     pool.maxSets=1;pool.poolSizeCount=4;pool.pPoolSizes=sizes;
@@ -72,7 +72,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     uiRenderer_.setCameraPreview(previewColor_.view());
   }
   std::vector<VkCopyDescriptorSet> copies;
-  for(u32 binding=1;binding<=16;++binding) {
+  for(u32 binding=1;binding<=17;++binding) {
     if((binding==5||binding==6||binding==15)&&!waterSubpassActive_) continue;
     if(binding>=7&&binding<=14&&!spectralWaterCount_) continue;
     VkCopyDescriptorSet copy{};copy.sType=VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;

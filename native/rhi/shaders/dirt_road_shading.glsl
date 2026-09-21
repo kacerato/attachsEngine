@@ -95,10 +95,49 @@ mediump vec3 directLight(mediump vec3 n,mediump vec3 v,mediump vec3 l,mediump ve
 // modelo de iluminacao escondido aqui. O laco tem limite constante para o
 // compilador desenrolar; `count` so decide onde parar.
 //
-// Sem sombra: a matriz de capacidades em renderer/punctual_lights.h diz que o
-// unico passe de profundidade implementado e o de cascatas do sol. Uma luz
-// pontual atravessa parede ate existir um cubemap de sombra, e isso esta
-// documentado em vez de disfarcado.
+// Sombra local (G6-B): o tile vem do atlas em quadtree (renderer/shadow_atlas.h).
+// O pontual escolhe a face pelo eixo dominante da direcao luz->fragmento, na
+// mesma ordem das faces do C++ (+X,-X,+Y,-Y,+Z,-Z). Fora do mapa conta como
+// iluminado: e a borda do cone ou o fim do alcance, onde a luz ja e zero.
+mediump float localShadowVisibility(highp vec4 shadow,highp vec3 position,mediump vec3 n,
+                                    highp vec3 fromLight) {
+  int first=int(shadow.x+0.5);
+  if(shadow.x<-0.5||first>=int(environment.localShadowParameters.x+0.5)) return 1.0;
+  int packed=int(shadow.y+0.5);
+  bool soft=packed>=16;
+  int count=soft?packed-16:packed;
+  int tile=first;
+  if(count==6) {
+    highp vec3 a=abs(fromLight);
+    if(a.x>=a.y&&a.x>=a.z) tile+=fromLight.x>=0.0?0:1;
+    else if(a.y>=a.z) tile+=fromLight.y>=0.0?2:3;
+    else tile+=fromLight.z>=0.0?4:5;
+  }
+  highp vec4 rect=environment.localShadowRect[tile];
+  // Desvio ao longo da normal medido em texels do mapa, como o Normal Bias da
+  // Unity: o mesmo numero serve para lampada de 2 m e holofote de 40 m.
+  highp vec3 biased=position+n*(rect.w*shadow.w);
+  highp vec4 clip=environment.localShadowViewProjection[tile]*vec4(biased,1.0);
+  if(clip.w<=1e-5) return 1.0;
+  highp vec3 ndc=clip.xyz/clip.w;
+  if(abs(ndc.x)>1.0||abs(ndc.y)>1.0||ndc.z<0.0||ndc.z>1.0) return 1.0;
+  highp vec2 uv=rect.xy+(ndc.xy*0.5+0.5)*rect.z;
+  mediump float lit;
+  if(soft) {
+    // Suave: quatro buscas com compare de hardware em volta do texel, cada uma
+    // ja filtrada 2x2 — 16 amostras efetivas sem sair do tile.
+    highp vec2 texel=vec2(environment.localShadowParameters.y*0.75);
+    highp vec2 low=rect.xy+texel,high=rect.xy+rect.zz-texel;
+    lit=0.25*(texture(localShadowAtlas,vec3(clamp(uv+vec2(-texel.x,-texel.y),low,high),ndc.z))+
+              texture(localShadowAtlas,vec3(clamp(uv+vec2( texel.x,-texel.y),low,high),ndc.z))+
+              texture(localShadowAtlas,vec3(clamp(uv+vec2(-texel.x, texel.y),low,high),ndc.z))+
+              texture(localShadowAtlas,vec3(clamp(uv+vec2( texel.x, texel.y),low,high),ndc.z)));
+  } else {
+    lit=texture(localShadowAtlas,vec3(uv,ndc.z));
+  }
+  return mix(1.0,lit,clamp(shadow.z,0.0,1.0));
+}
+
 mediump vec3 punctualLighting(highp vec3 position,mediump vec3 n,mediump vec3 v,
                               mediump vec3 base,mediump vec3 f0,mediump float f90,
                               mediump float metal,mediump float rough) {
@@ -106,9 +145,10 @@ mediump vec3 punctualLighting(highp vec3 position,mediump vec3 n,mediump vec3 v,
   mediump vec3 sum=vec3(0.0);
   for(int i=0;i<PUNCTUAL_LIGHT_LIMIT;++i) {
     if(i>=count) break;
-    highp vec4 positionRange=environment.punctualLights[i*3];
-    mediump vec4 colorIntensity=environment.punctualLights[i*3+1];
-    mediump vec4 directionOffset=environment.punctualLights[i*3+2];
+    highp vec4 positionRange=environment.punctualLights[i*4];
+    mediump vec4 colorIntensity=environment.punctualLights[i*4+1];
+    mediump vec4 directionOffset=environment.punctualLights[i*4+2];
+    highp vec4 shadow=environment.punctualLights[i*4+3];
     highp vec3 toLight=positionRange.xyz-position;
     highp float distanceSquared=dot(toLight,toLight);
     // Uma luz exatamente sobre a superficie dividiria por zero e pintaria o
@@ -126,7 +166,11 @@ mediump vec3 punctualLighting(highp vec3 position,mediump vec3 n,mediump vec3 v,
     // exatamente 1 em qualquer direcao -- mesma conta, sem desvio por tipo.
     mediump float cone=clamp(dot(directionOffset.xyz,-l)*colorIntensity.w+directionOffset.w,0.0,1.0);
     cone*=cone;
-    mediump vec3 radiance=colorIntensity.rgb*(window*cone/safeSquared);
+    // A sombra so e buscada onde a luz ainda chega: fora do cone ou do
+    // alcance, o atlas nao tem o que dizer e a busca seria desperdicio.
+    if(cone<=0.0) continue;
+    mediump float visible=localShadowVisibility(shadow,position,n,-toLight);
+    mediump vec3 radiance=colorIntensity.rgb*(window*cone*visible/safeSquared);
     sum+=directLight(n,v,l,radiance,base,f0,f90,metal,rough);
   }
   return sum;

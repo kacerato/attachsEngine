@@ -79,15 +79,20 @@ AE_TEST(component_matrix_reports_default_domain_and_invalidation) {
 AE_TEST(engine_capabilities_agree_with_the_renderer_tables) {
   const auto *punctualShadow = core::findEngineCapability("render.shadow.punctual");
   AE_EXPECT_TRUE(punctualShadow != nullptr, "a capacidade de sombra local é declarada");
-  AE_EXPECT_TRUE(punctualShadow->state == core::CapabilityState::Planned,
-                 "não há passe de sombra para luz local");
-  AE_EXPECT_TRUE(!renderer::lightCastsShadow(renderer::LightModality::Point),
+  // Desde o atlas local (G6-B) existe passe: quadtree com um mapa por spot e
+  // seis faces por pontual. A tabela do renderer e o registro têm de dizer a
+  // MESMA coisa — é o que impede um controle sem shader atrás.
+  AE_EXPECT_TRUE(punctualShadow->state == core::CapabilityState::Implemented,
+                 "a sombra de luz local tem passe");
+  AE_EXPECT_TRUE(renderer::lightCastsShadow(renderer::LightModality::Point) &&
+                 renderer::lightCastsShadow(renderer::LightModality::Spot),
                  "a tabela do renderer concorda com o registro");
   AE_EXPECT_TRUE(renderer::lightCastsShadow(renderer::LightModality::Directional),
                  "o sol tem cascatas implementadas");
 
+  AE_EXPECT_TRUE(core::engineCapabilityAuthorable("render.shadow.punctual"), "implementada é autorável");
   // Uma capacidade planejada nunca pode ser autorável: é o botão sem shader.
-  AE_EXPECT_TRUE(!core::engineCapabilityAuthorable("render.shadow.punctual"), "planejada não é autorável");
+  AE_EXPECT_TRUE(!core::engineCapabilityAuthorable("render.probe.reflection"), "planejada não é autorável");
   AE_EXPECT_TRUE(core::engineCapabilityAuthorable("render.aa.temporal"),
                  "limitada pelo aparelho continua autorável, com degradação relatada");
   AE_EXPECT_TRUE(core::engineCapabilityAuthorable(""), "sem capacidade declarada é sempre autorável");

@@ -192,7 +192,7 @@ Geometria e material. **Consumidor:** renderer/map_draw_update.h → instância 
 | `sampling.wrap` | Repetição | enumeração | Amostragem | Herdar | Herdar \| Repetir \| Fixar na borda \| Espelhar |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
 | `sampling.filter` | Filtro | enumeração | Amostragem | Herdar | Herdar \| Linear \| Vizinho mais próximo |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
 
-## Luz · `astra.render.light` v2
+## Luz · `astra.render.light` v3
 
 Direcional, pontual ou spot. **Consumidor:** runtime/scene_lights.cpp → renderer/punctual_lights.h. **Invalida:** seleção de luzes.
 
@@ -206,10 +206,16 @@ Direcional, pontual ou spot. **Consumidor:** runtime/scene_lights.cpp → render
 | `range` | Alcance | número | Volume | 10 | 0.01 … 1000 | m | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | sim | não |
 | `inner_angle` | Meio-cone interno | número | Volume | 20 | 0 … 89 | ° | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | sim | não |
 | `outer_angle` | Meio-cone externo | número | Volume | 35 | 0 … 89 | ° | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | sim | não |
+| `shadow_strength` | Força da sombra | número | Sombra | 1 | 0 … 1 |  | renderer/shadow_atlas.h → atlas local | seleção de luzes | sim | não |
+| `shadow_bias` | Desvio | número | Sombra | 0.05 | 0 … 2 | texel | renderer/shadow_atlas.h → atlas local | seleção de luzes | sim | não |
+| `shadow_normal_bias` | Desvio na normal | número | Sombra | 0.4 | 0 … 2 | texel | renderer/shadow_atlas.h → atlas local | seleção de luzes | sim | não |
+| `shadow_near_plane` | Plano próximo da sombra | número | Sombra | 0.2 | 0.01 … 10 | m | renderer/shadow_atlas.h → atlas local | seleção de luzes | sim | não |
 | `enabled` | Acesa | booleano | Geral | verdadeiro | verdadeiro \| falso |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
 | `use_color_temperature` | Filtro por temperatura | booleano | Emissão | falso | verdadeiro \| falso |  | scene/light_units.h → RGB linear | seleção de luzes | não | não |
 | `kind` | Modalidade | enumeração | Geral | Pontual | Direcional \| Pontual \| Spot |  | runtime/scene_lights.cpp → renderer/punctual_lights.h | seleção de luzes | não | não |
 | `unit` | Unidade | enumeração | Emissão | Lux / lúmen | Interna (legada) \| Lux / candela \| Lux / lúmen |  | scene/light_units.h → irradiância linear | seleção de luzes | não | não |
+| `shadow_mode` | Sombra | enumeração | Sombra | Nenhuma | Nenhuma \| Dura \| Suave |  | renderer/shadow_atlas.h → atlas local | seleção de luzes | sim | não |
+| `shadow_resolution` | Resolução da sombra | enumeração | Sombra | Automática | Automática \| Baixa \| Média \| Alta \| Muito alta |  | renderer/shadow_atlas.h → atlas local | seleção de luzes | sim | não |
 
 ## Ambiente · `astra.render.environment` v5
 
@@ -318,7 +324,7 @@ Código C# do projeto. **Consumidor:** runtime/script_bridge.cpp → runtime .NE
 | `render.light.cookie` | Máscara projetada (cookie) | planejada | renderer/punctual_lights.h | Sem amostragem de textura por luz no shader de fragmento |
 | `render.light.area` | Luz de área | planejada | renderer/punctual_lights.h | Sem integração de fonte com extensão |
 | `render.shadow.directional` | Sombra do sol em cascatas | implementada | renderer/shadow_cascades.cpp + rhi/shaders/shadow_depth.vert | — |
-| `render.shadow.punctual` | Sombra de luz pontual ou spot | planejada | renderer/punctual_lights.h | Sem atlas nem cubemap de profundidade para luz local |
+| `render.shadow.punctual` | Sombra de luz pontual ou spot | implementada | renderer/shadow_atlas.h | Atlas em quadtree: spot ocupa um mapa, pontual seis faces |
 | `render.ambient.hemispheric` | Ambiente hemisférico céu/chão | implementada | renderer/environment_lighting.h | — |
 | `render.ambient.specular` | Reflexo especular do ambiente | implementada | renderer/environment_map.cpp | — |
 | `render.gi.lightmap` | Iluminação indireta assada em lightmap | planejada | renderer/ (serviço de bake) | Sem serviço de bake, UV de lightmap nem atlas |

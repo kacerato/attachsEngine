@@ -35,6 +35,16 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
     entry.range = light->range;
     entry.innerAngle = light->innerAngle;
     entry.outerAngle = light->outerAngle;
+    // Sombra local autoral (G6-B). A direcional projeta pelas cascatas do sol,
+    // com politica em Ambiente, entao ela nunca leva pedido de atlas local.
+    if (light->kind != scene::LightKind::Directional) {
+      entry.shadow.mode = static_cast<u8>(light->shadowMode);
+      entry.shadow.resolution = static_cast<u8>(light->shadowResolution);
+      entry.shadow.strength = light->shadowStrength;
+      entry.shadow.bias = light->shadowBias;
+      entry.shadow.normalBias = light->shadowNormalBias;
+      entry.shadow.nearPlane = light->shadowNearPlane;
+    }
     collected.push_back(entry);
   }
   out = std::move(collected);

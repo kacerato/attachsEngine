@@ -241,7 +241,7 @@ ganha um na reimportação — a ausência ali pode ser escolha do autor; grupo
 gerado por nome termina em 1% em vez de cortar no último degrau da escada;
 Animate Cross-fading tem teste de host, sem captura no aparelho.
 
-## Suíte do host — 1060 de 1060 verdes
+## Suíte do host — 1066 de 1066 verdes
 
 Havia cinco falhas **anteriores ao plano** (conferidas numa build de
 `a80fcb28`). Foram fechadas assim:
@@ -423,3 +423,23 @@ exatamente o que estava sendo comparado.
 **Pendente do G6-A com o aparelho desligado:** o passeio no aparelho (aba
 Malhas num GLB real escolhido pelo seletor, montagem do cenário de referência e
 troca entre as vistas salvas) e a captura das evidências.
+
+### G6-B · sombra de luz pontual e spot (atlas local)
+
+Referência: Light Inspector da Unity 6 — Shadow Type (No Shadows / Hard / Soft),
+Realtime Shadows (Strength, Resolution, Bias, Normal Bias, Near Plane) e o atlas
+de sombras das luzes adicionais da URP, que escolhe a resolução pelo tamanho da
+luz na tela.
+
+| Entrega | Onde vive | Estado |
+|---|---|---|
+| Política do atlas sem Vulkan: quem recebe sombra (tamanho do alcance na tela), que resolução (potências de dois entre piso e teto, com a escolha do autor por cima) e onde fica (quadtree "buddy", cada tile alinhado ao próprio tamanho). Pontual ocupa seis faces ou nenhuma; o que não cabe é contado por distância ou orçamento | `native/renderer/shadow_atlas.h/.cpp` | 5 casos no host, incluindo projeção de cada face e ausência de sobreposição |
+| Luz v3: Sombra (Nenhuma/Dura/Suave), Resolução da sombra (Automática/Baixa/Média/Alta/Muito alta), Força, Desvio, Desvio na normal, Plano próximo. Só em pontual e spot — a direcional segue com as cascatas do sol; ajustes finos só aparecem com a sombra ligada. Luz v2 abre sem sombra, lendo só os oito números da época | `native/scene/light.h`, `runtime/scene_lights.cpp` | host; a leitura v2 foi corrigida porque o teste pegou que ela passaria a exigir os números novos |
+| Capacidade `render.shadow.punctual` agora **Implemented**; a tabela do renderer e o registro concordam em tempo de compilação | `core/engine_capability.h`, `renderer/punctual_lights.h` | host |
+| Passe Vulkan: atlas local próprio (não divide a imagem das cascatas, para o cache estático do sol continuar valendo), mesmo passe compatível e mesmas pipelines de caster; recorte de casters pela esfera de alcance; desvio autoral escala o do sol (0,05 reproduz o desvio atual). O atlas é limpo todo quadro, com ou sem tile, para o descritor ficar válido | `instanced_renderer.cpp` (`recordLocalShadowPass`), binding 17 | compilado arm64, SPIR-V de todos os shaders regenerado e validado com `spirv-val` |
+| Amostragem: pontual escolhe a face pelo eixo dominante, desvio na normal medido em texels do mapa, suave com 4 buscas de compare (16 amostras efetivas), força mistura com o iluminado; fora do mapa conta como iluminado | `rhi/shaders/dirt_road_shading.glsl` | idem |
+| Bloco do quadro: 4 vec4 por luz (a quarta aponta o tile), 16 tiles com matriz e retângulo | `DirtRoadFrameUniform` (3104 bytes), `environment_lighting.glsl` | idem |
+
+**Pendente com o aparelho:** ver a sombra da luz de teto do cenário de
+referência sobre a mesa, a borda suave e o custo em ms do passe. É o primeiro
+ponto do G6 em que o aparelho é necessário de verdade: o host não executa Vulkan.

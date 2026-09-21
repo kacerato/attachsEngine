@@ -9,6 +9,7 @@
 #include "scene/component_schema.h"
 #include "scene/light.h"
 
+#include <algorithm>
 #include <string>
 #include <sstream>
 #include <vector>
@@ -269,13 +270,28 @@ AE_TEST(light_shadow_capability_matrix_is_published_and_honest) {
   // modalidade sem passe seria um botão sem shader atrás.
   AE_EXPECT_TRUE(renderer::lightCastsShadow(renderer::LightModality::Directional),
                  "direcional tem passe de sombra: as cascatas do sol");
-  AE_EXPECT_TRUE(!renderer::lightCastsShadow(renderer::LightModality::Point),
-                 "pontual ainda não tem passe de sombra");
-  AE_EXPECT_TRUE(!renderer::lightCastsShadow(renderer::LightModality::Spot),
-                 "spot ainda não tem passe de sombra");
-  // E a Luz não expõe interruptor de sombra enquanto isso for verdade.
-  for (const auto &property : scene::Light::descriptor.booleans)
-    AE_EXPECT_TRUE(property.id != "cast_shadow", "sem interruptor de sombra na Luz");
+  AE_EXPECT_TRUE(renderer::lightCastsShadow(renderer::LightModality::Point) &&
+                 renderer::lightCastsShadow(renderer::LightModality::Spot),
+                 "luz local tem passe de sombra: o atlas em quadtree");
+
+  // E a autoria acompanha: o controle de sombra existe na Luz, some na
+  // direcional (cuja sombra é a do sol, com política em Ambiente) e os ajustes
+  // finos só aparecem quando a sombra está ligada.
+  const auto mode = std::find_if(scene::Light::descriptor.enums.begin(), scene::Light::descriptor.enums.end(),
+                                  [](const auto &property) { return property.id == std::string_view("shadow_mode"); });
+  AE_EXPECT_TRUE(mode != scene::Light::descriptor.enums.end(), "a Luz expõe o tipo de sombra");
+  scene::Light directional;
+  directional.kind = scene::LightKind::Directional;
+  scene::Light lamp;
+  lamp.kind = scene::LightKind::Point;
+  AE_EXPECT_TRUE(!mode->presentation.isVisible(directional), "direcional não repete o controle das cascatas");
+  AE_EXPECT_TRUE(mode->presentation.isVisible(lamp), "pontual escolhe a própria sombra");
+  const auto strength = std::find_if(scene::Light::descriptor.numbers.begin(), scene::Light::descriptor.numbers.end(),
+                                      [](const auto &property) { return property.id == std::string_view("shadow_strength"); });
+  AE_EXPECT_TRUE(strength != scene::Light::descriptor.numbers.end(), "força da sombra é propriedade");
+  AE_EXPECT_TRUE(!strength->presentation.isVisible(lamp), "sem sombra ligada, o ajuste fino fica escondido");
+  lamp.shadowMode = 1;
+  AE_EXPECT_TRUE(strength->presentation.isVisible(lamp), "com sombra dura, o ajuste aparece");
 }
 
 AE_TEST(light_changed_during_play_reaches_the_collected_frame) {
@@ -305,4 +321,67 @@ AE_TEST(light_changed_during_play_reaches_the_collected_frame) {
   // E o documento autoral continua com o valor autorado.
   play.stop();
   AE_EXPECT_EQ(lightComponent(*doc.find(id))->intensity, 6.f, "autoria preservada depois do Stop");
+}
+
+AE_TEST(local_shadow_authoring_reaches_the_frame_slot_and_old_scenes_open_without_it) {
+  EditorDocument doc;
+  const auto lamp = lightAt(doc, "Lâmpada", scene::LightKind::Point, 0, 2.4f, 0, 800, 8);
+  const auto sun = lightAt(doc, "Sol", scene::LightKind::Directional, 0, 10, 0, 5, 1);
+  AE_EXPECT_TRUE(lamp && sun, "luzes criadas");
+  // Sombra suave, resolução Alta, força 0,8 — o que o autor escolhe no Inspector.
+  auto values = *doc.find(lamp);
+  auto *light = editLight(values);
+  light->shadowMode = 2;
+  light->shadowResolution = 3;
+  light->shadowStrength = .8f;
+  light->shadowNearPlane = .3f;
+  AE_EXPECT_TRUE(doc.applyEntityValues(lamp, values), "sombra autorada");
+  // A direcional com o campo ligado por script não vira pedido de atlas local:
+  // a sombra dela é a das cascatas.
+  values = *doc.find(sun);
+  editLight(values)->shadowMode = 1;
+  AE_EXPECT_TRUE(doc.applyEntityValues(sun, values), "direcional aceita o valor");
+
+  std::vector<renderer::SceneLight> lights;
+  AE_EXPECT_TRUE(runtime::collectSceneLights(doc, lights), "coleta do quadro");
+  const renderer::SceneLight *pointLight = nullptr, *directional = nullptr;
+  for (const auto &entry : lights) {
+    if (entry.modality == renderer::LightModality::Point) pointLight = &entry;
+    if (entry.modality == renderer::LightModality::Directional) directional = &entry;
+  }
+  AE_EXPECT_TRUE(pointLight && pointLight->shadow.casts() && pointLight->shadow.mode == 2,
+                 "a sombra suave chega à coleta");
+  AE_EXPECT_TRUE(pointLight->shadow.resolution == 3 && pointLight->shadow.strength == .8f &&
+                 pointLight->shadow.nearPlane == .3f, "resolução, força e plano próximo chegam intactos");
+  AE_EXPECT_TRUE(directional && !directional->shadow.casts(), "direcional nunca pede atlas local");
+
+  // A vaga que o shader lê sabe de qual luz veio e começa sem tile: é o
+  // renderer, depois de montar o atlas, que aponta o tile.
+  const float camera[3]{0, 1.6f, -4};
+  renderer::PunctualLight slots[renderer::MaximumPunctualLights];
+  slots[0].shadow[0] = 5; // lixo de um quadro anterior
+  u32 sources[renderer::MaximumPunctualLights]{};
+  renderer::LightBudgetReport report;
+  const u32 accepted = renderer::selectPunctualLights(lights, camera, slots, report, sources);
+  AE_EXPECT_EQ(accepted, 1u, "uma luz local aceita");
+  AE_EXPECT_TRUE(&lights[sources[0]] == pointLight, "a vaga reata a luz de origem");
+  AE_EXPECT_TRUE(slots[0].shadow[0] < 0, "vaga reaproveitada não herda tile de outra luz");
+
+  // Cena salva antes da sombra local (Luz v2) abre sem sombra.
+  std::stringstream old;
+  old << "1 1 2 0 1 1 1 6500 800 8 20 35";
+  scene::Light restored;
+  AE_EXPECT_TRUE(restored.read(old, 2), "Luz v2 lida");
+  AE_EXPECT_TRUE(restored.shadowMode == 0 && restored.shadowStrength == 1, "v2 abre sem sombra, como foi salva");
+  // E a versão atual faz ida e volta com a sombra.
+  scene::Light authored;
+  authored.shadowMode = 2;
+  authored.shadowResolution = 3;
+  authored.shadowStrength = .8f;
+  std::stringstream current;
+  authored.write(current);
+  scene::Light again;
+  AE_EXPECT_TRUE(again.read(current, 3), "Luz v3 lida");
+  AE_EXPECT_TRUE(again.shadowMode == 2 && again.shadowResolution == 3 && again.shadowStrength == .8f,
+                 "a sombra sobrevive ao arquivo");
 }

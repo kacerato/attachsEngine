@@ -36,6 +36,7 @@
 #include "renderer/rendering_policy.h"
 #include "renderer/runtime_hud.h"
 #include "renderer/shadow_cascades.h"
+#include "renderer/shadow_atlas.h"
 #include "renderer/water_surface.h"
 #include "platform/android/material_preview_resources.h"
 #include "renderer/render_view.h"
@@ -488,6 +489,10 @@ private:
   bool createShadowResources();
   void destroyShadowResources();
   void recordShadowPass(const platform::FreeCameraState &camera);
+  // Atlas de sombra das luzes locais (G6-B). Sempre começa e termina o passe,
+  // mesmo sem tile: a imagem precisa sair limpa e no layout de leitura para o
+  // descritor continuar válido.
+  void recordLocalShadowPass();
   bool createHzbResources();
   void destroyHzbResources();
   bool createHzbPipeline(const u32 *vertSpirv, u32 vertSpirvSize, const u32 *fragSpirv, u32 fragSpirvSize,
@@ -655,6 +660,19 @@ private:
   VkPipeline shadowOpaquePipeline_ = VK_NULL_HANDLE;
   VkPipeline shadowMaskedPipeline_ = VK_NULL_HANDLE;
   rhi::VulkanImage shadowAtlas_{};
+  // Atlas local: imagem própria em vez de dividir a das cascatas, para o cache
+  // estático do sol continuar valendo quando só uma lâmpada muda. O passe é
+  // compatível com o do sol, então as mesmas pipelines de caster servem.
+  rhi::VulkanImage localShadowAtlas_{};
+  VkRenderPass localShadowRenderPass_ = VK_NULL_HANDLE;
+  VkFramebuffer localShadowFramebuffer_ = VK_NULL_HANDLE;
+  renderer::ShadowAtlasTile localShadowTiles_[renderer::MaximumLocalShadowTiles]{};
+  // Esfera de alcance da luz de cada tile (xyz centro, w raio) e o desvio de
+  // profundidade autoral, para o passe recortar casters e ajustar a acne.
+  float localShadowSpheres_[renderer::MaximumLocalShadowTiles][4]{};
+  float localShadowBias_[renderer::MaximumLocalShadowTiles]{};
+  u32 localShadowTileCount_ = 0;
+  renderer::ShadowAtlasReport localShadowReport_{};
   rhi::VulkanSampler shadowSampler_{};
   VkFormat shadowDepthFormat_ = VK_FORMAT_UNDEFINED;
   renderer::ShadowCascade shadowCascades_[renderer::MaximumShadowCascades]{};

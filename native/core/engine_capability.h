@@ -79,8 +79,8 @@ inline constexpr std::array<EngineCapability, 36> engineCapabilities{{
   // --- Sombra --------------------------------------------------------------
   {"render.shadow.directional", "Sombra do sol em cascatas", CapabilityState::Implemented,
    "renderer/shadow_cascades.cpp + rhi/shaders/shadow_depth.vert", ""},
-  {"render.shadow.punctual", "Sombra de luz pontual ou spot", CapabilityState::Planned,
-   "renderer/punctual_lights.h", "Sem atlas nem cubemap de profundidade para luz local"},
+  {"render.shadow.punctual", "Sombra de luz pontual ou spot", CapabilityState::Implemented,
+   "renderer/shadow_atlas.h", "Atlas em quadtree: spot ocupa um mapa, pontual seis faces"},
 
   // --- Ambiente, GI e sondas ----------------------------------------------
   {"render.ambient.hemispheric", "Ambiente hemisférico céu/chão", CapabilityState::Implemented,

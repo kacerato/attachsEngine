@@ -129,8 +129,15 @@ struct DirtRoadFrameUniform {
   // vetor existe para manter o alinhamento std140 do array que vem depois.
   float punctualLightParameters[4]{};
   renderer::PunctualLight punctualLights[renderer::MaximumPunctualLights]{};
+  // Sombra local (G6-B): x é quantos tiles valem, y o inverso do lado do
+  // atlas. Um tile é a matriz da luz e o retângulo no atlas (x, y e lado já
+  // normalizados; w é o tamanho do texel no alcance, a escala do desvio na
+  // normal). A ordem e o tamanho são os de environment_lighting.glsl.
+  float localShadowParameters[4]{};
+  float localShadowViewProjection[renderer::MaximumLocalShadowTiles][16]{};
+  float localShadowRect[renderer::MaximumLocalShadowTiles][4]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 1680);
+static_assert(sizeof(DirtRoadFrameUniform) == 3104);
 
 struct ShadowPushConstants {
   float lightViewProjection[16]{};
@@ -921,7 +928,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[17]{};
+  VkDescriptorSetLayoutBinding bindings[18]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -958,12 +965,14 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
      VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   // R4: transformações de UV, lidas pelo sombreamento e pela cobertura do mapa.
   bindings[bindingCount++]={16,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  // G6-B: atlas de sombra das luzes locais, com o mesmo sampler de compare.
+  bindings[bindingCount++]={17,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   layout.bindingCount = bindingCount;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
                                    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                    spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)},
+                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 1u},
                                    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                     (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 1u}};
@@ -1007,7 +1016,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
       break;
     }
   }
-  VkWriteDescriptorSet writes[17]{};
+  VkWriteDescriptorSet writes[18]{};
   VkDescriptorBufferInfo rippleBuffer{};
   VkDescriptorBufferInfo uvTransforms{materialUvTransformBuffer_.handle(), 0, materialUvTransformBuffer_.sizeBytes()};
   VkDescriptorImageInfo spectralImages[4]{};
@@ -1089,6 +1098,17 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   writes[writeCount].descriptorCount = 1;
   writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
   writes[writeCount].pBufferInfo = &uvTransforms;
+  ++writeCount;
+  VkDescriptorImageInfo localShadow{
+      shadowSampler_.isReady() ? shadowSampler_.handle() : dirtRoadResources_.environmentSampler(),
+      localShadowAtlas_.isReady() ? localShadowAtlas_.view() : dirtRoadResources_.environmentView(),
+      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  writes[writeCount].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  writes[writeCount].dstSet = environmentSet_;
+  writes[writeCount].dstBinding = 17;
+  writes[writeCount].descriptorCount = 1;
+  writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  writes[writeCount].pImageInfo = &localShadow;
   ++writeCount;
   vkUpdateDescriptorSets(device_, writeCount, writes, 0, nullptr);
   return true;
@@ -1928,9 +1948,8 @@ bool InstancedRenderer::createShadowResources() {
   VkSubpassDescription subpass{};
   subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
   subpass.pDepthStencilAttachment = &depthReference;
-  const VkImageView atlasView = shadowAtlas_.view();
-  const auto createPassAndFramebuffer = [&](bool preserve, VkRenderPass &outPass,
-                                             VkFramebuffer &outFramebuffer) {
+  const auto createPassAndFramebuffer = [&](bool preserve, VkImageView atlasView, u32 width, u32 height,
+                                             VkRenderPass &outPass, VkFramebuffer &outFramebuffer) {
     VkAttachmentDescription attachment{};
     attachment.format = shadowDepthFormat_;
     attachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -1970,13 +1989,31 @@ bool InstancedRenderer::createShadowResources() {
     framebuffer.renderPass = outPass;
     framebuffer.attachmentCount = 1;
     framebuffer.pAttachments = &atlasView;
-    framebuffer.width = image.width; framebuffer.height = image.height; framebuffer.layers = 1;
+    framebuffer.width = width; framebuffer.height = height; framebuffer.layers = 1;
     return vkCreateFramebuffer(device_, &framebuffer, nullptr, &outFramebuffer) == VK_SUCCESS;
   };
-  if (!createPassAndFramebuffer(false, shadowRenderPass_, shadowFramebuffer_) ||
-      !createPassAndFramebuffer(true, shadowCachedRenderPass_, shadowCachedFramebuffer_))
+  if (!createPassAndFramebuffer(false, shadowAtlas_.view(), image.width, image.height,
+                                shadowRenderPass_, shadowFramebuffer_) ||
+      !createPassAndFramebuffer(true, shadowAtlas_.view(), image.width, image.height,
+                                shadowCachedRenderPass_, shadowCachedFramebuffer_))
     return false;
   invalidateStaticShadowCache();
+
+  // Atlas das luzes locais (G6-B). O lado acompanha a resolução das cascatas:
+  // o aparelho que aguenta cascata de 1024 aguenta atlas local de 2048, e o
+  // que desceu para 512 desce junto. Sombra desligada fica com 1x1 limpo, só
+  // para o descritor existir.
+  {
+    rhi::ImageDesc local = image;
+    const u32 side = renderingPolicy_.shadows.enabled
+                         ? std::min(2048u, std::max(512u, renderingPolicy_.shadows.cascadeResolution * 2u)) : 1u;
+    local.width = side;
+    local.height = side;
+    if (!memoryAllocator_->createImage(local, &localShadowAtlas_)) return false;
+    if (!createPassAndFramebuffer(false, localShadowAtlas_.view(), side, side,
+                                  localShadowRenderPass_, localShadowFramebuffer_))
+      return false;
+  }
 
   // Mesmo quando a sombra está desligada, o atlas 1x1 acima é limpo uma vez por
   // frame e mantém o descriptor sempre válido. Pipelines de caster só existem
@@ -2211,6 +2248,10 @@ void InstancedRenderer::destroyShadowResources() {
   if (shadowCachedFramebuffer_ != VK_NULL_HANDLE)
     vkDestroyFramebuffer(device_,shadowCachedFramebuffer_,nullptr);
   if (shadowRenderPass_ != VK_NULL_HANDLE) vkDestroyRenderPass(device_,shadowRenderPass_,nullptr);
+  if (localShadowFramebuffer_ != VK_NULL_HANDLE) vkDestroyFramebuffer(device_,localShadowFramebuffer_,nullptr);
+  if (localShadowRenderPass_ != VK_NULL_HANDLE) vkDestroyRenderPass(device_,localShadowRenderPass_,nullptr);
+  localShadowFramebuffer_=VK_NULL_HANDLE; localShadowRenderPass_=VK_NULL_HANDLE;
+  localShadowTileCount_=0; localShadowAtlas_.reset();
   if (shadowCachedRenderPass_ != VK_NULL_HANDLE)
     vkDestroyRenderPass(device_,shadowCachedRenderPass_,nullptr);
   shadowOpaquePipeline_=VK_NULL_HANDLE; shadowMaskedPipeline_=VK_NULL_HANDLE;
@@ -2220,6 +2261,102 @@ void InstancedRenderer::destroyShadowResources() {
   shadowCacheInitialized_=false; shadowCascadeDirtyMask_=0xffffffffu;
   shadowCacheHitFrames_=0;
   shadowSampler_.shutdown(); shadowAtlas_.reset(); shadowDepthFormat_=VK_FORMAT_UNDEFINED;
+}
+
+void InstancedRenderer::recordLocalShadowPass() {
+  if (!dirtRoadPreview_ || localShadowRenderPass_ == VK_NULL_HANDLE) return;
+  VkClearValue clear{}; clear.depthStencil = {1.0f, 0};
+  VkRenderPassBeginInfo begin{};
+  begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  begin.renderPass = localShadowRenderPass_;
+  begin.framebuffer = localShadowFramebuffer_;
+  begin.renderArea.extent = {localShadowAtlas_.width(), localShadowAtlas_.height()};
+  begin.clearValueCount = 1;
+  begin.pClearValues = &clear;
+  vkCmdBeginRenderPass(commandBuffer_, &begin, VK_SUBPASS_CONTENTS_INLINE);
+  if (localShadowTileCount_ == 0 || shadowOpaquePipeline_ == VK_NULL_HANDLE) {
+    vkCmdEndRenderPass(commandBuffer_);
+    return;
+  }
+  VkDeviceSize offset = 0;
+  const VkBuffer mesh = dirtRoadResources_.vertexBuffer();
+  const VkBuffer instances = instanceBuffer_.handle();
+  vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);
+  vkCmdBindVertexBuffers(commandBuffer_,1,1,&instances,&offset);
+  vkCmdBindIndexBuffer(commandBuffer_,dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
+  // O mesmo recorte de material das cascatas: folhagem recortada projeta a
+  // mesma silhueta sob o sol e sob a lâmpada.
+  auto pushAndDraw = [&](u32 tile, u32 drawIndex, bool masked) {
+    if (!authoredVisibility_.empty() && (!authoredVisibility_[drawIndex] || !authoredShadows_[drawIndex])) return;
+    const auto &draw=dirtRoadResources_.draws()[drawIndex];
+    auto material=dirtRoadResources_.materials()[draw.materialIndex];
+    const bool authored=drawIndex<authoredMaterials_.size();
+    if(authored)
+      material=renderer::applyMaterialOverride(material,authoredMaterials_[drawIndex],
+                                               static_cast<u32>(dirtRoadResources_.packageTextureCount()));
+    if ((material.flags & renderer::MapMaterialWater) != 0) return;
+    // Caster fora da esfera de alcance não chega a nenhum receptor iluminado
+    // por esta luz: recortar aqui é o que mantém seis faces por lâmpada
+    // baratas numa cena grande.
+    const float *sphere=localShadowSpheres_[tile];
+    const float dx=draw.boundsCenter[0]-sphere[0],dy=draw.boundsCenter[1]-sphere[1],dz=draw.boundsCenter[2]-sphere[2];
+    const float reach=sphere[3]+draw.boundsRadius;
+    if (dx*dx+dy*dy+dz*dz>reach*reach) return;
+    if (masked && !useBindless_) {
+      const VkDescriptorSet set=dirtMaterialSets_[draw.materialIndex];
+      vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              shadowPipelineLayout_,0,1,&set,0,nullptr);
+    }
+    ShadowPushConstants push{};
+    std::memcpy(push.lightViewProjection,localShadowTiles_[tile].viewProjection,
+                sizeof(push.lightViewProjection));
+    push.alphaCutoffUvSlot[0]=material.alphaCutoff;
+    push.alphaCutoffUvSlot[1]=static_cast<float>(material.textureCoordinates&3u);
+    if(authored) {
+      const auto &value=authoredMaterials_[drawIndex];
+      if(value.channels.alphaSource!=scene::MaterialAlphaSourceKeep)
+        push.alphaCutoffUvSlot[2]=static_cast<float>(value.channels.alphaSource-1u);
+      if(value.uvTransformMask&1u) {
+        const auto *rows=value.uvTransforms[0];
+        push.uvRow0[0]=rows[0];push.uvRow0[1]=rows[1];push.uvRow0[2]=rows[2];
+        push.uvRow1[0]=rows[3];push.uvRow1[1]=rows[4];push.uvRow1[2]=rows[5];
+      }
+    }
+    const u32 texture=material.textureIndices[0];
+    push.baseTextureIndex[0]=useBindless_ && texture!=renderer::InvalidMapTexture && texture<dirtTextureSlots_.size()
+                                 ? dirtTextureSlots_[texture] : baseTextureIndex_;
+    vkCmdPushConstants(commandBuffer_,shadowPipelineLayout_,
+                       VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0,sizeof(push),&push);
+    vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,
+                     static_cast<i32>(draw.vertexOffset),drawIndex);
+  };
+  const std::vector<u32> &solidDraws = lodGroups_.empty() ? solidDrawOrder_ : levelZeroSolidDrawOrder_;
+  const std::vector<u32> &coverageDraws =
+      coverageLodGroups_.empty() ? coverageDrawOrder_ : levelZeroCoverageDrawOrder_;
+  for (u32 tile = 0; tile < localShadowTileCount_; ++tile) {
+    const auto &rect = localShadowTiles_[tile];
+    VkViewport viewport{static_cast<float>(rect.x),static_cast<float>(rect.y),
+                        static_cast<float>(rect.size),static_cast<float>(rect.size),0.0f,1.0f};
+    VkRect2D scissor{{static_cast<i32>(rect.x),static_cast<i32>(rect.y)},{rect.size,rect.size}};
+    vkCmdSetViewport(commandBuffer_,0,1,&viewport);
+    vkCmdSetScissor(commandBuffer_,0,1,&scissor);
+    // O Desvio autoral escala o do sol: 0,05 (o padrão do Light Inspector)
+    // reproduz exatamente o desvio que as cascatas já usam neste aparelho.
+    const float biasScale = localShadowBias_[tile] / 0.05f;
+    vkCmdSetDepthBias(commandBuffer_,renderingPolicy_.shadows.depthBiasConstant*biasScale,0.0f,
+                      renderingPolicy_.shadows.depthBiasSlope*biasScale);
+    vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,shadowOpaquePipeline_);
+    for (u32 drawIndex : solidDraws) pushAndDraw(tile,drawIndex,false);
+    if (!coverageDraws.empty() && shadowMaskedPipeline_ != VK_NULL_HANDLE) {
+      vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,shadowMaskedPipeline_);
+      if(useBindless_)
+        vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                shadowPipelineLayout_,0,1,&textureSet_,0,nullptr);
+      for (u32 drawIndex : coverageDraws) pushAndDraw(tile,drawIndex,true);
+    }
+  }
+  vkCmdEndRenderPass(commandBuffer_);
 }
 
 bool InstancedRenderer::createFramebuffers() {
@@ -4673,11 +4810,77 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     {
       const std::span<const renderer::SceneLight> lights=editorBackground_&&!editorSceneLighting_
           ? std::span<const renderer::SceneLight>{}:std::span<const renderer::SceneLight>{sceneLights_};
+      u32 sources[renderer::MaximumPunctualLights]{};
       const u32 accepted = renderer::selectPunctualLights(
-          lights, camera.position, frame->punctualLights, lightBudget_);
+          lights, camera.position, frame->punctualLights, lightBudget_, sources);
       frame->punctualLightParameters[0] = static_cast<float>(accepted);
       for (u32 i = accepted; i < renderer::MaximumPunctualLights; ++i)
         frame->punctualLights[i] = {};
+      // Sombra local (G6-B): o atlas é montado só com as luzes ACEITAS neste
+      // quadro. Luz fora do orçamento não ilumina, e sombra de luz que não
+      // ilumina seria trabalho jogado fora.
+      localShadowTileCount_ = 0;
+      localShadowReport_ = {};
+      frame->localShadowParameters[0] = 0.0f;
+      frame->localShadowParameters[1] = localShadowAtlas_.width() > 0
+          ? 1.0f / static_cast<float>(localShadowAtlas_.width()) : 1.0f;
+      if (renderingPolicy_.shadows.enabled && localShadowRenderPass_ != VK_NULL_HANDLE &&
+          localShadowAtlas_.width() > 1) {
+        renderer::ShadowCaster casters[renderer::MaximumPunctualLights]{};
+        u32 casterCount = 0;
+        for (u32 slot = 0; slot < accepted; ++slot) {
+          const auto &light = lights[sources[slot]];
+          if (!light.shadow.casts()) continue;
+          auto &caster = casters[casterCount++];
+          caster.lightIndex = slot;
+          caster.modality = light.modality;
+          std::copy(light.position, light.position + 3, caster.position);
+          renderer::detail::normalized(light.direction, caster.direction);
+          caster.range = light.range;
+          caster.outerAngleDegrees = light.outerAngle;
+          caster.resolution = static_cast<renderer::ShadowResolution>(light.shadow.resolution);
+          caster.nearPlane = light.shadow.nearPlane;
+        }
+        if (casterCount > 0) {
+          renderer::ShadowAtlasInput atlas{};
+          atlas.atlasResolution = localShadowAtlas_.width();
+          atlas.maximumTiles = renderer::MaximumLocalShadowTiles;
+          atlas.minimumTileSize = 128;
+          atlas.maximumTileSize = localShadowAtlas_.width() / 2u;
+          std::memcpy(atlas.cameraPosition, camera.position, sizeof(atlas.cameraPosition));
+          atlas.verticalFovRadians = sceneFieldOfView();
+          atlas.shadowDistance = renderingPolicy_.shadows.maximumDistance;
+          localShadowTileCount_ = renderer::buildShadowAtlas(
+              atlas, {casters, casterCount},
+              {localShadowTiles_, renderer::MaximumLocalShadowTiles}, localShadowReport_);
+          const float inverse = 1.0f / static_cast<float>(localShadowAtlas_.width());
+          for (u32 index = 0; index < localShadowTileCount_; ++index) {
+            const auto &tile = localShadowTiles_[index];
+            const auto &caster = casters[tile.caster];
+            const auto &light = lights[sources[caster.lightIndex]];
+            std::memcpy(frame->localShadowViewProjection[index], tile.viewProjection,
+                        sizeof(tile.viewProjection));
+            frame->localShadowRect[index][0] = static_cast<float>(tile.x) * inverse;
+            frame->localShadowRect[index][1] = static_cast<float>(tile.y) * inverse;
+            frame->localShadowRect[index][2] = static_cast<float>(tile.size) * inverse;
+            frame->localShadowRect[index][3] = tile.worldUnitsPerTexelAtRange;
+            std::copy(caster.position, caster.position + 3, localShadowSpheres_[index]);
+            localShadowSpheres_[index][3] = caster.range;
+            localShadowBias_[index] = light.shadow.bias;
+            // A primeira face aponta o slot da luz para o bloco dela. `y` leva
+            // quantos tiles e, somado 16, o pedido de sombra suave.
+            if (tile.face == 0) {
+              auto &shadow = frame->punctualLights[caster.lightIndex].shadow;
+              const u32 faces = caster.modality == renderer::LightModality::Point ? 6u : 1u;
+              shadow[0] = static_cast<float>(index);
+              shadow[1] = static_cast<float>(faces + (light.shadow.mode == 2 ? 16u : 0u));
+              shadow[2] = light.shadow.strength;
+              shadow[3] = light.shadow.normalBias;
+            }
+          }
+          frame->localShadowParameters[0] = static_cast<float>(localShadowTileCount_);
+        }
+      }
       // Uma direcional autorada na cena passa a ser o sol: ela é a modalidade
       // que já tem consumidor com cascatas de sombra. Sem nenhuma, o sol do
       // recurso de ambiente continua valendo, como antes deste caminho existir.
@@ -4802,6 +5005,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   endGpuRegion(GpuPassClass::WaterSimulation);
   beginGpuRegion(GpuPassClass::Shadow);
   recordShadowPass(camera);
+  recordLocalShadowPass();
   endGpuRegion(GpuPassClass::Shadow);
 
   // Oclusao GPU-driven: tem de ficar fora de qualquer render pass e antes do
