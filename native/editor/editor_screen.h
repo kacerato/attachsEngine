@@ -205,6 +205,7 @@ enum class EditorWidget : u32 {
   TransformMenu, TransformCopy, TransformPaste, TransformReset,
   TransformResetPosition, TransformResetRotation, TransformResetScale,
   // R3: importação no painel de Propriedades (abas, perfil e ações do perfil).
+  CreateSceneTemplate, SceneTemplateClose,
   ImportTabSummary, ImportTabStructure, ImportTabMeshes, ImportTabTextures, ImportTabProfile,
   ImportMeshClose,
   ImportScaleDown, ImportScaleUp,
@@ -259,6 +260,8 @@ enum class EditorWidget : u32 {
   SceneViewRowBase=0x93000000u,
   // + índice da malha na aba Malhas: abre o cartão de detalhe daquela malha.
   ImportMeshRowBase=0x94000000u,
+  // + índice do modelo de cena: monta aquele cenário.
+  SceneTemplateRowBase=0x95000000u,
   ImpactOpenBase=0x90000000u, ImpactRowBase=0x91000000u, ImpactClose=0x92000000u, ImpactPrevious, ImpactNext, ImpactRepair, ImpactRepairApply, ImpactRepairShared, ImpactRepairScope,
   ComponentColorBase=0x7e000000u,
   ColorHueBase=0x5f000000u, ColorSvBase=0x5f000100u, ColorApply=0x5f000200u, ColorCancel,
@@ -325,7 +328,8 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ComponentTripleBase,kRange},{EditorWidget::ComponentColorBase,kRange},{EditorWidget::ComponentResourceBase,kRange},
   {EditorWidget::HierarchyCollapseBase,kWideRange},
   {EditorWidget::ImpactOpenBase,kRange},{EditorWidget::ImpactRowBase,kRange},{EditorWidget::ImpactClose,kRange},
-  {EditorWidget::SceneViewRowBase,kRange},{EditorWidget::ImportMeshRowBase,kRange}};
+  {EditorWidget::SceneViewRowBase,kRange},{EditorWidget::ImportMeshRowBase,kRange},
+  {EditorWidget::SceneTemplateRowBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -444,6 +448,8 @@ struct EditorScreenState final {
   // Vistas salvas da cena: painel aberto, linha escolhida e o fluxo de nome
   // (salvar uma nova ou renomear a escolhida).
   bool viewsPanel=false,viewNaming=false,viewRenaming=false;
+  // Escolha do modelo de cena a montar.
+  bool templatePanel=false;
   u32 viewSelected=0;
   std::string viewName;
   // Salvar o OBJETO como receita é um terceiro destino do mesmo campo de nome;

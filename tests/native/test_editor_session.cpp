@@ -5,6 +5,7 @@
 #include "editor/editor_creation_catalog.h"
 #include "editor/editor_scene_camera.h"
 #include "editor/editor_session.h"
+#include "editor/editor_scene_template.h"
 #include "harness.h"
 #include "renderer/water_authoring_geometry.h"
 #include "editor/editor_water_play.h"
@@ -2230,4 +2231,65 @@ AE_TEST(the_import_panel_measures_each_mesh_of_the_source_and_opens_its_card) {
                  "tocar a linha abre o cartão daquela malha");
   tapWidget(fixture, widgetId(EditorWidget::ImportMeshClose));
   AE_EXPECT_TRUE(!fixture.session.screen().importMeshDetail, "voltar fecha o cartão e devolve a lista");
+}
+
+AE_TEST(the_reference_scene_template_builds_interior_and_exterior_in_one_undo_step) {
+  EditorSession session;
+  std::vector<u8> vertices;
+  std::vector<u32> indices;
+  std::vector<renderer::MapDrawRecord> draws;
+  std::vector<renderer::MapMaterialRecord> materials;
+  AE_EXPECT_TRUE(renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride, vertices, indices, draws, materials),
+                 "biblioteca com o cubo autoral");
+  AE_EXPECT_TRUE(session.importMap(draws, materials, false, vertices, indices, 0), "biblioteca carregada");
+  const auto before = session.document().entityCount();
+  AE_EXPECT_TRUE(session.createSceneTemplate(0), "o modelo de referência monta");
+  const auto &model = sceneTemplates()[0];
+  AE_EXPECT_EQ(session.document().entityCount(), before + model.nodes.size() + 1,
+               "um objeto por nó do modelo, mais o grupo que os segura");
+
+  // Escala humana: é ela que faz um modelo importado parecer grande ou pequeno
+  // demais no ato, então precisa chegar com 1,80 m mesmo.
+  bool humanFound = false, sunFound = false, ceilingLight = false, spotFound = false;
+  for (EditorEntityId id = 1; id <= session.document().entityCount() + 8; ++id) {
+    const auto *entity = session.document().find(id);
+    if (!entity) continue;
+    if (entity->name == std::string("Pessoa 1,80 m")) {
+      humanFound = std::fabs(entity->transform.scale[1] - 1.8f) < 1e-4f;
+      AE_EXPECT_TRUE(meshRenderer(*entity) != nullptr, "a referência humana é malha de verdade");
+    }
+    const auto *light = static_cast<const scene::Light *>(entity->components.find(scene::Light::descriptor));
+    if (!light) continue;
+    if (light->kind == scene::LightKind::Directional)
+      sunFound = light->unit == scene::LightUnit::LuxCandela && light->intensity >= 50000;
+    if (light->kind == scene::LightKind::Point)
+      ceilingLight = light->unit == scene::LightUnit::LuxLumen && light->range > 1;
+    if (light->kind == scene::LightKind::Spot) spotFound = true;
+  }
+  AE_EXPECT_TRUE(humanFound, "a referência de 1,80 m está na cena");
+  AE_EXPECT_TRUE(sunFound, "o sol chega em lux, como luz direcional");
+  AE_EXPECT_TRUE(ceilingLight && spotFound, "o interior tem luz de teto e foco de parede");
+
+  // As vistas vêm com o modelo: é o enquadramento repetido que torna duas
+  // medições comparáveis.
+  AE_EXPECT_EQ(session.document().views().count(), static_cast<u32>(model.views.size()), "as vistas do modelo entraram");
+  AE_EXPECT_TRUE(session.document().views().find("Interior") && session.document().views().find("Exterior"),
+                 "interior e exterior têm enquadramento salvo");
+  AE_EXPECT_TRUE(session.screen().status.find("vistas salvas") != std::string::npos, "o status diz o que foi montado");
+
+  // Um passo de Desfazer devolve a cena inteira, vistas inclusive: montar um
+  // cenário por engano não pode custar trinta toques para desfazer.
+  AE_EXPECT_TRUE(session.history().undo(session.document()), "desfazer o modelo");
+  AE_EXPECT_EQ(session.document().entityCount(), before, "a cena volta ao que era");
+  AE_EXPECT_TRUE(session.document().views().empty(), "as vistas do modelo saem junto");
+  AE_EXPECT_TRUE(session.history().redo(session.document()), "refazer devolve o modelo");
+  AE_EXPECT_EQ(session.document().views().count(), static_cast<u32>(model.views.size()), "e as vistas voltam");
+
+  // Sem o cubo autoral na biblioteca não há como montar: melhor dizer isso do
+  // que montar um cenário invisível.
+  EditorSession bare;
+  AE_EXPECT_TRUE(bare.importMap({}, {}, false), "biblioteca vazia");
+  AE_EXPECT_TRUE(!bare.createSceneTemplate(0), "modelo recusado sem geometria");
+  AE_EXPECT_TRUE(bare.document().entityCount() == 1, "nada entrou na cena");
+  AE_EXPECT_TRUE(!bare.createSceneTemplate(99), "índice fora do catálogo é recusado");
 }

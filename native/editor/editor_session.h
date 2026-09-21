@@ -846,6 +846,16 @@ public:
     return true;
   }
   EditorEntityId instantiateAsset(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options=nullptr);
+  // Instancia DENTRO de uma transação já aberta. É o que permite um modelo de
+  // cena inteiro caber num passo de Desfazer; `instantiateAsset` é esta mesma
+  // operação com a transação própria do gesto avulso.
+  EditorEntityId instantiateAssetInTransaction(u32 index, EditorEntityId parent, const float worldPosition[3],
+                                               const EditorAssetInstantiation *options=nullptr);
+  // Modelos de cena (editor/editor_scene_template.h): monta o cenário do modelo
+  // `index` na cena aberta, com as vistas salvas que vêm com ele, num passo só.
+  bool createSceneTemplate(u32 index);
+  // Slot do cubo autoral na biblioteca, ou zero quando a biblioteca não o traz.
+  u32 boxAssetSlot() const;
   EditorEntityId createWaterSurface(bool cameraRelative);
   void reportWaterConfiguration(bool accepted) {
     state_.status=accepted?"Agua atualizada":"Configuracao de agua recusada; estado anterior mantido";

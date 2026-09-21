@@ -10,6 +10,7 @@
 #include "editor/editor_screen.h"
 #include "editor/editor_number_text.h"
 #include "editor/editor_script_templates.h"
+#include "editor/editor_scene_template.h"
 #include "editor/editor_reference_picker.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_properties.h"
@@ -3087,6 +3088,39 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
   overlays();
 }
 
+// Escolha do modelo de cena (G6-A). Cada linha traz o nome e o que o cenário
+// entrega, porque montar um modelo mexe na cena aberta e o autor precisa saber
+// o que vai aparecer antes de tocar.
+void buildSceneTemplatePanel(ScreenBuilder &builder, const UiRect &viewport) {
+  const auto &theme = builder.theme;
+  auto &list = builder.list;
+  auto &router = builder.router;
+  const auto models = sceneTemplates();
+  const float width = std::min(360.0f, std::max(220.0f, viewport.width - 32.0f));
+  const UiRect panel{viewport.x + (viewport.width - width) * .5f, viewport.y + 48.0f, width,
+                     56.0f + static_cast<float>(models.size()) * 62.0f};
+  list.addRect(panel, theme.color.surface, 6);
+  router.addBlocker(panel);
+  auto content = deflate(panel, UiInsets::all(12));
+  auto header = takeTop(content, 26);
+  const auto close = takeRight(header, 28);
+  builder.label(close, "X", theme.color.textDim, theme.type.caption, UiAlign::Center);
+  router.addRegion(close, widgetId(EditorWidget::SceneTemplateClose));
+  builder.label(header, "Modelo de cena", theme.color.text, theme.type.cardName);
+  for (u32 index = 0; index < models.size(); ++index) {
+    auto row = takeTop(content, 62);
+    const auto card = deflate(row, UiInsets::symmetric(0, 3));
+    list.addRect(card, theme.color.raised, theme.radius.control);
+    auto inner = deflate(card, UiInsets::all(8));
+    builder.label(takeTop(inner, 20), models[index].name, theme.color.text, theme.type.caption);
+    for (const auto &line : wrapText(list, models[index].summary, inner.width, theme.type.caption)) {
+      builder.label(takeTop(inner, 16), line, theme.color.textMuted, theme.type.caption);
+      if (inner.height <= 0) break;
+    }
+    router.addRegion(card, widgetId(EditorWidget::SceneTemplateRowBase) + index);
+  }
+}
+
 // Painel das vistas salvas da cena (G6-A). Uma linha por enquadramento, com a
 // escolhida em destaque; tocar a linha LEVA a câmera até ela. O rodapé age
 // sobre a escolhida — atualizar com a vista atual, renomear, excluir — e
@@ -3310,6 +3344,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   builder.iconButton({layout.viewport.x + 104.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
                      UiIcon::SceneLayers, widgetId(EditorWidget::ViewsOpen), state.viewsPanel);
   if(state.viewsPanel && state.document) buildSceneViewsPanel(builder, layout.viewport);
+  if(state.templatePanel) buildSceneTemplatePanel(builder, layout.viewport);
   if(compact) {
     const UiRect button{layout.viewport.x+104,layout.viewport.y+56,100,40};
     list.addRect(button,theme.color.raised,theme.radius.control);

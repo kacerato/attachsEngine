@@ -9,6 +9,7 @@
 #include "editor/editor_creation_catalog.h"
 #include "editor/editor_session.h"
 #include "editor/editor_number_text.h"
+#include "editor/editor_scene_template.h"
 #include "resources/import_report.h"
 #include "editor/editor_import_transaction.h"
 #include "scene/import_link.h"
@@ -2189,6 +2190,17 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     }
     return true;
   }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CreateSceneTemplate)) {
+    state_.templatePanel=true;state_.creationMenu=false;return true;
+  }
+  if(state_.templatePanel && routing.tapped) {
+    if(routing.widgetId==widgetId(EditorWidget::SceneTemplateClose)) {state_.templatePanel=false;return true;}
+    if(routing.widgetId>=widgetId(EditorWidget::SceneTemplateRowBase) &&
+       routing.widgetId<widgetId(EditorWidget::SceneTemplateRowBase)+sceneTemplates().size()) {
+      createSceneTemplate(routing.widgetId-widgetId(EditorWidget::SceneTemplateRowBase));
+      state_.templatePanel=false;return true;
+    }
+  }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportModel)) {
     // O editor não conhece Android nem o seletor de arquivos: levanta o pedido
     // e quem tem o sistema na mão abre o diálogo e devolve os bytes.
@@ -3805,7 +3817,7 @@ bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, st
   for(u32 i=0;i<mapScene_.assetCount();++i) {
     const auto flags=mapScene_.materialFlagsForAsset(i);
     if(flags & renderer::BoxAuthoringResource) {
-      state_.creationAvailable|=(1u<<2)|(1u<<3);
+      state_.creationAvailable|=(1u<<2)|(1u<<3)|(1u<<9);
       if(flags & renderer::WaterAuthoringResource) state_.creationAvailable|=1u<<7;
     }
     if(flags & renderer::WaterRouteResource) state_.creationAvailable|=1u<<6;
@@ -3827,7 +3839,15 @@ bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, st
 }
 
 EditorEntityId EditorSession::instantiateAsset(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options) {
-  if(!worldPosition || !mapScene_.asset(index) || !document_.exists(parent) || history_.isOpen()) return kInvalidEntity;
+  if(history_.isOpen()) return kInvalidEntity;
+  if(!history_.begin("Instanciar malha")) return kInvalidEntity;
+  const auto id=instantiateAssetInTransaction(index,parent,worldPosition,options);
+  history_.end();
+  return id;
+}
+
+EditorEntityId EditorSession::instantiateAssetInTransaction(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options) {
+  if(!worldPosition || !mapScene_.asset(index) || !document_.exists(parent)) return kInvalidEntity;
   EditorEntity values;auto *render=editMeshRenderer(values);if(!render) return kInvalidEntity;render->mesh=index+1;render->material=mapScene_.materialForAsset(index);
   float parentWorld[16],world[16];EditorTransform pose;
   std::copy(worldPosition,worldPosition+3,pose.position);editorTransformMatrix(pose,world);
@@ -3850,10 +3870,102 @@ EditorEntityId EditorSession::instantiateAsset(u32 index, EditorEntityId parent,
     std::copy(options->scale,options->scale+3,values.transform.scale);values.rigidBodyEnabled=options->rigidBody;
     if(!isTransformValid(values.transform)) return kInvalidEntity;
   }
-  if(!history_.begin("Instanciar malha")) return kInvalidEntity;
   const auto id=history_.createEntity(document_,parent,water?EditorEntityKind::Water:EditorEntityKind::Mesh,values.name);
   if(id) {history_.applyValues(document_,id,values);setSelection(id);state_.status="Malha adicionada";}
-  history_.end();return id;
+  return id;
+}
+
+u32 EditorSession::boxAssetSlot() const {
+  for(u32 i=0;i<mapScene_.assetCount();++i)
+    if(mapScene_.materialFlagsForAsset(i)&renderer::BoxAuthoringResource) return i+1;
+  return 0;
+}
+
+bool EditorSession::createSceneTemplate(u32 index) {
+  const auto templates=sceneTemplates();
+  if(index>=templates.size() || isPlaying() || history_.isOpen()) return false;
+  const auto slot=boxAssetSlot();
+  if(!slot) {state_.status="O cubo autoral não está nesta biblioteca";return false;}
+  const auto &model=templates[index];
+  if(!history_.begin(model.name)) return false;
+  const auto group=history_.createEntity(document_,document_.root(),EditorEntityKind::Folder,model.name);
+  if(!group) {history_.end();return false;}
+  std::vector<EditorEntityId> created(model.nodes.size(),kInvalidEntity);
+  bool complete=true;
+  for(usize n=0;n<model.nodes.size();++n) {
+    const auto &node=model.nodes[n];
+    const auto parent=node.parent<0?group:
+        (static_cast<usize>(node.parent)<n?created[static_cast<usize>(node.parent)]:kInvalidEntity);
+    if(parent==kInvalidEntity) {complete=false;break;}
+    EditorEntityId id=kInvalidEntity;
+    if(node.mesh) {
+      // A pose do modelo é LOCAL ao pai; a instanciação recebe mundo, então o
+      // caminho comum é montar a pose depois, com o valor do nó.
+      const float origin[3]{0,0,0};
+      EditorAssetInstantiation options;options.name=node.name;
+      std::copy(node.scale,node.scale+3,options.scale);
+      id=instantiateAssetInTransaction(slot-1,parent,origin,&options);
+    } else {
+      id=history_.createEntity(document_,parent,EditorEntityKind::Folder,node.name);
+    }
+    if(!id) {complete=false;break;}
+    auto values=*document_.find(id);
+    std::copy(node.position,node.position+3,values.transform.position);
+    std::copy(node.rotationDegrees,node.rotationDegrees+3,values.transform.rotationDegrees);
+    std::copy(node.scale,node.scale+3,values.transform.scale);
+    if(node.mesh) {
+      auto *render=editMeshRenderer(values);
+      if(!render) {complete=false;break;}
+      // Cor autoral por objeto: é o que separa piso, parede e referência humana
+      // sem depender de nenhuma textura importada.
+      render->material.enabled=true;
+      std::copy(node.color,node.color+3,render->material.baseColor);
+      render->material.roughness=.85f;
+      render->material.metallic=0;
+    }
+    if(node.light!=SceneTemplateLight::None) {
+      auto *light=static_cast<scene::Light*>(values.components.add(scene::Light::descriptor));
+      if(!light) {complete=false;break;}
+      light->kind=node.light==SceneTemplateLight::Directional?scene::LightKind::Directional:
+                  node.light==SceneTemplateLight::Point?scene::LightKind::Point:scene::LightKind::Spot;
+      // Lux para a direcional, lúmen para as locais: as unidades fotométricas
+      // que o componente já consome.
+      light->unit=node.light==SceneTemplateLight::Directional?scene::LightUnit::LuxCandela:scene::LightUnit::LuxLumen;
+      light->intensity=node.lightIntensity;
+      if(node.lightRange>0) light->range=node.lightRange;
+      std::copy(node.color,node.color+3,light->color);
+    }
+    if(!history_.applyValues(document_,id,values)) {complete=false;break;}
+    created[n]=id;
+  }
+  if(!complete) {
+    // Modelo pela metade é pior do que modelo nenhum: o autor não sabe o que
+    // faltou e a comparação nasce torta.
+    history_.cancel(document_);
+    state_.status="Não foi possível montar o modelo de cena";
+    return false;
+  }
+  // As vistas do modelo entram como vistas salvas da cena, no MESMO passo.
+  auto views=document_.views();
+  for(const auto &view:model.views) {
+    runtime::SceneView saved;
+    saved.name=view.name;
+    std::copy(view.target,view.target+3,saved.target);
+    saved.distance=view.distance;saved.yaw=view.yaw;saved.pitch=view.pitch;
+    saved.verticalFov=projection_.verticalFieldOfViewRadians;
+    views.replace(saved);
+  }
+  history_.setViews(document_,views);
+  history_.end();
+  setSelection(group);
+  state_.creationMenu=false;
+  // Abre na primeira vista DO MODELO, que pode não ser a primeira da cena
+  // quando o autor já tinha vistas salvas.
+  if(!model.views.empty())
+    for(u32 v=0;v<document_.views().count();++v)
+      if(document_.views().at(v)->name==model.views.front().name) {applySceneView(v);break;}
+  state_.status=std::string(model.name)+" montado com "+std::to_string(model.views.size())+" vistas salvas";
+  return true;
 }
 
 EditorEntityId EditorSession::createWaterSurface(bool cameraRelative) {
