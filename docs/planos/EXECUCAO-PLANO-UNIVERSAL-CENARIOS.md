@@ -241,7 +241,7 @@ ganha um na reimportação — a ausência ali pode ser escolha do autor; grupo
 gerado por nome termina em 1% em vez de cortar no último degrau da escada;
 Animate Cross-fading tem teste de host, sem captura no aparelho.
 
-## Suíte do host — 1052 de 1052 verdes
+## Suíte do host — 1060 de 1060 verdes
 
 Havia cinco falhas **anteriores ao plano** (conferidas numa build de
 `a80fcb28`). Foram fechadas assim:
@@ -377,3 +377,49 @@ da cena**: viaja no arquivo, vale para qualquer projeto e tem Desfazer.
 | Salvar, atualizar, renomear e excluir passam pelo histórico com rótulo próprio **Vistas**, e voltam em Desfazer/Refazer como qualquer edição autoral | `EditorCommandKind::Views`, `EditorHistory::setViews` | validado no host |
 | Painel **Vistas** no viewport, ao lado de Enquadrar: lista com a escolhida em destaque, toque na linha leva a câmera até ela, rodapé com Atualizar / Renomear / Excluir e "Salvar vista atual". Nome entra pelo teclado da tela (`EditorTextPurpose::SceneViewName`) | `editor_screen.cpp` (`buildSceneViewsPanel`), `editor_session.cpp` | compilado e coberto no host; falta evidência no aparelho (adb desligado a pedido) |
 | Aplicar uma vista antiga sem lente guardada mantém a lente atual do editor, em vez de impor um campo de visão que ela nunca teve | `EditorSession::applySceneView` | validado no host |
+
+### G6-A · medição da fonte (aba Malhas)
+
+Uma cena de referência só serve para comparar mudanças visuais se a FONTE for
+conhecida. "A parede ficou borrada" pode ser a iluminação, a textura, o filtro —
+ou UV com metade da densidade do resto do prédio, que nenhuma configuração de
+engine conserta. A medição separa os dois casos antes da discussão.
+
+O vocabulário é o do [Mesh asset Inspector da Unity 6](https://docs.unity3d.com/6000.3/Documentation/Manual/view-mesh-data-visualizations.html)
+(vértices, faces, canais de UV, **Normals**, **Tangents**, **Vertex Color**) e o
+do [Model Import Settings](https://docs.unity3d.com/6000.0/Documentation/Manual/FBXImporter-Model.html)
+(Scale Factor, Tangents: Import/Calculate). A medida que a Unity **não** traz é
+a densidade de texel em texels por metro: lá a prática é aplicar uma textura
+xadrez (UV Checker) e julgar a olho, e numa tela de seis polegadas isso não
+distingue 300 de 600 texels/m — que é justamente a diferença entre uma parede
+nítida e uma borrada lado a lado.
+
+| Entrega | Onde vive | Estado |
+|---|---|---|
+| `MeshDataReport`: contagem, canais presentes, limites em metros, área de superfície e de UV, faixa de UV, densidade de texel por pixel de textura e razão entre decis (esticamento). A densidade acompanha a escala do objeto — o mesmo cubo com o dobro do tamanho tem metade dos texels por metro | `native/renderer/mesh_report.h/.cpp` | validado no host: cubo de 1 m com 1024² dá 1024 texels/m exatos; UV repetida 4× quadruplica; malha desigual sai com razão 4× |
+| `ImportSourceReport`: hierarquia (nós, raízes, profundidade), limites do modelo inteiro com a pose de cada nó, e uma linha por malha com material, resolução da textura de cor base, mapa normal e apontamentos em português | `native/resources/import_report.h/.cpp` | validado no host |
+| Gravidade honesta: **erro** é só o que nenhuma configuração conserta (sem TEXCOORD com textura no material, UV sem área, mapa normal sem tangente — este com o conserto dito: Tangentes: Calcular). Superfície de cor lisa sem UV é **atenção**, não erro | `import_report.cpp` | corrigido depois de a conferência no corpus oficial acusar erro numa fonte sadia |
+| Aba **Malhas** no importador: uma linha por malha com contagem, canais, tamanho na cena e densidade, selo de gravidade, e cartão de detalhe com faixa colorida e o que fazer com cada apontamento. O Resumo diz quantas malhas têm apontamento | `editor_screen.cpp`, `editor_session.cpp` | coberto no host (linhas, abertura e fechamento do cartão); falta evidência no aparelho |
+| `aether_tests --source-report <arquivo.glb>`: a mesma medição no terminal, para conferir um arquivo sem abrir o editor | `tests/native/test_mesh_report.cpp` | usado para achar o exagero de gravidade acima |
+| Corpus PBR real no teste (Avocado, CC0 do corpus oficial: cor base, mapa normal e metálico/rugosidade em 2048²) | `tests/native/fixtures/gltf/Avocado.glb` | medido de ponta a ponta: 0,081 m de lado, 21.585 texels/m, esticamento 1,32×, nenhum apontamento |
+
+### G6-A · modelo de cena de referência
+
+A Unity 6 tem **Scene Templates** (File > New Scene lista os modelos; Assets >
+Create > Scene Template cria outro a partir de uma cena). A Astra usa a mesma
+ideia com uma diferença deliberada: o modelo entra na cena **aberta** em vez de
+abrir outra — no aparelho, trocar de cena no meio de uma comparação perde
+exatamente o que estava sendo comparado.
+
+| Entrega | Onde vive | Estado |
+|---|---|---|
+| Modelo de cena como DADO: nós com pose, malha, luz fotométrica e cor, mais as vistas salvas que nascem com ele. Nada conhece Vulkan, arquivo ou aparelho | `native/editor/editor_scene_template.h` | validado no host |
+| Cenário de referência com escala humana real: corpo de 1,80 m, porta de 2,10 m, pé-direito de 2,60 m. Exterior com sol de 100.000 lux e blocos de 1, 2 e 4 m; interior fechado com vão de porta por onde a luz de fora entra, luz de teto em lúmen e foco de parede; pedestal para o modelo em avaliação nos dois lados | `kReferenceNodes` | validado no host |
+| Quatro vistas salvas nascem com o cenário (Exterior, Interior, Interior · porta, Comparação) e o editor abre na primeira | `EditorSession::createSceneTemplate` | validado no host |
+| Monta e desfaz em UM passo, vistas inclusive: instanciar malha foi separado da transação para caber dentro de outra (`instantiateAssetInTransaction`) | `editor_session.cpp` | validado no host, com Refazer devolvendo objetos e vistas |
+| Sem o cubo autoral na biblioteca o modelo é recusado com motivo, em vez de montar um cenário invisível | `boxAssetSlot`, `createSceneTemplate` | validado no host |
+| Entrada "Modelo de cena" no catálogo de criação, com painel de escolha que diz o que cada cenário entrega antes do toque | `editor_creation_catalog.h`, `buildSceneTemplatePanel` | compilado no host e no Android (`assembleDebug` arm64); falta evidência no aparelho |
+
+**Pendente do G6-A com o aparelho desligado:** o passeio no aparelho (aba
+Malhas num GLB real escolhido pelo seletor, montagem do cenário de referência e
+troca entre as vistas salvas) e a captura das evidências.
