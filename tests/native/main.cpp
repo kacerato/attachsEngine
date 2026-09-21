@@ -7,6 +7,7 @@ int probeReimportGlb(const char *path);
 int writeM082Fixtures(const char *directory);
 int probePackGltf(int count, char **paths);
 int writePropertyMatrix(const char *path);
+int printSourceReport(const char *path);
 
 int main(int argc,char **argv) {
   if(argc==3 && std::strcmp(argv[1],"--import-glb")==0) return inspectGlbFile(argv[2]);
@@ -16,6 +17,9 @@ int main(int argc,char **argv) {
   if(argc>=3 && std::strcmp(argv[1],"--pack-gltf")==0) return probePackGltf(argc-2,argv+2);
   // Regenera a matriz de propriedades a partir dos descritores de componente.
   if(argc==3 && std::strcmp(argv[1],"--write-property-matrix")==0) return writePropertyMatrix(argv[2]);
+  // Relatorio da fonte (G6-A) no terminal: os mesmos numeros que a aba Malhas
+  // mostra no aparelho, para conferir um arquivo sem abrir o editor.
+  if(argc==3 && std::strcmp(argv[1],"--source-report")==0) return printSourceReport(argv[2]);
   int failCount = 0;
   int total = 0;
   for (const auto &tc : ae::test::registry()) {

@@ -1,0 +1,10 @@
+Avocado
+Source: https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Avocado
+Downloaded GLB: https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Avocado/glTF-Binary/Avocado.glb
+SHA-256: ccc9c3ce56423720b09399c2351537207cd5a65f859f9e6e2f30922762f3abd4
+License: Creative Commons Zero v1.0 Universal (CC0-1.0), (c) 2017 Microsoft
+Por que este: e o modelo CC0 mais leve do corpus oficial com PBR real completo
+- cor base, mapa normal e metalico/rugosidade em 2048 -, que e o que o
+relatorio da fonte precisa medir (UV, tangentes, mapa normal e densidade de
+texel). Modelos de cena inteira (Sponza) passam de 90 MB e nao cabem como
+fixture de teste.

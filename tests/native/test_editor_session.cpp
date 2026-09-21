@@ -2189,6 +2189,15 @@ AE_TEST(the_import_panel_measures_each_mesh_of_the_source_and_opens_its_card) {
   }
   model.materials = materials;
   model.materialNames.push_back("Concreto");
+  // Material texturizado: é o que torna "sem UV" um erro, e não a observação
+  // legítima de uma superfície de cor lisa.
+  {
+    auto texture = std::make_shared<renderer::AuthoringTexture>();
+    const_cast<renderer::AuthoringTexture *>(texture.get())->width = 1024;
+    const_cast<renderer::AuthoringTexture *>(texture.get())->height = 1024;
+    model.textures.push_back(texture);
+    model.materials[0].textureIndices[0] = 0;
+  }
   model.draws.push_back(draws[0]);
   model.draws.push_back(draws[0]);
   model.draws[1].vertexOffset = flat;

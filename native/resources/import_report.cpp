@@ -163,8 +163,13 @@ bool buildImportSourceReport(const GltfImport &model, float uniformScale, Import
         note(ImportIssueLevel::Error, "Mapa normal sem tangente: o relevo não aparece — use Tangentes: Calcular no perfil");
       }
     }
-    if (mesh.data.zeroAreaUvTriangles)
-      note(ImportIssueLevel::Error, std::to_string(mesh.data.zeroAreaUvTriangles) +
+    // Malha SEM UV nenhuma já foi dita acima; repetir aqui contaria o mesmo
+    // fato duas vezes e, pior, transformaria uma superfície de cor lisa
+    // (material sem textura, escolha legítima) em erro vermelho. Só a malha que
+    // TEM UV e mesmo assim colapsou triângulos entra nesta linha.
+    if (mesh.data.zeroAreaUvTriangles && mesh.data.hasUv0)
+      note(textured ? ImportIssueLevel::Error : ImportIssueLevel::Warning,
+           std::to_string(mesh.data.zeroAreaUvTriangles) +
            " triângulo(s) com UV sem área: a textura não mapeia ali, em nenhuma resolução");
     if (mesh.data.stretchRatio >= 4) {
       ++report.stretchedMeshes;

@@ -12,6 +12,8 @@
 
 #include <cmath>
 #include <cstring>
+#include <cstdio>
+#include <fstream>
 #include <vector>
 
 using namespace ae;
@@ -183,4 +185,102 @@ AE_TEST(import_source_report_points_at_what_the_profile_cannot_fix) {
   AE_EXPECT_EQ(bareReport.normalMapsWithoutTangents, 1u, "mapa normal sem tangente é apontado");
   AE_EXPECT_TRUE(bareReport.level == resources::ImportIssueLevel::Error, "é erro, não observação");
   AE_EXPECT_TRUE(!bareReport.meshes[0].issues.empty(), "a linha explica o conserto no perfil");
+}
+
+AE_TEST(the_official_pbr_corpus_is_measured_end_to_end) {
+  // Fonte PBR real do corpus oficial (CC0): cor base, mapa normal e
+  // metálico/rugosidade em 2048², com UV desenrolada à mão. É o caso que o
+  // relatório existe para julgar — e ele não pode acusar problema numa fonte
+  // sadia, senão o autor aprende a ignorar o painel.
+  std::ifstream input("tests/native/fixtures/gltf/Avocado.glb", std::ios::binary);
+  AE_EXPECT_TRUE(static_cast<bool>(input), "o corpus oficial está disponível");
+  const std::vector<u8> bytes{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+  resources::GltfImportLimits limits;
+  resources::GltfImport model;
+  AE_EXPECT_TRUE(resources::importGlb(bytes, limits, {}, model), model.diagnostic.c_str());
+  resources::ImportSourceReport report;
+  AE_EXPECT_TRUE(resources::buildImportSourceReport(model, 1.0f, report), "o arquivo é medido");
+  AE_EXPECT_TRUE(!report.meshes.empty(), "a fonte traz malha");
+  const auto &mesh = report.meshes[0];
+  AE_EXPECT_TRUE(mesh.data.hasUv0 && mesh.data.hasNormals && mesh.data.hasTangents,
+                 "UV, normais e tangentes chegam do arquivo");
+  AE_EXPECT_TRUE(mesh.normalMap, "o material traz mapa normal");
+  AE_EXPECT_EQ(report.normalMapsWithoutTangents, 0u, "mapa normal com tangente é o caso sadio");
+  AE_EXPECT_EQ(report.unmappedMeshes, 0u, "nada sem mapeamento");
+  AE_EXPECT_EQ(mesh.data.zeroAreaUvTriangles, 0u, "nenhum triângulo com UV sem área");
+  AE_EXPECT_TRUE(mesh.textureWidth >= 1024, "a textura de cor base chega em resolução real");
+  // O abacate tem cerca de 8 cm: a mesma textura de 2048 sobre pouca superfície
+  // dá uma densidade altíssima, e é isso que o número precisa dizer.
+  AE_EXPECT_TRUE(mesh.data.largestDimension() < .2f, "modelo pequeno, em metros");
+  AE_EXPECT_TRUE(mesh.texelDensity() > 5000, "textura grande sobre poucos centímetros concentra texels");
+  AE_EXPECT_TRUE(mesh.data.stretchRatio > 0 && mesh.data.stretchRatio < 4,
+                 "UV desenrolada à mão não aparece como esticada");
+  AE_EXPECT_TRUE(report.level != resources::ImportIssueLevel::Error, "fonte sadia não vira erro");
+}
+
+// --source-report <arquivo.glb>: a medição da fonte impressa, para conferir um
+// arquivo sem abrir o editor. Os números são os mesmos da aba Malhas.
+int printSourceReport(const char *path) {
+  std::ifstream input(path, std::ios::binary);
+  if (!input) {std::fprintf(stderr, "não abriu %s\n", path);return 2;}
+  const std::vector<u8> bytes{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+  resources::GltfImportLimits limits;
+  resources::GltfImport model;
+  if (!resources::importGlb(bytes, limits, {}, model)) {std::fprintf(stderr, "importação: %s\n", model.diagnostic.c_str());return 1;}
+  resources::ImportSourceReport report;
+  if (!resources::buildImportSourceReport(model, 1.0f, report)) {std::fprintf(stderr, "medição recusada\n");return 1;}
+  std::printf("%s\n%u nós · %u malhas · %u materiais · %u texturas · profundidade %u\n", path,
+              report.nodeCount, report.meshCount, report.materialCount, report.textureCount, report.depth);
+  std::printf("tamanho %.3f × %.3f × %.3f m · densidade mediana %.0f texels/m\n",
+              static_cast<double>(report.boundsMaximum[0] - report.boundsMinimum[0]),
+              static_cast<double>(report.boundsMaximum[1] - report.boundsMinimum[1]),
+              static_cast<double>(report.boundsMaximum[2] - report.boundsMinimum[2]),
+              static_cast<double>(report.densityMedian));
+  for (const auto &mesh : report.meshes) {
+    std::printf("  [%s] %s · %s · %u v · %u tri · UV0 %s · tangentes %s · %ux%u · %.0f texels/m · esticamento %.2f×\n",
+                mesh.level == resources::ImportIssueLevel::Error ? "erro" :
+                mesh.level == resources::ImportIssueLevel::Warning ? "atenção" : "ok",
+                mesh.name.c_str(), mesh.material.c_str(), mesh.data.vertexCount, mesh.data.triangleCount,
+                mesh.data.hasUv0 ? "sim" : "não", mesh.data.hasTangents ? "sim" : "não",
+                mesh.textureWidth, mesh.textureHeight, static_cast<double>(mesh.texelDensity()),
+                static_cast<double>(mesh.data.stretchRatio));
+    for (const auto &issue : mesh.issues) std::printf("      • %s\n", issue.c_str());
+  }
+  return 0;
+}
+
+AE_TEST(a_plain_untextured_surface_is_not_reported_as_an_error) {
+  // Superfície de cor lisa é escolha legítima: sem textura no material, não ter
+  // UV não impede nada. Chamar isso de erro ensinaria o autor a ignorar o
+  // painel — e aí o erro de verdade passa junto.
+  resources::GltfImport model;
+  Quad quad;
+  addQuad(quad, 1.0f, 0.0f);
+  model.vertices = quad.vertices;
+  model.indices = quad.indices;
+  model.draws.push_back(quad.draw);
+  MapMaterialRecord material{};
+  for (auto &index : material.textureIndices) index = InvalidMapTexture;
+  model.materials.push_back(material);
+  model.materialNames.push_back("Cor lisa");
+  model.names.push_back("Piso");
+  model.nodes.emplace_back();
+  model.drawNodes.push_back(0);
+  resources::ImportSourceReport report;
+  AE_EXPECT_TRUE(resources::buildImportSourceReport(model, 1.0f, report), "fonte medida");
+  AE_EXPECT_TRUE(report.level == resources::ImportIssueLevel::Warning, "é atenção, não erro");
+  AE_EXPECT_EQ(report.unmappedMeshes, 0u, "sem textura não há mapeamento a cobrar");
+  AE_EXPECT_EQ(report.meshes[0].issues.size(), usize{1}, "o mesmo fato não é contado duas vezes");
+
+  // A MESMA malha com textura no material passa a ser erro: agora existe
+  // textura para mapear e não existe onde.
+  model.materials[0].textureIndices[0] = 0;
+  auto texture = std::make_shared<AuthoringTexture>();
+  const_cast<AuthoringTexture *>(texture.get())->width = 512;
+  const_cast<AuthoringTexture *>(texture.get())->height = 512;
+  model.textures.push_back(texture);
+  resources::ImportSourceReport textured;
+  AE_EXPECT_TRUE(resources::buildImportSourceReport(model, 1.0f, textured), "fonte texturizada medida");
+  AE_EXPECT_TRUE(textured.level == resources::ImportIssueLevel::Error, "textura sem UV é erro");
+  AE_EXPECT_EQ(textured.unmappedMeshes, 1u, "a malha sem mapeamento é contada");
 }
