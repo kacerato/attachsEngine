@@ -241,7 +241,7 @@ ganha um na reimportação — a ausência ali pode ser escolha do autor; grupo
 gerado por nome termina em 1% em vez de cortar no último degrau da escada;
 Animate Cross-fading tem teste de host, sem captura no aparelho.
 
-## Suíte do host — 1066 de 1066 verdes
+## Suíte do host — 1070 de 1070 verdes
 
 Havia cinco falhas **anteriores ao plano** (conferidas numa build de
 `a80fcb28`). Foram fechadas assim:
@@ -474,3 +474,28 @@ Capturas: `aba-malhas-avocado.png` e `aba-malhas-cartao-avocado.png`.
 
 Ainda não medido: custo em ms do passe de sombra local (exige bancada limpa,
 ver as regras de medição).
+
+### Qualidade gráfica do editor (pedido fora do G6, 21/09/2026)
+
+**Diagnóstico no aparelho:** a escala dinâmica derrubava o viewport do editor
+para 50% (640×1384) em um segundo e ele não voltava: o orçamento era de 7,3 ms
+(meta de 120 Hz) e a GPU levava ~14 ms mesmo a 50%. Além disso o aparelho cai
+no nível automático "Médio" (perfil B, sem ray query/mesh shader/VRS) e não
+havia onde mudar nada disso no editor.
+
+Referências: Unity 6 — Project Settings > Quality (níveis) e URP Asset (Render
+Scale, Upscaling Filter, Anti-aliasing); Godot 4 — Rendering > Scaling 3D
+(Scale/Mode), Anti Aliasing e Max FPS. As duas renderizam o viewport do EDITOR em
+resolução nativa.
+
+| Entrega | Onde vive | Estado |
+|---|---|---|
+| Arquivo de configurações do projeto (`.astra/rendering.astra`): nível, escala de renderização, escala dinâmica, anti-aliasing, nitidez e taxa alvo. Chave futura é ignorada; valor ilegível recusa o arquivo | `native/renderer/rendering_settings_file.*` | host (3 casos) e aparelho (gravar → reabrir) |
+| Padrões de editor: sem escala dinâmica e alvo de 60 Hz, salvo pedido explícito do projeto | `withEditorDefaults`, `android_main.cpp` | aparelho: `dinamica=off`, renderizando 1280×2772 nativo |
+| Painel **Qualidade** no viewport: Nível (Automático/Baixo/Médio/Alto/Ultra, mostrando o detectado), Escala de renderização (50–100% em passos de 5%), Escala dinâmica, Anti-aliasing (Desligado/FXAA/TAA), Nitidez, Taxa alvo, e rodapé ao vivo "Renderizando L×A · GPU x ms" (GPU medida só com o painel aberto). Aplicar grava o arquivo e refaz o renderer | `buildQualityPanel`, `editor_session.*` | host (sessão) e aparelho |
+| Refazer o renderer no ponto seguro do laço, antes do quadro | `qualityRebuildPending` | a primeira versão refazia no meio do quadro e derrubou o processo; corrigido e reconfirmado |
+
+Resultado no aparelho com Alto + TAA + 30% de nitidez: resolução nativa, 3
+cascatas de 1536, reflexo especular do ambiente, bloom e TAA, a 18,4 ms de GPU.
+Comparação ampliada em `docs/capturas/g6/qualidade-antes-50pct-depois-nativo.png`
+e painel em `qualidade-painel.png`.

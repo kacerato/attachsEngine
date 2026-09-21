@@ -258,6 +258,7 @@ add_library(aether_renderer STATIC
   renderer/rendering_policy.cpp
   renderer/shadow_cascades.cpp
   renderer/shadow_atlas.cpp
+  renderer/rendering_settings_file.cpp
   renderer/hzb_visibility.cpp
   renderer/lod_selection.cpp
   renderer/mesh_report.cpp
@@ -551,6 +552,7 @@ if(NOT ANDROID)
     ../tests/native/test_scene_views.cpp
     ../tests/native/test_mesh_report.cpp
     ../tests/native/test_shadow_atlas.cpp
+    ../tests/native/test_rendering_settings_file.cpp
     ../tests/native/test_runtime_input.cpp
     ../tests/native/test_runtime_lights.cpp
     ../tests/native/test_runtime_environment.cpp

@@ -856,6 +856,24 @@ public:
   bool createSceneTemplate(u32 index);
   // Slot do cubo autoral na biblioteca, ou zero quando a biblioteca não o traz.
   u32 boxAssetSlot() const;
+  // Configurações de renderização do projeto (painel Qualidade). O shell entrega
+  // o que leu do projeto; o painel edita um rascunho; "Aplicar" levanta o pedido
+  // que o shell consome para gravar o arquivo e reconstruir o renderer. O editor
+  // não conhece Vulkan nem sabe reconstruir nada.
+  const renderer::ProjectRenderingSettings &renderingSettings() const noexcept { return renderingSettings_; }
+  void setRenderingSettings(const renderer::ProjectRenderingSettings &settings) {
+    renderingSettings_ = settings;
+    state_.qualityDraft = settings;
+    state_.qualityDirty = false;
+  }
+  bool takeRenderingSettingsRequest(renderer::ProjectRenderingSettings &out) {
+    if (!renderingSettingsRequested_) return false;
+    renderingSettingsRequested_ = false;
+    out = renderingSettings_;
+    return true;
+  }
+  // O que o renderer está fazendo agora, para o rodapé do painel.
+  void setRenderStats(u32 width, u32 height, float gpuMilliseconds, std::string_view detectedLevel);
   EditorEntityId createWaterSurface(bool cameraRelative);
   void reportWaterConfiguration(bool accepted) {
     state_.status=accepted?"Agua atualizada":"Configuracao de agua recusada; estado anterior mantido";
@@ -1082,6 +1100,8 @@ private:
   double playLastSeconds_=0;
   platform::FirstPersonTouchControls playTouches_;
   EditorHistory history_;
+  renderer::ProjectRenderingSettings renderingSettings_{};
+  bool renderingSettingsRequested_ = false;
   EditorCamera camera_;
   renderer::PerspectiveVisibilitySettings projection_{};
   EditorViewport view_{};

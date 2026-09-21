@@ -2191,6 +2191,48 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     }
     return true;
   }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::QualityOpen)) {
+    state_.qualityPanel=!state_.qualityPanel;return true;
+  }
+  if(state_.qualityPanel && routing.tapped) {
+    auto &draft=state_.qualityDraft;
+    const auto key=routing.widgetId;
+    const auto is=[&](EditorWidget widget) {return key==widgetId(widget);};
+    bool changed=true;
+    if(is(EditorWidget::QualityClose)) {state_.qualityPanel=false;return true;}
+    else if(is(EditorWidget::QualityLevel)) {
+      // Automático, Baixo, Médio, Alto, Ultra: a ordem dos níveis da Unity.
+      using Preset=renderer::QualityPreset;
+      draft.preset=draft.preset==Preset::Auto?Preset::C:draft.preset==Preset::C?Preset::B:
+                   draft.preset==Preset::B?Preset::A:draft.preset==Preset::A?Preset::S:Preset::Auto;
+    } else if(is(EditorWidget::QualityScaleDown) || is(EditorWidget::QualityScaleUp)) {
+      // Passos de 5%, entre 50% e 100%, como o Render Scale do URP Asset.
+      const float current=draft.resolutionScale>0?draft.resolutionScale:1.0f;
+      const float next=std::clamp(current+(is(EditorWidget::QualityScaleUp)?.05f:-.05f),.5f,1.0f);
+      draft.resolutionScale=std::round(next*20.0f)/20.0f;
+    } else if(is(EditorWidget::QualityDynamic)) {
+      using Override=renderer::FeatureOverride;
+      draft.dynamicResolution=draft.dynamicResolution==Override::Disabled?Override::Enabled:Override::Disabled;
+    } else if(is(EditorWidget::QualityAntiAliasing)) {
+      using Mode=renderer::AntiAliasingMode;
+      draft.antiAliasing=draft.antiAliasing==Mode::Inherit?Mode::Off:draft.antiAliasing==Mode::Off?Mode::Fxaa:
+                         draft.antiAliasing==Mode::Fxaa?Mode::Temporal:Mode::Inherit;
+    } else if(is(EditorWidget::QualitySharpenDown) || is(EditorWidget::QualitySharpenUp)) {
+      const float current=draft.postSharpen>=0?draft.postSharpen:0.0f;
+      draft.postSharpen=std::round(std::clamp(current+(is(EditorWidget::QualitySharpenUp)?.1f:-.1f),0.0f,1.0f)*10.0f)/10.0f;
+    } else if(is(EditorWidget::QualityRate)) {
+      draft.maximumRenderHz=draft.maximumRenderHz==30?60:draft.maximumRenderHz==60?90:
+                            draft.maximumRenderHz==90?120:draft.maximumRenderHz==120?0:30;
+    } else if(is(EditorWidget::QualityApply)) {
+      renderingSettings_=draft;renderingSettingsRequested_=true;state_.qualityDirty=false;
+      state_.status="Aplicando qualidade: o renderer será refeito";
+      return true;
+    } else changed=false;
+    if(changed) {
+      state_.qualityDirty=true;
+      return true;
+    }
+  }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CreateSceneTemplate)) {
     state_.templatePanel=true;state_.creationMenu=false;return true;
   }
@@ -3874,6 +3916,13 @@ EditorEntityId EditorSession::instantiateAssetInTransaction(u32 index, EditorEnt
   const auto id=history_.createEntity(document_,parent,water?EditorEntityKind::Water:EditorEntityKind::Mesh,values.name);
   if(id) {history_.applyValues(document_,id,values);setSelection(id);state_.status="Malha adicionada";}
   return id;
+}
+
+void EditorSession::setRenderStats(u32 width,u32 height,float gpuMilliseconds,std::string_view detectedLevel) {
+  state_.qualityDetected=std::string(detectedLevel);
+  std::string text="Renderizando "+std::to_string(width)+"×"+std::to_string(height);
+  if(gpuMilliseconds>0) text+=" · GPU "+decimalText(gpuMilliseconds,1)+" ms";
+  state_.qualityStats=std::move(text);
 }
 
 u32 EditorSession::boxAssetSlot() const {

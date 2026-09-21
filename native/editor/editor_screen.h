@@ -20,6 +20,7 @@
 // Sem Vulkan, sem Android, sem I/O: testável integralmente no host.
 #pragma once
 
+#include "renderer/rendering_policy.h"
 #include "core/base.h"
 #include "editor/editor_document.h"
 #include "editor/editor_filesystem.h"
@@ -206,6 +207,8 @@ enum class EditorWidget : u32 {
   TransformResetPosition, TransformResetRotation, TransformResetScale,
   // R3: importação no painel de Propriedades (abas, perfil e ações do perfil).
   CreateSceneTemplate, SceneTemplateClose,
+  QualityOpen, QualityClose, QualityLevel, QualityScaleDown, QualityScaleUp, QualityDynamic,
+  QualityAntiAliasing, QualitySharpenDown, QualitySharpenUp, QualityRate, QualityApply,
   ImportTabSummary, ImportTabStructure, ImportTabMeshes, ImportTabTextures, ImportTabProfile,
   ImportMeshClose,
   ImportScaleDown, ImportScaleUp,
@@ -450,6 +453,11 @@ struct EditorScreenState final {
   bool viewsPanel=false,viewNaming=false,viewRenaming=false;
   // Escolha do modelo de cena a montar.
   bool templatePanel=false;
+  // Painel Qualidade: o rascunho que o autor edita, se difere do aplicado, e o
+  // que o renderer está fazendo de fato agora (resolução real e custo de GPU).
+  bool qualityPanel=false,qualityDirty=false;
+  renderer::ProjectRenderingSettings qualityDraft{};
+  std::string qualityStats,qualityDetected;
   u32 viewSelected=0;
   std::string viewName;
   // Salvar o OBJETO como receita é um terceiro destino do mesmo campo de nome;

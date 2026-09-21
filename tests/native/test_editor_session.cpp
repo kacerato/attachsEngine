@@ -2293,3 +2293,31 @@ AE_TEST(the_reference_scene_template_builds_interior_and_exterior_in_one_undo_st
   AE_EXPECT_TRUE(bare.document().entityCount() == 1, "nada entrou na cena");
   AE_EXPECT_TRUE(!bare.createSceneTemplate(99), "índice fora do catálogo é recusado");
 }
+
+AE_TEST(the_quality_panel_edits_a_draft_and_applies_it_on_request) {
+  Fixture fixture;
+  renderer::ProjectRenderingSettings project;
+  project.preset = renderer::QualityPreset::Auto;
+  fixture.session.setRenderingSettings(project);
+  fixture.session.update();
+  tapWidget(fixture, widgetId(EditorWidget::QualityOpen));
+  AE_EXPECT_TRUE(fixture.session.screen().qualityPanel, "o painel Qualidade abre pelo viewport");
+  // Automático → Baixo → Médio → Alto, na ordem dos níveis da Unity.
+  for (u32 tap = 0; tap < 3; ++tap) tapWidget(fixture, widgetId(EditorWidget::QualityLevel));
+  tapWidget(fixture, widgetId(EditorWidget::QualityScaleDown));
+  AE_EXPECT_TRUE(fixture.session.screen().qualityDraft.preset == renderer::QualityPreset::A, "rascunho em Alto");
+  AE_EXPECT_TRUE(std::fabs(fixture.session.screen().qualityDraft.resolutionScale - .95f) < 1e-4f,
+                 "escala desce em passos de 5%, a partir de 100%");
+  AE_EXPECT_TRUE(fixture.session.screen().qualityDirty, "rascunho diferente do aplicado");
+  renderer::ProjectRenderingSettings requested;
+  AE_EXPECT_TRUE(!fixture.session.takeRenderingSettingsRequest(requested), "editar não reconstrói nada sozinho");
+  tapWidget(fixture, widgetId(EditorWidget::QualityApply));
+  AE_EXPECT_TRUE(fixture.session.takeRenderingSettingsRequest(requested), "Aplicar levanta o pedido para o shell");
+  AE_EXPECT_TRUE(requested.preset == renderer::QualityPreset::A, "o pedido leva o nível escolhido");
+  AE_EXPECT_TRUE(!fixture.session.takeRenderingSettingsRequest(requested), "o pedido é consumido uma vez");
+  AE_EXPECT_TRUE(!fixture.session.screen().qualityDirty, "aplicado");
+  fixture.session.setRenderStats(1280, 2772, 18.5f, "Médio");
+  AE_EXPECT_TRUE(fixture.session.screen().qualityStats.find("1280×2772") != std::string::npos &&
+                 fixture.session.screen().qualityStats.find("18,5 ms") != std::string::npos,
+                 "o rodapé mostra a resolução real e o custo de GPU");
+}

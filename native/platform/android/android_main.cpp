@@ -12,6 +12,7 @@
 #include "platform/android/water_spectral_probe.h"
 #include "platform/android/android_frame_profiler.h"
 #include "renderer/rendering_policy.h"
+#include "renderer/rendering_settings_file.h"
 #include "renderer/water_fft.h"
 #include "platform/android/android_frame_pacer.h"
 #include "platform/android/android_performance.h"
@@ -45,6 +46,7 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <future>
 #include <atomic>
 #include <mutex>
@@ -199,6 +201,8 @@ struct AndroidShell final {
   bool editorUi = false;
   ae::editor::EditorSession editorSession;
   bool editorMapImported = false;
+  // Pedido do painel Qualidade, atendido no ponto seguro do laço.
+  bool qualityRebuildPending = false;
   ae::u64 editorPackageFingerprint = 0;
   std::string editorSavePath;
   char editorProjectName[256]{};
@@ -685,6 +689,35 @@ void updateEditorCodeCompiler(AndroidShell &shell) {
 // joins BEFORE destroying anything referenced by the worker.
 namespace {
 // O registro de recursos mora ao lado da cena, dentro do projeto.
+// Configurações de renderização do projeto (painel Qualidade), ao lado do
+// registro de recursos. Arquivo ausente ou ilegível deixa o padrão como está.
+std::string projectRenderingSettingsPath(const char *projectPath) {
+  return projectPath && projectPath[0] ? std::string(projectPath)+"/.astra/rendering.astra" : std::string();
+}
+bool readProjectRenderingSettings(const char *projectPath,ae::renderer::ProjectRenderingSettings &settings) {
+  const auto path=projectRenderingSettingsPath(projectPath);
+  if(path.empty()) return false;
+  std::ifstream input(path,std::ios::binary);
+  if(!input) return false;
+  const std::string text{std::istreambuf_iterator<char>(input),std::istreambuf_iterator<char>()};
+  return ae::renderer::readRenderingSettings(text,settings);
+}
+bool writeProjectRenderingSettings(const char *projectPath,const ae::renderer::ProjectRenderingSettings &settings) {
+  const auto path=projectRenderingSettingsPath(projectPath);
+  if(path.empty()) return false;
+  std::error_code code;
+  std::filesystem::create_directories(std::string(projectPath)+"/.astra",code);
+  const auto temporary=path+".tmp";
+  {
+    std::ofstream output(temporary,std::ios::binary|std::ios::trunc);
+    if(!output) return false;
+    output<<ae::renderer::writeRenderingSettings(settings);
+    if(!output) return false;
+  }
+  std::filesystem::rename(temporary,path,code);
+  return !code;
+}
+
 std::string projectAssetRegistryPath(const char *projectPath) {
   return projectPath && projectPath[0] ? std::string(projectPath)+"/.astra/assets.astra" : std::string();
 }
@@ -1739,6 +1772,12 @@ void android_main(android_app *app) {
   shell.instancedRenderer.setGpuCostIsolation(shell.gpuCostIsolation);
   applyRuntimeControls(shell);
 
+  // O projeto aberto no editor decide primeiro (painel Qualidade); as opções
+  // de lançamento abaixo continuam sendo o override de diagnóstico por cima.
+  if(shell.editorUi && shell.editorProjectPath[0]) {
+    readProjectRenderingSettings(shell.editorProjectPath,shell.renderingSettings);
+    shell.editorSession.setRenderingSettings(shell.renderingSettings);
+  }
   // --- Política global de renderização (ADR-014) ---------------------------
   // As opções de lançamento são o override de diagnóstico do que, no produto,
   // virá das Project Settings serializadas. O vocabulário é o mesmo dos dois
@@ -1868,6 +1907,11 @@ void android_main(android_app *app) {
             app->activity, "aether.disable_environment_split_sum"))
       shell.renderingSettings.environmentSplitSumBrdf = ae::renderer::FeatureOverride::Disabled;
   }
+  // O viewport do editor é onde se julga a imagem: como na Unity e na Godot,
+  // ele renderiza em resolução nativa e sem escala dinâmica, salvo pedido
+  // explícito do projeto. No aparelho a escala dinâmica derrubava o viewport
+  // para 50% em um segundo, com orçamento de 120 Hz, e não voltava.
+  if(shell.editorUi) shell.renderingSettings=ae::renderer::withEditorDefaults(shell.renderingSettings);
   shell.instancedRenderer.setCoveragePrepassEnabled(
       !ae::platform::android::readBooleanLaunchOption(app->activity,
                                                        "aether.disable_coverage_prepass"));
@@ -2021,6 +2065,16 @@ void android_main(android_app *app) {
       continue;
     }
     collectRendererInitialization(shell,false);
+    // Painel Qualidade: refaz o renderer com a política nova no mesmo ponto
+    // seguro em que o redimensionamento refaz — sem inicialização em andamento
+    // e antes de qualquer trabalho do quadro tocar o renderer.
+    if(shell.qualityRebuildPending && shell.renderingCapabilitiesReady && !shell.rendererInitialization.valid()) {
+      shell.qualityRebuildPending=false;
+      resolveRenderingPolicyForDevice(shell,shell.maximumDisplayHz);
+      if(!rebuildInstancedRenderer(shell))
+        __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Quality] Falha ao refazer o renderer.");
+      shell.editorPublishedRevision=~ae::u64{0};
+    }
     if(shell.windowResizePending && app->window && shell.vulkanSurface.isReady() &&
        !shell.rendererInitialization.valid() && std::chrono::steady_clock::now()>=shell.windowResizeAfter) {
       shell.windowResizePending=false;
@@ -2137,6 +2191,40 @@ void android_main(android_app *app) {
             std::chrono::duration<double>(std::chrono::steady_clock::now()-shell.shellStartTime).count());
         updateEditorCodeCompiler(shell);
         shell.editorSession.update();
+        // Painel Qualidade: "Aplicar" grava o arquivo do projeto e refaz o
+        // renderer com a política nova — o mesmo caminho de quando a surface é
+        // recriada, que já sabe devolver a cena ao renderer novo.
+        {
+          ae::renderer::ProjectRenderingSettings requested;
+          if(shell.editorSession.takeRenderingSettingsRequest(requested) && !editorPlaying) {
+            if(!writeProjectRenderingSettings(shell.editorProjectPath,requested))
+              __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Quality] Falha ao gravar as configurações do projeto.");
+            auto &settings=shell.renderingSettings;
+            settings.preset=requested.preset;settings.resolutionScale=requested.resolutionScale;
+            settings.dynamicResolution=requested.dynamicResolution;settings.antiAliasing=requested.antiAliasing;
+            settings.postSharpen=requested.postSharpen;settings.maximumRenderHz=requested.maximumRenderHz;
+            settings=ae::renderer::withEditorDefaults(settings);
+            // A reconstrução NÃO acontece aqui, no meio do quadro: o renderer
+            // novo inicializa em outra thread e o resto deste quadro ainda o
+            // usaria — foi o que derrubou o processo no aparelho. O pedido fica
+            // marcado e é atendido no ponto seguro do laço, antes do quadro.
+            shell.qualityRebuildPending=true;
+          }
+          // Rodapé do painel: o que o renderer faz AGORA. A GPU só é medida
+          // enquanto o painel está aberto; fora dele o custo da medição some.
+          const bool measuring=shell.editorSession.screen().qualityPanel;
+          if(shell.instancedRendererReady) shell.instancedRenderer.setEditorGpuTiming(measuring);
+          if(measuring && shell.instancedRendererReady) {
+            const auto profile=shell.renderingPolicy.effectiveProfile;
+            const auto level=profile==ae::rhi::DeviceProfile::S?ae::renderer::QualityPreset::S:
+                             profile==ae::rhi::DeviceProfile::A?ae::renderer::QualityPreset::A:
+                             profile==ae::rhi::DeviceProfile::B?ae::renderer::QualityPreset::B:ae::renderer::QualityPreset::C;
+            shell.editorSession.setRenderStats(shell.instancedRenderer.sceneRenderWidth(),
+                shell.instancedRenderer.sceneRenderHeight(),
+                static_cast<float>(shell.instancedRenderer.lastFrameTimings().gpuFrameMs),
+                ae::renderer::qualityLevelLabel(level));
+          }
+        }
         shell.instancedRenderer.setEnvironmentAdjustment(shell.editorSession.document().find(shell.editorSession.document().root())->environment);
         const float editorWallSeconds=std::chrono::duration<float>(std::chrono::steady_clock::now()-shell.shellStartTime).count();
         if(!shell.editorSession.requestedScenePath().empty() && !editorPlaying && !shell.editorSession.history().isOpen()) {

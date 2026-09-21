@@ -429,6 +429,11 @@ public:
   }
   const profiler::RenderPhaseTimings &lastFrameTimings() const { return lastFrameTimings_; }
   float currentRenderScale() const { return dynamicResolution_.scale(); }
+  // Resolução interna da cena neste quadro, para o painel Qualidade.
+  u32 sceneRenderWidth() const { return swapchain_ ? renderWidth() : 0u; }
+  u32 sceneRenderHeight() const { return swapchain_ ? renderHeight() : 0u; }
+  // Mede a GPU enquanto o painel Qualidade está aberto, mesmo sem escala dinâmica.
+  void setEditorGpuTiming(bool enabled) { editorGpuTimingEnabled_ = enabled; }
   u32 currentRenderWidth() const { return renderWidth(); }
   u32 currentRenderHeight() const { return renderHeight(); }
   rhi::DeviceMemorySnapshot deviceMemorySnapshot() const {
@@ -793,9 +798,10 @@ private:
   // para alimentar cadência adaptativa foi medida e retirada — ver
   // PROFILING-ANDROID.md, "Cadência adaptativa rejeitada".
   bool gpuTimingEnabled() const {
-    return frameProfilingEnabled_ || adpfGpuTimingEnabled_ ||
+    return frameProfilingEnabled_ || adpfGpuTimingEnabled_ || editorGpuTimingEnabled_ ||
            renderingPolicy_.dynamicResolution.enabled;
   }
+  bool editorGpuTimingEnabled_ = false;
   bool adpfGpuTimingEnabled_ = false;
   bool coveragePrepassEnabled_ = true;
   bool runtimeHudEnabled_ = false;

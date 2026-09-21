@@ -11,6 +11,7 @@
 #include "editor/editor_number_text.h"
 #include "editor/editor_script_templates.h"
 #include "editor/editor_scene_template.h"
+#include "renderer/rendering_settings_file.h"
 #include "editor/editor_reference_picker.h"
 #include "editor/editor_map_scene.h"
 #include "editor/editor_properties.h"
@@ -3092,6 +3093,81 @@ void buildCodeWorkspace(ScreenBuilder &builder,UiRect body,UiRect toolbar,Editor
   overlays();
 }
 
+// Painel Qualidade. Cada linha é um controle da política de renderização do
+// projeto, com o nome que a Unity usa no nível de qualidade e no URP Asset;
+// o rodapé diz o que o renderer está fazendo de verdade AGORA — resolução
+// interna e custo de GPU —, que é o número que decide se a escolha cabe.
+void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
+  const auto &state = builder.state;
+  const auto &theme = builder.theme;
+  auto &list = builder.list;
+  auto &router = builder.router;
+  const auto &draft = state.qualityDraft;
+  const float width = std::min(340.0f, std::max(240.0f, viewport.width - 32.0f));
+  const float height = std::min(viewport.height - 64.0f, 386.0f);
+  const UiRect panel{viewport.x + std::max(8.0f, std::min(276.0f, viewport.width - width - 8.0f)),
+                     viewport.y + 56.0f, width, height};
+  list.addRect(panel, theme.color.surface, 6);
+  router.addBlocker(panel);
+  auto content = deflate(panel, UiInsets::all(10));
+  auto header = takeTop(content, 26);
+  const auto close = takeRight(header, 28);
+  builder.label(close, "X", theme.color.textDim, theme.type.caption, UiAlign::Center);
+  router.addRegion(close, widgetId(EditorWidget::QualityClose));
+  builder.label(header, "Qualidade", theme.color.text, theme.type.cardName);
+  // Rodapé primeiro: Aplicar e a linha do que o renderer faz agora nunca podem
+  // sair do painel. Numa tela baixa as linhas é que encolhem.
+  const auto apply = deflate(takeBottom(content, 40), UiInsets::all(2));
+  const auto stats = takeBottom(content, 20);
+  const float rowHeight = std::clamp(content.height / 6.0f, 28.0f, 38.0f);
+  const auto row = [&](const char *label, const std::string &value, EditorWidget widget) {
+    auto line = takeTop(content, rowHeight);
+    builder.label(takeLeft(line, line.width * .46f), label, theme.color.textDim, theme.type.caption);
+    const auto cell = deflate(line, UiInsets::all(2));
+    list.addRect(cell, theme.color.raised, theme.radius.control);
+    builder.label(cell, value, theme.color.text, theme.type.caption, UiAlign::Center);
+    router.addRegion(cell, widgetId(widget));
+  };
+  const auto stepper = [&](const char *label, const std::string &value, EditorWidget down, EditorWidget up) {
+    auto line = takeTop(content, rowHeight);
+    builder.label(takeLeft(line, line.width * .46f), label, theme.color.textDim, theme.type.caption);
+    const auto minus = deflate(takeLeft(line, 36), UiInsets::all(2));
+    const auto plus = deflate(takeRight(line, 36), UiInsets::all(2));
+    for (const auto &[rect, glyph, widget] : {std::tuple{minus, "-", down}, std::tuple{plus, "+", up}}) {
+      list.addRect(rect, theme.color.raised, theme.radius.control);
+      builder.label(rect, glyph, theme.color.text, theme.type.body, UiAlign::Center);
+      router.addRegion(rect, widgetId(widget));
+    }
+    builder.label(line, value, theme.color.text, theme.type.caption, UiAlign::Center);
+  };
+  std::string level = renderer::qualityLevelLabel(draft.preset);
+  if (draft.preset == renderer::QualityPreset::Auto && !state.qualityDetected.empty())
+    level += " (" + state.qualityDetected + ")";
+  row("Nível", level, EditorWidget::QualityLevel);
+  stepper("Escala de renderização",
+          draft.resolutionScale > 0 ? std::to_string(static_cast<int>(draft.resolutionScale * 100.0f + .5f)) + "%"
+                                    : std::string("do nível"),
+          EditorWidget::QualityScaleDown, EditorWidget::QualityScaleUp);
+  row("Escala dinâmica",
+      draft.dynamicResolution == renderer::FeatureOverride::Enabled ? "Ligada" :
+      draft.dynamicResolution == renderer::FeatureOverride::Disabled ? "Desligada" : "Padrão (desligada no editor)",
+      EditorWidget::QualityDynamic);
+  row("Anti-aliasing", renderer::antiAliasingLabel(draft.antiAliasing), EditorWidget::QualityAntiAliasing);
+  stepper("Nitidez",
+          draft.postSharpen >= 0 ? std::to_string(static_cast<int>(draft.postSharpen * 100.0f + .5f)) + "%"
+                                 : std::string("do nível"),
+          EditorWidget::QualitySharpenDown, EditorWidget::QualitySharpenUp);
+  row("Taxa alvo", draft.maximumRenderHz ? std::to_string(draft.maximumRenderHz) + " Hz" : std::string("Padrão (60 Hz no editor)"),
+      EditorWidget::QualityRate);
+  // Aplicar reconstrói o renderer: é explícito, como o Apply do Import
+  // Settings, porque troca alvos de renderização e leva um instante.
+  list.addRect(apply, state.qualityDirty ? theme.color.accent : theme.color.raised, theme.radius.control);
+  builder.label(apply, state.qualityDirty ? "Aplicar" : "Aplicado",
+                state.qualityDirty ? theme.color.accentInk : theme.color.textMuted, theme.type.caption, UiAlign::Center);
+  if (state.qualityDirty) router.addRegion(apply, widgetId(EditorWidget::QualityApply));
+  builder.label(stats, state.qualityStats, theme.color.textMuted, theme.type.caption);
+}
+
 // Escolha do modelo de cena (G6-A). Cada linha traz o nome e o que o cenário
 // entrega, porque montar um modelo mexe na cena aberta e o autor precisa saber
 // o que vai aparecer antes de tocar.
@@ -3354,6 +3430,12 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
                      UiIcon::SceneLayers, widgetId(EditorWidget::ViewsOpen), state.viewsPanel);
   if(state.viewsPanel && state.document) buildSceneViewsPanel(builder, layout.viewport);
   if(state.templatePanel) buildSceneTemplatePanel(builder, layout.viewport);
+  // Qualidade: o que a Unity põe em Project Settings > Quality e no URP Asset,
+  // e a Godot em Rendering > Scaling 3D — aqui ao alcance do viewport, porque é
+  // olhando a cena que se decide a qualidade dela.
+  builder.iconButton({layout.viewport.x + 276.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
+                     UiIcon::UiSliders, widgetId(EditorWidget::QualityOpen), state.qualityPanel);
+  if(state.qualityPanel) buildQualityPanel(builder, layout.viewport);
   if(compact) {
     const UiRect button{layout.viewport.x+104,layout.viewport.y+56,100,40};
     list.addRect(button,theme.color.raised,theme.radius.control);
