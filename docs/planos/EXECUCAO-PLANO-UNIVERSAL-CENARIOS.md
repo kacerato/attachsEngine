@@ -465,5 +465,12 @@ Capturas em `docs/capturas/g6/`: `modelo-de-cena-painel.png`,
 `referencia-interior-antes-parede-20cm.png` e
 `referencia-interior-sombra-luz-de-teto.png`.
 
+A aba Malhas também foi conferida com um GLB real escolhido pelo seletor do
+Android (Avocado, CC0; o arquivo foi colocado em Downloads só para o teste e
+apagado em seguida): 406 vértices, 682 triângulos, UV0/Normais/Tangentes, mapa
+normal, 21.585 texels/m em 2048², uniformidade 1,3× — os mesmos números do host.
+O resumo do arquivo saía cortado numa linha só e passou a quebrar linha.
+Capturas: `aba-malhas-avocado.png` e `aba-malhas-cartao-avocado.png`.
+
 Ainda não medido: custo em ms do passe de sombra local (exige bancada limpa,
-ver as regras de medição) e a aba Malhas com um GLB escolhido pelo seletor.
+ver as regras de medição).

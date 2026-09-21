@@ -2190,7 +2190,11 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
       list.popClip();
       break;
     }
-    builder.label(takeTop(content,24),state.importMeshSummary,theme.color.textMuted,theme.type.caption);
+    // O resumo do arquivo é longo (nós, malhas, escala, densidade): numa linha só
+    // ele saía cortado no aparelho, justamente na parte da densidade.
+    for(const auto &line:wrapText(list,state.importMeshSummary,content.width,theme.type.caption))
+      builder.label(takeTop(content,20),line,theme.color.textMuted,theme.type.caption);
+    takeTop(content,4);
     const auto [first,last]=paginate(state.importMeshes.size(),56);
     list.pushClip(content);
     for(usize i=first;i<last;++i) {
