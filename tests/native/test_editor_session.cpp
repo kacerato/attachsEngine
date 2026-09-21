@@ -2159,3 +2159,66 @@ AE_TEST(p02_impact_resolves_material_inheritance_and_registry_diagnostics) {
   bool unloaded=false;for(const auto &row:rows) if(row.detail=="Materiais/shared.material") unloaded=row.invalid&&row.relation.find("não carregado")!=std::string::npos;
   AE_EXPECT_TRUE(unloaded,"registered material without loaded library is not falsely resolved");
 }
+
+AE_TEST(the_import_panel_measures_each_mesh_of_the_source_and_opens_its_card) {
+  Fixture fixture;
+  fixture.session.beginImportPreparation();
+  // Uma fonte com duas malhas: um cubo bem mapeado e o mesmo cubo com a UV
+  // colapsada, que é o caso que nenhuma resolução de textura conserta.
+  resources::GltfImport model;
+  std::vector<renderer::MapDrawRecord> draws;
+  std::vector<renderer::MapMaterialRecord> materials;
+  AE_EXPECT_TRUE(renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride, model.vertices, model.indices,
+                                                      draws, materials), "cubo");
+  const auto flat = static_cast<u32>(model.vertices.size() / renderer::MapVertexStride);
+  for (u32 vertex = 0; vertex < flat; ++vertex) {
+    float zero[2]{0, 0};
+    std::memcpy(model.vertices.data() + static_cast<usize>(vertex) * renderer::MapVertexStride + 28, zero, sizeof(zero));
+  }
+  model.vertices.insert(model.vertices.end(), model.vertices.begin(),
+                        model.vertices.begin() + static_cast<long long>(flat) * renderer::MapVertexStride);
+  // O primeiro bloco volta a ter UV; o segundo (a cópia) fica sem.
+  {
+    std::vector<u8> good;
+    std::vector<u32> goodIndices;
+    std::vector<renderer::MapDrawRecord> goodDraws;
+    std::vector<renderer::MapMaterialRecord> goodMaterials;
+    AE_EXPECT_TRUE(renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride, good, goodIndices, goodDraws,
+                                                        goodMaterials), "cubo de referência");
+    std::copy(good.begin(), good.end(), model.vertices.begin());
+  }
+  model.materials = materials;
+  model.materialNames.push_back("Concreto");
+  model.draws.push_back(draws[0]);
+  model.draws.push_back(draws[0]);
+  model.draws[1].vertexOffset = flat;
+  model.names.push_back("Parede");
+  model.names.push_back("Piso");
+  model.nodes.emplace_back();
+  model.nodes[0].name = "Raiz";
+  model.drawNodes.push_back(0);
+  model.drawNodes.push_back(0);
+  fixture.session.showImportPreview("Fontes/cenario.glb", model, {}, {});
+  fixture.session.update();
+
+  const auto &screen = fixture.session.screen();
+  AE_EXPECT_EQ(screen.importMeshes.size(), usize{2}, "uma linha por malha da fonte");
+  AE_EXPECT_TRUE(screen.importMeshes[0].name == "Parede", "o nome do desenho é o da linha");
+  AE_EXPECT_TRUE(screen.importMeshes[0].channels.find("UV0") != std::string::npos &&
+                 screen.importMeshes[0].channels.find("Tangentes") != std::string::npos,
+                 "os canais presentes são listados como na prévia de malha da Unity");
+  AE_EXPECT_TRUE(screen.importMeshes[0].counts.find("triângulos") != std::string::npos, "contagem na linha");
+  AE_EXPECT_TRUE(screen.importMeshes[0].size.find("m") != std::string::npos, "tamanho na cena na linha");
+  AE_EXPECT_TRUE(screen.importMeshes[1].level == 2 && !screen.importMeshes[1].issues.empty(),
+                 "a malha sem UV é apontada como erro, com o motivo");
+  AE_EXPECT_TRUE(screen.importMeshSummary.find("profundidade") != std::string::npos,
+                 "o resumo traz hierarquia e escala do arquivo");
+
+  tapWidget(fixture, widgetId(EditorWidget::ImportTabMeshes));
+  AE_EXPECT_TRUE(fixture.session.screen().importTab == EditorScreenState::ImportTab::Meshes, "a aba Malhas abre");
+  tapWidget(fixture, widgetId(EditorWidget::ImportMeshRowBase) + 1);
+  AE_EXPECT_TRUE(fixture.session.screen().importMeshDetail && fixture.session.screen().importMeshSelected == 1,
+                 "tocar a linha abre o cartão daquela malha");
+  tapWidget(fixture, widgetId(EditorWidget::ImportMeshClose));
+  AE_EXPECT_TRUE(!fixture.session.screen().importMeshDetail, "voltar fecha o cartão e devolve a lista");
+}

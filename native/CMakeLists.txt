@@ -259,6 +259,7 @@ add_library(aether_renderer STATIC
   renderer/shadow_cascades.cpp
   renderer/hzb_visibility.cpp
   renderer/lod_selection.cpp
+  renderer/mesh_report.cpp
   renderer/spatial_render_chunks.cpp
   renderer/static_collision_mesh.cpp
   renderer/thermal_pressure_controller.cpp
@@ -294,6 +295,7 @@ add_library(aether_assets STATIC
   resources/gltf_codecs.cpp
   resources/gltf_package.cpp
   resources/import_cache.cpp
+  resources/import_report.cpp
   resources/texture_budget.cpp
   resources/import_profile.cpp
   resources/mesh_derived.cpp
@@ -546,6 +548,7 @@ if(NOT ANDROID)
     ../tests/native/test_mesh_collider.cpp
     ../tests/native/test_lod_group.cpp
     ../tests/native/test_scene_views.cpp
+    ../tests/native/test_mesh_report.cpp
     ../tests/native/test_runtime_input.cpp
     ../tests/native/test_runtime_lights.cpp
     ../tests/native/test_runtime_environment.cpp

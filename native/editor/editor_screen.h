@@ -205,7 +205,8 @@ enum class EditorWidget : u32 {
   TransformMenu, TransformCopy, TransformPaste, TransformReset,
   TransformResetPosition, TransformResetRotation, TransformResetScale,
   // R3: importação no painel de Propriedades (abas, perfil e ações do perfil).
-  ImportTabSummary, ImportTabStructure, ImportTabTextures, ImportTabProfile,
+  ImportTabSummary, ImportTabStructure, ImportTabMeshes, ImportTabTextures, ImportTabProfile,
+  ImportMeshClose,
   ImportScaleDown, ImportScaleUp,
   ImportTextureDimension256, ImportTextureDimension512, ImportTextureDimension1024, ImportTextureDimension2048,
   ImportApplyProfile, ImportSaveDefaultProfile,
@@ -256,6 +257,8 @@ enum class EditorWidget : u32 {
   // e engolia o toque na categoria do menu Adicionar objeto.
   // + índice da vista salva: aplica aquele enquadramento.
   SceneViewRowBase=0x93000000u,
+  // + índice da malha na aba Malhas: abre o cartão de detalhe daquela malha.
+  ImportMeshRowBase=0x94000000u,
   ImpactOpenBase=0x90000000u, ImpactRowBase=0x91000000u, ImpactClose=0x92000000u, ImpactPrevious, ImpactNext, ImpactRepair, ImpactRepairApply, ImpactRepairShared, ImpactRepairScope,
   ComponentColorBase=0x7e000000u,
   ColorHueBase=0x5f000000u, ColorSvBase=0x5f000100u, ColorApply=0x5f000200u, ColorCancel,
@@ -322,7 +325,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ComponentTripleBase,kRange},{EditorWidget::ComponentColorBase,kRange},{EditorWidget::ComponentResourceBase,kRange},
   {EditorWidget::HierarchyCollapseBase,kWideRange},
   {EditorWidget::ImpactOpenBase,kRange},{EditorWidget::ImpactRowBase,kRange},{EditorWidget::ImpactClose,kRange},
-  {EditorWidget::SceneViewRowBase,kRange}};
+  {EditorWidget::SceneViewRowBase,kRange},{EditorWidget::ImportMeshRowBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -548,15 +551,29 @@ struct EditorScreenState final {
   u32 importAmbiguityChoice=0;
   // R3: o importador vive em Propriedades, com dados estruturados por aba em vez
   // de um texto paginado numa janela que bloqueava o editor inteiro.
-  enum class ImportTab : u8 { Summary, Structure, Textures, Profile };
+  enum class ImportTab : u8 { Summary, Structure, Meshes, Textures, Profile };
   ImportTab importTab=ImportTab::Summary;
   // Uma linha da aba Estrutura. `node` é a identidade que o nó terá no mapa —
   // a MESMA que a publicação vai gravar —, e é por ela que a exclusão é pedida.
   // `excluded` já vem propagado: filho de nó excluído também não vem.
   struct ImportNodeRow { std::string name; u32 depth=0, draws=0; resources::AssetGuid node{}; bool excluded=false; };
   struct ImportTextureRow { u32 width=0,height=0,levels=0,uses=0; bool srgb=true,astc=false; u64 bytes=0; };
+  // G6-A: uma linha por malha da fonte, com os fatos que o Mesh asset Inspector
+  // da Unity mostra (contagem e canais) e a medida que ela não traz — densidade
+  // de texel. `level` é 0 sem nada a apontar, 1 atenção, 2 erro.
+  struct ImportMeshRow {
+    std::string name,material,channels,counts,size,density,stretch;
+    std::vector<std::string> issues;
+    u8 level=0;
+  };
   std::vector<ImportNodeRow> importNodes;
   std::vector<ImportTextureRow> importTextures;
+  std::vector<ImportMeshRow> importMeshes;
+  // Leitura do arquivo inteiro (hierarquia, escala e densidade) e a malha
+  // aberta no cartão de detalhe.
+  std::string importMeshSummary;
+  u32 importMeshSelected=0;
+  bool importMeshDetail=false;
   // Tamanho do modelo preparado, em unidades da cena, já com a escala preparada.
   float importExtent[3]{};
   bool importHasExtent=false;

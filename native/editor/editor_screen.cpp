@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <cctype>
 #include "editor/editor_screen.h"
+#include "editor/editor_number_text.h"
 #include "editor/editor_script_templates.h"
 #include "editor/editor_reference_picker.h"
 #include "editor/editor_map_scene.h"
@@ -1976,18 +1977,6 @@ void buildObjectActions(ScreenBuilder &builder,UiRect content,const EditorEntity
 }
 
 namespace {
-// Número com vírgula decimal, sem depender de locale.
-std::string decimalText(double value,int digits) {
-  const long long factor=digits==0?1:digits==1?10:digits==2?100:1000;
-  const long long scaled=std::llround(std::fabs(value)*static_cast<double>(factor));
-  std::string text=std::to_string(scaled/factor);
-  if(digits>0) {
-    std::string fraction=std::to_string(scaled%factor);
-    fraction.insert(0,static_cast<usize>(digits)-fraction.size(),'0');
-    text+=","+fraction;
-  }
-  return (value<0 && scaled?"-":"")+text;
-}
 
 // Quebra por largura medida, respeitando parágrafos e sequências UTF-8.
 std::vector<std::string> wrapText(const UiDrawList &list,std::string_view text,float width,const UiTypeStyle &style) {
@@ -2033,6 +2022,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
 
   const struct {const char *label;Tab tab;EditorWidget widget;} tabs[]{
       {"Resumo",Tab::Summary,EditorWidget::ImportTabSummary},{"Estrutura",Tab::Structure,EditorWidget::ImportTabStructure},
+      {"Malhas",Tab::Meshes,EditorWidget::ImportTabMeshes},
       {"Texturas",Tab::Textures,EditorWidget::ImportTabTextures},{"Perfil",Tab::Profile,EditorWidget::ImportTabProfile}};
   auto tabRow=takeTop(content,32);
   const float tabWidth=tabRow.width/static_cast<float>(std::size(tabs));
@@ -2151,6 +2141,71 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
       takeLeft(row,static_cast<float>(std::min(node.depth,8u))*10.0f);
       if(node.draws) builder.label(takeRight(row,64),std::to_string(node.draws)+(node.draws==1?" malha":" malhas"),theme.color.textMuted,theme.type.caption,UiAlign::End);
       builder.label(row,node.name,node.excluded?theme.color.textMuted:node.draws?theme.color.text:theme.color.textDim,theme.type.caption);
+    }
+    list.popClip();
+    break;
+  }
+  case Tab::Meshes: {
+    // Aba Malhas (G6-A): a fonte medida, malha a malha. A linha responde o que
+    // o autor pergunta antes de montar a cena de referência — tem UV? tem
+    // tangente? quantos texels por metro? — e o cartão de detalhe explica o que
+    // fazer com cada apontamento.
+    if(state.importMeshes.empty()) {builder.label(takeTop(content,24),"Sem prévia de malhas ainda",theme.color.textMuted,theme.type.caption);break;}
+    const auto severityColor=[&](u8 level) {
+      return level==2?theme.color.danger:level==1?theme.color.warning:theme.color.accent;
+    };
+    if(state.importMeshDetail && state.importMeshSelected<state.importMeshes.size()) {
+      const auto &mesh=state.importMeshes[state.importMeshSelected];
+      auto header=takeTop(content,28);
+      const auto back=takeLeft(header,84);
+      builder.label(back,"< Malhas",theme.color.accent,theme.type.caption);
+      router.addRegion(back,widgetId(EditorWidget::ImportMeshClose));
+      builder.label(header,mesh.name,theme.color.text,theme.type.cardName);
+      // Faixa de gravidade: a cor diz de longe se esta malha entra na cena de
+      // referência como está.
+      list.addRect(takeTop(content,3),severityColor(mesh.level),0);
+      takeTop(content,6);
+      const auto line=[&](const char *label,const std::string &value,bool dim=false) {
+        if(value.empty()) return;
+        auto row=takeTop(content,34);
+        builder.label(takeLeft(row,row.width*.38f),label,theme.color.textMuted,theme.type.caption);
+        for(const auto &part:wrapText(list,value,row.width,theme.type.caption)) {
+          builder.label({row.x,row.y+(row.height-18)*.5f,row.width,18},part,dim?theme.color.textDim:theme.color.text,theme.type.caption);
+          break;
+        }
+      };
+      line("Contagem",mesh.counts);
+      line("Canais",mesh.channels);
+      line("Material",mesh.material,true);
+      line("Tamanho na cena",mesh.size);
+      line("Densidade",mesh.density);
+      line("Uniformidade",mesh.stretch);
+      list.pushClip(content);
+      for(const auto &issue:mesh.issues) {
+        const auto lines=wrapText(list,"• "+issue,content.width,theme.type.caption);
+        for(const auto &text:lines) builder.label(takeTop(content,20),text,severityColor(mesh.level),theme.type.caption);
+        takeTop(content,4);
+      }
+      list.popClip();
+      break;
+    }
+    builder.label(takeTop(content,24),state.importMeshSummary,theme.color.textMuted,theme.type.caption);
+    const auto [first,last]=paginate(state.importMeshes.size(),56);
+    list.pushClip(content);
+    for(usize i=first;i<last;++i) {
+      const auto &mesh=state.importMeshes[i];
+      auto row=takeTop(content,56);
+      router.addRegion(row,widgetId(EditorWidget::ImportMeshRowBase)+static_cast<u32>(i));
+      auto title=takeTop(row,20);
+      if(mesh.level) {
+        const auto chip=deflate(takeRight(title,84),UiInsets::symmetric(2,2));
+        list.addRect(chip,withAlpha(severityColor(mesh.level),.18f),theme.radius.control);
+        builder.label(chip,mesh.level==2?"erro":"atenção",severityColor(mesh.level),theme.type.caption,UiAlign::Center);
+      }
+      builder.label(title,mesh.name,theme.color.text,theme.type.caption);
+      builder.label(takeTop(row,18),mesh.counts+" · "+mesh.channels,theme.color.textDim,theme.type.caption);
+      builder.label(takeTop(row,18),mesh.size+(mesh.density.empty()?std::string{}:" · "+mesh.density),
+                    theme.color.textMuted,theme.type.caption);
     }
     list.popClip();
     break;

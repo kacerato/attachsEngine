@@ -8,6 +8,8 @@
 #include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
 #include "editor/editor_session.h"
+#include "editor/editor_number_text.h"
+#include "resources/import_report.h"
 #include "editor/editor_import_transaction.h"
 #include "scene/import_link.h"
 #include "core/sha256.h"
@@ -1078,8 +1080,15 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     bool handled=true;
     if(is(EditorWidget::ImportTabSummary)) {state_.importTab=Tab::Summary;state_.importPage=0;}
     else if(is(EditorWidget::ImportTabStructure)) {state_.importTab=Tab::Structure;state_.importPage=0;}
+    else if(is(EditorWidget::ImportTabMeshes)) {state_.importTab=Tab::Meshes;state_.importPage=0;state_.importMeshDetail=false;}
     else if(is(EditorWidget::ImportTabTextures)) {state_.importTab=Tab::Textures;state_.importPage=0;}
     else if(is(EditorWidget::ImportTabProfile)) {state_.importTab=Tab::Profile;state_.importPage=0;}
+    else if(is(EditorWidget::ImportMeshClose)) state_.importMeshDetail=false;
+    else if(routing.widgetId>=widgetId(EditorWidget::ImportMeshRowBase) &&
+            routing.widgetId<widgetId(EditorWidget::ImportMeshRowBase)+state_.importMeshes.size()) {
+      state_.importMeshSelected=routing.widgetId-widgetId(EditorWidget::ImportMeshRowBase);
+      state_.importMeshDetail=true;
+    }
     else if(is(EditorWidget::ImportPreviousPage)) {if(state_.importPage) --state_.importPage;}
     else if(is(EditorWidget::ImportNextPage)) ++state_.importPage;
     else if(is(EditorWidget::ImportCancel)) {state_.importCancel=!state_.importError;closeImportPreview();}
@@ -3557,12 +3566,69 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
         for(const auto index:material.textureIndices) if(index==t) ++row.uses;
       state_.importTextures.push_back(row);
     }
+    // G6-A: a fonte medida, malha a malha. As posições do buffer não têm a
+    // escala do perfil — ela mora na pose das raízes —, então o relatório mede o
+    // mundo do arquivo e recebe 1 aqui.
+    state_.importMeshes.clear();state_.importMeshSummary.clear();
+    state_.importMeshSelected=0;state_.importMeshDetail=false;
+    resources::ImportSourceReport report;
+    if(resources::buildImportSourceReport(model,1.0f,report)) {
+      const auto metres=[](float value) {return decimalText(value,value<10?2:1);};
+      const auto thousands=[](u64 value) {
+        return value>=10000?decimalText(static_cast<float>(value)/1000.0f,1)+" mil":std::to_string(value);
+      };
+      state_.importMeshes.reserve(report.meshes.size());
+      for(const auto &mesh:report.meshes) {
+        EditorScreenState::ImportMeshRow row;
+        row.name=mesh.name;row.material=mesh.material+(mesh.normalMap?" · com mapa normal":"");
+        row.level=static_cast<u8>(mesh.level);
+        row.counts=thousands(mesh.data.vertexCount)+" vértices · "+thousands(mesh.data.triangleCount)+" triângulos";
+        // Os canais na ordem em que a prévia de malha da Unity os lista.
+        for(const auto &[present,label]:{std::pair{mesh.data.hasUv0,"UV0"},std::pair{mesh.data.hasUv1,"UV1"},
+                                         std::pair{mesh.data.hasNormals,"Normais"},std::pair{mesh.data.hasTangents,"Tangentes"},
+                                         std::pair{mesh.data.hasColors,"Cores"}})
+          if(present) row.channels+=(row.channels.empty()?"":", ")+std::string(label);
+        if(row.channels.empty()) row.channels="sem canais além da posição";
+        row.size=metres(mesh.data.boundsMaximum[0]-mesh.data.boundsMinimum[0])+" × "+
+                 metres(mesh.data.boundsMaximum[1]-mesh.data.boundsMinimum[1])+" × "+
+                 metres(mesh.data.boundsMaximum[2]-mesh.data.boundsMinimum[2])+" m";
+        if(const float density=mesh.texelDensity();density>0)
+          row.density=decimalText(density,0)+" texels/m em "+std::to_string(mesh.textureWidth)+"×"+
+                      std::to_string(mesh.textureHeight);
+        if(mesh.data.stretchRatio>0)
+          row.stretch=mesh.data.stretchRatio<1.5f?"uniforme ("+decimalText(mesh.data.stretchRatio,1)+"×)":
+                      decimalText(mesh.data.stretchRatio,1)+"× entre o decil baixo e o alto";
+        row.issues=mesh.issues;
+        state_.importMeshes.push_back(std::move(row));
+      }
+      state_.importMeshSummary=std::to_string(report.nodeCount)+" nós · "+std::to_string(report.meshCount)+" malhas · "+
+          std::to_string(report.materialCount)+" materiais · profundidade "+std::to_string(report.depth);
+      state_.importMeshSummary+=" · "+metres(report.largestDimension())+" m na maior dimensão";
+      if(report.densityMedian>0) {
+        state_.importMeshSummary+=" · densidade mediana "+decimalText(report.densityMedian,0)+" texels/m";
+        // Duas densidades muito diferentes no MESMO arquivo é o que produz uma
+        // parede nítida ao lado de uma borrada, sem nada a ajustar na engine.
+        if(report.densityLowest>0 && report.densityHighest/report.densityLowest>=4)
+          state_.importMeshSummary+=" (de "+decimalText(report.densityLowest,0)+" a "+
+              decimalText(report.densityHighest,0)+")";
+      }
+    }
   }
   state_.importPanel=true;state_.importReady=true;state_.importError=false;state_.importPage=0;state_.importPath=std::move(path);
   state_.importStatus=assets_.findByPath(state_.importPath)?"Atualizar recurso existente":"Registrar novo recurso";
   state_.importSummary=std::to_string(model.nodes.size())+" nós · "+std::to_string(model.draws.size())+" malhas · "+
       std::to_string(model.materials.size())+" materiais";
   state_.importSummary+="\nSó recurso: guarda no projeto.\nImportar na cena: guarda, instancia e enquadra o modelo.";
+  // G6-A: o que a medição da fonte achou. Vai no Resumo porque é ali que o
+  // autor decide publicar; o detalhe de cada malha fica na aba Malhas.
+  if(!state_.importMeshes.empty()) {
+    u32 errors=0,warnings=0;
+    for(const auto &mesh:state_.importMeshes) {if(mesh.level==2) ++errors;else if(mesh.level==1) ++warnings;}
+    state_.importSummary+=errors||warnings
+        ? "\nMalhas medidas: "+std::to_string(errors)+" com erro e "+std::to_string(warnings)+
+          " com atenção — a aba Malhas diz qual e por quê."
+        : "\nMalhas medidas: nada a apontar na fonte.";
+  }
   // Texturas (M09.1): o que entrou, o que não entrou e por quê. Ausência de
   // textura nunca pode parecer material final correto.
   if(!model.textures.empty())
@@ -5084,7 +5150,9 @@ void EditorSession::beginImportPreparation(std::string_view path) {
   state_.importPanel=true;state_.importReady=false;state_.importError=false;state_.importPage=0;state_.importIntoScene=false;
   state_.importSummary.clear();state_.importPath=std::string(path);state_.importAmbiguities=0;state_.importAmbiguityChoice=0;
   state_.importStatus="Preparando recurso…";state_.importTab=EditorScreenState::ImportTab::Summary;
-  state_.importNodes.clear();state_.importTextures.clear();state_.importHasExtent=false;state_.importReprepare=false;
+  state_.importNodes.clear();state_.importTextures.clear();state_.importMeshes.clear();
+  state_.importMeshSummary.clear();state_.importMeshSelected=0;state_.importMeshDetail=false;
+  state_.importHasExtent=false;state_.importReprepare=false;
   const auto profile=importProfileForPath(path);
   state_.importScale=state_.importPreparedScale=profile.scale;
   state_.importTextureDimension=state_.importPreparedTextureDimension=profile.maximumTextureDimension;
