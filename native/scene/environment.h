@@ -11,7 +11,7 @@ public:
   Environment() { values.active = true; }
   renderer::SceneEnvironment values{};
   renderer::EnvironmentVolumeShape shape=renderer::EnvironmentVolumeShape::Global;
-  bool overrideSky=true,overrideFog=true,overridePost=true;
+  bool overrideSky=true,overrideFog=true,overridePost=true,overrideIndirect=true;
   float weight=1.0f,blendDistance=0.0f,boxSize[3]{10,10,10},sphereRadius=5.0f;
   u32 layer=0;
   resources::AssetGuid profile{};
@@ -33,12 +33,12 @@ public:
         << static_cast<u32>(values.sky) << ' ' << static_cast<u32>(values.toneMapper) << ' '
         << values.ambientOcclusion << ' '
         << static_cast<u32>(shape) << ' ' << overrideSky << ' ' << overrideFog << ' '
-        << overridePost << ' ' << layer << ' ' << (profile.valid()?profile.text():"-");
+        << overridePost << ' ' << layer << ' ' << (profile.valid()?profile.text():"-") << ' ' << overrideIndirect;
     for (const auto &property : descriptor.numbers) out << ' ' << property.read(*this);
   }
   bool read(std::istream &in, u32 version) override {
     u32 sky = 0, tone = 0;
-    if ((version < 1 || version > 5) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
+    if ((version < 1 || version > 6) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
                           values.vignette))
       return false;
     if(version>=5 && !(in>>values.filmGrain)) return false;
@@ -55,15 +55,21 @@ public:
       std::string token;
       if(!(in>>token) || (token!="-"&&!resources::AssetGuid::parse(token,profile))) return false;
     }
+    // Antes da v6 não havia controle de luz indireta: o volume participa com o
+    // valor neutro (1), que é exatamente o que ele fazia.
+    overrideIndirect=true;values.indirectDiffuse=1;values.indirectSpecular=1;
+    if(version>=6 && !(in>>overrideIndirect)) return false;
     for (const auto &property : descriptor.numbers) {
       if(version<5 && property.id=="film_grain_intensity") continue;
+      if(version<6 && property.id.starts_with("indirect_")) continue;
       // Campos espaciais não existiam no arquivo v1.
       if (version>=3 || (version==2 && !property.id.starts_with("ambient_occlusion_")) ||
           property.id=="priority" || property.id.starts_with("sky_") ||
           property.id.starts_with("ground.") || property.id=="atmosphere" ||
           property.id.starts_with("sun_disk_") || property.id.starts_with("fog_") ||
           property.id=="exposure_ev" || property.id.starts_with("bloom_") ||
-          property.id=="contrast" || property.id=="saturation" || property.id=="vignette_intensity")
+          property.id=="contrast" || property.id=="saturation" || property.id=="vignette_intensity" ||
+          property.id.starts_with("indirect_"))
         if (!(in >> *property.write(*this))) return false;
     }
     return valid();
@@ -161,6 +167,11 @@ inline constexpr std::array<ComponentNumber, 4> environmentAmbientOcclusionNumbe
 #define AE_ENV_VOLUME_AXIS(id,label,axis) \
   {label,.01f,100000.0f,.1f,[](const ComponentValue &v)->const float&{return static_cast<const Environment&>(v).boxSize[axis];}, \
    [](ComponentValue &v)->float*{return &static_cast<Environment&>(v).boxSize[axis];},id,{"Volume","m",nullptr,environmentIsBox,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Draw}}
+inline constexpr std::array<ComponentNumber,2> environmentIndirectNumbers{{
+  AE_ENV_NUMBER("indirect_diffuse", "Difuso indireto", indirectDiffuse, 0, 4, .02f, "Luz indireta", "×", nullptr, "render.ambient.hemispheric", "rhi/shaders/dirt_road_shading.glsl", Invalidate::Draw),
+  AE_ENV_NUMBER("indirect_specular", "Reflexo indireto", indirectSpecular, 0, 4, .02f, "Luz indireta", "×", nullptr, "render.ambient.specular", "rhi/shaders/environment_lighting.glsl", Invalidate::Draw),
+}};
+
 inline constexpr std::array<ComponentNumber,6> environmentVolumeNumbers{{
   AE_ENV_VOLUME_NUMBER("weight","Peso",weight,0,1,.02f,"",nullptr),
   AE_ENV_VOLUME_NUMBER("blend_distance","Distância de mistura",blendDistance,0,100000,.1f,"m",environmentIsLocal),
@@ -179,7 +190,7 @@ inline constexpr std::array<ComponentNumber,6> environmentVolumeNumbers{{
 // array constexpr evita uma tabela paralela apenas para a paginação do editor.
 inline constexpr auto environmentAllNumbers = [] {
   std::array<ComponentNumber, environmentNumbers.size() + environmentTailNumbers.size()+
-      environmentAmbientOcclusionNumbers.size()+environmentVolumeNumbers.size()> out{};
+      environmentAmbientOcclusionNumbers.size()+environmentVolumeNumbers.size()+environmentIndirectNumbers.size()> out{};
   for (usize i = 0; i < environmentNumbers.size(); ++i) out[i] = environmentNumbers[i];
   for (usize i = 0; i < environmentTailNumbers.size(); ++i)
     out[environmentNumbers.size() + i] = environmentTailNumbers[i];
@@ -187,10 +198,13 @@ inline constexpr auto environmentAllNumbers = [] {
     out[environmentNumbers.size()+environmentTailNumbers.size()+i]=environmentAmbientOcclusionNumbers[i];
   for(usize i=0;i<environmentVolumeNumbers.size();++i)
     out[environmentNumbers.size()+environmentTailNumbers.size()+environmentAmbientOcclusionNumbers.size()+i]=environmentVolumeNumbers[i];
+  for(usize i=0;i<environmentIndirectNumbers.size();++i)
+    out[environmentNumbers.size()+environmentTailNumbers.size()+environmentAmbientOcclusionNumbers.size()+
+        environmentVolumeNumbers.size()+i]=environmentIndirectNumbers[i];
   return out;
 }();
 
-inline constexpr std::array<ComponentBoolean, 10> environmentBooleans{{
+inline constexpr std::array<ComponentBoolean, 11> environmentBooleans{{
   {"enabled", "Ativo", [](const ComponentValue &v){return static_cast<const Environment&>(v).values.active;}, [](ComponentValue &v,bool b){static_cast<Environment&>(v).values.active=b;}, {"Geral","","Participa da seleção por prioridade"}},
   {"fog", "Neblina", [](const ComponentValue &v){return static_cast<const Environment&>(v).values.fog;}, [](ComponentValue &v,bool b){static_cast<Environment&>(v).values.fog=b;}, {"Neblina","","Aplica neblina exponencial pela profundidade",nullptr,nullptr,"render.environment.fog","rhi/shaders/post_process_common.glsl",Invalidate::Draw}},
   {"post", "Pós-processamento", [](const ComponentValue &v){return static_cast<const Environment&>(v).values.post;}, [](ComponentValue &v,bool b){static_cast<Environment&>(v).values.post=b;}, {"Pós","","Ativa os overrides autorais desta cena",nullptr,nullptr,"render.post.tonemap","rhi/shaders/post_process_common.glsl",Invalidate::Policy}},
@@ -201,6 +215,7 @@ inline constexpr std::array<ComponentBoolean, 10> environmentBooleans{{
   {"override_sky","Sobrescrever céu",[](const ComponentValue &v){return static_cast<const Environment&>(v).overrideSky;},[](ComponentValue &v,bool b){static_cast<Environment&>(v).overrideSky=b;},{"Volume","","Participa da mistura de céu e atmosfera",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Draw}},
   {"override_fog","Sobrescrever neblina",[](const ComponentValue &v){return static_cast<const Environment&>(v).overrideFog;},[](ComponentValue &v,bool b){static_cast<Environment&>(v).overrideFog=b;},{"Volume","","Participa da mistura de neblina",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Draw}},
   {"override_post","Sobrescrever pós",[](const ComponentValue &v){return static_cast<const Environment&>(v).overridePost;},[](ComponentValue &v,bool b){static_cast<Environment&>(v).overridePost=b;},{"Volume","","Participa da mistura de exposição e pós",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Policy}},
+  {"override_indirect","Sobrescrever luz indireta",[](const ComponentValue &v){return static_cast<const Environment&>(v).overrideIndirect;},[](ComponentValue &v,bool b){static_cast<Environment&>(v).overrideIndirect=b;},{"Volume","","Participa da mistura de difuso e reflexo indiretos",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Draw}},
 }};
 
 inline constexpr std::array<ComponentEnumOption, 2> skyOptions{{{0,"HDRI"},{1,"Atmosfera"}}};
@@ -236,7 +251,7 @@ inline constexpr std::array<ComponentResourceBinding,1> environmentResources{{
 }};
 
 inline const ComponentType Environment::descriptor{
-  "astra.render.environment", 5,
+  "astra.render.environment", 6,
   []()->std::unique_ptr<ComponentValue>{return std::make_unique<Environment>();},
   environmentAllNumbers, environmentBooleans, environmentEnums, nullptr, false, {}, environmentTriples,
   environmentResources

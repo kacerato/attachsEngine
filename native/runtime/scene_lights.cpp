@@ -33,6 +33,7 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
     entry.intensity = scene::lightIntensityForShader(light->kind, light->unit, light->intensity,
                                                      light->innerAngle, light->outerAngle);
     entry.range = light->range;
+    entry.photometric = light->unit != scene::LightUnit::Engine;
     entry.innerAngle = light->innerAngle;
     entry.outerAngle = light->outerAngle;
     // Sombra local autoral (G6-B). A direcional projeta pelas cascatas do sol,

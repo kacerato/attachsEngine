@@ -66,6 +66,10 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     result.fogStart=mix(result.fogStart,target.fogStart,amount);
     if(amount>=.5f) result.fog=target.fog;
   }
+  if(overrides&EnvironmentOverrideIndirect) {
+    result.indirectDiffuse=mix(result.indirectDiffuse,target.indirectDiffuse,amount);
+    result.indirectSpecular=mix(result.indirectSpecular,target.indirectSpecular,amount);
+  }
   if(overrides&EnvironmentOverridePost) {
     result.exposureEv=mix(result.exposureEv,target.exposureEv,amount);
     result.bloomThreshold=mix(result.bloomThreshold,target.bloomThreshold,amount);

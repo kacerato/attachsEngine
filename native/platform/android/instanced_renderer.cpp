@@ -4884,6 +4884,26 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       // Uma direcional autorada na cena passa a ser o sol: ela é a modalidade
       // que já tem consumidor com cascatas de sombra. Sem nenhuma, o sol do
       // recurso de ambiente continua valendo, como antes deste caminho existir.
+      // Céu, ambiente e reflexo do ambiente acompanham o sol autorado quando
+      // ele está em lux: o recurso de ambiente foi calibrado contra o PRÓPRIO
+      // sol (2 unidades no padrão), e um sol de 100.000 lux com o céu antigo
+      // deixa o céu preto e a sombra sem luz de preenchimento assim que a
+      // exposição desce para enquadrar o sol. É o que o céu físico da HDRP faz:
+      // a proporção céu:sol é do ambiente; a escala absoluta é do sol.
+      frame->sceneAoDetail[2] = 1.0f;
+      float skyScale = 1.0f;
+      if (const auto *sun = renderer::selectDirectionalLight(lights)) {
+        const float reference = frame->environment.sunDirectionIntensity[3];
+        if (sun->photometric && reference > 0.0f && std::isfinite(sun->intensity) && sun->intensity > 0.0f)
+          skyScale = sun->intensity / reference;
+      }
+      // O céu visível (z) só acompanha o sol; o que chega às superfícies ainda
+      // passa pelo controle de luz indireta do volume da câmera (w e ambiente).
+      const float indirectDiffuse = look.active ? look.indirectDiffuse : 1.0f;
+      const float indirectSpecular = look.active ? look.indirectSpecular : 1.0f;
+      frame->sceneAoDetail[2] = skyScale;
+      frame->sceneAoDetail[3] = skyScale * indirectSpecular;
+      frame->environment.ambientColorStrength[3] *= skyScale * indirectDiffuse;
       if (const auto *sun = renderer::selectDirectionalLight(lights)) {
         float direction[3];
         renderer::detail::normalized(sun->direction, direction);

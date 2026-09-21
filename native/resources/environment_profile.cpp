@@ -75,6 +75,9 @@ renderer::SceneEnvironment applyEnvironmentProfile(const renderer::SceneEnvironm
                                                     const EnvironmentProfile &profile) {
   auto result=profile.values;
   result.active=instance.active;result.priority=instance.priority;
+  // Luz indireta é do LUGAR (a sala escura, o pátio aberto), não da aparência
+  // compartilhada: fica com a instância, como a prioridade.
+  result.indirectDiffuse=instance.indirectDiffuse;result.indirectSpecular=instance.indirectSpecular;
   return result;
 }
 

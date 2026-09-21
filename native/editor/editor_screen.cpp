@@ -3098,7 +3098,7 @@ void buildSceneTemplatePanel(ScreenBuilder &builder, const UiRect &viewport) {
   const auto models = sceneTemplates();
   const float width = std::min(360.0f, std::max(220.0f, viewport.width - 32.0f));
   const UiRect panel{viewport.x + (viewport.width - width) * .5f, viewport.y + 48.0f, width,
-                     56.0f + static_cast<float>(models.size()) * 62.0f};
+                     56.0f + static_cast<float>(models.size()) * 78.0f};
   list.addRect(panel, theme.color.surface, 6);
   router.addBlocker(panel);
   auto content = deflate(panel, UiInsets::all(12));
@@ -3108,13 +3108,13 @@ void buildSceneTemplatePanel(ScreenBuilder &builder, const UiRect &viewport) {
   router.addRegion(close, widgetId(EditorWidget::SceneTemplateClose));
   builder.label(header, "Modelo de cena", theme.color.text, theme.type.cardName);
   for (u32 index = 0; index < models.size(); ++index) {
-    auto row = takeTop(content, 62);
+    auto row = takeTop(content, 78);
     const auto card = deflate(row, UiInsets::symmetric(0, 3));
     list.addRect(card, theme.color.raised, theme.radius.control);
     auto inner = deflate(card, UiInsets::all(8));
     builder.label(takeTop(inner, 20), models[index].name, theme.color.text, theme.type.caption);
     for (const auto &line : wrapText(list, models[index].summary, inner.width, theme.type.caption)) {
-      builder.label(takeTop(inner, 16), line, theme.color.textMuted, theme.type.caption);
+      builder.label(takeTop(inner, 20), line, theme.color.textMuted, theme.type.caption);
       if (inner.height <= 0) break;
     }
     router.addRegion(card, widgetId(EditorWidget::SceneTemplateRowBase) + index);
@@ -3134,7 +3134,10 @@ void buildSceneViewsPanel(ScreenBuilder &builder, const UiRect &viewport) {
   const auto &views = state.document->views();
   const float width = std::min(300.0f, std::max(180.0f, viewport.width - 32.0f));
   const float rows = static_cast<float>(std::min<u32>(views.count(), 6));
-  const UiRect panel{viewport.x + 104.0f, viewport.y + 56.0f, width, 96.0f + rows * 34.0f};
+  const UiRect panel{viewport.x + std::max(8.0f, std::min(228.0f, viewport.width - width - 8.0f)), viewport.y + 56.0f,
+                     width, 124.0f + rows * 34.0f + (views.empty() ? 34.0f : 0.0f) + (views.count() > 6 ? 20.0f : 0.0f)};
+  // Cabeçalho, linhas, rodapé de ações e "Salvar vista atual" — a conta antiga
+  // esquecia o último botão, e ele saía cortado no aparelho.
   list.addRect(panel, theme.color.surface, 6);
   router.addBlocker(panel);
   auto content = deflate(panel, UiInsets::all(10));
@@ -3341,7 +3344,9 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
                      UiIcon::EditorAuthorFrame, widgetId(EditorWidget::FrameAll));
   // Vistas salvas: o enquadramento é o que torna duas medições comparáveis, e
   // por isso fica ao lado dos controles de câmera, não escondido num menu.
-  builder.iconButton({layout.viewport.x + 104.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
+  // Fica DEPOIS de Lighting/Effects (+104..+220): no mesmo lugar, o botão de
+  // Lighting cobria este e ele não aparecia no aparelho.
+  builder.iconButton({layout.viewport.x + 228.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
                      UiIcon::SceneLayers, widgetId(EditorWidget::ViewsOpen), state.viewsPanel);
   if(state.viewsPanel && state.document) buildSceneViewsPanel(builder, layout.viewport);
   if(state.templatePanel) buildSceneTemplatePanel(builder, layout.viewport);

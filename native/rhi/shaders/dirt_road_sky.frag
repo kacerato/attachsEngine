@@ -91,6 +91,8 @@ void main() {
                             corona*environment.sceneSky.z*0.18);
     color=mix(color,atmosphereSky,clamp(environment.sceneSky.x,0.0,1.0));
   }
+  // O ceu visivel acompanha o sol autorado em lux (ver environmentRadiance).
+  color*=environment.sceneAoDetail.z;
   if(environment.scenePost.z<0.5)
     color=acesToneMap(color*environment.parameters.x*exp2(environment.scenePost.x));
   if((frame.materialFlags.z&1u)!=0u) color=linearToSrgb(color);

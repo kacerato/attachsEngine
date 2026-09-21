@@ -33,7 +33,8 @@ bool collectSceneEnvironmentVolumes(const SceneGraph &graph,
     volume.shape=component->shape;
     volume.overrides=(component->overrideSky?renderer::EnvironmentOverrideSky:0u)|
                      (component->overrideFog?renderer::EnvironmentOverrideFog:0u)|
-                     (component->overridePost?renderer::EnvironmentOverridePost:0u);
+                     (component->overridePost?renderer::EnvironmentOverridePost:0u)|
+                     (component->overrideIndirect?renderer::EnvironmentOverrideIndirect:0u);
     volume.layer=component->layer;volume.stableId=id;volume.weight=component->weight;
     volume.blendDistance=component->blendDistance;volume.sphereRadius=component->sphereRadius;
     std::copy(component->boxSize,component->boxSize+3,volume.boxSize);

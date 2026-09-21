@@ -440,6 +440,30 @@ luz na tela.
 | Amostragem: pontual escolhe a face pelo eixo dominante, desvio na normal medido em texels do mapa, suave com 4 buscas de compare (16 amostras efetivas), força mistura com o iluminado; fora do mapa conta como iluminado | `rhi/shaders/dirt_road_shading.glsl` | idem |
 | Bloco do quadro: 4 vec4 por luz (a quarta aponta o tile), 16 tiles com matriz e retângulo | `DirtRoadFrameUniform` (3104 bytes), `environment_lighting.glsl` | idem |
 
-**Pendente com o aparelho:** ver a sombra da luz de teto do cenário de
-referência sobre a mesa, a borda suave e o custo em ms do passe. É o primeiro
-ponto do G6 em que o aparelho é necessário de verdade: o host não executa Vulkan.
+### G6-A/B · passada no aparelho (Xiaomi 25053PC47G, 21/09/2026)
+
+Projeto de teste próprio (`G6Referencia`); nenhum projeto do usuário foi tocado.
+
+| Achado | Causa | Correção |
+|---|---|---|
+| Projeto salvo pela build nova não abria ("Formato de cena não reconhecido") | o shell Java aceitava arquivo até v12 e as Vistas subiram para v13. O teste gerenciado `ArquivoDeCenaTests` pega isso, mas não tinha sido rodado | `ProjectSceneSource.LAST_SUPPORTED_ARCHIVE_VERSION = 13`; suíte gerenciada rodada: 456 verdes |
+| Botão Vistas invisível | desenhado em +104, embaixo do botão Lighting | movido para depois de Lighting/Effects |
+| "Salvar vista atual" cortado; resumo do Modelo de cena cortado | altura do painel não contava o último botão / a segunda linha | alturas corrigidas |
+| Cenário de referência estourado em branco | sol em lux (100.000 lux = 146 unidades) sem exposição coerente | o modelo traz volumes de Ambiente: exposição do dia −6,8 EV e caixa do interior +4,5 EV com mistura de 1 m |
+| Céu preto e sombra sem preenchimento no exterior | a exposição física escurecia céu e ambiente, que não acompanhavam o sol | **céu, ambiente e reflexo acompanham o sol autorado em lux** (razão sol da cena / sol do recurso), como o céu físico da HDRP; sol em unidade legada não muda nada |
+| Interior estourado mesmo com a lâmpada certa | o céu físico entrava inteiro na sala: sem sondas, nada dizia que ali dentro o céu é oclusão | novo override **Luz indireta** no Ambiente v6 (Difuso indireto / Reflexo indireto, o Indirect Lighting Controller do Volume da Unity), misturado por volume; a sala usa 0,1% (2% ainda estourava) |
+| Linha clara no pé das paredes | sombra do sol vazando em parede de 10 cm | paredes e teto do modelo com 20 cm, como parede real |
+| Luzes do interior sem sombra | o modelo não ligava | o dado do modelo declara `shadows`; luz de teto e foco nascem com sombra suave |
+
+Resultado: exterior legível com sombras do sol; interior com a lâmpada
+dominando, a luz do dia entrando pela porta e **a sombra da luz de teto
+projetada pela mesa** (o pé da mesa fica na sombra do tampo). A camada de
+validação do Vulkan ficou ligada durante a passada e não registrou nenhum VUID.
+Capturas em `docs/capturas/g6/`: `modelo-de-cena-painel.png`,
+`vistas-painel.png`, `referencia-exterior-exposicao-fisica.png`,
+`referencia-interior-estourado-2pct.png`,
+`referencia-interior-antes-parede-20cm.png` e
+`referencia-interior-sombra-luz-de-teto.png`.
+
+Ainda não medido: custo em ms do passe de sombra local (exige bancada limpa,
+ver as regras de medição) e a aba Malhas com um GLB escolhido pelo seletor.

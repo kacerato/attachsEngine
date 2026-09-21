@@ -59,6 +59,9 @@ struct SceneLight {
   float innerAngle = 20; // meio-ângulo, graus
   float outerAngle = 35;
   SceneLightShadow shadow{};
+  // Intensidade em unidade física (lux, candela, lúmen) em vez da escala
+  // interna legada. Só a física pede que céu e ambiente acompanhem o sol.
+  bool photometric = false;
 };
 
 // Nenhuma luz some em silêncio: o que não coube é contado, por modalidade, e

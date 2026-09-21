@@ -10,6 +10,7 @@
 #include "editor/editor_session.h"
 #include "editor/editor_number_text.h"
 #include "editor/editor_scene_template.h"
+#include "scene/environment.h"
 #include "resources/import_report.h"
 #include "editor/editor_import_transaction.h"
 #include "scene/import_link.h"
@@ -3934,6 +3935,7 @@ bool EditorSession::createSceneTemplate(u32 index) {
       light->intensity=node.lightIntensity;
       if(node.lightRange>0) light->range=node.lightRange;
       std::copy(node.color,node.color+3,light->color);
+      if(node.shadows) light->shadowMode=2;
     }
     if(!history_.applyValues(document_,id,values)) {complete=false;break;}
     created[n]=id;
@@ -3941,6 +3943,35 @@ bool EditorSession::createSceneTemplate(u32 index) {
   if(!complete) {
     // Modelo pela metade é pior do que modelo nenhum: o autor não sabe o que
     // faltou e a comparação nasce torta.
+    history_.cancel(document_);
+    state_.status="Não foi possível montar o modelo de cena";
+    return false;
+  }
+  // Volumes de Ambiente do modelo: a exposição coerente com a luz fotométrica.
+  for(const auto &volume:model.volumes) {
+    if(!complete) break;
+    const auto parent=volume.parent<0?group:
+        (static_cast<usize>(volume.parent)<created.size()?created[static_cast<usize>(volume.parent)]:kInvalidEntity);
+    const auto id=parent!=kInvalidEntity?history_.createEntity(document_,parent,EditorEntityKind::Folder,volume.name):kInvalidEntity;
+    if(!id) {complete=false;break;}
+    auto values=*document_.find(id);
+    std::copy(volume.position,volume.position+3,values.transform.position);
+    auto *environment=static_cast<scene::Environment*>(values.components.add(scene::Environment::descriptor));
+    if(!environment) {complete=false;break;}
+    environment->shape=volume.box?renderer::EnvironmentVolumeShape::Box:renderer::EnvironmentVolumeShape::Global;
+    std::copy(volume.size,volume.size+3,environment->boxSize);
+    environment->blendDistance=volume.blendDistance;
+    environment->values.priority=volume.priority;
+    environment->values.exposureEv=volume.exposureEv;
+    environment->values.post=true;
+    environment->values.indirectDiffuse=volume.indirectDiffuse;
+    environment->values.indirectSpecular=volume.indirectSpecular;
+    // A caixa do interior só troca a exposição: céu e neblina continuam os do
+    // dia, que é o que se vê pela porta.
+    if(volume.box) {environment->overrideSky=false;environment->overrideFog=false;}
+    if(!history_.applyValues(document_,id,values)) complete=false;
+  }
+  if(!complete) {
     history_.cancel(document_);
     state_.status="Não foi possível montar o modelo de cena";
     return false;

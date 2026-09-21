@@ -16,7 +16,11 @@ enum EnvironmentOverride : u32 {
   EnvironmentOverrideSky = 1u << 0,
   EnvironmentOverrideFog = 1u << 1,
   EnvironmentOverridePost = 1u << 2,
-  EnvironmentOverrideAll = EnvironmentOverrideSky | EnvironmentOverrideFog | EnvironmentOverridePost,
+  // Luz indireta (o Indirect Lighting Controller do Volume da Unity): quanto do
+  // céu e do reflexo do ambiente chega às superfícies dentro do volume.
+  EnvironmentOverrideIndirect = 1u << 3,
+  EnvironmentOverrideAll = EnvironmentOverrideSky | EnvironmentOverrideFog | EnvironmentOverridePost |
+                           EnvironmentOverrideIndirect,
 };
 
 // Resultado autoral já resolvido para uma vista. O componente de cena e o
@@ -52,6 +56,11 @@ struct SceneEnvironment final {
   float ambientOcclusionIntensity = 1.0f;
   float ambientOcclusionPower = 1.5f;
   float ambientOcclusionBias = 0.02f;
+  // Multiplicadores de luz indireta, como Indirect Diffuse Lighting Multiplier e
+  // Reflection Lighting Multiplier da Unity. Sem sondas de luz, é o que diz ao
+  // renderer que dentro de uma sala o céu não chega inteiro: 1 é o legado.
+  float indirectDiffuse = 1.0f;
+  float indirectSpecular = 1.0f;
 
   bool valid() const noexcept {
     if (static_cast<u32>(sky) > 1 || static_cast<u32>(toneMapper) > 1) return false;
@@ -60,7 +69,7 @@ struct SceneEnvironment final {
                           bloomIntensity, contrast, saturation, vignetteIntensity,
                           filmGrainIntensity,
                           ambientOcclusionRadius, ambientOcclusionIntensity,
-                          ambientOcclusionPower, ambientOcclusionBias};
+                          ambientOcclusionPower, ambientOcclusionBias, indirectDiffuse, indirectSpecular};
     for (float value : scalars) if (!std::isfinite(value)) return false;
     for (const float *color : {skyZenith, skyHorizon, ground, fogColor})
       for (u32 channel = 0; channel < 3; ++channel)
@@ -78,7 +87,9 @@ struct SceneEnvironment final {
            ambientOcclusionRadius >= 0.05f && ambientOcclusionRadius <= 10.0f &&
            ambientOcclusionIntensity >= 0.0f && ambientOcclusionIntensity <= 4.0f &&
            ambientOcclusionPower >= 0.1f && ambientOcclusionPower <= 4.0f &&
-           ambientOcclusionBias >= 0.0f && ambientOcclusionBias <= 1.0f;
+           ambientOcclusionBias >= 0.0f && ambientOcclusionBias <= 1.0f &&
+           indirectDiffuse >= 0.0f && indirectDiffuse <= 4.0f &&
+           indirectSpecular >= 0.0f && indirectSpecular <= 4.0f;
   }
 };
 

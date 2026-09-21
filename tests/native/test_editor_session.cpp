@@ -2245,8 +2245,8 @@ AE_TEST(the_reference_scene_template_builds_interior_and_exterior_in_one_undo_st
   const auto before = session.document().entityCount();
   AE_EXPECT_TRUE(session.createSceneTemplate(0), "o modelo de referência monta");
   const auto &model = sceneTemplates()[0];
-  AE_EXPECT_EQ(session.document().entityCount(), before + model.nodes.size() + 1,
-               "um objeto por nó do modelo, mais o grupo que os segura");
+  AE_EXPECT_EQ(session.document().entityCount(), before + model.nodes.size() + model.volumes.size() + 1,
+               "um objeto por nó e por volume do modelo, mais o grupo que os segura");
 
   // Escala humana: é ela que faz um modelo importado parecer grande ou pequeno
   // demais no ato, então precisa chegar com 1,80 m mesmo.
@@ -2263,12 +2263,12 @@ AE_TEST(the_reference_scene_template_builds_interior_and_exterior_in_one_undo_st
     if (light->kind == scene::LightKind::Directional)
       sunFound = light->unit == scene::LightUnit::LuxCandela && light->intensity >= 50000;
     if (light->kind == scene::LightKind::Point)
-      ceilingLight = light->unit == scene::LightUnit::LuxLumen && light->range > 1;
+      ceilingLight = light->unit == scene::LightUnit::LuxLumen && light->range > 1 && light->shadowMode == 2;
     if (light->kind == scene::LightKind::Spot) spotFound = true;
   }
   AE_EXPECT_TRUE(humanFound, "a referência de 1,80 m está na cena");
   AE_EXPECT_TRUE(sunFound, "o sol chega em lux, como luz direcional");
-  AE_EXPECT_TRUE(ceilingLight && spotFound, "o interior tem luz de teto e foco de parede");
+  AE_EXPECT_TRUE(ceilingLight && spotFound, "o interior tem luz de teto com sombra suave e foco de parede");
 
   // As vistas vêm com o modelo: é o enquadramento repetido que torna duas
   // medições comparáveis.

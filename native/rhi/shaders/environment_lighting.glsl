@@ -78,7 +78,7 @@ highp vec2 environmentUv(highp vec3 direction) {
 // equiretangular, 2 = sempre octaedrico. Ver a declaracao em
 // dirt_road_shading.glsl -- a constante existe para que o ramo nao usado saia
 // do binario em vez de custar registradores em todo fragmento.
-mediump vec3 environmentRadiance(highp vec3 direction,mediump float lod) {
+mediump vec3 environmentRadianceUnscaled(highp vec3 direction,mediump float lod) {
   if(ENVIRONMENT_PROJECTION==1u ||
      (ENVIRONMENT_PROJECTION==0u && environment.parameters.w<0.5))
     return textureLod(environmentMap,environmentUv(direction),
@@ -93,6 +93,13 @@ mediump vec3 environmentRadiance(highp vec3 direction,mediump float lod) {
                                     greaterThanEqual(folded,vec2(0.0)));
   highp vec2 uv=folded*0.5+0.5;
   return textureLod(environmentSpecularMap,uv,clamp(lod,0.0,environment.parameters.z)).rgb;
+}
+
+// `sceneAoDetail.w` e a escala do reflexo do ambiente: a razao sol autorado / sol
+// do recurso (quando o sol da cena esta em lux) vezes o Reflexo indireto do
+// volume da camera. 1 no legado. Todo reflexo do ambiente passa por aqui.
+mediump vec3 environmentRadiance(highp vec3 direction,mediump float lod) {
+  return environmentRadianceUnscaled(direction,lod)*environment.sceneAoDetail.w;
 }
 
 mediump vec2 environmentBrdf(mediump float noV,mediump float roughness) {
