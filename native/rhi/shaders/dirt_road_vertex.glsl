@@ -59,6 +59,7 @@ layout(location=10) in vec4 inTint;
 layout(location=11) in vec4 inNormalColumn0;
 layout(location=12) in vec4 inNormalColumn1;
 layout(location=13) in vec4 inNormalColumn2;
+layout(location=14) in mat4 inPreviousModel;
 // Precisao dos varyings (item 2.2.5). Cada varying e gravado na memoria de tile
 // e reinterpolado por fragmento: em fp16 esse trafego cai pela metade, e sao 12
 // floats por pixel entre normal, tangente, cor e dither.
@@ -81,6 +82,7 @@ layout(location=5) out mediump vec4 vColor;
 // one carrying real data (tangent handedness sign), so this slot never grew
 // the 128-byte instance struct or its vertex binding stride.
 layout(location=6) out mediump float vDither;
+layout(location=10) out highp vec3 vMotionWorldDelta;
 #ifdef AETHER_WATER_RIPPLES
 layout(location=9) out highp vec2 vRippleGeometrySlope;
 #endif
@@ -305,6 +307,10 @@ void main() {
   vUv0=resolvedUv0; vUv1=resolvedUv1; vColor=inColor*inTint;
   if(impostor && (frame.materialFlags.y>>16u)!=0u) vColor.a=impostorViewBlend;
   vDither=inNormalColumn1.w;
+  // The motion pass samples the same vertex position and raster coverage as
+  // the color pass. Billboard impostors and displaced water have separate
+  // temporal behavior; they are excluded from rigid motion draws.
+  vMotionWorldDelta=worldPosition-(inPreviousModel*vec4(modelPosition,1)).xyz;
   highp vec3 relative=worldPosition-frame.cameraPositionNear.xyz;
   highp vec3 view=vec3(dot(environment.worldToViewRow0.xyz,relative),
                  dot(environment.worldToViewRow1.xyz,relative),

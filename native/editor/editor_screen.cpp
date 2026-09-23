@@ -220,6 +220,18 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
     builder.router.addRegion(graphics,widgetId(EditorWidget::QualityOpen),theme.touch.minimumTarget);
     takeLeft(content,theme.spacing.medium);
   }
+  if(builder.state.workspace==EditorWorkspace::Scene &&
+     builder.state.qualityTemporalAvailable && builder.state.qualityTemporalDebug!=0 &&
+     content.width>=136.0f) {
+    constexpr const char *quickNames[]{"","TAA: profundidade","TAA: histórico","TAA: rejeição","TAA: movimento","TAA: reatividade"};
+    const auto quick=takeLeft(content,128.0f);
+    builder.list.addRect(quick,withAlpha(theme.color.accent,0.20f),theme.radius.control);
+    builder.label(quick,quickNames[std::min(builder.state.qualityTemporalDebug,5u)],
+                  theme.color.accent,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(quick,widgetId(EditorWidget::QualityTemporalDebugQuick),
+                             theme.touch.minimumTarget);
+    takeLeft(content,theme.spacing.small);
+  }
   const char *context=builder.state.workspace==EditorWorkspace::Play ? (builder.state.playPaused?"Pausado":"Em execução") :
       builder.state.workspace==EditorWorkspace::Lighting ? "Ambiente da cena" :
       builder.state.workspace==EditorWorkspace::Settings ? "Água da cena" :
@@ -3329,7 +3341,7 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
   // sair do painel. Numa tela baixa as linhas é que encolhem.
   const auto apply = deflate(takeBottom(content, 40), UiInsets::all(2));
   const auto stats = takeBottom(content, 20);
-  const u32 rowCount=state.qualityTab==2?9u:state.qualityTab==0?7u:state.qualityTab==1?8u:6u;
+  const u32 rowCount=state.qualityTab==2?10u:state.qualityTab==0?7u:state.qualityTab==1?8u:6u;
   const u32 rowsPerPage=std::max(1u,static_cast<u32>(std::floor(content.height/25.0f)));
   const u32 pageCount=(rowCount+rowsPerPage-1u)/rowsPerPage;
   const u32 page=std::min(state.qualityPage,pageCount-1u);
@@ -3348,15 +3360,17 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     if(page+1u<pageCount) router.addRegion(next,widgetId(EditorWidget::QualityPageNext));
   }
   u32 rowCursor=0;
-  const auto row = [&](const char *label, const std::string &value, EditorWidget widget) {
+  const auto row = [&](const char *label, const std::string &value, EditorWidget widget,
+                       bool enabled=true) {
     const u32 index=rowCursor++;
     if(index<firstRow||index>=firstRow+rowsOnPage) return;
     auto line = takeTop(content, rowHeight);
     builder.label(takeLeft(line, line.width * .46f), label, theme.color.textDim, theme.type.caption);
     const auto cell = deflate(line, UiInsets::all(2));
     list.addRect(cell, theme.color.raised, theme.radius.control);
-    builder.label(cell, value, theme.color.text, theme.type.caption, UiAlign::Center);
-    router.addRegion(cell, widgetId(widget));
+    builder.label(cell, value, enabled?theme.color.text:theme.color.textMuted,
+                  theme.type.caption, UiAlign::Center);
+    if(enabled) router.addRegion(cell, widgetId(widget));
   };
   const auto stepper = [&](const char *label, const std::string &value, EditorWidget down, EditorWidget up) {
     const u32 index=rowCursor++;
@@ -3384,7 +3398,8 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     row("Ampliação",renderer::upscalingFilterLabel(draft.upscalingFilter),EditorWidget::QualityUpscaling);
     row("Texturas / anisotropia",renderer::textureQualityLabel(draft.textures),EditorWidget::QualityTextures);
     row("Escala dinâmica",renderer::featureOverrideLabel(draft.dynamicResolution),EditorWidget::QualityDynamic);
-    row("Anti-aliasing",renderer::antiAliasingLabel(draft.antiAliasing),EditorWidget::QualityAntiAliasing);
+    row("Anti-aliasing",draft.antiAliasing==renderer::AntiAliasingMode::Temporal && state.qualityMotionAvailable
+        ?"TAA (câmera + rígidos)":renderer::antiAliasingLabel(draft.antiAliasing),EditorWidget::QualityAntiAliasing);
     row("Taxa alvo",draft.maximumRenderHz?std::to_string(draft.maximumRenderHz)+" Hz":std::string("Do nível"),EditorWidget::QualityRate);
   } else if(state.qualityTab==1) {
     row("Sombras",renderer::shadowQualityLabel(draft.shadows),EditorWidget::QualityShadows);
@@ -3401,8 +3416,13 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     row("Pós-processamento",renderer::postQualityLabel(draft.post),EditorWidget::QualityPost);
     stepper("Limiar do bloom",measure(draft.bloomThreshold,-1.0f,"",1),EditorWidget::QualityBloomThresholdDown,EditorWidget::QualityBloomThresholdUp);
     stepper("Intensidade do bloom",percent(draft.bloomIntensity,-1.0f),EditorWidget::QualityBloomIntensityDown,EditorWidget::QualityBloomIntensityUp);
-    row("Anti-aliasing",renderer::antiAliasingLabel(draft.antiAliasing),EditorWidget::QualityAntiAliasing);
+    row("Anti-aliasing",draft.antiAliasing==renderer::AntiAliasingMode::Temporal && state.qualityMotionAvailable
+        ?"TAA (câmera + rígidos)":renderer::antiAliasingLabel(draft.antiAliasing),EditorWidget::QualityAntiAliasing);
     stepper("Peso temporal",percent(draft.temporalHistoryWeight,-1.0f),EditorWidget::QualityTemporalWeightDown,EditorWidget::QualityTemporalWeightUp);
+    constexpr const char *temporalViews[]{"Imagem final","Profundidade","Histórico usado","Profundidade rejeitada","Movimento ×512","Reatividade"};
+    row("Diagnóstico TAA",state.qualityTemporalAvailable
+        ?temporalViews[std::min(state.qualityTemporalDebug,5u)]:"TAA indisponível nesta vista",
+        EditorWidget::QualityTemporalDebug,state.qualityTemporalAvailable);
     stepper("Nitidez",percent(draft.postSharpen,-1.0f),EditorWidget::QualitySharpenDown,EditorWidget::QualitySharpenUp);
     row("Vinheta",renderer::featureOverrideLabel(draft.postVignette),EditorWidget::QualityVignette);
   } else {

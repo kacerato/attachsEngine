@@ -4,6 +4,7 @@ precision highp int;
 layout(set=0,binding=0) uniform sampler2D sceneColor;
 layout(set=0,binding=1) uniform sampler2D historyColor;
 layout(set=0,binding=2) uniform sampler2D sceneDepth;
+layout(set=0,binding=5) uniform sampler2D motionWorld;
 layout(set=0,binding=4,std430) readonly buffer ExposureState {
   float ev; float targetEv; float meteredEv; uint valid;
 } automaticExposure;
@@ -28,7 +29,7 @@ layout(set=0,binding=3,std140) uniform EnvironmentLightingBlock {
   layout(offset=3296) vec4 postViewport; // normalized physical xy/extent
 } environment;
 layout(push_constant) uniform PostPushConstants {
-  vec4 texelFlags; // xy=1/source extent, z=bit0 bloom + bit1 bicubic upscale, w=AA/history
+  vec4 texelFlags; // xy=1/source extent, z=bloom/upscale/FSR/motion bits, w=AA + debug*4
   vec4 bloom;      // threshold, intensity, sharpen, vignette intensity
   vec4 grade;      // contrast, saturation, encode sRGB, packed transform+feedback
   vec4 sourceTransform; // xy=active/source extent, z=focal length, w=display aspect
@@ -188,17 +189,18 @@ float screenSpaceAmbientOcclusion(vec2 uv) {
 
 vec3 sampleFxaa(vec2 uv, out vec3 unfiltered, out vec3 crossAverage) {
   vec2 px = post.texelFlags.xy;
+  float aaMode=mod(post.texelFlags.w,4.0);
   vec3 center = sampleScene(uv);
   unfiltered = center;
   crossAverage = center;
-  if (post.bloom.z > 0.0 || post.texelFlags.w >= 2.0) {
+  if (post.bloom.z > 0.0 || aaMode >= 2.0) {
     vec3 north = sampleScene(uv + vec2(0.0, -px.y));
     vec3 south = sampleScene(uv + vec2(0.0,  px.y));
     vec3 west  = sampleScene(uv + vec2(-px.x, 0.0));
     vec3 east  = sampleScene(uv + vec2( px.x, 0.0));
     crossAverage = (north + south + west + east) * 0.25;
   }
-  if (post.texelFlags.w < 0.5 || post.texelFlags.w > 1.5) return center;
+  if (aaMode < 0.5 || aaMode > 1.5) return center;
 
   // FXAA 3.x-style edge search. Reject non-edges first; unlike the old cross
   // average this does not blur foliage interiors and material texture detail.
@@ -300,15 +302,32 @@ vec4 unpackSurfaceTransform(int packed) {
               float((packed >> 6) & 3) - 1.0);
 }
 
-vec3 temporalResolve(vec2 sourceUv, vec3 current, float ao, vec3 bloomColor) {
+// Alpha in the resolved-history attachment stores logarithmic view depth.
+// The presentation attachment keeps opaque alpha; only temporal reprojection
+// reads this value. Logarithmic encoding gives the UNORM8 history useful
+// precision across both nearby geometry and distant scenery.
+float temporalEncodeDepth(float viewZ, float nearPlane, float farPlane) {
+  return clamp(log2(max(viewZ / nearPlane, 1.0)) /
+                   log2(max(farPlane / nearPlane, 1.0001)), 0.0, 1.0);
+}
+
+vec3 temporalResolve(vec2 sourceUv, vec3 current, float ao, vec3 bloomColor,
+                     out float encodedDepth, out float historyContribution,
+                     out float rejectedDepth, out vec2 motionUv) {
   // Mode 1 is spatial AA when history is invalid (first frame/cut/moving draw),
   // mode 3 has a valid copied resolve. Invalid frames are rendered without
   // jitter and seed the next history; they never sample uninitialized color.
-  if (post.texelFlags.w < 2.5) return current;
   float depth = texture(sceneDepth, sourceUv).r;
   float nearPlane = post.currentPositionNear.w;
   float farPlane = post.previousPositionFar.w;
   float denominator = farPlane - depth * (farPlane - nearPlane);
+  encodedDepth = depth >= 0.999999 ? 1.0 :
+      temporalEncodeDepth(nearPlane * farPlane / max(denominator, 1.0e-6),
+                          nearPlane, farPlane);
+  historyContribution=0.0;
+  rejectedDepth=0.0;
+  motionUv=vec2(0.0);
+  if (mod(post.texelFlags.w,4.0) < 2.5) return current;
   if (denominator <= 1.0e-6) return current;
   float viewZ = nearPlane * farPlane / denominator;
 
@@ -323,6 +342,10 @@ vec3 temporalResolve(vec2 sourceUv, vec3 current, float ao, vec3 bloomColor) {
                            -cameraNdc.y * viewZ / focal, viewZ);
   vec3 worldPosition = post.currentPositionNear.xyz +
                        cameraRotation(post.currentCamera.x, post.currentCamera.y, post.previousCamera.z) * viewPosition;
+  if(mod(floor(post.texelFlags.z/8.0),2.0)>0.5 && depth<0.999999) {
+    vec4 objectMotion=texture(motionWorld,sourceUv);
+    if(objectMotion.a>0.5) worldPosition-=objectMotion.xyz;
+  }
   vec3 previousView = transpose(cameraRotation(post.previousCamera.x,
                                                  post.previousCamera.y, post.previousCamera.w)) *
                       (worldPosition - post.previousPositionFar.xyz);
@@ -346,16 +369,37 @@ vec3 temporalResolve(vec2 sourceUv, vec3 current, float ao, vec3 bloomColor) {
   if (any(lessThan(previousLocalUv, vec2(0.0))) ||
       any(greaterThan(previousLocalUv, vec2(1.0)))) return current;
   vec2 previousUv=environment.postViewport.xy+previousLocalUv*environment.postViewport.zw;
+  motionUv=vUv-previousUv;
 
   // FSR runs this resolve at the current internal extent, in the top-left of
   // the full-size history allocation. The rest of the image is never read.
-  vec2 historyScale=post.texelFlags.z>=4.0
+  vec2 historyScale=mod(floor(post.texelFlags.z/4.0),2.0)>0.5
       ? post.sourceTransform.xy/post.texelFlags.xy/vec2(textureSize(historyColor,0))
       : vec2(1.0);
   previousUv*=historyScale;
   vec2 historyHalfTexel=0.5/vec2(textureSize(historyColor,0));
   previousUv=clamp(previousUv,environment.postViewport.xy*historyScale+historyHalfTexel,
       (environment.postViewport.xy+environment.postViewport.zw)*historyScale-historyHalfTexel);
+  // A color match is insufficient at disocclusions: a newly visible surface
+  // may have nearly the same color as the old occluder. Reject its history
+  // when the old pixel's depth differs from the reprojected surface depth.
+  // Fetch alpha without bilinear filtering across a depth edge.
+  ivec2 historyExtent=textureSize(historyColor,0);
+  ivec2 historyPixel=clamp(ivec2(previousUv*vec2(historyExtent)),
+                          ivec2(0),historyExtent-ivec2(1));
+  float previousDepth=texelFetch(historyColor,historyPixel,0).a;
+  float expectedDepth=depth>=0.999999 ? 1.0 :
+      temporalEncodeDepth(previousView.z,nearPlane,farPlane);
+  // ~0.02 in log depth tolerates 8-bit quantization and raster edge samples
+  // while rejecting a different surface at materially different depth.
+  // A stationary depth edge alternates foreground/background under projection
+  // jitter. There is no newly exposed surface when camera and depth-writing
+  // geometry are unchanged, so this mismatch must not discard its history.
+  bool staticCoverage=mod(floor(post.texelFlags.z/16.0),2.0)>0.5;
+  if(!staticCoverage && abs(previousDepth-expectedDepth)>0.02) {
+    rejectedDepth=1.0;
+    return current;
+  }
   vec3 history = texture(historyColor, previousUv).rgb;
   // An sRGB history view decodes in hardware; UNORM contains explicitly
   // encoded presentation bytes. Resolve and clip in display-linear color
@@ -372,8 +416,14 @@ vec3 temporalResolve(vec2 sourceUv, vec3 current, float ao, vec3 bloomColor) {
   float historyWeight = fract(post.grade.w);
   float motionPixels = length((previousUv-vUv*historyScale)*vec2(textureSize(historyColor,0)));
   historyWeight *= exp2(-motionPixels * 0.035);
+  // Transparent/water draws reduce opaque coverage in sceneColor.a. Their
+  // color can change without writing depth or rigid motion, so retain less
+  // history in proportion to the accumulated blended coverage.
+  float reactive=clamp(1.0-texture(sceneColor,sourceUv).a,0.0,1.0);
+  historyWeight *= 1.0-reactive;
   historyWeight *= 1.0 - smoothstep(0.08, 0.35, abs(luma(history) - luma(current)));
-  return mix(current, history, clamp(historyWeight, 0.0, 0.97));
+  historyContribution=clamp(historyWeight, 0.0, 0.97);
+  return mix(current, history, historyContribution);
 }
 #endif
 
@@ -412,15 +462,32 @@ void main() {
   vec3 color = center + bloomColor;
   color=displayLinearColor(color);
 #if AETHER_TEMPORAL
-  color = temporalResolve(sourceUv, color, ao, bloomColor);
-  outHistory=vec4(post.grade.z>.5?linearToSrgb(color):color,1);
+  float encodedDepth;
+  float historyContribution,rejectedDepth;
+  vec2 motionUv;
+  color = temporalResolve(sourceUv, color, ao, bloomColor,
+                          encodedDepth, historyContribution, rejectedDepth,motionUv);
+  outHistory=vec4(post.grade.z>.5?linearToSrgb(color):color,encodedDepth);
+  // Editor diagnostics inspect the actual consumer values. The normal color
+  // and depth still go into history, so changing view never poisons a frame.
+  int temporalDebug=int(floor(post.texelFlags.w*0.25));
+  if(temporalDebug!=0) {
+    float displayedReactive=clamp(1.0-texture(sceneColor,sourceUv).a,0.0,1.0);
+    vec3 diagnostic=temporalDebug==1?vec3(encodedDepth):
+                    temporalDebug==2?vec3(0,historyContribution,0):
+                    temporalDebug==3?vec3(rejectedDepth,0,0):
+                    temporalDebug==4?vec3(clamp(vec2(0.5)+motionUv*512.0,0.0,1.0),0.5):
+                                     vec3(displayedReactive,0,displayedReactive);
+    outColor=vec4(diagnostic,1);
+    return;
+  }
 #endif
   // Presentation detail never feeds back into temporal reconstruction.
   if (post.bloom.z > 0.0)
     color += (displayLinearColor(unfiltered*ao+bloomColor)-
               displayLinearColor(crossAverage*ao+bloomColor))*post.bloom.z;
   float grainIntensity=environment.sceneAoDetail.y;
-  if(grainIntensity>0.0 && post.texelFlags.z<4.0) {
+  if(grainIntensity>0.0 && mod(floor(post.texelFlags.z/4.0),2.0)<0.5) {
     float response=0.35+0.65*(1.0-abs(luma(color)*2.0-1.0));
     color+=(filmGrainNoise(gl_FragCoord.xy)-0.5)*grainIntensity*response;
   }

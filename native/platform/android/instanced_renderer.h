@@ -50,6 +50,9 @@
 
 namespace ae::platform::android {
 
+enum class TemporalDebugView : u32 { Final = 0, Depth = 1, HistoryWeight = 2,
+                                     RejectedDepth = 3, Motion = 4, Reactivity = 5 };
+
 // PoC-A (item 0.2 do plano): "o overhead de interop C#↔Vulkan mata o
 // desempenho?". Desenha N instâncias de um cubo (rhi/shaders/instanced.vert)
 // cuja posição/cor vem inteiramente do lado C# — Aether.Interop.
@@ -90,6 +93,11 @@ public:
   // da tela é do editor, não do renderer) e valem para UM frame: quem não as
   // publicar de novo simplesmente não desenha interface, sem estado preso.
   void setUiInstances(std::span<const ui::UiInstance> instances);
+  void setTemporalDebugView(TemporalDebugView view) { temporalDebugView_ = view; }
+  bool temporalDebugAvailable() const {
+    return temporalAaActive_ && sceneOrthographicHalfHeight_ == 0.0f;
+  }
+  bool motionVectorsAvailable() const { return motionVectorsActive_ && temporalDebugAvailable(); }
   // R4: atlas de prévia de texturas composto pelo editor; enviado à GPU no
   // início da gravação da interface do próximo quadro.
   void setUiPreviewAtlas(std::span<const u8> rgba, u32 width, u32 height);
@@ -481,6 +489,12 @@ private:
   bool commitAuthoredScene();
   std::vector<u8> authoredVisibility_, authoredShadows_;
   std::vector<renderer::MaterialOverride> authoredMaterials_;
+  struct AuthoredDrawIdentity {
+    u64 objectId;
+    u32 sourceDrawIndex;
+    std::shared_ptr<const renderer::WaterRoute> route;
+  };
+  std::vector<AuthoredDrawIdentity> authoredDrawIdentities_;
   // R4: tabela de transformações de UV por binding (set=1, binding=16). Só os
   // desenhos que transformam ocupam entrada; o índice+1 vai em materialFlags.z.
   static constexpr u32 MaterialUvTransformCapacity = 1024;
@@ -515,6 +529,9 @@ private:
   void recordUiOverlay(u32 imageIndex);
   bool createPostResources();
   void destroyPostResources();
+  bool createMotionResources();
+  void destroyMotionResources();
+  void recordMotionPass(const platform::FreeCameraState &camera,float timeSeconds);
   void recordPostProcess(u32 imageIndex, const platform::FreeCameraState &camera);
   bool createAutoExposureResources();
   void destroyAutoExposureResources();
@@ -708,6 +725,11 @@ private:
   VkPipelineLayout autoExposurePipelineLayout_=VK_NULL_HANDLE;
   VkPipeline autoExposurePipelines_[2]{};
   rhi::VulkanImage postSceneColor_{};
+  rhi::VulkanImage motionImage_{};
+  VkRenderPass motionRenderPass_ = VK_NULL_HANDLE;
+  VkFramebuffer motionFramebuffer_ = VK_NULL_HANDLE;
+  VkPipeline motionPipeline_ = VK_NULL_HANDLE;
+  bool motionVectorsActive_ = false;
   rhi::VulkanImage postHistory_{};
   rhi::VulkanImage postResolved_{};
   rhi::VulkanImage fsrSource_{}, fsrUpscaled_{};
@@ -727,6 +749,7 @@ private:
   bool hdrSceneColor_ = false;
   VkFramebuffer postFramebuffers_[kMaxFramebuffers]{};
   bool temporalAaActive_ = false;
+  TemporalDebugView temporalDebugView_ = TemporalDebugView::Final;
   // Image layout and color validity are separate states. The descriptor is
   // statically used by the temporal shader even on its first-frame branch, so
   // the image must already be shader-readable before it contains history.
@@ -911,6 +934,13 @@ private:
   renderer::WaterShadingSettings waterShading_{};
   std::array<renderer::MapDrawUpdate, 128> pendingMapPoses_{};
   u32 pendingMapPoseCount_ = 0;
+  std::array<u32,128> motionDrawIndices_{};
+  u32 motionDrawCount_ = 0;
+  bool temporalStaticCoverage_ = false;
+  u32 temporalStaticFrameCount_ = 0;
+  // Dither/coverage updates still invalidate HZB, but only changed model
+  // transforms invalidate the camera-only temporal history.
+  bool pendingMapTransformChanged_ = false;
   // Estado por instância que NÃO é pose: material, visibilidade e sombra. Ele
   // muda durante o Play sem que a hierarquia mude -- um script escrevendo
   // `base_color`, por exemplo -- e a publicação de poses sozinha o deixaria

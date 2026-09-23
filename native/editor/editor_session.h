@@ -987,7 +987,14 @@ public:
     }
   }
   // O que o renderer está fazendo agora, para o rodapé do painel.
-  void setRenderStats(u32 width, u32 height, float gpuMilliseconds, std::string_view detectedLevel);
+  void setRenderStats(u32 width, u32 height, float gpuMilliseconds,
+                      std::string_view detectedLevel);
+  void setTemporalDebugAvailable(bool available,bool motionAvailable=false) {
+    state_.qualityTemporalAvailable=available;
+    state_.qualityMotionAvailable=available && motionAvailable;
+    if(!available) state_.qualityTemporalDebug=0;
+    else if(!motionAvailable && state_.qualityTemporalDebug==4) state_.qualityTemporalDebug=0;
+  }
   EditorEntityId createWaterSurface(bool cameraRelative);
   void reportWaterConfiguration(bool accepted) {
     state_.status=accepted?"Agua atualizada":"Configuracao de agua recusada; estado anterior mantido";

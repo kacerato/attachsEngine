@@ -2449,3 +2449,53 @@ AE_TEST(the_quality_panel_edits_a_draft_and_applies_it_on_request) {
                  fixture.session.screen().qualityStats.find("18,5 ms") != std::string::npos,
                  "o rodapé mostra a resolução real e o custo de GPU");
 }
+
+AE_TEST(temporal_debug_views_are_live_editor_state_only_when_taa_is_available) {
+  Fixture fixture;
+  fixture.session.update();
+  tapWidget(fixture,widgetId(EditorWidget::QualityOpen));
+  tapWidget(fixture,widgetId(EditorWidget::QualityTabLighting));
+  fixture.session.setTemporalDebugAvailable(true);
+  for(u32 page=0;page<4 &&
+      locateWidget(fixture.session,widgetId(EditorWidget::QualityTemporalDebug)).x<0;++page) {
+    AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::QualityPageNext)).x>=0,
+                   "controle de diagnóstico alcançável pela paginação");
+    tapWidget(fixture,widgetId(EditorWidget::QualityPageNext));
+  }
+  AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::QualityTemporalDebug)).x>=0,
+                 "diagnóstico aparece quando o renderer tem TAA");
+  fixture.session.setTemporalDebugAvailable(false);
+  AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::QualityTemporalDebug)).x<0,
+                 "diagnóstico não aceita toques sem consumidor temporal");
+  fixture.session.setTemporalDebugAvailable(true);
+  tapWidget(fixture,widgetId(EditorWidget::QualityTemporalDebug));
+  AE_EXPECT_EQ(fixture.session.screen().qualityTemporalDebug,1u,
+               "controle escolhe a visualização de profundidade");
+  AE_EXPECT_TRUE(!fixture.session.screen().qualityDirty,
+                 "modo de inspeção não altera a configuração autoral");
+  renderer::ProjectRenderingSettings request;
+  AE_EXPECT_TRUE(!fixture.session.takeRenderingSettingsRequest(request),
+                 "diagnóstico não solicita reconstrução nem gravação");
+  tapWidget(fixture,widgetId(EditorWidget::QualityClose));
+  AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::QualityTemporalDebugQuick)).x>=0,
+                 "atalho permanece na barra com o painel fechado");
+  for(u32 tap=0;tap<4;++tap) tapWidget(fixture,widgetId(EditorWidget::QualityTemporalDebugQuick));
+  AE_EXPECT_EQ(fixture.session.screen().qualityTemporalDebug,0u,
+               "atalho percorre as vistas até retornar à imagem final");
+  AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::QualityTemporalDebugQuick)).x<0 &&
+                 !fixture.session.screen().qualityDirty,
+                 "atalho desaparece na imagem final e não grava o projeto");
+  fixture.session.setTemporalDebugAvailable(true,true);
+  tapWidget(fixture,widgetId(EditorWidget::QualityOpen));
+  AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::QualityTemporalDebug)).x>=0,
+                 "controle do painel permanece acessível após reabrir");
+  for(u32 tap=0;tap<4;++tap) tapWidget(fixture,widgetId(EditorWidget::QualityTemporalDebug));
+  AE_EXPECT_EQ(fixture.session.screen().qualityTemporalDebug,4u,
+               "vista de movimento só entra no ciclo quando o passe real está disponível");
+  fixture.session.setTemporalDebugAvailable(true,false);
+  AE_EXPECT_EQ(fixture.session.screen().qualityTemporalDebug,0u,
+               "perder o passe de vetores retira o diagnóstico de movimento");
+  for(u32 tap=0;tap<4;++tap) tapWidget(fixture,widgetId(EditorWidget::QualityTemporalDebug));
+  AE_EXPECT_EQ(fixture.session.screen().qualityTemporalDebug,5u,
+               "reatividade permanece inspecionável sem vetor rígido");
+}

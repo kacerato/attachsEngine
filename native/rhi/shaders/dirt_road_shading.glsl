@@ -263,7 +263,7 @@ void main() {
     if((frame.materialFlags.z&1u)!=0u)
       color=mix(12.92*color,1.055*pow(color,vec3(1.0/2.4))-.055,
                 greaterThan(color,vec3(.0031308)));
-    outColor=vec4(color,base.a);
+    outColor=vec4(color,(flags&1u)!=0u?base.a:1.0);
     return;
   }
   highp vec3 eye=frame.cameraPositionNear.xyz;
@@ -381,5 +381,5 @@ void main() {
   color=toneMapEnvironment(color);
   if((frame.materialFlags.z&1u)!=0u) color=mix(12.92*color,1.055*pow(color,vec3(1.0/2.4))-.055,
                                              greaterThan(color,vec3(.0031308)));
-  outColor=vec4(color,base.a);
+  outColor=vec4(color,(flags&1u)!=0u?base.a:1.0);
 }

@@ -15,6 +15,8 @@
 #include "rhi/shaders/dirt_road_coverage_fallback_spirv.h"
 #include "rhi/shaders/dirt_road_coverage_shade_spirv.h"
 #include "rhi/shaders/dirt_road_coverage_shade_fallback_spirv.h"
+#include "rhi/shaders/dirt_road_motion_spirv.h"
+#include "rhi/shaders/dirt_road_motion_fallback_spirv.h"
 #include "rhi/shaders/dirt_road_sky_spirv.h"
 #include "rhi/shaders/runtime_hud_spirv.h"
 #include "rhi/shaders/post_process_spirv.h"
@@ -463,6 +465,7 @@ bool InstancedRenderer::createRenderPass() {
 
 #include "platform/android/instanced_fsr.inl"
 #include "platform/android/instanced_auto_exposure.inl"
+#include "platform/android/instanced_motion.inl"
 
 bool InstancedRenderer::createPipeline() {
   VkShaderModule vertModule = dirtRoadPreview_
@@ -582,7 +585,7 @@ bool InstancedRenderer::createPipeline() {
   binding.stride = instanceStride();
   binding.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 
-  VkVertexInputAttributeDescription attributes[14]{};
+  VkVertexInputAttributeDescription attributes[18]{};
   attributes[0].location = 0;
   attributes[0].binding = 1;
   attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
@@ -617,13 +620,14 @@ bool InstancedRenderer::createPipeline() {
                    packed?44u:56u};
     for(u32 i=0;i<5;++i)attributes[6+i]={6+i,1,VK_FORMAT_R32G32B32A32_SFLOAT,i*16u};
     for(u32 i=0;i<3;++i)attributes[11+i]={11+i,1,VK_FORMAT_R32G32B32A32_SFLOAT,80u+i*16u};
+    for(u32 i=0;i<4;++i)attributes[14+i]={14+i,1,VK_FORMAT_R32G32B32A32_SFLOAT,128u+i*16u};
   }
 
   VkPipelineVertexInputStateCreateInfo vertexInput{};
   vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
   vertexInput.vertexBindingDescriptionCount = (materialPreview_ || dirtRoadPreview_) ? 2 : 1;
   vertexInput.pVertexBindingDescriptions = bindings;
-  vertexInput.vertexAttributeDescriptionCount = dirtRoadPreview_ ? 14 : (materialPreview_ ? 9 : (scenePreview_ ? 5 : 2));
+  vertexInput.vertexAttributeDescriptionCount = dirtRoadPreview_ ? 18 : (materialPreview_ ? 9 : (scenePreview_ ? 5 : 2));
   vertexInput.pVertexAttributeDescriptions = attributes;
 
   VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -742,7 +746,9 @@ bool InstancedRenderer::createPipeline() {
       colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
       colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
       colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-      colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+      // Alpha carries the opaque coverage left after transparent layers.
+      // The post resolve uses 1-alpha as per-pixel temporal reactivity.
+      colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
       colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
       colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
       pipelineInfo.subpass = waterSubpassActive_ ? 1u : 0u;
@@ -836,7 +842,7 @@ bool InstancedRenderer::createPipeline() {
         // already contains opaque/sky color from subpass 0.
         colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
         colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
         colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         pipelineOk = pipelineOk && vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                                &waterPipeline_) == VK_SUCCESS;
@@ -1698,6 +1704,7 @@ bool InstancedRenderer::createPostResources() {
     if (!historyReady || !memoryAllocator_->createImage(history, &postResolved_)) {
       postHistory_.reset();postResolved_.reset();
       temporalAaActive_ = false;
+      destroyMotionResources();
       renderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
       resourceRenderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
       __android_log_print(ANDROID_LOG_WARN, LogTag,
@@ -1764,8 +1771,8 @@ bool InstancedRenderer::createPostResources() {
   if (vkCreateRenderPass(device_, &renderPass, nullptr, &previewPostRenderPass_) != VK_SUCCESS)
     return false;
 
-  VkDescriptorSetLayoutBinding bindings[5]{};
-  constexpr u32 bindingCount = 5;
+  VkDescriptorSetLayoutBinding bindings[6]{};
+  constexpr u32 bindingCount = 6;
   for (u32 index = 0; index < 3; ++index) {
     bindings[index].binding = index;
     bindings[index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1780,13 +1787,17 @@ bool InstancedRenderer::createPostResources() {
   bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
   bindings[4].descriptorCount = 1;
   bindings[4].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  bindings[5].binding = 5;
+  bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  bindings[5].descriptorCount = 1;
+  bindings[5].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
   VkDescriptorSetLayoutCreateInfo setLayout{};
   setLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   setLayout.bindingCount = bindingCount;
   setLayout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &setLayout, nullptr, &postSetLayout_) != VK_SUCCESS)
     return false;
-  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3},
+  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4},
                                    {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}};
   VkDescriptorPoolCreateInfo pool{};
@@ -1802,7 +1813,7 @@ bool InstancedRenderer::createPostResources() {
   allocate.descriptorSetCount = 1;
   allocate.pSetLayouts = &postSetLayout_;
   if (vkAllocateDescriptorSets(device_, &allocate, &postDescriptorSet_) != VK_SUCCESS) return false;
-  VkDescriptorImageInfo images[3]{};
+  VkDescriptorImageInfo images[4]{};
   images[0] = {postSampler_.handle(), postSceneColor_.view(),
                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   images[1] = {postSampler_.handle(),
@@ -1810,9 +1821,12 @@ bool InstancedRenderer::createPostResources() {
                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   images[2] = {postDepthSampler_.handle(), depthImage_.view(),
                VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
+  images[3] = {postDepthSampler_.handle(),
+               motionVectorsActive_ ? motionImage_.view() : postSceneColor_.view(),
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkDescriptorBufferInfo environmentBuffer{environmentUniform_.handle(), 0,
                                             sizeof(DirtRoadFrameUniform)};
-  VkWriteDescriptorSet writes[5]{};
+  VkWriteDescriptorSet writes[6]{};
   for (u32 index = 0; index < 3; ++index) {
     writes[index].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[index].dstSet = postDescriptorSet_;
@@ -1832,6 +1846,10 @@ bool InstancedRenderer::createPostResources() {
   writes[4].dstSet=postDescriptorSet_;writes[4].dstBinding=4;
   writes[4].descriptorCount=1;writes[4].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
   writes[4].pBufferInfo=&exposureBuffer;
+  writes[5].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  writes[5].dstSet=postDescriptorSet_;writes[5].dstBinding=5;
+  writes[5].descriptorCount=1;writes[5].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  writes[5].pImageInfo=&images[3];
   vkUpdateDescriptorSets(device_, bindingCount, writes, 0, nullptr);
 
   VkShaderModule vert = createShaderModule(device_, rhi::shaders::kPost_ProcessVertSpirv,
@@ -1960,11 +1978,15 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
      (renderWidth()<swapchain_->width() || renderHeight()<swapchain_->height()))
     push.texelFlags[2] += 2.0f;
   if(fsrActive_) push.texelFlags[2] += 4.0f;
+  if(motionVectorsActive_) push.texelFlags[2] += 8.0f;
+  if(temporalStaticCoverage_) push.texelFlags[2] += 16.0f;
   const bool temporalPoseSupported = sceneOrthographicHalfHeight_==0;
   push.texelFlags[3] = temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_
                            ? 3.0f
                            : temporalAaActive_ || renderingPolicy_.post.antiAliasing ==
                                      renderer::AntiAliasingMode::Fxaa ? 1.0f : 0.0f;
+  if (temporalAaActive_ && temporalPoseSupported)
+    push.texelFlags[3] += 4.0f * static_cast<float>(temporalDebugView_);
   push.bloom[0] = authoredPost?look.bloomThreshold:renderingPolicy_.post.bloomThreshold;
   push.bloom[1] = authoredPost?look.bloomIntensity:renderingPolicy_.post.bloomIntensity;
   push.bloom[2] = postEffectsEnabled&&!fsrActive_?renderingPolicy_.post.sharpen:0.0f;
@@ -2655,6 +2677,7 @@ bool InstancedRenderer::createInstanceBuffer() {
     hzbHysteresis_.assign(instanceCount_, renderer::HzbHysteresisState{});
     dynamicMapDraws_.assign(instanceCount_, 0);
     pendingMapPoseCount_ = 0;
+    pendingMapTransformChanged_ = false;
     const float tint[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     for (u32 index = 0; index < instanceCount_; ++index) {
       // Matriz singular/NaN rejeita o pacote inteiro em vez de escrever um
@@ -4166,6 +4189,10 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pipeline instanciado.");
     return false;
   }
+  if (!createMotionResources()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Motion] Falha ao criar o passe de vetores por objeto.");
+    return false;
+  }
   if (!createEditorGridPipeline()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pipeline da grade editorial.");
     return false;
@@ -4268,6 +4295,7 @@ void InstancedRenderer::shutdown() {
   destroyFramebuffers();
   destroyHzbResources();
   destroyPostResources();
+  destroyMotionResources();
   destroyShadowResources();
   hzbHysteresis_.clear();
   hzbWorkloadEligible_ = false;
@@ -4403,7 +4431,7 @@ void InstancedRenderer::shutdown() {
   rhiDevice_ = nullptr;
   memoryAllocator_ = nullptr;
   swapchain_ = nullptr;
-  pendingScene_.clear();sourceMapDraws_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredMaterials_.clear();
+  pendingScene_.clear();sourceMapDraws_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredMaterials_.clear();authoredDrawIdentities_.clear();
   authoredUvTransformEntries_.clear();
   fillInstanceBuffer_ = nullptr;
   extractScene_ = nullptr;
@@ -4502,8 +4530,9 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
       "[Import] texturas importadas: %zu publicadas (%u reaproveitadas, %u enviadas), %zu slots bindless; geometria %s.",
       textures.size(),dirtRoadResources_.lastReusedTextures(),dirtRoadResources_.lastUploadedTextures(),
       authoringTextureSlots_.size(),dirtRoadResources_.lastGeometryReused()?"reaproveitada":"enviada");
-  pendingScene_.clear();pendingMapPoseCount_=0;pendingAuthoredStateValid_=false;
-  authoredMaterials_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredUvTransformEntries_.clear();
+  pendingScene_.clear();pendingMapPoseCount_=0;pendingMapTransformChanged_=false;
+  pendingAuthoredStateValid_=false;
+  authoredMaterials_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredDrawIdentities_.clear();authoredUvTransformEntries_.clear();
   authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();
   shadowCascadeDirtyMask_=0xffffffffu;
   if(!rebuildDrawOrders()) {
@@ -4610,23 +4639,62 @@ bool InstancedRenderer::queueMapScene(std::span<const renderer::MapDrawState> dr
   // A cena completa supersede qualquer lote de poses/material preparado para
   // a topologia anterior no mesmo quadro.
   pendingMapPoseCount_=0;
+  pendingMapTransformChanged_=false;
   pendingAuthoredStateValid_=false;
   return true;
 }
 
 bool InstancedRenderer::queueAuthoredPoses(std::span<const renderer::MapDrawState> draws) {
   const auto &current=dirtRoadResources_.draws();
-  if(draws.size()!=current.size()) return false;
+  if(draws.size()!=current.size() || draws.size()!=authoredDrawIdentities_.size()) return false;
+  const auto sameRoute=[](const std::shared_ptr<const renderer::WaterRoute> &a,
+                          const std::shared_ptr<const renderer::WaterRoute> &b) {
+    if(a==b) return true;
+    if(!a || !b || a->count!=b->count) return false;
+    for(u32 point=0;point<a->count;++point) {
+      const auto &left=a->points[point],&right=b->points[point];
+      if(!std::equal(std::begin(left.position),std::end(left.position),std::begin(right.position)) ||
+         left.width!=right.width || left.depth!=right.depth || left.speed!=right.speed ||
+         left.foam!=right.foam || left.tension!=right.tension) return false;
+    }
+    return true;
+  };
   u32 count=0;
   // A cobertura do cross-fade de LOD Group (normalColumns[7]) vive no registro
   // da instância: mudar só ela, com a mesma matriz, também é pose a publicar.
   const auto *published=static_cast<const renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
+  bool transformChanged=false;
   for(u32 i=0;i<draws.size();++i) {
+    const auto &next=draws[i];
+    const auto &old=current[i];
+    const auto &identity=authoredDrawIdentities_[i];
+    if(next.objectId!=identity.objectId || next.sourceDrawIndex!=identity.sourceDrawIndex ||
+       !sameRoute(next.route,identity.route) ||
+       next.pose.drawIndex!=i ||
+       (!next.route && (next.pose.draw.firstIndex!=old.firstIndex ||
+                        next.pose.draw.indexCount!=old.indexCount ||
+                        next.pose.draw.vertexOffset!=old.vertexOffset)) ||
+       next.pose.draw.materialIndex!=old.materialIndex ||
+       next.pose.draw.lodLevel!=old.lodLevel ||
+       next.pose.draw.lodGroupId!=old.lodGroupId ||
+       next.pose.draw.geometricError!=old.geometricError ||
+       !std::equal(std::begin(next.waterLayers),std::end(next.waterLayers),authoredWaterLayers_[i].begin()) ||
+       !std::equal(std::begin(next.waterFlowDepth),std::end(next.waterFlowDepth),authoredWaterFlowDepth_[i].begin()))
+      return false;
+    const auto &base=dirtRoadResources_.materials()[old.materialIndex];
+    const auto previousFlags=renderer::applyMaterialOverride(base,authoredMaterials_[i]).flags;
+    const auto nextFlags=renderer::applyMaterialOverride(base,next.material).flags;
+    constexpr u32 drawFamily=renderer::MapMaterialWater|renderer::MapMaterialWaterCameraGrid|
+                             renderer::MapMaterialBlend|renderer::MapMaterialAlphaMask;
+    if((previousFlags&drawFamily)!=(nextFlags&drawFamily)) return false;
     const bool sameDither=!published || i>=instanceCount_ ||
-        published[i].normalColumns[7]==draws[i].pose.instance.normalColumns[7];
-    if(sameDither && std::memcmp(draws[i].pose.draw.model,current[i].model,sizeof(current[i].model))==0) continue;
-    if(count==pendingMapPoses_.size() || draws[i].route) return false;
-    auto update=draws[i].pose;
+        published[i].normalColumns[7]==next.pose.instance.normalColumns[7];
+    const bool sameModel=std::memcmp(next.pose.draw.model,old.model,
+                                     sizeof(old.model))==0;
+    if(sameDither && sameModel) continue;
+    if(count==pendingMapPoses_.size() || next.route) return false;
+    transformChanged|=!sameModel;
+    auto update=next.pose;
     // Topology remains owned by the committed scene, including generated meshes.
     update.draw.firstIndex=current[i].firstIndex;update.draw.indexCount=current[i].indexCount;
     update.draw.vertexOffset=current[i].vertexOffset;update.draw.materialIndex=current[i].materialIndex;
@@ -4645,7 +4713,7 @@ bool InstancedRenderer::queueAuthoredPoses(std::span<const renderer::MapDrawStat
     state.castShadow=draws[i].castShadow;
   }
   pendingAuthoredStateValid_=true;
-  pendingMapPoseCount_=count;return true;
+  pendingMapPoseCount_=count;pendingMapTransformChanged_=transformChanged;return true;
 }
 
 bool InstancedRenderer::commitAuthoredScene() {
@@ -4697,6 +4765,7 @@ bool InstancedRenderer::commitAuthoredScene() {
   if(!instances) return false;
   std::vector<renderer::MapDrawRecord> records;records.reserve(count);
   authoredVisibility_.resize(count);authoredShadows_.resize(count);authoredMaterials_.resize(count);
+  authoredDrawIdentities_.resize(count);
   routeVertices_=std::move(nextVertices);routeIndices_=std::move(nextIndices);authoredWaterLayers_.resize(count);
   authoredWaterFlowDepth_.resize(count);
   // Scalar per-instance overrides require individual push constants.
@@ -4707,6 +4776,7 @@ bool InstancedRenderer::commitAuthoredScene() {
   for(u32 i=0;i<count;++i) {
     const auto &state=pendingScene_[i];records.push_back(state.pose.draw);instances[i]=state.pose.instance;
     authoredVisibility_[i]=state.visible;authoredShadows_[i]=state.castShadow;authoredMaterials_[i]=state.material;
+    authoredDrawIdentities_[i]={state.objectId,state.sourceDrawIndex,state.route};
     std::copy(state.waterLayers,state.waterLayers+4,authoredWaterLayers_[i].begin());
     std::copy(state.waterFlowDepth,state.waterFlowDepth+4,authoredWaterFlowDepth_[i].begin());
     dynamicMapDraws_[i]=1;hzbHysteresis_[i]={};
@@ -4743,12 +4813,15 @@ bool InstancedRenderer::queueMapDrawPose(u32 drawIndex, const float *model,
   if (belongsToLod(lodGroups_) || belongsToLod(coverageLodGroups_)) return false;
   renderer::MapDrawUpdate update;
   if (!renderer::prepareMapDrawUpdate(drawIndex, draw, model, localCenter, localRadius, update)) return false;
+  const bool transformChanged=std::memcmp(update.draw.model,draw.model,sizeof(draw.model))!=0;
   for (u32 i = 0; i < pendingMapPoseCount_; ++i) if (pendingMapPoses_[i].drawIndex == drawIndex) {
     pendingMapPoses_[i] = update;
+    pendingMapTransformChanged_|=transformChanged;
     return true;
   }
   if (pendingMapPoseCount_ == pendingMapPoses_.size()) return false;
   pendingMapPoses_[pendingMapPoseCount_++] = update;
+  pendingMapTransformChanged_|=transformChanged;
   return true;
 }
 
@@ -4820,7 +4893,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // Same "safe without a new stall" reasoning as collectPrevious() above --
   // see readHzbPyramidFromPreviousFrame()'s own comment.
   readDrawCullTelemetryFromPreviousFrame();
-  const bool mapPosesChanged = pendingMapPoseCount_ != 0 || !pendingScene_.empty();
+  const bool fullSceneChanged = !pendingScene_.empty();
+  const bool mapPosesChanged = pendingMapPoseCount_ != 0 || fullSceneChanged;
+  const bool mapTransformsChanged = pendingMapTransformChanged_ || fullSceneChanged;
+  motionDrawCount_=0;
+  bool uncoveredMotion=false;
+  bool authoredAppearanceChanged=false;
   if (!pendingScene_.empty() && !commitAuthoredScene()) return rhi::SwapchainStatus::FatalError;
   if (pendingAuthoredStateValid_) {
     // `commitAuthoredScene` já escreve estes vetores a partir de pendingScene_;
@@ -4830,8 +4908,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     for (u32 i = 0; i < states; ++i) {
       const auto &state = pendingAuthoredState_[i];
       if (!(authoredMaterials_[i] == state.material) || authoredVisibility_[i] != state.visible ||
-          authoredShadows_[i] != state.castShadow)
+          authoredShadows_[i] != state.castShadow) {
         shadowCascadeDirtyMask_ = 0xffffffffu;
+        authoredAppearanceChanged=true;
+      }
       authoredMaterials_[i] = state.material;
       authoredVisibility_[i] = state.visible;
       authoredShadows_[i] = state.castShadow;
@@ -4846,12 +4926,30 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       const auto &update = pendingMapPoses_[i];
       if (!dirtRoadResources_.updateDrawPose(update.drawIndex, update.draw))
         return rhi::SwapchainStatus::FatalError;
-      instances[update.drawIndex] = update.instance;
+      auto prepared=update.instance;
+      const bool moved=std::memcmp(instances[update.drawIndex].model,prepared.model,
+                                   sizeof(prepared.model))!=0;
+      std::copy(std::begin(instances[update.drawIndex].model),
+                std::end(instances[update.drawIndex].model),prepared.previousModel);
+      if(moved) {
+        auto material=dirtRoadResources_.materials()[update.draw.materialIndex];
+        if(update.drawIndex<authoredMaterials_.size())
+          material=renderer::applyMaterialOverride(material,authoredMaterials_[update.drawIndex],
+                      static_cast<u32>(dirtRoadResources_.packageTextureCount()));
+        constexpr u32 unsupported=renderer::MapMaterialBlend|renderer::MapMaterialWater|
+                                  renderer::MapMaterialImpostor;
+        if(motionVectorsActive_ && (material.flags&unsupported)==0 &&
+           motionDrawCount_<motionDrawIndices_.size())
+          motionDrawIndices_[motionDrawCount_++]=update.drawIndex;
+        else uncoveredMotion=true;
+      }
+      instances[update.drawIndex] = prepared;
       dynamicMapDraws_[update.drawIndex] = 1;
       hzbHysteresis_[update.drawIndex] = {};
     }
     if (!memoryAllocator_->flushBuffer(instanceBuffer_)) return rhi::SwapchainStatus::FatalError;
     pendingMapPoseCount_ = 0;
+    pendingMapTransformChanged_ = false;
     shadowCascadeDirtyMask_ = 0xffffffffu;
   }
   if (hzbPreviousFrameEligible_) readHzbPyramidFromPreviousFrame();
@@ -4877,11 +4975,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     hzbPyramidValid_ = false;
     hzbPyramidCameraValid_ = false;
     hzbRecordedCameraValid_ = false;
-    // No per-object velocity buffer yet: discard history for moving draws.
-    // This frame uses spatial AA without jitter, rather than exposing the
-    // raw Halton displacement. Stable frames resume temporal accumulation.
-    temporalHistoryInitialized_ = false;
   }
+  // Keep history for rigid moving draws only when the separate pass can
+  // provide their previous world position. Scene topology and unsupported
+  // surfaces still seed a new spatial frame rather than use false velocity.
+  if (mapTransformsChanged && (fullSceneChanged || !motionVectorsActive_ || uncoveredMotion))
+    temporalHistoryInitialized_ = false;
   hzbReadbackRecordedThisFrame_ = false;
   const bool temporalPoseSupported=sceneOrthographicHalfHeight_==0;
   // Invalidate cuts before rasterization so the spatial fallback receives an
@@ -4889,15 +4988,28 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if(temporalAaActive_ && temporalHistoryInitialized_ &&
       (!temporalPoseSupported || temporalCameraCut(camera,temporalPreviousCamera_)))
     temporalHistoryInitialized_=false;
+  const bool temporalStationaryPose=temporalHistoryInitialized_ &&
+      sameCameraPose(camera,temporalPreviousCamera_) && !mapTransformsChanged &&
+      !authoredAppearanceChanged;
+  temporalStaticCoverage_=temporalStationaryPose && waterDrawOrder_.empty() &&
+      transparentDrawOrder_.empty();
+  // A stationary view needs a finite set of subpixel samples, not a new
+  // projection offset forever. Resume the sequence on the first changed pose.
+  temporalStaticFrameCount_=temporalStationaryPose
+      ?std::min(temporalStaticFrameCount_+1u,9u):0u;
   if (temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_) {
-    const u64 sample = temporalFrameIndex_ % 8u + 1u;
-    const auto jitterViewport=physicalSceneViewport();
-    temporalCurrentJitter_[0] =
-        (halton(sample, 2u) - 0.5f) * 2.0f /
-        std::max(1.0f,renderWidth()*jitterViewport.width);
-    temporalCurrentJitter_[1] =
-        (halton(sample, 3u) - 0.5f) * 2.0f /
-        std::max(1.0f,renderHeight()*jitterViewport.height);
+    if(temporalStaticFrameCount_>=9u) {
+      temporalCurrentJitter_[0]=temporalCurrentJitter_[1]=0.0f;
+    } else {
+      const u64 sample = temporalFrameIndex_ % 8u + 1u;
+      const auto jitterViewport=physicalSceneViewport();
+      temporalCurrentJitter_[0] =
+          (halton(sample, 2u) - 0.5f) * 2.0f /
+          std::max(1.0f,renderWidth()*jitterViewport.width);
+      temporalCurrentJitter_[1] =
+          (halton(sample, 3u) - 0.5f) * 2.0f /
+          std::max(1.0f,renderHeight()*jitterViewport.height);
+    }
   } else {
     temporalCurrentJitter_[0] = temporalCurrentJitter_[1] = 0.0f;
   }
@@ -5906,7 +6018,6 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         }
       }
     }
-    endGpuRegion(GpuPassClass::Transparent);
   } else if (materialPreview_) {
     const VkBuffer mesh=materialResources_.vertexBuffer();
     vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);
@@ -5920,8 +6031,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     endGpuRegion(GpuPassClass::Opaque);
   }
 
-  rhiDevice_->cmdEndDebugLabel(commandBuffer_);
   vkCmdEndRenderPass(commandBuffer_);
+  // End the tile render pass before the transparent timestamp. Otherwise its
+  // deferred store is incorrectly charged to the following motion pass.
+  if(dirtRoadPreview_) endGpuRegion(GpuPassClass::Transparent);
+  rhiDevice_->cmdEndDebugLabel(commandBuffer_);
+  beginGpuRegion(GpuPassClass::Motion);
+  recordMotionPass(camera,timeSeconds);
+  endGpuRegion(GpuPassClass::Motion);
   beginGpuRegion(GpuPassClass::AutoExposure);
   if(renderingPolicy_.post.dedicatedPass) {
     auto look=sceneEnvironment_.active?sceneEnvironment_:

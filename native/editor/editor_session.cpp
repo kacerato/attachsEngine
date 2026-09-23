@@ -2469,6 +2469,14 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::QualityOpen)) {
     state_.qualityPanel=!state_.qualityPanel;return true;
   }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::QualityTemporalDebugQuick)) {
+    if(state_.qualityTemporalAvailable && state_.workspace==EditorWorkspace::Scene) {
+      const u32 next=state_.qualityTemporalDebug+1u;
+      state_.qualityTemporalDebug=next==4u&&!state_.qualityMotionAvailable?5u:
+                                  next>=6u?0u:next;
+    }
+    return true;
+  }
   if(state_.qualityPanel && routing.tapped) {
     auto &draft=state_.qualityDraft;
     const auto key=routing.widgetId;
@@ -2489,6 +2497,14 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     else if(is(EditorWidget::QualityTabPerformance)) {state_.qualityTab=3;state_.qualityPage=0;return true;}
     else if(is(EditorWidget::QualityPagePrevious)) {if(state_.qualityPage) --state_.qualityPage;return true;}
     else if(is(EditorWidget::QualityPageNext)) {++state_.qualityPage;return true;}
+    else if(is(EditorWidget::QualityTemporalDebug)) {
+      if(state_.qualityTemporalAvailable) {
+        const u32 next=state_.qualityTemporalDebug+1u;
+        state_.qualityTemporalDebug=next==4u&&!state_.qualityMotionAvailable?5u:
+                                    next>=6u?0u:next;
+      }
+      return true;
+    }
     else if(is(EditorWidget::QualityLevel)) {
       // Automático, Baixo, Médio, Alto, Ultra: a ordem dos níveis da Unity.
       using Preset=renderer::QualityPreset;
@@ -4309,7 +4325,8 @@ EditorEntityId EditorSession::instantiateAssetInTransaction(u32 index, EditorEnt
   return id;
 }
 
-void EditorSession::setRenderStats(u32 width,u32 height,float gpuMilliseconds,std::string_view detectedLevel) {
+void EditorSession::setRenderStats(u32 width,u32 height,float gpuMilliseconds,
+                                   std::string_view detectedLevel) {
   state_.qualityDetected=std::string(detectedLevel);
   std::string text="Renderizando "+std::to_string(width)+"×"+std::to_string(height);
   if(gpuMilliseconds>0) text+=" · GPU "+decimalText(gpuMilliseconds,1)+" ms";

@@ -146,19 +146,20 @@ bool InstancedRenderer::prepareCameraPreview() {
     allocate.descriptorPool=previewPool_;allocate.descriptorSetCount=1;allocate.pSetLayouts=&environmentSetLayout_;
     if(vkAllocateDescriptorSets(device_,&allocate,&previewSet_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
 
-    VkDescriptorPoolSize postSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,3},
+    VkDescriptorPoolSize postSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,4},
                                      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},
                                      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1}};
     pool.maxSets=1;pool.poolSizeCount=3;pool.pPoolSizes=postSizes;
     if(vkCreateDescriptorPool(device_,&pool,nullptr,&previewPostPool_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
     allocate.descriptorPool=previewPostPool_;allocate.pSetLayouts=&postSetLayout_;
     if(vkAllocateDescriptorSets(device_,&allocate,&previewPostSet_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
-    VkDescriptorImageInfo postImages[3]{
+    VkDescriptorImageInfo postImages[4]{
       {postSampler_.handle(),previewSceneColor_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
       {postSampler_.handle(),previewSceneColor_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-      {postDepthSampler_.handle(),previewDepth_.view(),VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL}};
+      {postDepthSampler_.handle(),previewDepth_.view(),VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL},
+      {postDepthSampler_.handle(),previewSceneColor_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
     VkDescriptorBufferInfo postBuffer{previewUniform_.handle(),0,sizeof(DirtRoadFrameUniform)};
-    VkWriteDescriptorSet postWrites[5]{};
+    VkWriteDescriptorSet postWrites[6]{};
     for(u32 index=0;index<3;++index) {
       postWrites[index].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
       postWrites[index].dstSet=previewPostSet_;postWrites[index].dstBinding=index;
@@ -172,7 +173,11 @@ bool InstancedRenderer::prepareCameraPreview() {
     postWrites[4].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;postWrites[4].dstSet=previewPostSet_;
     postWrites[4].dstBinding=4;postWrites[4].descriptorCount=1;
     postWrites[4].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;postWrites[4].pBufferInfo=&exposureBuffer;
-    vkUpdateDescriptorSets(device_,5,postWrites,0,nullptr);
+    postWrites[5].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;postWrites[5].dstSet=previewPostSet_;
+    postWrites[5].dstBinding=5;postWrites[5].descriptorCount=1;
+    postWrites[5].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    postWrites[5].pImageInfo=&postImages[3];
+    vkUpdateDescriptorSets(device_,6,postWrites,0,nullptr);
     bindAutoExposureSource(1,previewSceneColor_.view());
     uiRenderer_.setCameraPreview(previewColor_.view());
   }

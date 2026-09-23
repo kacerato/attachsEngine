@@ -24,6 +24,8 @@ if ($All) {
         dirt_road_coverage_shade_fallback = @('frag')
         dirt_road_coverage_shade = @('frag')
         dirt_road_fallback = @('frag')
+        dirt_road_motion_fallback = @('frag')
+        dirt_road_motion = @('frag')
         dirt_road_sky = @('vert', 'frag')
         dirt_road = @('vert', 'frag')
         astra_ui = @('vert', 'frag')

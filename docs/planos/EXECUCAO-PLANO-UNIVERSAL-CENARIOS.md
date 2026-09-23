@@ -785,3 +785,51 @@ de recurso passaram no host. A exclusão de HDRI/perfil não exige republicar
 geometria; Mesh/Material/Texture exigem o publicador antes da remoção do arquivo.
 O Release final compilou com `:app:assembleRelease` em 29 s. Esses resultados
 fecham as regressões encontradas nesta validação, não o restante do plano G6.
+
+Na fatia temporal seguinte, o resolve TAA passou a guardar profundidade de vista
+logarítmica no alfa do histórico de cor e a rejeitar histórico cuja profundidade
+anterior difere da superfície reprojetada. O alfa da apresentação permanece
+opaco; o canal do histórico é interno e quantizado em 8 bits no formato atual.
+Atualização só de cobertura no cross-fade de LOD conserva a acumulação; mudança
+da matriz de um objeto ainda invalida o histórico inteiro porque falta vetor
+de movimento por objeto. A alteração reduz uma fonte de ghosting em
+desoclusões causadas pela câmera, sem prometer estabilidade de malhas animadas,
+transparência, água ou reconstrução temporal avançada. Referências: [motion
+vectors na Unity 6 URP](https://docs.unity3d.com/6000.0/Documentation/Manual/urp/features/motion-vectors.html)
+e [depth clip no FSR 2](https://gpuopen.com/manuals/fidelityfx_sdk/techniques/super-resolution-temporal/).
+Na aba **Luz e pós**, um diagnóstico temporário do editor mostra profundidade,
+peso efetivo do histórico e rejeição por profundidade. O controle só aparece
+ativo quando o renderer realmente usa TAA na vista perspectiva. Fora do painel,
+um atalho na barra superior mantém a vista de diagnóstico utilizável em todo o
+viewport e percorre as opções até voltar à imagem final. O histórico continua
+recebendo cor e profundidade normais enquanto a visualização está ligada. O layout segue a ideia de
+[Rendering Debugger da Unity 6](https://learn.unity.com/course/unity-6-universal-render-pipeline),
+sem copiar sua UI ou anunciar vetores de movimento ainda inexistentes.
+
+Em 23/09, a fatia seguinte adicionou um passe de movimento RGBA16F para malhas rígidas opacas e alpha clip, com matriz anterior por instância e depth test contra a cena. O pós subtrai o deslocamento em mundo antes da reprojeção da câmera, preservando o histórico quando o editor publica apenas poses compatíveis. A aba Luz e pós e o atalho superior oferecem Movimento ×512; a escala afeta apenas o diagnóstico. Shader SPIR-V, teste host `temporal_debug` e Release arm64 passaram. No Xiaomi/Adreno 825, arrastar Bloco 2 m mostrou a malha roxa durante o movimento e cinza ao parar; a imagem final retornou ao desligar o diagnóstico. A captura comprova dados e consumo nessa cena, não uma comparação controlada de ghosting/custo. Transparência, água, skinning, máscaras reativas e backends Arm ASR/FSR 2 continuam pendentes.
+
+Ainda em 23/09, uma gravação de cena parada isolou a oscilação do TAA: o recorte
+de objetos variava entre quadros enquanto FXAA e a UI permaneciam quase
+estáveis. A reprojeção deixou de rejeitar profundidade nas silhuetas quando
+câmera e geometria conservam a pose; após oito amostras Halton estacionárias,
+o renderer fixa o deslocamento de projeção em zero até a próxima mudança de
+pose. Mudanças de material/visibilidade também retiram a proteção de cena
+estática. No Xiaomi/Adreno 825, a captura de 5,9 s a 10 amostras/s teve mediana
+de diferença RGB entre quadros de 0,0 nos recortes de cubo, céu e chão da Scene
+View; Play repetiu 0,0 nesses recortes. O perfil Vulkan registrou janelas de
+600 quadros, com cerca de 60 quadros/s apresentados. Uma janela atribuiu
+p50 de 0,019 ms ao passe de movimento e 7,82 ms ao pós;
+esses intervalos não são o custo incremental de ativar TAA, que exige A/B na
+mesma pose e condições térmicas. O gesto de câmera terminou com imagem estável
+na captura, mas ainda falta comparação controlada de ghosting de objeto móvel.
+O teste não fecha superfícies com skinning nem integração Arm ASR/FSR 2.
+
+O HDR da cena agora conserva no alfa a cobertura opaca restante após materiais
+BLEND e água; o resolve TAA usa `1 - alfa` para reduzir o histórico por pixel.
+Materiais OPAQUE/MASK escrevem alfa 1. A opção **Reatividade** na aba Luz e pós
+e na barra superior mostra essa entrada sem alterar o histórico. No Xiaomi,
+o cubo opaco apareceu preto, passou a magenta com o material em Transparente
+e voltou a preto ao restaurar o modo de origem. A imagem final e o material
+autoral foram restaurados após o teste. Isso valida o produtor e o consumidor
+para blend nessa cena; falta testar água e opacidades intermediárias, vetores
+de superfícies deformadas e a textura R8 exigida pelos backends temporais externos.

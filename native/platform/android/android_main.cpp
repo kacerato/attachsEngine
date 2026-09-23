@@ -2496,6 +2496,12 @@ void android_main(android_app *app) {
                 ae::renderer::qualityLevelLabel(level));
           }
         }
+        shell.editorSession.setTemporalDebugAvailable(shell.instancedRendererReady &&
+            shell.instancedRenderer.temporalDebugAvailable(),shell.instancedRendererReady &&
+            shell.instancedRenderer.motionVectorsAvailable());
+        shell.instancedRenderer.setTemporalDebugView(static_cast<ae::platform::android::TemporalDebugView>(
+            !editorPlaying && shell.editorSession.screen().workspace==ae::editor::EditorWorkspace::Scene
+                ? std::min(shell.editorSession.screen().qualityTemporalDebug,5u) : 0u));
         shell.instancedRenderer.setEnvironmentAdjustment(shell.editorSession.document().find(shell.editorSession.document().root())->environment);
         const float editorWallSeconds=std::chrono::duration<float>(std::chrono::steady_clock::now()-shell.shellStartTime).count();
         if(!shell.editorSession.requestedScenePath().empty() && !editorPlaying && !shell.editorSession.history().isOpen()) {
@@ -3007,9 +3013,8 @@ void android_main(android_app *app) {
           // previous draw topology; publish the full scene when it changes.
           bool queued=false;
           if(ready) {
-            queued=changed? shell.instancedRenderer.queueMapScene(authored)
-                : shell.instancedRenderer.queueAuthoredPoses(authored);
-            if(!queued && !changed) queued=shell.instancedRenderer.queueMapScene(authored);
+            queued=shell.instancedRenderer.queueAuthoredPoses(authored);
+            if(!queued) queued=shell.instancedRenderer.queueMapScene(authored);
           }
           if (queued) {
             shell.editorPublishedRevision = shell.editorSession.document().revision();

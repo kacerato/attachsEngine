@@ -223,6 +223,8 @@ enum class EditorWidget : u32 {
   QualityAmbient, QualityEnvironmentBrdf, QualityPost, QualityBloomThresholdDown,
   QualityBloomThresholdUp, QualityBloomIntensityDown, QualityBloomIntensityUp,
   QualityTemporalWeightDown, QualityTemporalWeightUp, QualityVignette,
+  QualityTemporalDebug,
+  QualityTemporalDebugQuick,
   QualityDynamicMinimumDown, QualityDynamicMinimumUp, QualityLodSelection,
   QualityLodErrorDown, QualityLodErrorUp, QualityLodHysteresisDown,
   QualityLodHysteresisUp, QualityMaterialVariants,
@@ -485,6 +487,9 @@ struct EditorScreenState final {
   u32 qualityPage=0;
   renderer::ProjectRenderingSettings qualityDraft{};
   std::string qualityStats,qualityDetected;
+  u32 qualityTemporalDebug=0;
+  bool qualityTemporalAvailable=false;
+  bool qualityMotionAvailable=false;
   u32 viewSelected=0;
   std::string viewName;
   // Salvar o OBJETO como receita é um terceiro destino do mesmo campo de nome;
