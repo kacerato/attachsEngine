@@ -19,19 +19,23 @@ import re
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 VALIDATION = ROOT / "build" / "android-validation"
 
-# Mediana: o `measure-ocean` publica cinco quantis por métrica e o terceiro é a
-# mediana. Média seria pior aqui — um único quadro longo de compilação de
-# pipeline desloca a média e não desloca a mediana.
-MEDIAN = 2
+# Os vetores são [mean, p50, p95, p99, max].
+MEDIAN = 1
 
 PASS_KEYS = [
+    ("camera_preview", "gpu_camera_preview_ms"),
     ("water_simulation", "gpu_water_simulation_ms"),
-    ("opaque", "gpu_opaque_ms"),
-    ("post", "gpu_post_ms"),
     ("shadow", "gpu_shadow_ms"),
+    ("local_shadow", "gpu_local_shadow_ms"),
     ("culling", "gpu_culling_ms"),
+    ("opaque", "gpu_opaque_ms"),
+    ("coverage", "gpu_coverage_ms"),
     ("sky", "gpu_sky_ms"),
     ("transparent", "gpu_transparent_ms"),
+    ("auto_exposure", "gpu_auto_exposure_ms"),
+    ("post", "gpu_post_ms"),
+    ("fsr_easu", "gpu_fsr_easu_ms"),
+    ("fsr_rcas", "gpu_fsr_rcas_ms"),
     ("ui", "gpu_ui_ms"),
     ("hzb", "gpu_hzb_ms"),
 ]
@@ -52,6 +56,64 @@ def read_last_json_line(path: pathlib.Path, tag: str):
                 except json.JSONDecodeError:
                     continue
     return found
+
+
+def read_passes(path: pathlib.Path, window: dict):
+    """Read the matching complete pass set; reject truncated or duplicate parts."""
+    if not path.is_file():
+        return None
+    pattern = re.compile(r"\[FrameProfilePasses\] (\{.*)$")
+    pieces = {}
+    legacy = None
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            match = pattern.search(line)
+            if not match:
+                continue
+            try:
+                record = json.loads(match.group(1))
+            except json.JSONDecodeError as error:
+                raise ValueError("Malformed FrameProfilePasses record") from error
+            if (record.get("pid"), record.get("epoch"), record.get("window")) != (
+                window.get("pid"), window.get("epoch"), window.get("window")
+            ):
+                continue
+            if record.get("schemaVersion", 0) < 8:
+                if legacy is not None or pieces:
+                    raise ValueError("Duplicate FrameProfilePasses window")
+                required = {key for _, key in PASS_KEYS if key in (
+                    "gpu_shadow_ms", "gpu_culling_ms", "gpu_opaque_ms", "gpu_coverage_ms",
+                    "gpu_sky_ms", "gpu_transparent_ms", "gpu_ui_ms", "gpu_post_ms", "gpu_hzb_ms"
+                )}
+                if not required.issubset(record):
+                    raise ValueError("Incomplete legacy FrameProfilePasses window")
+                legacy = record
+                continue
+            if legacy is not None or record.get("parts") != 3 or record.get("part") not in range(3):
+                raise ValueError("Invalid FrameProfilePasses fragment")
+            part = record["part"]
+            if part in pieces:
+                raise ValueError("Duplicate FrameProfilePasses fragment")
+            expected = {key for _, key in PASS_KEYS[part * 5:(part + 1) * 5]}
+            present = {key for _, key in PASS_KEYS if key in record}
+            if present != expected:
+                raise ValueError("Incomplete FrameProfilePasses fragment")
+            pieces[part] = record
+    if legacy is not None:
+        return legacy
+    if not pieces:
+        return None
+    if len(pieces) != 3:
+        raise ValueError("Incomplete FrameProfilePasses window")
+    first = pieces[0]
+    for part in (1, 2):
+        record = pieces[part]
+        for key in ("schemaVersion", "pid", "epoch", "window", "parts", "attribution",
+                    "collapsed_frames", "attribution_samples"):
+            if record.get(key) != first.get(key):
+                raise ValueError("Inconsistent FrameProfilePasses fragments")
+        first.update({key: record[key] for _, key in PASS_KEYS[part * 5:(part + 1) * 5]})
+    return first
 
 
 def read_water_provider(path: pathlib.Path):
@@ -80,7 +142,7 @@ def collect_run(directory: pathlib.Path):
     thermal = summary.get("thermalAfter", {})
     window = summary["windows"][-1]
     log = directory / "logcat.txt"
-    passes = read_last_json_line(log, "FrameProfilePasses")
+    passes = read_passes(log, window)
     memory = read_last_json_line(log, "FrameProfileMemory")
 
     record = {

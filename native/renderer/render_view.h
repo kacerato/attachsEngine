@@ -11,6 +11,7 @@ struct RenderViewSnapshot {
   u32 width=0,height=0;
   u64 sceneEpoch=0,sceneRevision=0,requestId=0;
   u32 cameraEntity=0;
+  u32 environmentLayerMask=~0u;
   bool valid() const {return frustum.valid && width>0 && height>0 && requestId!=0;}
 };
 struct PreviewViewBudget {

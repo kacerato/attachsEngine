@@ -25,9 +25,11 @@ public static unsafe class NativeBehaviorRuntime
         public float Radius, HalfHeight;
         public float RotationX, RotationY, RotationZ, RotationW;
     }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeAssetGuid { public ulong High, Low; }
 
     /// <summary>
-    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v5). A ordem dos
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v8). A ordem dos
     /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
     /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
     /// do fim do que o nativo alocou.
@@ -81,6 +83,19 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*, byte*, int, uint, int> InputButton;
         public delegate* unmanaged<void*, byte*, int, int, int> InputContext;
         public delegate* unmanaged<void*, uint, byte*, int, int> InputRole;
+        // v6 — gráficos e recursos
+        public delegate* unmanaged<void*, uint, NativeGraphicsState*, int> GetRenderingState;
+        public delegate* unmanaged<void*, uint, GraphicsSettings*, ulong*, int> SetRenderingSettings;
+        public delegate* unmanaged<void*, uint, byte*, int, int> CopyRenderingDiagnostics;
+        public delegate* unmanaged<void*, ulong, ulong, byte*, int, uint, NativeAssetGuid*, int> GetComponentResource;
+        public delegate* unmanaged<void*, ulong, ulong, byte*, int, uint, NativeAssetGuid, int> SetComponentResource;
+        // v7 — propriedades por slot de material
+        public delegate* unmanaged<void*, ulong, ulong, byte*, int, uint, uint*, ulong*, int> GetComponentSlotProperty;
+        public delegate* unmanaged<void*, ulong, ulong, byte*, int, uint, uint, ulong, int> SetComponentSlotProperty;
+        // v8 — comandos de gameplay, acrescentados ao fim da ABI
+        public delegate* unmanaged<void*, ulong, float*, int> CharacterMove;
+        public delegate* unmanaged<void*, ulong, int> CharacterJump;
+        public delegate* unmanaged<void*, ulong, float*, int> CameraLook;
 
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
             MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
@@ -90,7 +105,11 @@ public static unsafe class NativeBehaviorRuntime
             ComponentAt != null && FindComponent != null && AddComponent != null && RemoveComponent != null &&
             GetProperty != null && SetProperty != null && GetWorldTransform != null && SetWorldTransform != null &&
             RayCast != null && ShapeCast != null && Overlap != null && LayerByName != null && LayerName != null &&
-            InputAxis != null && InputButton != null && InputContext != null && InputRole != null;
+            InputAxis != null && InputButton != null && InputContext != null && InputRole != null &&
+            GetRenderingState != null && SetRenderingSettings != null && CopyRenderingDiagnostics != null &&
+            GetComponentResource != null && SetComponentResource != null &&
+            GetComponentSlotProperty != null && SetComponentSlotProperty != null &&
+            CharacterMove != null && CharacterJump != null && CameraLook != null;
     }
 
     private sealed class SceneAdapter(SceneAccess access) : ISceneAccess
@@ -365,6 +384,78 @@ public static unsafe class NativeBehaviorRuntime
             var size = access.InputRole(access.Context, role, buffer, NameCapacity);
             return size <= 0 || size > NameCapacity ? string.Empty : Encoding.UTF8.GetString(buffer, size);
         }
+
+        public GraphicsSnapshot GetGraphicsState(uint expectedWorld)
+        {
+            if (!Accessible) throw new WorldException(WorldStatus.NotRunning, "ler gráficos");
+            NativeGraphicsState state = default;
+            state.Size = (uint)sizeof(NativeGraphicsState);
+            state.Requested.Size = (uint)sizeof(GraphicsSettings);
+            state.Effective.Size = (uint)sizeof(ResolvedGraphicsSettings);
+            state.Capabilities.Size = (uint)sizeof(GraphicsCapabilities);
+            if (access.GetRenderingState(access.Context, expectedWorld, &state) == 0)
+                throw new WorldException(LastStatus, "ler gráficos");
+            var length = access.CopyRenderingDiagnostics(access.Context, expectedWorld, null, 0);
+            var diagnostics = string.Empty;
+            if (length > 0)
+            {
+                var bytes = new byte[length];
+                fixed (byte* pointer = bytes)
+                    if (access.CopyRenderingDiagnostics(access.Context, expectedWorld, pointer, length) == length)
+                        diagnostics = Encoding.UTF8.GetString(bytes);
+            }
+            return new(state.Requested, state.Effective, state.Capabilities, state.Pending != 0,
+                state.PendingRequestId, state.LastRequestSucceeded != 0, state.EffectiveAvailable != 0, diagnostics);
+        }
+        public bool SetGraphicsSettings(uint expectedWorld, GraphicsSettings settings, out ulong requestId)
+        {
+            requestId = 0;
+            if (!Accessible) return false;
+            settings.Size = (uint)sizeof(GraphicsSettings);
+            fixed (ulong* request = &requestId)
+                return access.SetRenderingSettings(access.Context, expectedWorld, &settings, request) != 0;
+        }
+        public bool TryGetResource(ulong objectId, ulong instanceId, string propertyId, uint slot, out AssetGuid value)
+        {
+            value = default;
+            if (!Accessible) return false;
+            var bytes = Utf8(propertyId, "recurso"); NativeAssetGuid raw;
+            fixed (byte* pointer = bytes)
+                if (access.GetComponentResource(access.Context, objectId, instanceId, pointer, bytes.Length, slot, &raw) == 0) return false;
+            value = new(raw.High, raw.Low); return true;
+        }
+        public bool SetResource(ulong objectId, ulong instanceId, string propertyId, uint slot, AssetGuid value)
+        {
+            if (!Accessible) return false;
+            var bytes = Utf8(propertyId, "recurso"); var raw = new NativeAssetGuid { High=value.High, Low=value.Low };
+            fixed (byte* pointer = bytes)
+                return access.SetComponentResource(access.Context, objectId, instanceId, pointer, bytes.Length, slot, raw) != 0;
+        }
+        public bool TryGetSlotProperty(ulong objectId,ulong instanceId,string propertyId,uint slot,out uint kind,out ulong bits)
+        {
+            kind=0;bits=0;if(!Accessible)return false;var bytes=Utf8(propertyId,"propriedade por slot");
+            fixed(byte* pointer=bytes)fixed(uint* kindOut=&kind)fixed(ulong* bitsOut=&bits)
+                return access.GetComponentSlotProperty(access.Context,objectId,instanceId,pointer,bytes.Length,slot,kindOut,bitsOut)!=0;
+        }
+        public bool SetSlotProperty(ulong objectId,ulong instanceId,string propertyId,uint slot,uint kind,ulong bits)
+        {
+            if(!Accessible)return false;var bytes=Utf8(propertyId,"propriedade por slot");
+            fixed(byte* pointer=bytes)
+                return access.SetComponentSlotProperty(access.Context,objectId,instanceId,pointer,bytes.Length,slot,kind,bits)!=0;
+        }
+        public bool CharacterMove(ulong objectId, Vector2 input, float yawRadians)
+        {
+            if (!Accessible) return false;
+            float* command = stackalloc float[3] { input.X, input.Y, yawRadians };
+            return access.CharacterMove(access.Context, objectId, command) != 0;
+        }
+        public bool CharacterJump(ulong objectId) => Accessible && access.CharacterJump(access.Context, objectId) != 0;
+        public bool CameraLook(ulong objectId, Vector2 normalizedDelta)
+        {
+            if (!Accessible) return false;
+            float* command = stackalloc float[2] { normalizedDelta.X, normalizedDelta.Y };
+            return access.CameraLook(access.Context, objectId, command) != 0;
+        }
     }
 
     private static BehaviorWorld? _world;
@@ -376,13 +467,13 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 5 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 8 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);
             var attachments = JsonSerializer.Deserialize<BehaviorAttachment[]>(new ReadOnlySpan<byte>(json, jsonLength))
                 ?? throw new InvalidDataException("Behavior attachment data is empty.");
-            _scene = new(*access); _world = new(); _world.Start(project, _scene, attachments);
+            _scene = new(*access); Graphics.Bind(_scene); _world = new(); _world.Start(project, _scene, attachments);
             RefreshDiagnostics(); return 0;
         }
         catch (Exception error) { StopWorld(); _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }
@@ -427,7 +518,7 @@ public static unsafe class NativeBehaviorRuntime
     private static void StopWorld()
     {
         try { _world?.Dispose(); }
-        finally { _world = null; _scene?.Invalidate(); _scene = null; }
+        finally { _world = null; Graphics.Unbind(); _scene?.Invalidate(); _scene = null; }
     }
     private static void RefreshDiagnostics()
     {

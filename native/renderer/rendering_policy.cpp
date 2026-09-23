@@ -151,10 +151,10 @@ AmbientSettings deriveAmbient(AmbientQuality quality) {
 PostSettings derivePost(PostQuality quality) {
   switch (quality) {
     case PostQuality::Bloom:
-      return {true, true, AntiAliasingMode::Fxaa, true,
+      return {true, true, AntiAliasingMode::Fxaa, UpscalingFilter::Bilinear, true,
               1.15f, 0.28f, 1.04f, 1.03f, 0.12f, 0.16f};
     case PostQuality::Tonemap:
-      return {true, false, AntiAliasingMode::Fxaa, false,
+      return {true, false, AntiAliasingMode::Fxaa, UpscalingFilter::Bilinear, false,
               1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f};
     default: return {};
   }
@@ -243,6 +243,22 @@ AntiAliasingMode parseAntiAliasingMode(const char *name) {
   return AntiAliasingMode::Inherit;
 }
 
+UpscalingFilter parseUpscalingFilter(const char *name) {
+  if (matches(name, "bilinear")) return UpscalingFilter::Bilinear;
+  if (matches(name, "catmull-rom")) return UpscalingFilter::CatmullRom;
+  if (matches(name, "fsr1")) return UpscalingFilter::Fsr1;
+  return UpscalingFilter::Inherit;
+}
+
+const char *upscalingFilterName(UpscalingFilter filter) {
+  switch (filter) {
+    case UpscalingFilter::Bilinear: return "bilinear";
+    case UpscalingFilter::CatmullRom: return "catmull-rom";
+    case UpscalingFilter::Fsr1: return "fsr1";
+    default: return "inherit";
+  }
+}
+
 const char *shadowQualityName(ShadowQuality quality) {
   switch (quality) {
     case ShadowQuality::Off: return "off";
@@ -313,7 +329,10 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
                                                const RenderingCapabilities &capabilities,
                                                ThermalPressure thermal) {
   ResolvedRenderingPolicy policy{};
-  policy.effectiveProfile = profileForPreset(settings.preset, capabilities.profile);
+  const auto automaticProfile = capabilities.qualityRecommendation.evidence !=
+          rhi::DeviceQualityEvidence::CapabilityProfile
+      ? capabilities.qualityRecommendation.profile : capabilities.profile;
+  policy.effectiveProfile = profileForPreset(settings.preset, automaticProfile);
   const PresetPoint point = presetForProfile(policy.effectiveProfile);
 
   const auto note = [&policy](const char *axis, PolicyClamp reason) {
@@ -493,6 +512,9 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
   policy.ambient.splitSumBrdf = policy.ambient.specularProbe &&
       enabledOverride(settings.environmentSplitSumBrdf, policy.ambient.splitSumBrdf);
   policy.post = derivePost(post);
+  policy.post.upscalingFilter = settings.upscalingFilter == UpscalingFilter::Fsr1
+      ? UpscalingFilter::Fsr1 : settings.upscalingFilter == UpscalingFilter::CatmullRom
+      ? UpscalingFilter::CatmullRom : UpscalingFilter::Bilinear;
   if (settings.antiAliasing != AntiAliasingMode::Inherit) {
     policy.post.antiAliasing = settings.antiAliasing;
   } else if (settings.postFxaa != FeatureOverride::Inherit) {
@@ -519,6 +541,7 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
   // Qualquer filtro solicitado exige o passe, mesmo quando o preset base usava
   // tonemap inline. Isto mantém cada eixo independente de nome de preset.
   if (policy.post.bloom || policy.post.antiAliasing != AntiAliasingMode::Off ||
+      policy.post.upscalingFilter != UpscalingFilter::Bilinear ||
       policy.post.vignette ||
       policy.post.sharpen > 0.0f || policy.post.contrast != 1.0f ||
       policy.post.saturation != 1.0f) {
@@ -561,7 +584,10 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
   policy.geometry.waterMesh = waterMesh;
   policy.geometry.lodSelection = enabledOverride(settings.lodSelection, true);
   policy.geometry.materialShaderVariants =
-      enabledOverride(settings.materialShaderVariants, point.materialShaderVariants);
+      enabledOverride(settings.materialShaderVariants,
+          settings.preset == QualityPreset::Auto
+              ? presetForProfile(capabilities.profile).materialShaderVariants
+              : point.materialShaderVariants);
   policy.resolutionScale = std::clamp(resolutionScale, 0.5f, 1.0f);
   // --- cadência alta: o preset foi autorado para 60 Hz ------------------------
   //

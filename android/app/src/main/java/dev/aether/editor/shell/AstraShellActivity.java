@@ -125,6 +125,10 @@ public final class AstraShellActivity extends Activity implements ShellView.List
         intent.putExtra("aether.free_camera", "aether.ocean_preview".equals(template.previewExtra));
         intent.putExtra("aether.water_fft", template.spectralWater);
         intent.putExtra("aether.target_fps", 120.0f);
+        // Profiling follows the actual project-opening route; the renderer
+        // Activity remains private to the application.
+        intent.putExtra("aether.profile_frames",
+                getIntent().getBooleanExtra("aether.profile_frames", false));
         intent.putExtra("astra.project_path", project.path);
         intent.putExtra("astra.project_name", project.name);
         startActivity(intent);

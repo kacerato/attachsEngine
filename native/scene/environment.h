@@ -33,16 +33,30 @@ public:
         << static_cast<u32>(values.sky) << ' ' << static_cast<u32>(values.toneMapper) << ' '
         << values.ambientOcclusion << ' '
         << static_cast<u32>(shape) << ' ' << overrideSky << ' ' << overrideFog << ' '
-        << overridePost << ' ' << layer << ' ' << (profile.valid()?profile.text():"-") << ' ' << overrideIndirect;
+        << overridePost << ' ' << layer << ' ' << (profile.valid()?profile.text():"-") << ' ' << overrideIndirect
+        << ' ' << values.physicalAtmosphereHighQuality
+        << ' ' << (values.environmentMap.valid()?values.environmentMap.text():"-")
+        << ' ' << values.autoExposure << ' ' << values.autoExposureCenterWeighted;
     for (const auto &property : descriptor.numbers) out << ' ' << property.read(*this);
   }
   bool read(std::istream &in, u32 version) override {
     u32 sky = 0, tone = 0;
-    if ((version < 1 || version > 6) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
+    if ((version < 1 || version > 12) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
                           values.vignette))
       return false;
+    if(version<7) {
+      const renderer::SceneEnvironment defaults{};
+      values.physicalAtmosphereHighQuality=defaults.physicalAtmosphereHighQuality;
+      values.physicalSkyIntensity=defaults.physicalSkyIntensity;
+      values.airDensity=defaults.airDensity;values.aerosolDensity=defaults.aerosolDensity;
+      values.aerosolAnisotropy=defaults.aerosolAnisotropy;
+      values.planetRadiusKm=defaults.planetRadiusKm;values.observerHeightKm=defaults.observerHeightKm;
+      values.rayleighScaleHeightKm=defaults.rayleighScaleHeightKm;
+      values.aerosolScaleHeightKm=defaults.aerosolScaleHeightKm;
+      values.atmosphereHeightKm=defaults.atmosphereHeightKm;values.groundAlbedo=defaults.groundAlbedo;
+    }
     if(version>=5 && !(in>>values.filmGrain)) return false;
-    if(!(in>>sky>>tone) || sky>1 || tone>1) return false;
+    if(!(in>>sky>>tone) || sky>(version>=7?2u:1u) || tone>(version>=9?2u:1u)) return false;
     if(version>=3 && !(in>>values.ambientOcclusion)) return false;
     values.sky = static_cast<renderer::SkyModel>(sky);
     values.toneMapper = static_cast<renderer::ToneMapper>(tone);
@@ -59,9 +73,37 @@ public:
     // valor neutro (1), que é exatamente o que ele fazia.
     overrideIndirect=true;values.indirectDiffuse=1;values.indirectSpecular=1;
     if(version>=6 && !(in>>overrideIndirect)) return false;
+    if(version>=7 && !(in>>values.physicalAtmosphereHighQuality)) return false;
+    values.environmentMap={};values.hdriRotationDegrees=0;values.hdriExposureEv=0;
+    if(version>=8) {
+      std::string token;
+      if(!(in>>token)||(token!="-"&&!resources::AssetGuid::parse(token,values.environmentMap))) return false;
+    }
+    if(version>=11) {
+      if(!(in>>values.autoExposure>>values.autoExposureCenterWeighted)) return false;
+    } else {
+      values.autoExposure=false;values.autoExposureCenterWeighted=false;
+      const renderer::SceneEnvironment defaults{};
+      values.autoExposureMinEv=defaults.autoExposureMinEv;
+      values.autoExposureMaxEv=defaults.autoExposureMaxEv;
+      values.autoExposureLowPercent=defaults.autoExposureLowPercent;
+      values.autoExposureHighPercent=defaults.autoExposureHighPercent;
+      values.autoExposureTargetGrey=defaults.autoExposureTargetGrey;
+      values.autoExposureSpeedUp=defaults.autoExposureSpeedUp;
+      values.autoExposureSpeedDown=defaults.autoExposureSpeedDown;
+    }
+    if(version<12) values.fogLightEnergy=1.0f;
     for (const auto &property : descriptor.numbers) {
+      if(version<12 && property.id=="fog_light_energy") continue;
+      if(version<11 && property.id.starts_with("auto_exposure_")) continue;
+      if(version<8 && property.id.starts_with("hdri_")) continue;
+      if(version<10 && (property.id=="fog_base_height" || property.id=="fog_height_falloff")) continue;
       if(version<5 && property.id=="film_grain_intensity") continue;
       if(version<6 && property.id.starts_with("indirect_")) continue;
+      if(version<7 && (property.id.starts_with("physical_") || property.id.starts_with("air_") ||
+                       property.id.starts_with("aerosol_") || property.id.starts_with("planet_") ||
+                       property.id.starts_with("observer_") || property.id.starts_with("rayleigh_") ||
+                       property.id=="atmosphere_height_km" || property.id=="ground_albedo")) continue;
       // Campos espaciais não existiam no arquivo v1.
       if (version>=3 || (version==2 && !property.id.starts_with("ambient_occlusion_")) ||
           property.id=="priority" || property.id.starts_with("sky_") ||
@@ -89,11 +131,24 @@ inline bool environmentIsSphere(const ComponentValue &value) {
 inline bool environmentUsesAtmosphere(const ComponentValue &value) {
   return static_cast<const Environment &>(value).values.sky == renderer::SkyModel::Atmosphere;
 }
+inline bool environmentUsesHdri(const ComponentValue &value) {
+  return static_cast<const Environment&>(value).values.sky==renderer::SkyModel::Hdri;
+}
+inline bool environmentUsesProceduralSky(const ComponentValue &value) {
+  return static_cast<const Environment &>(value).values.sky != renderer::SkyModel::Hdri;
+}
+inline bool environmentUsesPhysicalAtmosphere(const ComponentValue &value) {
+  return static_cast<const Environment &>(value).values.sky == renderer::SkyModel::PhysicalAtmosphere;
+}
 inline bool environmentUsesFog(const ComponentValue &value) {
   return static_cast<const Environment &>(value).values.fog;
 }
 inline bool environmentUsesPost(const ComponentValue &value) {
   return static_cast<const Environment &>(value).values.post;
+}
+inline bool environmentUsesAutoExposure(const ComponentValue &value) {
+  const auto &environment=static_cast<const Environment &>(value).values;
+  return environment.post&&environment.autoExposure;
 }
 inline bool environmentUsesBloom(const ComponentValue &value) {
   const auto &environment = static_cast<const Environment &>(value).values;
@@ -121,7 +176,7 @@ inline bool environmentUsesAmbientOcclusion(const ComponentValue &value) {
    [](ComponentValue &v)->float* { return &static_cast<Environment&>(v).values.field[channel]; }, id, \
    {group, "", nullptr, visible, nullptr, capability, consumer, invalidation}}
 
-inline constexpr std::array<ComponentNumber, 22> environmentNumbers{{
+inline constexpr std::array<ComponentNumber, 25> environmentNumbers{{
   AE_ENV_NUMBER("priority", "Prioridade", priority, -1000, 1000, 1, "Geral", "", nullptr, "render.environment.atmosphere", "runtime/scene_environment.cpp → seleção", Invalidate::Draw),
   AE_ENV_COLOR("sky_zenith.r", "Zênite R", skyZenith, 0, "Atmosfera", environmentUsesAtmosphere, "render.environment.atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
   AE_ENV_COLOR("sky_zenith.g", "Zênite G", skyZenith, 1, "Atmosfera", environmentUsesAtmosphere, "render.environment.atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
@@ -133,14 +188,17 @@ inline constexpr std::array<ComponentNumber, 22> environmentNumbers{{
   AE_ENV_COLOR("ground.g", "Chão G", ground, 1, "Atmosfera", environmentUsesAtmosphere, "render.environment.atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
   AE_ENV_COLOR("ground.b", "Chão B", ground, 2, "Atmosfera", environmentUsesAtmosphere, "render.environment.atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
   AE_ENV_NUMBER("atmosphere", "Força atmosférica", atmosphere, 0, 1, .02f, "Atmosfera", "", environmentUsesAtmosphere, "render.environment.atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
-  AE_ENV_NUMBER("sun_disk_degrees", "Diâmetro do sol", sunDiskDegrees, .05f, 10, .05f, "Atmosfera", "°", environmentUsesAtmosphere, "render.environment.atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
-  AE_ENV_NUMBER("sun_disk_intensity", "Brilho do disco solar", sunDiskIntensity, 0, 100, .1f, "Atmosfera", "", environmentUsesAtmosphere, "render.environment.atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
+  AE_ENV_NUMBER("sun_disk_degrees", "Diâmetro do sol", sunDiskDegrees, .05f, 10, .05f, "Atmosfera", "°", environmentUsesProceduralSky, "render.environment.atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
+  AE_ENV_NUMBER("sun_disk_intensity", "Brilho do disco solar", sunDiskIntensity, 0, 100, .1f, "Atmosfera", "", environmentUsesProceduralSky, "render.environment.atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
   AE_ENV_COLOR("fog_color.r", "Neblina R", fogColor, 0, "Neblina", environmentUsesFog, "render.environment.fog", "rhi/shaders/post_process_common.glsl", Invalidate::Draw),
   AE_ENV_COLOR("fog_color.g", "Neblina G", fogColor, 1, "Neblina", environmentUsesFog, "render.environment.fog", "rhi/shaders/post_process_common.glsl", Invalidate::Draw),
   AE_ENV_COLOR("fog_color.b", "Neblina B", fogColor, 2, "Neblina", environmentUsesFog, "render.environment.fog", "rhi/shaders/post_process_common.glsl", Invalidate::Draw),
+  AE_ENV_NUMBER("fog_light_energy", "Energia da neblina", fogLightEnergy, 0, 65504, 1, "Neblina", "×", environmentUsesFog, "render.environment.fog", "platform/android/instanced_renderer.cpp", Invalidate::Draw),
   AE_ENV_NUMBER("fog_density", "Densidade", fogDensity, 0, 1, .001f, "Neblina", "1/m", environmentUsesFog, "render.environment.fog", "rhi/shaders/post_process_common.glsl", Invalidate::Draw),
   AE_ENV_NUMBER("fog_start", "Início", fogStart, 0, 10000, .5f, "Neblina", "m", environmentUsesFog, "render.environment.fog", "rhi/shaders/post_process_common.glsl", Invalidate::Draw),
-  AE_ENV_NUMBER("exposure_ev", "Compensação", exposureEv, -16, 16, .1f, "Pós", "EV", environmentUsesPost, "render.post.tonemap", "rhi/shaders/post_process_common.glsl", Invalidate::Policy),
+  AE_ENV_NUMBER("fog_base_height", "Altura base", fogBaseHeight, -100000, 100000, .5f, "Neblina", "m", environmentUsesFog, "render.environment.fog", "rhi/shaders/post_process_common.glsl", Invalidate::Draw),
+  AE_ENV_NUMBER("fog_height_falloff", "Decaimento por altura", fogHeightFalloff, 0, 10, .001f, "Neblina", "1/m", environmentUsesFog, "render.environment.fog", "rhi/shaders/post_process_common.glsl", Invalidate::Draw),
+  AE_ENV_NUMBER("exposure_ev", "Compensação", exposureEv, -16, 16, .1f, "Exposição", "EV", environmentUsesPost, "render.post.tonemap", "rhi/shaders/post_process_common.glsl", Invalidate::Policy),
   AE_ENV_NUMBER("bloom_threshold", "Limiar do bloom", bloomThreshold, 0, 64, .05f, "Pós", "", environmentUsesBloom, "render.post.bloom", "rhi/shaders/post_process_common.glsl", Invalidate::Policy),
   AE_ENV_NUMBER("bloom_intensity", "Intensidade do bloom", bloomIntensity, 0, 2, .02f, "Pós", "", environmentUsesBloom, "render.post.bloom", "rhi/shaders/post_process_common.glsl", Invalidate::Policy),
   AE_ENV_NUMBER("contrast", "Contraste", contrast, .5f, 2, .02f, "Pós", "", environmentUsesPost, "render.post.tonemap", "rhi/shaders/post_process_common.glsl", Invalidate::Policy),
@@ -172,6 +230,19 @@ inline constexpr std::array<ComponentNumber,2> environmentIndirectNumbers{{
   AE_ENV_NUMBER("indirect_specular", "Reflexo indireto", indirectSpecular, 0, 4, .02f, "Luz indireta", "×", nullptr, "render.ambient.specular", "rhi/shaders/environment_lighting.glsl", Invalidate::Draw),
 }};
 
+inline constexpr std::array<ComponentNumber,10> environmentPhysicalAtmosphereNumbers{{
+  AE_ENV_NUMBER("physical_sky_intensity", "Intensidade", physicalSkyIntensity, 0, 16, .05f, "Atmosfera física", "×", environmentUsesPhysicalAtmosphere, "render.environment.physical_atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
+  AE_ENV_NUMBER("air_density", "Densidade do ar", airDensity, 0, 8, .02f, "Atmosfera física", "×", environmentUsesPhysicalAtmosphere, "render.environment.physical_atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
+  AE_ENV_NUMBER("aerosol_density", "Densidade de aerossóis", aerosolDensity, 0, 8, .02f, "Atmosfera física", "×", environmentUsesPhysicalAtmosphere, "render.environment.physical_atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
+  AE_ENV_NUMBER("aerosol_anisotropy", "Anisotropia dos aerossóis", aerosolAnisotropy, 0, .95f, .01f, "Atmosfera física", "g", environmentUsesPhysicalAtmosphere, "render.environment.physical_atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
+  AE_ENV_NUMBER("planet_radius_km", "Raio do planeta", planetRadiusKm, 1, 100000, 1, "Atmosfera física", "km", environmentUsesPhysicalAtmosphere, "render.environment.physical_atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
+  AE_ENV_NUMBER("observer_height_km", "Altura do observador", observerHeightKm, 0, 1000, .001f, "Atmosfera física", "km", environmentUsesPhysicalAtmosphere, "render.environment.physical_atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
+  AE_ENV_NUMBER("rayleigh_scale_height_km", "Escala Rayleigh", rayleighScaleHeightKm, .1f, 100, .1f, "Atmosfera física", "km", environmentUsesPhysicalAtmosphere, "render.environment.physical_atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
+  AE_ENV_NUMBER("aerosol_scale_height_km", "Escala de aerossóis", aerosolScaleHeightKm, .05f, 50, .05f, "Atmosfera física", "km", environmentUsesPhysicalAtmosphere, "render.environment.physical_atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
+  AE_ENV_NUMBER("atmosphere_height_km", "Altura da atmosfera", atmosphereHeightKm, 1, 1000, 1, "Atmosfera física", "km", environmentUsesPhysicalAtmosphere, "render.environment.physical_atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
+  AE_ENV_NUMBER("ground_albedo", "Albedo médio do solo", groundAlbedo, 0, 1, .01f, "Atmosfera física", "", environmentUsesPhysicalAtmosphere, "render.environment.physical_atmosphere", "rhi/shaders/dirt_road_sky.frag", Invalidate::Draw),
+}};
+
 inline constexpr std::array<ComponentNumber,6> environmentVolumeNumbers{{
   AE_ENV_VOLUME_NUMBER("weight","Peso",weight,0,1,.02f,"",nullptr),
   AE_ENV_VOLUME_NUMBER("blend_distance","Distância de mistura",blendDistance,0,100000,.1f,"m",environmentIsLocal),
@@ -183,6 +254,19 @@ inline constexpr std::array<ComponentNumber,6> environmentVolumeNumbers{{
 #undef AE_ENV_VOLUME_AXIS
 #undef AE_ENV_VOLUME_NUMBER
 
+inline constexpr std::array<ComponentNumber,2> environmentHdriNumbers{{
+  AE_ENV_NUMBER("hdri_rotation_degrees","Rotação HDRI",hdriRotationDegrees,-360,360,1,"HDRI","°",environmentUsesHdri,"render.environment.atmosphere","rhi/shaders/environment_lighting.glsl",Invalidate::Draw),
+  AE_ENV_NUMBER("hdri_exposure_ev","Exposição HDRI",hdriExposureEv,-16,16,.1f,"HDRI","EV",environmentUsesHdri,"render.environment.atmosphere","rhi/shaders/environment_lighting.glsl",Invalidate::Draw),
+}};
+inline constexpr std::array<ComponentNumber,7> environmentAutoExposureNumbers{{
+  AE_ENV_NUMBER("auto_exposure_min_ev","EV mínimo",autoExposureMinEv,-16,16,.1f,"Exposição","EV",environmentUsesAutoExposure,"render.post.auto_exposure","platform/android/instanced_auto_exposure.inl",Invalidate::Policy),
+  AE_ENV_NUMBER("auto_exposure_max_ev","EV máximo",autoExposureMaxEv,-16,16,.1f,"Exposição","EV",environmentUsesAutoExposure,"render.post.auto_exposure","platform/android/instanced_auto_exposure.inl",Invalidate::Policy),
+  AE_ENV_NUMBER("auto_exposure_low_percent","Corte baixo",autoExposureLowPercent,0,1,.01f,"Exposição","",environmentUsesAutoExposure,"render.post.auto_exposure","platform/android/instanced_auto_exposure.inl",Invalidate::Policy),
+  AE_ENV_NUMBER("auto_exposure_high_percent","Corte alto",autoExposureHighPercent,0,1,.01f,"Exposição","",environmentUsesAutoExposure,"render.post.auto_exposure","platform/android/instanced_auto_exposure.inl",Invalidate::Policy),
+  AE_ENV_NUMBER("auto_exposure_target_grey","Cinza alvo",autoExposureTargetGrey,.01f,1,.01f,"Exposição","",environmentUsesAutoExposure,"render.post.auto_exposure","platform/android/instanced_auto_exposure.inl",Invalidate::Policy),
+  AE_ENV_NUMBER("auto_exposure_speed_up","Velocidade ao escurecer",autoExposureSpeedUp,.01f,20,.1f,"Exposição","EV/s",environmentUsesAutoExposure,"render.post.auto_exposure","platform/android/instanced_auto_exposure.inl",Invalidate::Policy),
+  AE_ENV_NUMBER("auto_exposure_speed_down","Velocidade ao clarear",autoExposureSpeedDown,.01f,20,.1f,"Exposição","EV/s",environmentUsesAutoExposure,"render.post.auto_exposure","platform/android/instanced_auto_exposure.inl",Invalidate::Policy),
+}};
 #undef AE_ENV_COLOR
 #undef AE_ENV_NUMBER
 
@@ -190,7 +274,8 @@ inline constexpr std::array<ComponentNumber,6> environmentVolumeNumbers{{
 // array constexpr evita uma tabela paralela apenas para a paginação do editor.
 inline constexpr auto environmentAllNumbers = [] {
   std::array<ComponentNumber, environmentNumbers.size() + environmentTailNumbers.size()+
-      environmentAmbientOcclusionNumbers.size()+environmentVolumeNumbers.size()+environmentIndirectNumbers.size()> out{};
+      environmentAmbientOcclusionNumbers.size()+environmentVolumeNumbers.size()+environmentIndirectNumbers.size()+
+      environmentPhysicalAtmosphereNumbers.size()+environmentAutoExposureNumbers.size()+environmentHdriNumbers.size()> out{};
   for (usize i = 0; i < environmentNumbers.size(); ++i) out[i] = environmentNumbers[i];
   for (usize i = 0; i < environmentTailNumbers.size(); ++i)
     out[environmentNumbers.size() + i] = environmentTailNumbers[i];
@@ -201,13 +286,22 @@ inline constexpr auto environmentAllNumbers = [] {
   for(usize i=0;i<environmentIndirectNumbers.size();++i)
     out[environmentNumbers.size()+environmentTailNumbers.size()+environmentAmbientOcclusionNumbers.size()+
         environmentVolumeNumbers.size()+i]=environmentIndirectNumbers[i];
+  for(usize i=0;i<environmentPhysicalAtmosphereNumbers.size();++i)
+    out[environmentNumbers.size()+environmentTailNumbers.size()+environmentAmbientOcclusionNumbers.size()+
+        environmentVolumeNumbers.size()+environmentIndirectNumbers.size()+i]=environmentPhysicalAtmosphereNumbers[i];
+  for(usize i=0;i<environmentAutoExposureNumbers.size();++i)
+    out[out.size()-environmentHdriNumbers.size()-environmentAutoExposureNumbers.size()+i]=environmentAutoExposureNumbers[i];
+  for(usize i=0;i<environmentHdriNumbers.size();++i)
+    out[out.size()-environmentHdriNumbers.size()+i]=environmentHdriNumbers[i];
   return out;
 }();
 
-inline constexpr std::array<ComponentBoolean, 11> environmentBooleans{{
+inline constexpr std::array<ComponentBoolean, 14> environmentBooleans{{
   {"enabled", "Ativo", [](const ComponentValue &v){return static_cast<const Environment&>(v).values.active;}, [](ComponentValue &v,bool b){static_cast<Environment&>(v).values.active=b;}, {"Geral","","Participa da seleção por prioridade"}},
-  {"fog", "Neblina", [](const ComponentValue &v){return static_cast<const Environment&>(v).values.fog;}, [](ComponentValue &v,bool b){static_cast<Environment&>(v).values.fog=b;}, {"Neblina","","Aplica neblina exponencial pela profundidade",nullptr,nullptr,"render.environment.fog","rhi/shaders/post_process_common.glsl",Invalidate::Draw}},
+  {"fog", "Neblina", [](const ComponentValue &v){return static_cast<const Environment&>(v).values.fog;}, [](ComponentValue &v,bool b){static_cast<Environment&>(v).values.fog=b;}, {"Neblina","","Aplica neblina exponencial uniforme ou com decaimento por altura",nullptr,nullptr,"render.environment.fog","rhi/shaders/post_process_common.glsl",Invalidate::Draw}},
   {"post", "Pós-processamento", [](const ComponentValue &v){return static_cast<const Environment&>(v).values.post;}, [](ComponentValue &v,bool b){static_cast<Environment&>(v).values.post=b;}, {"Pós","","Ativa os overrides autorais desta cena",nullptr,nullptr,"render.post.tonemap","rhi/shaders/post_process_common.glsl",Invalidate::Policy}},
+  {"auto_exposure", "Exposição automática", [](const ComponentValue &v){return static_cast<const Environment&>(v).values.autoExposure;}, [](ComponentValue &v,bool b){static_cast<Environment&>(v).values.autoExposure=b;}, {"Exposição","","Mede luminância HDR e adapta a exposição por câmera",environmentUsesPost,nullptr,"render.post.auto_exposure","platform/android/instanced_auto_exposure.inl",Invalidate::Policy}},
+  {"auto_exposure_center_weighted", "Peso central", [](const ComponentValue &v){return static_cast<const Environment&>(v).values.autoExposureCenterWeighted;}, [](ComponentValue &v,bool b){static_cast<Environment&>(v).values.autoExposureCenterWeighted=b;}, {"Exposição","","Prioriza o centro da imagem na medição",environmentUsesAutoExposure,nullptr,"render.post.auto_exposure","platform/android/instanced_auto_exposure.inl",Invalidate::Policy}},
   {"bloom", "Bloom", [](const ComponentValue &v){return static_cast<const Environment&>(v).values.bloom;}, [](ComponentValue &v,bool b){static_cast<Environment&>(v).values.bloom=b;}, {"Pós","","Espalha altas luzes antes do tonemap",environmentUsesPost,nullptr,"render.post.bloom","rhi/shaders/post_process_common.glsl",Invalidate::Policy}},
   {"vignette", "Vinheta", [](const ComponentValue &v){return static_cast<const Environment&>(v).values.vignette;}, [](ComponentValue &v,bool b){static_cast<Environment&>(v).values.vignette=b;}, {"Pós","","Escurece gradualmente as bordas",environmentUsesPost,nullptr,"render.post.tonemap","rhi/shaders/post_process_common.glsl",Invalidate::Policy}},
   {"film_grain", "Grão de filme", [](const ComponentValue &v){return static_cast<const Environment&>(v).values.filmGrain;}, [](ComponentValue &v,bool b){static_cast<Environment&>(v).values.filmGrain=b;}, {"Pós","","Adiciona grão sensível à luminância depois da resolução temporal",environmentUsesPost,nullptr,"render.post.film_grain","rhi/shaders/post_process_common.glsl",Invalidate::Policy}},
@@ -216,10 +310,11 @@ inline constexpr std::array<ComponentBoolean, 11> environmentBooleans{{
   {"override_fog","Sobrescrever neblina",[](const ComponentValue &v){return static_cast<const Environment&>(v).overrideFog;},[](ComponentValue &v,bool b){static_cast<Environment&>(v).overrideFog=b;},{"Volume","","Participa da mistura de neblina",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Draw}},
   {"override_post","Sobrescrever pós",[](const ComponentValue &v){return static_cast<const Environment&>(v).overridePost;},[](ComponentValue &v,bool b){static_cast<Environment&>(v).overridePost=b;},{"Volume","","Participa da mistura de exposição e pós",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Policy}},
   {"override_indirect","Sobrescrever luz indireta",[](const ComponentValue &v){return static_cast<const Environment&>(v).overrideIndirect;},[](ComponentValue &v,bool b){static_cast<Environment&>(v).overrideIndirect=b;},{"Volume","","Participa da mistura de difuso e reflexo indiretos",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Draw}},
+  {"physical_atmosphere_high_quality","Alta qualidade",[](const ComponentValue &v){return static_cast<const Environment&>(v).values.physicalAtmosphereHighQuality;},[](ComponentValue &v,bool b){static_cast<Environment&>(v).values.physicalAtmosphereHighQuality=b;},{"Atmosfera física","","Aumenta as amostras de vista e luz; custa mais GPU",environmentUsesPhysicalAtmosphere,nullptr,"render.environment.physical_atmosphere","rhi/shaders/dirt_road_sky.frag",Invalidate::Draw}},
 }};
 
-inline constexpr std::array<ComponentEnumOption, 2> skyOptions{{{0,"HDRI"},{1,"Atmosfera"}}};
-inline constexpr std::array<ComponentEnumOption, 2> toneOptions{{{0,"Neutro"},{1,"ACES"}}};
+inline constexpr std::array<ComponentEnumOption, 3> skyOptions{{{0,"HDRI"},{1,"Atmosfera"},{2,"Atmosfera física"}}};
+inline constexpr std::array<ComponentEnumOption, 3> toneOptions{{{0,"Reinhard"},{1,"ACES"},{2,"AgX"}}};
 inline constexpr std::array<ComponentEnumOption,3> environmentShapeOptions{{{0,"Global"},{1,"Caixa"},{2,"Esfera"}}};
 inline constexpr std::array<ComponentEnumOption,8> environmentLayerOptions{{
   {0,"Ambiente 0"},{1,"Ambiente 1"},{2,"Ambiente 2"},{3,"Ambiente 3"},
@@ -240,18 +335,25 @@ inline constexpr std::array<ComponentTriple, 5> environmentTriples{{
   {"box_size","Tamanho da caixa",{"box_size.x","box_size.y","box_size.z"},ComponentTripleKind::Vector},
 }};
 
-inline constexpr std::array<ComponentResourceBinding,1> environmentResources{{
+inline constexpr std::array<ComponentResourceBinding,2> environmentResources{{
   {"profile","Perfil",resources::AssetType::EnvironmentProfile,
    [](const ComponentValue &){return 1u;},
    [](const ComponentValue &v,u32){return static_cast<const Environment&>(v).profile;},
    [](ComponentValue &v,u32,resources::AssetGuid value){static_cast<Environment&>(v).profile=value;return true;},
    {"Geral","","Aparência compartilhada; forma, peso, prioridade e camada continuam nesta instância",
     nullptr,nullptr,"render.environment.volumes","resources/environment_profile.cpp",Invalidate::Draw|Invalidate::Policy},
+   true,{}},
+  {"environment_map","Mapa HDRI",resources::AssetType::EnvironmentMap,
+   [](const ComponentValue &){return 1u;},
+   [](const ComponentValue &v,u32){return static_cast<const Environment&>(v).values.environmentMap;},
+   [](ComponentValue &v,u32,resources::AssetGuid value){static_cast<Environment&>(v).values.environmentMap=value;return true;},
+   {"HDRI","","Panorama HDR linear: céu, irradiância global e reflexão compartilham a mesma fonte",
+    environmentUsesHdri,nullptr,"render.environment.atmosphere","resources/environment_map_asset.cpp",Invalidate::Draw|Invalidate::TextureResidency},
    true,{}}
 }};
 
 inline const ComponentType Environment::descriptor{
-  "astra.render.environment", 6,
+  "astra.render.environment", 12,
   []()->std::unique_ptr<ComponentValue>{return std::make_unique<Environment>();},
   environmentAllNumbers, environmentBooleans, environmentEnums, nullptr, false, {}, environmentTriples,
   environmentResources

@@ -134,6 +134,9 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
         dependsOn(verifyVendoredAndroid16kLibraries)
     }
     from("../../native/third_party/openssl/LICENSE.txt") { into("licenses/openssl") }
+    from("../../native/third_party/playdead_temporal/LICENSE.txt") { into("licenses/playdead_temporal") }
+    from("../../native/third_party/godot_agx/LICENSE.txt") { into("licenses/godot_agx") }
+    from("../../native/third_party/fidelityfx_fsr1/LICENSE.txt") { into("licenses/fidelityfx_fsr1") }
     if (includeLegacyDemos) {
     inputs.file("../../samples/material-preview/manifest.json")
     inputs.file("../../samples/dirt-road/manifest.json")

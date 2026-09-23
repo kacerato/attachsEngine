@@ -1,0 +1,5 @@
+Godot 4.4-stable
+Commit: 4c311cbee68c0b66ff8ebb8b0defdd9979dd2a41
+Source: servers/rendering/renderer_rd/shaders/effects/tonemap.glsl
+Subset: agx_contrast_approx and tonemap_agx, unmodified.
+License: MIT (LICENSE.txt).

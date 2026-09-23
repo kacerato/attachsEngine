@@ -4,6 +4,8 @@
 #include "runtime/game_world.h"
 #include "runtime/scene_components.h"
 #include "scene/component_schema.h"
+#include "scene/environment.h"
+#include "scene/mesh_renderer.h"
 
 using namespace ae;
 using namespace ae::editor;
@@ -49,6 +51,153 @@ AE_TEST(runtime_world_rejects_handles_from_another_play_session) {
   const auto foreign = first.handle(child);
   AE_EXPECT_EQ(static_cast<u32>(second.validate(foreign)), static_cast<u32>(WorldStatus::ForeignWorld),
                "handle de outra execução é recusado, não reinterpretado");
+}
+
+AE_TEST(runtime_world_component_resources_keep_guid128_and_validate_asset_type) {
+  EditorDocument doc;const auto id=named(doc,doc.root(),"Ambiente");auto values=*doc.find(id);
+  auto *environment=static_cast<scene::Environment *>(values.components.add(scene::Environment::descriptor));
+  AE_EXPECT_TRUE(environment&&doc.applyEntityValues(id,values),"componente autorado");
+  GameWorld world;AE_EXPECT_TRUE(world.load(doc),"mundo");
+  const auto component=world.findComponent(world.handle(id),scene::Environment::descriptor.id);
+  resources::AssetRegistry assets;resources::AssetRecord record;
+  const resources::AssetGuid hdri{0x1122334455667788ull,0x99aabbccddeeff00ull};
+  record.guid=hdri;record.type=resources::AssetType::EnvironmentMap;record.path="Environment/studio.aeen";
+  AE_EXPECT_TRUE(assets.add(record),"HDRI registrado");
+  AE_EXPECT_EQ((u32)world.setResource(component,"environment_map",0,hdri,assets),(u32)WorldStatus::Ok,"recurso aplicado");
+  resources::AssetGuid read;AE_EXPECT_EQ((u32)world.getResource(component,"environment_map",0,read),(u32)WorldStatus::Ok,"recurso lido");
+  AE_EXPECT_TRUE(read==hdri,"128 bits preservados");
+  record.guid={7,8};record.type=resources::AssetType::Mesh;record.path="Meshes/wrong.mesh";
+  AE_EXPECT_TRUE(assets.add(record),"tipo divergente registrado");
+  AE_EXPECT_EQ((u32)world.setResource(component,"environment_map",0,record.guid,assets),(u32)WorldStatus::ResourceTypeMismatch,"tipo recusado");
+  AE_EXPECT_EQ((u32)world.setResource(component,"environment_map",1,{},assets),(u32)WorldStatus::InvalidArgument,"slot recusado");
+
+  resources::EnvironmentProfile profile;profile.guid={0xabc,0xdef};profile.name="Noite";
+  profile.values.hdriExposureEv=4.0f;
+  record.guid=profile.guid;record.type=resources::AssetType::EnvironmentProfile;record.path="Environment/night.environment";
+  AE_EXPECT_TRUE(assets.add(record)&&profile.valid(),"perfil e conteúdo registrados");
+  AE_EXPECT_EQ((u32)world.setResource(component,"profile",0,profile.guid,assets),(u32)WorldStatus::UnknownResource,
+               "identidade sem biblioteca de valores não finge aplicar perfil");
+  const std::array profiles{profile};
+  AE_EXPECT_EQ((u32)world.setResource(component,"profile",0,profile.guid,assets,profiles),(u32)WorldStatus::Ok,
+               "perfil aplicado com conteúdo");
+  const auto *runtimeEnvironment=static_cast<const scene::Environment*>(world.readComponent(component));
+  AE_EXPECT_TRUE(runtimeEnvironment&&runtimeEnvironment->profile==profile.guid&&
+                 runtimeEnvironment->values.hdriExposureEv==4.0f,"GUID e aparência mudam juntos");
+  AE_EXPECT_EQ((u32)world.setResource(component,"profile",0,{},assets,profiles),(u32)WorldStatus::Ok,
+               "limpeza do vínculo aceita GUID vazio");
+  runtimeEnvironment=static_cast<const scene::Environment*>(world.readComponent(component));
+  AE_EXPECT_TRUE(runtimeEnvironment&&!runtimeEnvironment->profile.valid()&&
+                 runtimeEnvironment->values.hdriExposureEv==4.0f,"limpeza preserva fallback local visível");
+}
+
+AE_TEST(runtime_world_material_slots_are_typed_atomic_and_require_a_published_texture) {
+  EditorDocument doc;const auto id=named(doc,doc.root(),"Malha");auto authored=*doc.find(id);
+  auto *render=static_cast<scene::MeshRenderer*>(authored.components.add(scene::MeshRenderer::descriptor));
+  AE_EXPECT_TRUE(render!=nullptr,"renderer criado");
+  render->submeshes.emplace_back();
+  AE_EXPECT_TRUE(doc.applyEntityValues(id,authored),"dois slots autorados");
+  const auto authoringRevision=doc.revision();
+
+  GameWorld world;AE_EXPECT_TRUE(world.load(doc),"mundo");
+  const auto component=world.findComponent(world.handle(id),scene::MeshRenderer::descriptor.id);
+  scene::ComponentPropertyValue value;
+  AE_EXPECT_EQ((u32)world.setSlotProperty(component,"material.roughness",1,.25f),(u32)WorldStatus::Ok,
+               "fator do segundo slot mutável em Play");
+  AE_EXPECT_EQ((u32)world.getSlotProperty(component,"material.roughness",1,value),(u32)WorldStatus::Ok,"releitura");
+  AE_EXPECT_EQ(std::get<float>(value),.25f,"slot correto alterado");
+  AE_EXPECT_EQ((u32)world.setSlotProperty(component,"surface.alpha_mode",1,(u32)scene::MaterialAlphaMask),
+               (u32)WorldStatus::Ok,"enum validado pelo schema");
+  AE_EXPECT_EQ((u32)world.setSlotProperty(component,"sampling.wrap",1,(u32)scene::MaterialWrapClamp),
+               (u32)WorldStatus::ComponentUnavailable,"sampler sem publicação não finge efeito");
+  AE_EXPECT_EQ((u32)world.getSlotProperty(component,"sampling.wrap",1,value),(u32)WorldStatus::Ok,"sampler relido");
+  AE_EXPECT_EQ(std::get<u32>(value),(u32)scene::MaterialWrapKeep,"recusa de sampler é atômica");
+  AE_EXPECT_EQ((u32)world.setSlotProperty(component,"sampling.normal.scale_u",1,2.5f),(u32)WorldStatus::Ok,
+               "escala individual da normal é alcançável");
+  AE_EXPECT_EQ((u32)world.getSlotProperty(component,"sampling.normal.scale_u",1,value),(u32)WorldStatus::Ok,
+               "escala individual relida");
+  AE_EXPECT_EQ(std::get<float>(value),2.5f,"binding normal mudou");
+  AE_EXPECT_EQ((u32)world.getSlotProperty(component,"sampling.base_color.scale_u",1,value),(u32)WorldStatus::Ok,
+               "binding vizinho relido");
+  AE_EXPECT_EQ(std::get<float>(value),1.0f,"binding vizinho não foi alterado");
+  AE_EXPECT_EQ((u32)world.setSlotProperty(component,"material.roughness",1,2.f),(u32)WorldStatus::InvalidArgument,
+               "faixa inválida recusada");
+  AE_EXPECT_EQ((u32)world.setSlotProperty(component,"surface.alpha_mode",1,999u),(u32)WorldStatus::InvalidArgument,
+               "opção inválida recusada");
+  AE_EXPECT_EQ((u32)world.setSlotProperty(component,"material.roughness",2,.5f),(u32)WorldStatus::InvalidArgument,
+               "slot inexistente recusado");
+
+  resources::AssetRegistry assets;resources::AssetRecord texture;
+  texture.guid={0x1111,0x2222};texture.type=resources::AssetType::Texture;texture.path="Textures/runtime.png";
+  AE_EXPECT_TRUE(assets.add(texture),"textura registrada");
+  AE_EXPECT_EQ((u32)world.setResource(component,"texture.base_color",1,texture.guid,assets),
+               (u32)WorldStatus::ComponentUnavailable,"registro sem publicação não finge efeito visual");
+  resources::AssetGuid read;
+  AE_EXPECT_EQ((u32)world.getResource(component,"texture.base_color",1,read),(u32)WorldStatus::Ok,"binding ainda legível");
+  AE_EXPECT_TRUE(!read.valid(),"recusa é atômica");
+
+  bool sawCandidate=false;
+  const auto published=[&](resources::AssetGuid guid,resources::AssetType kind,std::string_view property,u32 slot,
+                           scene::ComponentValue &candidate) {
+    const auto &mesh=static_cast<const scene::MeshRenderer&>(candidate);
+    sawCandidate=guid==texture.guid&&kind==resources::AssetType::Texture&&property=="texture.base_color"&&slot==1&&
+                 mesh.slotTextures(1)[0]==texture.guid;
+    return sawCandidate;
+  };
+  AE_EXPECT_EQ((u32)world.setResource(component,"texture.base_color",1,texture.guid,assets,{},published),
+               (u32)WorldStatus::Ok,"publicador confirma a variante efetiva antes do commit");
+  AE_EXPECT_TRUE(sawCandidate,"callback recebeu binding, slot e componente candidato");
+  bool sawSampler=false;
+  const auto samplerPublished=[&](resources::AssetGuid guid,resources::AssetType kind,std::string_view property,u32 slot,
+                                  scene::ComponentValue &candidate) {
+    const auto &mesh=static_cast<const scene::MeshRenderer&>(candidate);
+    sawSampler=!guid.valid()&&kind==resources::AssetType::Texture&&property=="sampling.wrap"&&slot==1&&
+               mesh.slotSampling(1)[0].wrap==scene::MaterialWrapClamp;
+    return sawSampler;
+  };
+  AE_EXPECT_EQ((u32)world.setSlotProperty(component,"sampling.wrap",1,(u32)scene::MaterialWrapClamp,samplerPublished),
+               (u32)WorldStatus::Ok,"sampler entra após publicação das variantes candidatas");
+  AE_EXPECT_TRUE(sawSampler,"publicador vê sampler candidato antes do commit");
+  bool sawNormalSampler=false;
+  const auto normalSamplerPublished=[&](resources::AssetGuid guid,resources::AssetType kind,std::string_view property,u32 slot,
+                                        scene::ComponentValue &candidate) {
+    const auto &mesh=static_cast<const scene::MeshRenderer&>(candidate);
+    sawNormalSampler=!guid.valid()&&kind==resources::AssetType::Texture&&property=="sampling.normal.filter"&&slot==1&&
+                     mesh.slotSampling(1)[1].filter==scene::MaterialFilterNearest&&
+                     mesh.slotSampling(1)[0].filter==scene::MaterialFilterKeep;
+    return sawNormalSampler;
+  };
+  AE_EXPECT_EQ((u32)world.setSlotProperty(component,"sampling.normal.filter",1,(u32)scene::MaterialFilterNearest,
+                                          normalSamplerPublished),(u32)WorldStatus::Ok,
+               "filtro individual passa pelo publicador antes do commit");
+  AE_EXPECT_TRUE(sawNormalSampler,"publicador recebe somente o binding candidato alterado");
+  AE_EXPECT_EQ((u32)world.getResource(component,"texture.base_color",1,read),(u32)WorldStatus::Ok,"textura relida");
+  AE_EXPECT_TRUE(read==texture.guid,"GUID aplicado ao segundo slot");
+  bool resolvedNone=false;
+  const auto none=[&](resources::AssetGuid guid,resources::AssetType kind,std::string_view property,u32 slot,
+                     scene::ComponentValue &candidate) {
+    const auto &mesh=static_cast<const scene::MeshRenderer&>(candidate);
+    resolvedNone=guid==scene::MaterialTextureNone&&kind==resources::AssetType::Texture&&
+                 property=="texture.base_color"&&slot==1&&
+                 mesh.slotTextures(1)[0]==scene::MaterialTextureNone;
+    return resolvedNone;
+  };
+  AE_EXPECT_EQ((u32)world.setResource(component,"texture.base_color",1,scene::MaterialTextureNone,assets,{},none),
+               (u32)WorldStatus::Ok,"None explícito é resolvido antes do commit");
+  AE_EXPECT_TRUE(resolvedNone,"consumidor recebe binding removido");
+  bool resolvedInheritance=false;
+  const auto inherited=[&](resources::AssetGuid guid,resources::AssetType kind,std::string_view property,u32 slot,
+                           scene::ComponentValue &candidate) {
+    const auto &mesh=static_cast<const scene::MeshRenderer&>(candidate);
+    resolvedInheritance=!guid.valid()&&kind==resources::AssetType::Texture&&property=="texture.base_color"&&slot==1&&
+                        !mesh.slotTextures(1)[0].valid();
+    return resolvedInheritance;
+  };
+  AE_EXPECT_EQ((u32)world.setResource(component,"texture.base_color",1,{},assets,{},inherited),(u32)WorldStatus::Ok,
+               "limpar override também resolve o binding herdado candidato");
+  AE_EXPECT_TRUE(resolvedInheritance,"herança não pula consumidor");
+  AE_EXPECT_EQ(doc.revision(),authoringRevision,"mutação de Play não persiste no documento");
+  const auto *authoredRender=static_cast<const scene::MeshRenderer*>(doc.find(id)->components.find(scene::MeshRenderer::descriptor));
+  AE_EXPECT_TRUE(authoredRender&&!authoredRender->slotTextures(1)[0].valid(),"binding autoral preservado");
 }
 
 AE_TEST(runtime_world_destroy_expires_handle_immediately_and_frees_at_safe_point) {

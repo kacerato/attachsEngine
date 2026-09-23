@@ -201,7 +201,7 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
   // Regiões de GPU do frame, pareadas à janela acima por pid/epoch/window. O
   // consumidor exige o par: uma janela sem suas regiões é captura incompleta,
   // não uma janela cujos passes custaram zero.
-  char passes[1024];
+  char passes[900];
   // attribution diz se a divisao abaixo significa alguma coisa neste hardware.
   // Numa GPU TBDR os timestamps internos ao render pass podem resolver todos no
   // fim do tile: as regioes existem, mas o hardware nao as separa.
@@ -210,20 +210,26 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
               collapsedAttributionFrames_ * 2 >= attributionSampleFrames_
           ? "tile-deferred"
           : "resolved";
-  int passesUsed = std::snprintf(passes, sizeof(passes),
-      "{\"schemaVersion\":%u,\"pid\":%d,\"epoch\":%u,\"window\":%llu,"
-      "\"attribution\":\"%s\",\"collapsed_frames\":%u,\"attribution_samples\":%u",
-      ProfileSchemaVersion, getpid(), epoch_, static_cast<unsigned long long>(window_), attribution,
-      collapsedAttributionFrames_, attributionSampleFrames_);
-  if (passesUsed < 0 || static_cast<size_t>(passesUsed) >= sizeof(passes)) return;
-  passesUsed = appendMetrics(passes, sizeof(passes), passesUsed,
-                             profiler::FrameLevelMetricCount, profiler::FrameMetricCount);
-  if (!closeJson(passes, sizeof(passes), passesUsed)) {
-    __android_log_print(ANDROID_LOG_ERROR, LogTag,
-                        "[FrameProfilePasses] Buffer de relatório insuficiente.");
-    return;
+  constexpr u32 PassesPerRecord=5;
+  constexpr u32 PartCount=(GpuPassClassCount+PassesPerRecord-1)/PassesPerRecord;
+  for(u32 part=0;part<PartCount;++part) {
+    int passesUsed=std::snprintf(passes,sizeof(passes),
+        "{\"schemaVersion\":%u,\"pid\":%d,\"epoch\":%u,\"window\":%llu,"
+        "\"part\":%u,\"parts\":%u,\"attribution\":\"%s\","
+        "\"collapsed_frames\":%u,\"attribution_samples\":%u",
+        ProfileSchemaVersion,getpid(),epoch_,static_cast<unsigned long long>(window_),
+        part,PartCount,attribution,collapsedAttributionFrames_,attributionSampleFrames_);
+    if(passesUsed<0||static_cast<size_t>(passesUsed)>=sizeof(passes)) return;
+    const u32 first=profiler::FrameLevelMetricCount+part*PassesPerRecord;
+    const u32 last=std::min(first+PassesPerRecord,profiler::FrameMetricCount);
+    passesUsed=appendMetrics(passes,sizeof(passes),passesUsed,first,last);
+    if(!closeJson(passes,sizeof(passes),passesUsed)) {
+      __android_log_print(ANDROID_LOG_ERROR,LogTag,
+                          "[FrameProfilePasses] Parte excedeu limite seguro do Logcat.");
+      return;
+    }
+    __android_log_print(ANDROID_LOG_INFO,LogTag,"[FrameProfilePasses] %s",passes);
   }
-  __android_log_print(ANDROID_LOG_INFO, LogTag, "[FrameProfilePasses] %s", passes);
 
   // Registro separado para manter cada entrada abaixo do limite do Logcat. A
   // classificação compara p95 com budgets; ela nunca preenche CPU ociosa nem

@@ -3,11 +3,19 @@
 #include <span>
 #include <cstring>
 #include <algorithm>
+#include <limits>
 
 namespace ae::renderer {
 struct TexturePayload {
   rhi::ImageDesc description{};
   u64 payloadBytes=0;
+};
+struct TextureResidentRange {
+  rhi::ImageDesc description{};
+  u32 baseMip=0;
+  u64 byteOffset=0; // relativo ao início do payload, depois do cabeçalho AETX
+  u64 byteSize=0;
+  bool valid() const noexcept {return byteSize!=0 && description.mipLevels!=0;}
 };
 // AETX v1 header is explicit little-endian, never a dump of a compiler struct.
 inline bool decodeTextureHeader(std::span<const u8> bytes, u64 fileSize, TexturePayload &out) {
@@ -35,12 +43,34 @@ inline bool decodeTextureHeader(std::span<const u8> bytes, u64 fileSize, Texture
       data.payloadBytes>512ull*1024*1024 || fileSize!=32+data.payloadBytes) return false;
   out=data; return true;
 }
-inline u32 chooseResidentMip(const rhi::ImageDesc &description,u32 maxDimension,u64 budget) {
+inline u32 chooseResidentMip(const rhi::ImageDesc &description,u32 maxDimension,u64 budget,
+                             u32 minimumMip=0) {
   auto d=description;
   for(u32 mip=0;mip<description.mipLevels;++mip) {
-    if(d.width<=maxDimension && d.height<=maxDimension && rhi::sampledChainByteSize(d)<=budget) return mip;
+    if(mip>=minimumMip && d.width<=maxDimension && d.height<=maxDimension &&
+       rhi::sampledChainByteSize(d)<=budget) return mip;
     d.width=std::max(1u,d.width/2);d.height=std::max(1u,d.height/2);--d.mipLevels;
   }
   return description.mipLevels; // no supported resident chain
+}
+// Seleciona uma cauda contígua da cadeia sem alterar o recurso fonte. O bias é
+// um limite de residência: 1 começa no segundo mip (metade em cada dimensão).
+inline TextureResidentRange chooseResidentRange(const rhi::ImageDesc &source,u32 maxDimension,
+                                                 u64 budget,u32 minimumMip=0) {
+  TextureResidentRange range;
+  const u32 base=chooseResidentMip(source,maxDimension,budget,minimumMip);
+  if(base==source.mipLevels) return range;
+  range.description=source;range.baseMip=base;
+  for(u32 mip=0;mip<base;++mip) {
+    const u64 bytes=rhi::sampledMipByteSize(range.description.format,range.description.width,
+                                            range.description.height);
+    if(bytes==0 || bytes>std::numeric_limits<u64>::max()-range.byteOffset) return {};
+    range.byteOffset+=bytes;
+    range.description.width=std::max(1u,range.description.width/2);
+    range.description.height=std::max(1u,range.description.height/2);
+    --range.description.mipLevels;
+  }
+  range.byteSize=rhi::sampledChainByteSize(range.description);
+  return range;
 }
 } // namespace ae::renderer

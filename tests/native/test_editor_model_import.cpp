@@ -475,13 +475,13 @@ AE_TEST(a_recreated_surface_gets_the_imported_geometry_back) {
   for (const auto &update : updates) if (update.objectId && update.visible) ++drawn;
   AE_EXPECT_TRUE(drawn >= 2u, "os objetos importados voltam a ser desenhados");
 
-  // Reidratar sem nada importado é silenciosamente verdadeiro: a biblioteca do
-  // consumidor novo já são as mesmas primitivas.
+  // Mesmo sem GLB, as primitivas podem referenciar texturas do projeto. O
+  // consumidor novo precisa receber a biblioteca e os bindings outra vez.
   EditorSession limpa;
   FakeRenderer vazio;
   startSession(limpa, vazio);
-  AE_EXPECT_TRUE(limpa.republishGeometry(diagnostic), "sem importação não há o que reidratar");
-  AE_EXPECT_EQ(vazio.rebuilds, 0u, "e nada é republicado à toa");
+  AE_EXPECT_TRUE(limpa.republishGeometry(diagnostic), diagnostic.c_str());
+  AE_EXPECT_EQ(vazio.rebuilds, 1u, "primitivas são republicadas mesmo sem GLB");
 }
 
 namespace {

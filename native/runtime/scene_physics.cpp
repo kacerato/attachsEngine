@@ -353,6 +353,18 @@ bool ScenePhysics::setCharacterMove(ObjectId id,float right,float forward,float 
   for(auto &c:characters_) if(c.id==id) {c.right=right;c.forward=forward;c.yaw=yaw;return true;}
   return false;
 }
+void ScenePhysics::beginScriptInputFrame() {
+  for(auto &c:characters_) c.scriptMoveActive=false;
+}
+bool ScenePhysics::setCharacterScriptMove(ObjectId id,float right,float forward,float yaw) {
+  if(!std::isfinite(right)||!std::isfinite(forward)||!std::isfinite(yaw)||
+     right<-1||right>1||forward<-1||forward>1) return false;
+  for(auto &c:characters_) if(c.id==id) {
+    c.scriptRight=right;c.scriptForward=forward;c.scriptYaw=yaw;c.scriptMoveActive=true;
+    return true;
+  }
+  return false;
+}
 bool ScenePhysics::jumpCharacter(ObjectId id) {
   for(auto &c:characters_) if(c.id==id) return c.motor->jump(c.jumpSpeed);
   return false;
@@ -387,7 +399,13 @@ bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(vo
   accumulated_+=std::min(elapsed,.25);
   while(accumulated_+1e-9>=fixed) {
     if(beforeStep&&!beforeStep(context,static_cast<float>(fixed))) return false;
-    for(auto &c:characters_) if(!c.motor->update(c.right,c.forward,c.yaw,static_cast<float>(fixed))) return false;
+    for(auto &c:characters_) {
+      const bool scripted=c.scriptMoveActive;
+      const float right=scripted?c.scriptRight:c.right;
+      const float forward=scripted?c.scriptForward:c.forward;
+      const float yaw=scripted?c.scriptYaw:c.yaw;
+      if(!c.motor->update(right,forward,yaw,static_cast<float>(fixed))) return false;
+    }
     if(AetherPhysics_StepV2(world_,static_cast<float>(fixed),1)!=0) return false;
     accumulated_-=fixed;
     if(!synchronizePoses(world)) return false;

@@ -10,6 +10,7 @@ std::mutex mutex;
 // aplicada ao pedido seguinte.
 ae::u64 sequence = 0;
 bool pending = false;
+bool allowCompanions = true;
 std::optional<ae::platform::android::ModelPickerResult> result;
 // Teto do que atravessa a fronteira JNI de uma vez. Um GLB maior que isto não é
 // recusado por capricho: ele seria copiado inteiro para a heap do processo três
@@ -19,13 +20,14 @@ constexpr jsize kMaximumBytes = 128 * 1024 * 1024;
 
 namespace ae::platform::android {
 
-void requestModelPick() {
+void requestModelPick(bool companions) {
   std::lock_guard lock(mutex);
   // Pedir de novo enquanto um pedido está aberto NÃO é ignorado: o seletor pode
   // ter sido encerrado pelo sistema sem devolver nada, e o usuário ficaria com
   // um botão que não responde mais. O número de sequência novo faz a resposta
   // atrasada do pedido anterior ser descartada.
   pending = true;
+  allowCompanions = companions;
   ++sequence;
   result.reset();
 }
@@ -89,9 +91,24 @@ Java_dev_aether_editor_ModelPicker_submit(JNIEnv *env, jclass, jlong token, jbyt
   result = std::move(reply);
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_dev_aether_editor_ModelPicker_allowMultiple(JNIEnv *, jclass, jlong token) {
+  std::lock_guard lock(mutex);
+  return pending && static_cast<ae::u64>(token)==sequence && allowCompanions ? JNI_TRUE : JNI_FALSE;
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_dev_aether_editor_ModelPicker_submitMany(JNIEnv *env, jclass, jlong token, jobjectArray contents,
                                               jobjectArray names, jbyteArray diagnostic) {
+  {
+    std::lock_guard lock(mutex);
+    if(!pending || static_cast<ae::u64>(token)!=sequence) return;
+    if(!allowCompanions) {
+      ae::platform::android::ModelPickerResult rejected;
+      rejected.diagnostic="Escolha uma única imagem por importação.";
+      result=std::move(rejected);pending=false;return;
+    }
+  }
   ae::platform::android::ModelPickerResult reply;
   const auto text = [env](jbyteArray array) {
     std::string value;

@@ -1,11 +1,15 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
 #include "dirt_road_frame.glsl"
+layout(set=0,binding=0,std140) uniform SkyTemporalFrame {
+  layout(offset=592) vec4 shadowFilterParameters;
+} skyFrame;
 layout(location=0) out vec3 vDirection;
 void main() {
   vec2 positions[3]=vec2[3](vec2(-1,-1),vec2(3,-1),vec2(-1,3));
   vec2 ndc=positions[gl_VertexIndex];
-  vec2 cameraNdc=vec2(dot(frame.surfaceTransform.xz,ndc),dot(frame.surfaceTransform.yw,ndc));
+  vec2 rayNdc=ndc-skyFrame.shadowFilterParameters.zw;
+  vec2 cameraNdc=vec2(dot(frame.surfaceTransform.xz,rayNdc),dot(frame.surfaceTransform.yw,rayNdc));
   float focal=frame.materialFactors.w>0.0?frame.materialFactors.w:1.732050808;
   // SEM `normalize` aqui: o raio de camera (x,y,1) e afim em NDC e interpola
   // exato; o versor nao e. Normalizar nos vertices de um triangulo de tela

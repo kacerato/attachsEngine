@@ -117,6 +117,11 @@ public:
   bool moveKinematic(ObjectId id, const float *pose);
   void stop();
   bool setCharacterMove(ObjectId id, float right, float forward, float yaw);
+  // Novo quadro de scripts: descarta comando anterior. Um comando emitido em
+  // Update vale para todos os subpassos físicos desse quadro; FixedUpdate pode
+  // substituí-lo antes do subpasso corrente.
+  void beginScriptInputFrame();
+  bool setCharacterScriptMove(ObjectId id,float right,float forward,float yaw);
   bool jumpCharacter(ObjectId id);
   // Solta corpo, personagem e mapeamento de um objeto removido no ponto seguro.
   // Juntas ligadas a ele deixam de existir junto com o corpo no Jolt.
@@ -153,6 +158,8 @@ private:
     float eyeHeight;
     float jumpSpeed = 0;
     float right = 0, forward = 0, yaw = 0;
+    float scriptRight=0,scriptForward=0,scriptYaw=0;
+    bool scriptMoveActive=false;
   };
   std::vector<CharacterBinding> characters_;
   u32 jointCount_ = 0;

@@ -1,4 +1,4 @@
-"""Fetch six real CC0 Poly Haven models and pack their 1K glTF sources as GLB.
+"""Fetch real CC0 Poly Haven models and pack their 1K glTF sources as GLB.
 
 The games remain fully offline. Run this explicitly when refreshing the bundled
 art; generate-highlevel-games.py reads the resulting GLBs without network use.
@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import struct
+import sys
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -17,9 +18,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "android/app/src/main/assets/astra/example-projects"
 MODELS = {
-    "quarentena": ("Barrel_01", "portable_generator"),
-    "resgate": ("medical_box", "rock_07"),
-    "perimetro": ("old_military_crate", "old_gas_mask"),
+    "quarentena": ("Barrel_01", "portable_generator", "korean_fire_extinguisher_01"),
+    "resgate": ("medical_box", "rock_07", "metal_toolbox"),
+    "perimetro": ("old_military_crate", "old_gas_mask", "vintage_radio_transceiver"),
+    "mercado-nexus": ("plastic_crate_01", "wicker_basket_01", "CoffeeCart_01"),
+    "farol-abissal": ("propane_tank", "modular_industrial_pipes_01", "Lantern_01"),
+    "expresso-tita": ("vintage_suitcase", "industrial_storage_cart", "metal_tool_chest"),
 }
 HEADERS = {"User-Agent": "Astra-offline-example-assets/1.0"}
 
@@ -87,7 +91,12 @@ def fetch(model: str, destination: Path) -> dict:
 
 
 if __name__ == "__main__":
-    for game, names in MODELS.items():
+    requested = sys.argv[1:] or list(MODELS)
+    unknown = [game for game in requested if game not in MODELS]
+    if unknown:
+        raise SystemExit("Jogos desconhecidos: " + ", ".join(unknown))
+    for game in requested:
+        names = MODELS[game]
         records = [fetch(name, OUT / game / "Assets" / f"{name}.glb") for name in names]
         (OUT / game / "Assets" / "FONTES-ARTE.md").write_text(
             "# Modelos reais utilizados\n\nPowered by Poly Haven. Os modelos abaixo são CC0 1.0 e foram "

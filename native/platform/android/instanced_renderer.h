@@ -6,6 +6,7 @@
 #include "renderer/map_draw_update.h"
 #include "renderer/punctual_lights.h"
 #include "renderer/scene_environment.h"
+#include "renderer/physical_atmosphere.h"
 #include "renderer/grid_plan.h"
 
 #include "core/base.h"
@@ -101,24 +102,37 @@ public:
     if(!completedPreview_.requestId) return false;
     view=completedPreview_;success=previewCompletionSuccess_;completedPreview_={};return true;
   }
+  const std::string &cameraPreviewDiagnostic() const {return previewDiagnostic_;}
+  const std::string &autoExposureDiagnostic() const {return autoExposureDiagnostic_;}
+  void setAutoExposureSceneEpoch(u64 epoch,u32 cameraEntity=0) {
+    autoExposureSceneEpoch_=epoch;autoExposureCameraEntity_=cameraEntity;
+  }
+  void setAutoExposurePaused(bool paused) {autoExposurePaused_=paused;}
   // Tamanho da superficie NO ESPACO EM QUE AS INSTANCIAS FORAM CONSTRUIDAS --
   // pixels logicos, nao fisicos. Zero volta a usar a extensao do display, que e
   // o comportamento certo so quando as duas escalas coincidem.
   void setUiSurfaceSize(float width, float height);
   // Normalized logical display rectangle; empty restores a full display scene.
   void setSceneViewport(const ui::UiRect &rect) {
-    sceneViewport_ = ui::intersect(rect, {0,0,1,1});
-    // Current temporal reprojection assumes a full-target camera projection.
-    if (!sceneViewport_.isEmpty()) { temporalAaActive_=false; temporalHistoryInitialized_=false; }
+    const auto next = ui::intersect(rect, {0,0,1,1});
+    if(next.x!=sceneViewport_.x || next.y!=sceneViewport_.y ||
+       next.width!=sceneViewport_.width || next.height!=sceneViewport_.height)
+      temporalHistoryInitialized_=false;
+    sceneViewport_ = next;
   }
+  ui::UiRect physicalSceneViewport() const;
   float sceneAspectRatio() const;
   // A zero pair restores the imported camera range (Play/runtime).
   void setSceneClipPlanes(float nearPlane, float farPlane) {
+    if(sceneNearPlane_!=nearPlane || sceneFarPlane_!=farPlane) temporalHistoryInitialized_=false;
     sceneNearPlane_ = nearPlane;
     sceneFarPlane_ = farPlane;
   }
   // Zero restores the renderer's configured field of view.
-  void setSceneFieldOfView(float radians) { sceneFieldOfView_=radians; }
+  void setSceneFieldOfView(float radians) {
+    if(sceneFieldOfView_!=radians) temporalHistoryInitialized_=false;
+    sceneFieldOfView_=radians;
+  }
   // Zero selects perspective; positive values are a world-space half height.
   // Orthographic currently uses spatial AA and CPU visibility (no GPU HZB).
   void setSceneOrthographicHalfHeight(float halfHeight);
@@ -131,6 +145,13 @@ public:
   void setSceneEnvironment(const renderer::SceneEnvironment &environment) {
     if (environment.valid()) sceneEnvironment_ = environment;
   }
+  void setEnvironmentMaps(std::span<const std::pair<resources::AssetGuid,renderer::SharedEnvironmentMap>> maps) {
+    environmentMaps_.assign(maps.begin(),maps.end());
+  }
+  const std::string &environmentMapDiagnostic() const { return environmentMapDiagnostic_; }
+  const MaterialTextureResidencyReport &packageTextureResidency() const { return dirtRoadResources_.packageTextureResidency(); }
+  const MaterialTextureResidencyReport &authoringTextureResidency() const { return dirtRoadResources_.authoringTextureResidency(); }
+  const std::string &textureResidencyDiagnostic() const { return dirtRoadResources_.textureResidencyDiagnostic(); }
   void queueSceneEnvironmentVolumes(std::span<const renderer::SceneEnvironmentVolume> volumes) {
     sceneEnvironmentVolumes_.assign(volumes.begin(),volumes.end());
     if(sceneEnvironmentVolumes_.empty()) sceneEnvironment_={};
@@ -338,6 +359,9 @@ public:
   // pressão térmica pode reduzir e depois recuperar qualidade sem reconstruir
   // atlas, render pass, pipelines, descritores ou assets.
   void setRuntimeRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy);
+  const renderer::ResolvedRenderingPolicy &activeRenderingPolicy() const noexcept {
+    return renderingPolicy_;
+  }
   // Scene/transform systems call this when any static caster, material alpha or
   // sun configuration changes. A câmera não precisa invalidar manualmente: o
   // renderer testa contenção de cada cascata antes de reutilizá-la.
@@ -483,6 +507,8 @@ private:
   bool createSkyPipeline();
   bool createEditorGridPipeline();
   bool createRuntimeHudPipeline();
+  bool createUiRenderPass();
+  void recordRuntimeHud(u32 imageIndex, const renderer::RuntimeHudState &hud);
   // Carrega os atlas do APK e monta a pipeline. Falhar aqui NÃO derruba o
   // renderer: uma cena sem interface ainda é uma cena, e o log diz o motivo.
   void createUiRenderer(AAssetManager *assets);
@@ -490,7 +516,18 @@ private:
   bool createPostResources();
   void destroyPostResources();
   void recordPostProcess(u32 imageIndex, const platform::FreeCameraState &camera);
-  bool recordTemporalHistoryCopy(u32 imageIndex);
+  bool createAutoExposureResources();
+  void destroyAutoExposureResources();
+  void bindAutoExposureSource(u32 view, VkImageView source);
+  bool recordAutoExposure(u32 view, const renderer::SceneEnvironment &look,
+                          const platform::FreeCameraState &camera, float timeSeconds,
+                          const ui::UiRect &viewport, u32 activeWidth, u32 activeHeight,
+                          u32 allocatedWidth, u32 allocatedHeight,
+                          u64 sceneEpoch=0, u32 cameraEntity=0);
+  bool createFsrResources();
+  void destroyFsrResources();
+  void recordFsr(u32 imageIndex, const platform::FreeCameraState &camera);
+  bool recordTemporalHistoryCopy();
   bool createShadowResources();
   void destroyShadowResources();
   void recordShadowPass(const platform::FreeCameraState &camera);
@@ -574,9 +611,24 @@ private:
   VkDescriptorSet previewPostSet_=VK_NULL_HANDLE;
   renderer::RenderViewSnapshot pendingPreview_{},submittedPreview_{},completedPreview_{};
   bool previewCloseRequested_=false,previewCompletionSuccess_=false;
+  std::string previewDiagnostic_;
+  std::string autoExposureDiagnostic_;
+  u64 autoExposureSceneEpoch_=0;
+  u32 autoExposureCameraEntity_=0;
+  bool autoExposurePaused_=false;
   bool prepareCameraPreview();
+  bool prepareCameraPreviewEnvironment();
+  bool setCameraPreviewEnvironmentMap(renderer::SharedEnvironmentMap);
+  void releaseCameraPreviewEnvironment();
   void recordCameraPreview(float timeSeconds);
   void destroyCameraPreview();
+  renderer::SceneEnvironment previewSceneEnvironment_{};
+  renderer::SharedEnvironmentMap previewEnvironmentMap_{};
+  std::array<rhi::VulkanImage,3> previewEnvironmentImages_{};
+  std::array<rhi::VulkanSampler,3> previewEnvironmentSamplers_{};
+  renderer::PhysicalAtmosphereGroundIrradianceCache previewAtmosphereGroundCache_{};
+  bool previewEnvironmentReady_=false;
+  bool previewEnvironmentUsesPrimary_=true;
   // Item 2.1.4 do plano: em vez de um descriptor set por-objeto com 1 binding,
   // o pipeline instanciado consome o registro bindless (array único indexado
   // por materialIndex no shader) — ver rhi/bindless_registry.h. Esta PoC tem
@@ -640,8 +692,35 @@ private:
   VkDescriptorSet postDescriptorSet_ = VK_NULL_HANDLE;
   VkPipelineLayout postPipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline postPipeline_ = VK_NULL_HANDLE;
+  struct AutoExposureView {
+    rhi::VulkanBuffer histogram,state;
+    VkDescriptorSet set=VK_NULL_HANDLE;
+    bool initialized=false,enabled=false,cameraValid=false,paused=false;
+    float previousTime=0;
+    platform::FreeCameraState previousCamera{};
+    u32 activeWidth=0,activeHeight=0,allocatedWidth=0,allocatedHeight=0;
+    u64 sceneEpoch=0;
+    u32 cameraEntity=0;
+  };
+  std::array<AutoExposureView,2> autoExposureViews_{};
+  VkDescriptorSetLayout autoExposureSetLayout_=VK_NULL_HANDLE;
+  VkDescriptorPool autoExposurePool_=VK_NULL_HANDLE;
+  VkPipelineLayout autoExposurePipelineLayout_=VK_NULL_HANDLE;
+  VkPipeline autoExposurePipelines_[2]{};
   rhi::VulkanImage postSceneColor_{};
   rhi::VulkanImage postHistory_{};
+  rhi::VulkanImage postResolved_{};
+  rhi::VulkanImage fsrSource_{}, fsrUpscaled_{};
+  VkRenderPass fsrRenderPasses_[2]{};
+  VkPipeline fsrPipelines_[2]{};
+  VkPipelineLayout fsrPipelineLayout_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout fsrSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorPool fsrPool_ = VK_NULL_HANDLE;
+  VkDescriptorSet fsrSets_[2]{};
+  VkFramebuffer fsrEasuFramebuffer_ = VK_NULL_HANDLE;
+  VkFramebuffer fsrPresentFramebuffers_[kMaxFramebuffers]{};
+  bool fsrActive_ = false;
+  rhi::VulkanImage previewResolved_{};
   rhi::VulkanSampler postSampler_{};
   rhi::VulkanSampler postDepthSampler_{};
   VkFormat sceneColorFormat_ = VK_FORMAT_UNDEFINED;
@@ -849,6 +928,10 @@ private:
   bool rebuildDrawOrders();
   std::vector<renderer::SceneLight> sceneLights_;
   renderer::SceneEnvironment sceneEnvironment_{};
+  std::vector<std::pair<resources::AssetGuid,renderer::SharedEnvironmentMap>> environmentMaps_;
+  renderer::SharedEnvironmentMap activeEnvironmentMap_;
+  std::string environmentMapDiagnostic_;
+  renderer::PhysicalAtmosphereGroundIrradianceCache atmosphereGroundCache_;
   std::vector<renderer::SceneEnvironmentVolume> sceneEnvironmentVolumes_;
   u32 sceneEnvironmentLayerMask_=~0u;
   renderer::SceneEnvironmentBlendReport environmentBlendReport_{};

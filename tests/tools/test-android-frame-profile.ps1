@@ -19,6 +19,15 @@ function New-TestWindow {
     }
     return [pscustomobject]$window
 }
+function New-TestWindow8 {
+    param([int]$Index = 1)
+    $window = New-TestWindow -Index $Index
+    $window.schemaVersion = 8
+    foreach ($metric in $FrameProfilePassMetricNames) {
+        $window.$metric = [pscustomobject]@{ mean = 0.05; p50 = 0.05; p95 = 0.05; p99 = 0.05; max = 0.05 }
+    }
+    return $window
+}
 function New-TestContext {
     param([int]$Epoch = 1, [string]$Scene = 'poc-a-5000-textured-cubes', [int]$Instances = 5000)
     return [pscustomobject][ordered]@{
@@ -44,24 +53,41 @@ function Get-TestCapture {
         -Scene $Scene -Contexts @($context)
 }
 function Convert-TestWindow {
-    param($Window, [switch]$OmitPasses, [string]$Attribution = 'resolved')
+    param($Window, [switch]$OmitPasses, [string]$Attribution = 'resolved',
+          [switch]$LegacyWater)
     # Espelha o emissor nativo: a janela leva as metricas de frame, e as regioes
     # de GPU saem numa segunda entrada de Logcat pareada por epoch/window.
     $wire = $Window | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+    $passNames = if ($wire.schemaVersion -ge 8) { $FrameProfilePassMetricNames }
+                 elseif ($LegacyWater) { $FrameProfileLegacyPassMetricNames + @('gpu_water_simulation_ms') }
+                 else { $FrameProfileLegacyPassMetricNames }
     $passes = [ordered]@{ schemaVersion = $wire.schemaVersion; pid = $wire.pid; epoch = $wire.epoch; window = $wire.window
                           attribution = $Attribution; collapsed_frames = 0; attribution_samples = 600 }
-    foreach ($metric in $FrameProfilePassMetricNames) {
+    foreach ($metric in $passNames) {
         $d = $wire.$metric
         $passes[$metric] = @($d.mean, $d.p50, $d.p95, $d.p99, $d.max)
-        $wire.PSObject.Properties.Remove($metric)
     }
+    foreach ($metric in $FrameProfilePassMetricNames) { $wire.PSObject.Properties.Remove($metric) }
     foreach ($metric in $FrameProfileFrameMetricNames) {
         $d = $wire.$metric
         $wire.$metric = @($d.mean, $d.p50, $d.p95, $d.p99, $d.max)
     }
     $line = '[FrameProfile] ' + ($wire | ConvertTo-Json -Depth 5 -Compress)
     if ($OmitPasses) { return $line }
-    $result = $line + "`n" + '[FrameProfilePasses] ' + ([pscustomobject]$passes | ConvertTo-Json -Depth 5 -Compress)
+    $result = $line
+    if ($wire.schemaVersion -ge 8) {
+        foreach ($part in 0..2) {
+            $fragment = [ordered]@{ schemaVersion = $wire.schemaVersion; pid = $wire.pid;
+                epoch = $wire.epoch; window = $wire.window; part = $part; parts = 3;
+                attribution = $Attribution; collapsed_frames = 0; attribution_samples = 600 }
+            foreach ($metric in @($FrameProfilePassMetricNames | Select-Object -Skip ($part * 5) -First 5)) {
+                $fragment[$metric] = $passes[$metric]
+            }
+            $result += "`n" + '[FrameProfilePasses] ' + ([pscustomobject]$fragment | ConvertTo-Json -Depth 5 -Compress)
+        }
+    } else {
+        $result += "`n" + '[FrameProfilePasses] ' + ([pscustomobject]$passes | ConvertTo-Json -Depth 5 -Compress)
+    }
     if ($wire.schemaVersion -ge 5) {
         $pressure = [pscustomobject][ordered]@{
             schemaVersion = $wire.schemaVersion; pid = $wire.pid; epoch = $wire.epoch; window = $wire.window
@@ -86,7 +112,7 @@ function Convert-TestWindow {
     }
     if ($wire.schemaVersion -ge 7) {
         $memory = [pscustomobject][ordered]@{
-            schemaVersion = 7; pid = $wire.pid; epoch = $wire.epoch; window = $wire.window
+            schemaVersion = $wire.schemaVersion; pid = $wire.pid; epoch = $wire.epoch; window = $wire.window
             classification = 'normal'; ram_valid = $true
             ram_bytes = @(500000000, 200000000, 220000000, 150000000, 45000000, 5000000, 0)
             system_ram_valid = $true; system_ram_bytes = @(8000000000, 3000000000)
@@ -401,12 +427,39 @@ Test-Profile 'regiões de GPU chegam pareadas à janela e preservam a partição
     $window = New-TestWindow
     $parsed = @(ConvertFrom-FrameProfileLog (Convert-TestWindow $window) 7)
     Assert-Profile ($parsed.Count -eq 1)
-    foreach ($metric in $FrameProfilePassMetricNames) {
+    foreach ($metric in $FrameProfileLegacyPassMetricNames) {
         Assert-Profile ($parsed[0].$metric.mean -eq 0.1)
     }
     $regionSum = 0.0
-    foreach ($metric in $FrameProfilePassMetricNames) { $regionSum += $parsed[0].$metric.mean }
+    foreach ($metric in $FrameProfileLegacyPassMetricNames) { $regionSum += $parsed[0].$metric.mean }
     Assert-Profile ($regionSum -le $parsed[0].gpu_frame_ms.mean)
+}
+Test-Profile 'schema 8 reúne as quinze regiões sem inventar valores' {
+    $decoded = @(ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow8)) 7)
+    Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].gpuPassMetricsMissing.Count -eq 0)
+    foreach ($metric in $FrameProfilePassMetricNames) { Assert-Profile ($decoded[0].$metric.mean -eq 0.05) }
+}
+Test-Profile 'schema 8 recusa fragmento ausente e duplicado' {
+    $text = Convert-TestWindow (New-TestWindow8)
+    $lines = @($text -split "`n")
+    $fragments = @($lines | Where-Object { $_ -match '\[FrameProfilePasses\]' })
+    Assert-Profile ($fragments.Count -eq 3)
+    Assert-Rejected { ConvertFrom-FrameProfileLog (($lines | Where-Object { $_ -ne $fragments[1] }) -join "`n") 7 }
+    Assert-Rejected { ConvertFrom-FrameProfileLog "$text`n$($fragments[1])" 7 }
+}
+Test-Profile 'schema 7 preserva água quando presente e explicita outras ausências' {
+    $decoded = @(ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow) -LegacyWater) 7)
+    Assert-Profile ($decoded[0].gpu_water_simulation_ms.mean -eq 0.1)
+    Assert-Profile ($null -eq $decoded[0].gpu_camera_preview_ms -and
+        $decoded[0].gpuPassMetricsMissing -contains 'gpu_camera_preview_ms')
+    $capture = Get-TestCapture $decoded 10
+    Assert-Profile ($capture.metrics.Contains('gpu_water_simulation_ms') -and
+        -not $capture.metrics.Contains('gpu_camera_preview_ms'))
+}
+Test-Profile 'captura recusa disponibilidade misturada de passes antigos' {
+    $a = @(ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow 1) -LegacyWater) 7)[0]
+    $b = @(ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow 2)) 7)[0]
+    Assert-Rejected { Get-TestCapture @($a, $b) 20 }
 }
 Test-Profile 'janela sem registro de regiões é recusada em vez de virar zero' {
     # O modo de falha que este teste tranca: aceitar a janela órfã produziria

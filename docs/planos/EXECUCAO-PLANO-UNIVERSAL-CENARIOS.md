@@ -10,7 +10,10 @@ Vocabulário (o mesmo da §9 do plano): **inventariado** → **especificado** �
 **Escopo de validação desta rodada:**
 
 1. Suíte inteira de host (`build/editor-host`, Ninja + g++ com `-Werror`,
-   incluindo o Jolt): **1048 de 1048 verdes** na revisão de 2026-09-20. As
+   incluindo o Jolt): **1084 de 1084 verdes** após integrar atmosfera física e
+   SH9 em 21/09/2026. Essa suíte completa precede a última regressão de ordem de
+   desenho; depois dela, os filtros finais `graphics_` (**3/3**) e `screen_`
+   (**28/28**) passaram. A suíte completa não foi repetida depois dessa adição. As
    falhas antigas foram corrigidas; a seção "Suíte do host" abaixo diz como.
    A cobertura acumulada deste plano inclui testes como
    `test_component_contracts`, `test_component_preset`,
@@ -18,8 +21,9 @@ Vocabulário (o mesmo da §9 do plano): **inventariado** → **especificado** �
    `test_import_scene_impact`, `test_import_format_compat`,
    `test_import_node_exclusion`, todos registrados em `native/CMakeLists.txt`.
 2. **Build nativo completo para arm64-v8a pelo Gradle/NDK, com `-Wall -Wextra
-   -Wpedantic -Werror`: `BUILD SUCCESSFUL`**, APK gerado. É o build que valida
-   o código no compilador de verdade do alvo.
+   -Wpedantic -Werror`: `BUILD SUCCESSFUL`**. O APK Release foi gerado,
+   instalado e aberto no aparelho; isto valida compilação/integração nesse alvo,
+   sem substituir medição visual ou de desempenho.
 3. **Evidência no aparelho** (Xiaomi 25053PC47G, ARM64): APK instalado, shell
    ASTRA abre, projeto abre, seleção e gizmo funcionam. Duas coisas foram vistas
    funcionando na tela: o agrupamento novo do Corpo físico aparecendo como abas
@@ -35,8 +39,8 @@ Vocabulário (o mesmo da §9 do plano): **inventariado** → **especificado** �
     `docs/capturas/g4/luz-fotometrica-2500k.png`). O objeto dessa conferência não foi
     salvo no projeto.
 
-**O que NÃO foi validado:** comparação visual A/B controlada com outro renderer e
-desempenho do novo céu. No aparelho, o GLB oficial `PointLightIntensityTest`
+**O que NÃO foi validado:** comparação visual A/B controlada com outro renderer,
+desempenho do novo céu e equivalência com uma atmosfera completa da HDRP. No aparelho, o GLB oficial `PointLightIntensityTest`
 percorreu a leitura, a prévia, a opção **Importar luzes** e a nova preparação do
 perfil; a publicação foi cancelada de propósito para preservar o projeto aberto.
 O contrato até a criação dos componentes continua coberto no host.
@@ -499,3 +503,285 @@ Resultado no aparelho com Alto + TAA + 30% de nitidez: resolução nativa, 3
 cascatas de 1536, reflexo especular do ambiente, bloom e TAA, a 18,4 ms de GPU.
 Comparação ampliada em `docs/capturas/g6/qualidade-antes-50pct-depois-nativo.png`
 e painel em `qualidade-painel.png`.
+
+### Gate 8.1 · estágio gráfico profundo, rodada de 21/09/2026
+
+Esta rodada integra uma parte do gate de doze passos do plano. Ela não fecha o
+gate inteiro: registra separadamente o que compilou, o que foi visto no aparelho
+e o que ainda depende de autoria, API ou medição.
+
+| Evidência | Resultado |
+|---|---|
+| Suíte nativa de host | **1084/1084 verdes** antes da regressão final de ordem de desenho; depois, `graphics_` **3/3** e `screen_` **28/28** |
+| Ferramentas de ambiente em Python | **3/3 verdes** |
+| Propriedades de atmosfera pela ABI de scripts | regressão nativa **1/1**: enum, float e bool atravessam a ponte real, chegam à coleta de ambiente em Play e preservam a autoria após Stop; não equivale a executar CLR no aparelho |
+| Shaders alterados | todos os módulos SPIR-V regenerados e aprovados pelo `spirv-val` |
+| Alvo Android | rebuild Release incremental em **24 s**; instalação com preservação de dados (`install -r`) concluída com `Success`; APK aberto no Xiaomi/Adreno 825 |
+| Projeto de validação | cópia `GraphicsStage0921`; o projeto original permaneceu fora desta rodada |
+
+Após reabrir `GraphicsStage0921`, as quatro abas do painel **Gráficos** ficaram sem
+sobreposição. O arquivo puxado do aparelho confirmou 85% de escala,
+**Catmull–Rom** e **TAA temporal**. O TAA desta etapa usa movimento de câmera;
+motion vectors por objeto e por skinning continuam pendentes.
+
+O novo céu físico foi visto no aparelho. No Inspector do componente Ambiente,
+mudar **Intensidade** de 1 para 8 alterou efetivamente o céu renderizado, o que
+confirma o caminho propriedade → cena → uniform → consumidor Vulkan nesse caso.
+Play e Stop foram executados sem crash, e a Intensidade 8 permaneceu autorada.
+O modelo implementado é **single scattering Rayleigh/Mie**. Ele não representa
+o conjunto completo da atmosfera HDRP, nem inclui nuvens, fog volumétrico local
+ou múltiplo scattering.
+
+O SH9 global está integrado ao recurso de ambiente cozido e ao shader de luz
+indireta, coberto pelos testes e pelo build instalado. A autoria HDRI no editor
+continua pendente: `Environment`/`EnvironmentProfile` ainda não escolhem uma
+fonte HDR por GUID, e o workspace de primitivas continua iniciando com a textura
+neutra. Também continuam pendentes a API gráfica global C#, a comparação visual
+isolada do SH9, o A/B/custo de Catmull–Rom, a medição em bancada limpa e a
+equivalência pixel a pixel entre Scene View e Play.
+
+Evidência desta passada: `build/graphics-stage/graphics-panel-final.png`,
+`build/graphics-stage/graphics-shadows-final.png`,
+`build/graphics-stage/graphics-post-final.png`,
+`build/graphics-stage/atmosphere-view-final.png`,
+`build/graphics-stage/play-final.png` e
+`build/graphics-stage/device-release.log`.
+
+#### Estabilidade temporal, atmosfera e samplers — continuação de 21/09/2026
+
+O Release seguinte compilou, foi instalado com sucesso no Xiaomi 25053PC47G
+(Adreno 825) e reabriu a cópia `GraphicsStage0921`. A causa raiz de o TAA quase
+não alterar o vídeo estava em `android_main.cpp`: o laço publicava clip planes e
+FOV zero e depois os valores reais em cada quadro. Os setters invalidavam
+`temporalHistoryInitialized_` nas duas mudanças, então o pós recebia sempre o
+modo de primeiro quadro e não acumulava. A câmera efetiva passou a ser publicada
+uma única vez. Um log temporário no quadro 120 confirmou modo 3 e feedback 0,88;
+ele foi removido depois da medição.
+
+Foram gravados vídeos de tela de 4 s a 20 Mbps na vista **Exterior**, com 85%,
+Catmull–Rom, TAA e 120 Hz solicitados. A análise começou após 1 s e mediu 2 s no
+crop `x=850, y=650, w=780, h=430`, aplicando aos dois vídeos a mesma máscara de
+7.341 pixels de borda derivada do baseline:
+
+| Captura | Frames | Desvio de aresta | Diferença média entre frames |
+|---|---:|---:|---:|
+| antes da causa raiz | 120 | 7,6314783 | 10,4111462 |
+| Release final | 118 | 2,1526747 | 1,9744731 |
+
+A diferença entre frames caiu aproximadamente 81%. Os números vêm de níveis de
+cinza 8-bit de vídeo H.264 e comprovam somente a estabilidade desse recorte
+estático; não são tempo de GPU, não avaliam objetos móveis e não substituem as
+três cenas nem a bancada limpa. Vídeos, frames e script ficam em
+`build/graphics-stability/`, inclusive `taa-exterior-final.mp4`,
+`exterior-final.png` e `final-device.log`.
+
+O cache CPU de irradiância do solo físico foi integrado ao CMake e ao frame UBO
+de 3328 bytes, no offset 3312. O filtro `physical_atmosphere` passou 5/5; no
+aparelho, `exterior-before.png` mostra a porção inferior preta e
+`exterior-after.png` mostra o solo iluminado. O modelo continua single scattering
+Rayleigh/Mie e não passa a ser Bruneton, Hillaire ou HDRP completo. O efeito
+visual foi validado no aparelho; o custo GPU da atmosfera não foi medido.
+
+Os samplers glTF agora preservam independentemente minificação, magnificação,
+uso de mip e modo entre mips conforme a
+[especificação glTF 2.0 da Khronos](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#reference-sampler),
+mantendo flags legados. Cooker e consumidores de autoria/pacote convergem no
+mesmo decode. Seis modos e pacote passaram nos testes focados; a regressão de
+reabertura do editor e três filtros focados também passaram. A revisão do cache
+de importação subiu de 4 para 5 para reconstruir derivados automaticamente na
+próxima abertura sem apagar fontes. Pacotes `.aemap` já cozidos com os bits
+antigos precisam ser recozidos da fonte; os bits antigos não permitem recuperar
+a escolha original. O teste focado do cache passou 1/1 e o Release com a revisão
+5 compilou em 24 s, foi instalado com `Success` e reabriu vivo (PID 19040). O
+código gráfico medido no vídeo final não mudou nesse rebuild posterior. Esta
+rodada não fez A/B visual de cada modo no aparelho.
+
+O fechamento para ausência de histórico também chegou ao Release final: o corte
+de câmera é decidido antes de gerar jitter, e frames invalidados usam jitter
+zero com FXAA espacial antes de formar uma nova base de histórico. O build
+incremental final passou em 13 s, foi instalado após remover o log temporário,
+Play/Stop foi exercitado, o céu foi observado nos dois modos e o aplicativo
+permaneceu vivo (PID 15010). Não houve manipulação de objeto móvel, portanto
+essa observação não valida estabilidade de movimento por objeto.
+
+Motion vectors por objeto/skinning, máscara reativa, autoria HDRI por GUID,
+probes locais, pós temporal separado e os demais itens do gate 8.1 continuam
+pendentes. `textureQualityHalf`/`residencyMipBias` hoje só chegam ao estado/log e
+não alteram residência de textura; permanecem pendentes como consumidor real.
+Também não houve equivalência pixel a pixel entre Scene View e Play. Esta
+evidência não fecha o estágio gráfico AAA.
+
+#### Recursos HDRI, API gráfica e histórico isolado — 21/09/2026
+
+Esta continuação substitui as pendências de implementação de autoria HDRI,
+`textureQualityHalf` e histórico separado citadas no fechamento anterior:
+
+- `EnvironmentMap` agora é recurso do AssetRegistry. Radiance HDR 2:1 é
+  importado/reimportado com receita editável, cancelamento, limites e cache por
+  conteúdo. Panorama RGBA16F/mips, GGX octaédrico, BRDF e SH9 são derivados da
+  mesma fonte. Environment v8 e Profile v4 guardam GUID, rotação e exposição.
+- Inspector, perfis e API usam o mesmo binding. Troca de HDRI é discreta entre
+  volumes do grupo Céu. OpenEXR e mistura de dois panoramas seguem ausentes.
+- `Astra.Graphics` pela ABI 6 permite solicitar os eixos da política gráfica,
+  consultar capacidades e distinguir pedido de aplicação confirmada. O estado
+  é de Play; Stop restaura autoria. Scripts compilados contra a ABI antiga são
+  recusados pela identidade do compilador e precisam ser recompilados.
+- Half tem consumidor de residência nos uploads de pacote/autoria. Cadeias
+  preservam mips válidos; RGBA8 de um único mip recebe redução com tratamento
+  sRGB; comprimidas sem nível reduzido são recusadas. HDRI/LUT ficam fora disso.
+- TAA grava histórico em attachment próprio antes de nitidez/grão. O histórico
+  usa a grade estável do resolve, não a rasterização bruta anterior. Profundidade
+  publica EARLY e LATE fragment tests. Grão tem a mesma posição display-linear
+  em sRGB e UNORM. Existe custo de um attachment adicional ainda não medido.
+
+Validação até esta integração: host completo 1100/1100; testes focados de
+importação/cache e commit/reopen/binding HDRI; duas fontes HDR reais de 1K/2K
+preparadas em cerca de 0,7 s no host; shaders aprovados por spirv-val; C# de
+consumo da API compilado; APK Release arm64 compilado. Esses resultados não
+equivalem a observar esta versão no aparelho. A passada ADB é feita por último.
+
+**Passada ADB final deste bloco:** o Release incremental final compilou em 18 s
+e foi instalado com `Success` no Xiaomi 25053PC47G/Adreno 825. A validação usou
+somente a cópia `GraphicsApi0921`. O picker importou a fonte real
+`hausdorf_clear_sky_1k.hdr`; a prévia alterou GGX de 128 para 256 amostras,
+repreparou os derivados e bloqueou publicação durante o trabalho. O registro
+puxado do aparelho contém `AEM_IMPORT 1 1024 256 128 256 512`. A escolha do GUID
+alterou céu e iluminação no viewport; exposição 0/7/4 EV e rotação 0/90° tiveram
+efeito observado. A cena já usava exposição global -6,8 EV; a exposição HDRI
+é uma escala da fonte, não uma substituição da exposição de câmera.
+
+A reabertura registrou uma fonte, um cache reaproveitado, zero falhas e 99 ms
+no trecho de reabertura (86 ms preparo, 10 publicação, 3 cena; não é tempo de
+GPU nem do cold start inteiro). O script foi compilado pelo editor no Android
+depois de corrigir o `ComponentId` ausente no próprio smoke. Em Play, a chamada
+C# → ABI → política → rebuild → republicação retornou:
+`success=True available=True scale=0.85 aa=Temporal textureBias=1 rotation=45`.
+Após Stop, o log confirmou mip bias 0 e anisotropia 8 novamente. O componente
+Environment serializado permaneceu idêntico ao anterior, incluindo HDRI em
+90°/4 EV; `rendering.astra` permaneceu byte a byte idêntico. O processo continuou
+vivo, PID 12142, sem fatal no log coletado. Esta execução não ativou validation
+layers, portanto ausência de VUID no log não é aceite de validação Vulkan.
+
+Evidências em `build/graphics-api-validation/`: `hdri-preview.png`,
+`hdri-reprepare.png`, `hdri-rotation-90.png`, `reopened-hdri.png`, `api-play.png`,
+`api-stopped.png`, fontes/arquivos autorais puxados e `final-device.log`.
+A cena de caixas não tem biblioteca de texturas materiais representativa: ela
+confirma a aplicação da política Half e a restauração, mas não mede a economia
+de residência. O histórico separado apresentou imagem com TAA ativo; não foi
+feito novo A/B temporal ou benchmark do attachment adicional. Preview de outra
+câmera ainda compartilha a resolução de ambiente da câmera principal.
+
+Permanecem abertos no pedido integral: FSR/ASR, motion vectors por objeto e
+skinning, probes locais, exposição automática/LUT/saída HDR, atmosfera
+volumétrica/nuvens, decals/materiais avançados, gizmos restantes e os aceites
+G6-C/D/E. O bloco não declara esses recursos implementados nem fecha o plano G6.
+
+## 23/09/2026 — texturas, exposição e autoria espacial
+
+- Importação direta PNG/JPEG/KTX2, receita por GUID, gerenciador e prévia com
+  canais/mips, Aplicar/Reverter e páginas acessíveis. Perfil v3 acrescenta cobertura
+  alfa. Aplicar prepara os dados, valida os bindings publicados e só então grava;
+  uma recusa preserva receita/registro/histórico. Undo/Redo recusa fonte externa
+  divergente. Materiais em Play expõem UV/sampler por binding via ABI 7.
+- FSR 1 EASU/RCAS e AgX foram integrados, com licenças empacotadas. A neblina
+  analítica por altura evita cancelamento numérico em grandes diferenças de
+  altitude. TAA agora inclui roll na reprojeção da câmera; continua sem vetores
+  de movimento por objeto/skinning.
+- Exposição automática por histograma GPU: percentis, cinza alvo, limites EV,
+  velocidades separadas, compensação e estado por vista. Ambiente v11/perfil v7
+  migram documentos antigos com o recurso desligado. A prévia resolve seu próprio
+  Ambiente/HDRI e informa recursos indisponíveis; ainda não tem sombras/água próprias.
+- Alças de alcance/cones de luz e dimensões/raio/mistura dos volumes de Ambiente
+  editam os descritores existentes e agrupam o arraste em um único Undo. Luz usa
+  quadro óptico sem escala; dimensões do volume seguem sua transformação e a
+  mistura é medida em metros de mundo. Não foram criados probes sem consumidor.
+- Medição separa prévia, sombras locais, exposição, EASU e RCAS. O relatório
+  Android v8 divide os 15 passes em três registros para evitar truncamento pelo
+  Logcat. Os leitores exigem todas as partes e recusam duplicatas; capturas
+  antigas mantêm as métricas disponíveis, sem preencher ausências com zero.
+
+Referências da autoria espacial: [Light da Unity 6, Built-in](https://docs.unity3d.com/6000.0/Documentation/Manual/class-Light.html)
+para alcance/cone; [gizmos da Godot](https://docs.godotengine.org/en/stable/classes/class_editornode3dgizmoplugin.html)
+para edição de handles com confirmação/cancelamento; [volumes da Unreal](https://dev.epicgames.com/documentation/unreal-engine/post-process-effects-in-unreal-engine)
+para distância de mistura em unidades de mundo. A Astra mantém os meios-ângulos
+já usados pelo próprio schema e o histórico de comandos existente.
+
+Validação host: build incremental `aether_tests` e builds Release da API managed
+e do consumidor `GraphicsApiSmoke` concluídos. Passaram os filtros de materiais,
+ABI, ambiente/exposição/perfis, textura/cobertura alfa, Qualidade e estatísticas
+de GPU. Após o ajuste final de atomicidade e das alças, passaram os oito filtros
+focados de gizmos, câmera, bindings, receitas e recusa de publicação/Undo.
+O leitor do profiler passou 56 testes PowerShell e os casos de fragmentação do
+consumidor Python; o objeto NDK correspondente compilou.
+No Xiaomi/Adreno 825, o Release desta primeira passada importou JPEG pelo seletor,
+aplicou a textura a uma primitiva e republicou a receita de 512 para 1024 px.
+Undo restaurou 512 px e o registro de assets byte a byte; Redo restaurou 1024 px.
+O painel Gráficos preservou 90% e TAA ao reabrir o painel e ao reiniciar o aplicativo.
+A alça de alcance de luz alterou 10 para 42,593 m; um Undo voltou a 10 m, e o
+Undo da mudança de modalidade restaurou o arquivo da cena byte a byte.
+
+A passada encontrou e corrigiu três falhas: escolhas rápidas na receita podiam
+perder o último preparo; o Inspector de Malha repetia suas abas; a reconstrução
+de qualidade em Play perdia texturas de primitivas. A repetição no Release de
+23/09 confirmou a última receita pronta após mudanças rápidas, cancelamento
+seguido de nova importação, abas únicas e textura/miniatura preservadas após
+reconstrução. A neblina com cor limitada a 0–1 revelou outra lacuna: sob exposição
+−6,8 EV, os raios de céu saturados pela densidade aparecem quase pretos. Desligar
+somente a neblina recuperou o panorama, confirmando a incompatibilidade entre
+sua intensidade limitada e a exposição usada.
+O componente v12 e o perfil v8 agora expõem `fog_light_energy` (0–65504),
+multiplicando a cor linear antes da exposição. Cenas antigas conservam energia 1.
+A autoria segue a separação entre cor e energia da
+[Godot 4.4](https://docs.godotengine.org/en/4.4/classes/class_environment.html#class-environment-property-fog-light-energy);
+é neblina analítica configurável, sem afirmar dispersão volumétrica.
+No Xiaomi, a API aplicou energia 100 mantendo −6,8 EV e a névoa passou a ser
+visível sem a faixa preta; o cubo manteve sua textura depois do rebuild de
+qualidade. A calibração artística da densidade/altura/energia continua autorável.
+A exposição automática foi observada numa transição controlada: mantendo a cena
+e 0 EV manual, o script ativou a medição após oito segundos; a imagem superexposta
+recuperou os tons. `exposure-manual-zero.png`, `exposure-auto-settled.png` e
+`auto-transition.log` em `build/graphics-api-validation/0923` guardam a evidência.
+O SHA-256 da cena antes/depois do Play permaneceu
+`05C6106929E80BF75FBD161E0E0408D5E4186EABAEC53CF887F1340E2A0D2387`.
+O script, o mapa de entrada temporário e a política gráfica do projeto de teste
+foram restaurados; o modo de jogo Android voltou ao `performance` original.
+O leitor v8 consumiu os 15 passes do log real, incluindo exposição/EASU/RCAS.
+Os números dessa execução não são uma bancada de desempenho: a cena estava com
+recursos ausentes, `game_mode=2` e GameTurbo não foi verificado como desligado.
+
+O pedido integral segue aberto nas linhas explícitas de §9.1 do plano universal,
+incluindo probes locais, reconstrução temporal com movimento por objeto, LUT/HDR
+de saída, volumetria/nuvens, materiais avançados e G6-C/D/E. O inventário de G6-C
+também identificou ausência de save-game de runtime nesse caminho e nenhum backend
+de áudio localizado nos diretórios próprios consultados. Essas são implementações
+restantes, não verificações que um APK compilado possa encerrar.
+
+Fatia G6-C, entrada física: `handleInput` traduz `AKeyEvent` e eventos de joystick
+para o `InputDeviceState` consumido pelo mesmo `InputActionMap` da cena em Play.
+Bindings `Key` e `GamepadButton` usam os key codes Android; `GamepadAxis` 0–7
+representam esquerda X/frente, direita X/cima, gatilhos esquerdo/direito e
+D-pad X/cima. O último teclado e o último gamepad ativos têm posse do estado;
+esta fatia não define jogadores múltiplos. Pausa, perda de foco, Stop, editor
+de código visível e desconexão soltam teclas/botões/eixos. A adaptação segue as fontes da
+[Unity 6 Input System 1.17](https://docs.unity3d.com/Packages/com.unity.inputsystem@1.17/manual/ActionBindings.html),
+os [eventos de controle Android](https://developer.android.com/games/sdk/game-controller/controller-input)
+e a [zona morta da Godot](https://docs.godotengine.org/en/stable/tutorials/inputs/controllers_gamepads_joysticks.html).
+O teste do helper passou no host. No aparelho, uma tecla E injetada por ADB
+atravessou Android → mapa autorado → script C#, registrando `JustPressed` e
+`JustReleased`. Isso confirmou a correção do foco: suporte ao IME não significa
+campo em edição. Entrar em Play encerra a solicitação de texto autoral e recusa
+respostas tardias. Teclado físico e gamepad físico ainda não foram verificados.
+
+ABI 8 acrescenta comandos de Character e CameraLook. O teste
+`play_script_character_commands_cover_all_substeps_and_preserve_authorship`
+passou com física real no host: mesma distância em 30/60 Hz, expiração da intenção
+no quadro seguinte, salto no chão/recusa no ar, limite de pitch, preservação de
+roll e documento autoral. O runtime managed nesse teste é um duplo que chama a
+ABI; isso não substitui a execução CLR dos comandos no aparelho.
+
+Fechamento desta fatia: `environment` 17/17, `auto_exposure` 2/2 e os filtros
+de foco do Play, comando de Character, reidratação, entrada Android e exclusão
+de recurso passaram no host. A exclusão de HDRI/perfil não exige republicar
+geometria; Mesh/Material/Texture exigem o publicador antes da remoção do arquivo.
+O Release final compilou com `:app:assembleRelease` em 29 s. Esses resultados
+fecham as regressões encontradas nesta validação, não o restante do plano G6.

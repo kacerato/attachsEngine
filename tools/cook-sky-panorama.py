@@ -24,6 +24,7 @@ OUTPUT_HEIGHT = 512
 SPECULAR_SIZE = 256
 SPECULAR_MIP_LEVELS = 9
 BRDF_SIZE = 128
+SH_BANDS = (math.pi, 2.0 * math.pi / 3.0, math.pi / 4.0)
 
 
 def srgb_to_linear(value):
@@ -179,6 +180,68 @@ def sample_equirectangular(image, directions):
     return top * (1.0 - ty) + bottom * ty
 
 
+def diffuse_irradiance_sh9(source):
+    """Project an HDR equirectangular source into cosine-convolved SH L2.
+
+    The nine RGB coefficients represent irradiance, not an average tint. Pixel
+    rows use their exact spherical solid angle, so poles do not receive the
+    same weight as the equator. The basis is real, orthonormal and y-up, matching
+    renderer/environment_map.cpp and environment_lighting.glsl.
+    """
+    height, width, channels = source.shape
+    if channels != 3 or height == 0 or width == 0:
+        raise ValueError("SH source must be a non-empty RGB image")
+    if not np.isfinite(source).all() or source.min() < 0.0:
+        raise ValueError("SH source contains invalid radiance")
+
+    phi = ((np.arange(width, dtype=np.float64) + 0.5) / width - 0.5) * 2.0 * math.pi
+    theta = (np.arange(height, dtype=np.float64) + 0.5) / height * math.pi
+    sine = np.sin(theta)[:, None]
+    x = sine * np.cos(phi)[None, :]
+    y = np.cos(theta)[:, None] * np.ones((1, width), dtype=np.float64)
+    z = sine * np.sin(phi)[None, :]
+    basis = (
+        np.full((height, width), 0.2820947918, dtype=np.float64),
+        0.4886025119 * y,
+        0.4886025119 * z,
+        0.4886025119 * x,
+        1.0925484306 * x * y,
+        1.0925484306 * y * z,
+        0.3153915653 * (3.0 * y * y - 1.0),
+        1.0925484306 * x * z,
+        0.5462742153 * (x * x - z * z),
+    )
+    edges = np.arange(height + 1, dtype=np.float64) * math.pi / height
+    row_solid_angle = (np.cos(edges[:-1]) - np.cos(edges[1:])) * (2.0 * math.pi / width)
+    weights = row_solid_angle[:, None]
+    source64 = source.astype(np.float64, copy=False)
+    coefficients = np.empty((9, 4), dtype=np.float32)
+    for index, function in enumerate(basis):
+        band = 0 if index == 0 else 1 if index <= 3 else 2
+        projected = (source64 * (function * weights)[..., None]).sum(axis=(0, 1))
+        coefficients[index, :3] = projected * SH_BANDS[band]
+        coefficients[index, 3] = 0.0
+    if not np.isfinite(coefficients).all():
+        raise ValueError("HDR radiance is outside the SH coefficient range")
+    return coefficients
+
+
+def evaluate_diffuse_irradiance_sh9(coefficients, direction):
+    """CPU reference for tests; runtime evaluates the same nine basis terms."""
+    direction = np.asarray(direction, dtype=np.float64)
+    length = np.linalg.norm(direction)
+    if direction.shape != (3,) or not np.isfinite(length) or length <= 1e-8:
+        raise ValueError("SH direction must be a finite non-zero vector")
+    x, y, z = direction / length
+    basis = np.array((0.2820947918, 0.4886025119 * y, 0.4886025119 * z,
+                      0.4886025119 * x, 1.0925484306 * x * y,
+                      1.0925484306 * y * z,
+                      0.3153915653 * (3.0 * y * y - 1.0),
+                      1.0925484306 * x * z,
+                      0.5462742153 * (x * x - z * z)), dtype=np.float64)
+    return basis @ np.asarray(coefficients, dtype=np.float64)[:, :3]
+
+
 def radical_inverse(index):
     result, fraction = 0.0, 0.5
     while index:
@@ -326,6 +389,7 @@ def main():
                   SPECULAR_SIZE, SPECULAR_SIZE, 5)
     write_texture(args.out / "environment-brdf.aetex", [bake_brdf_lut()],
                   BRDF_SIZE, BRDF_SIZE, 5)
+    diffuse_sh = diffuse_irradiance_sh9(linear)
 
     row_weight = np.sin((np.arange(height, dtype=np.float32) + 0.5) *
                         math.pi / height)
@@ -355,7 +419,7 @@ def main():
     ground_color_saturation = [*args.ground_bounce, args.ambient_saturation]
     cloud_light_wind_speed = [1.35, 1.42, 1.52, 0.0035]
     metadata = struct.pack(
-        "<4I32f8I", MAGIC_AEEN, 3, 176, 0,
+        "<4I32f8I36f", MAGIC_AEEN, 4, 320, 0,
         *sun_direction, args.sun_intensity,
         *sun_color, math.radians(0.27),
         *ambient_color, args.ambient_strength,
@@ -365,7 +429,8 @@ def main():
         *ground_color_saturation,
         *cloud_light_wind_speed,
         1, SPECULAR_SIZE, SPECULAR_SIZE, SPECULAR_MIP_LEVELS,
-        BRDF_SIZE, BRDF_SIZE, 1, 3,
+        BRDF_SIZE, BRDF_SIZE, 1, 7,
+        *diffuse_sh.reshape(-1),
     )
     metadata_path = args.out / "environment.aeenv"
     metadata_path.write_bytes(metadata)
@@ -389,11 +454,13 @@ def main():
         "exposure": args.exposure,
         "groundBounceColor": ground_color_saturation[:3],
         "saturation": ground_color_saturation[3],
-        "environmentResourceVersion": 3,
+        "environmentResourceVersion": 4,
         "specularRepresentation": "octahedral-ggx-prefiltered-rgba16f",
         "specularResolution": [SPECULAR_SIZE, SPECULAR_SIZE],
         "specularMipLevels": SPECULAR_MIP_LEVELS,
         "brdfLut": [BRDF_SIZE, BRDF_SIZE],
+        "diffuseIrradiance": "real-sh-l2-y-up-lambert-convolved",
+        "diffuseIrradianceSh9": diffuse_sh[:, :3].tolist(),
     }
     manifest["outputs"] = {
         path.name: hashlib.sha256(path.read_bytes()).hexdigest()

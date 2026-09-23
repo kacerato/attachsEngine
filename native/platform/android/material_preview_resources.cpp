@@ -47,7 +47,7 @@ bool MaterialPreviewResources::initialize(rhi::VulkanDevice &device,rhi::VulkanU
       if(i==4)sampling.addressU=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     }
     if(!loadAndroidTexture(device,upload,assets,!astc&&i<3?fallback[i]:names[i],maxDimension,
-        i<3?perMapBudget:4ull*1024*1024,sampling,images_[i],samplers_[i],cancel,"MaterialPreview")) {
+        i<3?perMapBudget:4ull*1024*1024,sampling,true,images_[i],samplers_[i],cancel,"MaterialPreview")) {
       if(!cancel || !cancel->load())
         __android_log_print(ANDROID_LOG_ERROR,"Aether.Android","[MaterialPreview] Falha de upload no mapa %u",i);
       return false;

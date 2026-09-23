@@ -1,4 +1,5 @@
-AETHER_ASSETS 1 3
-5bd07969cc0d0b9cc230fdddc83f59fb mesh "Assets/world.glb" "Assets/world.glb" "a4120768121b0a263d88205c852a41ca8d0db490cc5dbdbd3badbb1930d24879" 1 "glb" 0 0
+AETHER_ASSETS 1 4
+5bd07969cc0d0b9cc230fdddc83f59fb mesh "Assets/world.glb" "Assets/world.glb" "1a8d4ef2c42226bf3d3a5f678f7a856d297c74207c55daab0568daa4d0614aa2" 1 "glb" 0 0
 c40ae11a68290bae39c958fba2f114f4 mesh "Assets/medical_box.glb" "Assets/medical_box.glb" "ecb72b4ad5873c1f84b87b80b72498a2fb85c97573465293f8d4b4e488dc4fcc" 1 "glb" 0 0
 797c0189b3fd1e37c186730bf83517af mesh "Assets/rock_07.glb" "Assets/rock_07.glb" "d2707013e91bef7d19cf64afcf207ee818eb02e23793e094a11fe899ec0d6bd3" 1 "glb" 0 0
+d18a23bf514341b3ab759e747a49b318 mesh "Assets/metal_toolbox.glb" "Assets/metal_toolbox.glb" "918abb89085c48f88f22b18b3c6cc3e7ba9065cf5c1638a22717a493e57722e1" 1 "glb" 0 0

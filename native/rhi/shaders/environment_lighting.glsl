@@ -53,6 +53,9 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   vec4 localShadowParameters;
   mat4 localShadowViewProjection[16];
   vec4 localShadowRect[16];
+  // AEEN v4 diffuse irradiance, copied at load time. Appending preserves every
+  // existing UBO offset. RGB stores cosine-convolved real SH L2; W is padding.
+  vec4 diffuseIrradianceSh[9];
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 // sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de
@@ -63,6 +66,55 @@ layout(set=1,binding=3) uniform sampler2D environmentSpecularMap;
 layout(set=1,binding=4) uniform sampler2D environmentBrdfLut;
 // Atlas das luzes locais, com o mesmo sampler de compare das cascatas.
 layout(set=1,binding=17) uniform sampler2DShadow localShadowAtlas;
+
+highp vec3 environmentSourceDirection(highp vec3 direction) {
+  // Same positive longitude offset used by the visible panorama.
+  float c=cos(environment.parameters.y),s=sin(environment.parameters.y);
+  return vec3(c*direction.x-s*direction.z,direction.y,
+              s*direction.x+c*direction.z);
+}
+
+mediump vec3 environmentDiffuseIrradiance(mediump vec3 direction) {
+  direction=environmentSourceDirection(direction);
+  direction=normalize(direction);
+  mediump float x=direction.x,y=direction.y,z=direction.z;
+  mediump float basis[9]=float[9](
+      0.2820947918,
+      0.4886025119*y,
+      0.4886025119*z,
+      0.4886025119*x,
+      1.0925484306*x*y,
+      1.0925484306*y*z,
+      0.3153915653*(3.0*y*y-1.0),
+      1.0925484306*x*z,
+      0.5462742153*(x*x-z*z));
+  mediump vec3 irradiance=vec3(0.0);
+  for(int coefficient=0;coefficient<9;++coefficient)
+    irradiance+=environment.diffuseIrradianceSh[coefficient].rgb*basis[coefficient];
+  // Truncating at L2 can ring slightly around a very bright sun/horizon.
+  // Negative irradiance is non-physical and would subtract material energy.
+  return max(irradiance,vec3(0.0));
+}
+
+mediump vec3 environmentAmbientDiffuse(mediump vec3 normal) {
+  // The cooked coefficients contain irradiance E. Lambertian diffuse uses
+  // E/pi; the existing strength remains the common authoring/volume scale.
+  if(environment.diffuseIrradianceSh[0].w>0.5 &&
+     environment.quality.z>0.5 && environment.sceneSky.w<0.5)
+    return environmentDiffuseIrradiance(normal)*
+        (environment.ambientColorStrength.w/PI);
+
+  // AEEN v1-v3, atmosphere, and the Constant quality tier retain their exact
+  // hemispheric fallback. No coefficient is fabricated for legacy assets.
+  mediump float skyWeight=environment.quality.z>0.5?
+      clamp(normal.y*0.5+0.5,0.0,1.0):1.0;
+  mediump vec3 ambient=mix(environment.groundColorSaturation.rgb,
+                           environment.ambientColorStrength.rgb,skyWeight);
+  mediump float luminance=dot(ambient,vec3(0.2126,0.7152,0.0722));
+  ambient=mix(vec3(luminance),ambient,
+              clamp(environment.groundColorSaturation.w,0.0,2.0));
+  return ambient*environment.ambientColorStrength.w;
+}
 
 // A UV do panorama permanece highp: sao 1024 px por eixo com costura horizontal,
 // e o fract() perto da costura e exatamente onde fp16 produziria uma emenda
@@ -86,6 +138,7 @@ mediump vec3 environmentRadianceUnscaled(highp vec3 direction,mediump float lod)
   // Octahedral projection is homogeneous: reflect() already returns a unit
   // direction, but even a slightly non-unit vector maps correctly without a
   // reciprocal sqrt. This replaces atan+acos in the hot PBR fragment path.
+  direction=environmentSourceDirection(direction);
   highp vec2 folded=direction.xz/
       max(abs(direction.x)+abs(direction.y)+abs(direction.z),1e-8);
   if(direction.y<0.0)
@@ -108,13 +161,13 @@ mediump vec2 environmentBrdf(mediump float noV,mediump float roughness) {
       :vec2(.25+.75*(1.0-roughness),0.0);
 }
 
-mediump vec3 toneMapEnvironment(mediump vec3 color) {
+#include "tone_mapping.glsl"
+highp vec3 toneMapEnvironment(highp vec3 color) {
   // O intermediário HDR preserva radiância para bloom/neblina e aplica a
   // curva uma única vez no passe final. Prévias sem pós mantêm o caminho inline.
   if(environment.scenePost.z>0.5) return max(color,vec3(0));
   color=max(color*environment.parameters.x*exp2(environment.scenePost.x),vec3(0));
-  // Stable filmic curve with a soft shoulder for the HDR sun.
-  return clamp((color*(2.51*color+.03))/(color*(2.43*color+.59)+.14),0.0,1.0);
+  return astraToneMap(color,environment.scenePost.y);
 }
 
 mediump float sampleDirectionalShadowCascade(highp vec3 worldPosition,

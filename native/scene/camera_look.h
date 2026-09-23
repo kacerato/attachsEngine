@@ -30,4 +30,15 @@ inline constexpr std::array<ComponentNumber,3> cameraLookNumbers{{
 inline const ComponentType CameraLook::descriptor{
   "astra.camera.look",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<CameraLook>();},cameraLookNumbers
 };
+// Delta normalizado pela viewport. O rig pai orienta a câmera no mundo; aqui
+// só X/Y locais mudam, preservando o roll autorado.
+inline bool applyCameraLookRotation(float rotationDegrees[3],const CameraLook &settings,float x,float y) {
+  if(!rotationDegrees||!settings.valid()||!std::isfinite(x)||!std::isfinite(y)) return false;
+  for(u32 i=0;i<3;++i) if(!std::isfinite(rotationDegrees[i])) return false;
+  const float yaw=std::remainder(rotationDegrees[1]+x*settings.yawSensitivity,360.0f);
+  const float pitch=std::clamp(rotationDegrees[0]+y*settings.pitchSensitivity,-settings.pitchLimit,settings.pitchLimit);
+  if(!std::isfinite(yaw)||!std::isfinite(pitch)) return false;
+  rotationDegrees[0]=pitch;rotationDegrees[1]=yaw;
+  return true;
+}
 }

@@ -4,3 +4,4 @@ Powered by Poly Haven. Os modelos abaixo são CC0 1.0 e foram baixados em glTF 1
 
 - [medical_box](https://polyhaven.com/a/medical_box) — [fonte glTF](https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/medical_box/medical_box_1k.gltf); SHA-256 do GLB: `ecb72b4ad5873c1f84b87b80b72498a2fb85c97573465293f8d4b4e488dc4fcc`.
 - [rock_07](https://polyhaven.com/a/rock_07) — [fonte glTF](https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/rock_07/rock_07_1k.gltf); SHA-256 do GLB: `d2707013e91bef7d19cf64afcf207ee818eb02e23793e094a11fe899ec0d6bd3`.
+- [metal_toolbox](https://polyhaven.com/a/metal_toolbox) — [fonte glTF](https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/metal_toolbox/metal_toolbox_1k.gltf); SHA-256 do GLB: `918abb89085c48f88f22b18b3c6cc3e7ba9065cf5c1638a22717a493e57722e1`.

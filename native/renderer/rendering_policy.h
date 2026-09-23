@@ -91,6 +91,10 @@ enum class AntiAliasingMode : u32 {
   Temporal,
 };
 
+// Reconstruction is independent of anti-aliasing. Catmull-Rom is a spatial
+// bicubic filter; it is not temporal super resolution or AMD/Arm FSR/ASR.
+enum class UpscalingFilter : u32 { Inherit = 0, Bilinear, CatmullRom, Fsr1 };
+
 // Preset é um ponto nomeado no espaço acima. `Auto` deriva do perfil de dispositivo
 // detectado; os demais fixam o ponto independentemente do hardware, e a capability
 // ainda pode reduzi-los (nunca elevá-los).
@@ -100,7 +104,7 @@ enum class QualityPreset : u32 { Auto = 0, C, B, A, S, Custom };
 // produziria dois campos capazes de se contradizer no arquivo do projeto.
 enum class FeatureOverride : u32 { Inherit = 0, Disabled, Enabled };
 
-inline constexpr u32 RenderingSettingsSchemaVersion = 7;
+inline constexpr u32 RenderingSettingsSchemaVersion = 9;
 
 // ---------------------------------------------------------------------------
 // Entrada 3 da ADR — escolha global serializada do projeto.
@@ -170,6 +174,7 @@ struct ProjectRenderingSettings final {
   FeatureOverride thermalDistanceScaling = FeatureOverride::Inherit;
 
   AntiAliasingMode antiAliasing = AntiAliasingMode::Inherit;
+  UpscalingFilter upscalingFilter = UpscalingFilter::Inherit;
   // Schema <= 6 compatibility. New serialized settings must use
   // `antiAliasing`; this field remains so old projects and launch tooling do
   // not silently change appearance during migration.
@@ -198,6 +203,8 @@ struct ProjectRenderingSettings final {
 // ---------------------------------------------------------------------------
 struct RenderingCapabilities final {
   rhi::DeviceProfile profile = rhi::DeviceProfile::C;
+  // Visual Auto recommendation is a heuristic, independent of Vulkan paths.
+  rhi::DeviceQualityRecommendation qualityRecommendation{};
   // Maior dimensão de imagem 2D suportada; limita a resolução de cascata.
   u32 maximumImage2DSize = 4096;
   // Camadas de array suportadas; cascatas moram num array de mapas de sombra.
@@ -265,6 +272,7 @@ struct PostSettings final {
   bool dedicatedPass = false;
   bool bloom = false;
   AntiAliasingMode antiAliasing = AntiAliasingMode::Off;
+  UpscalingFilter upscalingFilter = UpscalingFilter::Bilinear;
   bool vignette = false;
   float bloomThreshold = 1.0f;
   float bloomIntensity = 0.0f;
@@ -356,12 +364,14 @@ PostQuality parsePostQuality(const char *name);
 TextureQuality parseTextureQuality(const char *name);
 WaterMeshQuality parseWaterMeshQuality(const char *name);
 AntiAliasingMode parseAntiAliasingMode(const char *name);
+UpscalingFilter parseUpscalingFilter(const char *name);
 
 const char *shadowQualityName(ShadowQuality quality);
 const char *ambientQualityName(AmbientQuality quality);
 const char *postQualityName(PostQuality quality);
 const char *textureQualityName(TextureQuality quality);
 const char *antiAliasingModeName(AntiAliasingMode mode);
+const char *upscalingFilterName(UpscalingFilter filter);
 
 // Resolve a política. Determinística e sem estado: as mesmas quatro entradas
 // produzem sempre a mesma saída, que é o que permite reproduzir uma captura.

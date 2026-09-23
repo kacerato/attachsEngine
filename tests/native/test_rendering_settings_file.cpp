@@ -1,7 +1,7 @@
 // Configurações de renderização do projeto (painel Qualidade).
 //
-// Protegido aqui: ida e volta pelo arquivo; arquivo de versão futura abre com o
-// que entende; valor ilegível recusa o arquivo inteiro; e o editor usa
+// Protegido aqui: ida e volta pelo arquivo; versão futura ou valor ilegível
+// recusa o arquivo inteiro; chave desconhecida é ignorada; e o editor usa
 // resolução nativa sem escala dinâmica quando o projeto não decidiu.
 #include "harness.h"
 #include "renderer/rendering_settings_file.h"
@@ -15,15 +15,54 @@ AE_TEST(rendering_settings_survive_the_project_file) {
   settings.resolutionScale = .85f;
   settings.dynamicResolution = FeatureOverride::Disabled;
   settings.antiAliasing = AntiAliasingMode::Temporal;
+  settings.upscalingFilter = UpscalingFilter::Fsr1;
   settings.postSharpen = .35f;
+  settings.postContrast = .123456791f + .5f;
   settings.maximumRenderHz = 60;
+  settings.shadows = ShadowQuality::UltraSoft;
+  settings.shadowCascadeCount = 4;
+  settings.shadowCascadeResolution = 2048;
+  settings.shadowMaximumDistance = 320.0f;
+  settings.shadowDepthBiasConstant = 1.2f;
+  settings.shadowDepthBiasSlope = 1.8f;
+  settings.shadowNormalOffsetTexels = 1.5f;
+  settings.ambient = AmbientQuality::HemisphericSpecular;
+  settings.environmentSplitSumBrdf = FeatureOverride::Enabled;
+  settings.post = PostQuality::Bloom;
+  settings.bloomThreshold = 1.1f;
+  settings.bloomIntensity = .4f;
+  settings.temporalHistoryWeight = .91f;
+  settings.textures = TextureQuality::Full;
+  settings.lodSelection = FeatureOverride::Enabled;
+  settings.lodPixelErrorBudget = .75f;
+  settings.lodHysteresisBandRatio = .8f;
+  settings.dynamicResolutionMinimumScale = .65f;
+  settings.dynamicResolutionDecreaseStep = .05f;
   ProjectRenderingSettings restored;
   AE_EXPECT_TRUE(readRenderingSettings(writeRenderingSettings(settings), restored), "o arquivo volta");
   AE_EXPECT_TRUE(restored.preset == QualityPreset::A, "nível Alto");
   AE_EXPECT_TRUE(restored.resolutionScale == .85f, "escala 85%");
   AE_EXPECT_TRUE(restored.dynamicResolution == FeatureOverride::Disabled, "escala dinâmica desligada");
   AE_EXPECT_TRUE(restored.antiAliasing == AntiAliasingMode::Temporal, "TAA");
+  AE_EXPECT_TRUE(restored.upscalingFilter == UpscalingFilter::Fsr1, "ampliação AMD FSR 1");
   AE_EXPECT_TRUE(restored.postSharpen == .35f && restored.maximumRenderHz == 60, "nitidez e taxa alvo");
+  AE_EXPECT_TRUE(restored.postContrast == settings.postContrast, "float mantém round-trip exato");
+  AE_EXPECT_TRUE(restored.shadows == ShadowQuality::UltraSoft && restored.shadowCascadeCount == 4 &&
+                 restored.shadowCascadeResolution == 2048 && restored.shadowMaximumDistance == 320.0f,
+                 "qualidade, cascatas, resolução e alcance das sombras");
+  AE_EXPECT_TRUE(restored.shadowDepthBiasConstant == 1.2f && restored.shadowDepthBiasSlope == 1.8f &&
+                 restored.shadowNormalOffsetTexels == 1.5f, "bias de sombra");
+  AE_EXPECT_TRUE(restored.ambient == AmbientQuality::HemisphericSpecular &&
+                 restored.environmentSplitSumBrdf == FeatureOverride::Enabled,
+                 "ambiente especular");
+  AE_EXPECT_TRUE(restored.post == PostQuality::Bloom && restored.bloomThreshold == 1.1f &&
+                 restored.bloomIntensity == .4f && restored.temporalHistoryWeight == .91f,
+                 "bloom e histórico temporal");
+  AE_EXPECT_TRUE(restored.textures == TextureQuality::Full && restored.lodSelection == FeatureOverride::Enabled &&
+                 restored.lodPixelErrorBudget == .75f && restored.lodHysteresisBandRatio == .8f,
+                 "texturas e LOD");
+  AE_EXPECT_TRUE(restored.dynamicResolutionMinimumScale == .65f && restored.dynamicResolutionDecreaseStep == .05f,
+                 "parâmetros da resolução dinâmica");
 }
 
 AE_TEST(a_bad_rendering_settings_file_changes_nothing) {
@@ -35,10 +74,40 @@ AE_TEST(a_bad_rendering_settings_file_changes_nothing) {
                  "nível desconhecido é recusado");
   AE_EXPECT_TRUE(!readRenderingSettings("quality=a\n", settings), "sem cabeçalho não é arquivo de configurações");
   AE_EXPECT_TRUE(settings.preset == QualityPreset::B, "recusa não muda nada");
+  settings.shadowCascadeCount = 3;
+  AE_EXPECT_TRUE(!readRenderingSettings("astra_rendering 2\nquality=a\nshadow_cascade_count=9\n", settings),
+                 "override fora da faixa recusa o arquivo inteiro");
+  AE_EXPECT_TRUE(settings.preset == QualityPreset::B && settings.shadowCascadeCount == 3,
+                 "falha tardia também é atômica");
   // Chave que esta versão não conhece é de um arquivo mais novo: abre com o resto.
   AE_EXPECT_TRUE(readRenderingSettings("astra_rendering 2\nquality=s\nupscaling=fsr\n", settings),
                  "chave futura é ignorada");
   AE_EXPECT_TRUE(settings.preset == QualityPreset::S, "o que se entende vale");
+  AE_EXPECT_TRUE(!readRenderingSettings("astra_rendering 3\nquality=a\n", settings),
+                 "versão futura requer migração conhecida");
+}
+
+AE_TEST(rendering_settings_v1_migrates_without_inventing_new_overrides) {
+  ProjectRenderingSettings settings;
+  settings.upscalingFilter = UpscalingFilter::Bilinear;
+  settings.shadowCascadeCount = 3;
+  AE_EXPECT_TRUE(readRenderingSettings(
+    "astra_rendering 1\nquality=a\nresolution_scale=0.8\ndynamic_resolution=off\n"
+    "anti_aliasing=fxaa\nsharpen=0.2\nmaximum_render_hz=60\n", settings), "arquivo v1 abre");
+  AE_EXPECT_TRUE(settings.preset == QualityPreset::A && settings.resolutionScale == .8f &&
+                 settings.antiAliasing == AntiAliasingMode::Fxaa, "campos v1 migram");
+  AE_EXPECT_TRUE(settings.upscalingFilter == UpscalingFilter::Bilinear && settings.shadowCascadeCount == 3,
+                 "eixos ausentes preservam o valor do chamador");
+}
+
+AE_TEST(legacy_fxaa_override_survives_the_project_file) {
+  ProjectRenderingSettings settings;
+  settings.antiAliasing = AntiAliasingMode::Inherit;
+  settings.postFxaa = FeatureOverride::Disabled;
+  ProjectRenderingSettings restored;
+  AE_EXPECT_TRUE(readRenderingSettings(writeRenderingSettings(settings), restored), "arquivo com override legado abre");
+  AE_EXPECT_TRUE(restored.antiAliasing == AntiAliasingMode::Inherit &&
+                 restored.postFxaa == FeatureOverride::Disabled, "fallback FXAA não muda de semântica");
 }
 
 AE_TEST(the_editor_renders_native_unless_the_project_asks_otherwise) {

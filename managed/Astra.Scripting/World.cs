@@ -25,6 +25,8 @@ public enum WorldStatus : uint
     InvalidArgument,
     LimitReached,
     Rejected,
+    UnknownResource,
+    ResourceTypeMismatch,
 }
 
 public sealed class WorldException(WorldStatus status, string operation)
@@ -46,6 +48,8 @@ public sealed class WorldException(WorldStatus status, string operation)
         WorldStatus.TransformOwnedByPhysics => "a pose deste objeto é publicada pela física",
         WorldStatus.InvalidArgument => "argumento inválido",
         WorldStatus.LimitReached => "limite de capacidade atingido",
+        WorldStatus.UnknownResource => "recurso inexistente",
+        WorldStatus.ResourceTypeMismatch => "tipo de recurso incompatível",
         _ => "operação recusada",
     };
 }
@@ -209,6 +213,30 @@ public sealed class GameObject : IEquatable<GameObject>
         set { var t = LocalTransform; LocalTransform = t with { Position = value }; }
     }
 
+    /// <summary>Envia direção normalizada ao Character para os passos físicos deste quadro.
+    /// O yaw usa radianos; no quadro seguinte prevalece o toque até novo comando.</summary>
+    public void MoveCharacter(Vector2 input, float yawRadians)
+    {
+        Require("mover personagem");
+        Check(Scene.CharacterMove(ObjectId, input, yawRadians), "mover personagem");
+    }
+
+    /// <summary>Tenta saltar. Retorna falso quando o motor recusa o salto no ar.</summary>
+    public bool TryJumpCharacter()
+    {
+        Require("saltar personagem");
+        if (Scene.CharacterJump(ObjectId)) return true;
+        if (Scene.LastStatus == WorldStatus.Rejected) return false;
+        throw new WorldException(Scene.LastStatus, "saltar personagem");
+    }
+
+    /// <summary>Aplica um delta de olhar normalizado pela viewport à CameraLook local.</summary>
+    public void LookCamera(Vector2 normalizedDelta)
+    {
+        Require("olhar pela câmera");
+        Check(Scene.CameraLook(ObjectId, normalizedDelta), "olhar pela câmera");
+    }
+
     public int ComponentCount { get { Require("contar componentes"); return Math.Max(0, Scene.ComponentCount(ObjectId)); } }
 
     public Component ComponentAt(int index)
@@ -321,6 +349,26 @@ public readonly struct Component
         Check(_scene.SetProperty(_object.ObjectId, InstanceId, propertyId, 2, value), "escrever " + propertyId);
     public void SetReference(string propertyId, ObjectReference value) =>
         Check(_scene.SetProperty(_object.ObjectId, InstanceId, propertyId, 3, value.ObjectId), "escrever " + propertyId);
+    public AssetGuid GetResource(string propertyId, uint slot = 0) =>
+        _scene.TryGetResource(_object.ObjectId, InstanceId, propertyId, slot, out var value)
+            ? value : throw new WorldException(_scene.LastStatus, "ler recurso " + propertyId);
+    public void SetResource(string propertyId, AssetGuid value, uint slot = 0) =>
+        Check(_scene.SetResource(_object.ObjectId, InstanceId, propertyId, slot, value), "escrever recurso " + propertyId);
+    public float GetSlotFloat(string propertyId,uint slot=0) => ReadSlot(propertyId,slot,0,out var bits)
+        ? BitConverter.UInt32BitsToSingle((uint)bits)
+        : throw new WorldException(_scene.LastStatus,"ler "+propertyId);
+    public uint GetSlotEnum(string propertyId,uint slot=0) => ReadSlot(propertyId,slot,2,out var bits)
+        ? (uint)bits : throw new WorldException(_scene.LastStatus,"ler "+propertyId);
+    public void SetSlotFloat(string propertyId,float value,uint slot=0) =>
+        Check(_scene.SetSlotProperty(_object.ObjectId,InstanceId,propertyId,slot,0,BitConverter.SingleToUInt32Bits(value)),
+              "escrever "+propertyId);
+    public void SetSlotEnum(string propertyId,uint value,uint slot=0) =>
+        Check(_scene.SetSlotProperty(_object.ObjectId,InstanceId,propertyId,slot,2,value),"escrever "+propertyId);
+    public MaterialSlot Material(uint slot=0)
+    {
+        if(TypeId!=ComponentIds.MeshRenderer) throw new WorldException(WorldStatus.InvalidArgument,"acessar material");
+        return new MaterialSlot(this,slot);
+    }
 
     /// <summary>Remoção aplicada no próximo ponto seguro do mundo.</summary>
     public void Remove() => Check(_scene.RemoveComponent(_object.ObjectId, InstanceId), "remover componente");
@@ -331,6 +379,12 @@ public readonly struct Component
         // Um campo que mudou de tipo no schema não deve chegar reinterpretado:
         // devolver bits de float como enum produziria um valor plausível e errado.
         if (kind != expected) throw new WorldException(WorldStatus.InvalidArgument, "tipo de " + propertyId);
+        return true;
+    }
+    private bool ReadSlot(string propertyId,uint slot,uint expected,out ulong bits)
+    {
+        if(!_scene.TryGetSlotProperty(_object.ObjectId,InstanceId,propertyId,slot,out var kind,out bits))return false;
+        if(kind!=expected)throw new WorldException(WorldStatus.InvalidArgument,"tipo de "+propertyId);
         return true;
     }
 

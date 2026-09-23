@@ -9,11 +9,10 @@ bool gpuPassAttributionCollapsed(const std::array<double, GpuPassClassCount> &pa
   // Frame sem tempo medido não afirma nada sobre atribuição.
   if (!(frameMs > 0.0)) return false;
   const auto intraPass = [](GpuPassClass pass) {
-    // Só classes gravadas dentro do render pass principal. Shadow, Post e HZB
-    // têm passes próprios e são legitimamente medidos em separado.
-    return pass != GpuPassClass::WaterSimulation && pass != GpuPassClass::Culling &&
-           pass != GpuPassClass::Shadow && pass != GpuPassClass::Post &&
-           pass != GpuPassClass::Hzb;
+    // Somente as classes dentro do mesmo render pass podem ter atribuição
+    // colapsada pelo tile renderer. UI, FSR e sombras têm passes próprios.
+    return pass == GpuPassClass::Opaque || pass == GpuPassClass::Coverage ||
+           pass == GpuPassClass::Sky || pass == GpuPassClass::Transparent;
   };
   double dominant = 0.0;
   double others = 0.0;

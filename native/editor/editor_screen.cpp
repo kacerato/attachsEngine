@@ -20,6 +20,7 @@
 #include "editor/editor_collider_geometry.h"
 #include "editor/editor_component_visuals.h"
 #include "editor/editor_camera_handles.h"
+#include "editor/editor_component_handles.h"
 #include "editor/editor_import_reconcile.h"
 #include "runtime/scene_environment.h"
 #include <bit>
@@ -204,7 +205,21 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
   builder.label(save,"Salvar",theme.color.text,theme.type.caption,UiAlign::Center);
   builder.router.addRegion(save,widgetId(EditorWidget::SaveDocument));
 
-  takeLeft(content,theme.spacing.medium);
+  takeLeft(content,theme.spacing.small);
+  if(content.width>=52.0f) {
+    const bool labelled=content.width>=180.0f;
+    const auto graphics=takeLeft(content,labelled?108.0f:40.0f);
+    builder.list.addRect(graphics,builder.state.qualityPanel?theme.color.accent:theme.color.raised,
+                         theme.radius.control);
+    const auto icon=labelled?UiRect{graphics.x+8.0f,graphics.y,24.0f,graphics.height}:graphics;
+    builder.list.addImage(centred(icon,18.0f,18.0f),static_cast<UiImageId>(UiIcon::UiSliders),
+                          builder.state.qualityPanel?theme.color.accentInk:theme.color.text);
+    if(labelled) builder.label({graphics.x+34.0f,graphics.y,graphics.width-38.0f,graphics.height},
+                               "Gráficos",builder.state.qualityPanel?theme.color.accentInk:theme.color.text,
+                               theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(graphics,widgetId(EditorWidget::QualityOpen),theme.touch.minimumTarget);
+    takeLeft(content,theme.spacing.medium);
+  }
   const char *context=builder.state.workspace==EditorWorkspace::Play ? (builder.state.playPaused?"Pausado":"Em execução") :
       builder.state.workspace==EditorWorkspace::Lighting ? "Ambiente da cena" :
       builder.state.workspace==EditorWorkspace::Settings ? "Água da cena" :
@@ -377,6 +392,27 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
       builder.router.addRegion(target,widgetId(EditorWidget::CameraHandleBase)+kind);
     }
   }
+  if(entity && state.showComponentVisuals && !state.cameraViewEntity &&
+     state.workspace==EditorWorkspace::Scene && expandedVisual &&
+     (&expandedVisual->type()==&scene::Light::descriptor ||
+      &expandedVisual->type()==&scene::Environment::descriptor)) {
+    constexpr const char *labels[]{"Alcance","Cone interno","Cone externo",
+        "Tamanho X","Tamanho Y","Tamanho Z","Raio","Mistura"};
+    for(u32 index=0;index<static_cast<u32>(EditorComponentHandleKind::Count);++index) {
+      EditorComponentHandle handle;
+      const auto kind=static_cast<EditorComponentHandleKind>(index);
+      if(!componentHandleGeometry(*state.document,entity->id,expandedVisual->instanceId(),kind,handle)) continue;
+      const auto point=projectWorldToScreen(*state.view,handle.point);float parameter;
+      if(!point.valid || !viewport.contains(point.screen) ||
+         !cameraHandleRayParameter(*state.view,handle,point.screen,parameter)) continue;
+      const UiRect target{point.screen.x-16,point.screen.y-16,32,32};
+      if(!viewport.contains({target.x,target.y}) || !viewport.contains({target.right(),target.bottom()})) continue;
+      builder.list.addRect(target,theme.color.surface,theme.radius.control);
+      builder.list.addRect({point.screen.x-5,point.screen.y-5,10,10},theme.color.accent,4);
+      builder.label({point.screen.x+18,point.screen.y-12,88,24},labels[index],theme.color.text,theme.type.caption);
+      builder.router.addRegion(target,widgetId(EditorWidget::ComponentHandleBase)+index);
+    }
+  }
   builder.list.popClip();
 }
 
@@ -403,7 +439,9 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
       ++index;
     }
     header=takeTop(content,44);
+    builder.iconButton(takeRight(header,34),UiIcon::AssetsTexture,widgetId(EditorWidget::ImportTexture));
     builder.iconButton(takeRight(header,34),UiIcon::AssetsImport,widgetId(EditorWidget::ImportModel));
+    builder.iconButton(takeRight(header,34),UiIcon::LightingSky,widgetId(EditorWidget::ImportEnvironment));
     auto newFile=takeRight(header,34),newFolder=takeRight(header,34);
     builder.list.addImage(centred(newFile,19,19),static_cast<UiImageId>(UiIcon::IdeAdd),0xffffffff);
     builder.list.addImage(centred(newFolder,19,19),static_cast<UiImageId>(UiIcon::IdeFiles),0xffffffff);
@@ -413,7 +451,9 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
   } else {
     builder.router.addRegion(header,widgetId(EditorWidget::FilesCollapse));
     builder.iconButton(takeRight(header,28),UiIcon::ScriptingCode,widgetId(EditorWidget::CodeOpen));
+    builder.iconButton(takeRight(header,28),UiIcon::AssetsTexture,widgetId(EditorWidget::ImportTexture));
     builder.iconButton(takeRight(header,28),UiIcon::AssetsImport,widgetId(EditorWidget::ImportModel));
+    builder.iconButton(takeRight(header,28),UiIcon::LightingSky,widgetId(EditorWidget::ImportEnvironment));
   }
   builder.label(header,"Arquivos",theme.color.text,theme.type.body);
   if(builder.state.filesCollapsed && !code) return;
@@ -452,6 +492,8 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
     action(actions,confirming?"Apagar mesmo assim":"Apagar",EditorWidget::FilesDelete,
            confirming?theme.color.accent:theme.color.text);
   }
+  const auto *selectedRecord=builder.state.assetRegistry?
+      builder.state.assetRegistry->findByPath(builder.state.selectedFile):nullptr;
   if(builder.state.selectedFile.ends_with(".glb")) {
     auto actions=takeBottom(content,36);
     // R4: "Texturas" extrai as imagens embutidas do GLB para o projeto.
@@ -463,6 +505,18 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
       builder.label(button,item.first,theme.color.text,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(button,widgetId(item.second));
     }
+  } else if(selectedRecord&&selectedRecord->type==resources::AssetType::EnvironmentMap) {
+    auto actions=takeBottom(content,36);
+    auto button=deflate(actions,UiInsets::all(3));
+    builder.list.addRect(button,theme.color.raised,theme.radius.control);
+    builder.label(button,"Reimportar HDRI",theme.color.text,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(button,widgetId(EditorWidget::AssetReimport));
+  } else if(selectedRecord&&selectedRecord->type==resources::AssetType::Texture) {
+    auto actions=takeBottom(content,36);
+    auto button=deflate(actions,UiInsets::all(3));
+    builder.list.addRect(button,theme.color.raised,theme.radius.control);
+    builder.label(button,"Reimportar textura",theme.color.text,theme.type.caption,UiAlign::Center);
+    builder.router.addRegion(button,widgetId(EditorWidget::AssetReimport));
   }
   if(!files.error().empty()) {
     builder.list.pushClip(content);builder.label(content,files.error().c_str(),theme.color.textDim,theme.type.caption);builder.list.popClip();return;
@@ -914,7 +968,7 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
     builder.label(takeTop(content,22),"A oclusão usa o conjunto de UV e a amostragem do mapa metal/rugosidade",theme.color.textMuted,theme.type.caption);
   const u32 rows=static_cast<u32>(state.projectTextureNames.size());
   if(!rows) {
-    builder.label(takeTop(content,40),"Nenhuma textura no projeto: em Arquivos, selecione um GLB e toque em Texturas.",
+    builder.label(takeTop(content,40),"Nenhuma textura no projeto. Use Importar textura em Arquivos.",
                   theme.color.textMuted,theme.type.caption);
     return;
   }
@@ -961,7 +1015,7 @@ void buildTextureViewer(ScreenBuilder &builder,UiRect content) {
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
   builder.router.addRegion(back,widgetId(EditorWidget::TextureViewerClose));
   builder.label(title,state.textureViewerTitle,theme.color.text,theme.type.caption);
-  auto controls=takeBottom(content,std::min(content.height*.62f,270.0f));
+  auto controls=takeBottom(content,std::min(content.height*.8f,346.0f));
   auto image=deflate(content,UiInsets::all(4));
   builder.list.addRect(image,theme.color.raised,theme.radius.control);
   if(!state.textureViewerImage.isEmpty() && !image.isEmpty()) {
@@ -1005,25 +1059,45 @@ void buildTextureViewer(ScreenBuilder &builder,UiRect content) {
   builder.list.addRect(backgroundBox,theme.color.raised,theme.radius.control);
   builder.label(backgroundBox,"Fundo "+state.textureViewerBackgroundLabel,rgba?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
   if(rgba) builder.router.addRegion(backgroundBox,widgetId(EditorWidget::TextureViewerBackground));
-  // R4: perfil da textura (vale para todos os usos) e o que está na GPU.
-  if(controls.height>=36*3) {
+  // O perfil tem duas páginas curtas para manter Aplicar/Reverter alcançáveis
+  // também no painel estreito do aparelho.
+  if(controls.height>=36+26+30*2) {
     const auto profileButton=[&](UiRect box,const std::string &text,u32 widget) {
       box=deflate(box,UiInsets::all(2));
       builder.list.addRect(box,theme.color.raised,theme.radius.control);
       builder.label(box,text,theme.color.text,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(box,widget);
     };
-    for(u32 line=0;line<3;++line) {
-      auto row=takeTop(controls,36);
-      const u32 first=line*2;
+    for(u32 line=0;line<2;++line) {
+      auto row=takeTop(controls,30);
+      const u32 first=std::min(state.textureProfilePage,1u)*4+line*2;
       profileButton(takeLeft(row,row.width*.5f),state.textureProfileLabels[first],widgetId(EditorWidget::TextureProfileInterpretation)+first);
-      if(first+1<5) profileButton(row,state.textureProfileLabels[first+1],widgetId(EditorWidget::TextureProfileInterpretation)+first+1);
-      else builder.label(deflate(row,UiInsets::symmetric(6,2)),state.textureResidencyLabel,theme.color.textMuted,theme.type.caption);
+      profileButton(row,state.textureProfileLabels[first+1],widgetId(EditorWidget::TextureProfileInterpretation)+first+1);
+    }
+    auto pager=takeTop(controls,26);
+    const auto previous=takeLeft(pager,65),next=takeRight(pager,65);
+    builder.label(previous,"‹ Perfil",state.textureProfilePage?theme.color.text:theme.color.textMuted,theme.type.caption);
+    builder.label(next,"Perfil ›",state.textureProfilePage?theme.color.textMuted:theme.color.text,theme.type.caption,UiAlign::End);
+    builder.label(pager,std::to_string(std::min(state.textureProfilePage,1u)+1)+" / 2",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    if(state.textureProfilePage) builder.router.addRegion(previous,widgetId(EditorWidget::TextureProfilePrevious));
+    else builder.router.addRegion(next,widgetId(EditorWidget::TextureProfileNext));
+  }
+  if(controls.height>=36) {
+    auto row=takeTop(controls,36);
+    const auto revert=deflate(takeLeft(row,row.width*.42f),UiInsets::all(2));
+    const auto apply=deflate(row,UiInsets::all(2));
+    builder.list.addRect(revert,theme.color.raised,theme.radius.control);
+    builder.label(revert,"Reverter",state.textureProfileDirty?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    builder.list.addRect(apply,state.textureProfileDirty?theme.color.accent:theme.color.raised,theme.radius.control);
+    builder.label(apply,"Aplicar e republicar",state.textureProfileDirty?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    if(state.textureProfileDirty) {
+      builder.router.addRegion(revert,widgetId(EditorWidget::TextureProfileRevert));
+      builder.router.addRegion(apply,widgetId(EditorWidget::TextureProfileApply));
     }
   }
   if(controls.height<20) return;
   builder.list.pushClip(controls);
-  builder.label(controls,state.textureViewerInfo,theme.color.textMuted,theme.type.caption);
+  builder.label(controls,state.textureResidencyLabel+" · "+state.textureViewerInfo,theme.color.textMuted,theme.type.caption);
   builder.list.popClip();
 }
 
@@ -1071,9 +1145,13 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     for(const auto &p:properties) if(p.presentation.isVisible(*component)&&!p.presentation.group.empty() &&
         std::find(groups.begin(),groups.end(),p.presentation.group)==groups.end()) groups.push_back(p.presentation.group);
   };
-  collectGroups(entry.type->numbers);collectGroups(entry.type->booleans);collectGroups(entry.type->enums);
-  collectGroups(entry.type->references);collectGroups(entry.type->resourceBindings);
-  std::string_view group=builder.state.componentGroup;
+  // Malha já navega entre Geometria e o editor de Material por slot acima.
+  // As abas refletidas repetiriam esses nomes sem acrescentar controles.
+  if(!mesh) {
+    collectGroups(entry.type->numbers);collectGroups(entry.type->booleans);collectGroups(entry.type->enums);
+    collectGroups(entry.type->references);collectGroups(entry.type->resourceBindings);
+  }
+  std::string_view group=mesh?std::string_view{"Geometria"}:std::string_view{builder.state.componentGroup};
   if(!groups.empty() && std::find(groups.begin(),groups.end(),group)==groups.end()) group=groups.front();
   if(groups.size()>1) {
     // Componentes extensos (Ambiente, materiais futuros) não espremem seis
@@ -1118,7 +1196,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
   for(u32 i=0;i<entry.type->resourceBindings.size();++i) {
     const auto &binding=entry.type->resourceBindings[i];
     if(mesh||(binding.kind!=resources::AssetType::Mesh&&
-             binding.kind!=resources::AssetType::EnvironmentProfile)||!show(binding.presentation)) continue;
+             binding.kind!=resources::AssetType::EnvironmentProfile&&
+             binding.kind!=resources::AssetType::EnvironmentMap)||!show(binding.presentation)) continue;
     for(u32 slot=0;slot<binding.slotCount(*component);++slot) fields.push_back({6,i,slot});
   }
   if(mesh && !builder.state.meshTab) {
@@ -1271,6 +1350,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       std::string value;
       if(!asset.valid()) {
         value=binding.kind==resources::AssetType::EnvironmentProfile?"Sem perfil":
+              binding.kind==resources::AssetType::EnvironmentMap?"Ambiente padrão":
               binding.inheritable?"Herdar malha visual":"Sem recurso";
       } else value=asset.text().substr(0,8);
       if(const auto resolved=builder.state.resources?builder.state.resources->assetSlot(asset):0) {
@@ -1322,27 +1402,33 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
   builder.label(title,resourceBinding?resourceBinding->name:"Geometria",theme.color.text,theme.type.body);
   auto search=takeTop(content,36);builder.list.addRect(search,theme.color.raised,theme.radius.control);
   builder.label(search,state.meshQuery.empty()?
-      (resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Buscar perfil":"Buscar malha"):
+      (resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Buscar perfil":
+       resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentMap?"Buscar mapa HDRI":"Buscar malha"):
       state.meshQuery.c_str(),theme.color.textDim,theme.type.caption);
   builder.router.addRegion(search,widgetId(EditorWidget::MeshSearch));
   auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
-  if(resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentProfile) {
-    const auto action=deflate(takeTop(content,40),UiInsets::all(2));
-    builder.list.addRect(action,theme.color.accent,theme.radius.control);
-    builder.label(action,selectedResource.valid()?"Atualizar perfil com estes valores":"Criar perfil com estes valores",
-                  theme.color.accentInk,theme.type.caption,UiAlign::Center);
-    builder.router.addRegion(action,widgetId(selectedResource.valid()?EditorWidget::EnvironmentProfileUpdate:
-                                               EditorWidget::EnvironmentProfileCreate));
+  if(resourceBinding&&(resourceBinding->kind==resources::AssetType::EnvironmentProfile||
+                       resourceBinding->kind==resources::AssetType::EnvironmentMap)) {
+    if(resourceBinding->kind==resources::AssetType::EnvironmentProfile) {
+      const auto action=deflate(takeTop(content,40),UiInsets::all(2));
+      builder.list.addRect(action,theme.color.accent,theme.radius.control);
+      builder.label(action,selectedResource.valid()?"Atualizar perfil com estes valores":"Criar perfil com estes valores",
+                    theme.color.accentInk,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(action,widgetId(selectedResource.valid()?EditorWidget::EnvironmentProfileUpdate:
+                                                 EditorWidget::EnvironmentProfileCreate));
+    }
     std::vector<u32> matches;const auto query=editorSearchKey(state.meshQuery);
     if(state.assetRegistry) for(u32 i=0;i<state.assetRegistry->records().size();++i) {
       const auto &record=state.assetRegistry->records()[i];
-      if(record.type!=resources::AssetType::EnvironmentProfile) continue;
+      if(record.type!=resourceBinding->kind) continue;
       if(query.empty()||editorSearchKey(record.path).find(query)!=std::string::npos) matches.push_back(i);
     }
     const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-34)/50));
     const u32 pages=std::max(1u,(static_cast<u32>(matches.size())+perPage-1)/perPage);
     const u32 page=std::min(state.meshPage,pages-1);
-    auto clear=takeTop(content,34);builder.label(clear,"Sem perfil · conservar cópia local",theme.color.textDim,theme.type.caption);
+    auto clear=takeTop(content,34);builder.label(clear,
+        resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Sem perfil · conservar cópia local":"Sem mapa HDRI",
+        theme.color.textDim,theme.type.caption);
     builder.router.addRegion(clear,widgetId(EditorWidget::MeshClear));
     for(u32 row=page*perPage;row<matches.size()&&row<(page+1)*perPage;++row) {
       const auto index=matches[row];const auto &record=state.assetRegistry->records()[index];
@@ -1355,7 +1441,8 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
       builder.label(slot,("GUID "+record.guid.text().substr(0,8)+" · compartilhado").c_str(),theme.color.textMuted,theme.type.caption);
       builder.router.addRegion(hit,widgetId(EditorWidget::MeshChoiceBase)+index);
     }
-    if(matches.empty()) builder.label(content,"Nenhum perfil no projeto",theme.color.textMuted,theme.type.caption);
+    if(matches.empty()) builder.label(content,resourceBinding->kind==resources::AssetType::EnvironmentProfile?
+        "Nenhum perfil no projeto":"Nenhum mapa HDRI no projeto",theme.color.textMuted,theme.type.caption);
     builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
     builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
     if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
@@ -2017,10 +2104,114 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
   auto header=takeTop(content,kPanelHeaderHeight);
   list.addImage(centred(takeLeft(header,26.0f),18.0f,18.0f),static_cast<UiImageId>(UiIcon::AssetsImport),theme.color.text);
   const float half=header.height*.5f;
-  builder.label({header.x,header.y,header.width,half},"Importar recurso",theme.color.text,theme.type.cardName);
+  builder.label({header.x,header.y,header.width,half},state.importTexture?"Importar textura":"Importar recurso",theme.color.text,theme.type.cardName);
   builder.label({header.x,header.y+half,header.width,half},state.importPath.empty()?"Escolhendo arquivo…":state.importPath,
                 theme.color.textDim,theme.type.caption); // caption: o caminho mantém a caixa do nome do arquivo
   builder.label(takeTop(content,24),state.importStatus,theme.color.accent,theme.type.caption);
+
+  if(state.importTexture) {
+    auto actions=takeBottom(content,40);
+    const bool recipeReady=resources::sameTextureProfile(state.textureImportSettings,state.textureImportPreparedSettings);
+    const auto cancel=deflate(takeLeft(actions,state.importReady?actions.width*.36f:actions.width),UiInsets::all(2));
+    list.addRect(cancel,theme.color.raised,theme.radius.control);
+    builder.label(cancel,state.importError?"Fechar":"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(cancel,widgetId(EditorWidget::ImportCancel));
+    if(state.importReady) {
+      const auto accept=deflate(actions,UiInsets::all(2));
+      list.addRect(accept,recipeReady?theme.color.accent:theme.color.raised,theme.radius.control);
+      builder.label(accept,"Importar textura",recipeReady?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      if(recipeReady) router.addRegion(accept,widgetId(EditorWidget::ImportAccept));
+    }
+    auto preview=takeTop(content,std::clamp(content.height*.28f,64.0f,150.0f));
+    list.addRect(preview,theme.color.raised,theme.radius.control);
+    if(!state.textureImportImage.isEmpty()) {
+      const auto &texels=state.textureImportImage;
+      const float fit=std::min(preview.width/texels.width,preview.height/texels.height);
+      const float w=texels.width*fit,h=texels.height*fit;
+      list.addPreviewImage({preview.x+(preview.width-w)*.5f,preview.y+(preview.height-h)*.5f,w,h},texels);
+    } else builder.label(preview,"Prévia indisponível",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    takeTop(content,5);
+    const auto &profile=state.textureImportSettings;
+    static constexpr const char *types[]{"Pelo uso","Cor (sRGB)","Dados (linear)","Mapa normal"};
+    const std::array<std::pair<std::string,EditorWidget>,8> settings{{
+      {std::string("Interpretação · ")+types[std::min<u32>(profile.interpretation,3u)],EditorWidget::TextureProfileInterpretation},
+      {profile.maximumDimension?"Tamanho máx. · "+std::to_string(profile.maximumDimension)+" px":std::string("Tamanho máx. · projeto"),EditorWidget::TextureProfileDimension},
+      {profile.mipmaps?"Mipmaps · gerar":"Mipmaps · desligados",EditorWidget::TextureProfileMipmaps},
+      {profile.dilateEdges?"Bordas alfa · dilatar":"Bordas alfa · preservar",EditorWidget::TextureProfileEdges},
+      {profile.anisotropy?"Anisotropia · permitir":"Anisotropia · desligar",EditorWidget::TextureProfileAnisotropy},
+      {profile.invertNormalGreen?"Normal Y · inverter (DX)":"Normal Y · manter (GL)",EditorWidget::TextureProfileNormalGreen},
+      {profile.preserveAlphaCoverage?"Cobertura alfa · preservar":"Cobertura alfa · desligada",EditorWidget::TextureProfileCoverage},
+      {"Corte cobertura · "+std::to_string(static_cast<u32>(std::lround(profile.alphaCoverageCutoff*100.0f)))+"%",EditorWidget::TextureProfileCoverageCutoff}}};
+    auto pager=takeBottom(content,26);
+    const u32 settingsPage=std::min(state.importPage,2u);
+    const u32 firstSetting=settingsPage*3,lastSetting=std::min<u32>(firstSetting+3,settings.size());
+    for(u32 index=firstSetting;index<lastSetting;++index) {
+      const auto &[label,widget]=settings[index];
+      auto row=deflate(takeTop(content,30),UiInsets::all(2));
+      list.addRect(row,theme.color.raised,theme.radius.control);
+      builder.label(deflate(row,UiInsets::symmetric(7,0)),label,
+                    widget==EditorWidget::TextureProfileNormalGreen&&profile.interpretation!=resources::TextureInterpretationNormal?
+                      theme.color.textMuted:theme.color.text,theme.type.caption);
+      if(widget!=EditorWidget::TextureProfileNormalGreen||profile.interpretation==resources::TextureInterpretationNormal)
+        router.addRegion(row,widgetId(widget));
+    }
+    const auto previous=takeLeft(pager,56),next=takeRight(pager,56);
+    builder.label(previous,"‹ Opções",settingsPage?theme.color.text:theme.color.textMuted,theme.type.caption);
+    builder.label(next,"Opções ›",settingsPage<2?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::End);
+    builder.label(pager,std::to_string(settingsPage+1)+" / 3",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    if(settingsPage) router.addRegion(previous,widgetId(EditorWidget::ImportPreviousPage));
+    if(settingsPage<2) router.addRegion(next,widgetId(EditorWidget::ImportNextPage));
+    takeTop(content,4);
+    const auto alpha=state.textureImportSourceHasAlpha?"alfa":"opaca";
+    builder.label(takeTop(content,22),std::to_string(state.textureImportSourceWidth)+"×"+
+        std::to_string(state.textureImportSourceHeight)+" · "+alpha+" · "+
+        std::to_string(state.textureImportDroppedMips)+" mip(s) descartado(s)",theme.color.textDim,theme.type.caption);
+    builder.label(takeTop(content,20),"Wrap e filtro pertencem a cada uso no Material.",theme.color.textMuted,theme.type.caption);
+    for(const auto &line:wrapText(list,state.importSummary,content.width,theme.type.caption)) {
+      if(content.height<20) break;
+      builder.label(takeTop(content,20),line,theme.color.textMuted,theme.type.caption);
+    }
+    return;
+  }
+
+  if(state.importEnvironment) {
+    auto actions=takeBottom(content,40);
+    const auto cancel=deflate(takeLeft(actions,state.importReady?actions.width*.36f:actions.width),UiInsets::all(2));
+    list.addRect(cancel,theme.color.raised,theme.radius.control);
+    builder.label(cancel,state.importError?"Fechar":"Cancelar",theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(cancel,widgetId(EditorWidget::ImportCancel));
+    if(state.importReady) {
+      const auto accept=deflate(actions,UiInsets::all(2));
+      list.addRect(accept,theme.color.accent,theme.radius.control);
+      builder.label(accept,"Importar HDRI",theme.color.accentInk,theme.type.caption,UiAlign::Center);
+      router.addRegion(accept,widgetId(EditorWidget::ImportAccept));
+    }
+    list.addRect(takeTop(content,3),theme.color.accent,0);
+    takeTop(content,5);
+    const float settingHeight=std::clamp((content.height-44.0f)/5.0f,25.0f,32.0f);
+    const auto setting=[&](const char *label,u32 value,EditorWidget down,EditorWidget up) {
+      auto row=takeTop(content,settingHeight);builder.label(takeLeft(row,row.width*.52f),label,theme.color.textDim,theme.type.caption);
+      const auto less=takeLeft(row,30),more=takeRight(row,30);
+      builder.label(less,"−",theme.color.text,theme.type.body,UiAlign::Center);
+      builder.label(more,"+",theme.color.text,theme.type.body,UiAlign::Center);
+      builder.label(row,std::to_string(value).c_str(),theme.color.text,theme.type.numeric,UiAlign::Center);
+      router.addRegion(less,widgetId(down));router.addRegion(more,widgetId(up));
+    };
+    setting("Panorama",state.environmentImportSettings.panoramaWidth,
+            EditorWidget::EnvironmentPanoramaDown,EditorWidget::EnvironmentPanoramaUp);
+    setting("Reflexão",state.environmentImportSettings.specularSize,
+            EditorWidget::EnvironmentSpecularDown,EditorWidget::EnvironmentSpecularUp);
+    setting("BRDF LUT",state.environmentImportSettings.brdfSize,
+            EditorWidget::EnvironmentBrdfDown,EditorWidget::EnvironmentBrdfUp);
+    setting("Amostras GGX",state.environmentImportSettings.specularSamples,
+            EditorWidget::EnvironmentSpecularSamplesDown,EditorWidget::EnvironmentSpecularSamplesUp);
+    setting("Amostras BRDF",state.environmentImportSettings.brdfSamples,
+            EditorWidget::EnvironmentBrdfSamplesDown,EditorWidget::EnvironmentBrdfSamplesUp);
+    takeTop(content,5);
+    for(const auto &line:wrapText(list,state.importSummary,content.width,theme.type.caption))
+      builder.label(takeTop(content,22),line,theme.color.textDim,theme.type.caption);
+    return;
+  }
 
   const struct {const char *label;Tab tab;EditorWidget widget;} tabs[]{
       {"Resumo",Tab::Summary,EditorWidget::ImportTabSummary},{"Estrutura",Tab::Structure,EditorWidget::ImportTabStructure},
@@ -2372,6 +2563,10 @@ void buildTextureManager(ScreenBuilder &builder,UiRect content) {
   auto title=takeTop(content,36),back=takeLeft(title,36);
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
   builder.router.addRegion(back,widgetId(EditorWidget::TextureManagerClose));
+  auto import=takeRight(title,82);
+  builder.list.addRect(deflate(import,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+  builder.label(import,"+ Importar",theme.color.text,theme.type.caption,UiAlign::Center);
+  builder.router.addRegion(import,widgetId(EditorWidget::ImportTexture));
   builder.label(title,(state.textureFolder.empty()?std::string("Texturas do projeto"):state.textureFolder)+" · "+
                 std::to_string(state.textureManagerRows.size()),theme.color.text,theme.type.caption);
   auto search=deflate(takeTop(content,36),UiInsets::all(2));
@@ -2430,8 +2625,8 @@ void buildTextureManager(ScreenBuilder &builder,UiRect content) {
     builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
     builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
     builder.label(footer,std::to_string(page+1)+" / "+std::to_string(pages),theme.color.textMuted,theme.type.caption,UiAlign::Center);
-    builder.router.addRegion(previous,widgetId(EditorWidget::TextureManagerPrevious));
-    builder.router.addRegion(next,widgetId(EditorWidget::TextureManagerNext));
+    if(page>0) builder.router.addRegion(previous,widgetId(EditorWidget::TextureManagerPrevious));
+    if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::TextureManagerNext));
   }
 }
 } // namespace
@@ -3103,10 +3298,10 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
   auto &list = builder.list;
   auto &router = builder.router;
   const auto &draft = state.qualityDraft;
-  const float width = std::min(340.0f, std::max(240.0f, viewport.width - 32.0f));
-  const float height = std::min(viewport.height - 64.0f, 386.0f);
-  const UiRect panel{viewport.x + std::max(8.0f, std::min(276.0f, viewport.width - width - 8.0f)),
-                     viewport.y + 56.0f, width, height};
+  const float width = std::min(520.0f, std::max(280.0f, viewport.width - 24.0f));
+  const float height = std::min(viewport.height - 16.0f, 610.0f);
+  const UiRect panel{viewport.x + std::max(8.0f, std::min(16.0f, viewport.width - width - 8.0f)),
+                     viewport.y + 8.0f, width, height};
   list.addRect(panel, theme.color.surface, 6);
   router.addBlocker(panel);
   auto content = deflate(panel, UiInsets::all(10));
@@ -3114,13 +3309,48 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
   const auto close = takeRight(header, 28);
   builder.label(close, "X", theme.color.textDim, theme.type.caption, UiAlign::Center);
   router.addRegion(close, widgetId(EditorWidget::QualityClose));
-  builder.label(header, "Qualidade", theme.color.text, theme.type.cardName);
+  builder.label(header, "Gráficos do projeto", theme.color.text, theme.type.cardName);
+  auto tabs=takeTop(content,34);
+  const std::array<std::tuple<const char *,EditorWidget>,4> tabItems{{
+    {"Geral",EditorWidget::QualityTabGeneral},{"Sombras",EditorWidget::QualityTabShadows},
+    {"Luz e pós",EditorWidget::QualityTabLighting},{"Desempenho",EditorWidget::QualityTabPerformance}}};
+  for(u32 index=0;index<tabItems.size();++index) {
+    auto cell=deflate(takeLeft(tabs,tabs.width/static_cast<float>(tabItems.size()-index)),UiInsets::all(2));
+    list.addRect(cell,index==state.qualityTab?theme.color.accent:theme.color.raised,theme.radius.control);
+    builder.label(cell,std::get<0>(tabItems[index]),index==state.qualityTab?theme.color.accentInk:theme.color.text,
+                  theme.type.caption,UiAlign::Center);
+    router.addRegion(cell,widgetId(std::get<1>(tabItems[index])));
+  }
+  if(state.qualityTab==2) {
+    builder.label(takeTop(content,28),"Padrões globais; volumes de Ambiente podem sobrescrever.",
+                  theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  }
   // Rodapé primeiro: Aplicar e a linha do que o renderer faz agora nunca podem
   // sair do painel. Numa tela baixa as linhas é que encolhem.
   const auto apply = deflate(takeBottom(content, 40), UiInsets::all(2));
   const auto stats = takeBottom(content, 20);
-  const float rowHeight = std::clamp(content.height / 6.0f, 28.0f, 38.0f);
+  const u32 rowCount=state.qualityTab==2?9u:state.qualityTab==0?7u:state.qualityTab==1?8u:6u;
+  const u32 rowsPerPage=std::max(1u,static_cast<u32>(std::floor(content.height/25.0f)));
+  const u32 pageCount=(rowCount+rowsPerPage-1u)/rowsPerPage;
+  const u32 page=std::min(state.qualityPage,pageCount-1u);
+  const u32 firstRow=page*rowsPerPage;
+  const u32 rowsOnPage=std::min(rowsPerPage,rowCount-firstRow);
+  const float rowHeight = std::clamp(content.height / static_cast<float>(rowsOnPage), 25.0f, 38.0f);
+  if(pageCount>1) {
+    auto pager=takeRight(header,std::min(116.0f,header.width*.48f));
+    list.addRect(pager,theme.color.surface,theme.radius.control);
+    const auto previous=takeLeft(pager,30.0f),next=takeRight(pager,30.0f);
+    builder.label(previous,"‹",page?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
+    builder.label(next,"›",page+1u<pageCount?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
+    builder.label(pager,std::to_string(page+1u)+" / "+std::to_string(pageCount),theme.color.textDim,
+                  theme.type.caption,UiAlign::Center);
+    if(page) router.addRegion(previous,widgetId(EditorWidget::QualityPagePrevious));
+    if(page+1u<pageCount) router.addRegion(next,widgetId(EditorWidget::QualityPageNext));
+  }
+  u32 rowCursor=0;
   const auto row = [&](const char *label, const std::string &value, EditorWidget widget) {
+    const u32 index=rowCursor++;
+    if(index<firstRow||index>=firstRow+rowsOnPage) return;
     auto line = takeTop(content, rowHeight);
     builder.label(takeLeft(line, line.width * .46f), label, theme.color.textDim, theme.type.caption);
     const auto cell = deflate(line, UiInsets::all(2));
@@ -3129,6 +3359,8 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     router.addRegion(cell, widgetId(widget));
   };
   const auto stepper = [&](const char *label, const std::string &value, EditorWidget down, EditorWidget up) {
+    const u32 index=rowCursor++;
+    if(index<firstRow||index>=firstRow+rowsOnPage) return;
     auto line = takeTop(content, rowHeight);
     builder.label(takeLeft(line, line.width * .46f), label, theme.color.textDim, theme.type.caption);
     const auto minus = deflate(takeLeft(line, 36), UiInsets::all(2));
@@ -3140,25 +3372,47 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     }
     builder.label(line, value, theme.color.text, theme.type.caption, UiAlign::Center);
   };
-  std::string level = renderer::qualityLevelLabel(draft.preset);
-  if (draft.preset == renderer::QualityPreset::Auto && !state.qualityDetected.empty())
-    level += " (" + state.qualityDetected + ")";
-  row("Nível", level, EditorWidget::QualityLevel);
-  stepper("Escala de renderização",
-          draft.resolutionScale > 0 ? std::to_string(static_cast<int>(draft.resolutionScale * 100.0f + .5f)) + "%"
-                                    : std::string("do nível"),
-          EditorWidget::QualityScaleDown, EditorWidget::QualityScaleUp);
-  row("Escala dinâmica",
-      draft.dynamicResolution == renderer::FeatureOverride::Enabled ? "Ligada" :
-      draft.dynamicResolution == renderer::FeatureOverride::Disabled ? "Desligada" : "Padrão (desligada no editor)",
-      EditorWidget::QualityDynamic);
-  row("Anti-aliasing", renderer::antiAliasingLabel(draft.antiAliasing), EditorWidget::QualityAntiAliasing);
-  stepper("Nitidez",
-          draft.postSharpen >= 0 ? std::to_string(static_cast<int>(draft.postSharpen * 100.0f + .5f)) + "%"
-                                 : std::string("do nível"),
-          EditorWidget::QualitySharpenDown, EditorWidget::QualitySharpenUp);
-  row("Taxa alvo", draft.maximumRenderHz ? std::to_string(draft.maximumRenderHz) + " Hz" : std::string("Padrão (60 Hz no editor)"),
-      EditorWidget::QualityRate);
+  const auto percent=[](float value,float inherited) {return value==inherited?std::string("Do nível"):
+    std::to_string(static_cast<int>(value*100.0f+.5f))+"%";};
+  const auto measure=[](float value,float inherited,const char *unit,int digits=1) {return value==inherited?std::string("Do nível"):
+    decimalText(value,digits)+unit;};
+  if(state.qualityTab==0) {
+    std::string level=renderer::qualityLevelLabel(draft.preset);
+    if(draft.preset==renderer::QualityPreset::Auto&&!state.qualityDetected.empty()) level+=" ("+state.qualityDetected+")";
+    row("Nível",level,EditorWidget::QualityLevel);
+    stepper("Escala de renderização",percent(draft.resolutionScale,0.0f),EditorWidget::QualityScaleDown,EditorWidget::QualityScaleUp);
+    row("Ampliação",renderer::upscalingFilterLabel(draft.upscalingFilter),EditorWidget::QualityUpscaling);
+    row("Texturas / anisotropia",renderer::textureQualityLabel(draft.textures),EditorWidget::QualityTextures);
+    row("Escala dinâmica",renderer::featureOverrideLabel(draft.dynamicResolution),EditorWidget::QualityDynamic);
+    row("Anti-aliasing",renderer::antiAliasingLabel(draft.antiAliasing),EditorWidget::QualityAntiAliasing);
+    row("Taxa alvo",draft.maximumRenderHz?std::to_string(draft.maximumRenderHz)+" Hz":std::string("Do nível"),EditorWidget::QualityRate);
+  } else if(state.qualityTab==1) {
+    row("Sombras",renderer::shadowQualityLabel(draft.shadows),EditorWidget::QualityShadows);
+    row("Cascatas",draft.shadowCascadeCount?std::to_string(draft.shadowCascadeCount):std::string("Do nível"),EditorWidget::QualityShadowCascades);
+    row("Resolução por cascata",draft.shadowCascadeResolution?std::to_string(draft.shadowCascadeResolution)+" px":std::string("Do nível"),EditorWidget::QualityShadowResolution);
+    stepper("Distância máxima",measure(draft.shadowMaximumDistance,0.0f," m",0),EditorWidget::QualityShadowDistanceDown,EditorWidget::QualityShadowDistanceUp);
+    stepper("Bias constante",measure(draft.shadowDepthBiasConstant,-1.0f,"",1),EditorWidget::QualityShadowBiasDown,EditorWidget::QualityShadowBiasUp);
+    stepper("Bias de inclinação",measure(draft.shadowDepthBiasSlope,-1.0f,"",1),EditorWidget::QualityShadowSlopeDown,EditorWidget::QualityShadowSlopeUp);
+    stepper("Offset normal",measure(draft.shadowNormalOffsetTexels,-1.0f," texel",1),EditorWidget::QualityShadowNormalDown,EditorWidget::QualityShadowNormalUp);
+    row("Cache estático",renderer::featureOverrideLabel(draft.staticShadowCache),EditorWidget::QualityShadowCache);
+  } else if(state.qualityTab==2) {
+    row("Ambiente",renderer::ambientQualityLabel(draft.ambient),EditorWidget::QualityAmbient);
+    row("BRDF especular",renderer::featureOverrideLabel(draft.environmentSplitSumBrdf),EditorWidget::QualityEnvironmentBrdf);
+    row("Pós-processamento",renderer::postQualityLabel(draft.post),EditorWidget::QualityPost);
+    stepper("Limiar do bloom",measure(draft.bloomThreshold,-1.0f,"",1),EditorWidget::QualityBloomThresholdDown,EditorWidget::QualityBloomThresholdUp);
+    stepper("Intensidade do bloom",percent(draft.bloomIntensity,-1.0f),EditorWidget::QualityBloomIntensityDown,EditorWidget::QualityBloomIntensityUp);
+    row("Anti-aliasing",renderer::antiAliasingLabel(draft.antiAliasing),EditorWidget::QualityAntiAliasing);
+    stepper("Peso temporal",percent(draft.temporalHistoryWeight,-1.0f),EditorWidget::QualityTemporalWeightDown,EditorWidget::QualityTemporalWeightUp);
+    stepper("Nitidez",percent(draft.postSharpen,-1.0f),EditorWidget::QualitySharpenDown,EditorWidget::QualitySharpenUp);
+    row("Vinheta",renderer::featureOverrideLabel(draft.postVignette),EditorWidget::QualityVignette);
+  } else {
+    row("Escala dinâmica",renderer::featureOverrideLabel(draft.dynamicResolution),EditorWidget::QualityDynamic);
+    stepper("Escala dinâmica mínima",percent(draft.dynamicResolutionMinimumScale,0.0f),EditorWidget::QualityDynamicMinimumDown,EditorWidget::QualityDynamicMinimumUp);
+    row("Seleção de LOD",renderer::featureOverrideLabel(draft.lodSelection),EditorWidget::QualityLodSelection);
+    stepper("Erro de LOD",measure(draft.lodPixelErrorBudget,0.0f," px",2),EditorWidget::QualityLodErrorDown,EditorWidget::QualityLodErrorUp);
+    stepper("Histerese de LOD",percent(draft.lodHysteresisBandRatio,0.0f),EditorWidget::QualityLodHysteresisDown,EditorWidget::QualityLodHysteresisUp);
+    row("Variantes de material",renderer::featureOverrideLabel(draft.materialShaderVariants),EditorWidget::QualityMaterialVariants);
+  }
   // Aplicar reconstrói o renderer: é explícito, como o Apply do Import
   // Settings, porque troca alvos de renderização e leva um instante.
   list.addRect(apply, state.qualityDirty ? theme.color.accent : theme.color.raised, theme.radius.control);
@@ -3430,12 +3684,6 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
                      UiIcon::SceneLayers, widgetId(EditorWidget::ViewsOpen), state.viewsPanel);
   if(state.viewsPanel && state.document) buildSceneViewsPanel(builder, layout.viewport);
   if(state.templatePanel) buildSceneTemplatePanel(builder, layout.viewport);
-  // Qualidade: o que a Unity põe em Project Settings > Quality e no URP Asset,
-  // e a Godot em Rendering > Scaling 3D — aqui ao alcance do viewport, porque é
-  // olhando a cena que se decide a qualidade dela.
-  builder.iconButton({layout.viewport.x + 276.0f, layout.viewport.y + 8.0f, 40.0f, 40.0f},
-                     UiIcon::UiSliders, widgetId(EditorWidget::QualityOpen), state.qualityPanel);
-  if(state.qualityPanel) buildQualityPanel(builder, layout.viewport);
   if(compact) {
     const UiRect button{layout.viewport.x+104,layout.viewport.y+56,100,40};
     list.addRect(button,theme.color.raised,theme.radius.control);
@@ -3519,7 +3767,9 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       const UiRect image{panel.x+4,panel.y+30,panel.width-8,height-4};
       if(state.cameraPreviewReady) list.addImage(image,kUiCameraPreviewImage,0xffffffff,6);
       else {
-        builder.label(image,state.cameraPreviewFailed?"Falha · tocar para tentar":"Preparando prévia",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        builder.label(image,state.cameraPreviewFailed?
+            (state.cameraPreviewDiagnostic.empty()?"Falha · tocar para tentar":state.cameraPreviewDiagnostic):
+            "Preparando prévia",theme.color.textMuted,theme.type.caption,UiAlign::Center);
         if(state.cameraPreviewFailed) router.addRegion(image,widgetId(EditorWidget::CameraPreviewRetry));
       }
       const float controlWidth=(panel.width-20)/2;
@@ -3575,6 +3825,11 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     builder.label(footer,"Proxima",theme.color.text,theme.type.body,UiAlign::Center);
     router.addRegion(previous,widgetId(EditorWidget::AssetsPrevious));router.addRegion(footer,widgetId(EditorWidget::AssetsNext));
   }
+  // Painel global de gráficos fica acima de todas as ferramentas do viewport.
+  // O roteador resolve da última região para a primeira, então a mesma ordem
+  // também impede Lighting/Effects e a navegação inferior de roubarem toques.
+  // Menus contextuais e modais abaixo continuam acima dele deliberadamente.
+  if(state.qualityPanel) buildQualityPanel(builder,layout.viewport);
   if (state.entityMenu) {
     const UiRect menu{layout.viewport.x, layout.viewport.y+56.0f, std::min(180.0f,layout.viewport.width), std::min(280.0f,layout.viewport.height-56.0f)};
     builder.list.addRect(menu, theme.color.raised, theme.radius.control);

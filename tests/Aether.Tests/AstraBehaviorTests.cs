@@ -25,7 +25,12 @@ public static class AstraBehaviorTests
     {
         public readonly List<string> Events = [];
         public Vector3 Force, Impulse, Torque, AngularImpulse;
+        public int SlotWrites;
+        public readonly List<string> SlotPropertyIds = [];
         public bool Exists(ulong id) => id is 1 or 2;
+        public uint WorldId => 7;
+        public uint GenerationOf(ulong id) => Exists(id) ? 1u : 0u;
+        public WorldStatus LastStatus => WorldStatus.Ok;
         public TransformValue GetTransform(ulong id) => new(Vector3.Zero, Quaternion.Identity, Vector3.One);
         public bool SetTransform(ulong id, TransformValue value) => Exists(id);
         public bool SetBodyVelocity(ulong id, Vector3 velocity) => Exists(id);
@@ -36,6 +41,10 @@ public static class AstraBehaviorTests
         public bool AddAngularImpulse(ulong id, Vector3 value) { AngularImpulse += value; return Exists(id); }
         public Vector3 GetBodyVelocity(ulong id) => new(2, 0, 0);
         public void Log(ulong id, string message) => Events.Add(id + ":" + message);
+        public ulong FindComponent(ulong objectId, string typeId, uint ordinal) =>
+            Exists(objectId) && typeId == ComponentIds.MeshRenderer && ordinal == 0 ? 17ul : 0;
+        public bool SetSlotProperty(ulong objectId, ulong instanceId, string propertyId, uint slot, uint kind, ulong bits)
+        { ++SlotWrites; SlotPropertyIds.Add(propertyId); return Exists(objectId) && instanceId == 17; }
     }
     private const string Source = """
         using Astra;
@@ -130,5 +139,52 @@ public static class AstraBehaviorTests
         Assert.True(blocks.Length >= 2, "documento tem exemplos");
         for (var i = 0; i < blocks.Length; ++i) File.WriteAllText(Path.Combine(project.Root, "Example" + i + ".cs"), blocks[i]);
         Assert.Equal(blocks.Length, project.Compile().Types.Length, "todo exemplo documentado emite um schema anexável");
+    }
+
+    [Test]
+    public static void MaterialSlotAndAuthoredTextureReference_CompileThroughTheProjectCompiler()
+    {
+        const string source = """
+            using Astra;
+            using System.Numerics;
+            [ComponentId("test.material-driver")]
+            public sealed class MaterialDriver : Behavior
+            {
+                [PropertyId("albedo")] public AssetReference Albedo;
+                public override void Start()
+                {
+                    var component = Object.GetComponent(ComponentIds.MeshRenderer) ??
+                        throw new System.InvalidOperationException("MeshRenderer ausente");
+                    var material = component.Material(1);
+                    material.BaseColor = new Vector3(0.8f, 0.7f, 0.6f);
+                    material.Roughness = 0.35f;
+                    material.AlphaMode = MaterialAlphaMode.Mask;
+                    material.SetTexture(MaterialTextureBinding.BaseColor, Albedo);
+                    var normal = material.TextureSampling(MaterialTextureBinding.Normal);
+                    normal.Scale = new Vector2(2, 2);
+                    normal.Wrap = MaterialWrap.Repeat;
+                }
+            }
+            """;
+        using var project = new Project(source);
+        Assert.Equal(1, project.Compile().Types.Length, "fachada tipada compila no pipeline real de scripts");
+    }
+
+    [Test]
+    public static void MaterialSlotCompositeValues_ValidateBeforeWritingAnyAxis()
+    {
+        var scene = new Scene();
+        var component = GameObject.Resolve(scene, 1).GetComponent(ComponentIds.MeshRenderer) ??
+            throw new InvalidOperationException("fixture sem MeshRenderer");
+        var material = component.Material();
+        Assert.Throws<ArgumentOutOfRangeException>(() => material.BaseColor = new Vector3(.5f, float.NaN, .5f));
+        Assert.Throws<ArgumentOutOfRangeException>(() => material.Scale = new Vector2(1, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => material.TextureSampling(MaterialTextureBinding.Normal).Offset =
+            new Vector2(0, float.PositiveInfinity));
+        Assert.Equal(0, scene.SlotWrites, "vetor inválido não deixa primeiro eixo aplicado");
+        material.TextureSampling(MaterialTextureBinding.Normal).Scale = new Vector2(2, 3);
+        Assert.Equal("sampling.normal.scale_u", scene.SlotPropertyIds[0]);
+        Assert.Equal("sampling.normal.scale_v", scene.SlotPropertyIds[1]);
+        Assert.Throws<ArgumentOutOfRangeException>(() => material.TextureSampling((MaterialTextureBinding)99));
     }
 }

@@ -1,12 +1,15 @@
 #include "editor/editor_import_transaction.h"
 #include "resources/gltf_package.h"
 #include "resources/import_cache.h"
+#include "resources/environment_map_asset.h"
+#include "resources/texture_asset.h"
 #include "editor/editor_water_settings_component.h"
 #include "editor/editor_scene_camera.h"
 #include <cstring>
 #include "platform/android/android_paths.h"
 #include "platform/android/android_launch_options.h"
 #include "platform/android/android_model_picker.h"
+#include "platform/android/android_game_input.h"
 #include "platform/android/android_runtime_controls.h"
 #include "platform/android/astc_encode_probe.h"
 #include "platform/android/water_spectral_probe.h"
@@ -160,15 +163,40 @@ struct AndroidShell final {
   std::shared_ptr<std::atomic<bool>> importCancellation;
   std::future<PreparedModel> importWork;
   std::optional<PreparedModel> importPreview;
+  struct PreparedEnvironment {
+    std::string root,path,expectedHash,diagnostic;
+    ae::u64 epoch=0;
+    std::vector<ae::u8> bytes;
+    ae::renderer::SharedEnvironmentMap map;
+    ae::resources::EnvironmentMapImportSettings settings{};
+    bool accepted=false;
+  };
+  std::future<PreparedEnvironment> environmentImportWork;
+  std::optional<PreparedEnvironment> environmentImportPreview;
+  struct PreparedTexture {
+    std::string root,path,expectedHash,diagnostic;
+    ae::u64 epoch=0;
+    std::vector<ae::u8> bytes;
+    ae::resources::PreparedTextureImport asset;
+    ae::resources::TextureProfile settings{};
+    ae::resources::TextureImportLimits limits{};
+    bool accepted=false;
+  };
+  std::future<PreparedTexture> textureImportWork;
+  std::optional<PreparedTexture> textureImportPreview;
   std::string importPickerRoot;
   ae::u64 importPickerEpoch=0;
+  bool environmentImportPicker=false;
+  bool textureImportPicker=false;
   // R1 — abertura do projeto sem tela preta. As fontes registradas são lidas e
   // interpretadas num worker; o loop continua apresentando quadros do editor.
   // A publicação (uma só, para todas as fontes) e a recuperação da cena salva
   // voltam à thread do editor quando o worker termina.
   struct ProjectReopen {
+    using EnvironmentEntry=std::pair<ae::resources::AssetGuid,ae::renderer::SharedEnvironmentMap>;
     std::string root;
     std::vector<ae::editor::EditorSession::ReopenedSource> sources;
+    std::vector<EnvironmentEntry> environments;
     std::vector<std::string> missing;
     std::vector<std::pair<std::string,std::string>> refused;
     ae::usize cacheHits=0;
@@ -192,6 +220,8 @@ struct AndroidShell final {
   ae::platform::FreeCameraController cameraController;
   ae::platform::FirstPersonController firstPersonController;
   ae::platform::FirstPersonTouchControls firstPersonTouches;
+  ae::platform::android::AndroidGameInputState gameInput;
+  std::chrono::steady_clock::time_point nextDeviceCheck{};
   ae::physics::CharacterMotor characterMotor;
   bool firstPersonEnabled = false;
 
@@ -203,6 +233,11 @@ struct AndroidShell final {
   bool editorMapImported = false;
   // Pedido do painel Qualidade, atendido no ponto seguro do laço.
   bool qualityRebuildPending = false;
+  bool scriptRenderingRebuildPending = false;
+  ae::u64 scriptRenderingRequestId = 0;
+  ae::renderer::ProjectRenderingSettings activeRenderingSettings{};
+  ae::renderer::ProjectRenderingSettings renderingSettingsBeforeScriptRequest{};
+  ae::renderer::ResolvedRenderingPolicy renderingPolicyBeforeScriptRequest{};
   ae::u64 editorPackageFingerprint = 0;
   std::string editorSavePath;
   char editorProjectName[256]{};
@@ -213,6 +248,8 @@ struct AndroidShell final {
   float editorLastSaveSeconds = 0.0f;
   bool editorWasPlaying = false;
   ae::u64 editorPublishedRevision = ~ae::u64{0};
+  std::string editorEnvironmentMapDiagnostic;
+  std::string editorAutoExposureDiagnostic;
 
   // Escala de pixel fisico para dp, resolvida uma vez na inicializacao. A
   // interface e montada em dp; sem isto um painel de 220 unidades sairia com 220
@@ -434,7 +471,7 @@ void applyRuntimeControls(AndroidShell &shell) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[RuntimeControls] shading de água recusado.");
 
   if (!shell.renderingCapabilitiesReady || !shell.instancedRendererReady) return;
-  auto requestedSettings=shell.renderingSettings;
+  auto requestedSettings=shell.activeRenderingSettings;
   if(controls.solidLodError>0) requestedSettings.lodPixelErrorBudget=controls.solidLodError;
   if(controls.foliageLodError>0) requestedSettings.coverageLodPixelErrorBudget=controls.foliageLodError;
   if(controls.lodTransition>0) requestedSettings.lodHysteresisBandRatio=controls.lodTransition;
@@ -444,13 +481,13 @@ void applyRuntimeControls(AndroidShell &shell) {
   // sobrescrevê-la, toda medição feita com ela é inválida sem aviso. Foi
   // exatamente assim que as capturas do oceano ficaram presas em escala 0,5,
   // com o padrão do painel (dinâmica ligada) anulando o pedido explícito.
-  const bool scaleFromLaunchOption = shell.renderingSettings.resolutionScale > 0.0f;
+  const bool scaleFromLaunchOption = shell.activeRenderingSettings.resolutionScale > 0.0f;
   if (!scaleFromLaunchOption)
     policy.resolutionScale = std::min(policy.resolutionScale, controls.renderScale);
   policy.dynamicResolution.maximumScale = std::min(policy.dynamicResolution.maximumScale,
                                                    policy.resolutionScale);
   const bool dynamicFromLaunchOption =
-      shell.renderingSettings.dynamicResolution != ae::renderer::FeatureOverride::Inherit;
+      shell.activeRenderingSettings.dynamicResolution != ae::renderer::FeatureOverride::Inherit;
   const bool dynamicEnabled = dynamicFromLaunchOption ? policy.dynamicResolution.enabled
                                                       : controls.dynamicResolution;
   policy.dynamicResolution.enabled = dynamicEnabled;
@@ -707,11 +744,15 @@ bool writeProjectRenderingSettings(const char *projectPath,const ae::renderer::P
   if(path.empty()) return false;
   std::error_code code;
   std::filesystem::create_directories(std::string(projectPath)+"/.astra",code);
+  if(code) return false;
   const auto temporary=path+".tmp";
   {
     std::ofstream output(temporary,std::ios::binary|std::ios::trunc);
     if(!output) return false;
     output<<ae::renderer::writeRenderingSettings(settings);
+    output.flush();
+    if(!output) return false;
+    output.close();
     if(!output) return false;
   }
   std::filesystem::rename(temporary,path,code);
@@ -755,18 +796,27 @@ bool startProjectReopen(AndroidShell &shell) {
   // (or a copy of only the current record) leaves later iterations dangling.
   // R3: cada fonte com os limites do PRÓPRIO perfil (e, por eles, a própria chave de cache).
   std::vector<std::pair<std::string,ae::resources::GltfImportLimits>> sources;
+  struct EnvironmentSource {
+    ae::resources::AssetGuid guid;
+    std::string source,derived,settingsText;
+  };
+  std::vector<EnvironmentSource> environments;
   for(const auto &record:shell.editorSession.assets().records())
     if(record.type==ae::resources::AssetType::Mesh && !record.source.empty())
       sources.emplace_back(record.source,shell.editorSession.importLimitsFor(shell.editorSession.importProfileFor(record.guid)));
-  if(sources.empty()) return false;
+    else if(record.type==ae::resources::AssetType::EnvironmentMap && !record.source.empty())
+      environments.push_back({record.guid,record.source,record.derived.empty()?std::string():record.derived.front(),
+                              record.importerParameters});
+  if(sources.empty()&&environments.empty()) return false;
   shell.reopenCancellation=std::make_shared<std::atomic<bool>>(false);
   shell.reopenProgress=std::make_shared<AndroidShell::ReopenProgress>();
-  shell.reopenProgress->total=sources.size();
+  shell.reopenProgress->total=sources.size()+environments.size();
   shell.projectReopening=true;
   shell.reopenStartedMs=ae::platform::android::lifecycleUptimeMs();
   const std::string root(shell.editorProjectPath);
-  const auto count=sources.size();
+  const auto count=sources.size()+environments.size();
   shell.reopenWork=std::async(std::launch::async,[root,sources=std::move(sources),
+                                                  environments=std::move(environments),
                                                   cancel=shell.reopenCancellation,progress=shell.reopenProgress]() {
     using Transaction=ae::editor::EditorImportTransaction;
     AndroidShell::ProjectReopen result;
@@ -836,6 +886,59 @@ bool startProjectReopen(AndroidShell &shell) {
           source.c_str(),bytes.size(),cached?"acerto":"falta",hashedAt-started,derivedAt-hashedAt,
           ae::platform::android::lifecycleUptimeMs()-started-writeMs,writeMs);
       result.sources.push_back(std::move(reopened));
+      std::lock_guard<std::mutex> hold(progress->lock);++progress->done;
+    }
+    const ae::resources::EnvironmentMapImportLimits environmentLimits{};
+    for(const auto &entry:environments) {
+      if(cancel->load()) break;
+      stage(entry.source,"lendo HDRI");
+      ae::resources::EnvironmentMapImportSettings settings;
+      if(!ae::resources::readEnvironmentMapImportSettings(entry.settingsText,settings)) {
+        result.refused.emplace_back(entry.source,"Receita de importação HDRI inválida.");
+        std::lock_guard<std::mutex> hold(progress->lock);++progress->done;continue;
+      }
+      std::vector<ae::u8> bytes;
+      if(FILE *file=std::fopen((root+"/"+entry.source).c_str(),"rb")) {
+        char chunk[16384];ae::usize read=0;
+        while((read=std::fread(chunk,1,sizeof(chunk),file))>0)
+          bytes.insert(bytes.end(),reinterpret_cast<ae::u8*>(chunk),reinterpret_cast<ae::u8*>(chunk)+read);
+        std::fclose(file);
+      }
+      if(bytes.empty()) {
+        result.missing.push_back(entry.source);
+        std::lock_guard<std::mutex> hold(progress->lock);++progress->done;continue;
+      }
+      const std::string hash=ae::Sha256::hex(bytes);
+      const std::string key=ae::resources::environmentMapCacheKey(hash,settings,environmentLimits);
+      std::filesystem::path cachePath;
+      const std::string relative=entry.derived.empty()?
+          ae::resources::environmentMapCacheRelativePath(key):entry.derived;
+      bool pathValid=Transaction::safePath(Transaction::fromUtf8(root),relative,cachePath);
+      ae::renderer::SharedEnvironmentMap map;
+      bool cached=false;
+      if(pathValid) {
+        stage(entry.source,"lendo iluminação derivada");std::vector<ae::u8> derived;
+        if(Transaction::read(cachePath,derived,environmentLimits.maximumOutputBytes+4096))
+          cached=ae::resources::readEnvironmentMapCache(derived,key,environmentLimits,map);
+      }
+      if(!cached) {
+        stage(entry.source,"cozinhando iluminação HDRI");
+        const ae::resources::EnvironmentMapCancel watch{
+          [](void *context){return static_cast<std::atomic<bool>*>(context)->load();},cancel.get()};
+        std::string diagnostic;
+        if(!ae::resources::importRadianceEnvironmentMap(bytes,settings,environmentLimits,watch,map,diagnostic)) {
+          result.refused.emplace_back(entry.source,std::move(diagnostic));
+          std::lock_guard<std::mutex> hold(progress->lock);++progress->done;continue;
+        }
+        const auto actualRelative=ae::resources::environmentMapCacheRelativePath(map->cacheKey);
+        if(Transaction::safePath(Transaction::fromUtf8(root),actualRelative,cachePath)) {
+          std::vector<ae::u8> derived;std::error_code error;
+          std::filesystem::create_directories(cachePath.parent_path(),error);
+          if(error||!ae::resources::writeEnvironmentMapCache(*map,derived)||!Transaction::write(cachePath,derived))
+            __android_log_print(ANDROID_LOG_WARN,LogTag,"[Cache] HDRI de %s não gravado; será recalculado.",entry.source.c_str());
+        }
+      } else ++result.cacheHits;
+      result.environments.emplace_back(entry.guid,std::move(map));
       std::lock_guard<std::mutex> hold(progress->lock);++progress->done;
     }
     // Derivados que nenhuma fonte atual usa (fonte trocada, limites mudados) só
@@ -936,6 +1039,15 @@ void finishProjectReopen(AndroidShell &shell) {
                                                 shell.editorPackageFingerprint);
   const bool published=shell.editorSession.reopenSources(result.sources,reports,diagnostic);
   ae::usize failures=result.missing.size()+result.refused.size();
+  for(const auto &[guid,map]:result.environments) {
+    std::string environmentDiagnostic;
+    if(!shell.editorSession.adoptEnvironmentMap(guid,map,environmentDiagnostic)) {
+      ++failures;
+      __android_log_print(ANDROID_LOG_WARN,LogTag,"[Import] HDRI recusado ao publicar: %s",
+                          environmentDiagnostic.c_str());
+    }
+  }
+  shell.instancedRenderer.setEnvironmentMaps(shell.editorSession.environmentMaps());
   for(ae::usize i=0;i<result.sources.size() && i<reports.size();++i) {
     if(reports[i].diagnostic.empty())
       __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] fonte reaberta: %s",result.sources[i].sourceName.c_str());
@@ -964,7 +1076,7 @@ void finishProjectReopen(AndroidShell &shell) {
   const double doneAt=ae::platform::android::lifecycleUptimeMs();
   __android_log_print(ANDROID_LOG_INFO,LogTag,
       "[Open] projeto aberto: fontes=%zu derivados_reaproveitados=%zu falhas=%zu preparo_ms=%.0f publicacao_ms=%.0f cena_ms=%.0f total_ms=%.0f",
-      result.sources.size(),result.cacheHits,failures,preparedAt-shell.reopenStartedMs,publishedAt-preparedAt,doneAt-publishedAt,
+      result.sources.size()+result.environments.size(),result.cacheHits,failures,preparedAt-shell.reopenStartedMs,publishedAt-preparedAt,doneAt-publishedAt,
       doneAt-shell.reopenStartedMs);
   if(failures)
     shell.editorSession.setImportStatus("Projeto aberto; "+std::to_string(failures)+" recurso(s) não carregado(s). Detalhes no console.",
@@ -974,12 +1086,29 @@ void finishProjectReopen(AndroidShell &shell) {
 }
 } // namespace
 
+void reportScriptTextureResidency(AndroidShell &shell) {
+  const auto &package=shell.instancedRenderer.packageTextureResidency();
+  const auto &authoring=shell.instancedRenderer.authoringTextureResidency();
+  const bool complete=package.fullyApplied&&authoring.fullyApplied;
+  std::string message="Gráficos runtime · mip "+std::to_string(package.requestedMipBias)+
+      " · pacote "+std::to_string(package.reducedTextures)+"/"+std::to_string(package.textures)+
+      " reduzidas, "+std::to_string(package.residentBytes)+"/"+std::to_string(package.sourceBytes)+
+      " bytes · autoria "+std::to_string(authoring.reducedTextures)+"/"+std::to_string(authoring.textures)+
+      " reduzidas, "+std::to_string(authoring.residentBytes)+"/"+std::to_string(authoring.sourceBytes)+" bytes";
+  const auto &detail=shell.instancedRenderer.textureResidencyDiagnostic();
+  if(!detail.empty()) message+=" · "+detail;
+  if(!complete) message+=" · aplicação de residência incompleta";
+  shell.editorSession.reportProblem(complete?ae::editor::EditorConsoleSeverity::Info:
+      ae::editor::EditorConsoleSeverity::Warning,std::move(message));
+}
+
 void collectRendererInitialization(AndroidShell &shell, bool cancel) {
   if (!shell.rendererInitialization.valid()) return;
   if (cancel) shell.cancelRendererInitialization.store(true);
   else if (shell.rendererInitialization.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
   const bool ready=shell.rendererInitialization.get();
   shell.instancedRendererReady=ready && !cancel;
+  bool editorResourcesPublished=shell.instancedRendererReady;
   // A sessao de edicao so pode existir depois que os atlas chegaram a GPU: sao
   // eles que dizem quanto mede cada glifo e onde cada icone vive. Antes disso
   // `update` sai cedo e a tela fica sem interface -- que foi exatamente o
@@ -1021,6 +1150,7 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
     // recriada e este renderer é novo: a cena do editor sobrevive, a biblioteca
     // dele não.
     const bool rehydrating = shell.editorMapImported;
+    shell.instancedRenderer.setEnvironmentMaps(shell.editorSession.environmentMaps());
     if (!shell.editorMapImported && (shell.independentWorkspace || !shell.instancedRenderer.mapDraws().empty())) {
       shell.editorPackageFingerprint=shell.independentWorkspace ? 0 : shell.instancedRenderer.contentFingerprint();
       if (!shell.independentWorkspace) shell.editorSession.setProjection(shell.instancedRenderer.mapProjection());
@@ -1040,18 +1170,38 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
     // quadro contra uma biblioteca que não tem mais a geometria importada, e o
     // viewport fica vazio com a hierarquia inteira do lado.
     if (rehydrating) {
+      shell.editorSession.republishPreviewAtlas();
       std::string diagnostic;
       if (shell.editorSession.republishGeometry(diagnostic))
         __android_log_print(ANDROID_LOG_INFO, LogTag,
             "[Editor] Geometria republicada na superficie nova.");
-      else
+      else {
+        editorResourcesPublished=false;
         __android_log_print(ANDROID_LOG_ERROR, LogTag,
             "[Editor] Reidratacao grafica falhou: %s", diagnostic.c_str());
+      }
     }
     shell.editorPublishedRevision = ~ae::u64{0};
     __android_log_print(ANDROID_LOG_INFO, LogTag,
         "[Editor] sessao pronta: %u entidades no documento.",
         shell.editorSession.document().entityCount());
+  }
+  if(shell.scriptRenderingRebuildPending) {
+    const auto &package=shell.instancedRenderer.packageTextureResidency();
+    const auto &authoring=shell.instancedRenderer.authoringTextureResidency();
+    const bool success=editorResourcesPublished&&package.fullyApplied&&authoring.fullyApplied;
+    if(!success) {
+      // O renderer anterior já foi destruído. Restaurar a escolha para a
+      // próxima tentativa não permite anunciar a política antiga como ativa.
+      shell.activeRenderingSettings=shell.renderingSettingsBeforeScriptRequest;
+      shell.renderingPolicy=shell.renderingPolicyBeforeScriptRequest;
+      shell.activeRenderingPolicy=shell.renderingPolicyBeforeScriptRequest;
+    }
+    if(success) shell.activeRenderingPolicy=shell.instancedRenderer.activeRenderingPolicy();
+    shell.editorSession.completeScriptRenderingRequest(shell.scriptRenderingRequestId,success,
+        success?shell.activeRenderingPolicy:ae::renderer::ResolvedRenderingPolicy{},success);
+    if(success) reportScriptTextureResidency(shell);
+    shell.scriptRenderingRebuildPending=false;shell.scriptRenderingRequestId=0;
   }
   if (shell.instancedRendererReady && shell.dirtRoadPreview && !shell.mapCameraInitialized &&
       shell.instancedRenderer.hasDefaultCamera()) {
@@ -1126,6 +1276,7 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
   auto &capabilities = shell.renderingCapabilities;
   capabilities = {};
   capabilities.profile = device.deviceProfile();
+  capabilities.qualityRecommendation = ae::rhi::recommendDeviceQuality(features);
   capabilities.maximumImage2DSize = device.maximumImage2DSize();
   capabilities.maximumImageArrayLayers = device.maximumImageArrayLayers();
   // O suporte real a depth amostrável é decidido junto do formato, na criação do
@@ -1138,7 +1289,7 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
   // A política térmica ativa só reduz o uso destes recursos e pode recuperar
   // sem rebuild quando a histerese do monitor autorizar.
   shell.renderingPolicy = ae::renderer::resolveRenderingPolicy(
-      shell.renderingSettings, capabilities, ae::renderer::ThermalPressure::None);
+      shell.activeRenderingSettings, capabilities, ae::renderer::ThermalPressure::None);
   shell.activeRenderingPolicy = shell.renderingPolicy;
   shell.thermalPolicyApplied = false;
   // VisibilityBudget also carries HZB knobs that are not part of the rendering
@@ -1163,7 +1314,7 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
   __android_log_print(ANDROID_LOG_INFO, LogTag,
       "[RenderPolicy] preset=%s perfil=%d sombras=%s(%u cascatas @%u, %u/%u taps, cache=%s margem=%.2f blend=%.2f fade=%.2f) "
       "ambiente=%s%s%s pos=%s%s malha_agua=%s(%u seg) textura_mip_bias=%u aniso=%.1f escala=%.2f dinamica=%s[%.2f,%.2f] clamps=%u",
-      ae::renderer::qualityPresetName(shell.renderingSettings.preset),
+      ae::renderer::qualityPresetName(shell.activeRenderingSettings.preset),
       static_cast<int>(shell.renderingPolicy.effectiveProfile),
       shell.renderingPolicy.shadows.enabled ? "on" : "off",
       shell.renderingPolicy.shadows.cascadeCount,
@@ -1225,8 +1376,9 @@ void applyThermalRenderingPolicy(AndroidShell &shell, bool force) {
   if (!force && shell.thermalPolicyApplied && pressure == shell.appliedThermalPressure) return;
 
   shell.activeRenderingPolicy = ae::renderer::resolveRenderingPolicy(
-      shell.renderingSettings, shell.renderingCapabilities, pressure);
+      shell.activeRenderingSettings, shell.renderingCapabilities, pressure);
   shell.instancedRenderer.setRuntimeRenderingPolicy(shell.activeRenderingPolicy);
+  shell.activeRenderingPolicy=shell.instancedRenderer.activeRenderingPolicy();
   shell.appliedThermalPressure = pressure;
   shell.thermalPolicyApplied = true;
   shell.frameProfiler.reset();
@@ -1361,6 +1513,7 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     shell.frameProfiler.reset();
     shell.cameraController.cancelGesture();
     shell.firstPersonTouches.cancel();
+    shell.gameInput.clear();
     shell.performance.setActive(false, false);
     flushCameraRouteRecordingIfNeeded(shell);
     __android_log_print(ANDROID_LOG_INFO, LogTag, "Aplicativo suspenso.");
@@ -1397,6 +1550,7 @@ void handleCommand(android_app *app, int32_t command) {
     break;
   case APP_CMD_LOST_FOCUS:
     shell.editorSession.cancelPointers();
+    shell.gameInput.clear();
     // The attached code panel owns keyboard focus while the same Activity
     // remains resumed. Keep draining its revision queue and drawing native
     // tabs/console. APP_CMD_PAUSE still suspends the whole editor normally.
@@ -1457,12 +1611,89 @@ void handleCommand(android_app *app, int32_t command) {
       ae::platform::android::lifecycleUptimeMs() - startedMs);
 }
 
-// AInputEvent remains platform-only. The reusable controller exposes a camera
-// state that keyboard/gamepad/NoCode can drive later through the same contract.
-int32_t handleInput(android_app *app, AInputEvent *event) {
-  if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) return 0;
+void releaseDisconnectedInputs(AndroidShell &shell) {
+  if(!shell.gameInput.active() ||
+     (shell.gameInput.keyboardDevice()<0&&shell.gameInput.gamepadDevice()<0)) return;
+  const auto now=std::chrono::steady_clock::now();
+  if(now<shell.nextDeviceCheck) return;
+  shell.nextDeviceCheck=now+std::chrono::seconds(1);
+  JNIEnv *env=nullptr;
+  const auto attached=shell.app->activity->vm->GetEnv(reinterpret_cast<void **>(&env),JNI_VERSION_1_6);
+  const bool detach=attached==JNI_EDETACHED;
+  if(detach && shell.app->activity->vm->AttachCurrentThread(&env,nullptr)!=JNI_OK) {
+    shell.gameInput.clear();return;
+  }
+  if(!env) {shell.gameInput.clear();return;}
+  jclass cls=env->FindClass("android/view/InputDevice");
+  jmethodID method=cls?env->GetStaticMethodID(cls,"getDeviceIds","()[I"):nullptr;
+  auto ids=method?static_cast<jintArray>(env->CallStaticObjectMethod(cls,method)):nullptr;
+  if(env->ExceptionCheck()) {
+    env->ExceptionClear();shell.gameInput.clear();
+    __android_log_print(ANDROID_LOG_WARN,LogTag,"[Input] Falha ao consultar dispositivos conectados; estado solto.");
+  }
+  else if(ids) {
+    const auto count=env->GetArrayLength(ids);
+    std::vector<jint> connected(static_cast<ae::usize>(count));
+    if(count) env->GetIntArrayRegion(ids,0,count,connected.data());
+    if(env->ExceptionCheck()) {
+      env->ExceptionClear();shell.gameInput.clear();
+      __android_log_print(ANDROID_LOG_WARN,LogTag,"[Input] Falha ao ler IDs de dispositivos; estado solto.");
+    } else {
+      const auto present=[&](int device) {
+        return std::find(connected.begin(),connected.end(),device)!=connected.end();
+      };
+      const int keyboard=shell.gameInput.keyboardDevice(),gamepad=shell.gameInput.gamepadDevice();
+      if(keyboard>=0&&!present(keyboard)) shell.gameInput.disconnect(keyboard);
+      if(gamepad>=0&&!present(gamepad)) shell.gameInput.disconnect(gamepad);
+    }
+  } else {
+    shell.gameInput.clear();
+    __android_log_print(ANDROID_LOG_WARN,LogTag,"[Input] Lista de dispositivos indisponível; estado solto.");
+  }
+  if(ids) env->DeleteLocalRef(ids);
+  if(cls) env->DeleteLocalRef(cls);
+  if(detach) shell.app->activity->vm->DetachCurrentThread();
+}
 
+// Android key codes remain binding codes; axes use the logical slots documented
+// by AndroidGameInputState. UI text input keeps ownership outside Play.
+int32_t handleInput(android_app *app, AInputEvent *event) {
   auto &shell = *static_cast<AndroidShell *>(app->userData);
+  const int32_t eventType=AInputEvent_getType(event);
+  const int32_t source=AInputEvent_getSource(event);
+  const bool gamepad=(source&AINPUT_SOURCE_GAMEPAD)==AINPUT_SOURCE_GAMEPAD ||
+                     (source&AINPUT_SOURCE_JOYSTICK)==AINPUT_SOURCE_JOYSTICK ||
+                     (source&AINPUT_SOURCE_DPAD)==AINPUT_SOURCE_DPAD;
+  const bool gameplay=shell.editorUi&&shell.editorSession.gameplayInputFocused()&&
+      !ae::platform::android::editorCodePanelVisible()&&
+      shell.lifecycle.isActive();
+  if(eventType==AINPUT_EVENT_TYPE_KEY) {
+    const int32_t code=AKeyEvent_getKeyCode(event);
+    if(!gameplay) return 0;
+    if(code==AKEYCODE_BACK || code==AKEYCODE_HOME || code==AKEYCODE_VOLUME_UP || code==AKEYCODE_VOLUME_DOWN)
+      return 0;
+    const int32_t action=AKeyEvent_getAction(event);
+    if(action!=AKEY_EVENT_ACTION_DOWN && action!=AKEY_EVENT_ACTION_UP) return 0;
+    shell.gameInput.key(AInputEvent_getDeviceId(event),gamepad,static_cast<ae::u32>(code),
+                        action==AKEY_EVENT_ACTION_DOWN);
+    return 1;
+  }
+  if(eventType!=AINPUT_EVENT_TYPE_MOTION) return 0;
+  if(gamepad) {
+    if(!gameplay) return 0;
+    const auto action=AMotionEvent_getAction(event)&AMOTION_EVENT_ACTION_MASK;
+    if(action==AMOTION_EVENT_ACTION_CANCEL) shell.gameInput.disconnect(AInputEvent_getDeviceId(event));
+    else if(action==AMOTION_EVENT_ACTION_MOVE) {
+      const auto axis=[&](int32_t code) {return AMotionEvent_getAxisValue(event,code,0);};
+      shell.gameInput.axes(AInputEvent_getDeviceId(event),{
+          axis(AMOTION_EVENT_AXIS_X),-axis(AMOTION_EVENT_AXIS_Y),
+          axis(AMOTION_EVENT_AXIS_Z),-axis(AMOTION_EVENT_AXIS_RZ),
+          std::max(axis(AMOTION_EVENT_AXIS_LTRIGGER),axis(AMOTION_EVENT_AXIS_BRAKE)),
+          std::max(axis(AMOTION_EVENT_AXIS_RTRIGGER),axis(AMOTION_EVENT_AXIS_GAS)),
+          axis(AMOTION_EVENT_AXIS_HAT_X),-axis(AMOTION_EVENT_AXIS_HAT_Y)});
+    }
+    return 1;
+  }
   if(shell.editorUi && shell.instancedRendererReady) {
     // Drain text before tab/undo commands, then let Android own a gesture
     // begun inside the visible CodeField. Returning zero forwards it through
@@ -1912,6 +2143,7 @@ void android_main(android_app *app) {
   // explícito do projeto. No aparelho a escala dinâmica derrubava o viewport
   // para 50% em um segundo, com orçamento de 120 Hz, e não voltava.
   if(shell.editorUi) shell.renderingSettings=ae::renderer::withEditorDefaults(shell.renderingSettings);
+  shell.activeRenderingSettings=shell.renderingSettings;
   shell.instancedRenderer.setCoveragePrepassEnabled(
       !ae::platform::android::readBooleanLaunchOption(app->activity,
                                                        "aether.disable_coverage_prepass"));
@@ -2061,6 +2293,7 @@ void android_main(android_app *app) {
       // R1: o worker de reabertura para entre fontes; o future junta na saída
       // sem esperar o resto do projeto ser interpretado.
       if (shell.reopenCancellation) shell.reopenCancellation->store(true);
+      if (shell.importCancellation) shell.importCancellation->store(true);
       applyEvent(shell, ae::platform::AppEvent::Destroy);
       continue;
     }
@@ -2071,8 +2304,34 @@ void android_main(android_app *app) {
     if(shell.qualityRebuildPending && shell.renderingCapabilitiesReady && !shell.rendererInitialization.valid()) {
       shell.qualityRebuildPending=false;
       resolveRenderingPolicyForDevice(shell,shell.maximumDisplayHz);
-      if(!rebuildInstancedRenderer(shell))
+      const bool rebuildStarted=rebuildInstancedRenderer(shell);
+      if(!rebuildStarted)
         __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Quality] Falha ao refazer o renderer.");
+      if(shell.scriptRenderingRebuildPending && !shell.rendererInitialization.valid()) {
+        bool resourcesPublished=rebuildStarted;
+        if(resourcesPublished) {
+          shell.instancedRenderer.setEnvironmentMaps(shell.editorSession.environmentMaps());
+          std::string diagnostic;
+          if(shell.editorUi&&shell.editorMapImported&&!shell.editorSession.republishGeometry(diagnostic)) {
+            resourcesPublished=false;
+            shell.editorSession.reportProblem(ae::editor::EditorConsoleSeverity::Error,
+                "Gráficos runtime recusados: "+diagnostic);
+          }
+          const auto &package=shell.instancedRenderer.packageTextureResidency();
+          const auto &authoring=shell.instancedRenderer.authoringTextureResidency();
+          resourcesPublished=resourcesPublished&&package.fullyApplied&&authoring.fullyApplied;
+        }
+        if(!resourcesPublished) {
+          shell.activeRenderingSettings=shell.renderingSettingsBeforeScriptRequest;
+          shell.renderingPolicy=shell.renderingPolicyBeforeScriptRequest;
+          shell.activeRenderingPolicy=shell.renderingPolicyBeforeScriptRequest;
+        }
+        if(resourcesPublished) shell.activeRenderingPolicy=shell.instancedRenderer.activeRenderingPolicy();
+        shell.editorSession.completeScriptRenderingRequest(shell.scriptRenderingRequestId,resourcesPublished,
+            resourcesPublished?shell.activeRenderingPolicy:ae::renderer::ResolvedRenderingPolicy{},resourcesPublished);
+        if(resourcesPublished) reportScriptTextureResidency(shell);
+        shell.scriptRenderingRebuildPending=false;shell.scriptRenderingRequestId=0;
+      }
       shell.editorPublishedRevision=~ae::u64{0};
     }
     if(shell.windowResizePending && app->window && shell.vulkanSurface.isReady() &&
@@ -2143,6 +2402,9 @@ void android_main(android_app *app) {
       shell.editorSession.advanceClock(timeSeconds);
       const bool editorPlaying = !editorActive || shell.editorSession.isPlaying();
       if (editorActive) timeSeconds = shell.editorSession.sceneTime();
+      if(!editorActive||!shell.editorSession.gameplayInputFocused()||
+         ae::platform::android::editorCodePanelVisible()) shell.gameInput.clear();
+      else releaseDisconnectedInputs(shell);
       if (editorActive && shell.editorWasPlaying && !editorPlaying) {
         shell.editorPublishedRevision=~ae::u64{0};
         shell.cameraController.cancelGesture();shell.firstPersonTouches.cancel();
@@ -2196,18 +2458,27 @@ void android_main(android_app *app) {
         // recriada, que já sabe devolver a cena ao renderer novo.
         {
           ae::renderer::ProjectRenderingSettings requested;
-          if(shell.editorSession.takeRenderingSettingsRequest(requested) && !editorPlaying) {
-            if(!writeProjectRenderingSettings(shell.editorProjectPath,requested))
+          if(!editorPlaying && shell.editorSession.takeRenderingSettingsRequest(requested)) {
+            const bool saved=writeProjectRenderingSettings(shell.editorProjectPath,requested);
+            shell.editorSession.completeRenderingSettingsRequest(saved);
+            if(!saved) {
               __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Quality] Falha ao gravar as configurações do projeto.");
-            auto &settings=shell.renderingSettings;
-            settings.preset=requested.preset;settings.resolutionScale=requested.resolutionScale;
-            settings.dynamicResolution=requested.dynamicResolution;settings.antiAliasing=requested.antiAliasing;
-            settings.postSharpen=requested.postSharpen;settings.maximumRenderHz=requested.maximumRenderHz;
-            settings=ae::renderer::withEditorDefaults(settings);
-            // A reconstrução NÃO acontece aqui, no meio do quadro: o renderer
-            // novo inicializa em outra thread e o resto deste quadro ainda o
-            // usaria — foi o que derrubou o processo no aparelho. O pedido fica
-            // marcado e é atendido no ponto seguro do laço, antes do quadro.
+            } else {
+              shell.renderingSettings=ae::renderer::withEditorDefaults(requested);
+              shell.activeRenderingSettings=shell.renderingSettings;
+              // Rebuild at the safe point before the next frame: initialization
+              // runs on another thread and must not overlap this frame's use.
+              shell.qualityRebuildPending=true;
+            }
+          }
+          ae::u64 scriptRequest=0;
+          if(!shell.scriptRenderingRebuildPending &&
+             shell.editorSession.takeScriptRenderingRequest(scriptRequest,requested)) {
+            shell.renderingSettingsBeforeScriptRequest=shell.activeRenderingSettings;
+            shell.renderingPolicyBeforeScriptRequest=shell.activeRenderingPolicy;
+            shell.activeRenderingSettings=requested;
+            shell.scriptRenderingRequestId=scriptRequest;
+            shell.scriptRenderingRebuildPending=true;
             shell.qualityRebuildPending=true;
           }
           // Rodapé do painel: o que o renderer faz AGORA. A GPU só é medida
@@ -2272,13 +2543,23 @@ void android_main(android_app *app) {
         if(shell.importPreview && (shell.importPreview->root!=session.codeProjectRoot() || shell.importPreview->epoch!=session.sceneVersion().epoch)) {
           shell.importPreview.reset();session.closeImportPreview();
         }
+        if(shell.environmentImportPreview && (shell.environmentImportPreview->root!=session.codeProjectRoot() ||
+           shell.environmentImportPreview->epoch!=session.sceneVersion().epoch)) {
+          shell.environmentImportPreview.reset();session.closeImportPreview();
+        }
+        if(shell.textureImportPreview && (shell.textureImportPreview->root!=session.codeProjectRoot() ||
+           shell.textureImportPreview->epoch!=session.sceneVersion().epoch)) {
+          shell.textureImportPreview.reset();session.closeImportPreview();
+        }
         if(session.takeImportCancel()) {
           ae::platform::android::cancelModelPick();
           if(shell.importCancellation) shell.importCancellation->store(true);
-          shell.importPreview.reset();session.setImportStatus("Importação cancelada; projeto preservado.");
+          shell.importPreview.reset();shell.environmentImportPreview.reset();shell.textureImportPreview.reset();
+          session.setImportStatus("Importação cancelada; projeto preservado.");
         }
         const auto launchImport=[&](ae::platform::android::ModelPickerResult picked,std::string path) {
-          if(shell.importWork.valid() || shell.importPreview) {session.setImportStatus("Finalize a importação em andamento.");return;}
+          if(shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||shell.importPreview||shell.environmentImportPreview||shell.textureImportPreview)
+            {session.setImportStatus("Finalize a importação em andamento.");return;}
           if(shell.projectReopening) {session.setImportStatus("Aguarde os recursos do projeto terminarem de abrir.");return;}
           session.beginImportPreparation(path);
           shell.importCancellation=std::make_shared<std::atomic<bool>>(false);
@@ -2327,15 +2608,127 @@ void android_main(android_app *app) {
             return result;
           });
         };
-        if(session.consumeModelImportRequest()) {
-          if(!shell.importWork.valid() && !shell.importPreview) {
-            shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
-            session.beginImportPreparation();
-            ae::platform::android::requestModelPick();
+        const auto launchEnvironmentImport=[&](ae::platform::android::ModelPickerResult picked,std::string path,
+                                               ae::resources::EnvironmentMapImportSettings settings) {
+          if(shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||shell.importPreview||shell.environmentImportPreview||shell.textureImportPreview) {
+            session.setImportStatus("Finalize a importação em andamento.");return;
           }
+          if(shell.projectReopening){session.setImportStatus("Aguarde os recursos do projeto terminarem de abrir.");return;}
+          session.beginEnvironmentImportPreparation(path,settings);
+          shell.importCancellation=std::make_shared<std::atomic<bool>>(false);
+          auto cancel=shell.importCancellation;const auto root=session.codeProjectRoot();const auto epoch=session.sceneVersion().epoch;
+          shell.environmentImportWork=std::async(std::launch::async,
+            [picked=std::move(picked),path=std::move(path),root,epoch,cancel,settings]() mutable {
+              AndroidShell::PreparedEnvironment result;result.root=root;result.path=path;result.epoch=epoch;result.settings=settings;
+              std::filesystem::path absolute;
+              if(!ae::editor::EditorImportTransaction::safePath(ae::editor::EditorImportTransaction::fromUtf8(root),path,absolute)) {
+                result.diagnostic="Destino fora do projeto.";return result;
+              }
+              std::error_code error;const bool exists=std::filesystem::exists(absolute,error);std::vector<ae::u8> previous;
+              if(error||(exists&&!ae::editor::EditorImportTransaction::read(absolute,previous))) {
+                result.diagnostic="Não foi possível ler a fonte HDRI anterior.";return result;
+              }
+              result.expectedHash=exists?ae::Sha256::hex(previous):std::string();
+              result.bytes=picked.accepted?std::move(picked.bytes):std::move(previous);
+              const ae::resources::EnvironmentMapImportLimits limits;
+              const ae::resources::EnvironmentMapCancel watch{
+                [](void *context){return static_cast<std::atomic<bool>*>(context)->load();},cancel.get()};
+              result.accepted=ae::resources::importRadianceEnvironmentMap(result.bytes,settings,limits,watch,
+                                                                           result.map,result.diagnostic);
+              return result;
+            });
+        };
+        const auto launchTextureImport=[&](ae::platform::android::ModelPickerResult picked,std::string path,
+                                           ae::resources::TextureProfile settings) {
+          if(shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||
+             shell.importPreview||shell.environmentImportPreview||shell.textureImportPreview) {
+            session.setImportStatus("Finalize a importação em andamento.");return;
+          }
+          if(shell.projectReopening) {session.setImportStatus("Aguarde os recursos do projeto terminarem de abrir.");return;}
+          session.beginTextureImportPreparation(path,settings);
+          shell.importCancellation=std::make_shared<std::atomic<bool>>(false);
+          const auto cancel=shell.importCancellation;const auto root=session.codeProjectRoot();
+          const auto epoch=session.sceneVersion().epoch;
+          ae::resources::TextureImportLimits limits;
+          limits.image=session.importLimits().image;
+          limits.projectMaximumDimension=session.importLimits().maximumTextureDimension;
+          shell.textureImportWork=std::async(std::launch::async,
+              [picked=std::move(picked),path=std::move(path),root,epoch,cancel,settings,limits]() mutable {
+            AndroidShell::PreparedTexture result;result.root=root;result.path=path;result.epoch=epoch;
+            result.settings=settings;result.limits=limits;
+            std::filesystem::path absolute;
+            if(!ae::editor::EditorImportTransaction::safePath(ae::editor::EditorImportTransaction::fromUtf8(root),path,absolute)) {
+              result.diagnostic="Destino fora do projeto.";return result;
+            }
+            std::error_code error;const bool exists=std::filesystem::exists(absolute,error);
+            std::vector<ae::u8> previous;
+            if(error||(exists&&!ae::editor::EditorImportTransaction::read(absolute,previous))) {
+              result.diagnostic="Não foi possível ler a textura anterior.";return result;
+            }
+            result.expectedHash=exists?ae::Sha256::hex(previous):std::string();
+            result.bytes=picked.accepted?std::move(picked.bytes):std::move(previous);
+            result.accepted=ae::resources::prepareTextureImport(result.bytes,settings,true,
+                ae::editor::EditorMapScene::DefaultTextureSampler,limits,cancel.get(),result.asset);
+            result.diagnostic=result.asset.diagnostic;
+            return result;
+          });
+        };
+        ae::platform::android::ModelPickerResult picked;
+        const bool pickerResultReady=ae::platform::android::takeModelPickResult(picked);
+        const auto importSlotAvailable=[&] {
+          return !pickerResultReady&&!shell.projectReopening&&!ae::platform::android::modelPickPending()&&
+                 !shell.importWork.valid()&&!shell.environmentImportWork.valid()&&!shell.textureImportWork.valid()&&
+                 !shell.importPreview&&!shell.environmentImportPreview&&!shell.textureImportPreview;
+        };
+        bool importRequestTaken=false;
+        if(importSlotAvailable()&&session.consumeModelImportRequest()) {
+          importRequestTaken=true;
+          shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
+          shell.environmentImportPicker=false;shell.textureImportPicker=false;
+          session.beginImportPreparation();
+          ae::platform::android::requestModelPick();
         }
-        if(auto path=session.takeReimportPath();!path.empty()) launchImport({},std::move(path));
-        if(ae::platform::android::ModelPickerResult picked;ae::platform::android::takeModelPickResult(picked)) {
+        if(!importRequestTaken&&importSlotAvailable()&&session.consumeEnvironmentImportRequest()) {
+          importRequestTaken=true;
+          shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
+          shell.environmentImportPicker=true;shell.textureImportPicker=false;session.beginImportPreparation();
+          ae::platform::android::requestModelPick(false);
+        }
+        if(!importRequestTaken&&importSlotAvailable()&&session.consumeTextureImportRequest()) {
+          importRequestTaken=true;
+          shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
+          shell.environmentImportPicker=false;shell.textureImportPicker=true;session.beginImportPreparation();
+          ae::platform::android::requestModelPick(false);
+        }
+        if(!importRequestTaken&&importSlotAvailable()) if(auto path=session.takeTextureReimportPath();!path.empty()) {
+          importRequestTaken=true;
+          const auto *record=session.assets().findByPath(path);
+          if(!record||record->type!=ae::resources::AssetType::Texture)
+            session.showImportFailure("A textura não está registrada no projeto.");
+          else launchTextureImport({},std::move(path),session.textureProfileFor(record->guid));
+        }
+        if(!importRequestTaken&&importSlotAvailable()) if(auto path=session.takeReimportPath();!path.empty()) {
+          importRequestTaken=true;
+          const auto *record=session.assets().findByPath(path);
+          if(record&&record->type==ae::resources::AssetType::EnvironmentMap) {
+            ae::resources::EnvironmentMapImportSettings settings;
+            if(!ae::resources::readEnvironmentMapImportSettings(record->importerParameters,settings))
+              session.showImportFailure("Receita HDRI salva é inválida; a fonte foi preservada.");
+            else launchEnvironmentImport({},std::move(path),settings);
+          } else if(record&&record->type==ae::resources::AssetType::Texture)
+            launchTextureImport({},std::move(path),session.textureProfileFor(record->guid));
+          else launchImport({},std::move(path));
+        }
+        if(!importRequestTaken&&importSlotAvailable()) if(auto path=session.takeEnvironmentReimportPath();!path.empty()) {
+          importRequestTaken=true;
+          const auto *record=session.assets().findByPath(path);
+          ae::resources::EnvironmentMapImportSettings settings;
+          if(!record||record->type!=ae::resources::AssetType::EnvironmentMap||
+             !ae::resources::readEnvironmentMapImportSettings(record->importerParameters,settings))
+            session.showImportFailure("Receita HDRI salva é inválida; a fonte foi preservada.");
+          else launchEnvironmentImport({},std::move(path),settings);
+        }
+        if(pickerResultReady) {
           if(shell.importPickerRoot!=session.codeProjectRoot() || shell.importPickerEpoch!=session.sceneVersion().epoch)
             {session.closeImportPreview();session.setImportStatus("Seleção descartada: o projeto ou a cena mudou.");}
           else if(!picked.accepted) {
@@ -2343,13 +2736,21 @@ void android_main(android_app *app) {
             else session.showImportFailure(picked.diagnostic);
           }
           else {
-            std::string name=picked.displayName.empty()?"modelo.glb":picked.displayName;
+            const char *fallbackName=shell.textureImportPicker?"textura.png":shell.environmentImportPicker?"ambiente.hdr":"modelo.glb";
+            std::string name=picked.displayName.empty()?fallbackName:picked.displayName;
             for(auto &character:name) if(character=='/' || character=='\\' || character==':' || static_cast<unsigned char>(character)<32) character='_';
-            if(name=="." || name=="..") name="modelo.glb";
-            // Um .gltf é guardado empacotado: o projeto recebe cena.glb, não cena.gltf.
-            if(name.size()>5 && name.ends_with(".gltf")) name.replace(name.size()-5,5,".glb");
-            if(!name.ends_with(".glb")) name+=".glb";
-            launchImport(std::move(picked),"Fontes/"+name);
+            if(name=="." || name=="..") name=fallbackName;
+            if(shell.textureImportPicker) {
+              launchTextureImport(std::move(picked),"Texturas/"+name,session.textureImportSettings());
+            } else if(shell.environmentImportPicker) {
+              if(name.find('.')==std::string::npos) name+=".hdr";
+              launchEnvironmentImport(std::move(picked),"Fontes/"+name,session.environmentMapImportSettings());
+            } else {
+              // Um .gltf é guardado empacotado: o projeto recebe cena.glb, não cena.gltf.
+              if(name.size()>5 && name.ends_with(".gltf")) name.replace(name.size()-5,5,".glb");
+              if(!name.ends_with(".glb")) name+=".glb";
+              launchImport(std::move(picked),"Fontes/"+name);
+            }
           }
         }
         // R1: etapa real da abertura na barra de estado enquanto o worker trabalha.
@@ -2390,6 +2791,34 @@ void android_main(android_app *app) {
             });
           }
         }
+        const auto sameEnvironmentSettings=[](const auto &a,const auto &b) {
+          return a.panoramaWidth==b.panoramaWidth&&a.specularSize==b.specularSize&&
+                 a.brdfSize==b.brdfSize&&a.specularSamples==b.specularSamples&&
+                 a.brdfSamples==b.brdfSamples;
+        };
+        const auto reprepareEnvironment=[&](AndroidShell::PreparedEnvironment previous,
+                                            ae::resources::EnvironmentMapImportSettings settings) {
+          shell.importCancellation=std::make_shared<std::atomic<bool>>(false);auto cancel=shell.importCancellation;
+          shell.environmentImportWork=std::async(std::launch::async,
+            [previous=std::move(previous),cancel,settings]() mutable {
+              previous.map.reset();previous.settings=settings;
+              const ae::resources::EnvironmentMapImportLimits limits;
+              const ae::resources::EnvironmentMapCancel watch{
+                [](void *context){return static_cast<std::atomic<bool>*>(context)->load();},cancel.get()};
+              previous.accepted=ae::resources::importRadianceEnvironmentMap(previous.bytes,settings,
+                  limits,watch,previous.map,previous.diagnostic);
+              return previous;
+            });
+        };
+        ae::resources::EnvironmentMapImportSettings environmentSettings;
+        if(!shell.environmentImportWork.valid()&&session.takeEnvironmentImportReprepare(environmentSettings)) {
+          if(!shell.environmentImportPreview)
+            session.setImportStatus("Não há HDRI para preparar de novo.",ae::editor::EditorConsoleSeverity::Warning);
+          else {
+            auto previous=std::move(*shell.environmentImportPreview);shell.environmentImportPreview.reset();
+            reprepareEnvironment(std::move(previous),environmentSettings);
+          }
+        }
         if(shell.importWork.valid() && shell.importWork.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
           auto prepared=shell.importWork.get();
           if(shell.importCancellation->load() || prepared.root!=session.codeProjectRoot() || prepared.epoch!=session.sceneVersion().epoch) {
@@ -2405,7 +2834,103 @@ void android_main(android_app *app) {
             shell.importPreview=std::move(prepared);
           }
         }
-        if(session.takeImportAccept() && shell.importPreview) {
+        if(shell.environmentImportWork.valid()&&
+           shell.environmentImportWork.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
+          auto prepared=shell.environmentImportWork.get();
+          if(shell.importCancellation->load()||prepared.root!=session.codeProjectRoot()||
+             prepared.epoch!=session.sceneVersion().epoch) {
+            session.closeImportPreview();session.setImportStatus("Preparação HDRI descartada; projeto preservado.");
+          } else if(!sameEnvironmentSettings(prepared.settings,session.environmentMapImportSettings())) {
+            session.takeEnvironmentImportReprepare(environmentSettings);
+            session.setImportStatus("Repreparando iluminação HDRI com as últimas opções…");
+            reprepareEnvironment(std::move(prepared),session.environmentMapImportSettings());
+          } else if(!prepared.accepted||!prepared.map) {
+            session.showImportFailure(prepared.diagnostic.empty()?"O importador não conseguiu preparar este HDRI.":prepared.diagnostic);
+            if(!prepared.bytes.empty()) shell.environmentImportPreview=std::move(prepared);
+          } else {
+            session.takeEnvironmentImportReprepare(environmentSettings);
+            session.showEnvironmentImportPreview(prepared.path,*prepared.map,prepared.settings);
+            shell.environmentImportPreview=std::move(prepared);
+          }
+        }
+        const auto reprepareTexture=[&](AndroidShell::PreparedTexture previous,
+                                        ae::resources::TextureProfile settings) {
+          shell.importCancellation=std::make_shared<std::atomic<bool>>(false);const auto cancel=shell.importCancellation;
+          shell.textureImportWork=std::async(std::launch::async,
+              [previous=std::move(previous),cancel,settings]() mutable {
+            previous.asset={};previous.settings=settings;
+            previous.accepted=ae::resources::prepareTextureImport(previous.bytes,settings,true,
+                ae::editor::EditorMapScene::DefaultTextureSampler,previous.limits,cancel.get(),previous.asset);
+            previous.diagnostic=previous.asset.diagnostic;return previous;
+          });
+        };
+        ae::resources::TextureProfile textureSettings;
+        if(!shell.textureImportWork.valid()&&session.takeTextureImportReprepare(textureSettings)) {
+          if(!shell.textureImportPreview)
+            session.setImportStatus("Não há textura para preparar de novo.",ae::editor::EditorConsoleSeverity::Warning);
+          else {
+            auto previous=std::move(*shell.textureImportPreview);shell.textureImportPreview.reset();
+            reprepareTexture(std::move(previous),textureSettings);
+          }
+        }
+        if(shell.textureImportWork.valid()&&
+           shell.textureImportWork.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
+          auto prepared=shell.textureImportWork.get();
+          if(shell.importCancellation->load()||prepared.root!=session.codeProjectRoot()||
+             prepared.epoch!=session.sceneVersion().epoch) {
+            session.closeImportPreview();session.setImportStatus("Preparação de textura descartada; projeto preservado.");
+          } else if(!ae::resources::sameTextureProfile(prepared.settings,session.textureImportSettings())) {
+            session.takeTextureImportReprepare(textureSettings);
+            session.setImportStatus("Repreparando textura com as últimas opções…");
+            reprepareTexture(std::move(prepared),session.textureImportSettings());
+          } else if(!prepared.accepted||!prepared.asset.valid()) {
+            if(prepared.bytes.empty())
+              session.showImportFailure(prepared.diagnostic.empty()?"A fonte da textura está indisponível.":prepared.diagnostic);
+            else {
+              session.showTextureImportPreview(prepared.path,prepared.asset,prepared.settings);
+              shell.textureImportPreview=std::move(prepared);
+            }
+          } else {
+            session.takeTextureImportReprepare(textureSettings);
+            session.showTextureImportPreview(prepared.path,prepared.asset,prepared.settings);
+            shell.textureImportPreview=std::move(prepared);
+          }
+        }
+        const bool importAccepted=session.takeImportAccept();
+        if(importAccepted&&shell.textureImportPreview) {
+          session.closeImportPreview();auto prepared=std::move(*shell.textureImportPreview);
+          shell.textureImportPreview.reset();std::string diagnostic;
+          if(prepared.root!=session.codeProjectRoot()||prepared.epoch!=session.sceneVersion().epoch)
+            session.setImportStatus("Publicação descartada: o projeto ou a cena mudou.",ae::editor::EditorConsoleSeverity::Warning);
+          else if(!session.commitTextureImport(prepared.path,prepared.bytes,prepared.expectedHash,prepared.asset,
+                                                prepared.settings,diagnostic)) session.showImportFailure(diagnostic);
+          else {
+            shell.editorPublishedRevision=~ae::u64{0};
+            session.setImportStatus("Textura importada; configure seus usos nos materiais.");
+          }
+        } else if(importAccepted&&shell.environmentImportPreview) {
+          session.closeImportPreview();auto prepared=std::move(*shell.environmentImportPreview);
+          shell.environmentImportPreview.reset();std::string diagnostic;
+          if(prepared.root!=session.codeProjectRoot()||prepared.epoch!=session.sceneVersion().epoch)
+            session.setImportStatus("Publicação HDRI descartada: o projeto ou a cena mudou.",ae::editor::EditorConsoleSeverity::Warning);
+          else if(!session.commitEnvironmentMap(prepared.path,prepared.bytes,prepared.expectedHash,prepared.map,
+                                                prepared.settings,diagnostic))
+            session.showImportFailure(diagnostic);
+          else {
+            std::filesystem::path cachePath;std::vector<ae::u8> cache;
+            const std::string relative=ae::resources::environmentMapCacheRelativePath(prepared.map->cacheKey);
+            std::error_code error;
+            const bool safe=ae::editor::EditorImportTransaction::safePath(
+                ae::editor::EditorImportTransaction::fromUtf8(prepared.root),relative,cachePath);
+            if(safe)std::filesystem::create_directories(cachePath.parent_path(),error);
+            if(!safe||error||!ae::resources::writeEnvironmentMapCache(*prepared.map,cache)||
+               !ae::editor::EditorImportTransaction::write(cachePath,cache))
+              __android_log_print(ANDROID_LOG_WARN,LogTag,"[Cache] HDRI importado, mas derivado não foi gravado.");
+            shell.instancedRenderer.setEnvironmentMaps(session.environmentMaps());
+            shell.editorPublishedRevision=~ae::u64{0};
+            session.setImportStatus("HDRI importado; selecione-o no componente Ambiente.");
+          }
+        } else if(importAccepted && shell.importPreview) {
           const bool intoScene=session.takeImportIntoScene();
           // A exclusão de nós é escolhida DEPOIS da preparação, na aba
           // Estrutura, sem reler o arquivo. Ela entra aqui, no perfil que vai
@@ -2458,8 +2983,14 @@ void android_main(android_app *app) {
           auto &authored=shell.authoredDraws;
           const bool changed=shell.editorPublishedRevision!=shell.editorSession.document().revision();
           bool ready=!(changed || lodChanged) || shell.editorSession.extractMap(authored);
-          if(editorPlaying && shell.independentWorkspace)
-            ready=shell.editorSession.extractPlayMap(authored);
+          if(editorPlaying && shell.independentWorkspace) {
+            const auto &effective=shell.instancedRendererReady?
+                shell.instancedRenderer.activeRenderingPolicy():shell.activeRenderingPolicy;
+            shell.editorSession.configureScriptRendering(shell.renderingSettings,shell.renderingCapabilities,
+                shell.thermalMonitor.state().pressure,effective);
+            ready=shell.editorSession.extractPlayMap(authored,shell.gameInput.snapshot(),
+                !ae::platform::android::editorCodePanelVisible());
+          }
           if(changed && shell.authoredWaterPlay.active()) shell.authoredWaterPlay.stop();
           if(ready && editorPlaying && !shell.independentWorkspace) {
             if(!shell.authoredWaterPlay.active()) {
@@ -2482,6 +3013,7 @@ void android_main(android_app *app) {
           }
           if (queued) {
             shell.editorPublishedRevision = shell.editorSession.document().revision();
+            if(changed) shell.instancedRenderer.setEnvironmentMaps(shell.editorSession.environmentMaps());
             // As luzes seguem o mesmo quadro dos desenhos. Republicar sempre é
             // barato (são poucas) e evita um segundo conceito de "sujo" para um
             // estado que muda por script no meio do Play.
@@ -2505,6 +3037,12 @@ void android_main(android_app *app) {
             if(editorPlaying) shell.editorSession.reportPlayFailure();
           }
         }
+        const auto &environmentMapDiagnostic=shell.instancedRenderer.environmentMapDiagnostic();
+        if(environmentMapDiagnostic!=shell.editorEnvironmentMapDiagnostic) {
+          shell.editorEnvironmentMapDiagnostic=environmentMapDiagnostic;
+          if(!environmentMapDiagnostic.empty())
+            shell.editorSession.setImportStatus(environmentMapDiagnostic,ae::editor::EditorConsoleSeverity::Warning);
+        }
         // A grade é publicada como plano para o renderer desenhar dentro da
         // cena. Antes ela era uma lista de segmentos na interface, por cima de
         // tudo; agora ela testa profundidade como qualquer outro desenho.
@@ -2525,10 +3063,9 @@ void android_main(android_app *app) {
       // sobreposicao sobre uma cena parada em outro lugar, que e exatamente a
       // sensacao de "isto e uma cena rodando, nao um editor".
       ae::platform::FreeCameraState sceneCamera = shell.cameraController.state();
-      shell.instancedRenderer.setSceneClipPlanes(0, 0);
-      shell.instancedRenderer.setSceneFieldOfView(0);
-      shell.instancedRenderer.setSceneOrthographicHalfHeight(0);
-      shell.instancedRenderer.setSceneEnvironmentLayerMask(~0u);
+      float sceneNear=0,sceneFar=0,sceneFov=0,sceneOrthoHeight=0;
+      ae::u32 sceneEnvironmentMask=~0u;
+      ae::u32 exposureCameraEntity=0;
       shell.instancedRenderer.setEditorBackground(editorActive && !editorPlaying);
       const auto &editorScreen=shell.editorSession.screen();
       shell.instancedRenderer.setEditorViewportOptions(
@@ -2539,9 +3076,9 @@ void android_main(android_app *app) {
           !editorActive||editorPlaying||editorScreen.scenePost);
       if (editorActive) {
         const auto &projection = shell.editorSession.view().frustum;
-        shell.instancedRenderer.setSceneClipPlanes(projection.nearPlane, projection.farPlane);
-        shell.instancedRenderer.setSceneFieldOfView(2*std::atan(projection.tangentHalfVertical));
-        shell.instancedRenderer.setSceneOrthographicHalfHeight(ae::renderer::isOrthographic(projection)?projection.orthographicHalfHeight:0);
+        sceneNear=projection.nearPlane;sceneFar=projection.farPlane;
+        sceneFov=2*std::atan(projection.tangentHalfVertical);
+        sceneOrthoHeight=ae::renderer::isOrthographic(projection)?projection.orthographicHalfHeight:0;
         std::copy(projection.cameraPosition,projection.cameraPosition+3,sceneCamera.position);
         sceneCamera.yaw = projection.yaw;
         sceneCamera.pitch = projection.pitch;
@@ -2549,16 +3086,25 @@ void android_main(android_app *app) {
         if(editorPlaying) {
           const auto authoredCamera=shell.editorSession.sceneCameraPose();
           if(authoredCamera.entity) {
+            exposureCameraEntity=authoredCamera.entity;
             std::copy(authoredCamera.position,authoredCamera.position+3,sceneCamera.position);
             sceneCamera.yaw=authoredCamera.yaw;sceneCamera.pitch=authoredCamera.pitch;
             sceneCamera.roll=authoredCamera.roll;
-            shell.instancedRenderer.setSceneClipPlanes(authoredCamera.nearPlane,authoredCamera.farPlane);
-            shell.instancedRenderer.setSceneFieldOfView(authoredCamera.verticalFov*0.017453292519943295f);
-            shell.instancedRenderer.setSceneOrthographicHalfHeight(authoredCamera.projection==ae::scene::CameraProjection::Orthographic?authoredCamera.orthographicHalfHeight:0);
-            shell.instancedRenderer.setSceneEnvironmentLayerMask(authoredCamera.environmentMask);
+            sceneNear=authoredCamera.nearPlane;sceneFar=authoredCamera.farPlane;
+            sceneFov=authoredCamera.verticalFov*0.017453292519943295f;
+            sceneOrthoHeight=authoredCamera.projection==ae::scene::CameraProjection::Orthographic?authoredCamera.orthographicHalfHeight:0;
+            sceneEnvironmentMask=authoredCamera.environmentMask;
           }
         }
       }
+      // Publish only the selected camera. Resetting to defaults before applying
+      // it invalidated TAA history on every frame, even with a static camera.
+      shell.instancedRenderer.setSceneClipPlanes(sceneNear,sceneFar);
+      shell.instancedRenderer.setSceneFieldOfView(sceneFov);
+      shell.instancedRenderer.setSceneOrthographicHalfHeight(sceneOrthoHeight);
+      shell.instancedRenderer.setSceneEnvironmentLayerMask(sceneEnvironmentMask);
+      shell.instancedRenderer.setAutoExposureSceneEpoch(shell.editorSession.sceneVersion().epoch,exposureCameraEntity);
+      shell.instancedRenderer.setAutoExposurePaused(editorPlaying&&shell.editorSession.screen().playPaused);
       ae::renderer::RenderViewSnapshot previewRequest;
       auto &preview=shell.editorSession.cameraPreview();
       const bool previewVisible=editorActive && !editorPlaying &&
@@ -2569,9 +3115,17 @@ void android_main(android_app *app) {
       if(!preview.camera() || !previewVisible) shell.instancedRenderer.closeCameraPreview();
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, sceneCamera, hud);
+      const auto &autoExposureDiagnostic=shell.instancedRenderer.autoExposureDiagnostic();
+      if(autoExposureDiagnostic!=shell.editorAutoExposureDiagnostic) {
+        shell.editorAutoExposureDiagnostic=autoExposureDiagnostic;
+        if(!autoExposureDiagnostic.empty())
+          shell.editorSession.setImportStatus(autoExposureDiagnostic,
+                                              ae::editor::EditorConsoleSeverity::Error);
+      }
       ae::renderer::RenderViewSnapshot previewCompleted;bool previewSuccess=false;
       if(shell.instancedRenderer.takeCameraPreviewCompletion(previewCompleted,previewSuccess))
-        preview.complete(previewCompleted,shell.editorSession.sceneVersion(),previewSuccess);
+        preview.complete(previewCompleted,shell.editorSession.sceneVersion(),previewSuccess,
+                         shell.instancedRenderer.cameraPreviewDiagnostic());
       if(frameStatus!=ae::rhi::SwapchainStatus::Ok) preview.invalidateTarget();
       const ae::u64 frameThreadCpuFinished = currentThreadCpuNanoseconds();
       const ae::u64 frameMonotonicFinished = currentMonotonicNanoseconds();
@@ -2670,7 +3224,7 @@ void android_main(android_app *app) {
       }
       if (frameStatus == ae::rhi::SwapchainStatus::Ok) {
         const VkExtent2D display = shell.vulkanSurface.swapchain().displayExtent();
-        const auto &camera = shell.cameraController.state();
+        const auto &camera = sceneCamera;
         ae::platform::android::FrameProfileContext context{};
         context.sceneId = profileSceneId(shell);
         context.contentFingerprint = shell.instancedRenderer.contentFingerprint();
@@ -2759,6 +3313,12 @@ void android_main(android_app *app) {
 
   {
     ae::platform::android::DotNetHost::NativeRegion nativeGc(shell.dotNetHost);
+    if(shell.importCancellation)shell.importCancellation->store(true);
+    if(shell.reopenCancellation)shell.reopenCancellation->store(true);
+    if(shell.importWork.valid())shell.importWork.wait();
+    if(shell.environmentImportWork.valid())shell.environmentImportWork.wait();
+    if(shell.textureImportWork.valid())shell.textureImportWork.wait();
+    if(shell.reopenWork.valid())shell.reopenWork.wait();
     if (shell.languageCancel) shell.languageCancel();
     if (shell.languageWork.valid()) shell.languageWork.wait();
     if (shell.codeCompilation.valid()) shell.codeCompilation.wait();

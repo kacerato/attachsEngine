@@ -1,0 +1,8 @@
+Source: https://github.com/playdeadgames/temporal
+Commit: 4795aa0007d464371abe60b7b28a1cf893a4e349
+License: MIT, see LICENSE.txt
+Subset: RGB/YCoCg conversion and optimized center-directed AABB clipping from
+Assets/Shaders/TemporalReprojection.shader, ported to GLSL in
+native/rhi/shaders/temporal_clipping.glsl. No Unity runtime dependency.
+Adaptations: vec3 only, nonnegative RGB output without clipping HDR to one,
+epsilon 1e-5. Camera reprojection and neighborhood integration belong to Astra.

@@ -1186,9 +1186,24 @@ def main():
             *dimensions, coverage_by_mip = cook_texture(
                 args.astcenc, args.cache, args.out, f"texture_{cooked_index:03d}", source, srgb,
                 normal_map, args.quality, args.jobs, coverage_cutoff, args.reuse_textures)
-            sampler = gltf.get("samplers", [{}])[texture.get("sampler", 0)]
-            flags = (1 if sampler.get("magFilter", 9729) == 9729 else 0)
-            flags |= (2 if sampler.get("minFilter", 9987) in (9987, 9985) else 0)
+            # `texture.sampler` ausente pede o sampler automático do glTF; não
+            # significa o sampler zero, mesmo quando o arquivo declara outros.
+            sampler_index = texture.get("sampler")
+            samplers = gltf.get("samplers", [])
+            sampler = samplers[sampler_index] if sampler_index is not None else {}
+            mag_filter = sampler.get("magFilter", 9729)
+            min_filter = sampler.get("minFilter", 9987)
+            # Bits altos versionam min/mag/mip independentes. Bits 0/1 ficam
+            # como aproximação para runtimes antigos e não mudam de significado.
+            flags = 1 << 24
+            if min_filter in (9729, 9985, 9987):
+                flags |= 1 << 25
+            if mag_filter == 9729:
+                flags |= (1 << 26) | 1
+            if min_filter in (9984, 9985, 9986, 9987):
+                flags |= 1 << 27
+            if min_filter in (9986, 9987):
+                flags |= (1 << 28) | 2
             flags |= (4 if sampler.get("wrapS", 10497) == 33071 else 0)
             flags |= (8 if sampler.get("wrapT", 10497) == 33071 else 0)
             flags |= (16 if srgb else 0)

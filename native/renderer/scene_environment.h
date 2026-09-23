@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/base.h"
+#include "resources/asset_registry.h"
 #include <algorithm>
 #include <cmath>
 #include <span>
@@ -8,8 +9,9 @@
 
 namespace ae::renderer {
 
-enum class SkyModel : u32 { Hdri = 0, Atmosphere = 1 };
-enum class ToneMapper : u32 { Neutral = 0, Aces = 1 };
+enum class SkyModel : u32 { Hdri = 0, Atmosphere = 1, PhysicalAtmosphere = 2 };
+// Neutral was the historical name for Reinhard, not Unity's Neutral curve.
+enum class ToneMapper : u32 { Reinhard = 0, Neutral = Reinhard, Aces = 1, AgX = 2 };
 enum class EnvironmentVolumeShape : u32 { Global = 0, Box = 1, Sphere = 2 };
 
 enum EnvironmentOverride : u32 {
@@ -33,7 +35,11 @@ struct SceneEnvironment final {
   bool vignette = false;
   bool filmGrain = false;
   bool ambientOcclusion = false;
+  bool physicalAtmosphereHighQuality = false;
   SkyModel sky = SkyModel::Atmosphere;
+  resources::AssetGuid environmentMap{};
+  float hdriRotationDegrees = 0.0f;
+  float hdriExposureEv = 0.0f;
   ToneMapper toneMapper = ToneMapper::Aces;
   float priority = 0.0f;
   float skyZenith[3]{0.025f, 0.10f, 0.32f};
@@ -42,10 +48,42 @@ struct SceneEnvironment final {
   float atmosphere = 1.0f;
   float sunDiskDegrees = 0.53f;
   float sunDiskIntensity = 8.0f;
+  // Physical-atmosphere distances use kilometres. Keeping the planetary
+  // calculation near 10^3 rather than 10^6 avoids precision loss in the
+  // mobile fragment shader's ray/sphere intersections. This is real-time
+  // single scattering: ozone, multiple scattering and volumetric aerial
+  // perspective are outside this sky pass.
+  float physicalSkyIntensity = 1.0f;
+  float airDensity = 1.0f;
+  float aerosolDensity = 1.0f;
+  float aerosolAnisotropy = 0.76f;
+  float planetRadiusKm = 6371.0f;
+  float observerHeightKm = 0.002f;
+  float rayleighScaleHeightKm = 8.0f;
+  float aerosolScaleHeightKm = 1.2f;
+  float atmosphereHeightKm = 100.0f;
+  float groundAlbedo = 0.10f;
   float fogColor[3]{0.58f, 0.67f, 0.76f};
+  // Multiplies the linear fog tint into scene-referred HDR radiance.
+  float fogLightEnergy = 1.0f;
   float fogDensity = 0.008f;
   float fogStart = 8.0f;
+  // Density equals fogDensity at this world-space height and decays upward as
+  // exp(-fogHeightFalloff * (height - fogBaseHeight)). Falloff zero preserves
+  // the historical uniform exponential fog exactly.
+  float fogBaseHeight = 0.0f;
+  float fogHeightFalloff = 0.0f;
   float exposureEv = 0.0f;
+  // Quando ativo, exposureEv compensa o EV medido do HDR da câmera.
+  bool autoExposure = false;
+  float autoExposureMinEv = -8.0f;
+  float autoExposureMaxEv = 8.0f;
+  float autoExposureLowPercent = 0.05f;
+  float autoExposureHighPercent = 0.95f;
+  float autoExposureTargetGrey = 0.18f;
+  float autoExposureSpeedUp = 2.0f;
+  float autoExposureSpeedDown = 3.0f;
+  bool autoExposureCenterWeighted = false;
   float bloomThreshold = 1.0f;
   float bloomIntensity = 0.10f;
   float contrast = 1.0f;
@@ -63,22 +101,41 @@ struct SceneEnvironment final {
   float indirectSpecular = 1.0f;
 
   bool valid() const noexcept {
-    if (static_cast<u32>(sky) > 1 || static_cast<u32>(toneMapper) > 1) return false;
-    const float scalars[]{priority, atmosphere, sunDiskDegrees, sunDiskIntensity,
-                          fogDensity, fogStart, exposureEv, bloomThreshold,
+    if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 2) return false;
+    const float scalars[]{priority, atmosphere, sunDiskDegrees, sunDiskIntensity, hdriRotationDegrees, hdriExposureEv,
+                          fogLightEnergy, fogDensity, fogStart, fogBaseHeight, fogHeightFalloff,
+                          exposureEv, autoExposureMinEv, autoExposureMaxEv,
+                          autoExposureLowPercent, autoExposureHighPercent,
+                          autoExposureTargetGrey, autoExposureSpeedUp, autoExposureSpeedDown,
+                          bloomThreshold,
                           bloomIntensity, contrast, saturation, vignetteIntensity,
                           filmGrainIntensity,
                           ambientOcclusionRadius, ambientOcclusionIntensity,
-                          ambientOcclusionPower, ambientOcclusionBias, indirectDiffuse, indirectSpecular};
+                          ambientOcclusionPower, ambientOcclusionBias, indirectDiffuse, indirectSpecular,
+                          physicalSkyIntensity, airDensity, aerosolDensity, aerosolAnisotropy,
+                          planetRadiusKm, observerHeightKm, rayleighScaleHeightKm,
+                          aerosolScaleHeightKm, atmosphereHeightKm, groundAlbedo};
     for (float value : scalars) if (!std::isfinite(value)) return false;
     for (const float *color : {skyZenith, skyHorizon, ground, fogColor})
       for (u32 channel = 0; channel < 3; ++channel)
         if (!std::isfinite(color[channel]) || color[channel] < 0.0f || color[channel] > 1.0f)
           return false;
-    return atmosphere >= 0.0f && atmosphere <= 1.0f &&
+    return hdriRotationDegrees>=-360.0f && hdriRotationDegrees<=360.0f &&
+           hdriExposureEv>=-16.0f && hdriExposureEv<=16.0f &&
+           atmosphere >= 0.0f && atmosphere <= 1.0f &&
            sunDiskDegrees >= 0.05f && sunDiskDegrees <= 10.0f && sunDiskIntensity >= 0.0f &&
+           fogLightEnergy >= 0.0f && fogLightEnergy <= 65504.0f &&
            fogDensity >= 0.0f && fogDensity <= 1.0f && fogStart >= 0.0f &&
+           fogBaseHeight >= -100000.0f && fogBaseHeight <= 100000.0f &&
+           fogHeightFalloff >= 0.0f && fogHeightFalloff <= 10.0f &&
            exposureEv >= -16.0f && exposureEv <= 16.0f &&
+           autoExposureMinEv >= -16.0f && autoExposureMaxEv <= 16.0f &&
+           autoExposureMinEv <= autoExposureMaxEv &&
+           autoExposureLowPercent >= 0.0f && autoExposureHighPercent <= 1.0f &&
+           autoExposureLowPercent < autoExposureHighPercent &&
+           autoExposureTargetGrey >= 0.01f && autoExposureTargetGrey <= 1.0f &&
+           autoExposureSpeedUp >= 0.01f && autoExposureSpeedUp <= 20.0f &&
+           autoExposureSpeedDown >= 0.01f && autoExposureSpeedDown <= 20.0f &&
            bloomThreshold >= 0.0f && bloomThreshold <= 64.0f &&
            bloomIntensity >= 0.0f && bloomIntensity <= 2.0f &&
            contrast >= 0.5f && contrast <= 2.0f && saturation >= 0.0f && saturation <= 2.0f &&
@@ -89,7 +146,17 @@ struct SceneEnvironment final {
            ambientOcclusionPower >= 0.1f && ambientOcclusionPower <= 4.0f &&
            ambientOcclusionBias >= 0.0f && ambientOcclusionBias <= 1.0f &&
            indirectDiffuse >= 0.0f && indirectDiffuse <= 4.0f &&
-           indirectSpecular >= 0.0f && indirectSpecular <= 4.0f;
+           indirectSpecular >= 0.0f && indirectSpecular <= 4.0f &&
+           physicalSkyIntensity >= 0.0f && physicalSkyIntensity <= 16.0f &&
+           airDensity >= 0.0f && airDensity <= 8.0f &&
+           aerosolDensity >= 0.0f && aerosolDensity <= 8.0f &&
+           aerosolAnisotropy >= 0.0f && aerosolAnisotropy <= 0.95f &&
+           planetRadiusKm >= 1.0f && planetRadiusKm <= 100000.0f &&
+           observerHeightKm >= 0.0f && observerHeightKm <= atmosphereHeightKm &&
+           rayleighScaleHeightKm >= 0.1f && rayleighScaleHeightKm <= 100.0f &&
+           aerosolScaleHeightKm >= 0.05f && aerosolScaleHeightKm <= 50.0f &&
+           atmosphereHeightKm >= 1.0f && atmosphereHeightKm <= 1000.0f &&
+           groundAlbedo >= 0.0f && groundAlbedo <= 1.0f;
   }
 };
 

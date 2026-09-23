@@ -1,8 +1,9 @@
 #pragma once
 #include "core/base.h"
+#include <cstddef>
 
 namespace ae::scene {
-// ABI v5 é independente de Editor e de headers do CLR. Todos os callbacks e
+// A ABI é independente de Editor e de headers do CLR. Todos os callbacks e
 // chamadas de runtime executam na thread dona do mundo, e os buffers só valem
 // durante a chamada.
 //
@@ -49,8 +50,63 @@ struct ScriptShapeQuery {
   float rotation[4]{0,0,0,1};
 };
 
+struct ScriptAssetGuid { u64 high=0,low=0; };
+
+// ABI v6. Enums cross as u32; booleans also use u32 so C++/CLR layout is stable.
+// The settings block mirrors ProjectRenderingSettings in one place at the ABI.
+struct ScriptRenderingSettings {
+  u32 size=sizeof(ScriptRenderingSettings),schemaVersion=0;
+  u32 preset=0,shadows=0,ambient=0,post=0,textures=0,waterMesh=0;
+  float resolutionScale=0; u32 maximumRenderHz=0;
+  u32 shadowCascadeCount=0,shadowCascadeResolution=0,shadowFilterTaps=0,shadowFarFilterTaps=0;
+  float shadowMaximumDistance=0,shadowDepthBiasConstant=0,shadowDepthBiasSlope=0,shadowNormalOffsetTexels=0;
+  u32 staticShadowCache=0; float shadowCacheGuardBandRatio=0,shadowCascadeBlendRatio=0,shadowDistanceFadeRatio=0;
+  float lodPixelErrorBudget=0,coverageLodPixelErrorBudget=0,lodHysteresisBandRatio=0;
+  u32 lodSelection=0,materialShaderVariants=0,environmentSplitSumBrdf=0;
+  float normalMapMaximumDistance=0,specularProbeMaximumDistance=0,metallicRoughnessMaximumDistance=0;
+  float emissiveMaximumDistance=0,materialDetailFadeBandRatio=0; u32 thermalDistanceScaling=0;
+  u32 antiAliasing=0,upscalingFilter=0,postFxaa=0,postVignette=0;
+  float bloomThreshold=0,bloomIntensity=0,postContrast=0,postSaturation=0,postSharpen=0,temporalHistoryWeight=0;
+  u32 dynamicResolution=0; float dynamicResolutionMinimumScale=0,dynamicResolutionDecreaseStep=0;
+  float dynamicResolutionIncreaseStep=0,dynamicResolutionRecoveryHeadroomRatio=0;
+  u32 dynamicResolutionOverloadFrames=0,dynamicResolutionRecoveryFrames=0;
+};
+
+struct ScriptResolvedRenderingPolicy {
+  u32 size=sizeof(ScriptResolvedRenderingPolicy);
+  u32 renderHz=0,simulationHz=0; float frameIntervalMs=0,cpuLaneBudgetMs=0,gpuLaneBudgetMs=0,compositorReserveMs=0;
+  u32 hzbMinimumCandidateDraws=0,hzbHysteresisFrames=0; float hzbNormalizedDepthBias=0,lodPixelErrorBudget=0;
+  float coverageLodPixelErrorBudget=0,lodHysteresisBandRatio=0;
+  u32 shadowsEnabled=0,shadowCascadeCount=0,shadowCascadeResolution=0,shadowFilterTaps=0,shadowFarFilterTaps=0;
+  float shadowMaximumDistance=0,shadowDepthBiasConstant=0,shadowDepthBiasSlope=0,shadowNormalOffsetTexels=0;
+  u32 shadowStabilizeTexelSnap=0,staticShadowCache=0; float shadowCacheGuardBandRatio=0,shadowCascadeBlendRatio=0,shadowDistanceFadeRatio=0;
+  u32 ambientHemispheric=0,ambientSpecularProbe=0,ambientSplitSumBrdf=0;
+  u32 postDedicatedPass=0,postBloom=0,antiAliasing=0,upscalingFilter=0,postVignette=0;
+  float bloomThreshold=0,bloomIntensity=0,postContrast=0,postSaturation=0,postSharpen=0,vignetteIntensity=0,temporalHistoryWeight=0;
+  u32 lodSelection=0,materialShaderVariants=0,waterMesh=0,textureResidencyMipBias=0;
+  float samplerAnisotropy=0,normalMapMaximumDistance=0,specularProbeMaximumDistance=0;
+  float metallicRoughnessMaximumDistance=0,emissiveMaximumDistance=0,materialDetailFadeBandRatio=0;
+  u32 dynamicResolutionEnabled=0; float dynamicResolutionMinimumScale=0,dynamicResolutionMaximumScale=0;
+  float dynamicResolutionDecreaseStep=0,dynamicResolutionIncreaseStep=0,dynamicResolutionRecoveryHeadroomRatio=0;
+  u32 dynamicResolutionOverloadFrames=0,dynamicResolutionRecoveryFrames=0;
+  float resolutionScale=0; u32 effectiveProfile=0,clampCount=0;
+};
+
+struct ScriptRenderingCapabilities {
+  u32 size=sizeof(ScriptRenderingCapabilities),profile=0,recommendedProfile=0,recommendationSource=0;
+  u32 maximumImage2DSize=0,maximumImageArrayLayers=0,supportsDepthSampling=0;
+  float maximumSamplerAnisotropy=0,displayHz=0;
+};
+struct ScriptRenderingState {
+  u32 size=sizeof(ScriptRenderingState),world=0,pending=0,lastRequestSucceeded=0,effectiveAvailable=0;
+  u64 pendingRequestId=0;
+  ScriptRenderingSettings requested{};
+  ScriptResolvedRenderingPolicy effective{};
+  ScriptRenderingCapabilities capabilities{};
+};
+
 struct ScriptSceneAccess {
-  u32 version=5,size=sizeof(ScriptSceneAccess);
+  u32 version=8,size=sizeof(ScriptSceneAccess);
   void *context=nullptr;
   int (*exists)(void *,u64)=nullptr;
   int (*getTransform)(void *,u64,float *)=nullptr; // position3 quaternion4 scale3, local space
@@ -107,15 +163,34 @@ struct ScriptSceneAccess {
   int (*inputButton)(void *,const u8 *,int,u32)=nullptr;        // 0 down, 1 pressed, 2 released
   int (*inputContext)(void *,const u8 *,int,int)=nullptr;       // -1 apenas consulta
   int (*inputRole)(void *,u32,u8 *,int)=nullptr;
+  // --- v6: política gráfica de execução e recursos tipados ---------------
+  int (*getRenderingState)(void *,u32,ScriptRenderingState *)=nullptr;
+  int (*setRenderingSettings)(void *,u32,const ScriptRenderingSettings *,u64 *)=nullptr;
+  int (*copyRenderingDiagnostics)(void *,u32,u8 *,int)=nullptr;
+  int (*getComponentResource)(void *,u64,u64,const u8 *,int,u32,ScriptAssetGuid *)=nullptr;
+  int (*setComponentResource)(void *,u64,u64,const u8 *,int,u32,ScriptAssetGuid)=nullptr;
+  // ABI v7: valores definidos pelo schema por slot (float=0, enum=2).
+  int (*getComponentSlotProperty)(void *,u64,u64,const u8 *,int,u32,u32 *,u64 *)=nullptr;
+  int (*setComponentSlotProperty)(void *,u64,u64,const u8 *,int,u32,u32,u64)=nullptr;
+  // ABI v8: comandos de gameplay. Movimento recebe right/forward em [-1,1]
+  // e yaw em radianos; olhar recebe delta normalizado da viewport (x,y).
+  int (*characterMove)(void *,u64,const float *)=nullptr;
+  int (*characterJump)(void *,u64)=nullptr;
+  int (*cameraLook)(void *,u64,const float *)=nullptr;
   bool available() const {
     return exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
            worldId&&generation&&lastStatus&&parentOf&&childCount&&childAt&&findChild&&getName&&setName&&
            getActive&&setActive&&createObject&&destroyObject&&setParent&&componentCount&&componentAt&&
            findComponent&&addComponent&&removeComponent&&getProperty&&setProperty&&
            getWorldTransform&&setWorldTransform&&rayCast&&shapeCast&&overlap&&layerByName&&layerName&&
-           inputAxis&&inputButton&&inputContext&&inputRole;
+           inputAxis&&inputButton&&inputContext&&inputRole&&getRenderingState&&setRenderingSettings&&
+           copyRenderingDiagnostics&&getComponentResource&&setComponentResource&&
+           getComponentSlotProperty&&setComponentSlotProperty&&characterMove&&characterJump&&cameraLook;
   }
 };
+static_assert(offsetof(ScriptSceneAccess,characterJump)==offsetof(ScriptSceneAccess,characterMove)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,cameraLook)==offsetof(ScriptSceneAccess,characterJump)+sizeof(void*));
+static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,cameraLook)+sizeof(void*));
 struct ScriptRuntimeApi {
   int (*start)(const u8 *,int,const u8 *,int,const ScriptSceneAccess *)=nullptr;
   int (*update)(float)=nullptr;

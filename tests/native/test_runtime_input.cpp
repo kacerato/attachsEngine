@@ -2,6 +2,7 @@
 #include "editor/editor_archive.h"
 #include "editor/editor_document.h"
 #include "runtime/input_actions.h"
+#include "platform/android/android_game_input.h"
 
 using namespace ae;
 using namespace ae::editor;
@@ -12,6 +13,35 @@ using ae::runtime::InputBinding;
 using ae::runtime::InputDeviceState;
 using ae::runtime::InputService;
 using ae::runtime::InputSource;
+
+AE_TEST(android_game_input_feeds_actions_and_releases_devices) {
+  ae::platform::android::AndroidGameInputState raw;
+  InputActionMap map;
+  InputAction key;key.id="Tecla";key.kind=ActionKind::Button;
+  key.bindings={{InputSource::Key,69,0,0,1,false}};
+  InputAction button;button.id="Controle";button.kind=ActionKind::Button;
+  button.bindings={{InputSource::GamepadButton,96,0,0,1,false}};
+  InputAction axis;axis.id="Direção";axis.kind=ActionKind::Axis2D;
+  axis.bindings={{InputSource::GamepadAxis,0,0,0,1,false},
+                 {InputSource::GamepadAxis,1,0,1,1,false}};
+  AE_EXPECT_TRUE(map.add(key)&&map.add(button)&&map.add(axis),"ações de entrada válidas");
+  InputService service;service.setMap(map);
+  raw.key(7,false,69,true);raw.key(8,true,96,true);
+  raw.axes(8,{.5f,.75f,0,0,0,0,0,0});
+  service.submit(raw.snapshot());
+  float move[2]{};service.axis2("Direção",move);
+  AE_EXPECT_TRUE(service.justPressed("Tecla")&&service.justPressed("Controle")&&
+                 move[0]>.4f&&move[1]>.7f,"teclado e controle chegam ao mesmo mapa");
+  raw.key(7,false,69,true);service.submit(raw.snapshot());
+  AE_EXPECT_TRUE(!service.justPressed("Tecla"),"repetição não gera novo pulso");
+  raw.disconnect(8);service.submit(raw.snapshot());
+  service.axis2("Direção",move);
+  AE_EXPECT_TRUE(!service.pressed("Controle")&&move[0]==0&&move[1]==0,
+                 "desconexão limpa botão e eixos do controle");
+  raw.clear();service.reset();service.submit(raw.snapshot());
+  AE_EXPECT_TRUE(!service.pressed("Tecla")&&!service.justReleased("Tecla"),
+                 "perda de foco não deixa tecla presa nem soltura fantasma");
+}
 
 AE_TEST(input_default_map_reproduces_the_existing_touch_controls) {
   InputActionMap map;

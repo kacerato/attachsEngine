@@ -15,6 +15,9 @@ AE_TEST(r4_texture_profile_round_trips_fails_closed_and_dilates_edges) {
   profile.mipmaps = false;
   profile.dilateEdges = true;
   profile.anisotropy = false;
+  profile.invertNormalGreen = true;
+  profile.preserveAlphaCoverage = true;
+  profile.alphaCoverageCutoff = .65f;
   TextureProfile back;
   AE_EXPECT_TRUE(parseTextureProfile(serializeTextureProfile(profile), back) && sameTextureProfile(profile, back), "perfil volta igual");
   AE_EXPECT_TRUE(!parseTextureProfile(
@@ -26,6 +29,11 @@ AE_TEST(r4_texture_profile_round_trips_fails_closed_and_dilates_edges) {
   AE_EXPECT_TRUE(!parseTextureProfile(
                      "{\"schema\":1,\"interpretation\":3,\"maximumDimension\":0,\"mipmaps\":1,\"dilateEdges\":0,\"anisotropy\":1}", back),
                  "interpretação desconhecida recusada");
+  TextureProfile legacy;
+  AE_EXPECT_TRUE(parseTextureProfile(
+      "{\"schema\":1,\"interpretation\":2,\"maximumDimension\":512,\"mipmaps\":1,\"dilateEdges\":0,\"anisotropy\":1}", legacy) &&
+      !legacy.invertNormalGreen && !legacy.preserveAlphaCoverage && legacy.alphaCoverageCutoff == .5f,
+      "schema 1 migrates with alpha coverage disabled");
   AE_EXPECT_TRUE(textureProfilePath(assetGuidFromSeed("textura")).starts_with(".astra/textures/"), "perfil mora em .astra/textures");
 
   // Vermelho opaco, dois transparentes pretos, azul opaco: um passo leva a cor
@@ -55,4 +63,7 @@ AE_TEST(r2_r4_authoring_library_reuses_only_the_same_shared_textures) {
   AE_EXPECT_TRUE(plan.reused == 2 && plan.uploaded == 3, "contagem de reaproveitadas e enviadas");
   const auto first = renderer::planAuthoringTextureReuse({}, previous);
   AE_EXPECT_TRUE(first.reused == 0 && first.uploaded == 2, "primeira publicação envia tudo");
+  const auto anotherMip = renderer::planAuthoringTextureReuse(previous, previous, 0, 1);
+  AE_EXPECT_TRUE(anotherMip.reused == 0 && anotherMip.uploaded == previous.size(),
+                 "mesma fonte com outro mip residente volta para a GPU");
 }

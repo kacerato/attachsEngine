@@ -14,12 +14,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "android/app/src/main/assets/astra/example-projects"
+TEXTURES = ROOT / "tools/assets/highlevel-textures"
 SOURCE = "Assets/world.glb"
 MESHES = ("Ground", "Concrete", "Steel", "Timber", "Hazard", "Pipe", "Rock", "Valve", "Lamp")
 REAL_MODELS = {
-    "quarentena": ("Barrel_01", "portable_generator"),
-    "resgate": ("medical_box", "rock_07"),
-    "perimetro": ("old_military_crate", "old_gas_mask"),
+    "quarentena": ("Barrel_01", "portable_generator", "korean_fire_extinguisher_01"),
+    "resgate": ("medical_box", "rock_07", "metal_toolbox"),
+    "perimetro": ("old_military_crate", "old_gas_mask", "vintage_radio_transceiver"),
 }
 
 _base_spec = importlib.util.spec_from_file_location("astra_base_examples", ROOT / "tools/generate-example-games.py")
@@ -100,12 +101,13 @@ def quaternion_euler(value):
     return tuple(math.degrees(v) for v in (xx_angle, yy, zz_angle))
 
 
-def real_prop(scene: Scene, game: str, model: str, label: str, parent: int, pos, scale=(1, 1, 1)):
+def real_prop(scene: Scene, game: str, model: str, label: str, parent: int, pos, scale=(1, 1, 1),
+              components=()):
     path = OUT / game / "Assets" / f"{model}.glb"
     document = glb_document(path)
     asset_path = f"Assets/{model}.glb"
     source_guid = base.guid("fonte:" + asset_path)
-    group = scene.add(label, parent, pos=pos, scale=scale)
+    group = scene.add(label, parent, pos=pos, scale=scale, components=components)
     nodes = document["nodes"]
     parent_of = {}
     for index, node in enumerate(nodes):
@@ -136,9 +138,38 @@ def real_prop(scene: Scene, game: str, model: str, label: str, parent: int, pos,
     return group
 
 
-def collision_proxy(scene: Scene, parent: int, label: str, pos, half):
-    return scene.add(label, parent, pos=pos, scale=half, static=True,
-                     components=(base.body_component(0), base.collider_component((1, 1, 1))))
+def collision_proxy(scene: Scene, parent: int, label: str, pos, half, body=True):
+    components = ((base.body_component(0), base.collider_component((1, 1, 1))) if body
+                  else (("astra.physics.collider", 3,
+                         " ".join(map(base.f, (0, 1, 1, 1, .5, .5, 0, 0, 0, 0, 0, 0,
+                                                     parent, 1)))),))
+    return scene.add(label, parent, pos=pos, scale=half, static=body, components=components)
+
+
+def npc(scene: Scene, name: str, parent: int, pos, script: str, suit, accent, drone=False):
+    half = (.42, .42, .42) if drone else (.38, .82, .3)
+    root = scene.add(name, parent, pos=pos, components=(
+        base.body_component(1, 1), base.collider_component(half), base.script_component(script)))
+    if drone:
+        shape(scene, "Carcaça", "Rock", root, (0, 0, 0), (.48, .35, .48), suit, .36, .62, uv_world=False)
+        shape(scene, "Anel de navegação", "Valve", root, (0, 0, 0), (.7, .7, .7), accent,
+              .28, .72, accent, 1.4, rot=(90, 0, 0), uv_world=False)
+        shape(scene, "Olho", "Lamp", root, (0, .03, .46), (.17, .12, .08), accent,
+              .18, .05, accent, 5, uv_world=False)
+        for side in (-1, 1):
+            shape(scene, f"Estabilizador {side}", "Pipe", root, (side * .62, 0, 0),
+                  (.08, .25, .08), suit, .34, .68, rot=(0, 0, 90), uv_world=False)
+    else:
+        shape(scene, "Tronco", "Concrete", root, (0, .18, 0), (.34, .55, .24), suit,
+              .7, .05, uv_world=False)
+        shape(scene, "Cabeça", "Lamp", root, (0, .92, 0), (.25, .28, .25), accent,
+              .42, .05, accent, .45, uv_world=False)
+        for side in (-1, 1):
+            shape(scene, f"Braço {side}", "Pipe", root, (side * .43, .19, 0),
+                  (.075, .46, .075), suit, .66, .08, rot=(0, 0, side * 8), uv_world=False)
+            shape(scene, f"Perna {side}", "Pipe", root, (side * .17, -.65, 0),
+                  (.09, .43, .09), suit, .72, .06, uv_world=False)
+    return root
 
 
 def png_rgb(width: int, height: int, pixel) -> bytes:
@@ -257,7 +288,11 @@ def torus(major=.72, minor=.18, segments=20, sides=10):
     return positions, normals, uvs, indices
 
 
-def world_glb() -> bytes:
+def world_glb(texture_surfaces: dict[str, str] | None = None,
+              texture_root: Path = TEXTURES) -> bytes:
+    texture_surfaces = texture_surfaces or {
+        "concrete": "concrete", "steel": "steel", "wood": "wood", "rock": "rock"
+    }
     definitions = [("Ground", cube(8), 0), ("Concrete", cube(1), 0),
                    ("Steel", cube(1), 1), ("Timber", cube(1), 2),
                    ("Hazard", cube(1), 3), ("Pipe", cylinder(), 1),
@@ -289,19 +324,39 @@ def world_glb() -> bytes:
                         "NORMAL": normal_accessor, "TEXCOORD_0": uv_accessor},
                         "indices": len(accessors) - 1, "material": material}]})
         nodes.append({"name": name, "mesh": len(meshes) - 1})
-    image_views = [append(texture(name)) for name in ("concrete", "steel", "wood", "hazard", "rock")]
-    materials = []
-    for index, (rough, metallic) in enumerate(((.88, 0), (.42, .7), (.82, 0), (.65, .15), (.92, 0))):
-        materials.append({"name": ("Concrete", "Steel", "Timber", "Hazard", "Rock")[index],
-                          "pbrMetallicRoughness": {"baseColorTexture": {"index": index},
-                                                   "roughnessFactor": rough, "metallicFactor": metallic}})
+    images, textures = [], []
+
+    def image(payload: bytes, mime: str) -> int:
+        view = append(payload)
+        images.append({"bufferView": view, "mimeType": mime})
+        textures.append({"source": len(images) - 1, "sampler": 0})
+        return len(textures) - 1
+
+    def surface(name: str, label: str) -> dict:
+        authored_name = texture_surfaces[name]
+        base_map = image((texture_root / f"{authored_name}-base.jpg").read_bytes(), "image/jpeg")
+        normal_map = image((texture_root / f"{authored_name}-normal.png").read_bytes(), "image/png")
+        arm_map = image((texture_root / f"{authored_name}-arm.png").read_bytes(), "image/png")
+        return {"name": label, "pbrMetallicRoughness": {
+                    "baseColorTexture": {"index": base_map},
+                    "metallicRoughnessTexture": {"index": arm_map},
+                    "roughnessFactor": 1, "metallicFactor": 1},
+                "normalTexture": {"index": normal_map, "scale": .82},
+                "occlusionTexture": {"index": arm_map, "strength": .78}}
+
+    materials = [surface("concrete", "Concrete"), surface("steel", "Steel"),
+                 surface("wood", "Timber")]
+    hazard_map = image(texture("hazard"), "image/png")
+    materials.append({"name": "Hazard", "pbrMetallicRoughness": {
+        "baseColorTexture": {"index": hazard_map}, "roughnessFactor": .65, "metallicFactor": .15}})
+    materials.append(surface("rock", "Rock"))
     materials.append({"name": "Lamp", "pbrMetallicRoughness": {"baseColorFactor": [1, 1, 1, 1],
                                                                 "roughnessFactor": .3, "metallicFactor": .05}})
     document = {"asset": {"version": "2.0", "generator": "Astra high level games"},
                 "buffers": [{"byteLength": len(data)}], "bufferViews": views, "accessors": accessors,
-                "images": [{"bufferView": v, "mimeType": "image/png"} for v in image_views],
+                "images": images,
                 "samplers": [{"wrapS": 10497, "wrapT": 10497, "magFilter": 9729, "minFilter": 9987}],
-                "textures": [{"source": i, "sampler": 0} for i in range(len(image_views))],
+                "textures": textures,
                 "materials": materials, "meshes": meshes, "nodes": nodes,
                 "scenes": [{"nodes": list(range(len(nodes)))}], "scene": 0}
     encoded = json.dumps(document, separators=(",", ":")).encode("utf-8")
@@ -346,7 +401,7 @@ def quarantine() -> Scene:
           (.68, .76, .81), .36, .78, kinematic=True)
     for index, (x, z) in enumerate(((3.8, -17), (-3.9, -1), (3.8, 12)), 1):
         shape(scene, f"Fusível {index}", "Lamp", pickups, (x, 1.5, z), (.27, .38, .27),
-              (.16, .73, 1), .2, .1, (.1, .55, 1), 4, solid=True)
+              (.16, .73, 1), .2, .1, (.1, .55, 1), 4, dynamic=True)
         shape(scene, f"Suporte do fusível {index}", "Steel", props, (x, .75, z), (.55, .72, .55),
               (.45, .51, .55), .4, .7, solid=True)
         light(scene, f"Luz do fusível {index}", emergency, (x, 2.35, z), (.15, .54, 1), 7, 4)
@@ -378,6 +433,9 @@ def quarantine() -> Scene:
     generator=real_prop(scene, "quarentena", "portable_generator", "Gerador portátil real", props,
                         (2.1, .7, 17.4), (1.6, 1.6, 1.6))
     collision_proxy(scene, generator, "Colisão do gerador", (0,.3,0), (.42,.3,.3))
+    extinguisher=real_prop(scene, "quarentena", "korean_fire_extinguisher_01",
+                           "Extintor de emergência real", props, (-5.8, .1, 15.4), (.8, .8, .8))
+    collision_proxy(scene, extinguisher, "Colisão do extintor", (0,.42,0), (.18,.42,.18))
     for z in range(-25, 29, 6):
         light(scene, f"Balizador de emergência {z}", emergency,
               (0, 3.75, z), (1, .08, .04), 9, 6)
@@ -388,6 +446,8 @@ def quarantine() -> Scene:
     shape(scene, "Baliza de extração", "Lamp", architecture, (0, 2.2, 27.5),
           (.55, .75, .2), (.15, 1, .56), .2, 0, (.08, .8, .24), 5)
     light(scene, "Luz da saída", work, (0, 3.5, 27), (.14, 1, .45), 25, 7)
+    npc(scene, "MIRA · drone de manutenção", world, (1.4, 1.7, -22.5), "MaintenanceDrone",
+        (.28, .42, .52), (.16, .72, 1), drone=True)
     actor = player(scene, "Operador", world, (0, 0, -25), "QuarantinePlayer", 5.1, 5.2)
     shape(scene, "Ferramenta de diagnóstico", "Steel", actor + 1,
           (.35, -.32, .72), (.11, .11, .31), (.55, .61, .65), .4, .72, uv_world=False)
@@ -438,9 +498,8 @@ def rescue() -> Scene:
               (.11, .11, .11), (.05, 1, .35), .2, 0, (.02, .9, .13), 4)
         light(scene, f"Luz da bomba {index}", fixtures, (x, 3.2, z), (.2, .67, 1), 13, 5)
     for index, (x, z) in enumerate(((-2.8, 1), (2.7, 18), (0, 25)), 1):
-        shape(scene, f"Sobrevivente {index}", "Lamp", survivors,
-              (x, 1.45, z), (.45, .72, .3), (.96, .8, .38), .6, .05,
-              (.32, .19, .03), 1.5, solid=True)
+        npc(scene, f"Sobrevivente {index}", survivors, (x, 1.0, z), "SurvivorAgent",
+            (.76, .55, .24), (.96, .8, .38))
         shape(scene, f"Maca {index}", "Timber", tunnel,
               (x, .3, z), (.75, .14, 1.2), (.66, .55, .4), .88)
     for index in range(15):
@@ -450,12 +509,16 @@ def rescue() -> Scene:
               (x, 2.8 + index % 3, z), (.42 + (index % 3) * .16,) * 3,
               (.79, .72, .61), .91, dynamic=True)
     for index, (x, z) in enumerate(((-3.2, -7.5), (3.1, 12.5), (.7, 24.5)), 1):
-        real_prop(scene, "resgate", "medical_box", f"Kit médico real {index}", tunnel,
-                  (x, .65, z), (1.7, 1.7, 1.7))
+        kit=real_prop(scene, "resgate", "medical_box", f"Kit médico real {index}", debris,
+                      (x, .65, z), (1.7, 1.7, 1.7), (base.body_component(2, 1.2),))
+        collision_proxy(scene, kit, "Colisão do kit", (0,.12,0), (.25,.15,.34), body=False)
     for index, (x, z) in enumerate(((-4.2, -14), (4.3, 3), (-4.4, 20)), 1):
         rock=real_prop(scene, "resgate", "rock_07", f"Rocha escaneada real {index}", tunnel,
                        (x, 0, z), (5, 5, 5))
         collision_proxy(scene, rock, "Colisão da rocha", (0,.07,0), (.09,.08,.16))
+    toolbox=real_prop(scene, "resgate", "metal_toolbox", "Caixa de ferramentas real", pumps,
+                      (-4.1, .62, -7.7), (1.25, 1.25, 1.25))
+    collision_proxy(scene, toolbox, "Colisão da caixa de ferramentas", (0,.14,0), (.28,.14,.2))
     for z in (-15, -2, 8, 22):
         shape(scene, f"Desabamento {z}", "Rock", tunnel,
               (4.9 if z % 2 else -4.9, 2.2, z), (1.35, 1.9, 1.9),
@@ -517,17 +580,19 @@ def perimeter() -> Scene:
               (.42, .42, .42), (.74, .64, .49), .82, 0, dynamic=True)
     for index, (x, z) in enumerate(((-2.9, -19), (3.1, -5), (-2.8, 10), (3.0, 23)), 1):
         crate=real_prop(scene, "perimetro", "old_military_crate", f"Caixote militar real {index}",
-                        covers, (x, .08, z), (1.65, 1.65, 1.65))
-        collision_proxy(scene, crate, "Cobertura sólida do caixote", (0,.2,0), (1.0,.22,.4))
+                        debris, (x, .58, z), (1.65, 1.65, 1.65),
+                        (base.body_component(2, 4), base.script_component("ThrowableCrate")))
+        collision_proxy(scene, crate, "Colisão física do caixote", (0,.0,0), (.62,.28,.36), body=False)
     real_prop(scene, "perimetro", "old_gas_mask", "Máscara de gás real", field,
               (-1.6, 1.05, 27), (.55, .55, .55))
+    radio=real_prop(scene, "perimetro", "vintage_radio_transceiver", "Rádio de extração real", field,
+                    (1.55, .86, 27.4), (.72, .72, .72))
+    collision_proxy(scene, radio, "Colisão do rádio", (0,.18,0), (.3,.18,.22))
     for row, z in enumerate((-10, 0, 10, 19, 25)):
         for column, x in enumerate((-7.5, 0, 7.5)):
             index = row * 3 + column + 1
-            shape(scene, f"Sentinela {index}", "Lamp", enemies,
-                  (x, 1.25, z), (.46, .63, .46), (.93, .18, .08), .26, .53,
-                  (.63, .04, .01), 3.5, kinematic=True,
-                  extra=(base.script_component("SentinelAgent"),))
+            npc(scene, f"Sentinela {index}", enemies, (x, 1.25, z), "SentinelAgent",
+                (.42, .16, .13), (.93, .18, .08), drone=True)
             light(scene, f"Luz de sentinela {index}", illumination,
                   (x, 2.35, z), (1, .13, .07), 5, 3)
     shape(scene, "Terminal de extração", "Hazard", field,
@@ -540,7 +605,7 @@ def perimeter() -> Scene:
           (.32, -.22, .92), (.035, .14, .035), (.24, .28, .31), .37, .84,
           rot=(90, 0, 0), uv_world=False)
     light(scene, "Céu nublado", world, (0, 24, 0), (.69, .79, .94), .55, kind=0, rot=(55, 20, 0))
-    scene.archive = lambda original=scene.archive: original().replace(base.INPUT, input_archive("Atirar"))
+    scene.archive = lambda original=scene.archive: original().replace(base.INPUT, input_archive("Ação"))
     return scene
 
 
@@ -554,7 +619,8 @@ public sealed class QuarantinePlayer : Behavior
 {
     [PropertyId("oxigenioInicial")] public float OxigenioInicial = 180;
     [PropertyId("alcanceInteracao")] public float AlcanceInteracao = 3.8f;
-    private GameObject? _camera, _world, _emergency, _work, _door;
+    [PropertyId("distanciaSegurar")] public float DistanciaSegurar = 2.15f;
+    private GameObject? _camera, _world, _emergency, _work, _door, _drone, _held;
     private float _oxygen, _doorHeight;
     private int _fuses;
     private bool _power, _finished;
@@ -566,6 +632,7 @@ public sealed class QuarantinePlayer : Behavior
         _emergency = _world?.Find("Luzes de emergência");
         _work = _world?.Find("Iluminação restaurada");
         _door = _world?.Find("Porta blindada");
+        _drone = _world?.Find("MIRA · drone de manutenção");
         _work?.SetActive(false);
         _oxygen = OxigenioInicial;
         _doorHeight = 2;
@@ -594,16 +661,24 @@ public sealed class QuarantinePlayer : Behavior
             return;
         }
         if (!Input.JustPressed("Interagir") || _camera is not { IsAlive: true }) return;
-        var pose = _camera.WorldTransform;
-        var forward = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, pose.Rotation));
-        var hit = Physics.RayCast(pose.Position, forward * AlcanceInteracao, QueryFilter.Default.Ignoring(Object));
-        if (hit is null) { Scene.Log(ObjectId, "Interação: mire em um fusível ou no gerador"); return; }
-        var target = hit.Value.Object;
+        var target = AimTarget(_held);
+        if (_held is { IsAlive: true } carried)
+        {
+            if (target?.Name == "Painel do gerador" && carried.Name.StartsWith("Fusível ", StringComparison.Ordinal))
+            {
+                carried.Destroy();
+                _held = null;
+                _fuses++;
+                Scene.Log(ObjectId, "FUSÍVEL INSERIDO " + _fuses + "/3 · O2 " + MathF.Ceiling(_oxygen) + " s");
+            }
+            else Drop("OBJETO SOLTO");
+            return;
+        }
+        if (target is null) { Scene.Log(ObjectId, "Mire em um fusível ou no painel"); return; }
         if (target.Name.StartsWith("Fusível ", StringComparison.Ordinal))
         {
-            target.Destroy();
-            _fuses++;
-            Scene.Log(ObjectId, "FUSÍVEIS " + _fuses + "/3 · O2 " + MathF.Ceiling(_oxygen) + " s");
+            _held = target;
+            Scene.Log(ObjectId, "SEGURANDO " + target.Name + " · leve ao painel e interaja");
         }
         else if (target.Name == "Painel do gerador")
         {
@@ -613,9 +688,89 @@ public sealed class QuarantinePlayer : Behavior
                 _power = true;
                 _emergency?.SetActive(false);
                 _work?.SetActive(true);
+                FindBehavior<MaintenanceDrone>(_drone)?.PowerRestored();
                 Scene.Log(ObjectId, "ENERGIA RESTAURADA · porta abrindo · alcance a saída");
             }
         }
+    }
+
+    public override void FixedUpdate(float dt)
+    {
+        if (_held is not { IsAlive: true } carried || _camera is not { IsAlive: true }) return;
+        var pose = _camera.WorldTransform;
+        var forward = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, pose.Rotation));
+        var delta = pose.Position + forward * DistanciaSegurar - carried.WorldTransform.Position;
+        if (delta.LengthSquared() > 42) { Drop("OBJETO PERDIDO"); return; }
+        var velocity = delta * 13 - Scene.GetBodyVelocity(carried.ObjectId) * 2.7f;
+        if (velocity.LengthSquared() > 144) velocity = Vector3.Normalize(velocity) * 12;
+        if (!Scene.SetBodyVelocity(carried.ObjectId, velocity)) Drop("NÃO FOI POSSÍVEL SEGURAR");
+    }
+
+    private GameObject? AimTarget(GameObject? ignored)
+    {
+        if (_camera is not { IsAlive: true }) return null;
+        var pose = _camera.WorldTransform;
+        var forward = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, pose.Rotation));
+        var hits = Physics.RayCastAll(pose.Position, forward * AlcanceInteracao, out _,
+                                      QueryFilter.Default.Ignoring(Object), 12);
+        foreach (var hit in hits)
+            if (ignored is null || hit.Object.ObjectId != ignored.ObjectId) return hit.Object;
+        return null;
+    }
+
+    private void Drop(string message)
+    {
+        if (_held is { IsAlive: true }) Scene.SetBodyVelocity(_held.ObjectId, Vector3.Zero);
+        _held = null;
+        Scene.Log(ObjectId, message);
+    }
+}
+''', "MaintenanceDrone.cs": '''using Astra;
+using System;
+using System.Numerics;
+
+[ComponentId("project.MaintenanceDrone")]
+public sealed class MaintenanceDrone : Behavior
+{
+    [PropertyId("velocidade")] public float Velocidade = 3.2f;
+    private GameObject? _player;
+    private readonly GameObject?[] _fuses = new GameObject?[3];
+    private bool _power;
+
+    public override void Start()
+    {
+        var world = Object.Parent;
+        _player = world?.Find("Operador");
+        for (var i = 0; i < _fuses.Length; i++) _fuses[i] = world?.Find("Fusível " + (i + 1));
+        Scene.Log(ObjectId, "MIRA ONLINE · seguindo e indicando o próximo módulo");
+    }
+
+    public void PowerRestored() => _power = true;
+
+    public override void FixedUpdate(float dt)
+    {
+        if (_player is not { IsAlive: true }) return;
+        var current = Object.WorldTransform.Position;
+        var player = _player.WorldTransform.Position;
+        var destination = player + new Vector3(1.45f, 1.65f, -1.15f);
+        if (!_power)
+            foreach (var fuse in _fuses)
+                if (fuse is { IsAlive: true } && Vector3.DistanceSquared(player, fuse.WorldTransform.Position) < 110)
+                { destination = fuse.WorldTransform.Position + Vector3.UnitY * .85f; break; }
+        if (_power && player.Z > 18) destination = new Vector3(0, 2.2f, 25.5f);
+        var delta = destination - current;
+        if (delta.LengthSquared() < .12f) return;
+        var direction = Vector3.Normalize(delta);
+        var step = direction * MathF.Min(Velocidade * dt, delta.Length());
+        var obstacle = Physics.ShapeCast(ShapeQuery.Sphere(.34f), current, step,
+                                         QueryFilter.Default.Ignoring(Object));
+        if (obstacle is { } hit && hit.Object.ObjectId != _player.ObjectId)
+        {
+            var side = Vector3.Normalize(Vector3.Cross(Vector3.UnitY, direction));
+            step = (direction * .25f + side * (((ObjectId & 1) == 0) ? 1 : -1)) * Velocidade * dt;
+        }
+        var yaw = MathF.Atan2(direction.X, direction.Z);
+        Scene.MoveKinematic(ObjectId, current + step, Quaternion.CreateFromAxisAngle(Vector3.UnitY, yaw));
     }
 }
 '''},
@@ -628,7 +783,8 @@ public sealed class RescuePlayer : Behavior
 {
     [PropertyId("oxigenioInicial")] public float OxigenioInicial = 240;
     [PropertyId("alcanceInteracao")] public float AlcanceInteracao = 4.1f;
-    private GameObject? _camera, _world;
+    [PropertyId("distanciaSegurar")] public float DistanciaSegurar = 2.2f;
+    private GameObject? _camera, _world, _held;
     private float _oxygen;
     private int _pumps, _survivors;
     private bool _finished;
@@ -660,11 +816,28 @@ public sealed class RescuePlayer : Behavior
             return;
         }
         if (!Input.JustPressed("Interagir") || _camera is not { IsAlive: true }) return;
-        var pose = _camera.WorldTransform;
-        var forward = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, pose.Rotation));
-        var hit = Physics.RayCast(pose.Position, forward * AlcanceInteracao, QueryFilter.Default.Ignoring(Object));
-        if (hit is null) { Scene.Log(ObjectId, "Interação: mire em bomba, sobrevivente ou bloco móvel"); return; }
-        var target = hit.Value.Object;
+        var target = AimTarget(_held);
+        if (_held is { IsAlive: true } carried)
+        {
+            var survivor = FindBehavior<SurvivorAgent>(target);
+            if (carried.Name.StartsWith("Kit médico real ", StringComparison.Ordinal) && survivor?.Heal() == true)
+            {
+                carried.Destroy();
+                _held = null;
+                _survivors++;
+                Scene.Log(ObjectId, "SOBREVIVENTE ESTABILIZADO " + _survivors + "/3 · ele seguirá a equipe");
+            }
+            else
+            {
+                var pose = _camera.WorldTransform;
+                var forward = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, pose.Rotation));
+                Scene.SetBodyVelocity(carried.ObjectId, forward * 6 + Vector3.UnitY * 1.4f);
+                _held = null;
+                Scene.Log(ObjectId, "OBJETO ARREMESSADO · use kits nos sobreviventes");
+            }
+            return;
+        }
+        if (target is null) { Scene.Log(ObjectId, "Mire em bomba, kit, escombro ou sobrevivente"); return; }
         if (target.Name.StartsWith("Bomba ", StringComparison.Ordinal))
         {
             var green = target.Find("Indicador verde");
@@ -674,17 +847,97 @@ public sealed class RescuePlayer : Behavior
             _pumps++;
             Scene.Log(ObjectId, "BOMBAS " + _pumps + "/2 · drenagem ativada");
         }
-        else if (target.Name.StartsWith("Sobrevivente ", StringComparison.Ordinal))
+        else if (target.Name.StartsWith("Kit médico real ", StringComparison.Ordinal) ||
+                 target.Name.StartsWith("Bloco móvel ", StringComparison.Ordinal))
         {
-            target.Destroy();
-            _survivors++;
-            Scene.Log(ObjectId, "SOBREVIVENTES " + _survivors + "/3 · siga até o elevador");
+            _held = target;
+            Scene.Log(ObjectId, "SEGURANDO " + target.Name + " · interaja para usar ou arremessar");
         }
-        else if (target.Name.StartsWith("Bloco móvel ", StringComparison.Ordinal))
+        else if (FindBehavior<SurvivorAgent>(target) is { IsHealed: false })
         {
-            Scene.AddImpulse(target.ObjectId, forward * 20 + Vector3.UnitY * 3);
-            Scene.Log(ObjectId, "Escombro deslocado · O2 " + MathF.Ceiling(_oxygen) + " s");
+            Scene.Log(ObjectId, "O sobrevivente precisa de um kit médico");
         }
+    }
+
+    public override void FixedUpdate(float dt)
+    {
+        if (_held is not { IsAlive: true } carried || _camera is not { IsAlive: true }) return;
+        var pose = _camera.WorldTransform;
+        var forward = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, pose.Rotation));
+        var delta = pose.Position + forward * DistanciaSegurar - carried.WorldTransform.Position;
+        if (delta.LengthSquared() > 42) { _held = null; return; }
+        var velocity = delta * 12.5f - Scene.GetBodyVelocity(carried.ObjectId) * 2.6f;
+        if (velocity.LengthSquared() > 144) velocity = Vector3.Normalize(velocity) * 12;
+        if (!Scene.SetBodyVelocity(carried.ObjectId, velocity)) _held = null;
+    }
+
+    private GameObject? AimTarget(GameObject? ignored)
+    {
+        if (_camera is not { IsAlive: true }) return null;
+        var pose = _camera.WorldTransform;
+        var forward = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, pose.Rotation));
+        var hits = Physics.RayCastAll(pose.Position, forward * AlcanceInteracao, out _,
+                                      QueryFilter.Default.Ignoring(Object), 12);
+        foreach (var hit in hits)
+            if (ignored is null || hit.Object.ObjectId != ignored.ObjectId) return hit.Object;
+        return null;
+    }
+}
+''', "SurvivorAgent.cs": '''using Astra;
+using System;
+using System.Numerics;
+
+[ComponentId("project.SurvivorAgent")]
+public sealed class SurvivorAgent : Behavior
+{
+    [PropertyId("velocidade")] public float Velocidade = 2.75f;
+    private GameObject? _player;
+    private Vector3 _rest;
+    private float _phase;
+    public bool IsHealed { get; private set; }
+
+    public override void Start()
+    {
+        _player = Object.Parent?.Parent?.Find("Socorrista");
+        _rest = Object.WorldTransform.Position;
+        _phase = (ObjectId % 9) * .47f;
+    }
+
+    public bool Heal()
+    {
+        if (IsHealed) return false;
+        IsHealed = true;
+        return true;
+    }
+
+    public override void FixedUpdate(float dt)
+    {
+        _phase += dt;
+        var current = Object.WorldTransform.Position;
+        if (!IsHealed)
+        {
+            var idle = _rest + Vector3.UnitY * (MathF.Sin(_phase * 2) * .025f);
+            Scene.MoveKinematic(ObjectId, idle, Quaternion.Identity);
+            return;
+        }
+        if (_player is not { IsAlive: true }) return;
+        var player = _player.WorldTransform.Position;
+        var side = ((int)(ObjectId % 3) - 1) * .85f;
+        var destination = player + new Vector3(side, 1.0f, -1.7f - (ObjectId % 2) * .65f);
+        var delta = destination - current;
+        delta.Y = 0;
+        if (delta.LengthSquared() < .45f) return;
+        var direction = Vector3.Normalize(delta);
+        var step = direction * MathF.Min(Velocidade * dt, delta.Length());
+        var obstacle = Physics.ShapeCast(ShapeQuery.Capsule(.3f, .75f), current, step,
+                                         QueryFilter.Default.Ignoring(Object));
+        if (obstacle is { } hit && hit.Object.ObjectId != _player.ObjectId)
+        {
+            var avoid = Vector3.Normalize(Vector3.Cross(Vector3.UnitY, direction));
+            step = (direction * .25f + avoid * (((ObjectId & 1) == 0) ? 1 : -1)) * Velocidade * dt;
+        }
+        var yaw = MathF.Atan2(direction.X, direction.Z);
+        Scene.MoveKinematic(ObjectId, current + step, Quaternion.CreateFromAxisAngle(Vector3.UnitY, yaw));
     }
 }
 '''},
@@ -697,7 +950,8 @@ public sealed class TacticalPlayer : Behavior
 {
     [PropertyId("municaoPente")] public int MunicaoPente = 12;
     [PropertyId("alcanceTiro")] public float AlcanceTiro = 48;
-    private GameObject? _camera;
+    [PropertyId("distanciaSegurar")] public float DistanciaSegurar = 2.25f;
+    private GameObject? _camera, _held;
     private float _health = 100, _cooldown, _reload, _damageCooldown;
     private int _ammo, _kills;
     private bool _finished;
@@ -706,7 +960,7 @@ public sealed class TacticalPlayer : Behavior
     {
         _camera = Object.Find("Câmera dos olhos");
         _ammo = MunicaoPente;
-        Scene.Log(ObjectId, "PERÍMETRO · 15 sentinelas · cobertura · extração | VIDA 100 · MUNIÇÃO 12");
+        Scene.Log(ObjectId, "PERÍMETRO · AÇÃO pega/lança caixotes ou dispara · 15 sentinelas");
     }
 
     public override void Update(float dt)
@@ -723,13 +977,31 @@ public sealed class TacticalPlayer : Behavior
                 Scene.Log(ObjectId, "RECARREGADO · MUNIÇÃO " + _ammo + " · VIDA " + _health);
             }
         }
-        if (_kills == 15 && Object.Position.Z > 25)
+        if (!Input.JustPressed("Ação") || _camera is not { IsAlive: true }) return;
+        if (_held is { IsAlive: true } carried)
         {
-            _finished = true;
-            Scene.Log(ObjectId, "EXTRAÇÃO CONCLUÍDA · VIDA " + _health);
+            var heldPose = _camera.WorldTransform;
+            var heldForward = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, heldPose.Rotation));
+            FindBehavior<ThrowableCrate>(carried)?.Arm();
+            Scene.SetBodyVelocity(carried.ObjectId, heldForward * 13 + Vector3.UnitY * 2.2f);
+            _held = null;
+            Scene.Log(ObjectId, "CAIXOTE LANÇADO · impactos fortes neutralizam sentinelas");
             return;
         }
-        if (!Input.JustPressed("Atirar") || _cooldown > 0 || _reload > 0 || _camera is not { IsAlive: true }) return;
+        var close = AimTarget(4.2f);
+        if (close?.Name.StartsWith("Caixote militar real ", StringComparison.Ordinal) == true)
+        {
+            _held = close;
+            Scene.Log(ObjectId, "SEGURANDO " + close.Name + " · pressione AÇÃO para lançar");
+            return;
+        }
+        if (close?.Name == "Terminal de extração")
+        {
+            if (_kills < 15) Scene.Log(ObjectId, "TERMINAL BLOQUEADO · restam " + (15 - _kills) + " sentinelas");
+            else { _finished = true; Scene.Log(ObjectId, "EXTRAÇÃO CONCLUÍDA · VIDA " + _health); }
+            return;
+        }
+        if (_cooldown > 0 || _reload > 0) return;
         if (_ammo == 0)
         {
             _reload = 1.7f;
@@ -746,14 +1018,42 @@ public sealed class TacticalPlayer : Behavior
             var enemy = FindBehavior<SentinelAgent>(contact.Object);
             if (enemy != null && enemy.Damage(1))
             {
-                _kills++;
-                Scene.Log(ObjectId, "ALVO NEUTRALIZADO " + _kills + "/15 · MUNIÇÃO " + _ammo + " · VIDA " + _health);
+                RegisterKill();
             }
             else Scene.Log(ObjectId, "IMPACTO: " + contact.Object.Name + " · MUNIÇÃO " + _ammo);
         }
         else Scene.Log(ObjectId, "SEM ALVO · MUNIÇÃO " + _ammo);
         if (_ammo == 0 && _kills < 15) _reload = 1.7f;
-        if (_kills == 15) Scene.Log(ObjectId, "ÁREA SEGURA · alcance o terminal de extração");
+    }
+
+    public override void FixedUpdate(float dt)
+    {
+        if (_held is not { IsAlive: true } carried || _camera is not { IsAlive: true }) return;
+        var pose = _camera.WorldTransform;
+        var forward = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, pose.Rotation));
+        var delta = pose.Position + forward * DistanciaSegurar - carried.WorldTransform.Position;
+        if (delta.LengthSquared() > 45) { _held = null; return; }
+        var velocity = delta * 12 - Scene.GetBodyVelocity(carried.ObjectId) * 2.6f;
+        if (velocity.LengthSquared() > 144) velocity = Vector3.Normalize(velocity) * 12;
+        if (!Scene.SetBodyVelocity(carried.ObjectId, velocity)) _held = null;
+    }
+
+    public void RegisterKill()
+    {
+        if (_finished) return;
+        _kills = Math.Min(15, _kills + 1);
+        Scene.Log(ObjectId, _kills == 15
+            ? "ÁREA SEGURA · interaja com o terminal de extração"
+            : "ALVO NEUTRALIZADO " + _kills + "/15 · MUNIÇÃO " + _ammo + " · VIDA " + _health);
+    }
+
+    private GameObject? AimTarget(float range)
+    {
+        if (_camera is not { IsAlive: true }) return null;
+        var pose = _camera.WorldTransform;
+        var forward = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, pose.Rotation));
+        return Physics.RayCast(pose.Position, forward * range,
+                               QueryFilter.Default.Ignoring(Object))?.Object;
     }
 
     public void TakeDamage(int amount)
@@ -776,7 +1076,8 @@ using System.Numerics;
 [ComponentId("project.SentinelAgent")]
 public sealed class SentinelAgent : Behavior
 {
-    [PropertyId("alcance")] public float Alcance = 13;
+    [PropertyId("alcance")] public float Alcance = 17;
+    [PropertyId("velocidade")] public float Velocidade = 1.8f;
     private GameObject? _player;
     private Vector3 _home;
     private float _phase, _shot;
@@ -785,26 +1086,45 @@ public sealed class SentinelAgent : Behavior
     public override void Start()
     {
         _player = Object.Parent?.Parent?.Find("Operador");
-        _home = Object.Position;
+        _home = Object.WorldTransform.Position;
         _phase = (ObjectId % 11) * .71f;
         _shot = 1 + (ObjectId % 5) * .35f;
     }
 
-    public override void Update(float dt)
+    public override void FixedUpdate(float dt)
     {
         if (_player is not { IsAlive: true }) return;
-        _phase += dt * .6f;
-        var next = _home + new Vector3(MathF.Sin(_phase) * .8f, 0, 0);
-        Scene.MoveKinematic(ObjectId, next, Quaternion.Identity);
+        _phase += dt * .72f;
+        var current = Object.WorldTransform.Position;
+        var target = _player.WorldTransform.Position + new Vector3(0, 1.1f, 0);
+        var toPlayer = target - current;
+        var distance = toPlayer.Length();
+        var destination = _home + new Vector3(MathF.Sin(_phase) * 1.45f, 0, MathF.Cos(_phase * .7f) * .55f);
+        if (distance < Alcance * 1.35f)
+        {
+            var forward = distance > .01f ? toPlayer / distance : Vector3.UnitZ;
+            var strafe = Vector3.Cross(Vector3.UnitY, forward) * MathF.Sin(_phase * 1.7f);
+            destination = distance > 9 ? current + forward * 2.2f : current + strafe * 1.7f;
+        }
+        var travel = destination - current;
+        travel.Y = 0;
+        var direction = travel.LengthSquared() > .01f ? Vector3.Normalize(travel) : Vector3.UnitZ;
+        var step = direction * MathF.Min(Velocidade * dt, travel.Length());
+        var obstacle = Physics.ShapeCast(ShapeQuery.Sphere(.4f), current, step,
+                                         QueryFilter.Default.Ignoring(Object));
+        if (obstacle is { } blocked && blocked.Object.ObjectId != _player.ObjectId)
+            step = Vector3.Cross(Vector3.UnitY, direction) * Velocidade * dt * (((ObjectId & 1) == 0) ? 1 : -1);
+        var next = current + step;
+        var facing = MathF.Atan2(toPlayer.X, toPlayer.Z);
+        Scene.MoveKinematic(ObjectId, next, Quaternion.CreateFromAxisAngle(Vector3.UnitY, facing));
         _shot -= dt;
         if (_shot > 0) return;
         _shot = 1.5f + (ObjectId % 4) * .22f;
         var from = next + new Vector3(0, .3f, 0);
-        var target = _player.WorldTransform.Position + new Vector3(0, 1.2f, 0);
-        var direction = target - from;
-        if (direction.LengthSquared() > Alcance * Alcance) return;
-        var obstacle = Physics.RayCast(from, direction, QueryFilter.Default.Ignoring(Object));
-        if (obstacle is { } hit && hit.Object.ObjectId != _player.ObjectId) return;
+        var shot = target - from;
+        if (shot.LengthSquared() > Alcance * Alcance) return;
+        var line = Physics.RayCast(from, shot, QueryFilter.Default.Ignoring(Object));
+        if (line is { } hit && hit.Object.ObjectId != _player.ObjectId) return;
         FindBehavior<TacticalPlayer>(_player)?.TakeDamage(5);
     }
 
@@ -814,6 +1134,35 @@ public sealed class SentinelAgent : Behavior
         if (_health > 0) return false;
         Object.Destroy();
         return true;
+    }
+}
+''', "ThrowableCrate.cs": '''using Astra;
+using System.Numerics;
+
+[ComponentId("project.ThrowableCrate")]
+public sealed class ThrowableCrate : Behavior
+{
+    private float _armed;
+    private float _speed;
+
+    public void Arm() => _armed = 3.5f;
+
+    public override void FixedUpdate(float dt)
+    {
+        _armed = System.MathF.Max(0, _armed - dt);
+        _speed = Scene.GetBodyVelocity(ObjectId).Length();
+    }
+
+    public override void CollisionEnter(Collision collision)
+    {
+        if (_armed <= 0 || _speed < 5.5f) return;
+        var target = Resolve(collision.Other);
+        var sentinel = FindBehavior<SentinelAgent>(target);
+        if (sentinel is null) return;
+        _armed = 0;
+        if (!sentinel.Damage(2)) return;
+        var player = Object.Parent?.Parent?.Find("Operador");
+        FindBehavior<TacticalPlayer>(player)?.RegisterKill();
     }
 }
 '''},
@@ -843,8 +1192,9 @@ def write_project(slug: str, title: str, scene: Scene, glb: bytes, objective: st
         "Saltar para pular e o segundo botão para a ação do jogo. "
         "Mire pelo retículo. Na primeira abertura, abra Código e use Recompilar projeto; depois use Play. "
         "O texto no Play mostra a última mensagem do jogo. Stop restaura a cena para outra partida.\n\n"
-        "Toda a geometria, luz, câmera, física e scripts podem ser editados no projeto. "
-        "A arquitetura usa textura projetada por metro; os equipamentos reais são GLBs com materiais PBR "
+        "Toda a geometria, luz, câmera, física, NPCs e scripts podem ser editados no projeto. "
+        "Os objetos seguráveis continuam corpos físicos e colidem enquanto são conduzidos em FixedUpdate. "
+        "A arquitetura usa texturas 1024 PBR projetadas por metro; os equipamentos reais são GLBs com materiais PBR "
         "e UVs da fonte. Veja Assets/FONTES-ARTE.md para origem e licença. "
         "Não há áudio nem animação esquelética.\n",
         encoding="utf-8")
@@ -852,43 +1202,22 @@ def write_project(slug: str, title: str, scene: Scene, glb: bytes, objective: st
 
 
 def write_thumbnail(slug: str):
-    width, height = 480, 320
-    def pixel(x, y):
-        dx, dy = x - width / 2, y - height / 2
-        perspective = max(0, 1 - abs(dx) / (190 + max(0, dy) * .35))
-        if slug == "quarentena":
-            wall = abs(dx) > 95 + max(0, dy) * .38
-            stripe = (x + y * 2) % 60 < 10
-            lamp = math.exp(-((dx / 115) ** 2 + ((y - 82) / 30) ** 2))
-            if wall: return (55 + stripe * 32, 62 + stripe * 16, 66 + stripe * 7)
-            return (28 + lamp * 95, 44 + lamp * 12, 56 + lamp * 9)
-        if slug == "resgate":
-            beam = y % 72 < 8 and abs(dx) < 210
-            rail = abs(abs(dx) - (20 + max(0, dy) * .34)) < 3
-            lamp = math.exp(-((dx / 105) ** 2 + ((y - 70) / 35) ** 2))
-            return (64 + beam * 35 + rail * 95 + lamp * 125,
-                    51 + beam * 25 + rail * 80 + lamp * 72,
-                    38 + beam * 18 + rail * 45 + lamp * 31)
-        barrier = y > 165 and any(abs(y - (210 + i * 11)) < 3 for i in range(4))
-        target = any(abs(x - cx) < 8 and 98 < y < 155 for cx in (125, 240, 355))
-        return (31 + barrier * 58 + target * 180 + perspective * 16,
-                43 + barrier * 64 + target * 15 + perspective * 19,
-                57 + barrier * 70 + target * 8 + perspective * 25)
     folder = ROOT / "android/app/src/main/assets/astra/thumbs"
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"example-{slug}.png").write_bytes(png_rgb(width, height, pixel))
+    (folder / f"example-{slug}.png").write_bytes(
+        (ROOT / "tools/assets/highlevel-thumbnails" / f"{slug}.png").read_bytes())
 
 
 if __name__ == "__main__":
     glb = world_glb()
     projects = (
         ("quarentena", "Quarentena 04", quarantine(),
-         "Localize três fusíveis, reative o gerador e atravesse a porta blindada antes do oxigênio acabar."),
+         "Siga o drone MIRA, segure e encaixe três fusíveis físicos, reative o gerador e escape antes do oxigênio acabar."),
         ("resgate", "Resgate na Mina", rescue(),
-         "Ligue duas bombas, encontre três sobreviventes, desloque escombros com impulso e chegue ao elevador."),
+         "Ligue duas bombas, carregue kits médicos até três NPCs e conduza a equipe pelo túnel enquanto move escombros."),
         ("perimetro", "Perímetro Delta", perimeter(),
-         "Use cobertura e tiro por raio para eliminar quinze sentinelas; a arma recarrega após doze disparos. "
-         "Depois, chegue ao terminal de extração."),
+         "Enfrente quinze sentinelas com IA usando tiro, cobertura e caixotes físicos que podem ser segurados e lançados. "
+         "Depois, interaja com o terminal de extração."),
     )
     for slug, title, scene, objective in projects:
         write_project(slug, title, scene, glb, objective)

@@ -95,7 +95,7 @@ inline const std::array<ComponentSchema, 11> componentSchemas{{
   {&Character::descriptor, "Personagem", "Locomoção com cápsula", ComponentCategory::Physics,
     {}, characterConflicts, PlayMutability::Never, PlayMutability::SafePoint,
     "runtime/scene_physics.cpp → CharacterVirtual", {}, Invalidate::PhysicsBody|Invalidate::PhysicsShape},
-  {&CameraLook::descriptor, "Olhar", "Rotação da câmera por toque", ComponentCategory::Camera,
+  {&CameraLook::descriptor, "Olhar", "Rotação local da câmera por entrada ou script", ComponentCategory::Camera,
     lookRequirements, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
     "runtime/game_world.cpp → pose da câmera", {}, Invalidate::Input},
   {&Collider::descriptor, "Colisor 3D", "Volume de contato", ComponentCategory::Physics,

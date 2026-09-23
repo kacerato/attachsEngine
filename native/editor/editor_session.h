@@ -24,9 +24,11 @@
 #include "editor/editor_character.h"
 #include "editor/editor_scene_camera.h"
 #include "editor/editor_camera_handles.h"
+#include "editor/editor_component_handles.h"
 #include "editor/editor_camera_preview.h"
 #include "editor/editor_camera_look.h"
 #include "platform/first_person_controller.h"
+#include "resources/texture_asset.h"
 #include "editor/editor_camera.h"
 #include "editor/editor_commands.h"
 #include "editor/editor_console.h"
@@ -36,6 +38,7 @@
 #include "resources/import_node_map.h"
 #include "resources/material_asset.h"
 #include "resources/environment_profile.h"
+#include "resources/environment_map_asset.h"
 #include "resources/texture_budget.h"
 #include "resources/import_profile.h"
 #include "resources/glb_images.h"
@@ -104,7 +107,29 @@ public:
   bool applyComponentRecipe(u64 preset,EditorEntityId entity,EditorSceneVersion expected,std::string &error);
   bool openComponentPresets(EditorEntityId entity,u64 instance);
   bool needsScriptRuntime() const {return isPlaying()&&runtime::ScriptBridge::hasScripts(document_);}
-  void setScriptRuntime(scene::ScriptRuntimeApi api) {playScene_.setScriptRuntime(api,files_.rootPath());}
+  void setScriptRuntime(scene::ScriptRuntimeApi api);
+  void configureScriptRendering(const renderer::ProjectRenderingSettings &authored,
+                                const renderer::RenderingCapabilities &capabilities,
+                                renderer::ThermalPressure thermal,
+                                const renderer::ResolvedRenderingPolicy &effective) {
+    playScene_.configureScriptRendering(authored,capabilities,thermal,effective,
+      [this](u64 id,const renderer::ProjectRenderingSettings &settings,bool restoringAuthoring) {
+        // Pedidos normais são serializados pelo estado runtime. A restauração
+        // autoral de Stop é a única chamada que pode chegar com uma entrada na
+        // fila; ela substitui o pedido não consumido para a configuração de
+        // gameplay não escapar para o modo de edição.
+        if(scriptRenderingRequestPending_&&!restoringAuthoring) return false;
+        scriptRenderingRequestPending_=true;scriptRenderingRequestId_=id;scriptRenderingRequest_=settings;return true;
+      },&assets_,&environmentProfiles_);
+  }
+  bool takeScriptRenderingRequest(u64 &id,renderer::ProjectRenderingSettings &settings) {
+    if(!scriptRenderingRequestPending_) return false;
+    scriptRenderingRequestPending_=false;id=scriptRenderingRequestId_;settings=scriptRenderingRequest_;return true;
+  }
+  bool completeScriptRenderingRequest(u64 id,bool success,const renderer::ResolvedRenderingPolicy &effective,
+                                      bool effectiveAvailable=true) {
+    return playScene_.completeScriptRenderingRequest(id,success,effective,effectiveAvailable);
+  }
   // O que um script escreve vai para o console ANTES de ir para onde o
   // hospedeiro mandar. No aparelho o destino do hospedeiro e o `logcat`, que
   // nao existe para quem esta usando o editor: sem esta captura, um script que
@@ -364,6 +389,11 @@ public:
   // física não integra enquanto alguém posiciona um objeto — senão o que se vê
   // não é um editor, é um vídeo com painéis por cima. A aba Play é o que solta.
   bool isPlaying() const noexcept { return state_.workspace == EditorWorkspace::Play; }
+  bool gameplayInputFocused() const noexcept {
+    // Play hides authoring panels and their text fields. platformTextInput
+    // advertises IME support for the whole Android session, not active focus.
+    return isPlaying()&&!state_.playPaused;
+  }
   // Relógio da CENA, separado do relógio de parede. Ele só avança em Play, e é
   // ele que alimenta a animação e a simulação — congelar apenas o desenho
   // mostraria uma imagem parada sobre um estado que continua mudando, e apertar
@@ -515,6 +545,36 @@ public:
   // `prepared` é o perfil com que o worker preparou `model`.
   void showImportPreview(std::string path, const resources::GltfImport &model, std::string_view contentHash={},
                          const resources::ImportProfile &prepared={});
+  using EnvironmentMapEntry=std::pair<resources::AssetGuid,renderer::SharedEnvironmentMap>;
+  const std::vector<EnvironmentMapEntry> &environmentMaps() const {return environmentMaps_;}
+  renderer::SharedEnvironmentMap findEnvironmentMap(const resources::AssetGuid &guid) const {
+    for(const auto &[id,map]:environmentMaps_) if(id==guid) return map;
+    return {};
+  }
+  // Worker e importação interativa convergem aqui: só recursos válidos e
+  // registrados entram na biblioteca publicada pelo renderer.
+  bool adoptEnvironmentMap(const resources::AssetGuid &guid,renderer::SharedEnvironmentMap map,
+                           std::string &diagnostic);
+  bool commitEnvironmentMap(const std::string &path,std::span<const u8> bytes,
+                            const std::string &expectedHash,renderer::SharedEnvironmentMap prepared,
+                            std::string &diagnostic);
+  bool commitEnvironmentMap(const std::string &path,std::span<const u8> bytes,
+                            const std::string &expectedHash,renderer::SharedEnvironmentMap prepared,
+                            const resources::EnvironmentMapImportSettings &settings,std::string &diagnostic);
+  void showEnvironmentImportPreview(std::string path,const renderer::EnvironmentMapResource &map,
+                                    const resources::EnvironmentMapImportSettings &settings={});
+  void beginEnvironmentImportPreparation(std::string_view path,
+                                         const resources::EnvironmentMapImportSettings &settings) {
+    beginImportPreparation(path);state_.importEnvironment=true;state_.importTexture=false;
+    state_.environmentImportSettings=settings;state_.environmentImportReprepare=false;
+  }
+  const resources::EnvironmentMapImportSettings &environmentMapImportSettings() const {
+    return state_.environmentImportSettings;
+  }
+  bool takeEnvironmentImportReprepare(resources::EnvironmentMapImportSettings &settings) {
+    if(!std::exchange(state_.environmentImportReprepare,false)) return false;
+    settings=state_.environmentImportSettings;return true;
+  }
   // Linha extra na preparação, dita por quem preparou os bytes (por exemplo, as
   // dependências de um .gltf empacotadas no GLB).
   void noteImportPreview(std::string line) {state_.importSummary+="\n"+std::move(line);}
@@ -617,7 +677,8 @@ public:
   // R4: perfil de uma textura do projeto (interpretação, tamanho, mips, bordas,
   // anisotropia). Aplicar grava o arquivo e republica as texturas.
   resources::TextureProfile textureProfileFor(const resources::AssetGuid &texture) const;
-  bool setTextureProfile(const resources::AssetGuid &texture,const resources::TextureProfile &profile,std::string &diagnostic);
+  bool setTextureProfile(const resources::AssetGuid &texture,const resources::TextureProfile &profile,
+                         std::string &diagnostic,bool recordHistory=true);
   // R4: o que subiu para a GPU de uma textura na última publicação, uma entrada
   // por combinação de uso (espaço de cor e sampler); vazio quando não é usada.
   struct TextureResidency {
@@ -633,7 +694,7 @@ public:
   // atualização); o visualizador escreve o nível e o canal escolhidos no atlas.
   bool generatePendingTextureThumbnail();
   bool openTextureViewer(u32 projectTextureIndex);
-  void closeTextureViewer() {state_.textureViewer=false;}
+  void closeTextureViewer() {state_.textureViewer=false;state_.textureProfileDirty=false;}
   bool stepTextureViewerLevel(int delta);
   bool cycleTextureViewerChannel();
   bool cycleTextureViewerZoom();
@@ -644,6 +705,7 @@ public:
     preview_.markClean();
     return &preview_.pixels();
   }
+  void republishPreviewAtlas() { preview_.markDirty(); }
   const ProjectTexture *findProjectTexture(const resources::AssetGuid &guid) const {
     for(const auto &texture:textures_) if(texture.guid==guid) return &texture;
     return nullptr;
@@ -690,6 +752,8 @@ public:
   bool takeImportIntoScene() {return std::exchange(state_.importIntoScene,false);}
   bool takeImportCancel() {return std::exchange(state_.importCancel,false);}
   std::string takeReimportPath() {return std::exchange(reimportPath_,{});}
+  std::string takeEnvironmentReimportPath() {return std::exchange(environmentReimportPath_,{});}
+  std::string takeTextureReimportPath() {return std::exchange(textureReimportPath_,{});}
   // O plano da grade para o quadro: política do editor, desenho do renderer.
   // Fora do workspace de cena, com a grade desligada ou em execução, ele volta
   // desabilitado — a grade é ferramenta de autoria, não elemento do jogo.
@@ -703,6 +767,7 @@ public:
   bool consumeModelImportRequest() {
     const bool requested=state_.modelImportRequested;
     state_.modelImportRequested=false;
+    if(requested) {state_.importEnvironment=false;state_.importTexture=false;}
     return requested;
   }
   // Etapa corrente de um trabalho longo (R1): só a barra de estado, sem entrada
@@ -722,6 +787,7 @@ public:
   // O registro e, com ele, os materiais do projeto que ele declara.
   bool loadAssets(std::string_view text) {
     if(!resources::AssetRegistry::deserialize(text, assets_)) return false;
+    environmentMaps_.clear();
     loadMaterialAssets();
     loadEnvironmentProfiles();
     return true;
@@ -783,7 +849,8 @@ public:
   SceneCameraPose sceneCameraPose() const {
     return resolveSceneCamera(isPlaying()&&playScene_.active()?playScene_.document():document_);
   }
-  bool extractPlayMap(std::vector<renderer::MapDrawState> &out) {
+  bool extractPlayMap(std::vector<renderer::MapDrawState> &out,
+                      const runtime::InputDeviceState &platformInput={},bool platformFocus=true) {
     if(!isPlaying()) return false;
     if(!playScene_.active()) {
       if(EditorPlayScene::unresolvedEntity(document_)!=kInvalidEntity) {
@@ -811,9 +878,12 @@ public:
     device.moveX=actions.moveRight;device.moveY=actions.moveForward;
     device.lookX=actions.lookScreenX;device.lookY=actions.lookScreenY;
     device.touchButtons=(jumpPressed_?1u:0u)|(secondaryPressed_?2u:0u);
+    device.keys=platformInput.keys;
+    device.gamepadButtons=platformInput.gamepadButtons;
+    device.gamepadAxes=platformInput.gamepadAxes;
     jumpPressed_=false;
     secondaryPressed_=false;
-    playScene_.setInputFocus(!state_.playPaused);
+    playScene_.setInputFocus(gameplayInputFocused()&&platformFocus);
     playScene_.submitInput(device);
     const auto &input=playScene_.input();
     const auto &map=input.map();
@@ -865,12 +935,56 @@ public:
     renderingSettings_ = settings;
     state_.qualityDraft = settings;
     state_.qualityDirty = false;
+    renderingSettingsRequested_ = false;
+    renderingSettingsRequestInFlight_ = false;
+    qualityRevision_ = 0;
+    renderingSettingsRequestRevision_ = 0;
   }
+  bool consumeEnvironmentImportRequest() {
+    const bool requested=std::exchange(state_.environmentImportRequested,false);
+    if(requested) {state_.importEnvironment=true;state_.importTexture=false;}
+    return requested;
+  }
+  bool consumeTextureImportRequest() {
+    const bool requested=std::exchange(state_.textureImportRequested,false);
+    if(requested) {state_.importEnvironment=false;state_.importTexture=true;}
+    return requested;
+  }
+  const resources::TextureProfile &textureImportSettings() const noexcept {return state_.textureImportSettings;}
+  void beginTextureImportPreparation(std::string_view path,const resources::TextureProfile &settings) {
+    beginImportPreparation(path);state_.importTexture=true;state_.importEnvironment=false;
+    state_.textureImportSettings=state_.textureImportPreparedSettings=settings;
+    state_.textureImportReprepare=false;
+  }
+  bool takeTextureImportReprepare(resources::TextureProfile &out) {
+    if(!std::exchange(state_.textureImportReprepare,false)) return false;
+    out=state_.textureImportSettings;return true;
+  }
+  void showTextureImportPreview(std::string path,const resources::PreparedTextureImport &prepared,
+                                const resources::TextureProfile &settings);
+  bool commitTextureImport(const std::string &path,std::span<const u8> bytes,const std::string &expectedHash,
+                           const resources::PreparedTextureImport &prepared,const resources::TextureProfile &settings,
+                           std::string &diagnostic);
   bool takeRenderingSettingsRequest(renderer::ProjectRenderingSettings &out) {
     if (!renderingSettingsRequested_) return false;
     renderingSettingsRequested_ = false;
-    out = renderingSettings_;
+    renderingSettingsRequestInFlight_ = true;
+    out = requestedRenderingSettings_;
     return true;
+  }
+  // Confirma o commit feito pelo shell. Falha de disco mantém o rascunho e o
+  // botão Aplicar ativos; só sucesso passa a ser o estado autoral aplicado.
+  void completeRenderingSettingsRequest(bool success) {
+    if (!renderingSettingsRequestInFlight_) return;
+    renderingSettingsRequestInFlight_ = false;
+    if (success) {
+      renderingSettings_ = requestedRenderingSettings_;
+      state_.qualityDirty = qualityRevision_ != renderingSettingsRequestRevision_;
+      state_.status = state_.qualityDirty ? "Qualidade aplicada; há novas alterações" : "Qualidade aplicada";
+    } else {
+      state_.qualityDirty = true;
+      state_.status = "Não foi possível salvar a qualidade; revise o armazenamento e tente novamente";
+    }
   }
   // O que o renderer está fazendo agora, para o rodapé do painel.
   void setRenderStats(u32 width, u32 height, float gpuMilliseconds, std::string_view detectedLevel);
@@ -879,7 +993,7 @@ public:
     state_.status=accepted?"Agua atualizada":"Configuracao de agua recusada; estado anterior mantido";
   }
   void reportPlayFailure() {
-    playScene_.stop();state_.workspace=EditorWorkspace::Scene;
+    playScene_.stop();runtimeTextures_.clear();state_.workspace=EditorWorkspace::Scene;
     if(!playScene_.scriptDiagnostics().empty()) state_.status=playScene_.scriptDiagnostics();
     else if(!playScene_.physicsError().empty()) state_.status=playScene_.physicsError();
     else if(state_.status.rfind("Play indisponível:",0)!=0)
@@ -998,6 +1112,8 @@ private:
   u64 importTextureBudget_ = u64{1} << 30;
   resources::TextureBudgetReport textureResidency_{};
   std::string reimportPath_;
+  std::string environmentReimportPath_;
+  std::string textureReimportPath_;
   bool previousImportMap(const resources::AssetGuid &source, resources::ImportNodeMap &out) const;
   bool persistImportMap(const resources::AssetGuid &source);
   void removeImportMapFile(const resources::AssetGuid &source);
@@ -1006,10 +1122,12 @@ private:
   u64 importInstanceCounter_=0;
   std::vector<resources::MaterialAsset> materials_;
   std::vector<resources::EnvironmentProfile> environmentProfiles_;
+  std::vector<EnvironmentMapEntry> environmentMaps_;
   std::vector<ProjectTexture> textures_;
   struct DecodedProjectTexture {
     resources::AssetGuid guid;
     bool srgb=true;
+    bool normal=false;
     u32 sampler=EditorMapScene::DefaultTextureSampler;
     std::string contentHash;
     renderer::SharedAuthoringTexture texture;
@@ -1019,12 +1137,16 @@ private:
   struct UsedTexture {
     resources::AssetGuid guid;
     bool srgb=true;
+    bool normal=false;
     u32 sampler=EditorMapScene::DefaultTextureSampler;
     friend bool operator==(const UsedTexture &a,const UsedTexture &b) {
-      return a.guid==b.guid && a.srgb==b.srgb && a.sampler==b.sampler;
+      return a.guid==b.guid && a.srgb==b.srgb && a.normal==b.normal && a.sampler==b.sampler;
     }
   };
   std::vector<UsedTexture> anticipatedTextures_;
+  // Variantes pedidas por scripts durante a sessão de Play. Permanecem na
+  // biblioteca até Stop para uma republicação posterior não desfazer o binding.
+  std::vector<UsedTexture> runtimeTextures_;
   std::vector<std::pair<resources::AssetGuid,resources::TextureProfile>> textureProfiles_;
   std::vector<std::pair<EditorMapScene::TextureBinding,TextureResidency>> publishedTextures_;
   // Seleção da cena quando a textura/gerenciador abriu: mudar a seleção devolve
@@ -1042,9 +1164,8 @@ private:
   std::vector<TextureThumbnail> thumbnails_; // na ordem das texturas do projeto
   struct ViewerChain {
     resources::AssetGuid guid;
-    std::string contentHash;
-    u32 width=0,height=0,levels=0;
-    std::vector<u8> chain;
+    std::string contentHash, recipe;
+    renderer::SharedAuthoringTexture texture;
   } viewerChain_;
   bool refreshTextureViewerImage();
   bool appearanceChanged_=false;
@@ -1055,7 +1176,8 @@ private:
   // Textura do projeto decodificada com mips para um espaço de cor, em cache
   // enquanto o conteúdo registrado não muda. Nula quando o arquivo não abre.
   renderer::SharedAuthoringTexture decodeProjectTexture(const resources::AssetGuid &guid,bool srgb,
-                                                        u32 sampler=EditorMapScene::DefaultTextureSampler);
+                                                        u32 sampler=EditorMapScene::DefaultTextureSampler,
+                                                        bool normal=false);
   // Pares (textura, sRGB) usados por slots da cena e por materiais do projeto.
   void collectUsedTextures(std::vector<UsedTexture> &out) const;
   // Publica de novo só se alguma textura usada ainda não está na biblioteca.
@@ -1101,7 +1223,14 @@ private:
   platform::FirstPersonTouchControls playTouches_;
   EditorHistory history_;
   renderer::ProjectRenderingSettings renderingSettings_{};
+  renderer::ProjectRenderingSettings requestedRenderingSettings_{};
+  renderer::ProjectRenderingSettings scriptRenderingRequest_{};
+  u64 scriptRenderingRequestId_=0;
+  bool scriptRenderingRequestPending_=false;
   bool renderingSettingsRequested_ = false;
+  bool renderingSettingsRequestInFlight_ = false;
+  u64 qualityRevision_ = 0;
+  u64 renderingSettingsRequestRevision_ = 0;
   EditorCamera camera_;
   renderer::PerspectiveVisibilitySettings projection_{};
   EditorViewport view_{};
@@ -1125,6 +1254,12 @@ private:
   EditorEntity lensDragInitial_{};
   EditorCameraHandle lensDragHandle_{};
   EditorViewport lensDragView_{};
+  bool componentDragOpen_=false;
+  u32 componentDragPointer_=0;
+  float componentDragStart_=0;
+  EditorEntity componentDragInitial_{};
+  EditorComponentHandle componentDragHandle_{};
+  EditorViewport componentDragView_{};
   EditorEntityId cameraGestureEntity_=0;
   u64 cameraGestureInstance_=0;
   void pilotCamera(ui::UiPoint delta,float dolly,bool translate);

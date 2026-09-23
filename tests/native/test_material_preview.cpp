@@ -60,6 +60,24 @@ AE_TEST(Texture_policy_reduces_resident_chain_not_source_identity) {
   AE_EXPECT_EQ(chooseResidentMip(d,8192,16ull*1024*1024),1,"budget limit");
   AE_EXPECT_EQ(chooseResidentMip(d,8192,1),14,"cannot fit even tail");
 }
+AE_TEST(Texture_mip_bias_selects_the_exact_contiguous_resident_tail) {
+  ImageDesc d{8,8,VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,VK_IMAGE_ASPECT_COLOR_BIT};
+  d.mipLevels=4;
+  const auto full=chooseResidentRange(d,8192,std::numeric_limits<u64>::max(),0);
+  AE_EXPECT_TRUE(full.valid() && full.baseMip==0 && full.byteOffset==0 && full.byteSize==340,
+                 "qualidade completa envia a cadeia inteira");
+  const auto half=chooseResidentRange(d,8192,std::numeric_limits<u64>::max(),1);
+  AE_EXPECT_TRUE(half.valid() && half.baseMip==1 && half.byteOffset==256 && half.byteSize==84,
+                 "Half omite exatamente o nível 8x8");
+  AE_EXPECT_TRUE(half.description.width==4 && half.description.height==4 && half.description.mipLevels==3,
+                 "a nova base é 4x4 com a cauda intacta");
+  const auto budgeted=chooseResidentRange(d,2,std::numeric_limits<u64>::max(),1);
+  AE_EXPECT_TRUE(budgeted.valid() && budgeted.baseMip==2 && budgeted.description.width==2,
+                 "capacidade e qualidade escolhem a restrição mais forte");
+  d.mipLevels=1;
+  AE_EXPECT_TRUE(!chooseResidentRange(d,8192,std::numeric_limits<u64>::max(),1).valid(),
+                 "recurso sem o mip pedido recusa em vez de fingir Half");
+}
 AE_TEST(Texture_payload_rejects_truncation_version_and_unknown_encoding) {
   std::array<u8,32> bytes{};
   auto set=[&](usize offset,u32 v){for(int i=0;i<4;++i)bytes[offset+i]=static_cast<u8>(v>>(8*i));};

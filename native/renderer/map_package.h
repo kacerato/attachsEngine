@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/base.h"
+#include "renderer/texture_sampler.h"
 
 #include <cmath>
 #include <cstring>
@@ -69,6 +70,8 @@ inline constexpr u32 MapMaterialOcclusionInMetallicRoughness = 1u << 14;
 inline constexpr u32 MapMaterialCullBackFaces = 1u << 15;
 
 struct MapTextureRecord {
+  // Pacotes antigos usam bits 0/1 (filtro único e mip linear). Pacotes novos
+  // somam TextureSamplerIndependent; decodeTextureSampler preserva ambos.
   u32 flags;
   u32 reserved[3];
 };

@@ -31,9 +31,9 @@ struct ModelPickerResult {
   std::vector<Companion> companions;
 };
 
-// Pede um arquivo ao usuário. Só um pedido por vez: um segundo pedido enquanto
-// o seletor está aberto é ignorado, em vez de empilhar diálogos.
-void requestModelPick();
+// A new request invalidates the old token. Textures and HDRI use a single
+// document; only a model can include its external dependency files.
+void requestModelPick(bool allowCompanions = true);
 void cancelModelPick();
 bool modelPickPending();
 // Devolve e CONSOME o resultado, quando há um.

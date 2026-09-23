@@ -150,9 +150,14 @@ AE_TEST(atribuicao_nao_afirma_nada_sem_tempo_de_gpu) {
 }
 
 AE_TEST(water_simulation_is_independent_of_tile_pass_attribution) {
-  std::array<double, ae::GpuPassClassCount> passes{};
-  passes[static_cast<ae::u32>(ae::GpuPassClass::WaterSimulation)]=7;
-  AE_EXPECT_TRUE(!gpuPassAttributionCollapsed(passes,7),"compute-only cost is not a collapsed raster pass");
+  for(const auto pass:{ae::GpuPassClass::CameraPreview,ae::GpuPassClass::WaterSimulation,ae::GpuPassClass::LocalShadow,
+                      ae::GpuPassClass::AutoExposure,ae::GpuPassClass::Post,ae::GpuPassClass::FsrEasu,
+                      ae::GpuPassClass::FsrRcas,ae::GpuPassClass::Ui}) {
+    std::array<double, ae::GpuPassClassCount> passes{};
+    passes[static_cast<ae::u32>(pass)]=7;
+    AE_EXPECT_TRUE(!gpuPassAttributionCollapsed(passes,7),
+                   "an independent render/compute pass dominating GPU is not collapsed attribution");
+  }
   AE_EXPECT_TRUE(std::string_view(ae::gpuPassClassMetricName(ae::GpuPassClass::WaterSimulation))==
       "gpu_water_simulation_ms","explicit water simulation metric");
 }

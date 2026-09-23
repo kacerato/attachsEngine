@@ -1,4 +1,7 @@
 #include "runtime/game_world.h"
+#include "scene/camera_look.h"
+#include "scene/camera.h"
+#include "scene/environment.h"
 #include "runtime/scene_components.h"
 
 #include <algorithm>
@@ -29,6 +32,8 @@ const char *worldStatusMessage(WorldStatus status) noexcept {
     case WorldStatus::InvalidArgument: return "Argumento inválido";
     case WorldStatus::LimitReached: return "Limite de capacidade atingido";
     case WorldStatus::Rejected: return "Operação recusada";
+    case WorldStatus::UnknownResource: return "Recurso inexistente";
+    case WorldStatus::ResourceTypeMismatch: return "Tipo de recurso incompatível";
   }
   return "Operação recusada";
 }
@@ -381,6 +386,126 @@ WorldStatus GameWorld::setProperty(const ComponentHandle &component, std::string
   return WorldStatus::Rejected;
 }
 
+WorldStatus GameWorld::getSlotProperty(const ComponentHandle &component,std::string_view propertyId,u32 slot,
+                                       scene::ComponentPropertyValue &out) const {
+  const auto status=validate(component.object);if(status!=WorldStatus::Ok)return status;
+  const auto *value=readComponent(component);if(!value)return WorldStatus::ComponentMissing;
+  const scene::ComponentSlotNumber *number=nullptr;const scene::ComponentSlotEnum *enumeration=nullptr;u32 matches=0;
+  for(const auto &p:value->type().slotNumbers)if(p.id==propertyId){number=&p;++matches;}
+  for(const auto &p:value->type().slotEnums)if(p.id==propertyId){enumeration=&p;++matches;}
+  if(matches!=1)return WorldStatus::InvalidArgument;
+  if(number) {
+    if(!number->read||slot>=number->slotCount(*value))return WorldStatus::InvalidArgument;
+    out=number->read(*value,slot);return WorldStatus::Ok;
+  }
+  if(!enumeration->read||slot>=enumeration->slotCount(*value))return WorldStatus::InvalidArgument;
+  out=enumeration->read(*value,slot);return WorldStatus::Ok;
+}
+
+WorldStatus GameWorld::setSlotProperty(const ComponentHandle &component,std::string_view propertyId,u32 slot,
+                                       const scene::ComponentPropertyValue &input,
+                                       const ComponentResourceResolver &resolveResource) {
+  const auto status=validate(component.object);if(status!=WorldStatus::Ok)return status;
+  const auto *source=readComponent(component);if(!source)return WorldStatus::ComponentMissing;
+  const auto *schema=scene::findComponentSchema(source->type().id);
+  if(!schema)return WorldStatus::UnknownComponent;
+  if(schema->propertiesInPlay==scene::PlayMutability::Never)return WorldStatus::NotMutableInPlay;
+  const scene::ComponentSlotNumber *number=nullptr;const scene::ComponentSlotEnum *enumeration=nullptr;u32 matches=0;
+  for(const auto &p:source->type().slotNumbers)if(p.id==propertyId){number=&p;++matches;}
+  for(const auto &p:source->type().slotEnums)if(p.id==propertyId){enumeration=&p;++matches;}
+  if(matches!=1)return WorldStatus::InvalidArgument;
+  auto candidate=source->clone();if(!candidate||&candidate->type()!=&source->type())return WorldStatus::Rejected;
+  bool written=false;
+  if(number) {
+    const auto *v=std::get_if<float>(&input);
+    if(!v||!std::isfinite(*v)||*v<number->minimum||*v>number->maximum||
+       !number->presentation.isEditable(*source)||slot>=number->slotCount(*source)||!number->write)
+      return WorldStatus::InvalidArgument;
+    written=number->write(*candidate,slot,*v);
+  } else {
+    const auto *v=std::get_if<u32>(&input);bool option=false;
+    if(v)for(const auto &entry:enumeration->options)if(entry.value==*v){option=true;break;}
+    if(!v||!option||!enumeration->presentation.isEditable(*source)||
+       slot>=enumeration->slotCount(*source)||!enumeration->write)return WorldStatus::InvalidArgument;
+    written=enumeration->write(*candidate,slot,*v);
+  }
+  if(!written||!candidate->valid())return WorldStatus::Rejected;
+  // Wrap e filtro fazem parte da chave da textura publicada. A troca só entra
+  // no mundo quando o consumidor confirmou as variantes do slot candidato.
+  const bool changesSampler=propertyId=="sampling.wrap"||propertyId=="sampling.filter"||
+      (propertyId.starts_with("sampling.")&&
+       (propertyId.ends_with(".wrap")||propertyId.ends_with(".filter")));
+  if(changesSampler&&
+     (!resolveResource||!resolveResource({},resources::AssetType::Texture,propertyId,slot,*candidate)))
+    return WorldStatus::ComponentUnavailable;
+  auto *components=editComponents(component.object.id);
+  return components&&components->replaceInstance(component.instance,*candidate)?WorldStatus::Ok:WorldStatus::StaleHandle;
+}
+
+WorldStatus GameWorld::getResource(const ComponentHandle &component, std::string_view propertyId, u32 slot,
+                                   resources::AssetGuid &out) const {
+  const auto status = validate(component.object);
+  if (status != WorldStatus::Ok) return status;
+  const auto *value = readComponent(component);
+  if (!value) return WorldStatus::ComponentMissing;
+  const scene::ComponentResourceBinding *match = nullptr;
+  for (const auto &binding : value->type().resourceBindings)
+    if (binding.id == propertyId) { if (match) return WorldStatus::InvalidArgument; match = &binding; }
+  if (!match || slot >= match->slotCount(*value) || !match->read) return WorldStatus::InvalidArgument;
+  out = match->at(*value, slot);
+  return WorldStatus::Ok;
+}
+
+WorldStatus GameWorld::setResource(const ComponentHandle &component, std::string_view propertyId, u32 slot,
+                                   resources::AssetGuid resource, const resources::AssetRegistry &assets,
+                                   std::span<const resources::EnvironmentProfile> environmentProfiles,
+                                   const ComponentResourceResolver &resolveResource) {
+  const auto status = validate(component.object);
+  if (status != WorldStatus::Ok) return status;
+  const auto *current = readComponent(component);
+  if (!current) return WorldStatus::ComponentMissing;
+  const auto *schema = scene::findComponentSchema(current->type().id);
+  if (!schema) return WorldStatus::UnknownComponent;
+  if (schema->propertiesInPlay == scene::PlayMutability::Never) return WorldStatus::NotMutableInPlay;
+  const scene::ComponentResourceBinding *match = nullptr;
+  for (const auto &binding : current->type().resourceBindings)
+    if (binding.id == propertyId) { if (match) return WorldStatus::InvalidArgument; match = &binding; }
+  if (!match || slot >= match->slotCount(*current) || !match->write) return WorldStatus::InvalidArgument;
+  if (resource.valid() && !match->declaresNone(resource)) {
+    const auto *record = assets.find(resource);
+    if (!record) return WorldStatus::UnknownResource;
+    if (record->type != match->kind) return WorldStatus::ResourceTypeMismatch;
+  }
+  const resources::EnvironmentProfile *environmentProfile=nullptr;
+  if(resource.valid()&&match->kind==resources::AssetType::EnvironmentProfile) {
+    for(const auto &profile:environmentProfiles) if(profile.guid==resource) {environmentProfile=&profile;break;}
+    // O registro comprova identidade/tipo, mas só a biblioteca contém os
+    // valores que tornam a troca de perfil observável no mesmo frame.
+    if(!environmentProfile) return WorldStatus::UnknownResource;
+  }
+  // Valida a troca sobre uma cópia. Além de manter a mutação atômica, isto dá
+  // ao publicador o componente efetivo (incluindo sampler e binding recém
+  // escritos) antes de aceitar uma textura/material como utilizável.
+  auto candidate=current->clone();
+  if(!candidate||&candidate->type()!=&current->type()||!match->write(*candidate,slot,resource))
+    return WorldStatus::Rejected;
+  if(environmentProfile&&&candidate->type()==&scene::Environment::descriptor) {
+    auto &environment=static_cast<scene::Environment&>(*candidate);
+    environment.values=resources::applyEnvironmentProfile(environment.values,*environmentProfile);
+  }
+  if(!candidate->valid()) return WorldStatus::Rejected;
+  // Mesmo limpar um override pode revelar um material/textura herdado. O
+  // consumidor resolve o candidato completo antes do commit, em vez de
+  // presumirmos que GUID vazio significa ausência visual.
+  const bool needsConsumerResolution=match->kind==resources::AssetType::Mesh||
+      match->kind==resources::AssetType::Texture||match->kind==resources::AssetType::Material;
+  if(needsConsumerResolution&&(!resolveResource||!resolveResource(resource,match->kind,propertyId,slot,*candidate)))
+    return WorldStatus::ComponentUnavailable;
+  if(!candidate->valid()) return WorldStatus::Rejected;
+  auto *components=editComponents(component.object.id);
+  return components&&components->replaceInstance(component.instance,*candidate)?WorldStatus::Ok:WorldStatus::StaleHandle;
+}
+
 // --- transform ------------------------------------------------------------
 
 TransformAuthority GameWorld::authorityOf(const ObjectHandle &h) const noexcept {
@@ -440,6 +565,20 @@ WorldStatus GameWorld::setWorldTransform(const ObjectHandle &h, const Transform 
   Transform local;
   if (!localTransformForWorld(desired, parent, local)) return WorldStatus::Rejected;
   return setLocalTransform(h, local);
+}
+
+WorldStatus GameWorld::applyCameraLook(const ObjectHandle &h,float x,float y) {
+  const auto status=validate(h);
+  if(status!=WorldStatus::Ok) return status;
+  if(!std::isfinite(x)||!std::isfinite(y)) return WorldStatus::InvalidArgument;
+  const auto *object=graph_.find(h.id);
+  if(!object->components.find(scene::Camera::descriptor)) return WorldStatus::ComponentMissing;
+  const auto *look=static_cast<const scene::CameraLook*>(object->components.find(scene::CameraLook::descriptor));
+  if(!look) return WorldStatus::ComponentMissing;
+  Transform transform=object->transform;
+  if(!scene::applyCameraLookRotation(transform.rotationDegrees,*look,x,y)) return WorldStatus::InvalidArgument;
+  if(x==0&&y==0) return WorldStatus::Ok;
+  return setLocalTransform(h,transform);
 }
 
 } // namespace ae::runtime

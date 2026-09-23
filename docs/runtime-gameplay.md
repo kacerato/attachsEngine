@@ -167,9 +167,12 @@ modal, gizmo arrastado, Play pausado — o gameplay lê zero e os botões são
 soltos na hora. A pausa e o cancelamento usam o mesmo caminho.
 
 **Dispositivos.** O toque Android alimenta manche, arraste e botões da interface
-de jogo. Teclado e gamepad têm fontes de binding implementadas e avaliadas pelo
-serviço, exercitadas nos testes de host; **o shell Android ainda não alimenta
-nenhuma das duas**, então elas não são apresentadas como validadas no aparelho.
+de jogo. Em Play, teclas e botões usam os key codes Android no mesmo mapa de
+ações. Os oito eixos de gamepad são esquerda X/frente, direita X/cima,
+gatilhos esquerdo/direito e D-pad X/cima; a zona morta continua definida pela
+ação. O shell usa o último teclado e o último controle que enviaram eventos;
+não agrega vários jogadores. Pausa, perda de foco, Stop e desconexão limpam o estado bruto. O caminho
+físico de teclado e controle ainda requer verificação em aparelho com periféricos.
 
 ## 10. Modelos de comportamento
 
@@ -228,9 +231,20 @@ O estado do catálogo é dito, não escondido:
 
 ## 12. ABI de scripts
 
-v5. Campos de v2 nas mesmas posições; v3 acrescentou hierarquia/ciclo de
+v8. Campos anteriores mantêm suas posições; v3 acrescentou hierarquia/ciclo de
 vida/componentes/propriedades/transform de mundo, v4 consultas e contatos, v5
-ações de entrada. O lado gerenciado exige a versão corrente e confere `size`.
+ações de entrada, v6 política gráfica, v7 propriedades de slots de material e
+v8 comandos de Character/CameraLook. O lado gerenciado exige a versão corrente
+e confere `size`.
+
+`GameObject.MoveCharacter(Vector2, yawRadians)` envia uma intenção com eixos em
+−1..1 para todos os passos físicos do quadro. Um novo quadro sem comando volta
+à entrada autorada; o comando não altera a velocidade configurada no componente.
+`TryJumpCharacter()` retorna falso quando o motor recusa um salto no ar; objeto
+inválido ou componente ausente continuam sendo erros. `LookCamera(Vector2)` usa
+o delta normalizado pela viewport, sensibilidade e limites do CameraLook,
+preservando o roll e obedecendo ao ownership da transformação. Essas operações
+atuam no mundo em Play, sem gravar a cena autoral.
 
 ## 13. Luzes
 

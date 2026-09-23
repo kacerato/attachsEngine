@@ -22,12 +22,15 @@ struct AuthoringTextureReusePlan {
 };
 
 inline AuthoringTextureReusePlan planAuthoringTextureReuse(std::span<const SharedAuthoringTexture> previous,
-                                                           std::span<const SharedAuthoringTexture> next) {
+                                                           std::span<const SharedAuthoringTexture> next,
+                                                           u32 previousMipBias=0,u32 nextMipBias=0) {
   AuthoringTextureReusePlan plan;
   plan.reuse.assign(next.size(), AuthoringTextureNoReuse);
   std::vector<u8> taken(previous.size());
   for (usize i = 0; i < next.size(); ++i) {
-    if (next[i])
+    // O mesmo objeto com outro mip base produz outra VkImage; identidade da
+    // fonte sozinha não autoriza mover a residência anterior.
+    if (next[i] && previousMipBias==nextMipBias)
       for (usize j = 0; j < previous.size(); ++j)
         if (!taken[j] && previous[j] == next[i]) {
           plan.reuse[i] = static_cast<u32>(j);

@@ -21,6 +21,8 @@
 #pragma once
 
 #include "renderer/rendering_policy.h"
+#include "resources/environment_map_asset.h"
+#include "resources/texture_profile.h"
 #include "core/base.h"
 #include "editor/editor_document.h"
 #include "editor/editor_filesystem.h"
@@ -144,6 +146,8 @@ enum class EditorWidget : u32 {
   CreateRiverWater,
   CreateBuoyantBox,
   ImportModel,
+  ImportEnvironment,
+  ImportTexture,
   ImportAccept,
   ImportIntoScene,
   ImportPreviousPage,
@@ -209,7 +213,25 @@ enum class EditorWidget : u32 {
   CreateSceneTemplate, SceneTemplateClose,
   QualityOpen, QualityClose, QualityLevel, QualityScaleDown, QualityScaleUp, QualityDynamic,
   QualityAntiAliasing, QualitySharpenDown, QualitySharpenUp, QualityRate, QualityApply,
+  QualityTabGeneral, QualityTabShadows, QualityTabLighting, QualityTabPerformance,
+  QualityPagePrevious, QualityPageNext,
+  QualityUpscaling, QualityTextures,
+  QualityShadows, QualityShadowCascades, QualityShadowResolution,
+  QualityShadowDistanceDown, QualityShadowDistanceUp,
+  QualityShadowBiasDown, QualityShadowBiasUp, QualityShadowSlopeDown, QualityShadowSlopeUp,
+  QualityShadowNormalDown, QualityShadowNormalUp, QualityShadowCache,
+  QualityAmbient, QualityEnvironmentBrdf, QualityPost, QualityBloomThresholdDown,
+  QualityBloomThresholdUp, QualityBloomIntensityDown, QualityBloomIntensityUp,
+  QualityTemporalWeightDown, QualityTemporalWeightUp, QualityVignette,
+  QualityDynamicMinimumDown, QualityDynamicMinimumUp, QualityLodSelection,
+  QualityLodErrorDown, QualityLodErrorUp, QualityLodHysteresisDown,
+  QualityLodHysteresisUp, QualityMaterialVariants,
   ImportTabSummary, ImportTabStructure, ImportTabMeshes, ImportTabTextures, ImportTabProfile,
+  EnvironmentPanoramaDown, EnvironmentPanoramaUp,
+  EnvironmentSpecularDown, EnvironmentSpecularUp,
+  EnvironmentBrdfDown, EnvironmentBrdfUp,
+  EnvironmentSpecularSamplesDown, EnvironmentSpecularSamplesUp,
+  EnvironmentBrdfSamplesDown, EnvironmentBrdfSamplesUp,
   ImportMeshClose,
   ImportScaleDown, ImportScaleUp,
   ImportTextureDimension256, ImportTextureDimension512, ImportTextureDimension1024, ImportTextureDimension2048,
@@ -226,6 +248,8 @@ enum class EditorWidget : u32 {
   TextureViewerClose, TextureViewerChannel, TextureViewerMipDown, TextureViewerMipUp,
   TextureViewerZoom, TextureViewerBackground,
   TextureProfileInterpretation, TextureProfileDimension, TextureProfileMipmaps, TextureProfileEdges, TextureProfileAnisotropy,
+  TextureProfileNormalGreen, TextureProfileCoverage, TextureProfileCoverageCutoff, TextureProfileApply, TextureProfileRevert,
+  TextureProfilePrevious, TextureProfileNext,
   TextureManagerClose, TextureSearch, TextureManagerPrevious, TextureManagerNext,
   TextureSamplingUv, TextureSamplingWrap, TextureSamplingFilter, TextureUvReset,
   // + máscara de ImportOverride.
@@ -247,6 +271,7 @@ enum class EditorWidget : u32 {
   ComponentResourceBase=0x7f000000u,
   CameraLens=0x5E000010u, CameraNear, CameraFar,
   CameraHandleBase=0x5E000020u,
+  ComponentHandleBase=0x5E000060u,
   CameraPreviewPin=0x5E000030u, CameraPreviewClose, CameraPreviewResolution, CameraPreviewFrequency, CameraPreviewRetry,
   PresetOpen=0x5E000040u, PresetClose, PresetSave, PresetApply, PresetAdd, PresetRename, PresetDelete, PresetPrevious, PresetNext,
   // Escolha por campo do preset: marcar tudo, desmarcar tudo e paginar o diff.
@@ -456,6 +481,8 @@ struct EditorScreenState final {
   // Painel Qualidade: o rascunho que o autor edita, se difere do aplicado, e o
   // que o renderer está fazendo de fato agora (resolução real e custo de GPU).
   bool qualityPanel=false,qualityDirty=false;
+  u32 qualityTab=0;
+  u32 qualityPage=0;
   renderer::ProjectRenderingSettings qualityDraft{};
   std::string qualityStats,qualityDetected;
   u32 viewSelected=0;
@@ -501,6 +528,7 @@ struct EditorScreenState final {
   EditorEntityId cameraViewEntity=0;
   EditorEntityId cameraPreviewEntity=0;
   bool cameraPreviewReady=false,cameraPreviewFailed=false;
+  std::string cameraPreviewDiagnostic;
   u32 cameraPreviewWidth=640,cameraPreviewHeight=360;
   float cameraPreviewFrequency=15;
   bool cameraPiloting=false;
@@ -552,8 +580,16 @@ struct EditorScreenState final {
   unsigned creationCategory=0,creationSelection=0,creationPage=0;
   u32 creationAvailable=3; // Basic object and camera; resource tools opt in on import.
   // O editor não conhece Android: ele levanta o pedido e o shell abre o seletor.
-  bool modelImportRequested=false;
+  bool modelImportRequested=false,environmentImportRequested=false,textureImportRequested=false;
   bool importPanel=false,importReady=false,importAccept=false,importCancel=false,importIntoScene=false,importError=false;
+  bool importEnvironment=false,importTexture=false;
+  resources::EnvironmentMapImportSettings environmentImportSettings{};
+  bool environmentImportReprepare=false;
+  resources::TextureProfile textureImportSettings{},textureImportPreparedSettings{};
+  bool textureImportReprepare=false;
+  u32 textureImportSourceWidth=0,textureImportSourceHeight=0,textureImportDroppedMips=0;
+  bool textureImportSourceHasAlpha=false;
+  ui::UiRect textureImportImage{};
   std::string importSummary,importPath;
   u32 importPage=0;
   bool codeRecoveryPending=false;
@@ -668,7 +704,10 @@ struct EditorScreenState final {
   std::string textureViewerTitle,textureViewerLevelLabel,textureViewerChannelLabel,textureViewerInfo;
   std::string textureViewerZoomLabel,textureViewerBackgroundLabel;
   // R4: perfil da textura (interpretação, tamanho, mips, bordas, anisotropia) e residência.
-  std::string textureProfileLabels[5],textureResidencyLabel;
+  std::string textureProfileLabels[8],textureResidencyLabel;
+  resources::TextureProfile textureProfileDraft{},textureProfileSaved{};
+  bool textureProfileDirty=false;
+  u32 textureProfilePage=0;
   // Menu de ações do objeto (⋮ do cabeçalho do inspetor) e do card Transformação.
   bool inspectorMenu=false,transformMenu=false;
   // Transformação copiada, para colar em outro objeto.

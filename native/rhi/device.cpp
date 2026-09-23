@@ -929,6 +929,10 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   if (computeQueueFamily_ != UINT32_MAX)
     vkGetDeviceQueue(device_, computeQueueFamily_, 0, &computeQueue_);
   deviceFeatures_ = DeviceFeatures{};
+  deviceFeatures_.vendorId = deviceProperties.vendorID;
+  deviceFeatures_.deviceId = deviceProperties.deviceID;
+  std::strncpy(deviceFeatures_.deviceName.data(), deviceProperties.deviceName,
+               deviceFeatures_.deviceName.size() - 1);
   deviceFeatures_.vulkan1_3 = deviceProperties.apiVersion >= VK_API_VERSION_1_3;
   deviceFeatures_.descriptorIndexing = descriptorIndexingExtensionSupported;
   deviceFeatures_.bindlessNonUniformIndexing = bindlessSupported;

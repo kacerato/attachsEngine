@@ -41,8 +41,10 @@ bool readAndroidAsset(AAssetManager *assets, const char *name, std::vector<u8> &
 bool loadAndroidTexture(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload,
                         AAssetManager *assets, const char *name, u32 maxDimension,
                         u64 budgetBytes, const rhi::SamplerDesc &samplerDescription,
+                        bool sampleMipChain,
                         rhi::VulkanImage &image, rhi::VulkanSampler &sampler,
-                        const std::atomic<bool> *cancel, const char *diagnosticCategory) {
+                        const std::atomic<bool> *cancel, const char *diagnosticCategory,
+                        u32 residencyMipBias, AndroidTextureResidency *residency) {
   Asset asset(AAssetManager_open(assets, name, AASSET_MODE_RANDOM), AAsset_close);
   if (!asset) {
     __android_log_print(ANDROID_LOG_ERROR, "Aether.Android", "[%s] Asset ausente: %s",
@@ -53,22 +55,22 @@ bool loadAndroidTexture(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upl
   renderer::TexturePayload payload;
   if (!readExact(asset.get(), header.data(), header.size(), cancel) ||
       !renderer::decodeTextureHeader(header, AAsset_getLength64(asset.get()), payload)) return false;
-  auto description = payload.description;
+  const auto sourceDescription = payload.description;
+  auto description = sourceDescription;
   VkFormatProperties properties{};
   vkGetPhysicalDeviceFormatProperties(device.physicalDevice(), description.format, &properties);
   constexpr auto required = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
                             VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
   if ((properties.optimalTilingFeatures & required) != required) return false;
-  const u32 baseMip = renderer::chooseResidentMip(description, maxDimension, budgetBytes);
-  if (baseMip == description.mipLevels) return false;
-  u64 offset = 32;
-  for (u32 mip = 0; mip < baseMip; ++mip) {
-    offset += rhi::sampledMipByteSize(description.format, description.width, description.height);
-    description.width = std::max(1u, description.width / 2);
-    description.height = std::max(1u, description.height / 2);
-    --description.mipLevels;
+  const auto resident=renderer::chooseResidentRange(description,maxDimension,budgetBytes,residencyMipBias);
+  if (!resident.valid()) {
+    __android_log_print(ANDROID_LOG_ERROR,"Aether.Android",
+        "[%s] texture=%s não possui mip residente para bias=%u.",diagnosticCategory,name,residencyMipBias);
+    return false;
   }
-  const u64 size = rhi::sampledChainByteSize(description);
+  description=resident.description;
+  const u32 baseMip=resident.baseMip;
+  const u64 offset=32+resident.byteOffset,size=resident.byteSize;
   if (AAsset_seek64(asset.get(), static_cast<off64_t>(offset), SEEK_SET) != static_cast<off64_t>(offset)) return false;
   std::vector<u8> payloadBytes(static_cast<usize>(size));
   if (!readExact(asset.get(), payloadBytes.data(), payloadBytes.size(), cancel) ||
@@ -76,8 +78,11 @@ bool loadAndroidTexture(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upl
       !device.memoryAllocator().createImage(description, &image) ||
       !upload.uploadSampledMipChain(device.memoryAllocator(), payloadBytes.data(), size, image)) return false;
   rhi::SamplerDesc residentSampler = samplerDescription;
-  residentSampler.maxLod = static_cast<float>(description.mipLevels - 1);
+  if (sampleMipChain)
+    residentSampler.maxLod = static_cast<float>(description.mipLevels - 1);
   if (!sampler.initialize(device.handle(), residentSampler)) return false;
+  if(residency) *residency={sourceDescription.width,sourceDescription.height,sourceDescription.mipLevels,
+      description.width,description.height,description.mipLevels,baseMip,payload.payloadBytes,size};
   __android_log_print(ANDROID_LOG_INFO, "Aether.Android",
       "[%s] texture=%s resident=%ux%u mips=%u bytes=%llu", diagnosticCategory, name,
       description.width, description.height, description.mipLevels,

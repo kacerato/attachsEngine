@@ -1,5 +1,6 @@
 #pragma once
 #include "core/base.h"
+#include "renderer/texture_sampler.h"
 #include <memory>
 #include <vector>
 
@@ -8,9 +9,8 @@ namespace ae::renderer {
 //
 // Sem Vulkan: o importador produz isto num worker e o renderer só cria a imagem
 // e o sampler. `mipChain` traz todos os níveis RGBA8 concatenados, do maior para
-// o menor. Os bits 0..3 de `samplerFlags` têm o MESMO significado de
-// `MapTextureRecord::flags` do pacote de mapa; os bits 4..5 acrescentam o
-// espelhamento que o glTF permite e o pacote não usava.
+// o menor. Os bits 0..3 preservam o contrato histórico. Importações novas usam
+// `TextureSamplerIndependent` para não fundir minificação, magnificação e mips.
 inline constexpr u32 AuthoringTextureLinearFilter = 1u << 0;
 inline constexpr u32 AuthoringTextureLinearMip = 1u << 1;
 inline constexpr u32 AuthoringTextureRepeatU = 1u << 2;

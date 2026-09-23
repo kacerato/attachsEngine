@@ -1,0 +1,5 @@
+AETHER_ASSETS 1 4
+5bd07969cc0d0b9cc230fdddc83f59fb mesh "Assets/world.glb" "Assets/world.glb" "04dde53448ee15d358a9cd2eb872482ce45dbcc7858c6347e382ef250ceada0f" 1 "glb" 0 0
+997acb99b33a52e9135ff01c236ace33 mesh "Assets/plastic_crate_01.glb" "Assets/plastic_crate_01.glb" "2463439dbea46e6626d5677087d1f94e884239666fce1e20529026d49c0e5011" 1 "glb" 0 0
+d7814409c76b4e8b3d8d0eb5f54fda11 mesh "Assets/wicker_basket_01.glb" "Assets/wicker_basket_01.glb" "15fbeb2939bd186d35dd300ee0e763a346928d0d437ff77edce4154df317735b" 1 "glb" 0 0
+41a75afa69da525f84cd8f921a811511 mesh "Assets/CoffeeCart_01.glb" "Assets/CoffeeCart_01.glb" "aa06cbe3625f5478d22c377e8c353d5bf9ea2cee6f2f147698ea6c2ae0ea7bc8" 1 "glb" 0 0

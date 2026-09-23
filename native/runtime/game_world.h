@@ -29,11 +29,17 @@
 #include "runtime/transform_math.h"
 #include "scene/component_properties.h"
 #include "scene/component_schema.h"
+#include "resources/asset_registry.h"
+#include "resources/environment_profile.h"
 
 #include <string>
+#include <functional>
 #include <vector>
 
 namespace ae::runtime {
+
+using ComponentResourceResolver = std::function<bool(resources::AssetGuid,resources::AssetType,std::string_view,u32,
+                                                     scene::ComponentValue &)>;
 
 struct ObjectHandle {
   u32 world = 0;
@@ -66,6 +72,8 @@ enum class WorldStatus : u32 {
   InvalidArgument,
   LimitReached,
   Rejected,
+  UnknownResource,
+  ResourceTypeMismatch,
 };
 
 const char *worldStatusMessage(WorldStatus status) noexcept;
@@ -145,12 +153,26 @@ public:
                           scene::ComponentPropertyValue &out) const;
   WorldStatus setProperty(const ComponentHandle &component, std::string_view propertyId,
                           const scene::ComponentPropertyValue &value);
+  WorldStatus getSlotProperty(const ComponentHandle &component,std::string_view propertyId,u32 slot,
+                              scene::ComponentPropertyValue &out) const;
+  WorldStatus setSlotProperty(const ComponentHandle &component,std::string_view propertyId,u32 slot,
+                              const scene::ComponentPropertyValue &value,
+                              const ComponentResourceResolver &resolveResource={});
+  WorldStatus getResource(const ComponentHandle &component, std::string_view propertyId, u32 slot,
+                          resources::AssetGuid &out) const;
+  WorldStatus setResource(const ComponentHandle &component, std::string_view propertyId, u32 slot,
+                          resources::AssetGuid value, const resources::AssetRegistry &assets,
+                          std::span<const resources::EnvironmentProfile> environmentProfiles={},
+                          const ComponentResourceResolver &resolveResource={});
 
   // --- transform ----------------------------------------------------------
   WorldStatus localTransform(const ObjectHandle &handle, Transform &out) const;
   WorldStatus setLocalTransform(const ObjectHandle &handle, const Transform &value);
   WorldStatus worldTransform(const ObjectHandle &handle, Transform &out) const;
   WorldStatus setWorldTransform(const ObjectHandle &handle, const Transform &value);
+  // Aplica o mesmo delta local normalizado usado pelo controle de toque,
+  // respeitando CameraLook e a autoridade de pose do mundo de Play.
+  WorldStatus applyCameraLook(const ObjectHandle &handle,float x,float y);
   TransformAuthority authorityOf(const ObjectHandle &handle) const noexcept;
   // O adaptador de física declara quem publica pose depois de montar os corpos.
   void setAuthority(ObjectId id, TransformAuthority authority);

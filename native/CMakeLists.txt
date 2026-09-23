@@ -251,6 +251,7 @@ add_library(aether_renderer STATIC
   renderer/dynamic_resolution.cpp
   renderer/environment_map.cpp
   renderer/scene_environment.cpp
+  renderer/physical_atmosphere.cpp
   renderer/frame_graph.cpp
   renderer/frustum_visibility.cpp
   renderer/gpu_draw_compaction.cpp
@@ -293,6 +294,7 @@ add_library(aether_assets STATIC
   resources/import_node_map.cpp
   resources/material_asset.cpp
   resources/environment_profile.cpp
+  resources/environment_map_asset.cpp
   resources/image_decode.cpp
   resources/gltf_codecs.cpp
   resources/gltf_package.cpp
@@ -302,6 +304,7 @@ add_library(aether_assets STATIC
   resources/import_profile.cpp
   resources/mesh_derived.cpp
   resources/texture_profile.cpp
+  resources/texture_asset.cpp
   resources/glb_images.cpp
 )
 target_include_directories(aether_assets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -327,6 +330,7 @@ add_library(aether_runtime STATIC
   runtime/scene_environment.cpp
   runtime/scene_physics.cpp
   runtime/script_bridge.cpp
+  runtime/runtime_rendering_state.cpp
 )
 target_include_directories(aether_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_runtime PUBLIC aether_core aether_assets aether_physics)
@@ -346,6 +350,8 @@ add_library(aether_editor STATIC
   editor/editor_gizmo.cpp
   editor/editor_screen.cpp
   editor/editor_session.cpp
+  editor/editor_environment_assets.cpp
+  editor/editor_texture_assets.cpp
   editor/editor_texture_preview.cpp
   editor/editor_import_reconcile.cpp
   editor/editor_history.cpp
@@ -556,6 +562,7 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_input.cpp
     ../tests/native/test_runtime_lights.cpp
     ../tests/native/test_runtime_environment.cpp
+    ../tests/native/test_runtime_rendering_state.cpp
     ../tests/native/test_asset_registry.cpp
     ../tests/native/test_gltf_import.cpp
     ../tests/native/test_editor_model_import.cpp
@@ -570,6 +577,7 @@ if(NOT ANDROID)
     ../tests/native/test_editor_code_catalog.cpp
     ../tests/native/test_editor_play_scripts.cpp
     ../tests/native/test_editor_map_scene.cpp
+    ../tests/native/test_highlevel_example_games.cpp
     ../tests/native/test_scene_components.cpp
     ../tests/native/test_component_contracts.cpp
     ../tests/native/test_component_preset.cpp
@@ -582,6 +590,7 @@ if(NOT ANDROID)
     ../tests/native/test_editor_gizmo.cpp
     ../tests/native/test_editor_screen.cpp
     ../tests/native/test_editor_session.cpp
+    ../tests/native/test_editor_environment_assets.cpp
     ../tests/native/test_editor_composition.cpp
     ../tests/native/test_editor_history.cpp
     ../tests/native/test_camera_ray_contract.cpp

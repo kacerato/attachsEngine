@@ -1,5 +1,7 @@
 #include "rhi/device_profile.h"
 
+#include <string_view>
+
 namespace ae::rhi {
 
 DeviceProfile classifyDeviceProfile(const DeviceFeatures &f) {
@@ -23,6 +25,25 @@ DeviceProfile classifyDeviceProfile(const DeviceFeatures &f) {
 
   // B: bindless disponível, sem os recursos avançados de A/S.
   return DeviceProfile::B;
+}
+
+DeviceQualityRecommendation recommendDeviceQuality(const DeviceFeatures &f) {
+  DeviceQualityRecommendation recommendation{classifyDeviceProfile(f),
+                                             DeviceQualityEvidence::CapabilityProfile};
+
+  // Xiaomi 25053PC47G / SM8735 identificado no aparelho como Vulkan 1.3,
+  // Adreno 825, 2772x1280. O perfil de features é B porque o driver não expõe os recursos
+  // opcionais que definem A/S, mas isso não mede a capacidade dos caminhos
+  // usados hoje pela engine. A identidade exata, observada por vkjson, aplica
+  // a heurística de qualidade A sem habilitar mesh shader, VRS ou ray query.
+  constexpr u32 QualcommVendorId = 0x5143;
+  if (f.vendorId == QualcommVendorId &&
+      std::string_view(f.deviceName.data()) == "Adreno (TM) 825" &&
+      recommendation.profile < DeviceProfile::A) {
+    recommendation.profile = DeviceProfile::A;
+    recommendation.evidence = DeviceQualityEvidence::RecognizedGpuIdentity;
+  }
+  return recommendation;
 }
 
 EnabledPaths derivePaths(DeviceProfile profile, const DeviceFeatures &f) {

@@ -15,11 +15,18 @@
 #include <android/asset_manager.h>
 #include <atomic>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace ae::platform::android {
 
 using EnvironmentLighting = renderer::EnvironmentLighting;
+
+struct MaterialTextureResidencyReport final {
+  u32 requestedMipBias=0,textures=0,reducedTextures=0,generatedMipTextures=0;
+  u64 sourceBytes=0,residentBytes=0;
+  bool fullyApplied=true;
+};
 
 // Runtime representation of the cooked Dirt Road test scene. Source glTF,
 // image decoders and import metadata remain outside the APK render path.
@@ -66,27 +73,63 @@ public:
   // (pacote e autoria) na próxima criação. Um valor de 1 ou menos desliga.
   void setSamplerAnisotropy(float value) { samplerAnisotropy_ = value > 1.0f ? value : 1.0f; }
   float samplerAnisotropy() const { return samplerAnisotropy_; }
+  // Limite global de materiais: 1 deixa de enviar o mip de maior resolução.
+  // Ambiente, LUTs e recursos de UI não passam por este caminho.
+  void setTextureResidencyMipBias(u32 value) { textureResidencyMipBias_=value; }
+  u32 textureResidencyMipBias() const {return textureResidencyMipBias_;}
+  const MaterialTextureResidencyReport &packageTextureResidency() const {return packageTextureResidency_;}
+  const MaterialTextureResidencyReport &authoringTextureResidency() const {return authoringTextureResidency_;}
+  const std::string &textureResidencyDiagnostic() const {return textureResidencyDiagnostic_;}
   // R2/R4: resultado da última reconstrução da biblioteca (publicação incremental).
   u32 lastReusedTextures() const { return lastReusedTextures_; }
   u32 lastUploadedTextures() const { return lastUploadedTextures_; }
   bool lastGeometryReused() const { return lastGeometryReused_; }
-  VkImageView environmentView() const { return environmentImage_.view(); }
-  VkSampler environmentSampler() const { return environmentSampler_.handle(); }
+  // Caller waits for in-flight draws before replacing these descriptor resources.
+  bool setEnvironmentMap(rhi::VulkanDevice &, rhi::VulkanUploadContext &,
+                         renderer::SharedEnvironmentMap);
+  VkImageView environmentView() const { return customEnvironment_ ? customEnvironmentImages_[0].view() : environmentImage_.view(); }
+  VkSampler environmentSampler() const { return customEnvironment_ ? customEnvironmentSamplers_[0].handle() : environmentSampler_.handle(); }
   VkImageView environmentSpecularView() const {
+    if(customEnvironment_) return customEnvironmentImages_[1].view();
     return environmentSpecularImage_.isReady() ? environmentSpecularImage_.view() : environmentImage_.view();
   }
   VkSampler environmentSpecularSampler() const {
+    if(customEnvironment_) return customEnvironmentSamplers_[1].handle();
     return environmentSpecularSampler_.isReady() ? environmentSpecularSampler_.handle()
                                                  : environmentSampler_.handle();
   }
   VkImageView environmentBrdfView() const {
+    if(customEnvironment_) return customEnvironmentImages_[2].view();
     return environmentBrdfImage_.isReady() ? environmentBrdfImage_.view() : environmentImage_.view();
   }
   VkSampler environmentBrdfSampler() const {
+    if(customEnvironment_) return customEnvironmentSamplers_[2].handle();
     return environmentBrdfSampler_.isReady() ? environmentBrdfSampler_.handle()
                                              : environmentSampler_.handle();
   }
   const renderer::EnvironmentMapDescription &environmentMapDescription() const {
+    return customEnvironment_ ? customEnvironment_->description : environmentMapDescription_;
+  }
+  // Independent views may select the packaged environment while the primary
+  // view has an authored HDRI resident. These accessors keep that fallback
+  // explicit instead of aliasing whichever custom map happens to be active.
+  VkImageView packagedEnvironmentView() const { return environmentImage_.view(); }
+  VkSampler packagedEnvironmentSampler() const { return environmentSampler_.handle(); }
+  VkImageView packagedEnvironmentSpecularView() const {
+    return environmentSpecularImage_.isReady() ? environmentSpecularImage_.view() : environmentImage_.view();
+  }
+  VkSampler packagedEnvironmentSpecularSampler() const {
+    return environmentSpecularSampler_.isReady() ? environmentSpecularSampler_.handle()
+                                                  : environmentSampler_.handle();
+  }
+  VkImageView packagedEnvironmentBrdfView() const {
+    return environmentBrdfImage_.isReady() ? environmentBrdfImage_.view() : environmentImage_.view();
+  }
+  VkSampler packagedEnvironmentBrdfSampler() const {
+    return environmentBrdfSampler_.isReady() ? environmentBrdfSampler_.handle()
+                                              : environmentSampler_.handle();
+  }
+  const renderer::EnvironmentMapDescription &packagedEnvironmentMapDescription() const {
     return environmentMapDescription_;
   }
   const EnvironmentLighting &environmentLighting() const { return environmentLighting_; }
@@ -125,6 +168,11 @@ private:
   std::vector<rhi::VulkanImage> authoringImages_;
   std::vector<rhi::VulkanSampler> authoringSamplers_;
   float samplerAnisotropy_ = 1.0f;
+  u32 textureResidencyMipBias_=0;
+  u32 authoringResidencyMipBias_=~u32{0};
+  MaterialTextureResidencyReport packageTextureResidency_{};
+  MaterialTextureResidencyReport authoringTextureResidency_{};
+  std::string textureResidencyDiagnostic_;
   // Objetos de onde saiu cada imagem de autoria publicada, na mesma ordem: é por
   // eles que a próxima publicação sabe o que já está na GPU.
   std::vector<renderer::SharedAuthoringTexture> authoringTextureSources_;
@@ -139,6 +187,9 @@ private:
   rhi::VulkanSampler environmentBrdfSampler_;
   EnvironmentLighting environmentLighting_{};
   renderer::EnvironmentMapDescription environmentMapDescription_{};
+  renderer::SharedEnvironmentMap customEnvironment_;
+  std::array<rhi::VulkanImage,3> customEnvironmentImages_;
+  std::array<rhi::VulkanSampler,3> customEnvironmentSamplers_;
   renderer::StaticCollisionMesh collisionMesh_{};
   rhi::VulkanBuffer vertices_;
   rhi::VulkanBuffer indices_;

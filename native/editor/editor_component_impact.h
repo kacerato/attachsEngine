@@ -63,7 +63,7 @@ inline std::vector<ComponentImpactEntry> physicsComponentImpact(const EditorDocu
 // Authored bindings plus shared-material inheritance when a library is supplied.
 // Package-local numeric indices are never treated as GUIDs; source-package
 // textures without persistent bindings remain outside this query.
-enum class ComponentResourceKind { Mesh, Material, Texture };
+using ComponentResourceKind = resources::AssetType;
 struct ComponentResourceUse {
   resources::AssetGuid asset;ComponentResourceKind kind;u32 slot;std::string binding;
 };
@@ -96,8 +96,7 @@ inline std::vector<ComponentResourceUse> componentResources(const scene::Compone
       else if(index<scene::MaterialTextureCount) effective=library->slotTexture(*mesh,slot,index);
     }
     if(!effective.valid() || effective==scene::MaterialTextureNone) continue;
-    const auto kind=binding.kind==resources::AssetType::Mesh?ComponentResourceKind::Mesh:
-        binding.kind==resources::AssetType::Material?ComponentResourceKind::Material:ComponentResourceKind::Texture;
+    const auto kind=binding.kind;
     result.push_back({effective,kind,slot,std::string(binding.name)+(!local.valid()&&effective.valid()?" · herdada":"")});
   }
   return result;
@@ -155,8 +154,7 @@ inline std::vector<ComponentImpactEntry> componentImpact(const EditorDocument &d
     const auto *record=registry?registry->find(use.asset):nullptr;
     auto relation=use.binding+" · slot "+std::to_string(use.slot+1);
     bool invalid=false;
-    const auto expected=use.kind==ComponentResourceKind::Mesh?resources::AssetType::Mesh:
-        use.kind==ComponentResourceKind::Material?resources::AssetType::Material:resources::AssetType::Texture;
+    const auto expected=use.kind;
     if(record && record->type!=expected) {relation+=" · tipo incompatível";invalid=true;}
     else if(registry && !record) {
       if(use.kind==ComponentResourceKind::Mesh && library && library->assetSlot(use.asset)) relation+=" · pacote";
@@ -244,8 +242,7 @@ inline std::vector<ComponentImpactEntry> resourceRepairChoices(const scene::Comp
   if(uses.empty()||!registry||!library) return rows;
   const auto kind=uses.front().kind;
   for(const auto &use:uses) if(use.kind!=kind) return rows; // ambiguous/corrupt binding: never guess a type
-  const auto type=kind==ComponentResourceKind::Mesh?resources::AssetType::Mesh:
-      kind==ComponentResourceKind::Material?resources::AssetType::Material:resources::AssetType::Texture;
+  const auto type=kind;
   for(const auto &record:registry->records()) {
     if(record.type!=type||record.guid==from) continue;
     if(type==resources::AssetType::Mesh&&!library->assetSlot(record.guid)) continue;
@@ -272,8 +269,7 @@ inline u32 replaceLocalResource(scene::ComponentValue &value,resources::AssetGui
   u32 count=0;
   auto *mesh=&value.type()==&scene::MeshRenderer::descriptor?static_cast<scene::MeshRenderer*>(&value):nullptr;
   for(const auto &binding:value.type().resourceBindings) {
-    const auto bindingKind=binding.kind==resources::AssetType::Mesh?ComponentResourceKind::Mesh:
-        binding.kind==resources::AssetType::Material?ComponentResourceKind::Material:ComponentResourceKind::Texture;
+    const auto bindingKind=binding.kind;
     if(bindingKind!=kind || !binding.read || !binding.write) continue;
     for(u32 slot=0;slot<binding.slotCount(value);++slot) {
       if(binding.read(value,slot)!=from || !binding.write(value,slot,to)) continue;

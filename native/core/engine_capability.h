@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 36> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 37> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -132,6 +132,8 @@ inline constexpr std::array<EngineCapability, 36> engineCapabilities{{
   // --- Céu e atmosfera ----------------------------------------------------
   {"render.environment.atmosphere", "Céu atmosférico", CapabilityState::Implemented,
    "runtime/scene_environment.cpp + rhi/shaders/dirt_road_sky.frag", ""},
+  {"render.environment.physical_atmosphere", "Céu físico Rayleigh/Mie", CapabilityState::Implemented,
+   "renderer/scene_environment.cpp + rhi/shaders/dirt_road_sky.frag", ""},
   {"render.environment.fog", "Neblina por profundidade", CapabilityState::Implemented,
    "rhi/shaders/post_process_common.glsl", ""},
   {"render.environment.volumes", "Volumes de ambiente por câmera", CapabilityState::Implemented,

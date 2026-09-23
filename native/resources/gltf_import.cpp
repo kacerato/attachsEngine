@@ -391,7 +391,7 @@ struct Importer {
   }
 
   // --- Texturas (M09.1) -----------------------------------------------------
-  std::unordered_map<u64, u32> textureCache{};        // (textura glTF, sRGB) -> índice de saída
+  std::unordered_map<u64, u32> textureCache{};        // (textura glTF, cor/dado/normal) -> índice de saída
   std::unordered_map<u32, DecodedImage> imageCache{}; // imagem glTF decodificada uma vez
   u32 textureCap = 0;                                 // maior lado residente deste arquivo
   std::unordered_map<u32, u32> imageUses{};           // usos restantes de cada imagem decodificada
@@ -441,12 +441,12 @@ struct Importer {
     struct Reference { u32 width, height; bool astc; };
     std::unordered_map<u64, Reference> references;
     std::unordered_set<u64> seen;
-    const auto consider = [&](const Node *owner, std::string_view name, bool srgb) {
+    const auto consider = [&](const Node *owner, std::string_view name, bool srgb, bool normal = false) {
       const auto *info = owner && owner->kind == Kind::Object ? json->member(*owner, name) : nullptr;
       if (!info || info->kind != Kind::Object || json->index(*info, "texCoord") > 1) return;
       const auto index = json->index(*info, "index");
       if (index < 0 || index >= textures->childCount) return;
-      const u64 key = static_cast<u64>(index) * 2 + (srgb ? 1 : 0);
+      const u64 key = static_cast<u64>(index) * 3u + (normal ? 2u : (srgb ? 1u : 0u));
       if (!seen.insert(key).second) return;
       const auto &texture = *json->child(*textures, static_cast<u32>(index));
       const auto source = textureSource(texture);
@@ -470,7 +470,7 @@ struct Importer {
       const auto *pbr = json->member(material, "pbrMetallicRoughness");
       consider(pbr, "baseColorTexture", true);
       consider(pbr, "metallicRoughnessTexture", false);
-      consider(&material, "normalTexture", false);
+      consider(&material, "normalTexture", false, true);
       consider(&material, "emissiveTexture", true);
     }
     if (references.empty()) return;
@@ -514,7 +514,7 @@ struct Importer {
   }
 
   u32 samplerFlags(const Node &root, i64 samplerIndex) {
-    u32 flags = renderer::AuthoringTextureLinearFilter | renderer::AuthoringTextureLinearMip |
+    u32 flags = renderer::encodeGltfTextureSampler() |
                 renderer::AuthoringTextureRepeatU | renderer::AuthoringTextureRepeatV;
     const auto *samplers = array(root, "samplers");
     if (!samplers || samplerIndex < 0 || samplerIndex >= samplers->childCount) return flags;
@@ -522,10 +522,8 @@ struct Importer {
     if (sampler.kind != Kind::Object) return flags;
     const auto mag = static_cast<i64>(json->number(sampler, "magFilter", 9729));
     const auto min = static_cast<i64>(json->number(sampler, "minFilter", 9987));
-    if (mag == 9728) flags &= ~renderer::AuthoringTextureLinearFilter;
-    // NEAREST_MIPMAP_NEAREST (9984) e LINEAR_MIPMAP_NEAREST (9985) escolhem o mip
-    // mais próximo; sem mipmap declarado (9728/9729) também.
-    if (min == 9984 || min == 9985 || min == 9728 || min == 9729) flags &= ~renderer::AuthoringTextureLinearMip;
+    flags = renderer::encodeGltfTextureSampler(static_cast<u32>(min), static_cast<u32>(mag)) |
+            renderer::AuthoringTextureRepeatU | renderer::AuthoringTextureRepeatV;
     const auto wrap = [&](const char *field, u32 repeat, u32 mirror) {
       const auto mode = static_cast<i64>(json->number(sampler, field, 10497));
       if (mode == 33071) flags &= ~repeat;                       // CLAMP_TO_EDGE
@@ -586,13 +584,15 @@ struct Importer {
   // Resolve uma textura glTF para o índice de saída, decodificando e gerando
   // mips na primeira vez. Inválido quando não foi possível aplicar — e o motivo
   // vai para `textureNotes`.
-  u32 resolveTexture(const Node &root, i64 textureIndex, bool srgb) {
+  u32 resolveTexture(const Node &root, i64 textureIndex, bool srgb, bool normal) {
     const auto *textures = array(root, "textures");
     if (!textures || textureIndex < 0 || textureIndex >= textures->childCount) {
       noteTexture("Material aponta para textura inexistente.");
       return renderer::InvalidMapTexture;
     }
-    const u64 key = static_cast<u64>(textureIndex) * 2 + (srgb ? 1 : 0);
+    // A mesma imagem pode alimentar cor, dados e normal. Normal compartilha o
+    // espaço linear, mas não a receita de mips: vetores precisam renormalizar.
+    const u64 key = static_cast<u64>(textureIndex) * 3u + (normal ? 2u : (srgb ? 1u : 0u));
     if (const auto found = textureCache.find(key); found != textureCache.end()) return found->second;
     u32 result = renderer::InvalidMapTexture;
     const auto &texture = *json->child(*textures, static_cast<u32>(textureIndex));
@@ -641,7 +641,8 @@ struct Importer {
         u32 levels = 0;
         if (out->textureBytes + needed > limits->maximumTextureBytes) {
           noteTexture("Orçamento de memória de texturas da importação esgotado; texturas restantes ficaram de fora.");
-        } else if (buildMipChain(decoded->second, srgb, chain, levels) && levels > dropped) {
+        } else if ((normal ? buildNormalMipChain(decoded->second, chain, levels)
+                           : buildMipChain(decoded->second, srgb, chain, levels)) && levels > dropped) {
           usize skip = 0;
           for (u32 level = 0, w = decoded->second.width, h = decoded->second.height; level < dropped;
                ++level, w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1)
@@ -690,7 +691,8 @@ struct Importer {
   // Liga uma `textureInfo` do material a um slot. Devolve se a textura foi
   // aplicada; toda referência não aplicada é contada em `skippedTextures`.
   bool assignTexture(const Node &root, const Node &owner, std::string_view name, bool srgb, u32 slot,
-                     renderer::MapMaterialRecord &target, u32 feature, u32 material) {
+                      renderer::MapMaterialRecord &target, u32 feature, u32 material,
+                      bool normal = false) {
     const auto *info = json->member(owner, name);
     if (!info || info->kind != Kind::Object) return false;
     if (material < declaresTexture.size()) declaresTexture[material] = 1;
@@ -706,7 +708,7 @@ struct Importer {
       ++out->skippedTextures;
       return false;
     }
-    const auto index = resolveTexture(root, json->index(*info, "index"), srgb);
+    const auto index = resolveTexture(root, json->index(*info, "index"), srgb, normal);
     if (index == renderer::InvalidMapTexture) {
       ++out->skippedTextures;
       return false;
@@ -793,7 +795,8 @@ struct Importer {
       if (!readVector(source, "emissiveFactor", emissive, 3)) return false;
       std::copy(emissive, emissive + 3, target.emissiveFactorAndStrength);
       target.emissiveFactorAndStrength[3] = 1;
-      if (assignTexture(root, source, "normalTexture", false, 1, target, renderer::MapMaterialNormalMap, i))
+      if (assignTexture(root, source, "normalTexture", false, 1, target,
+                        renderer::MapMaterialNormalMap, i, true))
         if (const auto *normal = json->member(source, "normalTexture"); normal && normal->kind == Kind::Object)
           target.normalScale = static_cast<float>(json->number(*normal, "scale", 1));
       assignTexture(root, source, "emissiveTexture", true, 3, target, renderer::MapMaterialEmissiveMap, i);

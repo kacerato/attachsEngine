@@ -37,6 +37,7 @@ public:
   TexturePreviewAtlas();
   const std::vector<u8> &pixels() const noexcept { return pixels_; }
   bool dirty() const noexcept { return dirty_; }
+  void markDirty() noexcept { dirty_ = true; }
   void markClean() noexcept { dirty_ = false; }
   // Célula da miniatura `index`, em texels; vazia fora da capacidade.
   static ui::UiRect thumbnailCell(u32 index) noexcept;

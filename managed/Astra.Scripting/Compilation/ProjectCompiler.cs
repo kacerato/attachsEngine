@@ -23,6 +23,7 @@ public sealed class ProjectCompiler
     public const int MaximumSources = 1024;
     public const int MaximumSourceBytes = 512 * 1024;
     public const int MaximumProjectBytes = 32 * 1024 * 1024;
+    internal static string CompilerIdentity => typeof(ProjectCompiler).Assembly.ManifestModule.ModuleVersionId.ToString("N");
     public ScriptBuildResult Build(string projectDirectory, CancellationToken cancellation = default)
     {
         try
@@ -41,7 +42,7 @@ public sealed class ProjectCompiler
             {
                 hash.AppendData(Encoding.UTF8.GetBytes(input.Path + "\0" + input.Text + "\0"));
             }
-            hash.AppendData(Encoding.UTF8.GetBytes(typeof(ProjectCompiler).Assembly.ManifestModule.ModuleVersionId.ToString()));
+            hash.AppendData(Encoding.UTF8.GetBytes(CompilerIdentity));
             var id = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
             var compilation = CSharpCompilation.Create("Astra.Project." + id, trees, references,
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,

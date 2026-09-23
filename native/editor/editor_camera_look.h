@@ -14,8 +14,6 @@ inline bool applyCameraLook(runtime::SceneGraph &document,EditorEntityId id,floa
   const auto *settings=cameraLook(*e);if(!settings||!settings->valid()) return false;
   if(x==0&&y==0) return true;
   auto transform=e->transform;
-  transform.rotationDegrees[1]=std::remainder(transform.rotationDegrees[1]+x*settings->yawSensitivity,360.0f);
-  transform.rotationDegrees[0]=std::clamp(transform.rotationDegrees[0]+y*settings->pitchSensitivity,-settings->pitchLimit,settings->pitchLimit);
-  return document.setTransform(id,transform);
+  return scene::applyCameraLookRotation(transform.rotationDegrees,*settings,x,y) && document.setTransform(id,transform);
 }
 }

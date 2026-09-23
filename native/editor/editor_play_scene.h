@@ -41,6 +41,24 @@ class EditorPlayScene final {
 public:
   ~EditorPlayScene(){stop();}
   void setScriptRuntime(scene::ScriptRuntimeApi api,const std::string &root) {scripts_.configure(api,root);}
+  void setScriptResourceAvailability(runtime::ScriptBridge::ResourceAvailability available) {
+    scripts_.setResourceAvailability(std::move(available));
+  }
+  void configureScriptRendering(renderer::ProjectRenderingSettings authored,
+                                renderer::RenderingCapabilities capabilities,
+                                renderer::ThermalPressure thermal,
+                                const renderer::ResolvedRenderingPolicy &effective,
+                                runtime::RuntimeRenderingState::RequestSink sink,
+                                const resources::AssetRegistry *assets,
+                                const std::vector<resources::EnvironmentProfile> *environmentProfiles) {
+    scripts_.configureRendering(std::move(authored),std::move(capabilities),thermal,effective,std::move(sink));
+    scripts_.setAssetLibrary(assets,environmentProfiles);
+  }
+  bool completeScriptRenderingRequest(u64 requestId,bool success,
+                                      const renderer::ResolvedRenderingPolicy &effective,
+                                      bool effectiveAvailable=true) {
+    return scripts_.completeRenderingRequest(requestId,success,effective,effectiveAvailable);
+  }
   void setScriptLogSink(runtime::ScriptBridge::LogSink sink) {scripts_.setLogSink(std::move(sink));}
   const std::string &scriptDiagnostics() const {return scripts_.diagnostics();}
   const std::string &physicsError() const {return physics_.error();}

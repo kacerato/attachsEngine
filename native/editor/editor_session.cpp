@@ -111,6 +111,9 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
         if(binding->kind==resources::AssetType::Mesh&&!mapScene_.assetSlot(request.componentResource)) break;
         if(binding->kind==resources::AssetType::Material&&!mapScene_.sharedMaterial(request.componentResource)) break;
         if(binding->kind==resources::AssetType::Texture&&(!record||record->type!=resources::AssetType::Texture)) break;
+        if(binding->kind==resources::AssetType::EnvironmentMap&&
+           (!record||record->type!=resources::AssetType::EnvironmentMap||
+            !findEnvironmentMap(request.componentResource))) break;
       } else if(!binding->inheritable && !binding->none.valid()) break;
       const auto authored=request.componentResource.valid()?request.componentResource:
           binding->inheritable?resources::AssetGuid{}:binding->none;
@@ -122,6 +125,8 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
           const auto *profile=findEnvironmentProfile(authored);
           if(!environment||!profile) break;
           environment->values=resources::applyEnvironmentProfile(environment->values,*profile);
+          if(environment->values.environmentMap.valid()&&
+             !findEnvironmentMap(environment->values.environmentMap)) break;
         }
       }
       if(candidate&&candidate->valid())
@@ -275,11 +280,139 @@ bool EditorSession::setProjectDirectory(const char *path) {
   code_.clear();state_.code=&code_;
   state_.files=&files_;state_.fileScroll=0;state_.fileScrollOffset=0;
   state_.console=&console_;
-  closeImportPreview();state_.importAccept=false;state_.importCancel=false;reimportPath_.clear();
+  closeImportPreview();state_.importAccept=false;state_.importCancel=false;
+  state_.modelImportRequested=false;state_.environmentImportRequested=false;state_.textureImportRequested=false;
+  reimportPath_.clear();environmentReimportPath_.clear();textureReimportPath_.clear();
   if(!files_.setRoot(path)) return false;
+  environmentMaps_.clear();
   state_.presetPanel=false;state_.presetNaming=false;state_.presetChoices.clear();componentPresets_=EditorComponentPresets{};
   state_.codeRecoveryPending=code_.hasRecovery(files_);
   return true;
+}
+
+void EditorSession::setScriptRuntime(scene::ScriptRuntimeApi api) {
+  playScene_.setScriptRuntime(api,files_.rootPath());
+  playScene_.setScriptResourceAvailability(
+      [this](resources::AssetGuid guid,resources::AssetType type,std::string_view propertyId,u32 slot,
+             scene::ComponentValue &candidate) {
+    auto *render=&candidate.type()==&scene::MeshRenderer::descriptor?static_cast<scene::MeshRenderer *>(&candidate):nullptr;
+    if(!render||slot>=render->slotCount()) return false;
+    const auto ensure=[&](const std::vector<UsedTexture> &required) {
+      const auto exact=[&](const UsedTexture &item) {
+        const auto &published=mapScene_.textureLibrary();
+        return std::any_of(published.begin(),published.end(),[&](const auto &entry) {
+          return entry.guid==item.guid&&entry.srgb==item.srgb&&entry.normal==item.normal&&entry.sampler==item.sampler;
+        });
+      };
+      std::vector<UsedTexture> inserted;
+      bool complete=true;
+      for(const auto &item:required) {
+        const auto *record=assets_.find(item.guid);
+        if(!record||record->type!=resources::AssetType::Texture) return false;
+      }
+      for(const auto &item:required) {
+        if(exact(item)) continue;
+        complete=false;
+        if(std::find(runtimeTextures_.begin(),runtimeTextures_.end(),item)==runtimeTextures_.end()) {
+          runtimeTextures_.push_back(item);inserted.push_back(item);
+        }
+      }
+      std::string diagnostic;
+      const bool available=complete||publishAndAdopt(flattenSources(importedSources_),diagnostic);
+      const bool all=available&&std::all_of(required.begin(),required.end(),exact);
+      if(!all) for(const auto &item:inserted) std::erase(runtimeTextures_,item);
+      if(!all) reportProblem(EditorConsoleSeverity::Warning,"Textura pedida pelo script não publicada: "+diagnostic);
+      return all;
+    };
+    const auto slotTextures=[&] {
+      std::vector<UsedTexture> required;
+      for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {
+        const auto texture=mapScene_.slotTexture(*render,slot,binding);
+        if(texture.valid()&&texture!=scene::MaterialTextureNone)
+          required.push_back({texture,EditorMapScene::bindingIsSrgb(binding),binding==1,
+                              EditorMapScene::samplerFlags(mapScene_.slotSampling(*render,slot,binding))});
+      }
+      const auto occlusion=mapScene_.slotOcclusionTexture(*render,slot);
+      if(occlusion.valid()&&occlusion!=scene::MaterialTextureNone)
+        required.push_back({occlusion,false,false,EditorMapScene::samplerFlags(mapScene_.slotSampling(*render,slot,2))});
+      return required;
+    };
+    u32 samplerBindingMask=0;
+    if(type==resources::AssetType::Texture&&
+       (propertyId=="sampling.wrap"||propertyId=="sampling.filter")) samplerBindingMask=0xf;
+    else if(type==resources::AssetType::Texture&&
+            (propertyId.ends_with(".wrap")||propertyId.ends_with(".filter"))) {
+      if(propertyId.starts_with("sampling.base_color.")) samplerBindingMask=1u<<0;
+      else if(propertyId.starts_with("sampling.normal.")) samplerBindingMask=1u<<1;
+      else if(propertyId.starts_with("sampling.metallic_roughness.")) samplerBindingMask=1u<<2;
+      else if(propertyId.starts_with("sampling.emissive.")) samplerBindingMask=1u<<3;
+    }
+    if(samplerBindingMask) {
+      std::vector<UsedTexture> required;
+      for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {
+        if(!(samplerBindingMask&(1u<<binding))) continue;
+        const auto texture=mapScene_.slotTexture(*render,slot,binding);
+        if(texture.valid()&&texture!=scene::MaterialTextureNone)
+          required.push_back({texture,EditorMapScene::bindingIsSrgb(binding),binding==1,
+                              EditorMapScene::samplerFlags(mapScene_.slotSampling(*render,slot,binding))});
+      }
+      if(samplerBindingMask&(1u<<2)) {
+        const auto occlusion=mapScene_.slotOcclusionTexture(*render,slot);
+        if(occlusion.valid()&&occlusion!=scene::MaterialTextureNone)
+          required.push_back({occlusion,false,false,EditorMapScene::samplerFlags(mapScene_.slotSampling(*render,slot,2))});
+      }
+      // Samplers das texturas embutidas na fonte são parte do pacote e ainda
+      // não podem virar uma variante em Play. Recuse em vez de aceitar sem efeito.
+      const auto source=render->slotMesh(slot)?mapScene_.materialForAsset(render->slotMesh(slot)-1):renderer::MaterialOverride{};
+      for(u32 binding=0;binding<scene::MaterialTextureCount;++binding)
+        if((samplerBindingMask&(1u<<binding))&&!mapScene_.slotTexture(*render,slot,binding).valid()&&
+           source.textures[binding]!=renderer::InvalidMapTexture&&source.textures[binding]!=scene::MaterialTextureKeep)
+          return false;
+      if((samplerBindingMask&(1u<<2))&&!mapScene_.slotOcclusionTexture(*render,slot).valid()&&
+         source.occlusionTexture!=renderer::InvalidMapTexture&&source.occlusionTexture!=scene::MaterialTextureKeep)
+        return false;
+      if(required.empty()) return false;
+      return ensure(required);
+    }
+    if(type==resources::AssetType::Material&&(guid==scene::MaterialTextureNone||!guid.valid()))
+      return ensure(slotTextures());
+    if(type==resources::AssetType::Mesh&&(guid==scene::MaterialTextureNone||!guid.valid())) {
+      if(auto *target=render->editSlotMesh(slot)) {*target=0;return true;}
+      return false;
+    }
+    if(type==resources::AssetType::Texture&&(guid==scene::MaterialTextureNone||!guid.valid())) {
+      if(guid==scene::MaterialTextureNone) return true;
+      u32 binding=0;
+      if(propertyId=="texture.normal") binding=1;
+      else if(propertyId=="texture.metallic_roughness"||propertyId=="texture.occlusion") binding=2;
+      else if(propertyId=="texture.emissive") binding=3;
+      else if(propertyId!="texture.base_color") return false;
+      const auto inherited=propertyId=="texture.occlusion"?mapScene_.slotOcclusionTexture(*render,slot):
+                                                          mapScene_.slotTexture(*render,slot,binding);
+      if(!inherited.valid()||inherited==scene::MaterialTextureNone) return true;
+      return ensure({{inherited,EditorMapScene::bindingIsSrgb(binding),binding==1,
+                      EditorMapScene::samplerFlags(mapScene_.slotSampling(*render,slot,binding))}});
+    }
+    const auto *record=assets_.find(guid);
+    if(!record||record->type!=type) return false;
+    if(type==resources::AssetType::Material)
+      return mapScene_.sharedMaterial(guid)!=nullptr&&ensure(slotTextures());
+    if(type==resources::AssetType::Mesh) {
+      const u32 resolved=mapScene_.assetSlot(guid);
+      auto *target=render->editSlotMesh(slot);
+      if(!resolved||!target) return false;
+      *target=resolved;return true;
+    }
+    if(type!=resources::AssetType::Texture) return true;
+    u32 binding=0;
+    if(propertyId=="texture.normal") binding=1;
+    else if(propertyId=="texture.metallic_roughness"||propertyId=="texture.occlusion") binding=2;
+    else if(propertyId=="texture.emissive") binding=3;
+    else if(propertyId!="texture.base_color") return false;
+    const auto sampling=mapScene_.slotSampling(*render,slot,binding);
+    const UsedTexture required{guid,EditorMapScene::bindingIsSrgb(binding),binding==1,EditorMapScene::samplerFlags(sampling)};
+    return ensure({required});
+  });
 }
 
 EditorSession::ViewportPointer *EditorSession::findViewportPointer(u32 id) noexcept {
@@ -539,6 +672,9 @@ bool EditorSession::handleViewportPointer(const UiPointerEvent &event,
 
 EditorTextEdit EditorSession::pendingTextEdit() const {
   EditorTextEdit edit;edit.version=sceneVersion();
+  // The Play HUD hides authoring fields. Returning no request also closes the
+  // platform IME and rejects late replies instead of editing an invisible draft.
+  if(isPlaying()) return edit;
   if(state_.presetNaming) {
     edit.purpose=EditorTextPurpose::ComponentPresetName;edit.entity=state_.presetEntity;
     edit.componentInstance=state_.presetInstance;edit.text=state_.presetName;return edit;
@@ -1026,6 +1162,36 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     }
     return true;
   }
+  const u32 componentHandleBase=widgetId(EditorWidget::ComponentHandleBase);
+  if(componentDragOpen_ || (routing.widgetId>=componentHandleBase &&
+                            routing.widgetId<componentHandleBase+static_cast<u32>(EditorComponentHandleKind::Count))) {
+    if(!componentDragOpen_ && event.phase==UiPointerPhase::Down && !isPlaying() &&
+       viewportPointers_.empty() && !history_.isOpen()) {
+      const auto *entity=document_.find(state_.selection);
+      const auto kind=static_cast<EditorComponentHandleKind>(routing.widgetId-componentHandleBase);
+      if(entity && componentHandleGeometry(document_,entity->id,state_.expandedNative,kind,componentDragHandle_) &&
+         cameraHandleRayParameter(view_,componentDragHandle_,event.position,componentDragStart_) &&
+         history_.begin("Ajustar componente")) {
+        componentDragOpen_=true;componentDragPointer_=event.pointerId;
+        componentDragInitial_=*entity;componentDragView_=view_;
+      }
+    }
+    if(componentDragOpen_ && event.pointerId==componentDragPointer_) {
+      if(event.phase==UiPointerPhase::Cancel) {history_.cancel(document_);componentDragOpen_=false;}
+      else {
+        if(routing.dragging) {
+          float parameter;
+          if(cameraHandleRayParameter(componentDragView_,componentDragHandle_,event.position,parameter)) {
+            auto changed=componentDragInitial_;
+            if(applyComponentHandleDelta(changed,componentDragHandle_,parameter-componentDragStart_))
+              history_.applyValues(document_,changed.id,changed,0xCA03u);
+          }
+        }
+        if(routing.released) {history_.end();componentDragOpen_=false;}
+      }
+    }
+    return true;
+  }
   if(cameraGestureOpen_ && routing.target==UiPointerTarget::Widget) finishCameraGesture(false);
   if(state_.colorField) {
     if(routing.tapped) {
@@ -1069,6 +1235,71 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   // continua respondendo enquanto a prévia está aberta.
   if(state_.importPanel && routing.tapped) {
     const auto is=[&routing](EditorWidget widget) {return routing.widgetId==widgetId(widget);};
+    if(state_.importTexture) {
+      if(is(EditorWidget::ImportCancel)) {state_.importCancel=true;closeImportPreview();}
+      else if(is(EditorWidget::ImportPreviousPage)) {if(state_.importPage) --state_.importPage;}
+      else if(is(EditorWidget::ImportNextPage)) state_.importPage=std::min(2u,state_.importPage+1);
+      else if(is(EditorWidget::ImportAccept) && state_.importReady &&
+              resources::sameTextureProfile(state_.textureImportSettings,state_.textureImportPreparedSettings)) {
+        state_.importAccept=true;state_.importReady=false;state_.importStatus="Publicando textura…";
+      } else {
+        auto &profile=state_.textureImportSettings;
+        bool changed=true;
+        if(is(EditorWidget::TextureProfileInterpretation)) profile.interpretation=static_cast<u8>((profile.interpretation+1u)%4u);
+        else if(is(EditorWidget::TextureProfileDimension)) {
+          const auto &steps=resources::TextureDimensionSteps;
+          const auto current=std::find(steps.begin(),steps.end(),profile.maximumDimension);
+          profile.maximumDimension=current==steps.end()||current+1==steps.end()?steps.front():*(current+1);
+        } else if(is(EditorWidget::TextureProfileMipmaps)) profile.mipmaps=!profile.mipmaps;
+        else if(is(EditorWidget::TextureProfileEdges)) profile.dilateEdges=!profile.dilateEdges;
+        else if(is(EditorWidget::TextureProfileAnisotropy)) profile.anisotropy=!profile.anisotropy;
+        else if(is(EditorWidget::TextureProfileNormalGreen)) profile.invertNormalGreen=!profile.invertNormalGreen;
+        else if(is(EditorWidget::TextureProfileCoverage)) profile.preserveAlphaCoverage=!profile.preserveAlphaCoverage;
+        else if(is(EditorWidget::TextureProfileCoverageCutoff)) {
+          profile.alphaCoverageCutoff=std::round((profile.alphaCoverageCutoff+.05f)*20.0f)/20.0f;
+          if(profile.alphaCoverageCutoff>1.0f) profile.alphaCoverageCutoff=0;
+        }
+        else changed=false;
+        if(changed) {
+          state_.textureImportReprepare=true;state_.importReady=false;state_.importError=false;
+          state_.importStatus="Repreparando textura com a receita…";
+        }
+      }
+      return true;
+    }
+    if(state_.importEnvironment) {
+      if(is(EditorWidget::ImportCancel)) {state_.importCancel=true;closeImportPreview();}
+      else if(is(EditorWidget::ImportAccept) && state_.importReady) {
+        state_.importAccept=true;state_.importReady=false;state_.importStatus="Publicando mapa HDRI…";
+      } else {
+        const auto step=[&](u32 &value,std::span<const u32> choices,EditorWidget down,EditorWidget up) {
+          if(!is(down)&&!is(up)) return false;
+          usize index=0;while(index+1<choices.size()&&choices[index]<value) ++index;
+          if(is(down)&&index) --index;
+          if(is(up)&&index+1<choices.size()) ++index;
+          if(value==choices[index]) return true;
+          value=choices[index];state_.environmentImportReprepare=true;state_.importReady=false;
+          state_.importError=false;state_.importStatus="Repreparando iluminação HDRI…";return true;
+        };
+        constexpr std::array<u32,4> panorama{256,512,1024,2048};
+        constexpr std::array<u32,4> specular{64,128,256,512};
+        constexpr std::array<u32,3> brdf{64,128,256};
+        constexpr std::array<u32,4> specularSamples{32,64,128,256};
+        constexpr std::array<u32,4> brdfSamples{128,256,512,1024};
+        const bool handled=step(state_.environmentImportSettings.panoramaWidth,panorama,
+             EditorWidget::EnvironmentPanoramaDown,EditorWidget::EnvironmentPanoramaUp)||
+        step(state_.environmentImportSettings.specularSize,specular,
+             EditorWidget::EnvironmentSpecularDown,EditorWidget::EnvironmentSpecularUp)||
+        step(state_.environmentImportSettings.brdfSize,brdf,
+             EditorWidget::EnvironmentBrdfDown,EditorWidget::EnvironmentBrdfUp)||
+        step(state_.environmentImportSettings.specularSamples,specularSamples,
+             EditorWidget::EnvironmentSpecularSamplesDown,EditorWidget::EnvironmentSpecularSamplesUp)||
+        step(state_.environmentImportSettings.brdfSamples,brdfSamples,
+             EditorWidget::EnvironmentBrdfSamplesDown,EditorWidget::EnvironmentBrdfSamplesUp);
+        (void)handled;
+      }
+      return true;
+    }
     using Tab=EditorScreenState::ImportTab;
     // Só o que muda a SAÍDA do importador pede nova preparação: desmarcar um nó
     // na Estrutura não relê o arquivo.
@@ -1547,7 +1778,8 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       const auto *component=entity->components.at(type);
       if(bindingIndex>=component->type().resourceBindings.size()) return true;
       const auto &binding=component->type().resourceBindings[bindingIndex];
-      if((binding.kind!=resources::AssetType::Mesh&&binding.kind!=resources::AssetType::EnvironmentProfile)||
+      if((binding.kind!=resources::AssetType::Mesh&&binding.kind!=resources::AssetType::EnvironmentProfile&&
+          binding.kind!=resources::AssetType::EnvironmentMap)||
          slot>=binding.slotCount(*component)||
          !binding.presentation.isEditable(*component)) return true;
       state_.resourceInstance=component->instanceId();state_.resourceProperty=std::string(binding.id);state_.resourceSlot=slot;
@@ -1654,12 +1886,19 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     }
     if(key==widgetId(EditorWidget::TextureViewerChannel)) {cycleTextureViewerChannel();return true;}
     if(key==widgetId(EditorWidget::TextureViewerZoom)) {cycleTextureViewerZoom();return true;}
+    if(key==widgetId(EditorWidget::TextureProfilePrevious)) {
+      if(state_.textureProfilePage) --state_.textureProfilePage;
+      return true;
+    }
+    if(key==widgetId(EditorWidget::TextureProfileNext)) {
+      state_.textureProfilePage=std::min(1u,state_.textureProfilePage+1);
+      return true;
+    }
     // R4: perfil da textura aberta no visualizador.
-    if(key>=widgetId(EditorWidget::TextureProfileInterpretation) && key<=widgetId(EditorWidget::TextureProfileAnisotropy) &&
+    if(key>=widgetId(EditorWidget::TextureProfileInterpretation) && key<=widgetId(EditorWidget::TextureProfileCoverageCutoff) &&
        state_.textureViewer && state_.textureViewerIndex<textures_.size()) {
-      const auto texture=textures_[state_.textureViewerIndex];
-      auto profile=textureProfileFor(texture.guid);
-      if(key==widgetId(EditorWidget::TextureProfileInterpretation)) profile.interpretation=static_cast<u8>((profile.interpretation+1u)%3u);
+      auto &profile=state_.textureProfileDraft;
+      if(key==widgetId(EditorWidget::TextureProfileInterpretation)) profile.interpretation=static_cast<u8>((profile.interpretation+1u)%4u);
       else if(key==widgetId(EditorWidget::TextureProfileDimension)) {
         const auto &steps=resources::TextureDimensionSteps;
         const auto current=std::find(steps.begin(),steps.end(),profile.maximumDimension);
@@ -1667,11 +1906,31 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       }
       else if(key==widgetId(EditorWidget::TextureProfileMipmaps)) profile.mipmaps=!profile.mipmaps;
       else if(key==widgetId(EditorWidget::TextureProfileEdges)) profile.dilateEdges=!profile.dilateEdges;
-      else profile.anisotropy=!profile.anisotropy;
-      std::string diagnostic;
-      state_.status=setTextureProfile(texture.guid,profile,diagnostic)?"Perfil aplicado a todos os usos de "+texture.name:diagnostic;
+      else if(key==widgetId(EditorWidget::TextureProfileAnisotropy)) profile.anisotropy=!profile.anisotropy;
+      else if(key==widgetId(EditorWidget::TextureProfileNormalGreen)) profile.invertNormalGreen=!profile.invertNormalGreen;
+      else if(key==widgetId(EditorWidget::TextureProfileCoverage)) profile.preserveAlphaCoverage=!profile.preserveAlphaCoverage;
+      else {
+        profile.alphaCoverageCutoff=std::round((profile.alphaCoverageCutoff+.05f)*20.0f)/20.0f;
+        if(profile.alphaCoverageCutoff>1.0f) profile.alphaCoverageCutoff=0;
+      }
+      state_.textureProfileDirty=!resources::sameTextureProfile(profile,state_.textureProfileSaved);
       refreshTextureViewerImage();
       return true;
+    }
+    if((key==widgetId(EditorWidget::TextureProfileApply) || key==widgetId(EditorWidget::TextureProfileRevert)) &&
+       state_.textureViewer && state_.textureViewerIndex<textures_.size()) {
+      const auto texture=textures_[state_.textureViewerIndex];
+      if(key==widgetId(EditorWidget::TextureProfileRevert)) {
+        state_.textureProfileDraft=state_.textureProfileSaved;state_.textureProfileDirty=false;
+        state_.status="Alterações do perfil descartadas";
+      } else if(state_.textureProfileDirty) {
+        std::string diagnostic;
+        if(setTextureProfile(texture.guid,state_.textureProfileDraft,diagnostic)) {
+          state_.textureProfileSaved=state_.textureProfileDraft;state_.textureProfileDirty=false;
+          state_.status=diagnostic.empty()?"Perfil aplicado a todos os usos de "+texture.name:diagnostic;
+        } else state_.status=std::move(diagnostic);
+      }
+      refreshTextureViewerImage();return true;
     }
     if(key==widgetId(EditorWidget::TextureViewerBackground)) {cycleTextureViewerBackground();return true;}
     if(key==widgetId(EditorWidget::TextureViewerMipDown) || key==widgetId(EditorWidget::TextureViewerMipUp)) {
@@ -1825,7 +2084,8 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
           const scene::ComponentResourceBinding *binding=nullptr;
           if(component) for(const auto &candidate:component->type().resourceBindings)
             if(candidate.id==state_.resourceProperty) {binding=&candidate;break;}
-          if(binding&&binding->kind==resources::AssetType::EnvironmentProfile) {
+          if(binding&&(binding->kind==resources::AssetType::EnvironmentProfile||
+                      binding->kind==resources::AssetType::EnvironmentMap)) {
             const auto index=request.property-1;
             if(index>=assets_.records().size()) return true;
             request.componentResource=assets_.records()[index].guid;
@@ -2044,6 +2304,8 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::FilesCollapse)) {state_.filesCollapsed=!state_.filesCollapsed;return true;}
     const u32 base=widgetId(EditorWidget::FileRowBase);
     if(key==widgetId(EditorWidget::ImportModel)) {state_.modelImportRequested=true;state_.codeFiles=false;return true;}
+    if(key==widgetId(EditorWidget::ImportEnvironment)) {state_.environmentImportRequested=true;state_.codeFiles=false;return true;}
+    if(key==widgetId(EditorWidget::ImportTexture)) {state_.textureImportRequested=true;state_.codeFiles=false;return true;}
     if(key==widgetId(EditorWidget::AssetInstantiate)) {
       const auto *record=assets_.findByPath(state_.selectedFile);
       ModelImportReport report;
@@ -2052,7 +2314,15 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       else setImportStatus("Instância criada: "+std::to_string(report.objects)+" objetos. Desfazer remove somente esta instância.");
       return true;
     }
-    if(key==widgetId(EditorWidget::AssetReimport)) {reimportPath_=state_.selectedFile;return true;}
+    if(key==widgetId(EditorWidget::AssetReimport)) {
+      const auto *record=assets_.findByPath(state_.selectedFile);
+      if(record&&record->type==resources::AssetType::EnvironmentMap)
+        environmentReimportPath_=state_.selectedFile;
+      else if(record&&record->type==resources::AssetType::Texture)
+        textureReimportPath_=state_.selectedFile;
+      else reimportPath_=state_.selectedFile;
+      return true;
+    }
     if(key==widgetId(EditorWidget::AssetExtractTextures)) {
       TextureExtraction report;std::string diagnostic;
       if(extractSourceTextures(state_.selectedFile,report,diagnostic)) setImportStatus(state_.status);
@@ -2110,7 +2380,12 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
             (texture && texture->width?" · "+std::to_string(texture->width)+"×"+std::to_string(texture->height):std::string())+
             " · "+std::to_string(users)+(users==1?" uso":" usos");
       }
-      else state_.status=entry.name.ends_with(".glb")?"Recurso GLB · Instanciar adiciona à cena; Reimportar atualiza a fonte; Texturas extrai as imagens":"Arquivo de origem";
+      else {
+        const auto *selectedAsset=assets_.findByPath(entry.relativePath);
+        state_.status=selectedAsset&&selectedAsset->type==resources::AssetType::EnvironmentMap?
+            "Mapa HDRI · Reimportar atualiza céu, irradiância e reflexões":
+            entry.name.ends_with(".glb")?"Recurso GLB · Instanciar adiciona à cena; Reimportar atualiza a fonte; Texturas extrai as imagens":"Arquivo de origem";
+      }
       return true;
     }
   }
@@ -2198,8 +2473,22 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     auto &draft=state_.qualityDraft;
     const auto key=routing.widgetId;
     const auto is=[&](EditorWidget widget) {return key==widgetId(widget);};
+    const auto cycleOverride=[](renderer::FeatureOverride value) {
+      using Override=renderer::FeatureOverride;
+      return value==Override::Inherit?Override::Disabled:value==Override::Disabled?Override::Enabled:Override::Inherit;
+    };
+    const auto step=[](float value,float inherited,float initial,float delta,float minimum,float maximum,bool up) {
+      const float current=value==inherited?initial:value;
+      return std::round(std::clamp(current+(up?delta:-delta),minimum,maximum)/delta)*delta;
+    };
     bool changed=true;
     if(is(EditorWidget::QualityClose)) {state_.qualityPanel=false;return true;}
+    else if(is(EditorWidget::QualityTabGeneral)) {state_.qualityTab=0;state_.qualityPage=0;return true;}
+    else if(is(EditorWidget::QualityTabShadows)) {state_.qualityTab=1;state_.qualityPage=0;return true;}
+    else if(is(EditorWidget::QualityTabLighting)) {state_.qualityTab=2;state_.qualityPage=0;return true;}
+    else if(is(EditorWidget::QualityTabPerformance)) {state_.qualityTab=3;state_.qualityPage=0;return true;}
+    else if(is(EditorWidget::QualityPagePrevious)) {if(state_.qualityPage) --state_.qualityPage;return true;}
+    else if(is(EditorWidget::QualityPageNext)) {++state_.qualityPage;return true;}
     else if(is(EditorWidget::QualityLevel)) {
       // Automático, Baixo, Médio, Alto, Ultra: a ordem dos níveis da Unity.
       using Preset=renderer::QualityPreset;
@@ -2208,27 +2497,89 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     } else if(is(EditorWidget::QualityScaleDown) || is(EditorWidget::QualityScaleUp)) {
       // Passos de 5%, entre 50% e 100%, como o Render Scale do URP Asset.
       const float current=draft.resolutionScale>0?draft.resolutionScale:1.0f;
-      const float next=std::clamp(current+(is(EditorWidget::QualityScaleUp)?.05f:-.05f),.5f,1.0f);
-      draft.resolutionScale=std::round(next*20.0f)/20.0f;
+      if(is(EditorWidget::QualityScaleUp)&&current>=1.0f) draft.resolutionScale=0.0f;
+      else {
+        const float next=std::clamp(current+(is(EditorWidget::QualityScaleUp)?.05f:-.05f),.5f,1.0f);
+        draft.resolutionScale=std::round(next*20.0f)/20.0f;
+      }
     } else if(is(EditorWidget::QualityDynamic)) {
-      using Override=renderer::FeatureOverride;
-      draft.dynamicResolution=draft.dynamicResolution==Override::Disabled?Override::Enabled:Override::Disabled;
+      draft.dynamicResolution=cycleOverride(draft.dynamicResolution);
+    } else if(is(EditorWidget::QualityUpscaling)) {
+      using Filter=renderer::UpscalingFilter;
+      draft.upscalingFilter=draft.upscalingFilter==Filter::Inherit?Filter::Bilinear:
+                            draft.upscalingFilter==Filter::Bilinear?Filter::CatmullRom:
+                            draft.upscalingFilter==Filter::CatmullRom?Filter::Fsr1:Filter::Inherit;
+    } else if(is(EditorWidget::QualityTextures)) {
+      using Quality=renderer::TextureQuality;
+      draft.textures=draft.textures==Quality::Inherit?Quality::Half:
+                     draft.textures==Quality::Half?Quality::Full:Quality::Inherit;
     } else if(is(EditorWidget::QualityAntiAliasing)) {
       using Mode=renderer::AntiAliasingMode;
       draft.antiAliasing=draft.antiAliasing==Mode::Inherit?Mode::Off:draft.antiAliasing==Mode::Off?Mode::Fxaa:
                          draft.antiAliasing==Mode::Fxaa?Mode::Temporal:Mode::Inherit;
     } else if(is(EditorWidget::QualitySharpenDown) || is(EditorWidget::QualitySharpenUp)) {
       const float current=draft.postSharpen>=0?draft.postSharpen:0.0f;
-      draft.postSharpen=std::round(std::clamp(current+(is(EditorWidget::QualitySharpenUp)?.1f:-.1f),0.0f,1.0f)*10.0f)/10.0f;
+      if(is(EditorWidget::QualitySharpenDown)&&draft.postSharpen==0.0f) draft.postSharpen=-1.0f;
+      else draft.postSharpen=std::round(std::clamp(current+(is(EditorWidget::QualitySharpenUp)?.1f:-.1f),0.0f,1.0f)*10.0f)/10.0f;
     } else if(is(EditorWidget::QualityRate)) {
       draft.maximumRenderHz=draft.maximumRenderHz==30?60:draft.maximumRenderHz==60?90:
                             draft.maximumRenderHz==90?120:draft.maximumRenderHz==120?0:30;
+    } else if(is(EditorWidget::QualityShadows)) {
+      using Quality=renderer::ShadowQuality;
+      draft.shadows=draft.shadows==Quality::Inherit?Quality::Off:draft.shadows==Quality::Off?Quality::Hard:
+                    draft.shadows==Quality::Hard?Quality::Soft:draft.shadows==Quality::Soft?Quality::UltraSoft:Quality::Inherit;
+    } else if(is(EditorWidget::QualityShadowCascades)) {
+      draft.shadowCascadeCount=draft.shadowCascadeCount>=4?0:draft.shadowCascadeCount+1;
+    } else if(is(EditorWidget::QualityShadowResolution)) {
+      draft.shadowCascadeResolution=draft.shadowCascadeResolution==0?512:draft.shadowCascadeResolution==512?1024:
+                                    draft.shadowCascadeResolution==1024?2048:draft.shadowCascadeResolution==2048?4096:0;
+    } else if(is(EditorWidget::QualityShadowDistanceDown)||is(EditorWidget::QualityShadowDistanceUp)) {
+      draft.shadowMaximumDistance=step(draft.shadowMaximumDistance,0.0f,160.0f,20.0f,20.0f,1000.0f,is(EditorWidget::QualityShadowDistanceUp));
+    } else if(is(EditorWidget::QualityShadowBiasDown)||is(EditorWidget::QualityShadowBiasUp)) {
+      draft.shadowDepthBiasConstant=step(draft.shadowDepthBiasConstant,-1.0f,1.0f,.1f,0.0f,10.0f,is(EditorWidget::QualityShadowBiasUp));
+    } else if(is(EditorWidget::QualityShadowSlopeDown)||is(EditorWidget::QualityShadowSlopeUp)) {
+      draft.shadowDepthBiasSlope=step(draft.shadowDepthBiasSlope,-1.0f,1.5f,.1f,0.0f,10.0f,is(EditorWidget::QualityShadowSlopeUp));
+    } else if(is(EditorWidget::QualityShadowNormalDown)||is(EditorWidget::QualityShadowNormalUp)) {
+      draft.shadowNormalOffsetTexels=step(draft.shadowNormalOffsetTexels,-1.0f,1.0f,.1f,0.0f,10.0f,is(EditorWidget::QualityShadowNormalUp));
+    } else if(is(EditorWidget::QualityShadowCache)) {
+      draft.staticShadowCache=cycleOverride(draft.staticShadowCache);
+    } else if(is(EditorWidget::QualityAmbient)) {
+      using Quality=renderer::AmbientQuality;
+      draft.ambient=draft.ambient==Quality::Inherit?Quality::Constant:draft.ambient==Quality::Constant?Quality::Hemispheric:
+                    draft.ambient==Quality::Hemispheric?Quality::HemisphericSpecular:Quality::Inherit;
+    } else if(is(EditorWidget::QualityEnvironmentBrdf)) {
+      draft.environmentSplitSumBrdf=cycleOverride(draft.environmentSplitSumBrdf);
+    } else if(is(EditorWidget::QualityPost)) {
+      using Quality=renderer::PostQuality;
+      draft.post=draft.post==Quality::Inherit?Quality::None:draft.post==Quality::None?Quality::Tonemap:
+                 draft.post==Quality::Tonemap?Quality::Bloom:Quality::Inherit;
+    } else if(is(EditorWidget::QualityBloomThresholdDown)||is(EditorWidget::QualityBloomThresholdUp)) {
+      draft.bloomThreshold=step(draft.bloomThreshold,-1.0f,1.0f,.1f,0.0f,8.0f,is(EditorWidget::QualityBloomThresholdUp));
+    } else if(is(EditorWidget::QualityBloomIntensityDown)||is(EditorWidget::QualityBloomIntensityUp)) {
+      draft.bloomIntensity=step(draft.bloomIntensity,-1.0f,.25f,.05f,0.0f,2.0f,is(EditorWidget::QualityBloomIntensityUp));
+    } else if(is(EditorWidget::QualityTemporalWeightDown)||is(EditorWidget::QualityTemporalWeightUp)) {
+      draft.temporalHistoryWeight=step(draft.temporalHistoryWeight,-1.0f,.88f,.01f,0.0f,.97f,is(EditorWidget::QualityTemporalWeightUp));
+    } else if(is(EditorWidget::QualityVignette)) {
+      draft.postVignette=cycleOverride(draft.postVignette);
+    } else if(is(EditorWidget::QualityDynamicMinimumDown)||is(EditorWidget::QualityDynamicMinimumUp)) {
+      draft.dynamicResolutionMinimumScale=step(draft.dynamicResolutionMinimumScale,0.0f,.70f,.05f,.50f,1.0f,is(EditorWidget::QualityDynamicMinimumUp));
+    } else if(is(EditorWidget::QualityLodSelection)) {
+      draft.lodSelection=cycleOverride(draft.lodSelection);
+    } else if(is(EditorWidget::QualityLodErrorDown)||is(EditorWidget::QualityLodErrorUp)) {
+      draft.lodPixelErrorBudget=step(draft.lodPixelErrorBudget,0.0f,1.0f,.25f,.25f,16.0f,is(EditorWidget::QualityLodErrorUp));
+    } else if(is(EditorWidget::QualityLodHysteresisDown)||is(EditorWidget::QualityLodHysteresisUp)) {
+      draft.lodHysteresisBandRatio=step(draft.lodHysteresisBandRatio,0.0f,.75f,.05f,.10f,.95f,is(EditorWidget::QualityLodHysteresisUp));
+    } else if(is(EditorWidget::QualityMaterialVariants)) {
+      draft.materialShaderVariants=cycleOverride(draft.materialShaderVariants);
     } else if(is(EditorWidget::QualityApply)) {
-      renderingSettings_=draft;renderingSettingsRequested_=true;state_.qualityDirty=false;
-      state_.status="Aplicando qualidade: o renderer será refeito";
+      requestedRenderingSettings_=draft;
+      renderingSettingsRequestRevision_=qualityRevision_;
+      renderingSettingsRequested_=true;
+      state_.status="Salvando qualidade do projeto";
       return true;
     } else changed=false;
     if(changed) {
+      ++qualityRevision_;
       state_.qualityDirty=true;
       return true;
     }
@@ -2535,6 +2886,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
 
 void EditorSession::cancelPointers() {
   if(lensDragOpen_) {history_.cancel(document_);lensDragOpen_=false;}
+  if(componentDragOpen_) {history_.cancel(document_);componentDragOpen_=false;}
   finishCameraGesture(true);
   playTouches_.cancel();
   jumpPressed_=false;secondaryPressed_=false;
@@ -2551,7 +2903,7 @@ void EditorSession::cancelPointers() {
 }
 
 void EditorSession::advanceClock(float wallSeconds) noexcept {
-  if(!isPlaying() && playScene_.active()) playScene_.stop();
+  if(!isPlaying() && playScene_.active()) {playScene_.stop();runtimeTextures_.clear();}
   if (!std::isfinite(wallSeconds)) return;
   if (!clockPrimed_) {
     lastWallSeconds_ = wallSeconds;
@@ -2674,8 +3026,8 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
     std::vector<UsedTexture> used;
     collectUsedTextures(used);
     for(const auto &item:used)
-      if(auto decoded=decodeProjectTexture(item.guid,item.srgb,item.sampler)) {
-        bindings.push_back({item.guid,item.srgb,item.sampler,static_cast<u32>(textures.size())});
+      if(auto decoded=decodeProjectTexture(item.guid,item.srgb,item.sampler,item.normal)) {
+        bindings.push_back({item.guid,item.srgb,item.sampler,static_cast<u32>(textures.size()),item.normal});
         textures.push_back(std::move(decoded));
       }
   }
@@ -2768,6 +3120,9 @@ bool EditorSession::openTextureViewer(u32 projectTextureIndex) {
   if(projectTextureIndex>=textures_.size()) return false;
   state_.textureViewer=true;state_.textureViewerIndex=projectTextureIndex;
   state_.textureViewerLevel=0;state_.textureViewerChannel=0;state_.textureViewerZoom=0;
+  state_.textureProfileSaved=state_.textureProfileDraft=textureProfileFor(textures_[projectTextureIndex].guid);
+  state_.textureProfileDirty=false;
+  state_.textureProfilePage=0;
   // O fundo escolhido vale entre texturas: é preferência de leitura, não da imagem.
   return refreshTextureViewerImage();
 }
@@ -2803,12 +3158,15 @@ bool EditorSession::refreshTextureViewerImage() {
   const auto &texture=textures_[state_.textureViewerIndex];
   const auto *record=assets_.find(texture.guid);
   const std::string hash=record?record->contentHash:std::string();
+  const auto savedProfile=textureProfileFor(texture.guid);
+  const auto recipe=resources::serializeTextureProfile(savedProfile);
   state_.textureViewerTitle=texture.name;
-  if(viewerChain_.guid!=texture.guid || viewerChain_.contentHash!=hash || viewerChain_.chain.empty()) {
+  if(viewerChain_.guid!=texture.guid || viewerChain_.contentHash!=hash ||
+     viewerChain_.recipe!=recipe || !viewerChain_.texture) {
     viewerChain_={};
-    resources::DecodedImage image;
-    if(!readProjectImage(files_.rootPath(),texture.path,importLimits_.image,image) ||
-       !resources::buildMipChain(image,true,viewerChain_.chain,viewerChain_.levels)) {
+    auto prepared=decodeProjectTexture(texture.guid,true,EditorMapScene::DefaultTextureSampler,
+        savedProfile.interpretation==resources::TextureInterpretationNormal);
+    if(!prepared || !prepared->valid()) {
       viewerChain_={};
       state_.textureViewerImage={};state_.textureViewerLevels=0;
       state_.textureViewerLevelLabel.clear();state_.textureViewerChannelLabel.clear();
@@ -2816,30 +3174,34 @@ bool EditorSession::refreshTextureViewerImage() {
       return false;
     }
     viewerChain_.guid=texture.guid;viewerChain_.contentHash=hash;
-    viewerChain_.width=image.width;viewerChain_.height=image.height;
+    viewerChain_.recipe=recipe;viewerChain_.texture=std::move(prepared);
   }
-  state_.textureViewerLevels=viewerChain_.levels;
-  state_.textureViewerLevel=std::min(state_.textureViewerLevel,viewerChain_.levels-1);
-  usize offset=0;u32 width=viewerChain_.width,height=viewerChain_.height;
+  const auto &image=*viewerChain_.texture;
+  state_.textureViewerLevels=image.levels;
+  state_.textureViewerLevel=std::min(state_.textureViewerLevel,image.levels-1);
+  usize offset=0;u32 width=image.width,height=image.height;
   for(u32 level=0;level<state_.textureViewerLevel;++level) {
     offset+=static_cast<usize>(width)*height*4;
     width=std::max<u32>(1,width/2);height=std::max<u32>(1,height/2);
   }
   const auto channel=static_cast<TexturePreviewChannel>(state_.textureViewerChannel);
   const auto background=static_cast<TexturePreviewBackground>(state_.textureViewerBackground);
-  state_.textureViewerImage=preview_.writeViewer(std::span<const u8>(viewerChain_.chain).subspan(offset,static_cast<usize>(width)*height*4),
+  state_.textureViewerImage=preview_.writeViewer(std::span<const u8>(image.mipChain).subspan(offset,static_cast<usize>(width)*height*4),
                                                  width,height,channel,state_.textureViewerZoom,background);
   state_.textureViewerZoomLabel=std::to_string(1u<<state_.textureViewerZoom)+"× no centro";
   // R4: perfil da textura (todos os usos) e o que está na GPU.
   {
-    const auto profile=textureProfileFor(texture.guid);
-    static constexpr const char *interpretations[]{"Interp.: pelo uso","Interp.: cor (sRGB)","Interp.: dado (linear)"};
-    state_.textureProfileLabels[0]=interpretations[std::min<u32>(profile.interpretation,2u)];
+    const auto &profile=state_.textureProfileDraft;
+    static constexpr const char *interpretations[]{"Tipo: pelo uso","Tipo: cor (sRGB)","Tipo: dado (linear)","Tipo: mapa normal"};
+    state_.textureProfileLabels[0]=interpretations[std::min<u32>(profile.interpretation,3u)];
     state_.textureProfileLabels[1]=profile.maximumDimension?"Tamanho: até "+std::to_string(profile.maximumDimension)+" px":
                                                             std::string("Tamanho: teto do projeto");
     state_.textureProfileLabels[2]=profile.mipmaps?"Mipmaps: sim":"Mipmaps: não";
     state_.textureProfileLabels[3]=profile.dilateEdges?"Bordas: sem halo":"Bordas: do arquivo";
     state_.textureProfileLabels[4]=profile.anisotropy?"Anisotropia: da qualidade":"Anisotropia: desligada";
+    state_.textureProfileLabels[5]=profile.invertNormalGreen?"Normal Y: inverter (DX)":"Normal Y: manter (GL)";
+    state_.textureProfileLabels[6]=profile.preserveAlphaCoverage?"Cobertura alfa: preservar":"Cobertura alfa: desligada";
+    state_.textureProfileLabels[7]="Corte da cobertura: "+std::to_string(static_cast<u32>(std::lround(profile.alphaCoverageCutoff*100.0f)))+"%";
     const auto residency=textureResidencyOf(texture.guid);
     if(residency.empty()) state_.textureResidencyLabel="Na GPU: não usada";
     else {
@@ -2851,16 +3213,15 @@ bool EditorSession::refreshTextureViewerImage() {
     }
   }
   state_.textureViewerBackgroundLabel=texturePreviewBackgroundName(background);
-  state_.textureViewerLevelLabel="Nível "+std::to_string(state_.textureViewerLevel)+" de "+std::to_string(viewerChain_.levels-1)+
+  state_.textureViewerLevelLabel="Nível "+std::to_string(state_.textureViewerLevel)+" de "+std::to_string(image.levels-1)+
                                  " · "+std::to_string(width)+"×"+std::to_string(height);
   state_.textureViewerChannelLabel=texturePreviewChannelName(channel);
   const auto users=textureUsersOf(texture.guid);
-  const double megabytes=static_cast<double>(viewerChain_.chain.size())/1048576.0;
+  const double megabytes=static_cast<double>(image.mipChain.size())/1048576.0;
   char size[32];std::snprintf(size,sizeof(size),"%.1f",megabytes);
-  state_.textureViewerInfo=std::to_string(viewerChain_.width)+"×"+std::to_string(viewerChain_.height)+" · "+
-      std::to_string(viewerChain_.levels)+" níveis · "+size+" MB com mips · "+std::to_string(users)+(users==1?" uso":" usos")+
-      (std::max(viewerChain_.width,viewerChain_.height)>importLimits_.maximumTextureDimension?
-           " · residente até "+std::to_string(importLimits_.maximumTextureDimension)+" px":std::string())+" · "+texture.path;
+  state_.textureViewerInfo="Perfil aplicado · "+std::to_string(image.width)+"×"+std::to_string(image.height)+" · "+
+      std::to_string(image.levels)+" níveis · "+size+" MB · "+std::to_string(users)+(users==1?" uso":" usos")+
+      (savedProfile.interpretation==resources::TextureInterpretationUse?" · prévia como cor":std::string())+" · "+texture.path;
   return true;
 }
 
@@ -2888,7 +3249,7 @@ void EditorSession::anticipateSceneTextures(const char *path,u64 fingerprint) {
         const bool occlusion=binding==scene::MaterialOcclusionTextureBinding;
         const auto guid=occlusion?mapScene_.slotOcclusionTexture(*render,slot):mapScene_.slotTexture(*render,slot,binding);
         if(!guid.valid() || guid==scene::MaterialTextureNone) continue;
-        const UsedTexture item{guid,!occlusion && EditorMapScene::bindingIsSrgb(binding),
+        const UsedTexture item{guid,!occlusion && EditorMapScene::bindingIsSrgb(binding),!occlusion&&binding==1,
                                EditorMapScene::samplerFlags(mapScene_.slotSampling(*render,slot,occlusion?2u:binding))};
         if(std::find(anticipatedTextures_.begin(),anticipatedTextures_.end(),item)==anticipatedTextures_.end())
           anticipatedTextures_.push_back(item);
@@ -2903,12 +3264,25 @@ u32 EditorSession::sceneUsersOf(const resources::AssetGuid &guid) const {
   for(const auto id:subtree) {
     const auto *entity=document_.find(id);
     if(!entity) continue;
+    bool used=false;
     const auto *render=meshRenderer(*entity);
     // Um slot usa o recurso pela malha ou pelo material do projeto.
     if(render) for(u32 slot=0;slot<render->slotCount();++slot)
       if(render->slotAsset(slot)==guid || render->slotMaterialAsset(slot)==guid ||
          std::find(render->slotTextures(slot).begin(),render->slotTextures(slot).end(),guid)!=render->slotTextures(slot).end() ||
-         render->slotOcclusionTexture(slot)==guid) {++users;break;}
+         render->slotOcclusionTexture(slot)==guid) {used=true;break;}
+    // Bindings declarados pelo schema cobrem recursos fora do MeshRenderer,
+    // incluindo o mapa HDRI autorado diretamente no volume de ambiente.
+    if(!used) for(usize componentIndex=0;componentIndex<entity->components.size()&&!used;++componentIndex) {
+      const auto *component=entity->components.at(componentIndex);if(!component) continue;
+      for(const auto &binding:component->type().resourceBindings) {
+        if(!binding.read) continue;
+        for(u32 slot=0;slot<binding.slotCount(*component);++slot)
+          if(binding.read(*component,slot)==guid) {used=true;break;}
+        if(used) break;
+      }
+    }
+    if(used) ++users;
   }
   return users;
 }
@@ -2948,6 +3322,8 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
   report={};
   if(relative.empty()) { report.diagnostic="Caminho vazio."; return false; }
   u32 texturesDoomed=0;
+  u32 meshesDoomed=0;
+  bool geometryLibraryChanged=false;
   // Tudo que vive sob este caminho: apagar uma pasta apaga os recursos dela.
   std::vector<resources::AssetGuid> doomed;
   for(const auto &record:assets_.records()) {
@@ -2956,6 +3332,9 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
     if(path.size()!=relative.size() && path[relative.size()]!='/') continue;
     doomed.push_back(record.guid);
     if(record.type==resources::AssetType::Texture) ++texturesDoomed;
+    if(record.type==resources::AssetType::Mesh) ++meshesDoomed;
+    geometryLibraryChanged|=record.type==resources::AssetType::Mesh||
+        record.type==resources::AssetType::Material||record.type==resources::AssetType::Texture;
   }
   for(const auto &guid:doomed) {
     report.sceneUsers+=sceneUsersOf(guid);
@@ -2982,8 +3361,13 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
         std::to_string(report.registryDependents)+" recurso(s) dependem deste arquivo.";
     return false;
   }
+  if(geometryLibraryChanged && !publishGeometry_) {
+    report.diagnostic="Este ambiente não publica geometria importada.";
+    return false;
+  }
   if(!files_.removePath(relative)) { report.diagnostic=files_.error(); return false; }
 
+  bool environmentLibraryChanged=false;
   // O registro e a biblioteca so mudam DEPOIS que o arquivo saiu: ate aqui o
   // projeto ainda podia ser recuperado do disco.
   for(const auto &guid:doomed) {
@@ -2994,13 +3378,19 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
     // marcados como referência sem arquivo no inspetor.
     std::erase_if(materials_,[&](const auto &material){return material.guid==guid;});
     std::erase_if(decodedTextures_,[&](const auto &entry){return entry.guid==guid;});
+    environmentLibraryChanged|=std::erase_if(environmentMaps_,[&](const auto &entry){return entry.first==guid;})!=0;
+    std::erase_if(environmentProfiles_,[&](const auto &profile){return profile.guid==guid;});
     assets_.remove(guid);
     ++report.retargeted;
   }
   assetRegistryDirty_=true;
+  // A biblioteca HDRI não pertence à revisão do documento. Use o sinal de
+  // publicação compartilhada para o shell substituir a lista uma única vez;
+  // isso também faz o renderer abandonar um shared_ptr removido da GPU.
+  if(environmentLibraryChanged) appearanceChanged_=true;
   if(!doomed.empty()) {loadTextureAssets();publishMaterialLibrary();}
   std::string diagnostic;
-  if(!doomed.empty() && !republishGeometry(diagnostic)) {
+  if(geometryLibraryChanged && !republishGeometry(diagnostic)) {
     report.diagnostic=diagnostic;
     return false;
   }
@@ -3011,14 +3401,14 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
   // Textura apagada não tira malha de ninguém: o binding volta à textura da fonte.
   state_.status=report.sceneUsers==0 ? std::string("Apagado")
       : texturesDoomed==doomed.size() ? std::to_string(report.sceneUsers)+" objeto(s) voltaram à textura da fonte"
-      : std::to_string(report.sceneUsers)+" objeto(s) ficaram sem malha";
+      : meshesDoomed ? std::to_string(report.sceneUsers)+" objeto(s) ficaram sem malha"
+      : std::to_string(report.sceneUsers)+" objeto(s) preservam referência ao recurso removido";
   return true;
 }
 
 bool EditorSession::republishGeometry(std::string &diagnostic) {
-  // Sem geometria importada não há o que reidratar: a biblioteca do consumidor
-  // novo já são as mesmas primitivas internas, com a mesma impressão digital.
-  if(importedSources_.empty()) return true;
+  // Mesmo sem fontes GLB, materiais das primitivas podem usar texturas do
+  // projeto. O renderer novo ainda não tem essas imagens nem seus bindings.
   return publishAndAdopt(flattenSources(importedSources_),diagnostic);
 }
 
@@ -3568,6 +3958,7 @@ bool EditorSession::commitModelImport(std::span<const u8> bytes,const resources:
 
 void EditorSession::showImportPreview(std::string path,const resources::GltfImport &model,std::string_view contentHash,
                                      const resources::ImportProfile &prepared) {
+  state_.importEnvironment=false;state_.importTexture=false;
   state_.importAmbiguities=0;state_.importAmbiguityChoice=0;
   state_.importPreparedScale=prepared.scale;state_.importPreparedTextureDimension=prepared.maximumTextureDimension;
   state_.importPreparedNormals=prepared.normals;state_.importPreparedNormalWeighting=prepared.normalWeighting;
@@ -4134,6 +4525,7 @@ void EditorSession::update() {
   state_.cameraPreviewEntity=cameraPreview_.camera();
   state_.cameraPreviewReady=cameraPreview_.hasCurrentImage(sceneVersion());
   state_.cameraPreviewFailed=cameraPreview_.failed();
+  state_.cameraPreviewDiagnostic=cameraPreview_.diagnostic();
   state_.cameraPreviewWidth=cameraPreview_.width();state_.cameraPreviewHeight=cameraPreview_.height();
   state_.cameraPreviewFrequency=cameraPreview_.frequency();
   refreshImportLinkView();
@@ -4472,21 +4864,119 @@ resources::TextureProfile EditorSession::textureProfileFor(const resources::Asse
   return {};
 }
 
-bool EditorSession::setTextureProfile(const resources::AssetGuid &texture,const resources::TextureProfile &profile,std::string &diagnostic) {
+bool EditorSession::setTextureProfile(const resources::AssetGuid &texture,const resources::TextureProfile &profile,
+                                      std::string &diagnostic,bool recordHistory) {
   diagnostic.clear();
   if(isPlaying()) {diagnostic="Pare a execução antes de mudar o perfil da textura.";return false;}
+  if(history_.isOpen()) {diagnostic="Finalize a edição antes de mudar o perfil da textura.";return false;}
   if(!resources::validTextureProfile(profile)) {diagnostic="Perfil de textura inválido.";return false;}
   const auto *record=assets_.find(texture);
   if(!record || record->type!=resources::AssetType::Texture) {diagnostic="Textura fora do projeto.";return false;}
-  if(!writeProjectTextureProfile(files_.rootPath(),resources::textureProfilePath(texture),profile)) {
-    diagnostic="Não foi possível gravar o perfil da textura.";return false;
+  const auto before=textureProfileFor(texture);
+  if(resources::sameTextureProfile(before,profile)) return true;
+  // Cozinhe antes de persistir a receita: um formato ou orçamento incompatível
+  // não pode deixar o registro apontando para um derivado que não será publicado.
+  const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());
+  std::filesystem::path source;std::vector<u8> sourceBytes;
+  if(!EditorImportTransaction::safePath(root,record->path,source)||
+     !EditorImportTransaction::read(source,sourceBytes,importLimits_.image.maximumEncodedBytes)||
+     Sha256::hex(sourceBytes)!=record->contentHash) {
+    diagnostic="Fonte da textura está ausente ou mudou fora do editor; reimporte antes de alterar a receita.";
+    return false;
+  }
+  resources::TextureImportLimits limits;limits.image=importLimits_.image;
+  limits.projectMaximumDimension=importLimits_.maximumTextureDimension;
+  resources::PreparedTextureImport prepared;
+  if(!resources::prepareTextureImport(sourceBytes,profile,true,EditorMapScene::DefaultTextureSampler,
+                                      limits,nullptr,prepared)) {
+    diagnostic="Receita incompatível com a fonte: "+prepared.diagnostic;return false;
+  }
+  if(profile.interpretation==resources::TextureInterpretationUse) {
+    auto normalProfile=profile;
+    normalProfile.interpretation=resources::TextureInterpretationNormal;
+    if(!resources::prepareTextureImport(sourceBytes,normalProfile,false,EditorMapScene::DefaultTextureSampler,
+                                        limits,nullptr,prepared)) {
+      diagnostic="Receita incompatível com uso normal: "+prepared.diagnostic;return false;
+    }
+  }
+  resources::TextureProfile registeredRecipe;
+  const bool canonical=record->importerVersion==resources::TextureAssetImporterRevision&&
+      resources::parseTextureProfile(record->importerParameters,registeredRecipe);
+  const auto previousAssets=assets_;
+  const auto previousProfiles=textureProfiles_;
+  const auto previousDecoded=decodedTextures_;
+  const auto previousViewer=viewerChain_;
+  const bool previousRegistryDirty=assetRegistryDirty_;
+  EditorImportTransaction transaction(files_.rootPath());
+  std::string nextRegistry;
+  if(canonical) {
+    auto next=assets_;
+    if(!next.publishImport(texture,record->contentHash,record->importerVersion,
+                           resources::serializeTextureProfile(profile),record->derived,record->dependencies)) {
+      diagnostic="Registro recusou a receita da textura.";return false;
+    }
+    if(!transaction.begin(record->path,record->contentHash,diagnostic)) return false;
+    nextRegistry=next.serialize();
+    assets_=std::move(next);assetRegistryDirty_=false;
   }
   std::erase_if(textureProfiles_,[&](const auto &entry){return entry.first==texture;});
   textureProfiles_.emplace_back(texture,profile);
   // A decodificação muda (espaço de cor, mips, bordas, teto): nada do cache serve.
   std::erase_if(decodedTextures_,[&](const auto &entry){return entry.guid==texture;});
-  if(importedSources_.empty()) return true;
-  return publishAndAdopt(flattenSources(importedSources_),diagnostic);
+  if(viewerChain_.guid==texture) viewerChain_={};
+  const auto restore=[&]() {
+    assets_=previousAssets;textureProfiles_=previousProfiles;
+    decodedTextures_=previousDecoded;viewerChain_=previousViewer;
+    assetRegistryDirty_=previousRegistryDirty;
+    std::string rollback;
+    if(!publishAndAdopt(flattenSources(importedSources_),rollback))
+      diagnostic+=" A GPU anterior não pôde ser republicada: "+rollback;
+  };
+  std::string publication;
+  bool published=publishAndAdopt(flattenSources(importedSources_),publication);
+  if(published) {
+    std::vector<UsedTexture> used;collectUsedTextures(used);
+    for(const auto &item:used) if(item.guid==texture) {
+      const bool present=std::any_of(publishedTextures_.begin(),publishedTextures_.end(),[&](const auto &entry) {
+        const auto &binding=entry.first;
+        return binding.guid==item.guid&&binding.srgb==item.srgb&&
+               binding.sampler==item.sampler&&binding.normal==item.normal;
+      });
+      if(!present) {published=false;publication="O binding da textura não chegou ao pacote gráfico.";break;}
+    }
+  }
+  if(!published) {
+    diagnostic="Perfil não aplicado: "+publication;
+    if(canonical&&!transaction.rollback()) diagnostic+=" Recuperação de disco pendente; backups preservados.";
+    restore();return false;
+  }
+  const bool saved=canonical?transaction.commit(sourceBytes,nextRegistry):
+      writeProjectTextureProfile(files_.rootPath(),resources::textureProfilePath(texture),profile);
+  if(!saved) {
+    diagnostic="Perfil não gravado; publicação anterior restaurada.";
+    if(canonical&&!transaction.rollback()) diagnostic+=" Recuperação de disco pendente; backups preservados.";
+    restore();return false;
+  }
+  if(state_.textureViewer&&state_.textureViewerIndex<textures_.size()&&
+     textures_[state_.textureViewerIndex].guid==texture) {
+    state_.textureProfileSaved=state_.textureProfileDraft=profile;
+    state_.textureProfileDirty=false;
+    refreshTextureViewerImage();
+  }
+  if(recordHistory) {
+    const auto project=files_.rootPath();
+    if(!history_.recordResource("Perfil de textura",[this,texture,before,after=profile,project](bool forward) {
+      if(files_.rootPath()!=project||!assets_.find(texture)||
+         !resources::sameTextureProfile(textureProfileFor(texture),forward?before:after)) {
+        state_.status="Perfil de textura mudou; histórico preservado sem sobrescrever.";return false;
+      }
+      std::string error;
+      if(!setTextureProfile(texture,forward?after:before,error,false)) {state_.status=error;return false;}
+      state_.status=forward?"Perfil de textura refeito":"Perfil de textura desfeito";
+      return true;
+    })) diagnostic="Perfil aplicado, mas o histórico não aceitou o passo de desfazer.";
+  }
+  return true;
 }
 
 std::vector<EditorSession::TextureResidency> EditorSession::textureResidencyOf(const resources::AssetGuid &texture) const {
@@ -4503,7 +4993,10 @@ void EditorSession::loadTextureAssets() {
     if(record.type!=resources::AssetType::Texture) continue;
     ProjectTexture texture;
     texture.guid=record.guid;texture.path=record.path;
-    if(resources::TextureProfile profile;readProjectTextureProfile(root,resources::textureProfilePath(record.guid),profile))
+    resources::TextureProfile profile;
+    const bool registryRecipe=record.importerVersion==resources::TextureAssetImporterRevision &&
+        resources::parseTextureProfile(record.importerParameters,profile);
+    if(registryRecipe||readProjectTextureProfile(root,resources::textureProfilePath(record.guid),profile))
       textureProfiles_.emplace_back(record.guid,profile);
     const auto slash=record.path.find_last_of('/');
     texture.name=slash==std::string::npos?record.path:record.path.substr(slash+1);
@@ -4518,49 +5011,52 @@ void EditorSession::loadTextureAssets() {
   }
 }
 
-renderer::SharedAuthoringTexture EditorSession::decodeProjectTexture(const resources::AssetGuid &guid,bool srgb,u32 sampler) {
+renderer::SharedAuthoringTexture EditorSession::decodeProjectTexture(const resources::AssetGuid &guid,bool srgb,u32 sampler,bool normal) {
   const auto *record=assets_.find(guid);
   if(!record || record->type!=resources::AssetType::Texture) return {};
   // R4: perfil da textura: interpretação, tamanho, mips, bordas e anisotropia.
   const auto profile=textureProfileFor(guid);
-  const bool decodeSrgb=profile.interpretation==resources::TextureInterpretationColor?true:
-                        profile.interpretation==resources::TextureInterpretationData?false:srgb;
   const u32 effectiveSampler=sampler|(profile.anisotropy?0u:renderer::AuthoringTextureNoAnisotropy);
   renderer::SharedAuthoringTexture base;
   for(const auto &entry:decodedTextures_)
-    if(entry.guid==guid && entry.srgb==srgb && entry.contentHash==record->contentHash) {
+    if(entry.guid==guid && entry.srgb==srgb && entry.normal==normal && entry.contentHash==record->contentHash) {
       if(entry.sampler==effectiveSampler) return entry.texture;
       base=entry.texture;
     }
   if(!base) {
   const auto root=files_.rootPath();
-  std::filesystem::path absolute;std::vector<u8> bytes;std::string diagnostic;resources::DecodedImage image;
+  std::filesystem::path absolute;std::vector<u8> bytes;
   if(root.empty() || !EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),record->path,absolute) ||
-     !EditorImportTransaction::read(absolute,bytes,importLimits_.image.maximumEncodedBytes) ||
-     !resources::decodeImageRgba8(bytes,importLimits_.image,image,diagnostic)) {
+     !EditorImportTransaction::read(absolute,bytes,importLimits_.image.maximumEncodedBytes)) {
     reportProblem(EditorConsoleSeverity::Warning,"Textura do projeto não decodificada: "+record->path+
-                  (diagnostic.empty()?std::string():" ("+diagnostic+")")+"; o binding usa a textura da fonte.");
+                  "; o binding usa a textura da fonte.");
     return {};
   }
-  auto texture=std::make_shared<renderer::AuthoringTexture>();
-  if(profile.dilateEdges) resources::dilateTransparentEdges(image);
-  texture->width=image.width;texture->height=image.height;texture->srgb=decodeSrgb;
-  if(!resources::buildMipChain(image,decodeSrgb,texture->mipChain,texture->levels)) return {};
-  // Teto residente: o do perfil da textura, nunca acima do das texturas importadas.
-  const u32 cap=profile.maximumDimension?std::min(profile.maximumDimension,importLimits_.maximumTextureDimension):
-                                         importLimits_.maximumTextureDimension;
-  while(texture->levels>1 && std::max(texture->width,texture->height)>cap) {
-    const u64 top=u64{texture->width}*texture->height*4;
-    texture->mipChain.erase(texture->mipChain.begin(),texture->mipChain.begin()+static_cast<std::ptrdiff_t>(top));
-    texture->width=std::max<u32>(1,texture->width/2);texture->height=std::max<u32>(1,texture->height/2);--texture->levels;
+  resources::TextureImportLimits limits;limits.image=importLimits_.image;
+  limits.projectMaximumDimension=importLimits_.maximumTextureDimension;
+  auto effectiveProfile=profile;
+  if(normal&&profile.interpretation==resources::TextureInterpretationUse)
+    effectiveProfile.interpretation=resources::TextureInterpretationNormal;
+  const auto sourceHash=Sha256::hex(bytes);
+  if(sourceHash!=record->contentHash) {
+    reportProblem(EditorConsoleSeverity::Warning,"Textura mudou fora do editor: "+record->path+
+                  "; reimporte para atualizar fonte, receita e cache juntos.");
+    return {};
   }
-  // Sem mipmaps: só o nível mais alto que coube no teto.
-  if(!profile.mipmaps && texture->levels>1) {
-    texture->mipChain.resize(static_cast<usize>(texture->width)*texture->height*4);texture->levels=1;
+  const auto expectedKey=resources::textureAssetCacheKey(sourceHash,effectiveProfile,srgb,sampler,limits);
+  resources::PreparedTextureImport prepared;
+  std::filesystem::path cachePath;std::vector<u8> cacheBytes;
+  if(EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),resources::textureAssetCachePath(guid),cachePath)&&
+     EditorImportTransaction::read(cachePath,cacheBytes,limits.maximumDerivedBytes+64u*1024u))
+    resources::readTextureAssetCache(cacheBytes,expectedKey,limits,prepared);
+  if(!prepared.valid()&&!resources::prepareTextureImport(bytes,effectiveProfile,srgb,sampler,limits,nullptr,prepared)) {
+    reportProblem(EditorConsoleSeverity::Warning,"Textura do projeto não preparada: "+record->path+
+                  (prepared.diagnostic.empty()?std::string():" ("+prepared.diagnostic+")")+"; o binding usa a textura da fonte.");
+    return {};
   }
-  if(!texture->valid()) return {};
-  std::erase_if(decodedTextures_,[&](const auto &entry){return entry.guid==guid && entry.srgb==srgb;});
-  decodedTextures_.push_back({guid,srgb,texture->samplerFlags,record->contentHash,texture});
+  auto texture=prepared.texture;
+  std::erase_if(decodedTextures_,[&](const auto &entry){return entry.guid==guid && entry.srgb==srgb && entry.normal==normal;});
+  decodedTextures_.push_back({guid,srgb,normal,effectiveSampler,record->contentHash,texture});
   base=texture;
   }
   if(base->samplerFlags==effectiveSampler) return base;
@@ -4568,7 +5064,7 @@ renderer::SharedAuthoringTexture EditorSession::decodeProjectTexture(const resou
   // cadeia fica duplicada na CPU e na GPU enquanto as duas amostragens forem usadas.
   auto variant=std::make_shared<renderer::AuthoringTexture>(*base);
   variant->samplerFlags=effectiveSampler;
-  decodedTextures_.push_back({guid,srgb,effectiveSampler,record->contentHash,variant});
+  decodedTextures_.push_back({guid,srgb,normal,effectiveSampler,record->contentHash,variant});
   return variant;
 }
 
@@ -4576,7 +5072,7 @@ void EditorSession::collectUsedTextures(std::vector<UsedTexture> &out) const {
   out.clear();
   const auto add=[&](const resources::AssetGuid &guid,u32 binding,const scene::MaterialSampling &sampling) {
     if(!guid.valid() || guid==scene::MaterialTextureNone) return;
-    const UsedTexture item{guid,EditorMapScene::bindingIsSrgb(binding),EditorMapScene::samplerFlags(sampling)};
+    const UsedTexture item{guid,EditorMapScene::bindingIsSrgb(binding),binding==1,EditorMapScene::samplerFlags(sampling)};
     if(std::find(out.begin(),out.end(),item)==out.end()) out.push_back(item);
   };
   for(const auto &material:materials_)
@@ -4585,6 +5081,8 @@ void EditorSession::collectUsedTextures(std::vector<UsedTexture> &out) const {
   for(const auto &material:materials_) add(material.occlusionTexture,2,material.sampling[2]);
   // Texturas da cena que ainda vai ser aberta (reabertura do projeto).
   for(const auto &item:anticipatedTextures_)
+    if(std::find(out.begin(),out.end(),item)==out.end()) out.push_back(item);
+  for(const auto &item:runtimeTextures_)
     if(std::find(out.begin(),out.end(),item)==out.end()) out.push_back(item);
   std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
   for(const auto id:ids) {
@@ -4602,13 +5100,12 @@ void EditorSession::collectUsedTextures(std::vector<UsedTexture> &out) const {
 }
 
 bool EditorSession::ensureTexturesPublished(std::string &diagnostic) {
-  if(importedSources_.empty()) return true;
   std::vector<UsedTexture> used;
   collectUsedTextures(used);
   const auto &published=mapScene_.textureLibrary();
   const bool complete=std::all_of(used.begin(),used.end(),[&](const auto &item) {
     return std::any_of(published.begin(),published.end(),[&](const auto &entry){
-      return entry.guid==item.guid && entry.srgb==item.srgb && entry.sampler==item.sampler;
+      return entry.guid==item.guid && entry.srgb==item.srgb && entry.normal==item.normal && entry.sampler==item.sampler;
     });
   });
   // Publicar de novo custa uma reconstrução da biblioteca (R2 ainda não publica
@@ -4950,9 +5447,17 @@ bool EditorSession::commitEnvironmentProfile(const resources::EnvironmentProfile
   }
   const auto serialized=candidate.serialize();
   const std::span<const u8> bytes{reinterpret_cast<const u8*>(serialized.data()),serialized.size()};
+  std::vector<resources::AssetGuid> dependencies;
+  if(candidate.values.environmentMap.valid()) {
+    const auto *map=assets_.find(candidate.values.environmentMap);
+    if(!map||map->type!=resources::AssetType::EnvironmentMap) {
+      diagnostic="O mapa HDRI do perfil não pertence ao projeto.";return false;
+    }
+    dependencies.push_back(candidate.values.environmentMap);
+  }
   auto nextAssets=assets_;
   if(!nextAssets.publishImport(candidate.guid,Sha256::hex(bytes),record->importerVersion,
-      record->importerParameters,record->derived,{})) {
+      record->importerParameters,record->derived,std::move(dependencies))) {
     diagnostic="Registro recusou a atualização do perfil.";return false;
   }
   std::filesystem::path absolute;std::vector<u8> previous;
@@ -5028,6 +5533,11 @@ resources::AssetGuid EditorSession::createEnvironmentProfile(EditorEntityId id,u
   const auto serialized=profile.serialize();resources::AssetRecord record;
   record.guid=profile.guid;record.type=resources::AssetType::EnvironmentProfile;record.path=path;
   record.contentHash=Sha256::hex(std::span<const u8>(reinterpret_cast<const u8*>(serialized.data()),serialized.size()));
+  if(profile.values.environmentMap.valid()) {
+    const auto *map=assets_.find(profile.values.environmentMap);
+    if(!map||map->type!=resources::AssetType::EnvironmentMap) {diagnostic="O mapa HDRI não pertence ao projeto.";return {};}
+    record.dependencies.push_back(profile.values.environmentMap);
+  }
   auto nextAssets=assets_;if(!nextAssets.add(record)) {diagnostic="O registro recusou o perfil.";return {};}
   auto values=*entity;auto *editable=static_cast<scene::Environment*>(values.components.editInstance(instance));
   if(!editable) {diagnostic="O volume mudou durante a criação.";return {};}
@@ -5561,6 +6071,12 @@ bool EditorSession::resolvePresetResources(scene::ComponentValue &value,const st
         const auto *record=assets_.find(asset);
         if(!record||record->type!=resources::AssetType::Texture||!decodeProjectTexture(asset,true,EditorMapScene::DefaultTextureSampler)) {
           error="Textura do preset indisponível ou inválida";return false;
+        }
+      }
+      if(binding.kind==resources::AssetType::EnvironmentMap) {
+        const auto *record=assets_.find(asset);
+        if(!record||record->type!=resources::AssetType::EnvironmentMap||!findEnvironmentMap(asset)) {
+          error="Mapa HDRI do preset indisponível ou inválido";return false;
         }
       }
     }

@@ -8,9 +8,9 @@
 // resolução interna — e as duas renderizam o viewport do EDITOR em resolução
 // nativa, sem escala dinâmica, porque é ali que se julga a imagem.
 //
-// Aqui o arquivo carrega só o que o painel Qualidade expõe. O resto da política
-// (cascatas, distâncias, orçamentos) continua vindo do nível escolhido, e o
-// arquivo não inventa um segundo lugar para decidir aquilo.
+// O arquivo v2 preserva o nível e todos os overrides autorais que a política
+// consome. Assim o painel pode começar pelo preset e aprofundar por eixo sem
+// criar um segundo contrato ou perder os ajustes ao reabrir o projeto.
 #include "renderer/rendering_policy.h"
 
 #include <string>
@@ -18,11 +18,11 @@
 
 namespace ae::renderer {
 
-inline constexpr u32 RenderingSettingsFileVersion = 1;
+inline constexpr u32 RenderingSettingsFileVersion = 2;
 
 // Texto `chave=valor`, uma por linha, com a versão na primeira. Chave
-// desconhecida é ignorada (arquivo de versão futura abre com o que se entende);
-// valor ilegível numa chave conhecida recusa o arquivo inteiro.
+// desconhecida é ignorada nas versões suportadas; versão futura ou valor
+// ilegível numa chave conhecida recusa o arquivo inteiro, sem alterar a saída.
 std::string writeRenderingSettings(const ProjectRenderingSettings &settings);
 bool readRenderingSettings(std::string_view text, ProjectRenderingSettings &out);
 
@@ -36,5 +36,11 @@ ProjectRenderingSettings withEditorDefaults(ProjectRenderingSettings settings);
 // Nomes do painel, no vocabulário dos níveis de qualidade da Unity.
 const char *qualityLevelLabel(QualityPreset preset);
 const char *antiAliasingLabel(AntiAliasingMode mode);
+const char *upscalingFilterLabel(UpscalingFilter filter);
+const char *shadowQualityLabel(ShadowQuality quality);
+const char *ambientQualityLabel(AmbientQuality quality);
+const char *postQualityLabel(PostQuality quality);
+const char *textureQualityLabel(TextureQuality quality);
+const char *featureOverrideLabel(FeatureOverride value);
 
 } // namespace ae::renderer

@@ -3,6 +3,7 @@
 #include "resources/asset_registry.h"
 #include "resources/image_decode.h"
 #include <array>
+#include <atomic>
 #include <string>
 #include <string_view>
 
@@ -12,15 +13,17 @@ namespace ae::resources {
 // textura; as escolhas por uso (UV, repetição, filtro, transformação) continuam
 // no material.
 //
-// Onde vive: `.astra/textures/<guid>.profile`. Arquivo ausente ou inválido volta
-// ao padrão, que é o comportamento anterior ao perfil.
+// A receita autoral atual vive em `AssetRecord.importerParameters`. O caminho
+// `.astra/textures/<guid>.profile` permanece apenas para leitura/migração de
+// projetos antigos; valor ausente ou inválido volta ao padrão anterior.
 //
 // Texturas embutidas nas fontes seguem o perfil de importação da fonte (R3); para
 // escolher por textura, extraia a imagem para o projeto.
-inline constexpr u32 TextureProfileSchema = 1;
+inline constexpr u32 TextureProfileSchema = 3;
 // Interpretação: pelo uso (cor base e emissão em sRGB, os demais lineares), cor
 // (sRGB sempre) ou dado (linear sempre).
-inline constexpr u8 TextureInterpretationUse = 0, TextureInterpretationColor = 1, TextureInterpretationData = 2;
+inline constexpr u8 TextureInterpretationUse = 0, TextureInterpretationColor = 1,
+                    TextureInterpretationData = 2, TextureInterpretationNormal = 3;
 // Maior lado residente. Zero segue o teto do projeto e do aparelho; nunca sobe acima dele.
 inline constexpr std::array<u32, 6> TextureDimensionSteps{0, 256, 512, 1024, 2048, 4096};
 
@@ -33,6 +36,13 @@ struct TextureProfile {
   bool dilateEdges = false;
   // Anisotropia da qualidade escolhida no aparelho; desligar fica por textura.
   bool anisotropy = true;
+  // Convenção DirectX opcional. Só é consumida quando `interpretation` é
+  // Normal; fica persistida ao alternar temporariamente o tipo no Inspector.
+  bool invertNormalGreen = false;
+  // Mantém a fração de texels que passa no alpha test ao gerar mips de cor.
+  // Desligado preserva exatamente o comportamento anterior.
+  bool preserveAlphaCoverage = false;
+  float alphaCoverageCutoff = 0.5f;
 };
 bool sameTextureProfile(const TextureProfile &a, const TextureProfile &b) noexcept;
 bool validTextureProfile(const TextureProfile &profile) noexcept;
@@ -44,5 +54,6 @@ std::string textureProfilePath(const AssetGuid &texture);
 // Espalha a cor dos texels visíveis (alfa >= `threshold`) para os vizinhos
 // transparentes, um anel por passo, sem tocar no alfa. Devolve quantos texels
 // receberam cor.
-u32 dilateTransparentEdges(DecodedImage &image, u32 passes = 8, u8 threshold = 1);
+u32 dilateTransparentEdges(DecodedImage &image, u32 passes = 8, u8 threshold = 1,
+                           const std::atomic<bool> *cancel = nullptr);
 } // namespace ae::resources

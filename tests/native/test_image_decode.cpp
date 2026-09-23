@@ -8,6 +8,7 @@
 #include "renderer/authoring_geometry.h"
 #include "resources/gltf_import.h"
 #include "resources/image_decode.h"
+#include "resources/texture_asset.h"
 #include "resources/texture_budget.h"
 
 #include <array>
@@ -173,15 +174,112 @@ AE_TEST(m091_mip_chain_averages_color_in_linear_space_and_data_directly) {
   AE_EXPECT_EQ(chain[16], u8{128}, "mapa de dados: média direta");
 }
 
+AE_TEST(texture_cook_keeps_npot_energy_and_renormalizes_normal_mips) {
+  resources::DecodedImage npot{3, 1, {0,0,0,255, 30,0,0,255, 90,0,0,255}};
+  std::vector<u8> chain; u32 levels = 0;
+  AE_EXPECT_TRUE(resources::buildMipChain(npot, false, chain, levels), "NPOT data mip");
+  AE_EXPECT_TRUE(levels == 2 && chain[12] == 40, "3 -> 1 includes every source texel");
+
+  // +X, +Y, +X, +Y: normalized average is approximately (.707,.707,0),
+  // encoded near (218,218,128), rather than the raw byte average (191,191,128).
+  resources::DecodedImage normals{2, 2, {
+    255,128,128,255, 128,255,128,255,
+    255,128,128,255, 128,255,128,255}};
+  AE_EXPECT_TRUE(resources::buildNormalMipChain(normals, chain, levels), "normal mip");
+  AE_EXPECT_TRUE(levels == 2 && chain[16] >= 217 && chain[16] <= 219 &&
+                 chain[17] >= 217 && chain[17] <= 219, "normal mip renormalized");
+}
+
+AE_TEST(texture_asset_recipe_cooks_and_cache_round_trips) {
+  const auto png = makePng(2, 2, {255,128,128,255, 128,255,128,128,
+                                  255,128,128,255, 128,255,128,255});
+  resources::TextureProfile settings;
+  settings.interpretation = resources::TextureInterpretationNormal;
+  settings.invertNormalGreen = true;
+  settings.anisotropy = false;
+  resources::TextureImportLimits limits;
+  resources::PreparedTextureImport prepared;
+  AE_EXPECT_TRUE(resources::prepareTextureImport(
+      png, settings, true, renderer::AuthoringTextureLinearFilter, limits, nullptr, prepared),
+      prepared.diagnostic.c_str());
+  AE_EXPECT_TRUE(prepared.valid() && !prepared.texture->srgb && prepared.texture->levels == 2,
+                 "normal is linear with full mip chain");
+  AE_EXPECT_TRUE((prepared.texture->samplerFlags & renderer::AuthoringTextureNoAnisotropy) != 0,
+                 "anisotropy setting reaches cooked sampler");
+  AE_EXPECT_TRUE(prepared.sourceHasAlpha, "alpha metadata comes from source");
+  std::vector<u8> cache;
+  AE_EXPECT_TRUE(resources::writeTextureAssetCache(prepared, cache), "cache writes");
+  resources::PreparedTextureImport reopened;
+  AE_EXPECT_TRUE(resources::readTextureAssetCache(cache, prepared.cacheKey, limits, reopened),
+                 "cache reads with expected recipe key");
+  AE_EXPECT_TRUE(reopened.valid() && reopened.texture->mipChain == prepared.texture->mipChain &&
+                 reopened.texture->samplerFlags == prepared.texture->samplerFlags,
+                 "cache preserves cooked payload and sampler");
+  cache.back() ^= 1u;
+  AE_EXPECT_TRUE(!resources::readTextureAssetCache(cache, prepared.cacheKey, limits, reopened),
+                 "checksum rejects modified cache");
+
+  const auto larger = makePng(4, 4, std::vector<u8>(4u * 4u * 4u, 128u));
+  resources::TextureImportLimits tight = limits;
+  // RGBA source 64 + reserved chain 84 + first generated mip 16 coexist.
+  // The previous preflight counted only source+chain (148) and accepted 150.
+  tight.maximumWorkingBytes = 150;
+  AE_EXPECT_TRUE(!resources::prepareTextureImport(
+      larger, {}, true, renderer::AuthoringTextureLinearFilter, tight, nullptr, reopened),
+      "working budget includes the current, next and reserved mip chain");
+}
+
+AE_TEST(texture_alpha_coverage_selects_closest_representable_mip_mask) {
+  resources::TextureProfile profile;
+  profile.preserveAlphaCoverage = true;
+  resources::TextureImportLimits limits;
+  resources::PreparedTextureImport cooked;
+  const auto cook = [&](const std::vector<u8> &pixels, float cutoff,
+                        resources::PreparedTextureImport &result) {
+    profile.alphaCoverageCutoff = cutoff;
+    return resources::prepareTextureImport(makePng(4, 4, pixels), profile, true, 0,
+                                           limits, nullptr, result);
+  };
+  std::vector<u8> sparse(4u * 4u * 4u, 255u);
+  for (u32 pixel = 0; pixel < 16; ++pixel)
+    sparse[pixel * 4u + 3u] = (pixel % 4u % 2u == 0u && pixel / 4u % 2u == 0u) ? 255u : 0u;
+  AE_EXPECT_TRUE(cook(sparse, .1f, cooked), cooked.diagnostic.c_str());
+  // Cada bloco 2x2 tem um texel visível. A média alfa 64 passaria no corte
+  // 0,1 e cobriria 100%; zero é a máscara discreta mais próxima de 25%.
+  for (usize at = 4u * 4u * 4u + 3u; at < 4u * 4u * 4u + 16u; at += 4u)
+    AE_EXPECT_EQ(cooked.texture->mipChain[at], u8{0}, "mip esparso escolhe cobertura zero");
+
+  std::vector<u8> dense(4u * 4u * 4u, 255u);
+  for (u32 pixel = 0; pixel < 16; ++pixel)
+    dense[pixel * 4u + 3u] = (pixel % 4u % 2u == 1u && pixel / 4u % 2u == 1u) ? 0u : 255u;
+  AE_EXPECT_TRUE(cook(dense, .9f, cooked), cooked.diagnostic.c_str());
+  // Três texels opacos por bloco ficam em alfa 191; expandir todos é mais
+  // próximo da cobertura original de 75% que manter todos invisíveis.
+  for (usize at = 4u * 4u * 4u + 3u; at < 4u * 4u * 4u + 16u; at += 4u)
+    AE_EXPECT_TRUE(cooked.texture->mipChain[at] >= 230u, "mip denso amplia cobertura");
+
+  profile.interpretation = resources::TextureInterpretationData;
+  AE_EXPECT_TRUE(resources::prepareTextureImport(makePng(4, 4, dense), profile, true, 0,
+                                                  limits, nullptr, cooked), cooked.diagnostic.c_str());
+  AE_EXPECT_EQ(cooked.texture->mipChain[4u * 4u * 4u + 3u], u8{191},
+               "preservação de cobertura não modifica mapa de dados");
+  std::atomic<bool> cancel{true};
+  AE_EXPECT_TRUE(!resources::prepareTextureImport(makePng(4, 4, dense), profile, true, 0,
+                                                   limits, &cancel, cooked) && !cooked.valid(),
+                 "cancelamento não entrega derivado parcial");
+}
+
 AE_TEST(m091_glb_textures_map_to_slots_with_color_space_uv_and_sampler) {
   const auto glb = texturedGlb(makePng(2, 2, checkerPixels()), kFullMaterial);
   resources::GltfImport model;
   AE_EXPECT_TRUE(resources::importGlb(glb, {}, {}, model), model.diagnostic.c_str());
-  AE_EXPECT_EQ(model.textures.size(), usize{2}, "a mesma imagem em sRGB (cor) e em linear (dados)");
+  AE_EXPECT_EQ(model.textures.size(), usize{3},
+               "a mesma imagem usa receitas distintas para cor, dados e normal");
   const auto &material = model.materials.front();
   const auto base = material.textureIndices[0], normal = material.textureIndices[1], mr = material.textureIndices[2];
-  AE_EXPECT_TRUE(base < 2 && model.textures[base]->srgb, "cor base em sRGB");
-  AE_EXPECT_TRUE(normal < 2 && !model.textures[normal]->srgb && normal == mr, "normal e metálico/rugosidade lineares, mesma textura");
+  AE_EXPECT_TRUE(base < 3 && model.textures[base]->srgb, "cor base em sRGB");
+  AE_EXPECT_TRUE(normal < 3 && mr < 3 && !model.textures[normal]->srgb && !model.textures[mr]->srgb && normal != mr,
+                 "normal renormalizada e metálico/rugosidade linear mantêm receitas separadas");
   AE_EXPECT_TRUE(material.textureIndices[3] == renderer::InvalidMapTexture, "emissivo só em WebP não foi aplicado");
   AE_EXPECT_TRUE((material.flags & renderer::MapMaterialNormalMap) && (material.flags & renderer::MapMaterialMetallicRoughnessMap),
                  "flags dos mapas que o shader usa");

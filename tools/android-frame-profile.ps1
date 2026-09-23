@@ -111,9 +111,12 @@ $FrameProfileFrameMetricNames = @('interval_ms', 'process_cpu_ms', 'thread_cpu_m
 # Regioes de GPU: viajam em [FrameProfilePasses], porque a linha da janela ja
 # ocupava 937 dos ~1023 bytes que o Logcat entrega antes de truncar em silencio.
 # A ordem espelha ae::GpuPassClass em native/core/gpu_pass_class.h.
-$FrameProfilePassMetricNames = @('gpu_shadow_ms', 'gpu_culling_ms', 'gpu_opaque_ms',
-    'gpu_coverage_ms', 'gpu_sky_ms',
-    'gpu_transparent_ms', 'gpu_ui_ms', 'gpu_post_ms', 'gpu_hzb_ms')
+$FrameProfilePassMetricNames = @('gpu_camera_preview_ms', 'gpu_water_simulation_ms',
+    'gpu_shadow_ms', 'gpu_local_shadow_ms', 'gpu_culling_ms', 'gpu_opaque_ms',
+    'gpu_coverage_ms', 'gpu_sky_ms', 'gpu_transparent_ms', 'gpu_auto_exposure_ms',
+    'gpu_post_ms', 'gpu_fsr_easu_ms', 'gpu_fsr_rcas_ms', 'gpu_ui_ms', 'gpu_hzb_ms')
+$FrameProfileLegacyPassMetricNames = @('gpu_shadow_ms', 'gpu_culling_ms', 'gpu_opaque_ms',
+    'gpu_coverage_ms', 'gpu_sky_ms', 'gpu_transparent_ms', 'gpu_ui_ms', 'gpu_post_ms', 'gpu_hzb_ms')
 $FrameProfileMetricNames = $FrameProfileFrameMetricNames + $FrameProfilePassMetricNames
 
 # Converte os vetores compactos [mean,p50,p95,p99,max] em objetos e valida
@@ -154,7 +157,7 @@ function ConvertFrom-FrameProfilePressureLog {
         if ($line -notmatch '\[FrameProfilePressure\] (\{.*)$') { continue }
         $record = $Matches[1] | ConvertFrom-Json
         if ([string]$record.pid -ne $ExpectedPid) { continue }
-        if ($record.schemaVersion -notin @(5, 6, 7) -or $record.epoch -lt 1 -or $record.window -lt 1 -or
+        if ($record.schemaVersion -notin @(5, 6, 7, 8) -or $record.epoch -lt 1 -or $record.window -lt 1 -or
             $record.classification -notin @('unknown', 'within-budget', 'cpu', 'gpu', 'mixed', 'presentation')) {
             throw 'Registro FrameProfilePressure incompatível ou incompleto.'
         }
@@ -211,7 +214,7 @@ function ConvertFrom-FrameProfileMemoryLog {
         if ($line -notmatch '\[FrameProfileMemory\] (\{.*)$') { continue }
         $record = $Matches[1] | ConvertFrom-Json
         if ([string]$record.pid -ne $ExpectedPid) { continue }
-        if ($record.schemaVersion -ne 7 -or $record.epoch -lt 1 -or $record.window -lt 1 -or
+        if ($record.schemaVersion -notin @(7, 8) -or $record.epoch -lt 1 -or $record.window -lt 1 -or
             $record.classification -notin @('unknown', 'normal', 'warning', 'critical')) {
             throw 'Registro FrameProfileMemory incompatível ou incompleto.'
         }
@@ -291,11 +294,12 @@ function ConvertFrom-FrameProfileMemoryLog {
 function ConvertFrom-FrameProfilePassLog {
     param([string]$Text, [string]$ExpectedPid)
     $passes = @{}
+    $fragments = @{}
     foreach ($line in ($Text -split "`n")) {
         if ($line -notmatch '\[FrameProfilePasses\] (\{.*)$') { continue }
         $record = $Matches[1] | ConvertFrom-Json
         if ([string]$record.pid -ne $ExpectedPid) { continue }
-        if ($record.schemaVersion -notin @(4, 5, 6, 7) -or $record.epoch -lt 1 -or $record.window -lt 1) {
+        if ($record.schemaVersion -notin @(4, 5, 6, 7, 8) -or $record.epoch -lt 1 -or $record.window -lt 1) {
             throw 'Registro FrameProfilePasses incompativel ou incompleto.'
         }
         if ($record.PSObject.Properties.Name -notcontains 'attribution') {
@@ -304,10 +308,50 @@ function ConvertFrom-FrameProfilePassLog {
         if ($record.attribution -notin @('resolved', 'tile-deferred')) {
             throw "FrameProfilePasses com atribuicao invalida: $($record.attribution)."
         }
-        ConvertTo-FrameProfileDistributions -Record $record -MetricNames $FrameProfilePassMetricNames -Label 'FrameProfilePasses'
         $key = "$($record.epoch):$($record.window)"
-        if ($passes.ContainsKey($key)) { throw "Registro FrameProfilePasses duplicado: $key." }
-        $passes[$key] = $record
+        if ($record.schemaVersion -lt 8) {
+            if ($passes.ContainsKey($key) -or $fragments.ContainsKey($key)) {
+                throw "Registro FrameProfilePasses duplicado: $key."
+            }
+            $available = @($FrameProfilePassMetricNames | Where-Object { $record.PSObject.Properties.Name -contains $_ })
+            foreach ($required in $FrameProfileLegacyPassMetricNames) {
+                if ($available -notcontains $required) { throw "FrameProfilePasses legado sem ${required}: $key." }
+            }
+            ConvertTo-FrameProfileDistributions -Record $record -MetricNames $available -Label 'FrameProfilePasses'
+            $passes[$key] = $record
+            continue
+        }
+        if ($passes.ContainsKey($key) -or $record.parts -ne 3 -or $record.part -notin @(0, 1, 2)) {
+            throw "Fragmento FrameProfilePasses inválido: $key."
+        }
+        $part = [int]$record.part
+        $expected = @($FrameProfilePassMetricNames | Select-Object -Skip ($part * 5) -First 5)
+        $present = @($FrameProfilePassMetricNames | Where-Object { $record.PSObject.Properties.Name -contains $_ })
+        if (@(Compare-Object $expected $present).Count -ne 0) {
+            throw "Fragmento FrameProfilePasses com métricas divergentes: $key/$part."
+        }
+        ConvertTo-FrameProfileDistributions -Record $record -MetricNames $expected -Label 'FrameProfilePasses'
+        if (-not $fragments.ContainsKey($key)) { $fragments[$key] = @{} }
+        if ($fragments[$key].ContainsKey($part)) { throw "Fragmento FrameProfilePasses duplicado: $key/$part." }
+        $fragments[$key][$part] = $record
+    }
+    foreach ($key in $fragments.Keys) {
+        $pieces = $fragments[$key]
+        if ($pieces.Count -ne 3) { throw "Fragmentos FrameProfilePasses incompletos: $key." }
+        $first = $pieces[0]
+        foreach ($part in 1..2) {
+            $next = $pieces[$part]
+            if ($next.schemaVersion -ne $first.schemaVersion -or $next.pid -ne $first.pid -or
+                $next.attribution -ne $first.attribution -or
+                $next.collapsed_frames -ne $first.collapsed_frames -or
+                $next.attribution_samples -ne $first.attribution_samples) {
+                throw "Fragmentos FrameProfilePasses inconsistentes: $key."
+            }
+            foreach ($metric in @($FrameProfilePassMetricNames | Select-Object -Skip ($part * 5) -First 5)) {
+                $first | Add-Member -NotePropertyName $metric -NotePropertyValue $next.$metric
+            }
+        }
+        $passes[$key] = $first
     }
     return $passes
 }
@@ -319,7 +363,7 @@ function ConvertFrom-FrameProfileContextLog {
         if ($line -notmatch '\[FrameProfileContext\] (\{.*)$') { continue }
         $context = $Matches[1] | ConvertFrom-Json
         if ([string]$context.pid -ne $ExpectedPid) { continue }
-        if ($context.schemaVersion -notin @(2, 3, 4, 5, 6, 7) -or $context.epoch -lt 1 -or
+        if ($context.schemaVersion -notin @(2, 3, 4, 5, 6, 7, 8) -or $context.epoch -lt 1 -or
             -not $context.scene -or $context.scene -notmatch '^[a-z0-9-]+$' -or
             $context.content_fingerprint -notmatch '^[0-9a-f]{16}$' -or
             $context.target_fps -lt 1 -or $context.instances -lt 1 -or
@@ -443,7 +487,7 @@ function ConvertFrom-FrameProfileLog {
                 throw "FrameProfile inválido: $field."
             }
         }
-        if ($window.schemaVersion -notin @(4, 5, 6, 7) -or
+        if ($window.schemaVersion -notin @(4, 5, 6, 7, 8) -or
             ($null -ne $ExpectedInstances -and $window.instances -ne $ExpectedInstances) -or
             $window.frames -ne 600 -or $window.elapsed_ms -le 0 -or
             $window.width -le 0 -or $window.height -le 0 -or $window.epoch -lt 1 -or $window.window -lt 1) {
@@ -473,8 +517,11 @@ function ConvertFrom-FrameProfileLog {
             throw "Schemas de FrameProfile e FrameProfilePasses divergem: $passKey."
         }
         foreach ($metric in $FrameProfilePassMetricNames) {
-            $window | Add-Member -NotePropertyName $metric -NotePropertyValue $passRecord.$metric
+            $value = if ($passRecord.PSObject.Properties.Name -contains $metric) { $passRecord.$metric } else { $null }
+            $window | Add-Member -NotePropertyName $metric -NotePropertyValue $value
         }
+        $window | Add-Member -NotePropertyName gpuPassMetricsMissing -NotePropertyValue @(
+            $FrameProfilePassMetricNames | Where-Object { $null -eq $window.$_ })
         # Numa GPU TBDR os timestamps internos ao render pass podem resolver
         # todos no fim do tile: a primeira regiao absorve o frame e as demais
         # medem ~0. Os numeros continuam no relatorio porque sao o que o
@@ -555,7 +602,9 @@ function ConvertFrom-FrameProfileLog {
         # As regioes particionam o frame: somadas nao podem exceder o tempo total
         # de GPU alem da tolerancia de arredondamento de 4 casas por metrica.
         $passSum = 0.0
-        foreach ($metric in $FrameProfilePassMetricNames) { $passSum += $window.$metric.mean }
+        foreach ($metric in $FrameProfilePassMetricNames) {
+            if ($null -ne $window.$metric) { $passSum += $window.$metric.mean }
+        }
         if ($passSum -gt $window.gpu_frame_ms.mean + 0.01) {
             throw "Regioes de GPU somam mais que o frame: $passKey."
         }
@@ -643,6 +692,11 @@ function Get-FrameProfileCapture {
     $frames = ($selected | Measure-Object frames -Sum).Sum
     $metrics = [ordered]@{}
     foreach ($metric in $FrameProfileMetricNames) {
+        $available = @($selected | Where-Object { $null -ne $_.$metric }).Count
+        if ($available -ne 0 -and $available -ne $selected.Count) {
+            throw "Disponibilidade da métrica $metric muda dentro da captura."
+        }
+        if ($available -eq 0) { continue }
         $weightedSum = 0.0
         foreach ($window in $selected) { $weightedSum += $window.$metric.mean * $window.frames }
         $metrics[$metric] = [ordered]@{
@@ -709,6 +763,7 @@ function Get-FrameProfileCapture {
         # fim do tile e as metricas gpu_*_ms abaixo NAO atribuem custo por
         # regiao. Os marcadores de debug continuam validos para captura AGI.
         gpuPassAttribution = $captureAttribution
+        gpuPassMetricsMissing = @($FrameProfilePassMetricNames | Where-Object { -not $metrics.Contains($_) })
         context = $context
         pid = $latest.pid
         epoch = $latest.epoch

@@ -90,7 +90,16 @@ function Select-Records { param([string]$Tag)
 }
 
 $windows = @(Select-Records 'FrameProfile')
-$passes = @(Select-Records 'FrameProfilePasses')
+$passes = @()
+if ($windows.Count -gt 0) {
+    . (Join-Path $PSScriptRoot 'android-frame-profile.ps1')
+    $passRecords = ConvertFrom-FrameProfilePassLog -Text ($lines -join "`n") -ExpectedPid ([string]$windows[-1].pid)
+    foreach ($window in $windows) {
+        $key = "$($window.epoch):$($window.window)"
+        if (-not $passRecords.ContainsKey($key)) { throw "FrameProfilePasses ausente: $key." }
+        $passes += $passRecords[$key]
+    }
+}
 $pressure = @(Select-Records 'FrameProfilePressure')
 
 # Uma opção rejeitada pelo Android (tipo errado no extra) é silenciosa no app e

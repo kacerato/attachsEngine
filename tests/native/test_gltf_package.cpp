@@ -159,6 +159,44 @@ AE_TEST(m09e4_gltf_with_companion_bin_and_image_packs_into_a_self_contained_glb)
                  "manifesto com origem, tamanho e hash de cada byte");
 }
 
+AE_TEST(gltf_sampler_preserves_independent_min_mag_and_mip_modes) {
+  struct Case { u32 minFilter; u32 magFilter; bool minLinear; bool magLinear; bool mipEnabled; bool mipLinear; };
+  constexpr Case cases[]{
+      {9728,9729,false,true,false,false}, {9729,9728,true,false,false,false},
+      {9984,9729,false,true,true,false},  {9985,9729,true,true,true,false},
+      {9986,9729,false,true,true,true},   {9987,9729,true,true,true,true},
+  };
+  const auto bin=quadBin();
+  const std::vector<resources::GltfPackageFile> files{{"cena.bin",bin},{"grade.png",kPixel}};
+  for(const auto &expected:cases) {
+    auto text=gltfText("cena.bin","grade.png");
+    const std::string texture=R"("textures":[{"source":0}])";
+    const auto at=text.find(texture);
+    AE_EXPECT_TRUE(at!=std::string::npos,"texture do fixture");
+    text.replace(at,texture.size(),R"("textures":[{"source":0,"sampler":0}],"samplers":[{"minFilter":)"+
+        std::to_string(expected.minFilter)+R"(,"magFilter":)"+std::to_string(expected.magFilter)+"}]");
+    resources::GltfPackage package;std::string diagnostic;
+    AE_EXPECT_TRUE(resources::packGltf(bytesOf(text),files,64u<<20,package,diagnostic),diagnostic.c_str());
+    resources::GltfImport model;
+    AE_EXPECT_TRUE(resources::importGlb(package.glb,{},{},model),model.diagnostic.c_str());
+    AE_EXPECT_EQ(model.textures.size(),usize{1},"uma textura");
+    const auto actual=renderer::decodeTextureSampler(model.textures.front()->samplerFlags);
+    AE_EXPECT_EQ(actual.minLinear,expected.minLinear,"minificação");
+    AE_EXPECT_EQ(actual.magLinear,expected.magLinear,"magnificação");
+    AE_EXPECT_EQ(actual.mipEnabled,expected.mipEnabled,"uso de mip");
+    AE_EXPECT_EQ(actual.mipLinear,expected.mipLinear,"filtro entre mips");
+  }
+
+  // Flags sem marcador são assets anteriores: continuam com filtro único e
+  // cadeia de mips aberta, exatamente como o backend os interpretava.
+  const auto oldNearest=renderer::decodeTextureSampler(0);
+  AE_EXPECT_TRUE(!oldNearest.minLinear&&!oldNearest.magLinear&&oldNearest.mipEnabled&&!oldNearest.mipLinear,
+                 "flags legadas nearest preservadas");
+  const auto oldLinear=renderer::decodeTextureSampler(3);
+  AE_EXPECT_TRUE(oldLinear.minLinear&&oldLinear.magLinear&&oldLinear.mipEnabled&&oldLinear.mipLinear,
+                 "flags legadas lineares preservadas");
+}
+
 AE_TEST(m09e4_gltf_dependencies_never_reach_network_parent_folders_or_ambiguous_files) {
   const auto bin = quadBin();
   resources::GltfPackage package;

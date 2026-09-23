@@ -38,6 +38,30 @@ bool hasClamp(const ResolvedRenderingPolicy &policy, const char *axis, PolicyCla
 
 } // namespace
 
+AE_TEST(policy_upscaling_is_independent_of_aa_and_forces_a_real_resolve) {
+  ProjectRenderingSettings settings{};
+  settings.preset=QualityPreset::C;
+  settings.post=PostQuality::None;
+  settings.antiAliasing=AntiAliasingMode::Off;
+  settings.resolutionScale=.75f;
+  settings.upscalingFilter=UpscalingFilter::CatmullRom;
+  auto policy=resolveRenderingPolicy(settings,strongDevice(),ThermalPressure::None);
+  AE_EXPECT_TRUE(policy.post.dedicatedPass,"reconstruction requires a real final pass");
+  AE_EXPECT_EQ(policy.post.upscalingFilter,UpscalingFilter::CatmullRom,"requested filter reaches consumer policy");
+  AE_EXPECT_EQ(policy.post.antiAliasing,AntiAliasingMode::Off,"spatial reconstruction does not enable AA");
+  settings.antiAliasing=AntiAliasingMode::Temporal;
+  policy=resolveRenderingPolicy(settings,strongDevice(),ThermalPressure::None);
+  AE_EXPECT_EQ(policy.post.upscalingFilter,UpscalingFilter::CatmullRom,"TAA and reconstruction remain independent");
+  AE_EXPECT_EQ(policy.post.antiAliasing,AntiAliasingMode::Temporal,"temporal request retained");
+  AE_EXPECT_EQ(parseUpscalingFilter(upscalingFilterName(settings.upscalingFilter)),settings.upscalingFilter,"stable serialized name");
+  settings.upscalingFilter=UpscalingFilter::Fsr1;
+  policy=resolveRenderingPolicy(settings,strongDevice(),ThermalPressure::None);
+  AE_EXPECT_EQ(policy.post.upscalingFilter,UpscalingFilter::Fsr1,"AMD spatial reconstruction retained");
+  AE_EXPECT_TRUE(policy.post.dedicatedPass,"FSR needs display-referred intermediate");
+  AE_EXPECT_EQ(policy.post.antiAliasing,AntiAliasingMode::Temporal,"FSR1 composes with AA");
+  AE_EXPECT_EQ(parseUpscalingFilter(upscalingFilterName(settings.upscalingFilter)),settings.upscalingFilter,"FSR persisted name");
+}
+
 AE_TEST(policy_auto_deriva_do_perfil_detectado) {
   auto capabilities = strongDevice();
   const auto s = resolveRenderingPolicy({}, capabilities, ThermalPressure::None);
@@ -57,6 +81,21 @@ AE_TEST(policy_auto_deriva_do_perfil_detectado) {
   AE_EXPECT_TRUE(c.post.dedicatedPass, "escala reduzida do perfil C exige passe de upscale");
   AE_EXPECT_TRUE(!c.post.bloom && c.post.antiAliasing == AntiAliasingMode::Off,
                  "perfil C nao paga filtros adicionais no passe de upscale");
+}
+
+AE_TEST(policy_auto_recommendation_does_not_enable_unmeasured_shader_paths) {
+  auto capabilities = strongDevice();
+  capabilities.profile = rhi::DeviceProfile::B;
+  capabilities.qualityRecommendation = {rhi::DeviceProfile::A,
+      rhi::DeviceQualityEvidence::RecognizedGpuIdentity};
+  const auto policy = resolveRenderingPolicy({}, capabilities, ThermalPressure::None);
+  AE_EXPECT_EQ(policy.effectiveProfile, rhi::DeviceProfile::A, "Auto uses independent visual recommendation");
+  AE_EXPECT_TRUE(!policy.geometry.materialShaderVariants,
+      "recognized identity does not opt into shader variants with measured regressions");
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::C;
+  AE_EXPECT_EQ(resolveRenderingPolicy(settings, capabilities, ThermalPressure::None).effectiveProfile,
+      rhi::DeviceProfile::C, "explicit project quality wins over heuristic");
 }
 
 AE_TEST(policy_eixo_sobrescrito_nao_arrasta_os_outros) {

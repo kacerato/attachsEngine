@@ -9,6 +9,8 @@
 
 #include "core/base.h"
 
+#include <array>
+
 namespace ae::rhi {
 
 // Subconjunto de features/limits Vulkan relevantes para a decisão de perfil.
@@ -16,6 +18,13 @@ namespace ae::rhi {
 // reais no código de inicialização do device (não testado aqui); os testes
 // preenchem esta struct à mão.
 struct DeviceFeatures {
+  // Identidade Vulkan usada somente para recomendação de qualidade e
+  // diagnóstico. Ela nunca habilita extensões: caminhos de GPU continuam
+  // dependendo exclusivamente das features consultadas abaixo.
+  u32 vendorId = 0;
+  u32 deviceId = 0;
+  std::array<char, 256> deviceName{};
+
   // Núcleo Vulkan 1.3 (linha de base assumida pelo plano).
   bool vulkan1_3 = false;
 
@@ -47,6 +56,19 @@ enum class DeviceProfile : u32 {
   S = 3,
 };
 
+// O perfil acima descreve caminhos que o driver pode executar. A recomendação
+// abaixo descreve a carga visual que um aparelho conhecido consegue sustentar;
+// separar os dois evita fingir ray query/VRS só para oferecer qualidade Alta.
+enum class DeviceQualityEvidence : u32 {
+  CapabilityProfile = 0,
+  RecognizedGpuIdentity,
+};
+
+struct DeviceQualityRecommendation final {
+  DeviceProfile profile = DeviceProfile::C;
+  DeviceQualityEvidence evidence = DeviceQualityEvidence::CapabilityProfile;
+};
+
 // Quais caminhos de renderização ficam habilitados para o perfil detectado.
 // Corresponde à Parte 2.4 do plano: cada perfil liga um subconjunto de
 // caminhos, nunca infere features que a struct não reportou.
@@ -63,6 +85,11 @@ struct EnabledPaths {
 // Decide o perfil a partir das features reportadas. Puramente combinacional
 // — sem I/O, sem estado global — para ser trivial de testar exaustivamente.
 DeviceProfile classifyDeviceProfile(const DeviceFeatures &features);
+
+// Recomenda o ponto visual de Auto. Uma identidade reconhecida é uma heurística
+// explícita, não uma medição de desempenho; derivePaths continua usando o
+// perfil de capacidade e as features reais.
+DeviceQualityRecommendation recommendDeviceQuality(const DeviceFeatures &features);
 
 // Deriva quais caminhos ficam habilitados para um perfil (e, quando o
 // caminho depende de uma feature que o perfil normalmente tem mas o

@@ -30,6 +30,7 @@ import java.nio.charset.StandardCharsets;
  */
 public final class ModelPicker {
     private static native long poll();
+    private static native boolean allowMultiple(long token);
     private static native void submit(long token, byte[] bytes, byte[] name, byte[] diagnostic);
     /**
      * Vários arquivos escolhidos juntos: um .gltf (ou .glb) e as dependências dele.
@@ -97,7 +98,7 @@ public final class ModelPicker {
             intent.setType("*/*");
             // Seleção múltipla: um .gltf chega com o .bin e as imagens escolhidos
             // junto. Não há acesso à pasta — só ao que o usuário marcou.
-            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, allowMultiple(token));
             activity.startActivityForResult(intent, REQUEST);
         } catch (RuntimeException error) {
             submit(token, null, null, encode("Nenhum aplicativo de arquivos respondeu ao pedido."));

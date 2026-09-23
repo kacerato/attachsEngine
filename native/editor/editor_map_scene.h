@@ -105,6 +105,7 @@ public:
     bool srgb=true;
     u32 sampler=DefaultTextureSampler;
     u32 index=0; // posição na lista de texturas da biblioteca publicada
+    bool normal=false;
   };
   static constexpr u32 DefaultTextureSampler=renderer::AuthoringTextureLinearFilter|renderer::AuthoringTextureLinearMip|
                                              renderer::AuthoringTextureRepeatU|renderer::AuthoringTextureRepeatV;
@@ -127,7 +128,7 @@ public:
     if(guid==scene::MaterialTextureNone) return renderer::InvalidMapTexture;
     if(!guid.valid()) return scene::MaterialTextureKeep;
     for(const auto &entry:textureLibrary_)
-      if(entry.guid==guid && entry.srgb==bindingIsSrgb(binding) && entry.sampler==sampler) return entry.index;
+      if(entry.guid==guid && entry.srgb==bindingIsSrgb(binding) && entry.sampler==sampler && entry.normal==(binding==1)) return entry.index;
     return scene::MaterialTextureKeep;
   }
   // R4: canais, oclusão, normal e alfa efetivos, campo a campo: instância, senão

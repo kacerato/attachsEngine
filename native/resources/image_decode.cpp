@@ -31,9 +31,8 @@
 // implementação, então não há símbolo duplicado.
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
+#define STBI_ONLY_HDR
 #define STBI_NO_STDIO
-#define STBI_NO_LINEAR
-#define STBI_NO_HDR
 #define STBI_NO_THREAD_LOCALS
 #include "third_party/stb/stb_image.h"
 #if defined(__clang__)
@@ -67,13 +66,20 @@ ImageContainer detectImageContainer(std::span<const u8> bytes) {
   if (bytes.size() >= 8 && std::memcmp(bytes.data(), png, 8) == 0) return ImageContainer::Png;
   if (bytes.size() >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff) return ImageContainer::Jpeg;
   if (isKtx2(bytes)) return ImageContainer::Ktx2;
+  static constexpr char radiance[] = "#?RADIANCE";
+  static constexpr char rgbe[] = "#?RGBE";
+  if ((bytes.size() >= sizeof(radiance)-1 && std::memcmp(bytes.data(),radiance,sizeof(radiance)-1)==0) ||
+      (bytes.size() >= sizeof(rgbe)-1 && std::memcmp(bytes.data(),rgbe,sizeof(rgbe)-1)==0))
+    return ImageContainer::RadianceHdr;
   return ImageContainer::Unknown;
 }
 
 bool readImageDimensions(std::span<const u8> bytes, const ImageDecodeLimits &limits, u32 &width, u32 &height) {
   width = height = 0;
   if (bytes.empty() || bytes.size() > limits.maximumEncodedBytes || bytes.size() > 0x7fffffffu ||
-      detectImageContainer(bytes) == ImageContainer::Unknown)
+      (detectImageContainer(bytes) != ImageContainer::Png &&
+       detectImageContainer(bytes) != ImageContainer::Jpeg &&
+       detectImageContainer(bytes) != ImageContainer::Ktx2))
     return false;
   const auto withinLimits = [&](u32 w, u32 h) {
     return w <= limits.maximumDimension && h <= limits.maximumDimension &&
@@ -105,7 +111,9 @@ bool decodeImageRgba8(std::span<const u8> bytes, const ImageDecodeLimits &limits
     diagnostic = "Imagem vazia ou maior que o limite de bytes da importação.";
     return false;
   }
-  if (detectImageContainer(bytes) == ImageContainer::Unknown) {
+  if (detectImageContainer(bytes) != ImageContainer::Png &&
+      detectImageContainer(bytes) != ImageContainer::Jpeg &&
+      detectImageContainer(bytes) != ImageContainer::Ktx2) {
     diagnostic = "Formato de imagem não suportado neste perfil (PNG, JPEG e KTX2/BasisU).";
     return false;
   }
@@ -160,6 +168,49 @@ bool decodeImageRgba8(std::span<const u8> bytes, const ImageDecodeLimits &limits
   return true;
 }
 
+bool decodeRadianceHdrRgba32f(std::span<const u8> bytes,const HdrImageDecodeLimits &limits,
+                              DecodedHdrImage &out,std::string &diagnostic) {
+  out={};diagnostic.clear();
+  if(bytes.empty()||bytes.size()>limits.maximumEncodedBytes||bytes.size()>0x7fffffffu) {
+    diagnostic="Radiance HDR vazio ou maior que o limite de bytes da importação.";return false;
+  }
+  if(detectImageContainer(bytes)!=ImageContainer::RadianceHdr) {
+    diagnostic="Formato HDR não suportado. Use Radiance RGBE (.hdr); OpenEXR não está disponível.";return false;
+  }
+  int width=0,height=0,channels=0;
+  if(!stbi_info_from_memory(bytes.data(),static_cast<int>(bytes.size()),&width,&height,&channels)||
+     width<=0||height<=0) {
+    diagnostic=std::string("Cabeçalho Radiance HDR inválido: ")+
+        (stbi_failure_reason()?stbi_failure_reason():"desconhecido");return false;
+  }
+  if(static_cast<u32>(width)>limits.maximumDimension||static_cast<u32>(height)>limits.maximumDimension) {
+    diagnostic="Radiance HDR excede os limites de dimensão ou memória decodificada.";return false;
+  }
+  const u64 pixels=static_cast<u64>(width)*static_cast<u64>(height);
+  if(pixels>limits.maximumPixels||pixels>limits.maximumDecodedBytes/(2u*4u*sizeof(float))) {
+    diagnostic="Radiance HDR excede os limites de dimensão ou memória decodificada.";return false;
+  }
+  int decodedWidth=0,decodedHeight=0,decodedChannels=0;
+  float *pixels32=stbi_loadf_from_memory(bytes.data(),static_cast<int>(bytes.size()),&decodedWidth,
+                                         &decodedHeight,&decodedChannels,4);
+  if(!pixels32) {
+    diagnostic=std::string("Falha ao decodificar Radiance HDR: ")+
+        (stbi_failure_reason()?stbi_failure_reason():"desconhecido");return false;
+  }
+  if(decodedWidth!=width||decodedHeight!=height) {
+    stbi_image_free(pixels32);diagnostic="Radiance HDR divergiu do próprio cabeçalho.";return false;
+  }
+  const usize count=static_cast<usize>(pixels)*4u;
+  bool valid=true;
+  for(usize index=0;index<count;++index)
+    if(!std::isfinite(pixels32[index])||pixels32[index]<0.0f) {valid=false;break;}
+  if(!valid) {
+    stbi_image_free(pixels32);diagnostic="Radiance HDR contém radiância negativa ou não finita.";return false;
+  }
+  out.width=static_cast<u32>(width);out.height=static_cast<u32>(height);
+  out.rgba.assign(pixels32,pixels32+count);stbi_image_free(pixels32);return true;
+}
+
 u32 mipLevelCount(u32 width, u32 height) {
   u32 levels = 1;
   for (u32 size = std::max(width, height); size > 1; size >>= 1) ++levels;
@@ -183,21 +234,27 @@ bool buildMipChain(const DecodedImage &base, bool srgb, std::vector<u8> &chain, 
     const u32 width = std::max(1u, previousWidth / 2), height = std::max(1u, previousHeight / 2);
     for (u32 y = 0; y < height; ++y)
       for (u32 x = 0; x < width; ++x) {
-        // Até 2x2 texels da origem; em dimensão ímpar ou 1, repete a borda.
-        const u32 x0 = std::min(x * 2, previousWidth - 1), x1 = std::min(x * 2 + 1, previousWidth - 1);
-        const u32 y0 = std::min(y * 2, previousHeight - 1), y1 = std::min(y * 2 + 1, previousHeight - 1);
+        // Particiona toda a origem entre os texels de destino. Em 3 -> 1, por
+        // exemplo, os três texels participam; o antigo 2x2 descartava a última
+        // coluna/linha de dimensões NPOT.
+        const u32 x0 = x * previousWidth / width;
+        const u32 x1 = (x + 1) * previousWidth / width;
+        const u32 y0 = y * previousHeight / height;
+        const u32 y1 = (y + 1) * previousHeight / height;
         const auto at = [&](u32 sx, u32 sy) { return chain.data() + previousOffset + (static_cast<usize>(sy) * previousWidth + sx) * 4; };
-        const u8 *samples[4]{at(x0, y0), at(x1, y0), at(x0, y1), at(x1, y1)};
         u8 *target = chain.data() + offset + (static_cast<usize>(y) * width + x) * 4;
+        const u32 samples = (x1 - x0) * (y1 - y0);
         for (u32 c = 0; c < 4; ++c) {
           if (srgb && c < 3) {
             float sum = 0;
-            for (const auto *sample : samples) sum += toLinear[sample[c]];
-            target[c] = linearToSrgb(sum * 0.25f);
+            for (u32 sy = y0; sy < y1; ++sy)
+              for (u32 sx = x0; sx < x1; ++sx) sum += toLinear[at(sx, sy)[c]];
+            target[c] = linearToSrgb(sum / static_cast<float>(samples));
           } else {
             u32 sum = 0;
-            for (const auto *sample : samples) sum += sample[c];
-            target[c] = static_cast<u8>((sum + 2) / 4);
+            for (u32 sy = y0; sy < y1; ++sy)
+              for (u32 sx = x0; sx < x1; ++sx) sum += at(sx, sy)[c];
+            target[c] = static_cast<u8>((sum + samples / 2) / samples);
           }
         }
       }
@@ -205,6 +262,51 @@ bool buildMipChain(const DecodedImage &base, bool srgb, std::vector<u8> &chain, 
     offset += static_cast<usize>(width) * height * 4;
     previousWidth = width;
     previousHeight = height;
+  }
+  return true;
+}
+
+bool buildNormalMipChain(const DecodedImage &base, std::vector<u8> &chain, u32 &levels) {
+  chain.clear(); levels = 0;
+  if (!base.width || !base.height ||
+      base.rgba.size() != static_cast<usize>(base.width) * base.height * 4u) return false;
+  levels = mipLevelCount(base.width, base.height);
+  usize total = 0;
+  for (u32 level = 0, w = base.width, h = base.height; level < levels;
+       ++level, w = std::max(1u, w / 2), h = std::max(1u, h / 2))
+    total += static_cast<usize>(w) * h * 4u;
+  chain.resize(total); std::memcpy(chain.data(), base.rgba.data(), base.rgba.size());
+  usize previousOffset = 0, offset = base.rgba.size();
+  u32 previousWidth = base.width, previousHeight = base.height;
+  for (u32 level = 1; level < levels; ++level) {
+    const u32 width = std::max(1u, previousWidth / 2), height = std::max(1u, previousHeight / 2);
+    const auto at = [&](u32 x, u32 y) {
+      return chain.data() + previousOffset + (static_cast<usize>(y) * previousWidth + x) * 4u;
+    };
+    for (u32 y = 0; y < height; ++y) for (u32 x = 0; x < width; ++x) {
+      const u32 x0 = x * previousWidth / width, x1 = (x + 1) * previousWidth / width;
+      const u32 y0 = y * previousHeight / height, y1 = (y + 1) * previousHeight / height;
+      const u32 count = (x1 - x0) * (y1 - y0);
+      float nx = 0, ny = 0, nz = 0; u32 alpha = 0;
+      for (u32 sy = y0; sy < y1; ++sy) for (u32 sx = x0; sx < x1; ++sx) {
+        const u8 *sample = at(sx, sy);
+        nx += static_cast<float>(sample[0]) / 127.5f - 1.0f;
+        ny += static_cast<float>(sample[1]) / 127.5f - 1.0f;
+        nz += static_cast<float>(sample[2]) / 127.5f - 1.0f;
+        alpha += sample[3];
+      }
+      const float length = std::sqrt(nx * nx + ny * ny + nz * nz);
+      if (length > 1.0e-8f) { nx /= length; ny /= length; nz /= length; }
+      else { nx = 0; ny = 0; nz = 1; }
+      const auto encode = [](float value) {
+        return static_cast<u8>(std::lround(std::clamp(value * .5f + .5f, 0.0f, 1.0f) * 255.0f));
+      };
+      u8 *target = chain.data() + offset + (static_cast<usize>(y) * width + x) * 4u;
+      target[0] = encode(nx); target[1] = encode(ny); target[2] = encode(nz);
+      target[3] = static_cast<u8>((alpha + count / 2u) / count);
+    }
+    previousOffset = offset; offset += static_cast<usize>(width) * height * 4u;
+    previousWidth = width; previousHeight = height;
   }
   return true;
 }

@@ -343,20 +343,7 @@ void main() {
                          base.rgb,f0,f90,metal,rough)*sunVisibility;
   color+=punctualLighting(vPosition,n,v,base.rgb,f0,f90,metal,rough);
   mediump float nv=max(dot(n,v),0.0);
-  // A single global hemispherical irradiance keeps upward-facing foliage tied
-  // to the sky while giving downward/vertical surfaces a neutral ground bounce.
-  // This is constant-time ALU: no extra pass, draw call or texture fetch.
-  mediump float skyWeight=environment.quality.z>0.5?clamp(n.y*.5+.5,0.0,1.0):1.0;
-  mediump vec3 ambientIrradiance=mix(environment.groundColorSaturation.rgb,
-                              environment.ambientColorStrength.rgb,skyWeight);
-  // AEEN has carried this authored control since v3. Applying it to irradiance
-  // (rather than grading the final image) removes colored shadow casts while
-  // preserving direct-sun and material color. Values above one deliberately
-  // allow stylized environments.
-  mediump float ambientLuminance=dot(ambientIrradiance,vec3(.2126,.7152,.0722));
-  ambientIrradiance=mix(vec3(ambientLuminance),ambientIrradiance,
-                        clamp(environment.groundColorSaturation.w,0.0,2.0));
-  color+=(1-metal)*base.rgb*ambientIrradiance*environment.ambientColorStrength.w*occlusion;
+  color+=(1-metal)*base.rgb*environmentAmbientDiffuse(n)*occlusion;
   // Rough dielectrics carry almost no readable high-frequency reflection.
   // Skip that fetch coherently per material while retaining HDR reflections
   // on wet, polished and metallic surfaces.

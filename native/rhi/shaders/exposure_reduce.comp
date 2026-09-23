@@ -1,0 +1,35 @@
+#version 450
+layout(local_size_x=1) in;
+layout(set=0,binding=1,std430) readonly buffer Histogram { uint count[64]; uint sum[64]; } histogram;
+layout(set=0,binding=2,std430) buffer ExposureState { float ev; float targetEv; float meteredEv; uint valid; } state;
+layout(push_constant) uniform ExposurePush {
+  vec4 sourceSize;
+  vec4 viewport;
+  vec4 metering; // min EV, max EV, target gray, base exposure multiplier
+  vec4 adaptation; // dt seconds, speed up/down EV/s, reset
+  vec4 range; // low/high percentile, center weighted, reserved
+} exposure;
+void main() {
+  float total=0;
+  for(uint i=0;i<64;++i) total+=float(histogram.count[i]);
+  if(total<=0) {state.ev=0;state.targetEv=0;state.meteredEv=0;state.valid=0;return;}
+  float low=total*exposure.range.x,high=total*exposure.range.y;
+  float prefix=0,selected=0,sumPosition=0;
+  for(uint i=0;i<64;++i) {
+    float count=float(histogram.count[i]);
+    float amount=max(0.0,min(prefix+count,high)-max(prefix,low));
+    if(count>0) sumPosition+=amount*float(histogram.sum[i])/(count*4095.0);
+    selected+=amount;prefix+=count;
+  }
+  if(selected<=0) {state.ev=0;state.targetEv=0;state.meteredEv=0;state.valid=0;return;}
+  state.meteredEv=(sumPosition/selected)*40.0-16.0;
+  float target=clamp(log2(exposure.metering.z)-state.meteredEv,exposure.metering.x,exposure.metering.y);
+  state.targetEv=target;
+  if(state.valid==0||exposure.adaptation.w>0.5) state.ev=target;
+  else {
+    float delta=target-state.ev;
+    float step=max(0.0,exposure.adaptation.x)*(delta>0?exposure.adaptation.y:exposure.adaptation.z);
+    state.ev=clamp(state.ev+clamp(delta,-step,step),exposure.metering.x,exposure.metering.y);
+  }
+  state.valid=1;
+}

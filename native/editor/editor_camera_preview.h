@@ -2,6 +2,8 @@
 #include "editor/editor_commands.h"
 #include "editor/editor_scene_camera.h"
 #include "renderer/render_view.h"
+#include <string>
+#include <string_view>
 
 namespace ae::editor {
 // One pinned preview per session. Submission is a lease: only its matching
@@ -12,8 +14,8 @@ public:
     if(!camera || resolveSceneCamera(document,camera,true).entity!=camera) return false;
     close();entity_=camera;epoch_=version.epoch;return true;
   }
-  void close() {entity_=0;pending_=false;published_=false;failed_=false;lastAttempt_=-1;}
-  void invalidateTarget() {pending_=false;published_=false;failed_=false;lastAttempt_=-1;}
+  void close() {entity_=0;pending_=false;published_=false;failed_=false;lastAttempt_=-1;diagnostic_.clear();}
+  void invalidateTarget() {pending_=false;published_=false;failed_=false;lastAttempt_=-1;diagnostic_.clear();}
   bool configure(u32 width,u32 height,const renderer::PreviewViewBudget &budget) {
     u32 w,h;if(!renderer::previewViewExtent(width,height,budget,w,h)) return false;
     if(w!=width_||h!=height_||budget.updatesPerSecond!=budget_.updatesPerSecond) invalidateTarget();
@@ -46,20 +48,23 @@ public:
       static_cast<float>(width_)/height_,settings);
     if(!out.frustum.valid) {out={};return false;}
     out.width=width_;out.height=height_;out.sceneEpoch=version.epoch;out.sceneRevision=version.revision;
-    out.cameraEntity=entity_;out.requestId=++serial_;lease_=out;pending_=true;lastAttempt_=now;
+    out.cameraEntity=entity_;out.environmentLayerMask=pose.environmentMask;
+    out.requestId=++serial_;lease_=out;pending_=true;lastAttempt_=now;
     return true;
   }
-  bool complete(const renderer::RenderViewSnapshot &request,EditorSceneVersion current,bool success) {
+  bool complete(const renderer::RenderViewSnapshot &request,EditorSceneVersion current,bool success,
+                std::string_view diagnostic={}) {
     if(!pending_||request.requestId!=lease_.requestId) return false;
     pending_=false;
     if(current.epoch!=lease_.sceneEpoch||current.revision!=lease_.sceneRevision) return false;
-    if(!success) {failed_=true;published_=false;return false;}
-    published_=true;revision_=lease_.sceneRevision;return true;
+    if(!success) {failed_=true;published_=false;diagnostic_=diagnostic;return false;}
+    diagnostic_.clear();published_=true;revision_=lease_.sceneRevision;return true;
   }
   bool hasCurrentImage(EditorSceneVersion version) const {
     return published_&&version.epoch==epoch_&&version.revision==revision_;
   }
   bool failed() const {return failed_;}
+  const std::string &diagnostic() const {return diagnostic_;}
   u32 width() const {return width_;}
   u32 height() const {return height_;}
   float frequency() const {return budget_.updatesPerSecond;}
@@ -72,5 +77,6 @@ private:
   bool pending_=false,published_=false,failed_=false;
   renderer::PreviewViewBudget budget_{};
   renderer::RenderViewSnapshot lease_{};
+  std::string diagnostic_;
 };
 }

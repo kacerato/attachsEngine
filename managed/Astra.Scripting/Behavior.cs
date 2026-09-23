@@ -20,7 +20,7 @@ public readonly record struct TransformValue(Vector3 Position, Quaternion Rotati
 
 /// <summary>
 /// A superfície de baixo nível do mundo de execução: uma tradução direta da ABI
-/// nativa v3 (native/scene/script_runtime.h). O documento autoral nunca cruza
+/// nativa v8 (native/scene/script_runtime.h). O documento autoral nunca cruza
 /// esta API.
 ///
 /// Os comportamentos do projeto usam <see cref="GameObject"/> e
@@ -102,6 +102,25 @@ public interface ISceneAccess
     bool InputContext(string context, int enabled) => throw new NotSupportedException();
     /// <summary>Nome da ação que cumpre o papel: 0 mover, 1 olhar, 2 saltar.</summary>
     string InputRole(uint role) => throw new NotSupportedException();
+
+    // --- v6: gráficos globais e recursos tipados --------------------------
+    GraphicsSnapshot GetGraphicsState(uint expectedWorld) => throw new NotSupportedException();
+    bool SetGraphicsSettings(uint expectedWorld, GraphicsSettings settings, out ulong requestId)
+        => throw new NotSupportedException();
+    bool TryGetResource(ulong objectId, ulong instanceId, string propertyId, uint slot, out AssetGuid value)
+        => throw new NotSupportedException();
+    bool SetResource(ulong objectId, ulong instanceId, string propertyId, uint slot, AssetGuid value)
+        => throw new NotSupportedException();
+    // --- v7: propriedades tipadas endereçadas por slot --------------------
+    bool TryGetSlotProperty(ulong objectId, ulong instanceId, string propertyId, uint slot,
+        out uint kind, out ulong bits) => throw new NotSupportedException();
+    bool SetSlotProperty(ulong objectId, ulong instanceId, string propertyId, uint slot, uint kind, ulong bits)
+        => throw new NotSupportedException();
+
+    // --- v8: comandos dos consumidores de personagem/câmera -------------
+    bool CharacterMove(ulong objectId, Vector2 input, float yawRadians) => throw new NotSupportedException();
+    bool CharacterJump(ulong objectId) => throw new NotSupportedException();
+    bool CameraLook(ulong objectId, Vector2 normalizedDelta) => throw new NotSupportedException();
 }
 
 /// <summary>

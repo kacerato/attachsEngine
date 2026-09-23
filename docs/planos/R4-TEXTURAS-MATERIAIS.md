@@ -212,3 +212,81 @@ Limites: buffers de instância, filas de desenho e descritores ainda são recria
 - **Sem descritores bindless**: texturas importadas e do projeto não aparecem (limitação anterior, com aviso no log).
 - **Lista de usuários da textura** e **apagar/substituir textura** com prévia de impacto (W05/W07): R6.
 - **Histórico da edição compartilhada** (W04): o material do projeto continua fora do Desfazer, como em E2.
+
+## 21/09/2026 — importação direta e API de materiais
+
+O gerenciador **Texturas → Importar** abre uma imagem PNG, JPEG ou KTX2/Basis,
+prepara a prévia e publica a fonte com GUID, hash e receita. Reimportar mantém
+o GUID e os vínculos. O Inspector edita uma receita pendente com **Aplicar /
+Reverter**: interpretação por uso/cor/dados/normal, dimensão máxima, mipmaps,
+dilatação de bordas transparentes, anisotropia e inversão do canal verde de
+normais. Wrap, filtro e transformações UV continuam pertencendo ao material.
+O cache `.astra/cache/textures/<guid>.aetc` é validado por conteúdo, receita,
+limites e revisão do importador; não substitui a fonte autoral.
+
+O cooker reutiliza os codecs existentes. Mips de cor são filtrados em linear,
+mips de normais são renormalizados, e dimensões ímpares incluem a última linha
+e coluna. A receita fica no registro de assets; perfis legados continuam
+legíveis. PNG/JPEG/KTX2 não implica suporte a WebP ou OpenEXR. HDRI Radiance tem
+seu próprio importador e tipo `EnvironmentMap`.
+
+A ABI 7 expõe as propriedades de slot do mesmo descritor usado pelo Inspector.
+`Component.Material(slot)` fornece `MaterialSlot`; os métodos genéricos são
+`GetSlotFloat`, `SetSlotFloat`, `GetSlotEnum`, `SetSlotEnum`, `GetResource` e
+`SetResource`. Exemplo dentro de um `Astra.Behavior`, com a referência obtida
+pelo componente de malha do objeto:
+
+```csharp
+var mesh = Object.GetComponent(ComponentIds.MeshRenderer)
+    ?? throw new InvalidOperationException("Objeto sem MeshRenderer");
+var material = mesh.Material(0);
+material.Override = true;
+material.Roughness = 0.65f;
+material.Scale = new System.Numerics.Vector2(2, 2);
+material.Wrap = MaterialWrap.Repeat;
+// Ajuste apenas o mapa normal; os demais bindings mantêm sua amostragem.
+var normal = material.TextureSampling(MaterialTextureBinding.Normal);
+normal.Scale = new System.Numerics.Vector2(4, 4);
+```
+
+A atribuição de textura usa `material.SetTexture(binding, guid)` ou uma
+`AssetReference` exposta pelo script. Herdar e remover são operações distintas.
+Trocar a amostragem exige publicar a variante correspondente antes de aceitar
+a mutação. Recursos ausentes, slots inválidos e handles de outra sessão são
+recusados; Stop descarta alterações de execução sem gravá-las no documento.
+
+`MaterialSlot.TextureSampling(binding)` expõe UV, deslocamento, escala, rotação,
+wrap e filtro de cada binding pelos mesmos descritores `sampling.<binding>.*`.
+As propriedades antigas `MaterialSlot.Scale/Wrap/...` continuam aplicando a
+todos os bindings. Oclusão usa a amostragem do mapa metálico/rugosidade, como
+no shader atual. Sampler de imagem embutida no GLB ainda é parte do pacote:
+para personalizá-lo, extrair a imagem para Texturas e atribuí-la ao material.
+A API recusa a troca sem consumidor quando o binding continua embutido.
+
+O perfil de textura v3 acrescenta **Preservar cobertura alfa** e o cutoff do
+material usado como referência. Para mipmaps de cor, o cooker escolhe a escala
+de alfa que aproxima a fração de texels aprovados no teste de corte. A máscara
+é discreta: a cobertura exata pode não existir nos mips pequenos. A opção vem
+desligada, não altera normais/dados e recusa KTX2 quando precisaria modificar
+seus mips comprimidos. Esse ajuste reduz erosão de recortes; não substitui AA.
+Referência: [Unity TextureImporter — cobertura alfa](https://docs.unity.com/en-us/engine/6000.0/script-reference/unityeditor/textureimporter).
+
+A prévia do visualizador usa o perfil **aplicado**, inclusive limite de tamanho
+e quantidade de mips. Alterar o rascunho exige Aplicar; Reverter restaura a
+receita salva. As opções são paginadas para permanecerem acessíveis em telas
+baixas. Ainda não há edição em lote, biblioteca de presets de importação ou
+escolha de compressão por plataforma neste gerenciador.
+
+Aplicar a receita verifica o hash da fonte, prepara os usos de cor/normal e
+confere a publicação dos bindings antes de gravar. Uma recusa preserva receita,
+registro e cursor de histórico; a versão anterior é republicada quando necessário.
+O comando participa do Undo/Redo de recursos. Se a fonte mudou fora do editor,
+o replay é recusado e pede reimportação, sem sobrescrever a fonte externa.
+
+Referências de autoria: [Unreal Texture Asset Editor](https://dev.epicgames.com/documentation/en-us/unreal-engine/texture-asset-editor-in-unreal-engine),
+[Godot — importação de imagens](https://docs.godotengine.org/en/stable/tutorials/assets_pipeline/importing_images.html)
+e [Unity 6 TextureImporter](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/TextureImporter.html).
+Foram consultadas a imagem do dock Import da Godot e partes do
+[vídeo de importação da Unreal](https://www.youtube.com/watch?v=kbzIloH4nb8)
+para organização visual. O vídeo é referência de fluxo da UE4, não contrato da
+UE5 nem evidência de execução da Astra.

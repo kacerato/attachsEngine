@@ -100,6 +100,9 @@ public static class NativeCompiler
                     throw new InvalidDataException("Applied artifact unavailable: " + name);
                 return File.ReadAllBytes(info.FullName);
             }
+            var compiler = Encoding.UTF8.GetString(Read("compiler.id", 64)).Trim();
+            if (!StringComparer.Ordinal.Equals(compiler, ProjectCompiler.CompilerIdentity))
+                throw new InvalidDataException("Applied code was built for a different scripting ABI.");
             var types = JsonSerializer.Deserialize<ScriptTypeSchema[]>(Read("schema.json", 4 * 1024 * 1024))
                 ?? throw new InvalidDataException("Applied schema unavailable.");
             _applied = new(id, Read("Project.dll", 32 * 1024 * 1024), Read("Project.pdb", 32 * 1024 * 1024), types);
@@ -124,6 +127,7 @@ public static class NativeCompiler
         WriteAtomic(Path.Combine(directory, "Project.dll"), project.Assembly);
         WriteAtomic(Path.Combine(directory, "Project.pdb"), project.Symbols);
         WriteAtomic(Path.Combine(directory, "schema.json"), JsonSerializer.SerializeToUtf8Bytes(project.Types));
+        WriteAtomic(Path.Combine(directory, "compiler.id"), Encoding.UTF8.GetBytes(ProjectCompiler.CompilerIdentity));
         // The pointer is published last. A failed build keeps the prior generation intact.
         WriteAtomic(Path.Combine(root, ".astra", "code", "current"), Encoding.UTF8.GetBytes(project.Id));
     }

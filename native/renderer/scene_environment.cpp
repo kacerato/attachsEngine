@@ -58,12 +58,34 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     result.atmosphere=mix(result.atmosphere,target.atmosphere,amount);
     result.sunDiskDegrees=mix(result.sunDiskDegrees,target.sunDiskDegrees,amount);
     result.sunDiskIntensity=mix(result.sunDiskIntensity,target.sunDiskIntensity,amount);
-    if(amount>=.5f) result.sky=target.sky;
+    result.physicalSkyIntensity=mix(result.physicalSkyIntensity,target.physicalSkyIntensity,amount);
+    result.airDensity=mix(result.airDensity,target.airDensity,amount);
+    result.aerosolDensity=mix(result.aerosolDensity,target.aerosolDensity,amount);
+    result.aerosolAnisotropy=mix(result.aerosolAnisotropy,target.aerosolAnisotropy,amount);
+    result.planetRadiusKm=mix(result.planetRadiusKm,target.planetRadiusKm,amount);
+    result.observerHeightKm=mix(result.observerHeightKm,target.observerHeightKm,amount);
+    result.rayleighScaleHeightKm=mix(result.rayleighScaleHeightKm,target.rayleighScaleHeightKm,amount);
+    result.aerosolScaleHeightKm=mix(result.aerosolScaleHeightKm,target.aerosolScaleHeightKm,amount);
+    result.atmosphereHeightKm=mix(result.atmosphereHeightKm,target.atmosphereHeightKm,amount);
+    result.groundAlbedo=mix(result.groundAlbedo,target.groundAlbedo,amount);
+    if(amount>=.5f) {
+      result.sky=target.sky;
+      // Resources are selected discretely with the sky group. Never take an
+      // HDRI from a volume overriding only fog/post, nor blend radiance using
+      // the rotation of a different, nonresident panorama.
+      result.environmentMap=target.environmentMap;
+      result.hdriRotationDegrees=target.hdriRotationDegrees;
+      result.hdriExposureEv=target.hdriExposureEv;
+      result.physicalAtmosphereHighQuality=target.physicalAtmosphereHighQuality;
+    }
   }
   if(overrides&EnvironmentOverrideFog) {
     mixColor(result.fogColor,target.fogColor,amount);
+    result.fogLightEnergy=mix(result.fogLightEnergy,target.fogLightEnergy,amount);
     result.fogDensity=mix(result.fogDensity,target.fog?target.fogDensity:0.0f,amount);
     result.fogStart=mix(result.fogStart,target.fogStart,amount);
+    result.fogBaseHeight=mix(result.fogBaseHeight,target.fogBaseHeight,amount);
+    result.fogHeightFalloff=mix(result.fogHeightFalloff,target.fogHeightFalloff,amount);
     if(amount>=.5f) result.fog=target.fog;
   }
   if(overrides&EnvironmentOverrideIndirect) {
@@ -72,6 +94,13 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
   }
   if(overrides&EnvironmentOverridePost) {
     result.exposureEv=mix(result.exposureEv,target.exposureEv,amount);
+    result.autoExposureMinEv=mix(result.autoExposureMinEv,target.autoExposureMinEv,amount);
+    result.autoExposureMaxEv=mix(result.autoExposureMaxEv,target.autoExposureMaxEv,amount);
+    result.autoExposureLowPercent=mix(result.autoExposureLowPercent,target.autoExposureLowPercent,amount);
+    result.autoExposureHighPercent=mix(result.autoExposureHighPercent,target.autoExposureHighPercent,amount);
+    result.autoExposureTargetGrey=mix(result.autoExposureTargetGrey,target.autoExposureTargetGrey,amount);
+    result.autoExposureSpeedUp=mix(result.autoExposureSpeedUp,target.autoExposureSpeedUp,amount);
+    result.autoExposureSpeedDown=mix(result.autoExposureSpeedDown,target.autoExposureSpeedDown,amount);
     result.bloomThreshold=mix(result.bloomThreshold,target.bloomThreshold,amount);
     result.bloomIntensity=mix(result.bloomIntensity,target.bloom?target.bloomIntensity:0.0f,amount);
     result.contrast=mix(result.contrast,target.contrast,amount);
@@ -86,6 +115,8 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     result.ambientOcclusionBias=mix(result.ambientOcclusionBias,target.ambientOcclusionBias,amount);
     if(amount>=.5f) {
       result.post=target.post;result.bloom=target.bloom;result.vignette=target.vignette;
+      result.autoExposure=target.autoExposure;
+      result.autoExposureCenterWeighted=target.autoExposureCenterWeighted;
       result.filmGrain=target.filmGrain;
       result.ambientOcclusion=target.ambientOcclusion;
       result.toneMapper=target.toneMapper;

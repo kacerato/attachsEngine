@@ -46,6 +46,41 @@ std::string_view viewOf(const u8 *text, int length) {
   return {reinterpret_cast<const char *>(text), static_cast<usize>(length)};
 }
 
+scene::ScriptRenderingSettings toAbi(const renderer::ProjectRenderingSettings &s) {
+  scene::ScriptRenderingSettings o;
+  o.schemaVersion=s.schemaVersion;o.preset=(u32)s.preset;o.shadows=(u32)s.shadows;o.ambient=(u32)s.ambient;o.post=(u32)s.post;o.textures=(u32)s.textures;o.waterMesh=(u32)s.waterMesh;
+  o.resolutionScale=s.resolutionScale;o.maximumRenderHz=s.maximumRenderHz;o.shadowCascadeCount=s.shadowCascadeCount;o.shadowCascadeResolution=s.shadowCascadeResolution;o.shadowFilterTaps=s.shadowFilterTaps;o.shadowFarFilterTaps=s.shadowFarFilterTaps;
+  o.shadowMaximumDistance=s.shadowMaximumDistance;o.shadowDepthBiasConstant=s.shadowDepthBiasConstant;o.shadowDepthBiasSlope=s.shadowDepthBiasSlope;o.shadowNormalOffsetTexels=s.shadowNormalOffsetTexels;o.staticShadowCache=(u32)s.staticShadowCache;o.shadowCacheGuardBandRatio=s.shadowCacheGuardBandRatio;o.shadowCascadeBlendRatio=s.shadowCascadeBlendRatio;o.shadowDistanceFadeRatio=s.shadowDistanceFadeRatio;
+  o.lodPixelErrorBudget=s.lodPixelErrorBudget;o.coverageLodPixelErrorBudget=s.coverageLodPixelErrorBudget;o.lodHysteresisBandRatio=s.lodHysteresisBandRatio;o.lodSelection=(u32)s.lodSelection;o.materialShaderVariants=(u32)s.materialShaderVariants;o.environmentSplitSumBrdf=(u32)s.environmentSplitSumBrdf;
+  o.normalMapMaximumDistance=s.normalMapMaximumDistance;o.specularProbeMaximumDistance=s.specularProbeMaximumDistance;o.metallicRoughnessMaximumDistance=s.metallicRoughnessMaximumDistance;o.emissiveMaximumDistance=s.emissiveMaximumDistance;o.materialDetailFadeBandRatio=s.materialDetailFadeBandRatio;o.thermalDistanceScaling=(u32)s.thermalDistanceScaling;
+  o.antiAliasing=(u32)s.antiAliasing;o.upscalingFilter=(u32)s.upscalingFilter;o.postFxaa=(u32)s.postFxaa;o.postVignette=(u32)s.postVignette;o.bloomThreshold=s.bloomThreshold;o.bloomIntensity=s.bloomIntensity;o.postContrast=s.postContrast;o.postSaturation=s.postSaturation;o.postSharpen=s.postSharpen;o.temporalHistoryWeight=s.temporalHistoryWeight;
+  o.dynamicResolution=(u32)s.dynamicResolution;o.dynamicResolutionMinimumScale=s.dynamicResolutionMinimumScale;o.dynamicResolutionDecreaseStep=s.dynamicResolutionDecreaseStep;o.dynamicResolutionIncreaseStep=s.dynamicResolutionIncreaseStep;o.dynamicResolutionRecoveryHeadroomRatio=s.dynamicResolutionRecoveryHeadroomRatio;o.dynamicResolutionOverloadFrames=s.dynamicResolutionOverloadFrames;o.dynamicResolutionRecoveryFrames=s.dynamicResolutionRecoveryFrames;
+  return o;
+}
+
+renderer::ProjectRenderingSettings fromAbi(const scene::ScriptRenderingSettings &s) {
+  renderer::ProjectRenderingSettings o;
+  o.schemaVersion=s.schemaVersion;o.preset=(renderer::QualityPreset)s.preset;o.shadows=(renderer::ShadowQuality)s.shadows;o.ambient=(renderer::AmbientQuality)s.ambient;o.post=(renderer::PostQuality)s.post;o.textures=(renderer::TextureQuality)s.textures;o.waterMesh=(renderer::WaterMeshQuality)s.waterMesh;
+  o.resolutionScale=s.resolutionScale;o.maximumRenderHz=s.maximumRenderHz;o.shadowCascadeCount=s.shadowCascadeCount;o.shadowCascadeResolution=s.shadowCascadeResolution;o.shadowFilterTaps=s.shadowFilterTaps;o.shadowFarFilterTaps=s.shadowFarFilterTaps;
+  o.shadowMaximumDistance=s.shadowMaximumDistance;o.shadowDepthBiasConstant=s.shadowDepthBiasConstant;o.shadowDepthBiasSlope=s.shadowDepthBiasSlope;o.shadowNormalOffsetTexels=s.shadowNormalOffsetTexels;o.staticShadowCache=(renderer::FeatureOverride)s.staticShadowCache;o.shadowCacheGuardBandRatio=s.shadowCacheGuardBandRatio;o.shadowCascadeBlendRatio=s.shadowCascadeBlendRatio;o.shadowDistanceFadeRatio=s.shadowDistanceFadeRatio;
+  o.lodPixelErrorBudget=s.lodPixelErrorBudget;o.coverageLodPixelErrorBudget=s.coverageLodPixelErrorBudget;o.lodHysteresisBandRatio=s.lodHysteresisBandRatio;o.lodSelection=(renderer::FeatureOverride)s.lodSelection;o.materialShaderVariants=(renderer::FeatureOverride)s.materialShaderVariants;o.environmentSplitSumBrdf=(renderer::FeatureOverride)s.environmentSplitSumBrdf;
+  o.normalMapMaximumDistance=s.normalMapMaximumDistance;o.specularProbeMaximumDistance=s.specularProbeMaximumDistance;o.metallicRoughnessMaximumDistance=s.metallicRoughnessMaximumDistance;o.emissiveMaximumDistance=s.emissiveMaximumDistance;o.materialDetailFadeBandRatio=s.materialDetailFadeBandRatio;o.thermalDistanceScaling=(renderer::FeatureOverride)s.thermalDistanceScaling;
+  o.antiAliasing=(renderer::AntiAliasingMode)s.antiAliasing;o.upscalingFilter=(renderer::UpscalingFilter)s.upscalingFilter;o.postFxaa=(renderer::FeatureOverride)s.postFxaa;o.postVignette=(renderer::FeatureOverride)s.postVignette;o.bloomThreshold=s.bloomThreshold;o.bloomIntensity=s.bloomIntensity;o.postContrast=s.postContrast;o.postSaturation=s.postSaturation;o.postSharpen=s.postSharpen;o.temporalHistoryWeight=s.temporalHistoryWeight;
+  o.dynamicResolution=(renderer::FeatureOverride)s.dynamicResolution;o.dynamicResolutionMinimumScale=s.dynamicResolutionMinimumScale;o.dynamicResolutionDecreaseStep=s.dynamicResolutionDecreaseStep;o.dynamicResolutionIncreaseStep=s.dynamicResolutionIncreaseStep;o.dynamicResolutionRecoveryHeadroomRatio=s.dynamicResolutionRecoveryHeadroomRatio;o.dynamicResolutionOverloadFrames=s.dynamicResolutionOverloadFrames;o.dynamicResolutionRecoveryFrames=s.dynamicResolutionRecoveryFrames;
+  return o;
+}
+
+scene::ScriptResolvedRenderingPolicy toAbi(const renderer::ResolvedRenderingPolicy &p) {
+  scene::ScriptResolvedRenderingPolicy o;
+  o.renderHz=p.frame.renderHz;o.simulationHz=p.frame.simulationHz;o.frameIntervalMs=p.frame.frameIntervalMs;o.cpuLaneBudgetMs=p.frame.cpuLaneBudgetMs;o.gpuLaneBudgetMs=p.frame.gpuLaneBudgetMs;o.compositorReserveMs=p.frame.compositorReserveMs;
+  o.hzbMinimumCandidateDraws=p.visibility.hzbMinimumCandidateDraws;o.hzbHysteresisFrames=p.visibility.hzbHysteresisFrames;o.hzbNormalizedDepthBias=p.visibility.hzbNormalizedDepthBias;o.lodPixelErrorBudget=p.visibility.lodPixelErrorBudget;o.coverageLodPixelErrorBudget=p.visibility.coverageLodPixelErrorBudget;o.lodHysteresisBandRatio=p.visibility.lodHysteresisBandRatio;
+  o.shadowsEnabled=p.shadows.enabled;o.shadowCascadeCount=p.shadows.cascadeCount;o.shadowCascadeResolution=p.shadows.cascadeResolution;o.shadowFilterTaps=p.shadows.filterTaps;o.shadowFarFilterTaps=p.shadows.farFilterTaps;o.shadowMaximumDistance=p.shadows.maximumDistance;o.shadowDepthBiasConstant=p.shadows.depthBiasConstant;o.shadowDepthBiasSlope=p.shadows.depthBiasSlope;o.shadowNormalOffsetTexels=p.shadows.normalOffsetTexels;o.shadowStabilizeTexelSnap=p.shadows.stabilizeTexelSnap;o.staticShadowCache=p.shadows.staticCasterCache;o.shadowCacheGuardBandRatio=p.shadows.cacheGuardBandRatio;o.shadowCascadeBlendRatio=p.shadows.cascadeBlendRatio;o.shadowDistanceFadeRatio=p.shadows.distanceFadeRatio;
+  o.ambientHemispheric=p.ambient.hemispheric;o.ambientSpecularProbe=p.ambient.specularProbe;o.ambientSplitSumBrdf=p.ambient.splitSumBrdf;o.postDedicatedPass=p.post.dedicatedPass;o.postBloom=p.post.bloom;o.antiAliasing=(u32)p.post.antiAliasing;o.upscalingFilter=(u32)p.post.upscalingFilter;o.postVignette=p.post.vignette;o.bloomThreshold=p.post.bloomThreshold;o.bloomIntensity=p.post.bloomIntensity;o.postContrast=p.post.contrast;o.postSaturation=p.post.saturation;o.postSharpen=p.post.sharpen;o.vignetteIntensity=p.post.vignetteIntensity;o.temporalHistoryWeight=p.post.temporalHistoryWeight;
+  o.lodSelection=p.geometry.lodSelection;o.materialShaderVariants=p.geometry.materialShaderVariants;o.waterMesh=(u32)p.geometry.waterMesh;o.textureResidencyMipBias=p.textures.residencyMipBias;o.samplerAnisotropy=p.textures.samplerAnisotropy;o.normalMapMaximumDistance=p.materialDistance.normalMapMaximumDistance;o.specularProbeMaximumDistance=p.materialDistance.specularProbeMaximumDistance;o.metallicRoughnessMaximumDistance=p.materialDistance.metallicRoughnessMaximumDistance;o.emissiveMaximumDistance=p.materialDistance.emissiveMaximumDistance;o.materialDetailFadeBandRatio=p.materialDistance.fadeBandRatio;
+  o.dynamicResolutionEnabled=p.dynamicResolution.enabled;o.dynamicResolutionMinimumScale=p.dynamicResolution.minimumScale;o.dynamicResolutionMaximumScale=p.dynamicResolution.maximumScale;o.dynamicResolutionDecreaseStep=p.dynamicResolution.decreaseStep;o.dynamicResolutionIncreaseStep=p.dynamicResolution.increaseStep;o.dynamicResolutionRecoveryHeadroomRatio=p.dynamicResolution.recoveryHeadroomRatio;o.dynamicResolutionOverloadFrames=p.dynamicResolution.overloadFrames;o.dynamicResolutionRecoveryFrames=p.dynamicResolution.recoveryFrames;o.resolutionScale=p.resolutionScale;o.effectiveProfile=(u32)p.effectiveProfile;o.clampCount=p.clampCount;
+  return o;
+}
+
 } // namespace
 
 bool ScriptBridge::hasScripts(const SceneGraph &graph) {
@@ -416,6 +451,111 @@ void ScriptBridge::installAccess() {
     s.lastStatus_ = s.world_->setProperty({s.world_->handle(static_cast<ObjectId>(id)), instance}, viewOf(propertyId, length), value);
     return s.lastStatus_ == WorldStatus::Ok;
   };
+
+  access_.getRenderingState = [](void *c, u32 expectedWorld, scene::ScriptRenderingState *out) -> int {
+    auto &s=*static_cast<ScriptBridge *>(c);
+    if(!out||out->size!=sizeof(*out)||!s.rendering_.active(expectedWorld)) {s.lastStatus_=WorldStatus::ForeignWorld;return 0;}
+    out->world=expectedWorld;out->pending=s.rendering_.pending();out->pendingRequestId=s.rendering_.pendingId();
+    out->lastRequestSucceeded=s.rendering_.lastRequestSucceeded();out->effectiveAvailable=s.rendering_.effectiveAvailable();
+    out->requested=toAbi(s.rendering_.requested());
+    out->effective=toAbi(s.rendering_.effective());
+    const auto &cap=s.rendering_.capabilities();out->capabilities.profile=(u32)cap.profile;
+    out->capabilities.recommendedProfile=(u32)cap.qualityRecommendation.profile;
+    out->capabilities.recommendationSource=(u32)cap.qualityRecommendation.evidence;
+    out->capabilities.maximumImage2DSize=cap.maximumImage2DSize;out->capabilities.maximumImageArrayLayers=cap.maximumImageArrayLayers;
+    out->capabilities.supportsDepthSampling=cap.supportsDepthSampling;out->capabilities.maximumSamplerAnisotropy=cap.maximumSamplerAnisotropy;out->capabilities.displayHz=cap.displayHz;
+    s.lastStatus_=WorldStatus::Ok;return 1;
+  };
+  access_.setRenderingSettings = [](void *c,u32 expectedWorld,const scene::ScriptRenderingSettings *value,u64 *request)->int {
+    auto &s=*static_cast<ScriptBridge *>(c);
+    if(!value||value->size!=sizeof(*value)||!request) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    if(!s.rendering_.active(expectedWorld)) {s.lastStatus_=WorldStatus::ForeignWorld;return 0;}
+    if(!s.rendering_.request(expectedWorld,fromAbi(*value),*request)) {s.lastStatus_=WorldStatus::Rejected;return 0;}
+    s.lastStatus_=WorldStatus::Ok;return 1;
+  };
+  access_.copyRenderingDiagnostics = [](void *c,u32 expectedWorld,u8 *out,int capacity)->int {
+    auto &s=*static_cast<ScriptBridge *>(c);
+    if(!s.rendering_.active(expectedWorld)||capacity<0) return -1;
+    std::string text;
+    const auto &p=s.rendering_.effective();
+    for(u32 i=0;i<p.clampCount;++i) {if(i) text+='\n';text+=p.clamps[i].axis;text+='=';text+=renderer::policyClampName(p.clamps[i].reason);}
+    const int size=(int)text.size();if(!out||capacity<size)return size;
+    std::memcpy(out,text.data(),text.size());return size;
+  };
+  access_.getComponentResource = [](void *c,u64 id,u64 instance,const u8 *property,int length,u32 slot,scene::ScriptAssetGuid *out)->int {
+    auto &s=*static_cast<ScriptBridge *>(c);if(!out||id>std::numeric_limits<ObjectId>::max()){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    resources::AssetGuid value;s.lastStatus_=s.world_->getResource({s.world_->handle((ObjectId)id),instance},viewOf(property,length),slot,value);
+    if(s.lastStatus_!=WorldStatus::Ok) return 0;
+    out->high=value.high;out->low=value.low;return 1;
+  };
+  access_.setComponentResource = [](void *c,u64 id,u64 instance,const u8 *property,int length,u32 slot,scene::ScriptAssetGuid value)->int {
+    auto &s=*static_cast<ScriptBridge *>(c);if(!s.assets_||id>std::numeric_limits<ObjectId>::max()){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const std::span<const resources::EnvironmentProfile> profiles=s.environmentProfiles_?
+        std::span<const resources::EnvironmentProfile>(*s.environmentProfiles_):std::span<const resources::EnvironmentProfile>{};
+    s.lastStatus_=s.world_->setResource({s.world_->handle((ObjectId)id),instance},viewOf(property,length),slot,
+                                        {value.high,value.low},*s.assets_,profiles,s.resourceAvailable_);
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  access_.getComponentSlotProperty=[](void *c,u64 id,u64 instance,const u8 *property,int length,u32 slot,
+                                      u32 *kind,u64 *bits)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);if(!kind||!bits||id>std::numeric_limits<ObjectId>::max()){
+      s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    scene::ComponentPropertyValue value;
+    s.lastStatus_=s.world_->getSlotProperty({s.world_->handle((ObjectId)id),instance},viewOf(property,length),slot,value);
+    if(s.lastStatus_!=WorldStatus::Ok)return 0;
+    if(const auto *number=std::get_if<float>(&value)){u32 raw;std::memcpy(&raw,number,sizeof(raw));*kind=0;*bits=raw;return 1;}
+    if(const auto *enumeration=std::get_if<u32>(&value)){*kind=2;*bits=*enumeration;return 1;}
+    s.lastStatus_=WorldStatus::InvalidArgument;return 0;
+  };
+  access_.setComponentSlotProperty=[](void *c,u64 id,u64 instance,const u8 *property,int length,u32 slot,
+                                      u32 kind,u64 bits)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);if(id>std::numeric_limits<ObjectId>::max()){
+      s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    scene::ComponentPropertyValue value;
+    if(kind==0){
+      if(bits>std::numeric_limits<u32>::max()){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+      const u32 raw=(u32)bits;float number;std::memcpy(&number,&raw,sizeof(number));value=number;
+    }
+    else if(kind==2){
+      if(bits>std::numeric_limits<u32>::max()){s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+      value=(u32)bits;
+    }
+    else{s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=s.world_->setSlotProperty({s.world_->handle((ObjectId)id),instance},viewOf(property,length),slot,value,
+                                            s.resourceAvailable_);
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  access_.characterMove=[](void *c,u64 id,const float *move)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!move||id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto handle=s.world_->handle((ObjectId)id);
+    s.lastStatus_=s.world_->validate(handle);
+    if(s.lastStatus_!=WorldStatus::Ok) return 0;
+    const auto *object=s.world_->find(handle);
+    if(!object->components.find(scene::Character::descriptor)) {s.lastStatus_=WorldStatus::ComponentMissing;return 0;}
+    if(!std::isfinite(move[0])||!std::isfinite(move[1])||!std::isfinite(move[2])||
+       move[0]<-1||move[0]>1||move[1]<-1||move[1]>1) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=s.physics_->setCharacterScriptMove((ObjectId)id,move[0],move[1],move[2])?
+        WorldStatus::Ok:WorldStatus::Rejected;
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  access_.characterJump=[](void *c,u64 id)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const auto handle=s.world_->handle((ObjectId)id);
+    s.lastStatus_=s.world_->validate(handle);
+    if(s.lastStatus_!=WorldStatus::Ok) return 0;
+    const auto *object=s.world_->find(handle);
+    if(!object->components.find(scene::Character::descriptor)) {s.lastStatus_=WorldStatus::ComponentMissing;return 0;}
+    s.lastStatus_=s.physics_->jumpCharacter((ObjectId)id)?WorldStatus::Ok:WorldStatus::Rejected;
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  access_.cameraLook=[](void *c,u64 id,const float *delta)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!delta||id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=s.world_->applyCameraLook(s.world_->handle((ObjectId)id),delta[0],delta[1]);
+    return s.lastStatus_==WorldStatus::Ok;
+  };
 }
 
 bool ScriptBridge::start(GameWorld &world, ScenePhysics &physics, InputService &input) {
@@ -427,6 +567,9 @@ bool ScriptBridge::start(GameWorld &world, ScenePhysics &physics, InputService &
   physics_ = &physics;
   input_ = &input;
   lastStatus_ = WorldStatus::Ok;
+  if (!rendering_.begin(world.worldId(), initialEffective_)) {
+    diagnostics_ = "Política gráfica de execução não configurada"; world_=nullptr;physics_=nullptr;input_=nullptr;return false;
+  }
   installAccess();
   const auto data = attachments(world.graph());
   if (api_.start(reinterpret_cast<const u8 *>(root_.data()), static_cast<int>(root_.size()),
@@ -434,6 +577,7 @@ bool ScriptBridge::start(GameWorld &world, ScenePhysics &physics, InputService &
     collectDiagnostics();
     world_ = nullptr;
     physics_ = nullptr;
+    rendering_.end();
     return false;
   }
   running_ = true;
@@ -451,6 +595,7 @@ void ScriptBridge::collectDiagnostics() {
 
 bool ScriptBridge::update(float elapsed) {
   if (!running_) return true;
+  physics_->beginScriptInputFrame();
   const bool ok = api_.update(elapsed) == 0;
   collectDiagnostics();
   return ok;
@@ -522,6 +667,7 @@ bool ScriptBridge::trigger(ObjectId sensor, ObjectId other, u32 phase) {
 
 void ScriptBridge::stop() {
   if (running_) api_.stop();
+  rendering_.end();
   running_ = false;
   world_ = nullptr;
   physics_ = nullptr;

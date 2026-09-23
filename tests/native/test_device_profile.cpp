@@ -1,6 +1,8 @@
 #include "harness.h"
 #include "rhi/device_profile.h"
 
+#include <algorithm>
+
 using namespace ae;
 using namespace ae::rhi;
 using namespace ae::test;
@@ -110,4 +112,38 @@ AE_TEST(DeviceProfile_async_compute_nunca_liga_sem_compute) {
   EnabledPaths paths = derivePaths(DeviceProfile::A, f);
   AE_EXPECT_TRUE(!paths.compute, "compute ausente deve permanecer desabilitado");
   AE_EXPECT_TRUE(!paths.asyncCompute, "fila reportada isoladamente nao autoriza async compute");
+}
+
+AE_TEST(DeviceProfile_Adreno_825_recomenda_alto_sem_inventar_features) {
+  DeviceFeatures f;
+  f.vendorId = 0x5143;
+  f.deviceId = 0x44030000;
+  std::copy_n("Adreno (TM) 825", 16, f.deviceName.begin());
+  f.vulkan1_3 = true;
+  f.descriptorIndexing = true;
+  f.bindlessNonUniformIndexing = true;
+
+  const auto capability = classifyDeviceProfile(f);
+  const auto recommendation = recommendDeviceQuality(f);
+  const auto paths = derivePaths(capability, f);
+
+  AE_EXPECT_EQ(capability, DeviceProfile::B, "recursos Vulkan continuam descrevendo perfil B");
+  AE_EXPECT_EQ(recommendation.profile, DeviceProfile::A, "GPU medida recomenda qualidade Alta");
+  AE_EXPECT_EQ(recommendation.evidence, DeviceQualityEvidence::RecognizedGpuIdentity,
+               "a promocao explica que veio da identidade reconhecida");
+  AE_EXPECT_TRUE(!paths.rayQueryGI && !paths.meshShaderPipeline && !paths.variableRateShading,
+                 "recomendacao visual nao inventa caminhos opcionais");
+}
+
+AE_TEST(DeviceProfile_nome_sem_vendor_conhecido_nao_promove_recomendacao) {
+  DeviceFeatures f;
+  std::copy_n("Adreno (TM) 825", 16, f.deviceName.begin());
+  f.vulkan1_3 = true;
+  f.descriptorIndexing = true;
+  f.bindlessNonUniformIndexing = true;
+
+  const auto recommendation = recommendDeviceQuality(f);
+  AE_EXPECT_EQ(recommendation.profile, DeviceProfile::B, "nome isolado nao e identidade suficiente");
+  AE_EXPECT_EQ(recommendation.evidence, DeviceQualityEvidence::CapabilityProfile,
+               "sem correspondencia exata a origem permanece capacidades");
 }

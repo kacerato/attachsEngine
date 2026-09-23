@@ -192,8 +192,8 @@ void main() {
   // favours transmitted sunlight in backlit waves without whitening the whole
   // surface. Turbidity remains the independent authoring axis for this energy.
   mediump float forwardScatter=pow(max(dot(-l,v),0.0),4.0);
-  mediump vec3 waterIrradiance=environment.ambientColorStrength.rgb*
-      environment.ambientColorStrength.w + environment.sunColorAngularRadius.rgb*
+  mediump vec3 waterIrradiance=environmentAmbientDiffuse(n) +
+      environment.sunColorAngularRadius.rgb*
       environment.sunDirectionIntensity.w*max(l.y,0.0)*shadow/PI;
   body*=waterIrradiance*(0.35+0.65*environment.waterOptics.z);
   body+=environment.waterShallowColorDistance.rgb*forwardScatter*nl*

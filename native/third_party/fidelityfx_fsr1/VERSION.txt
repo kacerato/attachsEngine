@@ -1,0 +1,5 @@
+AMD FidelityFX Super Resolution 1.0.2
+Commit: a21ffb8f6c13233ba336352bdff293894c706575
+Source: https://github.com/GPUOpen-Effects/FidelityFX-FSR
+Files: ffx-fsr/ffx_a.h, ffx-fsr/ffx_fsr1.h (unmodified)
+License: MIT (LICENSE.txt)

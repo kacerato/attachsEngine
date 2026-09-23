@@ -124,9 +124,9 @@ struct InputDeviceState {
   float lookX = 0, lookY = 0;
   // Botões da interface de jogo, por índice (0 = salto, 1 = interagir, ...).
   u32 touchButtons = 0;
-  // Teclas e botões de gamepad pressionados neste quadro. O serviço avalia
-  // essas fontes; o shell Android ainda não alimenta nenhuma delas, e por isso
-  // elas não são apresentadas como exercitadas no aparelho.
+  // Teclas Android (key code), botões de gamepad (key code) e eixos lógicos.
+  // No Android os eixos 0..7 são esquerda X/frente, direita X/cima,
+  // gatilhos esquerdo/direito e D-pad X/cima, respectivamente.
   std::vector<u32> keys;
   std::vector<u32> gamepadButtons;
   std::array<float, 8> gamepadAxes{};

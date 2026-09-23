@@ -1,6 +1,7 @@
 #include "editor/editor_component_impact.h"
 #include "scene/component_properties.h"
 #include "renderer/authoring_geometry.h"
+#include "renderer/rendering_settings_file.h"
 #include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
 #include "editor/editor_scene_camera.h"
@@ -1087,6 +1088,28 @@ AE_TEST(session_platform_text_owns_focus_and_rename_is_one_undo) {
   f.session.history().undo(f.session.document());
   AE_EXPECT_TRUE(std::string(f.session.document().find(f.cube)->name)=="Cube","undo");
 }
+AE_TEST(session_play_input_focus_ignores_hidden_authoring_panels) {
+  EditorSession session;
+  auto &state=const_cast<EditorScreenState&>(session.screen());
+  session.usePlatformTextInput(true); // Android enables the IME capability for the whole session.
+  AE_EXPECT_TRUE(!session.gameplayInputFocused(),"Scene does not accept gameplay keys");
+  state.searchingTextures=true;
+  const auto previousEdit=session.pendingTextEdit();
+  AE_EXPECT_EQ(previousEdit.purpose,EditorTextPurpose::TextureSearch,"Scene requests its active text field");
+  state.workspace=EditorWorkspace::Play;
+  state.texturePicker=true;
+  state.qualityPanel=true;
+  state.importPanel=true;
+  AE_EXPECT_TRUE(session.gameplayInputFocused(),"hidden authoring panels do not block Play keys");
+  state.searchingTextures=true;
+  AE_EXPECT_TRUE(session.gameplayInputFocused(),"hidden authoring text draft does not block Play keys");
+  AE_EXPECT_EQ(session.pendingTextEdit().purpose,EditorTextPurpose::None,"Play closes the authoring IME");
+  AE_EXPECT_TRUE(!session.updateTextDraft(previousEdit,"late text",0),"late IME draft is rejected during Play");
+  AE_EXPECT_TRUE(!session.completeTextEdit(previousEdit,"late commit",true),"late IME commit is rejected during Play");
+  state.searchingTextures=false;
+  state.playPaused=true;
+  AE_EXPECT_TRUE(!session.gameplayInputFocused(),"paused Play releases gameplay keys");
+}
 AE_TEST(session_platform_text_cancel_and_stale_reply_preserve_authoring) {
   Fixture f;f.session.setSelection(f.cube);f.session.usePlatformTextInput(true);
   tapWidget(f,widgetId(EditorWidget::HierarchyMenu));tapWidget(f,widgetId(EditorWidget::RenameSelection));
@@ -1687,6 +1710,73 @@ AE_TEST(p03_camera_world_handles_drag_undo_cancel_and_clip_limits) {
     AE_EXPECT_TRUE(applyCameraHandleDelta(camera,2,5,-100000),"far clamps above near");
     AE_EXPECT_TRUE(camera.valid(),"ordered finite planes");
   }
+}
+
+AE_TEST(component_volume_handles_use_effective_pose_schema_and_single_undo) {
+  Fixture f;auto &document=f.session.document();auto &history=f.session.history();
+  const auto lightId=history.createEntity(document,document.root(),EditorEntityKind::Folder,"Spot");
+  auto lightEntity=*document.find(lightId);
+  auto *light=static_cast<scene::Light*>(lightEntity.components.add(scene::Light::descriptor));
+  light->kind=scene::LightKind::Spot;light->range=4;
+  const auto lightInstance=light->instanceId();
+  lightEntity.transform.scale[0]=2;
+  AE_EXPECT_TRUE(document.applyEntityValues(lightId,lightEntity),"spot autorado");
+  EditorComponentHandle rangeHandle,innerHandle,outerHandle;
+  AE_EXPECT_TRUE(componentHandleGeometry(document,lightId,lightInstance,EditorComponentHandleKind::LightRange,rangeHandle) &&
+                 componentHandleGeometry(document,lightId,lightInstance,EditorComponentHandleKind::LightInnerAngle,innerHandle) &&
+                 componentHandleGeometry(document,lightId,lightInstance,EditorComponentHandleKind::LightOuterAngle,outerHandle),
+                 "alcance e dois cones possuem alças");
+  AE_EXPECT_TRUE(std::fabs(rangeHandle.worldUnitsPerProperty-1)<1e-4f,
+                 "alcance óptico ignora escala do objeto");
+  auto changed=*document.find(lightId);
+  AE_EXPECT_TRUE(applyComponentHandleDelta(changed,outerHandle,-100),"cone externo limitado pelo interno");
+  AE_EXPECT_EQ(static_cast<const scene::Light*>(changed.components.findInstance(lightInstance))->outerAngle,20.f,
+               "cone externo não cruza o interno");
+
+  const auto volumeId=history.createEntity(document,document.root(),EditorEntityKind::Folder,"Volume");
+  auto volumeEntity=*document.find(volumeId);
+  auto *volume=static_cast<scene::Environment*>(volumeEntity.components.add(scene::Environment::descriptor));
+  volume->shape=renderer::EnvironmentVolumeShape::Box;volume->boxSize[0]=4;volume->blendDistance=2;
+  const auto volumeInstance=volume->instanceId();
+  volumeEntity.transform.scale[0]=2;
+  AE_EXPECT_TRUE(document.applyEntityValues(volumeId,volumeEntity),"volume autorado");
+  EditorComponentHandle sizeHandle,blendHandle;
+  AE_EXPECT_TRUE(componentHandleGeometry(document,volumeId,volumeInstance,EditorComponentHandleKind::BoxX,sizeHandle) &&
+                 componentHandleGeometry(document,volumeId,volumeInstance,EditorComponentHandleKind::BlendDistance,blendHandle),
+                 "tamanho e mistura possuem alças");
+  AE_EXPECT_TRUE(std::fabs(sizeHandle.point[0]-4)<1e-4f &&
+                 std::fabs(sizeHandle.worldUnitsPerProperty-1)<1e-4f &&
+                 std::fabs(blendHandle.point[0]+6)<1e-4f &&
+                 std::fabs(blendHandle.worldUnitsPerProperty-1)<1e-4f,
+                 "tamanho local usa escala mundial; mistura permanece em metros mundiais");
+  changed=*document.find(volumeId);
+  AE_EXPECT_TRUE(applyComponentHandleDelta(changed,sizeHandle,2),"dimensão aumenta por arraste");
+  AE_EXPECT_EQ(static_cast<const scene::Environment*>(changed.components.findInstance(volumeInstance))->boxSize[0],6.f,
+               "dimensão chega ao valor autoral");
+  AE_EXPECT_TRUE(applyComponentHandleDelta(changed,blendHandle,3),"mistura aumenta por arraste");
+  AE_EXPECT_EQ(static_cast<const scene::Environment*>(changed.components.findInstance(volumeInstance))->blendDistance,5.f,
+               "distância de mistura em metros mundiais");
+
+  f.session.setSelection(lightId);f.session.update();tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  history.clear();f.session.update();
+  const auto at=locateWidget(f.session,widgetId(EditorWidget::ComponentHandleBase)+
+      static_cast<u32>(EditorComponentHandleKind::LightRange));
+  AE_EXPECT_TRUE(at.x>=0,"alça de luz alcançável na cena");
+  f.down(1,at);f.move(1,{at.x+30,at.y-15});f.up(1,{at.x+30,at.y-15});f.session.update();
+  AE_EXPECT_EQ(history.undoDepth(),1u,"arraste da luz é uma operação autoral");
+  AE_EXPECT_TRUE(history.undo(document),"alcance desfazível");
+  AE_EXPECT_EQ(static_cast<const scene::Light*>(document.find(lightId)->components.findInstance(lightInstance))->range,4.f,
+               "desfazer restaura alcance");
+  history.clear();f.session.setSelection(volumeId);f.session.update();
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));f.session.update();
+  const auto boxAt=locateWidget(f.session,widgetId(EditorWidget::ComponentHandleBase)+
+      static_cast<u32>(EditorComponentHandleKind::BoxX));
+  AE_EXPECT_TRUE(boxAt.x>=0,"alça da caixa alcançável na cena");
+  f.down(2,boxAt);f.move(2,{boxAt.x+25,boxAt.y-20});f.up(2,{boxAt.x+25,boxAt.y-20});f.session.update();
+  AE_EXPECT_EQ(history.undoDepth(),1u,"arraste do volume é uma operação autoral");
+  AE_EXPECT_TRUE(history.undo(document),"tamanho desfazível");
+  AE_EXPECT_EQ(static_cast<const scene::Environment*>(document.find(volumeId)->components.findInstance(volumeInstance))->boxSize[0],4.f,
+               "desfazer restaura tamanho");
 }
 
 AE_TEST(p03_preview_view_budget_pin_schedule_and_stale_publication) {
@@ -2304,18 +2394,56 @@ AE_TEST(the_quality_panel_edits_a_draft_and_applies_it_on_request) {
   AE_EXPECT_TRUE(fixture.session.screen().qualityPanel, "o painel Qualidade abre pelo viewport");
   // Automático → Baixo → Médio → Alto, na ordem dos níveis da Unity.
   for (u32 tap = 0; tap < 3; ++tap) tapWidget(fixture, widgetId(EditorWidget::QualityLevel));
-  tapWidget(fixture, widgetId(EditorWidget::QualityScaleDown));
+  for (u32 tap = 0; tap < 5; ++tap) tapWidget(fixture, widgetId(EditorWidget::QualityScaleDown));
+  // O painel pode abrir sobre qualquer valor persistido; percorra o ciclo real
+  // até TAA, como o usuário faz, em vez de depender do valor inicial.
+  for (u32 tap=0;tap<4 && fixture.session.screen().qualityDraft.antiAliasing!=renderer::AntiAliasingMode::Temporal;++tap)
+    tapWidget(fixture, widgetId(EditorWidget::QualityAntiAliasing));
   AE_EXPECT_TRUE(fixture.session.screen().qualityDraft.preset == renderer::QualityPreset::A, "rascunho em Alto");
-  AE_EXPECT_TRUE(std::fabs(fixture.session.screen().qualityDraft.resolutionScale - .95f) < 1e-4f,
+  AE_EXPECT_TRUE(std::fabs(fixture.session.screen().qualityDraft.resolutionScale - .75f) < 1e-4f,
                  "escala desce em passos de 5%, a partir de 100%");
+  AE_EXPECT_EQ(fixture.session.screen().qualityDraft.antiAliasing, renderer::AntiAliasingMode::Temporal,
+               "anti-aliasing percorre desligado, FXAA e TAA");
   AE_EXPECT_TRUE(fixture.session.screen().qualityDirty, "rascunho diferente do aplicado");
   renderer::ProjectRenderingSettings requested;
   AE_EXPECT_TRUE(!fixture.session.takeRenderingSettingsRequest(requested), "editar não reconstrói nada sozinho");
   tapWidget(fixture, widgetId(EditorWidget::QualityApply));
   AE_EXPECT_TRUE(fixture.session.takeRenderingSettingsRequest(requested), "Aplicar levanta o pedido para o shell");
   AE_EXPECT_TRUE(requested.preset == renderer::QualityPreset::A, "o pedido leva o nível escolhido");
+  AE_EXPECT_TRUE(std::fabs(requested.resolutionScale - .75f) < 1e-4f &&
+                 requested.antiAliasing == renderer::AntiAliasingMode::Temporal,
+                 "o pedido leva escala e anti-aliasing escolhidos");
   AE_EXPECT_TRUE(!fixture.session.takeRenderingSettingsRequest(requested), "o pedido é consumido uma vez");
+  fixture.session.completeRenderingSettingsRequest(true);
   AE_EXPECT_TRUE(!fixture.session.screen().qualityDirty, "aplicado");
+
+  tapWidget(fixture, widgetId(EditorWidget::QualityClose));
+  tapWidget(fixture, widgetId(EditorWidget::QualityOpen));
+  AE_EXPECT_TRUE(std::fabs(fixture.session.screen().qualityDraft.resolutionScale - .75f) < 1e-4f &&
+                 fixture.session.screen().qualityDraft.antiAliasing == renderer::AntiAliasingMode::Temporal,
+                 "fechar e reabrir o painel preserva os valores aplicados");
+
+  renderer::ProjectRenderingSettings restored;
+  AE_EXPECT_TRUE(renderer::readRenderingSettings(renderer::writeRenderingSettings(requested), restored),
+                 "arquivo do projeto reabre");
+  Fixture reopened;
+  reopened.session.setRenderingSettings(restored);
+  reopened.session.update();
+  tapWidget(reopened, widgetId(EditorWidget::QualityOpen));
+  AE_EXPECT_TRUE(reopened.session.screen().qualityDraft.preset == renderer::QualityPreset::A &&
+                 std::fabs(reopened.session.screen().qualityDraft.resolutionScale - .75f) < 1e-4f &&
+                 reopened.session.screen().qualityDraft.antiAliasing == renderer::AntiAliasingMode::Temporal,
+                 "uma nova sessao restaura nivel, escala e TAA do codec persistido");
+  tapWidget(fixture, widgetId(EditorWidget::QualityScaleUp));
+  tapWidget(fixture, widgetId(EditorWidget::QualityApply));
+  renderer::ProjectRenderingSettings rejected;
+  AE_EXPECT_TRUE(fixture.session.takeRenderingSettingsRequest(rejected), "nova aplicação entrega um snapshot");
+  fixture.session.completeRenderingSettingsRequest(false);
+  AE_EXPECT_TRUE(fixture.session.screen().qualityDirty &&
+                 std::fabs(fixture.session.screen().qualityDraft.resolutionScale - .80f) < 1e-4f,
+                 "falha de gravação preserva o rascunho e mantém Aplicar ativo");
+  AE_EXPECT_TRUE(std::fabs(fixture.session.renderingSettings().resolutionScale - .75f) < 1e-4f,
+                 "falha não anuncia configuração como aplicada");
   fixture.session.setRenderStats(1280, 2772, 18.5f, "Médio");
   AE_EXPECT_TRUE(fixture.session.screen().qualityStats.find("1280×2772") != std::string::npos &&
                  fixture.session.screen().qualityStats.find("18,5 ms") != std::string::npos,

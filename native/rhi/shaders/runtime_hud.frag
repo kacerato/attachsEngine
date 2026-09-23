@@ -10,6 +10,13 @@ layout(push_constant) uniform RuntimeHudPushConstants {
 layout(location=0) in vec2 localPosition;
 layout(location=0) out vec4 outColor;
 
+vec4 presentationColor(vec4 value) {
+  if(hud.parameters.z!=0u)
+    value.rgb=mix(12.92*value.rgb,1.055*pow(max(value.rgb,vec3(0)),vec3(1.0/2.4))-.055,
+                  greaterThan(value.rgb,vec3(.0031308)));
+  return value;
+}
+
 uint digitBits(uint digit) {
   const uint glyphs[10]=uint[10](31599u,11415u,29671u,29647u,23497u,
                                  31183u,31215u,29257u,31727u,31695u);
@@ -32,13 +39,13 @@ void main() {
   if(kind==0u) {
     if(radius>1.0) discard;
     float ring=smoothstep(.74,.82,radius);
-    outColor=vec4(mix(vec3(.08,.12,.14),vec3(.62,.82,.73),ring),mix(.17,.42,ring));
+    outColor=presentationColor(vec4(mix(vec3(.08,.12,.14),vec3(.62,.82,.73),ring),mix(.17,.42,ring)));
     return;
   }
   if(kind==1u) {
     if(radius>1.0) discard;
     float edge=smoothstep(.72,1.0,radius);
-    outColor=vec4(mix(vec3(.72,.92,.82),vec3(.25,.42,.35),edge),.64);
+    outColor=presentationColor(vec4(mix(vec3(.72,.92,.82),vec3(.25,.42,.35),edge),.64));
     return;
   }
 
@@ -56,5 +63,5 @@ void main() {
     vec2 digitUv=vec2(fract(content.x*3.0)*.82+.09,content.y);
     if(!leading) glyph=digitPixel((fps/divisor)%10u,digitUv);
   }
-  outColor=mix(vec4(.015,.025,.028,.72),vec4(.55,1.0,.68,.96),glyph);
+  outColor=presentationColor(mix(vec4(.015,.025,.028,.72),vec4(.55,1.0,.68,.96),glyph));
 }

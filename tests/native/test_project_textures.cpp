@@ -9,10 +9,13 @@
 #include "editor/editor_component_impact.h"
 #include "renderer/authoring_geometry.h"
 #include "renderer/material_override.h"
+#include "renderer/texture_sampler.h"
 #include "resources/glb_images.h"
 #include "resources/material_asset.h"
+#include "resources/texture_asset.h"
 #include "scene/mesh_renderer.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -71,7 +74,7 @@ std::vector<u8> png(u32 width, u32 height, u8 red) {
   return out;
 }
 // Uma tela com cor base texturizada por uma imagem PNG embutida chamada "Pintura".
-std::vector<u8> texturedPanel(const std::vector<u8> &image) {
+std::vector<u8> texturedPanel(const std::vector<u8> &image, u32 minFilter = 0, u32 magFilter = 0) {
   std::vector<u8> binary;
   const float positions[12]{0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0};
   for (float value : positions) {
@@ -86,12 +89,16 @@ std::vector<u8> texturedPanel(const std::vector<u8> &image) {
   const usize imageOffset = binary.size();
   binary.insert(binary.end(), image.begin(), image.end());
   while (binary.size() % 4) binary.push_back(0);
+  const std::string texture = minFilter
+      ? std::string(R"("textures":[{"source":0,"sampler":0}],"samplers":[{"minFilter":)") +
+            std::to_string(minFilter) + R"(,"magFilter":)" + std::to_string(magFilter) + "}],"
+      : R"("textures":[{"source":0}],)";
   std::string json =
       std::string(R"({"asset":{"version":"2.0"},"buffers":[{"byteLength":)") + std::to_string(binary.size()) + R"(}],)" +
       R"("bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":48},{"buffer":0,"byteOffset":48,"byteLength":12},)" +
       R"({"buffer":0,"byteOffset":)" + std::to_string(imageOffset) + R"(,"byteLength":)" + std::to_string(image.size()) + R"(}],)" +
       R"("accessors":[{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3"},{"bufferView":1,"componentType":5123,"count":6,"type":"SCALAR"}],)" +
-      R"("images":[{"bufferView":2,"mimeType":"image/png","name":"Pintura.png"}],"textures":[{"source":0}],)" +
+      R"("images":[{"bufferView":2,"mimeType":"image/png","name":"Pintura.png"}],)" + texture +
       R"("materials":[{"name":"Tela","pbrMetallicRoughness":{"baseColorTexture":{"index":0}}}],)" +
       R"("meshes":[{"name":"Tela","primitives":[{"attributes":{"POSITION":0},"indices":1,"material":0}]}],)" +
       R"("nodes":[{"name":"Tela","mesh":0}],"scenes":[{"nodes":[0]}],"scene":0})";
@@ -116,6 +123,7 @@ struct Publisher {
   std::vector<renderer::MapMaterialRecord> materials;
   usize textures = 0;
   u32 rebuilds = 0;
+  bool failNext = false;
   std::vector<u32> samplers; // flags de sampler de cada textura publicada, na ordem da biblioteca
   std::vector<renderer::SharedAuthoringTexture> published;
 };
@@ -130,6 +138,7 @@ void start(EditorSession &session, Publisher &publisher) {
   session.setGeometryPublisher([&publisher](std::span<const u8> v, std::span<const u32> i, std::span<const renderer::MapDrawRecord> d,
                                             std::span<const renderer::MapMaterialRecord> m,
                                             std::span<const renderer::SharedAuthoringTexture> t, EditorSession::PublishedGeometry &out) {
+    if(publisher.failNext) {publisher.failNext=false;return false;}
     for (const auto &texture : t) if (!texture || !texture->valid()) return false;
     ++publisher.rebuilds;
     publisher.textures = t.size();
@@ -169,6 +178,68 @@ std::vector<std::string> tokens(const std::string &text) {
   return out;
 }
 } // namespace
+
+AE_TEST(texture_import_preserves_guid_recipe_and_publishes_without_a_glb_source) {
+  Project project;EditorSession session;Publisher publisher;start(session,publisher);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()),"open project");
+  const auto source=png(4,4,180);
+  resources::TextureProfile profile;profile.maximumDimension=256;
+  resources::TextureImportLimits limits;limits.projectMaximumDimension=session.importLimits().maximumTextureDimension;
+  limits.image=session.importLimits().image;
+  resources::PreparedTextureImport prepared;
+  AE_EXPECT_TRUE(resources::prepareTextureImport(source,profile,true,EditorMapScene::DefaultTextureSampler,
+                                                  limits,nullptr,prepared),prepared.diagnostic.c_str());
+  std::string diagnostic;
+  AE_EXPECT_TRUE(session.commitTextureImport("Texturas/normal.png",source,{},prepared,profile,diagnostic),diagnostic.c_str());
+  const auto *first=session.assets().findByPath("Texturas/normal.png");
+  AE_EXPECT_TRUE(first&&first->type==resources::AssetType::Texture,"registered texture");
+  const auto guid=first->guid;
+  resources::TextureProfile persisted;
+  AE_EXPECT_TRUE(resources::parseTextureProfile(first->importerParameters,persisted)&&
+                 resources::sameTextureProfile(profile,persisted),"recipe stored in registry");
+
+  const auto object=session.history().createEntity(session.document(),session.document().root(),EditorEntityKind::Mesh,"Cubo");
+  auto objectValues=*session.document().find(object);
+  auto *render=static_cast<scene::MeshRenderer *>(objectValues.components.add(scene::MeshRenderer::descriptor));
+  AE_EXPECT_TRUE(render!=nullptr,"mesh renderer component");render->mesh=1;
+  AE_EXPECT_TRUE(session.document().applyEntityValues(object,objectValues),"primitive mesh values");
+  std::string bind;
+  AE_EXPECT_TRUE(session.setSlotTexture(object,0,1,EditorSession::MaterialScope::Instance,guid,bind),bind.c_str());
+  AE_EXPECT_TRUE(publisher.textures==1&&publisher.rebuilds>0,"standalone texture published for primitive");
+  AE_EXPECT_TRUE(publisher.published.front()->srgb==false,"normal map is linear");
+  AE_EXPECT_TRUE(publisher.published.front()->mipChain[64]!=180||publisher.published.front()->mipChain[65]!=64,
+                 "profile by-use derives normalized normal-map mips for normal binding");
+
+  auto changed=png(4,4,90);resources::PreparedTextureImport reimported;
+  AE_EXPECT_TRUE(resources::prepareTextureImport(changed,profile,true,EditorMapScene::DefaultTextureSampler,
+                                                  limits,nullptr,reimported),reimported.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.commitTextureImport("Texturas/normal.png",changed,first->contentHash,reimported,profile,diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(session.assets().findByPath("Texturas/normal.png")->guid==guid,"reimport preserves guid");
+  auto edited=profile;edited.mipmaps=false;
+  AE_EXPECT_TRUE(session.setTextureProfile(guid,edited,diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(session.history().undo(session.document())&&
+                 resources::sameTextureProfile(session.textureProfileFor(guid),profile),
+                 "desfazer restaura a receita publicada");
+  AE_EXPECT_TRUE(session.history().redo(session.document())&&
+                 resources::sameTextureProfile(session.textureProfileFor(guid),edited),
+                 "refazer reaplica a receita da textura");
+  const auto registered=session.serializeAssets();
+  auto refused=edited;refused.anisotropy=false;publisher.failNext=true;
+  AE_EXPECT_TRUE(!session.setTextureProfile(guid,refused,diagnostic)&&
+                 diagnostic.find("não aplicado")!=std::string::npos,
+                 "publicador recusado não anuncia receita aplicada");
+  AE_EXPECT_TRUE(session.serializeAssets()==registered&&
+                 resources::sameTextureProfile(session.textureProfileFor(guid),edited)&&
+                 session.history().undoLabel()=="Perfil de textura",
+                 "falha da GPU restaura receita, registro e passo de histórico");
+  AE_EXPECT_TRUE(EditorImportTransaction::write(project.root / "Texturas/normal.png",png(4,4,11)),
+                 "fonte externa divergente preparada");
+  AE_EXPECT_TRUE(!session.history().undo(session.document())&&session.history().canUndo()&&
+                 !session.history().canRedo(),"falha no disco mantém cursor do histórico");
+  AE_EXPECT_TRUE(session.serializeAssets()==registered&&
+                 resources::sameTextureProfile(session.textureProfileFor(guid),edited),
+                 "falha no replay preserva registro e perfil em memória");
+}
 
 AE_TEST(p02_shared_repair_history_persists_and_rejects_external_conflicts) {
   Project project;EditorSession session;Publisher publisher;start(session,publisher);
@@ -418,6 +489,9 @@ AE_TEST(r4_texture_thumbnails_are_generated_once_and_viewer_walks_mips_and_chann
   const auto *atlas = session.takePreviewAtlas();
   AE_EXPECT_TRUE(atlas && atlas->size() == usize{TexturePreviewAtlasSize} * TexturePreviewAtlasSize * 4, "atlas entregue ao renderer");
   AE_EXPECT_TRUE(session.takePreviewAtlas() == nullptr, "entregue uma vez só");
+  session.republishPreviewAtlas();
+  AE_EXPECT_TRUE(session.takePreviewAtlas() == atlas, "renderer recriado recebe os pixels já decodificados");
+  AE_EXPECT_TRUE(session.takePreviewAtlas() == nullptr, "reidratação não reenvia a cada quadro");
 
   AE_EXPECT_TRUE(session.openTextureViewer(0), session.screen().textureViewerInfo.c_str());
   const auto &screen = session.screen();
@@ -432,6 +506,12 @@ AE_TEST(r4_texture_thumbnails_are_generated_once_and_viewer_walks_mips_and_chann
   AE_EXPECT_TRUE(session.cycleTextureViewerZoom() && screen.textureViewerZoomLabel.starts_with("2×"), screen.textureViewerZoomLabel.c_str());
   AE_EXPECT_TRUE(session.cycleTextureViewerBackground() && screen.textureViewerBackgroundLabel == "Preto", "fundo seguinte");
   AE_EXPECT_TRUE(!session.openTextureViewer(7), "índice fora das texturas recusado");
+  auto profile=session.textureProfileFor(extraction.textures.front());
+  profile.mipmaps=false;profile.interpretation=resources::TextureInterpretationNormal;
+  AE_EXPECT_TRUE(session.setTextureProfile(extraction.textures.front(),profile,diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(session.openTextureViewer(0)&&screen.textureViewerLevels==1,
+                 "visualizador usa a receita aplicada, sem inventar mips desligados");
+  AE_EXPECT_TRUE(!session.stepTextureViewerLevel(1),"mip ausente no derivado não aparece no visualizador");
   session.closeTextureViewer();
   AE_EXPECT_TRUE(!screen.textureViewer, "fechado");
 }
@@ -737,6 +817,80 @@ AE_TEST(r4_sampling_uv_set_wrap_and_filter_resolve_publish_variants_and_travel_t
   AE_EXPECT_EQ(effectiveMaterial(session, object).uvSets[0], scene::MaterialUvKeep, "UV volta à fonte");
 }
 
+AE_TEST(gltf_source_sampler_survives_editor_sampling_and_scene_reopen) {
+  // LINEAR sem mip para minificação e NEAREST para magnificação não pode ser
+  // representado pelos dois bits antigos. Ele detecta qualquer normalização
+  // acidental para o sampler padrão do editor.
+  constexpr u32 minFilter = 9729;
+  constexpr u32 magFilter = 9728;
+  const auto expectedFlags = renderer::encodeGltfTextureSampler(minFilter, magFilter) |
+                             renderer::AuthoringTextureRepeatU | renderer::AuthoringTextureRepeatV;
+  const auto expectedState = renderer::decodeTextureSampler(expectedFlags);
+  AE_EXPECT_TRUE(expectedState.minLinear && !expectedState.magLinear && !expectedState.mipEnabled,
+                 "fixture usa os três eixos independentes");
+
+  Project project;
+  const auto glb = texturedPanel(png(4, 4, 170), minFilter, magFilter);
+  const auto scenePath = project.root / "scenes" / "sampler.aescene";
+  std::filesystem::create_directories(scenePath.parent_path());
+  std::string registry;
+  {
+    EditorSession session;
+    Publisher publisher;
+    start(session, publisher);
+    AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
+    resources::GltfImport model;
+    AE_EXPECT_TRUE(resources::importGlb(glb, {}, {}, model), model.diagnostic.c_str());
+    AE_EXPECT_TRUE(model.textures.size() == 1 && model.textures.front()->samplerFlags == expectedFlags,
+                   "importador preserva min, mag e ausência de mip");
+    EditorSession::ModelImportReport report;
+    AE_EXPECT_TRUE(session.commitModelImport(glb, model, "Fontes/sampler.glb", "", report), report.diagnostic.c_str());
+    AE_EXPECT_TRUE(session.instantiateModel(report.source, report), report.diagnostic.c_str());
+    const auto object = firstMeshObject(session);
+    AE_EXPECT_TRUE(object != kInvalidEntity, "instância com malha");
+    AE_EXPECT_TRUE(publisher.samplers.size() == 1 && publisher.samplers.front() == expectedFlags,
+                   "publicação usa o sampler da fonte");
+    AE_EXPECT_TRUE(std::any_of(publisher.materials.begin(), publisher.materials.end(), [](const auto &material) {
+                     return material.textureIndices[0] == 0;
+                   }), "material importado aponta para a textura da fonte");
+
+    // Alterar somente UV é um override autoral válido, mas filtro e wrap em
+    // Keep continuam pertencendo à fonte glTF.
+    const scene::MaterialSampling uv1{scene::MaterialUv1, scene::MaterialWrapKeep, scene::MaterialFilterKeep};
+    std::string diagnostic;
+    AE_EXPECT_TRUE(session.setSlotSampling(object, 0, 0, EditorSession::MaterialScope::Instance, uv1, diagnostic), diagnostic.c_str());
+    AE_EXPECT_EQ(effectiveTexture(session, object, 0), scene::MaterialTextureKeep,
+                 "sampling sem textura local não cria variante do projeto");
+    AE_EXPECT_TRUE(publisher.samplers.size() == 1 && publisher.samplers.front() == expectedFlags,
+                   "UV autoral não normaliza o sampler importado");
+    AE_EXPECT_TRUE(session.save(scenePath.string().c_str(), 0), "cena salva");
+    registry = session.serializeAssets();
+  }
+
+  // Reabertura real do editor: registro, fonte reimportada e documento de cena.
+  EditorSession reopened;
+  Publisher publisher;
+  start(reopened, publisher);
+  AE_EXPECT_TRUE(reopened.setProjectDirectory(project.root.string().c_str()), "projeto reaberto");
+  AE_EXPECT_TRUE(reopened.loadAssets(registry), "registro reaberto");
+  reopened.anticipateSceneTextures(scenePath.string().c_str(), 0);
+  std::vector<u8> bytes;
+  AE_EXPECT_TRUE(EditorImportTransaction::read(project.root / "Fontes/sampler.glb", bytes), "fonte salva");
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(reopened.importModel(bytes, "Fontes/sampler.glb", {}, report), report.diagnostic.c_str());
+  AE_EXPECT_TRUE(reopened.load(scenePath.string().c_str(), 0), "cena reaberta");
+  const auto object = firstMeshObject(reopened);
+  const auto *render = object == kInvalidEntity ? nullptr : meshRenderer(*reopened.document().find(object));
+  AE_EXPECT_TRUE(render && render->sampling[0].uvSet == scene::MaterialUv1 &&
+                     render->sampling[0].wrap == scene::MaterialWrapKeep &&
+                     render->sampling[0].filter == scene::MaterialFilterKeep,
+                 "override UV atravessa a cena sem assumir o sampler");
+  AE_EXPECT_EQ(effectiveTexture(reopened, object, 0), scene::MaterialTextureKeep,
+               "cena reaberta ainda herda a textura da fonte");
+  AE_EXPECT_TRUE(publisher.samplers.size() == 1 && publisher.samplers.front() == expectedFlags,
+                 "fonte reaberta mantém min, mag e mip independentes");
+}
+
 AE_TEST(r4_uv_transform_per_binding_resolves_reaches_the_shader_entry_and_persists) {
   // Contrato puro: T·R·S do KHR_texture_transform e a entrada que o shader lê.
   scene::MaterialSampling rotated{};
@@ -942,6 +1096,20 @@ AE_TEST(r4_texture_profile_changes_interpretation_mips_anisotropy_and_is_read_ba
   resources::TextureProfile invalid;
   invalid.maximumDimension = 300;
   AE_EXPECT_TRUE(!session.setTextureProfile(texture, invalid, diagnostic), "perfil fora dos passos recusado");
+  const auto registryBefore=session.serializeAssets();
+  const auto profileBefore=session.textureProfileFor(texture);
+  const auto *record=session.assets().find(texture);
+  AE_EXPECT_TRUE(record!=nullptr,"registro da textura presente");
+  const auto changedPng=png(4,4,12);
+  AE_EXPECT_TRUE(EditorImportTransaction::write(project.root / record->path,changedPng),
+                 "fonte alterada fora do editor para testar preflight");
+  auto incompatible=profile;incompatible.mipmaps=true;
+  AE_EXPECT_TRUE(!session.setTextureProfile(texture,incompatible,diagnostic)&&
+                 diagnostic.find("reimporte")!=std::string::npos,
+                 "perfil recusa fonte divergente antes de gravar receita");
+  AE_EXPECT_TRUE(session.serializeAssets()==registryBefore&&
+                 resources::sameTextureProfile(session.textureProfileFor(texture),profileBefore),
+                 "registro e receita aplicada permanecem intactos na falha");
 
   // Reabrir como o shell faz: diretório do projeto e o registro gravado.
   const auto registry = session.serializeAssets();

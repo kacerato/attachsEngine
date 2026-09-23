@@ -1,0 +1,5 @@
+AETHER_ASSETS 1 4
+5bd07969cc0d0b9cc230fdddc83f59fb mesh "Assets/world.glb" "Assets/world.glb" "52b3ba4fd921d9769f186ef6829312dc5e16baf848a163912bffb0200c982a07" 1 "glb" 0 0
+2097794be75c739ecb033219817496c9 mesh "Assets/propane_tank.glb" "Assets/propane_tank.glb" "6ebb27572ff2a1c7984c2549e9d80afa51b93cd9c0a685ba02cbe4b0fdcafb3d" 1 "glb" 0 0
+a68aad35054c3d5dc4f4536fddf5cff5 mesh "Assets/modular_industrial_pipes_01.glb" "Assets/modular_industrial_pipes_01.glb" "61a0ef932ed6c87036214c84a2e3711e0acb2cbcc5ba195138efbcb93dcd413e" 1 "glb" 0 0
+82825e945fa687cc76c6eab0e99c3fc7 mesh "Assets/Lantern_01.glb" "Assets/Lantern_01.glb" "866b3116efcbfe2bb667738774d3ee9d09acda9eb8833be311c85d4d43728318" 1 "glb" 0 0

@@ -68,7 +68,10 @@ public final class ProjectStore {
                 {"quarentena", "Quarentena 04 · GLB", "example-quarentena.png"},
                 {"resgate", "Resgate na Mina · GLB", "example-resgate.png"},
                 {"perimetro", "Perímetro Delta · GLB", "example-perimetro.png"},
-                {"linha-fantasma", "Linha Fantasma · GLB", "example-linha-fantasma.png"}
+                {"linha-fantasma", "Linha Fantasma · GLB", "example-linha-fantasma.png"},
+                {"mercado-nexus", "MERCADO NEXUS", "example-mercado-nexus.png"},
+                {"farol-abissal", "FAROL ABISSAL", "example-farol-abissal.png"},
+                {"expresso-tita", "EXPRESSO TITÃ", "example-expresso-tita.png"}
         };
         for (String[] example : examples) {
             File destination = new File(root(), example[1]);

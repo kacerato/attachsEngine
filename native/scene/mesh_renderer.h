@@ -345,12 +345,11 @@ inline constexpr std::array<ComponentResourceBinding,7> meshRendererResources{{
 // Os rótulos seguem o vocabulário do URP Lit (Surface Type, Alpha Clipping,
 // Render Face, Tiling, Offset), que é o que o autor já traz de fora.
 //
-// Amostragem: o binding (cor base, normal, …) é uma terceira dimensão de
-// endereço, e endereçar (slot × binding) por propriedade multiplicaria a lista
-// por cinco. Estas propriedades escrevem o valor em TODOS os bindings do slot —
-// que é o caso de autoria comum, "esta peça repete a textura duas vezes" — e a
-// escolha por binding continua no editor de material, que endereça os dois
-// índices. O que a propriedade LÊ é o binding de cor base, e isso está dito.
+// Amostragem possui duas formas de endereçamento. Os ids curtos `sampling.*`
+// preservam presets e scripts antigos e escrevem todos os bindings. Os ids
+// `sampling.<binding>.*` alcançam exatamente o mesmo valor individual que o
+// editor de material. O binding de oclusão compartilha a amostragem do mapa
+// metálico/rugosidade, como no consumidor existente.
 // O próprio interruptor de override é endereçável: sem ele, um preset poderia
 // ligar a substituição de material (ao escrever um fator) e nunca desligá-la.
 inline constexpr std::array<ComponentEnumOption,2> materialOverrideOptions{{
@@ -386,7 +385,7 @@ inline constexpr std::array<ComponentEnumOption,3> materialFilterOptions{{
   {MaterialFilterKeep,"Herdar"},{MaterialFilterLinear,"Linear"},{MaterialFilterNearest,"Vizinho mais próximo"}
 }};
 
-inline constexpr std::array<ComponentSlotEnum,12> meshRendererSlotEnums{{
+inline constexpr std::array<ComponentSlotEnum,24> meshRendererSlotEnums{{
   {"material.override","Material",materialOverrideOptions,detail::meshSlots,
    [](const ComponentValue &v,u32 slot)->u32{return static_cast<const MeshRenderer&>(v).slotMaterial(slot).enabled?1u:0u;},
    [](ComponentValue &v,u32 slot,u32 value)->bool{
@@ -428,10 +427,25 @@ inline constexpr std::array<ComponentSlotEnum,12> meshRendererSlotEnums{{
     {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.wrap=static_cast<std::uint8_t>(value);return true;}),
   AE_SLOT_ENUM("sampling.filter","Filtro",materialFilterOptions,"Amostragem",
     m.slotSampling(slot)[0].filter,
-    {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.filter=static_cast<std::uint8_t>(value);return true;})
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.filter=static_cast<std::uint8_t>(value);return true;}),
+#define AE_BINDING_SAMPLING_ENUM(name,label,binding) \
+  AE_SLOT_ENUM("sampling." name ".uv_set",label " / UV",materialUvSetOptions,"Amostragem", \
+    m.slotSampling(slot)[binding].uvSet, \
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;(*s)[binding].uvSet=static_cast<std::uint8_t>(value);return true;}), \
+  AE_SLOT_ENUM("sampling." name ".wrap",label " / Repetição",materialWrapOptions,"Amostragem", \
+    m.slotSampling(slot)[binding].wrap, \
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;(*s)[binding].wrap=static_cast<std::uint8_t>(value);return true;}), \
+  AE_SLOT_ENUM("sampling." name ".filter",label " / Filtro",materialFilterOptions,"Amostragem", \
+    m.slotSampling(slot)[binding].filter, \
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;(*s)[binding].filter=static_cast<std::uint8_t>(value);return true;})
+  AE_BINDING_SAMPLING_ENUM("base_color","Cor base",0),
+  AE_BINDING_SAMPLING_ENUM("normal","Normal",1),
+  AE_BINDING_SAMPLING_ENUM("metallic_roughness","Metal / rugosidade",2),
+  AE_BINDING_SAMPLING_ENUM("emissive","Emissão",3)
+#undef AE_BINDING_SAMPLING_ENUM
 #undef AE_SLOT_ENUM
 }};
-inline constexpr std::array<ComponentSlotNumber,7> meshRendererSlotNumbers{{
+inline constexpr std::array<ComponentSlotNumber,27> meshRendererSlotNumbers{{
 #define AE_SLOT_NUMBER(id,label,lo,hi,step,group,getter,setter) {id,label,lo,hi,step,detail::meshSlots,\
   [](const ComponentValue &v,u32 slot)->float{const auto &m=static_cast<const MeshRenderer&>(v);(void)m;return getter;},\
   [](ComponentValue &v,u32 slot,float value)->bool{auto &m=static_cast<MeshRenderer&>(v);(void)m;(void)value;setter},{group}}
@@ -457,7 +471,28 @@ inline constexpr std::array<ComponentSlotNumber,7> meshRendererSlotNumbers{{
     {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.scale[1]=value;return true;}),
   AE_SLOT_NUMBER("sampling.rotation","Rotação da UV",-360,360,1,"Amostragem",
     m.slotSampling(slot)[0].rotation,
-    {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.rotation=value;return true;})
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.rotation=value;return true;}),
+#define AE_BINDING_SAMPLING_NUMBER(name,label,binding) \
+  AE_SLOT_NUMBER("sampling." name ".offset_u",label " / Deslocamento U",-100,100,.01f,"Amostragem", \
+    m.slotSampling(slot)[binding].offset[0], \
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;(*s)[binding].offset[0]=value;return true;}), \
+  AE_SLOT_NUMBER("sampling." name ".offset_v",label " / Deslocamento V",-100,100,.01f,"Amostragem", \
+    m.slotSampling(slot)[binding].offset[1], \
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;(*s)[binding].offset[1]=value;return true;}), \
+  AE_SLOT_NUMBER("sampling." name ".scale_u",label " / Escala U",.01f,100,.01f,"Amostragem", \
+    m.slotSampling(slot)[binding].scale[0], \
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;(*s)[binding].scale[0]=value;return true;}), \
+  AE_SLOT_NUMBER("sampling." name ".scale_v",label " / Escala V",.01f,100,.01f,"Amostragem", \
+    m.slotSampling(slot)[binding].scale[1], \
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;(*s)[binding].scale[1]=value;return true;}), \
+  AE_SLOT_NUMBER("sampling." name ".rotation",label " / Rotação",-360,360,1,"Amostragem", \
+    m.slotSampling(slot)[binding].rotation, \
+    {auto *s=m.editSlotSampling(slot);if(!s) return false;(*s)[binding].rotation=value;return true;})
+  AE_BINDING_SAMPLING_NUMBER("base_color","Cor base",0),
+  AE_BINDING_SAMPLING_NUMBER("normal","Normal",1),
+  AE_BINDING_SAMPLING_NUMBER("metallic_roughness","Metal / rugosidade",2),
+  AE_BINDING_SAMPLING_NUMBER("emissive","Emissão",3)
+#undef AE_BINDING_SAMPLING_NUMBER
 #undef AE_SLOT_NUMBER
 }};
 // Os fatores PBR de CADA slot.
@@ -492,8 +527,8 @@ inline constexpr std::array<ComponentSlotNumber,11> meshRendererSlotMaterial{{
 }};
 // As duas listas por slot viram uma só no descritor: para quem endereça
 // propriedade, "corte do alfa" e "rugosidade" são a mesma espécie de campo.
-inline const std::array<ComponentSlotNumber,18> meshRendererAllSlotNumbers=[]{
-  std::array<ComponentSlotNumber,18> all{};
+inline const std::array<ComponentSlotNumber,38> meshRendererAllSlotNumbers=[]{
+  std::array<ComponentSlotNumber,38> all{};
   usize at=0;
   for(const auto &p:meshRendererSlotNumbers) all[at++]=p;
   for(const auto &p:meshRendererSlotMaterial) all[at++]=p;

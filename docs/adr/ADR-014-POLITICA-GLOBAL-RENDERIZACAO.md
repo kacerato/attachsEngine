@@ -128,6 +128,87 @@ NDK entregue amostra no máximo a cada 10 s, piora imediatamente e recupera some
 nível após três amostras frias. A política ativa só reduz recursos já criados para a
 época; portanto não recria atlas, pipelines ou assets no frame.
 
+### API C# durante Play — 21/09/2026
+
+`Astra.Graphics.State` consulta três estados distintos: a configuração pedida, a
+política efetivamente publicada pelo renderer e as capabilities detectadas. Um script
+pode copiar `State.Requested`, alterar qualquer eixo de `GraphicsSettings` e chamar
+`Graphics.ApplyRuntime(settings)`. O retorno é o identificador do pedido; enquanto
+`State.Pending` for verdadeiro, `State.Effective` continua descrevendo o renderer
+anterior. A confirmação ocorre somente no ponto seguro de rebuild, depois de materiais,
+texturas e recursos autorais serem republicados. Falha mantém o pedido para diagnóstico
+e não inventa uma política efetiva; `State.EffectiveAvailable` fica falso quando o
+rebuild destrutivo não deixou um renderer utilizável.
+
+Essa alteração existe apenas na sessão Play. Ela não grava `rendering.astra`; Stop
+enfileira a restauração autoral, inclusive quando substitui um pedido de gameplay que o
+shell ainda não consumiu. Handles de uma execução anterior são recusados pelo id do
+mundo. Pressão térmica e capabilities são atualizadas a partir do estado real do shell.
+Assemblies de projeto publicados registram a identidade do compilador `Astra.Scripting`;
+uma geração anterior à ABI atual é recusada e precisa ser recompilada. A ABI 7
+acrescenta propriedades de material por slot; a estrutura da política gráfica
+continua compartilhada entre o editor, o runtime e o renderer.
+
+### Reconstrução espacial e curva de apresentação — 21/09/2026
+
+`UpscalingFilter::Fsr1` / `GraphicsUpscaling.Fsr1` seleciona AMD FidelityFX
+Super Resolution 1.0.2, commit `a21ffb8f6c13233ba336352bdff293894c706575`, MIT.
+O backend Vulkan executa pós/AA na resolução interna, EASU na resolução de saída
+e RCAS antes da interface. `postSharpen` controla a intensidade do RCAS; zero
+preserva a reconstrução sem acrescentar nitidez. O filtro usa RGB perceptual,
+com conversões explícitas quando as imagens Vulkan fazem transferência sRGB.
+O recorte da câmera limita as amostras para não misturar painéis com a cena.
+O grão fica depois da reconstrução; o histórico TAA permanece sem grão/nitidez.
+Isto não fornece vetores de movimento, FSR 2, geração de frames ou Arm ASR.
+Alocação/pipeline recusados falham a publicação do pedido, sem anunciar FSR ativo.
+Referência: [AMD FSR 1](https://gpuopen.com/fidelityfx-superresolution/).
+
+O Ambiente oferece Reinhard (id 0, antigo rótulo Neutral), ACES (id 1) e AgX
+(id 2). Os ids antigos preservam a aparência. AgX reutiliza as funções MIT do
+[shader da Godot 4.4-stable](https://github.com/godotengine/godot/blob/4.4-stable/servers/rendering/renderer_rd/shaders/effects/tonemap.glsl),
+com fonte e licença identificadas em `native/third_party/godot_agx`.
+O contrato usa entrada/saída linear sRGB e uma transferência de apresentação
+posterior. Ambiente v12 e perfil v8 persistem AgX, neblina por altura, energia HDR da neblina e exposição automática; versões antigas continuam
+legíveis. Não há saída HDR de monitor implícita nessa escolha.
+
+A neblina usa `fog_base_height` (metros) e `fog_height_falloff` (1/m) no mesmo
+componente, Inspector, perfil e API genérica. A densidade na altura base é
+`fog_density`; acima dela decai exponencialmente. O shader integra a densidade
+ao longo do raio reconstruído da câmera, respeitando perspectiva, ortográfica,
+roll e início da neblina. Decaimento zero conserva a fórmula uniforme anterior.
+O grupo Neblina dos volumes mistura os dois parâmetros. Trata-se de neblina
+analítica por profundidade/altura; não há volume de dispersão iluminado.
+Referências: [Unreal Exponential Height Fog](https://dev.epicgames.com/documentation/en-us/unreal-engine/exponential-height-fog-in-unreal-engine),
+[Godot Environment](https://docs.godotengine.org/en/stable/classes/class_environment.html)
+e [Unity HDRP 17 Fog](https://docs.unity3d.com/Packages/com.unity.render-pipelines.high-definition@17.0/manual/fog-volume-override-reference.html).
+
+### Exposição por câmera — 23/09/2026
+
+`auto_exposure` usa histograma GPU de 64 faixas, com cortes percentuais baixo/alto,
+cinza alvo, limites EV, peso central opcional e velocidades separadas de adaptação
+em EV/s. `exposure_ev` soma a compensação autoral ao resultado. São multiplicadores
+em stops sobre a luminância linear da Astra, não o contrato físico EV100 de uma câmera.
+O histograma lê o HDR da cena antes da neblina e do bloom; a grade de medição é
+limitada a 256 × 144 amostras. Não há leitura de volta à CPU por quadro.
+
+Vista principal e prévia mantêm estados GPU distintos. Ativação, troca/corte de
+câmera, resize, nova cena e retomada invalidam a adaptação anterior. O Ambiente,
+Inspector, perfis e `Component.SetBool/SetFloat` compartilham os mesmos descritores
+e validação, inclusive `min <= max` e percentil baixo estritamente menor que alto.
+Volumes misturam os valores no grupo Pós; opções booleanas usam seleção discreta.
+Documentos antigos abrem com exposição automática desligada.
+
+Referências de comportamento: [Unity HDRP 17 Exposure](https://docs.unity3d.com/Packages/com.unity.render-pipelines.high-definition@17.0/manual/reference-override-exposure.html),
+[Unreal Auto Exposure](https://dev.epicgames.com/documentation/unreal-engine/auto-exposure-in-unreal-engine)
+e [Godot 4.4 CameraAttributes](https://docs.godotengine.org/en/4.4/classes/class_cameraattributes.html).
+A implementação do histograma/adaptação é própria. HDR intermediário e compute
+são requisitos; indisponibilidade deve ser diagnosticada, sem anunciar efeito ativo.
+
+A separação segue a diferença da Unity 6 entre a intenção alterada via `QualitySettings`
+e o pipeline atual consultável. Na Astra, o acknowledge assíncrono é explícito porque
+alguns eixos exigem reconstrução Vulkan; portanto um setter aceito não é apresentado
+como efeito já aplicado.
+
 ### Validação em hardware
 
 Em 01/09/2026, o AEMAP v3 de produção passou a fornecer 245 grupos espaciais com

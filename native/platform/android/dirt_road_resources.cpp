@@ -4,6 +4,8 @@
 #include "renderer/spatial_render_chunks.h"
 #include "renderer/environment_map.h"
 #include "renderer/water_authoring_geometry.h"
+#include "renderer/texture_payload.h"
+#include "resources/image_decode.h"
 
 #include <android/log.h>
 #include <algorithm>
@@ -12,6 +14,7 @@
 #include <cstring>
 #include <bit>
 #include <cmath>
+#include <limits>
 
 namespace ae::platform::android {
 namespace {
@@ -32,7 +35,8 @@ bool decodeEnvironment(const std::vector<u8> &bytes, EnvironmentLighting &lighti
   if (bytes.size() < 16 || readWord(bytes, 0) != 0x4E454541 ||
       readWord(bytes, 8) != bytes.size()) return false;
   const u32 version = readWord(bytes, 4);
-  const usize valueCount = version == 1 ? 16 : (version == 2 || version == 3) ? 32 : 0;
+  const usize valueCount = version == 1 ? 16 :
+      (version >= 2 && version <= renderer::EnvironmentResourceCurrentVersion) ? 32 : 0;
   if (valueCount == 0 || !renderer::decodeEnvironmentMapDescription(bytes, mapDescription)) return false;
 
   // AEEN v2 owns all global visual parameters. Defaults only keep v1 projects
@@ -213,27 +217,41 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
   const u32 maxDimension = std::min(4096u, properties.limits.maxImageDimension2D);
   images_.resize(header_.textureCount);
   samplers_.resize(header_.textureCount);
+  packageTextureResidency_={};
+  packageTextureResidency_.requestedMipBias=textureResidencyMipBias_;
+  textureResidencyDiagnostic_.clear();
   for (u32 index = 0; index < header_.textureCount; ++index) {
     if (cancel != nullptr && cancel->load()) return false;
     char name[96];
     std::snprintf(name, sizeof(name), astc ? "%s/texture_%03u.aetex"
                                            : "%s/texture_%03u-fallback.aetex", assetRoot, index);
     const u32 flags = textureRecords_[index].flags;
+    const auto filter = renderer::decodeTextureSampler(flags);
     rhi::SamplerDesc sampling{};
-    sampling.minFilter = (flags & 1u) != 0 ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-    sampling.magFilter = sampling.minFilter;
-    sampling.mipmapMode = (flags & 2u) != 0 ? VK_SAMPLER_MIPMAP_MODE_LINEAR
-                                             : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sampling.minFilter = filter.minLinear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    sampling.magFilter = filter.magLinear ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    sampling.mipmapMode = filter.mipLinear ? VK_SAMPLER_MIPMAP_MODE_LINEAR
+                                            : VK_SAMPLER_MIPMAP_MODE_NEAREST;
     sampling.addressU = addressMode((flags & 4u) != 0);
     sampling.addressV = addressMode((flags & 8u) != 0);
     // R4 (T13): a anisotropia da política chega de fato ao sampler. Antes ela era
     // calculada e registrada no log, mas nenhum sampler de material a usava.
-    if (samplerAnisotropy_ > 1.0f && (flags & 1u) != 0) {
+    if (samplerAnisotropy_ > 1.0f && filter.minLinear) {
       sampling.enableAnisotropy = true;
       sampling.maxAnisotropy = samplerAnisotropy_;
     }
+    AndroidTextureResidency resident;
     if (!loadAndroidTexture(device, upload, assets, name, maxDimension, perTextureBudget,
-                            sampling, images_[index], samplers_[index], cancel, "DirtRoad")) return false;
+                            sampling, filter.mipEnabled, images_[index], samplers_[index], cancel, "DirtRoad",
+                            textureResidencyMipBias_,&resident)) {
+      packageTextureResidency_.fullyApplied=false;
+      textureResidencyDiagnostic_="Textura material do pacote sem mip compatível com o limite pedido.";
+      return false;
+    }
+    ++packageTextureResidency_.textures;
+    packageTextureResidency_.sourceBytes+=resident.sourceBytes;
+    packageTextureResidency_.residentBytes+=resident.residentBytes;
+    if(resident.baseMip) ++packageTextureResidency_.reducedTextures;
   }
   std::vector<u8> environmentBytes;
   std::snprintf(assetPath, sizeof(assetPath), "%s/environment.aeenv", assetRoot);
@@ -250,7 +268,7 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
   environmentSampling.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   std::snprintf(assetPath, sizeof(assetPath), "%s/environment.aetex", assetRoot);
   if (!loadAndroidTexture(device, upload, assets, assetPath, maxDimension,
-                          128 * Megabyte, environmentSampling, environmentImage_,
+                          128 * Megabyte, environmentSampling, true, environmentImage_,
                           environmentSampler_, cancel, "Environment")) return false;
   if (environmentMapDescription_.hasPrefilteredSpecular()) {
     rhi::SamplerDesc specularSampling{};
@@ -262,7 +280,7 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
     std::snprintf(assetPath, sizeof(assetPath), "%s/environment-specular.aetex", assetRoot);
     if (!loadAndroidTexture(device, upload, assets, assetPath,
                             std::min(maxDimension, environmentMapDescription_.specularWidth),
-                            8 * Megabyte, specularSampling, environmentSpecularImage_,
+                            8 * Megabyte, specularSampling, true, environmentSpecularImage_,
                             environmentSpecularSampler_, cancel, "Environment/Specular")) return false;
   }
   if (environmentMapDescription_.hasSplitSumBrdf()) {
@@ -275,7 +293,7 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
     std::snprintf(assetPath, sizeof(assetPath), "%s/environment-brdf.aetex", assetRoot);
     if (!loadAndroidTexture(device, upload, assets, assetPath,
                             std::min(maxDimension, environmentMapDescription_.brdfWidth),
-                            2 * Megabyte, brdfSampling, environmentBrdfImage_,
+                            2 * Megabyte, brdfSampling, true, environmentBrdfImage_,
                             environmentBrdfSampler_, cancel, "Environment/BRDF")) return false;
   }
   __android_log_print(ANDROID_LOG_INFO, LogTag,
@@ -292,6 +310,36 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
       header_.triangleCount,
       astc ? "ASTC6x6" : "RGBA8-fallback",
       std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count());
+  return true;
+}
+
+bool DirtRoadResources::setEnvironmentMap(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload,
+                                         renderer::SharedEnvironmentMap resource) {
+  if(resource==customEnvironment_) return true;
+  if(resource && !resource->valid()) return false;
+  std::array<rhi::VulkanImage,3> images;
+  std::array<rhi::VulkanSampler,3> samplers;
+  if(resource) {
+    const renderer::Rgba16fMipChain *chains[]{&resource->panorama,&resource->specular,&resource->brdf};
+    for(u32 i=0;i<3;++i) {
+      const auto &chain=*chains[i];
+      rhi::ImageDesc desc{};desc.width=chain.width;desc.height=chain.height;desc.mipLevels=chain.levels;
+      desc.format=VK_FORMAT_R16G16B16A16_SFLOAT;
+      desc.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
+      desc.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+      auto &allocator=device.memoryAllocator();
+      if(!allocator.createImage(desc,&images[i]) ||
+         !upload.uploadSampledMipChain(allocator,chain.texels.data(),chain.texels.size()*sizeof(u16),images[i])) return false;
+      rhi::SamplerDesc sampler{};sampler.minFilter=VK_FILTER_LINEAR;sampler.magFilter=VK_FILTER_LINEAR;
+      sampler.mipmapMode=VK_SAMPLER_MIPMAP_MODE_LINEAR;
+      sampler.addressU=i==0?VK_SAMPLER_ADDRESS_MODE_REPEAT:VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+      sampler.addressV=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+      sampler.maxLod=static_cast<float>(chain.levels-1);
+      if(!samplers[i].initialize(device.handle(),sampler)) return false;
+    }
+  }
+  customEnvironmentImages_=std::move(images);customEnvironmentSamplers_=std::move(samplers);
+  customEnvironment_=std::move(resource);
   return true;
 }
 
@@ -362,45 +410,92 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
                         authoringImages_.size()==authoringSamplers_.size();
   const auto plan=renderer::planAuthoringTextureReuse(
       consistent?std::span<const renderer::SharedAuthoringTexture>(authoringTextureSources_):
-                 std::span<const renderer::SharedAuthoringTexture>{},extraTextures);
+                 std::span<const renderer::SharedAuthoringTexture>{},extraTextures,
+      authoringResidencyMipBias_,textureResidencyMipBias_);
   std::vector<u8> samplerReused(extraTextures.size());
+  std::vector<u32> residentLevels(extraTextures.size());
+  MaterialTextureResidencyReport residency{};
+  residency.requestedMipBias=textureResidencyMipBias_;
+  textureResidencyDiagnostic_.clear();
+  const auto refuseTexture=[&](const char *reason) {
+    residency.fullyApplied=false;authoringTextureResidency_=residency;
+    textureResidencyDiagnostic_=reason;return false;
+  };
   // Texturas importadas: imagem com todos os mips e sampler de cada uma, antes
   // de trocar qualquer coisa. Uma falha aqui mantém a biblioteca anterior.
   std::vector<rhi::VulkanImage> nextImages(extraTextures.size());
   std::vector<rhi::VulkanSampler> nextSamplers(extraTextures.size());
   for(usize t=0;t<extraTextures.size();++t) {
     const auto &texture=extraTextures[t];
-    if(!texture || !texture->valid()) return false;
+    if(!texture || !texture->valid()) return refuseTexture("Textura autoral inválida.");
+    ++residency.textures;residency.sourceBytes+=texture->mipChain.size();
+    rhi::ImageDesc image{};
+    image.width=texture->width;image.height=texture->height;image.mipLevels=texture->levels;
+    image.format=texture->format==renderer::AuthoringTextureAstc4x4
+      ?(texture->srgb?VK_FORMAT_ASTC_4x4_SRGB_BLOCK:VK_FORMAT_ASTC_4x4_UNORM_BLOCK)
+      :(texture->srgb?VK_FORMAT_R8G8B8A8_SRGB:VK_FORMAT_R8G8B8A8_UNORM);
+    image.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
+    image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;image.memoryClass=rhi::MemoryClass::Texture;
+
+    // Um perfil sem mip guarda só o nível autoral. Para Half, RGBA8 gera
+    // temporariamente a cadeia correta (inclusive conversão sRGB) e envia só o
+    // novo nível base; o recurso/cache CPU continua intocado e sem mip sampling.
+    std::vector<u8> generatedChain;
+    bool generated=false;
+    if(textureResidencyMipBias_>=image.mipLevels && (image.width>1 || image.height>1)) {
+      if(texture->format!=renderer::AuthoringTextureRgba8)
+        return refuseTexture("Textura autoral comprimida não possui o mip pedido pela qualidade.");
+      resources::DecodedImage base;
+      base.width=texture->width;base.height=texture->height;base.rgba=texture->mipChain;
+      u32 generatedLevels=0;
+      if(!resources::buildMipChain(base,texture->srgb,generatedChain,generatedLevels) ||
+         generatedLevels<=textureResidencyMipBias_)
+        return refuseTexture("Não foi possível gerar o mip de residência da textura autoral.");
+      image.mipLevels=generatedLevels;generated=true;++residency.generatedMipTextures;
+    }
+    const u32 requiredBias=(image.width==1 && image.height==1)?0:textureResidencyMipBias_;
+    auto resident=renderer::chooseResidentRange(image,std::numeric_limits<u32>::max(),
+                                                 std::numeric_limits<u64>::max(),requiredBias);
+    if(!resident.valid()) return refuseTexture("Textura autoral não possui o mip pedido pela qualidade.");
+    const u8 *source=generated?generatedChain.data():texture->mipChain.data();
+    if(generated) {
+      // `mipmaps=false`: o nível reduzido vira a base, sem habilitar os níveis
+      // seguintes que o perfil autoral recusou.
+      resident.description.mipLevels=1;
+      resident.byteSize=rhi::sampledMipByteSize(resident.description.format,
+                                                 resident.description.width,resident.description.height);
+    }
+    residentLevels[t]=resident.description.mipLevels;
+    residency.residentBytes+=resident.byteSize;
+    if(resident.baseMip) ++residency.reducedTextures;
     const bool reuseImage=plan.reuse[t]!=renderer::AuthoringTextureNoReuse;
     if(!reuseImage) {
-      rhi::ImageDesc image{};
-      image.width=texture->width;image.height=texture->height;image.mipLevels=texture->levels;
-      image.format=texture->format==renderer::AuthoringTextureAstc4x4
-        ?(texture->srgb?VK_FORMAT_ASTC_4x4_SRGB_BLOCK:VK_FORMAT_ASTC_4x4_UNORM_BLOCK)
-        :(texture->srgb?VK_FORMAT_R8G8B8A8_SRGB:VK_FORMAT_R8G8B8A8_UNORM);
-      image.usage=VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
-      image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;image.memoryClass=rhi::MemoryClass::Texture;
-      if(rhi::sampledChainByteSize(image)!=texture->mipChain.size() || !allocator.createImage(image,&nextImages[t]) ||
-         !upload.uploadSampledMipChain(allocator,texture->mipChain.data(),texture->mipChain.size(),nextImages[t])) return false;
+      if(resident.byteOffset+resident.byteSize>(generated?generatedChain.size():texture->mipChain.size()) ||
+         !allocator.createImage(resident.description,&nextImages[t]) ||
+         !upload.uploadSampledMipChain(allocator,source+resident.byteOffset,resident.byteSize,nextImages[t]))
+        return refuseTexture("Falha ao enviar a residência reduzida da textura autoral.");
     }
     // O sampler reaproveitado só vale se a anisotropia da política não mudou.
     if(reuseImage && authoringAnisotropy_==samplerAnisotropy_) {samplerReused[t]=1;continue;}
     const u32 flags=texture->samplerFlags;
+    const auto filter=renderer::decodeTextureSampler(flags);
     const auto wrap=[flags](u32 repeat,u32 mirror) {
       return (flags&mirror)?VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT:
              (flags&repeat)?VK_SAMPLER_ADDRESS_MODE_REPEAT:VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     };
     rhi::SamplerDesc sampling{};
-    sampling.minFilter=sampling.magFilter=(flags&renderer::AuthoringTextureLinearFilter)?VK_FILTER_LINEAR:VK_FILTER_NEAREST;
-    sampling.mipmapMode=(flags&renderer::AuthoringTextureLinearMip)?VK_SAMPLER_MIPMAP_MODE_LINEAR:VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sampling.minFilter=filter.minLinear?VK_FILTER_LINEAR:VK_FILTER_NEAREST;
+    sampling.magFilter=filter.magLinear?VK_FILTER_LINEAR:VK_FILTER_NEAREST;
+    sampling.mipmapMode=filter.mipLinear?VK_SAMPLER_MIPMAP_MODE_LINEAR:VK_SAMPLER_MIPMAP_MODE_NEAREST;
     sampling.addressU=wrap(renderer::AuthoringTextureRepeatU,renderer::AuthoringTextureMirrorU);
     sampling.addressV=wrap(renderer::AuthoringTextureRepeatV,renderer::AuthoringTextureMirrorV);
-    sampling.maxLod=static_cast<float>(texture->levels-1);
+    sampling.maxLod=filter.mipEnabled?static_cast<float>(residentLevels[t]-1):0.0f;
     // R4 (T13): anisotropia da qualidade escolhida, salvo quando o perfil da textura a desliga.
-    if(samplerAnisotropy_>1.0f && (flags&renderer::AuthoringTextureLinearFilter) && !(flags&renderer::AuthoringTextureNoAnisotropy)) {
+    if(samplerAnisotropy_>1.0f && filter.minLinear && !(flags&renderer::AuthoringTextureNoAnisotropy)) {
       sampling.enableAnisotropy=true;sampling.maxAnisotropy=samplerAnisotropy_;
     }
-    if(!nextSamplers[t].initialize(device.handle(),sampling)) return false;
+    if(!nextSamplers[t].initialize(device.handle(),sampling))
+      return refuseTexture("Falha ao criar sampler da textura autoral residente.");
   }
   // Tudo o que é novo existe e subiu: só agora as imagens reaproveitadas mudam de
   // dono. Uma falha acima deixou a biblioteca anterior intacta.
@@ -414,6 +509,8 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   authoringImages_=std::move(nextImages);authoringSamplers_=std::move(nextSamplers);
   authoringTextureSources_.assign(extraTextures.begin(),extraTextures.end());
   authoringAnisotropy_=samplerAnisotropy_;
+  authoringResidencyMipBias_=textureResidencyMipBias_;
+  authoringTextureResidency_=residency;
   lastReusedTextures_=plan.reused;lastUploadedTextures_=plan.uploaded;lastGeometryReused_=sameGeometry;
   pickingVertices_=std::move(vertices);pickingIndices_=std::move(indices);
   draws_=std::move(draws);materials_=std::move(materials);
@@ -483,6 +580,9 @@ platform::FreeCameraState DirtRoadResources::defaultGameplayCamera() const {
 }
 
 void DirtRoadResources::shutdown() {
+  customEnvironment_.reset();
+  for(auto &sampler:customEnvironmentSamplers_) sampler.shutdown();
+  for(auto &image:customEnvironmentImages_) image.reset();
   environmentBrdfSampler_.shutdown();
   environmentBrdfImage_.reset();
   environmentSpecularSampler_.shutdown();
@@ -503,6 +603,8 @@ void DirtRoadResources::shutdown() {
   draws_.clear();
   materials_.clear();
   textureRecords_.clear();
+  packageTextureResidency_={};authoringTextureResidency_={};
+  authoringResidencyMipBias_=~u32{0};textureResidencyDiagnostic_.clear();
   header_ = {};
   packageFingerprint_ = 0;
   pickingVertices_.clear();pickingIndices_.clear();

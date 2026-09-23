@@ -187,6 +187,62 @@ AE_TEST(screen_folded_components_open_into_available_inspector_space) {
   AE_EXPECT_TRUE(findWidget(expanded,widgetId(EditorWidget::AddComponentMenu),state.surface,point),"Add stays reachable while editing");
 }
 
+AE_TEST(graphics_panel_paginates_before_overlapping_apply_on_short_landscape) {
+  WaterLab lab;
+  Frame frame;
+  auto state=waterLabState(lab);
+  state.surface={0.0f,0.0f,900.0f,360.0f};
+  state.qualityPanel=true;
+  state.qualityTab=2;
+  composeFrame(frame,state);
+  UiRect apply{},lastSetting{};
+  bool foundApply=false,foundPager=false;
+  for(const auto &command:frame.list.commands()) {
+    if(command.kind!=UiPrimitive::Text) continue;
+    const auto text=frame.list.textOf(command);
+    if(text=="Aplicar"||text=="Aplicado") {apply=command.bounds;foundApply=true;}
+    if(text=="Ambiente"||text=="BRDF especular"||text=="Pós-processamento")
+      if(command.bounds.bottom()>lastSetting.bottom()) lastSetting=command.bounds;
+    if(text.starts_with("1 / ")) foundPager=true;
+  }
+  AE_EXPECT_TRUE(foundApply&&foundPager,"painel baixo mostra ação fixa e paginação");
+  AE_EXPECT_TRUE(lastSetting.bottom()<=apply.y,"controles paginados não invadem Aplicar");
+}
+
+AE_TEST(graphics_entry_lives_in_the_editor_top_bar) {
+  WaterLab lab;
+  Frame frame;
+  composeFrame(frame,waterLabState(lab));
+  UiRect graphics{};
+  bool found=false;
+  for(const auto &command:frame.list.commands()) {
+    if(command.kind==UiPrimitive::Text&&frame.list.textOf(command)=="Gráficos") {
+      graphics=command.bounds;found=true;break;
+    }
+  }
+  AE_EXPECT_TRUE(found,"barra superior oferece Gráficos");
+  AE_EXPECT_TRUE(frame.layout.topBar.contains({graphics.x+1.0f,graphics.y+1.0f})&&
+                 frame.layout.topBar.contains({graphics.right()-1.0f,graphics.bottom()-1.0f}),
+                 "entrada fica na barra do editor, fora do viewport");
+}
+
+AE_TEST(graphics_panel_draws_after_viewport_toolbars) {
+  WaterLab lab;
+  Frame frame;
+  auto state=waterLabState(lab);
+  state.qualityPanel=true;
+  composeFrame(frame,state);
+  usize lighting=0,title=0;
+  const auto commands=frame.list.commands();
+  for(usize index=0;index<commands.size();++index) {
+    const auto &command=commands[index];
+    if(command.kind==UiPrimitive::Image&&command.image==static_cast<UiImageId>(UiIcon::LightingSceneLighting))
+      lighting=index;
+    if(command.kind==UiPrimitive::Text&&frame.list.textOf(command)=="Gráficos do projeto") title=index;
+  }
+  AE_EXPECT_TRUE(lighting>0&&title>lighting,"painel de gráficos cobre a toolbar do viewport em vez de ficar sob ela");
+}
+
 AE_TEST(screen_mesh_cooking_group_reports_the_jolt_hull_before_play) {
   std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;
   std::vector<renderer::MapMaterialRecord> materials;
