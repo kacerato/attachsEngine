@@ -293,6 +293,8 @@ enum class EditorWidget : u32 {
   ImportMeshRowBase=0x94000000u,
   // + índice do modelo de cena: monta aquele cenário.
   SceneTemplateRowBase=0x95000000u,
+  // + componente + propriedade<<8 + endereço<<16: valor por endereço (ComponentSlotNumber).
+  ComponentSlotNumberBase=0x96000000u,
   ImpactOpenBase=0x90000000u, ImpactRowBase=0x91000000u, ImpactClose=0x92000000u, ImpactPrevious, ImpactNext, ImpactRepair, ImpactRepairApply, ImpactRepairShared, ImpactRepairScope,
   ComponentColorBase=0x7e000000u,
   ColorHueBase=0x5f000000u, ColorSvBase=0x5f000100u, ColorApply=0x5f000200u, ColorCancel,
@@ -360,7 +362,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::HierarchyCollapseBase,kWideRange},
   {EditorWidget::ImpactOpenBase,kRange},{EditorWidget::ImpactRowBase,kRange},{EditorWidget::ImpactClose,kRange},
   {EditorWidget::SceneViewRowBase,kRange},{EditorWidget::ImportMeshRowBase,kRange},
-  {EditorWidget::SceneTemplateRowBase,kRange}};
+  {EditorWidget::SceneTemplateRowBase,kRange},{EditorWidget::ComponentSlotNumberBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -754,6 +756,8 @@ struct EditorScreenState final {
   // G6-B: skin e juntas resolvidos da Malha com esqueleto, e o clipe da
   // Animação selecionada (nome, duração e, no Play, o tempo corrente).
   std::string skinStatus, animationStatus;
+  // Nomes dos blend shapes da malha selecionada, na ordem dos endereços de peso.
+  std::vector<std::string> blendShapeNames;
   bool canUndo = false;
   bool canRedo = false;
 };

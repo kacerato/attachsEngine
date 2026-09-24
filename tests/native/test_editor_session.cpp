@@ -11,6 +11,7 @@
 #include "renderer/water_authoring_geometry.h"
 #include "editor/editor_water_play.h"
 #include "editor/editor_properties.h"
+#include "scene/skinned_mesh.h"
 
 #include <cmath>
 #include <cstdio>
@@ -2559,4 +2560,66 @@ AE_TEST(temporal_reconstruction_control_shows_four_states_and_refuses_unavailabl
                  request.antiAliasing!=renderer::AntiAliasingMode::Temporal,"FSR 2 recusado: próximo é Desligada");
   AE_EXPECT_TRUE(fixture.session.screen().status.find("AMD FSR 2 indisponível")!=std::string::npos,
                  "a barra diz por que pulou");
+}
+
+// Valor por endereço no inspetor genérico: o peso de cada blend shape é um
+// campo próprio, editado pelo teclado numérico, validado pela faixa do
+// contrato e desfeito como qualquer propriedade autoral.
+AE_TEST(session_inspector_edits_blend_shape_weights_per_slot_with_undo) {
+  Fixture fixture;
+  auto values=*fixture.session.document().find(fixture.cube);
+  auto *skinned=static_cast<scene::SkinnedMesh *>(values.components.add(scene::SkinnedMesh::descriptor));
+  AE_EXPECT_TRUE(skinned!=nullptr,"malha deformável adicionada");
+  if(!skinned) return;
+  skinned->blendShapeWeights={0,0};
+  AE_EXPECT_TRUE(fixture.session.document().applyEntityValues(fixture.cube,values),"dois blend shapes");
+  fixture.session.setSelection(fixture.cube);fixture.session.history().clear();fixture.session.update();
+  u32 type=0;
+  const auto &components=fixture.session.document().find(fixture.cube)->components;
+  for(u32 i=0;i<components.size();++i) if(&components.at(i)->type()==&scene::SkinnedMesh::descriptor) type=i;
+  tapWidget(fixture,widgetId(EditorWidget::ComponentFoldBase)+type);
+  // Abas refletidas: Skin e Blend shapes.
+  tapWidget(fixture,widgetId(EditorWidget::ComponentGroupBase)+1);
+  const u32 second=widgetId(EditorWidget::ComponentSlotNumberBase)+type+(0u<<8)+(1u<<16);
+  revealProperty(fixture,second);
+  AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::ComponentSlotNumberBase)+type).x>=0,"campo do primeiro peso");
+  tapWidget(fixture,second);
+  AE_EXPECT_TRUE(fixture.session.screen().numericField==second,"teclado aberto no segundo endereço");
+  for(const u32 key:{3u,1u,9u,4u}) tapWidget(fixture,widgetId(EditorWidget::NumericKeyBase)+key); // 42.5
+  tapWidget(fixture,widgetId(EditorWidget::NumericApply));
+  const auto *edited=static_cast<const scene::SkinnedMesh *>(
+      fixture.session.document().find(fixture.cube)->components.find(scene::SkinnedMesh::descriptor));
+  AE_EXPECT_TRUE(edited && edited->blendShapeWeights[0]==0 && edited->blendShapeWeights[1]==42.5f,"só o segundo peso muda");
+  AE_EXPECT_EQ(fixture.session.history().undoDepth(),1u,"uma entrada de desfazer");
+  // Fora da faixa do contrato: recusado, documento intacto.
+  auto rejected=*fixture.session.document().find(fixture.cube);
+  AE_EXPECT_TRUE(scene::setComponentSlotProperty(rejected.components,scene::SkinnedMesh::descriptor.id,"blend_shape_weight",1,2000.0f)==
+                 scene::ComponentPropertyStatus::InvalidValue,"peso além de 1000 recusado");
+  AE_EXPECT_TRUE(scene::setComponentSlotProperty(rejected.components,scene::SkinnedMesh::descriptor.id,"blend_shape_weight",2,10.0f)==
+                 scene::ComponentPropertyStatus::InvalidValue,"endereço inexistente não é criado");
+  AE_EXPECT_TRUE(fixture.session.history().undo(fixture.session.document()),"desfazer");
+  edited=static_cast<const scene::SkinnedMesh *>(
+      fixture.session.document().find(fixture.cube)->components.find(scene::SkinnedMesh::descriptor));
+  AE_EXPECT_TRUE(edited && edited->blendShapeWeights[1]==0,"desfazer volta o peso");
+  EditorActionRequest request;request.version=fixture.session.sceneVersion();request.entity=fixture.cube;
+  request.action=EditorAction::ComponentSlotProperty;request.componentType=std::string(scene::SkinnedMesh::descriptor.id);
+  request.componentProperty="blend_shape_weight";request.componentSlot=0;request.componentValue=100.0f;
+  AE_EXPECT_TRUE(fixture.session.dispatch(request).status==EditorActionStatus::Applied,"ferramenta escreve o mesmo endereço");
+  edited=static_cast<const scene::SkinnedMesh *>(
+      fixture.session.document().find(fixture.cube)->components.find(scene::SkinnedMesh::descriptor));
+  AE_EXPECT_TRUE(edited && edited->blendShapeWeights[0]==100,"peso pela ação de ferramenta");
+}
+
+// Entrada em Play sem toque (opção de lançamento da bancada): mesmo preparo do
+// botão, e a volta pelo botão restaura o editor como sempre.
+AE_TEST(session_start_play_matches_the_play_button_and_is_idempotent) {
+  Fixture f;f.session.setSelection(f.cube);
+  AE_EXPECT_TRUE(!f.session.isPlaying(),"começa editando");
+  AE_EXPECT_TRUE(f.session.startPlay(),"Play aceito sem código pendente");
+  AE_EXPECT_TRUE(f.session.isPlaying() && f.session.playRequested(),"mesmo estado que o botão produz");
+  AE_EXPECT_TRUE(locateWidget(f.session,hierarchyRowWidget(f.cube)).x<0,"painéis de autoria recolhidos");
+  AE_EXPECT_TRUE(f.session.startPlay(),"pedir de novo não reinicia nem falha");
+  tapWidget(f,widgetId(EditorWidget::PlayFromTopBar));
+  AE_EXPECT_TRUE(!f.session.isPlaying(),"o botão para");
+  AE_EXPECT_TRUE(locateWidget(f.session,hierarchyRowWidget(f.cube)).x>=0,"hierarquia volta");
 }

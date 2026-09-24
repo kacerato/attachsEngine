@@ -566,3 +566,21 @@ AE_TEST(inspector_clip_resource_command_accepts_loaded_clips_refuses_unknown_and
   AE_EXPECT_TRUE(session.dispatch(request).status == EditorActionStatus::Applied &&
                  component<scene::Animation>(doc, owner)->clip == animation->clips[0], "um desfazer volta ao Survey");
 }
+
+// O documento salvo guarda um peso por blend shape: reabrir não pode zerar os endereços.
+AE_TEST(morph_cube_blend_shape_weights_survive_save_and_load) {
+  const auto bytes = fixture("AnimatedMorphCube.glb");
+  EditorSession session;
+  DeformationPublisher gpu;
+  startSession(session, gpu);
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.importModel(bytes, "Fontes/cubo.glb", {}, report), report.diagnostic.c_str());
+  const auto cube = withComponent(session.document(), scene::SkinnedMesh::descriptor);
+  const auto path = std::string(AETHER_REPOSITORY_ROOT) + "/build/test-morph-weights.aescene";
+  AE_EXPECT_TRUE(session.save(path.c_str(), 0), "cena salva");
+  EditorSession reopened;
+  AE_EXPECT_TRUE(reopened.load(path.c_str(), 0), "cena reaberta");
+  const auto *mesh = component<scene::SkinnedMesh>(reopened.document(), cube);
+  AE_EXPECT_TRUE(mesh && mesh->blendShapeWeights.size() == 2, "dois endereços de peso depois de reabrir");
+  std::remove(path.c_str());
+}

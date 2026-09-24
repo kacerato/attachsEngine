@@ -738,6 +738,20 @@ void buildPropertyPage(ScreenBuilder &builder, UiRect content, const EditorEntit
 // qual material ele usa, em que ALCANCE a edição vale, e os campos. O alcance
 // fica sempre à vista: editar o recurso compartilhado muda todos os usos, e isso
 // não pode ser uma surpresa.
+// Abas refletidas de um componente, na ordem em que aparecem. Desenho e toque
+// usam esta mesma lista: se divergirem, o toque numa aba abre outra.
+std::vector<std::string_view> componentGroups(const scene::ComponentValue &component) {
+  std::vector<std::string_view> groups;
+  const auto collect=[&](const auto &properties) {
+    for(const auto &p:properties) if(p.presentation.isVisible(component)&&!p.presentation.group.empty() &&
+        std::find(groups.begin(),groups.end(),p.presentation.group)==groups.end()) groups.push_back(p.presentation.group);
+  };
+  const auto &type=component.type();
+  collect(type.numbers);collect(type.booleans);collect(type.enums);
+  collect(type.references);collect(type.resourceBindings);collect(type.slotNumbers);
+  return groups;
+}
+
 void buildMaterialSlots(ScreenBuilder &builder,UiRect content) {
   const auto &theme=builder.theme;const auto &state=builder.state;const auto &view=state.materialSlotView;
   if(!view.slots || content.height<40) return;
@@ -1170,17 +1184,9 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
   // A aba Material é por SLOT, com alcance explícito; não é mais a lista de
   // números do componente, que só alcançava o primeiro slot.
   if(mesh && builder.state.meshTab) {buildMaterialSlots(builder,content);return;}
-  std::vector<std::string_view> groups;
-  const auto collectGroups=[&](const auto &properties) {
-    for(const auto &p:properties) if(p.presentation.isVisible(*component)&&!p.presentation.group.empty() &&
-        std::find(groups.begin(),groups.end(),p.presentation.group)==groups.end()) groups.push_back(p.presentation.group);
-  };
   // Malha já navega entre Geometria e o editor de Material por slot acima.
   // As abas refletidas repetiriam esses nomes sem acrescentar controles.
-  if(!mesh) {
-    collectGroups(entry.type->numbers);collectGroups(entry.type->booleans);collectGroups(entry.type->enums);
-    collectGroups(entry.type->references);collectGroups(entry.type->resourceBindings);
-  }
+  const auto groups=mesh?std::vector<std::string_view>{}:componentGroups(*component);
   std::string_view group=mesh?std::string_view{"Geometria"}:std::string_view{builder.state.componentGroup};
   if(!groups.empty() && std::find(groups.begin(),groups.end(),group)==groups.end()) group=groups.front();
   if(groups.size()>1) {
@@ -1208,7 +1214,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     takeTop(content,6);
   }
   const auto show=[&](const scene::PropertyPresentation &p) {return p.isVisible(*component)&&(p.group.empty()||p.group==group);};
-  struct Field {u32 kind,index,slot=0;}; // 0 bool, 1 enum, 2 number, 3 action, 4 object ref, 5 triple, 6 resource, 7 collider insight, 8 volume insight
+  struct Field {u32 kind,index,slot=0;}; // 0 bool, 1 enum, 2 number, 3 action, 4 object ref, 5 triple, 6 resource, 7 collider insight, 8 volume insight, 9 slot number
   std::vector<Field> fields;
   if(entry.type==&scene::Collider::descriptor && group=="Cozimento") fields.push_back({7,0});
   if(entry.type==&scene::Environment::descriptor && group=="Volume") fields.push_back({8,0});
@@ -1245,7 +1251,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       fields.push_back({3,widgetId(EditorWidget::LodGroupStatus)});
     if(entry.type==&scene::SkinnedMesh::descriptor && group=="Skin" && !builder.state.skinStatus.empty())
       fields.push_back({3,widgetId(EditorWidget::SkinnedMeshStatus)});
-    if(entry.type==&scene::Animation::descriptor && group=="Clipe" && !builder.state.animationStatus.empty())
+    if(entry.type==&scene::Animation::descriptor && group=="Clipes" && !builder.state.animationStatus.empty())
       fields.push_back({3,widgetId(EditorWidget::AnimationStatus)});
     for(u32 i=0;i<entry.type->numbers.size();++i) {
       if(!show(entry.type->numbers[i].presentation)) continue;
@@ -1264,6 +1270,11 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
         }
       }
       if(!grouped) fields.push_back({2,i});
+    }
+    for(u32 i=0;i<entry.type->slotNumbers.size();++i) {
+      const auto &property=entry.type->slotNumbers[i];
+      if(!show(property.presentation)) continue;
+      for(u32 slot=0;slot<property.slotCount(*component) && slot<256;++slot) fields.push_back({9,i,slot});
     }
   }
   if(content.height<40) return;
@@ -1377,6 +1388,20 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       if(!property.presentation.unit.empty()) builder.label(takeRight(slot,24),property.presentation.unit,theme.color.textMuted,theme.type.caption,UiAlign::Center);
       builder.label(slot,value,property.presentation.isEditable(*component)?theme.color.text:theme.color.textMuted,theme.type.numeric,UiAlign::Center);
       if(property.presentation.isEditable(*component)) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentNumberBase)+index+(f.index<<8));
+    } else if(f.kind==9) {
+      const auto &property=entry.type->slotNumbers[f.index];
+      // O endereço tem nome quando a fonte dá (alvo de blend shape); senão, a posição.
+      std::string name;
+      if(entry.type==&scene::SkinnedMesh::descriptor && f.slot<builder.state.blendShapeNames.size())
+        name=builder.state.blendShapeNames[f.slot];
+      if(name.empty()) name=std::string(property.name)+" · "+std::to_string(f.slot+1);
+      builder.label(takeLeft(slot,slot.width*.62f),name.c_str(),theme.color.textDim,theme.type.caption);
+      char value[32];std::snprintf(value,sizeof(value),"%.6g",static_cast<double>(property.read?property.read(*component,f.slot):0.0f));
+      builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.silhouette,8);
+      if(!property.presentation.unit.empty()) builder.label(takeRight(slot,24),property.presentation.unit,theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      const bool editable=property.write&&property.presentation.isEditable(*component);
+      builder.label(slot,value,editable?theme.color.text:theme.color.textMuted,theme.type.numeric,UiAlign::Center);
+      if(editable) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentSlotNumberBase)+index+(f.index<<8)+(f.slot<<16));
     } else if(f.kind==6) {
       const auto &binding=entry.type->resourceBindings[f.index];const auto asset=binding.at(*component,f.slot);
       std::string name=binding.name;
@@ -4225,9 +4250,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   if(widget>=widgetId(EditorWidget::ComponentGroupBase)&&widget<widgetId(EditorWidget::ComponentGroupBase)+0x01000000u) {
     const auto *entity=document.find(state.selection);const auto *value=entity?entity->components.findInstance(state.expandedNative):nullptr;
     if(!value) return outcome;
-    std::vector<std::string_view> groups;
-    const auto collect=[&](const auto &fields){for(const auto &p:fields) if(p.presentation.isVisible(*value)&&!p.presentation.group.empty() && std::find(groups.begin(),groups.end(),p.presentation.group)==groups.end()) groups.push_back(p.presentation.group);};
-    collect(value->type().numbers);collect(value->type().booleans);collect(value->type().enums);collect(value->type().references);
+    const auto groups=componentGroups(*value);
     const auto i=widget-widgetId(EditorWidget::ComponentGroupBase);
     if(i<groups.size()) {state.componentGroup=groups[i];state.propertyPage=0;}
     return outcome;

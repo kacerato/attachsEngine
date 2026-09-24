@@ -900,3 +900,43 @@ host 1132/1132 (as quatro falhas anteriores eram caminhos de fixture, hash de
 conteúdo e contagem de texturas nos testes), suíte gerenciada 460/0 (70
 puladas), sintaxe NDK e APK debug arm64 compilados. Pendente somente o
 aparelho: executar o A/B e observar blend shapes, cross-fade e CesiumMan no Play.
+
+Ainda em 24/09, com o ADB de volta, no Xiaomi/Adreno 825 (APK debug com a
+camada de validação): os três GLB entraram pela UI num projeto novo (CesiumMan
+com 19 juntas e textura, Fox com 3 clipes, cubo com Malha deformável); o
+seletor de clipe listou "Clipe 1 · 2.00 s · CesiumMan.glb"; no Play o CesiumMan
+caminhou e o cubo mudou de forma entre capturas separadas por 0,7 s, sem erro
+de validação. O aparelho revelou dois defeitos do Inspector, corrigidos:
+propriedade por endereço (`slotNumbers`) não tinha campo no Inspector genérico
+— só no editor de material —, então os pesos de blend shape não eram editáveis
+pela UI; e a lista de abas do toque divergia da desenhada (sem `resourceBindings`
+e `slotNumbers`), abrindo a aba errada. Agora `scene::setComponentSlotProperty`
+valida faixa/endereço, a ação `ComponentSlotProperty` e o campo por endereço
+(nome do alvo quando a fonte dá) entram com Desfazer, e as abas saem de uma
+função única. A linha de estado da Animação usava a aba "Clipe" antiga e voltou
+a aparecer em "Clipes". No aparelho: peso 50 aplicado pelo teclado deformou o
+cubo na edição, sobreviveu a Play/Stop e à reabertura; seleção por toque no
+cubo deformado funcionou; Reimportar reconciliou as duas instâncias e
+recompôs os pesos. Uma instância criada pelo APK anterior tinha sido gravada
+com zero pesos; não se reproduziu com o build atual (import novo, Instanciar,
+reabertura, importação posterior, Play/Stop) e a causa não foi identificada.
+Para medir sem toque, o shell repassa uma lista fechada de opções de medição
+e abre projeto por `astra.open_project`; `aether.start_play` entra em Play pelo
+mesmo preparo do botão (`EditorSession::startPlay`).
+
+A/B temporal executado (`tools/android-temporal-ab.ps1`, APK release, projeto
+G6CDeform em Play, 2 rodadas intercaladas × TAA nativo/Arm ASR/AMD FSR 2 ×
+escala 1,0/0,67, uma janela FrameProfile de 600 quadros por caso, estado
+térmico 0 e bateria 33–35 °C): os 12 casos são válidos, cada um com a linha do
+backend que rodou, sem erro de validação nem crash. O resultado de custo é
+**inconclusivo**: a mediana do quadro GPU ficou entre 22,9 e 30,2 ms em todas
+as combinações, a mesma combinação variou até 9 ms entre rodadas e ASR/FSR 2
+mediram mais caro em 0,67 do que em 1,0, o que só o estado de clock explica
+(cena leve, governador baixo). A região temporal domina o quadro nos três
+modos (TAA dentro de pós; ASR/FSR 2 na própria região), o que confirma onde
+está o custo mas não a diferença entre eles. A comparação de imagem (PSNR
+39,7–42,1 dB contra o TAA 1,0 da rodada) também não mede qualidade aqui: a
+cena anima e cada captura pega outra fase. Para concluir falta cena parada
+com câmera travada (ou captura no mesmo tempo de simulação), mais rodadas e
+controle de clock; a mediana do roteiro com número par de amostras foi
+corrigida para a média dos dois centrais.

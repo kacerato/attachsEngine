@@ -19,6 +19,18 @@ import dev.aether.editor.AetherActivity;
  */
 public final class AstraShellActivity extends Activity implements ShellView.Listener {
     private static final long SPLASH_MILLIS = 2200L;
+    /**
+     * Opções de medição que o shell repassa ao renderer (tools/android-temporal-ab.ps1).
+     * Lista fechada: o shell é exportado e o renderer é privado de propósito, então
+     * só passa o que a bancada usa, nunca qualquer "aether.*".
+     */
+    private static final String[] BOOLEAN_MEASUREMENT_OPTIONS = {
+        "aether.disable_dynamic_resolution", "aether.lock_camera", "aether.start_play"
+    };
+    private static final String[] FLOAT_MEASUREMENT_OPTIONS = { "aether.resolution_scale" };
+    private static final String[] STRING_MEASUREMENT_OPTIONS = {
+        "aether.anti_aliasing", "aether.upscaling", "aether.temporal_quality"
+    };
 
     private FrameLayout root;
     private ShellView shell;
@@ -44,6 +56,14 @@ public final class AstraShellActivity extends Activity implements ShellView.List
     }
 
     @Override public void onSplashFinished() {
+        // Bancada sem toque: abre direto o projeto pedido pelo nome, se existir.
+        final String requested = getIntent().getStringExtra("astra.open_project");
+        if (requested != null) {
+            for (Project project : store.projects()) {
+                if (requested.equals(project.name)) { beginOpening(project); return; }
+            }
+            toast("Projeto não encontrado: " + requested);
+        }
         shell.showProjects();
     }
 
@@ -129,6 +149,13 @@ public final class AstraShellActivity extends Activity implements ShellView.List
         // Activity remains private to the application.
         intent.putExtra("aether.profile_frames",
                 getIntent().getBooleanExtra("aether.profile_frames", false));
+        final Intent launch = getIntent();
+        for (String key : BOOLEAN_MEASUREMENT_OPTIONS)
+            if (launch.hasExtra(key)) intent.putExtra(key, launch.getBooleanExtra(key, false));
+        for (String key : FLOAT_MEASUREMENT_OPTIONS)
+            if (launch.hasExtra(key)) intent.putExtra(key, launch.getFloatExtra(key, 1.0f));
+        for (String key : STRING_MEASUREMENT_OPTIONS)
+            if (launch.getStringExtra(key) != null) intent.putExtra(key, launch.getStringExtra(key));
         intent.putExtra("astra.project_path", project.path);
         intent.putExtra("astra.project_name", project.name);
         startActivity(intent);

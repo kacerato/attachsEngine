@@ -118,6 +118,8 @@ struct AndroidShell final {
   ae::u32 editorReportedLightOverflow = 0;
   bool forceTextureFallback = false;
   bool lockCamera = false;
+  // Medição sem toque: entra em Play assim que o projeto termina de abrir.
+  bool startPlayOnOpen = false;
   std::future<bool> rendererInitialization;
   std::atomic<bool> cancelRendererInitialization{false};
   bool sceneValidation = false;
@@ -1923,6 +1925,7 @@ void android_main(android_app *app) {
       (!shell.scenePreview && !benchmarkPreview && !shell.materialPreview));
   shell.forceTextureFallback = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.force_texture_fallback");
   shell.lockCamera = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.lock_camera");
+  shell.startPlayOnOpen = ae::platform::android::readBooleanLaunchOption(app->activity, "aether.start_play");
   ae::u32 requestedCameraRouteMode = 0;
   ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.camera_route_mode",
                                                    requestedCameraRouteMode);
@@ -2795,6 +2798,10 @@ void android_main(android_app *app) {
         if(shell.projectReopening && shell.reopenWork.valid() &&
            shell.reopenWork.wait_for(std::chrono::seconds(0))==std::future_status::ready)
           finishProjectReopen(shell);
+        if(shell.startPlayOnOpen && !shell.projectReopening && session.startPlay()) {
+          shell.startPlayOnOpen=false;
+          __android_log_print(ANDROID_LOG_INFO,LogTag,"[Editor] Play iniciado pela opção aether.start_play.");
+        }
         // R3: o painel mudou o perfil. A prévia volta ao worker com os MESMOS bytes
         // (e o mesmo manifesto de dependências), preparada com o rascunho.
         if(session.takeImportReprepare()) {

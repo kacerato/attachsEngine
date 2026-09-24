@@ -96,5 +96,39 @@ inline ComponentPropertyStatus setComponentTriple(Components &components,std::st
   if(!candidate->valid() || !components.replaceInstance(source->instanceId(),*candidate)) return ComponentPropertyStatus::InvalidValue;
   return ComponentPropertyStatus::Applied;
 }
+// Propriedade com um valor por endereço (peso de blend shape, parâmetro de
+// material por slot). Mesmas regras de `setComponentProperty`, com o índice:
+// endereço inexistente é recusado e nunca criado.
+inline ComponentPropertyStatus setComponentSlotProperty(Components &components,std::string_view typeId,
+    std::string_view propertyId,u32 slot,const ComponentPropertyValue &value,u64 instanceId=0) {
+  const auto *source=instanceId?components.findInstance(instanceId):components.find(typeId);
+  if(!source||source->type().id!=typeId) return ComponentPropertyStatus::MissingComponent;
+  if(!instanceId) {
+    u32 count=0;for(usize i=0;i<components.size();++i) if(components.at(i)->type().id==typeId) ++count;
+    if(count>1) return ComponentPropertyStatus::AmbiguousProperty;
+  }
+  const ComponentSlotNumber *number=nullptr;const ComponentSlotEnum *enumeration=nullptr;u32 matches=0;
+  for(const auto &p:source->type().slotNumbers) if(p.id==propertyId) {number=&p;++matches;}
+  for(const auto &p:source->type().slotEnums) if(p.id==propertyId) {enumeration=&p;++matches;}
+  if(!matches) return ComponentPropertyStatus::UnknownProperty;
+  if(matches!=1) return ComponentPropertyStatus::AmbiguousProperty;
+  auto candidate=source->clone();
+  if(!candidate || &candidate->type()!=&source->type()) return ComponentPropertyStatus::InvalidValue;
+  if(number) {
+    const auto *v=std::get_if<float>(&value);
+    if(!v) return ComponentPropertyStatus::TypeMismatch;
+    if(!number->write || !number->presentation.isEditable(*source) || slot>=number->slotCount(*source) ||
+       !std::isfinite(*v) || *v<number->minimum || *v>number->maximum ||
+       !number->write(*candidate,slot,*v)) return ComponentPropertyStatus::InvalidValue;
+  } else {
+    const auto *v=std::get_if<u32>(&value);
+    if(!v) return ComponentPropertyStatus::TypeMismatch;
+    bool option=false;for(const auto &entry:enumeration->options) if(entry.value==*v) option=true;
+    if(!option || !enumeration->write || !enumeration->presentation.isEditable(*source) ||
+       slot>=enumeration->slotCount(*source) || !enumeration->write(*candidate,slot,*v)) return ComponentPropertyStatus::InvalidValue;
+  }
+  if(!candidate->valid() || !components.replaceInstance(source->instanceId(),*candidate)) return ComponentPropertyStatus::InvalidValue;
+  return ComponentPropertyStatus::Applied;
+}
 
 }

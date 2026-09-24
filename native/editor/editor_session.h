@@ -385,6 +385,8 @@ public:
   EditorCameraPreview &cameraPreview() noexcept {return cameraPreview_;}
   EditorActionResult dispatch(const EditorActionRequest &request);
   bool playRequested() const noexcept { return playRequested_; }
+  // Entra em Play como o botão (mesmas travas de código); falso enquanto travado.
+  bool startPlay();
   void clearPlayRequest() noexcept { playRequested_ = false; }
 
   // **Editar é ver a cena PARADA.** A água não ondula, o casco não anda e a
@@ -1359,6 +1361,7 @@ private:
   u32 hierarchyPointer_ = 0;
   EditorEntity fieldInitial_{};
   bool playRequested_ = false;
+  void preparePlay();
   // Pulso de um quadro: o botão de salto da interface vira um BOTÃO DE
   // DISPOSITIVO, e o mapa de ações decide o que ele aciona.
   bool jumpPressed_ = false;

@@ -94,6 +94,13 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
         applied=history_.applyValues(document_,request.entity,values);
       break;
     }
+    case EditorAction::ComponentSlotProperty: {
+      auto values=*entity;
+      if(scene::setComponentSlotProperty(values.components,request.componentType,request.componentProperty,
+          request.componentSlot,request.componentValue,request.componentInstance)==scene::ComponentPropertyStatus::Applied)
+        applied=history_.applyValues(document_,request.entity,values);
+      break;
+    }
     case EditorAction::ComponentResource: {
       const auto *source=entity->components.findInstance(request.componentInstance);
       if(!source) break;
@@ -1111,6 +1118,17 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
       }
       state_.numericError=false;close();return true;
     }
+    if(edit.field>=widgetId(EditorWidget::ComponentSlotNumberBase) &&
+       edit.field<widgetId(EditorWidget::ComponentSlotNumberBase)+0x01000000u) {
+      const auto *component=entity->components.findInstance(edit.componentInstance);
+      if(current.componentInstance!=edit.componentInstance || current.propertyId!=edit.propertyId || !component) return false;
+      const u32 slot=((edit.field-widgetId(EditorWidget::ComponentSlotNumberBase))>>16)&0xffu;
+      auto values=*entity;
+      if(scene::setComponentSlotProperty(values.components,component->type().id,edit.propertyId,slot,number,
+                                         edit.componentInstance)!=scene::ComponentPropertyStatus::Applied ||
+         !history_.applyValues(document_,edit.entity,values)) return false;
+      close();return true;
+    }
     auto values=*entity;
     bool changed=false;
     if(edit.componentInstance) {
@@ -1779,6 +1797,19 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       const auto &property=component->type().numbers[field];
       state_.numericField=key;state_.numericEntity=entity->id;state_.numericInstance=component->instanceId();state_.numericProperty=property.id;
       std::snprintf(state_.numericText,sizeof(state_.numericText),"%.9g",static_cast<double>(property.read(*component)));
+      state_.numericReplace=true;state_.numericError=false;return true;
+    }
+    if(key>=widgetId(EditorWidget::ComponentSlotNumberBase) && key<widgetId(EditorWidget::ComponentSlotNumberBase)+0x01000000u) {
+      const auto *entity=document_.find(state_.selection);const u32 encoded=key-widgetId(EditorWidget::ComponentSlotNumberBase);
+      const u32 type=encoded&0xffu,field=(encoded>>8)&0xffu,slot=(encoded>>16)&0xffu;
+      if(!entity||type>=entity->components.size()||history_.isOpen()) return true;
+      const auto *component=entity->components.at(type);
+      if(!component||field>=component->type().slotNumbers.size()) return true;
+      const auto &property=component->type().slotNumbers[field];
+      if(!property.read||slot>=property.slotCount(*component)) return true;
+      // O endereço viaja no próprio campo; o commit decodifica e confere de novo.
+      state_.numericField=key;state_.numericEntity=entity->id;state_.numericInstance=component->instanceId();state_.numericProperty=property.id;
+      std::snprintf(state_.numericText,sizeof(state_.numericText),"%.9g",static_cast<double>(property.read(*component,slot)));
       state_.numericReplace=true;state_.numericError=false;return true;
     }
     if(key>=widgetId(EditorWidget::ComponentResourceBase) && key<widgetId(EditorWidget::ComponentResourceBase)+0x01000000u) {
@@ -2936,28 +2967,41 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   }
   const EditorPointerOutcome outcome =
       applyEditorPointer(state_, layout_, routing, document_, history_);
-  if (outcome.requestPlay) {
-    state_.playHasScripts=runtime::ScriptBridge::hasScripts(document_);
-    state_.playSecondaryActionLabel.clear();state_.playHudMessage.clear();
-    for(const auto &action:document_.inputActions().actions()) {
-      if(action.kind!=runtime::ActionKind::Button) continue;
-      for(const auto &binding:action.bindings)
-        if(binding.source==runtime::InputSource::TouchButton && binding.code==1) {
-          state_.playSecondaryActionLabel=action.id;break;
-        }
-      if(!state_.playSecondaryActionLabel.empty()) break;
-    }
-    const auto view=resolveSceneCamera(document_);
-    const auto *camera=document_.find(view.entity);
-    state_.playFirstPerson=camera&&cameraLook(*camera);
-    state_.playHasCharacter=false;
-    for(auto *ancestor=camera;ancestor;ancestor=document_.find(ancestor->parent))
-      if(characterComponent(*ancestor)) {state_.playHasCharacter=true;break;}
-    playRequested_ = true;
-    cancelPointers();
-  }
+  if (outcome.requestPlay) preparePlay();
   if(!isPlaying()) {jumpPressed_=false;secondaryPressed_=false;}
   return outcome.consumed;
+}
+
+bool EditorSession::startPlay() {
+  if(isPlaying()) return true;
+  // As mesmas travas do botão Play: fonte compilando ou não publicada.
+  if(state_.codeBuildBusy) return false;
+  if(state_.code && (state_.code->catalogState()==EditorCodeCatalogState::Failed ||
+      state_.code->catalogState()==EditorCodeCatalogState::Stale || state_.code->dirty())) return false;
+  state_.workspace=EditorWorkspace::Play;state_.playPaused=false;state_.playStepRequested=false;
+  preparePlay();
+  return true;
+}
+
+void EditorSession::preparePlay() {
+  state_.playHasScripts=runtime::ScriptBridge::hasScripts(document_);
+  state_.playSecondaryActionLabel.clear();state_.playHudMessage.clear();
+  for(const auto &action:document_.inputActions().actions()) {
+    if(action.kind!=runtime::ActionKind::Button) continue;
+    for(const auto &binding:action.bindings)
+      if(binding.source==runtime::InputSource::TouchButton && binding.code==1) {
+        state_.playSecondaryActionLabel=action.id;break;
+      }
+    if(!state_.playSecondaryActionLabel.empty()) break;
+  }
+  const auto view=resolveSceneCamera(document_);
+  const auto *camera=document_.find(view.entity);
+  state_.playFirstPerson=camera&&cameraLook(*camera);
+  state_.playHasCharacter=false;
+  for(auto *ancestor=camera;ancestor;ancestor=document_.find(ancestor->parent))
+    if(characterComponent(*ancestor)) {state_.playHasCharacter=true;break;}
+  playRequested_ = true;
+  cancelPointers();
 }
 
 void EditorSession::cancelPointers() {
@@ -4774,7 +4818,7 @@ void EditorSession::refreshLodStatus() {
   state_.lodStatus="Na vista: "+(level<group->levelCount?"LOD "+std::to_string(level):std::string("Culled"))+" · "+height;
 }
 void EditorSession::refreshSkinningStatus() {
-  state_.skinStatus.clear();state_.animationStatus.clear();
+  state_.skinStatus.clear();state_.animationStatus.clear();state_.blendShapeNames.clear();
   const bool playing=isPlaying()&&playScene_.active();
   const auto &graph=playing?playScene_.document():document_;
   const auto *entity=graph.find(state_.selection);
@@ -4795,6 +4839,7 @@ void EditorSession::refreshSkinningStatus() {
       if(deform->morph) {
         if(!text.empty()) text+=" · ";
         text+=std::to_string(deform->morph->targetCount)+" blend shapes";
+        state_.blendShapeNames=deform->morph->names;
         // Nomes dos alvos na ordem dos slots, para quem edita o peso saber qual é qual.
         if(!deform->morph->names.empty()) {
           text+=":";

@@ -10,7 +10,9 @@ struct EditorSceneVersion { u64 epoch=0, revision=0; };
 enum class EditorAction { Select, Rename, Transform, NumericProperty, Duplicate, Remove,
                           Reparent, Undo, Redo, FrameSelection, ComponentProperty, ComponentResource,
                           AddComponent, AddScript, RemoveComponent, ScriptProperty, ScriptEnabled,
-                          FitCollider, GenerateCollisionMesh, AssignMesh, RestoreMaterial };
+                          FitCollider, GenerateCollisionMesh, AssignMesh, RestoreMaterial,
+                          // Valor por endereço (`componentSlot`): peso de blend shape, parâmetro por slot.
+                          ComponentSlotProperty };
 enum class EditorActionStatus { Applied, StaleScene, Busy, InvalidTarget, InvalidValue };
 struct EditorActionRequest {
   EditorSceneVersion version;
@@ -24,7 +26,7 @@ struct EditorActionRequest {
   scene::ComponentPropertyValue componentValue=0.0f;
   u64 componentInstance=0;
   resources::AssetGuid componentResource{};
-  u32 componentResourceSlot=0;
+  u32 componentResourceSlot=0,componentSlot=0;
   std::string scriptType,scriptPropertyType,scriptPropertyValue;
   bool enabled=true;
 };
