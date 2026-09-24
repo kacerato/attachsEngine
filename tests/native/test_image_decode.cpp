@@ -10,6 +10,9 @@
 #include "resources/image_decode.h"
 #include "resources/texture_asset.h"
 #include "resources/texture_budget.h"
+#include "resources/texture_compression.h"
+#include <astcenc.h>
+#include <cstdlib>
 
 #include <array>
 #include <cstring>
@@ -510,4 +513,55 @@ AE_TEST(r2_texture_budget_reduces_residency_across_sources_without_touching_orig
   report = resources::applyTextureBudget(astc, 60, 1);
   AE_EXPECT_EQ(report.requestedBytes, u64{112}, "64 + 16 + 16 + 16");
   AE_EXPECT_TRUE(report.withinBudget() && astc[0]->width == 4 && astc[0]->valid(), "ASTC reduzido em blocos inteiros");
+}
+
+// S1 — compressão na importação: a cadeia RGBA8 vira ASTC de verdade. O teste
+// decodifica cada nível com o próprio encoder da Arm e mede o erro, para não
+// aprovar blocos do tamanho certo com conteúdo errado.
+AE_TEST(s1_astc_compression_encodes_every_level_and_decodes_close_to_the_source) {
+  resources::DecodedImage base;
+  base.width = 64; base.height = 48;
+  base.rgba.resize(static_cast<usize>(base.width) * base.height * 4);
+  for (u32 y = 0; y < base.height; ++y)
+    for (u32 x = 0; x < base.width; ++x) {
+      u8 *p = base.rgba.data() + (static_cast<usize>(y) * base.width + x) * 4;
+      p[0] = static_cast<u8>(x * 4); p[1] = static_cast<u8>(y * 5); p[2] = static_cast<u8>(128 + x); p[3] = 255;
+    }
+  renderer::AuthoringTexture rgba;
+  rgba.width = base.width; rgba.height = base.height; rgba.srgb = false;
+  AE_EXPECT_TRUE(resources::buildMipChain(base, false, rgba.mipChain, rgba.levels), "cadeia RGBA8");
+  for (const auto compression : {resources::TextureCompression::Astc4x4, resources::TextureCompression::Astc6x6,
+                                 resources::TextureCompression::Astc8x8}) {
+    renderer::AuthoringTexture out;
+    std::string diagnostic;
+    AE_EXPECT_TRUE(resources::compressTexture(rgba, compression, out, diagnostic), diagnostic.c_str());
+    AE_EXPECT_TRUE(out.valid() && out.levels == rgba.levels && out.width == 64 && out.height == 48 &&
+                   out.format == resources::authoringFormatFor(compression), "mesmos níveis, formato pedido");
+    AE_EXPECT_TRUE(out.mipChain.size() < rgba.mipChain.size() / 2, "menor que RGBA8");
+    // Decodifica o nível 0 e compara com a fonte.
+    const u32 block = static_cast<u32>(compression);
+    astcenc_config config{};
+    astcenc_context *context = nullptr;
+    AE_EXPECT_TRUE(astcenc_config_init(ASTCENC_PRF_LDR, block, block, 1, ASTCENC_PRE_FAST, ASTCENC_FLG_DECOMPRESS_ONLY,
+                                       &config) == ASTCENC_SUCCESS &&
+                   astcenc_context_alloc(&config, 1, &context, nullptr) == ASTCENC_SUCCESS, "decodificador");
+    std::vector<u8> decoded(base.rgba.size());
+    void *slice = decoded.data();
+    astcenc_image image{};
+    image.dim_x = 64; image.dim_y = 48; image.dim_z = 1; image.data_type = ASTCENC_TYPE_U8; image.data = &slice;
+    const astcenc_swizzle swizzle{ASTCENC_SWZ_R, ASTCENC_SWZ_G, ASTCENC_SWZ_B, ASTCENC_SWZ_A};
+    const auto levelBytes = renderer::authoringTextureLevelBytes(out.format, 64, 48);
+    AE_EXPECT_TRUE(astcenc_decompress_image(context, out.mipChain.data(), levelBytes, &image, &swizzle, 0) ==
+                       ASTCENC_SUCCESS, "nível 0 decodifica");
+    astcenc_context_free(context);
+    double error = 0;
+    for (usize i = 0; i < decoded.size(); ++i) error += std::abs(static_cast<int>(decoded[i]) - base.rgba[i]);
+    error /= static_cast<double>(decoded.size());
+    AE_EXPECT_TRUE(error < (block == 8 ? 6.0 : 3.0), "gradiente reconstruído com erro médio pequeno");
+  }
+  renderer::AuthoringTexture rejected;
+  std::string diagnostic;
+  rejected.format = renderer::AuthoringTextureAstc4x4;
+  AE_EXPECT_TRUE(!resources::compressTexture(rejected, resources::TextureCompression::Astc6x6, rejected, diagnostic) &&
+                     !diagnostic.empty(), "entrada que não é RGBA8 é recusada com motivo");
 }

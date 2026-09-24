@@ -446,3 +446,32 @@ AE_TEST(pick_mesh_affine_transform_keeps_world_distance_and_handles_bvh) {
   model[0]=0;
   AE_EXPECT_TRUE(!mesh.intersect(origin,direction,model,distance),"singular instance rejected");
 }
+
+// Seleção sob demanda: montar candidatos não constrói geometria; o toque só
+// resolve quem o raio ainda disputa. Três superfícies em fila e uma fora do raio.
+AE_TEST(lazy_pick_geometry_is_resolved_only_for_candidates_that_can_still_win) {
+  const auto plane=[](float z) {
+    auto mesh=std::make_shared<EditorPickMesh>();
+    mesh->build({{{-2,-2,z, 2,-2,z, -2,2,z}}});
+    return std::shared_ptr<const EditorPickMesh>(mesh);
+  };
+  u32 resolved[4]{};
+  std::vector<EditorPickCandidate> candidates(4);
+  const float depths[4]{15,5,10,5};
+  for(u32 i=0;i<4;++i) {
+    candidates[i].id=i+1;candidates[i].radius=1;candidates[i].center[2]=depths[i];
+    if(i==3) candidates[i].center[0]=50; // fora do raio
+    const auto mesh=plane(depths[i]);
+    candidates[i].resolve=[&resolved,i,mesh]{++resolved[i];return mesh;};
+  }
+  EditorRay ray;ray.valid=true;ray.direction[2]=1;ray.origin[0]=ray.origin[1]=-.5f;
+  ray.minimumDistance=0;ray.maximumDistance=100;
+  const auto hit=pickNearest(candidates,ray);
+  AE_EXPECT_TRUE(hit.hit && hit.id==2 && hit.distance==5.0f,"a superfície mais próxima vence");
+  AE_EXPECT_TRUE(resolved[1]==1 && resolved[0]==0 && resolved[2]==0 && resolved[3]==0,
+                 "só a candidata vencedora teve a geometria construída");
+  // Empate na mesma distância continua com quem foi registrado antes.
+  candidates[3].center[0]=0;
+  const auto tie=pickNearest(candidates,ray);
+  AE_EXPECT_TRUE(tie.hit && tie.id==2,"empate fica com o registrado antes");
+}

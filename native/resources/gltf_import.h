@@ -89,6 +89,11 @@ struct GltfImportLimits {
   // cadeia completa de mips vira blocos ASTC — 8 bits por texel em vez de 32 —
   // sem RGBA intermediário. Sem isso, ou sem mips no arquivo, RGBA8 como antes.
   bool astc4x4 = false;
+  // Formato no aparelho das texturas PNG/JPEG (S1): valor de
+  // `resources::TextureCompression` (0 RGBA8; 4, 6, 8 = ASTC NxN). Vem do perfil
+  // de importação; o orçamento e a resolução residente são calculados já no
+  // formato final. KTX2 com mips segue o próprio caminho (ASTC 4x4 transcodificado).
+  u8 textureCompression = 0;
   // Escala uniforme das raízes, vinda do perfil de importação (R3,
   // `resources/import_profile.h`). Aplicada à pose local das raízes: a geometria
   // continua no espaço do nó e os filhos herdam pela hierarquia.
@@ -259,6 +264,9 @@ struct GltfImport {
   u32 bakedTextureTransforms = 0;
   // Texturas aplicadas com resolução reduzida por `maximumTextureDimension`.
   u32 reducedTextures = 0;
+  // Texturas PNG/JPEG codificadas em ASTC na importação (S1), e as que ficaram
+  // em RGBA8 porque o encoder recusou (com o motivo em `textureNotes`).
+  u32 compressedTextures = 0, compressionFailures = 0;
   // Uso efetivo dos codecs (Entrega 4): primitivas Draco decodificadas,
   // bufferViews meshopt decodificadas e imagens KTX2 transcodificadas.
   u32 dracoPrimitives = 0, meshoptViews = 0, ktx2Images = 0;

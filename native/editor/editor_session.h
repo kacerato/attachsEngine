@@ -41,6 +41,7 @@
 #include "resources/environment_map_asset.h"
 #include "resources/texture_budget.h"
 #include "resources/import_profile.h"
+#include "resources/import_report.h"
 #include "resources/glb_images.h"
 #include "editor/editor_texture_preview.h"
 #include "resources/texture_profile.h"
@@ -566,8 +567,12 @@ public:
                          std::span<const resources::AssetGuid> excludedNodes={},
                          std::span<const FolderCompanion> companions={}, std::string_view contentHash={});
   // `prepared` é o perfil com que o worker preparou `model`.
+  // `sourceReport`: a medição malha a malha (G6-A) já feita no trabalhador. Numa
+  // cena grande ela custa segundos (Sponza: 2,7 s no host) e, feita aqui na
+  // thread do editor, travava o toque (ANR). Nulo: medida aqui, como antes.
   void showImportPreview(std::string path, const resources::GltfImport &model, std::string_view contentHash={},
-                         const resources::ImportProfile &prepared={});
+                         const resources::ImportProfile &prepared={},
+                         const resources::ImportSourceReport *sourceReport=nullptr);
   using EnvironmentMapEntry=std::pair<resources::AssetGuid,renderer::SharedEnvironmentMap>;
   const std::vector<EnvironmentMapEntry> &environmentMaps() const {return environmentMaps_;}
   renderer::SharedEnvironmentMap findEnvironmentMap(const resources::AssetGuid &guid) const {
@@ -621,6 +626,7 @@ public:
   resources::ImportProfile importProfileFor(const resources::AssetGuid &source) const;
   resources::ImportProfile projectImportProfile() const;
   resources::ImportProfile importProfileForPath(std::string_view path) const;
+  resources::ImportProfile newSourceImportProfile() const;
   bool saveImportProfile(const resources::AssetGuid &source, const resources::ImportProfile &profile);
   bool saveProjectImportProfile(const resources::ImportProfile &profile);
   // Rascunho do painel e os limites que ele produz neste aparelho.
@@ -630,8 +636,21 @@ public:
     draft.normals=state_.importNormals;draft.normalWeighting=state_.importNormalWeighting;
     draft.smoothingAngle=state_.importSmoothingAngle;draft.tangents=state_.importTangents;
     draft.importCameras=state_.importCameras;draft.importLights=state_.importLights;
+    draft.textureCompression=state_.importTextureCompression;
     draft.excludedNodes=state_.importExcludedNodes;
     return draft;
+  }
+  // O perfil com que a prévia na tela FOI preparada, no mesmo formato do
+  // rascunho. Uma única função: campo novo esquecido aqui fazia a tela liberar
+  // "Só recurso" enquanto a sessão recusava o toque (achado no aparelho, S1).
+  resources::ImportProfile importProfilePrepared() const {
+    resources::ImportProfile prepared;
+    prepared.scale=state_.importPreparedScale;prepared.maximumTextureDimension=state_.importPreparedTextureDimension;
+    prepared.normals=state_.importPreparedNormals;prepared.normalWeighting=state_.importPreparedNormalWeighting;
+    prepared.smoothingAngle=state_.importPreparedSmoothingAngle;prepared.tangents=state_.importPreparedTangents;
+    prepared.importCameras=state_.importPreparedCameras;prepared.importLights=state_.importPreparedLights;
+    prepared.textureCompression=state_.importPreparedTextureCompression;
+    return prepared;
   }
   resources::GltfImportLimits importLimitsFor(const resources::ImportProfile &profile) const {
     return resources::applyImportProfile(importLimits_,profile);

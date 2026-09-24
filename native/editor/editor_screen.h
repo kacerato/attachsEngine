@@ -243,6 +243,7 @@ enum class EditorWidget : u32 {
   ImportApplyProfile, ImportSaveDefaultProfile,
   // G2: geometria derivada no perfil — normais, ponderação e tangentes.
   ImportNormalsCycle, ImportNormalWeightingCycle, ImportTangentsCycle, ImportCamerasToggle, ImportLightsToggle,
+  ImportTextureCompressionCycle,
   ImportSmoothingDown, ImportSmoothingUp,
   // R4: textura por binding de material e extração das imagens de um GLB.
   TexturePickerClose, TextureUseInherited, TextureUseNone, AssetExtractTextures,
@@ -628,7 +629,8 @@ struct EditorScreenState final {
   // a MESMA que a publicação vai gravar —, e é por ela que a exclusão é pedida.
   // `excluded` já vem propagado: filho de nó excluído também não vem.
   struct ImportNodeRow { std::string name; u32 depth=0, draws=0; resources::AssetGuid node{}; bool excluded=false; };
-  struct ImportTextureRow { u32 width=0,height=0,levels=0,uses=0; bool srgb=true,astc=false; u64 bytes=0; };
+  // `format` é o de `renderer::AuthoringTexture` (RGBA8 ou ASTC NxN) que vai para a GPU.
+  struct ImportTextureRow { u32 width=0,height=0,levels=0,uses=0,format=0; bool srgb=true; u64 bytes=0; };
   // G6-A: uma linha por malha da fonte, com os fatos que o Mesh asset Inspector
   // da Unity mostra (contagem e canais) e a medida que ela não traz — densidade
   // de texel. `level` é 0 sem nada a apontar, 1 atenção, 2 erro.
@@ -660,6 +662,10 @@ struct EditorScreenState final {
   u8 importTangents=0,importPreparedTangents=0;
   bool importCameras=false,importPreparedCameras=false;
   bool importLights=false,importPreparedLights=false;
+  // S1: compressão das texturas no aparelho (0 RGBA8, 4/6/8 ASTC NxN) e se o
+  // aparelho amostra ASTC — sem isso a escolha fica salva e o painel diz que não vale aqui.
+  u8 importTextureCompression=0,importPreparedTextureCompression=0;
+  bool importAstcSupported=false;
   // Nós que o autor tirou da importação. Não pede nova preparação: a saída do
   // importador é a mesma; muda o que a reconciliação instancia.
   std::vector<resources::AssetGuid> importExcludedNodes;

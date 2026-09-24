@@ -360,7 +360,10 @@ AE_TEST(r3_import_profile_scales_roots_persists_per_source_and_changes_the_cache
   FakeRenderer renderer;
   start(session, renderer);
   AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()), "projeto");
-  AE_EXPECT_TRUE(resources::sameImportProfile(session.importProfileForPath(kSource), {}), "sem arquivos: embutido");
+  // Fonte nova sem padrão do projeto: embutido + o preset de importação nova (ASTC 6x6, S1).
+  resources::ImportProfile preset;
+  preset.textureCompression = 6;
+  AE_EXPECT_TRUE(resources::sameImportProfile(session.importProfileForPath(kSource), preset), "sem arquivos: preset de fonte nova");
   AE_EXPECT_TRUE(session.saveProjectImportProfile(profileOf(0.01f, 1024)), "padrão do projeto gravado");
   AE_EXPECT_EQ(session.importProfileForPath(kSource).maximumTextureDimension, 1024u, "fonte nova usa o padrão");
   EditorSession::ModelImportReport report;
@@ -736,7 +739,7 @@ AE_TEST(m08e2_node_with_three_primitives_is_one_object_with_three_slots) {
   for (const auto &state : states) if (state.objectId == panel && state.visible) ++draws;
   AE_EXPECT_EQ(draws, 3u, "três desenhos, todos do mesmo objeto");
   u32 candidates = 0;
-  for (const auto &candidate : session.pickCandidates()) if (candidate.id == panel && candidate.mesh) ++candidates;
+  for (const auto &candidate : session.pickCandidates()) if (candidate.id == panel && candidate.geometry()) ++candidates;
   AE_EXPECT_EQ(candidates, 3u, "cada primitiva é tocável e seleciona o mesmo objeto");
 
   const auto *link = linkOf(document, panel);

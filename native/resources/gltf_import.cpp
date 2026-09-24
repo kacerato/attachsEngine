@@ -1,6 +1,7 @@
 #include "resources/gltf_import.h"
 #include "resources/json_reader.h"
 #include "resources/gltf_codecs.h"
+#include "resources/texture_compression.h"
 
 #include <algorithm>
 #include <cmath>
@@ -10,6 +11,9 @@
 #include <array>
 #include <atomic>
 #include <thread>
+#if defined(__linux__) || defined(__ANDROID__)
+#include <sys/resource.h>
+#endif
 
 namespace ae::resources {
 namespace {
@@ -410,9 +414,9 @@ struct Importer {
     std::string uri;              // ou arquivo da pasta da fonte
   };
   struct PreparedTexture {
-    bool ok = false;
+    bool ok = false, compressed = false;
     u32 dropped = 0;
-    std::string note;
+    std::string note, compressionNote;
     renderer::AuthoringTexture made;
   };
   std::vector<PlannedTexture> plannedTextures{};
@@ -424,6 +428,12 @@ struct Importer {
     std::atomic<usize> next{0};
     const u32 cap = std::max<u32>(1, textureCap);
     const auto work = [&] {
+#if defined(__linux__) || defined(__ANDROID__)
+      // Preparo é trabalho de fundo: no aparelho, quatro trabalhadores na mesma
+      // prioridade do laço do editor atrasaram o toque além de 5 s (ANR). Nice
+      // +10 vale por thread no Linux; o laço do editor continua na frente.
+      setpriority(PRIO_PROCESS, 0, 10);
+#endif
       for (;;) {
         const usize index = next.fetch_add(1);
         if (index >= plannedTextures.size()) return;
@@ -460,6 +470,10 @@ struct Importer {
         result.made.height = height;
         result.made.levels = levels;
         result.made.mipChain = std::move(chain);
+        image = {};
+        std::string compression;
+        result.compressed = finishTexture(result.made, compression);
+        result.compressionNote = std::move(compression);
         result.ok = true;
       }
     };
@@ -495,6 +509,38 @@ struct Importer {
     u32 levels = 0;
     return limits->astc4x4 && detectImageContainer(bytes) == ImageContainer::Ktx2 && ktx2LevelCount(bytes, levels) &&
            levels == mipLevelCount(width, height);
+  }
+
+  // Formato em que as texturas PNG/JPEG deste arquivo ficam residentes.
+  u32 outputFormat() const {
+    return validTextureCompression(limits->textureCompression)
+        ? authoringFormatFor(static_cast<TextureCompression>(limits->textureCompression))
+        : renderer::AuthoringTextureRgba8;
+  }
+  static u64 residentFormatBytes(u32 format, u32 width, u32 height, u32 cap) {
+    while (std::max(width, height) > cap) {
+      width = width > 1 ? width / 2 : 1;
+      height = height > 1 ? height / 2 : 1;
+    }
+    u64 total = 0;
+    for (;; width = width > 1 ? width / 2 : 1, height = height > 1 ? height / 2 : 1) {
+      total += renderer::authoringTextureLevelBytes(format, width, height);
+      if (width == 1 && height == 1) break;
+    }
+    return total;
+  }
+  // Cadeia RGBA8 pronta -> formato final. Recusa do encoder não descarta a
+  // textura: ela fica em RGBA8 e o motivo vai para as notas (nunca em silêncio).
+  bool finishTexture(renderer::AuthoringTexture &made, std::string &note) const {
+    const auto compression = static_cast<TextureCompression>(limits->textureCompression);
+    if (compression == TextureCompression::None || !validTextureCompression(limits->textureCompression)) return false;
+    renderer::AuthoringTexture compressed;
+    if (!compressTexture(made, compression, compressed, note)) {
+      note = "Compressão ASTC recusada; textura mantida em RGBA8: " + note;
+      return false;
+    }
+    made = std::move(compressed);
+    return true;
   }
 
   static u64 residentChainBytes(u32 width, u32 height, u32 cap) {
@@ -574,7 +620,7 @@ struct Importer {
       u64 total = 0;
       for (const auto &[key, reference] : references)
         total += reference.astc ? residentAstcBytes(reference.width, reference.height, textureCap)
-                                : residentChainBytes(reference.width, reference.height, textureCap);
+                                : residentFormatBytes(outputFormat(), reference.width, reference.height, textureCap);
       if (total <= limits->maximumTextureBytes || textureCap / 2 < floor) break;
       textureCap /= 2;
     }
@@ -715,6 +761,8 @@ struct Importer {
         noteTexture("Orçamento de memória de texturas da importação esgotado; texturas restantes ficaram de fora.");
       } else {
         job.made.samplerFlags = samplerFlags(root, texture.kind == Kind::Object ? json->index(texture, "sampler") : -1);
+        if (job.compressed) ++out->compressedTextures;
+        else if (!job.compressionNote.empty()) { ++out->compressionFailures; noteTexture(job.compressionNote); }
         if (job.made.valid()) {
           if (job.dropped) ++out->reducedTextures;
           out->textureBytes += job.made.mipChain.size();
@@ -758,14 +806,7 @@ struct Importer {
         }
         made.width = width;
         made.height = height;
-        const u64 needed = [&] {
-          u64 total = 0;
-          for (u32 w = width, h = height;; w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1) {
-            total += static_cast<u64>(w) * h * 4;
-            if (w == 1 && h == 1) break;
-          }
-          return total;
-        }();
+        const u64 needed = residentFormatBytes(outputFormat(), width, height, std::max(width, height));
         // Orçamento conferido ANTES de gerar os mips, já com a resolução residente.
         std::vector<u8> chain;
         u32 levels = 0;
@@ -775,6 +816,9 @@ struct Importer {
                           : buildMipChain(decoded->second, srgb, chain, levels, dropped)) {
           made.levels = levels;
           made.mipChain = std::move(chain);
+          std::string compression;
+          if (finishTexture(made, compression)) ++out->compressedTextures;
+          else if (!compression.empty()) { ++out->compressionFailures; noteTexture(compression); }
           if (made.valid()) {
             if (dropped) ++out->reducedTextures;
             out->textureBytes += made.mipChain.size();

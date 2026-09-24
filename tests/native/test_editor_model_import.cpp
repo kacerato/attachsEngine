@@ -5,6 +5,7 @@
 #include "renderer/authoring_geometry.h"
 #include "editor/editor_filesystem.h"
 #include "resources/gltf_folder_source.h"
+#include "resources/import_report.h"
 #include "core/sha256.h"
 #include "runtime/transform_math.h"
 
@@ -976,7 +977,13 @@ int probeFolderPublish(const char *mainPath) {
   EditorSession::ModelImportReport instance;
   const bool instantiated=session.instantiateModel(report.source,instance);
   auto t4=Clock::now();
-  std::printf("import_ms=%.0f commit_ms=%.0f republish_ms=%.0f(%d) instantiate_ms=%.0f(%d) objects=%u\n",
-              ms(t0,t1),ms(t1,t2),ms(t2,t3),republished?1:0,ms(t3,t4),instantiated?1:0,instance.objects);
+  session.beginImportPreparation("Fontes/probe/probe.gltf");
+  session.showImportPreview("Fontes/probe/probe.gltf",model,Sha256::hex(main),session.importProfileDraft());
+  auto t5=Clock::now();
+  resources::ImportSourceReport sourceReport;
+  resources::buildImportSourceReport(model,1.0f,sourceReport);
+  auto t6=Clock::now();
+  std::printf("import_ms=%.0f commit_ms=%.0f republish_ms=%.0f(%d) instantiate_ms=%.0f(%d) objects=%u preview_ms=%.0f source_report_ms=%.0f\n",
+              ms(t0,t1),ms(t1,t2),ms(t2,t3),republished?1:0,ms(t3,t4),instantiated?1:0,instance.objects,ms(t4,t5),ms(t5,t6));
   return 0;
 }

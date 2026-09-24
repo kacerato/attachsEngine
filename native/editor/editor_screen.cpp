@@ -526,13 +526,19 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
   }
   const auto *selectedRecord=builder.state.assetRegistry?
       builder.state.assetRegistry->findByPath(builder.state.selectedFile):nullptr;
-  if(builder.state.selectedFile.ends_with(".glb")) {
+  // Fonte de modelo é o que o REGISTRO diz, não a extensão: um GLB, ou o
+  // `.gltf` de uma fonte em pasta (S0). GLB ainda não registrado também entra,
+  // para Reimportar registrá-lo. "Texturas" extrai imagens EMBUTIDAS (R4): só
+  // existe no GLB — na pasta as imagens já são arquivos do projeto.
+  const bool glb=builder.state.selectedFile.ends_with(".glb");
+  if(glb || (selectedRecord&&selectedRecord->type==resources::AssetType::Mesh)) {
     auto actions=takeBottom(content,36);
-    // R4: "Texturas" extrai as imagens embutidas do GLB para o projeto.
+    const u32 count=glb?3u:2u;
     for(const auto &item:std::array<std::pair<const char *,EditorWidget>,3>{{
         {"Instanciar",EditorWidget::AssetInstantiate},{"Reimportar",EditorWidget::AssetReimport},
         {"Texturas",EditorWidget::AssetExtractTextures}}}) {
-      auto button=deflate(takeLeft(actions,content.width/3.0f),UiInsets::all(3));
+      if(item.second==EditorWidget::AssetExtractTextures && !glb) continue;
+      auto button=deflate(takeLeft(actions,content.width/static_cast<float>(count)),UiInsets::all(3));
       builder.list.addRect(button,theme.color.raised,theme.radius.control);
       builder.label(button,item.first,theme.color.text,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(button,widgetId(item.second));
@@ -2347,7 +2353,8 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
                             state.importSmoothingAngle==state.importPreparedSmoothingAngle &&
                             state.importTangents==state.importPreparedTangents &&
                             state.importCameras==state.importPreparedCameras &&
-                            state.importLights==state.importPreparedLights;
+                            state.importLights==state.importPreparedLights &&
+                            state.importTextureCompression==state.importPreparedTextureCompression;
 
   // Rodapé: cancelar sempre; publicar só com prévia pronta, perfil aplicado e
   // ambiguidades decididas. Apagado e sem toque até lá.
@@ -2526,7 +2533,9 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
       const auto &texture=state.importTextures[i];
       auto row=takeTop(content,42);
       builder.label(takeTop(row,20),"#"+std::to_string(i+1)+" · "+std::to_string(texture.width)+"×"+std::to_string(texture.height)+
-                    " · "+(texture.astc?"ASTC 4x4":"RGBA8"),theme.color.text,theme.type.caption);
+                    " · "+(texture.format==renderer::AuthoringTextureAstc4x4?"ASTC 4×4":
+                           texture.format==renderer::AuthoringTextureAstc6x6?"ASTC 6×6":
+                           texture.format==renderer::AuthoringTextureAstc8x8?"ASTC 8×8":"RGBA8"),theme.color.text,theme.type.caption);
       builder.label(takeTop(row,20),std::string(texture.srgb?"cor (sRGB)":"dados (linear)")+" · "+
                     decimalText(static_cast<double>(texture.bytes)/1048576.0,1)+" MB · "+std::to_string(texture.uses)+
                     (texture.uses==1?" uso":" usos"),theme.color.textDim,theme.type.caption);
@@ -2555,7 +2564,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     // Oito linhas de controle, paginadas como as outras abas: numa tela baixa
     // (um celular deitado tem ~400 de altura útil) a lista corrida cortava as
     // linhas de baixo sem aviso nem como alcançá-las.
-    enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Normals,Weighting,Smoothing,Tangents,Cameras,Lights,ProfileRowCount};
+    enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Compression,Normals,Weighting,Smoothing,Tangents,Cameras,Lights,ProfileRowCount};
     const auto [firstRow,lastRow]=paginate(ProfileRowCount,40);
     const auto cycle=[&](UiRect row,const char *label,const char *value,EditorWidget widget) {
       builder.label(takeLeft(row,row.width*.45f),label,theme.color.text,theme.type.caption);
@@ -2600,6 +2609,15 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
           builder.label(cell,std::to_string(step.value),on?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
           router.addRegion(cell,widgetId(step.widget));
         }
+        break;
+      }
+      // Format/Compression do Texture Importer da Unity (S1). No aparelho sem
+      // ASTC a escolha continua salva, mas o rótulo diz que aqui vira RGBA8.
+      case Compression: {
+        const u8 value=state.importTextureCompression;
+        std::string text=value==4?"ASTC 4×4":value==6?"ASTC 6×6":value==8?"ASTC 8×8":"Sem compressão";
+        if(value && !state.importAstcSupported) text+=" (RGBA8 aqui)";
+        cycle(row,"Compressão das texturas",text.c_str(),EditorWidget::ImportTextureCompressionCycle);
         break;
       }
       // Geometria derivada (G2). Os rótulos seguem o Model Import Settings da

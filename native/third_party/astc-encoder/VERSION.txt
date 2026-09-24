@@ -1,0 +1,11 @@
+Arm ASTC Encoder (astcenc) — biblioteca de codificação ASTC (S1 do plano Sponza)
+
+Origem:   https://github.com/ARM-software/astc-encoder
+Tag:      5.7.0 (publicada em 2026-07-31)
+Licença:  Apache License 2.0 (LICENSE.txt)
+Arquivos: só a biblioteca de núcleo (Source/astcenc.h e Source/astcenc_*),
+          sem a ferramenta de linha de comando nem os testes.
+
+Uso: resources/texture_compression.cpp codifica cadeias RGBA8 em ASTC LDR
+4x4/6x6/8x8 na importação. SIMD escolhido pelas macros do compilador
+(SSE no host x86-64, NEON no arm64 do Android); nenhuma flag própria.

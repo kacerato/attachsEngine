@@ -1,5 +1,6 @@
 #include "resources/import_profile.h"
 #include "resources/json_reader.h"
+#include "resources/texture_compression.h"
 
 #include <algorithm>
 #include <cmath>
@@ -43,6 +44,7 @@ bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept 
          a.maximumTextureDimension == b.maximumTextureDimension && a.normals == b.normals &&
          a.normalWeighting == b.normalWeighting && a.smoothingAngle == b.smoothingAngle && a.tangents == b.tangents &&
          a.importCameras == b.importCameras && a.importLights == b.importLights &&
+         a.textureCompression == b.textureCompression &&
          sameExcludedNodes(a, b) && sameCollisionMeshes(a, b);
 }
 
@@ -67,7 +69,8 @@ bool validImportProfile(const ImportProfile &profile) noexcept {
   return std::isfinite(profile.scale) && isScaleStep(profile.scale) && isTextureStep(profile.maximumTextureDimension) &&
          profile.normals <= GltfNormalsCalculate && profile.normalWeighting <= GltfNormalWeightAngle &&
          profile.smoothingAngle <= 180 &&
-         profile.tangents <= GltfTangentsCalculate && profile.excludedNodes.size() <= 65536 &&
+         profile.tangents <= GltfTangentsCalculate && validTextureCompression(profile.textureCompression) &&
+         profile.excludedNodes.size() <= 65536 &&
          profile.collisionMeshes.size() <= 65536 && collisionRecipesValid;
 }
 
@@ -81,7 +84,8 @@ std::string serializeImportProfile(const ImportProfile &profile) {
          ",\"smoothingAngle\":" + std::to_string(profile.smoothingAngle) +
          ",\"tangents\":" + std::to_string(profile.tangents) +
          ",\"importCameras\":" + (profile.importCameras ? "true" : "false") +
-         ",\"importLights\":" + (profile.importLights ? "true" : "false") + ",\"excludedNodes\":[" + [&] {
+         ",\"importLights\":" + (profile.importLights ? "true" : "false") +
+         ",\"textureCompression\":" + std::to_string(profile.textureCompression) + ",\"excludedNodes\":[" + [&] {
            std::string list;
            for (const auto &node : profile.excludedNodes) {
              if (!list.empty()) list += ',';
@@ -150,6 +154,11 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
     if (!lights || lights->kind != JsonDocument::Kind::Boolean) return false;
     parsed.importLights = lights->boolean;
   }
+  if (schema >= 9) {
+    const auto compression = document.index(root, "textureCompression");
+    if (compression < 0) return false;
+    parsed.textureCompression = static_cast<u8>(std::min<i64>(compression, 255));
+  }
   if (schema >= 4) {
     const auto *excluded = document.member(root, "excludedNodes");
     if (!excluded || excluded->kind != JsonDocument::Kind::Array || excluded->childCount > 65536) return false;
@@ -208,6 +217,8 @@ GltfImportLimits applyImportProfile(GltfImportLimits limits, const ImportProfile
   limits.tangents = profile.tangents;
   limits.importCameras = profile.importCameras;
   limits.importLights = profile.importLights;
+  // O perfil pede; o aparelho decide se amostra ASTC (mesma checagem do KTX2).
+  limits.textureCompression = limits.astc4x4 ? profile.textureCompression : 0;
   limits.maximumTextureDimension = std::min(limits.maximumTextureDimension, profile.maximumTextureDimension);
   limits.minimumTextureDimension = std::min(limits.minimumTextureDimension, limits.maximumTextureDimension);
   return limits;

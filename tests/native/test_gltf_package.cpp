@@ -315,23 +315,25 @@ AE_TEST(s0_gltf_folder_source_refuses_escape_and_reports_missing_files_by_path) 
 }
 
 // Sonda de uma fonte real em pasta (o Sponza), com os limites padrão da importação.
-int probeImportGltfFolder(const char *mainPath) {
+int probeImportGltfFolder(const char *mainPath, unsigned compression) {
   const std::filesystem::path path(mainPath);
   const auto main = readAll(path);
   using Clock = std::chrono::steady_clock;
   const auto start = Clock::now();
   resources::GltfImport model;
   std::vector<u8> packed;
-  const bool imported = resources::importGltfFolder(main, path.parent_path(), 512ull << 20, {}, {}, model, packed);
+  resources::GltfImportLimits limits;
+  limits.textureCompression = static_cast<u8>(compression);
+  const bool imported = resources::importGltfFolder(main, path.parent_path(), 512ull << 20, limits, {}, model, packed);
   const auto ms = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
   u64 triangles = 0;
   for (const auto &draw : model.draws) triangles += draw.indexCount / 3;
   std::printf("%s: import=%d ms=%.0f packed_mb=%.1f draws=%zu triangles=%llu nodes=%zu textures=%zu skipped_textures=%u "
-              "texture_mb=%.1f resident_dim=%u reduced=%u lights=%zu cameras=%zu\n",
+              "texture_mb=%.1f resident_dim=%u reduced=%u compressed=%u lights=%zu cameras=%zu\n",
               mainPath, imported ? 1 : 0, ms, static_cast<double>(packed.size()) / 1048576.0, model.draws.size(),
               static_cast<unsigned long long>(triangles), model.nodes.size(), model.textures.size(), model.skippedTextures,
               static_cast<double>(model.textureBytes) / 1048576.0, model.residentTextureDimension, model.reducedTextures,
-              model.lights.size(), model.cameras.size());
+              model.compressedTextures, model.lights.size(), model.cameras.size());
   if (!imported) std::printf("  import: %s\n", model.diagnostic.c_str());
   for (const auto &note : model.textureNotes) std::printf("  textura: %s\n", note.c_str());
   for (const auto &note : model.notes) std::printf("  nota: %s\n", note.c_str());

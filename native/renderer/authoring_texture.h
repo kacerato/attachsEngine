@@ -25,6 +25,21 @@ inline constexpr u32 AuthoringTextureNoAnisotropy = 1u << 6;
 // amostra ASTC 4x4 e a fonte é KTX2 com a cadeia completa de mips.
 inline constexpr u32 AuthoringTextureRgba8 = 0;
 inline constexpr u32 AuthoringTextureAstc4x4 = 1;
+// ASTC LDR de blocos maiores (S1): 6x6 é o padrão da Unity para Android
+// (3,56 bits/texel), 8x8 o mais econômico (2 bits/texel). Todos com blocos de 16 bytes.
+inline constexpr u32 AuthoringTextureAstc6x6 = 2;
+inline constexpr u32 AuthoringTextureAstc8x8 = 3;
+// Lado do bloco do formato; 1 para RGBA8, 0 para formato desconhecido.
+inline constexpr u32 authoringTextureBlock(u32 format) {
+  return format == AuthoringTextureRgba8 ? 1 : format == AuthoringTextureAstc4x4 ? 4
+       : format == AuthoringTextureAstc6x6 ? 6 : format == AuthoringTextureAstc8x8 ? 8 : 0;
+}
+inline constexpr u64 authoringTextureLevelBytes(u32 format, u32 width, u32 height) {
+  const u32 block = authoringTextureBlock(format);
+  if (!block) return 0;
+  if (block == 1) return static_cast<u64>(width) * height * 4;
+  return static_cast<u64>((width + block - 1) / block) * ((height + block - 1) / block) * 16;
+}
 
 struct AuthoringTexture {
   u32 width = 0, height = 0, levels = 0;
@@ -34,11 +49,10 @@ struct AuthoringTexture {
   u32 format = AuthoringTextureRgba8;
   std::vector<u8> mipChain;
   u64 expectedBytes() const {
-    if (format != AuthoringTextureRgba8 && format != AuthoringTextureAstc4x4) return 0;
+    if (!authoringTextureBlock(format)) return 0;
     u64 total = 0;
     for (u32 level = 0, w = width, h = height; level < levels; ++level, w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1)
-      total += format == AuthoringTextureAstc4x4 ? static_cast<u64>((w + 3) / 4) * ((h + 3) / 4) * 16
-                                                 : static_cast<u64>(w) * h * 4;
+      total += authoringTextureLevelBytes(format, w, h);
     return total;
   }
   bool valid() const { return width && height && levels && mipChain.size() == expectedBytes(); }

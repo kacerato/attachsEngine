@@ -166,6 +166,40 @@ target_compile_options(aether_codecs PRIVATE -w
   $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
 )
 
+# Arm ASTC Encoder 5.7.0 (S1 do plano Sponza): codificação ASTC LDR na importação.
+# Vendorizado com origem e licença em third_party/astc-encoder/VERSION.txt; como os
+# codecs, compila sem as flags estritas e sem RTTI/exceções. SIMD pelas macros do
+# compilador (SSE no host, NEON no arm64).
+add_library(aether_astcenc STATIC
+  third_party/astc-encoder/astcenc_averages_and_directions.cpp
+  third_party/astc-encoder/astcenc_block_sizes.cpp
+  third_party/astc-encoder/astcenc_color_quantize.cpp
+  third_party/astc-encoder/astcenc_color_unquantize.cpp
+  third_party/astc-encoder/astcenc_compress_symbolic.cpp
+  third_party/astc-encoder/astcenc_compute_variance.cpp
+  third_party/astc-encoder/astcenc_decompress_symbolic.cpp
+  third_party/astc-encoder/astcenc_diagnostic_trace.cpp
+  third_party/astc-encoder/astcenc_entry.cpp
+  third_party/astc-encoder/astcenc_find_best_partitioning.cpp
+  third_party/astc-encoder/astcenc_ideal_endpoints_and_weights.cpp
+  third_party/astc-encoder/astcenc_image.cpp
+  third_party/astc-encoder/astcenc_integer_sequence.cpp
+  third_party/astc-encoder/astcenc_mathlib.cpp
+  third_party/astc-encoder/astcenc_mathlib_softfloat.cpp
+  third_party/astc-encoder/astcenc_partition_tables.cpp
+  third_party/astc-encoder/astcenc_percentile_tables.cpp
+  third_party/astc-encoder/astcenc_pick_best_endpoint_format.cpp
+  third_party/astc-encoder/astcenc_quantization.cpp
+  third_party/astc-encoder/astcenc_symbolic_physical.cpp
+  third_party/astc-encoder/astcenc_weight_align.cpp
+  third_party/astc-encoder/astcenc_weight_quant_xfer_tables.cpp
+)
+target_include_directories(aether_astcenc SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/astc-encoder)
+# Otimizado em qualquer tipo de build: em -O0 o encoder é dezenas de vezes mais
+# lento (72 texturas do Sponza levaram 65 min no host Debug). Não há depuração
+# útil dentro dele; o nosso adaptador continua com as flags do build.
+target_compile_options(aether_astcenc PRIVATE -w -fno-rtti -fno-exceptions -O2)
+
 # --- Ampliadores temporais (G6-B) --------------------------------------------
 # Arm ASR 25.06 e AMD FSR 2.2.1, vendorizados com origem, commit e licença em
 # third_party/*/VERSION.txt. Só entram no binário Android: o host não tem um
@@ -362,6 +396,7 @@ add_library(aether_assets STATIC
   resources/asset_registry.cpp
   resources/json_reader.cpp
   resources/gltf_import.cpp
+  resources/texture_compression.cpp
   resources/skeletal_animation.cpp
   resources/import_node_map.cpp
   resources/material_asset.cpp
@@ -381,7 +416,7 @@ add_library(aether_assets STATIC
   resources/glb_images.cpp
 )
 target_include_directories(aether_assets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_assets PRIVATE aether_codecs)
+target_link_libraries(aether_assets PRIVATE aether_codecs aether_astcenc)
 # aether_renderer pelo formato do pacote de mapa: a importacao produz
 # exatamente os mesmos registros de desenho e material que o cozinhador offline,
 # para que geometria importada no aparelho e geometria cozida no computador
@@ -746,7 +781,7 @@ if(NOT ANDROID)
     AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
   target_link_libraries(aether_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources)
   # Os testes de meshopt codificam com o codificador real da mesma versão vendorizada.
-  target_link_libraries(aether_tests PRIVATE aether_codecs)
+  target_link_libraries(aether_tests PRIVATE aether_codecs aether_astcenc)
 
   # Probe separado porque induzir overflow em Debug dispara corretamente o
   # assert fail-fast do próprio Jolt. Em Release este binário valida a outra

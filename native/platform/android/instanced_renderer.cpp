@@ -4138,10 +4138,14 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   physicalDevice_ = device.physicalDevice();
   rhiDevice_ = &device;
   useBindless_ = device.enabledPaths().bindless;
-  // KTX2 importado só vira ASTC 4x4 quando o aparelho amostra esse formato com
-  // filtro linear e aceita cópia para ele, nas duas variantes (cor e dados).
+  // Textura importada só vira ASTC quando o aparelho amostra o formato com
+  // filtro linear e aceita cópia para ele, em cor e dados. S1 codifica em 4x4,
+  // 6x6 e 8x8: a mesma checagem cobre os três tamanhos de bloco, para o perfil
+  // nunca produzir um formato que este aparelho recusaria no upload.
   astc4x4_ = true;
-  for (const VkFormat format : {VK_FORMAT_ASTC_4x4_SRGB_BLOCK, VK_FORMAT_ASTC_4x4_UNORM_BLOCK}) {
+  for (const VkFormat format : {VK_FORMAT_ASTC_4x4_SRGB_BLOCK, VK_FORMAT_ASTC_4x4_UNORM_BLOCK,
+                                VK_FORMAT_ASTC_6x6_SRGB_BLOCK, VK_FORMAT_ASTC_6x6_UNORM_BLOCK,
+                                VK_FORMAT_ASTC_8x8_SRGB_BLOCK, VK_FORMAT_ASTC_8x8_UNORM_BLOCK}) {
     VkFormatProperties properties{};
     vkGetPhysicalDeviceFormatProperties(physicalDevice_, format, &properties);
     const VkFormatFeatureFlags needed = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |

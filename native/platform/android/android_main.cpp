@@ -172,6 +172,10 @@ struct AndroidShell final {
     };
     std::shared_ptr<Staging> staging;
     std::vector<ae::editor::EditorSession::FolderCompanion> companions;
+    // Medição da fonte feita no trabalhador (ver `showImportPreview`).
+    ae::resources::ImportSourceReport sourceReport;
+    bool sourceReportReady=false;
+    void measure() {if(accepted) sourceReportReady=ae::resources::buildImportSourceReport(model,1.0f,sourceReport);}
     bool folderSource=false; // `contentHash` é o da pasta inteira (principal + manifesto)
     std::filesystem::path folderDirectory; // de onde o importador lê: preparo, ou a pasta publicada
   };
@@ -2655,6 +2659,7 @@ void android_main(android_app *app) {
                 std::vector<ae::u8> packed;
                 result.accepted=ae::resources::importGltfFolder(result.bytes,result.folderDirectory,
                     ae::resources::GltfFolderMaximumFileBytes,limits,progress,result.model,packed);
+                result.measure();
                 if(result.accepted) result.contentHash=ae::resources::gltfFolderContentHash(result.bytes,result.manifest);
                 result.diagnostic=result.model.diagnostic;
                 return result;
@@ -2676,6 +2681,7 @@ void android_main(android_app *app) {
               progress.context=cancel.get();
               progress.cancelled=[](void *context) {return static_cast<std::atomic<bool> *>(context)->load();};
               result.accepted=ae::resources::importGlb(result.bytes,limits,progress,result.model);
+              result.measure();
               // Hash no worker: a revisão compara com o mapa publicado sem
               // percorrer dezenas de MiB na thread do editor.
               if(result.accepted) result.contentHash=ae::Sha256::hex(result.bytes);
@@ -2776,6 +2782,7 @@ void android_main(android_app *app) {
             std::vector<ae::u8> packed;
             result.accepted=ae::resources::importGltfFolder(result.bytes,staging,ae::resources::GltfFolderMaximumFileBytes,
                                                             limits,progress,result.model,packed);
+            result.measure();
             result.diagnostic=result.model.diagnostic;
             if(result.accepted) {
               result.manifest=ae::resources::serializeGltfFolderManifest(picked.displayName,result.bytes,records);
@@ -2991,6 +2998,8 @@ void android_main(android_app *app) {
                     ae::resources::GltfFolderMaximumFileBytes,limits,progress,result.model,packed);
               } else
               result.accepted=ae::resources::importGlb(result.bytes,limits,progress,result.model);
+              result.sourceReportReady=false;result.sourceReport={};
+              result.measure();
               result.diagnostic=result.model.diagnostic;
               return result;
             });
@@ -3031,7 +3040,8 @@ void android_main(android_app *app) {
           } else if(!prepared.accepted) {
             session.showImportFailure(prepared.diagnostic.empty()?"O importador não conseguiu preparar este arquivo.":prepared.diagnostic);
           } else {
-            session.showImportPreview(prepared.path,prepared.model,prepared.contentHash,prepared.profile);
+            session.showImportPreview(prepared.path,prepared.model,prepared.contentHash,prepared.profile,
+                                      prepared.sourceReportReady?&prepared.sourceReport:nullptr);
             if(prepared.dependencies)
               session.noteImportPreview("Dependências copiadas para o projeto: "+std::to_string(prepared.dependencies)+" arquivo(s)"+
                 (prepared.unusedCompanions?"; "+std::to_string(prepared.unusedCompanions)+" escolhido(s) sem uso":std::string())+

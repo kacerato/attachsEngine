@@ -356,14 +356,14 @@ AE_TEST(morph_cube_blend_shapes_animate_extract_and_bound) {
   static_cast<scene::SkinnedMesh *>(values.components.edit(scene::SkinnedMesh::descriptor))->blendShapeWeights[0] = 100;
   AE_EXPECT_TRUE(session.history().applyValues(session.document(), cube, values), "peso autoral");
   EditorPickCandidate base, deformed;
-  AE_EXPECT_TRUE(session.mapScene().pickSlotGeometry(session.document(), cube, 0, deformed) && deformed.mesh,
+  AE_EXPECT_TRUE(session.mapScene().pickSlotGeometry(session.document(), cube, 0, deformed) && deformed.geometry(),
                  "malha de seleção deformada");
   const auto slot = component<scene::MeshRenderer>(doc, cube)->slotMesh(0);
   std::span<const EditorPickMesh::Triangle> original;
   float relative[16];
   AE_EXPECT_TRUE(session.mapScene().localGeometry(slot, original, relative), "forma base");
   bool moved = false;
-  const auto triangles = deformed.mesh->triangles();
+  const auto triangles = deformed.geometry()->triangles();
   for (usize t = 0; t < triangles.size() && t < original.size(); ++t)
     for (u32 k = 0; k < 9; ++k) moved = moved || !near(triangles[t][k], original[t][k], 1e-4f);
   AE_EXPECT_TRUE(moved, "a malha de seleção não é mais a forma base");
@@ -411,10 +411,10 @@ AE_TEST(a_missing_bone_keeps_its_vertices_in_the_bind_pose_and_picking_follows_t
   armValues.transform.rotationDegrees[2] = 90;
   AE_EXPECT_TRUE(session.history().applyValues(doc, arm, armValues), "Arm girado no editor");
   EditorPickCandidate pick;
-  AE_EXPECT_TRUE(session.mapScene().pickSlotGeometry(doc, body, 0, pick) && pick.mesh, "malha de seleção");
+  AE_EXPECT_TRUE(session.mapScene().pickSlotGeometry(doc, body, 0, pick) && pick.geometry(), "malha de seleção");
   bool rotatedVertex = false;
   // (0,2,0) segue o Arm com 0,75 e o Hip com 0,25: 0,75·(-1,1,0) + 0,25·(0,2,0).
-  for (const auto &t : pick.mesh->triangles())
+  for (const auto &t : pick.geometry()->triangles())
     for (u32 k = 0; k < 3; ++k) rotatedVertex = rotatedVertex || (near(t[k * 3], -.75f) && near(t[k * 3 + 1], 1.25f));
   AE_EXPECT_TRUE(rotatedVertex, "o vértice (0,2,0) do braço está em (-0,75; 1,25) na malha de seleção");
   float center[3], radius = 0;

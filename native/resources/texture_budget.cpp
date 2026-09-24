@@ -7,9 +7,7 @@
 namespace ae::resources {
 namespace {
 u64 topLevelBytes(const renderer::AuthoringTexture &texture) {
-  if (texture.format == renderer::AuthoringTextureAstc4x4)
-    return static_cast<u64>((texture.width + 3) / 4) * ((texture.height + 3) / 4) * 16;
-  return static_cast<u64>(texture.width) * texture.height * 4;
+  return renderer::authoringTextureLevelBytes(texture.format, texture.width, texture.height);
 }
 
 bool reducible(const renderer::AuthoringTexture &texture, u32 minimumDimension) {

@@ -953,7 +953,7 @@ e imagens do disco uma a uma, com as texturas preparadas em paralelo (resultado
 idêntico ao sequencial) e cadeia de mips sem alocar os níveis descartados.
 Host: o Sponza oficial (405 primitivas, 3,75 M triângulos, 72 PNG 4096²) entra
 com as 72 texturas uniformes em 512 px em 59 s (antes 240 s e 61 texturas fora
-do orçamento). No aparelho (Nubia REDMAGIC 10 Pro, APK debug): a pasta
+do orçamento). No aparelho (Xiaomi 25053PC47G, APK debug): a pasta
 `Download/main_sponza` foi escolhida pela UI, 72 arquivos/2071 MB copiados com
 progresso, importado e reaberto por nome: preparo 83 s no trabalhador (sem
 derivado), derivado gravado em 7,7 s, publicação 3,3 s, e a cena renderizou

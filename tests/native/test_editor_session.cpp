@@ -726,7 +726,7 @@ AE_TEST(r3_import_lives_in_properties_and_does_not_block_the_editor) {
   resources::GltfImport model;
   model.nodes.emplace_back();
   model.nodes[0].name = "Raiz";
-  fixture.session.showImportPreview("Fontes/modelo.glb", model, {}, {});
+  fixture.session.showImportPreview("Fontes/modelo.glb", model, {}, fixture.session.importProfileDraft());
   fixture.session.update();
   const auto scene = locateWidget(fixture.session, widgetId(EditorWidget::ImportIntoScene));
   AE_EXPECT_TRUE(scene.x >= 0, "publicar na cena está no painel");
@@ -759,14 +759,14 @@ AE_TEST(every_profile_field_blocks_publishing_until_prepared_again) {
   // aparelho: só escala e textura bloqueavam.
   const EditorWidget fields[] = {EditorWidget::ImportNormalsCycle, EditorWidget::ImportNormalWeightingCycle,
                                  EditorWidget::ImportTangentsCycle, EditorWidget::ImportCamerasToggle,
-                                 EditorWidget::ImportLightsToggle};
+                                 EditorWidget::ImportLightsToggle, EditorWidget::ImportTextureCompressionCycle};
   for (const auto field : fields) {
     Fixture fixture;
     fixture.session.beginImportPreparation();
     resources::GltfImport model;
     model.nodes.emplace_back();
     model.nodes[0].name = "Raiz";
-    fixture.session.showImportPreview("Fontes/modelo.glb", model, {}, {});
+    fixture.session.showImportPreview("Fontes/modelo.glb", model, {}, fixture.session.importProfileDraft());
     fixture.session.update();
     tapWidget(fixture, widgetId(EditorWidget::ImportTabProfile));
     AE_EXPECT_TRUE(locateWidget(fixture.session, widgetId(EditorWidget::ImportIntoScene)).x >= 0, "publicar antes da mudança");
@@ -779,6 +779,12 @@ AE_TEST(every_profile_field_blocks_publishing_until_prepared_again) {
                    "publicar some com o campo pendente");
     AE_EXPECT_TRUE(locateWidget(fixture.session, widgetId(EditorWidget::ImportApplyProfile)).x >= 0,
                    "e preparar de novo fica disponível");
+    // Preparada de novo com o perfil da tela: o botão volta E a sessão aceita.
+    // Tela e sessão divergindo num campo deixava o toque sem efeito.
+    fixture.session.showImportPreview("Fontes/modelo.glb", model, {}, fixture.session.importProfileDraft());
+    fixture.session.update();
+    tapWidget(fixture, widgetId(EditorWidget::ImportIntoScene));
+    AE_EXPECT_TRUE(fixture.session.takeImportAccept(), "a sessão aceita publicar com o perfil preparado");
   }
 }
 
@@ -2299,7 +2305,7 @@ AE_TEST(the_import_panel_measures_each_mesh_of_the_source_and_opens_its_card) {
   model.nodes[0].name = "Raiz";
   model.drawNodes.push_back(0);
   model.drawNodes.push_back(0);
-  fixture.session.showImportPreview("Fontes/cenario.glb", model, {}, {});
+  fixture.session.showImportPreview("Fontes/cenario.glb", model, {}, fixture.session.importProfileDraft());
   fixture.session.update();
 
   const auto &screen = fixture.session.screen();

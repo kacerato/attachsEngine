@@ -13,6 +13,7 @@
 #include "scene/environment.h"
 #include "resources/import_report.h"
 #include "editor/editor_import_transaction.h"
+#include "resources/texture_compression.h"
 #include "scene/import_link.h"
 #include "core/sha256.h"
 #include "editor/editor_script_templates.h"
@@ -465,7 +466,7 @@ void EditorSession::buildPickCandidates() {
     // primitiva seleciona o objeto inteiro.
     for(u32 slot=1;slot<mesh->slotCount();++slot) {
       const auto meshSlot=mesh->slotMesh(slot);if(!meshSlot) continue;
-      auto extra=base;extra.mesh={};
+      auto extra=base;extra.mesh={};extra.resolve={};
       if(!mapScene_.slotBounds(document_,id,meshSlot-1,extra.center,extra.radius) ||
          !mapScene_.pickSlotGeometry(document_,id,slot,extra)) continue;
       candidates_.push_back(std::move(extra));
@@ -1333,13 +1334,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     using Tab=EditorScreenState::ImportTab;
     // Só o que muda a SAÍDA do importador pede nova preparação: desmarcar um nó
     // na Estrutura não relê o arquivo.
-    resources::ImportProfile prepared;
-    prepared.scale=state_.importPreparedScale;prepared.maximumTextureDimension=state_.importPreparedTextureDimension;
-    prepared.normals=state_.importPreparedNormals;prepared.normalWeighting=state_.importPreparedNormalWeighting;
-    prepared.smoothingAngle=state_.importPreparedSmoothingAngle;
-    prepared.tangents=state_.importPreparedTangents;prepared.importCameras=state_.importPreparedCameras;
-    prepared.importLights=state_.importPreparedLights;
-    const bool profileApplied=resources::sameImportPreparation(importProfileDraft(),prepared);
+    const bool profileApplied=resources::sameImportPreparation(importProfileDraft(),importProfilePrepared());
     bool handled=true;
     if(is(EditorWidget::ImportTabSummary)) {state_.importTab=Tab::Summary;state_.importPage=0;}
     else if(is(EditorWidget::ImportTabStructure)) {state_.importTab=Tab::Structure;state_.importPage=0;}
@@ -1376,6 +1371,11 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       state_.importTangents=state_.importTangents==resources::GltfTangentsImport?resources::GltfTangentsCalculate:resources::GltfTangentsImport;
     else if(is(EditorWidget::ImportCamerasToggle)) state_.importCameras=!state_.importCameras;
     else if(is(EditorWidget::ImportLightsToggle)) state_.importLights=!state_.importLights;
+    else if(is(EditorWidget::ImportTextureCompressionCycle)) {
+      // 6x6 -> 4x4 -> 8x8 -> sem -> 6x6: começa no padrão e vai para qualidade, economia, desligado.
+      const u8 value=state_.importTextureCompression;
+      state_.importTextureCompression=value==6?4:value==4?8:value==8?0:6;
+    }
     // Passos de 15°: o controle deslizante da Unity em toque, sem arrasto fino.
     else if(is(EditorWidget::ImportSmoothingDown)) state_.importSmoothingAngle=state_.importSmoothingAngle>=15?state_.importSmoothingAngle-15:0;
     else if(is(EditorWidget::ImportSmoothingUp)) state_.importSmoothingAngle=std::min(180u,state_.importSmoothingAngle+15);
@@ -2433,7 +2433,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
         const auto *selectedAsset=assets_.findByPath(entry.relativePath);
         state_.status=selectedAsset&&selectedAsset->type==resources::AssetType::EnvironmentMap?
             "Mapa HDRI · Reimportar atualiza céu, irradiância e reflexões":
-            entry.name.ends_with(".glb")?"Recurso GLB · Instanciar adiciona à cena; Reimportar atualiza a fonte; Texturas extrai as imagens":"Arquivo de origem";
+            entry.name.ends_with(".glb")?"Recurso GLB · Instanciar adiciona à cena; Reimportar atualiza a fonte; Texturas extrai as imagens":
+            selectedAsset&&selectedAsset->type==resources::AssetType::Mesh?
+            "Modelo em pasta · Instanciar adiciona à cena; Reimportar relê a pasta com o perfil da fonte":"Arquivo de origem";
       }
       return true;
     }
@@ -4254,7 +4256,8 @@ bool EditorSession::commitModelImport(std::span<const u8> bytes,const resources:
 }
 
 void EditorSession::showImportPreview(std::string path,const resources::GltfImport &model,std::string_view contentHash,
-                                     const resources::ImportProfile &prepared) {
+                                     const resources::ImportProfile &prepared,
+                                     const resources::ImportSourceReport *sourceReport) {
   state_.importEnvironment=false;state_.importTexture=false;
   state_.importAmbiguities=0;state_.importAmbiguityChoice=0;
   state_.importPreparedScale=prepared.scale;state_.importPreparedTextureDimension=prepared.maximumTextureDimension;
@@ -4262,6 +4265,7 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   state_.importPreparedSmoothingAngle=prepared.smoothingAngle;
   state_.importPreparedTangents=prepared.tangents;state_.importPreparedCameras=prepared.importCameras;
   state_.importPreparedLights=prepared.importLights;
+  state_.importPreparedTextureCompression=prepared.textureCompression;
   state_.importReprepare=false;
   // R3: saídas estruturadas para as abas do painel (I23).
   {
@@ -4303,7 +4307,7 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
       EditorScreenState::ImportTextureRow row;
       if(const auto &texture=model.textures[t]) {
         row.width=texture->width;row.height=texture->height;row.levels=texture->levels;row.srgb=texture->srgb;
-        row.astc=texture->format==renderer::AuthoringTextureAstc4x4;row.bytes=texture->mipChain.size();
+        row.format=texture->format;row.bytes=texture->mipChain.size();
       }
       for(const auto &material:model.materials)
         for(const auto index:material.textureIndices) if(index==t) ++row.uses;
@@ -4314,8 +4318,10 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
     // mundo do arquivo e recebe 1 aqui.
     state_.importMeshes.clear();state_.importMeshSummary.clear();
     state_.importMeshSelected=0;state_.importMeshDetail=false;
-    resources::ImportSourceReport report;
-    if(resources::buildImportSourceReport(model,1.0f,report)) {
+    resources::ImportSourceReport measured;
+    const bool reported=sourceReport || resources::buildImportSourceReport(model,1.0f,measured);
+    const auto &report=sourceReport?*sourceReport:measured;
+    if(reported) {
       const auto metres=[](float value) {return decimalText(value,value<10?2:1);};
       const auto thousands=[](u64 value) {
         return value>=10000?decimalText(static_cast<float>(value)/1000.0f,1)+" mil":std::to_string(value);
@@ -4387,6 +4393,17 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   if(!model.textures.empty())
     state_.importSummary+="\nTexturas: "+std::to_string(model.textures.size())+" aplicadas ("+
       std::to_string((model.textureBytes+(u64{1}<<19))>>20)+" MB com mipmaps).";
+  if(model.compressedTextures || model.compressionFailures) {
+    const auto format=[&]{
+      for(const auto &texture:model.textures) if(texture && texture->format!=renderer::AuthoringTextureAstc4x4 &&
+                                                texture->format!=renderer::AuthoringTextureRgba8)
+        return texture->format==renderer::AuthoringTextureAstc6x6?std::string("ASTC 6×6"):std::string("ASTC 8×8");
+      return std::string("ASTC 4×4");
+    }();
+    state_.importSummary+="\nCompressão: "+std::to_string(model.compressedTextures)+" textura(s) em "+format+
+      " na importação (perfil)"+(model.compressionFailures?"; "+std::to_string(model.compressionFailures)+
+      " ficaram em RGBA8 porque o encoder recusou (motivo nas notas).":std::string("."));
+  }
   if(model.astcTextures)
     state_.importSummary+="\nTexturas KTX2 em ASTC 4x4 na GPU: "+std::to_string(model.astcTextures)+
       " (o aparelho amostra ASTC; sem RGBA intermediário).";
@@ -6211,7 +6228,18 @@ resources::ImportProfile EditorSession::importProfileFor(const resources::AssetG
 resources::ImportProfile EditorSession::importProfileForPath(std::string_view path) const {
   if(!path.empty())
     if(const auto *record=assets_.findByPath(std::string(path))) return importProfileFor(record->guid);
-  return projectImportProfile();
+  return newSourceImportProfile();
+}
+
+resources::ImportProfile EditorSession::newSourceImportProfile() const {
+  // Fonte que ainda não existe no projeto: o padrão do projeto, quando o autor
+  // salvou um; senão o preset de importação nova, com ASTC 6x6 (o padrão da
+  // Unity no Android). Fontes já publicadas nunca passam por aqui.
+  resources::ImportProfile profile;
+  if(readProjectImportProfile(files_.rootPath(),resources::ImportProfileDefaultPath,profile)) return profile;
+  profile={};
+  profile.textureCompression=static_cast<u8>(resources::TextureCompression::Astc6x6);
+  return profile;
 }
 
 bool EditorSession::saveImportProfile(const resources::AssetGuid &source,const resources::ImportProfile &profile) {
@@ -6238,6 +6266,8 @@ void EditorSession::beginImportPreparation(std::string_view path) {
   state_.importTangents=state_.importPreparedTangents=profile.tangents;
   state_.importCameras=state_.importPreparedCameras=profile.importCameras;
   state_.importLights=state_.importPreparedLights=profile.importLights;
+  state_.importTextureCompression=state_.importPreparedTextureCompression=profile.textureCompression;
+  state_.importAstcSupported=importLimits_.astc4x4;
   state_.importExcludedNodes=profile.excludedNodes;state_.importImpact.clear();
   // O importador é Propriedades: ele precisa estar à vista, inclusive no layout
   // compacto e vindo do workspace de código.

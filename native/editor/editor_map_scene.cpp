@@ -354,8 +354,7 @@ bool EditorMapScene::pickSlotGeometry(const runtime::SceneGraph &document,Editor
   const auto *render=entity?meshRenderer(*entity):nullptr;
   if(!render || !render->slotMesh(slot) || render->slotMesh(slot)>pickSlots_.size()) return false;
   const auto index=render->slotMesh(slot)-1;
-  auto mesh=pickMesh(index);
-  if(!mesh) return false;
+  if(index>=pickSlots_.size() || !pickGeometry_) return false;
   float world[16],relative[16],pivot[3];
   if(!editorWorldMatrix(document,id,world)) return false;
   const auto &source=source_[index];std::copy(source.model,source.model+16,relative);
@@ -365,10 +364,12 @@ bool EditorMapScene::pickSlotGeometry(const runtime::SceneGraph &document,Editor
   // limites: tocar o objeto nao selecionava nada e tocar ao lado selecionava.
   pivotOf(index,pivot);
   for(u32 axis=0;axis<3;++axis) relative[12+axis]-=pivot[axis];
-  multiply(world,relative,out.model);out.mesh=std::move(mesh);
+  multiply(world,relative,out.model);out.mesh={};
+  // A BVH do desenho só nasce se o raio chegar até ele (`pickNearest`).
+  out.resolve=[this,index]{return pickMesh(index);};
   // Malha deformável: o toque acerta a pose que está na tela, não a de bind.
   std::shared_ptr<const EditorPickMesh> deformed;
-  if(deformedPickMesh(document,id,index,out.model,deformed)) out.mesh=std::move(deformed);
+  if(deformedPickMesh(document,id,index,out.model,deformed)) {out.mesh=std::move(deformed);out.resolve={};}
   return true;
 }
 void EditorMapScene::setDeformation(std::vector<std::shared_ptr<const DrawDeformation>> draws,

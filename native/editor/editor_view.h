@@ -20,6 +20,7 @@
 #include "ui/ui_geometry.h"
 
 #include <span>
+#include <functional>
 #include <memory>
 #include "editor/editor_pick_mesh.h"
 
@@ -76,8 +77,13 @@ struct EditorPickCandidate final {
   // Candidato invisível ou travado não é selecionável pelo toque. O olho e o
   // cadeado da hierarquia precisam significar algo no viewport também.
   bool selectable = true;
+  // Geometria de seleção: pronta (`mesh`) ou construída só quando o raio chega
+  // a este candidato (`resolve`). Montar a lista não pode construir BVH de
+  // tudo: no Sponza isso era 3,7 M faces no primeiro toque (ANR no aparelho).
   std::shared_ptr<const EditorPickMesh> mesh{};
+  std::function<std::shared_ptr<const EditorPickMesh>()> resolve{};
   float model[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+  std::shared_ptr<const EditorPickMesh> geometry() const {return mesh?mesh:resolve?resolve():nullptr;}
 };
 
 struct EditorPickResult final {

@@ -515,13 +515,13 @@ AE_TEST(editor_pick_resources_share_bvh_and_reject_bad_indices_transactionally) 
   AE_EXPECT_TRUE(scene.pickGeometry(doc,id,first),"pick geometry");
   EditorPickCandidate second;
   AE_EXPECT_TRUE(scene.pickGeometry(doc,id,second),"second candidate");
-  AE_EXPECT_TRUE(first.mesh==second.mesh,"shared immutable BVH");
+  AE_EXPECT_TRUE(first.geometry()==second.geometry(),"shared immutable BVH");
   EditorRay ray;ray.valid=true;ray.origin[1]=2;ray.direction[0]=1;
   AE_EXPECT_TRUE(!pickNearest({&first,1},ray).hit,"ray above thin floor does not hit its huge sphere");
   const auto before=serializeEditorDocument(doc,0);indices[0]=999999;
   AE_EXPECT_TRUE(!scene.import(doc,draws,materials,false,vertices,indices),"invalid topology rejected");
   AE_EXPECT_EQ(serializeEditorDocument(doc,0),before,"document retained");
-  AE_EXPECT_TRUE(scene.pickGeometry(doc,id,second) && first.mesh==second.mesh,"old resource retained");
+  AE_EXPECT_TRUE(scene.pickGeometry(doc,id,second) && first.geometry()==second.geometry(),"old resource retained");
 }
 AE_TEST(mesh_collider_visual_uses_the_bound_resource_geometry_with_a_segment_budget) {
   std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;

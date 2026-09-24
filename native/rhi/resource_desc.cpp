@@ -57,6 +57,8 @@ u64 sampledMipByteSize(VkFormat format, u32 width, u32 height) {
     units = ((static_cast<u64>(width)+3)/4) * ((static_cast<u64>(height)+3)/4); bytes = 16; break;
   case VK_FORMAT_ASTC_6x6_UNORM_BLOCK: case VK_FORMAT_ASTC_6x6_SRGB_BLOCK:
     units = ((static_cast<u64>(width)+5)/6) * ((static_cast<u64>(height)+5)/6); bytes = 16; break;
+  case VK_FORMAT_ASTC_8x8_UNORM_BLOCK: case VK_FORMAT_ASTC_8x8_SRGB_BLOCK:
+    units = ((static_cast<u64>(width)+7)/8) * ((static_cast<u64>(height)+7)/8); bytes = 16; break;
   default: return 0;
   }
   return units <= std::numeric_limits<u64>::max()/bytes ? units*bytes : 0;

@@ -120,7 +120,13 @@ EditorPickResult pickNearest(std::span<const EditorPickCandidate> candidates,
   EditorPickResult result{};
   if (!ray.valid || !std::isfinite(ray.minimumDistance) || !std::isfinite(ray.maximumDistance) ||
       ray.minimumDistance<0 || ray.maximumDistance<ray.minimumDistance) return result;
-  for (const EditorPickCandidate &candidate : candidates) {
+  // Duas fases: as esferas (baratas) e, em ordem de distância, a geometria só
+  // de quem ainda pode vencer o melhor acerto. Assim uma geometria resolvida
+  // sob demanda só é construída para os objetos que o raio realmente disputa.
+  struct Hit {usize index;float nearHit;};
+  std::vector<Hit> hits;
+  for (usize index=0;index<candidates.size();++index) {
+    const EditorPickCandidate &candidate=candidates[index];
     if (!candidate.selectable || candidate.id == 0) continue;
     if (!std::isfinite(candidate.radius) || candidate.radius <= 0.0f) continue;
     if (!isFiniteTriple(candidate.center)) continue;
@@ -140,24 +146,35 @@ EditorPickResult pickNearest(std::span<const EditorPickCandidate> candidates,
     const float nearHit = projection - halfChord;
     const float farHit = projection + halfChord;
     if (farHit < ray.minimumDistance || nearHit > ray.maximumDistance) continue;
+    hits.push_back({index,std::max(nearHit,ray.minimumDistance)});
+  }
+  std::stable_sort(hits.begin(),hits.end(),[](const Hit &a,const Hit &b){return a.nearHit<b.nearHit;});
+  usize winner=candidates.size();
+  for (const auto &entry : hits) {
+    // A esfera começa depois do melhor acerto: nada mais à frente vence.
+    if (result.hit && entry.nearHit > result.distance) break;
+    const EditorPickCandidate &candidate=candidates[entry.index];
     // Bounds-only fallback: an enclosing sphere starts at the first allowed
     // distance. Meshes below still require an actual visible triangle hit.
-    float distance = std::max(nearHit,ray.minimumDistance);
-    if(candidate.mesh) {
+    float distance = entry.nearHit;
+    const auto mesh=candidate.mesh||candidate.resolve?candidate.geometry():nullptr;
+    if(candidate.resolve && !candidate.mesh && !mesh) continue; // geometria declarada e indisponível: sem esfera inventada
+    if(mesh) {
       // Start the triangle query at the near plane. Filtering the first hit
       // afterwards would lose a second, visible surface of the same mesh.
       float clippedOrigin[3];
       for(u32 k=0;k<3;++k) clippedOrigin[k]=ray.origin[k]+ray.direction[k]*ray.minimumDistance;
-      if(!candidate.mesh->intersect(clippedOrigin,ray.direction,candidate.model,distance)) continue;
+      if(!mesh->intersect(clippedOrigin,ray.direction,candidate.model,distance)) continue;
       distance+=ray.minimumDistance;
     }
     if(!std::isfinite(distance)||distance>ray.maximumDistance) continue;
-    // Estritamente menor: empate fica com quem foi registrado antes, o que
+    // Menor distância vence; empate fica com quem foi registrado antes, o que
     // torna a seleção a mesma entre frames com a mesma lista.
-    if (result.hit && distance >= result.distance) continue;
+    if (result.hit && (distance > result.distance || (distance == result.distance && entry.index > winner))) continue;
     result.hit = true;
     result.id = candidate.id;
     result.distance = distance;
+    winner = entry.index;
   }
   return result;
 }
