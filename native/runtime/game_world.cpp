@@ -34,6 +34,7 @@ const char *worldStatusMessage(WorldStatus status) noexcept {
     case WorldStatus::Rejected: return "Operação recusada";
     case WorldStatus::UnknownResource: return "Recurso inexistente";
     case WorldStatus::ResourceTypeMismatch: return "Tipo de recurso incompatível";
+    case WorldStatus::ClipNotInComponent: return "Clipe fora da lista do componente Animação";
   }
   return "Operação recusada";
 }
@@ -471,7 +472,10 @@ WorldStatus GameWorld::setResource(const ComponentHandle &component, std::string
   for (const auto &binding : current->type().resourceBindings)
     if (binding.id == propertyId) { if (match) return WorldStatus::InvalidArgument; match = &binding; }
   if (!match || slot >= match->slotCount(*current) || !match->write) return WorldStatus::InvalidArgument;
-  if (resource.valid() && !match->declaresNone(resource)) {
+  // Clipe de animação é sub-recurso da fonte importada (identidade derivada,
+  // sem registro próprio): quem conhece as fontes carregadas decide.
+  const bool clip = match->kind == resources::AssetType::AnimationClip;
+  if (resource.valid() && !match->declaresNone(resource) && !clip) {
     const auto *record = assets.find(resource);
     if (!record) return WorldStatus::UnknownResource;
     if (record->type != match->kind) return WorldStatus::ResourceTypeMismatch;
@@ -498,7 +502,7 @@ WorldStatus GameWorld::setResource(const ComponentHandle &component, std::string
   // consumidor resolve o candidato completo antes do commit, em vez de
   // presumirmos que GUID vazio significa ausência visual.
   const bool needsConsumerResolution=match->kind==resources::AssetType::Mesh||
-      match->kind==resources::AssetType::Texture||match->kind==resources::AssetType::Material;
+      match->kind==resources::AssetType::Texture||match->kind==resources::AssetType::Material||(clip&&resource.valid());
   if(needsConsumerResolution&&(!resolveResource||!resolveResource(resource,match->kind,propertyId,slot,*candidate)))
     return WorldStatus::ComponentUnavailable;
   if(!candidate->valid()) return WorldStatus::Rejected;

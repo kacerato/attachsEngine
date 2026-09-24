@@ -212,14 +212,22 @@ public:
   bool supportsAstc4x4() const noexcept { return astc4x4_; }
   // R4: as pipelines de mapa descartam a face de trás por material (dupla face real).
   bool materialCulling() const noexcept { return materialCulling_; }
-  // `skinInfluences` é paralelo a `vertices` (16 bytes por vértice, vazio sem
-  // skin) e `drawJoints` a `draws` (juntas do skin; zero = estático).
+  // Deformação da biblioteca (G6-B): `skinInfluences` é paralelo a `vertices`
+  // (16 bytes por vértice, vazio sem skin) e `drawJoints` a `draws` (juntas do
+  // skin; zero = sem skin). `morphDeltas` traz os blend shapes (9 floats por
+  // alvo e vértice) e, por desenho, `drawMorphOffsets` o início e
+  // `drawMorphTargets` o número de alvos (zero = sem blend shapes).
+  struct DeformationLibrary {
+    std::span<const u8> skinInfluences;
+    std::span<const u32> drawJoints;
+    std::span<const float> morphDeltas;
+    std::span<const u32> drawMorphOffsets, drawMorphTargets;
+  };
   bool rebuildAuthoringGeometry(std::span<const u8> vertices, std::span<const u32> indices,
                                 std::span<const renderer::MapDrawRecord> draws,
                                 std::span<const renderer::MapMaterialRecord> materials,
                                 std::span<const renderer::SharedAuthoringTexture> textures = {},
-                                std::span<const u8> skinInfluences = {},
-                                std::span<const u32> drawJoints = {});
+                                const DeformationLibrary &deformation = {});
   // Desenhos com skin deformados pelo compute no último quadro.
   u32 profileSkinnedDraws() const noexcept { return skinnedDrawsThisFrame_; }
 
@@ -564,11 +572,15 @@ private:
   struct SkinnedDraw {
     u32 drawIndex = 0, sourceVertex = 0, vertexCount = 0, influenceVertex = 0;
     u32 targetVertex = 0, joints = 0, paletteBase = 0, influences = 4;
+    u32 morphTargets = 0, morphBase = 0, weightBase = 0;
+    // Identidade do desenho entre republicações: a pose anterior segue por ela.
+    u64 objectId = 0;
+    u32 sourceDrawIndex = 0;
     bool motion = true, hasPrevious = false;
-    std::vector<float> previous;
+    std::vector<float> previous, previousWeights;
   };
   struct PendingSkin {
-    std::shared_ptr<const std::vector<float>> palette;
+    std::shared_ptr<const std::vector<float>> palette, weights;
     u8 influences = 4;
     bool motion = true;
   };
@@ -576,14 +588,15 @@ private:
   bool createSkinningPipeline();
   void destroySkinningResources();
   bool uploadSkinningLibrary(std::span<const u8> influences, std::span<const u32> drawJoints,
-                             usize extraVertices);
+                             usize extraVertices, std::span<const float> morphDeltas,
+                             std::span<const u32> drawMorphOffsets, std::span<const u32> drawMorphTargets);
   bool layoutSkinnedDraws();
   void queueSkinPalettes(std::span<const renderer::MapDrawState> draws);
   bool recordSkinning();
   DrawGeometry drawGeometry(u32 drawIndex) const;
-  std::vector<u32> sourceSkinJoints_, sourceSkinVertices_;
+  std::vector<u32> sourceSkinJoints_, sourceSkinVertices_, sourceMorphTargets_, sourceMorphOffsets_;
   u32 skinInfluenceVertexBase_ = 0;
-  rhi::VulkanBuffer skinInfluences_{}, skinVertices_{}, skinPalettes_{};
+  rhi::VulkanBuffer skinInfluences_{}, skinVertices_{}, skinPalettes_{}, morphDeltas_{}, morphWeights_{};
   std::vector<SkinnedDraw> skinnedDraws_;
   std::vector<i32> drawSkinSlot_;
   std::vector<PendingSkin> pendingSkins_;

@@ -192,7 +192,7 @@ AE_TEST(the_official_pbr_corpus_is_measured_end_to_end) {
   // metálico/rugosidade em 2048², com UV desenrolada à mão. É o caso que o
   // relatório existe para julgar — e ele não pode acusar problema numa fonte
   // sadia, senão o autor aprende a ignorar o painel.
-  std::ifstream input("tests/native/fixtures/gltf/Avocado.glb", std::ios::binary);
+  std::ifstream input(std::string(AETHER_REPOSITORY_ROOT) + "/tests/native/fixtures/gltf/Avocado.glb", std::ios::binary);
   AE_EXPECT_TRUE(static_cast<bool>(input), "o corpus oficial está disponível");
   const std::vector<u8> bytes{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
   resources::GltfImportLimits limits;

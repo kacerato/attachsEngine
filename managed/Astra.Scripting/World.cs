@@ -27,6 +27,8 @@ public enum WorldStatus : uint
     Rejected,
     UnknownResource,
     ResourceTypeMismatch,
+    /// <summary>O clipe existe mas não está na lista do componente Animation.</summary>
+    ClipNotInComponent,
 }
 
 public sealed class WorldException(WorldStatus status, string operation)
@@ -74,11 +76,12 @@ public static class ComponentIds
     /// `size`, `fade_mode` (0 nenhum, 1 cross-fade), `animate_cross_fading`, `fade_width_0..3` e `force_level`
     /// (ForceLOD da Unity: 0 automático, n força o LOD n-1; estado de execução, não vai para o arquivo).</summary>
     public const string LodGroup = "astra.render.lod_group";
-    /// <summary>Malha com esqueleto: `quality` (0 automática, 1, 2 ou 4 influências) e
-    /// `skinned_motion_vectors`. Os ossos são ligados pela importação.</summary>
+    /// <summary>Malha deformável: `quality` (0 automática, 1, 2 ou 4 influências),
+    /// `skinned_motion_vectors` e `blend_shape_weight` por slot (0..100). Os ossos
+    /// são ligados pela importação. Use <see cref="Component.DeformableMesh"/>.</summary>
     public const string SkinnedMesh = "astra.render.skinned_mesh";
-    /// <summary>Animação: `clip`, `play_automatically`, `wrap_mode`, `speed` e, em execução,
-    /// `playing` e `time`. Use <see cref="Component.Animation"/>.</summary>
+    /// <summary>Animação: recursos `clip` (padrão) e `clips` (lista), `clip_count`,
+    /// `play_automatically`, `wrap_mode` e `speed`. Tocar e misturar: <see cref="Component.Animation"/>.</summary>
     public const string Animation = "astra.animation";
     public const string ScriptBehavior = "astra.script.behavior";
 }
@@ -317,6 +320,7 @@ public readonly struct Component
     public ulong InstanceId { get; }
     public string TypeId { get; }
     public GameObject Object => _object;
+    internal ISceneAccess Scene => _scene;
     public bool IsAlive
     {
         get
@@ -374,6 +378,11 @@ public readonly struct Component
     {
         if(TypeId!=ComponentIds.Animation) throw new WorldException(WorldStatus.InvalidArgument,"acessar animação");
         return new AnimationPlayer(this);
+    }
+    public DeformableMesh DeformableMesh()
+    {
+        if(TypeId!=ComponentIds.SkinnedMesh) throw new WorldException(WorldStatus.InvalidArgument,"acessar malha deformável");
+        return new DeformableMesh(this);
     }
     public MaterialSlot Material(uint slot=0)
     {

@@ -366,27 +366,35 @@ Nível de detalhe pela altura na tela. **Consumidor:** runtime/lod_groups.h → 
 | `level_2` | Objetos LOD 2 | referência | Níveis | Nenhum | qualquer objeto · abaixo deste objeto |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
 | `level_3` | Objetos LOD 3 | referência | Níveis | Nenhum | qualquer objeto · abaixo deste objeto |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
 
-## Malha com esqueleto · `astra.render.skinned_mesh` v1
+## Malha deformável · `astra.render.skinned_mesh` v2
 
-Deformação da Malha pelos ossos. **Consumidor:** editor/editor_map_scene.cpp → paleta; platform/android/instanced_skinning.inl → compute. **Capacidade:** `render.skinning` (implementada). **Invalida:** desenho, mapa de sombra.
+Esqueleto e blend shapes da Malha. **Consumidor:** editor/editor_map_scene.cpp → paleta; platform/android/instanced_skinning.inl → compute. **Capacidade:** `render.skinning` (implementada). **Invalida:** desenho, mapa de sombra.
 
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `skinned_motion_vectors` | Vetor de movimento do skin | booleano | Skin | verdadeiro | verdadeiro \| falso |  | platform/android/instanced_motion.inl → passe de movimento com pose anterior | desenho, mapa de sombra | não | não |
+| `skinned_motion_vectors` | Vetor de movimento da deformação | booleano | Skin | verdadeiro | verdadeiro \| falso |  | platform/android/instanced_motion.inl → passe de movimento com pose anterior | desenho, mapa de sombra | não | não |
 | `quality` | Qualidade | enumeração | Skin | Automática | Automática \| 1 osso \| 2 ossos \| 4 ossos |  | editor/editor_map_scene.cpp → paleta; platform/android/instanced_skinning.inl → compute | desenho, mapa de sombra | não | não |
+| `blend_shape_weight` | Peso do blend shape | número | Blend shapes |  | -1000 … 1000 | % | editor/editor_map_scene.cpp → pesos; platform/android/instanced_skinning.inl → compute | desenho, mapa de sombra | não | sim |
 
-## Animação · `astra.animation` v1
+## Animação · `astra.animation` v2
 
-Clipe da fonte importada tocado no Play. **Consumidor:** runtime/scene_animation.cpp → pose local dos nós da instância. **Capacidade:** `animation.clip` (implementada). **Invalida:** pose e bounds.
+Clipes tocados e misturados no Play. **Consumidor:** runtime/scene_animation.cpp → pose local dos nós da instância. **Capacidade:** `animation.clip` (implementada). **Invalida:** pose e bounds.
+
+**Recursos endereçados**
+
+| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada |
+|---|---|---|---|---|
+| `clip` | Clipe padrão | animation_clip | não | não |
+| `clips` | Clipe | animation_clip | não | não |
+
+**Propriedades**
 
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `clip` | Clipe | número | Clipe | 0 | 0 … 1023 |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
 | `speed` | Velocidade | número | Reprodução | 1 | -10 … 10 | x | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
-| `time` | Tempo | número | Execução | 0 | -1000000 … 1000000 | s | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | sim | não |
 | `play_automatically` | Tocar ao iniciar | booleano | Reprodução | verdadeiro | verdadeiro \| falso |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
-| `playing` | Tocando | booleano | Execução | falso | verdadeiro \| falso |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | sim | não |
 | `wrap_mode` | Repetição | enumeração | Reprodução | Repetir | Uma vez \| Repetir \| Vai e volta \| Segurar no fim |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
+| `clip_count` | Quantidade de clipes | enumeração | Clipes | 0 | 0 \| 1 \| 2 \| 3 \| 4 \| 5 \| 6 \| 7 \| 8 \| 9 \| 10 \| 11 \| 12 \| 13 \| 14 \| 15 \| 16 \| 17 \| 18 \| 19 \| 20 \| 21 \| 22 \| 23 \| 24 \| 25 \| 26 \| 27 \| 28 \| 29 \| 30 \| 31 \| 32 |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
 
 ## Comportamento · `astra.script.behavior` v1
 

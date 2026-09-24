@@ -1,63 +1,72 @@
 #version 450
 
-// Skin por compute (G6-B), um despacho por desenho com skin.
+// Deformação por compute (G6-B): blend shapes e depois skin, um despacho por
+// desenho deformável.
 //
 // Lê o vértice de repouso do pacote (48 bytes: posição f32x3, normal e
-// tangente snorm16x4, UV0, UV1, cor u8x4) e as 4 influências da importação
-// (juntas u16x4 + pesos unorm16x4, em ordem de peso), e escreve:
+// tangente snorm16x4, UV0, UV1, cor u8x4), os deltas dos blend shapes (9
+// floats por alvo e vértice, vértice a vértice) e as 4 influências da
+// importação (juntas u16x4 + pesos unorm16x4, em ordem de peso), e escreve:
 //   * na região ATUAL do desenho, o vértice inteiro na pose deste quadro;
 //   * na região ANTERIOR, logo depois dela, só a posição na pose do quadro
-//     anterior — é o que o passe de movimento lê para o vetor do skin.
+//     anterior (pesos e paleta anteriores) — é o que o passe de movimento lê.
 // A paleta já está no espaço do desenho (renderer::MapDrawState::skinPalette):
 // o modelo do objeto continua sendo aplicado pelo vertex shader de sempre, e
 // sombra, cena, prévia e movimento desenham a saída sem variante de pipeline.
 //
-// Normal e tangente usam a parte 3x3 da mesma matriz e são renormalizadas:
-// exato para rotação e escala uniforme; com escala não uniforme nos ossos é a
-// aproximação usual (a inversa transposta por vértice custaria outra matriz).
+// Normal pela matriz cofatora da parte 3x3 (a inversa transposta vezes o
+// determinante): exata também com escala não uniforme nos ossos. Tangente
+// segue a superfície e usa a própria matriz.
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 layout(std430, set = 0, binding = 0) readonly buffer RestVertices { uint rest[]; };
 layout(std430, set = 0, binding = 1) readonly buffer Influences { uvec4 influences[]; };
 layout(std430, set = 0, binding = 2) readonly buffer Palettes { mat4 palettes[]; };
-layout(std430, set = 0, binding = 3) writeonly buffer Skinned { uint skinned[]; };
+layout(std430, set = 0, binding = 3) writeonly buffer Deformed { uint deformed[]; };
+layout(std430, set = 0, binding = 4) readonly buffer Weights { float weights[]; };
+layout(std430, set = 0, binding = 5) readonly buffer MorphDeltas { float deltas[]; };
 
-layout(push_constant) uniform SkinningPush {
+layout(push_constant) uniform DeformPush {
   uint sourceVertex;     // primeiro vértice de repouso (absoluto no pacote)
   uint targetVertex;     // primeiro vértice da região atual; a anterior vem depois
   uint vertexCount;
   uint influenceVertex;  // primeiro vértice na tabela de influências
   uint currentPalette;   // primeira matriz da pose atual
   uint previousPalette;  // primeira matriz da pose anterior
-  uint jointCount;
+  uint jointCount;       // zero: sem skin
   uint influenceLimit;   // 1, 2 ou 4 (Skin Weights)
+  uint morphBase;        // primeiro float dos deltas do vértice 0 deste desenho
+  uint morphTargets;     // zero: sem blend shapes
+  uint currentWeights;   // primeiro peso (0..1) deste quadro
+  uint previousWeights;  // primeiro peso do quadro anterior
 } push;
 
 const uint STRIDE = 12u;
+const uint DELTA = 9u;
 
 mat4 skinMatrix(uint paletteBase, uvec4 packedInfluence) {
+  if (push.jointCount == 0u) return mat4(1.0);
   uint joints[4] = uint[4](packedInfluence.x & 0xffffu, packedInfluence.x >> 16u,
                            packedInfluence.y & 0xffffu, packedInfluence.y >> 16u);
-  vec4 weights = vec4(unpackUnorm2x16(packedInfluence.z), unpackUnorm2x16(packedInfluence.w));
-  if (push.influenceLimit < 4u) weights.w = 0.0;
-  if (push.influenceLimit < 3u) weights.z = 0.0;
-  if (push.influenceLimit < 2u) weights.y = 0.0;
+  vec4 w = vec4(unpackUnorm2x16(packedInfluence.z), unpackUnorm2x16(packedInfluence.w));
+  if (push.influenceLimit < 4u) w.w = 0.0;
+  if (push.influenceLimit < 3u) w.z = 0.0;
+  if (push.influenceLimit < 2u) w.y = 0.0;
   mat4 result = mat4(0.0);
   float total = 0.0;
   for (uint k = 0u; k < 4u; ++k) {
-    if (weights[k] <= 0.0 || joints[k] >= push.jointCount) continue;
-    result += weights[k] * palettes[paletteBase + joints[k]];
-    total += weights[k];
+    if (w[k] <= 0.0 || joints[k] >= push.jointCount) continue;
+    result += w[k] * palettes[paletteBase + joints[k]];
+    total += w[k];
   }
   // Sem peso válido o vértice fica na pose de bind, não na origem.
   return total > 0.0 ? result * (1.0 / total) : mat4(1.0);
 }
 
-vec3 rotateDirection(mat4 m, vec3 direction) {
-  vec3 rotated = mat3(m) * direction;
-  float lengthSquared = dot(rotated, rotated);
-  return lengthSquared > 1.0e-12 ? rotated * inversesqrt(lengthSquared) : direction;
+vec3 safeNormalize(vec3 value, vec3 fallback) {
+  float lengthSquared = dot(value, value);
+  return lengthSquared > 1.0e-12 ? value * inversesqrt(lengthSquared) : fallback;
 }
 
 void main() {
@@ -66,31 +75,56 @@ void main() {
   uint source = (push.sourceVertex + index) * STRIDE;
   uint target = (push.targetVertex + index) * STRIDE;
   uint previous = (push.targetVertex + push.vertexCount + index) * STRIDE;
-  uvec4 packedInfluence = influences[push.influenceVertex + index];
 
-  vec4 position = vec4(uintBitsToFloat(rest[source]), uintBitsToFloat(rest[source + 1u]),
-                       uintBitsToFloat(rest[source + 2u]), 1.0);
+  vec3 basePosition = vec3(uintBitsToFloat(rest[source]), uintBitsToFloat(rest[source + 1u]),
+                           uintBitsToFloat(rest[source + 2u]));
   vec2 normalXY = unpackSnorm2x16(rest[source + 3u]);
   vec2 normalZW = unpackSnorm2x16(rest[source + 4u]);
   vec2 tangentXY = unpackSnorm2x16(rest[source + 5u]);
   vec2 tangentZW = unpackSnorm2x16(rest[source + 6u]);
+  vec3 baseNormal = vec3(normalXY, normalZW.x);
+  vec3 baseTangent = vec3(tangentXY, tangentZW.x);
 
+  // Blend shapes: forma deste quadro e posição do anterior.
+  vec3 position = basePosition, previousPosition = basePosition;
+  vec3 normal = baseNormal, tangent = baseTangent;
+  uint row = push.morphBase + index * push.morphTargets * DELTA;
+  for (uint t = 0u; t < push.morphTargets; ++t) {
+    float wc = weights[push.currentWeights + t];
+    float wp = weights[push.previousWeights + t];
+    if (wc == 0.0 && wp == 0.0) continue;
+    uint d = row + t * DELTA;
+    vec3 dp = vec3(deltas[d], deltas[d + 1u], deltas[d + 2u]);
+    position += wc * dp;
+    previousPosition += wp * dp;
+    normal += wc * vec3(deltas[d + 3u], deltas[d + 4u], deltas[d + 5u]);
+    tangent += wc * vec3(deltas[d + 6u], deltas[d + 7u], deltas[d + 8u]);
+  }
+  normal = safeNormalize(normal, baseNormal);
+  tangent = safeNormalize(tangent, baseTangent);
+
+  uvec4 packedInfluence = push.jointCount != 0u ? influences[push.influenceVertex + index] : uvec4(0u);
   mat4 current = skinMatrix(push.currentPalette, packedInfluence);
-  vec3 skinnedPosition = (current * position).xyz;
-  vec3 normal = rotateDirection(current, vec3(normalXY, normalZW.x));
-  vec3 tangent = rotateDirection(current, vec3(tangentXY, tangentZW.x));
+  mat3 linear = mat3(current);
+  // Cofatora: colunas c1×c2, c2×c0, c0×c1. O sinal do determinante mantém a
+  // normal para fora num osso espelhado.
+  mat3 cofactor = mat3(cross(linear[1], linear[2]), cross(linear[2], linear[0]), cross(linear[0], linear[1]));
+  float determinant = dot(linear[0], cross(linear[1], linear[2]));
+  vec3 skinnedPosition = (current * vec4(position, 1.0)).xyz;
+  vec3 skinnedNormal = safeNormalize(cofactor * normal * (determinant < 0.0 ? -1.0 : 1.0), normal);
+  vec3 skinnedTangent = safeNormalize(linear * tangent, tangent);
 
-  skinned[target] = floatBitsToUint(skinnedPosition.x);
-  skinned[target + 1u] = floatBitsToUint(skinnedPosition.y);
-  skinned[target + 2u] = floatBitsToUint(skinnedPosition.z);
-  skinned[target + 3u] = packSnorm2x16(normal.xy);
-  skinned[target + 4u] = packSnorm2x16(vec2(normal.z, normalZW.y));
-  skinned[target + 5u] = packSnorm2x16(tangent.xy);
-  skinned[target + 6u] = packSnorm2x16(vec2(tangent.z, tangentZW.y));
-  for (uint word = 7u; word < STRIDE; ++word) skinned[target + word] = rest[source + word];
+  deformed[target] = floatBitsToUint(skinnedPosition.x);
+  deformed[target + 1u] = floatBitsToUint(skinnedPosition.y);
+  deformed[target + 2u] = floatBitsToUint(skinnedPosition.z);
+  deformed[target + 3u] = packSnorm2x16(skinnedNormal.xy);
+  deformed[target + 4u] = packSnorm2x16(vec2(skinnedNormal.z, normalZW.y));
+  deformed[target + 5u] = packSnorm2x16(skinnedTangent.xy);
+  deformed[target + 6u] = packSnorm2x16(vec2(skinnedTangent.z, tangentZW.y));
+  for (uint word = 7u; word < STRIDE; ++word) deformed[target + word] = rest[source + word];
 
-  vec3 previousPosition = (skinMatrix(push.previousPalette, packedInfluence) * position).xyz;
-  skinned[previous] = floatBitsToUint(previousPosition.x);
-  skinned[previous + 1u] = floatBitsToUint(previousPosition.y);
-  skinned[previous + 2u] = floatBitsToUint(previousPosition.z);
+  vec3 previousSkinned = (skinMatrix(push.previousPalette, packedInfluence) * vec4(previousPosition, 1.0)).xyz;
+  deformed[previous] = floatBitsToUint(previousSkinned.x);
+  deformed[previous + 1u] = floatBitsToUint(previousSkinned.y);
+  deformed[previous + 2u] = floatBitsToUint(previousSkinned.z);
 }

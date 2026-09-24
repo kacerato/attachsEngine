@@ -22,6 +22,7 @@
 #include "renderer/water_authoring_geometry.h"
 
 #include <algorithm>
+#include <map>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -114,7 +115,11 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
         if(binding->kind==resources::AssetType::EnvironmentMap&&
            (!record||record->type!=resources::AssetType::EnvironmentMap||
             !findEnvironmentMap(request.componentResource))) break;
-      } else if(!binding->inheritable && !binding->none.valid()) break;
+        // Clipe: sub-recurso de uma fonte carregada nesta sessão.
+        runtime::AnimationClipView clipView;
+        if(binding->kind==resources::AssetType::AnimationClip&&!mapScene_.findClip(request.componentResource,clipView)) break;
+      } else if(!binding->inheritable && !binding->none.valid() &&
+                binding->kind!=resources::AssetType::AnimationClip) break;
       const auto authored=request.componentResource.valid()?request.componentResource:
           binding->inheritable?resources::AssetGuid{}:binding->none;
       auto values=*entity;auto *candidate=values.components.editInstance(request.componentInstance);
@@ -295,6 +300,11 @@ void EditorSession::setScriptRuntime(scene::ScriptRuntimeApi api) {
   playScene_.setScriptResourceAvailability(
       [this](resources::AssetGuid guid,resources::AssetType type,std::string_view propertyId,u32 slot,
              scene::ComponentValue &candidate) {
+    // Clipe: vale se a fonte dele está carregada nesta sessão.
+    if(type==resources::AssetType::AnimationClip) {
+      runtime::AnimationClipView view;
+      return !guid.valid() || mapScene_.findClip(guid,view);
+    }
     auto *render=&candidate.type()==&scene::MeshRenderer::descriptor?static_cast<scene::MeshRenderer *>(&candidate):nullptr;
     if(!render||slot>=render->slotCount()) return false;
     const auto ensure=[&](const std::vector<UsedTexture> &required) {
@@ -1779,7 +1789,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       if(bindingIndex>=component->type().resourceBindings.size()) return true;
       const auto &binding=component->type().resourceBindings[bindingIndex];
       if((binding.kind!=resources::AssetType::Mesh&&binding.kind!=resources::AssetType::EnvironmentProfile&&
-          binding.kind!=resources::AssetType::EnvironmentMap)||
+          binding.kind!=resources::AssetType::EnvironmentMap&&binding.kind!=resources::AssetType::AnimationClip)||
          slot>=binding.slotCount(*component)||
          !binding.presentation.isEditable(*component)) return true;
       state_.resourceInstance=component->instanceId();state_.resourceProperty=std::string(binding.id);state_.resourceSlot=slot;
@@ -2089,6 +2099,12 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
             const auto index=request.property-1;
             if(index>=assets_.records().size()) return true;
             request.componentResource=assets_.records()[index].guid;
+          } else if(binding&&binding->kind==resources::AssetType::AnimationClip) {
+            // A lista do seletor é o catálogo de clipes carregados, na mesma ordem.
+            const auto catalog=mapScene_.clipCatalog();
+            const auto index=request.property-1;
+            if(index>=catalog.size()) return true;
+            request.componentResource=catalog[index].clip;
           } else request.componentResource=mapScene_.assetGuid(request.property-1);
         }
       } else request.action=key==widgetId(EditorWidget::MaterialRestore)?EditorAction::RestoreMaterial:EditorAction::AssignMesh;
@@ -3062,18 +3078,44 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
     }
     library.identities.insert(library.identities.end(),source.identities.begin(),source.identities.end());
     library.names.insert(library.names.end(),source.names.begin(),source.names.end());
-    // G6-B: o skin viaja por desenho. Derivados (colisão) são estáticos: são
-    // geometria de física, não o corpo deformado.
+    // G6-B: skin e blend shapes viajam por desenho. Derivados (colisão) são
+    // estáticos: são geometria de física, não o corpo deformado.
     std::vector<std::shared_ptr<const resources::SkinDefinition>> skins;
     for(const auto &skin:source.skins)
       skins.push_back(skin.joints.empty()?nullptr:std::make_shared<const resources::SkinDefinition>(skin));
+    std::vector<std::shared_ptr<const resources::MorphTargetSet>> morphs;
+    std::vector<u32> morphOffsets;
+    for(const auto &set:source.morphs) {
+      morphOffsets.push_back(static_cast<u32>(library.morphDeltas.size()));
+      library.morphDeltas.insert(library.morphDeltas.end(),set.deltas.begin(),set.deltas.end());
+      morphs.push_back(std::make_shared<const resources::MorphTargetSet>(set));
+    }
     const bool influences=!source.skinInfluences.empty() &&
         source.skinInfluences.size()==source.vertices.size()/renderer::MapVertexStride*resources::SkinInfluenceStride;
     for(usize i=0;i<source.draws.size();++i) {
-      const i32 skin=i<source.sourceDrawCount && i<source.drawSkins.size()?source.drawSkins[i]:-1;
-      const auto shared=influences && skin>=0 && static_cast<usize>(skin)<skins.size()?skins[static_cast<usize>(skin)]:nullptr;
-      library.drawSkins.push_back(shared);
-      library.drawJoints.push_back(shared?static_cast<u32>(shared->joints.size()):0u);
+      const bool authored=i<source.sourceDrawCount;
+      const i32 skin=authored && i<source.drawSkins.size()?source.drawSkins[i]:-1;
+      const i32 morph=authored && i<source.drawMorphs.size()?source.drawMorphs[i]:-1;
+      auto deformation=std::make_shared<EditorMapScene::DrawDeformation>();
+      deformation->skin=influences && skin>=0 && static_cast<usize>(skin)<skins.size()?skins[static_cast<usize>(skin)]:nullptr;
+      deformation->morph=morph>=0 && static_cast<usize>(morph)<morphs.size()?morphs[static_cast<usize>(morph)]:nullptr;
+      library.drawJoints.push_back(deformation->skin?static_cast<u32>(deformation->skin->joints.size()):0u);
+      library.drawMorphOffsets.push_back(deformation->morph?morphOffsets[static_cast<usize>(morph)]:~0u);
+      library.drawMorphTargets.push_back(deformation->morph?deformation->morph->targetCount:0u);
+      if(!deformation->skin && !deformation->morph) {library.deformations.push_back(nullptr);continue;}
+      // Cópia de CPU da faixa do desenho, para seleção e limites deformados.
+      const auto &draw=source.draws[i];
+      u32 highest=0;
+      for(u32 k=0;k<draw.indexCount;++k) highest=std::max(highest,source.indices[draw.firstIndex+k]);
+      deformation->localIndices.assign(source.indices.begin()+draw.firstIndex,source.indices.begin()+draw.firstIndex+draw.indexCount);
+      deformation->restPositions.resize(usize(highest+1)*3);
+      for(u32 v=0;v<=highest;++v)
+        std::memcpy(deformation->restPositions.data()+v*3,
+                    source.vertices.data()+(usize(draw.vertexOffset)+v)*renderer::MapVertexStride,12);
+      if(deformation->skin)
+        deformation->influences.assign(source.skinInfluences.begin()+usize(draw.vertexOffset)*resources::SkinInfluenceStride,
+                                       source.skinInfluences.begin()+(usize(draw.vertexOffset)+highest+1)*resources::SkinInfluenceStride);
+      library.deformations.push_back(std::move(deformation));
     }
     if(influences || !library.skinInfluences.empty()) {
       library.skinInfluences.resize(static_cast<usize>(vertexBase)*resources::SkinInfluenceStride,0);
@@ -3082,9 +3124,15 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
     }
     if(!source.animations.empty() && source.map.nodes.size()==source.nodes.size()) {
       auto animations=std::make_shared<runtime::SourceAnimations>();
+      animations->source=source.guid;
       animations->clips=source.animations;
-      for(const auto &node:source.map.nodes) animations->nodes.push_back(node.id);
-      library.animations.emplace_back(source.guid,std::move(animations));
+      // Identidade de clipe: fonte + nome + ordem entre clipes de mesmo nome.
+      animations->clipIds=resources::animationClipGuids(source.guid,source.animations);
+      for(usize n=0;n<source.map.nodes.size();++n) {
+        animations->nodes.push_back(source.map.nodes[n].id);
+        animations->nodeNames.push_back(importEntityName(source.nodes[n].name));
+      }
+      library.animations.push_back(std::move(animations));
     }
     // Pivô na origem do nó: a geometria importada já vive no espaço dele.
     for(usize i=0;i<source.draws.size();++i) {library.pivots.push_back(0);library.pivots.push_back(0);library.pivots.push_back(0);}
@@ -3123,7 +3171,8 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
       const auto &texture=*textures[binding.index];
       publishedResidency.push_back({binding,{texture.width,texture.height,texture.levels,texture.expectedBytes(),texture.srgb,texture.samplerFlags}});
     }
-  skinningPublication_={library.skinInfluences,library.drawJoints};
+  skinningPublication_={library.skinInfluences,library.drawJoints,library.morphDeltas,library.drawMorphOffsets,
+                        library.drawMorphTargets};
   const bool accepted=publishGeometry_(library.vertices,library.indices,library.draws,library.materials,textures,published);
   skinningPublication_={};
   if(!accepted) {
@@ -3165,9 +3214,9 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   }
   publishedTextures_=std::move(publishedResidency);
   mapScene_.setTextureLibrary(std::move(bindings));
-  std::vector<std::shared_ptr<const resources::SkinDefinition>> drawSkins(primitives);
-  drawSkins.insert(drawSkins.end(),library.drawSkins.begin(),library.drawSkins.end());
-  mapScene_.setSkinning(std::move(drawSkins),library.animations);
+  std::vector<std::shared_ptr<const EditorMapScene::DrawDeformation>> deformations(primitives);
+  deformations.insert(deformations.end(),library.deformations.begin(),library.deformations.end());
+  mapScene_.setDeformation(std::move(deformations),library.animations);
   return true;
 }
 
@@ -3690,6 +3739,8 @@ bool EditorSession::stageSource(const resources::GltfImport &model, std::string_
   block.drawSkins=model.drawSkins;
   block.skinInfluences=model.skinInfluences;
   block.animations=model.animations;
+  block.morphs=model.morphs;
+  block.drawMorphs=model.drawMorphs;
   block.sourceIndexCount=block.indices.size();
   block.sourceDrawCount=block.draws.size();
   auto profile=importProfileFor(source);
@@ -3848,6 +3899,75 @@ void EditorSession::refreshCollisionMeshDraft() {
 }
 
 // Depois da biblioteca adotada: a reconciliação resolve slots pelo pacote novo.
+bool EditorSession::bindImportedDeformation(const ImportedSource &tree,const std::vector<EditorEntityId> &objectOfNode,
+                                            std::span<const EditorEntityId> roots,u32 &meshes,u32 &animations) {
+  const auto objectOf=[&](u32 node)->EditorEntityId {
+    const auto id=node<objectOfNode.size()?objectOfNode[node]:kInvalidEntity;
+    return id && document_.find(id)?id:kInvalidEntity;
+  };
+  std::vector<u8> done(tree.nodes.size(),0);
+  for(usize i=0;i<tree.sourceDrawCount && i<tree.drawNodes.size();++i) {
+    const u32 node=tree.drawNodes[i];
+    if(node>=done.size() || done[node]) continue;
+    done[node]=1;
+    const i32 skinIndex=i<tree.drawSkins.size()?tree.drawSkins[i]:-1;
+    const i32 morphIndex=i<tree.drawMorphs.size()?tree.drawMorphs[i]:-1;
+    const auto *skin=skinIndex>=0 && static_cast<usize>(skinIndex)<tree.skins.size() && !tree.skinInfluences.empty() &&
+                     !tree.skins[static_cast<usize>(skinIndex)].joints.empty()?&tree.skins[static_cast<usize>(skinIndex)]:nullptr;
+    const auto *morph=morphIndex>=0 && static_cast<usize>(morphIndex)<tree.morphs.size()?&tree.morphs[static_cast<usize>(morphIndex)]:nullptr;
+    const auto target=objectOf(node);
+    if((!skin && !morph) || !target) continue;
+    auto value=*document_.find(target);
+    // `edit` cria quando falta: "criado" sai de `find`, antes.
+    const bool created=!value.components.find(scene::SkinnedMesh::descriptor);
+    auto *mesh=static_cast<scene::SkinnedMesh *>(value.components.edit(scene::SkinnedMesh::descriptor));
+    if(!mesh) return false;
+    bool changed=created;
+    if(skin) {
+      std::vector<u64> bones;
+      for(const auto joint:skin->joints) bones.push_back(objectOf(joint));
+      // Religa quando a fonte mudou as juntas ou um osso deixou de existir;
+      // uma troca de osso feita pelo autor, para outro objeto vivo, fica.
+      bool stale=mesh->bones.size()!=bones.size();
+      for(const auto bone:mesh->bones) stale=stale || !bone || !document_.find(static_cast<EditorEntityId>(bone));
+      if(created || stale) {mesh->bones=std::move(bones);changed=true;}
+    }
+    if(morph && mesh->blendShapeWeights.size()!=morph->targetCount) {
+      // Pesos iniciais: os do nó quando declarados, senão os da malha (0..1 → 0..100).
+      const auto &initial=tree.nodes[node].morphWeights.size()==morph->targetCount?tree.nodes[node].morphWeights:morph->defaultWeights;
+      const usize kept=mesh->blendShapeWeights.size();
+      mesh->blendShapeWeights.resize(morph->targetCount);
+      for(usize t=kept;t<morph->targetCount;++t) mesh->blendShapeWeights[t]=std::clamp(initial[t]*100.0f,
+          -scene::SkinnedMesh::MaximumBlendShapeWeight,scene::SkinnedMesh::MaximumBlendShapeWeight);
+      changed=true;
+    }
+    if(changed && !history_.applyValues(document_,target,value)) return false;
+    if(created) ++meshes;
+  }
+  if(tree.animations.empty()) return true;
+  const auto clipIds=resources::animationClipGuids(tree.guid,tree.animations);
+  for(const auto root:roots) {
+    if(!document_.find(root)) continue;
+    auto value=*document_.find(root);
+    const bool created=!value.components.find(scene::Animation::descriptor);
+    auto *animation=static_cast<scene::Animation *>(value.components.edit(scene::Animation::descriptor));
+    if(!animation) return false;
+    bool changed=created;
+    // v1 guardava o índice do clipe; a fonte carregada o traduz para identidade.
+    if(animation->legacyClipIndex!=~0u) {
+      if(animation->legacyClipIndex<clipIds.size()) animation->clip=clipIds[animation->legacyClipIndex];
+      animation->legacyClipIndex=~0u;changed=true;
+    }
+    // Clipes novos da fonte entram na lista, como no Model Importer.
+    for(const auto &id:clipIds)
+      if(!animation->contains(id) && animation->clips.size()<scene::Animation::MaximumClips) {animation->clips.push_back(id);changed=true;}
+    if(!animation->clip.valid()) {animation->clip=clipIds.front();changed=true;}
+    if(changed && !history_.applyValues(document_,root,value)) return false;
+    if(created) ++animations;
+  }
+  return true;
+}
+
 void EditorSession::reconcileStagedSource(const StagedSource &staged, ModelImportReport &report) {
   if(!staged.reimported) return;
   if(const auto *published=importNodeMap(staged.source)) {
@@ -3864,6 +3984,25 @@ void EditorSession::reconcileStagedSource(const StagedSource &staged, ModelImpor
     // Nós `_LOD<n>` que chegaram agora: grupo novo num pai novo, ou níveis
     // novos num grupo que já existia. Mesmo passo de Desfazer.
     report.lodGroups=addImportedLodGroups(document_,history_,mapScene_,report.reconcile.createdObjects,report.lodNotes);
+    // Deformação e clipes de cada instância: objetos novos ganham os
+    // componentes; os existentes têm ossos, blend shapes e clipes religados.
+    for(const auto &tree:importedSources_) if(tree.guid==staged.source) {
+      std::map<resources::AssetGuid,std::pair<std::vector<EditorEntityId>,std::vector<EditorEntityId>>> instances;
+      std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
+      for(const auto id:ids) {
+        const auto *link=scene::importLink(document_.find(id)->components);
+        if(!link || link->source!=tree.guid || link->orphan || link->unlinked) continue;
+        auto &[nodes,roots]=instances[link->instance];
+        nodes.resize(tree.map.nodes.size(),kInvalidEntity);
+        if(link->root) roots.push_back(id);
+        if(link->node.valid() && link->primitive<0) {
+          const auto index=tree.map.indexOf(link->node);
+          if(index>=0 && static_cast<usize>(index)<nodes.size()) nodes[static_cast<usize>(index)]=id;
+        }
+      }
+      for(auto &[instance,entry]:instances)
+        bindImportedDeformation(tree,entry.first,entry.second,report.skinnedMeshes,report.animations);
+    }
     history_.end();
     for(const auto &note:report.lodNotes) reportProblem(EditorConsoleSeverity::Info,note);
     if(report.reconcile.changed()) mapScene_.hydrateMaterials(document_);
@@ -3967,31 +4106,11 @@ bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportRep
       history_.applyValues(document_,target,value);
     }
     for(usize n=0;n<tree.nodes.size();++n) if(!placed[n]) ++report.groups;
-    // G6-B: o nó da malha com skin ganha Malha com esqueleto, com os ossos já
-    // ligados aos objetos que esta instanciação criou para as juntas; a raiz da
-    // instância ganha Animação quando a fonte traz clipes.
-    for(usize i=0;i<tree.sourceDrawCount && i<tree.drawSkins.size() && i<tree.drawNodes.size();++i) {
-      const i32 skinIndex=tree.drawSkins[i];
-      if(skinIndex<0 || static_cast<usize>(skinIndex)>=tree.skins.size() || tree.skinInfluences.empty()) continue;
-      const auto &skin=tree.skins[static_cast<usize>(skinIndex)];
-      const auto target=created[tree.drawNodes[i]];
-      auto value=*document_.find(target);
-      if(skin.joints.empty() || value.components.find(scene::SkinnedMesh::descriptor)) continue;
-      auto *skinned=static_cast<scene::SkinnedMesh *>(value.components.add(scene::SkinnedMesh::descriptor));
-      if(!skinned) return rollback("Não foi possível criar a malha com esqueleto.");
-      for(const auto joint:skin.joints) skinned->bones.push_back(joint<created.size()?created[joint]:0u);
-      history_.applyValues(document_,target,value);
-      ++report.skinnedMeshes;
-    }
-    if(linkable && !tree.animations.empty()) {
-      for(const auto root:newRoots) {
-        auto value=*document_.find(root);
-        if(value.components.find(scene::Animation::descriptor)) continue;
-        if(!value.components.add(scene::Animation::descriptor)) return rollback("Não foi possível criar a animação.");
-        history_.applyValues(document_,root,value);
-        ++report.animations;
-      }
-    }
+    // G6-B: o nó da malha com skin ou blend shapes ganha Malha deformável,
+    // com os ossos já ligados aos objetos que esta instanciação criou para as
+    // juntas; a raiz da instância ganha Animação com os clipes da fonte.
+    if(!bindImportedDeformation(tree,created,newRoots,report.skinnedMeshes,report.animations))
+      return rollback("Não foi possível criar a deformação ou a animação do modelo.");
     // Convenção `_LOD<n>` do Model Importer da Unity: com os slots já no lugar,
     // o grupo nasce medido e entra no mesmo Desfazer da instanciação. O grupo
     // da importação também conta como pai, porque modelos costumam trazer os
@@ -4656,40 +4775,66 @@ void EditorSession::refreshLodStatus() {
 }
 void EditorSession::refreshSkinningStatus() {
   state_.skinStatus.clear();state_.animationStatus.clear();
-  const auto &graph=isPlaying()&&playScene_.active()?playScene_.document():document_;
+  const bool playing=isPlaying()&&playScene_.active();
+  const auto &graph=playing?playScene_.document():document_;
   const auto *entity=graph.find(state_.selection);
   if(!entity) return;
   if(const auto *skinned=static_cast<const scene::SkinnedMesh *>(entity->components.find(scene::SkinnedMesh::descriptor))) {
     const auto *render=meshRenderer(*entity);
     const u32 mesh=render?render->slotMesh(0):0;
-    const auto *skin=mesh?mapScene_.drawSkin(mesh-1):nullptr;
-    if(!skin) state_.skinStatus="A malha deste objeto não tem skin na fonte: desenho estático";
+    const auto *deform=mesh?mapScene_.deformation(mesh-1):nullptr;
+    if(!deform) state_.skinStatus="A malha deste objeto não tem skin nem blend shapes na fonte: desenho estático";
     else {
-      u32 missing=0;std::vector<float> palette;float center[3],radius=0,model[16];
-      const bool posed=editorWorldMatrix(graph,entity->id,model) &&
-                       mapScene_.skinPose(graph,*skinned,mesh-1,model,palette,center,radius,&missing);
-      state_.skinStatus=std::to_string(skin->joints.size())+" juntas · "+
-          (missing?std::to_string(missing)+" sem osso (pose de bind)":std::string("todos os ossos ligados"))+
-          (posed?"":" · paleta recusada: osso com escala nula");
+      std::string text;
+      float model[16];
+      EditorMapScene::DeformedPose pose;
+      const bool posed=editorWorldMatrix(graph,entity->id,model) && mapScene_.deformedPose(graph,*skinned,mesh-1,model,pose);
+      if(deform->skin)
+        text=std::to_string(deform->skin->joints.size())+" juntas · "+
+             (pose.missingBones?std::to_string(pose.missingBones)+" sem osso (pose de bind)":std::string("todos os ossos ligados"));
+      if(deform->morph) {
+        if(!text.empty()) text+=" · ";
+        text+=std::to_string(deform->morph->targetCount)+" blend shapes";
+        // Nomes dos alvos na ordem dos slots, para quem edita o peso saber qual é qual.
+        if(!deform->morph->names.empty()) {
+          text+=":";
+          for(u32 t=0;t<deform->morph->names.size() && t<6;++t)
+            text+=std::string(t?", ":" ")+(deform->morph->names[t].empty()?"#"+std::to_string(t):deform->morph->names[t]);
+          if(deform->morph->names.size()>6) text+=", …";
+        }
+      }
+      if(!posed) text+=" · pose recusada: osso com escala nula";
+      state_.skinStatus=std::move(text);
     }
   }
   if(const auto *animation=static_cast<const scene::Animation *>(entity->components.find(scene::Animation::descriptor))) {
-    const auto *link=scene::importLink(entity->components);
-    const auto *source=link?mapScene_.animations(link->source):nullptr;
-    if(!source || source->clips.empty()) state_.animationStatus="Sem clipes: o objeto não veio de um modelo animado";
-    else if(animation->clipIndex()>=source->clips.size())
-      state_.animationStatus="Clipe "+std::to_string(animation->clipIndex())+" não existe (a fonte tem "+
-                             std::to_string(source->clips.size())+")";
+    runtime::AnimationClipView view;
+    u32 missing=0;
+    for(const auto &clip:animation->clips) if(clip.valid() && !mapScene_.findClip(clip,view)) ++missing;
+    std::string text;
+    if(animation->clips.empty() && !animation->clip.valid()) text="Sem clipes: escolha na lista Clipes";
+    else if(!animation->clip.valid()) text=std::to_string(animation->clips.size())+" clipe(s) · sem clipe padrão";
+    else if(!mapScene_.findClip(animation->clip,view)) text="Clipe padrão ausente: a fonte dele não está carregada";
     else {
-      const auto &clip=source->clips[animation->clipIndex()];
-      char duration[32];std::snprintf(duration,sizeof duration,"%.2f s",clip.duration);
-      state_.animationStatus="Clipe "+std::to_string(animation->clipIndex()+1)+" de "+std::to_string(source->clips.size())+": "+
-                             (clip.name.empty()?std::string("sem nome"):clip.name)+" · "+duration;
-      if(isPlaying()&&playScene_.active()) {
-        char time[32];std::snprintf(time,sizeof time,"%.2f s",animation->time);
-        state_.animationStatus+=animation->playing?std::string(" · tocando ")+time:std::string(" · parado");
-      }
+      char duration[32];std::snprintf(duration,sizeof duration,"%.2f s",view.clip->duration);
+      text="Padrão: "+view.name+" · "+duration+" · "+std::to_string(animation->clips.size())+" clipe(s)";
     }
+    if(missing) text+=" · "+std::to_string(missing)+" ausente(s)";
+    if(playing) {
+      // O que o avaliador está tocando agora, com peso e tempo.
+      const auto &animator=playScene_.animator();
+      std::string states;
+      for(const auto &clip:animation->clips) {
+        runtime::AnimationStateView state;
+        if(animator.state(entity->id,animation->instanceId(),clip,state)!=runtime::AnimationCommandStatus::Ok || !state.enabled)
+          continue;
+        char line[64];
+        std::snprintf(line,sizeof line," %.2f s ×%.2f",state.time,state.weight);
+        states+=(states.empty()?std::string():std::string(" · "))+(mapScene_.findClip(clip,view)?view.name:std::string("?"))+line;
+      }
+      text+=states.empty()?" · parado":" · tocando "+states;
+    }
+    state_.animationStatus=std::move(text);
   }
 }
 void EditorSession::update() {

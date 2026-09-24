@@ -31,6 +31,8 @@ struct MapDrawState {
   // Nula num desenho sem skin, ou quando a pose não pôde ser avaliada: o
   // renderer usa a pose de bind (identidade). Compartilhada, não copiada.
   std::shared_ptr<const std::vector<float>> skinPalette;
+  // Pesos dos blend shapes (0..1 por alvo), nulos num desenho sem eles.
+  std::shared_ptr<const std::vector<float>> morphWeights;
   // Influências por vértice (1, 2 ou 4) e se o vetor de movimento usa a pose
   // anterior dos ossos (skinnedMotionVectors da Unity).
   u8 skinInfluences = 4;

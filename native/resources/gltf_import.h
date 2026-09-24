@@ -132,6 +132,9 @@ struct GltfImportNode {
   // Identificador que o autor gravou no `extras` do nó, quando existe. É a
   // evidência mais forte de que um nó reexportado é o mesmo (M08.2).
   std::string authoredId;
+  // `weights` do nó: pesos iniciais dos blend shapes da malha dele, que valem
+  // sobre os da malha. Vazio quando o nó não declara.
+  std::vector<float> morphWeights;
 };
 
 // Uma câmera do arquivo, ligada ao nó que a carrega.
@@ -213,9 +216,14 @@ struct GltfImport {
   // Influências por vértice (SkinInfluenceStride bytes), paralelas a
   // `vertices`; vazio quando nenhuma primitiva do arquivo tem skin.
   std::vector<u8> skinInfluences;
+  // Blend shapes (morph targets) por primitiva e, por desenho, o conjunto que o
+  // deforma ou -1. `drawMorphs` é paralelo a `draws`.
+  std::vector<MorphTargetSet> morphs;
+  std::vector<i32> drawMorphs;
   // Clipes do arquivo com ao menos um canal suportado.
   std::vector<AnimationClip> animations;
-  // Canais descartados (pesos de morph, alvo inexistente ou espelhado).
+  // Canais descartados (alvo inexistente, espelhado, ou pesos para malha sem
+  // blend shapes).
   u32 unsupportedAnimationChannels = 0;
   // Motivo concreto quando `importGlb` devolve falso. Nunca "erro ao importar".
   std::string diagnostic;

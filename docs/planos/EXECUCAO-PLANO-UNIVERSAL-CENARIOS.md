@@ -860,3 +860,43 @@ defeitos: o alvo do ASR sem `FFXM_FSR` (shaders vazios e abort ao aplicar ASR) e
 asset real de terceiros (o download não foi autorizado nesta rodada), A/B de custo e
 qualidade entre TAA/ASR/FSR 2, mistura entre clipes, morph targets e escala não
 uniforme exata nas normais deformadas.
+
+Em 24/09, a fatia seguinte fechou em host as pendências da deformação, com o
+aparelho desligado por decisão do usuário (nada abaixo foi observado no Xiaomi).
+**Morph targets:** o importador lê alvos POSITION/NORMAL/TANGENT (inclusive
+esparsos), pesos padrão da malha e do nó, `extras.targetNames` e o canal
+`weights` (sampler SCALAR com `alvos × chaves`, STEP/LINEAR/CUBICSPLINE); o cache
+de importação foi para o schema 7. O componente virou **Malha deformável**
+(`astra.render.skinned_mesh` v2): ossos, `blend_shape_weight` por alvo na escala
+0–100 da Unity, qualidade e vetor de movimento da deformação; v1 migra. O compute
+aplica o morph antes do skin, com pesos atuais e anteriores por desenho.
+**Normais:** a deformação usa a matriz cofatora (× sinal do determinante) e a
+parte linear na tangente, correta sob escala não uniforme. **Clipes como
+recurso:** `animation_clip` (tipo 9) é sub-recurso da fonte com GUID derivado de
+fonte + nome + ordinal, estável entre reimportações; a **Animação** v2 guarda a
+lista de clipes e o clipe padrão (o índice v1 migra) e o Inspector ganhou o
+seletor com busca, duração e arquivo de origem; referência ausente fica gravada
+como "Clipe ausente". `playing`/`time` saíram do componente: são estado de Play.
+**Mistura:** modelo do componente Animation legado da Unity — estados por clipe
+com tempo, velocidade, peso, camada e repetição; Play, CrossFade, Blend, Stop e
+Rewind; camadas da maior para a menor, normalização por camada, sobra para a
+pose de repouso e quaternions no mesmo hemisfério. Os alvos resolvem pelo nó de
+origem do ImportLink na subárvore e, na falta, por nome único (redirecionamento
+entre fontes com a mesma nomenclatura). **Reimportação:** religa ossos
+inválidos, ajusta os pesos de blend shape, acrescenta clipes novos e migra o
+índice legado por instância. **Seleção e enquadramento** usam a pose deformada
+(paleta + pesos) na CPU. **Continuidade:** a pose anterior do compute segue pela
+identidade (objeto, desenho de origem) e sobrevive à republicação da biblioteca.
+**Scripts:** ABI 9 com comando/estado de animação; C# `AnimationPlayer`,
+`AnimationState` e `DeformableMesh` (`Get/SetBlendShapeWeight`). Fixtures reais em
+`tests/native/fixtures/gltf` com licença e SHA-256: CesiumMan (CC-BY 4.0, 19
+juntas, caminhada), Fox (três clipes; cross-fade e camadas) e AnimatedMorphCube
+(CC0; blend shapes, cache e seleção). Para o A/B temporal, o shell aceita
+`aether.upscaling` e `aether.temporal_quality`, e `tools/android-temporal-ab.ps1`
+(com `tools/temporal_ab_images.py`) roda TAA/ASR/FSR 2 × escalas em rodadas
+intercaladas, exige a linha do contexto criado, invalida casos com erro de
+validação e compara capturas com o TAA nativo; não foi executado. Validação:
+host 1132/1132 (as quatro falhas anteriores eram caminhos de fixture, hash de
+conteúdo e contagem de texturas nos testes), suíte gerenciada 460/0 (70
+puladas), sintaxe NDK e APK debug arm64 compilados. Pendente somente o
+aparelho: executar o A/B e observar blend shapes, cross-fade e CesiumMan no Play.

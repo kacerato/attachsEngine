@@ -1,0 +1,7 @@
+AnimatedMorphCube
+Source: https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/AnimatedMorphCube
+Downloaded GLB: https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/AnimatedMorphCube/glTF-Binary/AnimatedMorphCube.glb
+SHA-256: 214ee56160a50dbf22543a1d66dbf860986e87f0efac3d89feac1359d0e6aeab
+License: Creative Commons Zero v1.0 Universal (CC0-1.0), (c) 2017 Microsoft.
+Por que este: dois morph targets animados pelo canal weights (sem
+extras.targetNames); e o menor caso oficial de blend shapes.

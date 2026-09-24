@@ -16,25 +16,45 @@ namespace ae::editor {
 using EditorMapUpdate = renderer::MapDrawState;
 class EditorMapScene final : public runtime::AnimationLibrary {
 public:
-  // G6-B: skin de cada desenho do pacote (0-based; nulo = estático) e clipes de
-  // cada fonte importada. Dado imutável da fonte, trocado junto com o pacote.
-  void setSkinning(std::vector<std::shared_ptr<const resources::SkinDefinition>> drawSkins,
-                   std::vector<std::pair<resources::AssetGuid,std::shared_ptr<const runtime::SourceAnimations>>> animations) {
-    drawSkins_=std::move(drawSkins);animationSources_=std::move(animations);
+  // G6-B: o que deforma cada desenho do pacote (0-based; nulo = estático) —
+  // skin, blend shapes e a cópia de CPU da forma base usada por seleção e
+  // limites — e os clipes de cada fonte importada. Dado imutável da fonte,
+  // trocado junto com o pacote.
+  struct DrawDeformation {
+    std::shared_ptr<const resources::SkinDefinition> skin;
+    std::shared_ptr<const resources::MorphTargetSet> morph;
+    std::vector<float> restPositions; // xyz por vértice da faixa do desenho
+    std::vector<u32> localIndices;     // índices relativos a `vertexOffset`
+    std::vector<u8> influences;        // SkinInfluenceStride por vértice; vazio sem skin
+  };
+  void setDeformation(std::vector<std::shared_ptr<const DrawDeformation>> draws,
+                      std::vector<std::shared_ptr<const runtime::SourceAnimations>> animations);
+  const DrawDeformation *deformation(u32 index) const {
+    return index<deformations_.size()?deformations_[index].get():nullptr;
   }
   const resources::SkinDefinition *drawSkin(u32 index) const {
-    return index<drawSkins_.size()?drawSkins_[index].get():nullptr;
+    const auto *d=deformation(index);return d?d->skin.get():nullptr;
   }
-  const runtime::SourceAnimations *animations(const resources::AssetGuid &source) const override {
-    for(const auto &[guid,value]:animationSources_) if(guid==source) return value.get();
-    return nullptr;
+  const resources::MorphTargetSet *drawMorph(u32 index) const {
+    const auto *d=deformation(index);return d?d->morph.get():nullptr;
   }
-  // Paleta e limites deformados de um slot com skin, na pose atual dos ossos.
-  // Osso ausente fica na pose de bind (paleta identidade). Falso quando a
-  // paleta é singular; o desenho segue na pose de bind.
-  bool skinPose(const runtime::SceneGraph &document, const scene::SkinnedMesh &skinned, u32 assetIndex,
-                const float drawModel[16], std::vector<float> &palette, float center[3], float &radius,
-                u32 *missingBones=nullptr) const;
+  bool findClip(const resources::AssetGuid &clip, runtime::AnimationClipView &out) const override;
+  // Todos os clipes carregados, para o seletor do Inspector.
+  struct ClipEntry { resources::AssetGuid clip, source; std::string name; float duration=0; };
+  std::vector<ClipEntry> clipCatalog() const;
+  const std::vector<std::shared_ptr<const runtime::SourceAnimations>> &animationSources() const {return animationSources_;}
+  // Pose deformada de um slot: paleta (vazia sem skin), pesos 0..1 dos blend
+  // shapes (vazios sem eles) e limites no MUNDO. Osso ausente fica na pose de
+  // bind (paleta identidade). Falso quando a paleta é singular ou o desenho não
+  // deforma; o desenho segue na forma base.
+  struct DeformedPose {
+    std::shared_ptr<std::vector<float>> palette,weights;
+    float center[3]{};
+    float radius=0;
+    u32 missingBones=0;
+  };
+  bool deformedPose(const runtime::SceneGraph &document, const scene::SkinnedMesh &mesh, u32 assetIndex,
+                    const float drawModel[16], DeformedPose &out) const;
   u32 assetCount() const { return static_cast<u32>(source_.size()); }
   const renderer::MapDrawRecord *asset(u32 index) const { return index<source_.size()?&source_[index]:nullptr; }
   std::string_view assetName(u32 index) const { return index<assetNames_.size()?assetNames_[index]:std::string_view{}; }
@@ -256,8 +276,13 @@ public:
 private:
   std::vector<std::pair<resources::AssetGuid,SharedMaterial>> materialLibrary_;
   std::vector<TextureBinding> textureLibrary_;
-  std::vector<std::shared_ptr<const resources::SkinDefinition>> drawSkins_;
-  std::vector<std::pair<resources::AssetGuid,std::shared_ptr<const runtime::SourceAnimations>>> animationSources_;
+  std::vector<std::shared_ptr<const DrawDeformation>> deformations_;
+  std::vector<std::shared_ptr<const runtime::SourceAnimations>> animationSources_;
+  struct ClipLocation { u32 source=0, clip=0; };
+  std::unordered_map<resources::AssetGuid,ClipLocation,resources::AssetGuidHash> clipIndex_;
+  // Malha de seleção deformada de um objeto, refeita quando a pose muda.
+  bool deformedPickMesh(const runtime::SceneGraph &document,EditorEntityId id,u32 assetIndex,const float drawModel[16],
+                        std::shared_ptr<const EditorPickMesh> &out) const;
   EditorEntityId isolateEntity_=kInvalidEntity;
   u32 isolateSlot_=0;
   std::uint8_t isolateChannel_=0;

@@ -4618,8 +4618,7 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
                                                 std::span<const renderer::MapDrawRecord> draws,
                                                 std::span<const renderer::MapMaterialRecord> materials,
                                                 std::span<const renderer::SharedAuthoringTexture> textures,
-                                                std::span<const u8> skinInfluences,
-                                                std::span<const u32> drawJoints) {
+                                                const DeformationLibrary &deformation) {
   if(!dirtRoadPreview_ || !rhiDevice_ || device_==VK_NULL_HANDLE) {
     __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] renderer sem contexto para absorver geometria.");
     return false;
@@ -4684,9 +4683,11 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   }
   // G6-B: juntas por desenho e influências. Recusa quando o skin não casa com
   // a geometria publicada, em vez de deformar vértices de outro desenho.
-  if(!uploadSkinningLibrary(skinInfluences,drawJoints,vertices.size()/renderer::MapVertexStride)) {
-    __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] skin inconsistente com a geometria: %zu influências, %zu desenhos.",
-                        skinInfluences.size(),drawJoints.size());
+  if(!uploadSkinningLibrary(deformation.skinInfluences,deformation.drawJoints,vertices.size()/renderer::MapVertexStride,
+                            deformation.morphDeltas,deformation.drawMorphOffsets,deformation.drawMorphTargets)) {
+    __android_log_print(ANDROID_LOG_ERROR,LogTag,
+        "[Import] deformação inconsistente com a geometria: %zu influências, %zu desenhos, %zu floats de blend shape.",
+        deformation.skinInfluences.size(),deformation.drawJoints.size(),deformation.morphDeltas.size());
     return false;
   }
   // Os buffers antigos precisam sair antes: o alocador não sobrescreve uma

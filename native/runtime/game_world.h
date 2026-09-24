@@ -74,6 +74,7 @@ enum class WorldStatus : u32 {
   Rejected,
   UnknownResource,
   ResourceTypeMismatch,
+  ClipNotInComponent, // o clipe existe mas não está na lista do componente Animation
 };
 
 const char *worldStatusMessage(WorldStatus status) noexcept;

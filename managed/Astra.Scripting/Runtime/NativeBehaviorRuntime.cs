@@ -28,8 +28,27 @@ public static unsafe class NativeBehaviorRuntime
     [StructLayout(LayoutKind.Sequential)]
     public struct NativeAssetGuid { public ulong High, Low; }
 
+    /// <summary>Espelho de <c>ae::scene::ScriptAnimationCommand</c> (ABI v9, 40 bytes).</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeAnimationCommand
+    {
+        public uint Size, Op;
+        public NativeAssetGuid Clip;
+        public float Seconds, TargetWeight;
+        public uint PlayMode, Reserved;
+    }
+    /// <summary>Espelho de <c>ae::scene::ScriptAnimationState</c> (ABI v9, 48 bytes).</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeAnimationState
+    {
+        public uint Size, Enabled;
+        public NativeAssetGuid Clip;
+        public float Time, Speed, Weight, Length;
+        public uint Layer, WrapMode;
+    }
+
     /// <summary>
-    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v8). A ordem dos
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v9). A ordem dos
     /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
     /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
     /// do fim do que o nativo alocou.
@@ -96,6 +115,11 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*, ulong, float*, int> CharacterMove;
         public delegate* unmanaged<void*, ulong, int> CharacterJump;
         public delegate* unmanaged<void*, ulong, float*, int> CameraLook;
+        // v9 — animação por componente
+        public delegate* unmanaged<void*, ulong, ulong, NativeAnimationCommand*, int> AnimationCommand;
+        public delegate* unmanaged<void*, ulong, ulong, NativeAssetGuid, NativeAnimationState*, int> GetAnimationState;
+        public delegate* unmanaged<void*, ulong, ulong, NativeAnimationState*, int> SetAnimationState;
+        public delegate* unmanaged<void*, ulong, ulong, uint, NativeAssetGuid*, byte*, int, int> AnimationClipAt;
 
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
             MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
@@ -109,7 +133,8 @@ public static unsafe class NativeBehaviorRuntime
             GetRenderingState != null && SetRenderingSettings != null && CopyRenderingDiagnostics != null &&
             GetComponentResource != null && SetComponentResource != null &&
             GetComponentSlotProperty != null && SetComponentSlotProperty != null &&
-            CharacterMove != null && CharacterJump != null && CameraLook != null;
+            CharacterMove != null && CharacterJump != null && CameraLook != null &&
+            AnimationCommand != null && GetAnimationState != null && SetAnimationState != null && AnimationClipAt != null;
     }
 
     private sealed class SceneAdapter(SceneAccess access) : ISceneAccess
@@ -457,6 +482,56 @@ public static unsafe class NativeBehaviorRuntime
             float* command = stackalloc float[2] { normalizedDelta.X, normalizedDelta.Y };
             return access.CameraLook(access.Context, objectId, command) != 0;
         }
+        public bool AnimationCommand(ulong objectId, ulong instanceId, AnimationCommandKind op, AssetGuid clip,
+                                     float seconds, float targetWeight, AnimationPlayMode mode)
+        {
+            if (!Accessible) return false;
+            var command = new NativeAnimationCommand
+            {
+                Size = (uint)sizeof(NativeAnimationCommand), Op = (uint)op,
+                Clip = new NativeAssetGuid { High = clip.High, Low = clip.Low },
+                Seconds = seconds, TargetWeight = targetWeight, PlayMode = (uint)mode
+            };
+            return access.AnimationCommand(access.Context, objectId, instanceId, &command) != 0;
+        }
+        public bool TryGetAnimationState(ulong objectId, ulong instanceId, AssetGuid clip, out AnimationStateValue value)
+        {
+            value = default;
+            if (!Accessible) return false;
+            var state = new NativeAnimationState { Size = (uint)sizeof(NativeAnimationState) };
+            if (access.GetAnimationState(access.Context, objectId, instanceId,
+                    new NativeAssetGuid { High = clip.High, Low = clip.Low }, &state) == 0) return false;
+            value = new AnimationStateValue(new AssetGuid(state.Clip.High, state.Clip.Low), state.Enabled != 0, state.Time,
+                state.Speed, state.Weight, state.Length, state.Layer, (AnimationWrapMode)state.WrapMode);
+            return true;
+        }
+        public bool SetAnimationState(ulong objectId, ulong instanceId, in AnimationStateValue value)
+        {
+            if (!Accessible) return false;
+            var state = new NativeAnimationState
+            {
+                Size = (uint)sizeof(NativeAnimationState), Enabled = value.Enabled ? 1u : 0u,
+                Clip = new NativeAssetGuid { High = value.Clip.High, Low = value.Clip.Low },
+                Time = value.Time, Speed = value.Speed, Weight = value.Weight, Layer = value.Layer, WrapMode = (uint)value.WrapMode
+            };
+            return access.SetAnimationState(access.Context, objectId, instanceId, &state) != 0;
+        }
+        public int AnimationClipAt(ulong objectId, ulong instanceId, uint index, out AssetGuid clip, out string name)
+        {
+            clip = default; name = "";
+            if (!Accessible) return -1;
+            const int capacity = 256;
+            byte* text = stackalloc byte[capacity];
+            text[0] = 0;
+            NativeAssetGuid guid = default;
+            var count = access.AnimationClipAt(access.Context, objectId, instanceId, index, &guid, text, capacity);
+            if (count < 0 || index >= (uint)count) return count;
+            clip = new AssetGuid(guid.High, guid.Low);
+            var length = 0;
+            while (length < capacity && text[length] != 0) ++length;
+            name = Encoding.UTF8.GetString(text, length);
+            return count;
+        }
     }
 
     private static BehaviorWorld? _world;
@@ -468,7 +543,7 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 8 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 9 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);

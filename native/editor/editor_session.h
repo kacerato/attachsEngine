@@ -439,6 +439,10 @@ public:
   struct SkinningPublication {
     std::span<const u8> influences;
     std::span<const u32> drawJoints;
+    // Blend shapes: deltas (MorphDeltaStride floats por alvo e vértice, vértice
+    // a vértice) e, por desenho recebido, início em floats e número de alvos.
+    std::span<const float> morphDeltas;
+    std::span<const u32> drawMorphOffsets,drawMorphTargets;
   };
   const SkinningPublication &skinningPublication() const noexcept { return skinningPublication_; }
   // Republica a geometria importada para um consumidor gráfico NOVO.
@@ -1115,6 +1119,9 @@ private:
     std::vector<i32> drawSkins;
     std::vector<u8> skinInfluences;
     std::vector<resources::AnimationClip> animations;
+    // Blend shapes por primitiva e o conjunto de cada desenho da fonte (-1 sem).
+    std::vector<resources::MorphTargetSet> morphs;
+    std::vector<i32> drawMorphs;
     // Faixa que veio da fonte. Recursos derivados compartilham os vértices e
     // entram depois dela; regenerar começa sempre daqui.
     usize sourceIndexCount = 0;
@@ -1135,9 +1142,13 @@ private:
     // G6-B: influências paralelas a `vertices` (vazio quando nenhuma fonte tem
     // skin), skin e juntas por desenho, e os clipes de cada fonte.
     std::vector<u8> skinInfluences;
-    std::vector<std::shared_ptr<const resources::SkinDefinition>> drawSkins;
     std::vector<u32> drawJoints;
-    std::vector<std::pair<resources::AssetGuid,std::shared_ptr<const runtime::SourceAnimations>>> animations;
+    // Deltas de blend shapes de toda a biblioteca e, por desenho, o início (em
+    // floats) e o número de alvos; `~0u` e zero num desenho sem eles.
+    std::vector<float> morphDeltas;
+    std::vector<u32> drawMorphOffsets,drawMorphTargets;
+    std::vector<std::shared_ptr<const EditorMapScene::DrawDeformation>> deformations;
+    std::vector<std::shared_ptr<const runtime::SourceAnimations>> animations;
   };
   // Achata os blocos na ordem em que estão, remapeando offsets. A ordem é
   // estável: reimportar não reordena as fontes, então os slots das outras não
@@ -1166,6 +1177,12 @@ private:
                               EditorEntityId entity,const EditorEntity &values,std::string &diagnostic);
   void refreshCollisionMeshDraft();
   void reconcileStagedSource(const StagedSource &staged, ModelImportReport &report);
+  // Liga a deformação (ossos, blend shapes) e os clipes de uma instância de
+  // `tree`: `objectOfNode` é o objeto de cada nó da fonte (zero sem objeto) e
+  // `roots` os objetos que recebem a Animação. Componente novo é criado;
+  // existente é religado só onde a fonte mudou.
+  bool bindImportedDeformation(const ImportedSource &tree,const std::vector<EditorEntityId> &objectOfNode,
+                               std::span<const EditorEntityId> roots,u32 &meshes,u32 &animations);
   std::vector<ImportedSource> importedSources_;
   resources::GltfImportLimits importLimits_{};
   u64 importTextureBudget_ = u64{1} << 30;

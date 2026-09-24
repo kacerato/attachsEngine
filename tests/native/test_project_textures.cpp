@@ -13,6 +13,7 @@
 #include "resources/glb_images.h"
 #include "resources/material_asset.h"
 #include "resources/texture_asset.h"
+#include "core/sha256.h"
 #include "scene/mesh_renderer.h"
 
 #include <algorithm>
@@ -248,9 +249,13 @@ AE_TEST(p02_shared_repair_history_persists_and_rejects_external_conflicts) {
   resources::MaterialAsset value;value.guid=material;value.name="Shared";value.values.enabled=true;
   value.textures[0]=missing;value.occlusionTexture=missing;
   AE_EXPECT_TRUE(EditorImportTransaction::writeText(project.root/"shared.material",value.serialize()),"material fixture");
-  AE_EXPECT_TRUE(EditorImportTransaction::write(project.root/"texture.png",png(4,4,120)),"texture fixture");
+  const auto textureBytes=png(4,4,120);
+  AE_EXPECT_TRUE(EditorImportTransaction::write(project.root/"texture.png",textureBytes),"texture fixture");
   resources::AssetRegistry registry;resources::AssetRecord record;record.guid=material;record.type=resources::AssetType::Material;record.path="shared.material";
   AE_EXPECT_TRUE(registry.add(record),"material record");record.guid=texture;record.type=resources::AssetType::Texture;record.path="texture.png";
+  // O decodificador só aceita a textura cujo arquivo bate com o hash registrado
+  // (uma troca fora do editor pede reimportação): a fixture registra o hash.
+  record.contentHash=Sha256::hex(textureBytes);
   AE_EXPECT_TRUE(registry.add(record)&&session.loadAssets(registry.serialize()),"load resources");
   auto &d=session.document();auto &h=session.history();
   const auto first=h.createEntity(d,d.root(),EditorEntityKind::Mesh,"Inherited");

@@ -1,0 +1,8 @@
+CesiumMan
+Source: https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CesiumMan
+Downloaded GLB: https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/CesiumMan/glTF-Binary/CesiumMan.glb
+SHA-256: b7001eaeea8254bd44773bcd247e78696d94169388fbb2a1800fc69434e777d9
+License: Creative Commons Attribution 4.0 International (CC-BY-4.0), (c) 2017 Cesium.
+The Cesium logo/trademark in the texture is not licensed for reuse (LicenseRef-LegalMark-Cesium).
+Por que este: personagem real com skin (19 juntas), texturas e um clipe de caminhada;
+e o caso que o plano G6-B nomeia para importar, reabrir e tocar no Play.

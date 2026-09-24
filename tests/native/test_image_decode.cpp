@@ -440,11 +440,15 @@ AE_TEST(m091_publication_offsets_texture_indices_per_source) {
   // O registro exige hash de conteúdo no formato SHA-256 (64 hexadecimais).
   AE_EXPECT_TRUE(session.publishModel(model, std::string(64, 'a'), "Fontes/a.glb", report), report.diagnostic.c_str());
   AE_EXPECT_TRUE(session.publishModel(model, std::string(64, 'b'), "Fontes/b.glb", report), report.diagnostic.c_str());
-  AE_EXPECT_EQ(publishedTextures, usize{4}, "as texturas das duas fontes chegam na mesma publicação");
+  // A imagem 0 é cor (sRGB), dado (metal/rugosidade, oclusão) e normal: o
+  // importador publica uma textura por interpretação — (textura, cor/dado/normal)
+  // em gltf_import.cpp —, três por fonte.
+  AE_EXPECT_EQ(publishedTextures, usize{6}, ("as texturas das duas fontes chegam na mesma publicação: " +
+                                            std::to_string(publishedTextures)).c_str());
   // Cada fonte tem 1 material + o neutro; o da segunda fonte é o terceiro.
   AE_EXPECT_TRUE(publishedMaterials.size() >= 3, "materiais das duas fontes");
   const auto first = publishedMaterials[0].textureIndices[0], second = publishedMaterials[2].textureIndices[0];
-  AE_EXPECT_TRUE(first < 2 && second == first + 2, "índices da segunda fonte deslocados pelo bloco da primeira");
+  AE_EXPECT_TRUE(first < 3 && second == first + 3, "índices da segunda fonte deslocados pelo bloco da primeira");
 
   // R2: a publicação passa pelo orçamento agregado e deixa o relatório.
   AE_EXPECT_TRUE(session.textureResidency().textures >= 1u, "texturas contadas na publicação");

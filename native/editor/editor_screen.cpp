@@ -1227,7 +1227,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     const auto &binding=entry.type->resourceBindings[i];
     if(mesh||(binding.kind!=resources::AssetType::Mesh&&
              binding.kind!=resources::AssetType::EnvironmentProfile&&
-             binding.kind!=resources::AssetType::EnvironmentMap)||!show(binding.presentation)) continue;
+             binding.kind!=resources::AssetType::EnvironmentMap&&
+             binding.kind!=resources::AssetType::AnimationClip)||!show(binding.presentation)) continue;
     for(u32 slot=0;slot<binding.slotCount(*component);++slot) fields.push_back({6,i,slot});
   }
   if(mesh && !builder.state.meshTab) {
@@ -1385,8 +1386,14 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
       if(!asset.valid()) {
         value=binding.kind==resources::AssetType::EnvironmentProfile?"Sem perfil":
               binding.kind==resources::AssetType::EnvironmentMap?"Ambiente padrão":
+              binding.kind==resources::AssetType::AnimationClip?"Nenhum clipe":
               binding.inheritable?"Herdar malha visual":"Sem recurso";
       } else value=asset.text().substr(0,8);
+      if(binding.kind==resources::AssetType::AnimationClip && asset.valid() && builder.state.resources) {
+        runtime::AnimationClipView clip;
+        // Referência ausente fica gravada e é dita, nunca trocada por outra.
+        value=builder.state.resources->findClip(asset,clip)?clip.name:"Clipe ausente · "+asset.text().substr(0,8);
+      }
       if(const auto resolved=builder.state.resources?builder.state.resources->assetSlot(asset):0) {
         const auto name=builder.state.resources->assetName(resolved-1);
         value=name.empty()?"Malha "+std::to_string(resolved):std::string(name);
@@ -1440,7 +1447,8 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
   auto search=takeTop(content,36);builder.list.addRect(search,theme.color.raised,theme.radius.control);
   builder.label(search,state.meshQuery.empty()?
       (resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Buscar perfil":
-       resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentMap?"Buscar mapa HDRI":"Buscar malha"):
+       resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentMap?"Buscar mapa HDRI":
+       resourceBinding&&resourceBinding->kind==resources::AssetType::AnimationClip?"Buscar clipe":"Buscar malha"):
       state.meshQuery.c_str(),theme.color.textDim,theme.type.caption);
   builder.router.addRegion(search,widgetId(EditorWidget::MeshSearch));
   auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
@@ -1480,6 +1488,42 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
     }
     if(matches.empty()) builder.label(content,resourceBinding->kind==resources::AssetType::EnvironmentProfile?
         "Nenhum perfil no projeto":"Nenhum mapa HDRI no projeto",theme.color.textMuted,theme.type.caption);
+    builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));
+    if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::MeshNext));
+    const auto text=std::to_string(page+1)+" / "+std::to_string(pages);
+    builder.label(footer,text.c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    return;
+  }
+  if(resourceBinding&&resourceBinding->kind==resources::AssetType::AnimationClip) {
+    // Clipes de todas as fontes carregadas, com a duração e o arquivo de origem.
+    std::vector<u32> matches;const auto query=editorSearchKey(state.meshQuery);
+    const auto catalog=state.resources?state.resources->clipCatalog():std::vector<EditorMapScene::ClipEntry>{};
+    for(u32 i=0;i<catalog.size();++i)
+      if(query.empty()||editorSearchKey(catalog[i].name).find(query)!=std::string::npos) matches.push_back(i);
+    const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-34)/50));
+    const u32 pages=std::max(1u,(static_cast<u32>(matches.size())+perPage-1)/perPage);
+    const u32 page=std::min(state.meshPage,pages-1);
+    auto clear=takeTop(content,34);
+    builder.label(clear,"Nenhum clipe",theme.color.textDim,theme.type.caption);
+    builder.router.addRegion(clear,widgetId(EditorWidget::MeshClear));
+    for(u32 row=page*perPage;row<matches.size()&&row<(page+1)*perPage;++row) {
+      const auto index=matches[row];const auto &entry=catalog[index];
+      auto slot=takeTop(content,50);const auto hit=slot;
+      builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+      if(selectedResource==entry.clip) builder.list.addRect({slot.x,slot.y+4,3,slot.height-8},theme.color.accent,1);
+      builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(UiIcon::AssetsAnimation),0xffffffff);
+      builder.label(takeTop(slot,25),entry.name.c_str(),theme.color.text,theme.type.body);
+      std::string origin;
+      if(state.assetRegistry) if(const auto *record=state.assetRegistry->find(entry.source)) {
+        const auto slash=record->path.find_last_of('/');origin=record->path.substr(slash==std::string::npos?0:slash+1);
+      }
+      char duration[24];std::snprintf(duration,sizeof duration,"%.2f s",entry.duration);
+      builder.label(slot,(std::string(duration)+(origin.empty()?"":" · "+origin)).c_str(),theme.color.textMuted,theme.type.caption);
+      builder.router.addRegion(hit,widgetId(EditorWidget::MeshChoiceBase)+index);
+    }
+    if(matches.empty()) builder.label(content,"Nenhum clipe nas fontes carregadas",theme.color.textMuted,theme.type.caption);
     builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
     builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
     if(page) builder.router.addRegion(previous,widgetId(EditorWidget::MeshPrevious));

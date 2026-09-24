@@ -52,6 +52,24 @@ struct ScriptShapeQuery {
 
 struct ScriptAssetGuid { u64 high=0,low=0; };
 
+// ABI v9: animação (Animation legado da Unity). `op`: 0 Play, 1 CrossFade,
+// 2 Blend, 3 Stop, 4 Rewind. Clipe zero é o clipe padrão em Play/CrossFade e
+// todos os clipes em Stop/Rewind. `playMode`: 0 para a mesma camada, 1 para
+// todas. `seconds` é a duração do fade; `targetWeight` o peso do Blend.
+struct ScriptAnimationCommand {
+  u32 size=sizeof(ScriptAnimationCommand),op=0;
+  ScriptAssetGuid clip{};
+  float seconds=0,targetWeight=1;
+  u32 playMode=0,reserved=0;
+};
+// AnimationState: `wrapMode` na ordem de resources::AnimationWrapMode.
+struct ScriptAnimationState {
+  u32 size=sizeof(ScriptAnimationState),enabled=0;
+  ScriptAssetGuid clip{};
+  float time=0,speed=1,weight=0,length=0;
+  u32 layer=0,wrapMode=1;
+};
+
 // ABI v7. Enums cross as u32; booleans also use u32 so C++/CLR layout is stable.
 // v7 appends temporal upscaler quality, availability and the executed algorithm.
 // The settings block mirrors ProjectRenderingSettings in one place at the ABI.
@@ -113,7 +131,7 @@ struct ScriptRenderingState {
 };
 
 struct ScriptSceneAccess {
-  u32 version=8,size=sizeof(ScriptSceneAccess);
+  u32 version=9,size=sizeof(ScriptSceneAccess);
   void *context=nullptr;
   int (*exists)(void *,u64)=nullptr;
   int (*getTransform)(void *,u64,float *)=nullptr; // position3 quaternion4 scale3, local space
@@ -184,6 +202,13 @@ struct ScriptSceneAccess {
   int (*characterMove)(void *,u64,const float *)=nullptr;
   int (*characterJump)(void *,u64)=nullptr;
   int (*cameraLook)(void *,u64,const float *)=nullptr;
+  // ABI v9: animação por componente (objeto, instância do componente).
+  int (*animationCommand)(void *,u64,u64,const ScriptAnimationCommand *)=nullptr;
+  int (*getAnimationState)(void *,u64,u64,ScriptAssetGuid,ScriptAnimationState *)=nullptr;
+  int (*setAnimationState)(void *,u64,u64,const ScriptAnimationState *)=nullptr;
+  // Devolve quantos clipes o componente lista (ou -1); com `index` válido
+  // escreve a identidade e o nome (UTF-8, truncado em `capacity`).
+  int (*animationClipAt)(void *,u64,u64,u32,ScriptAssetGuid *,u8 *,int)=nullptr;
   bool available() const {
     return exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
            worldId&&generation&&lastStatus&&parentOf&&childCount&&childAt&&findChild&&getName&&setName&&
@@ -192,12 +217,15 @@ struct ScriptSceneAccess {
            getWorldTransform&&setWorldTransform&&rayCast&&shapeCast&&overlap&&layerByName&&layerName&&
            inputAxis&&inputButton&&inputContext&&inputRole&&getRenderingState&&setRenderingSettings&&
            copyRenderingDiagnostics&&getComponentResource&&setComponentResource&&
-           getComponentSlotProperty&&setComponentSlotProperty&&characterMove&&characterJump&&cameraLook;
+           getComponentSlotProperty&&setComponentSlotProperty&&characterMove&&characterJump&&cameraLook&&
+           animationCommand&&getAnimationState&&setAnimationState&&animationClipAt;
   }
 };
 static_assert(offsetof(ScriptSceneAccess,characterJump)==offsetof(ScriptSceneAccess,characterMove)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,cameraLook)==offsetof(ScriptSceneAccess,characterJump)+sizeof(void*));
-static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,cameraLook)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,animationCommand)==offsetof(ScriptSceneAccess,cameraLook)+sizeof(void*));
+static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,animationClipAt)+sizeof(void*));
+static_assert(sizeof(ScriptAnimationCommand)==40 && sizeof(ScriptAnimationState)==48);
 struct ScriptRuntimeApi {
   int (*start)(const u8 *,int,const u8 *,int,const ScriptSceneAccess *)=nullptr;
   int (*update)(float)=nullptr;

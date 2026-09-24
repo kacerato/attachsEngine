@@ -1133,7 +1133,7 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
           // O skin da biblioteca viaja na mesma publicação (G6-B).
           const auto &skin=shell.editorSession.skinningPublication();
           if(!shell.instancedRenderer.rebuildAuthoringGeometry(vertices,indices,draws,materials,textures,
-                                                               skin.influences,skin.drawJoints)) return false;
+                  {skin.influences,skin.drawJoints,skin.morphDeltas,skin.drawMorphOffsets,skin.drawMorphTargets})) return false;
           shell.editorSession.cameraPreview().invalidateTarget();
           out={shell.instancedRenderer.mapDraws(),shell.instancedRenderer.mapMaterials(),
                shell.instancedRenderer.pickingVertices(),shell.instancedRenderer.pickingIndices()};
@@ -2052,6 +2052,13 @@ void android_main(android_app *app) {
                                                       buffer, sizeof(buffer))) {
       shell.renderingSettings.antiAliasing = ae::renderer::parseAntiAliasingMode(buffer);
     }
+    // G6-B: A/B do ampliador no mesmo APK (tools/android-temporal-ab.ps1). O
+    // pedido passa pela mesma política: um aparelho que recusa o backend relata
+    // o motivo e não troca por outro em silêncio.
+    if (ae::platform::android::readStringLaunchOption(app->activity, "aether.upscaling", buffer, sizeof(buffer)))
+      shell.renderingSettings.upscalingFilter = ae::renderer::parseUpscalingFilter(buffer);
+    if (ae::platform::android::readStringLaunchOption(app->activity, "aether.temporal_quality", buffer, sizeof(buffer)))
+      shell.renderingSettings.temporalUpscalerQuality = ae::renderer::parseTemporalUpscalerQuality(buffer);
     ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.shadow_cascades",
                                                      shell.renderingSettings.shadowCascadeCount);
     ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.shadow_resolution",

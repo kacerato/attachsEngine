@@ -10,6 +10,7 @@
 #include "runtime/game_world.h"
 #include "runtime/input_actions.h"
 #include "runtime/scene_physics.h"
+#include "runtime/scene_animation.h"
 #include "runtime/runtime_rendering_state.h"
 #include "scene/script_runtime.h"
 #include "resources/asset_registry.h"
@@ -62,6 +63,9 @@ public:
     return rendering_.complete(requestId, success, effective, effectiveAvailable);
   }
   bool start(GameWorld &world, ScenePhysics &physics, InputService &input);
+  // Avaliador de animação do Play; nulo recusa os comandos de animação com
+  // NotRunning em vez de fingir que tocaram.
+  void setAnimator(SceneAnimator *animator) noexcept { animator_ = animator; }
   bool update(float elapsed);
   bool fixedUpdate(float elapsed);
   bool trigger(ObjectId sensor, ObjectId other, u32 phase);
@@ -87,6 +91,7 @@ private:
   GameWorld *world_ = nullptr;
   ScenePhysics *physics_ = nullptr;
   InputService *input_ = nullptr;
+  SceneAnimator *animator_ = nullptr;
   const resources::AssetRegistry *assets_ = nullptr;
   const std::vector<resources::EnvironmentProfile> *environmentProfiles_ = nullptr;
   ResourceAvailability resourceAvailable_;

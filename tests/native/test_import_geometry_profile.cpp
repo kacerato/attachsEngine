@@ -347,7 +347,7 @@ AE_TEST(import_lights_are_explicit_profile_data_with_photometric_values_and_orie
 }
 
 AE_TEST(import_reads_the_official_khronos_point_light_glb) {
-  std::ifstream input("tests/native/fixtures/gltf/PointLightIntensityTest.glb",std::ios::binary);
+  std::ifstream input(std::string(AETHER_REPOSITORY_ROOT)+"/tests/native/fixtures/gltf/PointLightIntensityTest.glb",std::ios::binary);
   AE_EXPECT_TRUE(static_cast<bool>(input),"o corpus oficial está disponível");
   const std::vector<u8> bytes{std::istreambuf_iterator<char>(input),std::istreambuf_iterator<char>()};
   GltfImportLimits limits;limits.importLights=true;

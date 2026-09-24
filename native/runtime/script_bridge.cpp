@@ -1,6 +1,7 @@
 #include "runtime/script_bridge.h"
 #include "runtime/transform_math.h"
 #include "scene/script_behavior.h"
+#include "scene/animation.h"
 
 #include <algorithm>
 #include <cmath>
@@ -572,6 +573,90 @@ void ScriptBridge::installAccess() {
     if(!delta||id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
     s.lastStatus_=s.world_->applyCameraLook(s.world_->handle((ObjectId)id),delta[0],delta[1]);
     return s.lastStatus_==WorldStatus::Ok;
+  };
+  // --- v9: animação ---------------------------------------------------------
+  // Objeto vivo, componente Animation dele e o avaliador ligado; senão o
+  // motivo fica em lastStatus.
+  static const auto animationTarget=[](ScriptBridge &s,u64 id,u64 instance)->bool {
+    if(!s.animator_) {s.lastStatus_=WorldStatus::NotRunning;return false;}
+    if(id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return false;}
+    const auto handle=s.world_->handle((ObjectId)id);
+    s.lastStatus_=s.world_->validate(handle);
+    if(s.lastStatus_!=WorldStatus::Ok) return false;
+    const auto *value=s.world_->find(handle)->components.findInstance(instance);
+    if(!value||&value->type()!=&scene::Animation::descriptor) {s.lastStatus_=WorldStatus::ComponentMissing;return false;}
+    return true;
+  };
+  static const auto animationStatus=[](AnimationCommandStatus status) {
+    switch(status) {
+    case AnimationCommandStatus::Ok: return WorldStatus::Ok;
+    case AnimationCommandStatus::UnknownComponent: return WorldStatus::ComponentMissing;
+    case AnimationCommandStatus::UnknownClip: return WorldStatus::UnknownResource;
+    case AnimationCommandStatus::ClipNotInComponent: return WorldStatus::ClipNotInComponent;
+    case AnimationCommandStatus::InvalidArgument: return WorldStatus::InvalidArgument;
+    }
+    return WorldStatus::Rejected;
+  };
+  access_.animationCommand=[](void *c,u64 id,u64 instance,const scene::ScriptAnimationCommand *command)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!command||command->size!=sizeof(scene::ScriptAnimationCommand)||command->playMode>1) {
+      s.lastStatus_=WorldStatus::InvalidArgument;return 0;
+    }
+    if(!animationTarget(s,id,instance)) return 0;
+    const resources::AssetGuid clip{command->clip.high,command->clip.low};
+    const auto mode=static_cast<AnimationPlayMode>(command->playMode);
+    AnimationCommandStatus status=AnimationCommandStatus::InvalidArgument;
+    switch(command->op) {
+    case 0: status=s.animator_->play((ObjectId)id,instance,clip,mode);break;
+    case 1: status=s.animator_->crossFade((ObjectId)id,instance,clip,command->seconds,mode);break;
+    case 2: status=s.animator_->blend((ObjectId)id,instance,clip,command->targetWeight,command->seconds);break;
+    case 3: status=s.animator_->stop((ObjectId)id,instance,clip);break;
+    case 4: status=s.animator_->rewind((ObjectId)id,instance,clip);break;
+    default: break;
+    }
+    s.lastStatus_=animationStatus(status);
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  access_.getAnimationState=[](void *c,u64 id,u64 instance,scene::ScriptAssetGuid clip,scene::ScriptAnimationState *out)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!out||out->size!=sizeof(scene::ScriptAnimationState)) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    if(!animationTarget(s,id,instance)) return 0;
+    AnimationStateView view;
+    s.lastStatus_=animationStatus(s.animator_->state((ObjectId)id,instance,{clip.high,clip.low},view));
+    if(s.lastStatus_!=WorldStatus::Ok) return 0;
+    out->enabled=view.enabled;out->clip={view.clip.high,view.clip.low};
+    out->time=view.time;out->speed=view.speed;out->weight=view.weight;out->length=view.length;
+    out->layer=view.layer;out->wrapMode=static_cast<u32>(view.wrapMode);
+    return 1;
+  };
+  access_.setAnimationState=[](void *c,u64 id,u64 instance,const scene::ScriptAnimationState *value)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!value||value->size!=sizeof(scene::ScriptAnimationState)||value->wrapMode>3) {
+      s.lastStatus_=WorldStatus::InvalidArgument;return 0;
+    }
+    if(!animationTarget(s,id,instance)) return 0;
+    AnimationStateView view;
+    view.clip={value->clip.high,value->clip.low};view.enabled=value->enabled!=0;
+    view.time=value->time;view.speed=value->speed;view.weight=value->weight;
+    view.layer=value->layer;view.wrapMode=static_cast<resources::AnimationWrapMode>(value->wrapMode);
+    s.lastStatus_=animationStatus(s.animator_->setState((ObjectId)id,instance,view));
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  access_.animationClipAt=[](void *c,u64 id,u64 instance,u32 index,scene::ScriptAssetGuid *clip,u8 *name,int capacity)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!animationTarget(s,id,instance)) return -1;
+    const u32 count=s.animator_->clipCount((ObjectId)id,instance);
+    if(index<count) {
+      resources::AssetGuid guid;std::string text;
+      if(!s.animator_->clipAt((ObjectId)id,instance,index,guid,text)) {s.lastStatus_=WorldStatus::Rejected;return -1;}
+      if(clip) *clip={guid.high,guid.low};
+      if(name&&capacity>0) {
+        const auto length=std::min<usize>(text.size(),static_cast<usize>(capacity-1));
+        std::memcpy(name,text.data(),length);name[length]=0;
+      }
+    }
+    s.lastStatus_=WorldStatus::Ok;
+    return static_cast<int>(count);
   };
 }
 

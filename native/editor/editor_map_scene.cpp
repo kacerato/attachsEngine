@@ -35,6 +35,22 @@ bool inheritedVisible(const runtime::SceneGraph &document, EditorEntityId id) {
 }
 }
 namespace {
+// Modelo do desenho: mundo do objeto vezes o modelo relativo ao pivô, o mesmo
+// produto que `extract` desenha.
+void drawModelOf(const float world[16],const renderer::MapDrawRecord &source,const float pivot[3],float out[16]) {
+  float relative[16];std::copy(source.model,source.model+16,relative);
+  for(u32 a=0;a<3;++a) relative[12+a]-=pivot[a];
+  multiply(world,relative,out);
+}
+float matrixNormBound(const float m[16]) {
+  float one=0,inf=0;
+  for(u32 i=0;i<3;++i) {
+    float col=0,row=0;
+    for(u32 k=0;k<3;++k) {col+=std::abs(m[i*4+k]);row+=std::abs(m[k*4+i]);}
+    one=std::max(one,col);inf=std::max(inf,row);
+  }
+  return std::sqrt(one*inf);
+}
 bool buildPickMeshes(std::span<const renderer::MapDrawRecord> draws,std::span<const u8> vertices,
                      std::span<const u32> indices,std::vector<std::shared_ptr<const EditorPickMesh>> &out) {
   out.assign(draws.size(),nullptr);
@@ -215,6 +231,15 @@ bool EditorMapScene::slotBounds(const runtime::SceneGraph &document, EditorEntit
   float world[16];if(!editorWorldMatrix(document,id,world)) return false;
   float pivot[3];pivotOf(index,pivot);
   const auto &record=source_[index];
+  // Malha deformável: enquadrar e selecionar pela pose deformada, a que se vê.
+  if(const auto *entity=document.find(id); entity && deformation(index))
+    if(const auto *mesh=static_cast<const scene::SkinnedMesh *>(entity->components.find(scene::SkinnedMesh::descriptor))) {
+      float model[16];drawModelOf(world,record,pivot,model);
+      DeformedPose pose;
+      if(deformedPose(document,*mesh,index,model,pose)) {
+        std::copy(pose.center,pose.center+3,center);radius=pose.radius;return true;
+      }
+    }
   // O centro é o centro do MESH levado ao mundo, e o pivô é a origem do objeto.
   // Para o pacote os dois coincidem e isto devolve exatamente o de sempre; para
   // um nó importado, usar a origem como centro deixaria o enquadramento e o
@@ -304,44 +329,102 @@ bool EditorMapScene::pickSlotGeometry(const runtime::SceneGraph &document,Editor
   // limites: tocar o objeto nao selecionava nada e tocar ao lado selecionava.
   pivotOf(index,pivot);
   for(u32 axis=0;axis<3;++axis) relative[12+axis]-=pivot[axis];
-  multiply(world,relative,out.model);out.mesh=pickMeshes_[index];return true;
+  multiply(world,relative,out.model);out.mesh=pickMeshes_[index];
+  // Malha deformável: o toque acerta a pose que está na tela, não a de bind.
+  std::shared_ptr<const EditorPickMesh> deformed;
+  if(deformedPickMesh(document,id,index,out.model,deformed)) out.mesh=std::move(deformed);
+  return true;
 }
-bool EditorMapScene::skinPose(const runtime::SceneGraph &document, const scene::SkinnedMesh &skinned, u32 assetIndex,
-                              const float drawModel[16], std::vector<float> &palette, float center[3], float &radius,
-                              u32 *missingBones) const {
-  const auto *skin=drawSkin(assetIndex);
-  if(!skin || skin->joints.empty()) return false;
-  const usize joints=skin->joints.size();
-  std::vector<float> worlds(joints*16);
-  std::vector<u8> missing(joints,0);
-  u32 absent=0;
-  for(usize j=0;j<joints;++j) {
-    const u64 bone=j<skinned.bones.size()?skinned.bones[j]:0;
-    if(!bone || !editorWorldMatrix(document,static_cast<EditorEntityId>(bone),worlds.data()+j*16)) {
-      // Placeholder finito; a entrada da paleta vira identidade logo abaixo.
-      std::copy(drawModel,drawModel+16,worlds.data()+j*16);
-      missing[j]=1;++absent;
+void EditorMapScene::setDeformation(std::vector<std::shared_ptr<const DrawDeformation>> draws,
+                                    std::vector<std::shared_ptr<const runtime::SourceAnimations>> animations) {
+  deformations_=std::move(draws);animationSources_=std::move(animations);
+  clipIndex_.clear();
+  for(u32 s=0;s<animationSources_.size();++s)
+    for(u32 c=0;c<animationSources_[s]->clipIds.size();++c) clipIndex_[animationSources_[s]->clipIds[c]]={s,c};
+}
+
+bool EditorMapScene::findClip(const resources::AssetGuid &clip,runtime::AnimationClipView &out) const {
+  const auto found=clipIndex_.find(clip);
+  if(found==clipIndex_.end()) return false;
+  const auto &source=*animationSources_[found->second.source];
+  out.source=&source;out.clip=&source.clips[found->second.clip];
+  out.name=resources::animationClipDisplayName(*out.clip,found->second.clip);
+  return true;
+}
+
+std::vector<EditorMapScene::ClipEntry> EditorMapScene::clipCatalog() const {
+  std::vector<ClipEntry> out;
+  for(const auto &source:animationSources_)
+    for(u32 c=0;c<source->clips.size();++c)
+      out.push_back({source->clipIds[c],source->source,resources::animationClipDisplayName(source->clips[c],c),source->clips[c].duration});
+  return out;
+}
+
+bool EditorMapScene::deformedPose(const runtime::SceneGraph &document,const scene::SkinnedMesh &mesh,u32 assetIndex,
+                                  const float drawModel[16],DeformedPose &out) const {
+  out={};
+  const auto *deform=deformation(assetIndex);
+  if(!deform || assetIndex>=source_.size()) return false;
+  float localCenter[3]{source_[assetIndex].boundsCenter[0],source_[assetIndex].boundsCenter[1],source_[assetIndex].boundsCenter[2]};
+  float localRadius=source_[assetIndex].boundsRadius;
+  if(const auto *skin=deform->skin.get()) {
+    const usize joints=skin->joints.size();
+    std::vector<float> worlds(joints*16);
+    std::vector<u8> missing(joints,0);
+    for(usize j=0;j<joints;++j) {
+      const u64 bone=j<mesh.bones.size()?mesh.bones[j]:0;
+      if(!bone || !editorWorldMatrix(document,static_cast<EditorEntityId>(bone),worlds.data()+j*16)) {
+        // Placeholder finito; a entrada da paleta vira identidade logo abaixo.
+        std::copy(drawModel,drawModel+16,worlds.data()+j*16);
+        missing[j]=1;++out.missingBones;
+      }
     }
+    auto palette=std::make_shared<std::vector<float>>();
+    if(!resources::computeSkinPalette(*skin,drawModel,worlds,*palette)) return false;
+    // Osso ausente = pose de bind: o vértice fica onde o arquivo o pôs.
+    for(usize j=0;j<joints;++j) if(missing[j]) {
+      float *m=palette->data()+j*16;
+      std::fill(m,m+16,0.0f);m[0]=m[5]=m[10]=m[15]=1;
+    }
+    if(!resources::skinnedLocalBounds(*skin,*palette,localCenter,localRadius)) return false;
+    out.palette=std::move(palette);
   }
-  if(missingBones) *missingBones=absent;
-  if(!resources::computeSkinPalette(*skin,drawModel,worlds,palette)) return false;
-  // Osso ausente = pose de bind: o vértice fica onde o arquivo o pôs.
-  for(usize j=0;j<joints;++j) if(missing[j]) {
-    float *m=palette.data()+j*16;
-    std::fill(m,m+16,0.0f);m[0]=m[5]=m[10]=m[15]=1;
-  }
-  float local[3],localRadius=0;
-  if(!resources::skinnedLocalBounds(*skin,palette,local,localRadius)) return false;
-  float one=0,inf=0;
-  for(u32 i=0;i<3;++i) {
-    float col=0,row=0;
-    for(u32 k=0;k<3;++k) {col+=std::abs(drawModel[i*4+k]);row+=std::abs(drawModel[k*4+i]);}
-    one=std::max(one,col);inf=std::max(inf,row);
+  if(const auto *morph=deform->morph.get()) {
+    auto weights=std::make_shared<std::vector<float>>(morph->targetCount,0.0f);
+    for(u32 t=0;t<morph->targetCount && t<mesh.blendShapeWeights.size();++t) (*weights)[t]=mesh.blendShapeWeights[t]/100.0f;
+    localRadius+=resources::morphBoundsExpansion(*morph,*weights);
+    out.weights=std::move(weights);
   }
   for(u32 axis=0;axis<3;++axis)
-    center[axis]=drawModel[12+axis]+drawModel[axis]*local[0]+drawModel[4+axis]*local[1]+drawModel[8+axis]*local[2];
-  radius=localRadius*std::sqrt(one*inf);
-  return std::isfinite(radius) && std::isfinite(center[0]) && std::isfinite(center[1]) && std::isfinite(center[2]);
+    out.center[axis]=drawModel[12+axis]+drawModel[axis]*localCenter[0]+drawModel[4+axis]*localCenter[1]+drawModel[8+axis]*localCenter[2];
+  out.radius=localRadius*matrixNormBound(drawModel);
+  return std::isfinite(out.radius) && std::isfinite(out.center[0]) && std::isfinite(out.center[1]) && std::isfinite(out.center[2]);
+}
+
+bool EditorMapScene::deformedPickMesh(const runtime::SceneGraph &document,EditorEntityId id,u32 assetIndex,
+                                      const float drawModel[16],std::shared_ptr<const EditorPickMesh> &out) const {
+  const auto *entity=document.find(id);
+  const auto *mesh=entity?static_cast<const scene::SkinnedMesh *>(entity->components.find(scene::SkinnedMesh::descriptor)):nullptr;
+  const auto *deform=deformation(assetIndex);
+  if(!mesh || !deform || deform->restPositions.empty()) return false;
+  DeformedPose pose;
+  if(!deformedPose(document,*mesh,assetIndex,drawModel,pose)) return false;
+  // Mesmos passos do compute: blend shapes e depois skin, na forma base local.
+  std::vector<float> positions=deform->restPositions;
+  static const std::vector<float> none;
+  if(!resources::deformPositions(positions,deform->influences,pose.palette?*pose.palette:none,mesh->influences(),
+                                 deform->morph.get(),pose.weights?*pose.weights:none)) return false;
+  std::vector<EditorPickMesh::Triangle> triangles(deform->localIndices.size()/3);
+  for(usize t=0;t<triangles.size();++t)
+    for(u32 point=0;point<3;++point) {
+      const u32 vertex=deform->localIndices[t*3+point];
+      if(usize(vertex)*3+2>=positions.size()) return false;
+      std::copy(positions.begin()+vertex*3,positions.begin()+vertex*3+3,triangles[t].begin()+point*3);
+    }
+  auto built=std::make_shared<EditorPickMesh>();
+  if(!built->build(std::move(triangles))) return false;
+  out=std::move(built);
+  return true;
 }
 
 bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<EditorMapUpdate> &out) const {
@@ -388,12 +471,12 @@ bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<Ed
       update.visible=inheritedVisible(document,id) && render->enabled;
       update.castShadow=entity->castShadow;
       if(const auto *skinned=static_cast<const scene::SkinnedMesh *>(entity->components.find(scene::SkinnedMesh::descriptor));
-         skinned && drawSkin(index)) {
-        auto palette=std::make_shared<std::vector<float>>();
-        float center[3],radius=0;
-        if(skinPose(document,*skinned,index,update.pose.draw.model,*palette,center,radius)) {
-          std::copy(center,center+3,update.pose.draw.boundsCenter);update.pose.draw.boundsRadius=radius;
-          update.skinPalette=std::move(palette);
+         skinned && deformation(index)) {
+        DeformedPose pose;
+        if(deformedPose(document,*skinned,index,update.pose.draw.model,pose)) {
+          std::copy(pose.center,pose.center+3,update.pose.draw.boundsCenter);update.pose.draw.boundsRadius=pose.radius;
+          update.skinPalette=std::move(pose.palette);
+          update.morphWeights=std::move(pose.weights);
         }
         update.skinInfluences=static_cast<u8>(skinned->influences());
         update.skinnedMotion=skinned->skinnedMotionVectors;

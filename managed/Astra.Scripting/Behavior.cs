@@ -121,6 +121,16 @@ public interface ISceneAccess
     bool CharacterMove(ulong objectId, Vector2 input, float yawRadians) => throw new NotSupportedException();
     bool CharacterJump(ulong objectId) => throw new NotSupportedException();
     bool CameraLook(ulong objectId, Vector2 normalizedDelta) => throw new NotSupportedException();
+
+    // --- v9: animação ---------------------------------------------------------
+    bool AnimationCommand(ulong objectId, ulong instanceId, AnimationCommandKind op, AssetGuid clip,
+                          float seconds, float targetWeight, AnimationPlayMode mode) => throw new NotSupportedException();
+    bool TryGetAnimationState(ulong objectId, ulong instanceId, AssetGuid clip, out AnimationStateValue value)
+        => throw new NotSupportedException();
+    bool SetAnimationState(ulong objectId, ulong instanceId, in AnimationStateValue value) => throw new NotSupportedException();
+    /// <summary>Quantos clipes o componente lista (-1 sem componente); com índice válido, o clipe e o nome.</summary>
+    int AnimationClipAt(ulong objectId, ulong instanceId, uint index, out AssetGuid clip, out string name)
+        => throw new NotSupportedException();
 }
 
 /// <summary>

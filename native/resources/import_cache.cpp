@@ -151,6 +151,7 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
     writer.i32v(node.parent);
     writer.raw(node.localMatrix, sizeof node.localMatrix);
     writer.text(node.authoredId);
+    writer.pods(node.morphWeights);
   }
   writer.pods(model.drawNodes);
   writer.pods(model.cameras);
@@ -206,11 +207,23 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
       writer.u32v(channel.node);
       writer.u32v(static_cast<u32>(channel.path));
       writer.u32v(static_cast<u32>(channel.interpolation));
+      writer.u32v(channel.weightCount);
       writer.pods(channel.times);
       writer.pods(channel.values);
     }
   }
   writer.u32v(model.unsupportedAnimationChannels);
+  // Schema 7: blend shapes por primitiva e por desenho.
+  writer.u32v(static_cast<u32>(model.morphs.size()));
+  for (const auto &set : model.morphs) {
+    writer.u32v(set.targetCount);
+    writer.u32v(set.vertexCount);
+    writer.pods(set.deltas);
+    writer.pods(set.defaultWeights);
+    writer.pods(set.maximumDisplacement);
+    writer.texts(set.names);
+  }
+  writer.pods(model.drawMorphs);
   // Terminador: um arquivo cortado no meio da escrita nunca passa por inteiro.
   writer.raw(kMagic, sizeof kMagic);
   return true;
@@ -244,6 +257,7 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
     node.parent = reader.i32v();
     reader.raw(node.localMatrix, sizeof node.localMatrix);
     node.authoredId = reader.text();
+    node.morphWeights = reader.pods<float>();
     if (node.parent < -1 || node.parent >= static_cast<i32>(i)) return refuse();
   }
   model.drawNodes = reader.pods<u32>();
@@ -318,15 +332,29 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
     for (auto &channel : clip.channels) {
       channel.node = reader.u32v();
       const u32 path = reader.u32v(), interpolation = reader.u32v();
-      if (path > 2 || interpolation > 2) return refuse();
+      if (path > 3 || interpolation > 2) return refuse();
       channel.path = static_cast<AnimationPath>(path);
       channel.interpolation = static_cast<AnimationInterpolation>(interpolation);
+      channel.weightCount = reader.u32v();
       channel.times = reader.pods<float>();
       channel.values = reader.pods<float>();
       if (!reader.ok) return refuse();
     }
   }
   model.unsupportedAnimationChannels = reader.u32v();
+  const u32 morphCount = reader.u32v();
+  if (!reader.ok || morphCount > bytes.size()) return refuse();
+  model.morphs.resize(morphCount);
+  for (auto &set : model.morphs) {
+    set.targetCount = reader.u32v();
+    set.vertexCount = reader.u32v();
+    set.deltas = reader.pods<float>();
+    set.defaultWeights = reader.pods<float>();
+    set.maximumDisplacement = reader.pods<float>();
+    set.names = reader.texts();
+    if (!reader.ok || !validMorphTargetSet(set)) return refuse();
+  }
+  model.drawMorphs = reader.pods<i32>();
   char trailer[8]{};
   if (!reader.raw(trailer, sizeof trailer) || std::memcmp(trailer, kMagic, sizeof trailer) != 0 ||
       reader.at != bytes.size())
@@ -339,7 +367,21 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
     if (node >= model.nodes.size()) return refuse();
   // Skin e animação do cache endereçam a árvore e os vértices: qualquer índice
   // fora dela é arquivo corrompido, e a reimportação é o caminho seguro.
-  if (model.drawSkins.size() != model.draws.size()) return refuse();
+  if (model.drawSkins.size() != model.draws.size() || model.drawMorphs.size() != model.draws.size()) return refuse();
+  for (usize d = 0; d < model.drawMorphs.size(); ++d) {
+    const i32 morph = model.drawMorphs[d];
+    if (morph < -1 || morph >= static_cast<i32>(model.morphs.size())) return refuse();
+    // Um vértice do desenho sem linha de deltas leria fora do conjunto.
+    if (morph >= 0) {
+      const auto &draw = model.draws[d];
+      u32 highest = 0;
+      for (u32 i = 0; i < draw.indexCount; ++i) {
+        if (usize(draw.firstIndex) + i >= model.indices.size()) return refuse();
+        highest = std::max(highest, model.indices[draw.firstIndex + i]);
+      }
+      if (highest >= model.morphs[static_cast<usize>(morph)].vertexCount) return refuse();
+    }
+  }
   if (!model.skinInfluences.empty() &&
       model.skinInfluences.size() != model.vertices.size() / renderer::MapVertexStride * SkinInfluenceStride)
     return refuse();

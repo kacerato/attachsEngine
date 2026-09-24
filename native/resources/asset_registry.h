@@ -49,7 +49,10 @@ enum class AssetType : u32 {
   InputActionMap = 5, // mapa de ações do projeto
   Scene = 6,          // cena reutilizável
   EnvironmentProfile = 7, // aparência compartilhada por volumes de ambiente
-  EnvironmentMap = 8 // panorama HDR linear, reflexão prefiltrada e irradiância SH9
+  EnvironmentMap = 8, // panorama HDR linear, reflexão prefiltrada e irradiância SH9
+  // Clipe por nós de uma fonte importada. Sub-recurso como as malhas da fonte:
+  // a identidade é derivada (fonte + nome), não um registro próprio.
+  AnimationClip = 9
 };
 const char *assetTypeName(AssetType type);
 bool parseAssetType(std::string_view text, AssetType &out);

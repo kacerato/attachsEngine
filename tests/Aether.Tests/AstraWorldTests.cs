@@ -213,6 +213,49 @@ public static class AstraWorldTests
         }
 
         /// <summary>O ponto seguro do mundo: só aqui o armazenamento muda.</summary>
+        // v9: animação. Clipes por componente e o último comando recebido, para
+        // o teste conferir o que o reprodutor C# manda pela ABI.
+        public readonly Dictionary<ulong, List<(AssetGuid Clip, string Name)>> Clips = [];
+        public readonly Dictionary<(ulong, AssetGuid), AnimationStateValue> States = [];
+        public (AnimationCommandKind Op, AssetGuid Clip, float Seconds, float Weight, AnimationPlayMode Mode)? LastCommand;
+        public bool AnimationCommand(ulong objectId, ulong instanceId, AnimationCommandKind op, AssetGuid clip,
+                                     float seconds, float targetWeight, AnimationPlayMode mode)
+        {
+            if (!Clips.ContainsKey(instanceId)) return Fail(WorldStatus.ComponentMissing);
+            LastCommand = (op, clip, seconds, targetWeight, mode);
+            var target = clip.IsValid ? clip : Clips[instanceId][0].Clip;
+            var state = States.GetValueOrDefault((instanceId, target), new AnimationStateValue(target, false, 0, 1, 0, 2, 0, AnimationWrapMode.Loop));
+            States[(instanceId, target)] = op switch
+            {
+                AnimationCommandKind.Play or AnimationCommandKind.CrossFade => state with { Enabled = true, Weight = 1 },
+                AnimationCommandKind.Stop => state with { Enabled = false, Weight = 0, Time = 0 },
+                AnimationCommandKind.Rewind => state with { Time = 0 },
+                _ => state with { Enabled = true, Weight = targetWeight },
+            };
+            LastStatus = WorldStatus.Ok;
+            return true;
+        }
+        public bool TryGetAnimationState(ulong objectId, ulong instanceId, AssetGuid clip, out AnimationStateValue value)
+        {
+            value = States.GetValueOrDefault((instanceId, clip), new AnimationStateValue(clip, false, 0, 1, 0, 2, 0, AnimationWrapMode.Loop));
+            LastStatus = WorldStatus.Ok;
+            return Clips.ContainsKey(instanceId) || Fail(WorldStatus.ComponentMissing);
+        }
+        public bool SetAnimationState(ulong objectId, ulong instanceId, in AnimationStateValue value)
+        {
+            States[(instanceId, value.Clip)] = value;
+            LastStatus = WorldStatus.Ok;
+            return true;
+        }
+        public int AnimationClipAt(ulong objectId, ulong instanceId, uint index, out AssetGuid clip, out string name)
+        {
+            clip = default; name = "";
+            if (!Clips.TryGetValue(instanceId, out var list)) { LastStatus = WorldStatus.ComponentMissing; return -1; }
+            if (index < list.Count) (clip, name) = list[(int)index];
+            LastStatus = WorldStatus.Ok;
+            return list.Count;
+        }
+
         public void Flush()
         {
             foreach (var (owner, instance) in _pendingRemovals)
@@ -325,23 +368,44 @@ public static class AstraWorldTests
     }
 
     [Test]
-    public static void AnimacaoTocaParaERebobinaPelasPropriedadesDoComponente()
+    public static void AnimacaoComandaClipesPorNomePelaAbiDeAnimacao()
     {
         var world = new FakeWorld(11);
-        var rig = world.RootObject.CreateChild("Rig");
-        var component = rig.AddComponent(ComponentIds.Animation);
+        var fox = world.RootObject.CreateChild("Fox");
+        var component = fox.AddComponent(ComponentIds.Animation);
+        var walk = new AssetGuid(1, 2);
+        var run = new AssetGuid(3, 4);
+        world.Clips[component.InstanceId] = [(walk, "Walk"), (run, "Run")];
         var player = component.Animation();
-        player.Speed = 0.5f;
-        player.WrapMode = AnimationWrapMode.PingPong;
-        player.Play();
-        Assert.True(player.IsPlaying, "Play liga a reprodução");
-        Assert.Close(0.5f, component.GetFloat("speed"), 1e-6f, "velocidade no mesmo PropertyId do nativo");
-        Assert.Equal(2u, component.GetEnum("wrap_mode"), "PingPong é 2 no contrato nativo");
-        player.Time = 0.75f;
+        Assert.Equal(2, player.ClipNames.Count, "a lista vem do componente");
+        Assert.Equal("Run", player.ClipNames[1]);
+
+        player.CrossFade("Run", 0.25f);
+        Assert.Equal(AnimationCommandKind.CrossFade, world.LastCommand!.Value.Op, "CrossFade atravessa a ABI");
+        Assert.Equal(run, world.LastCommand!.Value.Clip, "o nome vira a identidade do clipe");
+        Assert.Close(0.25f, world.LastCommand!.Value.Seconds, 1e-6f, "com a duração do fade");
+        Assert.True(player.IsPlaying && player.IsClipPlaying("Run"), "o estado do clipe responde");
+
+        player.Blend("Walk", 0.4f, 0.5f);
+        Assert.Equal(AnimationCommandKind.Blend, world.LastCommand!.Value.Op);
+        Assert.Close(0.4f, world.LastCommand!.Value.Weight, 1e-6f, "peso alvo do Blend");
+
+        var state = player["Walk"];
+        state.Speed = -1;
+        state.Layer = 2;
+        state.NormalizedTime = 0.5f;
+        Assert.Close(-1f, state.Speed, 1e-6f, "velocidade por clipe");
+        Assert.Equal(2u, state.Layer, "camada por clipe");
+        Assert.Close(1f, state.Time, 1e-6f, "normalizedTime = tempo / duração (2 s)");
+
         player.Stop();
-        Assert.False(player.IsPlaying, "Stop para");
-        Assert.Close(0f, player.Time, 1e-6f, "e rebobina, como Animation.Stop da Unity");
-        var collider = rig.AddComponent(ComponentIds.Collider);
+        Assert.Equal(AnimationCommandKind.Stop, world.LastCommand!.Value.Op);
+        Assert.False(world.LastCommand!.Value.Clip.IsValid, "Stop() sem nome vale para todos");
+        Assert.Throws<WorldException>(() => player.Play("Idle"), "clipe fora da lista é recusado");
+
+        component.SetBool("play_automatically", false);
+        Assert.False(player.PlayAutomatically, "configuração autoral pelas propriedades persistentes");
+        var collider = fox.AddComponent(ComponentIds.Collider);
         Assert.Throws<WorldException>(() => collider.Animation(), "só o componente de animação vira reprodutor");
     }
 

@@ -849,7 +849,22 @@ struct Importer {
   // mesmo mesh em dois nós custa dois desenhos, não duas cópias da geometria.
   struct PrimitiveRange { u32 firstIndex = 0, indexCount = 0, vertexOffset = 0, material = 0;
                           float center[3]{}; float radius = 0; std::string key;
-                          bool skinned = false; u32 highestJoint = 0; };
+                          bool skinned = false; u32 highestJoint = 0; i32 morph = -1; };
+
+  // Uma linha de deltas de morph (todos os alvos de um vértice) copiada para o
+  // fim do conjunto: é como a divisão de arestas duras e o espelho duplicam
+  // vértices sem perder o blend shape deles.
+  void appendMorphRows(i32 morph, std::span<const u32> sources) {
+    if (morph < 0) return;
+    auto &set = out->morphs[static_cast<usize>(morph)];
+    const usize row = usize(set.targetCount) * MorphDeltaStride;
+    for (const u32 source : sources) {
+      const usize from = usize(source) * row;
+      set.deltas.insert(set.deltas.end(), set.deltas.begin() + static_cast<std::ptrdiff_t>(from),
+                        set.deltas.begin() + static_cast<std::ptrdiff_t>(from + row));
+      ++set.vertexCount;
+    }
+  }
 
   // Influências paralelas aos vértices: crescem com eles, com zero onde a
   // primitiva não tem skin. Toda inserção de vértice passa por aqui.
@@ -899,6 +914,13 @@ struct Importer {
     growInfluences();
     for (u32 v = 0; v < vertexCount; ++v)
       copyInfluence(static_cast<usize>(source.vertexOffset) + v, static_cast<usize>(vertexBase) + v);
+    // Blend shapes da cópia refletida: deltas de posição, normal e tangente com X negado.
+    if (source.morph >= 0) {
+      auto set = out->morphs[static_cast<usize>(source.morph)];
+      for (usize i = 0; i < set.deltas.size(); i += 3) set.deltas[i] = -set.deltas[i];
+      out->morphs.push_back(std::move(set));
+      mirrored.morph = static_cast<i32>(out->morphs.size() - 1);
+    }
     for (u32 i = source.firstIndex; i + 2 < source.firstIndex + source.indexCount; i += 3) {
       const u32 a = out->indices[i], b = out->indices[i + 1], c = out->indices[i + 2];
       out->indices.insert(out->indices.end(), {a, c, b});
@@ -1005,6 +1027,7 @@ struct Importer {
       for (u32 i = 0; i < added; ++i)
         copyInfluence(static_cast<usize>(range.vertexOffset) + appendedSources[i],
                       static_cast<usize>(range.vertexOffset) + vertexCount + i);
+      appendMorphRows(range.morph, appendedSources);
       vertexCount += added;
     }
     return true;
@@ -1165,6 +1188,44 @@ struct Importer {
           packed[4 + largest] = static_cast<u16>(std::clamp<i32>(packed[4 + largest] + remainder, 0, 65535));
         }
         std::memcpy(out->skinInfluences.data() + (static_cast<usize>(vertexBase) + v) * SkinInfluenceStride, packed, 16);
+      }
+    }
+    // Morph targets: POSITION/NORMAL/TANGENT de cada alvo são deslocamentos VEC3
+    // por vértice (acessores esparsos já chegam expandidos). Mais alvos que o
+    // teto: a primitiva fica sem blend shapes, e isso vai para o relatório.
+    if (const auto *targets = json->member(primitive, "targets"); targets && targets->kind == Kind::Array &&
+                                                                    targets->childCount) {
+      if (targets->childCount > MaximumMorphTargets) {
+        out->notes.push_back("Primitiva com " + std::to_string(targets->childCount) + " blend shapes; o limite é " +
+                             std::to_string(MaximumMorphTargets) + " e ela ficou sem eles.");
+      } else {
+        MorphTargetSet set;
+        set.targetCount = targets->childCount;
+        set.vertexCount = position.count;
+        set.deltas.assign(usize(position.count) * set.targetCount * MorphDeltaStride, 0.0f);
+        set.defaultWeights.assign(set.targetCount, 0.0f);
+        set.maximumDisplacement.assign(set.targetCount, 0.0f);
+        for (u32 t = 0; t < set.targetCount; ++t) {
+          const auto *target = json->child(*targets, t);
+          if (!target || target->kind != Kind::Object) return fail("Alvo de morph inválido.");
+          const char *semantics[3]{"POSITION", "NORMAL", "TANGENT"};
+          for (u32 part = 0; part < 3; ++part) {
+            const auto index = json->index(*target, semantics[part]);
+            if (index < 0) continue;
+            Accessor delta{};
+            if (!resolveAccessor(root, index, delta, "Deslocamento de morph inválido.")) return false;
+            if (delta.components != 3 || delta.count != position.count)
+              return fail("Deslocamento de morph precisa ser VEC3 com um valor por vértice.");
+            for (u32 v = 0; v < position.count; ++v)
+              for (u32 axis = 0; axis < 3; ++axis) {
+                const float value = readComponent(delta, v, axis);
+                if (!std::isfinite(value)) return fail("Deslocamento de morph não finito.");
+                set.deltas[(usize(v) * set.targetCount + t) * MorphDeltaStride + part * 3 + axis] = value;
+              }
+          }
+        }
+        out->morphs.push_back(std::move(set));
+        range.morph = static_cast<i32>(out->morphs.size() - 1);
       }
     }
     for (u32 axis = 0; axis < 3; ++axis) range.center[axis] = (minimum[axis] + maximum[axis]) * .5f;
@@ -1551,6 +1612,33 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
       if (!importer.readPrimitive(*root, primitive, range)) return giveUp(result.diagnostic.c_str());
       if (range.indexCount) byMesh[m].push_back(range);
     }
+    // `weights` e `extras.targetNames` são da MALHA: valem para todas as
+    // primitivas, que a especificação obriga a ter o mesmo número de alvos.
+    {
+      std::vector<float> weights;
+      if (const auto *list = document.member(mesh, "weights"); list && list->kind == Kind::Array)
+        for (u32 i = 0; i < list->childCount; ++i) {
+          const auto *value = document.child(*list, i);
+          if (!value || value->kind != Kind::Number) return giveUp("Pesos de morph da malha inválidos.");
+          weights.push_back(static_cast<float>(value->number));
+        }
+      std::vector<std::string> names;
+      if (const auto *extras = document.member(mesh, "extras"); extras && extras->kind == Kind::Object)
+        if (const auto *list = document.member(*extras, "targetNames"); list && list->kind == Kind::Array)
+          for (u32 i = 0; i < list->childCount; ++i) {
+            const auto *value = document.child(*list, i);
+            names.push_back(value && value->kind == Kind::String ? std::string(document.textOf(*value)) : std::string());
+          }
+      u32 targets = 0;
+      for (const auto &range : byMesh[m]) {
+        if (range.morph < 0) continue;
+        auto &set = result.morphs[static_cast<usize>(range.morph)];
+        if (targets && set.targetCount != targets) return giveUp("Primitivas da mesma malha com números de alvos de morph diferentes.");
+        targets = set.targetCount;
+        if (weights.size() == set.targetCount) set.defaultWeights = weights;
+        if (names.size() == set.targetCount) set.names = names;
+      }
+    }
     importer.report(.1f + .6f * static_cast<float>(m + 1) / static_cast<float>(meshes->childCount), "Geometria");
   }
 
@@ -1670,6 +1758,13 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
     GltfImportNode imported;
     imported.name = name.empty() ? nodeKey : std::string(name);
     imported.parent = entry.parent;
+    if (const auto *weights = document.member(node, "weights"); weights && weights->kind == Kind::Array)
+      for (u32 i = 0; i < weights->childCount && i < MaximumMorphTargets; ++i) {
+        const auto *value = document.child(*weights, i);
+        if (!value || value->kind != Kind::Number || !std::isfinite(value->number))
+          return giveUp("Pesos de morph do nó inválidos.");
+        imported.morphWeights.push_back(static_cast<float>(value->number));
+      }
     // Perfil (R3): escala uniforme só nas raízes, S·L. Uniforme e positiva, não
     // interfere na reflexão nem no teste de cisalhamento acima.
     if (entry.parent < 0)
@@ -1811,6 +1906,7 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
         // espelhado desenha estático (a reflexão da geometria não comuta com
         // as juntas do arquivo) e isso é dito no relatório.
         drawSkinRequests.push_back(skinIndex >= 0 && range.skinned ? static_cast<i32>(skinIndex) : -1);
+        result.drawMorphs.push_back(range.morph);
         if (skinIndex >= 0 && range.skinned && mirrored) drawSkinRequests.back() = -2;
         result.names.push_back(name.empty() ? std::string("Malha ") + std::to_string(result.draws.size())
                                             : std::string(name));
@@ -1881,6 +1977,7 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
     // Desenhos: skin confirmado e índices de junta dentro do skin. Esferas por
     // junta, no espaço da junta, a partir dos vértices que ela influencia.
     result.drawSkins.assign(result.draws.size(), -1);
+    result.drawMorphs.resize(result.draws.size(), -1);
     std::vector<float> lower, upper;
     std::vector<u8> seen;
     u32 mirroredSkinnedDraws = 0;
@@ -1950,6 +2047,17 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
       if (drawSkinRequests[d] >= 0 && !usable[static_cast<usize>(drawSkinRequests[d])]) result.drawSkins[d] = -1;
   }
 
+  // Maior deslocamento de cada alvo de morph: é o que os limites somam por
+  // peso, sem varrer vértices a cada quadro.
+  for (auto &set : result.morphs) {
+    set.maximumDisplacement.assign(set.targetCount, 0.0f);
+    for (u32 v = 0; v < set.vertexCount; ++v)
+      for (u32 t = 0; t < set.targetCount; ++t) {
+        const float *delta = set.deltas.data() + (usize(v) * set.targetCount + t) * MorphDeltaStride;
+        set.maximumDisplacement[t] = std::max(set.maximumDisplacement[t], std::hypot(delta[0], delta[1], delta[2]));
+      }
+  }
+
   // --- Animações ------------------------------------------------------------------
   if (const auto *sourceAnimations = importer.array(*root, "animations")) {
     for (u32 a = 0; a < sourceAnimations->childCount; ++a) {
@@ -1968,9 +2076,9 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
         if (!target || target->kind != Kind::Object) return giveUp("Canal de animação sem alvo.");
         const auto path = document.string(*target, "path");
         const auto nodeIndex = document.index(*target, "node");
-        if (path == "weights" || nodeIndex < 0 || nodeIndex >= static_cast<i64>(nodes->childCount) ||
+        if (nodeIndex < 0 || nodeIndex >= static_cast<i64>(nodes->childCount) ||
             emittedOf[static_cast<u32>(nodeIndex)] < 0 ||
-            emittedMirrored[static_cast<u32>(emittedOf[static_cast<u32>(nodeIndex)])]) {
+            (path != "weights" && emittedMirrored[static_cast<u32>(emittedOf[static_cast<u32>(nodeIndex)])])) {
           ++result.unsupportedAnimationChannels;
           continue;
         }
@@ -1979,6 +2087,17 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
         if (path == "translation") sampled.path = AnimationPath::Translation;
         else if (path == "rotation") sampled.path = AnimationPath::Rotation;
         else if (path == "scale") sampled.path = AnimationPath::Scale;
+        else if (path == "weights") {
+          // Pesos animam os blend shapes da malha do nó; nó sem malha com alvos
+          // não tem o que receber.
+          sampled.path = AnimationPath::Weights;
+          const auto &gltfNode = *document.child(*nodes, static_cast<u32>(nodeIndex));
+          const auto meshIndex = document.index(gltfNode, "mesh");
+          if (meshIndex >= 0 && meshIndex < static_cast<i64>(meshes->childCount))
+            for (const auto &range : byMesh[static_cast<u32>(meshIndex)])
+              if (range.morph >= 0) {sampled.weightCount = result.morphs[static_cast<usize>(range.morph)].targetCount;break;}
+          if (!sampled.weightCount) {++result.unsupportedAnimationChannels;continue;}
+        }
         else {++result.unsupportedAnimationChannels;continue;}
         const auto samplerIndex = document.index(channel, "sampler");
         if (samplerIndex < 0 || samplerIndex >= static_cast<i64>(samplers->childCount))
@@ -1996,14 +2115,22 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
           return giveUp(result.diagnostic.c_str());
         const u32 components = sampled.components();
         const u32 perKey = sampled.interpolation == AnimationInterpolation::CubicSpline ? 3u : 1u;
-        if (input.components != 1 || input.component != kComponentFloat || output.components != components ||
-            output.count != input.count * perKey)
+        // Pesos de morph chegam como SCALAR com `alvos` valores por chave; os
+        // demais caminhos, como VEC3/VEC4 com um valor por chave.
+        const bool weights = sampled.path == AnimationPath::Weights;
+        if (input.components != 1 || input.component != kComponentFloat ||
+            output.components != (weights ? 1u : components) ||
+            output.count != input.count * perKey * (weights ? components : 1u))
           return giveUp("Sampler de animação com formato inconsistente.");
         sampled.times.resize(input.count);
         for (u32 k = 0; k < input.count; ++k) sampled.times[k] = readComponent(input, k, 0);
-        sampled.values.resize(static_cast<usize>(output.count) * components);
-        for (u32 k = 0; k < output.count; ++k)
-          for (u32 i = 0; i < components; ++i) sampled.values[static_cast<usize>(k) * components + i] = readComponent(output, k, i);
+        sampled.values.resize(static_cast<usize>(input.count) * perKey * components);
+        if (weights) {
+          for (u32 k = 0; k < output.count; ++k) sampled.values[k] = readComponent(output, k, 0);
+        } else {
+          for (u32 k = 0; k < output.count; ++k)
+            for (u32 i = 0; i < components; ++i) sampled.values[static_cast<usize>(k) * components + i] = readComponent(output, k, i);
+        }
         // Escala do perfil vale na pose local das raízes (S·L): translação e
         // escala de um nó raiz animado acompanham, a rotação não.
         if (result.nodes[sampled.node].parent < 0 && sampled.path != AnimationPath::Rotation)
@@ -2017,7 +2144,7 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
     }
     if (result.unsupportedAnimationChannels)
       result.notes.push_back(std::to_string(result.unsupportedAnimationChannels) +
-                             " canal(is) de animação não aplicados (pesos de morph, alvo fora da cena ou espelhado).");
+                             " canal(is) de animação não aplicados (alvo fora da cena, espelhado ou pesos para malha sem blend shapes).");
   }
 
   if (shearedNodes) {

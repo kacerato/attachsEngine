@@ -96,8 +96,11 @@ public:
     input_.setMap(world_.graph().inputActions());
     input_.reset();
     input_.setGameplayFocus(true);
-    if(!scripts_.start(world_,physics_,input_)) {physics_.stop();world_.clear();return false;}
-    animations_=&resources;animator_.reset();
+    // O avaliador existe antes dos scripts: o Start de um comportamento já
+    // pode tocar ou misturar clipes.
+    animator_.begin(world_.poseGraph(),resources);
+    scripts_.setAnimator(&animator_);
+    if(!scripts_.start(world_,physics_,input_)) {animator_.reset();physics_.stop();world_.clear();return false;}
     active_=true;
     paused_=false;
     return true;
@@ -114,7 +117,8 @@ public:
     physics_.stop();
     world_.clear();
     input_.reset();
-    animator_.reset();animations_=nullptr;
+    scripts_.setAnimator(nullptr);
+    animator_.reset();
     active_=false;
     paused_=false;
   }
@@ -146,8 +150,8 @@ private:
   // Depois do Update dos scripts e antes da física (runtime/scene_animation.h).
   // Nó com pose publicada pela física não é escrito pela animação.
   bool animate(float elapsed) {
-    if(!animations_) return true;
-    return animator_.advance(world_.poseGraph(),*animations_,elapsed,[this](runtime::ObjectId id) {
+    if(!animator_.active()) return true;
+    return animator_.advance(elapsed,[this](runtime::ObjectId id) {
       return world_.authorityOf(world_.handle(id))==runtime::TransformAuthority::Free;
     });
   }
@@ -169,7 +173,6 @@ private:
   runtime::InputService input_;
   std::vector<runtime::ObjectId> destroyed_;
   runtime::SceneAnimator animator_;
-  const runtime::AnimationLibrary *animations_=nullptr;
   bool active_=false;
   bool paused_=false;
 };

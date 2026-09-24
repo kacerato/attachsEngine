@@ -102,6 +102,9 @@ float wrapAnimationTime(float time, float duration, AnimationWrapMode mode, bool
 bool validAnimationChannel(const AnimationChannel &channel) {
   const usize keys = channel.times.size();
   if (!keys) return false;
+  if (channel.path == AnimationPath::Weights && (!channel.weightCount || channel.weightCount > MaximumMorphTargets))
+    return false;
+  if (channel.path != AnimationPath::Weights && channel.weightCount) return false;
   for (usize i = 0; i < keys; ++i) {
     if (!std::isfinite(channel.times[i]) || channel.times[i] < 0) return false;
     if (i && channel.times[i] < channel.times[i - 1]) return false;
@@ -114,7 +117,12 @@ bool validAnimationChannel(const AnimationChannel &channel) {
 }
 
 bool sampleAnimationChannel(const AnimationChannel &channel, float time, float out[4]) {
-  if (!validAnimationChannel(channel)) return false;
+  if (channel.components() > 4) return false;
+  return sampleAnimationChannel(channel, time, std::span<float>(out, 4));
+}
+
+bool sampleAnimationChannel(const AnimationChannel &channel, float time, std::span<float> out) {
+  if (!validAnimationChannel(channel) || out.size() < channel.components()) return false;
   const u32 components = channel.components();
   const bool cubic = channel.interpolation == AnimationInterpolation::CubicSpline;
   const usize keys = channel.times.size();
@@ -124,7 +132,7 @@ bool sampleAnimationChannel(const AnimationChannel &channel, float time, float o
   };
   const auto emit = [&](const float *source) {
     for (u32 i = 0; i < components; ++i) out[i] = source[i];
-    if (channel.path == AnimationPath::Rotation) normalizeQuaternion(out);
+    if (channel.path == AnimationPath::Rotation) normalizeQuaternion(out.data());
     return true;
   };
   if (keys == 1 || time <= channel.times.front()) return emit(value(0, 1));
@@ -139,7 +147,7 @@ bool sampleAnimationChannel(const AnimationChannel &channel, float time, float o
   if (channel.interpolation == AnimationInterpolation::Linear) {
     const float *a = value(previous, 1), *b = value(next, 1);
     if (channel.path == AnimationPath::Rotation) {
-      slerp(a, b, s, out);
+      slerp(a, b, s, out.data());
       return true;
     }
     for (u32 i = 0; i < components; ++i) out[i] = a[i] + (b[i] - a[i]) * s;
@@ -153,7 +161,82 @@ bool sampleAnimationChannel(const AnimationChannel &channel, float time, float o
   const float *v0 = value(previous, 1), *b0 = value(previous, 2), *v1 = value(next, 1), *a1 = value(next, 0);
   for (u32 i = 0; i < components; ++i)
     out[i] = h00 * v0[i] + h10 * span * b0[i] + h01 * v1[i] + h11 * span * a1[i];
-  if (channel.path == AnimationPath::Rotation) normalizeQuaternion(out);
+  if (channel.path == AnimationPath::Rotation) normalizeQuaternion(out.data());
+  return true;
+}
+
+bool validMorphTargetSet(const MorphTargetSet &set) {
+  if (!set.targetCount || set.targetCount > MaximumMorphTargets || !set.vertexCount) return false;
+  if (set.deltas.size() != usize(set.targetCount) * set.vertexCount * MorphDeltaStride) return false;
+  if (set.defaultWeights.size() != set.targetCount || set.maximumDisplacement.size() != set.targetCount) return false;
+  if (!set.names.empty() && set.names.size() != set.targetCount) return false;
+  for (const float value : set.deltas) if (!std::isfinite(value)) return false;
+  for (const float value : set.defaultWeights) if (!std::isfinite(value)) return false;
+  for (const float value : set.maximumDisplacement) if (!std::isfinite(value) || value < 0) return false;
+  return true;
+}
+
+AssetGuid animationClipGuid(const AssetGuid &source, std::string_view name, u32 ordinal) {
+  return assetGuidFromSeed("clipe:" + source.text() + ":" + std::string(name) + ":" + std::to_string(ordinal));
+}
+
+std::vector<AssetGuid> animationClipGuids(const AssetGuid &source, std::span<const AnimationClip> clips) {
+  std::vector<AssetGuid> out;
+  for (usize c = 0; c < clips.size(); ++c) {
+    u32 ordinal = 0;
+    for (usize k = 0; k < c; ++k) if (clips[k].name == clips[c].name) ++ordinal;
+    out.push_back(animationClipGuid(source, clips[c].name, ordinal));
+  }
+  return out;
+}
+
+std::string animationClipDisplayName(const AnimationClip &clip, u32 index) {
+  return clip.name.empty() ? "Clipe " + std::to_string(index + 1) : clip.name;
+}
+
+float morphBoundsExpansion(const MorphTargetSet &set, std::span<const float> weights) {
+  float expansion = 0;
+  for (u32 t = 0; t < set.targetCount && t < weights.size() && t < set.maximumDisplacement.size(); ++t)
+    expansion += std::fabs(weights[t]) * set.maximumDisplacement[t];
+  return std::isfinite(expansion) ? expansion : 0.0f;
+}
+
+bool deformPositions(std::span<float> positions, std::span<const u8> influences, std::span<const float> palette,
+                     u32 influenceLimit, const MorphTargetSet *morph, std::span<const float> weights) {
+  const usize vertices = positions.size() / 3;
+  if (positions.size() % 3) return false;
+  if (morph) {
+    if (!validMorphTargetSet(*morph) || morph->vertexCount != vertices) return false;
+    for (u32 t = 0; t < morph->targetCount && t < weights.size(); ++t) {
+      const float w = weights[t];
+      if (w == 0 || !std::isfinite(w)) continue;
+      for (usize v = 0; v < vertices; ++v) {
+        const float *delta = morph->deltas.data() + (v * morph->targetCount + t) * MorphDeltaStride;
+        for (u32 axis = 0; axis < 3; ++axis) positions[v * 3 + axis] += w * delta[axis];
+      }
+    }
+  }
+  if (palette.empty()) return true;
+  if (palette.size() % 16 || influences.size() != vertices * SkinInfluenceStride) return false;
+  const usize joints = palette.size() / 16;
+  for (usize v = 0; v < vertices; ++v) {
+    u16 packed[8];
+    std::copy(influences.data() + v * SkinInfluenceStride, influences.data() + (v + 1) * SkinInfluenceStride,
+              reinterpret_cast<u8 *>(packed));
+    float m[12]{}, total = 0;
+    for (u32 k = 0; k < 4 && k < influenceLimit; ++k) {
+      const float w = packed[4 + k] / 65535.0f;
+      if (w <= 0 || packed[k] >= joints) continue;
+      const float *joint = palette.data() + usize(packed[k]) * 16;
+      for (u32 c = 0; c < 4; ++c)
+        for (u32 r = 0; r < 3; ++r) m[c * 3 + r] += w * joint[c * 4 + r];
+      total += w;
+    }
+    if (!(total > 0)) continue; // sem peso válido: forma base, como no compute
+    const float p[3]{positions[v * 3], positions[v * 3 + 1], positions[v * 3 + 2]};
+    for (u32 r = 0; r < 3; ++r)
+      positions[v * 3 + r] = (m[r] * p[0] + m[3 + r] * p[1] + m[6 + r] * p[2] + m[9 + r]) / total;
+  }
   return true;
 }
 
