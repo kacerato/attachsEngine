@@ -51,32 +51,47 @@ float matrixNormBound(const float m[16]) {
   }
   return std::sqrt(one*inf);
 }
-bool buildPickMeshes(std::span<const renderer::MapDrawRecord> draws,std::span<const u8> vertices,
-                     std::span<const u32> indices,std::vector<std::shared_ptr<const EditorPickMesh>> &out) {
-  out.assign(draws.size(),nullptr);
+} // namespace
+
+// Valida o pacote para seleção e guarda só o necessário para construir cada
+// BVH depois: posições (3 floats por vértice) e índices. Recusa aqui o que a
+// construção recusaria mais tarde — intervalo, orçamento, posição não finita —
+// para um pacote ruim continuar falhando na adoção, não no primeiro toque.
+bool EditorMapScene::preparePickGeometry(std::span<const renderer::MapDrawRecord> draws,std::span<const u8> vertices,
+                                         std::span<const u32> indices,std::shared_ptr<const PickGeometry> &geometry,
+                                         std::vector<PickSlot> &slots) {
+  geometry.reset();slots.assign(draws.size(),{});
   if(vertices.empty()!=indices.empty() || vertices.size()%renderer::MapVertexStride) return false;
   if(vertices.empty()) return true;
+  const usize vertexCount=vertices.size()/renderer::MapVertexStride;
+  auto prepared=std::make_shared<PickGeometry>();
+  prepared->positions.resize(vertexCount*3);
+  for(usize v=0;v<vertexCount;++v) {
+    std::memcpy(prepared->positions.data()+v*3,vertices.data()+v*renderer::MapVertexStride,3*sizeof(float));
+    for(u32 k=0;k<3;++k) if(!std::isfinite(prepared->positions[v*3+k])) return false;
+  }
+  prepared->indices.assign(indices.begin(),indices.end());
   usize triangleCount=0;
-  std::map<std::tuple<u32,u32,i32>,std::shared_ptr<const EditorPickMesh>> shared;
+  std::map<std::tuple<u32,u32,i32>,u32> shared;
   for(u32 index=0;index<draws.size();++index) {
     const auto &draw=draws[index];
+    auto &slot=slots[index];
+    slot.firstIndex=draw.firstIndex;slot.indexCount=draw.indexCount;slot.vertexOffset=draw.vertexOffset;slot.canonical=index;
     const auto key=std::make_tuple(draw.firstIndex,draw.indexCount,static_cast<i32>(draw.vertexOffset));
-    if(const auto found=shared.find(key);found!=shared.end()) {out[index]=found->second;continue;}
+    if(const auto found=shared.find(key);found!=shared.end()) {slot.canonical=found->second;continue;}
     triangleCount+=draw.indexCount/3;
     if(!draw.indexCount || draw.indexCount%3 || triangleCount>EditorPickMesh::MaximumTriangles ||
        u64(draw.firstIndex)+draw.indexCount>indices.size()) return false;
-    std::vector<EditorPickMesh::Triangle> triangles(draw.indexCount/3);
-    for(u32 t=0;t<triangles.size();++t) for(u32 point=0;point<3;++point) {
-      const auto vertex=static_cast<long long>(draw.vertexOffset)+indices[draw.firstIndex+t*3+point];
-      if(vertex<0 || static_cast<u64>(vertex)>=vertices.size()/renderer::MapVertexStride) return false;
-      std::memcpy(triangles[t].data()+point*3,vertices.data()+vertex*renderer::MapVertexStride,3*sizeof(float));
+    for(u32 i=0;i<draw.indexCount;++i) {
+      const auto vertex=static_cast<long long>(draw.vertexOffset)+indices[draw.firstIndex+i];
+      if(vertex<0 || static_cast<u64>(vertex)>=vertexCount) return false;
     }
-    auto mesh=std::make_shared<EditorPickMesh>();if(!mesh->build(std::move(triangles))) return false;
-    out[index]=mesh;shared.emplace(key,std::move(mesh));
+    shared.emplace(key,index);
   }
+  geometry=std::move(prepared);
   return true;
 }
-} // namespace
+
 
 void EditorMapScene::pivotOf(u32 index, float out[3]) const {
   if(index>=source_.size()) {out[0]=out[1]=out[2]=0;return;}
@@ -89,8 +104,8 @@ bool EditorMapScene::adoptPackage(EditorDocument &document, std::span<const rend
                                   std::span<const u8> vertices, std::span<const u32> indices,
                                   std::span<const resources::AssetGuid> identities, u64 packageFingerprint,
                                   std::span<const float> pivots, std::span<const std::string> names) {
-  std::vector<std::shared_ptr<const EditorPickMesh>> meshes;
-  if(!buildPickMeshes(draws,vertices,indices,meshes)) return false;
+  std::shared_ptr<const PickGeometry> geometry;std::vector<PickSlot> slots;
+  if(!preparePickGeometry(draws,vertices,indices,geometry,slots)) return false;
   std::vector<resources::AssetGuid> assets(draws.size());
   for(u32 index=0;index<draws.size();++index)
     assets[index]=index<identities.size() && identities[index].valid()
@@ -100,7 +115,7 @@ bool EditorMapScene::adoptPackage(EditorDocument &document, std::span<const rend
   for(u32 a=0;a<assets.size();++a) for(u32 b=0;b<a;++b) if(assets[a]==assets[b]) return false;
   if(!pivots.empty() && pivots.size()!=draws.size()*3) return false;
   if(!names.empty() && names.size()!=draws.size()) return false;
-  pickMeshes_=std::move(meshes);
+  pickGeometry_=std::move(geometry);pickSlots_=std::move(slots);pickMeshes_.assign(draws.size(),nullptr);
   source_.assign(draws.begin(),draws.end());
   materials_.assign(materials.begin(),materials.end());
   assets_=std::move(assets);
@@ -113,8 +128,8 @@ bool EditorMapScene::adoptPackage(EditorDocument &document, std::span<const rend
 
 bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::MapDrawRecord> draws, std::span<const renderer::MapMaterialRecord> materials, bool instantiate, std::span<const u8> vertices, std::span<const u32> indices, u64 packageFingerprint) {
   if(draws.size()+1>EditorDocument::kMaximumEntities) return false;
-  std::vector<std::shared_ptr<const EditorPickMesh>> meshes;
-  if(!buildPickMeshes(draws,vertices,indices,meshes)) return false;
+  std::shared_ptr<const PickGeometry> geometry;std::vector<PickSlot> slots;
+  if(!preparePickGeometry(draws,vertices,indices,geometry,slots)) return false;
   EditorDocument prepared;
   for(u32 index=0;instantiate && index<draws.size();++index) {
     const auto &draw=draws[index];
@@ -132,7 +147,7 @@ bool EditorMapScene::import(EditorDocument &document, std::span<const renderer::
     std::copy(draw.boundsCenter,draw.boundsCenter+3,entity.transform.position);
     if(!prepared.applyEntityValues(id,entity)) return false;
   }
-  pickMeshes_=std::move(meshes);
+  pickGeometry_=std::move(geometry);pickSlots_=std::move(slots);pickMeshes_.assign(draws.size(),nullptr);
   source_.assign(draws.begin(),draws.end());
   materials_.assign(materials.begin(),materials.end());
   assets_.resize(draws.size());
@@ -257,12 +272,32 @@ bool EditorMapScene::slotBounds(const runtime::SceneGraph &document, EditorEntit
   radius=source_[index].boundsRadius*std::sqrt(one*inf);
   return std::isfinite(radius);
 }
+std::shared_ptr<const EditorPickMesh> EditorMapScene::pickMesh(u32 index) const {
+  if(index>=pickSlots_.size() || !pickGeometry_) return nullptr;
+  const u32 canonical=pickSlots_[index].canonical;
+  if(canonical>=pickMeshes_.size()) return nullptr;
+  if(!pickMeshes_[canonical]) {
+    const auto &slot=pickSlots_[canonical];const auto &geometry=*pickGeometry_;
+    std::vector<EditorPickMesh::Triangle> triangles(slot.indexCount/3);
+    for(u32 t=0;t<triangles.size();++t) for(u32 point=0;point<3;++point) {
+      const auto vertex=static_cast<usize>(static_cast<long long>(slot.vertexOffset)+geometry.indices[slot.firstIndex+t*3+point]);
+      std::memcpy(triangles[t].data()+point*3,geometry.positions.data()+vertex*3,3*sizeof(float));
+    }
+    auto mesh=std::make_shared<EditorPickMesh>();
+    // Já validado na adoção; uma falha aqui seria dado corrompido depois dela.
+    if(!mesh->build(std::move(triangles))) return nullptr;
+    pickMeshes_[canonical]=std::move(mesh);
+  }
+  return pickMeshes_[canonical];
+}
+
 bool EditorMapScene::localGeometry(u32 assetId,std::span<const EditorPickMesh::Triangle> &triangles,float relative[16]) const {
-  if(!assetId||assetId>pickMeshes_.size()||!pickMeshes_[assetId-1]) return false;
+  const auto mesh=assetId?pickMesh(assetId-1):nullptr;
+  if(!mesh) return false;
   const auto &source=source_[assetId-1];std::copy(source.model,source.model+16,relative);
   float pivot[3];pivotOf(assetId-1,pivot);
   for(u32 axis=0;axis<3;++axis) relative[12+axis]-=pivot[axis];
-  triangles=pickMeshes_[assetId-1]->triangles();return !triangles.empty();
+  triangles=mesh->triangles();return !triangles.empty();
 }
 
 bool EditorMapScene::collisionHullPreview(std::span<const u32> slots,float tolerance,
@@ -317,9 +352,10 @@ bool EditorMapScene::pickGeometry(const runtime::SceneGraph &document,EditorEnti
 bool EditorMapScene::pickSlotGeometry(const runtime::SceneGraph &document,EditorEntityId id,u32 slot,EditorPickCandidate &out) const {
   const auto *entity=document.find(id);
   const auto *render=entity?meshRenderer(*entity):nullptr;
-  if(!render || !render->slotMesh(slot) || render->slotMesh(slot)>pickMeshes_.size()) return false;
+  if(!render || !render->slotMesh(slot) || render->slotMesh(slot)>pickSlots_.size()) return false;
   const auto index=render->slotMesh(slot)-1;
-  if(!pickMeshes_[index]) return false;
+  auto mesh=pickMesh(index);
+  if(!mesh) return false;
   float world[16],relative[16],pivot[3];
   if(!editorWorldMatrix(document,id,world)) return false;
   const auto &source=source_[index];std::copy(source.model,source.model+16,relative);
@@ -329,7 +365,7 @@ bool EditorMapScene::pickSlotGeometry(const runtime::SceneGraph &document,Editor
   // limites: tocar o objeto nao selecionava nada e tocar ao lado selecionava.
   pivotOf(index,pivot);
   for(u32 axis=0;axis<3;++axis) relative[12+axis]-=pivot[axis];
-  multiply(world,relative,out.model);out.mesh=pickMeshes_[index];
+  multiply(world,relative,out.model);out.mesh=std::move(mesh);
   // Malha deformável: o toque acerta a pose que está na tela, não a de bind.
   std::shared_ptr<const EditorPickMesh> deformed;
   if(deformedPickMesh(document,id,index,out.model,deformed)) out.mesh=std::move(deformed);

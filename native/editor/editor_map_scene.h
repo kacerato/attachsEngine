@@ -290,7 +290,20 @@ private:
   std::vector<std::string> assetNames_;
   // Três floats por desenho; vazio significa "pivô no centro dos limites".
   std::vector<float> pivots_;
-  std::vector<std::shared_ptr<const EditorPickMesh>> pickMeshes_;
+  // Seleção por desenho sob demanda. Adotar um pacote copia só posições e
+  // índices (validados na hora, como antes); a BVH de um desenho é construída
+  // no primeiro uso — toque, prévia de colisor — e compartilhada entre desenhos
+  // com a mesma geometria. Construir as 3,7 M faces do Sponza na adoção prendia
+  // a thread do editor por ~20 s a cada superfície nova (ANR no aparelho).
+  struct PickGeometry {std::vector<float> positions;std::vector<u32> indices;};
+  struct PickSlot {u32 firstIndex=0,indexCount=0;i32 vertexOffset=0;u32 canonical=0;};
+  std::shared_ptr<const PickGeometry> pickGeometry_;
+  std::vector<PickSlot> pickSlots_;
+  mutable std::vector<std::shared_ptr<const EditorPickMesh>> pickMeshes_;
+  std::shared_ptr<const EditorPickMesh> pickMesh(u32 index) const;
+  static bool preparePickGeometry(std::span<const renderer::MapDrawRecord> draws,std::span<const u8> vertices,
+                                  std::span<const u32> indices,std::shared_ptr<const PickGeometry> &geometry,
+                                  std::vector<PickSlot> &slots);
   std::vector<renderer::MapMaterialRecord> materials_;
   std::vector<renderer::MapDrawRecord> source_;
   struct CollisionHullCacheEntry {

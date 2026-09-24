@@ -940,3 +940,29 @@ cena anima e cada captura pega outra fase. Para concluir falta cena parada
 com câmera travada (ou captura no mesmo tempo de simulação), mais rodadas e
 controle de clock; a mediana do roteiro com número par de amostras foi
 corrigida para a média dos dois centrais.
+
+Em 24/09, S0 do plano Sponza (seção 8.2 do plano): **Importar pasta** entrou como
+capacidade universal. O botão novo do painel Arquivos abre o seletor de pasta do
+sistema; a pasta é listada sem ler conteúdo, só o `.gltf` principal atravessa, e
+só os arquivos que ele referencia são copiados para o preparo do projeto, com
+SHA-256 e progresso real na barra de estado. A fonte fica em `Fontes/<pasta>/`
+com manifesto `ASTRA_GLTF_DEPS 2`; a transação `ASTRA_IMPORT_3` publica os
+companheiros por renomeação, com backup e recuperação; o preparo é descartado
+por guarda e ao abrir o projeto. O importador lê buffers para o GLB de trabalho
+e imagens do disco uma a uma, com as texturas preparadas em paralelo (resultado
+idêntico ao sequencial) e cadeia de mips sem alocar os níveis descartados.
+Host: o Sponza oficial (405 primitivas, 3,75 M triângulos, 72 PNG 4096²) entra
+com as 72 texturas uniformes em 512 px em 59 s (antes 240 s e 61 texturas fora
+do orçamento). No aparelho (Nubia REDMAGIC 10 Pro, APK debug): a pasta
+`Download/main_sponza` foi escolhida pela UI, 72 arquivos/2071 MB copiados com
+progresso, importado e reaberto por nome: preparo 83 s no trabalhador (sem
+derivado), derivado gravado em 7,7 s, publicação 3,3 s, e a cena renderizou
+com hierarquia do arquivo. A primeira execução travou a entrada (três ANR):
+a adoção construía a BVH de seleção das 3,7 M faces na thread do editor a cada
+superfície nova (17 s no host). Agora a adoção copia só posições e índices, com
+as mesmas validações, e a BVH de cada desenho nasce no primeiro uso: commit
+17,8 s → 0,49 s e republicação 16,7 s → 0,25 s no host; reabertura no aparelho
+sem ANR. Achados abertos: o material `dirt_decal` (BLEND, alfa 0,35 × textura)
+aparece branco e opaco; durante a preparação o processo chegou a 1,3 GB PSS
+(547 MB em swap) e o sistema encerrou outros apps; as luzes do arquivo têm
+intensidade 0 e não entram sem "Importar luzes" no perfil. S1–S6 pendentes.

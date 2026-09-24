@@ -951,3 +951,32 @@ AE_TEST(s0_folder_source_publishes_companions_and_rolls_back_a_refused_reimport)
   AE_EXPECT_TRUE(!std::filesystem::exists(project.root/".astra/import-transaction/journal"),"journal resolvido");
   AE_EXPECT_TRUE(!std::filesystem::exists(project.root/".astra/import-transaction/companions/0"),"backup do companheiro limpo");
 }
+
+// Sonda da publicação de uma fonte em pasta grande (Sponza): quanto custa cada
+// etapa que roda na thread do editor — é o que decide travar o toque no aparelho.
+int probeFolderPublish(const char *mainPath) {
+  using Clock=std::chrono::steady_clock;
+  const auto ms=[](auto a,auto b){return std::chrono::duration<double,std::milli>(b-a).count();};
+  PackageProject project;EditorSession session;FakeRenderer renderer;startSession(session,renderer);
+  if(!session.setProjectDirectory(project.root.string().c_str())) return 2;
+  std::vector<u8> main;
+  if(!EditorImportTransaction::read(EditorImportTransaction::fromUtf8(mainPath),main)) return 2;
+  resources::GltfImport model;std::vector<u8> packed;
+  auto t0=Clock::now();
+  if(!resources::importGltfFolder(main,std::filesystem::path(mainPath).parent_path(),512ull<<20,{},{},model,packed)) {
+    std::printf("import: %s\n",model.diagnostic.c_str());return 1;
+  }
+  auto t1=Clock::now();
+  EditorSession::ModelImportReport report;
+  if(!session.commitModelImport(main,model,"Fontes/probe/probe.gltf","",report)) {std::printf("commit: %s\n",report.diagnostic.c_str());return 1;}
+  auto t2=Clock::now();
+  std::string diagnostic;
+  const bool republished=session.republishGeometry(diagnostic);
+  auto t3=Clock::now();
+  EditorSession::ModelImportReport instance;
+  const bool instantiated=session.instantiateModel(report.source,instance);
+  auto t4=Clock::now();
+  std::printf("import_ms=%.0f commit_ms=%.0f republish_ms=%.0f(%d) instantiate_ms=%.0f(%d) objects=%u\n",
+              ms(t0,t1),ms(t1,t2),ms(t2,t3),republished?1:0,ms(t3,t4),instantiated?1:0,instance.objects);
+  return 0;
+}
