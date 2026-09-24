@@ -306,6 +306,44 @@ bool EditorMapScene::pickSlotGeometry(const runtime::SceneGraph &document,Editor
   for(u32 axis=0;axis<3;++axis) relative[12+axis]-=pivot[axis];
   multiply(world,relative,out.model);out.mesh=pickMeshes_[index];return true;
 }
+bool EditorMapScene::skinPose(const runtime::SceneGraph &document, const scene::SkinnedMesh &skinned, u32 assetIndex,
+                              const float drawModel[16], std::vector<float> &palette, float center[3], float &radius,
+                              u32 *missingBones) const {
+  const auto *skin=drawSkin(assetIndex);
+  if(!skin || skin->joints.empty()) return false;
+  const usize joints=skin->joints.size();
+  std::vector<float> worlds(joints*16);
+  std::vector<u8> missing(joints,0);
+  u32 absent=0;
+  for(usize j=0;j<joints;++j) {
+    const u64 bone=j<skinned.bones.size()?skinned.bones[j]:0;
+    if(!bone || !editorWorldMatrix(document,static_cast<EditorEntityId>(bone),worlds.data()+j*16)) {
+      // Placeholder finito; a entrada da paleta vira identidade logo abaixo.
+      std::copy(drawModel,drawModel+16,worlds.data()+j*16);
+      missing[j]=1;++absent;
+    }
+  }
+  if(missingBones) *missingBones=absent;
+  if(!resources::computeSkinPalette(*skin,drawModel,worlds,palette)) return false;
+  // Osso ausente = pose de bind: o vértice fica onde o arquivo o pôs.
+  for(usize j=0;j<joints;++j) if(missing[j]) {
+    float *m=palette.data()+j*16;
+    std::fill(m,m+16,0.0f);m[0]=m[5]=m[10]=m[15]=1;
+  }
+  float local[3],localRadius=0;
+  if(!resources::skinnedLocalBounds(*skin,palette,local,localRadius)) return false;
+  float one=0,inf=0;
+  for(u32 i=0;i<3;++i) {
+    float col=0,row=0;
+    for(u32 k=0;k<3;++k) {col+=std::abs(drawModel[i*4+k]);row+=std::abs(drawModel[k*4+i]);}
+    one=std::max(one,col);inf=std::max(inf,row);
+  }
+  for(u32 axis=0;axis<3;++axis)
+    center[axis]=drawModel[12+axis]+drawModel[axis]*local[0]+drawModel[4+axis]*local[1]+drawModel[8+axis]*local[2];
+  radius=localRadius*std::sqrt(one*inf);
+  return std::isfinite(radius) && std::isfinite(center[0]) && std::isfinite(center[1]) && std::isfinite(center[2]);
+}
+
 bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<EditorMapUpdate> &out) const {
   std::vector<EditorMapUpdate> prepared(source_.size());
   for(u32 i=0;i<source_.size();++i) {
@@ -349,6 +387,17 @@ bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<Ed
                 :slotBounds(document,id,index,update.pose.draw.boundsCenter,update.pose.draw.boundsRadius))) return false;
       update.visible=inheritedVisible(document,id) && render->enabled;
       update.castShadow=entity->castShadow;
+      if(const auto *skinned=static_cast<const scene::SkinnedMesh *>(entity->components.find(scene::SkinnedMesh::descriptor));
+         skinned && drawSkin(index)) {
+        auto palette=std::make_shared<std::vector<float>>();
+        float center[3],radius=0;
+        if(skinPose(document,*skinned,index,update.pose.draw.model,*palette,center,radius)) {
+          std::copy(center,center+3,update.pose.draw.boundsCenter);update.pose.draw.boundsRadius=radius;
+          update.skinPalette=std::move(palette);
+        }
+        update.skinInfluences=static_cast<u8>(skinned->influences());
+        update.skinnedMotion=skinned->skinnedMotionVectors;
+      }
       update.material=slotMaterial(*render,slot);
       if(isolateChannel_ && id==isolateEntity_ && slot==isolateSlot_) update.material.isolate=isolateChannel_;
       const auto &body=waterBody(*entity);

@@ -1130,7 +1130,10 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
                  std::span<const ae::renderer::MapMaterialRecord> materials,
                  std::span<const ae::renderer::SharedAuthoringTexture> textures,
                  ae::editor::EditorSession::PublishedGeometry &out) {
-          if(!shell.instancedRenderer.rebuildAuthoringGeometry(vertices,indices,draws,materials,textures)) return false;
+          // O skin da biblioteca viaja na mesma publicação (G6-B).
+          const auto &skin=shell.editorSession.skinningPublication();
+          if(!shell.instancedRenderer.rebuildAuthoringGeometry(vertices,indices,draws,materials,textures,
+                                                               skin.influences,skin.drawJoints)) return false;
           shell.editorSession.cameraPreview().invalidateTarget();
           out={shell.instancedRenderer.mapDraws(),shell.instancedRenderer.mapMaterials(),
                shell.instancedRenderer.pickingVertices(),shell.instancedRenderer.pickingIndices()};
@@ -1284,6 +1287,12 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
   capabilities.supportsDepthSampling = true;
   capabilities.maximumSamplerAnisotropy = device.maximumSamplerAnisotropy();
   capabilities.displayHz = displayHz;
+  // G6-B: Arm ASR e AMD FSR 2 dependem de recursos que o device habilitou; a
+  // política recusa com o motivo em vez de trocar de algoritmo em silêncio.
+  ae::platform::android::InstancedRenderer::probeTemporalUpscalers(device, capabilities.armAsr, capabilities.fsr2);
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "[TemporalUpscaler] arm-asr=%s fsr2=%s",
+                      ae::renderer::temporalUpscalerAvailabilityName(capabilities.armAsr),
+                      ae::renderer::temporalUpscalerAvailabilityName(capabilities.fsr2));
   shell.renderingCapabilitiesReady = true;
   // Recursos são sempre criados a partir da escolha do projeto sem pressão.
   // A política térmica ativa só reduz o uso destes recursos e pode recuperar
@@ -2498,10 +2507,15 @@ void android_main(android_app *app) {
         }
         shell.editorSession.setTemporalDebugAvailable(shell.instancedRendererReady &&
             shell.instancedRenderer.temporalDebugAvailable(),shell.instancedRendererReady &&
-            shell.instancedRenderer.motionVectorsAvailable());
+            shell.instancedRenderer.motionVectorsAvailable(),shell.instancedRendererReady &&
+            shell.instancedRenderer.temporalHistoryDiagnosticsAvailable());
+        if(shell.instancedRendererReady)
+          shell.editorSession.setTemporalUpscalerStatus(shell.renderingCapabilities.armAsr,
+              shell.renderingCapabilities.fsr2,shell.instancedRenderer.executedUpscaler(),
+              shell.instancedRenderer.executedUpscalerStatus(),shell.instancedRenderer.nativeTaaExecuted());
         shell.instancedRenderer.setTemporalDebugView(static_cast<ae::platform::android::TemporalDebugView>(
             !editorPlaying && shell.editorSession.screen().workspace==ae::editor::EditorWorkspace::Scene
-                ? std::min(shell.editorSession.screen().qualityTemporalDebug,5u) : 0u));
+                ? std::min(shell.editorSession.screen().qualityTemporalDebug,6u) : 0u));
         shell.instancedRenderer.setEnvironmentAdjustment(shell.editorSession.document().find(shell.editorSession.document().root())->environment);
         const float editorWallSeconds=std::chrono::duration<float>(std::chrono::steady_clock::now()-shell.shellStartTime).count();
         if(!shell.editorSession.requestedScenePath().empty() && !editorPlaying && !shell.editorSession.history().isOpen()) {

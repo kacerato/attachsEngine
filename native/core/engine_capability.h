@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 37> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 41> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -126,8 +126,12 @@ inline constexpr std::array<EngineCapability, 37> engineCapabilities{{
    "renderer/hzb_visibility.cpp", ""},
   {"render.instancing.gpu", "Culling e compactação de desenho em GPU", CapabilityState::Implemented,
    "renderer/gpu_draw_culling.cpp", ""},
-  {"render.motion_vectors", "Vetores de movimento por objeto", CapabilityState::Planned,
-   "renderer/frame_graph.cpp", "Sem pose anterior por instância nem alvo de velocidade"},
+  {"render.motion_vectors", "Vetores de movimento por pixel", CapabilityState::Implemented,
+   "platform/android/instanced_motion.inl + rhi/shaders/temporal_projection.glsl",
+   "Transparência e água usam as máscaras de reatividade/composição, não vetor próprio"},
+  {"render.skinning", "Malha deformada por esqueleto", CapabilityState::Implemented,
+   "editor/editor_map_scene.cpp (paleta) + platform/android/instanced_skinning.inl (compute)",
+   "Até 4 influências por vértice e 256 juntas por skin; morph targets não são importados"},
 
   // --- Céu e atmosfera ----------------------------------------------------
   {"render.environment.atmosphere", "Céu atmosférico", CapabilityState::Implemented,
@@ -142,6 +146,8 @@ inline constexpr std::array<EngineCapability, 37> engineCapabilities{{
   // --- Pós-processamento ---------------------------------------------------
   {"render.post.tonemap", "Exposição e mapeamento de tom", CapabilityState::Implemented,
    "rhi/shaders/post_process_common.glsl", ""},
+  {"render.post.auto_exposure", "Exposição automática por histograma", CapabilityState::Implemented,
+   "platform/android/instanced_auto_exposure.inl", "Histograma e adaptação por vista; o EV fica restrito à faixa autoral"},
   {"render.post.bloom", "Brilho estourado", CapabilityState::Implemented,
    "rhi/shaders/post_process_common.glsl", ""},
   {"render.post.film_grain", "Grão de filme", CapabilityState::Implemented,
@@ -152,6 +158,14 @@ inline constexpr std::array<EngineCapability, 37> engineCapabilities{{
    "rhi/shaders/post_process_common.glsl", ""},
   {"render.aa.temporal", "Antisserrilhado temporal", CapabilityState::DeviceLimited,
    "rhi/shaders/post_process_temporal.frag", "Exige histórico e profundidade alocáveis no backend"},
+  {"render.upscale.temporal", "Ampliação temporal Arm ASR / AMD FSR 2", CapabilityState::DeviceLimited,
+   "rhi/temporal_upscaler.cpp + platform/android/instanced_temporal_upscaler.inl",
+   "Exige float16/int16, formatos de storage e subgrupos no aparelho; recusa com motivo quando falta"},
+
+  // --- Animação ------------------------------------------------------------
+  {"animation.clip", "Clipe de animação por nós", CapabilityState::Implemented,
+   "runtime/scene_animation.cpp + resources/skeletal_animation.cpp",
+   "Translação, rotação e escala; pesos de morph não; sem mistura entre clipes"},
 }};
 
 inline constexpr const EngineCapability *findEngineCapability(std::string_view id) {

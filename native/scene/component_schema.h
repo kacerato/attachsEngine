@@ -26,6 +26,8 @@
 #include "scene/environment.h"
 #include "scene/lod_group.h"
 #include "scene/script_behavior.h"
+#include "scene/skinned_mesh.h"
+#include "scene/animation.h"
 
 #include <array>
 
@@ -87,8 +89,11 @@ inline constexpr std::array<ComponentRule, 1> lookRequirements{{
 inline constexpr std::array<ComponentRule, 1> jointRequirements{{
   {"astra.physics.body", "Adicione Corpo físico a este objeto"}
 }};
+inline constexpr std::array<ComponentRule, 1> skinnedMeshRequirements{{
+  {"astra.render.mesh", "Adicione Malha a este objeto"}
+}};
 
-inline const std::array<ComponentSchema, 11> componentSchemas{{
+inline const std::array<ComponentSchema, 13> componentSchemas{{
   {&PhysicsBody::descriptor, "Corpo físico", "Massa e resposta física", ComponentCategory::Physics,
     {}, bodyConflicts, PlayMutability::Never, PlayMutability::SafePoint,
     "runtime/scene_physics.cpp → Jolt", {}, Invalidate::PhysicsBody},
@@ -120,6 +125,13 @@ inline const std::array<ComponentSchema, 11> componentSchemas{{
   {&LodGroup::descriptor, "LOD Group", "Nível de detalhe pela altura na tela", ComponentCategory::Visual,
     {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
     "runtime/lod_groups.h → visibilidade do desenho por vista", "render.lod.group", Invalidate::Draw},
+  {&SkinnedMesh::descriptor, "Malha com esqueleto", "Deformação da Malha pelos ossos", ComponentCategory::Visual,
+    skinnedMeshRequirements, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
+    "editor/editor_map_scene.cpp → paleta; platform/android/instanced_skinning.inl → compute", "render.skinning",
+    Invalidate::Draw|Invalidate::ShadowMap},
+  {&Animation::descriptor, "Animação", "Clipe da fonte importada tocado no Play", ComponentCategory::Visual,
+    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
+    "runtime/scene_animation.cpp → pose local dos nós da instância", "animation.clip", Invalidate::Transform},
   {&ScriptBehavior::descriptor, "Comportamento", "Código C# do projeto", ComponentCategory::Script,
     {}, {}, PlayMutability::Never, PlayMutability::Never,
     "runtime/script_bridge.cpp → runtime .NET", {}, Invalidate::Script}

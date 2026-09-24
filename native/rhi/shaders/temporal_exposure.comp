@@ -1,0 +1,20 @@
+#version 450
+// Exposição 1x1 para Arm ASR / AMD FSR 2 (G6-B). As bibliotecas multiplicam a
+// cor HDR por este valor para chegar à entrada do tonemap; ele precisa ser o
+// MESMO fator que o pós aplica em toneMap(): exposição base do ambiente,
+// compensação autoral (EV) e a adaptação automática medida neste quadro.
+layout(local_size_x=1) in;
+layout(set=0,binding=0,std430) readonly buffer ExposureState {
+  float ev; float targetEv; float meteredEv; uint valid;
+} automaticExposure;
+layout(set=0,binding=1,std140) uniform EnvironmentLightingBlock {
+  layout(offset=48) vec4 parameters;  // x = exposição base
+  layout(offset=176) vec4 scenePost;  // x = EV autoral
+} environment;
+layout(set=0,binding=2,r32f) uniform writeonly image2D exposureOut;
+
+void main() {
+  float adaptation=automaticExposure.valid!=0u?automaticExposure.ev:0.0;
+  float exposure=environment.parameters.x*exp2(environment.scenePost.x+adaptation);
+  imageStore(exposureOut,ivec2(0),vec4(max(exposure,1.0e-6)));
+}

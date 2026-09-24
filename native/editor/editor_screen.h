@@ -191,7 +191,7 @@ enum class EditorWidget : u32 {
   CodeOpen, CodeScene, CodeNew, CodeEdit, CodeSave, CodeUndo, CodeRedo, CodeSearch, CodeClose, CodeApply,
   CodeMenu, CodeSaveAll, CodeFiles, CodeTabsPrevious, CodeTabsNext, CodeFindPrevious, CodeFindNext,
   CodeGoLine, CodeNewFolder, CodeNewHelper, CodeTemplates,
-  ColliderFit, LodGroupFit, LodGroupStatus, ComponentPrevious,
+  ColliderFit, LodGroupFit, LodGroupStatus, SkinnedMeshStatus, AnimationStatus, ComponentPrevious,
   ViewsOpen, ViewsClose, ViewSave, ViewUpdate, ViewRename, ViewDelete, ComponentNext, ScriptFieldsPrevious, ScriptFieldsNext,
   TransformFold, ComponentSearch, ComponentSearchClear, ComponentCategory,
   MeshGeometryTab, MeshMaterialTab, MeshChoose, MeshPickerClose, MeshClear, MeshSearch, MeshPrevious, MeshNext,
@@ -228,6 +228,7 @@ enum class EditorWidget : u32 {
   QualityDynamicMinimumDown, QualityDynamicMinimumUp, QualityLodSelection,
   QualityLodErrorDown, QualityLodErrorUp, QualityLodHysteresisDown,
   QualityLodHysteresisUp, QualityMaterialVariants,
+  QualityTemporalMode, QualityTemporalQuality, QualityTemporalModeQuick,
   ImportTabSummary, ImportTabStructure, ImportTabMeshes, ImportTabTextures, ImportTabProfile,
   EnvironmentPanoramaDown, EnvironmentPanoramaUp,
   EnvironmentSpecularDown, EnvironmentSpecularUp,
@@ -490,6 +491,17 @@ struct EditorScreenState final {
   u32 qualityTemporalDebug=0;
   bool qualityTemporalAvailable=false;
   bool qualityMotionAvailable=false;
+  // Diagnósticos que dependem do histórico do TAA nativo (histórico usado e
+  // rejeição). Com Arm ASR/FSR 2 o histórico é da biblioteca e não é exibido.
+  bool qualityHistoryDiagnostics=false;
+  // Ampliação temporal: o que o aparelho suporta, o que está salvo no projeto
+  // e o que o renderer realmente executou no último quadro.
+  renderer::TemporalUpscalerAvailability qualityArmAsr=renderer::TemporalUpscalerAvailability::NotProbed;
+  renderer::TemporalUpscalerAvailability qualityFsr2=renderer::TemporalUpscalerAvailability::NotProbed;
+  renderer::ProjectRenderingSettings qualityApplied{};
+  renderer::UpscalingFilter qualityExecutedUpscaler=renderer::UpscalingFilter::Bilinear;
+  renderer::TemporalUpscalerAvailability qualityExecutedStatus=renderer::TemporalUpscalerAvailability::Available;
+  bool qualityTemporalAaExecuted=false;
   u32 viewSelected=0;
   std::string viewName;
   // Salvar o OBJETO como receita é um terceiro destino do mesmo campo de nome;
@@ -739,6 +751,9 @@ struct EditorScreenState final {
   // Nível que a câmera da vista escolhe no LOD Group selecionado, com a altura
   // relativa — a leitura da barra de LOD do Inspector da Unity. Vazio sem grupo.
   std::string lodStatus;
+  // G6-B: skin e juntas resolvidos da Malha com esqueleto, e o clipe da
+  // Animação selecionada (nome, duração e, no Play, o tempo corrente).
+  std::string skinStatus, animationStatus;
   bool canUndo = false;
   bool canRedo = false;
 };

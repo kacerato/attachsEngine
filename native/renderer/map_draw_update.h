@@ -5,6 +5,7 @@
 #include "renderer/map_package.h"
 #include <cmath>
 #include <memory>
+#include <vector>
 #include "renderer/water_route.h"
 
 namespace ae::renderer {
@@ -25,6 +26,15 @@ struct MapDrawState {
   bool visible = true;
   bool castShadow = true;
   MaterialOverride material{};
+  // G6-B: paleta do skin deste desenho (16 floats coluna principal por junta,
+  // no espaço do desenho: inversa(modelo) * mundo(junta) * bind inversa).
+  // Nula num desenho sem skin, ou quando a pose não pôde ser avaliada: o
+  // renderer usa a pose de bind (identidade). Compartilhada, não copiada.
+  std::shared_ptr<const std::vector<float>> skinPalette;
+  // Influências por vértice (1, 2 ou 4) e se o vetor de movimento usa a pose
+  // anterior dos ossos (skinnedMotionVectors da Unity).
+  u8 skinInfluences = 4;
+  bool skinnedMotion = true;
 };
 
 // Caller supplies mesh-local bounds, never the previous frame's world bounds.

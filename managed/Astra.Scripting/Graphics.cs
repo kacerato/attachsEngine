@@ -6,7 +6,18 @@ namespace Astra;
 public enum GraphicsQuality : uint { Auto, Low, Medium, High, Ultra, Custom }
 public enum GraphicsFeature : uint { Inherit, Disabled, Enabled }
 public enum GraphicsAntiAliasing : uint { Inherit, Off, Fxaa, Temporal }
-public enum GraphicsUpscaling : uint { Inherit, Bilinear, CatmullRom, Fsr1 }
+/// <summary>Filtro de reconstrução. <c>ArmAsr</c> e <c>Fsr2</c> são ampliadores
+/// temporais: substituem FXAA/TAA enquanto ativos e exigem capacidade do aparelho.</summary>
+public enum GraphicsUpscaling : uint { Inherit, Bilinear, CatmullRom, Fsr1, ArmAsr, Fsr2 }
+/// <summary>Preset de shader do ampliador temporal (Arm ASR), independente da escala.</summary>
+public enum GraphicsTemporalQuality : uint { Inherit, Quality, Balanced, Performance, UltraPerformance }
+/// <summary>Motivo pelo qual um ampliador temporal não roda neste aparelho.</summary>
+public enum GraphicsTemporalAvailability : uint
+{
+    Available, NotProbed, NotBuilt, MissingFloat16, MissingInt16, MissingQuadSubgroup,
+    MissingStorageImageFormats, MissingStorageWriteWithoutFormat, MissingHdrSceneColor, ContextCreationFailed,
+    MissingSampledDepth32
+}
 public enum GraphicsShadows : uint { Inherit, Off, Hard, Soft, UltraSoft }
 public enum GraphicsAmbient : uint { Inherit, Constant, Hemispheric, HemisphericSpecular }
 public enum GraphicsPost : uint { Inherit, None, Tonemap, Bloom }
@@ -35,6 +46,7 @@ public struct GraphicsSettings
     public GraphicsFeature DynamicResolution; public float DynamicResolutionMinimumScale, DynamicResolutionDecreaseStep;
     public float DynamicResolutionIncreaseStep, DynamicResolutionRecoveryHeadroomRatio;
     public uint DynamicResolutionOverloadFrames, DynamicResolutionRecoveryFrames;
+    public GraphicsTemporalQuality TemporalUpscalerQuality;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -57,6 +69,7 @@ public struct ResolvedGraphicsSettings
     public float DynamicResolutionDecreaseStep, DynamicResolutionIncreaseStep, DynamicResolutionRecoveryHeadroomRatio;
     public uint DynamicResolutionOverloadFrames, DynamicResolutionRecoveryFrames;
     public float ResolutionScale; public uint EffectiveProfile, ClampCount;
+    public GraphicsTemporalQuality TemporalUpscalerQuality;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -66,6 +79,7 @@ public struct GraphicsCapabilities
     public uint CapabilityProfile, RecommendedProfile, RecommendationSource;
     public uint MaximumImage2DSize, MaximumImageArrayLayers, SupportsDepthSampling;
     public float MaximumSamplerAnisotropy, DisplayHz;
+    public GraphicsTemporalAvailability ArmAsr, Fsr2;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -76,12 +90,18 @@ public struct NativeGraphicsState
     public GraphicsSettings Requested;
     public ResolvedGraphicsSettings Effective;
     public GraphicsCapabilities Capabilities;
+    public GraphicsUpscaling ExecutedUpscaler;
+    public GraphicsTemporalAvailability ExecutedStatus;
 }
 
+/// <summary>Estado gráfico da sessão. <c>ExecutedUpscaler</c> é o algoritmo que o
+/// renderer realmente executou no último quadro; <c>ExecutedStatus</c> explica
+/// por que um ampliador temporal pedido não rodou.</summary>
 public readonly record struct GraphicsSnapshot(GraphicsSettings Requested,
     ResolvedGraphicsSettings Effective, GraphicsCapabilities Capabilities,
     bool Pending, ulong PendingRequestId, bool LastRequestSucceeded, bool EffectiveAvailable,
-    string Diagnostics);
+    string Diagnostics, GraphicsUpscaling ExecutedUpscaler = GraphicsUpscaling.Bilinear,
+    GraphicsTemporalAvailability ExecutedStatus = GraphicsTemporalAvailability.Available);
 
 /// <summary>Política gráfica da sessão Play. Alterações não persistem no projeto.</summary>
 public static class Graphics

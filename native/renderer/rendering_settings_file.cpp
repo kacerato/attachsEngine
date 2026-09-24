@@ -58,6 +58,7 @@ std::string writeRenderingSettings(const ProjectRenderingSettings &s) {
   append(text,"resolution_scale",s.resolutionScale);
   append(text,"maximum_render_hz",s.maximumRenderHz);
   append(text,"upscaling_filter",upscalingFilterName(s.upscalingFilter));
+  append(text,"temporal_upscaler_quality",temporalUpscalerQualityName(s.temporalUpscalerQuality));
   append(text,"shadow_cascade_count",s.shadowCascadeCount);
   append(text,"shadow_cascade_resolution",s.shadowCascadeResolution);
   append(text,"shadow_filter_taps",s.shadowFilterTaps);
@@ -124,6 +125,7 @@ bool readRenderingSettings(std::string_view text,ProjectRenderingSettings &out) 
     else if(key=="resolution_scale") {if(!parseRangedFloat(value,result.resolutionScale,.5f,1.0f,0.0f)) return false;}
     else if(key=="maximum_render_hz") {if(!parseRangedUnsigned(value,result.maximumRenderHz,24,240)) return false;}
     else if(key=="upscaling_filter") {if(!parseNamed(value,result.upscalingFilter,parseUpscalingFilter,upscalingFilterName)) return false;}
+    else if(key=="temporal_upscaler_quality") {if(!parseNamed(value,result.temporalUpscalerQuality,parseTemporalUpscalerQuality,temporalUpscalerQualityName)) return false;}
     else if(key=="shadow_cascade_count") {if(!parseRangedUnsigned(value,result.shadowCascadeCount,1,4)) return false;}
     else if(key=="shadow_cascade_resolution") {if(!parseRangedUnsigned(value,result.shadowCascadeResolution,256,4096)) return false;}
     else if(key=="shadow_filter_taps"||key=="shadow_far_filter_taps") {
@@ -173,6 +175,23 @@ bool readRenderingSettings(std::string_view text,ProjectRenderingSettings &out) 
   result.schemaVersion=RenderingSettingsSchemaVersion; out=result; return true;
 }
 
+TemporalReconstruction temporalReconstruction(const ProjectRenderingSettings &s) {
+  if(s.upscalingFilter==UpscalingFilter::ArmAsr) return TemporalReconstruction::ArmAsr;
+  if(s.upscalingFilter==UpscalingFilter::Fsr2) return TemporalReconstruction::Fsr2;
+  return s.antiAliasing==AntiAliasingMode::Temporal?TemporalReconstruction::NativeTaa:TemporalReconstruction::Off;
+}
+void setTemporalReconstruction(ProjectRenderingSettings &s,TemporalReconstruction mode) {
+  if(mode==TemporalReconstruction::ArmAsr) {s.upscalingFilter=UpscalingFilter::ArmAsr;return;}
+  if(mode==TemporalReconstruction::Fsr2) {s.upscalingFilter=UpscalingFilter::Fsr2;return;}
+  if(isTemporalUpscaler(s.upscalingFilter)) s.upscalingFilter=UpscalingFilter::Bilinear;
+  if(mode==TemporalReconstruction::NativeTaa) s.antiAliasing=AntiAliasingMode::Temporal;
+  else if(s.antiAliasing==AntiAliasingMode::Temporal) s.antiAliasing=AntiAliasingMode::Fxaa;
+}
+const char *temporalReconstructionLabel(TemporalReconstruction v) {
+  switch(v){case TemporalReconstruction::NativeTaa:return "TAA nativo";case TemporalReconstruction::ArmAsr:return "Arm ASR";
+            case TemporalReconstruction::Fsr2:return "AMD FSR 2";default:return "Desligada";}
+}
+
 ProjectRenderingSettings withEditorDefaults(ProjectRenderingSettings settings) {
   if(settings.dynamicResolution==FeatureOverride::Inherit) settings.dynamicResolution=FeatureOverride::Disabled;
   if(settings.maximumRenderHz==0) settings.maximumRenderHz=60;
@@ -180,7 +199,24 @@ ProjectRenderingSettings withEditorDefaults(ProjectRenderingSettings settings) {
 }
 const char *qualityLevelLabel(QualityPreset v) {switch(v){case QualityPreset::C:return "Baixo";case QualityPreset::B:return "Médio";case QualityPreset::A:return "Alto";case QualityPreset::S:return "Ultra";case QualityPreset::Custom:return "Personalizado";default:return "Automático";}}
 const char *antiAliasingLabel(AntiAliasingMode v) {switch(v){case AntiAliasingMode::Off:return "Desligado";case AntiAliasingMode::Fxaa:return "FXAA";case AntiAliasingMode::Temporal:return "TAA (câmera)";default:return "Do nível";}}
-const char *upscalingFilterLabel(UpscalingFilter v) {switch(v){case UpscalingFilter::Bilinear:return "Bilinear";case UpscalingFilter::CatmullRom:return "Bicúbica nítida";case UpscalingFilter::Fsr1:return "AMD FSR 1";default:return "Do nível";}}
+const char *upscalingFilterLabel(UpscalingFilter v) {switch(v){case UpscalingFilter::Bilinear:return "Bilinear";case UpscalingFilter::CatmullRom:return "Bicúbica nítida";case UpscalingFilter::Fsr1:return "AMD FSR 1";case UpscalingFilter::ArmAsr:return "Arm ASR";case UpscalingFilter::Fsr2:return "AMD FSR 2";default:return "Do nível";}}
+const char *temporalUpscalerQualityLabel(TemporalUpscalerQuality v) {switch(v){case TemporalUpscalerQuality::Quality:return "Qualidade";case TemporalUpscalerQuality::Balanced:return "Equilibrado";case TemporalUpscalerQuality::Performance:return "Desempenho";case TemporalUpscalerQuality::UltraPerformance:return "Ultra desempenho";default:return "Do nível";}}
+const char *temporalUpscalerAvailabilityLabel(TemporalUpscalerAvailability v) {
+  switch(v) {
+    case TemporalUpscalerAvailability::Available: return "Disponível";
+    case TemporalUpscalerAvailability::NotProbed: return "Aparelho ainda não consultado";
+    case TemporalUpscalerAvailability::NotBuilt: return "Biblioteca ausente deste binário";
+    case TemporalUpscalerAvailability::MissingFloat16: return "GPU sem shaderFloat16";
+    case TemporalUpscalerAvailability::MissingInt16: return "GPU sem shaderInt16";
+    case TemporalUpscalerAvailability::MissingQuadSubgroup: return "GPU sem operações de quad em subgrupo";
+    case TemporalUpscalerAvailability::MissingStorageImageFormats: return "GPU sem formatos estendidos de imagem de armazenamento";
+    case TemporalUpscalerAvailability::MissingStorageWriteWithoutFormat: return "GPU sem escrita de imagem sem formato";
+    case TemporalUpscalerAvailability::MissingHdrSceneColor: return "Sem cor de cena HDR (RGBA16F)";
+    case TemporalUpscalerAvailability::ContextCreationFailed: return "A biblioteca recusou o contexto";
+    case TemporalUpscalerAvailability::MissingSampledDepth32: return "Sem profundidade D32 amostrável";
+  }
+  return "Indisponível";
+}
 const char *shadowQualityLabel(ShadowQuality v) {switch(v){case ShadowQuality::Off:return "Desligadas";case ShadowQuality::Hard:return "Duras";case ShadowQuality::Soft:return "Suaves";case ShadowQuality::UltraSoft:return "Ultra suaves";default:return "Do nível";}}
 const char *ambientQualityLabel(AmbientQuality v) {switch(v){case AmbientQuality::Constant:return "Constante";case AmbientQuality::Hemispheric:return "Hemisférica";case AmbientQuality::HemisphericSpecular:return "Hemisférica + reflexos";default:return "Do nível";}}
 const char *postQualityLabel(PostQuality v) {switch(v){case PostQuality::None:return "Desligado";case PostQuality::Tonemap:return "Tonemap";case PostQuality::Bloom:return "Tonemap + bloom";default:return "Do nível";}}

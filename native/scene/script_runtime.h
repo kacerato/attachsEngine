@@ -52,7 +52,8 @@ struct ScriptShapeQuery {
 
 struct ScriptAssetGuid { u64 high=0,low=0; };
 
-// ABI v6. Enums cross as u32; booleans also use u32 so C++/CLR layout is stable.
+// ABI v7. Enums cross as u32; booleans also use u32 so C++/CLR layout is stable.
+// v7 appends temporal upscaler quality, availability and the executed algorithm.
 // The settings block mirrors ProjectRenderingSettings in one place at the ABI.
 struct ScriptRenderingSettings {
   u32 size=sizeof(ScriptRenderingSettings),schemaVersion=0;
@@ -70,6 +71,7 @@ struct ScriptRenderingSettings {
   u32 dynamicResolution=0; float dynamicResolutionMinimumScale=0,dynamicResolutionDecreaseStep=0;
   float dynamicResolutionIncreaseStep=0,dynamicResolutionRecoveryHeadroomRatio=0;
   u32 dynamicResolutionOverloadFrames=0,dynamicResolutionRecoveryFrames=0;
+  u32 temporalUpscalerQuality=0;
 };
 
 struct ScriptResolvedRenderingPolicy {
@@ -90,12 +92,14 @@ struct ScriptResolvedRenderingPolicy {
   float dynamicResolutionDecreaseStep=0,dynamicResolutionIncreaseStep=0,dynamicResolutionRecoveryHeadroomRatio=0;
   u32 dynamicResolutionOverloadFrames=0,dynamicResolutionRecoveryFrames=0;
   float resolutionScale=0; u32 effectiveProfile=0,clampCount=0;
+  u32 temporalUpscalerQuality=0;
 };
 
 struct ScriptRenderingCapabilities {
   u32 size=sizeof(ScriptRenderingCapabilities),profile=0,recommendedProfile=0,recommendationSource=0;
   u32 maximumImage2DSize=0,maximumImageArrayLayers=0,supportsDepthSampling=0;
   float maximumSamplerAnisotropy=0,displayHz=0;
+  u32 armAsr=0,fsr2=0; // renderer::TemporalUpscalerAvailability
 };
 struct ScriptRenderingState {
   u32 size=sizeof(ScriptRenderingState),world=0,pending=0,lastRequestSucceeded=0,effectiveAvailable=0;
@@ -103,6 +107,9 @@ struct ScriptRenderingState {
   ScriptRenderingSettings requested{};
   ScriptResolvedRenderingPolicy effective{};
   ScriptRenderingCapabilities capabilities{};
+  // What the renderer actually ran in the last presented frame, and why a
+  // requested temporal upscaler did not run (TemporalUpscalerAvailability).
+  u32 executedUpscaler=0,executedStatus=0;
 };
 
 struct ScriptSceneAccess {

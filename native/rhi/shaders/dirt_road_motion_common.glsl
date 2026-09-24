@@ -9,7 +9,10 @@ layout(location=4) in highp vec2 vUv1;
 layout(location=5) in mediump vec4 vColor;
 layout(location=6) in mediump float vDither;
 layout(location=10) in highp vec3 vMotionWorldDelta;
-layout(location=0) out highp vec4 outMotion;
+// RG16F, contrato de temporal_projection.glsl: atual -> anterior, UV da
+// extensão renderizada, sem jitter.
+layout(location=0) out highp vec2 outMotion;
+#include "temporal_projection.glsl"
 #include "lod_dither.glsl"
 #include "material_uv_transform.glsl"
 #include "world_uv.glsl"
@@ -26,5 +29,8 @@ void main() {
         frame.baseColorFactor.a*vColor.a;
     if(alpha<float((frame.materialFlags.y>>8u)&255u)/255.0) discard;
   }
-  outMotion=vec4(clamp(vMotionWorldDelta,vec3(-65504.0),vec3(65504.0)),1.0);
+  // vMotionWorldDelta é o deslocamento de mundo desde o quadro anterior do
+  // mesmo vértice: pose rígida anterior ou, com skin, a posição deformada
+  // anterior. A câmera anterior entra aqui, na projeção.
+  outMotion=temporalVelocity(vPosition,vPosition-vMotionWorldDelta);
 }

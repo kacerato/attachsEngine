@@ -1,0 +1,96 @@
+#version 450
+
+// Skin por compute (G6-B), um despacho por desenho com skin.
+//
+// Lê o vértice de repouso do pacote (48 bytes: posição f32x3, normal e
+// tangente snorm16x4, UV0, UV1, cor u8x4) e as 4 influências da importação
+// (juntas u16x4 + pesos unorm16x4, em ordem de peso), e escreve:
+//   * na região ATUAL do desenho, o vértice inteiro na pose deste quadro;
+//   * na região ANTERIOR, logo depois dela, só a posição na pose do quadro
+//     anterior — é o que o passe de movimento lê para o vetor do skin.
+// A paleta já está no espaço do desenho (renderer::MapDrawState::skinPalette):
+// o modelo do objeto continua sendo aplicado pelo vertex shader de sempre, e
+// sombra, cena, prévia e movimento desenham a saída sem variante de pipeline.
+//
+// Normal e tangente usam a parte 3x3 da mesma matriz e são renormalizadas:
+// exato para rotação e escala uniforme; com escala não uniforme nos ossos é a
+// aproximação usual (a inversa transposta por vértice custaria outra matriz).
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer RestVertices { uint rest[]; };
+layout(std430, set = 0, binding = 1) readonly buffer Influences { uvec4 influences[]; };
+layout(std430, set = 0, binding = 2) readonly buffer Palettes { mat4 palettes[]; };
+layout(std430, set = 0, binding = 3) writeonly buffer Skinned { uint skinned[]; };
+
+layout(push_constant) uniform SkinningPush {
+  uint sourceVertex;     // primeiro vértice de repouso (absoluto no pacote)
+  uint targetVertex;     // primeiro vértice da região atual; a anterior vem depois
+  uint vertexCount;
+  uint influenceVertex;  // primeiro vértice na tabela de influências
+  uint currentPalette;   // primeira matriz da pose atual
+  uint previousPalette;  // primeira matriz da pose anterior
+  uint jointCount;
+  uint influenceLimit;   // 1, 2 ou 4 (Skin Weights)
+} push;
+
+const uint STRIDE = 12u;
+
+mat4 skinMatrix(uint paletteBase, uvec4 packedInfluence) {
+  uint joints[4] = uint[4](packedInfluence.x & 0xffffu, packedInfluence.x >> 16u,
+                           packedInfluence.y & 0xffffu, packedInfluence.y >> 16u);
+  vec4 weights = vec4(unpackUnorm2x16(packedInfluence.z), unpackUnorm2x16(packedInfluence.w));
+  if (push.influenceLimit < 4u) weights.w = 0.0;
+  if (push.influenceLimit < 3u) weights.z = 0.0;
+  if (push.influenceLimit < 2u) weights.y = 0.0;
+  mat4 result = mat4(0.0);
+  float total = 0.0;
+  for (uint k = 0u; k < 4u; ++k) {
+    if (weights[k] <= 0.0 || joints[k] >= push.jointCount) continue;
+    result += weights[k] * palettes[paletteBase + joints[k]];
+    total += weights[k];
+  }
+  // Sem peso válido o vértice fica na pose de bind, não na origem.
+  return total > 0.0 ? result * (1.0 / total) : mat4(1.0);
+}
+
+vec3 rotateDirection(mat4 m, vec3 direction) {
+  vec3 rotated = mat3(m) * direction;
+  float lengthSquared = dot(rotated, rotated);
+  return lengthSquared > 1.0e-12 ? rotated * inversesqrt(lengthSquared) : direction;
+}
+
+void main() {
+  uint index = gl_GlobalInvocationID.x;
+  if (index >= push.vertexCount) return;
+  uint source = (push.sourceVertex + index) * STRIDE;
+  uint target = (push.targetVertex + index) * STRIDE;
+  uint previous = (push.targetVertex + push.vertexCount + index) * STRIDE;
+  uvec4 packedInfluence = influences[push.influenceVertex + index];
+
+  vec4 position = vec4(uintBitsToFloat(rest[source]), uintBitsToFloat(rest[source + 1u]),
+                       uintBitsToFloat(rest[source + 2u]), 1.0);
+  vec2 normalXY = unpackSnorm2x16(rest[source + 3u]);
+  vec2 normalZW = unpackSnorm2x16(rest[source + 4u]);
+  vec2 tangentXY = unpackSnorm2x16(rest[source + 5u]);
+  vec2 tangentZW = unpackSnorm2x16(rest[source + 6u]);
+
+  mat4 current = skinMatrix(push.currentPalette, packedInfluence);
+  vec3 skinnedPosition = (current * position).xyz;
+  vec3 normal = rotateDirection(current, vec3(normalXY, normalZW.x));
+  vec3 tangent = rotateDirection(current, vec3(tangentXY, tangentZW.x));
+
+  skinned[target] = floatBitsToUint(skinnedPosition.x);
+  skinned[target + 1u] = floatBitsToUint(skinnedPosition.y);
+  skinned[target + 2u] = floatBitsToUint(skinnedPosition.z);
+  skinned[target + 3u] = packSnorm2x16(normal.xy);
+  skinned[target + 4u] = packSnorm2x16(vec2(normal.z, normalZW.y));
+  skinned[target + 5u] = packSnorm2x16(tangent.xy);
+  skinned[target + 6u] = packSnorm2x16(vec2(tangent.z, tangentZW.y));
+  for (uint word = 7u; word < STRIDE; ++word) skinned[target + word] = rest[source + word];
+
+  vec3 previousPosition = (skinMatrix(push.previousPalette, packedInfluence) * position).xyz;
+  skinned[previous] = floatBitsToUint(previousPosition.x);
+  skinned[previous + 1u] = floatBitsToUint(previousPosition.y);
+  skinned[previous + 2u] = floatBitsToUint(previousPosition.z);
+}

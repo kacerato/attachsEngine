@@ -848,7 +848,20 @@ struct Importer {
   // de buffers que o pacote de mapa usa. Instâncias reaproveitam o bloco: o
   // mesmo mesh em dois nós custa dois desenhos, não duas cópias da geometria.
   struct PrimitiveRange { u32 firstIndex = 0, indexCount = 0, vertexOffset = 0, material = 0;
-                          float center[3]{}; float radius = 0; std::string key; };
+                          float center[3]{}; float radius = 0; std::string key;
+                          bool skinned = false; u32 highestJoint = 0; };
+
+  // Influências paralelas aos vértices: crescem com eles, com zero onde a
+  // primitiva não tem skin. Toda inserção de vértice passa por aqui.
+  void growInfluences() {
+    if (out->skinInfluences.empty()) return;
+    out->skinInfluences.resize(out->vertices.size() / renderer::MapVertexStride * SkinInfluenceStride, 0);
+  }
+  void copyInfluence(usize from, usize to) {
+    if (out->skinInfluences.empty()) return;
+    std::memcpy(out->skinInfluences.data() + to * SkinInfluenceStride,
+                out->skinInfluences.data() + from * SkinInfluenceStride, SkinInfluenceStride);
+  }
 
   // Cópia refletida por S = diag(-1,1,1) de uma primitiva já lida, para um nó
   // espelhado. Posição, normal e tangente têm X negado; o sinal da bitangente
@@ -883,6 +896,9 @@ struct Importer {
         std::memcpy(target + offset, &value, 2);
       }
     }
+    growInfluences();
+    for (u32 v = 0; v < vertexCount; ++v)
+      copyInfluence(static_cast<usize>(source.vertexOffset) + v, static_cast<usize>(vertexBase) + v);
     for (u32 i = source.firstIndex; i + 2 < source.firstIndex + source.indexCount; i += 3) {
       const u32 a = out->indices[i], b = out->indices[i + 1], c = out->indices[i + 2];
       out->indices.insert(out->indices.end(), {a, c, b});
@@ -937,6 +953,7 @@ struct Importer {
     }
     const float limit = std::cos(std::clamp(limits->smoothingAngle, 0.0f, 180.0f) * 0.017453292519943295f) - 1e-5f;
     std::vector<u8> appended;
+    std::vector<u32> appendedSources;
     u32 added = 0;
     std::vector<u8> member;
     std::vector<std::vector<u8>> groups;
@@ -971,6 +988,7 @@ struct Importer {
           if (static_cast<u64>(out->vertices.size() / renderer::MapVertexStride) + added + 1 > limits->maximumVertices)
             return fail("O arquivo passa do limite de vértices desta importação ao dividir as arestas duras.");
           target = vertexCount + added++;
+          appendedSources.push_back(v);
           appended.insert(appended.end(), vertex, vertex + renderer::MapVertexStride);
           vertex = appended.data() + appended.size() - renderer::MapVertexStride;
         }
@@ -983,6 +1001,10 @@ struct Importer {
       const usize base = static_cast<usize>(write - out->vertices.data());
       out->vertices.insert(out->vertices.end(), appended.begin(), appended.end());
       write = out->vertices.data() + base;
+      growInfluences();
+      for (u32 i = 0; i < added; ++i)
+        copyInfluence(static_cast<usize>(range.vertexOffset) + appendedSources[i],
+                      static_cast<usize>(range.vertexOffset) + vertexCount + i);
       vertexCount += added;
     }
     return true;
@@ -1040,6 +1062,28 @@ struct Importer {
        (hasUv0 && uv0.components!=2) || (hasUv1 && uv1.components!=2) ||
        (hasColor && color.components!=3 && color.components!=4)) return fail("Formato de atributo de vértice inválido.");
 
+    // Skin: JOINTS_n/WEIGHTS_n aos pares. Até dois conjuntos (8 influências);
+    // ficam as 4 maiores, renormalizadas.
+    Accessor jointSets[2]{}, weightSets[2]{};
+    u32 influenceSets = 0;
+    for (u32 set = 0; set < 2; ++set) {
+      const std::string jointName = "JOINTS_" + std::to_string(set), weightName = "WEIGHTS_" + std::to_string(set);
+      const bool hasJoints = declared(jointName), hasWeights = declared(weightName);
+      if (!hasJoints && !hasWeights) break;
+      if (hasJoints != hasWeights) return fail("JOINTS e WEIGHTS do skin precisam vir aos pares.");
+      if (!resolveAttribute(jointName, jointSets[set], "JOINTS inválido.") ||
+          !resolveAttribute(weightName, weightSets[set], "WEIGHTS inválido.")) return false;
+      const auto &joints = jointSets[set];const auto &weights = weightSets[set];
+      if (joints.components != 4 || weights.components != 4 || joints.count != position.count || weights.count != position.count)
+        return fail("JOINTS/WEIGHTS precisam ser VEC4 com um valor por vértice.");
+      if (joints.normalized || (joints.component != kComponentUnsignedByte && joints.component != kComponentUnsignedShort))
+        return fail("JOINTS precisa ser inteiro sem sinal de 8 ou 16 bits.");
+      if (weights.component != kComponentFloat &&
+          !(weights.normalized && (weights.component == kComponentUnsignedByte || weights.component == kComponentUnsignedShort)))
+        return fail("WEIGHTS precisa ser float ou inteiro normalizado sem sinal.");
+      ++influenceSets;
+    }
+
     const u64 vertexBase = out->vertices.size() / renderer::MapVertexStride;
     if (vertexBase + position.count > limits->maximumVertices)
       return fail("O arquivo passa do limite de vértices desta importação.");
@@ -1079,6 +1123,49 @@ struct Importer {
         for (u32 channel = 0; channel < std::min(color.components, 4u); ++channel)
           rgba[channel] = static_cast<u8>(std::lround(std::fmin(std::fmax(readComponent(color, v, channel), 0.f), 1.f) * 255.f));
       std::memcpy(vertex + 44, rgba, 4);
+    }
+    // A primeira primitiva com skin ativa o vetor já no tamanho de todos os
+    // vértices escritos até aqui (as anteriores ficam com peso zero).
+    if (influenceSets && out->skinInfluences.empty())
+      out->skinInfluences.assign(out->vertices.size() / renderer::MapVertexStride * SkinInfluenceStride, 0);
+    growInfluences();
+    if (influenceSets) {
+      range.skinned = true;
+      for (u32 v = 0; v < position.count; ++v) {
+        if ((v & 0xFFFF) == 0 && cancelled()) return false;
+        std::pair<float, u32> influence[8]{};
+        u32 count = 0;
+        for (u32 set = 0; set < influenceSets; ++set)
+          for (u32 k = 0; k < 4; ++k) {
+            const float weight = readComponent(weightSets[set], v, k);
+            const auto joint = static_cast<u32>(readComponent(jointSets[set], v, k));
+            if (!std::isfinite(weight) || weight <= 0) continue;
+            influence[count++] = {weight, joint};
+          }
+        std::sort(influence, influence + count, [](const auto &a, const auto &b) { return a.first > b.first; });
+        count = std::min(count, 4u);
+        float total = 0;
+        for (u32 k = 0; k < count; ++k) total += influence[k].first;
+        u16 packed[8]{};
+        if (!(total > 0)) {
+          // Vértice sem peso: fica preso à primeira junta, como a especificação
+          // trata pesos que não somam um (renormalizar).
+          packed[4] = 65535;
+        } else {
+          u32 assigned = 0, largest = 0;
+          for (u32 k = 0; k < count; ++k) {
+            packed[k] = static_cast<u16>(std::min<u32>(influence[k].second, 65535u));
+            range.highestJoint = std::max(range.highestJoint, influence[k].second);
+            const u32 quantized = static_cast<u32>(std::lround(influence[k].first / total * 65535.0f));
+            packed[4 + k] = static_cast<u16>(std::min(quantized, 65535u));
+            assigned += packed[4 + k];
+          }
+          // Soma exata em 65535: o resto do arredondamento vai para a maior.
+          const i32 remainder = 65535 - static_cast<i32>(assigned);
+          packed[4 + largest] = static_cast<u16>(std::clamp<i32>(packed[4 + largest] + remainder, 0, 65535));
+        }
+        std::memcpy(out->skinInfluences.data() + (static_cast<usize>(vertexBase) + v) * SkinInfluenceStride, packed, 16);
+      }
     }
     for (u32 axis = 0; axis < 3; ++axis) range.center[axis] = (minimum[axis] + maximum[axis]) * .5f;
     float radius = 0;
@@ -1426,8 +1513,6 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
         result.appearanceExtensions.emplace_back(name);
     }
 
-  if (const auto *animations = importer.array(*root, "animations")) result.skippedAnimations = animations->childCount;
-  if (const auto *skins = importer.array(*root, "skins")) result.skippedSkins = skins->childCount;
   // Uma câmera só conta como perdida quando o perfil NÃO pede para importá-la:
   // com "Import Cameras" ligado, ela vira dado e o nó que a carrega recebe o
   // componente de câmera no editor.
@@ -1482,6 +1567,11 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
   std::string shearedNames;
   std::vector<Pending> stack;
   std::vector<bool> visited(nodes->childCount, false);
+  // Nó do glTF -> nó emitido, e se o emitido saiu espelhado: skin e animação
+  // endereçam nós do ARQUIVO e precisam chegar aos da árvore importada.
+  std::vector<i32> emittedOf(nodes->childCount, -1);
+  std::vector<u8> emittedMirrored;
+  std::vector<i32> drawSkinRequests;
   const float identity[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
   const auto *scenes = importer.array(*root, "scenes");
   const auto sceneIndex = document.index(*root, "scene");
@@ -1593,6 +1683,8 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
         if (!value.empty() && value.size() <= 256) { imported.authoredId = std::string(value); break; }
       }
     result.nodes.push_back(std::move(imported));
+    emittedOf[entry.node] = static_cast<i32>(emitted);
+    emittedMirrored.push_back(mirrored ? 1 : 0);
 
     // A câmera do nó. Sem "Import Cameras" ela já foi contada como perdida na
     // varredura do arquivo; com ele, vira um registro ligado a ESTE nó — é o nó
@@ -1687,7 +1779,7 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
     }
     const auto meshIndex = document.index(node, "mesh");
     if (meshIndex >= 0 && meshIndex < meshes->childCount) {
-      if (document.index(node, "skin") >= 0) ++result.skippedSkins;
+      const auto skinIndex = document.index(node, "skin");
       const auto &sourceRanges = byMesh[static_cast<u32>(meshIndex)];
       for (usize r = 0; r < sourceRanges.size(); ++r) {
         if (result.draws.size() >= limits.maximumDraws)
@@ -1715,6 +1807,11 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
         draw.lodGroupId = static_cast<u32>(result.draws.size());
         result.draws.push_back(draw);
         result.drawNodes.push_back(emitted);
+        // Skin do nó vale para as primitivas que trazem JOINTS/WEIGHTS; o nó
+        // espelhado desenha estático (a reflexão da geometria não comuta com
+        // as juntas do arquivo) e isso é dito no relatório.
+        drawSkinRequests.push_back(skinIndex >= 0 && range.skinned ? static_cast<i32>(skinIndex) : -1);
+        if (skinIndex >= 0 && range.skinned && mirrored) drawSkinRequests.back() = -2;
         result.names.push_back(name.empty() ? std::string("Malha ") + std::to_string(result.draws.size())
                                             : std::string(name));
         result.keys.push_back(nodeKey + "/" + range.key);
@@ -1728,6 +1825,199 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
         if (index >= nodes->childCount) return giveUp("Nó filho inexistente.");
         stack.push_back({index, static_cast<i32>(emitted), mirrored});
       }
+  }
+
+  // --- Skins ---------------------------------------------------------------------
+  {
+    const auto *sourceSkins = importer.array(*root, "skins");
+    const u32 skinCount = sourceSkins ? sourceSkins->childCount : 0u;
+    result.skins.assign(skinCount, SkinDefinition{});
+    std::vector<u8> usable(skinCount, 0);
+    const auto refuseSkin = [&](u32 skin, const std::string &reason) {
+      usable[skin] = 0;
+      result.skins[skin] = SkinDefinition{};
+      ++result.skippedSkins;
+      result.notes.push_back("Skin " + std::to_string(skin) + " não aplicado: " + reason + " A malha fica estática.");
+    };
+    for (u32 s = 0; s < skinCount; ++s) {
+      const auto &source = *document.child(*sourceSkins, s);
+      if (source.kind != Kind::Object) return giveUp("Skin inválido.");
+      auto &skin = result.skins[s];
+      skin.name = std::string(document.string(source, "name"));
+      const auto *joints = importer.array(source, "joints");
+      if (!joints || !joints->childCount) return giveUp("Skin sem juntas.");
+      usable[s] = 1;
+      if (joints->childCount > MaximumSkinJoints) {refuseSkin(s, "mais de 256 juntas.");continue;}
+      bool resolved = true, mirroredJoint = false;
+      for (u32 j = 0; j < joints->childCount; ++j) {
+        const auto *value = document.child(*joints, j);
+        if (!value || value->kind != Kind::Number || value->number < 0 || value->number >= nodes->childCount)
+          return giveUp("Junta de skin inexistente.");
+        const i32 emittedJoint = emittedOf[static_cast<u32>(value->number)];
+        if (emittedJoint < 0) {resolved = false;break;}
+        mirroredJoint = mirroredJoint || emittedMirrored[static_cast<u32>(emittedJoint)];
+        skin.joints.push_back(static_cast<u32>(emittedJoint));
+      }
+      if (!resolved) {refuseSkin(s, "junta fora da cena importada.");continue;}
+      if (mirroredJoint) {refuseSkin(s, "junta sob escala negativa.");continue;}
+      const auto skeleton = document.index(source, "skeleton");
+      if (skeleton >= 0 && skeleton < static_cast<i64>(nodes->childCount)) skin.skeleton = emittedOf[static_cast<u32>(skeleton)];
+      skin.inverseBind.assign(skin.joints.size() * 16, 0);
+      for (usize j = 0; j < skin.joints.size(); ++j)
+        for (u32 d = 0; d < 4; ++d) skin.inverseBind[j * 16 + d * 5] = 1;
+      if (const auto accessorIndex = document.index(source, "inverseBindMatrices"); accessorIndex >= 0) {
+        Accessor matrices{};
+        if (!importer.resolveAccessor(*root, accessorIndex, matrices, "inverseBindMatrices inválido.")) return giveUp(result.diagnostic.c_str());
+        if (matrices.components != 16 || matrices.component != kComponentFloat || matrices.count < skin.joints.size())
+          return giveUp("inverseBindMatrices precisa ser MAT4 float com uma matriz por junta.");
+        for (usize j = 0; j < skin.joints.size(); ++j)
+          for (u32 c = 0; c < 16; ++c) {
+            const float value = readComponent(matrices, static_cast<u32>(j), c);
+            if (!std::isfinite(value)) return giveUp("inverseBindMatrices não finita.");
+            skin.inverseBind[j * 16 + c] = value;
+          }
+      }
+    }
+    // Desenhos: skin confirmado e índices de junta dentro do skin. Esferas por
+    // junta, no espaço da junta, a partir dos vértices que ela influencia.
+    result.drawSkins.assign(result.draws.size(), -1);
+    std::vector<float> lower, upper;
+    std::vector<u8> seen;
+    u32 mirroredSkinnedDraws = 0;
+    for (u32 s = 0; s < skinCount; ++s) {
+      if (!usable[s]) continue;
+      auto &skin = result.skins[s];
+      const usize joints = skin.joints.size();
+      lower.assign(joints * 3, 0);upper.assign(joints * 3, 0);seen.assign(joints, 0);
+      for (usize d = 0; d < result.draws.size(); ++d) {
+        if (drawSkinRequests[d] == -2) continue;
+        if (drawSkinRequests[d] != static_cast<i32>(s) || result.skinInfluences.empty()) continue;
+        const auto &draw = result.draws[d];
+        u32 vertexCount = 0;
+        for (u32 i = draw.firstIndex; i < draw.firstIndex + draw.indexCount; ++i)
+          vertexCount = std::max(vertexCount, result.indices[i] + 1);
+        bool inRange = true;
+        for (u32 v = 0; v < vertexCount && inRange; ++v) {
+          u16 packed[8];
+          std::memcpy(packed, result.skinInfluences.data() + (static_cast<usize>(draw.vertexOffset) + v) * SkinInfluenceStride, 16);
+          for (u32 k = 0; k < 4; ++k) if (packed[4 + k] && packed[k] >= joints) inRange = false;
+        }
+        if (!inRange) {
+          result.notes.push_back("Primitiva com índice de junta fora do skin " + std::to_string(s) + ": desenhada estática.");
+          ++result.skippedSkins;
+          continue;
+        }
+        result.drawSkins[d] = static_cast<i32>(s);
+        for (u32 v = 0; v < vertexCount; ++v) {
+          const usize vertex = static_cast<usize>(draw.vertexOffset) + v;
+          float p[3];
+          std::memcpy(p, result.vertices.data() + vertex * renderer::MapVertexStride, 12);
+          u16 packed[8];
+          std::memcpy(packed, result.skinInfluences.data() + vertex * SkinInfluenceStride, 16);
+          for (u32 k = 0; k < 4; ++k) {
+            if (!packed[4 + k]) continue;
+            const u32 j = packed[k];
+            const float *m = skin.inverseBind.data() + static_cast<usize>(j) * 16;
+            for (u32 axis = 0; axis < 3; ++axis) {
+              const float value = m[axis] * p[0] + m[4 + axis] * p[1] + m[8 + axis] * p[2] + m[12 + axis];
+              if (!seen[j] || value < lower[j * 3 + axis]) lower[j * 3 + axis] = value;
+              if (!seen[j] || value > upper[j * 3 + axis]) upper[j * 3 + axis] = value;
+            }
+            seen[j] = 1;
+          }
+        }
+      }
+      skin.jointSpheres.assign(joints * 4, 0);
+      for (usize j = 0; j < joints; ++j) {
+        float *sphere = skin.jointSpheres.data() + j * 4;
+        if (!seen[j]) {sphere[3] = -1;continue;}
+        float squared = 0;
+        for (u32 axis = 0; axis < 3; ++axis) {
+          sphere[axis] = (lower[j * 3 + axis] + upper[j * 3 + axis]) * .5f;
+          const float half = (upper[j * 3 + axis] - lower[j * 3 + axis]) * .5f;
+          squared += half * half;
+        }
+        sphere[3] = std::sqrt(squared);
+      }
+    }
+    for (const auto request : drawSkinRequests) if (request == -2) ++mirroredSkinnedDraws;
+    if (mirroredSkinnedDraws) {
+      result.skippedSkins += mirroredSkinnedDraws;
+      result.notes.push_back(std::to_string(mirroredSkinnedDraws) +
+                             " primitiva(s) com skin em nó de escala negativa: desenhadas estáticas.");
+    }
+    for (usize d = 0; d < drawSkinRequests.size(); ++d)
+      if (drawSkinRequests[d] >= 0 && !usable[static_cast<usize>(drawSkinRequests[d])]) result.drawSkins[d] = -1;
+  }
+
+  // --- Animações ------------------------------------------------------------------
+  if (const auto *sourceAnimations = importer.array(*root, "animations")) {
+    for (u32 a = 0; a < sourceAnimations->childCount; ++a) {
+      if (importer.cancelled()) return giveUp("Importação cancelada.");
+      const auto &source = *document.child(*sourceAnimations, a);
+      if (source.kind != Kind::Object) return giveUp("Animação inválida.");
+      AnimationClip clip;
+      clip.name = std::string(document.string(source, "name"));
+      if (clip.name.empty()) clip.name = "Clipe " + std::to_string(a + 1);
+      const auto *channels = importer.array(source, "channels");
+      const auto *samplers = importer.array(source, "samplers");
+      if (!channels || !samplers) return giveUp("Animação sem canais ou samplers.");
+      for (u32 c = 0; c < channels->childCount; ++c) {
+        const auto &channel = *document.child(*channels, c);
+        const auto *target = channel.kind == Kind::Object ? document.member(channel, "target") : nullptr;
+        if (!target || target->kind != Kind::Object) return giveUp("Canal de animação sem alvo.");
+        const auto path = document.string(*target, "path");
+        const auto nodeIndex = document.index(*target, "node");
+        if (path == "weights" || nodeIndex < 0 || nodeIndex >= static_cast<i64>(nodes->childCount) ||
+            emittedOf[static_cast<u32>(nodeIndex)] < 0 ||
+            emittedMirrored[static_cast<u32>(emittedOf[static_cast<u32>(nodeIndex)])]) {
+          ++result.unsupportedAnimationChannels;
+          continue;
+        }
+        AnimationChannel sampled;
+        sampled.node = static_cast<u32>(emittedOf[static_cast<u32>(nodeIndex)]);
+        if (path == "translation") sampled.path = AnimationPath::Translation;
+        else if (path == "rotation") sampled.path = AnimationPath::Rotation;
+        else if (path == "scale") sampled.path = AnimationPath::Scale;
+        else {++result.unsupportedAnimationChannels;continue;}
+        const auto samplerIndex = document.index(channel, "sampler");
+        if (samplerIndex < 0 || samplerIndex >= static_cast<i64>(samplers->childCount))
+          return giveUp("Canal de animação aponta para sampler inexistente.");
+        const auto &sampler = *document.child(*samplers, static_cast<u32>(samplerIndex));
+        const auto interpolation = document.string(sampler, "interpolation");
+        sampled.interpolation = interpolation == "STEP" ? AnimationInterpolation::Step
+                              : interpolation == "CUBICSPLINE" ? AnimationInterpolation::CubicSpline
+                                                                : AnimationInterpolation::Linear;
+        if (!interpolation.empty() && interpolation != "STEP" && interpolation != "CUBICSPLINE" && interpolation != "LINEAR")
+          return giveUp("Interpolação de animação desconhecida.");
+        Accessor input{}, output{};
+        if (!importer.resolveAccessor(*root, document.index(sampler, "input"), input, "Tempos da animação inválidos.") ||
+            !importer.resolveAccessor(*root, document.index(sampler, "output"), output, "Valores da animação inválidos."))
+          return giveUp(result.diagnostic.c_str());
+        const u32 components = sampled.components();
+        const u32 perKey = sampled.interpolation == AnimationInterpolation::CubicSpline ? 3u : 1u;
+        if (input.components != 1 || input.component != kComponentFloat || output.components != components ||
+            output.count != input.count * perKey)
+          return giveUp("Sampler de animação com formato inconsistente.");
+        sampled.times.resize(input.count);
+        for (u32 k = 0; k < input.count; ++k) sampled.times[k] = readComponent(input, k, 0);
+        sampled.values.resize(static_cast<usize>(output.count) * components);
+        for (u32 k = 0; k < output.count; ++k)
+          for (u32 i = 0; i < components; ++i) sampled.values[static_cast<usize>(k) * components + i] = readComponent(output, k, i);
+        // Escala do perfil vale na pose local das raízes (S·L): translação e
+        // escala de um nó raiz animado acompanham, a rotação não.
+        if (result.nodes[sampled.node].parent < 0 && sampled.path != AnimationPath::Rotation)
+          for (auto &value : sampled.values) value *= limits.rootScale;
+        if (!validAnimationChannel(sampled)) return giveUp("Canal de animação com tempos fora de ordem ou valores não finitos.");
+        clip.duration = std::max(clip.duration, sampled.times.back());
+        clip.channels.push_back(std::move(sampled));
+      }
+      if (clip.channels.empty()) {++result.skippedAnimations;continue;}
+      result.animations.push_back(std::move(clip));
+    }
+    if (result.unsupportedAnimationChannels)
+      result.notes.push_back(std::to_string(result.unsupportedAnimationChannels) +
+                             " canal(is) de animação não aplicados (pesos de morph, alvo fora da cena ou espelhado).");
   }
 
   if (shearedNodes) {

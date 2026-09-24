@@ -10,6 +10,9 @@
 #include "rhi/shaders/material_preview_spirv.h"
 #include "rhi/shaders/material_fallback_spirv.h"
 #include "rhi/shaders/dirt_road_spirv.h"
+#include "rhi/shaders/dirt_road_skinned_motion_spirv.h"
+#include "rhi/shaders/skinning_spirv.h"
+#include "resources/skeletal_animation.h"
 #include "rhi/shaders/dirt_road_fallback_spirv.h"
 #include "rhi/shaders/dirt_road_coverage_spirv.h"
 #include "rhi/shaders/dirt_road_coverage_fallback_spirv.h"
@@ -38,6 +41,9 @@
 #include "renderer/sphere_mesh.h"
 #include "renderer/material_distance.h"
 #include "renderer/camera_ray.h"
+#include "renderer/temporal_upscaler_capability.h"
+#include "rhi/shaders/temporal_camera_motion_spirv.h"
+#include "rhi/shaders/temporal_exposure_spirv.h"
 
 #include <android/log.h>
 #include <algorithm>
@@ -148,8 +154,23 @@ struct DirtRoadFrameUniform {
   float atmosphereDetail[4]{};
   float postViewport[4]{0,0,1,1}; // physical normalized xy/extent, before DRS
   float atmosphereGroundIrradiance[4]{};
+  // Contrato temporal (temporal_projection.glsl): poses sem jitter do quadro
+  // atual e do anterior, projeção, jitter e pré-transformação. Um só lugar
+  // alimenta o passe de vetores, o TAA nativo e os ampliadores temporais.
+  float temporalCurrentView[3][4]{};  // linhas world->view; w = posição da câmera
+  float temporalPreviousView[3][4]{}; // idem, quadro anterior (= atual após reset)
+  float temporalProjection[4]{};      // focal vertical, aspecto, near, far
+  float temporalJitter[4]{};          // atual xy, anterior zw, NDC físico
+  float temporalSurface[4]{1,0,0,1};  // pré-transformação xx xy yx yy
+  float temporalParameters[4]{};      // meia altura ortográfica, histórico válido
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 3328);
+static_assert(sizeof(DirtRoadFrameUniform) == 3488);
+static_assert(offsetof(DirtRoadFrameUniform, temporalCurrentView) == 3328);
+static_assert(offsetof(DirtRoadFrameUniform, temporalPreviousView) == 3376);
+static_assert(offsetof(DirtRoadFrameUniform, temporalProjection) == 3424);
+static_assert(offsetof(DirtRoadFrameUniform, temporalJitter) == 3440);
+static_assert(offsetof(DirtRoadFrameUniform, temporalSurface) == 3456);
+static_assert(offsetof(DirtRoadFrameUniform, temporalParameters) == 3472);
 static_assert(offsetof(DirtRoadFrameUniform, shadowFilterParameters) == 592);
 static_assert(offsetof(DirtRoadFrameUniform, diffuseIrradianceSh) == 3104);
 static_assert(offsetof(DirtRoadFrameUniform, atmosphereScattering) == 3248);
@@ -383,10 +404,14 @@ bool InstancedRenderer::createRenderPass() {
   waterDepthInput.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
   VkAttachmentReference waterDepthRef = waterDepthInput;
 
+  // G6-B: com entradas temporais, reatividade e composição são os anexos 2 e 3,
+  // escritos pelos transparentes e pela água nos dois subpasses.
+  const VkAttachmentReference colorRefs[3]{colorRef,{2,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                                           {3,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}};
   VkSubpassDescription subpass{};
   subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-  subpass.colorAttachmentCount = 1;
-  subpass.pColorAttachments = &colorRef;
+  subpass.colorAttachmentCount = sceneColorAttachmentCount();
+  subpass.pColorAttachments = colorRefs;
   subpass.pDepthStencilAttachment = &depthRef;
 
   VkSubpassDescription subpasses[2] = {subpass, {}};
@@ -394,8 +419,8 @@ bool InstancedRenderer::createRenderPass() {
     subpasses[1].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpasses[1].inputAttachmentCount = 1;
     subpasses[1].pInputAttachments = &waterDepthInput;
-    subpasses[1].colorAttachmentCount = 1;
-    subpasses[1].pColorAttachments = &colorRef;
+    subpasses[1].colorAttachmentCount = sceneColorAttachmentCount();
+    subpasses[1].pColorAttachments = colorRefs;
     subpasses[1].pDepthStencilAttachment = &waterDepthRef;
   }
 
@@ -410,11 +435,20 @@ bool InstancedRenderer::createRenderPass() {
   dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                              VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-  VkAttachmentDescription attachments[] = {colorAttachment, depthAttachment};
+  VkAttachmentDescription maskAttachment{};
+  maskAttachment.format = VK_FORMAT_R8_UNORM;
+  maskAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+  maskAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  maskAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  maskAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  maskAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  maskAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  maskAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  VkAttachmentDescription attachments[] = {colorAttachment, depthAttachment, maskAttachment, maskAttachment};
 
   VkRenderPassCreateInfo info{};
   info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  info.attachmentCount = 2;
+  info.attachmentCount = temporalMasksActive_ ? 4u : 2u;
   info.pAttachments = attachments;
   info.subpassCount = waterSubpassActive_ ? 2u : 1u;
   info.pSubpasses = subpasses;
@@ -433,21 +467,22 @@ bool InstancedRenderer::createRenderPass() {
     dependencies[dependencyCount].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     ++dependencyCount;
   }
-  if (renderingPolicy_.post.dedicatedPass || frameAttachmentPolicy_.depthSampled) {
+  if (renderingPolicy_.post.dedicatedPass || frameAttachmentPolicy_.depthSampled || temporalMasksActive_) {
     VkSubpassDependency &exit = dependencies[dependencyCount++];
     exit.srcSubpass = waterSubpassActive_ ? 1u : 0u;
     exit.dstSubpass = VK_SUBPASS_EXTERNAL;
     exit.srcStageMask =
-        (renderingPolicy_.post.dedicatedPass
+        (renderingPolicy_.post.dedicatedPass || temporalMasksActive_
              ? static_cast<VkPipelineStageFlags>(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
              : VkPipelineStageFlags{0}) |
         (frameAttachmentPolicy_.depthSampled
              ? static_cast<VkPipelineStageFlags>(VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                                                  VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)
              : VkPipelineStageFlags{0});
-    exit.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    // Pós e Arm ASR leem no fragmento; FSR 2 lê cor, profundidade e máscaras no compute.
+    exit.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
     exit.srcAccessMask =
-        (renderingPolicy_.post.dedicatedPass
+        (renderingPolicy_.post.dedicatedPass || temporalMasksActive_
              ? static_cast<VkAccessFlags>(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
              : VkAccessFlags{0}) |
         (frameAttachmentPolicy_.depthSampled
@@ -466,6 +501,8 @@ bool InstancedRenderer::createRenderPass() {
 #include "platform/android/instanced_fsr.inl"
 #include "platform/android/instanced_auto_exposure.inl"
 #include "platform/android/instanced_motion.inl"
+#include "platform/android/instanced_temporal_upscaler.inl"
+#include "platform/android/instanced_skinning.inl"
 
 bool InstancedRenderer::createPipeline() {
   VkShaderModule vertModule = dirtRoadPreview_
@@ -681,10 +718,29 @@ bool InstancedRenderer::createPipeline() {
                                         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
   colorBlendAttachment.blendEnable = VK_FALSE;
 
+  // Um estado por anexo do subpasse. As máscaras temporais só recebem escrita
+  // (MAX) das pipelines que fazem blend -- transparentes e água; o resto do
+  // passe as mantém no zero do clear.
+  VkPipelineColorBlendAttachmentState sceneBlend[3]{};
   VkPipelineColorBlendStateCreateInfo colorBlend{};
   colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  colorBlend.attachmentCount = 1;
-  colorBlend.pAttachments = &colorBlendAttachment;
+  colorBlend.attachmentCount = sceneColorAttachmentCount();
+  colorBlend.pAttachments = sceneBlend;
+  VkGraphicsPipelineCreateInfo *scenePipelineInfo = nullptr;
+  const auto createScenePipeline = [&](VkPipeline *out) {
+    sceneBlend[0] = colorBlendAttachment;
+    const bool blended = colorBlendAttachment.blendEnable == VK_TRUE && colorBlendAttachment.colorWriteMask != 0;
+    for (u32 mask = 1; mask < 3; ++mask) {
+      sceneBlend[mask] = {};
+      if (!blended) continue;
+      sceneBlend[mask].blendEnable = VK_TRUE;
+      sceneBlend[mask].srcColorBlendFactor = sceneBlend[mask].dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+      sceneBlend[mask].srcAlphaBlendFactor = sceneBlend[mask].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+      sceneBlend[mask].colorBlendOp = sceneBlend[mask].alphaBlendOp = VK_BLEND_OP_MAX;
+      sceneBlend[mask].colorWriteMask = VK_COLOR_COMPONENT_R_BIT;
+    }
+    return vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, scenePipelineInfo, nullptr, out);
+  };
 
   const VkDescriptorSetLayout setLayouts[2] = {textureSetLayout_, environmentSetLayout_};
   VkPipelineLayoutCreateInfo layoutInfo{};
@@ -718,9 +774,9 @@ bool InstancedRenderer::createPipeline() {
     pipelineInfo.layout = pipelineLayout_;
     pipelineInfo.renderPass = renderPass_;
     pipelineInfo.subpass = 0;
+    scenePipelineInfo = &pipelineInfo;
 
-    pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
-                                           &pipeline_) == VK_SUCCESS;
+    pipelineOk = createScenePipeline(&pipeline_) == VK_SUCCESS;
     if (pipelineOk && dirtRoadPreview_) {
       // MASK global em duas fases: primeiro apenas alpha+depth; depois PBR só
       // na camada visível (EQUAL). Preserva pixels e evita sombrear as muitas
@@ -728,8 +784,7 @@ bool InstancedRenderer::createPipeline() {
       stages[1].module = coverageFragModule;
       stages[1].pSpecializationInfo = nullptr;
       colorBlendAttachment.colorWriteMask = 0;
-      pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
-                                             &coveragePipeline_) == VK_SUCCESS;
+      pipelineOk = createScenePipeline(&coveragePipeline_) == VK_SUCCESS;
 
       stages[1].module = coverageShadeFragModule;
       stages[1].pSpecializationInfo = &gpuIsolationInfo;
@@ -738,8 +793,7 @@ bool InstancedRenderer::createPipeline() {
       depthStencil.depthWriteEnable = VK_FALSE;
       depthStencil.depthCompareOp = VK_COMPARE_OP_EQUAL;
       if (pipelineOk)
-        pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
-                                               &coverageShadePipeline_) == VK_SUCCESS;
+        pipelineOk = createScenePipeline(&coverageShadePipeline_) == VK_SUCCESS;
 
       depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
       colorBlendAttachment.blendEnable = VK_TRUE;
@@ -753,8 +807,7 @@ bool InstancedRenderer::createPipeline() {
       colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
       pipelineInfo.subpass = waterSubpassActive_ ? 1u : 0u;
       if (pipelineOk)
-        pipelineOk = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
-                                               &transparentPipeline_) == VK_SUCCESS;
+        pipelineOk = createScenePipeline(&transparentPipeline_) == VK_SUCCESS;
       pipelineInfo.subpass = 0;
 
       // Material detail LOD is a compiled pipeline choice, not merely a
@@ -774,8 +827,7 @@ bool InstancedRenderer::createPipeline() {
         depthStencil.depthWriteEnable = family == 0 ? VK_TRUE : VK_FALSE;
         depthStencil.depthCompareOp = family == 1 ? VK_COMPARE_OP_EQUAL : VK_COMPARE_OP_LESS;
         pipelineInfo.subpass = family == 2 && waterSubpassActive_ ? 1u : 0u;
-        const bool created = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
-                                         destination) == VK_SUCCESS;
+        const bool created = createScenePipeline(destination) == VK_SUCCESS;
         pipelineInfo.subpass = 0;
         return created;
       };
@@ -810,8 +862,7 @@ bool InstancedRenderer::createPipeline() {
         for (u32 variant = 0; variant < renderer::MaterialFeatureVariantCount; ++variant) {
           if (!used[family][variant]) continue;
           materialSpecialization.featureMask = renderer::materialFeatureMaskForVariant(variant);
-          if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
-                                        &destination[variant]) != VK_SUCCESS) {
+          if (createScenePipeline(&destination[variant]) != VK_SUCCESS) {
             pipelineInfo.subpass = 0;
             return false;
           }
@@ -844,8 +895,7 @@ bool InstancedRenderer::createPipeline() {
         colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
         colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        pipelineOk = pipelineOk && vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
-                                               &waterPipeline_) == VK_SUCCESS;
+        pipelineOk = pipelineOk && createScenePipeline(&waterPipeline_) == VK_SUCCESS;
         stages[0].module=vertModule;
         pipelineInfo.subpass = 0;
       }
@@ -1221,12 +1271,13 @@ bool InstancedRenderer::createSkyPipeline() {
   // the scene while producing the exact same color where the sky is visible.
   depth.depthTestEnable = VK_TRUE; depth.depthWriteEnable = VK_FALSE;
   depth.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-  VkPipelineColorBlendAttachmentState attachment{};
-  attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                              VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+  VkPipelineColorBlendAttachmentState attachment[3]{};
+  attachment[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                 VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
   VkPipelineColorBlendStateCreateInfo blend{};
   blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  blend.attachmentCount = 1; blend.pAttachments = &attachment;
+  // O céu não altera as máscaras temporais (anexos 2 e 3, escrita desligada).
+  blend.attachmentCount = sceneColorAttachmentCount(); blend.pAttachments = attachment;
   VkDynamicState states[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
   VkPipelineDynamicStateCreateInfo dynamic{};
   dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -1297,19 +1348,20 @@ bool InstancedRenderer::createEditorGridPipeline() {
   // quantizado com frequência, e "menor ou igual" deixava a grade atravessar
   // justamente as faces mais próximas.
   depth.depthCompareOp = VK_COMPARE_OP_LESS;
-  VkPipelineColorBlendAttachmentState attachment{};
-  attachment.blendEnable = VK_TRUE;
-  attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-  attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-  attachment.colorBlendOp = VK_BLEND_OP_ADD;
-  attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-  attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-  attachment.alphaBlendOp = VK_BLEND_OP_ADD;
-  attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+  VkPipelineColorBlendAttachmentState attachment[3]{};
+  attachment[0].blendEnable = VK_TRUE;
+  attachment[0].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+  attachment[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  attachment[0].colorBlendOp = VK_BLEND_OP_ADD;
+  attachment[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  attachment[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+  attachment[0].alphaBlendOp = VK_BLEND_OP_ADD;
+  attachment[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                               VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
   VkPipelineColorBlendStateCreateInfo blend{};
   blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  blend.attachmentCount = 1; blend.pAttachments = &attachment;
+  // A grade editorial não altera as máscaras temporais.
+  blend.attachmentCount = sceneColorAttachmentCount(); blend.pAttachments = attachment;
   VkDynamicState states[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
   VkPipelineDynamicStateCreateInfo dynamic{};
   dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -1771,8 +1823,10 @@ bool InstancedRenderer::createPostResources() {
   if (vkCreateRenderPass(device_, &renderPass, nullptr, &previewPostRenderPass_) != VK_SUCCESS)
     return false;
 
-  VkDescriptorSetLayoutBinding bindings[6]{};
-  constexpr u32 bindingCount = 6;
+  // 0 cor, 1 histórico, 2 profundidade, 3 UBO, 4 exposição, 5 vetor RG16F,
+  // 6 reatividade, 7 composição (entradas temporais unificadas).
+  VkDescriptorSetLayoutBinding bindings[8]{};
+  constexpr u32 bindingCount = 8;
   for (u32 index = 0; index < 3; ++index) {
     bindings[index].binding = index;
     bindings[index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1787,22 +1841,26 @@ bool InstancedRenderer::createPostResources() {
   bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
   bindings[4].descriptorCount = 1;
   bindings[4].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-  bindings[5].binding = 5;
-  bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  bindings[5].descriptorCount = 1;
-  bindings[5].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  for (u32 index = 5; index < 8; ++index) {
+    bindings[index].binding = index;
+    bindings[index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[index].descriptorCount = 1;
+    bindings[index].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  }
   VkDescriptorSetLayoutCreateInfo setLayout{};
   setLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   setLayout.bindingCount = bindingCount;
   setLayout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &setLayout, nullptr, &postSetLayout_) != VK_SUCCESS)
     return false;
-  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4},
-                                   {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
-                                   {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}};
+  // Três conjuntos: o pós normal, a composição antes do ampliador temporal e
+  // a exibição do resultado ampliado.
+  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 18},
+                                   {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3},
+                                   {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  pool.maxSets = 1;
+  pool.maxSets = 3;
   pool.poolSizeCount = 3;
   pool.pPoolSizes = poolSizes;
   if (vkCreateDescriptorPool(device_, &pool, nullptr, &postDescriptorPool_) != VK_SUCCESS)
@@ -1813,7 +1871,7 @@ bool InstancedRenderer::createPostResources() {
   allocate.descriptorSetCount = 1;
   allocate.pSetLayouts = &postSetLayout_;
   if (vkAllocateDescriptorSets(device_, &allocate, &postDescriptorSet_) != VK_SUCCESS) return false;
-  VkDescriptorImageInfo images[4]{};
+  VkDescriptorImageInfo images[6]{};
   images[0] = {postSampler_.handle(), postSceneColor_.view(),
                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   images[1] = {postSampler_.handle(),
@@ -1824,9 +1882,15 @@ bool InstancedRenderer::createPostResources() {
   images[3] = {postDepthSampler_.handle(),
                motionVectorsActive_ ? motionImage_.view() : postSceneColor_.view(),
                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  images[4] = {postDepthSampler_.handle(),
+               temporalMasksActive_ ? reactiveMaskImage_.view() : postSceneColor_.view(),
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  images[5] = {postDepthSampler_.handle(),
+               temporalMasksActive_ ? compositionMaskImage_.view() : postSceneColor_.view(),
+               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkDescriptorBufferInfo environmentBuffer{environmentUniform_.handle(), 0,
                                             sizeof(DirtRoadFrameUniform)};
-  VkWriteDescriptorSet writes[6]{};
+  VkWriteDescriptorSet writes[8]{};
   for (u32 index = 0; index < 3; ++index) {
     writes[index].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[index].dstSet = postDescriptorSet_;
@@ -1850,6 +1914,8 @@ bool InstancedRenderer::createPostResources() {
   writes[5].dstSet=postDescriptorSet_;writes[5].dstBinding=5;
   writes[5].descriptorCount=1;writes[5].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[5].pImageInfo=&images[3];
+  writes[6]=writes[5];writes[6].dstBinding=6;writes[6].pImageInfo=&images[4];
+  writes[7]=writes[5];writes[7].dstBinding=7;writes[7].pImageInfo=&images[5];
   vkUpdateDescriptorSets(device_, bindingCount, writes, 0, nullptr);
 
   VkShaderModule vert = createShaderModule(device_, rhi::shaders::kPost_ProcessVertSpirv,
@@ -1927,7 +1993,8 @@ bool InstancedRenderer::createPostResources() {
 }
 
 void InstancedRenderer::recordPostProcess(u32 imageIndex,
-                                           const platform::FreeCameraState &camera) {
+                                           const platform::FreeCameraState &camera,
+                                           bool upscaledInput) {
   if (!renderingPolicy_.post.dedicatedPass || postPipeline_ == VK_NULL_HANDLE) return;
   if (temporalAaActive_ && !temporalHistoryLayoutInitialized_) {
     // The temporal descriptor is statically referenced by the shader. Dynamic
@@ -1963,15 +2030,16 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
   vkCmdSetViewport(commandBuffer_, 0, 1, &viewport);
   vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
   vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, postPipeline_);
+  // Depois do Arm ASR/FSR 2 a entrada é a imagem ampliada, na resolução final.
   vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, postPipelineLayout_,
-                          0, 1, &postDescriptorSet_, 0, nullptr);
+                          0, 1, upscaledInput ? &upscaledDescriptorSet_ : &postDescriptorSet_, 0, nullptr);
   PostPushConstants push{};
   const bool postEffectsEnabled=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
   const auto look=sceneEnvironment_.active?sceneEnvironment_:
       (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
   const bool authoredPost=postEffectsEnabled&&look.active&&look.post;
-  push.texelFlags[0] = 1.0f / static_cast<float>(renderTargetWidth());
-  push.texelFlags[1] = 1.0f / static_cast<float>(renderTargetHeight());
+  push.texelFlags[0] = 1.0f / static_cast<float>(upscaledInput ? swapchain_->width() : renderTargetWidth());
+  push.texelFlags[1] = 1.0f / static_cast<float>(upscaledInput ? swapchain_->height() : renderTargetHeight());
   const bool bloom=postEffectsEnabled&&(authoredPost?look.bloom:renderingPolicy_.post.bloom);
   push.texelFlags[2] = bloom ? 1.0f : 0.0f;
   if(renderingPolicy_.post.upscalingFilter==renderer::UpscalingFilter::CatmullRom &&
@@ -1980,16 +2048,20 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
   if(fsrActive_) push.texelFlags[2] += 4.0f;
   if(motionVectorsActive_) push.texelFlags[2] += 8.0f;
   if(temporalStaticCoverage_) push.texelFlags[2] += 16.0f;
+  if(temporalMasksActive_) push.texelFlags[2] += 32.0f;
+  if(upscaledInput) push.texelFlags[2] += 128.0f;
   const bool temporalPoseSupported = sceneOrthographicHalfHeight_==0;
-  push.texelFlags[3] = temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_
+  push.texelFlags[3] = upscaledInput ? 0.0f :
+                       temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_
                            ? 3.0f
                            : temporalAaActive_ || renderingPolicy_.post.antiAliasing ==
                                      renderer::AntiAliasingMode::Fxaa ? 1.0f : 0.0f;
-  if (temporalAaActive_ && temporalPoseSupported)
+  if (temporalDebugAvailable())
     push.texelFlags[3] += 4.0f * static_cast<float>(temporalDebugView_);
   push.bloom[0] = authoredPost?look.bloomThreshold:renderingPolicy_.post.bloomThreshold;
   push.bloom[1] = authoredPost?look.bloomIntensity:renderingPolicy_.post.bloomIntensity;
-  push.bloom[2] = postEffectsEnabled&&!fsrActive_?renderingPolicy_.post.sharpen:0.0f;
+  // FSR 1 e os ampliadores temporais aplicam o próprio RCAS com esta nitidez.
+  push.bloom[2] = postEffectsEnabled&&!fsrActive_&&!upscaledInput?renderingPolicy_.post.sharpen:0.0f;
   push.bloom[3] = !postEffectsEnabled?0.0f:authoredPost
       ? (look.vignette?look.vignetteIntensity:0.0f)
       : (renderingPolicy_.post.vignette?renderingPolicy_.post.vignetteIntensity:0.0f);
@@ -2000,9 +2072,9 @@ void InstancedRenderer::recordPostProcess(u32 imageIndex,
   const rhi::SurfaceTransform &surfaceTransform = swapchain_->surfaceTransform();
   push.grade[3] = static_cast<float>(packSurfaceTransform(surfaceTransform)) +
                   renderingPolicy_.post.temporalHistoryWeight;
-  push.sourceTransform[0] = static_cast<float>(renderWidth()) /
+  push.sourceTransform[0] = upscaledInput ? 1.0f : static_cast<float>(renderWidth()) /
                             static_cast<float>(renderTargetWidth());
-  push.sourceTransform[1] = static_cast<float>(renderHeight()) /
+  push.sourceTransform[1] = upscaledInput ? 1.0f : static_cast<float>(renderHeight()) /
                             static_cast<float>(renderTargetHeight());
   push.sourceTransform[2] = dirtRoadPreview_?1.0f/std::tan(sceneFieldOfView()*.5f):1.732050808f;
   if(sceneOrthographicHalfHeight_>0) push.sourceTransform[2]=-1.0f;
@@ -2379,6 +2451,8 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
   vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);
   vkCmdBindVertexBuffers(commandBuffer_,1,1,&instances,&offset);
   vkCmdBindIndexBuffer(commandBuffer_,dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
+  // Desenho com skin lê a pose deste quadro do buffer do compute.
+  VkBuffer boundGeometry = mesh;
   const u32 resolution = renderingPolicy_.shadows.cascadeResolution;
   if (!initializeAtlas) {
     VkClearAttachment depthClear{};
@@ -2438,8 +2512,11 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     vkCmdPushConstants(commandBuffer_,shadowPipelineLayout_,
                        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                        0,sizeof(push),&push);
-    vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,
-                     static_cast<i32>(draw.vertexOffset),drawIndex);
+    const auto geometry=drawGeometry(drawIndex);
+    if(geometry.buffer!=boundGeometry) {
+      vkCmdBindVertexBuffers(commandBuffer_,0,1,&geometry.buffer,&offset);boundGeometry=geometry.buffer;
+    }
+    vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,geometry.vertexOffset,drawIndex);
     ++shadowSubmittedDraws_;
   };
   for(u32 cascade=0;cascade<shadowCascadeCount_;++cascade) {
@@ -2522,6 +2599,7 @@ void InstancedRenderer::recordLocalShadowPass() {
   vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);
   vkCmdBindVertexBuffers(commandBuffer_,1,1,&instances,&offset);
   vkCmdBindIndexBuffer(commandBuffer_,dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
+  VkBuffer boundGeometry = mesh;
   // O mesmo recorte de material das cascatas: folhagem recortada projeta a
   // mesma silhueta sob o sol e sob a lâmpada.
   auto pushAndDraw = [&](u32 tile, u32 drawIndex, bool masked) {
@@ -2566,8 +2644,11 @@ void InstancedRenderer::recordLocalShadowPass() {
     vkCmdPushConstants(commandBuffer_,shadowPipelineLayout_,
                        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                        0,sizeof(push),&push);
-    vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,
-                     static_cast<i32>(draw.vertexOffset),drawIndex);
+    const auto geometry=drawGeometry(drawIndex);
+    if(geometry.buffer!=boundGeometry) {
+      vkCmdBindVertexBuffers(commandBuffer_,0,1,&geometry.buffer,&offset);boundGeometry=geometry.buffer;
+    }
+    vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,geometry.vertexOffset,drawIndex);
   };
   const std::vector<u32> &solidDraws = lodGroups_.empty() ? solidDrawOrder_ : levelZeroSolidDrawOrder_;
   const std::vector<u32> &coverageDraws =
@@ -2602,11 +2683,12 @@ bool InstancedRenderer::createFramebuffers() {
   for (u32 i = 0; i < framebufferCount_; ++i) {
     const VkImageView colorView = renderingPolicy_.post.dedicatedPass
                                       ? postSceneColor_.view() : swapchain_->imageView(i);
-    const VkImageView attachments[] = {colorView, depthImage_.view()};
+    const VkImageView attachments[] = {colorView, depthImage_.view(),
+                                       reactiveMaskImage_.view(), compositionMaskImage_.view()};
     VkFramebufferCreateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     info.renderPass = renderPass_;
-    info.attachmentCount = 2;
+    info.attachmentCount = temporalMasksActive_ ? 4u : 2u;
     info.pAttachments = attachments;
     info.width = renderTargetWidth();
     info.height = renderTargetHeight();
@@ -2721,7 +2803,7 @@ bool InstancedRenderer::createDepthImage() {
   graphInputs.width = renderTargetWidth();
   graphInputs.height = renderTargetHeight();
   graphInputs.hzbEnabled = hzbWorkloadEligible_;
-  graphInputs.temporalAaEnabled = temporalAaActive_;
+  graphInputs.temporalAaEnabled = temporalInputsActive_;
   graphInputs.postDepthEnabled = dirtRoadPreview_ && renderingPolicy_.post.dedicatedPass;
   graphInputs.waterDepthInputEnabled = waterSubpassActive_;
   frameAttachmentPolicy_ = renderer::resolveFrameAttachmentPolicy(graphInputs);
@@ -2729,7 +2811,7 @@ bool InstancedRenderer::createDepthImage() {
     // Falha aberta: sem política compilada, armazenar é o comportamento que
     // nunca produz conteúdo indefinido.
     frameAttachmentPolicy_.depthStored = true;
-    frameAttachmentPolicy_.depthSampled = hzbWorkloadEligible_ || temporalAaActive_;
+    frameAttachmentPolicy_.depthSampled = hzbWorkloadEligible_ || temporalInputsActive_;
     frameAttachmentPolicy_.depthMemoryless = false;
     __android_log_print(ANDROID_LOG_WARN, LogTag,
         "[FrameGraph] política de anexos não compilou; usando store conservador.");
@@ -2748,6 +2830,13 @@ bool InstancedRenderer::createDepthImage() {
     hzbWorkloadEligible_ = false;
     graphInputs.hzbEnabled = false;
     temporalAaActive_ = false;
+    temporalInputsActive_ = false;
+    if (renderer::isTemporalUpscaler(temporalUpscalerRequested_)) {
+      executedUpscalerStatus_ = renderer::TemporalUpscalerAvailability::MissingSampledDepth32;
+      temporalUpscalerRequested_ = renderer::UpscalingFilter::Bilinear;
+      renderingPolicy_.post.upscalingFilter = renderer::UpscalingFilter::Bilinear;
+      resourceRenderingPolicy_.post.upscalingFilter = renderer::UpscalingFilter::Bilinear;
+    }
     graphInputs.temporalAaEnabled = false;
     if (renderingPolicy_.post.antiAliasing == renderer::AntiAliasingMode::Temporal) {
       renderingPolicy_.post.antiAliasing = renderer::AntiAliasingMode::Fxaa;
@@ -4086,6 +4175,29 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   temporalAaActive_ =
       renderingPolicy_.post.antiAliasing == renderer::AntiAliasingMode::Temporal &&
       dirtRoadPreview_;
+  // G6-B: ampliador temporal de terceiros. A política já recusou o que o
+  // aparelho não suporta; aqui a sonda é repetida contra este device e esta
+  // cena, e uma recusa fica registrada como estado executado com motivo.
+  temporalUpscalerRequested_ = renderer::UpscalingFilter::Bilinear;
+  executedUpscalerStatus_ = renderer::TemporalUpscalerAvailability::Available;
+  temporalUpscalerDiagnostic_.clear();
+  if (renderer::isTemporalUpscaler(renderingPolicy_.post.upscalingFilter)) {
+    renderer::TemporalUpscalerAvailability armAsr{}, fsr2{};
+    probeTemporalUpscalers(device, armAsr, fsr2);
+    const auto status = renderingPolicy_.post.upscalingFilter == renderer::UpscalingFilter::ArmAsr ? armAsr : fsr2;
+    if (!dirtRoadPreview_ || status != renderer::TemporalUpscalerAvailability::Available) {
+      executedUpscalerStatus_ = dirtRoadPreview_ ? status : renderer::TemporalUpscalerAvailability::MissingHdrSceneColor;
+      __android_log_print(ANDROID_LOG_WARN, LogTag, "[TemporalUpscaler] %s recusado: %s.",
+                          renderer::upscalingFilterName(renderingPolicy_.post.upscalingFilter),
+                          renderer::temporalUpscalerAvailabilityName(executedUpscalerStatus_));
+      renderingPolicy_.post.upscalingFilter = renderer::UpscalingFilter::Bilinear;
+      resourceRenderingPolicy_.post.upscalingFilter = renderer::UpscalingFilter::Bilinear;
+    } else {
+      temporalUpscalerRequested_ = renderingPolicy_.post.upscalingFilter;
+    }
+  }
+  temporalInputsActive_ = dirtRoadPreview_ &&
+      (temporalAaActive_ || renderer::isTemporalUpscaler(temporalUpscalerRequested_));
   if (renderingPolicy_.post.antiAliasing == renderer::AntiAliasingMode::Temporal &&
       !temporalAaActive_) {
     // History has its own clean resolve attachment; unsupported camera paths
@@ -4143,6 +4255,16 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
         renderer::WaterSpectrumSettings{}.windSpeed, 8000.0f).segments;
     dirtRoadResources_.setSamplerAnisotropy(renderingPolicy_.textures.samplerAnisotropy);
   dirtRoadResources_.setTextureResidencyMipBias(resourceRenderingPolicy_.textures.residencyMipBias);
+    {
+      float mipBias=0.0f;
+      if (renderer::isTemporalUpscaler(temporalUpscalerRequested_)) {
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
+        mipBias = std::max(std::log2(renderingPolicy_.resolutionScale) - 1.0f,
+                           -properties.limits.maxSamplerLodBias);
+      }
+      dirtRoadResources_.setSamplerMipLodBias(mipBias);
+    }
     __android_log_print(ANDROID_LOG_INFO, LogTag, "[Textures] anisotropia de material=%.1f",
                         static_cast<double>(dirtRoadResources_.samplerAnisotropy()));
     if (emptyScene_) {
@@ -4166,6 +4288,10 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   if (cancel && cancel->load()) return false;
   if (!createDepthImage()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o depth buffer.");
+    return false;
+  }
+  if (!createTemporalInputResources()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Temporal] Falha ao alocar as máscaras temporais.");
     return false;
   }
   if (!createTextureDescriptors()) {
@@ -4193,6 +4319,12 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Motion] Falha ao criar o passe de vetores por objeto.");
     return false;
   }
+  // Sem compute de skin a cena continua: os corpos ficam na pose de bind e o
+  // log diz por quê (layoutSkinnedDraws).
+  if (!createSkinningPipeline()) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag, "[Skin] pipeline compute de skin indisponível.");
+    destroySkinningResources();
+  }
   if (!createEditorGridPipeline()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pipeline da grade editorial.");
     return false;
@@ -4204,6 +4336,12 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
   if (!createPostResources()) {
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar o pós-processamento.");
     return false;
+  }
+  // Recusa do ampliador não derruba o renderer: a cena segue com o filtro
+  // neutro e o motivo fica no estado executado (painel e Graphics.State).
+  if (!createTemporalUpscalerResources()) {
+    temporalUpscalerRequested_ = renderer::UpscalingFilter::Bilinear;
+    renderingPolicy_.post.upscalingFilter = renderer::UpscalingFilter::Bilinear;
   }
   createUiRenderer(materialAssets);
   if (!createRuntimeHudPipeline()) {
@@ -4294,8 +4432,11 @@ void InstancedRenderer::shutdown() {
   }
   destroyFramebuffers();
   destroyHzbResources();
+  destroyTemporalUpscalerResources();
   destroyPostResources();
   destroyMotionResources();
+  destroySkinningResources();
+  destroyTemporalInputResources();
   destroyShadowResources();
   hzbHysteresis_.clear();
   hzbWorkloadEligible_ = false;
@@ -4476,7 +4617,9 @@ void InstancedRenderer::endGpuRegion(GpuPassClass pass) {
 bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, std::span<const u32> indices,
                                                 std::span<const renderer::MapDrawRecord> draws,
                                                 std::span<const renderer::MapMaterialRecord> materials,
-                                                std::span<const renderer::SharedAuthoringTexture> textures) {
+                                                std::span<const renderer::SharedAuthoringTexture> textures,
+                                                std::span<const u8> skinInfluences,
+                                                std::span<const u32> drawJoints) {
   if(!dirtRoadPreview_ || !rhiDevice_ || device_==VK_NULL_HANDLE) {
     __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] renderer sem contexto para absorver geometria.");
     return false;
@@ -4537,6 +4680,13 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   shadowCascadeDirtyMask_=0xffffffffu;
   if(!rebuildDrawOrders()) {
     __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] filas de desenho recusaram o pacote novo.");
+    return false;
+  }
+  // G6-B: juntas por desenho e influências. Recusa quando o skin não casa com
+  // a geometria publicada, em vez de deformar vértices de outro desenho.
+  if(!uploadSkinningLibrary(skinInfluences,drawJoints,vertices.size()/renderer::MapVertexStride)) {
+    __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] skin inconsistente com a geometria: %zu influências, %zu desenhos.",
+                        skinInfluences.size(),drawJoints.size());
     return false;
   }
   // Os buffers antigos precisam sair antes: o alocador não sobrescreve uma
@@ -4641,6 +4791,7 @@ bool InstancedRenderer::queueMapScene(std::span<const renderer::MapDrawState> dr
   pendingMapPoseCount_=0;
   pendingMapTransformChanged_=false;
   pendingAuthoredStateValid_=false;
+  queueSkinPalettes(draws);
   return true;
 }
 
@@ -4691,7 +4842,11 @@ bool InstancedRenderer::queueAuthoredPoses(std::span<const renderer::MapDrawStat
         published[i].normalColumns[7]==next.pose.instance.normalColumns[7];
     const bool sameModel=std::memcmp(next.pose.draw.model,old.model,
                                      sizeof(old.model))==0;
-    if(sameDither && sameModel) continue;
+    // Skin muda os limites sem mudar o modelo: culling e sombra precisam deles.
+    const bool sameBounds=!next.skinPalette ||
+        (std::memcmp(next.pose.draw.boundsCenter,old.boundsCenter,sizeof(old.boundsCenter))==0 &&
+         next.pose.draw.boundsRadius==old.boundsRadius);
+    if(sameDither && sameModel && sameBounds) continue;
     if(count==pendingMapPoses_.size() || next.route) return false;
     transformChanged|=!sameModel;
     auto update=next.pose;
@@ -4713,6 +4868,7 @@ bool InstancedRenderer::queueAuthoredPoses(std::span<const renderer::MapDrawStat
     state.castShadow=draws[i].castShadow;
   }
   pendingAuthoredStateValid_=true;
+  queueSkinPalettes(draws);
   pendingMapPoseCount_=count;pendingMapTransformChanged_=transformChanged;return true;
 }
 
@@ -4791,6 +4947,10 @@ bool InstancedRenderer::commitAuthoredScene() {
     else solidDrawOrder_.push_back(i);
   }
   dirtRoadResources_.setAuthoredDraws(std::move(records));
+  if(!layoutSkinnedDraws()) {
+    __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Skin] regiões de saída do skin recusadas.");
+    return false;
+  }
   if(!memoryAllocator_->flushBuffer(instanceBuffer_)) return false;
   if(!writeAuthoredUvTransforms()) return false;
   pendingScene_.clear();shadowCascadeDirtyMask_=0xffffffffu;
@@ -4936,12 +5096,15 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         if(update.drawIndex<authoredMaterials_.size())
           material=renderer::applyMaterialOverride(material,authoredMaterials_[update.drawIndex],
                       static_cast<u32>(dirtRoadResources_.packageTextureCount()));
-        constexpr u32 unsupported=renderer::MapMaterialBlend|renderer::MapMaterialWater|
-                                  renderer::MapMaterialImpostor;
-        if(motionVectorsActive_ && (material.flags&unsupported)==0 &&
-           motionDrawCount_<motionDrawIndices_.size())
-          motionDrawIndices_[motionDrawCount_++]=update.drawIndex;
-        else uncoveredMotion=true;
+        // Opacos e alpha-clip publicam vetor. Transparentes e água se movem
+        // sem vetor, mas as máscaras de reatividade/composição os cobrem; só
+        // o impostor (opaco, sem vetor) invalida o histórico.
+        constexpr u32 masked=renderer::MapMaterialBlend|renderer::MapMaterialWater;
+        if(motionVectorsActive_ && (material.flags&(masked|renderer::MapMaterialImpostor))==0) {
+          if(motionDrawCount_<motionDrawIndices_.size()) motionDrawIndices_[motionDrawCount_]=update.drawIndex;
+          else motionDrawIndices_.push_back(update.drawIndex);
+          ++motionDrawCount_;
+        } else if(!(temporalMasksActive_ && (material.flags&masked)!=0)) uncoveredMotion=true;
       }
       instances[update.drawIndex] = prepared;
       dynamicMapDraws_[update.drawIndex] = 1;
@@ -4985,8 +5148,13 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   const bool temporalPoseSupported=sceneOrthographicHalfHeight_==0;
   // Invalidate cuts before rasterization so the spatial fallback receives an
   // unjittered source. Doing this in the post pass is already too late.
-  if(temporalAaActive_ && temporalHistoryInitialized_ &&
-      (!temporalPoseSupported || temporalCameraCut(camera,temporalPreviousCamera_)))
+  // Resets do contrato temporal (TAA e ampliadores): corte de câmera, troca de
+  // projeção, resize/troca de modo (recriação do renderer), Play/Stop e perda
+  // de identidade (republicação da cena inteira), e retomada de surface
+  // (renderer novo). Todos zeram a mesma bandeira, que vira `reset` na biblioteca.
+  const bool upscalerActive=temporalUpscaler_.ready();
+  if(temporalInputsActive_ && temporalHistoryInitialized_ &&
+      ((!temporalPoseSupported && !upscalerActive) || temporalCameraCut(camera,temporalPreviousCamera_)))
     temporalHistoryInitialized_=false;
   const bool temporalStationaryPose=temporalHistoryInitialized_ &&
       sameCameraPose(camera,temporalPreviousCamera_) && !mapTransformsChanged &&
@@ -4997,7 +5165,18 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // projection offset forever. Resume the sequence on the first changed pose.
   temporalStaticFrameCount_=temporalStationaryPose
       ?std::min(temporalStaticFrameCount_+1u,9u):0u;
-  if (temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_) {
+  if (upscalerActive) {
+    // Sequência da própria biblioteca, sem parada em cena estática: a
+    // reconstrução acima da resolução interna depende de amostras novas.
+    const auto backend=temporalUpscaler_.backend();
+    const u32 phases=std::max(1u,rhi::TemporalUpscaler::jitterPhaseCount(backend,renderWidth(),swapchain_->width()));
+    rhi::TemporalUpscaler::jitterOffset(backend,static_cast<u32>(temporalFrameIndex_%phases),phases,
+                                        temporalUpscalerJitterPixels_[0],temporalUpscalerJitterPixels_[1]);
+    const auto jitterViewport=physicalSceneViewport();
+    // Pixel -> NDC físico do Vulkan (y desce, como na imagem das bibliotecas).
+    temporalCurrentJitter_[0]=2.0f*temporalUpscalerJitterPixels_[0]/std::max(1.0f,renderWidth()*jitterViewport.width);
+    temporalCurrentJitter_[1]=2.0f*temporalUpscalerJitterPixels_[1]/std::max(1.0f,renderHeight()*jitterViewport.height);
+  } else if (temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_) {
     if(temporalStaticFrameCount_>=9u) {
       temporalCurrentJitter_[0]=temporalCurrentJitter_[1]=0.0f;
     } else {
@@ -5071,6 +5250,34 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     std::memcpy(frame->worldToViewRow0, row0, sizeof(row0));
     std::memcpy(frame->worldToViewRow1, row1, sizeof(row1));
     std::memcpy(frame->worldToViewRow2, row2, sizeof(row2));
+    {
+      // Contrato temporal: a mesma pose anterior para vetor, TAA e biblioteca.
+      // Sem histórico válido, anterior = atual e todo vetor é zero.
+      const auto &previous=temporalHistoryInitialized_?temporalPreviousCamera_:camera;
+      const auto previousBasis=renderer::buildCameraViewBasis(previous.yaw,previous.pitch,previous.roll);
+      const float *currentRows[]{basis.row0,basis.row1,basis.row2};
+      const float *previousRows[]{previousBasis.row0,previousBasis.row1,previousBasis.row2};
+      for(u32 row=0;row<3;++row) {
+        std::copy(currentRows[row],currentRows[row]+3,frame->temporalCurrentView[row]);
+        frame->temporalCurrentView[row][3]=camera.position[row];
+        std::copy(previousRows[row],previousRows[row]+3,frame->temporalPreviousView[row]);
+        frame->temporalPreviousView[row][3]=previous.position[row];
+      }
+      frame->temporalProjection[0]=1.0f/std::tan(sceneFieldOfView()*.5f);
+      frame->temporalProjection[1]=sceneAspectRatio();
+      frame->temporalProjection[2]=sceneNearPlane();
+      frame->temporalProjection[3]=sceneFarPlane();
+      frame->temporalJitter[0]=temporalCurrentJitter_[0];frame->temporalJitter[1]=temporalCurrentJitter_[1];
+      frame->temporalJitter[2]=temporalHistoryInitialized_?temporalPreviousJitter_[0]:temporalCurrentJitter_[0];
+      frame->temporalJitter[3]=temporalHistoryInitialized_?temporalPreviousJitter_[1]:temporalCurrentJitter_[1];
+      const auto &surface=swapchain_->surfaceTransform();
+      frame->temporalSurface[0]=surface.xx;frame->temporalSurface[1]=surface.xy;
+      frame->temporalSurface[2]=surface.yx;frame->temporalSurface[3]=surface.yy;
+      frame->temporalParameters[0]=sceneOrthographicHalfHeight_;
+      frame->temporalParameters[1]=temporalHistoryInitialized_?1.0f:0.0f;
+      frame->temporalParameters[2]=static_cast<float>(renderWidth())/static_cast<float>(renderTargetWidth());
+      frame->temporalParameters[3]=static_cast<float>(renderHeight())/static_cast<float>(renderTargetHeight());
+    }
     // Estes eixos podem mudar em runtime por pressão térmica. Atualizar o UBO
     // já mapeado evita recriar descritores/pipelines e mantém custo O(1).
     frame->quality[0] = renderingPolicy_.materialDistance.normalMapMaximumDistance;
@@ -5319,6 +5526,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     return rhi::SwapchainStatus::FatalError;
   }
   if (gpuTimingEnabled()) gpuFrameTimer_.begin(commandBuffer_);
+  // Antes de QUALQUER desenho: a prévia de câmera também desenha corpos com skin.
+  beginGpuRegion(GpuPassClass::Skinning);
+  if (!recordSkinning()) return rhi::SwapchainStatus::FatalError;
+  endGpuRegion(GpuPassClass::Skinning);
   beginGpuRegion(GpuPassClass::CameraPreview);
   recordCameraPreview(timeSeconds);
   endGpuRegion(GpuPassClass::CameraPreview);
@@ -5357,7 +5568,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   recordDrawCompactDispatch();
   endGpuRegion(GpuPassClass::Culling);
 
-  VkClearValue clearValues[2]{};
+  VkClearValue clearValues[4]{};
   clearValues[0].color = editorBackground_ ? VkClearColorValue{{0.028f,0.032f,0.039f,1.0f}} : VkClearColorValue{{0.02f,0.02f,0.05f,1.0f}};
   clearValues[1].depthStencil = {1.0f, 0};
 
@@ -5366,7 +5577,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   renderPassInfo.renderPass = renderPass_;
   renderPassInfo.framebuffer = framebuffers_[imageIndex];
   renderPassInfo.renderArea.extent = {renderWidth(), renderHeight()};
-  renderPassInfo.clearValueCount = 2;
+  renderPassInfo.clearValueCount = temporalMasksActive_ ? 4u : 2u;
   renderPassInfo.pClearValues = clearValues;
   vkCmdBeginRenderPass(commandBuffer_, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
   // Item 2.1.6 do plano: marcador de debug em volta do desenho do cubo —
@@ -5540,11 +5751,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       pushMapMaterial(draw.materialIndex,drawIndex);
       const bool route=(dirtRoadResources_.materials()[draw.materialIndex].flags & renderer::WaterRouteResource)!=0;
       const VkDeviceSize zero=0;
-      const VkBuffer geometry=route?routeVertices_.handle():dirtRoadResources_.vertexBuffer();
-      vkCmdBindVertexBuffers(commandBuffer_,0,1,&geometry,&zero);
+      const auto geometry=route?DrawGeometry{routeVertices_.handle(),static_cast<i32>(draw.vertexOffset)}:drawGeometry(drawIndex);
+      vkCmdBindVertexBuffers(commandBuffer_,0,1,&geometry.buffer,&zero);
       vkCmdBindIndexBuffer(commandBuffer_,route?routeIndices_.handle():dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
-      vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,
-                       static_cast<i32>(draw.vertexOffset),drawIndex);
+      vkCmdDrawIndexed(commandBuffer_,draw.indexCount,1,draw.firstIndex,geometry.vertexOffset,drawIndex);
       ++visibilityTelemetry_.submittedDrawCalls;
       visibilityTelemetry_.submittedTriangles += draw.indexCount / 3;
     };
@@ -6059,8 +6269,16 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     autoExposureDiagnostic_="Exposição automática requer pós-processamento dedicado";
   } else autoExposureDiagnostic_.clear();
   endGpuRegion(GpuPassClass::AutoExposure);
+  beginGpuRegion(GpuPassClass::TemporalUpscale);
+  const bool upscaledFrame=temporalUpscaler_.ready() && recordTemporalUpscale(camera,timeSeconds);
+  endGpuRegion(GpuPassClass::TemporalUpscale);
+  // Estado executado, separado da política: o que o painel e o Graphics.State
+  // mostram como "ativo" é o que de fato rodou neste quadro.
+  executedUpscaler_=upscaledFrame?temporalUpscalerRequested_:renderingPolicy_.post.upscalingFilter;
+  if(!renderer::isTemporalUpscaler(temporalUpscalerRequested_))
+    executedUpscalerStatus_=renderer::TemporalUpscalerAvailability::Available;
   beginGpuRegion(GpuPassClass::Post);
-  recordPostProcess(imageIndex, camera);
+  recordPostProcess(imageIndex, camera, upscaledFrame);
   endGpuRegion(GpuPassClass::Post);
   recordFsr(imageIndex,camera);
   beginGpuRegion(GpuPassClass::Ui);

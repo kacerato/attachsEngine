@@ -20,6 +20,7 @@
 #include "rhi/memory_allocator.h"
 #include "rhi/pipeline_cache.h"
 #include "rhi/surface_transform.h"
+#include "rhi/temporal_upscaler.h"
 
 #include <vulkan/vulkan.h>
 #include <string>
@@ -278,6 +279,8 @@ public:
   // habilitada explicitamente — nunca presumida a partir da versão da API.
   // Ausente, o consumidor mantém o caminho atual de instanceCount zerado.
   bool drawIndirectCountSupported() const { return cmdDrawIndexedIndirectCountFn_ != nullptr; }
+  // Recursos que os ampliadores temporais exigem, já HABILITADOS no device.
+  const TemporalUpscalerDeviceFeatures &temporalUpscalerFeatures() const { return temporalUpscalerFeatures_; }
   // R4: culling por material. VK_EXT_extended_dynamic_state (core só em 1.3) é
   // enumerada e habilitada explicitamente; nulo quando o aparelho não tem.
   using CmdSetCullModeFn = void (VKAPI_PTR *)(VkCommandBuffer, VkCullModeFlags);
@@ -311,6 +314,7 @@ private:
   u32 maximumImage2DSize_ = 4096;
   u32 maximumImageArrayLayers_ = 256;
   float maximumSamplerAnisotropy_ = 1.0f;
+  TemporalUpscalerDeviceFeatures temporalUpscalerFeatures_{};
   // Carregado por vkGetDeviceProcAddr depois de criar o device, e só quando a
   // extensão foi enumerada E habilitada. Nulo é a resposta honesta de "este
   // aparelho não tem", e é ele que `drawIndirectCountSupported()` reporta.

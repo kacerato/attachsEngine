@@ -1,0 +1,9 @@
+Arm Accuracy Super Resolution (Arm ASR) Generic Library 25.06
+Tag: 25.06  Commit: 0501f490bd9946a2e1806b5363d7ab8a9a6a5e0a
+Source: https://github.com/arm/accuracy-super-resolution-generic-library
+License: MIT (LICENSES/MIT.txt); derived from AMD FidelityFX Super Resolution 2 v2.2.2 (MIT).
+Files: include/, src/shared, src/components/fsr2, src/backends/vk (standalone Vulkan
+backend) and src/backends/shared/blob_accessors with the upstream prebuilt 16-bit
+SPIR-V permutations (dependency .d files removed). Tools/binaries and the upstream
+CMake were not vendored; native/CMakeLists.txt builds the sources directly.
+Local modifications: none.

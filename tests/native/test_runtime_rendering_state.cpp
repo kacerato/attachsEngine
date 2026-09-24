@@ -79,3 +79,22 @@ AE_TEST(runtime_graphics_stop_replaces_a_request_not_yet_consumed) {
   AE_EXPECT_TRUE(queue.pending&&queue.id!=request&&queue.settings.resolutionScale==.9f,
                  "Stop substitui a fila pela restauração autoral");
 }
+
+AE_TEST(runtime_graphics_refuses_unavailable_temporal_upscaler_with_reason) {
+  renderer::ProjectRenderingSettings authored{};
+  renderer::RenderingCapabilities capabilities{};
+  capabilities.armAsr=renderer::TemporalUpscalerAvailability::MissingFloat16;
+  capabilities.fsr2=renderer::TemporalUpscalerAvailability::Available;
+  runtime::RuntimeRenderingState state;u32 calls=0;
+  state.configure(authored,capabilities,renderer::ThermalPressure::None,
+    [&](u64,const renderer::ProjectRenderingSettings &,bool){++calls;return true;});
+  AE_EXPECT_TRUE(state.begin(5,renderer::resolveRenderingPolicy(authored,capabilities,renderer::ThermalPressure::None)),"sessão");
+  auto asr=authored;asr.upscalingFilter=renderer::UpscalingFilter::ArmAsr;u64 id=0;
+  AE_EXPECT_TRUE(!state.request(5,asr,id)&&calls==0,"ASR sem float16 recusado antes do renderer");
+  auto fsr2=authored;fsr2.upscalingFilter=renderer::UpscalingFilter::Fsr2;
+  fsr2.temporalUpscalerQuality=renderer::TemporalUpscalerQuality::Performance;
+  AE_EXPECT_TRUE(state.request(5,fsr2,id)&&calls==1,"FSR 2 disponível chega ao consumidor");
+  state.setExecution(renderer::UpscalingFilter::Bilinear,renderer::TemporalUpscalerAvailability::ContextCreationFailed);
+  AE_EXPECT_EQ(state.executedStatus(),renderer::TemporalUpscalerAvailability::ContextCreationFailed,
+               "falha real do contexto fica visível, separada da política");
+}

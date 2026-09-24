@@ -29,6 +29,9 @@ struct AssetGuid {
     return a.high != b.high ? a.high < b.high : a.low < b.low;
   }
 };
+struct AssetGuidHash {
+  usize operator()(const AssetGuid &guid) const noexcept { return static_cast<usize>(guid.high ^ (guid.low * 31)); }
+};
 
 // Derivado de uma semente por SHA-256. Determinístico de propósito: a migração
 // de uma cena antiga precisa produzir hoje o mesmo GUID que produziu ontem,

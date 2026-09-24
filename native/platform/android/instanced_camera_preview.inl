@@ -102,6 +102,7 @@ void InstancedRenderer::destroyCameraPreview() {
   previewPostPool_=VK_NULL_HANDLE;previewPostSet_=VK_NULL_HANDLE;
   previewPool_=VK_NULL_HANDLE;previewSet_=VK_NULL_HANDLE;
   previewUniform_.reset();previewSceneColor_.reset();previewColor_.reset();previewDepth_.reset();previewResolved_.reset();
+  previewReactive_.reset();previewComposition_.reset();
   releaseCameraPreviewEnvironment();
   autoExposureViews_[1].initialized=false;
   autoExposureViews_[1].enabled=false;
@@ -126,9 +127,15 @@ bool InstancedRenderer::prepareCameraPreview() {
     depth.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;
     if(hasStencil(depthFormat_)) depth.aspectMask|=VK_IMAGE_ASPECT_STENCIL_BIT;
     if(!memoryAllocator_->createImage(depth,&previewDepth_)) {destroyCameraPreview();return false;}
-    VkImageView attachments[]{previewSceneColor_.view(),previewDepth_.view()};
+    if(temporalMasksActive_) {
+      auto mask=source;mask.format=VK_FORMAT_R8_UNORM;
+      if(!memoryAllocator_->createImage(mask,&previewReactive_) ||
+         !memoryAllocator_->createImage(mask,&previewComposition_)) {destroyCameraPreview();return false;}
+    }
+    VkImageView attachments[]{previewSceneColor_.view(),previewDepth_.view(),
+                              previewReactive_.view(),previewComposition_.view()};
     VkFramebufferCreateInfo fb{};fb.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    fb.renderPass=previewRenderPass_;fb.attachmentCount=2;fb.pAttachments=attachments;
+    fb.renderPass=previewRenderPass_;fb.attachmentCount=temporalMasksActive_?4u:2u;fb.pAttachments=attachments;
     fb.width=source.width;fb.height=source.height;fb.layers=1;
     if(vkCreateFramebuffer(device_,&fb,nullptr,&previewFramebuffer_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
     const VkImageView finalAttachments[]{previewColor_.view(),previewResolved_.view()};
@@ -146,7 +153,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     allocate.descriptorPool=previewPool_;allocate.descriptorSetCount=1;allocate.pSetLayouts=&environmentSetLayout_;
     if(vkAllocateDescriptorSets(device_,&allocate,&previewSet_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
 
-    VkDescriptorPoolSize postSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,4},
+    VkDescriptorPoolSize postSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,6},
                                      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},
                                      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1}};
     pool.maxSets=1;pool.poolSizeCount=3;pool.pPoolSizes=postSizes;
@@ -159,7 +166,7 @@ bool InstancedRenderer::prepareCameraPreview() {
       {postDepthSampler_.handle(),previewDepth_.view(),VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL},
       {postDepthSampler_.handle(),previewSceneColor_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
     VkDescriptorBufferInfo postBuffer{previewUniform_.handle(),0,sizeof(DirtRoadFrameUniform)};
-    VkWriteDescriptorSet postWrites[6]{};
+    VkWriteDescriptorSet postWrites[8]{};
     for(u32 index=0;index<3;++index) {
       postWrites[index].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
       postWrites[index].dstSet=previewPostSet_;postWrites[index].dstBinding=index;
@@ -177,7 +184,11 @@ bool InstancedRenderer::prepareCameraPreview() {
     postWrites[5].dstBinding=5;postWrites[5].descriptorCount=1;
     postWrites[5].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     postWrites[5].pImageInfo=&postImages[3];
-    vkUpdateDescriptorSets(device_,6,postWrites,0,nullptr);
+    // Vetor e máscaras não existem na prévia; o pós só os lê com os bits de
+    // diagnóstico/TAA que a prévia nunca liga, mas o descritor precisa ser válido.
+    postWrites[6]=postWrites[5];postWrites[6].dstBinding=6;
+    postWrites[7]=postWrites[5];postWrites[7].dstBinding=7;
+    vkUpdateDescriptorSets(device_,8,postWrites,0,nullptr);
     bindAutoExposureSource(1,previewSceneColor_.view());
     uiRenderer_.setCameraPreview(previewColor_.view());
   }
@@ -259,10 +270,10 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   before.srcAccessMask=VK_ACCESS_SHADER_READ_BIT;before.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
   vkCmdPipelineBarrier(commandBuffer_,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,0,1,&before,0,nullptr,0,nullptr);
-  VkClearValue clear[2]{};clear[0].color={{.028f,.032f,.039f,1}};clear[1].depthStencil={1,0};
+  VkClearValue clear[4]{};clear[0].color={{.028f,.032f,.039f,1}};clear[1].depthStencil={1,0};
   VkRenderPassBeginInfo begin{};begin.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   begin.renderPass=previewRenderPass_;begin.framebuffer=previewFramebuffer_;begin.renderArea.extent={view.width,view.height};
-  begin.clearValueCount=2;begin.pClearValues=clear;
+  begin.clearValueCount=temporalMasksActive_?4u:2u;begin.pClearValues=clear;
   vkCmdBeginRenderPass(commandBuffer_,&begin,VK_SUBPASS_CONTENTS_INLINE);
   const VkViewport viewport{0,0,static_cast<float>(view.width),static_cast<float>(view.height),0,1};
   const VkRect2D scissor{{0,0},{view.width,view.height}};
@@ -336,10 +347,10 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
     const auto pipeline=variants[variant]?variants[variant]:(blend?transparentPipeline_:pipeline_);
     vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
     pushMapMaterial(record.materialIndex,index);
-    const auto vertices=dirtRoadResources_.vertexBuffer();
-    vkCmdBindVertexBuffers(commandBuffer_,0,1,&vertices,&zero);
+    const auto geometry=drawGeometry(index);
+    vkCmdBindVertexBuffers(commandBuffer_,0,1,&geometry.buffer,&zero);
     vkCmdBindIndexBuffer(commandBuffer_,dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
-    vkCmdDrawIndexed(commandBuffer_,record.indexCount,1,record.firstIndex,static_cast<i32>(record.vertexOffset),index);
+    vkCmdDrawIndexed(commandBuffer_,record.indexCount,1,record.firstIndex,geometry.vertexOffset,index);
   };
   for(u32 i=0;i<dirtRoadResources_.draws().size();++i) {
     if(!authoredVisibility_.empty()&&!authoredVisibility_[i]) continue;

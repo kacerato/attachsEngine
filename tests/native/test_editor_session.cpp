@@ -2479,7 +2479,8 @@ AE_TEST(temporal_debug_views_are_live_editor_state_only_when_taa_is_available) {
   tapWidget(fixture,widgetId(EditorWidget::QualityClose));
   AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::QualityTemporalDebugQuick)).x>=0,
                  "atalho permanece na barra com o painel fechado");
-  for(u32 tap=0;tap<4;++tap) tapWidget(fixture,widgetId(EditorWidget::QualityTemporalDebugQuick));
+  // Profundidade, histórico, rejeição, reatividade e composição (sem vetor).
+  for(u32 tap=0;tap<5;++tap) tapWidget(fixture,widgetId(EditorWidget::QualityTemporalDebugQuick));
   AE_EXPECT_EQ(fixture.session.screen().qualityTemporalDebug,0u,
                "atalho percorre as vistas até retornar à imagem final");
   AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::QualityTemporalDebugQuick)).x<0 &&
@@ -2498,4 +2499,64 @@ AE_TEST(temporal_debug_views_are_live_editor_state_only_when_taa_is_available) {
   for(u32 tap=0;tap<4;++tap) tapWidget(fixture,widgetId(EditorWidget::QualityTemporalDebug));
   AE_EXPECT_EQ(fixture.session.screen().qualityTemporalDebug,5u,
                "reatividade permanece inspecionável sem vetor rígido");
+}
+
+AE_TEST(temporal_reconstruction_control_shows_four_states_and_refuses_unavailable_upscalers) {
+  Fixture fixture;
+  renderer::ProjectRenderingSettings project;
+  project.antiAliasing=renderer::AntiAliasingMode::Fxaa;
+  project.upscalingFilter=renderer::UpscalingFilter::CatmullRom;
+  fixture.session.setRenderingSettings(project);
+  fixture.session.setTemporalUpscalerStatus(renderer::TemporalUpscalerAvailability::Available,
+      renderer::TemporalUpscalerAvailability::MissingStorageWriteWithoutFormat,
+      renderer::UpscalingFilter::CatmullRom,renderer::TemporalUpscalerAvailability::Available,false);
+  fixture.session.update();
+  tapWidget(fixture,widgetId(EditorWidget::QualityOpen));
+  AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::QualityTemporalMode)).x>=0,
+                 "ampliação temporal fica na aba Geral");
+  AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::QualityTemporalQuality)).x<0,
+                 "preset temporal não aceita toque sem Arm ASR");
+  // Desligada -> TAA nativo -> Arm ASR.
+  tapWidget(fixture,widgetId(EditorWidget::QualityTemporalMode));
+  AE_EXPECT_EQ(fixture.session.screen().qualityDraft.antiAliasing,renderer::AntiAliasingMode::Temporal,"TAA nativo");
+  AE_EXPECT_EQ(fixture.session.screen().qualityDraft.upscalingFilter,renderer::UpscalingFilter::CatmullRom,
+               "TAA preserva o filtro espacial");
+  tapWidget(fixture,widgetId(EditorWidget::QualityTemporalMode));
+  const auto &draft=fixture.session.screen().qualityDraft;
+  AE_EXPECT_EQ(draft.upscalingFilter,renderer::UpscalingFilter::ArmAsr,"Arm ASR escolhido");
+  AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::QualityTemporalQuality)).x>=0 &&
+                 locateWidget(fixture.session,widgetId(EditorWidget::QualityAntiAliasing)).x<0 &&
+                 locateWidget(fixture.session,widgetId(EditorWidget::QualityUpscaling)).x<0,
+                 "com ASR o preset fica editável; AA e filtro espacial são do ampliador");
+  tapWidget(fixture,widgetId(EditorWidget::QualityTemporalQuality));
+  tapWidget(fixture,widgetId(EditorWidget::QualityTemporalQuality));
+  AE_EXPECT_EQ(draft.temporalUpscalerQuality,renderer::TemporalUpscalerQuality::Balanced,"preset independente da escala");
+  // FSR 2 indisponível: o Aplicar recusa com o motivo e não grava.
+  tapWidget(fixture,widgetId(EditorWidget::QualityTemporalMode));
+  AE_EXPECT_EQ(draft.upscalingFilter,renderer::UpscalingFilter::Fsr2,"FSR 2 selecionável para ver o motivo");
+  tapWidget(fixture,widgetId(EditorWidget::QualityApply));
+  renderer::ProjectRenderingSettings request;
+  AE_EXPECT_TRUE(!fixture.session.takeRenderingSettingsRequest(request),"FSR 2 indisponível não é aplicado");
+  AE_EXPECT_TRUE(fixture.session.screen().status.find("indisponível")!=std::string::npos,"o motivo aparece");
+  // Voltar a Desligada devolve o filtro espacial neutro e o AA não temporal.
+  tapWidget(fixture,widgetId(EditorWidget::QualityTemporalMode));
+  AE_EXPECT_TRUE(draft.upscalingFilter==renderer::UpscalingFilter::Bilinear &&
+                 draft.antiAliasing==renderer::AntiAliasingMode::Fxaa,"desligar não deixa TAA escondido");
+  // Controle rápido da barra: aplica na hora e pula FSR 2 com o motivo.
+  tapWidget(fixture,widgetId(EditorWidget::QualityClose));
+  AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::QualityTemporalModeQuick)).x>=0,"atalho na barra");
+  tapWidget(fixture,widgetId(EditorWidget::QualityTemporalModeQuick));
+  AE_EXPECT_TRUE(fixture.session.takeRenderingSettingsRequest(request) &&
+                 request.antiAliasing==renderer::AntiAliasingMode::Temporal,"atalho aplica TAA nativo");
+  fixture.session.completeRenderingSettingsRequest(true);
+  tapWidget(fixture,widgetId(EditorWidget::QualityTemporalModeQuick));
+  AE_EXPECT_TRUE(fixture.session.takeRenderingSettingsRequest(request) &&
+                 request.upscalingFilter==renderer::UpscalingFilter::ArmAsr,"atalho aplica Arm ASR");
+  fixture.session.completeRenderingSettingsRequest(true);
+  tapWidget(fixture,widgetId(EditorWidget::QualityTemporalModeQuick));
+  AE_EXPECT_TRUE(fixture.session.takeRenderingSettingsRequest(request) &&
+                 !renderer::isTemporalUpscaler(request.upscalingFilter) &&
+                 request.antiAliasing!=renderer::AntiAliasingMode::Temporal,"FSR 2 recusado: próximo é Desligada");
+  AE_EXPECT_TRUE(fixture.session.screen().status.find("AMD FSR 2 indisponível")!=std::string::npos,
+                 "a barra diz por que pulou");
 }

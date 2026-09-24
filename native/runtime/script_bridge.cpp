@@ -55,6 +55,7 @@ scene::ScriptRenderingSettings toAbi(const renderer::ProjectRenderingSettings &s
   o.normalMapMaximumDistance=s.normalMapMaximumDistance;o.specularProbeMaximumDistance=s.specularProbeMaximumDistance;o.metallicRoughnessMaximumDistance=s.metallicRoughnessMaximumDistance;o.emissiveMaximumDistance=s.emissiveMaximumDistance;o.materialDetailFadeBandRatio=s.materialDetailFadeBandRatio;o.thermalDistanceScaling=(u32)s.thermalDistanceScaling;
   o.antiAliasing=(u32)s.antiAliasing;o.upscalingFilter=(u32)s.upscalingFilter;o.postFxaa=(u32)s.postFxaa;o.postVignette=(u32)s.postVignette;o.bloomThreshold=s.bloomThreshold;o.bloomIntensity=s.bloomIntensity;o.postContrast=s.postContrast;o.postSaturation=s.postSaturation;o.postSharpen=s.postSharpen;o.temporalHistoryWeight=s.temporalHistoryWeight;
   o.dynamicResolution=(u32)s.dynamicResolution;o.dynamicResolutionMinimumScale=s.dynamicResolutionMinimumScale;o.dynamicResolutionDecreaseStep=s.dynamicResolutionDecreaseStep;o.dynamicResolutionIncreaseStep=s.dynamicResolutionIncreaseStep;o.dynamicResolutionRecoveryHeadroomRatio=s.dynamicResolutionRecoveryHeadroomRatio;o.dynamicResolutionOverloadFrames=s.dynamicResolutionOverloadFrames;o.dynamicResolutionRecoveryFrames=s.dynamicResolutionRecoveryFrames;
+  o.temporalUpscalerQuality=(u32)s.temporalUpscalerQuality;
   return o;
 }
 
@@ -67,6 +68,7 @@ renderer::ProjectRenderingSettings fromAbi(const scene::ScriptRenderingSettings 
   o.normalMapMaximumDistance=s.normalMapMaximumDistance;o.specularProbeMaximumDistance=s.specularProbeMaximumDistance;o.metallicRoughnessMaximumDistance=s.metallicRoughnessMaximumDistance;o.emissiveMaximumDistance=s.emissiveMaximumDistance;o.materialDetailFadeBandRatio=s.materialDetailFadeBandRatio;o.thermalDistanceScaling=(renderer::FeatureOverride)s.thermalDistanceScaling;
   o.antiAliasing=(renderer::AntiAliasingMode)s.antiAliasing;o.upscalingFilter=(renderer::UpscalingFilter)s.upscalingFilter;o.postFxaa=(renderer::FeatureOverride)s.postFxaa;o.postVignette=(renderer::FeatureOverride)s.postVignette;o.bloomThreshold=s.bloomThreshold;o.bloomIntensity=s.bloomIntensity;o.postContrast=s.postContrast;o.postSaturation=s.postSaturation;o.postSharpen=s.postSharpen;o.temporalHistoryWeight=s.temporalHistoryWeight;
   o.dynamicResolution=(renderer::FeatureOverride)s.dynamicResolution;o.dynamicResolutionMinimumScale=s.dynamicResolutionMinimumScale;o.dynamicResolutionDecreaseStep=s.dynamicResolutionDecreaseStep;o.dynamicResolutionIncreaseStep=s.dynamicResolutionIncreaseStep;o.dynamicResolutionRecoveryHeadroomRatio=s.dynamicResolutionRecoveryHeadroomRatio;o.dynamicResolutionOverloadFrames=s.dynamicResolutionOverloadFrames;o.dynamicResolutionRecoveryFrames=s.dynamicResolutionRecoveryFrames;
+  o.temporalUpscalerQuality=(renderer::TemporalUpscalerQuality)s.temporalUpscalerQuality;
   return o;
 }
 
@@ -78,6 +80,7 @@ scene::ScriptResolvedRenderingPolicy toAbi(const renderer::ResolvedRenderingPoli
   o.ambientHemispheric=p.ambient.hemispheric;o.ambientSpecularProbe=p.ambient.specularProbe;o.ambientSplitSumBrdf=p.ambient.splitSumBrdf;o.postDedicatedPass=p.post.dedicatedPass;o.postBloom=p.post.bloom;o.antiAliasing=(u32)p.post.antiAliasing;o.upscalingFilter=(u32)p.post.upscalingFilter;o.postVignette=p.post.vignette;o.bloomThreshold=p.post.bloomThreshold;o.bloomIntensity=p.post.bloomIntensity;o.postContrast=p.post.contrast;o.postSaturation=p.post.saturation;o.postSharpen=p.post.sharpen;o.vignetteIntensity=p.post.vignetteIntensity;o.temporalHistoryWeight=p.post.temporalHistoryWeight;
   o.lodSelection=p.geometry.lodSelection;o.materialShaderVariants=p.geometry.materialShaderVariants;o.waterMesh=(u32)p.geometry.waterMesh;o.textureResidencyMipBias=p.textures.residencyMipBias;o.samplerAnisotropy=p.textures.samplerAnisotropy;o.normalMapMaximumDistance=p.materialDistance.normalMapMaximumDistance;o.specularProbeMaximumDistance=p.materialDistance.specularProbeMaximumDistance;o.metallicRoughnessMaximumDistance=p.materialDistance.metallicRoughnessMaximumDistance;o.emissiveMaximumDistance=p.materialDistance.emissiveMaximumDistance;o.materialDetailFadeBandRatio=p.materialDistance.fadeBandRatio;
   o.dynamicResolutionEnabled=p.dynamicResolution.enabled;o.dynamicResolutionMinimumScale=p.dynamicResolution.minimumScale;o.dynamicResolutionMaximumScale=p.dynamicResolution.maximumScale;o.dynamicResolutionDecreaseStep=p.dynamicResolution.decreaseStep;o.dynamicResolutionIncreaseStep=p.dynamicResolution.increaseStep;o.dynamicResolutionRecoveryHeadroomRatio=p.dynamicResolution.recoveryHeadroomRatio;o.dynamicResolutionOverloadFrames=p.dynamicResolution.overloadFrames;o.dynamicResolutionRecoveryFrames=p.dynamicResolution.recoveryFrames;o.resolutionScale=p.resolutionScale;o.effectiveProfile=(u32)p.effectiveProfile;o.clampCount=p.clampCount;
+  o.temporalUpscalerQuality=(u32)p.post.temporalUpscalerQuality;
   return o;
 }
 
@@ -464,6 +467,8 @@ void ScriptBridge::installAccess() {
     out->capabilities.recommendationSource=(u32)cap.qualityRecommendation.evidence;
     out->capabilities.maximumImage2DSize=cap.maximumImage2DSize;out->capabilities.maximumImageArrayLayers=cap.maximumImageArrayLayers;
     out->capabilities.supportsDepthSampling=cap.supportsDepthSampling;out->capabilities.maximumSamplerAnisotropy=cap.maximumSamplerAnisotropy;out->capabilities.displayHz=cap.displayHz;
+    out->capabilities.armAsr=(u32)cap.armAsr;out->capabilities.fsr2=(u32)cap.fsr2;
+    out->executedUpscaler=(u32)s.rendering_.executedUpscaler();out->executedStatus=(u32)s.rendering_.executedStatus();
     s.lastStatus_=WorldStatus::Ok;return 1;
   };
   access_.setRenderingSettings = [](void *c,u32 expectedWorld,const scene::ScriptRenderingSettings *value,u64 *request)->int {
@@ -479,6 +484,18 @@ void ScriptBridge::installAccess() {
     std::string text;
     const auto &p=s.rendering_.effective();
     for(u32 i=0;i<p.clampCount;++i) {if(i) text+='\n';text+=p.clamps[i].axis;text+='=';text+=renderer::policyClampName(p.clamps[i].reason);}
+    // A refused temporal upscaler names the device reason next to the clamp.
+    const auto &cap=s.rendering_.capabilities();
+    const auto requested=s.rendering_.requested().upscalingFilter;
+    if(renderer::isTemporalUpscaler(requested)) {
+      if(!text.empty()) text+='\n';
+      text+=std::string("upscaler.")+renderer::upscalingFilterName(requested)+'='+
+            renderer::temporalUpscalerAvailabilityName(renderer::temporalUpscalerAvailability(cap,requested));
+    }
+    if(s.rendering_.executedStatus()!=renderer::TemporalUpscalerAvailability::Available) {
+      if(!text.empty()) text+='\n';
+      text+=std::string("upscaler.executed=")+renderer::temporalUpscalerAvailabilityName(s.rendering_.executedStatus());
+    }
     const int size=(int)text.size();if(!out||capacity<size)return size;
     std::memcpy(out,text.data(),text.size());return size;
   };

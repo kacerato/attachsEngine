@@ -325,6 +325,27 @@ public static class AstraWorldTests
     }
 
     [Test]
+    public static void AnimacaoTocaParaERebobinaPelasPropriedadesDoComponente()
+    {
+        var world = new FakeWorld(11);
+        var rig = world.RootObject.CreateChild("Rig");
+        var component = rig.AddComponent(ComponentIds.Animation);
+        var player = component.Animation();
+        player.Speed = 0.5f;
+        player.WrapMode = AnimationWrapMode.PingPong;
+        player.Play();
+        Assert.True(player.IsPlaying, "Play liga a reprodução");
+        Assert.Close(0.5f, component.GetFloat("speed"), 1e-6f, "velocidade no mesmo PropertyId do nativo");
+        Assert.Equal(2u, component.GetEnum("wrap_mode"), "PingPong é 2 no contrato nativo");
+        player.Time = 0.75f;
+        player.Stop();
+        Assert.False(player.IsPlaying, "Stop para");
+        Assert.Close(0f, player.Time, 1e-6f, "e rebobina, como Animation.Stop da Unity");
+        var collider = rig.AddComponent(ComponentIds.Collider);
+        Assert.Throws<WorldException>(() => collider.Animation(), "só o componente de animação vira reprodutor");
+    }
+
+    [Test]
     public static void TransformLocalEDeMundoAtravessamAApi()
     {
         var world = new FakeWorld(9);

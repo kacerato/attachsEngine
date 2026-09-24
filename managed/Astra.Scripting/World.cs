@@ -74,6 +74,12 @@ public static class ComponentIds
     /// `size`, `fade_mode` (0 nenhum, 1 cross-fade), `animate_cross_fading`, `fade_width_0..3` e `force_level`
     /// (ForceLOD da Unity: 0 automático, n força o LOD n-1; estado de execução, não vai para o arquivo).</summary>
     public const string LodGroup = "astra.render.lod_group";
+    /// <summary>Malha com esqueleto: `quality` (0 automática, 1, 2 ou 4 influências) e
+    /// `skinned_motion_vectors`. Os ossos são ligados pela importação.</summary>
+    public const string SkinnedMesh = "astra.render.skinned_mesh";
+    /// <summary>Animação: `clip`, `play_automatically`, `wrap_mode`, `speed` e, em execução,
+    /// `playing` e `time`. Use <see cref="Component.Animation"/>.</summary>
+    public const string Animation = "astra.animation";
     public const string ScriptBehavior = "astra.script.behavior";
 }
 
@@ -364,6 +370,11 @@ public readonly struct Component
               "escrever "+propertyId);
     public void SetSlotEnum(string propertyId,uint value,uint slot=0) =>
         Check(_scene.SetSlotProperty(_object.ObjectId,InstanceId,propertyId,slot,2,value),"escrever "+propertyId);
+    public AnimationPlayer Animation()
+    {
+        if(TypeId!=ComponentIds.Animation) throw new WorldException(WorldStatus.InvalidArgument,"acessar animação");
+        return new AnimationPlayer(this);
+    }
     public MaterialSlot Material(uint slot=0)
     {
         if(TypeId!=ComponentIds.MeshRenderer) throw new WorldException(WorldStatus.InvalidArgument,"acessar material");

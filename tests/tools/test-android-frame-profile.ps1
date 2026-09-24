@@ -76,9 +76,9 @@ function Convert-TestWindow {
     if ($OmitPasses) { return $line }
     $result = $line
     if ($wire.schemaVersion -ge 8) {
-        foreach ($part in 0..2) {
+        foreach ($part in 0..($FrameProfilePassParts - 1)) {
             $fragment = [ordered]@{ schemaVersion = $wire.schemaVersion; pid = $wire.pid;
-                epoch = $wire.epoch; window = $wire.window; part = $part; parts = 3;
+                epoch = $wire.epoch; window = $wire.window; part = $part; parts = $FrameProfilePassParts;
                 attribution = $Attribution; collapsed_frames = 0; attribution_samples = 600 }
             foreach ($metric in @($FrameProfilePassMetricNames | Select-Object -Skip ($part * 5) -First 5)) {
                 $fragment[$metric] = $passes[$metric]
@@ -434,7 +434,7 @@ Test-Profile 'regiões de GPU chegam pareadas à janela e preservam a partição
     foreach ($metric in $FrameProfileLegacyPassMetricNames) { $regionSum += $parsed[0].$metric.mean }
     Assert-Profile ($regionSum -le $parsed[0].gpu_frame_ms.mean)
 }
-Test-Profile 'schema 8 reúne as quinze regiões sem inventar valores' {
+Test-Profile 'schema 8 reúne todas as regiões sem inventar valores' {
     $decoded = @(ConvertFrom-FrameProfileLog (Convert-TestWindow (New-TestWindow8)) 7)
     Assert-Profile ($decoded.Count -eq 1 -and $decoded[0].gpuPassMetricsMissing.Count -eq 0)
     foreach ($metric in $FrameProfilePassMetricNames) { Assert-Profile ($decoded[0].$metric.mean -eq 0.05) }
@@ -443,7 +443,7 @@ Test-Profile 'schema 8 recusa fragmento ausente e duplicado' {
     $text = Convert-TestWindow (New-TestWindow8)
     $lines = @($text -split "`n")
     $fragments = @($lines | Where-Object { $_ -match '\[FrameProfilePasses\]' })
-    Assert-Profile ($fragments.Count -eq 3)
+    Assert-Profile ($fragments.Count -eq $FrameProfilePassParts)
     Assert-Rejected { ConvertFrom-FrameProfileLog (($lines | Where-Object { $_ -ne $fragments[1] }) -join "`n") 7 }
     Assert-Rejected { ConvertFrom-FrameProfileLog "$text`n$($fragments[1])" 7 }
 }

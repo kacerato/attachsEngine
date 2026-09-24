@@ -42,7 +42,7 @@ Locomoção com cápsula. **Consumidor:** runtime/scene_physics.cpp → Characte
 
 ## Olhar · `astra.camera.look` v1
 
-Rotação da câmera por toque. **Consumidor:** runtime/game_world.cpp → pose da câmera. **Invalida:** entrada.
+Rotação local da câmera por entrada ou script. **Consumidor:** runtime/game_world.cpp → pose da câmera. **Invalida:** entrada.
 
 | PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -168,6 +168,26 @@ Geometria e material. **Consumidor:** renderer/map_draw_update.h → instância 
 | `sampling.scale_u` | Escala U | número | Amostragem | 1 | 0.01 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
 | `sampling.scale_v` | Escala V | número | Amostragem | 1 | 0.01 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
 | `sampling.rotation` | Rotação da UV | número | Amostragem | 0 | -360 … 360 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.base_color.offset_u` | Cor base / Deslocamento U | número | Amostragem | 0 | -100 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.base_color.offset_v` | Cor base / Deslocamento V | número | Amostragem | 0 | -100 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.base_color.scale_u` | Cor base / Escala U | número | Amostragem | 1 | 0.01 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.base_color.scale_v` | Cor base / Escala V | número | Amostragem | 1 | 0.01 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.base_color.rotation` | Cor base / Rotação | número | Amostragem | 0 | -360 … 360 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.normal.offset_u` | Normal / Deslocamento U | número | Amostragem | 0 | -100 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.normal.offset_v` | Normal / Deslocamento V | número | Amostragem | 0 | -100 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.normal.scale_u` | Normal / Escala U | número | Amostragem | 1 | 0.01 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.normal.scale_v` | Normal / Escala V | número | Amostragem | 1 | 0.01 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.normal.rotation` | Normal / Rotação | número | Amostragem | 0 | -360 … 360 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.metallic_roughness.offset_u` | Metal / rugosidade / Deslocamento U | número | Amostragem | 0 | -100 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.metallic_roughness.offset_v` | Metal / rugosidade / Deslocamento V | número | Amostragem | 0 | -100 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.metallic_roughness.scale_u` | Metal / rugosidade / Escala U | número | Amostragem | 1 | 0.01 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.metallic_roughness.scale_v` | Metal / rugosidade / Escala V | número | Amostragem | 1 | 0.01 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.metallic_roughness.rotation` | Metal / rugosidade / Rotação | número | Amostragem | 0 | -360 … 360 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.emissive.offset_u` | Emissão / Deslocamento U | número | Amostragem | 0 | -100 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.emissive.offset_v` | Emissão / Deslocamento V | número | Amostragem | 0 | -100 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.emissive.scale_u` | Emissão / Escala U | número | Amostragem | 1 | 0.01 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.emissive.scale_v` | Emissão / Escala V | número | Amostragem | 1 | 0.01 … 100 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.emissive.rotation` | Emissão / Rotação | número | Amostragem | 0 | -360 … 360 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
 | `material.base_color.r` | Cor R | número | Cor | 1 | 0 … 1 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
 | `material.base_color.g` | Cor G | número | Cor | 1 | 0 … 1 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
 | `material.base_color.b` | Cor B | número | Cor | 1 | 0 … 1 |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
@@ -191,6 +211,18 @@ Geometria e material. **Consumidor:** renderer/map_draw_update.h → instância 
 | `sampling.uv_set` | Conjunto de UV | enumeração | Amostragem | Herdar | Herdar \| UV 0 \| UV 1 \| Mundo (triplanar) |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
 | `sampling.wrap` | Repetição | enumeração | Amostragem | Herdar | Herdar \| Repetir \| Fixar na borda \| Espelhar |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
 | `sampling.filter` | Filtro | enumeração | Amostragem | Herdar | Herdar \| Linear \| Vizinho mais próximo |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.base_color.uv_set` | Cor base / UV | enumeração | Amostragem | Herdar | Herdar \| UV 0 \| UV 1 \| Mundo (triplanar) |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.base_color.wrap` | Cor base / Repetição | enumeração | Amostragem | Herdar | Herdar \| Repetir \| Fixar na borda \| Espelhar |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.base_color.filter` | Cor base / Filtro | enumeração | Amostragem | Herdar | Herdar \| Linear \| Vizinho mais próximo |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.normal.uv_set` | Normal / UV | enumeração | Amostragem | Herdar | Herdar \| UV 0 \| UV 1 \| Mundo (triplanar) |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.normal.wrap` | Normal / Repetição | enumeração | Amostragem | Herdar | Herdar \| Repetir \| Fixar na borda \| Espelhar |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.normal.filter` | Normal / Filtro | enumeração | Amostragem | Herdar | Herdar \| Linear \| Vizinho mais próximo |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.metallic_roughness.uv_set` | Metal / rugosidade / UV | enumeração | Amostragem | Herdar | Herdar \| UV 0 \| UV 1 \| Mundo (triplanar) |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.metallic_roughness.wrap` | Metal / rugosidade / Repetição | enumeração | Amostragem | Herdar | Herdar \| Repetir \| Fixar na borda \| Espelhar |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.metallic_roughness.filter` | Metal / rugosidade / Filtro | enumeração | Amostragem | Herdar | Herdar \| Linear \| Vizinho mais próximo |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.emissive.uv_set` | Emissão / UV | enumeração | Amostragem | Herdar | Herdar \| UV 0 \| UV 1 \| Mundo (triplanar) |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.emissive.wrap` | Emissão / Repetição | enumeração | Amostragem | Herdar | Herdar \| Repetir \| Fixar na borda \| Espelhar |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
+| `sampling.emissive.filter` | Emissão / Filtro | enumeração | Amostragem | Herdar | Herdar \| Linear \| Vizinho mais próximo |  | renderer/map_draw_update.h → instância e material efetivo | desenho, material | não | sim |
 
 ## Luz · `astra.render.light` v3
 
@@ -217,7 +249,7 @@ Direcional, pontual ou spot. **Consumidor:** runtime/scene_lights.cpp → render
 | `shadow_mode` | Sombra | enumeração | Sombra | Nenhuma | Nenhuma \| Dura \| Suave |  | renderer/shadow_atlas.h → atlas local | seleção de luzes | sim | não |
 | `shadow_resolution` | Resolução da sombra | enumeração | Sombra | Automática | Automática \| Baixa \| Média \| Alta \| Muito alta |  | renderer/shadow_atlas.h → atlas local | seleção de luzes | sim | não |
 
-## Ambiente · `astra.render.environment` v5
+## Ambiente · `astra.render.environment` v12
 
 Céu, atmosfera, neblina e pós globais ou por volume. **Consumidor:** runtime/scene_environment.cpp → renderer e pós. **Invalida:** desenho, política resolvida.
 
@@ -226,6 +258,7 @@ Céu, atmosfera, neblina e pós globais ou por volume. **Consumidor:** runtime/s
 | Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada |
 |---|---|---|---|---|
 | `profile` | Perfil | environment_profile | sim | não |
+| `environment_map` | Mapa HDRI | environment_map | sim | não |
 
 **Propriedades**
 
@@ -247,10 +280,12 @@ Céu, atmosfera, neblina e pós globais ou por volume. **Consumidor:** runtime/s
 | `fog_color.r` | Neblina R | número | Neblina | 0.58 | 0 … 1 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
 | `fog_color.g` | Neblina G | número | Neblina | 0.67 | 0 … 1 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
 | `fog_color.b` | Neblina B | número | Neblina | 0.76 | 0 … 1 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
-| `fog_light_energy` | Energia da neblina | número | Neblina | 1 | 0 … 65504 | × | platform/android/instanced_renderer.cpp → rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `fog_light_energy` | Energia da neblina | número | Neblina | 1 | 0 … 65504 | × | platform/android/instanced_renderer.cpp | desenho, política resolvida | sim | não |
 | `fog_density` | Densidade | número | Neblina | 0.008 | 0 … 1 | 1/m | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
 | `fog_start` | Início | número | Neblina | 8 | 0 … 10000 | m | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
-| `exposure_ev` | Compensação | número | Pós | 0 | -16 … 16 | EV | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `fog_base_height` | Altura base | número | Neblina | 0 | -100000 … 100000 | m | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `fog_height_falloff` | Decaimento por altura | número | Neblina | 0 | 0 … 10 | 1/m | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `exposure_ev` | Compensação | número | Exposição | 0 | -16 … 16 | EV | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
 | `bloom_threshold` | Limiar do bloom | número | Pós | 1 | 0 … 64 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
 | `bloom_intensity` | Intensidade do bloom | número | Pós | 0.1 | 0 … 2 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
 | `contrast` | Contraste | número | Pós | 1 | 0.5 … 2 |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
@@ -267,9 +302,32 @@ Céu, atmosfera, neblina e pós globais ou por volume. **Consumidor:** runtime/s
 | `box_size.y` | Tamanho Y | número | Volume | 10 | 0.01 … 100000 | m | renderer/scene_environment.cpp | desenho, política resolvida | sim | não |
 | `box_size.z` | Tamanho Z | número | Volume | 10 | 0.01 … 100000 | m | renderer/scene_environment.cpp | desenho, política resolvida | sim | não |
 | `sphere_radius` | Raio | número | Volume | 5 | 0.01 … 100000 | m | renderer/scene_environment.cpp | desenho, política resolvida | sim | não |
+| `indirect_diffuse` | Difuso indireto | número | Luz indireta | 1 | 0 … 4 | × | rhi/shaders/dirt_road_shading.glsl | desenho, política resolvida | não | não |
+| `indirect_specular` | Reflexo indireto | número | Luz indireta | 1 | 0 … 4 | × | rhi/shaders/environment_lighting.glsl | desenho, política resolvida | não | não |
+| `physical_sky_intensity` | Intensidade | número | Atmosfera física | 1 | 0 … 16 | × | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `air_density` | Densidade do ar | número | Atmosfera física | 1 | 0 … 8 | × | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `aerosol_density` | Densidade de aerossóis | número | Atmosfera física | 1 | 0 … 8 | × | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `aerosol_anisotropy` | Anisotropia dos aerossóis | número | Atmosfera física | 0.76 | 0 … 0.95 | g | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `planet_radius_km` | Raio do planeta | número | Atmosfera física | 6371 | 1 … 100000 | km | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `observer_height_km` | Altura do observador | número | Atmosfera física | 0.002 | 0 … 1000 | km | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `rayleigh_scale_height_km` | Escala Rayleigh | número | Atmosfera física | 8 | 0.1 … 100 | km | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `aerosol_scale_height_km` | Escala de aerossóis | número | Atmosfera física | 1.2 | 0.05 … 50 | km | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `atmosphere_height_km` | Altura da atmosfera | número | Atmosfera física | 100 | 1 … 1000 | km | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `ground_albedo` | Albedo médio do solo | número | Atmosfera física | 0.1 | 0 … 1 |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `auto_exposure_min_ev` | EV mínimo | número | Exposição | -8 | -16 … 16 | EV | platform/android/instanced_auto_exposure.inl | desenho, política resolvida | sim | não |
+| `auto_exposure_max_ev` | EV máximo | número | Exposição | 8 | -16 … 16 | EV | platform/android/instanced_auto_exposure.inl | desenho, política resolvida | sim | não |
+| `auto_exposure_low_percent` | Corte baixo | número | Exposição | 0.05 | 0 … 1 |  | platform/android/instanced_auto_exposure.inl | desenho, política resolvida | sim | não |
+| `auto_exposure_high_percent` | Corte alto | número | Exposição | 0.95 | 0 … 1 |  | platform/android/instanced_auto_exposure.inl | desenho, política resolvida | sim | não |
+| `auto_exposure_target_grey` | Cinza alvo | número | Exposição | 0.18 | 0.01 … 1 |  | platform/android/instanced_auto_exposure.inl | desenho, política resolvida | sim | não |
+| `auto_exposure_speed_up` | Velocidade ao escurecer | número | Exposição | 2 | 0.01 … 20 | EV/s | platform/android/instanced_auto_exposure.inl | desenho, política resolvida | sim | não |
+| `auto_exposure_speed_down` | Velocidade ao clarear | número | Exposição | 3 | 0.01 … 20 | EV/s | platform/android/instanced_auto_exposure.inl | desenho, política resolvida | sim | não |
+| `hdri_rotation_degrees` | Rotação HDRI | número | HDRI | 0 | -360 … 360 | ° | rhi/shaders/environment_lighting.glsl | desenho, política resolvida | sim | não |
+| `hdri_exposure_ev` | Exposição HDRI | número | HDRI | 0 | -16 … 16 | EV | rhi/shaders/environment_lighting.glsl | desenho, política resolvida | sim | não |
 | `enabled` | Ativo | booleano | Geral | verdadeiro | verdadeiro \| falso |  | runtime/scene_environment.cpp → renderer e pós | desenho, política resolvida | não | não |
 | `fog` | Neblina | booleano | Neblina | falso | verdadeiro \| falso |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | não | não |
 | `post` | Pós-processamento | booleano | Pós | verdadeiro | verdadeiro \| falso |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | não | não |
+| `auto_exposure` | Exposição automática | booleano | Exposição | falso | verdadeiro \| falso |  | platform/android/instanced_auto_exposure.inl | desenho, política resolvida | sim | não |
+| `auto_exposure_center_weighted` | Peso central | booleano | Exposição | falso | verdadeiro \| falso |  | platform/android/instanced_auto_exposure.inl | desenho, política resolvida | sim | não |
 | `bloom` | Bloom | booleano | Pós | verdadeiro | verdadeiro \| falso |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
 | `vignette` | Vinheta | booleano | Pós | falso | verdadeiro \| falso |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
 | `film_grain` | Grão de filme | booleano | Pós | falso | verdadeiro \| falso |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
@@ -277,8 +335,10 @@ Céu, atmosfera, neblina e pós globais ou por volume. **Consumidor:** runtime/s
 | `override_sky` | Sobrescrever céu | booleano | Volume | verdadeiro | verdadeiro \| falso |  | renderer/scene_environment.cpp | desenho, política resolvida | não | não |
 | `override_fog` | Sobrescrever neblina | booleano | Volume | verdadeiro | verdadeiro \| falso |  | renderer/scene_environment.cpp | desenho, política resolvida | não | não |
 | `override_post` | Sobrescrever pós | booleano | Volume | verdadeiro | verdadeiro \| falso |  | renderer/scene_environment.cpp | desenho, política resolvida | não | não |
-| `sky` | Céu | enumeração | Atmosfera | Atmosfera | HDRI \| Atmosfera |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | não | não |
-| `tone_mapper` | Tonemapping | enumeração | Pós | ACES | Neutro \| ACES |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
+| `override_indirect` | Sobrescrever luz indireta | booleano | Volume | verdadeiro | verdadeiro \| falso |  | renderer/scene_environment.cpp | desenho, política resolvida | não | não |
+| `physical_atmosphere_high_quality` | Alta qualidade | booleano | Atmosfera física | falso | verdadeiro \| falso |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | sim | não |
+| `sky` | Céu | enumeração | Atmosfera | Atmosfera | HDRI \| Atmosfera \| Atmosfera física |  | rhi/shaders/dirt_road_sky.frag | desenho, política resolvida | não | não |
+| `tone_mapper` | Tonemapping | enumeração | Pós | ACES | Reinhard \| ACES \| AgX |  | rhi/shaders/post_process_common.glsl | desenho, política resolvida | sim | não |
 | `volume_shape` | Modo | enumeração | Volume | Global | Global \| Caixa \| Esfera |  | runtime/scene_environment.cpp | desenho, política resolvida | não | não |
 | `volume_layer` | Camada | enumeração | Volume | Ambiente 0 | Ambiente 0 \| Ambiente 1 \| Ambiente 2 \| Ambiente 3 \| Ambiente 4 \| Ambiente 5 \| Ambiente 6 \| Ambiente 7 |  | renderer/scene_environment.cpp | desenho, política resolvida | não | não |
 
@@ -305,6 +365,28 @@ Nível de detalhe pela altura na tela. **Consumidor:** runtime/lod_groups.h → 
 | `level_1` | Objetos LOD 1 | referência | Níveis | Nenhum | qualquer objeto · abaixo deste objeto |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
 | `level_2` | Objetos LOD 2 | referência | Níveis | Nenhum | qualquer objeto · abaixo deste objeto |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
 | `level_3` | Objetos LOD 3 | referência | Níveis | Nenhum | qualquer objeto · abaixo deste objeto |  | runtime/lod_groups.h → visibilidade do desenho por vista | desenho | sim | não |
+
+## Malha com esqueleto · `astra.render.skinned_mesh` v1
+
+Deformação da Malha pelos ossos. **Consumidor:** editor/editor_map_scene.cpp → paleta; platform/android/instanced_skinning.inl → compute. **Capacidade:** `render.skinning` (implementada). **Invalida:** desenho, mapa de sombra.
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `skinned_motion_vectors` | Vetor de movimento do skin | booleano | Skin | verdadeiro | verdadeiro \| falso |  | platform/android/instanced_motion.inl → passe de movimento com pose anterior | desenho, mapa de sombra | não | não |
+| `quality` | Qualidade | enumeração | Skin | Automática | Automática \| 1 osso \| 2 ossos \| 4 ossos |  | editor/editor_map_scene.cpp → paleta; platform/android/instanced_skinning.inl → compute | desenho, mapa de sombra | não | não |
+
+## Animação · `astra.animation` v1
+
+Clipe da fonte importada tocado no Play. **Consumidor:** runtime/scene_animation.cpp → pose local dos nós da instância. **Capacidade:** `animation.clip` (implementada). **Invalida:** pose e bounds.
+
+| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `clip` | Clipe | número | Clipe | 0 | 0 … 1023 |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
+| `speed` | Velocidade | número | Reprodução | 1 | -10 … 10 | x | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
+| `time` | Tempo | número | Execução | 0 | -1000000 … 1000000 | s | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | sim | não |
+| `play_automatically` | Tocar ao iniciar | booleano | Reprodução | verdadeiro | verdadeiro \| falso |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
+| `playing` | Tocando | booleano | Execução | falso | verdadeiro \| falso |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | sim | não |
+| `wrap_mode` | Repetição | enumeração | Reprodução | Repetir | Uma vez \| Repetir \| Vai e volta \| Segurar no fim |  | runtime/scene_animation.cpp → pose local dos nós da instância | pose e bounds | não | não |
 
 ## Comportamento · `astra.script.behavior` v1
 
@@ -344,13 +426,18 @@ Código C# do projeto. **Consumidor:** runtime/script_bridge.cpp → runtime .NE
 | `render.lod.group` | Grupo de LOD autoral por objeto | implementada | runtime/lod_groups.h + renderer/lod_dither.glsl | Níveis são objetos do autor ou da convenção _LOD<n>; simplificação automática de malha ainda não existe |
 | `render.visibility.hzb` | Oclusão por pirâmide de profundidade | implementada | renderer/hzb_visibility.cpp | — |
 | `render.instancing.gpu` | Culling e compactação de desenho em GPU | implementada | renderer/gpu_draw_culling.cpp | — |
-| `render.motion_vectors` | Vetores de movimento por objeto | planejada | renderer/frame_graph.cpp | Sem pose anterior por instância nem alvo de velocidade |
+| `render.motion_vectors` | Vetores de movimento por pixel | implementada | platform/android/instanced_motion.inl + rhi/shaders/temporal_projection.glsl | Transparência e água usam as máscaras de reatividade/composição, não vetor próprio |
+| `render.skinning` | Malha deformada por esqueleto | implementada | editor/editor_map_scene.cpp (paleta) + platform/android/instanced_skinning.inl (compute) | Até 4 influências por vértice e 256 juntas por skin; morph targets não são importados |
 | `render.environment.atmosphere` | Céu atmosférico | implementada | runtime/scene_environment.cpp + rhi/shaders/dirt_road_sky.frag | — |
+| `render.environment.physical_atmosphere` | Céu físico Rayleigh/Mie | implementada | renderer/scene_environment.cpp + rhi/shaders/dirt_road_sky.frag | — |
 | `render.environment.fog` | Neblina por profundidade | implementada | rhi/shaders/post_process_common.glsl | — |
 | `render.environment.volumes` | Volumes de ambiente por câmera | implementada | runtime/scene_environment.cpp + renderer/scene_environment.cpp | — |
 | `render.post.tonemap` | Exposição e mapeamento de tom | implementada | rhi/shaders/post_process_common.glsl | — |
+| `render.post.auto_exposure` | Exposição automática por histograma | implementada | platform/android/instanced_auto_exposure.inl | Histograma e adaptação por vista; o EV fica restrito à faixa autoral |
 | `render.post.bloom` | Brilho estourado | implementada | rhi/shaders/post_process_common.glsl | — |
 | `render.post.film_grain` | Grão de filme | implementada | rhi/shaders/post_process_common.glsl | — |
 | `render.post.ambient_occlusion` | Oclusão ambiente em tela | implementada | rhi/shaders/post_process_common.glsl | — |
 | `render.aa.fxaa` | Antisserrilhado espacial | implementada | rhi/shaders/post_process_common.glsl | — |
 | `render.aa.temporal` | Antisserrilhado temporal | limitada pelo aparelho | rhi/shaders/post_process_temporal.frag | Exige histórico e profundidade alocáveis no backend |
+| `render.upscale.temporal` | Ampliação temporal Arm ASR / AMD FSR 2 | limitada pelo aparelho | rhi/temporal_upscaler.cpp + platform/android/instanced_temporal_upscaler.inl | Exige float16/int16, formatos de storage e subgrupos no aparelho; recusa com motivo quando falta |
+| `animation.clip` | Clipe de animação por nós | implementada | runtime/scene_animation.cpp + resources/skeletal_animation.cpp | Translação, rotação e escala; pesos de morph não; sem mistura entre clipes |

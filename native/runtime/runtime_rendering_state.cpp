@@ -12,7 +12,8 @@ bool RuntimeRenderingState::validate(const renderer::ProjectRenderingSettings &s
      (u32)settings.textures>(u32)renderer::TextureQuality::Full ||
      (u32)settings.waterMesh>=(u32)renderer::WaterMeshQuality::Count ||
      (u32)settings.antiAliasing>(u32)renderer::AntiAliasingMode::Temporal ||
-     (u32)settings.upscalingFilter>(u32)renderer::UpscalingFilter::Fsr1 ||
+     (u32)settings.upscalingFilter>(u32)renderer::UpscalingFilter::Fsr2 ||
+     (u32)settings.temporalUpscalerQuality>(u32)renderer::TemporalUpscalerQuality::UltraPerformance ||
      !feature(settings.staticShadowCache)||!feature(settings.lodSelection)||
      !feature(settings.materialShaderVariants)||!feature(settings.environmentSplitSumBrdf)||
      !feature(settings.thermalDistanceScaling)||!feature(settings.postFxaa)||
@@ -38,6 +39,11 @@ bool RuntimeRenderingState::request(u32 expectedWorld,
                                     u64 &requestId) {
   requestId = 0;
   if (!active(expectedWorld) || pendingId_ || !sink_ || !validate(settings)) return false;
+  // A temporal upscaler this device cannot run is refused here, with the
+  // reason exposed by the diagnostics; the request never degrades to TAA.
+  if (renderer::isTemporalUpscaler(settings.upscalingFilter) &&
+      renderer::temporalUpscalerAvailability(capabilities_, settings.upscalingFilter) !=
+          renderer::TemporalUpscalerAvailability::Available) return false;
   pendingSettings_ = settings;
   pendingSettings_.schemaVersion = renderer::RenderingSettingsSchemaVersion;
   requested_ = pendingSettings_; // Requested é a intenção; Effective só muda no acknowledge.

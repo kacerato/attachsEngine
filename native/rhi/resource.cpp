@@ -36,6 +36,7 @@ bool VulkanSampler::initialize(VkDevice device, const SamplerDesc &desc) {
   info.addressModeV = desc.addressV;
   info.addressModeW = desc.addressW;
   info.minLod = desc.minLod;
+  info.mipLodBias = desc.mipLodBias;
   info.maxLod = desc.maxLod;
   info.anisotropyEnable = desc.enableAnisotropy ? VK_TRUE : VK_FALSE;
   info.maxAnisotropy = desc.maxAnisotropy;

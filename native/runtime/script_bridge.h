@@ -52,6 +52,10 @@ public:
   void setResourceAvailability(ResourceAvailability available) {
     if(!running_) resourceAvailable_=std::move(available);
   }
+  // O que o renderer executou no último quadro (Graphics.State.ExecutedUpscaler).
+  void setRenderingExecution(renderer::UpscalingFilter executed, renderer::TemporalUpscalerAvailability status) {
+    rendering_.setExecution(executed, status);
+  }
   bool completeRenderingRequest(u64 requestId, bool success,
                                 const renderer::ResolvedRenderingPolicy &effective,
                                 bool effectiveAvailable=true) {

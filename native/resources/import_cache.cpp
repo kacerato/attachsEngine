@@ -186,6 +186,31 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
   writer.raw(counters, sizeof counters);
   writer.texts(model.textureNotes);
   writer.texts(model.notes);
+  // Schema 6: skins, influências por vértice e clipes.
+  writer.u32v(static_cast<u32>(model.skins.size()));
+  for (const auto &skin : model.skins) {
+    writer.text(skin.name);
+    writer.pods(skin.joints);
+    writer.pods(skin.inverseBind);
+    writer.pods(skin.jointSpheres);
+    writer.i32v(skin.skeleton);
+  }
+  writer.pods(model.drawSkins);
+  writer.pods(model.skinInfluences);
+  writer.u32v(static_cast<u32>(model.animations.size()));
+  for (const auto &clip : model.animations) {
+    writer.text(clip.name);
+    writer.raw(&clip.duration, sizeof clip.duration);
+    writer.u32v(static_cast<u32>(clip.channels.size()));
+    for (const auto &channel : clip.channels) {
+      writer.u32v(channel.node);
+      writer.u32v(static_cast<u32>(channel.path));
+      writer.u32v(static_cast<u32>(channel.interpolation));
+      writer.pods(channel.times);
+      writer.pods(channel.values);
+    }
+  }
+  writer.u32v(model.unsupportedAnimationChannels);
   // Terminador: um arquivo cortado no meio da escrita nunca passa por inteiro.
   writer.raw(kMagic, sizeof kMagic);
   return true;
@@ -268,6 +293,40 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
   if (!std::isfinite(model.worstTexelDensityRatio) || model.worstTexelDensityRatio < 0) return refuse();
   model.textureNotes = reader.texts();
   model.notes = reader.texts();
+  const u32 skinCount = reader.u32v();
+  if (!reader.ok || skinCount > bytes.size()) return refuse();
+  model.skins.resize(skinCount);
+  for (auto &skin : model.skins) {
+    skin.name = reader.text();
+    skin.joints = reader.pods<u32>();
+    skin.inverseBind = reader.pods<float>();
+    skin.jointSpheres = reader.pods<float>();
+    skin.skeleton = reader.i32v();
+    if (!reader.ok) return refuse();
+  }
+  model.drawSkins = reader.pods<i32>();
+  model.skinInfluences = reader.pods<u8>();
+  const u32 clipCount = reader.u32v();
+  if (!reader.ok || clipCount > bytes.size()) return refuse();
+  model.animations.resize(clipCount);
+  for (auto &clip : model.animations) {
+    clip.name = reader.text();
+    reader.raw(&clip.duration, sizeof clip.duration);
+    const u32 channels = reader.u32v();
+    if (!reader.ok || channels > bytes.size()) return refuse();
+    clip.channels.resize(channels);
+    for (auto &channel : clip.channels) {
+      channel.node = reader.u32v();
+      const u32 path = reader.u32v(), interpolation = reader.u32v();
+      if (path > 2 || interpolation > 2) return refuse();
+      channel.path = static_cast<AnimationPath>(path);
+      channel.interpolation = static_cast<AnimationInterpolation>(interpolation);
+      channel.times = reader.pods<float>();
+      channel.values = reader.pods<float>();
+      if (!reader.ok) return refuse();
+    }
+  }
+  model.unsupportedAnimationChannels = reader.u32v();
   char trailer[8]{};
   if (!reader.raw(trailer, sizeof trailer) || std::memcmp(trailer, kMagic, sizeof trailer) != 0 ||
       reader.at != bytes.size())
@@ -278,6 +337,30 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
     return refuse();
   for (const auto node : model.drawNodes)
     if (node >= model.nodes.size()) return refuse();
+  // Skin e animação do cache endereçam a árvore e os vértices: qualquer índice
+  // fora dela é arquivo corrompido, e a reimportação é o caminho seguro.
+  if (model.drawSkins.size() != model.draws.size()) return refuse();
+  if (!model.skinInfluences.empty() &&
+      model.skinInfluences.size() != model.vertices.size() / renderer::MapVertexStride * SkinInfluenceStride)
+    return refuse();
+  for (const auto &skin : model.skins) {
+    if (skin.joints.size() > MaximumSkinJoints) return refuse();
+    if (skin.joints.empty()) continue;
+    if (skin.inverseBind.size() != skin.joints.size() * 16 || skin.jointSpheres.size() != skin.joints.size() * 4 ||
+        skin.skeleton < -1 || skin.skeleton >= static_cast<i32>(model.nodes.size()))
+      return refuse();
+    for (const auto joint : skin.joints) if (joint >= model.nodes.size()) return refuse();
+    for (const auto value : skin.inverseBind) if (!std::isfinite(value)) return refuse();
+  }
+  for (const auto skin : model.drawSkins)
+    if (skin < -1 || skin >= static_cast<i32>(model.skins.size()) ||
+        (skin >= 0 && (model.skins[static_cast<usize>(skin)].joints.empty() || model.skinInfluences.empty())))
+      return refuse();
+  for (const auto &clip : model.animations) {
+    if (!std::isfinite(clip.duration) || clip.duration < 0 || clip.channels.empty()) return refuse();
+    for (const auto &channel : clip.channels)
+      if (channel.node >= model.nodes.size() || !validAnimationChannel(channel)) return refuse();
+  }
   // Uma câmera do cache aponta para um nó: índice fora da árvore é arquivo
   // corrompido, e ler lente inválida de volta seria pior que reimportar.
   for (const auto &camera : model.cameras)

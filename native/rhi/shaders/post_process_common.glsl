@@ -4,7 +4,11 @@ precision highp int;
 layout(set=0,binding=0) uniform sampler2D sceneColor;
 layout(set=0,binding=1) uniform sampler2D historyColor;
 layout(set=0,binding=2) uniform sampler2D sceneDepth;
-layout(set=0,binding=5) uniform sampler2D motionWorld;
+// Entradas temporais unificadas (temporal_projection.glsl): vetor RG16F
+// atual -> anterior em UV da extensão, e as máscaras R8 do passe principal.
+layout(set=0,binding=5) uniform sampler2D temporalVelocity;
+layout(set=0,binding=6) uniform sampler2D reactiveMask;
+layout(set=0,binding=7) uniform sampler2D compositionMask;
 layout(set=0,binding=4,std430) readonly buffer ExposureState {
   float ev; float targetEv; float meteredEv; uint valid;
 } automaticExposure;
@@ -27,9 +31,15 @@ layout(set=0,binding=3,std140) uniform EnvironmentLightingBlock {
   layout(offset=240) vec4 worldToViewRow1;
   layout(offset=256) vec4 worldToViewRow2;
   layout(offset=3296) vec4 postViewport; // normalized physical xy/extent
+  // zw: extensão renderizada / alocação das entradas temporais (profundidade,
+  // vetor e máscaras), válida também quando a cor de entrada já foi ampliada.
+  layout(offset=3472) vec4 temporalParameters;
 } environment;
 layout(push_constant) uniform PostPushConstants {
-  vec4 texelFlags; // xy=1/source extent, z=bloom/upscale/FSR/motion bits, w=AA + debug*4
+  // z bits: 1 bloom, 2 bicúbica, 4 FSR 1, 8 vetor, 16 cobertura estática,
+  // 32 máscaras temporais, 64 só composição HDR (névoa+AO, antes do ampliador
+  // temporal), 128 entrada já composta (depois do ampliador).
+  vec4 texelFlags; // xy=1/source extent, z=bits acima, w=AA + debug*4
   vec4 bloom;      // threshold, intensity, sharpen, vignette intensity
   vec4 grade;      // contrast, saturation, encode sRGB, packed transform+feedback
   vec4 sourceTransform; // xy=active/source extent, z=focal length, w=display aspect
@@ -61,8 +71,13 @@ float viewDistance(vec2 uv) {
   return nearPlane*farPlane/max(farPlane-depth*(farPlane-nearPlane),1.0e-6);
 }
 
+bool postFlag(float bit) { return mod(floor(post.texelFlags.z/bit),2.0)>0.5; }
+vec2 temporalInputUv(vec2 uv) { return uv*environment.temporalParameters.zw; }
+
 vec3 applySceneFog(vec2 sourceUv, vec3 color) {
-  if(environment.sceneFog.x>0.5) {
+  // Depois do ampliador temporal a névoa já está na cor: aplicá-la de novo
+  // dobraria a densidade, e com profundidade de outra resolução.
+  if(environment.sceneFog.x>0.5 && !postFlag(128.0)) {
     float viewDepth=viewDistance(sourceUv);
     float falloff=environment.sceneFog.w;
     float opticalDepth;
@@ -159,7 +174,7 @@ vec3 reconstructScene(vec2 uv) {
 }
 
 float screenSpaceAmbientOcclusion(vec2 uv) {
-  if(environment.sceneAo.x<0.5) return 1.0;
+  if(environment.sceneAo.x<0.5 || postFlag(128.0)) return 1.0;
   float rawDepth=texture(sceneDepth,clampSourceUv(uv)).r;
   if(rawDepth>=0.999999) return 1.0;
   float center=viewDistance(uv);
@@ -342,10 +357,6 @@ vec3 temporalResolve(vec2 sourceUv, vec3 current, float ao, vec3 bloomColor,
                            -cameraNdc.y * viewZ / focal, viewZ);
   vec3 worldPosition = post.currentPositionNear.xyz +
                        cameraRotation(post.currentCamera.x, post.currentCamera.y, post.previousCamera.z) * viewPosition;
-  if(mod(floor(post.texelFlags.z/8.0),2.0)>0.5 && depth<0.999999) {
-    vec4 objectMotion=texture(motionWorld,sourceUv);
-    if(objectMotion.a>0.5) worldPosition-=objectMotion.xyz;
-  }
   vec3 previousView = transpose(cameraRotation(post.previousCamera.x,
                                                  post.previousCamera.y, post.previousCamera.w)) *
                       (worldPosition - post.previousPositionFar.xyz);
@@ -369,7 +380,19 @@ vec3 temporalResolve(vec2 sourceUv, vec3 current, float ao, vec3 bloomColor,
   if (any(lessThan(previousLocalUv, vec2(0.0))) ||
       any(greaterThan(previousLocalUv, vec2(1.0)))) return current;
   vec2 previousUv=environment.postViewport.xy+previousLocalUv*environment.postViewport.zw;
-  motionUv=vUv-previousUv;
+  // O vetor unificado manda: câmera e objetos saem do mesmo passe que as
+  // bibliotecas consomem. A reprojeção só de câmera acima continua dando a
+  // profundidade esperada; onde o vetor diverge dela, o pixel pertence a um
+  // objeto em movimento, cuja profundidade anterior a câmera não descreve.
+  bool objectMotion=false;
+  if(postFlag(8.0)) {
+    vec2 velocityUv=vUv+texture(temporalVelocity,sourceUv).xy;
+    objectMotion=length((velocityUv-previousUv)/max(post.texelFlags.xy,vec2(1.0e-6)))>0.5;
+    if(any(lessThan(velocityUv,environment.postViewport.xy))||
+       any(greaterThan(velocityUv,environment.postViewport.xy+environment.postViewport.zw))) return current;
+    previousUv=velocityUv;
+  }
+  motionUv=previousUv-vUv;
 
   // FSR runs this resolve at the current internal extent, in the top-left of
   // the full-size history allocation. The rest of the image is never read.
@@ -396,7 +419,7 @@ vec3 temporalResolve(vec2 sourceUv, vec3 current, float ao, vec3 bloomColor,
   // jitter. There is no newly exposed surface when camera and depth-writing
   // geometry are unchanged, so this mismatch must not discard its history.
   bool staticCoverage=mod(floor(post.texelFlags.z/16.0),2.0)>0.5;
-  if(!staticCoverage && abs(previousDepth-expectedDepth)>0.02) {
+  if(!staticCoverage && !objectMotion && abs(previousDepth-expectedDepth)>0.02) {
     rejectedDepth=1.0;
     return current;
   }
@@ -416,10 +439,12 @@ vec3 temporalResolve(vec2 sourceUv, vec3 current, float ao, vec3 bloomColor,
   float historyWeight = fract(post.grade.w);
   float motionPixels = length((previousUv-vUv*historyScale)*vec2(textureSize(historyColor,0)));
   historyWeight *= exp2(-motionPixels * 0.035);
-  // Transparent/water draws reduce opaque coverage in sceneColor.a. Their
-  // color can change without writing depth or rigid motion, so retain less
-  // history in proportion to the accumulated blended coverage.
-  float reactive=clamp(1.0-texture(sceneColor,sourceUv).a,0.0,1.0);
+  // Transparentes e água mudam de cor sem escrever profundidade nem vetor.
+  // As máscaras do passe principal dizem quanto; sem elas, a cobertura opaca
+  // restante em sceneColor.a é a aproximação anterior.
+  float reactive=postFlag(32.0)
+      ? max(texture(reactiveMask,sourceUv).r,0.5*texture(compositionMask,sourceUv).r)
+      : clamp(1.0-texture(sceneColor,sourceUv).a,0.0,1.0);
   historyWeight *= 1.0-reactive;
   historyWeight *= 1.0 - smoothstep(0.08, 0.35, abs(luma(history) - luma(current)));
   historyContribution=clamp(historyWeight, 0.0, 0.97);
@@ -435,7 +460,45 @@ float filmGrainNoise(vec2 pixel) {
   return fract(sin(dot(pixel+seed,vec2(12.9898,78.233)))*43758.5453);
 }
 
+// Diagnóstico temporal (G6-B): mostra o valor que o consumidor lê, não uma
+// recomputação. Vale no TAA nativo e depois dos ampliadores temporais.
+bool temporalDiagnostic(vec2 sourceUv, float encodedDepth, float historyContribution,
+                        float rejectedDepth, out vec3 diagnostic) {
+  int view=int(floor(post.texelFlags.w*0.25));
+  if(view==0) return false;
+  vec2 inputUv=temporalInputUv(vUv);
+  vec2 texel=vec2(textureSize(sceneDepth,0));
+  if(view==1) {
+    float depth=texture(sceneDepth,inputUv).r;
+    float nearPlane=post.currentPositionNear.w,farPlane=post.previousPositionFar.w;
+    float viewZ=nearPlane*farPlane/max(farPlane-depth*(farPlane-nearPlane),1.0e-6);
+    diagnostic=vec3(depth>=0.999999?1.0:clamp(log2(max(viewZ/nearPlane,1.0))/
+                                                   log2(max(farPlane/nearPlane,1.0001)),0.0,1.0));
+  } else if(view==2) diagnostic=vec3(0,historyContribution,0);
+  else if(view==3) diagnostic=vec3(rejectedDepth,0,0);
+  else if(view==4) {
+    // Pixels de movimento em cor: 16 px por quadro satura. Azul fixo separa
+    // "parado" (cinza-azulado) de ausência de dados.
+    vec2 pixels=texture(temporalVelocity,inputUv).xy*texel/max(environment.temporalParameters.zw,vec2(1.0e-6));
+    diagnostic=vec3(clamp(vec2(0.5)+pixels/32.0,0.0,1.0),0.5);
+  } else if(view==5) {
+    float reactive=postFlag(32.0)?texture(reactiveMask,inputUv).r:
+        clamp(1.0-texture(sceneColor,sourceUv).a,0.0,1.0);
+    diagnostic=vec3(reactive,0,reactive);
+  } else diagnostic=vec3(0,postFlag(32.0)?texture(compositionMask,inputUv).r:0.0,
+                         postFlag(32.0)?texture(compositionMask,inputUv).r:0.0);
+  return true;
+}
+
 void main() {
+  if(postFlag(64.0)) {
+    // Composição antes do ampliador temporal: névoa e AO em HDR linear, na
+    // resolução interna, alinhadas à profundidade que as produziu. Tonemap,
+    // bloom, grade e vinheta ficam para depois da ampliação.
+    vec2 sourceUv=clampSourceUv(vUv*post.sourceTransform.xy);
+    outColor=vec4(sampleScene(sourceUv)*screenSpaceAmbientOcclusion(sourceUv),1.0);
+    return;
+  }
   if(any(lessThan(vUv,environment.postViewport.xy)) ||
      any(greaterThan(vUv,environment.postViewport.xy+environment.postViewport.zw))) {
     // UI is composited afterwards. Preserve the clear outside the camera;
@@ -470,15 +533,15 @@ void main() {
   outHistory=vec4(post.grade.z>.5?linearToSrgb(color):color,encodedDepth);
   // Editor diagnostics inspect the actual consumer values. The normal color
   // and depth still go into history, so changing view never poisons a frame.
-  int temporalDebug=int(floor(post.texelFlags.w*0.25));
-  if(temporalDebug!=0) {
-    float displayedReactive=clamp(1.0-texture(sceneColor,sourceUv).a,0.0,1.0);
-    vec3 diagnostic=temporalDebug==1?vec3(encodedDepth):
-                    temporalDebug==2?vec3(0,historyContribution,0):
-                    temporalDebug==3?vec3(rejectedDepth,0,0):
-                    temporalDebug==4?vec3(clamp(vec2(0.5)+motionUv*512.0,0.0,1.0),0.5):
-                                     vec3(displayedReactive,0,displayedReactive);
+  vec3 diagnostic;
+  if(temporalDiagnostic(sourceUv,encodedDepth,historyContribution,rejectedDepth,diagnostic)) {
     outColor=vec4(diagnostic,1);
+    return;
+  }
+#else
+  vec3 diagnostic;
+  if(temporalDiagnostic(sourceUv,0.0,0.0,0.0,diagnostic)) {
+    outColor=vec4(post.grade.z>.5?linearToSrgb(diagnostic):diagnostic,1);
     return;
   }
 #endif

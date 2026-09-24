@@ -39,6 +39,7 @@ struct DeviceFeatures {
   bool dedicatedComputeQueue = false;
   bool multiDrawIndirect = false;
   bool drawIndirectFirstInstance = false;
+  bool independentBlend = false;
 
   // Limites relevantes.
   u32 maxBoundDescriptorSets = 4;

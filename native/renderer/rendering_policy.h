@@ -93,7 +93,39 @@ enum class AntiAliasingMode : u32 {
 
 // Reconstruction is independent of anti-aliasing. Catmull-Rom is a spatial
 // bicubic filter; it is not temporal super resolution or AMD/Arm FSR/ASR.
-enum class UpscalingFilter : u32 { Inherit = 0, Bilinear, CatmullRom, Fsr1 };
+//
+// ArmAsr and Fsr2 are temporal upscalers (Unity 6 lists STP in the same
+// "Upscaling Filter" field): they consume jittered HDR color, depth, 2D
+// velocity and reactive masks, and replace FXAA/TAA while active. The values
+// are appended so serialized projects and the script ABI keep their numbers.
+// A device that lacks a technique's requirements clamps it with a recorded
+// Capability reason; it never silently becomes TAA or FSR 1.
+enum class UpscalingFilter : u32 { Inherit = 0, Bilinear, CatmullRom, Fsr1, ArmAsr, Fsr2 };
+
+inline constexpr bool isTemporalUpscaler(UpscalingFilter filter) {
+  return filter == UpscalingFilter::ArmAsr || filter == UpscalingFilter::Fsr2;
+}
+
+// Shader quality of a temporal upscaler, independent from the resolution
+// scale (Arm ASR separates both on purpose). Arm ASR has four shader presets;
+// AMD FSR 2 has a single algorithm, so the axis does not apply to it.
+enum class TemporalUpscalerQuality : u32 { Inherit = 0, Quality, Balanced, Performance, UltraPerformance };
+
+// Why a temporal upscaler cannot run on this device/build. Stable numbers:
+// they cross the script ABI and appear in the Quality panel.
+enum class TemporalUpscalerAvailability : u32 {
+  Available = 0,
+  NotProbed,          // o renderer ainda não consultou o dispositivo
+  NotBuilt,           // biblioteca ausente deste binário (host/testes)
+  MissingFloat16,     // shaderFloat16 (VK_KHR_shader_float16_int8)
+  MissingInt16,       // shaderInt16
+  MissingQuadSubgroup,// subgroup QUAD no estágio exigido
+  MissingStorageImageFormats, // shaderStorageImageExtendedFormats
+  MissingStorageWriteWithoutFormat, // shaderStorageImageWriteWithoutFormat
+  MissingHdrSceneColor,       // RGBA16F renderizável e amostrável
+  ContextCreationFailed,      // a biblioteca recusou o contexto
+  MissingSampledDepth32,      // profundidade D32_SFLOAT amostrável (vista criada pelo Arm ASR)
+};
 
 // Preset é um ponto nomeado no espaço acima. `Auto` deriva do perfil de dispositivo
 // detectado; os demais fixam o ponto independentemente do hardware, e a capability
@@ -104,7 +136,7 @@ enum class QualityPreset : u32 { Auto = 0, C, B, A, S, Custom };
 // produziria dois campos capazes de se contradizer no arquivo do projeto.
 enum class FeatureOverride : u32 { Inherit = 0, Disabled, Enabled };
 
-inline constexpr u32 RenderingSettingsSchemaVersion = 9;
+inline constexpr u32 RenderingSettingsSchemaVersion = 10;
 
 // ---------------------------------------------------------------------------
 // Entrada 3 da ADR — escolha global serializada do projeto.
@@ -175,6 +207,9 @@ struct ProjectRenderingSettings final {
 
   AntiAliasingMode antiAliasing = AntiAliasingMode::Inherit;
   UpscalingFilter upscalingFilter = UpscalingFilter::Inherit;
+  // Schema 10: shader preset of the temporal upscaler (Arm ASR). Inherit
+  // follows the device profile.
+  TemporalUpscalerQuality temporalUpscalerQuality = TemporalUpscalerQuality::Inherit;
   // Schema <= 6 compatibility. New serialized settings must use
   // `antiAliasing`; this field remains so old projects and launch tooling do
   // not silently change appearance during migration.
@@ -214,6 +249,10 @@ struct RenderingCapabilities final {
   // Anisotropia máxima do sampler (1.0 = sem suporte).
   float maximumSamplerAnisotropy = 1.0f;
   float displayHz = 60.0f;
+  // Temporal upscalers are optional device capabilities. The renderer probes
+  // them once per device; host/tests keep NotProbed and the policy clamps.
+  TemporalUpscalerAvailability armAsr = TemporalUpscalerAvailability::NotProbed;
+  TemporalUpscalerAvailability fsr2 = TemporalUpscalerAvailability::NotProbed;
 };
 
 // ---------------------------------------------------------------------------
@@ -281,6 +320,8 @@ struct PostSettings final {
   float sharpen = 0.0f;
   float vignetteIntensity = 0.0f;
   float temporalHistoryWeight = 0.88f;
+  // Arm ASR shader preset; meaningful only with a temporal upscaler.
+  TemporalUpscalerQuality temporalUpscalerQuality = TemporalUpscalerQuality::Quality;
 };
 
 struct MaterialDistanceSettings final {
@@ -365,6 +406,7 @@ TextureQuality parseTextureQuality(const char *name);
 WaterMeshQuality parseWaterMeshQuality(const char *name);
 AntiAliasingMode parseAntiAliasingMode(const char *name);
 UpscalingFilter parseUpscalingFilter(const char *name);
+TemporalUpscalerQuality parseTemporalUpscalerQuality(const char *name);
 
 const char *shadowQualityName(ShadowQuality quality);
 const char *ambientQualityName(AmbientQuality quality);
@@ -372,6 +414,10 @@ const char *postQualityName(PostQuality quality);
 const char *textureQualityName(TextureQuality quality);
 const char *antiAliasingModeName(AntiAliasingMode mode);
 const char *upscalingFilterName(UpscalingFilter filter);
+const char *temporalUpscalerQualityName(TemporalUpscalerQuality quality);
+const char *temporalUpscalerAvailabilityName(TemporalUpscalerAvailability availability);
+TemporalUpscalerAvailability temporalUpscalerAvailability(const RenderingCapabilities &capabilities,
+                                                          UpscalingFilter filter);
 
 // Resolve a política. Determinística e sem estado: as mesmas quatro entradas
 // produzem sempre a mesma saída, que é o que permite reproduzir uma captura.

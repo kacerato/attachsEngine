@@ -3,6 +3,7 @@
 #include "renderer/authoring_texture.h"
 #include "renderer/map_package.h"
 #include "resources/image_decode.h"
+#include "resources/skeletal_animation.h"
 #include <span>
 #include <string>
 #include <vector>
@@ -16,7 +17,8 @@ namespace ae::resources {
 //
 // | Traz | Não traz |
 // |---|---|
-// | hierarquia de nós, com TRS e `matrix` | skins e animações |
+// | hierarquia de nós, com TRS e `matrix` | pesos de morph (alvos de morph e canais `weights`) |
+// | skins (JOINTS/WEIGHTS, até 4 influências por vértice) e animações TRS com STEP, LINEAR e CUBICSPLINE | skin em nó espelhado; mais de 256 juntas |
 // | instâncias (o mesmo mesh em vários nós) | câmeras e luzes do arquivo |
 // | TRIANGLES, TRIANGLE_STRIP e TRIANGLE_FAN | pontos e linhas |
 // | POSITION, NORMAL, TEXCOORD_0/1, TANGENT, COLOR_0 | WebP, AVIF e imagens por URI dentro deste leitor |
@@ -203,6 +205,18 @@ struct GltfImport {
   // Câmeras do arquivo, quando o perfil pede para importá-las.
   std::vector<GltfImportCamera> cameras;
   std::vector<GltfImportLight> lights;
+  // Skins do arquivo, no índice do glTF. Um skin recusado fica com `joints`
+  // vazio e os desenhos que o usariam ficam estáticos (motivo em `notes`).
+  std::vector<SkinDefinition> skins;
+  // Por desenho: skin que o deforma ou -1. Paralelo a `draws`.
+  std::vector<i32> drawSkins;
+  // Influências por vértice (SkinInfluenceStride bytes), paralelas a
+  // `vertices`; vazio quando nenhuma primitiva do arquivo tem skin.
+  std::vector<u8> skinInfluences;
+  // Clipes do arquivo com ao menos um canal suportado.
+  std::vector<AnimationClip> animations;
+  // Canais descartados (pesos de morph, alvo inexistente ou espelhado).
+  u32 unsupportedAnimationChannels = 0;
   // Motivo concreto quando `importGlb` devolve falso. Nunca "erro ao importar".
   std::string diagnostic;
   bool cancelled = false;
@@ -264,6 +278,7 @@ struct GltfImport {
   std::vector<std::string> notes;
   bool anythingSkipped() const noexcept {
     return !appearanceExtensions.empty() || skippedTextures || skippedAnimations || skippedSkins || skippedPrimitives ||
+           unsupportedAnimationChannels ||
            skippedCameras || skippedLights || unappliedTextureTransforms || unappliedOcclusion;
   }
 };

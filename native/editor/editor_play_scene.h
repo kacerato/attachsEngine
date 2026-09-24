@@ -4,6 +4,7 @@
 #include "runtime/scene_physics.h"
 #include "runtime/input_actions.h"
 #include "runtime/script_bridge.h"
+#include "runtime/scene_animation.h"
 
 namespace ae::editor {
 // Adaptador do editor para o mundo de execução.
@@ -54,6 +55,9 @@ public:
     scripts_.configureRendering(std::move(authored),std::move(capabilities),thermal,effective,std::move(sink));
     scripts_.setAssetLibrary(assets,environmentProfiles);
   }
+  void setScriptRenderingExecution(renderer::UpscalingFilter executed,renderer::TemporalUpscalerAvailability status) {
+    scripts_.setRenderingExecution(executed,status);
+  }
   bool completeScriptRenderingRequest(u64 requestId,bool success,
                                       const renderer::ResolvedRenderingPolicy &effective,
                                       bool effectiveAvailable=true) {
@@ -93,6 +97,7 @@ public:
     input_.reset();
     input_.setGameplayFocus(true);
     if(!scripts_.start(world_,physics_,input_)) {physics_.stop();world_.clear();return false;}
+    animations_=&resources;animator_.reset();
     active_=true;
     paused_=false;
     return true;
@@ -109,11 +114,12 @@ public:
     physics_.stop();
     world_.clear();
     input_.reset();
+    animator_.reset();animations_=nullptr;
     active_=false;
     paused_=false;
   }
   void pause(bool value) {if(active_) paused_=value;}
-  bool step() {return active_ && paused_ && runScripts(1.0f/60.0f) && physics_.advance(1.0/60.0,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands();}
+  bool step() {return active_ && paused_ && runScripts(1.0f/60.0f) && animate(1.0f/60.0f) && physics_.advance(1.0/60.0,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands();}
   bool setCharacterMove(EditorEntityId id,float right,float forward,float yaw) {
     return active_ && physics_.setCharacterMove(id,right,forward,yaw);
   }
@@ -122,9 +128,10 @@ public:
     if(!active_) return false;
     if(paused_) return true;
     world_.advanceClock(std::min(elapsed,.25));
-    return runScripts(static_cast<float>(std::min(elapsed,.25))) &&
+    return runScripts(static_cast<float>(std::min(elapsed,.25))) && animate(static_cast<float>(std::min(elapsed,.25))) &&
            physics_.advance(elapsed,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands();
   }
+  const runtime::SceneAnimator &animator() const noexcept {return animator_;}
   u32 pendingCommandCount() const noexcept {return world_.pendingCommandCount();}
 private:
   // Ponto seguro: aplica a fila e avisa a física de quem deixou de existir, para
@@ -136,6 +143,14 @@ private:
     return true;
   }
   bool runScripts(float elapsed) {return scripts_.update(elapsed) && drainCommands();}
+  // Depois do Update dos scripts e antes da física (runtime/scene_animation.h).
+  // Nó com pose publicada pela física não é escrito pela animação.
+  bool animate(float elapsed) {
+    if(!animations_) return true;
+    return animator_.advance(world_.poseGraph(),*animations_,elapsed,[this](runtime::ObjectId id) {
+      return world_.authorityOf(world_.handle(id))==runtime::TransformAuthority::Free;
+    });
+  }
   static bool triggerEvent(void *context,runtime::ObjectId sensor,runtime::ObjectId other,u32 phase) {
     auto &self=*static_cast<EditorPlayScene *>(context);
     return self.scripts_.trigger(sensor,other,phase) && self.drainCommands();
@@ -153,6 +168,8 @@ private:
   runtime::ScriptBridge scripts_;
   runtime::InputService input_;
   std::vector<runtime::ObjectId> destroyed_;
+  runtime::SceneAnimator animator_;
+  const runtime::AnimationLibrary *animations_=nullptr;
   bool active_=false;
   bool paused_=false;
 };

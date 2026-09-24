@@ -310,7 +310,13 @@ void main() {
   // The motion pass samples the same vertex position and raster coverage as
   // the color pass. Billboard impostors and displaced water have separate
   // temporal behavior; they are excluded from rigid motion draws.
+#ifdef AETHER_SKINNED_MOTION
+  // Skin: a posição anterior já é a deformada pela paleta anterior, no espaço
+  // do desenho; o modelo anterior leva ao mundo do quadro anterior.
+  vMotionWorldDelta=worldPosition-(inPreviousModel*vec4(inTangent.xyz,1)).xyz;
+#else
   vMotionWorldDelta=worldPosition-(inPreviousModel*vec4(modelPosition,1)).xyz;
+#endif
   highp vec3 relative=worldPosition-frame.cameraPositionNear.xyz;
   highp vec3 view=vec3(dot(environment.worldToViewRow0.xyz,relative),
                  dot(environment.worldToViewRow1.xyz,relative),

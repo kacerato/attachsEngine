@@ -166,6 +166,76 @@ target_compile_options(aether_codecs PRIVATE -w
   $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
 )
 
+# --- Ampliadores temporais (G6-B) --------------------------------------------
+# Arm ASR 25.06 e AMD FSR 2.2.1, vendorizados com origem, commit e licença em
+# third_party/*/VERSION.txt. Só entram no binário Android: o host não tem um
+# device Vulkan para eles, e rhi/temporal_upscaler.cpp compila ali sem as
+# bibliotecas (a política recusa com NotBuilt). Como Jolt e codecs, entram
+# antes das flags estritas; o nosso wrapper os inclui como SYSTEM.
+if(ANDROID)
+  set(AETHER_ARM_ASR_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/arm_asr)
+  add_library(aether_arm_asr STATIC
+    ${AETHER_ARM_ASR_DIR}/src/shared/ffxm_assert.cpp
+    ${AETHER_ARM_ASR_DIR}/src/shared/ffxm_object_management.cpp
+    ${AETHER_ARM_ASR_DIR}/src/components/fsr2/ffxm_fsr2.cpp
+    ${AETHER_ARM_ASR_DIR}/src/backends/vk/ffxm_vk.cpp
+    ${AETHER_ARM_ASR_DIR}/src/backends/vk/ffxm_hash.cpp
+    ${AETHER_ARM_ASR_DIR}/src/backends/shared/ffxm_shader_blobs.cpp
+    ${AETHER_ARM_ASR_DIR}/src/backends/shared/blob_accessors/ffxm_fsr2_shaderblobs.cpp
+  )
+  target_include_directories(aether_arm_asr SYSTEM PUBLIC
+    ${AETHER_ARM_ASR_DIR}
+    ${AETHER_ARM_ASR_DIR}/include
+    ${AETHER_ARM_ASR_DIR}/include/host
+    ${AETHER_ARM_ASR_DIR}/include/host/backends/vk
+    ${AETHER_ARM_ASR_DIR}/include/gpu
+  )
+  target_include_directories(aether_arm_asr PRIVATE
+    ${AETHER_ARM_ASR_DIR}/src/backends/shared
+    ${AETHER_ARM_ASR_DIR}/src/backends/shared/blob_accessors
+    ${AETHER_ARM_ASR_DIR}/src/backends/shared/blob_accessors/prebuilt_shaders
+    ${AETHER_ARM_ASR_DIR}/src/backends/vk
+    ${AETHER_ARM_ASR_DIR}/src/components
+  )
+  target_compile_features(aether_arm_asr PRIVATE cxx_std_20)
+  # Consultas Vulkan 1.1 que o stub do NDK (minSdk 26) não exporta: despachadas
+  # por rhi/temporal_upscaler.cpp pelo ponteiro da instância.
+  # FFXM_FSR liga o acessor dos shaders FSR2 pré-compilados (o CMake oficial
+  # do ASR o define); sem ele cada pass recebe blob vazio e o contexto falha.
+  target_compile_definitions(aether_arm_asr PRIVATE
+    FFXM_FSR
+    vkGetPhysicalDeviceProperties2=aetherVkGetPhysicalDeviceProperties2
+    vkGetPhysicalDeviceFeatures2=aetherVkGetPhysicalDeviceFeatures2)
+  target_compile_options(aether_arm_asr PRIVATE -w)
+  target_link_libraries(aether_arm_asr PUBLIC vulkan)
+
+  set(AETHER_FSR2_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/fsr2)
+  add_library(aether_fsr2 STATIC
+    ${AETHER_FSR2_DIR}/src/ffx-fsr2-api/ffx_assert.cpp
+    ${AETHER_FSR2_DIR}/src/ffx-fsr2-api/ffx_fsr2.cpp
+    ${AETHER_FSR2_DIR}/src/ffx-fsr2-api/vk/ffx_fsr2_vk.cpp
+    ${AETHER_FSR2_DIR}/src/ffx-fsr2-api/vk/shaders/ffx_fsr2_shaders_vk.cpp
+  )
+  target_include_directories(aether_fsr2 SYSTEM PUBLIC ${AETHER_FSR2_DIR}/src/ffx-fsr2-api)
+  target_include_directories(aether_fsr2 PRIVATE
+    ${AETHER_FSR2_DIR}/src/ffx-fsr2-api/vk
+    ${AETHER_FSR2_DIR}/src/ffx-fsr2-api/vk/shaders
+    ${AETHER_FSR2_DIR}/src/ffx-fsr2-api/shaders
+    ${AETHER_FSR2_DIR}/generated
+  )
+  # FFX_GCC seleciona a exportação sem __declspec também nos cabeçalhos
+  # públicos; o shim fornece _countof/wcscpy_s e os cabeçalhos que o MSVC
+  # trazia transitivamente. O libc++ do NDK 27 esconde wstring_convert em C++26;
+  # as duas macros o mantêm visível para o fonte da AMD (C++17).
+  target_compile_definitions(aether_fsr2 PUBLIC FFX_GCC)
+  target_compile_definitions(aether_fsr2 PRIVATE
+    _LIBCPP_ENABLE_CXX26_REMOVED_CODECVT _LIBCPP_ENABLE_CXX26_REMOVED_WSTRING_CONVERT
+    vkGetPhysicalDeviceProperties2=aetherVkGetPhysicalDeviceProperties2
+    vkGetPhysicalDeviceFeatures2=aetherVkGetPhysicalDeviceFeatures2)
+  target_compile_options(aether_fsr2 PRIVATE -w -include ${AETHER_FSR2_DIR}/aether_portability.h)
+  target_link_libraries(aether_fsr2 PUBLIC vulkan)
+endif()
+
 # Engine mobile: sem RTTI, sem exceções, warnings tratados como erro nos alvos de runtime.
 # (só para o NOSSO código — ver a nota acima sobre por que o Jolt entra antes desta linha.)
 add_compile_options(
@@ -260,6 +330,7 @@ add_library(aether_renderer STATIC
   renderer/shadow_cascades.cpp
   renderer/shadow_atlas.cpp
   renderer/rendering_settings_file.cpp
+  renderer/temporal_upscaler_capability.cpp
   renderer/hzb_visibility.cpp
   renderer/lod_selection.cpp
   renderer/mesh_report.cpp
@@ -291,6 +362,7 @@ add_library(aether_assets STATIC
   resources/asset_registry.cpp
   resources/json_reader.cpp
   resources/gltf_import.cpp
+  resources/skeletal_animation.cpp
   resources/import_node_map.cpp
   resources/material_asset.cpp
   resources/environment_profile.cpp
@@ -331,6 +403,7 @@ add_library(aether_runtime STATIC
   runtime/scene_physics.cpp
   runtime/script_bridge.cpp
   runtime/runtime_rendering_state.cpp
+  runtime/scene_animation.cpp
 )
 target_include_directories(aether_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_runtime PUBLIC aether_core aether_assets aether_physics)
@@ -395,6 +468,7 @@ add_library(aether_rhi STATIC
   rhi/resource_desc.cpp
   rhi/render_graph_vulkan.cpp
   rhi/render_graph_vulkan_mapping.cpp
+  rhi/temporal_upscaler.cpp
   rhi/ui_renderer.cpp
   rhi/upload_context.cpp
 )
@@ -411,6 +485,8 @@ target_link_libraries(aether_rhi PUBLIC aether_core aether_rendergraph aether_ui
 if(ANDROID)
   find_package(games-frame-pacing REQUIRED CONFIG)
   target_link_libraries(aether_rhi PUBLIC vulkan)
+  target_link_libraries(aether_rhi PRIVATE aether_arm_asr aether_fsr2)
+  target_compile_definitions(aether_rhi PRIVATE AETHER_ARM_ASR=1 AETHER_FSR2=1)
 
   set(NATIVE_APP_GLUE_DIR ${ANDROID_NDK}/sources/android/native_app_glue)
   add_library(aether_native_app_glue STATIC
@@ -565,6 +641,8 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_rendering_state.cpp
     ../tests/native/test_asset_registry.cpp
     ../tests/native/test_gltf_import.cpp
+    ../tests/native/test_skeletal_animation.cpp
+    ../tests/native/test_skinned_scene.cpp
     ../tests/native/test_editor_model_import.cpp
     ../tests/native/test_import_reconcile.cpp
     ../tests/native/test_image_decode.cpp

@@ -5,14 +5,36 @@
 #include "renderer/authoring_texture.h"
 #include "editor/editor_view.h"
 #include "resources/asset_registry.h"
+#include "resources/skeletal_animation.h"
+#include "runtime/scene_animation.h"
+#include "scene/skinned_mesh.h"
 
 namespace ae::editor {
 // Immutable package geometry plus authored transforms. No Vulkan or Android.
 // assetId identifies a package draw, not a process pointer. The package fingerprint
 // must accompany saved documents so references cannot silently target another map.
 using EditorMapUpdate = renderer::MapDrawState;
-class EditorMapScene {
+class EditorMapScene final : public runtime::AnimationLibrary {
 public:
+  // G6-B: skin de cada desenho do pacote (0-based; nulo = estático) e clipes de
+  // cada fonte importada. Dado imutável da fonte, trocado junto com o pacote.
+  void setSkinning(std::vector<std::shared_ptr<const resources::SkinDefinition>> drawSkins,
+                   std::vector<std::pair<resources::AssetGuid,std::shared_ptr<const runtime::SourceAnimations>>> animations) {
+    drawSkins_=std::move(drawSkins);animationSources_=std::move(animations);
+  }
+  const resources::SkinDefinition *drawSkin(u32 index) const {
+    return index<drawSkins_.size()?drawSkins_[index].get():nullptr;
+  }
+  const runtime::SourceAnimations *animations(const resources::AssetGuid &source) const override {
+    for(const auto &[guid,value]:animationSources_) if(guid==source) return value.get();
+    return nullptr;
+  }
+  // Paleta e limites deformados de um slot com skin, na pose atual dos ossos.
+  // Osso ausente fica na pose de bind (paleta identidade). Falso quando a
+  // paleta é singular; o desenho segue na pose de bind.
+  bool skinPose(const runtime::SceneGraph &document, const scene::SkinnedMesh &skinned, u32 assetIndex,
+                const float drawModel[16], std::vector<float> &palette, float center[3], float &radius,
+                u32 *missingBones=nullptr) const;
   u32 assetCount() const { return static_cast<u32>(source_.size()); }
   const renderer::MapDrawRecord *asset(u32 index) const { return index<source_.size()?&source_[index]:nullptr; }
   std::string_view assetName(u32 index) const { return index<assetNames_.size()?assetNames_[index]:std::string_view{}; }
@@ -234,6 +256,8 @@ public:
 private:
   std::vector<std::pair<resources::AssetGuid,SharedMaterial>> materialLibrary_;
   std::vector<TextureBinding> textureLibrary_;
+  std::vector<std::shared_ptr<const resources::SkinDefinition>> drawSkins_;
+  std::vector<std::pair<resources::AssetGuid,std::shared_ptr<const runtime::SourceAnimations>>> animationSources_;
   EditorEntityId isolateEntity_=kInvalidEntity;
   u32 isolateSlot_=0;
   std::uint8_t isolateChannel_=0;

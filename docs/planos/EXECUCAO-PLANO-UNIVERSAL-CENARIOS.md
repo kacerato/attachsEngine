@@ -833,3 +833,30 @@ e voltou a preto ao restaurar o modo de origem. A imagem final e o material
 autoral foram restaurados após o teste. Isso valida o produtor e o consumidor
 para blend nessa cena; falta testar água e opacidades intermediárias, vetores
 de superfícies deformadas e a textura R8 exigida pelos backends temporais externos.
+
+Em 23/09, a base temporal do G6-B ganhou skin e animação por nós. A importação
+glTF lê `JOINTS_0`/`WEIGHTS_0` (4 maiores influências, renormalizadas), bind
+inversa, esferas por junta e clipes STEP/LINEAR/CUBICSPLINE; pesos de morph
+são contados como não suportados. Dois componentes entram pelo contrato de
+cena: **Malha com esqueleto** (`astra.render.skinned_mesh`: ossos por objeto,
+qualidade 1/2/4, vetor de movimento do skin) e **Animação** (`astra.animation`:
+clipe, tocar ao iniciar, repetição, velocidade; `playing`/`time` só em
+execução). A instanciação liga os ossos aos objetos das juntas e põe a Animação
+na raiz. No Play, a animação roda depois do `Update` dos scripts e não escreve
+nós cuja pose é da física. A extração calcula paleta e limites deformados; o
+renderer deforma por compute (primeira classe de GPU do quadro, `gpu_skinning_ms`)
+num buffer próprio com a pose atual e a posição anterior, lido pela sombra, cena,
+prévia e pelo passe de movimento (variante com a posição anterior no binding 2).
+C# ganhou `Component.Animation()` com Play/Stop/Rewind/Time/Speed/WrapMode.
+Host 1122/1126 (as quatro falhas restantes são corpus/texturas ausentes, anteriores),
+suíte gerenciada 460/0, APK debug arm64 compilado. No Xiaomi/Adreno 825, um GLB
+procedural próprio (tubo de 3 ossos, clipe "Aceno" de 2 s, `build/glb-real/astra-braco-skin.glb`)
+foi importado pela UI, mostrou "Clipe 1 de 1: Aceno · 2.00 s", dobrou suavemente
+no Play com TAA nativo, Arm ASR e AMD FSR 2, reabriu com hierarquia e componentes,
+e o diagnóstico Vetor coloriu só a parte girada durante o arrasto do osso no editor,
+voltando ao cinza ao soltar. A validação no aparelho encontrou e corrigiu dois
+defeitos: o alvo do ASR sem `FFXM_FSR` (shaders vazios e abort ao aplicar ASR) e
+`independentBlend` não habilitado para as máscaras R8. Pendentes: CesiumMan ou outro
+asset real de terceiros (o download não foi autorizado nesta rodada), A/B de custo e
+qualidade entre TAA/ASR/FSR 2, mistura entre clipes, morph targets e escala não
+uniforme exata nas normais deformadas.

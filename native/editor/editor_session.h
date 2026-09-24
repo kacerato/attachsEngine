@@ -368,6 +368,7 @@ public:
   void update();
   // A linha "Na vista" do LOD Group selecionado, refeita a cada atualização.
   void refreshLodStatus();
+  void refreshSkinningStatus();
 
   std::span<const ui::UiInstance> instances() const noexcept { return instances_; }
   const EditorScreenLayout &layout() const noexcept { return layout_; }
@@ -375,6 +376,7 @@ public:
   const EditorCamera &camera() const noexcept { return camera_; }
   const EditorViewport &view() const noexcept { return view_; }
   EditorDocument &document() noexcept { return document_; }
+  const EditorMapScene &mapScene() const noexcept { return mapScene_; }
   EditorHistory &history() noexcept { return history_; }
   EditorEntityId selection() const noexcept { return state_.selection; }
   EditorSceneVersion sceneVersion() const noexcept { return {sceneEpoch_,document_.revision()}; }
@@ -431,6 +433,14 @@ public:
                                                std::span<const renderer::SharedAuthoringTexture>,
                                                PublishedGeometry &)>;
   void setGeometryPublisher(GeometryPublisher publisher) { publishGeometry_ = std::move(publisher); }
+  // Skin da biblioteca sendo publicada, lido pelo publicador DURANTE a chamada:
+  // influências paralelas aos vértices recebidos e juntas por desenho recebido
+  // (zero = estático). Fora da publicação, vazio.
+  struct SkinningPublication {
+    std::span<const u8> influences;
+    std::span<const u32> drawJoints;
+  };
+  const SkinningPublication &skinningPublication() const noexcept { return skinningPublication_; }
   // Republica a geometria importada para um consumidor gráfico NOVO.
   //
   // Recriar a superfície reconstrói o renderer do zero, e a biblioteca de
@@ -495,6 +505,8 @@ public:
     // LOD Groups gerados pela convenção `_LOD0`, `_LOD1`... dos nós, e o que
     // ficou de fora deles.
     u32 lodGroups = 0;
+    // G6-B: componentes de skin e animação criados na instanciação.
+    u32 skinnedMeshes = 0, animations = 0;
     std::vector<std::string> lodNotes;
     std::string diagnostic;
     bool cancelled = false;
@@ -934,6 +946,7 @@ public:
   void setRenderingSettings(const renderer::ProjectRenderingSettings &settings) {
     renderingSettings_ = settings;
     state_.qualityDraft = settings;
+    state_.qualityApplied = settings;
     state_.qualityDirty = false;
     renderingSettingsRequested_ = false;
     renderingSettingsRequestInFlight_ = false;
@@ -979,6 +992,7 @@ public:
     renderingSettingsRequestInFlight_ = false;
     if (success) {
       renderingSettings_ = requestedRenderingSettings_;
+      state_.qualityApplied = renderingSettings_;
       state_.qualityDirty = qualityRevision_ != renderingSettingsRequestRevision_;
       state_.status = state_.qualityDirty ? "Qualidade aplicada; há novas alterações" : "Qualidade aplicada";
     } else {
@@ -989,11 +1003,37 @@ public:
   // O que o renderer está fazendo agora, para o rodapé do painel.
   void setRenderStats(u32 width, u32 height, float gpuMilliseconds,
                       std::string_view detectedLevel);
-  void setTemporalDebugAvailable(bool available,bool motionAvailable=false) {
+  // Entradas temporais que o renderer produz nesta vista. `history` diz se o
+  // histórico é do TAA nativo (as vistas de histórico e rejeição só existem ali).
+  void setTemporalDebugAvailable(bool available,bool motionAvailable=false,bool history=true) {
     state_.qualityTemporalAvailable=available;
     state_.qualityMotionAvailable=available && motionAvailable;
-    if(!available) state_.qualityTemporalDebug=0;
-    else if(!motionAvailable && state_.qualityTemporalDebug==4) state_.qualityTemporalDebug=0;
+    state_.qualityHistoryDiagnostics=available && history;
+    if(!available || !temporalDebugViewAvailable(state_.qualityTemporalDebug)) state_.qualityTemporalDebug=0;
+  }
+  // Capacidade do aparelho e o que o renderer executou no último quadro.
+  void setTemporalUpscalerStatus(renderer::TemporalUpscalerAvailability armAsr,
+                                 renderer::TemporalUpscalerAvailability fsr2,
+                                 renderer::UpscalingFilter executed,
+                                 renderer::TemporalUpscalerAvailability status,bool nativeTaa) {
+    state_.qualityArmAsr=armAsr;state_.qualityFsr2=fsr2;
+    state_.qualityExecutedUpscaler=executed;state_.qualityExecutedStatus=status;
+    state_.qualityTemporalAaExecuted=nativeTaa;
+    playScene_.setScriptRenderingExecution(executed,status);
+  }
+  bool temporalDebugViewAvailable(u32 view) const {
+    if(view==0) return true;
+    if(!state_.qualityTemporalAvailable || view>6) return false;
+    if(view==2||view==3) return state_.qualityHistoryDiagnostics;
+    if(view==4) return state_.qualityMotionAvailable;
+    return true;
+  }
+  u32 nextTemporalDebugView() const {
+    for(u32 step=1;step<=7;++step) {
+      const u32 view=(state_.qualityTemporalDebug+step)%7u;
+      if(temporalDebugViewAvailable(view)) return view;
+    }
+    return 0;
   }
   EditorEntityId createWaterSurface(bool cameraRelative);
   void reportWaterConfiguration(bool accepted) {
@@ -1069,6 +1109,12 @@ private:
     std::vector<std::string> materialNames;
     // Texturas decodificadas da fonte; `materials[i].textureIndices` indexa aqui.
     std::vector<renderer::SharedAuthoringTexture> textures;
+    // G6-B: skins, skin por desenho da fonte (-1 estático), influências
+    // paralelas a `vertices` (vazio sem skin) e clipes por nó.
+    std::vector<resources::SkinDefinition> skins;
+    std::vector<i32> drawSkins;
+    std::vector<u8> skinInfluences;
+    std::vector<resources::AnimationClip> animations;
     // Faixa que veio da fonte. Recursos derivados compartilham os vértices e
     // entram depois dela; regenerar começa sempre daqui.
     usize sourceIndexCount = 0;
@@ -1086,6 +1132,12 @@ private:
     // Pivô por desenho, em espaço do mesh. Geometria importada gira em torno da
     // origem do NÓ; ver `EditorMapScene::adoptPackage`.
     std::vector<float> pivots;
+    // G6-B: influências paralelas a `vertices` (vazio quando nenhuma fonte tem
+    // skin), skin e juntas por desenho, e os clipes de cada fonte.
+    std::vector<u8> skinInfluences;
+    std::vector<std::shared_ptr<const resources::SkinDefinition>> drawSkins;
+    std::vector<u32> drawJoints;
+    std::vector<std::pair<resources::AssetGuid,std::shared_ptr<const runtime::SourceAnimations>>> animations;
   };
   // Achata os blocos na ordem em que estão, remapeando offsets. A ordem é
   // estável: reimportar não reordena as fontes, então os slots das outras não
@@ -1201,6 +1253,7 @@ private:
   u64 packageFingerprint_ = 0;
   resources::AssetRegistry assets_;
   GeometryPublisher publishGeometry_;
+  SkinningPublication skinningPublication_{};
   static u64 nextSceneEpoch() noexcept;
   struct ViewportPointer final {
     u32 id = 0;

@@ -150,8 +150,9 @@ AE_TEST(atribuicao_nao_afirma_nada_sem_tempo_de_gpu) {
 }
 
 AE_TEST(water_simulation_is_independent_of_tile_pass_attribution) {
-  for(const auto pass:{ae::GpuPassClass::CameraPreview,ae::GpuPassClass::WaterSimulation,ae::GpuPassClass::LocalShadow,
-                      ae::GpuPassClass::AutoExposure,ae::GpuPassClass::Post,ae::GpuPassClass::FsrEasu,
+  for(const auto pass:{ae::GpuPassClass::Skinning,ae::GpuPassClass::CameraPreview,ae::GpuPassClass::WaterSimulation,ae::GpuPassClass::LocalShadow,
+                      ae::GpuPassClass::AutoExposure,ae::GpuPassClass::TemporalUpscale,
+                      ae::GpuPassClass::Post,ae::GpuPassClass::FsrEasu,
                       ae::GpuPassClass::FsrRcas,ae::GpuPassClass::Ui}) {
     std::array<double, ae::GpuPassClassCount> passes{};
     passes[static_cast<ae::u32>(pass)]=7;

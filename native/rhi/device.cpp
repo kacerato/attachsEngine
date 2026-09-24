@@ -743,6 +743,15 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   // R4 (T13): sem pedir a feature, o limite de anisotropia ficava sempre 1 e a
   // política de qualidade era reduzida "por capability" em qualquer aparelho.
   enabledFeatures.samplerAnisotropy = supportedFeatures.samplerAnisotropy;
+  // G6-B: as máscaras R8 de reatividade/composição misturam com MAX enquanto a
+  // cor usa o blend do material: anexos com blend diferente exigem esta feature.
+  enabledFeatures.independentBlend = supportedFeatures.independentBlend;
+  // G6-B: Arm ASR e AMD FSR 2 usam shaders com Int16 e imagens de storage em
+  // formatos estendidos / escrita sem formato. Pedidas só quando existem; o
+  // renderer lê o que ficou habilitado para decidir, nunca o suporte físico.
+  enabledFeatures.shaderInt16 = supportedFeatures.shaderInt16;
+  enabledFeatures.shaderStorageImageExtendedFormats = supportedFeatures.shaderStorageImageExtendedFormats;
+  enabledFeatures.shaderStorageImageWriteWithoutFormat = supportedFeatures.shaderStorageImageWriteWithoutFormat;
 
   // Item 2.1.4 (bindless via descriptor_indexing): VK_EXT_descriptor_indexing é core no Vulkan
   // 1.2+, mas continua exigindo consulta explícita de suporte — extensão core não significa
@@ -754,6 +763,7 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   bool memoryBudgetExtensionSupported = false;
   bool drawIndirectCountExtensionSupported = false;
   bool extendedDynamicStateSupported = false;
+  bool shaderFloat16ExtensionSupported = false;
   {
     u32 extensionCount = 0;
     vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extensionCount, nullptr);
@@ -772,6 +782,8 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
           drawIndirectCountExtensionSupported = true;
         if (std::strcmp(ext.extensionName, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME) == 0)
           extendedDynamicStateSupported = true;
+        if (std::strcmp(ext.extensionName, VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME) == 0)
+          shaderFloat16ExtensionSupported = true;
       }
     }
   }
@@ -851,12 +863,50 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
     enabledDynamicState.extendedDynamicState = extendedDynamicStateSupported ? VK_TRUE : VK_FALSE;
   }
 
+  // G6-B: shaderFloat16 só existe via VK_KHR_shader_float16_int8 no piso 1.1.
+  // As bibliotecas escolhem permutações de 16 bits pelo suporte que ELAS
+  // consultam; habilitar aqui é o que torna essa escolha válida.
+  VkPhysicalDeviceShaderFloat16Int8Features enabledFloat16{};
+  enabledFloat16.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
+  if (shaderFloat16ExtensionSupported) {
+    VkPhysicalDeviceShaderFloat16Int8Features supported{};
+    supported.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
+    auto getFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
+        vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceFeatures2KHR"));
+    if (getFeatures2 == nullptr)
+      getFeatures2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2KHR>(
+          vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceFeatures2"));
+    if (getFeatures2 != nullptr) {
+      VkPhysicalDeviceFeatures2 features2{};
+      features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+      features2.pNext = &supported;
+      getFeatures2(physicalDevice_, &features2);
+    }
+    shaderFloat16ExtensionSupported = supported.shaderFloat16 == VK_TRUE;
+    enabledFloat16.shaderFloat16 = shaderFloat16ExtensionSupported ? VK_TRUE : VK_FALSE;
+  }
+  // Operações de subgrupo no compute: o passe de pirâmide de luminância das
+  // duas bibliotecas usa GroupNonUniform e GroupNonUniformQuad.
+  VkPhysicalDeviceSubgroupProperties subgroup{};
+  subgroup.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES;
+  if (auto getProperties2 = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(
+          vkGetInstanceProcAddr(instance_, "vkGetPhysicalDeviceProperties2"))) {
+    VkPhysicalDeviceProperties2 properties{};
+    properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    properties.pNext = &subgroup;
+    getProperties2(physicalDevice_, &properties);
+  }
+
   VkDeviceCreateInfo deviceInfo{};
   deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   if (bindlessSupported && extendedDynamicStateSupported) enabledDescriptorIndexingFeatures.pNext = &enabledDynamicState;
   deviceInfo.pNext = bindlessSupported ? static_cast<const void *>(&enabledDescriptorIndexingFeatures)
                      : extendedDynamicStateSupported ? static_cast<const void *>(&enabledDynamicState)
                                                      : nullptr;
+  if (shaderFloat16ExtensionSupported) {
+    enabledFloat16.pNext = const_cast<void *>(deviceInfo.pNext);
+    deviceInfo.pNext = &enabledFloat16;
+  }
   deviceInfo.queueCreateInfoCount = queueCreateCount;
   deviceInfo.pQueueCreateInfos = queueInfos;
   deviceInfo.pEnabledFeatures = &enabledFeatures;
@@ -873,6 +923,8 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
     deviceExtensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
   if (extendedDynamicStateSupported)
     deviceExtensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
+  if (shaderFloat16ExtensionSupported)
+    deviceExtensions.push_back(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
   // `multiDrawIndirect` é a feature que permite mais de um comando por chamada;
   // sem ela, um `maxDrawCount` vindo da GPU não teria como ser respeitado e a
   // extensão não serviria para nada. Pedir as duas juntas evita habilitar uma
@@ -941,6 +993,7 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
   deviceFeatures_.dedicatedComputeQueue = computeQueueFamily_ != UINT32_MAX &&
                                           computeQueueFamily_ != graphicsQueueFamily_;
   deviceFeatures_.multiDrawIndirect = enabledFeatures.multiDrawIndirect == VK_TRUE;
+  deviceFeatures_.independentBlend = enabledFeatures.independentBlend == VK_TRUE;
   deviceFeatures_.drawIndirectFirstInstance =
       enabledFeatures.drawIndirectFirstInstance == VK_TRUE;
   computeLimits_.supported = deviceFeatures_.computeShaders;
@@ -960,6 +1013,27 @@ bool VulkanDevice::initializeDevice(VkSurfaceKHR presentationSurface, bool allow
                                   : 1.0f;
   deviceProfile_ = classifyDeviceProfile(deviceFeatures_);
   enabledPaths_ = derivePaths(deviceProfile_, deviceFeatures_);
+  temporalUpscalerFeatures_ = {};
+  temporalUpscalerFeatures_.shaderFloat16 = shaderFloat16ExtensionSupported;
+  temporalUpscalerFeatures_.shaderInt16 = enabledFeatures.shaderInt16 == VK_TRUE;
+  temporalUpscalerFeatures_.storageImageExtendedFormats =
+      enabledFeatures.shaderStorageImageExtendedFormats == VK_TRUE;
+  temporalUpscalerFeatures_.storageImageWriteWithoutFormat =
+      enabledFeatures.shaderStorageImageWriteWithoutFormat == VK_TRUE;
+  temporalUpscalerFeatures_.computeSubgroupBasic =
+      (subgroup.supportedStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0 &&
+      (subgroup.supportedOperations & VK_SUBGROUP_FEATURE_BASIC_BIT) != 0;
+  temporalUpscalerFeatures_.computeSubgroupQuad =
+      temporalUpscalerFeatures_.computeSubgroupBasic &&
+      (subgroup.supportedOperations & VK_SUBGROUP_FEATURE_QUAD_BIT) != 0;
+#if AETHER_VULKAN_VALIDATION
+  __android_log_print(ANDROID_LOG_INFO, kValidationLogTag,
+      "[TemporalUpscaler] float16=%d int16=%d storage_ext=%d storage_write_noformat=%d subgroup_compute=%d quad=%d",
+      temporalUpscalerFeatures_.shaderFloat16, temporalUpscalerFeatures_.shaderInt16,
+      temporalUpscalerFeatures_.storageImageExtendedFormats,
+      temporalUpscalerFeatures_.storageImageWriteWithoutFormat,
+      temporalUpscalerFeatures_.computeSubgroupBasic, temporalUpscalerFeatures_.computeSubgroupQuad);
+#endif
 
   return true;
 }

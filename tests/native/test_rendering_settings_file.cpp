@@ -83,7 +83,7 @@ AE_TEST(a_bad_rendering_settings_file_changes_nothing) {
   AE_EXPECT_TRUE(readRenderingSettings("astra_rendering 2\nquality=s\nupscaling=fsr\n", settings),
                  "chave futura é ignorada");
   AE_EXPECT_TRUE(settings.preset == QualityPreset::S, "o que se entende vale");
-  AE_EXPECT_TRUE(!readRenderingSettings("astra_rendering 3\nquality=a\n", settings),
+  AE_EXPECT_TRUE(!readRenderingSettings("astra_rendering 4\nquality=a\n", settings),
                  "versão futura requer migração conhecida");
 }
 
@@ -128,4 +128,27 @@ AE_TEST(the_editor_renders_native_unless_the_project_asks_otherwise) {
   const auto policy = resolveRenderingPolicy(editor, device, ThermalPressure::None);
   AE_EXPECT_TRUE(!policy.dynamicResolution.enabled, "sem controlador de escala no editor");
   AE_EXPECT_TRUE(policy.resolutionScale >= .999f, "resolução nativa");
+}
+
+AE_TEST(rendering_settings_v3_persist_temporal_upscaler_and_reject_future_names) {
+  ProjectRenderingSettings settings;
+  settings.upscalingFilter = UpscalingFilter::ArmAsr;
+  settings.temporalUpscalerQuality = TemporalUpscalerQuality::Balanced;
+  settings.resolutionScale = .67f;
+  const auto text = writeRenderingSettings(settings);
+  AE_EXPECT_TRUE(text.rfind("astra_rendering 3\n", 0) == 0, "arquivo v3");
+  ProjectRenderingSettings restored;
+  AE_EXPECT_TRUE(readRenderingSettings(text, restored), "v3 volta");
+  AE_EXPECT_TRUE(restored.upscalingFilter == UpscalingFilter::ArmAsr &&
+                 restored.temporalUpscalerQuality == TemporalUpscalerQuality::Balanced &&
+                 restored.resolutionScale == .67f, "Arm ASR, preset e escala sobrevivem");
+  settings.upscalingFilter = UpscalingFilter::Fsr2;
+  AE_EXPECT_TRUE(readRenderingSettings(writeRenderingSettings(settings), restored) &&
+                 restored.upscalingFilter == UpscalingFilter::Fsr2, "AMD FSR 2 sobrevive");
+  ProjectRenderingSettings untouched;
+  AE_EXPECT_TRUE(!readRenderingSettings("astra_rendering 3\ntemporal_upscaler_quality=extreme\n", untouched) &&
+                 untouched.temporalUpscalerQuality == TemporalUpscalerQuality::Inherit,
+                 "preset ilegível recusa o arquivo sem alterar a saída");
+  AE_EXPECT_TRUE(readRenderingSettings("astra_rendering 2\nupscaling_filter=fsr1\n", untouched) &&
+                 untouched.upscalingFilter == UpscalingFilter::Fsr1, "v2 continua legível");
 }

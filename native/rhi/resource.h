@@ -15,6 +15,8 @@ struct SamplerDesc {
   VkSamplerAddressMode addressW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
   float minLod = 0.0f;
   float maxLod = 0.0f;
+  // Viés de LOD; limitado por VkPhysicalDeviceLimits::maxSamplerLodBias.
+  float mipLodBias = 0.0f;
   bool enableAnisotropy = false;
   float maxAnisotropy = 1.0f;
   // Amostragem de comparacao (sampler2DShadow). O Adreno tem PCF em hardware:

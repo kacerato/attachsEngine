@@ -20,6 +20,7 @@
 #include "rhi/gpu_frame_timer.h"
 #include "rhi/memory_allocator.h"
 #include "rhi/resource.h"
+#include "rhi/temporal_upscaler.h"
 #include "rhi/upload_context.h"
 #include "renderer/gpu_mesh_instance.h"
 #include "renderer/gpu_cost_isolation.h"
@@ -50,8 +51,11 @@
 
 namespace ae::platform::android {
 
+// Diagnóstico das entradas temporais. Histórico e rejeição só existem no TAA
+// nativo; profundidade, vetor e máscaras também valem com Arm ASR e FSR 2.
 enum class TemporalDebugView : u32 { Final = 0, Depth = 1, HistoryWeight = 2,
-                                     RejectedDepth = 3, Motion = 4, Reactivity = 5 };
+                                     RejectedDepth = 3, Motion = 4, Reactivity = 5,
+                                     Composition = 6 };
 
 // PoC-A (item 0.2 do plano): "o overhead de interop C#↔Vulkan mata o
 // desempenho?". Desenha N instâncias de um cubo (rhi/shaders/instanced.vert)
@@ -95,9 +99,23 @@ public:
   void setUiInstances(std::span<const ui::UiInstance> instances);
   void setTemporalDebugView(TemporalDebugView view) { temporalDebugView_ = view; }
   bool temporalDebugAvailable() const {
-    return temporalAaActive_ && sceneOrthographicHalfHeight_ == 0.0f;
+    return temporalInputsActive_ &&
+           (temporalUpscaler_.ready() || (temporalAaActive_ && sceneOrthographicHalfHeight_ == 0.0f));
   }
   bool motionVectorsAvailable() const { return motionVectorsActive_ && temporalDebugAvailable(); }
+  bool temporalHistoryDiagnosticsAvailable() const {
+    return temporalAaActive_ && sceneOrthographicHalfHeight_ == 0.0f;
+  }
+  // G6-B: o que o aparelho permite e o que rodou no último quadro. O estado
+  // executado é separado da política: um contexto pode falhar depois dela.
+  // Chamado antes de `initialize`, a partir do device e dos formatos reais,
+  // para a política já nascer com o motivo de recusa.
+  static void probeTemporalUpscalers(const rhi::VulkanDevice &device,
+                                     renderer::TemporalUpscalerAvailability &armAsr,
+                                     renderer::TemporalUpscalerAvailability &fsr2);
+  renderer::UpscalingFilter executedUpscaler() const noexcept { return executedUpscaler_; }
+  renderer::TemporalUpscalerAvailability executedUpscalerStatus() const noexcept { return executedUpscalerStatus_; }
+  bool nativeTaaExecuted() const noexcept { return temporalAaActive_ && temporalHistoryInitialized_; }
   // R4: atlas de prévia de texturas composto pelo editor; enviado à GPU no
   // início da gravação da interface do próximo quadro.
   void setUiPreviewAtlas(std::span<const u8> rgba, u32 width, u32 height);
@@ -194,10 +212,16 @@ public:
   bool supportsAstc4x4() const noexcept { return astc4x4_; }
   // R4: as pipelines de mapa descartam a face de trás por material (dupla face real).
   bool materialCulling() const noexcept { return materialCulling_; }
+  // `skinInfluences` é paralelo a `vertices` (16 bytes por vértice, vazio sem
+  // skin) e `drawJoints` a `draws` (juntas do skin; zero = estático).
   bool rebuildAuthoringGeometry(std::span<const u8> vertices, std::span<const u32> indices,
                                 std::span<const renderer::MapDrawRecord> draws,
                                 std::span<const renderer::MapMaterialRecord> materials,
-                                std::span<const renderer::SharedAuthoringTexture> textures = {});
+                                std::span<const renderer::SharedAuthoringTexture> textures = {},
+                                std::span<const u8> skinInfluences = {},
+                                std::span<const u32> drawJoints = {});
+  // Desenhos com skin deformados pelo compute no último quadro.
+  u32 profileSkinnedDraws() const noexcept { return skinnedDrawsThisFrame_; }
 
 
   bool uiRendererReady() const { return uiRenderer_.isReady(); }
@@ -532,7 +556,60 @@ private:
   bool createMotionResources();
   void destroyMotionResources();
   void recordMotionPass(const platform::FreeCameraState &camera,float timeSeconds);
-  void recordPostProcess(u32 imageIndex, const platform::FreeCameraState &camera);
+  // --- Skin por compute (G6-B, instanced_skinning.inl) ----------------------
+  // A saída vive num buffer próprio: por desenho publicado com skin, a pose
+  // atual (n vértices) e, logo depois, a posição anterior (n vértices). Os
+  // desenhos com skin trocam o buffer de vértice e o deslocamento; o resto do
+  // pacote não muda de lugar.
+  struct SkinnedDraw {
+    u32 drawIndex = 0, sourceVertex = 0, vertexCount = 0, influenceVertex = 0;
+    u32 targetVertex = 0, joints = 0, paletteBase = 0, influences = 4;
+    bool motion = true, hasPrevious = false;
+    std::vector<float> previous;
+  };
+  struct PendingSkin {
+    std::shared_ptr<const std::vector<float>> palette;
+    u8 influences = 4;
+    bool motion = true;
+  };
+  struct DrawGeometry { VkBuffer buffer; i32 vertexOffset; };
+  bool createSkinningPipeline();
+  void destroySkinningResources();
+  bool uploadSkinningLibrary(std::span<const u8> influences, std::span<const u32> drawJoints,
+                             usize extraVertices);
+  bool layoutSkinnedDraws();
+  void queueSkinPalettes(std::span<const renderer::MapDrawState> draws);
+  bool recordSkinning();
+  DrawGeometry drawGeometry(u32 drawIndex) const;
+  std::vector<u32> sourceSkinJoints_, sourceSkinVertices_;
+  u32 skinInfluenceVertexBase_ = 0;
+  rhi::VulkanBuffer skinInfluences_{}, skinVertices_{}, skinPalettes_{};
+  std::vector<SkinnedDraw> skinnedDraws_;
+  std::vector<i32> drawSkinSlot_;
+  std::vector<PendingSkin> pendingSkins_;
+  bool pendingSkinsValid_ = false;
+  VkDescriptorSetLayout skinningSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorPool skinningPool_ = VK_NULL_HANDLE;
+  VkDescriptorSet skinningSet_ = VK_NULL_HANDLE;
+  VkPipelineLayout skinningLayout_ = VK_NULL_HANDLE;
+  VkPipeline skinningPipeline_ = VK_NULL_HANDLE;
+  VkPipeline motionSkinnedPipeline_ = VK_NULL_HANDLE;
+  bool skinningDescriptorsDirty_ = true;
+  bool skinningUnavailableReported_ = false;
+  u32 skinnedDrawsThisFrame_ = 0;
+  // Máscaras R8 de reatividade e composição, anexos 2 e 3 do passe principal.
+  bool createTemporalInputResources();
+  void destroyTemporalInputResources();
+  u32 sceneColorAttachmentCount() const { return temporalMasksActive_ ? 3u : 1u; }
+  // Arm ASR / AMD FSR 2: composição HDR na resolução interna, exposição 1x1 e
+  // o dispatch da biblioteca; a exibição reaproveita o pós na resolução final.
+  bool createTemporalUpscalerResources();
+  void destroyTemporalUpscalerResources();
+  bool recordTemporalUpscale(const platform::FreeCameraState &camera, float timeSeconds);
+  // `upscaledInput`: a cor de entrada é a saída do Arm ASR/FSR 2 na resolução
+  // final, já composta (névoa e AO); o pós só faz a parte de exibição.
+  void recordPostProcess(u32 imageIndex, const platform::FreeCameraState &camera,
+                         bool upscaledInput = false);
   bool createAutoExposureResources();
   void destroyAutoExposureResources();
   void bindAutoExposureSource(u32 view, VkImageView source);
@@ -621,6 +698,9 @@ private:
   VkRenderPass previewPostRenderPass_=VK_NULL_HANDLE;
   VkFramebuffer previewPostFramebuffer_=VK_NULL_HANDLE;
   rhi::VulkanImage previewSceneColor_,previewColor_,previewDepth_;
+  // O passe da prévia é compatível com o principal: com máscaras temporais,
+  // o framebuffer precisa dos mesmos anexos (a prévia não os consome).
+  rhi::VulkanImage previewReactive_,previewComposition_;
   rhi::VulkanBuffer previewUniform_;
   VkDescriptorPool previewPool_=VK_NULL_HANDLE;
   VkDescriptorSet previewSet_=VK_NULL_HANDLE;
@@ -725,11 +805,42 @@ private:
   VkPipelineLayout autoExposurePipelineLayout_=VK_NULL_HANDLE;
   VkPipeline autoExposurePipelines_[2]{};
   rhi::VulkanImage postSceneColor_{};
-  rhi::VulkanImage motionImage_{};
+  // Entradas temporais unificadas (temporal_projection.glsl).
+  bool temporalInputsActive_ = false;
+  bool temporalMasksActive_ = false;
+  rhi::VulkanImage motionImage_{}; // RG16F: atual -> anterior, UV da extensão, sem jitter
+  rhi::VulkanImage reactiveMaskImage_{}, compositionMaskImage_{};
   VkRenderPass motionRenderPass_ = VK_NULL_HANDLE;
   VkFramebuffer motionFramebuffer_ = VK_NULL_HANDLE;
   VkPipeline motionPipeline_ = VK_NULL_HANDLE;
+  VkPipeline motionCameraPipeline_ = VK_NULL_HANDLE;
+  VkPipelineLayout motionCameraLayout_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout motionCameraSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorPool motionCameraPool_ = VK_NULL_HANDLE;
+  VkDescriptorSet motionCameraSet_ = VK_NULL_HANDLE;
+  rhi::VulkanSampler motionDepthSampler_{};
   bool motionVectorsActive_ = false;
+  // Ampliador temporal de terceiros (rhi/temporal_upscaler.h).
+  rhi::TemporalUpscaler temporalUpscaler_{};
+  renderer::UpscalingFilter temporalUpscalerRequested_ = renderer::UpscalingFilter::Bilinear;
+  renderer::UpscalingFilter executedUpscaler_ = renderer::UpscalingFilter::Bilinear;
+  renderer::TemporalUpscalerAvailability executedUpscalerStatus_ =
+      renderer::TemporalUpscalerAvailability::Available;
+  rhi::VulkanImage compositeColor_{}, upscaledColor_{}, exposureImage_{};
+  VkImageLayout upscaledColorLayout_ = VK_IMAGE_LAYOUT_UNDEFINED;
+  VkRenderPass compositeRenderPass_ = VK_NULL_HANDLE;
+  VkFramebuffer compositeFramebuffer_ = VK_NULL_HANDLE;
+  VkPipeline compositePipeline_ = VK_NULL_HANDLE;
+  VkDescriptorSet upscaledDescriptorSet_ = VK_NULL_HANDLE;
+  VkDescriptorSetLayout exposureExportSetLayout_ = VK_NULL_HANDLE;
+  VkDescriptorPool exposureExportPool_ = VK_NULL_HANDLE;
+  VkDescriptorSet exposureExportSet_ = VK_NULL_HANDLE;
+  VkPipelineLayout exposureExportLayout_ = VK_NULL_HANDLE;
+  VkPipeline exposureExportPipeline_ = VK_NULL_HANDLE;
+  bool exposureImageInitialized_ = false;
+  float temporalUpscalerJitterPixels_[2]{};
+  float temporalPreviousTime_ = -1.0f;
+  std::string temporalUpscalerDiagnostic_;
   rhi::VulkanImage postHistory_{};
   rhi::VulkanImage postResolved_{};
   rhi::VulkanImage fsrSource_{}, fsrUpscaled_{};
@@ -934,7 +1045,9 @@ private:
   renderer::WaterShadingSettings waterShading_{};
   std::array<renderer::MapDrawUpdate, 128> pendingMapPoses_{};
   u32 pendingMapPoseCount_ = 0;
-  std::array<u32,128> motionDrawIndices_{};
+  // Um vetor por desenho que se moveu no quadro, sem teto fixo: exceder uma
+  // capacidade pequena descartava o histórico da cena inteira.
+  std::vector<u32> motionDrawIndices_;
   u32 motionDrawCount_ = 0;
   bool temporalStaticCoverage_ = false;
   u32 temporalStaticFrameCount_ = 0;

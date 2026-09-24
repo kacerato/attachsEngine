@@ -214,8 +214,9 @@ AE_TEST(glb_import_reuses_geometry_for_instances_and_reports_what_it_left_behind
   asset.json.replace(posicao, um.size(), dois);
   asset.json.replace(asset.json.find(R"("scenes":[{"nodes":[0]}])"), std::strlen(R"("scenes":[{"nodes":[0]}])"),
                      R"("scenes":[{"nodes":[0,1]}])");
-  // E um arquivo que também traz animação, pele e textura: coisas que esta
-  // importação não traz e precisa CONTAR, não esconder.
+  // E um arquivo que também traz animação sem canais, pele e textura. O que a
+  // importação não traz precisa ser CONTADO, não escondido; o skin com junta
+  // válida agora é suportado (G6-B) e deixa de contar como perdido.
   asset.json.insert(asset.json.size() - 1,
                     R"(,"animations":[{"channels":[],"samplers":[]}],"skins":[{"joints":[0]}])");
   asset.json.replace(asset.json.find(R"("baseColorFactor":[0.25,0.5,0.75,1])"),
@@ -233,7 +234,8 @@ AE_TEST(glb_import_reuses_geometry_for_instances_and_reports_what_it_left_behind
                  "poses diferentes, na árvore e não no desenho");
   AE_EXPECT_TRUE(import.drawNodes[0] != import.drawNodes[1], "cada desenho pertence a seu nó");
   AE_EXPECT_EQ(import.skippedAnimations, 1u, "animação contada");
-  AE_EXPECT_EQ(import.skippedSkins, 1u, "pele contada");
+  AE_EXPECT_TRUE(import.skins.size() == 1 && import.skins[0].joints.size() == 1 && import.skippedSkins == 0,
+                 "pele com junta válida importada, não contada como perdida");
   AE_EXPECT_TRUE(import.skippedTextures > 0, "textura contada");
   AE_EXPECT_TRUE(import.anythingSkipped(), "o relatório diz que algo ficou para trás");
 }

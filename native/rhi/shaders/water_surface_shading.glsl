@@ -18,6 +18,7 @@ layout(location=7) in mediump float vSpectralFoam;
 layout(location=8) in highp vec3 vSpectralCoordinates;
 #endif
 layout(location=0) out vec4 outColor;
+#include "temporal_masks.glsl"
 
 // O depth opaco permanece na memória do tile. subpassLoad lê somente o pixel
 // corrente, suficiente para espessura, absorção e espuma de interseção sem a
@@ -84,6 +85,7 @@ void main() {
   if(isolation==WATER_ISOLATION_FLAT) {
     // Geometria, profundidade e blend permanecem; só o sombreamento sai.
     outColor=vec4(vec3(0.05,0.18,0.26)*0.72,0.72);
+    aetherWaterTemporalMasks(0.72,0.0);
     return;
   }
   highp vec3 eye=frame.cameraPositionNear.xyz;
@@ -241,4 +243,5 @@ void main() {
         1.055*pow(surfaceColor,vec3(1.0/2.4))-.055,
         greaterThan(surfaceColor,vec3(.0031308)));
   outColor=vec4(surfaceColor*compositeAlpha,compositeAlpha);
+  aetherWaterTemporalMasks(compositeAlpha,foam);
 }

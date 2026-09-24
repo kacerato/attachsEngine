@@ -111,10 +111,12 @@ $FrameProfileFrameMetricNames = @('interval_ms', 'process_cpu_ms', 'thread_cpu_m
 # Regioes de GPU: viajam em [FrameProfilePasses], porque a linha da janela ja
 # ocupava 937 dos ~1023 bytes que o Logcat entrega antes de truncar em silencio.
 # A ordem espelha ae::GpuPassClass em native/core/gpu_pass_class.h.
-$FrameProfilePassMetricNames = @('gpu_camera_preview_ms', 'gpu_water_simulation_ms',
+$FrameProfilePassMetricNames = @('gpu_skinning_ms', 'gpu_camera_preview_ms', 'gpu_water_simulation_ms',
     'gpu_shadow_ms', 'gpu_local_shadow_ms', 'gpu_culling_ms', 'gpu_opaque_ms',
-    'gpu_coverage_ms', 'gpu_sky_ms', 'gpu_transparent_ms', 'gpu_auto_exposure_ms',
-    'gpu_post_ms', 'gpu_fsr_easu_ms', 'gpu_fsr_rcas_ms', 'gpu_ui_ms', 'gpu_hzb_ms')
+    'gpu_coverage_ms', 'gpu_sky_ms', 'gpu_transparent_ms', 'gpu_motion_ms', 'gpu_auto_exposure_ms',
+    'gpu_temporal_upscale_ms', 'gpu_post_ms', 'gpu_fsr_easu_ms', 'gpu_fsr_rcas_ms', 'gpu_ui_ms', 'gpu_hzb_ms')
+# O nativo divide as regioes em registros de 5 (limite do Logcat).
+$FrameProfilePassParts = [int][math]::Ceiling($FrameProfilePassMetricNames.Count / 5)
 $FrameProfileLegacyPassMetricNames = @('gpu_shadow_ms', 'gpu_culling_ms', 'gpu_opaque_ms',
     'gpu_coverage_ms', 'gpu_sky_ms', 'gpu_transparent_ms', 'gpu_ui_ms', 'gpu_post_ms', 'gpu_hzb_ms')
 $FrameProfileMetricNames = $FrameProfileFrameMetricNames + $FrameProfilePassMetricNames
@@ -321,7 +323,8 @@ function ConvertFrom-FrameProfilePassLog {
             $passes[$key] = $record
             continue
         }
-        if ($passes.ContainsKey($key) -or $record.parts -ne 3 -or $record.part -notin @(0, 1, 2)) {
+        if ($passes.ContainsKey($key) -or $record.parts -ne $FrameProfilePassParts -or
+            $record.part -notin @(0..($FrameProfilePassParts - 1))) {
             throw "Fragmento FrameProfilePasses inválido: $key."
         }
         $part = [int]$record.part
@@ -337,9 +340,9 @@ function ConvertFrom-FrameProfilePassLog {
     }
     foreach ($key in $fragments.Keys) {
         $pieces = $fragments[$key]
-        if ($pieces.Count -ne 3) { throw "Fragmentos FrameProfilePasses incompletos: $key." }
+        if ($pieces.Count -ne $FrameProfilePassParts) { throw "Fragmentos FrameProfilePasses incompletos: $key." }
         $first = $pieces[0]
-        foreach ($part in 1..2) {
+        foreach ($part in 1..($FrameProfilePassParts - 1)) {
             $next = $pieces[$part]
             if ($next.schemaVersion -ne $first.schemaVersion -or $next.pid -ne $first.pid -or
                 $next.attribution -ne $first.attribution -or

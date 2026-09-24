@@ -598,7 +598,8 @@ AE_TEST(r2_import_cache_round_trips_the_prepared_model_and_refuses_stale_or_corr
   // limites. A revisão 5 precisa recusá-la para reler os quatro eixos do
   // sampler glTF, informação que o derivado antigo já perdeu.
   constexpr std::string_view legacySamplerKey = "991bbf4e12e9bd5fd38c67c02c4d4c05b5a6aea73b3840291e3aa84b5a60a49a";
-  AE_EXPECT_TRUE(resources::ImportCacheImporterRevision == 5 && key != legacySamplerKey,
+  // A revisão 6 (skins e animações no derivado) continua recusando essa chave.
+  AE_EXPECT_TRUE(resources::ImportCacheImporterRevision >= 5 && key != legacySamplerKey,
                  "sampler independente invalida o derivado da revisão 4");
   AE_EXPECT_TRUE(key != resources::importCacheKey(sourceHash, {}), "outro formato alvo, outra chave");
   AE_EXPECT_TRUE(key != resources::importCacheKey(std::string(64, 'b'), astc), "outra fonte, outra chave");

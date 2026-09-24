@@ -26,6 +26,13 @@ public:
   bool request(u32 expectedWorld, const renderer::ProjectRenderingSettings &settings, u64 &requestId);
   bool complete(u64 requestId, bool success, const renderer::ResolvedRenderingPolicy &effective,
                 bool effectiveAvailable=true);
+  // Host report of what the renderer really executed in the last frame. It is
+  // separate from `effective`: a context can fail after the policy resolved.
+  void setExecution(renderer::UpscalingFilter executed, renderer::TemporalUpscalerAvailability status) {
+    executedUpscaler_=executed;executedStatus_=status;
+  }
+  renderer::UpscalingFilter executedUpscaler() const noexcept { return executedUpscaler_; }
+  renderer::TemporalUpscalerAvailability executedStatus() const noexcept { return executedStatus_; }
   bool refresh(u32 expectedWorld, renderer::RenderingCapabilities capabilities,
                renderer::ThermalPressure thermal, const renderer::ResolvedRenderingPolicy &effective) {
     if(!active(expectedWorld)) return false;
@@ -49,6 +56,8 @@ private:
   renderer::RenderingCapabilities capabilities_{};
   renderer::ThermalPressure thermal_ = renderer::ThermalPressure::None;
   RequestSink sink_;
+  renderer::UpscalingFilter executedUpscaler_ = renderer::UpscalingFilter::Bilinear;
+  renderer::TemporalUpscalerAvailability executedStatus_ = renderer::TemporalUpscalerAvailability::Available;
   u32 world_ = 0;
   u64 nextRequestId_ = 1, pendingId_ = 0;
   bool changed_ = false, lastRequestSucceeded_ = true, effectiveAvailable_ = false;

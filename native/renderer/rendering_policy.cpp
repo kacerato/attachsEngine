@@ -247,7 +247,51 @@ UpscalingFilter parseUpscalingFilter(const char *name) {
   if (matches(name, "bilinear")) return UpscalingFilter::Bilinear;
   if (matches(name, "catmull-rom")) return UpscalingFilter::CatmullRom;
   if (matches(name, "fsr1")) return UpscalingFilter::Fsr1;
+  if (matches(name, "arm-asr")) return UpscalingFilter::ArmAsr;
+  if (matches(name, "fsr2")) return UpscalingFilter::Fsr2;
   return UpscalingFilter::Inherit;
+}
+
+TemporalUpscalerQuality parseTemporalUpscalerQuality(const char *name) {
+  if (matches(name, "quality")) return TemporalUpscalerQuality::Quality;
+  if (matches(name, "balanced")) return TemporalUpscalerQuality::Balanced;
+  if (matches(name, "performance")) return TemporalUpscalerQuality::Performance;
+  if (matches(name, "ultra-performance")) return TemporalUpscalerQuality::UltraPerformance;
+  return TemporalUpscalerQuality::Inherit;
+}
+
+const char *temporalUpscalerQualityName(TemporalUpscalerQuality quality) {
+  switch (quality) {
+    case TemporalUpscalerQuality::Quality: return "quality";
+    case TemporalUpscalerQuality::Balanced: return "balanced";
+    case TemporalUpscalerQuality::Performance: return "performance";
+    case TemporalUpscalerQuality::UltraPerformance: return "ultra-performance";
+    default: return "inherit";
+  }
+}
+
+const char *temporalUpscalerAvailabilityName(TemporalUpscalerAvailability availability) {
+  switch (availability) {
+    case TemporalUpscalerAvailability::Available: return "available";
+    case TemporalUpscalerAvailability::NotProbed: return "not-probed";
+    case TemporalUpscalerAvailability::NotBuilt: return "not-built";
+    case TemporalUpscalerAvailability::MissingFloat16: return "missing-float16";
+    case TemporalUpscalerAvailability::MissingInt16: return "missing-int16";
+    case TemporalUpscalerAvailability::MissingQuadSubgroup: return "missing-quad-subgroup";
+    case TemporalUpscalerAvailability::MissingStorageImageFormats: return "missing-storage-image-formats";
+    case TemporalUpscalerAvailability::MissingStorageWriteWithoutFormat: return "missing-storage-write-without-format";
+    case TemporalUpscalerAvailability::MissingHdrSceneColor: return "missing-hdr-scene-color";
+    case TemporalUpscalerAvailability::ContextCreationFailed: return "context-creation-failed";
+    case TemporalUpscalerAvailability::MissingSampledDepth32: return "missing-sampled-depth32";
+  }
+  return "unknown";
+}
+
+TemporalUpscalerAvailability temporalUpscalerAvailability(const RenderingCapabilities &capabilities,
+                                                          UpscalingFilter filter) {
+  if (filter == UpscalingFilter::ArmAsr) return capabilities.armAsr;
+  if (filter == UpscalingFilter::Fsr2) return capabilities.fsr2;
+  return TemporalUpscalerAvailability::Available;
 }
 
 const char *upscalingFilterName(UpscalingFilter filter) {
@@ -255,6 +299,8 @@ const char *upscalingFilterName(UpscalingFilter filter) {
     case UpscalingFilter::Bilinear: return "bilinear";
     case UpscalingFilter::CatmullRom: return "catmull-rom";
     case UpscalingFilter::Fsr1: return "fsr1";
+    case UpscalingFilter::ArmAsr: return "arm-asr";
+    case UpscalingFilter::Fsr2: return "fsr2";
     default: return "inherit";
   }
 }
@@ -512,9 +558,28 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
   policy.ambient.splitSumBrdf = policy.ambient.specularProbe &&
       enabledOverride(settings.environmentSplitSumBrdf, policy.ambient.splitSumBrdf);
   policy.post = derivePost(post);
-  policy.post.upscalingFilter = settings.upscalingFilter == UpscalingFilter::Fsr1
-      ? UpscalingFilter::Fsr1 : settings.upscalingFilter == UpscalingFilter::CatmullRom
-      ? UpscalingFilter::CatmullRom : UpscalingFilter::Bilinear;
+  switch (settings.upscalingFilter) {
+    case UpscalingFilter::CatmullRom:
+    case UpscalingFilter::Fsr1:
+    case UpscalingFilter::ArmAsr:
+    case UpscalingFilter::Fsr2: policy.post.upscalingFilter = settings.upscalingFilter; break;
+    default: policy.post.upscalingFilter = UpscalingFilter::Bilinear; break;
+  }
+  if (isTemporalUpscaler(policy.post.upscalingFilter) &&
+      temporalUpscalerAvailability(capabilities, policy.post.upscalingFilter) !=
+          TemporalUpscalerAvailability::Available) {
+    // Explicit, recorded refusal: the renderer draws with the neutral spatial
+    // filter and the panel/ABI show the device reason. Falling back to TAA or
+    // FSR 1 would present a different algorithm under the requested name.
+    policy.post.upscalingFilter = UpscalingFilter::Bilinear;
+    note("post.upscalingFilter", PolicyClamp::Capability);
+  }
+  policy.post.temporalUpscalerQuality =
+      settings.temporalUpscalerQuality != TemporalUpscalerQuality::Inherit
+          ? settings.temporalUpscalerQuality
+          : policy.effectiveProfile == rhi::DeviceProfile::C ? TemporalUpscalerQuality::Performance
+          : policy.effectiveProfile == rhi::DeviceProfile::B ? TemporalUpscalerQuality::Balanced
+                                                              : TemporalUpscalerQuality::Quality;
   if (settings.antiAliasing != AntiAliasingMode::Inherit) {
     policy.post.antiAliasing = settings.antiAliasing;
   } else if (settings.postFxaa != FeatureOverride::Inherit) {
@@ -538,6 +603,11 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
     policy.post.temporalHistoryWeight =
         std::clamp(settings.temporalHistoryWeight, 0.0f, 0.97f);
   }
+  // A temporal upscaler owns anti-aliasing: it resolves the jittered samples.
+  // FXAA/TAA on top would filter the same edges twice (and TAA would keep a
+  // second, conflicting history), so the resolved AA reports Off.
+  if (isTemporalUpscaler(policy.post.upscalingFilter))
+    policy.post.antiAliasing = AntiAliasingMode::Off;
   // Qualquer filtro solicitado exige o passe, mesmo quando o preset base usava
   // tonemap inline. Isto mantém cada eixo independente de nome de preset.
   if (policy.post.bloom || policy.post.antiAliasing != AntiAliasingMode::Off ||

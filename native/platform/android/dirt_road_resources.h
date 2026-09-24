@@ -72,6 +72,11 @@ public:
   // R4: anisotropia da política de qualidade aplicada aos samplers de material
   // (pacote e autoria) na próxima criação. Um valor de 1 ou menos desliga.
   void setSamplerAnisotropy(float value) { samplerAnisotropy_ = value > 1.0f ? value : 1.0f; }
+  // G6-B: viés negativo de mip com ampliação temporal, para a textura manter o
+  // detalhe da resolução FINAL (log2(interna/final) - 1, orientação do
+  // Arm ASR/FSR 2). Zero sem ampliador; já limitado ao máximo do aparelho.
+  void setSamplerMipLodBias(float value) { samplerMipLodBias_ = value; }
+  float samplerMipLodBias() const { return samplerMipLodBias_; }
   float samplerAnisotropy() const { return samplerAnisotropy_; }
   // Limite global de materiais: 1 deixa de enviar o mip de maior resolução.
   // Ambiente, LUTs e recursos de UI não passam por este caminho.
@@ -168,6 +173,8 @@ private:
   std::vector<rhi::VulkanImage> authoringImages_;
   std::vector<rhi::VulkanSampler> authoringSamplers_;
   float samplerAnisotropy_ = 1.0f;
+  float samplerMipLodBias_ = 0.0f;
+  float authoringMipLodBias_ = 0.0f;
   u32 textureResidencyMipBias_=0;
   u32 authoringResidencyMipBias_=~u32{0};
   MaterialTextureResidencyReport packageTextureResidency_{};

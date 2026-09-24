@@ -220,13 +220,31 @@ void buildTopBar(ScreenBuilder &builder, const UiRect &bar) {
     builder.router.addRegion(graphics,widgetId(EditorWidget::QualityOpen),theme.touch.minimumTarget);
     takeLeft(content,theme.spacing.medium);
   }
+  // Ampliação temporal na barra: mostra o que o renderer EXECUTOU e alterna
+  // Desligada → TAA nativo → Arm ASR → AMD FSR 2, pulando o que o aparelho
+  // recusa (o motivo vai para a barra de estado).
+  if(builder.state.workspace==EditorWorkspace::Scene || builder.state.workspace==EditorWorkspace::Play) {
+    if(content.width>=250.0f) {
+      const auto &state=builder.state;
+      const char *executed=renderer::isTemporalUpscaler(state.qualityExecutedUpscaler)
+          ?renderer::upscalingFilterLabel(state.qualityExecutedUpscaler)
+          :state.qualityTemporalAaExecuted?"TAA nativo":"Sem temporal";
+      const auto chip=takeLeft(content,112.0f);
+      const bool temporalActive=renderer::isTemporalUpscaler(state.qualityExecutedUpscaler)||state.qualityTemporalAaExecuted;
+      builder.list.addRect(chip,temporalActive?withAlpha(theme.color.accent,0.20f):theme.color.raised,theme.radius.control);
+      builder.label(chip,executed,temporalActive?theme.color.accent:theme.color.text,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(chip,widgetId(EditorWidget::QualityTemporalModeQuick),theme.touch.minimumTarget);
+      takeLeft(content,theme.spacing.small);
+    }
+  }
   if(builder.state.workspace==EditorWorkspace::Scene &&
      builder.state.qualityTemporalAvailable && builder.state.qualityTemporalDebug!=0 &&
      content.width>=136.0f) {
-    constexpr const char *quickNames[]{"","TAA: profundidade","TAA: histórico","TAA: rejeição","TAA: movimento","TAA: reatividade"};
+    constexpr const char *quickNames[]{"","Temporal: profundidade","Temporal: histórico","Temporal: rejeição",
+                                       "Temporal: vetor","Temporal: reatividade","Temporal: composição"};
     const auto quick=takeLeft(content,128.0f);
     builder.list.addRect(quick,withAlpha(theme.color.accent,0.20f),theme.radius.control);
-    builder.label(quick,quickNames[std::min(builder.state.qualityTemporalDebug,5u)],
+    builder.label(quick,quickNames[std::min(builder.state.qualityTemporalDebug,6u)],
                   theme.color.accent,theme.type.caption,UiAlign::Center);
     builder.router.addRegion(quick,widgetId(EditorWidget::QualityTemporalDebugQuick),
                              theme.touch.minimumTarget);
@@ -1224,6 +1242,10 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     if(entry.type==&scene::LodGroup::descriptor && group=="Limites") fields.push_back({3,widgetId(EditorWidget::LodGroupFit)});
     if(entry.type==&scene::LodGroup::descriptor && group=="Níveis" && !builder.state.lodStatus.empty())
       fields.push_back({3,widgetId(EditorWidget::LodGroupStatus)});
+    if(entry.type==&scene::SkinnedMesh::descriptor && group=="Skin" && !builder.state.skinStatus.empty())
+      fields.push_back({3,widgetId(EditorWidget::SkinnedMeshStatus)});
+    if(entry.type==&scene::Animation::descriptor && group=="Clipe" && !builder.state.animationStatus.empty())
+      fields.push_back({3,widgetId(EditorWidget::AnimationStatus)});
     for(u32 i=0;i<entry.type->numbers.size();++i) {
       if(!show(entry.type->numbers[i].presentation)) continue;
       bool grouped=false;
@@ -1385,6 +1407,9 @@ void buildComponentFields(ScreenBuilder &builder,UiRect content,const EditorEnti
     } else if(f.index==widgetId(EditorWidget::LodGroupStatus)) {
       // Leitura, não controle: sem região de toque.
       builder.label(slot,builder.state.lodStatus.c_str(),theme.color.accent,theme.type.caption);
+    } else if(f.index==widgetId(EditorWidget::SkinnedMeshStatus)||f.index==widgetId(EditorWidget::AnimationStatus)) {
+      builder.label(slot,(f.index==widgetId(EditorWidget::SkinnedMeshStatus)?builder.state.skinStatus:builder.state.animationStatus).c_str(),
+                    theme.color.accent,theme.type.caption);
     } else {
       builder.label(slot,f.index==widgetId(EditorWidget::MaterialRestore)?"Restaurar material da origem":
                     f.index==widgetId(EditorWidget::LodGroupFit)?"Recalcular tamanho":"Ajustar à malha",theme.color.text,theme.type.caption);
@@ -3341,7 +3366,7 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
   // sair do painel. Numa tela baixa as linhas é que encolhem.
   const auto apply = deflate(takeBottom(content, 40), UiInsets::all(2));
   const auto stats = takeBottom(content, 20);
-  const u32 rowCount=state.qualityTab==2?10u:state.qualityTab==0?7u:state.qualityTab==1?8u:6u;
+  const u32 rowCount=state.qualityTab==2?10u:state.qualityTab==0?9u:state.qualityTab==1?8u:6u;
   const u32 rowsPerPage=std::max(1u,static_cast<u32>(std::floor(content.height/25.0f)));
   const u32 pageCount=(rowCount+rowsPerPage-1u)/rowsPerPage;
   const u32 page=std::min(state.qualityPage,pageCount-1u);
@@ -3395,12 +3420,35 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     if(draft.preset==renderer::QualityPreset::Auto&&!state.qualityDetected.empty()) level+=" ("+state.qualityDetected+")";
     row("Nível",level,EditorWidget::QualityLevel);
     stepper("Escala de renderização",percent(draft.resolutionScale,0.0f),EditorWidget::QualityScaleDown,EditorWidget::QualityScaleUp);
-    row("Ampliação",renderer::upscalingFilterLabel(draft.upscalingFilter),EditorWidget::QualityUpscaling);
+    // Ampliação temporal mostra um de quatro estados: indisponível com o
+    // motivo do aparelho, pendente de Aplicar, ativa (o que o renderer
+    // executou no último quadro) ou apenas disponível.
+    using Mode=renderer::TemporalReconstruction;
+    const auto mode=renderer::temporalReconstruction(draft);
+    const auto upscaler=renderer::isTemporalUpscaler(draft.upscalingFilter);
+    std::string temporal=renderer::temporalReconstructionLabel(mode);
+    const auto availability=mode==Mode::ArmAsr?state.qualityArmAsr:mode==Mode::Fsr2?state.qualityFsr2:
+                            renderer::TemporalUpscalerAvailability::Available;
+    const bool pending=mode!=renderer::temporalReconstruction(state.qualityApplied);
+    if(availability!=renderer::TemporalUpscalerAvailability::Available)
+      temporal+=std::string(" · indisponível: ")+renderer::temporalUpscalerAvailabilityLabel(availability);
+    else if(pending) temporal+=" · aplicar";
+    else if(upscaler) temporal+=state.qualityExecutedUpscaler==draft.upscalingFilter?" · ativo":
+        std::string(" · falhou: ")+renderer::temporalUpscalerAvailabilityLabel(state.qualityExecutedStatus);
+    else if(mode==Mode::NativeTaa) temporal+=state.qualityTemporalAaExecuted?" · ativo":" · sem histórico nesta vista";
+    row("Ampliação temporal",temporal,EditorWidget::QualityTemporalMode);
+    row("Qualidade temporal",mode==Mode::ArmAsr?std::string(renderer::temporalUpscalerQualityLabel(draft.temporalUpscalerQuality)):
+        mode==Mode::Fsr2?std::string("Não se aplica ao FSR 2"):std::string("Só com Arm ASR"),
+        EditorWidget::QualityTemporalQuality,mode==Mode::ArmAsr);
+    row("Anti-aliasing",upscaler?std::string("Pelo ")+renderer::upscalingFilterLabel(draft.upscalingFilter):
+        draft.antiAliasing==renderer::AntiAliasingMode::Temporal && state.qualityMotionAvailable
+        ?std::string("TAA (câmera + objetos)"):std::string(renderer::antiAliasingLabel(draft.antiAliasing)),
+        EditorWidget::QualityAntiAliasing,!upscaler);
+    row("Filtro espacial",upscaler?std::string("Substituído pelo ")+renderer::upscalingFilterLabel(draft.upscalingFilter):
+        std::string(renderer::upscalingFilterLabel(draft.upscalingFilter)),EditorWidget::QualityUpscaling,!upscaler);
+    row("Taxa alvo",draft.maximumRenderHz?std::to_string(draft.maximumRenderHz)+" Hz":std::string("Do nível"),EditorWidget::QualityRate);
     row("Texturas / anisotropia",renderer::textureQualityLabel(draft.textures),EditorWidget::QualityTextures);
     row("Escala dinâmica",renderer::featureOverrideLabel(draft.dynamicResolution),EditorWidget::QualityDynamic);
-    row("Anti-aliasing",draft.antiAliasing==renderer::AntiAliasingMode::Temporal && state.qualityMotionAvailable
-        ?"TAA (câmera + rígidos)":renderer::antiAliasingLabel(draft.antiAliasing),EditorWidget::QualityAntiAliasing);
-    row("Taxa alvo",draft.maximumRenderHz?std::to_string(draft.maximumRenderHz)+" Hz":std::string("Do nível"),EditorWidget::QualityRate);
   } else if(state.qualityTab==1) {
     row("Sombras",renderer::shadowQualityLabel(draft.shadows),EditorWidget::QualityShadows);
     row("Cascatas",draft.shadowCascadeCount?std::to_string(draft.shadowCascadeCount):std::string("Do nível"),EditorWidget::QualityShadowCascades);
@@ -3416,12 +3464,16 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     row("Pós-processamento",renderer::postQualityLabel(draft.post),EditorWidget::QualityPost);
     stepper("Limiar do bloom",measure(draft.bloomThreshold,-1.0f,"",1),EditorWidget::QualityBloomThresholdDown,EditorWidget::QualityBloomThresholdUp);
     stepper("Intensidade do bloom",percent(draft.bloomIntensity,-1.0f),EditorWidget::QualityBloomIntensityDown,EditorWidget::QualityBloomIntensityUp);
-    row("Anti-aliasing",draft.antiAliasing==renderer::AntiAliasingMode::Temporal && state.qualityMotionAvailable
-        ?"TAA (câmera + rígidos)":renderer::antiAliasingLabel(draft.antiAliasing),EditorWidget::QualityAntiAliasing);
+    row("Anti-aliasing",renderer::isTemporalUpscaler(draft.upscalingFilter)
+        ?std::string("Pelo ")+renderer::upscalingFilterLabel(draft.upscalingFilter):
+        draft.antiAliasing==renderer::AntiAliasingMode::Temporal && state.qualityMotionAvailable
+        ?std::string("TAA (câmera + objetos)"):std::string(renderer::antiAliasingLabel(draft.antiAliasing)),
+        EditorWidget::QualityAntiAliasing,!renderer::isTemporalUpscaler(draft.upscalingFilter));
     stepper("Peso temporal",percent(draft.temporalHistoryWeight,-1.0f),EditorWidget::QualityTemporalWeightDown,EditorWidget::QualityTemporalWeightUp);
-    constexpr const char *temporalViews[]{"Imagem final","Profundidade","Histórico usado","Profundidade rejeitada","Movimento ×512","Reatividade"};
-    row("Diagnóstico TAA",state.qualityTemporalAvailable
-        ?temporalViews[std::min(state.qualityTemporalDebug,5u)]:"TAA indisponível nesta vista",
+    constexpr const char *temporalViews[]{"Imagem final","Profundidade","Histórico usado","Profundidade rejeitada",
+                                          "Vetor de movimento","Reatividade","Composição"};
+    row("Diagnóstico temporal",state.qualityTemporalAvailable
+        ?temporalViews[std::min(state.qualityTemporalDebug,6u)]:"Sem entradas temporais nesta vista",
         EditorWidget::QualityTemporalDebug,state.qualityTemporalAvailable);
     stepper("Nitidez",percent(draft.postSharpen,-1.0f),EditorWidget::QualitySharpenDown,EditorWidget::QualitySharpenUp);
     row("Vinheta",renderer::featureOverrideLabel(draft.postVignette),EditorWidget::QualityVignette);

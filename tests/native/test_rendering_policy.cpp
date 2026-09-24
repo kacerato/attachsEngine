@@ -6,6 +6,7 @@
 #include "harness.h"
 #include "renderer/rendering_policy.h"
 #include "renderer/material_distance.h"
+#include "renderer/temporal_upscaler_capability.h"
 
 using namespace ae;
 using namespace ae::test;
@@ -660,4 +661,64 @@ AE_TEST(policy_malha_de_agua_le_os_nomes_que_atravessam_projeto_e_lancamento) {
   // usuário, e conteúdo inválido nunca pode derrubar a engine.
   AE_EXPECT_EQ(parseWaterMeshQuality("oceano"), WaterMeshQuality::Inherit, "desconhecido herda");
   AE_EXPECT_EQ(parseWaterMeshQuality(nullptr), WaterMeshQuality::Inherit, "nulo herda");
+}
+
+AE_TEST(policy_temporal_upscalers_require_probed_capability_and_own_anti_aliasing) {
+  ProjectRenderingSettings settings{};
+  settings.antiAliasing=AntiAliasingMode::Temporal;
+  settings.resolutionScale=.67f;
+  settings.upscalingFilter=UpscalingFilter::ArmAsr;
+  auto capabilities=strongDevice();
+  // Host and unprobed devices must refuse explicitly, never become TAA/FSR 1.
+  auto policy=resolveRenderingPolicy(settings,capabilities,ThermalPressure::None);
+  AE_EXPECT_EQ(policy.post.upscalingFilter,UpscalingFilter::Bilinear,"unprobed ASR is refused to the neutral filter");
+  AE_EXPECT_TRUE(hasClamp(policy,"post.upscalingFilter",PolicyClamp::Capability),"refusal is recorded as capability");
+  AE_EXPECT_EQ(policy.post.antiAliasing,AntiAliasingMode::Temporal,"refused upscaler keeps the authored AA");
+  capabilities.armAsr=TemporalUpscalerAvailability::Available;
+  policy=resolveRenderingPolicy(settings,capabilities,ThermalPressure::None);
+  AE_EXPECT_EQ(policy.post.upscalingFilter,UpscalingFilter::ArmAsr,"available ASR reaches the renderer");
+  AE_EXPECT_EQ(policy.post.antiAliasing,AntiAliasingMode::Off,"the upscaler owns anti-aliasing");
+  AE_EXPECT_TRUE(policy.post.dedicatedPass,"temporal upscaling needs the post chain");
+  AE_EXPECT_EQ(policy.post.temporalUpscalerQuality,TemporalUpscalerQuality::Quality,"profile S inherits the Quality preset");
+  settings.temporalUpscalerQuality=TemporalUpscalerQuality::Performance;
+  policy=resolveRenderingPolicy(settings,capabilities,ThermalPressure::None);
+  AE_EXPECT_EQ(policy.post.temporalUpscalerQuality,TemporalUpscalerQuality::Performance,"authored shader preset wins");
+  settings.upscalingFilter=UpscalingFilter::Fsr2;
+  capabilities.fsr2=TemporalUpscalerAvailability::MissingStorageWriteWithoutFormat;
+  policy=resolveRenderingPolicy(settings,capabilities,ThermalPressure::None);
+  AE_EXPECT_EQ(policy.post.upscalingFilter,UpscalingFilter::Bilinear,"FSR 2 without its GPU feature is refused");
+  AE_EXPECT_TRUE(hasClamp(policy,"post.upscalingFilter",PolicyClamp::Capability),"FSR 2 refusal recorded");
+  for(auto filter:{UpscalingFilter::ArmAsr,UpscalingFilter::Fsr2})
+    AE_EXPECT_EQ(parseUpscalingFilter(upscalingFilterName(filter)),filter,"stable temporal upscaler names");
+  for(auto quality:{TemporalUpscalerQuality::Quality,TemporalUpscalerQuality::Balanced,
+                    TemporalUpscalerQuality::Performance,TemporalUpscalerQuality::UltraPerformance})
+    AE_EXPECT_EQ(parseTemporalUpscalerQuality(temporalUpscalerQualityName(quality)),quality,"stable preset names");
+}
+
+AE_TEST(temporal_upscaler_probe_names_the_first_missing_device_requirement) {
+  TemporalUpscalerProbe probe{};
+  AE_EXPECT_EQ(probeArmAsr(probe),TemporalUpscalerAvailability::NotBuilt,"host sem biblioteca");
+  AE_EXPECT_EQ(probeFsr2(probe),TemporalUpscalerAvailability::NotBuilt,"host sem biblioteca");
+  probe.armAsrBuilt=probe.fsr2Built=true;
+  AE_EXPECT_EQ(probeArmAsr(probe),TemporalUpscalerAvailability::MissingHdrSceneColor,"luz linear exigida");
+  probe.hdrSceneColor=true;
+  AE_EXPECT_EQ(probeArmAsr(probe),TemporalUpscalerAvailability::MissingFloat16,"ASR exige float16");
+  probe.shaderFloat16=true;
+  AE_EXPECT_EQ(probeArmAsr(probe),TemporalUpscalerAvailability::MissingInt16,"ASR exige int16");
+  AE_EXPECT_EQ(probeFsr2(probe),TemporalUpscalerAvailability::MissingStorageImageFormats,"FSR 2 exige storage estendido");
+  probe.shaderInt16=true;probe.storageImageExtendedFormats=true;
+  AE_EXPECT_EQ(probeFsr2(probe),TemporalUpscalerAvailability::MissingStorageWriteWithoutFormat,
+               "FSR 2 escreve UAV sem formato");
+  AE_EXPECT_EQ(probeArmAsr(probe),TemporalUpscalerAvailability::MissingQuadSubgroup,"pirâmide de luminância usa quad");
+  probe.computeSubgroupBasic=probe.computeSubgroupQuad=true;
+  AE_EXPECT_EQ(probeArmAsr(probe),TemporalUpscalerAvailability::MissingSampledDepth32,"ASR cria vista D32");
+  probe.sampledDepth32=true;
+  AE_EXPECT_EQ(probeArmAsr(probe),TemporalUpscalerAvailability::Available,"ASR disponível");
+  probe.storageImageWriteWithoutFormat=true;
+  AE_EXPECT_EQ(probeFsr2(probe),TemporalUpscalerAvailability::Available,"FSR 2 disponível");
+  probe.shaderInt16=false;
+  AE_EXPECT_EQ(probeFsr2(probe),TemporalUpscalerAvailability::MissingInt16,
+               "float16 habilitado leva o FSR 2 às permutações com Int16");
+  probe.shaderFloat16=false;
+  AE_EXPECT_EQ(probeFsr2(probe),TemporalUpscalerAvailability::Available,"sem float16 o FSR 2 usa 32 bits");
 }

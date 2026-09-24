@@ -1,0 +1,13 @@
+AMD FidelityFX Super Resolution 2 v2.2.1
+Commit: 1680d1edd5c034f88ebbbb793d8b88f8842cf804 (GPUOpen-Effects/FidelityFX-FSR2, master)
+Source: https://github.com/GPUOpen-Effects/FidelityFX-FSR2
+License: MIT (LICENSE.txt)
+Files: src/ffx-fsr2-api (core API, Vulkan backend and GLSL shader sources; DX12 backend
+removed). generated/ holds the Vulkan shader permutation headers produced on
+2026-09-23 with the repository's own tools/sc/FidelityFX_SC.exe + glslangValidator,
+using the exact arguments of src/ffx-fsr2-api/CMakeLists.txt and vk/CMakeLists.txt
+(-compiler=glslang --target-env vulkan1.1 -S comp -Os -DFFX_GLSL=1, all permutation
+axes, FFX_HALF={0,1} except the luminance pyramid). Regenerate with those tools after
+any shader change. Local modifications: none. aether_portability.h (ours) is
+force-included to provide _countof and two-argument wcscpy_s for clang; no
+upstream file was edited.

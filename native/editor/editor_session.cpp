@@ -2470,11 +2470,36 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     state_.qualityPanel=!state_.qualityPanel;return true;
   }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::QualityTemporalDebugQuick)) {
-    if(state_.qualityTemporalAvailable && state_.workspace==EditorWorkspace::Scene) {
-      const u32 next=state_.qualityTemporalDebug+1u;
-      state_.qualityTemporalDebug=next==4u&&!state_.qualityMotionAvailable?5u:
-                                  next>=6u?0u:next;
+    if(state_.qualityTemporalAvailable && state_.workspace==EditorWorkspace::Scene)
+      state_.qualityTemporalDebug=nextTemporalDebugView();
+    return true;
+  }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::QualityTemporalModeQuick)) {
+    // Controle rápido: aplica na hora, sobre o que está salvo, e pula o que o
+    // aparelho recusa dizendo por quê.
+    using Mode=renderer::TemporalReconstruction;
+    auto next=renderingSettings_;
+    auto mode=renderer::temporalReconstruction(next);
+    std::string skipped;
+    for(u32 attempt=0;attempt<4;++attempt) {
+      mode=static_cast<Mode>((static_cast<u32>(mode)+1u)%4u);
+      const auto availability=mode==Mode::ArmAsr?state_.qualityArmAsr:mode==Mode::Fsr2?state_.qualityFsr2:
+                              renderer::TemporalUpscalerAvailability::Available;
+      if(availability==renderer::TemporalUpscalerAvailability::Available) break;
+      if(!skipped.empty()) skipped+="; ";
+      skipped+=std::string(renderer::temporalReconstructionLabel(mode))+" indisponível: "+
+               renderer::temporalUpscalerAvailabilityLabel(availability);
     }
+    if(renderingSettingsRequestInFlight_ || renderingSettingsRequested_) {
+      state_.status="Aguarde a aplicação anterior da qualidade";return true;
+    }
+    renderer::setTemporalReconstruction(next,mode);
+    requestedRenderingSettings_=next;
+    renderingSettingsRequestRevision_=qualityRevision_;
+    renderingSettingsRequested_=true;
+    if(!state_.qualityDirty) state_.qualityDraft=next;
+    state_.status=std::string("Ampliação temporal: ")+renderer::temporalReconstructionLabel(mode)+
+                  (skipped.empty()?std::string():" ("+skipped+")");
     return true;
   }
   if(state_.qualityPanel && routing.tapped) {
@@ -2498,12 +2523,19 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     else if(is(EditorWidget::QualityPagePrevious)) {if(state_.qualityPage) --state_.qualityPage;return true;}
     else if(is(EditorWidget::QualityPageNext)) {++state_.qualityPage;return true;}
     else if(is(EditorWidget::QualityTemporalDebug)) {
-      if(state_.qualityTemporalAvailable) {
-        const u32 next=state_.qualityTemporalDebug+1u;
-        state_.qualityTemporalDebug=next==4u&&!state_.qualityMotionAvailable?5u:
-                                    next>=6u?0u:next;
-      }
+      if(state_.qualityTemporalAvailable) state_.qualityTemporalDebug=nextTemporalDebugView();
       return true;
+    }
+    else if(is(EditorWidget::QualityTemporalMode)) {
+      using Mode=renderer::TemporalReconstruction;
+      const auto mode=renderer::temporalReconstruction(draft);
+      renderer::setTemporalReconstruction(draft,static_cast<Mode>((static_cast<u32>(mode)+1u)%4u));
+    } else if(is(EditorWidget::QualityTemporalQuality)) {
+      using Quality=renderer::TemporalUpscalerQuality;
+      draft.temporalUpscalerQuality=draft.temporalUpscalerQuality==Quality::Inherit?Quality::Quality:
+          draft.temporalUpscalerQuality==Quality::Quality?Quality::Balanced:
+          draft.temporalUpscalerQuality==Quality::Balanced?Quality::Performance:
+          draft.temporalUpscalerQuality==Quality::Performance?Quality::UltraPerformance:Quality::Inherit;
     }
     else if(is(EditorWidget::QualityLevel)) {
       // Automático, Baixo, Médio, Alto, Ultra: a ordem dos níveis da Unity.
@@ -2522,6 +2554,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       draft.dynamicResolution=cycleOverride(draft.dynamicResolution);
     } else if(is(EditorWidget::QualityUpscaling)) {
       using Filter=renderer::UpscalingFilter;
+      if(renderer::isTemporalUpscaler(draft.upscalingFilter)) return true; // o temporal substitui o espacial
       draft.upscalingFilter=draft.upscalingFilter==Filter::Inherit?Filter::Bilinear:
                             draft.upscalingFilter==Filter::Bilinear?Filter::CatmullRom:
                             draft.upscalingFilter==Filter::CatmullRom?Filter::Fsr1:Filter::Inherit;
@@ -2531,6 +2564,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
                      draft.textures==Quality::Half?Quality::Full:Quality::Inherit;
     } else if(is(EditorWidget::QualityAntiAliasing)) {
       using Mode=renderer::AntiAliasingMode;
+      if(renderer::isTemporalUpscaler(draft.upscalingFilter)) return true; // AA pertence ao ampliador
       draft.antiAliasing=draft.antiAliasing==Mode::Inherit?Mode::Off:draft.antiAliasing==Mode::Off?Mode::Fxaa:
                          draft.antiAliasing==Mode::Fxaa?Mode::Temporal:Mode::Inherit;
     } else if(is(EditorWidget::QualitySharpenDown) || is(EditorWidget::QualitySharpenUp)) {
@@ -2588,6 +2622,16 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     } else if(is(EditorWidget::QualityMaterialVariants)) {
       draft.materialShaderVariants=cycleOverride(draft.materialShaderVariants);
     } else if(is(EditorWidget::QualityApply)) {
+      // Um ampliador temporal que o aparelho recusa não é salvo como se fosse
+      // funcionar: o motivo aparece e o rascunho continua pendente.
+      if(renderer::isTemporalUpscaler(draft.upscalingFilter)) {
+        const auto availability=draft.upscalingFilter==renderer::UpscalingFilter::ArmAsr?state_.qualityArmAsr:state_.qualityFsr2;
+        if(availability!=renderer::TemporalUpscalerAvailability::Available) {
+          state_.status=std::string(renderer::upscalingFilterLabel(draft.upscalingFilter))+" indisponível: "+
+                        renderer::temporalUpscalerAvailabilityLabel(availability);
+          return true;
+        }
+      }
       requestedRenderingSettings_=draft;
       renderingSettingsRequestRevision_=qualityRevision_;
       renderingSettingsRequested_=true;
@@ -3018,6 +3062,30 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
     }
     library.identities.insert(library.identities.end(),source.identities.begin(),source.identities.end());
     library.names.insert(library.names.end(),source.names.begin(),source.names.end());
+    // G6-B: o skin viaja por desenho. Derivados (colisão) são estáticos: são
+    // geometria de física, não o corpo deformado.
+    std::vector<std::shared_ptr<const resources::SkinDefinition>> skins;
+    for(const auto &skin:source.skins)
+      skins.push_back(skin.joints.empty()?nullptr:std::make_shared<const resources::SkinDefinition>(skin));
+    const bool influences=!source.skinInfluences.empty() &&
+        source.skinInfluences.size()==source.vertices.size()/renderer::MapVertexStride*resources::SkinInfluenceStride;
+    for(usize i=0;i<source.draws.size();++i) {
+      const i32 skin=i<source.sourceDrawCount && i<source.drawSkins.size()?source.drawSkins[i]:-1;
+      const auto shared=influences && skin>=0 && static_cast<usize>(skin)<skins.size()?skins[static_cast<usize>(skin)]:nullptr;
+      library.drawSkins.push_back(shared);
+      library.drawJoints.push_back(shared?static_cast<u32>(shared->joints.size()):0u);
+    }
+    if(influences || !library.skinInfluences.empty()) {
+      library.skinInfluences.resize(static_cast<usize>(vertexBase)*resources::SkinInfluenceStride,0);
+      if(influences) library.skinInfluences.insert(library.skinInfluences.end(),source.skinInfluences.begin(),source.skinInfluences.end());
+      else library.skinInfluences.resize(library.vertices.size()/renderer::MapVertexStride*resources::SkinInfluenceStride,0);
+    }
+    if(!source.animations.empty() && source.map.nodes.size()==source.nodes.size()) {
+      auto animations=std::make_shared<runtime::SourceAnimations>();
+      animations->clips=source.animations;
+      for(const auto &node:source.map.nodes) animations->nodes.push_back(node.id);
+      library.animations.emplace_back(source.guid,std::move(animations));
+    }
     // Pivô na origem do nó: a geometria importada já vive no espaço dele.
     for(usize i=0;i<source.draws.size();++i) {library.pivots.push_back(0);library.pivots.push_back(0);library.pivots.push_back(0);}
   }
@@ -3055,7 +3123,10 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
       const auto &texture=*textures[binding.index];
       publishedResidency.push_back({binding,{texture.width,texture.height,texture.levels,texture.expectedBytes(),texture.srgb,texture.samplerFlags}});
     }
-  if(!publishGeometry_(library.vertices,library.indices,library.draws,library.materials,textures,published)) {
+  skinningPublication_={library.skinInfluences,library.drawJoints};
+  const bool accepted=publishGeometry_(library.vertices,library.indices,library.draws,library.materials,textures,published);
+  skinningPublication_={};
+  if(!accepted) {
     diagnostic="O consumidor gráfico recusou a geometria importada.";return false;
   }
   const bool residencyChanged=residency.residentBytes!=textureResidency_.residentBytes ||
@@ -3094,6 +3165,9 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   }
   publishedTextures_=std::move(publishedResidency);
   mapScene_.setTextureLibrary(std::move(bindings));
+  std::vector<std::shared_ptr<const resources::SkinDefinition>> drawSkins(primitives);
+  drawSkins.insert(drawSkins.end(),library.drawSkins.begin(),library.drawSkins.end());
+  mapScene_.setSkinning(std::move(drawSkins),library.animations);
   return true;
 }
 
@@ -3459,6 +3533,7 @@ bool EditorSession::importModel(std::span<const u8> bytes, std::string_view sour
     if(!instantiateModel(report.source,instance,false)) {report.diagnostic=instance.diagnostic;return false;}
     report.objects=instance.objects;report.groups=instance.groups;
     report.lodGroups=instance.lodGroups;report.lodNotes=std::move(instance.lodNotes);
+    report.skinnedMeshes=instance.skinnedMeshes;report.animations=instance.animations;
   }
   return true;
 }
@@ -3611,6 +3686,10 @@ bool EditorSession::stageSource(const resources::GltfImport &model, std::string_
   block.map=std::move(nodeMap);
   block.materialNames=model.materialNames;
   block.textures=model.textures;
+  block.skins=model.skins;
+  block.drawSkins=model.drawSkins;
+  block.skinInfluences=model.skinInfluences;
+  block.animations=model.animations;
   block.sourceIndexCount=block.indices.size();
   block.sourceDrawCount=block.draws.size();
   auto profile=importProfileFor(source);
@@ -3888,6 +3967,31 @@ bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportRep
       history_.applyValues(document_,target,value);
     }
     for(usize n=0;n<tree.nodes.size();++n) if(!placed[n]) ++report.groups;
+    // G6-B: o nó da malha com skin ganha Malha com esqueleto, com os ossos já
+    // ligados aos objetos que esta instanciação criou para as juntas; a raiz da
+    // instância ganha Animação quando a fonte traz clipes.
+    for(usize i=0;i<tree.sourceDrawCount && i<tree.drawSkins.size() && i<tree.drawNodes.size();++i) {
+      const i32 skinIndex=tree.drawSkins[i];
+      if(skinIndex<0 || static_cast<usize>(skinIndex)>=tree.skins.size() || tree.skinInfluences.empty()) continue;
+      const auto &skin=tree.skins[static_cast<usize>(skinIndex)];
+      const auto target=created[tree.drawNodes[i]];
+      auto value=*document_.find(target);
+      if(skin.joints.empty() || value.components.find(scene::SkinnedMesh::descriptor)) continue;
+      auto *skinned=static_cast<scene::SkinnedMesh *>(value.components.add(scene::SkinnedMesh::descriptor));
+      if(!skinned) return rollback("Não foi possível criar a malha com esqueleto.");
+      for(const auto joint:skin.joints) skinned->bones.push_back(joint<created.size()?created[joint]:0u);
+      history_.applyValues(document_,target,value);
+      ++report.skinnedMeshes;
+    }
+    if(linkable && !tree.animations.empty()) {
+      for(const auto root:newRoots) {
+        auto value=*document_.find(root);
+        if(value.components.find(scene::Animation::descriptor)) continue;
+        if(!value.components.add(scene::Animation::descriptor)) return rollback("Não foi possível criar a animação.");
+        history_.applyValues(document_,root,value);
+        ++report.animations;
+      }
+    }
     // Convenção `_LOD<n>` do Model Importer da Unity: com os slots já no lugar,
     // o grupo nasce medido e entra no mesmo Desfazer da instanciação. O grupo
     // da importação também conta como pai, porque modelos costumam trazer os
@@ -3901,7 +4005,9 @@ bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportRep
   }
 
   state_.status="Recurso instanciado: "+std::to_string(report.objects)+" objetos"+
-      (report.lodGroups?" · "+std::to_string(report.lodGroups)+(report.lodGroups==1?" LOD Group":" LOD Groups")+" pelos nomes _LOD":std::string());
+      (report.lodGroups?" · "+std::to_string(report.lodGroups)+(report.lodGroups==1?" LOD Group":" LOD Groups")+" pelos nomes _LOD":std::string())+
+      (report.skinnedMeshes?" · "+std::to_string(report.skinnedMeshes)+" com esqueleto":std::string())+
+      (report.animations?" · animação":std::string());
   for(const auto &note:report.lodNotes) reportProblem(EditorConsoleSeverity::Warning,note);
   // The newly imported object must be discoverable immediately. Fit only this
   // instance (all its roots), preserving authored scale and source transforms.
@@ -4080,6 +4186,16 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
   state_.importStatus=assets_.findByPath(state_.importPath)?"Atualizar recurso existente":"Registrar novo recurso";
   state_.importSummary=std::to_string(model.nodes.size())+" nós · "+std::to_string(model.draws.size())+" malhas · "+
       std::to_string(model.materials.size())+" materiais";
+  // G6-B: skin e clipes importados, e o que ficou de fora com o motivo contado.
+  {
+    usize skins=0;for(const auto &skin:model.skins) if(!skin.joints.empty()) ++skins;
+    if(skins) state_.importSummary+=" · "+std::to_string(skins)+(skins==1?" skin":" skins");
+    if(!model.animations.empty())
+      state_.importSummary+=" · "+std::to_string(model.animations.size())+(model.animations.size()==1?" clipe":" clipes");
+    if(model.skippedSkins || model.unsupportedAnimationChannels)
+      state_.importSummary+="\nNão importado: "+std::to_string(model.skippedSkins)+" skin(s) e "+
+          std::to_string(model.unsupportedAnimationChannels)+" canal(is) de animação (pesos de morph ou alvo inválido).";
+  }
   state_.importSummary+="\nSó recurso: guarda no projeto.\nImportar na cena: guarda, instancia e enquadra o modelo.";
   // G6-A: o que a medição da fonte achou. Vai no Resumo porque é ali que o
   // autor decide publicar; o detalhe de cada malha fica na aba Malhas.
@@ -4538,6 +4654,44 @@ void EditorSession::refreshLodStatus() {
       std::to_string(static_cast<int>(std::lround(std::min(relative,99.99f)*100)))+"% da tela";
   state_.lodStatus="Na vista: "+(level<group->levelCount?"LOD "+std::to_string(level):std::string("Culled"))+" · "+height;
 }
+void EditorSession::refreshSkinningStatus() {
+  state_.skinStatus.clear();state_.animationStatus.clear();
+  const auto &graph=isPlaying()&&playScene_.active()?playScene_.document():document_;
+  const auto *entity=graph.find(state_.selection);
+  if(!entity) return;
+  if(const auto *skinned=static_cast<const scene::SkinnedMesh *>(entity->components.find(scene::SkinnedMesh::descriptor))) {
+    const auto *render=meshRenderer(*entity);
+    const u32 mesh=render?render->slotMesh(0):0;
+    const auto *skin=mesh?mapScene_.drawSkin(mesh-1):nullptr;
+    if(!skin) state_.skinStatus="A malha deste objeto não tem skin na fonte: desenho estático";
+    else {
+      u32 missing=0;std::vector<float> palette;float center[3],radius=0,model[16];
+      const bool posed=editorWorldMatrix(graph,entity->id,model) &&
+                       mapScene_.skinPose(graph,*skinned,mesh-1,model,palette,center,radius,&missing);
+      state_.skinStatus=std::to_string(skin->joints.size())+" juntas · "+
+          (missing?std::to_string(missing)+" sem osso (pose de bind)":std::string("todos os ossos ligados"))+
+          (posed?"":" · paleta recusada: osso com escala nula");
+    }
+  }
+  if(const auto *animation=static_cast<const scene::Animation *>(entity->components.find(scene::Animation::descriptor))) {
+    const auto *link=scene::importLink(entity->components);
+    const auto *source=link?mapScene_.animations(link->source):nullptr;
+    if(!source || source->clips.empty()) state_.animationStatus="Sem clipes: o objeto não veio de um modelo animado";
+    else if(animation->clipIndex()>=source->clips.size())
+      state_.animationStatus="Clipe "+std::to_string(animation->clipIndex())+" não existe (a fonte tem "+
+                             std::to_string(source->clips.size())+")";
+    else {
+      const auto &clip=source->clips[animation->clipIndex()];
+      char duration[32];std::snprintf(duration,sizeof duration,"%.2f s",clip.duration);
+      state_.animationStatus="Clipe "+std::to_string(animation->clipIndex()+1)+" de "+std::to_string(source->clips.size())+": "+
+                             (clip.name.empty()?std::string("sem nome"):clip.name)+" · "+duration;
+      if(isPlaying()&&playScene_.active()) {
+        char time[32];std::snprintf(time,sizeof time,"%.2f s",animation->time);
+        state_.animationStatus+=animation->playing?std::string(" · tocando ")+time:std::string(" · parado");
+      }
+    }
+  }
+}
 void EditorSession::update() {
   state_.cameraPreviewEntity=cameraPreview_.camera();
   state_.cameraPreviewReady=cameraPreview_.hasCurrentImage(sceneVersion());
@@ -4550,6 +4704,7 @@ void EditorSession::update() {
   if(state_.texturePicker || state_.textureManager) generatePendingTextureThumbnail();
   refreshMaterialSlotView();
   refreshLodStatus();
+  refreshSkinningStatus();
   if(const auto *selected=document_.find(state_.selection)) state_.routePoint=waterRoute(*selected).count?std::min(state_.routePoint,waterRoute(*selected).count-1):0;
   if (font_ == nullptr || icons_ == nullptr) return;
   state_.assetCount=mapScene_.assetCount();

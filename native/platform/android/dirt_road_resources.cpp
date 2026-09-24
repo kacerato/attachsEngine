@@ -240,6 +240,7 @@ bool DirtRoadResources::initialize(rhi::VulkanDevice &device, rhi::VulkanUploadC
       sampling.enableAnisotropy = true;
       sampling.maxAnisotropy = samplerAnisotropy_;
     }
+    if (filter.mipEnabled) sampling.mipLodBias = samplerMipLodBias_;
     AndroidTextureResidency resident;
     if (!loadAndroidTexture(device, upload, assets, name, maxDimension, perTextureBudget,
                             sampling, filter.mipEnabled, images_[index], samplers_[index], cancel, "DirtRoad",
@@ -397,7 +398,9 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   rhi::VulkanBuffer nextVertices,nextIndices;
   if(!sameGeometry) {
     rhi::BufferDesc buffer{};buffer.preferDeviceMemory=true;buffer.cpuAccess=rhi::CpuAccess::None;
-    buffer.sizeBytes=vertices.size();buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    // STORAGE: o compute de skin lê daqui os vértices de repouso (G6-B).
+    buffer.sizeBytes=vertices.size();
+    buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     if(!allocator.createBuffer(buffer,&nextVertices) ||
        !upload.uploadBuffer(allocator,vertices.data(),vertices.size(),nextVertices,VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT)) return false;
     buffer.sizeBytes=indices.size()*sizeof(u32);buffer.usage=VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
@@ -476,7 +479,9 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
         return refuseTexture("Falha ao enviar a residência reduzida da textura autoral.");
     }
     // O sampler reaproveitado só vale se a anisotropia da política não mudou.
-    if(reuseImage && authoringAnisotropy_==samplerAnisotropy_) {samplerReused[t]=1;continue;}
+    if(reuseImage && authoringAnisotropy_==samplerAnisotropy_ && authoringMipLodBias_==samplerMipLodBias_) {
+      samplerReused[t]=1;continue;
+    }
     const u32 flags=texture->samplerFlags;
     const auto filter=renderer::decodeTextureSampler(flags);
     const auto wrap=[flags](u32 repeat,u32 mirror) {
@@ -494,6 +499,7 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
     if(samplerAnisotropy_>1.0f && filter.minLinear && !(flags&renderer::AuthoringTextureNoAnisotropy)) {
       sampling.enableAnisotropy=true;sampling.maxAnisotropy=samplerAnisotropy_;
     }
+    if(filter.mipEnabled) sampling.mipLodBias=samplerMipLodBias_;
     if(!nextSamplers[t].initialize(device.handle(),sampling))
       return refuseTexture("Falha ao criar sampler da textura autoral residente.");
   }
@@ -509,6 +515,7 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   authoringImages_=std::move(nextImages);authoringSamplers_=std::move(nextSamplers);
   authoringTextureSources_.assign(extraTextures.begin(),extraTextures.end());
   authoringAnisotropy_=samplerAnisotropy_;
+  authoringMipLodBias_=samplerMipLodBias_;
   authoringResidencyMipBias_=textureResidencyMipBias_;
   authoringTextureResidency_=residency;
   lastReusedTextures_=plan.reused;lastUploadedTextures_=plan.uploaded;lastGeometryReused_=sameGeometry;

@@ -10,6 +10,7 @@ layout(location=4) in highp vec2 vUv1;
 layout(location=5) in mediump vec4 vColor;
 layout(location=6) in mediump float vDither;
 layout(location=0) out vec4 outColor;
+#include "temporal_masks.glsl"
 layout(constant_id=0) const uint GPU_COST_ISOLATION=0u;
 layout(constant_id=1) const uint MATERIAL_FEATURE_MASK=0xffffffffu;
 // Projecao da sonda de ambiente resolvida em tempo de compilacao de pipeline.
@@ -218,7 +219,9 @@ void main() {
   if(aetherLodDitherDiscard(gl_FragCoord.xy,vDither)) discard;
   uint flags=frame.materialFlags.x;
   uint isolation=GPU_COST_ISOLATION;
+  aetherWriteTemporalMasks(0.0,0.0);
   if((flags&MATERIAL_WATER)!=0u) {
+    aetherWaterTemporalMasks(1.0,0.0);
     mediump vec3 color=toneMapEnvironment(shadeWater(vPosition,normalize(vNormal)));
     if((frame.materialFlags.z&1u)!=0u)
       color=mix(12.92*color,1.055*pow(color,vec3(1.0/2.4))-.055,
@@ -264,6 +267,7 @@ void main() {
       color=mix(12.92*color,1.055*pow(color,vec3(1.0/2.4))-.055,
                 greaterThan(color,vec3(.0031308)));
     outColor=vec4(color,(flags&1u)!=0u?base.a:1.0);
+    if((flags&1u)!=0u) aetherBlendedTemporalMasks(base.a);
     return;
   }
   highp vec3 eye=frame.cameraPositionNear.xyz;
@@ -382,4 +386,5 @@ void main() {
   if((frame.materialFlags.z&1u)!=0u) color=mix(12.92*color,1.055*pow(color,vec3(1.0/2.4))-.055,
                                              greaterThan(color,vec3(.0031308)));
   outColor=vec4(color,(flags&1u)!=0u?base.a:1.0);
+  if((flags&1u)!=0u) aetherBlendedTemporalMasks(base.a);
 }
