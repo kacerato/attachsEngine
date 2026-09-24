@@ -370,6 +370,7 @@ add_library(aether_assets STATIC
   resources/image_decode.cpp
   resources/gltf_codecs.cpp
   resources/gltf_package.cpp
+  resources/gltf_folder_source.cpp
   resources/import_cache.cpp
   resources/import_report.cpp
   resources/texture_budget.cpp
@@ -432,6 +433,11 @@ add_library(aether_editor STATIC
 )
 target_include_directories(aether_editor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(aether_editor PUBLIC aether_core aether_assets aether_runtime aether_renderer aether_ui aether_platform)
+# A sessao do editor passa do limite de secoes do COFF no build de depuracao do
+# MinGW ("file too big"); o formato estendido so muda o objeto, nao o codigo.
+if(MINGW)
+  target_compile_options(aether_editor PRIVATE -Wa,-mbig-obj)
+endif()
 
 # --- aether_ui: layout, desenho e roteamento de toque da interface ---------
 # Separada de aether_renderer de proposito: a UI do editor nao conhece Vulkan,

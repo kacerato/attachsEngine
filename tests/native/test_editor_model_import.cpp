@@ -4,6 +4,8 @@
 #include "editor/editor_session.h"
 #include "renderer/authoring_geometry.h"
 #include "editor/editor_filesystem.h"
+#include "resources/gltf_folder_source.h"
+#include "core/sha256.h"
 #include "runtime/transform_math.h"
 
 #include <cstring>
@@ -886,4 +888,66 @@ AE_TEST(reimport_that_adds_a_lod_level_extends_the_existing_group) {
   const auto *group = groupOf();
   AE_EXPECT_TRUE(group && group->levelCount == 3 && group->levels[2] == find("Porta_LOD2"), "o nível novo entrou no grupo");
   AE_EXPECT_TRUE(group && group->transitions[2] < group->transitions[1], "com transição abaixo da anterior");
+}
+
+// S0 — fonte em pasta publicada na mesma transação que o principal: os
+// companheiros saem do preparo por renomeação, e uma publicação recusada
+// devolve o que existia (e apaga o que não existia).
+namespace {
+std::string folderGltf() {
+  return R"({"asset":{"version":"2.0"},"buffers":[{"uri":"cena.bin","byteLength":42}],)"
+         R"("bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":36},{"buffer":0,"byteOffset":36,"byteLength":6}],)"
+         R"("accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},)"
+         R"({"bufferView":1,"componentType":5123,"count":3,"type":"SCALAR"}],)"
+         R"("meshes":[{"primitives":[{"attributes":{"POSITION":0},"indices":1}]}],)"
+         R"("nodes":[{"name":"Tri","mesh":0}],"scenes":[{"nodes":[0]}],"scene":0})";
+}
+std::vector<u8> folderBin(float z) {
+  const float positions[9]{0, 0, z, 1, 0, z, 0, 1, z};
+  const u16 indices[3]{0, 1, 2};
+  std::vector<u8> bin(42, 0);
+  std::memcpy(bin.data(), positions, 36);
+  std::memcpy(bin.data() + 36, indices, 6);
+  return bin;
+}
+void stageFile(const std::filesystem::path &root, const std::string &relative, std::span<const u8> bytes) {
+  std::filesystem::create_directories((root / relative).parent_path());
+  std::ofstream out(root / relative, std::ios::binary);
+  out.write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+}
+} // namespace
+
+AE_TEST(s0_folder_source_publishes_companions_and_rolls_back_a_refused_reimport) {
+  PackageProject project;EditorSession session;FakeRenderer renderer;startSession(session,renderer);
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.root.string().c_str()),"project");
+  const auto text=folderGltf();
+  const std::span<const u8> main(reinterpret_cast<const u8 *>(text.data()),text.size());
+  const auto first=folderBin(0);
+  stageFile(project.root,".astra/import-staging/cena/cena.bin",first);
+  resources::GltfImport parsed;std::vector<u8> packed;
+  AE_EXPECT_TRUE(resources::importGltfFolder(main,project.root/".astra/import-staging/cena",1u<<20,{},{},parsed,packed),
+                 parsed.diagnostic.c_str());
+  const EditorSession::FolderCompanion companion{".astra/import-staging/cena/cena.bin","Fontes/cena/cena.bin"};
+  EditorSession::ModelImportReport report;
+  const auto folderHash=resources::gltfFolderContentHash(main,"folder \"cena.bin\" 42 x");
+  AE_EXPECT_TRUE(session.commitModelImport(main,parsed,"Fontes/cena/cena.gltf","",report,
+                                           resources::ImportAmbiguityPolicy::Refuse,{},{&companion,1},folderHash),
+                 report.diagnostic.c_str());
+  std::vector<u8> published;
+  AE_EXPECT_TRUE(EditorImportTransaction::read(project.root/"Fontes/cena/cena.bin",published) && published==first,
+                 "companheiro movido para o lado do principal");
+  AE_EXPECT_TRUE(!std::filesystem::exists(project.root/".astra/import-staging/cena/cena.bin"),"preparo esvaziado pela renomeação");
+  const auto *record=session.assets().find(report.source);
+  AE_EXPECT_TRUE(record && record->contentHash==folderHash,"registro guarda o conteúdo da pasta, não só do .gltf");
+  // Reimportação recusada pela GPU: o .bin publicado continua o antigo.
+  stageFile(project.root,".astra/import-staging/cena/cena.bin",folderBin(5));
+  renderer.refuse=true;
+  std::vector<u8> current;EditorImportTransaction::read(project.root/"Fontes/cena/cena.gltf",current);
+  AE_EXPECT_TRUE(!session.commitModelImport(main,parsed,"Fontes/cena/cena.gltf",Sha256::hex(current),report,
+                                            resources::ImportAmbiguityPolicy::Refuse,{},{&companion,1},resources::gltfFolderContentHash(main,"outra")),
+                 "reimportação recusada");
+  AE_EXPECT_TRUE(EditorImportTransaction::read(project.root/"Fontes/cena/cena.bin",published) && published==first,
+                 "rollback devolve o companheiro anterior");
+  AE_EXPECT_TRUE(!std::filesystem::exists(project.root/".astra/import-transaction/journal"),"journal resolvido");
+  AE_EXPECT_TRUE(!std::filesystem::exists(project.root/".astra/import-transaction/companions/0"),"backup do companheiro limpo");
 }

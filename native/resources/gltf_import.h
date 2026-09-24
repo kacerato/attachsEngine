@@ -39,11 +39,11 @@ namespace ae::resources {
 // (`tools/cook-gltf-map.py`) também não converte. Introduzir um espelhamento
 // aqui faria o mesmo arquivo chegar diferente conforme o caminho de entrada.
 //
-// Este leitor recebe só GLB autocontido. Um `.gltf`, ou um GLB com URIs
-// externas, passa antes por `resources/gltf_package.h` (Entrega 4): o seletor
-// do Android entrega os arquivos escolhidos JUNTO com o principal, e as
-// dependências entram num GLB único, com manifesto `.deps` ao lado da fonte.
-// Uma URI que chegue até aqui sem ter sido empacotada é recusada com diagnóstico.
+// Este leitor recebe GLB. Um `.gltf`, ou um GLB com URIs externas, passa antes
+// por `resources/gltf_package.h`: na seleção múltipla (Entrega 4) tudo entra
+// num GLB único; numa fonte em pasta (S0) só os buffers entram, e as imagens
+// continuam por URI, lidas por `GltfImportProgress::externalFile`. Sem esse
+// leitor, uma URI que chegue até aqui é recusada com diagnóstico.
 // Normais e tangentes: escolha AUTORAL, do perfil de importação, e não detecção
 // silenciosa. Os nomes seguem o Model Import Settings da Unity (Normals,
 // Normals Mode, Tangents), com uma diferença deliberada: não existe a opção
@@ -113,9 +113,18 @@ struct GltfImportLimits {
 // Progresso e cancelamento. A importação chama `report` em pontos onde o
 // trabalho já avançou de verdade, e consulta `cancelled` com frequência
 // suficiente para o usuário desistir de um arquivo grande sem esperar o fim.
+// Começo de arquivo suficiente para as dimensões de PNG, JPEG e KTX2.
+inline constexpr u64 GltfImageHeaderBytes = 256u << 10;
+
 struct GltfImportProgress {
   void (*report)(void *context, float fraction, const char *stage) = nullptr;
   bool (*cancelled)(void *context) = nullptr;
+  // Fonte em pasta (S0, `resources/gltf_package.h`): lê a imagem por URI do
+  // disco, na hora de decodificar, uma de cada vez. `uri` vem como está no
+  // arquivo; quem implementa normaliza com `gltfRelativeUri` e fica dentro da
+  // pasta da fonte. Nulo: imagem por URI é recusada, como antes.
+  // `prefix` diferente de zero pede só os primeiros bytes (cabeçalho da imagem).
+  bool (*externalFile)(void *context, std::string_view uri, u64 prefix, std::vector<u8> &bytes) = nullptr;
   void *context = nullptr;
 };
 

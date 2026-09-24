@@ -168,9 +168,10 @@ enum class Resolution { Found, Missing, Refused };
 struct Resolver {
   std::span<const GltfPackageFile> files;
   std::vector<bool> used;
-  std::vector<std::vector<u8>> decoded; // data: URIs
+  std::vector<std::vector<u8>> decoded; // data: URIs e arquivos lidos da pasta
   std::vector<std::string> missing;
   std::string refusal;
+  const GltfFolder *folder = nullptr;   // pasta: casa pelo caminho relativo
 
   Resolution resolve(std::string_view uri, std::span<const u8> &bytes, GltfDependency &dependency) {
     dependency = {};
@@ -190,45 +191,21 @@ struct Resolver {
       dependency.dataUri = true;
       return Resolution::Found;
     }
-    // Esquema (http:, https:, file:, content:…) antes de qualquer '/', ou caminho
-    // absoluto: nunca rede implícita nem busca fora do que o usuário escolheu.
-    const auto colon = uri.find(':'), slash = uri.find('/');
-    if (uri.starts_with('/') || uri.find('\\') != std::string_view::npos ||
-        (colon != std::string_view::npos && (slash == std::string_view::npos || colon < slash))) {
-      refusal = "URI absoluta ou de rede não é lida (" + std::string(uri.substr(0, 128)) +
-                "); a importação não acessa a rede nem busca arquivos pelo aparelho.";
-      return Resolution::Refused;
-    }
-    std::string path;
-    for (usize i = 0; i < uri.size(); ++i) {
-      if (uri[i] == '%') {
-        const int high = i + 2 < uri.size() ? hexDigit(uri[i + 1]) : -1, low = i + 2 < uri.size() ? hexDigit(uri[i + 2]) : -1;
-        if (high < 0 || low < 0) {
-          refusal = "URI com codificação percentual inválida: " + std::string(uri.substr(0, 128)) + ".";
-          return Resolution::Refused;
-        }
-        path.push_back(static_cast<char>(high * 16 + low));
-        i += 2;
-      } else {
-        path.push_back(uri[i]);
+    std::string relative;
+    if (!gltfRelativeUri(uri, relative, refusal)) return Resolution::Refused;
+    if (folder) {
+      decoded.emplace_back();
+      if (!folder->read || !folder->read(folder->context, relative, decoded.back())) {
+        decoded.pop_back();
+        if (std::find(missing.begin(), missing.end(), relative) == missing.end()) missing.push_back(relative);
+        return Resolution::Missing;
       }
+      bytes = decoded.back();
+      dependency.file = relative;
+      return Resolution::Found;
     }
-    usize begin = 0;
-    std::string name;
-    while (begin <= path.size()) {
-      const auto end = std::min(path.find('/', begin), path.size());
-      const auto segment = std::string_view(path).substr(begin, end - begin);
-      if (segment == "..") {
-        refusal = "URI sai da pasta do arquivo (" + std::string(uri.substr(0, 128)) + ").";
-        return Resolution::Refused;
-      }
-      if (!segment.empty() && segment != ".") name = std::string(segment);
-      begin = end + 1;
-    }
-    if (name.empty()) {
-      refusal = "URI vazia ou sem nome de arquivo.";
-      return Resolution::Refused;
-    }
+    const auto slash = relative.rfind('/');
+    const std::string name = slash == std::string::npos ? relative : relative.substr(slash + 1);
     i64 match = -1;
     for (usize f = 0; f < files.size(); ++f)
       if (files[f].name == name) {
@@ -274,7 +251,8 @@ bool gltfNeedsPackage(std::span<const u8> main) {
   return false;
 }
 
-bool packGltf(std::span<const u8> main, std::span<const GltfPackageFile> companions, u64 maximumBytes,
+namespace {
+bool packImpl(std::span<const u8> main, Resolver &resolver, bool externalImages, u64 maximumBytes,
               GltfPackage &out, std::string &diagnostic) {
   out = {};
   diagnostic.clear();
@@ -298,7 +276,6 @@ bool packGltf(std::span<const u8> main, std::span<const GltfPackageFile> compani
   if (views && views->kind != Kind::Array) views = nullptr;
   if (images && images->kind != Kind::Array) images = nullptr;
 
-  Resolver resolver{companions, std::vector<bool>(companions.size(), false), {}, {}, {}};
   std::vector<u8> packed;
   std::vector<u64> bases;
   const auto record = [&](GltfDependency dependency, std::span<const u8> bytes) {
@@ -361,7 +338,8 @@ bool packGltf(std::span<const u8> main, std::span<const GltfPackageFile> compani
   const u32 viewCount = views ? views->childCount : 0;
   std::vector<i64> imageViews(images ? images->childCount : 0, -1);
   std::vector<std::pair<u64, u64>> appendedViews; // (offset, length)
-  for (u32 i = 0; images && i < images->childCount; ++i) {
+  // Pasta: a imagem continua por URI; quem lê é o importador, uma de cada vez.
+  for (u32 i = 0; images && !externalImages && i < images->childCount; ++i) {
     const auto &image = *document.child(*images, i);
     const auto uri = image.kind == Kind::Object ? document.string(image, "uri") : std::string_view{};
     if (uri.empty()) continue;
@@ -387,7 +365,8 @@ bool packGltf(std::span<const u8> main, std::span<const GltfPackageFile> compani
     diagnostic = "Faltam arquivos referenciados pelo glTF: ";
     for (usize i = 0; i < resolver.missing.size() && i < 6; ++i) diagnostic += (i ? ", " : "") + resolver.missing[i];
     if (resolver.missing.size() > 6) diagnostic += ", …";
-    diagnostic += ". Selecione-os junto com o arquivo principal (seleção múltipla no seletor).";
+    diagnostic += resolver.folder ? std::string(". A pasta do modelo precisa conter esses arquivos nos caminhos declarados.")
+                                  : std::string(". Selecione-os junto com o arquivo principal (seleção múltipla no seletor).");
     return false;
   }
   for (const bool used : resolver.used) out.unusedFiles += used ? 0 : 1;
@@ -542,6 +521,107 @@ bool packGltf(std::span<const u8> main, std::span<const GltfPackageFile> compani
     out.glb.insert(out.glb.end(), packed.begin(), packed.end());
   }
   return true;
+}
+
+} // namespace
+
+bool gltfRelativeUri(std::string_view uri, std::string &relative, std::string &refusal) {
+  relative.clear();
+  refusal.clear();
+  if (uri.starts_with("data:")) return false;
+  // Esquema (http:, https:, file:, content:…) antes de qualquer '/', ou caminho
+  // absoluto: nunca rede implícita nem busca fora do que o usuário escolheu.
+  const auto colon = uri.find(':'), slash = uri.find('/');
+  if (uri.starts_with('/') || uri.find('\\') != std::string_view::npos ||
+      (colon != std::string_view::npos && (slash == std::string_view::npos || colon < slash))) {
+    refusal = "URI absoluta ou de rede não é lida (" + std::string(uri.substr(0, 128)) +
+              "); a importação não acessa a rede nem busca arquivos pelo aparelho.";
+    return false;
+  }
+  std::string path;
+  for (usize i = 0; i < uri.size(); ++i) {
+    if (uri[i] == '%') {
+      const int high = i + 2 < uri.size() ? hexDigit(uri[i + 1]) : -1, low = i + 2 < uri.size() ? hexDigit(uri[i + 2]) : -1;
+      if (high < 0 || low < 0) {
+        refusal = "URI com codificação percentual inválida: " + std::string(uri.substr(0, 128)) + ".";
+        return false;
+      }
+      path.push_back(static_cast<char>(high * 16 + low));
+      i += 2;
+    } else {
+      path.push_back(uri[i]);
+    }
+  }
+  if (path.find('\0') != std::string::npos || path.find('\\') != std::string::npos) {
+    refusal = "URI com caractere inválido: " + std::string(uri.substr(0, 128)) + ".";
+    return false;
+  }
+  usize begin = 0;
+  while (begin <= path.size()) {
+    const auto end = std::min(path.find('/', begin), path.size());
+    const auto segment = std::string_view(path).substr(begin, end - begin);
+    if (segment == "..") {
+      refusal = "URI sai da pasta do arquivo (" + std::string(uri.substr(0, 128)) + ").";
+      relative.clear();
+      return false;
+    }
+    if (!segment.empty() && segment != ".") {
+      if (!relative.empty()) relative.push_back('/');
+      relative += segment;
+    }
+    begin = end + 1;
+  }
+  if (relative.empty() || relative.back() == '/') {
+    refusal = "URI vazia ou sem nome de arquivo.";
+    relative.clear();
+    return false;
+  }
+  return true;
+}
+
+bool listGltfFolderDependencies(std::span<const u8> main, std::vector<GltfFolderDependency> &out,
+                                std::string &diagnostic) {
+  out.clear();
+  diagnostic.clear();
+  std::span<const u8> binary;
+  bool glb = false;
+  const auto json = mainJson(main, binary, glb);
+  JsonDocument document;
+  if (json.empty() || !JsonDocument::parse(json, document) || !document.root() || document.root()->kind != Kind::Object) {
+    diagnostic = "O JSON do glTF está mal formado.";
+    return false;
+  }
+  const auto &root = *document.root();
+  for (const auto field : {std::string_view("buffers"), std::string_view("images")}) {
+    const auto *list = document.member(root, field);
+    if (!list || list->kind != Kind::Array) continue;
+    for (u32 i = 0; i < list->childCount; ++i) {
+      const auto &item = *document.child(*list, i);
+      const auto uri = item.kind == Kind::Object ? document.string(item, "uri") : std::string_view{};
+      if (uri.empty() || uri.starts_with("data:")) continue;
+      GltfFolderDependency dependency;
+      if (!gltfRelativeUri(uri, dependency.relative, diagnostic)) return false;
+      if (std::any_of(out.begin(), out.end(), [&](const auto &known) { return known.relative == dependency.relative; }))
+        continue;
+      dependency.uri = std::string(uri.substr(0, 512));
+      dependency.image = field == "images";
+      out.push_back(std::move(dependency));
+    }
+  }
+  return true;
+}
+
+bool packGltf(std::span<const u8> main, std::span<const GltfPackageFile> companions, u64 maximumBytes,
+              GltfPackage &out, std::string &diagnostic) {
+  Resolver resolver{companions, std::vector<bool>(companions.size(), false), {}, {}, {}};
+  return packImpl(main, resolver, false, maximumBytes, out, diagnostic);
+}
+
+bool packGltfFolder(std::span<const u8> main, const GltfFolder &folder, u64 maximumBytes, GltfPackage &out,
+                    std::string &diagnostic) {
+  Resolver resolver{{}, {}, {}, {}, {}};
+  resolver.folder = &folder;
+  return packImpl(main, resolver, true, maximumBytes, out, diagnostic);
 }
 
 std::string serializeGltfManifest(std::string_view mainName, std::span<const u8> main, const GltfPackage &package) {

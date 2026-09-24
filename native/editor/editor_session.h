@@ -556,10 +556,15 @@ public:
   // segunda publicação quando a cena é carregada. `load` descarta a antecipação.
   void anticipateSceneTextures(const char *path, u64 fingerprint);
   bool instantiateModel(resources::AssetGuid source, ModelImportReport &report, bool wrapMultipleRoots=true);
+  // Fonte em pasta (S0): `companions` são os arquivos do modelo já copiados
+  // para o preparo, publicados na mesma transação que o principal; `contentHash`
+  // é o do conteúdo inteiro (principal + manifesto), não só dos bytes do `.gltf`.
+  struct FolderCompanion {std::string staged,relative;};
   bool commitModelImport(std::span<const u8> bytes, const resources::GltfImport &model,
                          const std::string &path, const std::string &expectedHash, ModelImportReport &report,
                          resources::ImportAmbiguityPolicy policy=resources::ImportAmbiguityPolicy::Refuse,
-                         std::span<const resources::AssetGuid> excludedNodes={});
+                         std::span<const resources::AssetGuid> excludedNodes={},
+                         std::span<const FolderCompanion> companions={}, std::string_view contentHash={});
   // `prepared` é o perfil com que o worker preparou `model`.
   void showImportPreview(std::string path, const resources::GltfImport &model, std::string_view contentHash={},
                          const resources::ImportProfile &prepared={});
@@ -785,6 +790,12 @@ public:
   bool consumeModelImportRequest() {
     const bool requested=state_.modelImportRequested;
     state_.modelImportRequested=false;
+    if(requested) {state_.importEnvironment=false;state_.importTexture=false;}
+    return requested;
+  }
+  bool consumeFolderImportRequest() {
+    const bool requested=state_.folderImportRequested;
+    state_.folderImportRequested=false;
     if(requested) {state_.importEnvironment=false;state_.importTexture=false;}
     return requested;
   }

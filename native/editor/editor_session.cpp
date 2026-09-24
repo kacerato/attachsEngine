@@ -288,12 +288,14 @@ bool EditorSession::setProjectDirectory(const char *path) {
     std::string recovery;
     if(!EditorImportTransaction::recover(path,recovery)) {state_.status=recovery;return false;}
     if(!recovery.empty()) reportProblem(EditorConsoleSeverity::Warning,recovery);
+    EditorImportTransaction::discardStaging(path);
   }
   code_.clear();state_.code=&code_;
   state_.files=&files_;state_.fileScroll=0;state_.fileScrollOffset=0;
   state_.console=&console_;
   closeImportPreview();state_.importAccept=false;state_.importCancel=false;
   state_.modelImportRequested=false;state_.environmentImportRequested=false;state_.textureImportRequested=false;
+  state_.folderImportRequested=false;
   reimportPath_.clear();environmentReimportPath_.clear();textureReimportPath_.clear();
   if(!files_.setRoot(path)) return false;
   environmentMaps_.clear();
@@ -2702,6 +2704,13 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       state_.templatePanel=false;return true;
     }
   }
+  if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportFolder)) {
+    // Pasta inteira: o shell lista a pasta, e só os arquivos que o glTF
+    // referencia são copiados para o projeto.
+    state_.folderImportRequested=true;state_.creationMenu=false;state_.codeFiles=false;
+    state_.status="Escolha a pasta do modelo (.gltf com .bin e texturas)";
+    return true;
+  }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::ImportModel)) {
     // O editor não conhece Android nem o seletor de arquivos: levanta o pedido
     // e quem tem o sistema na mão abre o diálogo e devolve os bytes.
@@ -4203,21 +4212,24 @@ bool EditorSession::instantiateModel(resources::AssetGuid source, ModelImportRep
 bool EditorSession::commitModelImport(std::span<const u8> bytes,const resources::GltfImport &model,
                                       const std::string &path,const std::string &expectedHash,ModelImportReport &report,
                                       resources::ImportAmbiguityPolicy policy,
-                                      std::span<const resources::AssetGuid> excludedNodes) {
+                                      std::span<const resources::AssetGuid> excludedNodes,
+                                      std::span<const FolderCompanion> companions,std::string_view contentHash) {
   report={};
   if(isPlaying()) {report.diagnostic="Pare a execução antes de publicar.";return false;}
   // O mapa de nós entra na MESMA transação que fonte e registro.
   const auto *known=assets_.findByPath(path);
   const auto mapSource=known?known->guid:resources::assetGuidFromSeed("fonte:"+path);
   EditorImportTransaction transaction(files_.rootPath());
-  if(!transaction.begin(path,expectedHash,report.diagnostic,resources::importNodeMapPath(mapSource))) {
+  std::vector<EditorImportTransaction::Companion> moved;
+  for(const auto &companion:companions) moved.push_back({companion.staged,companion.relative});
+  if(!transaction.begin(path,expectedHash,report.diagnostic,resources::importNodeMapPath(mapSource),moved)) {
     if(report.diagnostic.empty()) report.diagnostic="Não foi possível preparar os backups da importação.";
     return false;
   }
   const auto previousSources=importedSources_;const auto previousAssets=assets_;
   const auto previousDocument=document_;const auto previousMap=mapScene_;const auto previousHistory=history_;
   const bool previousDirty=assetRegistryDirty_;
-  bool published=publishModel(model,Sha256::hex(bytes),path,report,policy,excludedNodes);
+  bool published=publishModel(model,contentHash.empty()?Sha256::hex(bytes):std::string(contentHash),path,report,policy,excludedNodes);
   const auto *nodeMap=published?importNodeMap(report.source):nullptr;
   if(published && nodeMap && transaction.commit(bytes,assets_.serialize(),nodeMap->serialize())) {
     assetRegistryDirty_=false;files_.rebuildTree();state_.selectedFile=path;

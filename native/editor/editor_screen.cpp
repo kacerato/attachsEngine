@@ -471,6 +471,7 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
     header=takeTop(content,44);
     builder.iconButton(takeRight(header,34),UiIcon::AssetsTexture,widgetId(EditorWidget::ImportTexture));
     builder.iconButton(takeRight(header,34),UiIcon::AssetsImport,widgetId(EditorWidget::ImportModel));
+    builder.iconButton(takeRight(header,34),UiIcon::AssetsFolderOpen,widgetId(EditorWidget::ImportFolder));
     builder.iconButton(takeRight(header,34),UiIcon::LightingSky,widgetId(EditorWidget::ImportEnvironment));
     auto newFile=takeRight(header,34),newFolder=takeRight(header,34);
     builder.list.addImage(centred(newFile,19,19),static_cast<UiImageId>(UiIcon::IdeAdd),0xffffffff);
@@ -483,6 +484,7 @@ void buildFiles(ScreenBuilder &builder,const UiRect &panel) {
     builder.iconButton(takeRight(header,28),UiIcon::ScriptingCode,widgetId(EditorWidget::CodeOpen));
     builder.iconButton(takeRight(header,28),UiIcon::AssetsTexture,widgetId(EditorWidget::ImportTexture));
     builder.iconButton(takeRight(header,28),UiIcon::AssetsImport,widgetId(EditorWidget::ImportModel));
+    builder.iconButton(takeRight(header,28),UiIcon::AssetsFolderOpen,widgetId(EditorWidget::ImportFolder));
     builder.iconButton(takeRight(header,28),UiIcon::LightingSky,widgetId(EditorWidget::ImportEnvironment));
   }
   builder.label(header,"Arquivos",theme.color.text,theme.type.body);

@@ -217,97 +217,93 @@ u32 mipLevelCount(u32 width, u32 height) {
   return levels;
 }
 
-bool buildMipChain(const DecodedImage &base, bool srgb, std::vector<u8> &chain, u32 &levels) {
+namespace {
+// Gera os níveis por média de caixa, nível a nível, e guarda só a partir de
+// `firstLevel`: os níveis de cima (os que o orçamento descarta) passam por um
+// buffer rolante e nunca entram na cadeia. `reduce` escreve um texel de destino
+// a partir do retângulo [x0,x1)x[y0,y1) do nível anterior.
+template <class Reduce>
+bool buildChain(const DecodedImage &base, u32 firstLevel, std::vector<u8> &chain, u32 &levels, Reduce reduce) {
   chain.clear();
   levels = 0;
-  if (!base.width || !base.height || base.rgba.size() != static_cast<usize>(base.width) * base.height * 4) return false;
-  levels = mipLevelCount(base.width, base.height);
-  usize total = 0;
-  for (u32 level = 0, w = base.width, h = base.height; level < levels; ++level, w = std::max(1u, w / 2), h = std::max(1u, h / 2))
-    total += static_cast<usize>(w) * h * 4;
-  chain.resize(total);
-  std::memcpy(chain.data(), base.rgba.data(), base.rgba.size());
-  const auto &toLinear = srgbToLinearTable();
-  usize previousOffset = 0, offset = base.rgba.size();
+  if (!base.width || !base.height || base.rgba.size() != static_cast<usize>(base.width) * base.height * 4u) return false;
+  const u32 total = mipLevelCount(base.width, base.height);
+  if (firstLevel >= total) return false;
+  usize kept = 0;
+  for (u32 level = 0, w = base.width, h = base.height; level < total; ++level, w = std::max(1u, w / 2), h = std::max(1u, h / 2))
+    if (level >= firstLevel) kept += static_cast<usize>(w) * h * 4u;
+  chain.reserve(kept);
+  if (firstLevel == 0) chain.insert(chain.end(), base.rgba.begin(), base.rgba.end());
+  std::vector<u8> rolling[2];
+  const u8 *previous = base.rgba.data();
   u32 previousWidth = base.width, previousHeight = base.height;
-  for (u32 level = 1; level < levels; ++level) {
+  for (u32 level = 1; level < total; ++level) {
     const u32 width = std::max(1u, previousWidth / 2), height = std::max(1u, previousHeight / 2);
+    auto &target = rolling[level & 1u];
+    target.resize(static_cast<usize>(width) * height * 4u);
     for (u32 y = 0; y < height; ++y)
       for (u32 x = 0; x < width; ++x) {
         // Particiona toda a origem entre os texels de destino. Em 3 -> 1, por
         // exemplo, os três texels participam; o antigo 2x2 descartava a última
         // coluna/linha de dimensões NPOT.
-        const u32 x0 = x * previousWidth / width;
-        const u32 x1 = (x + 1) * previousWidth / width;
-        const u32 y0 = y * previousHeight / height;
-        const u32 y1 = (y + 1) * previousHeight / height;
-        const auto at = [&](u32 sx, u32 sy) { return chain.data() + previousOffset + (static_cast<usize>(sy) * previousWidth + sx) * 4; };
-        u8 *target = chain.data() + offset + (static_cast<usize>(y) * width + x) * 4;
-        const u32 samples = (x1 - x0) * (y1 - y0);
-        for (u32 c = 0; c < 4; ++c) {
-          if (srgb && c < 3) {
-            float sum = 0;
-            for (u32 sy = y0; sy < y1; ++sy)
-              for (u32 sx = x0; sx < x1; ++sx) sum += toLinear[at(sx, sy)[c]];
-            target[c] = linearToSrgb(sum / static_cast<float>(samples));
-          } else {
-            u32 sum = 0;
-            for (u32 sy = y0; sy < y1; ++sy)
-              for (u32 sx = x0; sx < x1; ++sx) sum += at(sx, sy)[c];
-            target[c] = static_cast<u8>((sum + samples / 2) / samples);
-          }
-        }
+        const u32 x0 = x * previousWidth / width, x1 = (x + 1) * previousWidth / width;
+        const u32 y0 = y * previousHeight / height, y1 = (y + 1) * previousHeight / height;
+        reduce(previous, previousWidth, x0, x1, y0, y1, target.data() + (static_cast<usize>(y) * width + x) * 4u);
       }
-    previousOffset = offset;
-    offset += static_cast<usize>(width) * height * 4;
+    if (level >= firstLevel) chain.insert(chain.end(), target.begin(), target.end());
+    previous = target.data();
     previousWidth = width;
     previousHeight = height;
   }
+  levels = total - firstLevel;
   return true;
 }
+} // namespace
 
-bool buildNormalMipChain(const DecodedImage &base, std::vector<u8> &chain, u32 &levels) {
-  chain.clear(); levels = 0;
-  if (!base.width || !base.height ||
-      base.rgba.size() != static_cast<usize>(base.width) * base.height * 4u) return false;
-  levels = mipLevelCount(base.width, base.height);
-  usize total = 0;
-  for (u32 level = 0, w = base.width, h = base.height; level < levels;
-       ++level, w = std::max(1u, w / 2), h = std::max(1u, h / 2))
-    total += static_cast<usize>(w) * h * 4u;
-  chain.resize(total); std::memcpy(chain.data(), base.rgba.data(), base.rgba.size());
-  usize previousOffset = 0, offset = base.rgba.size();
-  u32 previousWidth = base.width, previousHeight = base.height;
-  for (u32 level = 1; level < levels; ++level) {
-    const u32 width = std::max(1u, previousWidth / 2), height = std::max(1u, previousHeight / 2);
-    const auto at = [&](u32 x, u32 y) {
-      return chain.data() + previousOffset + (static_cast<usize>(y) * previousWidth + x) * 4u;
-    };
-    for (u32 y = 0; y < height; ++y) for (u32 x = 0; x < width; ++x) {
-      const u32 x0 = x * previousWidth / width, x1 = (x + 1) * previousWidth / width;
-      const u32 y0 = y * previousHeight / height, y1 = (y + 1) * previousHeight / height;
-      const u32 count = (x1 - x0) * (y1 - y0);
-      float nx = 0, ny = 0, nz = 0; u32 alpha = 0;
-      for (u32 sy = y0; sy < y1; ++sy) for (u32 sx = x0; sx < x1; ++sx) {
-        const u8 *sample = at(sx, sy);
+bool buildMipChain(const DecodedImage &base, bool srgb, std::vector<u8> &chain, u32 &levels, u32 firstLevel) {
+  const auto &toLinear = srgbToLinearTable();
+  return buildChain(base, firstLevel, chain, levels,
+                    [&](const u8 *source, u32 stride, u32 x0, u32 x1, u32 y0, u32 y1, u8 *target) {
+    const auto at = [&](u32 sx, u32 sy) { return source + (static_cast<usize>(sy) * stride + sx) * 4u; };
+    const u32 samples = (x1 - x0) * (y1 - y0);
+    for (u32 c = 0; c < 4; ++c) {
+      if (srgb && c < 3) {
+        float sum = 0;
+        for (u32 sy = y0; sy < y1; ++sy)
+          for (u32 sx = x0; sx < x1; ++sx) sum += toLinear[at(sx, sy)[c]];
+        target[c] = linearToSrgb(sum / static_cast<float>(samples));
+      } else {
+        u32 sum = 0;
+        for (u32 sy = y0; sy < y1; ++sy)
+          for (u32 sx = x0; sx < x1; ++sx) sum += at(sx, sy)[c];
+        target[c] = static_cast<u8>((sum + samples / 2) / samples);
+      }
+    }
+  });
+}
+
+bool buildNormalMipChain(const DecodedImage &base, std::vector<u8> &chain, u32 &levels, u32 firstLevel) {
+  return buildChain(base, firstLevel, chain, levels,
+                    [](const u8 *source, u32 stride, u32 x0, u32 x1, u32 y0, u32 y1, u8 *target) {
+    const u32 count = (x1 - x0) * (y1 - y0);
+    float nx = 0, ny = 0, nz = 0;
+    u32 alpha = 0;
+    for (u32 sy = y0; sy < y1; ++sy)
+      for (u32 sx = x0; sx < x1; ++sx) {
+        const u8 *sample = source + (static_cast<usize>(sy) * stride + sx) * 4u;
         nx += static_cast<float>(sample[0]) / 127.5f - 1.0f;
         ny += static_cast<float>(sample[1]) / 127.5f - 1.0f;
         nz += static_cast<float>(sample[2]) / 127.5f - 1.0f;
         alpha += sample[3];
       }
-      const float length = std::sqrt(nx * nx + ny * ny + nz * nz);
-      if (length > 1.0e-8f) { nx /= length; ny /= length; nz /= length; }
-      else { nx = 0; ny = 0; nz = 1; }
-      const auto encode = [](float value) {
-        return static_cast<u8>(std::lround(std::clamp(value * .5f + .5f, 0.0f, 1.0f) * 255.0f));
-      };
-      u8 *target = chain.data() + offset + (static_cast<usize>(y) * width + x) * 4u;
-      target[0] = encode(nx); target[1] = encode(ny); target[2] = encode(nz);
-      target[3] = static_cast<u8>((alpha + count / 2u) / count);
-    }
-    previousOffset = offset; offset += static_cast<usize>(width) * height * 4u;
-    previousWidth = width; previousHeight = height;
-  }
-  return true;
+    const float length = std::sqrt(nx * nx + ny * ny + nz * nz);
+    if (length > 1.0e-8f) { nx /= length; ny /= length; nz /= length; }
+    else { nx = 0; ny = 0; nz = 1; }
+    const auto encode = [](float value) {
+      return static_cast<u8>(std::lround(std::clamp(value * .5f + .5f, 0.0f, 1.0f) * 255.0f));
+    };
+    target[0] = encode(nx); target[1] = encode(ny); target[2] = encode(nz);
+    target[3] = static_cast<u8>((alpha + count / 2u) / count);
+  });
 }
 } // namespace ae::resources

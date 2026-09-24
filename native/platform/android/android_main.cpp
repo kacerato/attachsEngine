@@ -1,5 +1,6 @@
 #include "editor/editor_import_transaction.h"
 #include "resources/gltf_package.h"
+#include "resources/gltf_folder_source.h"
 #include "resources/import_cache.h"
 #include "resources/environment_map_asset.h"
 #include "resources/texture_asset.h"
@@ -51,6 +52,7 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <thread>
 #include <atomic>
 #include <mutex>
 #include <unordered_set>
@@ -160,7 +162,21 @@ struct AndroidShell final {
     ae::u32 dependencies=0,unusedCompanions=0;
     // R3: perfil com que este modelo foi preparado; é o que fica com a fonte.
     ae::resources::ImportProfile profile;
+    // S0: fonte em pasta. Os arquivos do modelo estão no preparo do projeto
+    // (`staging`) e são publicados junto com o principal. O preparo é apagado
+    // quando a última cópia desta preparação morre — cancelar, recusar,
+    // preparar de novo ou publicar não deixam 2 GB para trás.
+    struct Staging {
+      std::filesystem::path directory;
+      ~Staging() {std::error_code error;if(!directory.empty()) std::filesystem::remove_all(directory,error);}
+    };
+    std::shared_ptr<Staging> staging;
+    std::vector<ae::editor::EditorSession::FolderCompanion> companions;
+    bool folderSource=false; // `contentHash` é o da pasta inteira (principal + manifesto)
+    std::filesystem::path folderDirectory; // de onde o importador lê: preparo, ou a pasta publicada
   };
+  // Cópia de pasta em andamento, lida pelo laço do editor para a barra de estado.
+  std::shared_ptr<std::atomic<ae::u64>> folderCopyToken;
   // The cancellation token outlives its worker, including shell teardown.
   std::shared_ptr<std::atomic<bool>> importCancellation;
   std::future<PreparedModel> importWork;
@@ -846,7 +862,16 @@ bool startProjectReopen(AndroidShell &shell) {
       }
       ae::editor::EditorSession::ReopenedSource reopened;
       reopened.sourceName=source;
-      reopened.hash=ae::Sha256::hex(bytes);
+      // Fonte em pasta (S0): o conteúdo é o principal + manifesto; as imagens
+      // são lidas da pasta só quando o derivado precisa ser refeito.
+      const bool folderSource=ae::resources::gltfIsFolderSource(bytes);
+      std::string manifest;
+      if(folderSource) {
+        std::vector<ae::u8> text;
+        Transaction::read(Transaction::fromUtf8(root+"/"+source+".deps"),text,8u<<20);
+        manifest.assign(text.begin(),text.end());
+      }
+      reopened.hash=folderSource?ae::resources::gltfFolderContentHash(bytes,manifest):ae::Sha256::hex(bytes);
       const double hashedAt=ae::platform::android::lifecycleUptimeMs();
       // R2: derivado regenerável por conteúdo + limites. Acerto pula o importador
       // inteiro; arquivo ausente, velho ou corrompido cai no importador.
@@ -867,7 +892,11 @@ bool startProjectReopen(AndroidShell &shell) {
         ae::resources::GltfImportProgress watch{};
         watch.context=cancel.get();
         watch.cancelled=[](void *context) {return static_cast<std::atomic<bool> *>(context)->load();};
-        if(!ae::resources::importGlb(bytes,limits,watch,reopened.model)) {
+        std::vector<ae::u8> packed;
+        const auto folder=Transaction::fromUtf8(root+"/"+source).parent_path();
+        if(folderSource ? !ae::resources::importGltfFolder(bytes,folder,ae::resources::GltfFolderMaximumFileBytes,limits,watch,
+                                                            reopened.model,packed)
+                        : !ae::resources::importGlb(bytes,limits,watch,reopened.model)) {
           result.refused.emplace_back(source,reopened.model.diagnostic);
           std::lock_guard<std::mutex> hold(progress->lock);++progress->done;
           continue;
@@ -2613,6 +2642,23 @@ void android_main(android_app *app) {
               }
               result.expectedHash=exists?ae::Sha256::hex(previous):std::string();
               result.bytes=picked.accepted?std::move(picked.bytes):std::move(previous);
+              // Reimportar uma fonte em pasta (S0): lê a própria pasta publicada.
+              if(!picked.accepted && ae::resources::gltfIsFolderSource(result.bytes)) {
+                result.folderSource=true;result.folderDirectory=absolute.parent_path();
+                std::vector<ae::u8> manifest;
+                std::filesystem::path manifestPath=absolute;manifestPath+=".deps";
+                ae::editor::EditorImportTransaction::read(manifestPath,manifest,8u<<20);
+                result.manifest.assign(manifest.begin(),manifest.end());
+                ae::resources::GltfImportProgress progress{};
+                progress.context=cancel.get();
+                progress.cancelled=[](void *context) {return static_cast<std::atomic<bool> *>(context)->load();};
+                std::vector<ae::u8> packed;
+                result.accepted=ae::resources::importGltfFolder(result.bytes,result.folderDirectory,
+                    ae::resources::GltfFolderMaximumFileBytes,limits,progress,result.model,packed);
+                if(result.accepted) result.contentHash=ae::resources::gltfFolderContentHash(result.bytes,result.manifest);
+                result.diagnostic=result.model.diagnostic;
+                return result;
+              }
               // .gltf, ou GLB com URI externa: as dependências vêm dos arquivos
               // escolhidos junto e entram num GLB autocontido, que é o que o
               // projeto guarda. Reabrir não depende da pasta nem da permissão do seletor.
@@ -2634,6 +2680,107 @@ void android_main(android_app *app) {
               // percorrer dezenas de MiB na thread do editor.
               if(result.accepted) result.contentHash=ae::Sha256::hex(result.bytes);
               result.diagnostic=result.model.diagnostic;
+            }
+            return result;
+          });
+        };
+        // S0: pasta de modelo. O principal chegou lido; os arquivos que ele
+        // referencia são copiados do seletor para o preparo do projeto (só eles),
+        // e o importador lê do preparo: buffers para o GLB de trabalho, imagens
+        // uma a uma. A publicação move o preparo para `Fontes/<pasta>/`.
+        const auto launchFolderImport=[&](ae::platform::android::ModelPickerResult picked) {
+          if(shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||shell.importPreview||shell.environmentImportPreview||shell.textureImportPreview)
+            {session.setImportStatus("Finalize a importação em andamento.");return;}
+          if(shell.projectReopening) {session.setImportStatus("Aguarde os recursos do projeto terminarem de abrir.");return;}
+          session.beginImportPreparation();
+          shell.importCancellation=std::make_shared<std::atomic<bool>>(false);
+          shell.folderCopyToken=std::make_shared<std::atomic<ae::u64>>(0);
+          auto cancel=shell.importCancellation;auto copyToken=shell.folderCopyToken;
+          const auto root=session.codeProjectRoot();const auto epoch=session.sceneVersion().epoch;
+          const auto profile=session.importProfileDraft();
+          const auto limits=session.importLimitsFor(profile);
+          shell.importWork=std::async(std::launch::async,[picked=std::move(picked),root,epoch,cancel,copyToken,limits,profile]() mutable {
+            using Transaction=ae::editor::EditorImportTransaction;
+            AndroidShell::PreparedModel result;result.root=root;result.epoch=epoch;result.profile=profile;result.folderSource=true;
+            // Pasta de destino: a do principal dentro da escolhida (o zip do
+            // Sponza traz `main_sponza/`), senão o nome da pasta escolhida.
+            const auto slash=picked.mainRelative.rfind('/');
+            const std::string mainDirectory=slash==std::string::npos?std::string():picked.mainRelative.substr(0,slash);
+            std::string folder=mainDirectory.empty()?picked.folderName:mainDirectory.substr(mainDirectory.rfind('/')==std::string::npos?0:mainDirectory.rfind('/')+1);
+            for(auto &character:folder) if(character=='/'||character=='\\'||character==':'||static_cast<unsigned char>(character)<32) character='_';
+            if(folder.empty()||folder=="."||folder=="..") folder="Modelo";
+            result.path="Fontes/"+folder+"/"+picked.displayName;
+            std::vector<ae::resources::GltfFolderDependency> dependencies;
+            if(!ae::resources::listGltfFolderDependencies(picked.bytes,dependencies,result.diagnostic)) return result;
+            // Cada dependência precisa estar na listagem, no caminho declarado.
+            std::vector<std::string> missing;
+            ae::platform::android::FolderCopyRequest copy;
+            std::vector<ae::resources::GltfFolderFileRecord> records;
+            for(const auto &dependency:dependencies) {
+              const auto source=mainDirectory.empty()?dependency.relative:mainDirectory+"/"+dependency.relative;
+              const auto found=std::find_if(picked.folderFiles.begin(),picked.folderFiles.end(),
+                                            [&](const auto &file) {return file.relative==source;});
+              if(found==picked.folderFiles.end()) {missing.push_back(dependency.relative);continue;}
+              copy.sources.push_back(source);copy.targets.push_back(dependency.relative);
+              copy.totalBytes+=found->bytes>0?static_cast<ae::u64>(found->bytes):0;
+              records.push_back({dependency.relative,found->bytes>0?static_cast<ae::u64>(found->bytes):0,{}});
+            }
+            if(!missing.empty()) {
+              result.diagnostic="A pasta não tem "+std::to_string(missing.size())+" arquivo(s) que o glTF referencia: ";
+              for(std::size_t i=0;i<missing.size()&&i<5;++i) result.diagnostic+=(i?", ":"")+missing[i];
+              if(missing.size()>5) result.diagnostic+=", …";
+              result.diagnostic+=".";
+              return result;
+            }
+            const std::string stagingRelative=".astra/import-staging/"+std::to_string(static_cast<unsigned long long>(
+                std::chrono::steady_clock::now().time_since_epoch().count()));
+            std::filesystem::path staging;
+            if(!Transaction::safePath(Transaction::fromUtf8(root),stagingRelative,staging)) {result.diagnostic="Preparo fora do projeto.";return result;}
+            {
+              std::error_code error;std::filesystem::create_directories(staging,error);
+              if(error) {result.diagnostic="Não foi possível criar o preparo da importação.";return result;}
+            }
+            result.staging=std::make_shared<AndroidShell::PreparedModel::Staging>();
+            result.staging->directory=staging;
+            copy.destination=staging.string();
+            const auto token=ae::platform::android::requestFolderCopy(copy);
+            copyToken->store(token);
+            ae::platform::android::FolderCopyState state;
+            for(;;) {
+              if(cancel->load()) ae::platform::android::cancelFolderCopy(token);
+              if(!ae::platform::android::folderCopyState(token,state)) {result.diagnostic="Cópia substituída por outra.";return result;}
+              if(state.finished) break;
+              std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+            copyToken->store(0);
+            if(state.cancelled||cancel->load()) {result.diagnostic="Importação cancelada durante a cópia.";return result;}
+            if(!state.diagnostic.empty()) {result.diagnostic=state.diagnostic;return result;}
+            for(std::size_t i=0;i<records.size();++i) {
+              records[i].sha256=state.sha256[i];
+              result.companions.push_back({stagingRelative+"/"+records[i].relative,"Fontes/"+folder+"/"+records[i].relative});
+            }
+            // Mesma fonte que já existe no projeto: a transação confere o principal.
+            {
+              std::filesystem::path absolute;std::vector<ae::u8> previous;std::error_code error;
+              if(!Transaction::safePath(Transaction::fromUtf8(root),result.path,absolute)) {result.diagnostic="Destino fora do projeto.";return result;}
+              if(std::filesystem::exists(absolute,error)) {
+                if(!Transaction::read(absolute,previous)) {result.diagnostic="Não foi possível ler a fonte anterior.";return result;}
+                result.expectedHash=ae::Sha256::hex(previous);
+              }
+            }
+            result.bytes=std::move(picked.bytes);
+            result.folderDirectory=staging;
+            ae::resources::GltfImportProgress progress{};
+            progress.context=cancel.get();
+            progress.cancelled=[](void *context) {return static_cast<std::atomic<bool> *>(context)->load();};
+            std::vector<ae::u8> packed;
+            result.accepted=ae::resources::importGltfFolder(result.bytes,staging,ae::resources::GltfFolderMaximumFileBytes,
+                                                            limits,progress,result.model,packed);
+            result.diagnostic=result.model.diagnostic;
+            if(result.accepted) {
+              result.manifest=ae::resources::serializeGltfFolderManifest(picked.displayName,result.bytes,records);
+              result.contentHash=ae::resources::gltfFolderContentHash(result.bytes,result.manifest);
+              result.dependencies=static_cast<ae::u32>(records.size());
             }
             return result;
           });
@@ -2718,6 +2865,13 @@ void android_main(android_app *app) {
           session.beginImportPreparation();
           ae::platform::android::requestModelPick();
         }
+        if(!importRequestTaken&&importSlotAvailable()&&session.consumeFolderImportRequest()) {
+          importRequestTaken=true;
+          shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
+          shell.environmentImportPicker=false;shell.textureImportPicker=false;
+          session.beginImportPreparation();
+          ae::platform::android::requestFolderPick();
+        }
         if(!importRequestTaken&&importSlotAvailable()&&session.consumeEnvironmentImportRequest()) {
           importRequestTaken=true;
           shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
@@ -2770,7 +2924,9 @@ void android_main(android_app *app) {
             std::string name=picked.displayName.empty()?fallbackName:picked.displayName;
             for(auto &character:name) if(character=='/' || character=='\\' || character==':' || static_cast<unsigned char>(character)<32) character='_';
             if(name=="." || name=="..") name=fallbackName;
-            if(shell.textureImportPicker) {
+            if(picked.folder) {
+              launchFolderImport(std::move(picked));
+            } else if(shell.textureImportPicker) {
               launchTextureImport(std::move(picked),"Texturas/"+name,session.textureImportSettings());
             } else if(shell.environmentImportPicker) {
               if(name.find('.')==std::string::npos) name+=".hdr";
@@ -2781,6 +2937,16 @@ void android_main(android_app *app) {
               if(!name.ends_with(".glb")) name+=".glb";
               launchImport(std::move(picked),"Fontes/"+name);
             }
+          }
+        }
+        // S0: cópia da pasta do modelo na barra de estado (arquivos e MB reais).
+        if(shell.folderCopyToken) if(const auto token=shell.folderCopyToken->load()) {
+          ae::platform::android::FolderCopyState copy;
+          if(ae::platform::android::folderCopyState(token,copy) && !copy.finished) {
+            char text[160];
+            std::snprintf(text,sizeof text,"Copiando a pasta do modelo · %u arquivo(s) · %.0f de %.0f MB",copy.files,
+                          static_cast<double>(copy.doneBytes)/1048576.0,static_cast<double>(copy.totalBytes)/1048576.0);
+            session.setWorkStatus(text);
           }
         }
         // R1: etapa real da abertura na barra de estado enquanto o worker trabalha.
@@ -2819,6 +2985,11 @@ void android_main(android_app *app) {
               ae::resources::GltfImportProgress progress{};
               progress.context=cancel.get();
               progress.cancelled=[](void *context) {return static_cast<std::atomic<bool> *>(context)->load();};
+              if(result.folderSource) {
+                std::vector<ae::u8> packed;
+                result.accepted=ae::resources::importGltfFolder(result.bytes,result.folderDirectory,
+                    ae::resources::GltfFolderMaximumFileBytes,limits,progress,result.model,packed);
+              } else
               result.accepted=ae::resources::importGlb(result.bytes,limits,progress,result.model);
               result.diagnostic=result.model.diagnostic;
               return result;
@@ -2977,7 +3148,8 @@ void android_main(android_app *app) {
           if(prepared.root!=session.codeProjectRoot() || prepared.epoch!=session.sceneVersion().epoch)
             session.setImportStatus("Publicação descartada: o projeto ou a cena mudou.",ae::editor::EditorConsoleSeverity::Warning);
           else if(!session.commitModelImport(prepared.bytes,prepared.model,prepared.path,prepared.expectedHash,report,
-                                             session.importAmbiguityPolicy(),prepared.profile.excludedNodes))
+                                             session.importAmbiguityPolicy(),prepared.profile.excludedNodes,
+                                             prepared.companions,prepared.folderSource?std::string_view(prepared.contentHash):std::string_view{}))
             session.showImportFailure(report.diagnostic);
           else {
             // Manifesto ao lado da fonte, só depois da fonte gravada: descreve de

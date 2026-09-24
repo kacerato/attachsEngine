@@ -60,13 +60,15 @@ bool decodeImageRgba8(std::span<const u8> bytes, const ImageDecodeLimits &limits
 bool decodeRadianceHdrRgba32f(std::span<const u8> bytes, const HdrImageDecodeLimits &limits,
                               DecodedHdrImage &out, std::string &diagnostic);
 
-// Cadeia completa de mipmaps (níveis concatenados, maior primeiro) por média
-// 2x2. Com `srgb`, a média é feita em espaço linear e volta a sRGB — média
-// direta de valores sRGB escurece a textura ao longe. Alfa e mapas de dados
-// (normal, metálico/rugosidade, oclusão) são médios diretos.
+// Cadeia de mipmaps (níveis concatenados, maior primeiro) por média 2x2. Com
+// `srgb`, a média é feita em espaço linear e volta a sRGB — média direta de
+// valores sRGB escurece a textura ao longe. Alfa e mapas de dados (normal,
+// metálico/rugosidade, oclusão) são médios diretos. `firstLevel` descarta os
+// níveis de cima SEM guardá-los (o residente de uma 4K limitada a 1K não aloca
+// os 85 MB da cadeia cheia); `levels` conta só os níveis guardados.
 u32 mipLevelCount(u32 width, u32 height);
-bool buildMipChain(const DecodedImage &base, bool srgb, std::vector<u8> &chain, u32 &levels);
+bool buildMipChain(const DecodedImage &base, bool srgb, std::vector<u8> &chain, u32 &levels, u32 firstLevel = 0);
 // Mapas normais são dados lineares, porém não podem usar média RGBA direta:
 // cada mip volta a ter vetores unitários. Uma média degenerada usa +Z.
-bool buildNormalMipChain(const DecodedImage &base, std::vector<u8> &chain, u32 &levels);
+bool buildNormalMipChain(const DecodedImage &base, std::vector<u8> &chain, u32 &levels, u32 firstLevel = 0);
 } // namespace ae::resources

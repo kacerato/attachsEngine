@@ -146,6 +146,8 @@ enum class EditorWidget : u32 {
   CreateRiverWater,
   CreateBuoyantBox,
   ImportModel,
+  // S0: pasta de modelo (glTF com .bin e texturas ao lado), copiada para o projeto.
+  ImportFolder,
   ImportEnvironment,
   ImportTexture,
   ImportAccept,
@@ -599,7 +601,7 @@ struct EditorScreenState final {
   unsigned creationCategory=0,creationSelection=0,creationPage=0;
   u32 creationAvailable=3; // Basic object and camera; resource tools opt in on import.
   // O editor não conhece Android: ele levanta o pedido e o shell abre o seletor.
-  bool modelImportRequested=false,environmentImportRequested=false,textureImportRequested=false;
+  bool modelImportRequested=false,environmentImportRequested=false,textureImportRequested=false,folderImportRequested=false;
   bool importPanel=false,importReady=false,importAccept=false,importCancel=false,importIntoScene=false,importError=false;
   bool importEnvironment=false,importTexture=false;
   resources::EnvironmentMapImportSettings environmentImportSettings{};

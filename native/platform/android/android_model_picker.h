@@ -29,6 +29,16 @@ struct ModelPickerResult {
     std::vector<u8> bytes;
   };
   std::vector<Companion> companions;
+  // Pasta de modelo (S0): o principal está em `bytes`, no caminho `mainRelative`
+  // dentro da pasta listada; `folderFiles` é a listagem inteira (caminho e
+  // tamanho, -1 quando o provedor não diz). Nenhum outro conteúdo atravessou.
+  struct FolderFile {
+    std::string relative;
+    i64 bytes = -1;
+  };
+  bool folder = false;
+  std::string folderName, mainRelative;
+  std::vector<FolderFile> folderFiles;
 };
 
 // A new request invalidates the old token. Textures and HDRI use a single
@@ -38,5 +48,27 @@ void cancelModelPick();
 bool modelPickPending();
 // Devolve e CONSOME o resultado, quando há um.
 bool takeModelPickResult(ModelPickerResult &out);
+// Seletor de PASTA (S0). O resultado chega por `takeModelPickResult` com `folder`.
+void requestFolderPick();
+
+// Cópia dos arquivos de uma pasta listada para o preparo do projeto. `sources`
+// são caminhos da listagem; `targets`, caminhos relativos a `destination` (já
+// normalizados). O Java calcula o SHA-256 enquanto copia.
+struct FolderCopyRequest {
+  std::vector<std::string> sources, targets;
+  std::string destination;
+  u64 totalBytes = 0;
+};
+struct FolderCopyState {
+  u64 doneBytes = 0, totalBytes = 0;
+  u32 files = 0;
+  bool finished = false, cancelled = false;
+  std::vector<std::string> sha256; // um por arquivo, na ordem do pedido
+  std::string diagnostic;
+};
+u64 requestFolderCopy(FolderCopyRequest request);
+// Falso quando o token não é mais o da cópia atual.
+bool folderCopyState(u64 token, FolderCopyState &out);
+void cancelFolderCopy(u64 token);
 
 } // namespace ae::platform::android

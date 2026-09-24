@@ -2,11 +2,13 @@
 #include "harness.h"
 #include "core/sha256.h"
 #include "resources/gltf_import.h"
+#include "resources/gltf_folder_source.h"
 #include "resources/gltf_package.h"
 
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -236,4 +238,102 @@ AE_TEST(m09e4_gltf_dependencies_never_reach_network_parent_folders_or_ambiguous_
                  "data URIs decodificadas e registradas");
   resources::GltfImport model;
   AE_EXPECT_TRUE(resources::importGlb(package.glb, {}, {}, model) && model.textures.size() == 1, model.diagnostic.c_str());
+}
+
+// S0 — fonte em pasta: o principal e os arquivos dele no disco, casados pelo
+// caminho relativo. Buffers entram no GLB de trabalho; a imagem é lida do disco
+// pelo importador, e nada fora da pasta é alcançável.
+namespace {
+std::filesystem::path writeFolderSource(const std::string &name, const std::string &text, bool withImage) {
+  const auto root = std::filesystem::temp_directory_path() / ("astra-gltf-folder-" + name);
+  std::error_code error;
+  std::filesystem::remove_all(root, error);
+  std::filesystem::create_directories(root / "texturas", error);
+  const auto write = [](const std::filesystem::path &path, std::span<const u8> bytes) {
+    std::ofstream out(path, std::ios::binary);
+    out.write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+  };
+  write(root / "cena.gltf", bytesOf(text));
+  write(root / "cena.bin", quadBin());
+  if (withImage) write(root / "texturas" / "grade a.png", kPixel);
+  write(root / "grade a.png", kPixel); // mesmo nome, outra pasta: não pode ser confundido
+  return root;
+}
+std::vector<u8> readAll(const std::filesystem::path &path) {
+  std::ifstream in(path, std::ios::binary);
+  return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+}
+} // namespace
+
+AE_TEST(s0_gltf_folder_source_reads_buffers_into_glb_and_images_from_disk) {
+  const std::string text = gltfText("cena.bin", "texturas/grade%20a.png");
+  const auto root = writeFolderSource("ok", text, true);
+  std::vector<resources::GltfFolderDependency> dependencies;
+  std::string diagnostic;
+  AE_EXPECT_TRUE(resources::listGltfFolderDependencies(bytesOf(text), dependencies, diagnostic), diagnostic.c_str());
+  AE_EXPECT_TRUE(dependencies.size() == 2 && dependencies[0].relative == "cena.bin" && !dependencies[0].image &&
+                     dependencies[1].relative == "texturas/grade a.png" && dependencies[1].image,
+                 "buffer e imagem pelo caminho relativo decodificado");
+  const auto main = readAll(root / "cena.gltf");
+  resources::GltfImport model;
+  std::vector<u8> packed;
+  AE_EXPECT_TRUE(resources::gltfIsFolderSource(main), ".gltf com URI é fonte em pasta");
+  AE_EXPECT_TRUE(resources::importGltfFolder(main, root, 64u << 20, {}, {}, model, packed), model.diagnostic.c_str());
+  AE_EXPECT_TRUE(model.draws.size() == 1 && model.textures.size() == 1 && model.skippedTextures == 0,
+                 "geometria do .bin e textura lida da subpasta");
+  AE_EXPECT_TRUE(packed.size() < 92 + 4096, "o GLB de trabalho leva o buffer, não a imagem");
+  std::error_code error;
+  std::filesystem::remove_all(root, error);
+}
+
+AE_TEST(s0_gltf_folder_source_refuses_escape_and_reports_missing_files_by_path) {
+  std::string relative, refusal;
+  AE_EXPECT_TRUE(!resources::gltfRelativeUri("../fora.png", relative, refusal) && !refusal.empty(), "`..` recusado");
+  AE_EXPECT_TRUE(!resources::gltfRelativeUri("file:///sdcard/x.png", relative, refusal), "esquema recusado");
+  AE_EXPECT_TRUE(!resources::gltfRelativeUri("/abs.png", relative, refusal), "absoluto recusado");
+  AE_EXPECT_TRUE(resources::gltfRelativeUri("./a/./b%20c.png", relative, refusal) && relative == "a/b c.png",
+                 "normalizado e decodificado");
+  // A imagem existe só na raiz com o mesmo nome: pelo caminho, está faltando.
+  const std::string text = gltfText("cena.bin", "texturas/grade%20a.png");
+  const auto root = writeFolderSource("missing", text, false);
+  const auto main = readAll(root / "cena.gltf");
+  resources::GltfImport model;
+  std::vector<u8> packed;
+  AE_EXPECT_TRUE(resources::importGltfFolder(main, root, 64u << 20, {}, {}, model, packed), model.diagnostic.c_str());
+  AE_EXPECT_TRUE(model.textures.empty() && model.skippedTextures == 1, "textura ausente fica de fora, sem trocar de arquivo");
+  bool noted = false;
+  for (const auto &note : model.textureNotes) noted |= note.find("texturas/grade%20a.png") != std::string::npos;
+  AE_EXPECT_TRUE(noted, "o motivo cita a URI que faltou");
+  const std::string escaping = gltfText("../cena.bin", "texturas/grade%20a.png");
+  AE_EXPECT_TRUE(!resources::importGltfFolder(bytesOf(escaping), root, 64u << 20, {}, {}, model, packed) &&
+                     model.diagnostic.find("sai da pasta") != std::string::npos,
+                 "buffer fora da pasta recusado antes de ler");
+  std::vector<u8> bytes;
+  AE_EXPECT_TRUE(!resources::readGltfFolderFile(root, "../astra-gltf-folder-ok/cena.gltf", bytes), "leitor fecha a pasta");
+  std::error_code error;
+  std::filesystem::remove_all(root, error);
+}
+
+// Sonda de uma fonte real em pasta (o Sponza), com os limites padrão da importação.
+int probeImportGltfFolder(const char *mainPath) {
+  const std::filesystem::path path(mainPath);
+  const auto main = readAll(path);
+  using Clock = std::chrono::steady_clock;
+  const auto start = Clock::now();
+  resources::GltfImport model;
+  std::vector<u8> packed;
+  const bool imported = resources::importGltfFolder(main, path.parent_path(), 512ull << 20, {}, {}, model, packed);
+  const auto ms = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+  u64 triangles = 0;
+  for (const auto &draw : model.draws) triangles += draw.indexCount / 3;
+  std::printf("%s: import=%d ms=%.0f packed_mb=%.1f draws=%zu triangles=%llu nodes=%zu textures=%zu skipped_textures=%u "
+              "texture_mb=%.1f resident_dim=%u reduced=%u lights=%zu cameras=%zu\n",
+              mainPath, imported ? 1 : 0, ms, static_cast<double>(packed.size()) / 1048576.0, model.draws.size(),
+              static_cast<unsigned long long>(triangles), model.nodes.size(), model.textures.size(), model.skippedTextures,
+              static_cast<double>(model.textureBytes) / 1048576.0, model.residentTextureDimension, model.reducedTextures,
+              model.lights.size(), model.cameras.size());
+  if (!imported) std::printf("  import: %s\n", model.diagnostic.c_str());
+  for (const auto &note : model.textureNotes) std::printf("  textura: %s\n", note.c_str());
+  for (const auto &note : model.notes) std::printf("  nota: %s\n", note.c_str());
+  return imported ? 0 : 1;
 }

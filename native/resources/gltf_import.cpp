@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <array>
+#include <atomic>
+#include <thread>
 
 namespace ae::resources {
 namespace {
@@ -396,6 +398,84 @@ struct Importer {
   u32 textureCap = 0;                                 // maior lado residente deste arquivo
   std::unordered_map<u32, u32> imageUses{};           // usos restantes de cada imagem decodificada
 
+  // Preparo em paralelo (S0). Decodificar PNG/JPEG e reduzir a cadeia é o que
+  // domina uma cena grande (72 PNG 4096² no Sponza); nada disso depende do
+  // JSON nem da ordem. Os trabalhadores produzem a cadeia residente de cada
+  // (textura, uso); `resolveTexture` consome na ordem de sempre, com o mesmo
+  // orçamento e as mesmas mensagens — o resultado é o do caminho sequencial.
+  struct PlannedTexture {
+    u64 key = 0;
+    bool srgb = false, normal = false;
+    std::span<const u8> embedded; // bytes no bloco binário (vivem o import inteiro)
+    std::string uri;              // ou arquivo da pasta da fonte
+  };
+  struct PreparedTexture {
+    bool ok = false;
+    u32 dropped = 0;
+    std::string note;
+    renderer::AuthoringTexture made;
+  };
+  std::vector<PlannedTexture> plannedTextures{};
+  std::unordered_map<u64, PreparedTexture> preparedTextures{};
+
+  void prepareTexturesInParallel() {
+    if (plannedTextures.size() < 2) return;
+    std::vector<PreparedTexture> results(plannedTextures.size());
+    std::atomic<usize> next{0};
+    const u32 cap = std::max<u32>(1, textureCap);
+    const auto work = [&] {
+      for (;;) {
+        const usize index = next.fetch_add(1);
+        if (index >= plannedTextures.size()) return;
+        if (progress->cancelled && progress->cancelled(progress->context)) return;
+        const auto &plan = plannedTextures[index];
+        auto &result = results[index];
+        std::vector<u8> file;
+        std::span<const u8> bytes = plan.embedded;
+        if (!plan.uri.empty()) {
+          if (!progress->externalFile(progress->context, plan.uri, 0, file) || file.empty()) {
+            result.note = "Imagem da pasta da fonte não encontrada: " + plan.uri.substr(0, 160) + ".";
+            continue;
+          }
+          bytes = file;
+        }
+        DecodedImage image;
+        if (!decodeImageRgba8(bytes, limits->image, image, result.note)) continue;
+        file = {};
+        u32 width = image.width, height = image.height;
+        while (std::max(width, height) > cap) {
+          width = width > 1 ? width / 2 : 1;
+          height = height > 1 ? height / 2 : 1;
+          ++result.dropped;
+        }
+        std::vector<u8> chain;
+        u32 levels = 0;
+        if (!(plan.normal ? buildNormalMipChain(image, chain, levels, result.dropped)
+                          : buildMipChain(image, plan.srgb, chain, levels, result.dropped))) {
+          result.note = "Não foi possível gerar os mipmaps de uma textura.";
+          continue;
+        }
+        result.made.srgb = plan.srgb;
+        result.made.width = width;
+        result.made.height = height;
+        result.made.levels = levels;
+        result.made.mipChain = std::move(chain);
+        result.ok = true;
+      }
+    };
+    // Memória, não núcleos, é o teto: cada trabalhador segura uma imagem cheia
+    // decodificada (64 MB numa 4096²) mais a cadeia residente.
+    const u32 workers = std::clamp<u32>(std::thread::hardware_concurrency(), 1u, 4u);
+    std::vector<std::thread> threads;
+    for (u32 i = 1; i < workers; ++i) threads.emplace_back(work);
+    work();
+    for (auto &thread : threads) thread.join();
+    for (usize i = 0; i < plannedTextures.size(); ++i) {
+      if (!results[i].ok && results[i].note.empty()) continue; // cancelado: o caminho sequencial decide
+      preparedTextures.emplace(plannedTextures[i].key, std::move(results[i]));
+    }
+  }
+
   static u64 residentAstcBytes(u32 width, u32 height, u32 cap) {
     while (std::max(width, height) > cap) {
       width = width > 1 ? width / 2 : 1;
@@ -459,10 +539,25 @@ struct Importer {
       std::span<const u8> bytes;
       u32 stride = 0;
       std::string reason;
-      if (viewIndex < 0 || !viewBytes(root, viewIndex, bytes, stride, reason)) return;
+      std::vector<u8> header;
+      std::string_view uri;
+      if (viewIndex < 0) {
+        // Fonte em pasta: só o começo do arquivo, onde estão as dimensões.
+        uri = image.kind == Kind::Object ? json->string(image, "uri") : std::string_view{};
+        if (uri.empty() || uri.starts_with("data:") || !progress->externalFile ||
+            !progress->externalFile(progress->context, uri, GltfImageHeaderBytes, header))
+          return;
+        bytes = header;
+      } else if (!viewBytes(root, viewIndex, bytes, stride, reason)) {
+        return;
+      }
       u32 width = 0, height = 0;
       if (readImageDimensions(bytes, limits->image, width, height))
         references.emplace(key, Reference{width, height, astcEligible(bytes, width, height)});
+      // PNG e JPEG vão para o preparo paralelo; KTX2 segue no caminho próprio.
+      const auto container = detectImageContainer(bytes);
+      if (container == ImageContainer::Png || container == ImageContainer::Jpeg)
+        plannedTextures.push_back({key, srgb, normal, viewIndex < 0 ? std::span<const u8>{} : bytes, std::string(uri)});
     };
     for (u32 i = 0; i < materials->childCount; ++i) {
       const auto &material = *json->child(*materials, i);
@@ -495,15 +590,29 @@ struct Importer {
     out->textureNotes.push_back(std::move(text));
   }
 
-  // Bytes de uma imagem embutida no bloco binário. URI externa ou data URI não
-  // é lida neste caminho: o seletor entrega um arquivo, não a pasta.
+  // Bytes da imagem: do bloco binário, ou do disco quando a fonte é uma pasta
+  // (S0). Data URI não chega aqui: o empacotamento já a converteu.
+  std::vector<u8> externalImage{}; // imagem da pasta em uso; vale até a próxima leitura
   bool imageBytes(const Node &root, i64 imageIndex, std::span<const u8> &bytes) {
     const auto *images = array(root, "images");
     if (!images || imageIndex < 0 || imageIndex >= images->childCount) { noteTexture("Textura aponta para imagem inexistente."); return false; }
     const auto &image = *json->child(*images, static_cast<u32>(imageIndex));
     if (image.kind != Kind::Object) { noteTexture("Imagem inválida."); return false; }
     const auto viewIndex = json->index(image, "bufferView");
-    if (viewIndex < 0) { noteTexture("Imagem externa ou em data URI não é lida neste perfil."); return false; }
+    if (viewIndex < 0) {
+      const auto uri = json->string(image, "uri");
+      if (uri.empty() || uri.starts_with("data:") || !progress->externalFile) {
+        noteTexture("Imagem externa ou em data URI não é lida neste perfil.");
+        return false;
+      }
+      externalImage.clear();
+      if (!progress->externalFile(progress->context, uri, 0, externalImage) || externalImage.empty()) {
+        noteTexture("Imagem da pasta da fonte não encontrada: " + std::string(uri.substr(0, 160)) + ".");
+        return false;
+      }
+      bytes = externalImage;
+      return true;
+    }
     u32 stride = 0;
     std::string reason;
     if (!viewBytes(root, viewIndex, bytes, stride, reason) || bytes.empty()) {
@@ -597,6 +706,27 @@ struct Importer {
     u32 result = renderer::InvalidMapTexture;
     const auto &texture = *json->child(*textures, static_cast<u32>(textureIndex));
     const auto source = textureSource(texture);
+    if (auto prepared = preparedTextures.find(key); prepared != preparedTextures.end()) {
+      auto job = std::move(prepared->second);
+      preparedTextures.erase(prepared);
+      if (!job.ok) {
+        noteTexture(job.note);
+      } else if (out->textureBytes + job.made.mipChain.size() > limits->maximumTextureBytes) {
+        noteTexture("Orçamento de memória de texturas da importação esgotado; texturas restantes ficaram de fora.");
+      } else {
+        job.made.samplerFlags = samplerFlags(root, texture.kind == Kind::Object ? json->index(texture, "sampler") : -1);
+        if (job.made.valid()) {
+          if (job.dropped) ++out->reducedTextures;
+          out->textureBytes += job.made.mipChain.size();
+          result = static_cast<u32>(out->textures.size());
+          out->textures.push_back(std::make_shared<renderer::AuthoringTexture>(std::move(job.made)));
+        } else {
+          noteTexture("Não foi possível gerar os mipmaps de uma textura.");
+        }
+      }
+      textureCache.emplace(key, result);
+      return result;
+    }
     std::span<const u8> bytes;
     if (source < 0) {
       noteTexture("Textura só em extensão sem decodificador neste perfil (WebP ou AVIF).");
@@ -641,14 +771,10 @@ struct Importer {
         u32 levels = 0;
         if (out->textureBytes + needed > limits->maximumTextureBytes) {
           noteTexture("Orçamento de memória de texturas da importação esgotado; texturas restantes ficaram de fora.");
-        } else if ((normal ? buildNormalMipChain(decoded->second, chain, levels)
-                           : buildMipChain(decoded->second, srgb, chain, levels)) && levels > dropped) {
-          usize skip = 0;
-          for (u32 level = 0, w = decoded->second.width, h = decoded->second.height; level < dropped;
-               ++level, w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1)
-            skip += static_cast<usize>(w) * h * 4;
-          made.levels = levels - dropped;
-          made.mipChain.assign(chain.begin() + static_cast<std::ptrdiff_t>(skip), chain.end());
+        } else if (normal ? buildNormalMipChain(decoded->second, chain, levels, dropped)
+                          : buildMipChain(decoded->second, srgb, chain, levels, dropped)) {
+          made.levels = levels;
+          made.mipChain = std::move(chain);
           if (made.valid()) {
             if (dropped) ++out->reducedTextures;
             out->textureBytes += made.mipChain.size();
@@ -759,6 +885,7 @@ struct Importer {
     const auto *materials = array(root, "materials");
     const u32 count = materials ? materials->childCount : 0;
     planTextureResolution(root);
+    prepareTexturesInParallel();
     // Um material neutro fecha a lista: primitiva sem material é legal em glTF
     // e precisa de alguma coisa para apontar.
     out->materials.resize(count + 1);

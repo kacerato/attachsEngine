@@ -6,6 +6,7 @@ int inspectGlbFile(const char *path);
 int probeReimportGlb(const char *path);
 int writeM082Fixtures(const char *directory);
 int probePackGltf(int count, char **paths);
+int probeImportGltfFolder(const char *mainPath);
 int writePropertyMatrix(const char *path);
 int printSourceReport(const char *path);
 
@@ -15,6 +16,8 @@ int main(int argc,char **argv) {
   if(argc==3 && std::strcmp(argv[1],"--write-m082-fixtures")==0) return writeM082Fixtures(argv[2]);
   // --pack-gltf <principal> [companheiros...]: empacota como o seletor faria e importa o resultado.
   if(argc>=3 && std::strcmp(argv[1],"--pack-gltf")==0) return probePackGltf(argc-2,argv+2);
+  // --import-gltf-folder <principal.gltf>: fonte em pasta (S0), buffers e imagens lidos do disco.
+  if(argc==3 && std::strcmp(argv[1],"--import-gltf-folder")==0) return probeImportGltfFolder(argv[2]);
   // Regenera a matriz de propriedades a partir dos descritores de componente.
   if(argc==3 && std::strcmp(argv[1],"--write-property-matrix")==0) return writePropertyMatrix(argv[2]);
   // Relatorio da fonte (G6-A) no terminal: os mesmos numeros que a aba Malhas

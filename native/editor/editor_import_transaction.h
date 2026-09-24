@@ -18,8 +18,18 @@ namespace ae::editor {
 // de nós da fonte (M08.2). Cena nova com registro antigo, ou mapa novo com
 // fonte antiga, seria exatamente o estado parcial que o journal existe para
 // impedir. Journals ASTRA_IMPORT_1 continuam recuperáveis.
+//
+// ASTRA_IMPORT_3 acrescenta os arquivos COMPANHEIROS de uma fonte em pasta
+// (S0: `.bin` e imagens do glTF). Eles chegam já copiados numa pasta de preparo
+// do projeto; publicar é MOVER (renomear no mesmo volume), nunca copiar 2 GB de
+// novo: o que existia no destino vai para o backup da transação e volta se a
+// publicação não terminar.
 class EditorImportTransaction {
 public:
+  struct Companion {
+    std::string staged;   // relativo ao projeto, sob `.astra/import-staging/`
+    std::string relative; // destino relativo ao projeto, fora de `.astra/`
+  };
   static std::filesystem::path fromUtf8(std::string_view text) {return std::filesystem::path(std::u8string(text.begin(),text.end()));}
   static bool safePath(const std::filesystem::path &root,const std::string &relative,std::filesystem::path &out) {
     const auto part=fromUtf8(relative);
@@ -62,16 +72,24 @@ public:
     std::error_code error;
     if(!std::filesystem::exists(transaction.journal_,error)) return !error;
     std::vector<u8> bytes;
-    if(!read(transaction.journal_,bytes,8192)) {diagnostic="Não foi possível ler a transação de importação.";return false;}
+    if(!read(transaction.journal_,bytes,1u<<20)) {diagnostic="Não foi possível ler a transação de importação.";return false;}
     std::istringstream stream(std::string(bytes.begin(),bytes.end()));
     std::string magic,state,relative;
     bool parsed=static_cast<bool>(stream>>magic>>state>>std::quoted(relative)>>transaction.hadSource_>>transaction.hadRegistry_);
-    if(parsed && magic=="ASTRA_IMPORT_2") {
+    if(parsed && (magic=="ASTRA_IMPORT_2" || magic=="ASTRA_IMPORT_3")) {
       std::string extra;
       parsed=static_cast<bool>(stream>>std::quoted(extra)>>transaction.hadExtra_);
       if(parsed && extra!="-") {
         if(!extra.starts_with(".astra/imports/") || !safePath(transaction.root_,extra,transaction.extra_)) parsed=false;
         transaction.extraRelative_=extra;
+      }
+      usize count=0;
+      if(parsed && magic=="ASTRA_IMPORT_3") parsed=static_cast<bool>(stream>>count) && count<=MaximumCompanions;
+      for(usize i=0;parsed && i<count;++i) {
+        Companion companion;bool had=false;
+        parsed=static_cast<bool>(stream>>std::quoted(companion.staged)>>std::quoted(companion.relative)>>had) &&
+               transaction.validCompanion(companion);
+        transaction.companions_.push_back(std::move(companion));transaction.hadCompanion_.push_back(had);
       }
     } else if(magic!="ASTRA_IMPORT_1") parsed=false;
     if(!parsed || (state!="prepared" && state!="committed") ||
@@ -85,10 +103,22 @@ public:
     diagnostic=state=="prepared"?"Importação interrompida recuperada; fonte e registro anteriores restaurados.":"";
     return true;
   }
+  // Preparo de fonte em pasta que sobrou de um processo encerrado no meio da
+  // importação. Só depois de `recover`: com journal pendente, o preparo ainda
+  // pode ser o que a recuperação precisa e fica onde está.
+  static void discardStaging(const std::string &root) {
+    std::filesystem::path staging,journal;std::error_code error;
+    if(!safePath(fromUtf8(root),".astra/import-staging",staging) ||
+       !safePath(fromUtf8(root),".astra/import-transaction/journal",journal)) return;
+    if(std::filesystem::exists(journal,error) || error) return;
+    std::filesystem::remove_all(staging,error);
+  }
   explicit EditorImportTransaction(std::string root):root_(fromUtf8(root)) {}
   // `extra` é o caminho relativo do mapa de nós, sob `.astra/imports/`; vazio
   // quando a publicação não grava mapa.
-  bool begin(const std::string &relative,const std::string &expectedHash,std::string &diagnostic,const std::string &extra={}) {
+  static constexpr usize MaximumCompanions=4096;
+  bool begin(const std::string &relative,const std::string &expectedHash,std::string &diagnostic,const std::string &extra={},
+             std::span<const Companion> companions={}) {
     if(!paths() || relative.starts_with(".astra/") || !safePath(root_,relative,source_)) {
       diagnostic="Destino de importação inválido.";return false;
     }
@@ -116,12 +146,35 @@ public:
       std::filesystem::create_directories(extra_.parent_path(),error);if(error) return false;
       if(hadExtra_ && (!read(extra_,current,64u*1024u*1024u) || !write(directory_/"extra.backup",current))) return false;
     }
+    companions_.clear();hadCompanion_.clear();
+    if(companions.size()>MaximumCompanions) {diagnostic="Arquivos demais na pasta do modelo.";return false;}
+    for(const auto &companion:companions) {
+      std::filesystem::path staged,target;
+      if(!validCompanion(companion) || !safePath(root_,companion.staged,staged) || !safePath(root_,companion.relative,target) ||
+         !std::filesystem::is_regular_file(staged,error)) {
+        diagnostic="Arquivo da pasta do modelo fora do preparo ou do projeto: "+companion.relative;return false;
+      }
+      companions_.push_back(companion);
+      hadCompanion_.push_back(std::filesystem::exists(target,error));if(error) return false;
+    }
+    if(!companions_.empty()) {
+      std::filesystem::create_directories(directory_/"companions",error);if(error) return false;
+    }
     relative_=relative;
     if(!mark("prepared")) {diagnostic="Não foi possível preparar o journal de importação.";return false;}
     active_=true;return true;
   }
   bool commit(std::span<const u8> bytes,const std::string &registry,const std::string &extra={}) {
-    if(!active_ || !write(source_,bytes) || !writeText(registry_,registry)) return false;
+    if(!active_) return false;
+    // Companheiros primeiro: o principal só aponta para arquivos que já estão lá.
+    for(usize i=0;i<companions_.size();++i) {
+      std::filesystem::path staged,target;std::error_code error;
+      if(!safePath(root_,companions_[i].staged,staged) || !safePath(root_,companions_[i].relative,target)) return false;
+      std::filesystem::create_directories(target.parent_path(),error);if(error) return false;
+      if(hadCompanion_[i]) {std::filesystem::rename(target,companionBackup(i),error);if(error) return false;}
+      std::filesystem::rename(staged,target,error);if(error) return false;
+    }
+    if(!write(source_,bytes) || !writeText(registry_,registry)) return false;
     if(!extraRelative_.empty() && !writeText(extra_,extra)) return false;
     if(!mark("committed")) return false;
     active_=false;cleanup();return true;
@@ -142,20 +195,45 @@ private:
   }
   bool mark(const char *state) {
     std::ostringstream out;
-    out<<"ASTRA_IMPORT_2 "<<state<<' '<<std::quoted(relative_)<<' '<<hadSource_<<' '<<hadRegistry_<<' '
-       <<std::quoted(extraRelative_.empty()?std::string("-"):extraRelative_)<<' '<<hadExtra_<<'\n';
+    out<<(companions_.empty()?"ASTRA_IMPORT_2 ":"ASTRA_IMPORT_3 ")<<state<<' '<<std::quoted(relative_)<<' '<<hadSource_<<' '<<hadRegistry_<<' '
+       <<std::quoted(extraRelative_.empty()?std::string("-"):extraRelative_)<<' '<<hadExtra_;
+    if(!companions_.empty()) {
+      out<<' '<<companions_.size();
+      for(usize i=0;i<companions_.size();++i)
+        out<<' '<<std::quoted(companions_[i].staged)<<' '<<std::quoted(companions_[i].relative)<<' '<<hadCompanion_[i];
+    }
+    out<<'\n';
     return writeText(journal_,out.str());
   }
+  bool validCompanion(const Companion &companion) const {
+    return companion.staged.starts_with(".astra/import-staging/") && !companion.relative.empty() &&
+           !companion.relative.starts_with(".astra/");
+  }
+  std::filesystem::path companionBackup(usize index) const {return directory_/"companions"/std::to_string(index);}
   bool restore() {
     const auto restoreOne=[&](const std::filesystem::path &target,const char *backup,bool existed) {
       if(existed) {std::vector<u8> bytes;return read(directory_/backup,bytes,256u*1024u*1024u) && write(target,bytes);}
       std::error_code error;std::filesystem::remove(target,error);return !error;
     };
+    // Companheiro: o que foi publicado sai; o que existia volta do backup. O
+    // arquivo novo não volta para o preparo — quem prepara importa de novo.
+    bool companions=true;
+    for(usize i=0;i<companions_.size();++i) {
+      std::filesystem::path target;std::error_code error;
+      if(!safePath(root_,companions_[i].relative,target)) {companions=false;continue;}
+      const auto backup=companionBackup(i);
+      if(std::filesystem::exists(backup,error)) {
+        std::filesystem::remove(target,error);error.clear();
+        std::filesystem::rename(backup,target,error);companions=companions && !error;
+      } else if(!hadCompanion_[i]) {
+        std::filesystem::remove(target,error);companions=companions && !error;
+      }
+    }
     // Evaluate every restoration: failure of one must not skip the others.
     const bool source=restoreOne(source_,"source.backup",hadSource_);
     const bool registry=restoreOne(registry_,"registry.backup",hadRegistry_);
     const bool extra=extraRelative_.empty() || extraRelative_=="-" || restoreOne(extra_,"extra.backup",hadExtra_);
-    return source && registry && extra;
+    return source && registry && extra && companions;
   }
   void cleanup() {
     // Fixed internal leaf paths only; no recursive deletion.
@@ -164,9 +242,13 @@ private:
     std::filesystem::remove(directory_/"source.backup",error);
     std::filesystem::remove(directory_/"registry.backup",error);
     std::filesystem::remove(directory_/"extra.backup",error);
+    for(usize i=0;i<companions_.size();++i) std::filesystem::remove(companionBackup(i),error);
+    std::filesystem::remove(directory_/"companions",error); // só se vazia
   }
   std::filesystem::path root_,directory_,journal_,source_,registry_,extra_;
   std::string relative_,extraRelative_;
+  std::vector<Companion> companions_;
+  std::vector<bool> hadCompanion_;
   bool hadSource_=false,hadRegistry_=false,hadExtra_=false,active_=false;
 };
 }
