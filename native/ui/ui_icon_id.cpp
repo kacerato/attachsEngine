@@ -96,6 +96,8 @@ constexpr const char *kNames[] = {
     "ide/search",
     "ide/undo",
     "ide/warning",
+    "input/action",
+    "input/binding",
     "lighting/cloud",
     "lighting/cloud-sun",
     "lighting/exposure",

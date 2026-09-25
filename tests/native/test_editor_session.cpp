@@ -1761,12 +1761,18 @@ AE_TEST(input_workspace_authors_runtime_action_with_history_and_archive) {
   AE_EXPECT_TRUE(f.session.screen().workspace==EditorWorkspace::Input,"mapa abre como workspace");
   tapWidget(f,widgetId(EditorWidget::InputActionAdd));
   AE_EXPECT_EQ(doc.inputActions().actions().size(),4u,"ação é criada no dado autorado");
+  tapWidget(f,widgetId(EditorWidget::InputActionRowBase));
+  AE_EXPECT_EQ(f.session.screen().inputActionIndex,0u,"lista seleciona ação diretamente");
+  tapWidget(f,widgetId(EditorWidget::InputActionRowBase)+3);
+  AE_EXPECT_EQ(f.session.screen().inputActionIndex,3u,"lista retorna à ação recém-criada");
   tapWidget(f,widgetId(EditorWidget::InputActionRename));
   auto edit=f.session.pendingTextEdit();
   AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::InputActionName,"nome abre editor de texto");
   AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"Interagir",true),"nome alterado");
   AE_EXPECT_TRUE(doc.inputActions().find("Interagir")!=nullptr,"id novo persistido no mapa");
-  tapWidget(f,widgetId(EditorWidget::InputTabBinding));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::InputRoleMove)).x<0,
+                 "ação Botão não oferece papel de movimento inválido");
+  tapWidget(f,widgetId(EditorWidget::InputBindingRowBase));
   tapWidget(f,widgetId(EditorWidget::InputBindingSource)); // TouchButton -> Key
   tapWidget(f,widgetId(EditorWidget::InputDetailsToggle));
   tapWidget(f,widgetId(EditorWidget::InputBindingCode));

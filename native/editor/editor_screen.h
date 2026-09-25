@@ -406,7 +406,11 @@ enum class EditorWidget : u32 {
   InputBindingPrevious,InputBindingNext,InputBindingAdd,InputBindingRemove,
   InputBindingSource,InputBindingAxis,InputBindingInvert,InputBindingCode,
   InputBindingNegativeCode,InputBindingScale,
+  InputActionPagePrevious,InputActionPageNext,
+  InputBindingPagePrevious,InputBindingPageNext,
   InputDetailsToggle,
+  InputActionRowBase=0x0831'0000u,
+  InputBindingRowBase=0x0832'0000u,
 };
 
 inline constexpr u32 widgetId(EditorWidget widget) noexcept { return static_cast<u32>(widget); }
@@ -453,7 +457,8 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::SceneViewRowBase,kRange},{EditorWidget::ImportMeshRowBase,kRange},
   {EditorWidget::SceneTemplateRowBase,kRange},{EditorWidget::ComponentSlotNumberBase,kRange},
   {EditorWidget::ComponentClipMoveUpBase,kRange},{EditorWidget::ComponentClipMoveDownBase,kRange},
-  {EditorWidget::ComponentClipRemoveBase,kRange}};
+  {EditorWidget::ComponentClipRemoveBase,kRange},
+  {EditorWidget::InputActionRowBase,64},{EditorWidget::InputBindingRowBase,16}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -540,6 +545,7 @@ struct EditorScreenState final {
   u32 physicsLayer=0,physicsMatrixPage=0;
   bool editingPhysicsLayerName=false;
   u32 inputActionIndex=0,inputBindingIndex=0,inputTab=0,inputEditField=0;
+  u32 inputActionPage=0,inputBindingPage=0;
   bool inputDetails=false;
   bool editingInputActionName=false,editingInputContext=false;
   bool playHasScripts=false;

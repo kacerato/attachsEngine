@@ -4648,82 +4648,284 @@ void buildPhysicsLayers(ScreenBuilder &builder,UiRect area) {
   }
 }
 
-void buildInputWorkspace(ScreenBuilder &builder,UiRect area) {
+void buildInputWorkspaceFocused(ScreenBuilder &builder,UiRect area) {
   const auto &state=builder.state;const auto &theme=builder.theme;
   auto &list=builder.list;auto &router=builder.router;
-  const auto &map=state.document->inputActions();const auto &actions=map.actions();
-  list.addRect(area,theme.color.surface);auto content=deflate(area,UiInsets::all(12));
-  auto button=[&](UiRect rect,std::string_view label,EditorWidget widget,bool active=false) {
+  const auto &actions=state.document->inputActions().actions();
+  list.addRect(area,theme.color.surface);
+  UiRect content=deflate(area,UiInsets::all(8));
+  const auto button=[&](UiRect rect,std::string_view title,EditorWidget widget,bool active=false,
+                        bool enabled=true) {
     list.addRect(rect,active?theme.color.accent:theme.color.raised,theme.radius.control);
-    builder.label(rect,label,active?theme.color.accentInk:theme.color.text,theme.type.caption,UiAlign::Center);
-    router.addRegion(rect,widgetId(widget),theme.touch.minimumTarget);
+    builder.label(rect,title,active?theme.color.accentInk:
+                  enabled?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+    if(enabled) router.addRegion(rect,widgetId(widget),theme.touch.minimumTarget);
   };
-  auto header=takeTop(content,34),add=takeRight(header,100);
-  builder.label(header,"Ações de entrada",theme.color.text,theme.type.cardName);
-  button(add,"+ Ação",EditorWidget::InputActionAdd,true);
-  if(actions.empty()) {builder.label(content,"Crie uma ação para ligar toque, teclado ou controle.",theme.color.textDim,theme.type.body);return;}
-  const u32 index=std::min(state.inputActionIndex,static_cast<u32>(actions.size()-1));
-  const auto &action=actions[index];
-  auto navigation=takeTop(content,36),previous=takeLeft(navigation,36),next=takeRight(navigation,36);
-  button(previous,"<",EditorWidget::InputActionPrevious);
-  button(next,">",EditorWidget::InputActionNext);
-  list.addRect(navigation,theme.color.silhouette,theme.radius.control);
-  builder.label(navigation,(action.id+"  ·  "+std::to_string(index+1)+"/"+std::to_string(actions.size())).c_str(),theme.color.accent,theme.type.body,UiAlign::Center);
-  auto tabs=takeTop(content,32),tabAction=takeLeft(tabs,tabs.width*.5f);
-  button(tabAction,"Ação",EditorWidget::InputTabAction,state.inputTab==0);
-  button(tabs,"Vínculos",EditorWidget::InputTabBinding,state.inputTab==1);
-  takeTop(content,4);
-  button(takeTop(content,30),state.inputDetails?"< Principal":"Mais propriedades >",EditorWidget::InputDetailsToggle);
-  const auto field=[&](std::string_view title,std::string_view value,EditorWidget widget) {
-    auto row=takeTop(content,32);list.addRect(row,theme.color.silhouette,2);
-    builder.label(takeLeft(row,row.width*.47f),title,theme.color.textDim,theme.type.caption);
-    builder.label(row,value,theme.color.text,theme.type.body,UiAlign::Center);
-    router.addRegion({content.x,row.y,content.width,row.height},widgetId(widget),theme.touch.minimumTarget);
+  const auto field=[&](UiRect &column,std::string_view title,std::string_view value,EditorWidget widget) {
+    const UiRect row=takeTop(column,42);
+    list.addRect(row,theme.color.silhouette,2);
+    UiRect labels=deflate(row,UiInsets::symmetric(10,0));
+    builder.label(takeLeft(labels,labels.width*.38f),title,theme.color.textDim,theme.type.caption);
+    list.pushClip(labels);
+    builder.label(labels,value,theme.color.text,theme.type.caption,UiAlign::Center);
+    list.popClip();
+    router.addRegion(row,widgetId(widget),theme.touch.minimumTarget);
   };
-  if(state.inputTab==0) {
-    const char *kinds[]{"Botão","Eixo 1D","Eixo 2D"};
-    if(!state.inputDetails) {
-      field("Tipo",kinds[static_cast<u32>(action.kind)],EditorWidget::InputActionKind);
-      field("Nome","Renomear · "+action.id,EditorWidget::InputActionRename);
-      auto roles=takeTop(content,32);const float width=roles.width/3;
-      const bool move=map.moveAction()==action.id,look=map.lookAction()==action.id,jump=map.jumpAction()==action.id;
-      button(takeLeft(roles,width),move?"Mover ✓":"Mover",EditorWidget::InputRoleMove,move);
-      button(takeLeft(roles,width),look?"Olhar ✓":"Olhar",EditorWidget::InputRoleLook,look);
-      button(roles,jump?"Saltar ✓":"Saltar",EditorWidget::InputRoleJump,jump);
-    } else {
-      char number[36];std::snprintf(number,sizeof(number),"%.3g",static_cast<double>(action.deadzone));
-      field("Zona morta",number,EditorWidget::InputDeadzone);
-      std::snprintf(number,sizeof(number),"%.3g",static_cast<double>(action.sensitivity));
-      field("Sensibilidade",number,EditorWidget::InputSensitivity);
-      field("Contexto",action.context.empty()?"Sempre ativo":action.context,EditorWidget::InputActionContext);
-      button(takeBottom(content,32),"Remover ação",EditorWidget::InputActionRemove);
+  if(content.width<700.0f) {
+    auto header=takeTop(content,48),add=takeRight(header,92);
+    builder.label(header,"MAPA DE ENTRADA",theme.color.text,theme.type.cardName);
+    button(add,"+ Ação",EditorWidget::InputActionAdd,
+           actions.size()<runtime::InputActionMap::kMaximumActions,
+           actions.size()<runtime::InputActionMap::kMaximumActions);
+    if(actions.empty()) {
+      builder.label(content,"Crie uma ação para configurar as entradas do jogo.",
+                    theme.color.textDim,theme.type.body);
+      return;
     }
-  } else {
-    auto nav=takeTop(content,32),addBinding=takeRight(nav,90),nextBinding=takeRight(nav,32),previousBinding=takeLeft(nav,32);
-    button(previousBinding,"<",EditorWidget::InputBindingPrevious);
-    button(nextBinding,">",EditorWidget::InputBindingNext);
-    button(addBinding,"+ Vínculo",EditorWidget::InputBindingAdd,true);
-    builder.label(nav,action.bindings.empty()?"Sem vínculos":
-      (std::to_string(std::min(state.inputBindingIndex,static_cast<u32>(action.bindings.size()-1))+1)+"/"+
-       std::to_string(action.bindings.size())).c_str(),theme.color.accent,theme.type.body,UiAlign::Center);
-    if(action.bindings.empty()) {builder.label(content,"Adicione uma fonte de entrada para esta ação.",theme.color.textDim,theme.type.body);return;}
-    const auto &binding=action.bindings[std::min(state.inputBindingIndex,static_cast<u32>(action.bindings.size()-1))];
-    constexpr const char *sources[]{"Nenhuma","Manche touch","Olhar touch","Botão touch","Tecla","Eixo gamepad","Botão gamepad"};
+    const u32 selected=std::min(state.inputActionIndex,static_cast<u32>(actions.size()-1));
+    const auto &action=actions[selected];
+    auto navigation=takeTop(content,52),previous=takeLeft(navigation,48),next=takeRight(navigation,48);
+    button(previous,"<",EditorWidget::InputActionPrevious);
+    button(next,">",EditorWidget::InputActionNext);
+    builder.label(navigation,(action.id+" · "+std::to_string(selected+1)+"/"+
+                              std::to_string(actions.size())).c_str(),
+                  theme.color.accent,theme.type.body,UiAlign::Center);
+    auto tabs=takeTop(content,46),actionTab=takeLeft(tabs,tabs.width*.5f);
+    button(actionTab,"Ação",EditorWidget::InputTabAction,state.inputTab==0);
+    button(tabs,"Vínculos",EditorWidget::InputTabBinding,state.inputTab==1);
+    takeTop(content,10);
+    if(state.inputTab==0) {
+      const char *types[]={"Botão","Eixo 1D","Eixo 2D"};
+      field(content,"Tipo",types[static_cast<u32>(action.kind)],EditorWidget::InputActionKind);
+      field(content,"Nome",action.id,EditorWidget::InputActionRename);
+      field(content,"Contexto",action.context.empty()?"Sempre ativo":action.context,
+            EditorWidget::InputActionContext);
+      if(action.kind!=runtime::ActionKind::Button) {
+        char value[36];std::snprintf(value,sizeof(value),"%.3g",static_cast<double>(action.deadzone));
+        field(content,"Zona morta",value,EditorWidget::InputDeadzone);
+        std::snprintf(value,sizeof(value),"%.3g",static_cast<double>(action.sensitivity));
+        field(content,"Sensibilidade",value,EditorWidget::InputSensitivity);
+      }
+      auto roles=takeTop(content,46),move=takeLeft(roles,roles.width/3),look=takeLeft(roles,roles.width*.5f);
+      const auto &map=state.document->inputActions();
+      button(move,"Mover",EditorWidget::InputRoleMove,map.moveAction()==action.id,
+             action.kind==runtime::ActionKind::Axis2D);
+      button(look,"Olhar",EditorWidget::InputRoleLook,map.lookAction()==action.id,
+             action.kind==runtime::ActionKind::Axis2D);
+      button(roles,"Saltar",EditorWidget::InputRoleJump,map.jumpAction()==action.id,
+             action.kind==runtime::ActionKind::Button);
+      takeTop(content,12);
+      button(takeTop(content,44),"Remover ação",EditorWidget::InputActionRemove);
+    } else {
+      auto bindingNav=takeTop(content,48),addBinding=takeRight(bindingNav,110);
+      auto nextBinding=takeRight(bindingNav,48),previousBinding=takeLeft(bindingNav,48);
+      button(previousBinding,"<",EditorWidget::InputBindingPrevious);
+      button(nextBinding,">",EditorWidget::InputBindingNext);
+      button(addBinding,"+ Vínculo",EditorWidget::InputBindingAdd,
+             action.bindings.size()<runtime::InputActionMap::kMaximumBindings,
+             action.bindings.size()<runtime::InputActionMap::kMaximumBindings);
+      builder.label(bindingNav,(std::to_string(action.bindings.empty()?0:
+          std::min(state.inputBindingIndex,static_cast<u32>(action.bindings.size()-1))+1)+"/"+
+          std::to_string(action.bindings.size())).c_str(),
+          theme.color.accent,theme.type.caption,UiAlign::Center);
+      if(action.bindings.empty()) return;
+      const auto &binding=action.bindings[std::min(state.inputBindingIndex,
+                                            static_cast<u32>(action.bindings.size()-1))];
+      constexpr const char *sources[]={"Nenhuma","Manche touch","Olhar touch","Botão touch",
+                                       "Tecla","Eixo gamepad","Botão gamepad"};
+      field(content,"Fonte",sources[static_cast<u32>(binding.source)],EditorWidget::InputBindingSource);
+      if(!state.inputDetails) {
+        if(action.kind==runtime::ActionKind::Axis2D)
+          field(content,"Eixo",std::to_string(binding.axis),EditorWidget::InputBindingAxis);
+        if(action.kind!=runtime::ActionKind::Button)
+          field(content,"Inverter",binding.invert?"Sim":"Não",EditorWidget::InputBindingInvert);
+      } else {
+        if(binding.source==runtime::InputSource::TouchButton || binding.source==runtime::InputSource::Key ||
+           binding.source==runtime::InputSource::GamepadAxis || binding.source==runtime::InputSource::GamepadButton)
+          field(content,"Código",std::to_string(binding.code),EditorWidget::InputBindingCode);
+        if(binding.source==runtime::InputSource::Key && action.kind!=runtime::ActionKind::Button)
+          field(content,"Código negativo",std::to_string(binding.negativeCode),
+                EditorWidget::InputBindingNegativeCode);
+        char value[36];std::snprintf(value,sizeof(value),"%.3g",static_cast<double>(binding.scale));
+        field(content,"Escala",value,EditorWidget::InputBindingScale);
+      }
+      takeTop(content,8);
+      button(takeTop(content,44),state.inputDetails?"< Básico":"Avançado >",
+             EditorWidget::InputDetailsToggle);
+      takeTop(content,8);
+      button(takeTop(content,44),"Remover vínculo",EditorWidget::InputBindingRemove);
+    }
+    return;
+  }
+  const float railWidth=std::clamp(content.width*.265f,180.0f,310.0f);
+  UiRect rail=takeLeft(content,railWidth);
+  const UiRect separator=takeLeft(content,2);
+  list.addRect(separator,theme.color.line);
+  content=deflate(content,UiInsets{12,0,4,0});
+  auto railHeader=takeTop(rail,52),add=takeRight(railHeader,86);
+  builder.label(railHeader,"AÇÕES",theme.color.textDim,theme.type.caption);
+  button(add,"+ Ação",EditorWidget::InputActionAdd,
+         actions.size()<runtime::InputActionMap::kMaximumActions,
+         actions.size()<runtime::InputActionMap::kMaximumActions);
+  auto railFooter=takeBottom(rail,40);
+  const u32 actionPageSize=std::max(1u,std::min(8u,static_cast<u32>(std::max(0.0f,rail.height)/46.0f)));
+  const u32 actionPages=std::max(1u,(static_cast<u32>(actions.size())+actionPageSize-1)/actionPageSize);
+  const u32 actionPage=std::min(state.inputActionPage,actionPages-1);
+  if(actions.empty()) builder.label(rail,"Nenhuma ação. Toque em + Ação.",theme.color.textDim,theme.type.caption);
+  for(u32 i=actionPage*actionPageSize;i<std::min(static_cast<u32>(actions.size()),(actionPage+1)*actionPageSize);++i) {
+    auto row=takeTop(rail,46);
+    const bool selected=i==state.inputActionIndex;
+    list.addRect(row,selected?theme.color.raised:theme.color.surface,2);
+    if(selected) list.addRect({row.x,row.y,3,row.height},theme.color.accent);
+    auto inner=deflate(row,UiInsets::symmetric(7,2));
+    auto icon=takeLeft(inner,33);
+    list.addImage(centred(icon,27,27),static_cast<UiImageId>(UiIcon::InputAction),0xffffffff);
+    const auto &item=actions[i];
+    list.pushClip(inner);
+    builder.label(takeTop(inner,23),item.id,selected?theme.color.text:theme.color.textDim,theme.type.caption);
+    const char *types[]={"Botão","Eixo 1D","Eixo 2D"};
+    const std::string detail=std::string(types[static_cast<u32>(item.kind)])+" · "+std::to_string(item.bindings.size())+" vínculos";
+    builder.label(inner,detail,theme.color.textMuted,theme.type.caption);
+    list.popClip();
+    router.addRegion(row,widgetId(EditorWidget::InputActionRowBase)+i,theme.touch.minimumTarget);
+  }
+  if(actionPages>1) {
+    auto previous=takeLeft(railFooter,43),next=takeRight(railFooter,43);
+    if(actionPage) button(previous,"<",EditorWidget::InputActionPagePrevious);
+    if(actionPage+1<actionPages) button(next,">",EditorWidget::InputActionPageNext);
+    builder.label(railFooter,(std::to_string(actionPage+1)+"/"+std::to_string(actionPages)).c_str(),
+                  theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  } else builder.label(railFooter,(std::to_string(actions.size())+" / 64 ações").c_str(),
+                       theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  if(actions.empty()) {
+    builder.label(content,"Crie ações para associar toque, teclado ou controle ao jogo.",
+                  theme.color.textDim,theme.type.body);
+    return;
+  }
+  const u32 selected=std::min(state.inputActionIndex,static_cast<u32>(actions.size()-1));
+  const auto &action=actions[selected];
+  auto title=takeTop(content,60),rename=takeRight(title,92);
+  button(rename,"Renomear",EditorWidget::InputActionRename);
+  auto mark=takeLeft(title,49);
+  list.addImage(centred(mark,40,40),static_cast<UiImageId>(UiIcon::InputAction),0xffffffff);
+  list.pushClip(title);
+  builder.label(takeTop(title,30),action.id,theme.color.text,theme.type.cardName);
+  builder.label(title,(std::to_string(selected+1)+"/"+std::to_string(actions.size())+" ações · "+
+                      std::to_string(action.bindings.size())+" vínculos").c_str(),
+                theme.color.textDim,theme.type.caption);
+  list.popClip();
+  takeTop(content,8);
+  const float middleWidth=std::max(230.0f,content.width*.54f);
+  UiRect middle=takeLeft(content,middleWidth);
+  takeLeft(content,10);
+  UiRect properties=content;
+  list.addRect({properties.x-6,properties.y,1,properties.height},theme.color.line);
+  builder.label(takeTop(middle,28),"TIPO E PAPEL",theme.color.textDim,theme.type.caption);
+  const char *types[]={"Botão","Eixo 1D","Eixo 2D"};
+  field(middle,"Tipo",std::string(types[static_cast<u32>(action.kind)])+"  >",EditorWidget::InputActionKind);
+  auto roles=takeTop(middle,48);
+  const float roleWidth=roles.width/3;
+  const auto &map=state.document->inputActions();
+  button(takeLeft(roles,roleWidth),"Mover",
+         EditorWidget::InputRoleMove,map.moveAction()==action.id,
+         action.kind==runtime::ActionKind::Axis2D);
+  button(takeLeft(roles,roleWidth),"Olhar",
+         EditorWidget::InputRoleLook,map.lookAction()==action.id,
+         action.kind==runtime::ActionKind::Axis2D);
+  button(roles,"Saltar",
+         EditorWidget::InputRoleJump,map.jumpAction()==action.id,
+         action.kind==runtime::ActionKind::Button);
+  takeTop(middle,12);
+  auto bindingHeader=takeTop(middle,40),addBinding=takeRight(bindingHeader,110);
+  builder.label(bindingHeader,"VÍNCULOS",theme.color.textDim,theme.type.caption);
+  button(addBinding,"+ Vínculo",EditorWidget::InputBindingAdd,
+         action.bindings.size()<runtime::InputActionMap::kMaximumBindings,
+         action.bindings.size()<runtime::InputActionMap::kMaximumBindings);
+  auto bindingFooter=takeBottom(middle,38);
+  const u32 bindingPageSize=std::max(1u,std::min(4u,static_cast<u32>(std::max(0.0f,middle.height)/54.0f)));
+  const u32 bindingPages=std::max(1u,(static_cast<u32>(action.bindings.size())+bindingPageSize-1)/bindingPageSize);
+  const u32 bindingPage=std::min(state.inputBindingPage,bindingPages-1);
+  constexpr const char *sources[]={"Nenhuma","Manche touch","Olhar touch","Botão touch",
+                                   "Tecla","Eixo gamepad","Botão gamepad"};
+  if(action.bindings.empty()) builder.label(middle,"Nenhum vínculo. Adicione uma fonte de entrada.",
+                                            theme.color.textDim,theme.type.caption);
+  for(u32 i=bindingPage*bindingPageSize;
+      i<std::min(static_cast<u32>(action.bindings.size()),(bindingPage+1)*bindingPageSize);++i) {
+    auto row=takeTop(middle,54);
+    const bool active=i==state.inputBindingIndex;
+    list.addRect(row,active?theme.color.raised:theme.color.silhouette,2);
+    if(active) list.addRect({row.x,row.y,3,row.height},theme.color.accent);
+    auto inner=deflate(row,UiInsets::symmetric(7,3));
+    auto glyph=takeLeft(inner,35);
+    list.addImage(centred(glyph,28,28),static_cast<UiImageId>(UiIcon::InputBinding),0xffffffff);
+    const auto &binding=action.bindings[i];
+    list.pushClip(inner);
+    builder.label(takeTop(inner,23),sources[static_cast<u32>(binding.source)],
+                  active?theme.color.text:theme.color.textDim,theme.type.caption);
+    std::string detail;
+    if(binding.source==runtime::InputSource::TouchMove ||
+       binding.source==runtime::InputSource::TouchLook)
+      detail=action.kind==runtime::ActionKind::Axis2D?
+        std::string("Eixo ")+(binding.axis?"Y":"X"):"Gestos na tela";
+    else if(binding.source==runtime::InputSource::Key)
+      detail="Tecla "+std::to_string(binding.code);
+    else if(binding.source==runtime::InputSource::TouchButton ||
+            binding.source==runtime::InputSource::GamepadButton)
+      detail="Botão "+std::to_string(binding.code);
+    else if(binding.source==runtime::InputSource::GamepadAxis)
+      detail="Eixo "+std::to_string(binding.code);
+    else detail="Sem fonte";
+    builder.label(inner,detail,theme.color.textMuted,theme.type.caption);
+    list.popClip();
+    router.addRegion(row,widgetId(EditorWidget::InputBindingRowBase)+i,theme.touch.minimumTarget);
+  }
+  if(bindingPages>1) {
+    auto previous=takeLeft(bindingFooter,43),next=takeRight(bindingFooter,43);
+    if(bindingPage) button(previous,"<",EditorWidget::InputBindingPagePrevious);
+    if(bindingPage+1<bindingPages) button(next,">",EditorWidget::InputBindingPageNext);
+    builder.label(bindingFooter,(std::to_string(bindingPage+1)+"/"+std::to_string(bindingPages)).c_str(),
+                  theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  }
+  builder.label(takeTop(properties,30),"AÇÃO",theme.color.textDim,theme.type.caption);
+  field(properties,"Contexto",action.context.empty()?"Sempre ativo":action.context,
+        EditorWidget::InputActionContext);
+  if(action.kind!=runtime::ActionKind::Button) {
+    char number[36];std::snprintf(number,sizeof(number),"%.3g",static_cast<double>(action.deadzone));
+    field(properties,"Zona morta",number,EditorWidget::InputDeadzone);
+    std::snprintf(number,sizeof(number),"%.3g",static_cast<double>(action.sensitivity));
+    field(properties,"Sensibilidade",number,EditorWidget::InputSensitivity);
+  }
+  takeTop(properties,14);
+  auto section=takeTop(properties,32);
+  list.addImage(centred(takeLeft(section,29),24,24),static_cast<UiImageId>(UiIcon::InputBinding),0xffffffff);
+  builder.label(section,"VÍNCULO SELECIONADO",theme.color.textDim,theme.type.caption);
+  if(!action.bindings.empty()) {
+    const auto &binding=action.bindings[std::min(state.inputBindingIndex,
+                                          static_cast<u32>(action.bindings.size()-1))];
+    field(properties,"Fonte",sources[static_cast<u32>(binding.source)],EditorWidget::InputBindingSource);
     if(!state.inputDetails) {
-      field("Fonte",sources[static_cast<u32>(binding.source)],EditorWidget::InputBindingSource);
-      if(action.kind==runtime::ActionKind::Axis2D) field("Eixo",std::to_string(binding.axis),EditorWidget::InputBindingAxis);
-      if(action.kind!=runtime::ActionKind::Button) field("Inverter",binding.invert?"Sim":"Não",EditorWidget::InputBindingInvert);
+      if(action.kind==runtime::ActionKind::Axis2D)
+        field(properties,"Eixo",std::to_string(binding.axis),EditorWidget::InputBindingAxis);
+      if(action.kind!=runtime::ActionKind::Button)
+        field(properties,"Inverter",binding.invert?"Sim":"Não",EditorWidget::InputBindingInvert);
     } else {
       if(binding.source==runtime::InputSource::TouchButton || binding.source==runtime::InputSource::Key ||
          binding.source==runtime::InputSource::GamepadAxis || binding.source==runtime::InputSource::GamepadButton)
-        field("Código",std::to_string(binding.code),EditorWidget::InputBindingCode);
+        field(properties,"Código",std::to_string(binding.code),EditorWidget::InputBindingCode);
       if(binding.source==runtime::InputSource::Key && action.kind!=runtime::ActionKind::Button)
-        field("Código negativo",std::to_string(binding.negativeCode),EditorWidget::InputBindingNegativeCode);
+        field(properties,"Código negativo",std::to_string(binding.negativeCode),
+              EditorWidget::InputBindingNegativeCode);
       char scale[36];std::snprintf(scale,sizeof(scale),"%.3g",static_cast<double>(binding.scale));
-      field("Escala",scale,EditorWidget::InputBindingScale);
-      button(takeBottom(content,32),"Remover vínculo",EditorWidget::InputBindingRemove);
+      field(properties,"Escala",scale,EditorWidget::InputBindingScale);
     }
-  }
+    takeTop(properties,8);
+    button(takeTop(properties,38),state.inputDetails?"< Ajustes básicos":"Ajustes avançados >",
+           EditorWidget::InputDetailsToggle);
+  } else builder.label(takeTop(properties,42),"Adicione um vínculo para editar.",
+                       theme.color.textMuted,theme.type.caption);
+  auto removal=takeBottom(properties,42),removeAction=takeLeft(removal,removal.width*.5f);
+  button(removeAction,"Remover ação",EditorWidget::InputActionRemove);
+  if(!action.bindings.empty()) button(removal,"Remover vínculo",EditorWidget::InputBindingRemove);
 }
 
 EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiTheme &theme,
@@ -4753,18 +4955,22 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   constexpr float compactPanelWidth = 240.0f;
   const bool compact = available < compactPanelWidth * 2 + kViewportMinimum + kSplitterWidth * 2;
 
-  float hierarchyWidth = state.hierarchyVisible && state.workspace != EditorWorkspace::Play
+  float hierarchyWidth = state.hierarchyVisible && state.workspace != EditorWorkspace::Play &&
+      state.workspace != EditorWorkspace::Input
       ? (state.hierarchyWidth > 0.0f ? state.hierarchyWidth : available * 0.24f)
       : 0.0f;
-  float inspectorWidth = state.inspectorVisible && state.workspace != EditorWorkspace::Play
+  float inspectorWidth = state.inspectorVisible && state.workspace != EditorWorkspace::Play &&
+      state.workspace != EditorWorkspace::Input
       ? (state.inspectorWidth > 0.0f ? state.inspectorWidth : available * 0.27f)
       : 0.0f;
   if (hierarchyWidth > 0.0f) hierarchyWidth = std::max(hierarchyWidth, kPanelMinimum);
   if (inspectorWidth > 0.0f) inspectorWidth = std::max(inspectorWidth, kPanelMinimum);
   if (compact) {
-    hierarchyWidth = state.workspace != EditorWorkspace::Play && (state.compactPanel == EditorScreenState::CompactPanel::Hierarchy || state.compactPanel == EditorScreenState::CompactPanel::Files)
+    hierarchyWidth = state.workspace != EditorWorkspace::Play && state.workspace != EditorWorkspace::Input &&
+        (state.compactPanel == EditorScreenState::CompactPanel::Hierarchy || state.compactPanel == EditorScreenState::CompactPanel::Files)
         ? std::min(compactPanelWidth, std::max(0.0f, available-kViewportMinimum-kSplitterWidth)) : 0;
-    inspectorWidth = state.workspace != EditorWorkspace::Play && state.compactPanel == EditorScreenState::CompactPanel::Inspector
+    inspectorWidth = state.workspace != EditorWorkspace::Play && state.workspace != EditorWorkspace::Input &&
+        state.compactPanel == EditorScreenState::CompactPanel::Inspector
         ? std::min(compactPanelWidth, std::max(0.0f, available-kViewportMinimum-kSplitterWidth)) : 0;
   }
   const float splitters = (hierarchyWidth > 0.0f ? kSplitterWidth : 0.0f) +
@@ -5150,7 +5356,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   }
   if(state.workspace==EditorWorkspace::Input && !layout.viewport.isEmpty()) {
     router.addBlocker(layout.viewport);
-    buildInputWorkspace(builder,layout.viewport);
+    buildInputWorkspaceFocused(builder,layout.viewport);
   }
   if(state.workspaceMenu) {
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,.65f));router.addBlocker(state.surface);
@@ -5410,8 +5616,31 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     return outcome;
   }
 
+  if(widget>=widgetId(EditorWidget::InputActionRowBase) &&
+     widget<widgetId(EditorWidget::InputActionRowBase)+runtime::InputActionMap::kMaximumActions) {
+    const u32 index=widget-widgetId(EditorWidget::InputActionRowBase);
+    if(index<document.inputActions().actions().size()) {
+      state.inputActionIndex=index;state.inputBindingIndex=0;state.inputBindingPage=0;
+      state.inputTab=0;state.inputDetails=false;
+    }
+    return outcome;
+  }
+  if(widget>=widgetId(EditorWidget::InputBindingRowBase) &&
+     widget<widgetId(EditorWidget::InputBindingRowBase)+runtime::InputActionMap::kMaximumBindings) {
+    const auto &actions=document.inputActions().actions();
+    if(state.inputActionIndex<actions.size() &&
+       widget-widgetId(EditorWidget::InputBindingRowBase)<actions[state.inputActionIndex].bindings.size()) {
+      state.inputBindingIndex=widget-widgetId(EditorWidget::InputBindingRowBase);
+      state.inputTab=1;state.inputDetails=false;
+    }
+    return outcome;
+  }
   if(widget>=widgetId(EditorWidget::InputActionPrevious) && widget<=widgetId(EditorWidget::InputDetailsToggle)) {
     if(widget==widgetId(EditorWidget::InputDetailsToggle)) {state.inputDetails=!state.inputDetails;return outcome;}
+    if(widget==widgetId(EditorWidget::InputActionPagePrevious)) {if(state.inputActionPage) --state.inputActionPage;return outcome;}
+    if(widget==widgetId(EditorWidget::InputActionPageNext)) {++state.inputActionPage;return outcome;}
+    if(widget==widgetId(EditorWidget::InputBindingPagePrevious)) {if(state.inputBindingPage) --state.inputBindingPage;return outcome;}
+    if(widget==widgetId(EditorWidget::InputBindingPageNext)) {++state.inputBindingPage;return outcome;}
     auto map=document.inputActions();
     const auto &actions=map.actions();
     if(widget==widgetId(EditorWidget::InputActionAdd)) {
@@ -5423,7 +5652,8 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       }
       if(map.add(action) && history.setInputActions(document,map)) {
         state.inputActionIndex=static_cast<u32>(map.actions().size()-1);state.inputBindingIndex=0;
-        state.inputTab=0;outcome.documentChanged=true;
+        state.inputTab=0;state.inputActionPage=state.inputActionIndex/8;
+        state.inputBindingPage=0;outcome.documentChanged=true;
       } else state.status="Limite de ações atingido";
       return outcome;
     }
@@ -5433,7 +5663,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     if(widget==widgetId(EditorWidget::InputActionPrevious) || widget==widgetId(EditorWidget::InputActionNext)) {
       state.inputActionIndex=widget==widgetId(EditorWidget::InputActionNext)?
         (state.inputActionIndex+1)%actions.size():(state.inputActionIndex+actions.size()-1)%actions.size();
-      state.inputBindingIndex=0;return outcome;
+      state.inputBindingIndex=0;state.inputBindingPage=0;return outcome;
     }
     if(widget==widgetId(EditorWidget::InputTabAction) || widget==widgetId(EditorWidget::InputTabBinding)) {
       state.inputTab=widget==widgetId(EditorWidget::InputTabBinding)?1u:0u;state.inputDetails=false;return outcome;
@@ -5447,7 +5677,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     if(widget==widgetId(EditorWidget::InputActionRemove)) {
       if(map.remove(original.id)) {outcome.documentChanged=history.setInputActions(document,map);
         state.inputActionIndex=std::min(state.inputActionIndex,static_cast<u32>(map.actions().empty()?0:map.actions().size()-1));
-        state.inputBindingIndex=0;}
+        state.inputBindingIndex=0;state.inputActionPage=0;state.inputBindingPage=0;}
       return outcome;
     }
     if(widget==widgetId(EditorWidget::InputDeadzone) || widget==widgetId(EditorWidget::InputSensitivity) ||
@@ -5497,10 +5727,14 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       if(action.bindings.size()>=runtime::InputActionMap::kMaximumBindings) {state.status="Máximo de vínculos atingido";return outcome;}
       action.bindings.push_back({runtime::InputSource::TouchButton,1,0,0,1,false});
       state.inputBindingIndex=static_cast<u32>(action.bindings.size()-1);
+      state.inputBindingPage=state.inputBindingIndex/4;
     } else {
       if(action.bindings.empty()) return outcome;
       state.inputBindingIndex=std::min(state.inputBindingIndex,static_cast<u32>(action.bindings.size()-1));
-      if(widget==widgetId(EditorWidget::InputBindingRemove)) action.bindings.erase(action.bindings.begin()+state.inputBindingIndex);
+      if(widget==widgetId(EditorWidget::InputBindingRemove)) {
+        action.bindings.erase(action.bindings.begin()+state.inputBindingIndex);
+        state.inputBindingPage=0;
+      }
       else {
         auto &binding=action.bindings[state.inputBindingIndex];
         if(widget==widgetId(EditorWidget::InputBindingSource)) {
@@ -5777,7 +6011,9 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::TabLighting: state.workspaceMenu=false; state.workspace = EditorWorkspace::Lighting; state.selection=document.root(); state.propertyPage=0; break;
     case EditorWidget::TabTimers: state.workspaceMenu=false; state.workspace=EditorWorkspace::Timers; state.timerPage=0; break;
     case EditorWidget::TabPhysics: state.workspaceMenu=false; state.workspace=EditorWorkspace::Physics; state.physicsMatrixPage=0; break;
-    case EditorWidget::TabInput: state.workspaceMenu=false; state.workspace=EditorWorkspace::Input; state.inputActionIndex=0;state.inputBindingIndex=0;state.inputTab=0;break;
+    case EditorWidget::TabInput: state.workspaceMenu=false; state.workspace=EditorWorkspace::Input;
+      state.inputActionIndex=0;state.inputBindingIndex=0;state.inputActionPage=0;state.inputBindingPage=0;
+      state.inputTab=0;break;
     case EditorWidget::TabSettings: if(waterCreationAvailable(state)) {state.workspaceMenu=false; state.workspace = EditorWorkspace::Settings; state.selection=document.root();state.propertyPage=0;} break;
     case EditorWidget::InspectorTabTransform: state.tab = EditorInspectorTab::Transform; break;
     case EditorWidget::InspectorTabMaterial:

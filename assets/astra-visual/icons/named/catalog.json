@@ -998,6 +998,18 @@
         26
       ]
     },
+    "input/action": {
+      "category": "input",
+      "name": "action",
+      "dark_ui_ready": true,
+      "generation": "input-map-v1"
+    },
+    "input/binding": {
+      "category": "input",
+      "name": "binding",
+      "dark_ui_ready": true,
+      "generation": "input-map-v1"
+    },
     "lighting/scene-lighting": {
       "source": "viewport-v1/scene-lighting.png",
       "raster": "../viewport-v1/scene-lighting.png",
