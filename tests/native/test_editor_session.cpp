@@ -51,7 +51,7 @@ AE_TEST(editor_creation_availability_follows_imported_resources) {
   EditorSession session;
   AE_EXPECT_TRUE(session.importMap({}, {}, false),"independent source");
   // Luzes e formas de colisão independem da biblioteca visual importada.
-  const u32 semGeometria=creationAlwaysAvailableMask;
+  const auto semGeometria=creationAlwaysAvailable();
   AE_EXPECT_EQ(session.screen().creationAvailable,semGeometria,"independent objects remain available without geometry");
   std::vector<u8> vertices;std::vector<u32> indices;
   std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
@@ -1025,7 +1025,8 @@ AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
   tapWidget(f,widgetId(EditorWidget::ComponentCategory));
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)+2).x>=0,"look resolves its camera dependency");
-  for(u32 category=0;category<4;++category) tapWidget(f,widgetId(EditorWidget::ComponentCategory));
+  for(u32 category=0;category<8 && f.session.screen().componentCategory!=0;++category)
+    tapWidget(f,widgetId(EditorWidget::ComponentCategory));
   tapWidget(f,widgetId(EditorWidget::ComponentAddBase));
   AE_EXPECT_TRUE(!physicsBody(*f.session.document().find(f.cube)),"prévia não adiciona o corpo");
   tapWidget(f,widgetId(EditorWidget::ComponentPreviewConfirm));
@@ -1039,9 +1040,12 @@ AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   AE_EXPECT_TRUE(locateWidget(f.session,friction).x>=0,"new component properties are reachable");
   AE_EXPECT_EQ(f.session.document().revision(),revision,"opening the Inspector never changes authoring");
   while(f.session.screen().propertyPage) tapWidget(f,widgetId(EditorWidget::PropertyPrevious));
-  tapWidget(f,widgetId(EditorWidget::ComponentEnumBase)+1);
+  const u32 motion=widgetId(EditorWidget::ComponentEnumBase)+1;
+  revealProperty(f,motion);
+  tapWidget(f,motion);
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion==scene::BodyMotion::Kinematic,"kinematic option");
-  tapWidget(f,widgetId(EditorWidget::ComponentEnumBase)+1);
+  revealProperty(f,motion);
+  tapWidget(f,motion);
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion==scene::BodyMotion::Dynamic,"motion enum remains an editable value");
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
   tapWidget(f,widgetId(EditorWidget::ComponentAddBase));
@@ -1656,6 +1660,9 @@ AE_TEST(session_builtin_light_and_physics_objects_are_complete_creations) {
   const EditorWidget actions[]{EditorWidget::CreateDirectionalLight,EditorWidget::CreatePointLight,
     EditorWidget::CreateSpotLight,EditorWidget::CreateStaticBox,EditorWidget::CreateStaticSphere,
     EditorWidget::CreateStaticCapsule,EditorWidget::CreateDynamicBox,EditorWidget::CreateTriggerBox,
+    EditorWidget::CreateDynamicSphere,EditorWidget::CreateDynamicCapsule,
+    EditorWidget::CreateTriggerSphere,EditorWidget::CreateTriggerCapsule,
+    EditorWidget::CreateKinematicBox,EditorWidget::CreateKinematicSphere,
     EditorWidget::CreateCharacter};
   EditorEntityId createdIds[std::size(actions)]{};
   for(u32 index=0;index<std::size(actions);++index) {
@@ -1671,13 +1678,26 @@ AE_TEST(session_builtin_light_and_physics_objects_are_complete_creations) {
       const auto *light=runtime::lightComponent(*object);
       AE_EXPECT_TRUE(light!=nullptr,"light component attached");
       AE_EXPECT_EQ(static_cast<u32>(light->kind),index,"correct light modality");
-    } else if(index<8) {
+    } else if(index<std::size(actions)-1) {
       const auto *body=runtime::physicsBody(*object);
       const auto *collider=runtime::colliderComponent(*object);
       AE_EXPECT_TRUE(body && collider,"physical body has a real shape");
-      AE_EXPECT_EQ(static_cast<u32>(collider->shape),index==4?1u:index==5?2u:0u,"correct shape");
-      AE_EXPECT_TRUE(body->sensor==(index==7),"sensor intent reaches body");
-      AE_EXPECT_TRUE(body->motion==(index==6?scene::BodyMotion::Dynamic:scene::BodyMotion::Static),"motion intent reaches body");
+      const auto sphere=actions[index]==EditorWidget::CreateStaticSphere ||
+        actions[index]==EditorWidget::CreateDynamicSphere || actions[index]==EditorWidget::CreateTriggerSphere ||
+        actions[index]==EditorWidget::CreateKinematicSphere;
+      const auto capsule=actions[index]==EditorWidget::CreateStaticCapsule ||
+        actions[index]==EditorWidget::CreateDynamicCapsule || actions[index]==EditorWidget::CreateTriggerCapsule;
+      AE_EXPECT_EQ(collider->shape,sphere?scene::ColliderShape::Sphere:
+        capsule?scene::ColliderShape::Capsule:scene::ColliderShape::Box,"correct shape");
+      const auto sensor=actions[index]==EditorWidget::CreateTriggerBox ||
+        actions[index]==EditorWidget::CreateTriggerSphere || actions[index]==EditorWidget::CreateTriggerCapsule;
+      const auto dynamic=actions[index]==EditorWidget::CreateDynamicBox ||
+        actions[index]==EditorWidget::CreateDynamicSphere || actions[index]==EditorWidget::CreateDynamicCapsule;
+      const auto kinematic=actions[index]==EditorWidget::CreateKinematicBox ||
+        actions[index]==EditorWidget::CreateKinematicSphere;
+      AE_EXPECT_EQ(body->sensor,sensor,"sensor intent reaches body");
+      AE_EXPECT_EQ(body->motion,dynamic?scene::BodyMotion::Dynamic:
+        kinematic?scene::BodyMotion::Kinematic:scene::BodyMotion::Static,"motion intent reaches body");
     } else {
       AE_EXPECT_TRUE(runtime::characterComponent(*object)!=nullptr,"character controller attached");
     }
@@ -1685,12 +1705,12 @@ AE_TEST(session_builtin_light_and_physics_objects_are_complete_creations) {
     AE_EXPECT_TRUE(!doc.exists(id),"no partial object after undo");
     AE_EXPECT_TRUE(history.redo(doc) && doc.exists(id),"redo restores component composition");
   }
-  AE_EXPECT_EQ(doc.entityCount(),10u,"nine distinct creations survive");
+  AE_EXPECT_EQ(doc.entityCount(),16u,"fifteen distinct creations survive");
   f.session.setSelection(createdIds[6]);f.session.update();
   tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
   tapWidget(f,widgetId(EditorWidget::CreateStaticSphere));
-  AE_EXPECT_EQ(doc.entityCount(),10u,"invalid physics ancestry creates no partial object");
-  AE_EXPECT_EQ(history.undoDepth(),9u,"rejected creation records no undo command");
+  AE_EXPECT_EQ(doc.entityCount(),16u,"invalid physics ancestry creates no partial object");
+  AE_EXPECT_EQ(history.undoDepth(),15u,"rejected creation records no undo command");
   tapWidget(f,widgetId(EditorWidget::CreateMenuClose));
   namespace fs=std::filesystem;
   const auto path=fs::temp_directory_path()/("aether-builtins-"+
@@ -1699,7 +1719,15 @@ AE_TEST(session_builtin_light_and_physics_objects_are_complete_creations) {
   AE_EXPECT_TRUE(f.session.save(path.string().c_str(),0),"save authored objects");
   EditorSession reopened;
   AE_EXPECT_TRUE(reopened.load(path.string().c_str(),0),"reopen authored objects");
-  AE_EXPECT_EQ(reopened.document().entityCount(),10u,"all types survive archive");
+  AE_EXPECT_EQ(reopened.document().entityCount(),16u,"all types survive archive");
+  for(u32 index=3;index<std::size(actions)-1;++index) {
+    const auto *original=doc.find(createdIds[index]);
+    const auto *loaded=reopened.document().find(createdIds[index]);
+    AE_EXPECT_TRUE(original && loaded,"physical object survives archive by identity");
+    AE_EXPECT_EQ(runtime::physicsBody(*loaded)->motion,runtime::physicsBody(*original)->motion,"motion survives archive");
+    AE_EXPECT_EQ(runtime::physicsBody(*loaded)->sensor,runtime::physicsBody(*original)->sensor,"sensor survives archive");
+    AE_EXPECT_EQ(runtime::colliderComponent(*loaded)->shape,runtime::colliderComponent(*original)->shape,"shape survives archive");
+  }
   AE_EXPECT_TRUE(reopened.startPlay(),"composed objects enter Play");
   std::vector<renderer::MapDrawState> playDraws;
   AE_EXPECT_TRUE(reopened.extractPlayMap(playDraws),"real physics and light consumers initialize in Play");

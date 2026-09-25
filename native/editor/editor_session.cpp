@@ -71,7 +71,7 @@ u64 EditorSession::nextSceneEpoch() noexcept {
 void EditorSession::initialize(const UiFont *font, const UiIconAtlas *icons) {
   font_ = font;
   icons_ = icons;
-  state_.creationAvailable|=creationAlwaysAvailableMask;
+  state_.creationAvailable=creationAlwaysAvailable();
   state_.document = &document_;
   state_.resources = &mapScene_;
   state_.assetRegistry = &assets_;
@@ -3123,7 +3123,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     history_.end();setSelection(id);state_.creationMenu=false;return true;
   }
   if(routing.tapped && routing.widgetId>=widgetId(EditorWidget::CreateDirectionalLight) &&
-     routing.widgetId<=widgetId(EditorWidget::CreateFollowCamera)) {
+     routing.widgetId<=widgetId(EditorWidget::CreateKinematicSphere)) {
     const auto action=static_cast<EditorWidget>(routing.widgetId);
     const auto parent=action==EditorWidget::CreateFollowCamera?document_.root():
         state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) &&
@@ -3180,18 +3180,36 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       case EditorWidget::CreateStaticSphere:
       case EditorWidget::CreateStaticCapsule:
       case EditorWidget::CreateDynamicBox:
-      case EditorWidget::CreateTriggerBox: {
+      case EditorWidget::CreateDynamicSphere:
+      case EditorWidget::CreateDynamicCapsule:
+      case EditorWidget::CreateTriggerBox:
+      case EditorWidget::CreateTriggerSphere:
+      case EditorWidget::CreateTriggerCapsule:
+      case EditorWidget::CreateKinematicBox:
+      case EditorWidget::CreateKinematicSphere: {
         name=action==EditorWidget::CreateStaticBox?"Caixa de colisão":
              action==EditorWidget::CreateStaticSphere?"Esfera de colisão":
              action==EditorWidget::CreateStaticCapsule?"Cápsula de colisão":
-             action==EditorWidget::CreateDynamicBox?"Caixa dinâmica":"Sensor de caixa";
+             action==EditorWidget::CreateDynamicBox?"Caixa dinâmica":
+             action==EditorWidget::CreateDynamicSphere?"Esfera dinâmica":
+             action==EditorWidget::CreateDynamicCapsule?"Cápsula dinâmica":
+             action==EditorWidget::CreateTriggerBox?"Sensor de caixa":
+             action==EditorWidget::CreateTriggerSphere?"Sensor esférico":
+             action==EditorWidget::CreateTriggerCapsule?"Sensor de cápsula":
+             action==EditorWidget::CreateKinematicBox?"Caixa cinemática":"Esfera cinemática";
         auto *body=runtime::editPhysicsBody(values);
         auto *collider=runtime::editCollider(values);
         if(!body || !collider) {name=nullptr;break;}
-        collider->shape=action==EditorWidget::CreateStaticSphere?scene::ColliderShape::Sphere:
-                        action==EditorWidget::CreateStaticCapsule?scene::ColliderShape::Capsule:scene::ColliderShape::Box;
-        body->motion=action==EditorWidget::CreateDynamicBox?scene::BodyMotion::Dynamic:scene::BodyMotion::Static;
-        body->sensor=action==EditorWidget::CreateTriggerBox;
+        collider->shape=(action==EditorWidget::CreateStaticSphere || action==EditorWidget::CreateDynamicSphere ||
+                         action==EditorWidget::CreateTriggerSphere || action==EditorWidget::CreateKinematicSphere)?scene::ColliderShape::Sphere:
+                        (action==EditorWidget::CreateStaticCapsule || action==EditorWidget::CreateDynamicCapsule ||
+                         action==EditorWidget::CreateTriggerCapsule)?scene::ColliderShape::Capsule:scene::ColliderShape::Box;
+        body->motion=(action==EditorWidget::CreateDynamicBox || action==EditorWidget::CreateDynamicSphere ||
+                      action==EditorWidget::CreateDynamicCapsule)?scene::BodyMotion::Dynamic:
+                     (action==EditorWidget::CreateKinematicBox || action==EditorWidget::CreateKinematicSphere)?scene::BodyMotion::Kinematic:
+                     scene::BodyMotion::Static;
+        body->sensor=action==EditorWidget::CreateTriggerBox || action==EditorWidget::CreateTriggerSphere ||
+                     action==EditorWidget::CreateTriggerCapsule;
         values.transform.position[1]=body->motion==scene::BodyMotion::Dynamic?2.f:0.f;
         break;
       }
@@ -5326,18 +5344,19 @@ bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, st
   if (!mapScene_.import(document_, draws, materials, instantiate,vertices,indices,packageFingerprint)) return false;
   packageFingerprint_=packageFingerprint;
   importedSources_.clear();
-  state_.creationAvailable=creationAlwaysAvailableMask;
+  state_.creationAvailable=creationAlwaysAvailable();
   for(u32 i=0;i<mapScene_.assetCount();++i) {
     const auto flags=mapScene_.materialFlagsForAsset(i);
     if(flags & renderer::BoxAuthoringResource) {
-      state_.creationAvailable|=creationMask(EditorWidget::CreateCube)|creationMask(EditorWidget::CreateGround)|
-                                creationMask(EditorWidget::CreateSceneTemplate);
-      if(flags & renderer::WaterAuthoringResource) state_.creationAvailable|=creationMask(EditorWidget::CreateBuoyantBox);
+      enableCreation(state_,EditorWidget::CreateCube);
+      enableCreation(state_,EditorWidget::CreateGround);
+      enableCreation(state_,EditorWidget::CreateSceneTemplate);
+      if(flags & renderer::WaterAuthoringResource) enableCreation(state_,EditorWidget::CreateBuoyantBox);
     }
-    if(flags & renderer::WaterRouteResource) state_.creationAvailable|=creationMask(EditorWidget::CreateRiverWater);
+    if(flags & renderer::WaterRouteResource) enableCreation(state_,EditorWidget::CreateRiverWater);
     if((flags & renderer::WaterAuthoringResource) && (flags & renderer::MapMaterialWater) && !(flags & renderer::WaterRouteResource))
-      state_.creationAvailable|=creationMask((flags & renderer::MapMaterialWaterCameraGrid)?
-                                            EditorWidget::CreateOceanWater:EditorWidget::CreateFiniteWater);
+      enableCreation(state_,(flags & renderer::MapMaterialWaterCameraGrid)?
+                            EditorWidget::CreateOceanWater:EditorWidget::CreateFiniteWater);
   }
   if((state_.workspace==EditorWorkspace::Assets && !mapScene_.assetCount()) ||
      (state_.workspace==EditorWorkspace::Settings && !waterCreationAvailable(state_)))

@@ -386,6 +386,12 @@ enum class EditorWidget : u32 {
   CreateCharacter,
   CreateTimer,
   CreateFollowCamera,
+  CreateDynamicSphere,
+  CreateDynamicCapsule,
+  CreateTriggerSphere,
+  CreateTriggerCapsule,
+  CreateKinematicBox,
+  CreateKinematicSphere,
   TabTimers=0x0810'0000u,
   TimerHorizon,
   TimerPrevious,
@@ -750,7 +756,7 @@ struct EditorScreenState final {
   bool creationAsChild=false;
   bool workspaceMenu=false;
   unsigned creationCategory=0,creationSelection=0,creationPage=0;
-  u32 creationAvailable=3; // Basic object and camera; resource tools opt in on import.
+  std::vector<u8> creationAvailable{1,1}; // Basic object and camera until resource availability is resolved.
   // O editor não conhece Android: ele levanta o pedido e o shell abre o seletor.
   bool modelImportRequested=false,environmentImportRequested=false,textureImportRequested=false,folderImportRequested=false;
   bool importPanel=false,importReady=false,importAccept=false,importCancel=false,importIntoScene=false,importError=false;

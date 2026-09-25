@@ -348,6 +348,12 @@
       "label": "D24",
       "name": "character"
     },
+    "physics/dynamic-capsule": {"category": "physics", "name": "dynamic-capsule", "dark_ui_ready": true},
+    "physics/dynamic-sphere": {"category": "physics", "name": "dynamic-sphere", "dark_ui_ready": true},
+    "physics/kinematic-box": {"category": "physics", "name": "kinematic-box", "dark_ui_ready": true},
+    "physics/kinematic-sphere": {"category": "physics", "name": "kinematic-sphere", "dark_ui_ready": true},
+    "physics/sensor-capsule": {"category": "physics", "name": "sensor-capsule", "dark_ui_ready": true},
+    "physics/sensor-sphere": {"category": "physics", "name": "sensor-sphere", "dark_ui_ready": true},
     "primitive/capsule": {
       "category": "primitive",
       "label": "D17",
