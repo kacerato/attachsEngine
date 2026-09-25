@@ -746,7 +746,7 @@ public:
   // atualização); o visualizador escreve o nível e o canal escolhidos no atlas.
   bool generatePendingTextureThumbnail();
   bool openTextureViewer(u32 projectTextureIndex);
-  void closeTextureViewer() {state_.textureViewer=false;state_.textureViewerSource=false;state_.textureProfileDirty=false;}
+  void closeTextureViewer() {state_.textureViewer=false;state_.textureViewerSource=false;state_.textureProfileDirty=false;state_.textureViewerExpanded=false;}
   bool stepTextureViewerLevel(int delta);
   bool cycleTextureViewerChannel();
   bool cycleTextureViewerZoom();
@@ -1337,6 +1337,8 @@ private:
   // Prévia RGBA8 da textura de fonte aberta no Inspector.
   struct {const renderer::AuthoringTexture *texture=nullptr;renderer::AuthoringTexture rgba;u32 firstLevel=0;} sourceViewer_;
   void collectSourceTextures();
+  // Expande em Arquivos as pastas até `relativePath`, seleciona e rola até ele.
+  bool revealInFiles(const std::string &relativePath);
   bool generatePendingSourceThumbnail();
   bool refreshSourceTextureViewer();
 public:

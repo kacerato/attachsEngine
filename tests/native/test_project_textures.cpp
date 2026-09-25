@@ -1233,8 +1233,17 @@ AE_TEST(f_source_textures_are_listed_previewed_and_lead_back_to_their_source) {
   session.update();
   AE_EXPECT_TRUE(state.textureInspector && state.textureViewer && state.textureViewerSource, "abre no Inspector");
   AE_EXPECT_TRUE(!state.textureViewerImage.isEmpty() && state.textureViewerLevels >= 1, "com a prévia do que foi preparado");
-  AE_EXPECT_TRUE(state.sourceTextureFacts.size() >= 4 && state.sourceTextureFacts[0].find("8×8") != std::string::npos,
-                 "e a ficha com tamanho, formato e memória");
+  AE_EXPECT_EQ(state.textureDimensions, std::string("8 × 8"), "tamanho do que foi preparado");
+  const auto field = [&](std::string_view label) {
+    for (const auto &entry : state.textureProperties) if (entry.label == label) return entry.value;
+    return std::string();
+  };
+  AE_EXPECT_TRUE(field("Formato") == "RGBA8" && field("Cor") == "sRGB" && !field("Memória").empty() && !field("Na GPU").empty(),
+                 "propriedades: formato, cor, memória e GPU");
+  AE_EXPECT_TRUE(state.textureOrigin.size() == 2 && state.textureOrigin[0].copy.empty() &&
+                     state.textureOrigin[1].label == "Fonte" && state.textureOrigin[1].copy == "Fontes/tela.glb",
+                 "imagem embutida não finge caminho; a fonte é copiável");
+  AE_EXPECT_TRUE(state.textureBreadcrumb == std::vector<std::string>{"Fontes"}, "trilha até a fonte");
   AE_EXPECT_TRUE(state.textureUserEntities.size() == 1 && state.textureUserEntities[0] == object, "o objeto que usa a textura");
   session.cycleTextureViewerChannel();
   AE_EXPECT_EQ(state.textureViewerChannel, 1u, "os controles do visualizador valem para a textura da fonte");

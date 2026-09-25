@@ -114,6 +114,8 @@ struct ScreenBuilder final {
   u32 componentPage=0;
   // Bloco F: o gerenciador anota as linhas de textura das fontes que desenhou.
   std::vector<u32> *visibleSourceTextureRows=nullptr;
+  // Medidas que a sessão usa para rolar o Inspector de textura.
+  EditorScreenLayout *layout=nullptr;
 
   bool isPressed(u32 widget) const { return state.pressedWidget == widget && widget != 0; }
 
@@ -1063,130 +1065,435 @@ void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
 
 // R4: visualizador de textura. A imagem vem do atlas de prévia com o nível de
 // mip e o canal escolhidos; os dados do arquivo ficam embaixo.
+// Inspector de textura em cartões, o mesmo para texturas do projeto e das
+// fontes. Referências: prévia e import settings do Inspector da Unity, doca
+// Import do Godot e Detalhes do editor de textura da Unreal. Cabeçalho (nome,
+// trilha de pastas, tipo) e rodapé de ações ficam fixos; os cartões rolam entre
+// eles e cada um recolhe pelo título.
+namespace {
+constexpr float kTexCardGap=6.0f,kTexCardHeader=26.0f,kTexCardPad=8.0f,kTexField=22.0f,kTexFieldLabel=13.0f;
+constexpr UiTypeStyle kTexCardTitle{11.0f,0.0f,1.2f,false,true};
+constexpr UiTypeStyle kTexValue{12.0f,0.0f,1.2f,false,true};
+
+usize utf8Start(const std::string &text,usize at) {
+  while(at>0 && at<text.size() && (static_cast<u8>(text[at])&0xC0u)==0x80u) --at;
+  return at;
+}
+usize utf8Next(const std::string &text,usize at) {
+  while(at<text.size() && (static_cast<u8>(text[at])&0xC0u)==0x80u) ++at;
+  return at;
+}
+// Nomes de textura diferem no fim (_BaseColor.png, _Normal.png): corta o meio.
+// O atlas da fonte vai só até Latin-1, então a reticência é de três pontos.
+std::string fitMiddle(const UiDrawList &list,const std::string &text,float width,const UiTypeStyle &style) {
+  const auto &metrics=list.fontMetrics();
+  if(width<=0.0f || measureTextWidth(text,metrics,style)<=width) return text;
+  for(usize keep=text.size();keep>1;--keep) {
+    const usize head=utf8Start(text,(keep+1)/2),tail=utf8Next(text,text.size()-keep/2);
+    if(tail<head) continue;
+    std::string candidate=text.substr(0,head)+"..."+text.substr(tail);
+    if(measureTextWidth(candidate,metrics,style)<=width) return candidate;
+  }
+  return "...";
+}
+
+// Cartões desenhados numa coluna que rola dentro de `window`: o desenho é
+// recortado pela janela e o toque só existe na parte visível.
+struct TextureCards {
+  ScreenBuilder &b;
+  UiRect window;
+  void region(const UiRect &rect,u32 widget) const {
+    const auto hit=intersect(rect,window);
+    if(!hit.isEmpty()) b.router.addRegion(hit,widget);
+  }
+  static u32 sub(u32 offset) {return widgetId(EditorWidget::TextureInspectorBase)+offset;}
+};
+
+// Abre um cartão: fundo, borda, ícone, título e seta; tocar no título recolhe.
+// `body` fica vazio quando recolhido.
+void textureCard(const TextureCards &c,UiRect &column,detail::TextureInspectorCard card,UiIcon icon,const std::string &title,
+                 float bodyHeight,UiRect &body,std::string_view note={}) {
+  auto &b=c.b;const auto &theme=b.theme;
+  const bool open=!(b.state.textureCardsClosed&(1u<<card));
+  auto frame=takeTop(column,kTexCardHeader+(open?bodyHeight+kTexCardPad:0.0f));
+  takeTop(column,kTexCardGap);
+  b.list.addRect(frame,theme.color.surface,theme.radius.card);
+  b.list.addBorder(frame,theme.color.lineSoft,1.0f,theme.radius.card);
+  const auto header=takeTop(frame,kTexCardHeader);
+  auto inner=deflate(header,UiInsets::symmetric(kTexCardPad,0));
+  b.list.addImage(centred(takeLeft(inner,16),14,14),static_cast<UiImageId>(icon),theme.color.accent);
+  takeLeft(inner,6);
+  b.list.addImage(centred(takeRight(inner,14),12,12),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),
+                  theme.color.textMuted);
+  if(!note.empty()) b.label(takeRight(inner,std::min(inner.width*.45f,measureTextWidth(note,b.list.fontMetrics(),theme.type.caption)+6)),
+                            note,theme.color.accent,theme.type.caption,UiAlign::End);
+  b.label(inner,title,theme.color.text,kTexCardTitle);
+  c.region(header,TextureCards::sub(detail::TextureInspectorSection+card));
+  body=open?deflate(frame,UiInsets{kTexCardPad,0,kTexCardPad,kTexCardPad}):UiRect{};
+}
+
+float textureFieldHeight(bool stacked) {return stacked?kTexFieldLabel+kTexField:kTexField;}
+
+// Célula da grade: rótulo discreto em cima do campo (painel estreito) ou ao
+// lado (painel largo). Devolve o campo, para setas dentro dele.
+UiRect textureField(const TextureCards &c,UiRect cell,std::string_view label,const std::string &value,bool stacked,
+                    u32 widget=0,UiIcon trailing=UiIcon::None) {
+  auto &b=c.b;const auto &theme=b.theme;
+  auto field=cell;
+  if(stacked) b.label(takeTop(field,kTexFieldLabel),label,theme.color.textMuted,theme.type.caption);
+  else b.label(takeLeft(field,field.width*.42f),label,theme.color.textMuted,theme.type.caption);
+  field.height=kTexField;
+  b.list.addRect(field,theme.color.canvas,theme.radius.control);
+  if(widget) b.list.addBorder(field,b.isPressed(widget)?theme.color.accent:theme.color.lineSoft,1.0f,theme.radius.control);
+  auto text=deflate(field,UiInsets::symmetric(6,0));
+  if(trailing!=UiIcon::None)
+    b.list.addImage(centred(takeRight(text,12),11,11),static_cast<UiImageId>(trailing),widget?theme.color.textDim:theme.color.textMuted);
+  if(!value.empty()) b.label(text,fitMiddle(b.list,value,text.width,theme.type.caption),theme.color.text,theme.type.caption);
+  if(widget) c.region(field,widget);
+  return field;
+}
+
+// Botão de ação: primário cheio na cor de destaque, secundário em relevo;
+// desabilitado apagado e sem toque.
+void textureAction(ScreenBuilder &b,UiRect box,UiIcon icon,std::string_view text,u32 widget,bool primary,bool enabled=true) {
+  const auto &theme=b.theme;
+  const UiColor fill=primary&&enabled?theme.color.accent:(b.isPressed(widget)?theme.color.line:theme.color.raised);
+  const UiColor ink=primary&&enabled?theme.color.accentInk:enabled?theme.color.text:theme.color.textFaint;
+  b.list.addRect(box,fill,theme.radius.control);
+  const float textWidth=measureTextWidth(text,b.list.fontMetrics(),theme.type.caption);
+  const float total=std::min(box.width-8,14+5+textWidth);
+  UiRect row{box.x+(box.width-total)*.5f,box.y,total,box.height};
+  b.list.addImage(centred(takeLeft(row,14),13,13),static_cast<UiImageId>(icon),ink);
+  takeLeft(row,5);
+  b.label(row,text,ink,theme.type.caption);
+  if(enabled) b.router.addRegion(box,widget);
+}
+
+// Chips de "Usado por": largura pelo texto, quebra de linha, e no máximo três
+// linhas até o usuário pedir todos.
+struct TextureChip {UiRect box;u32 index;bool more;};
+std::vector<TextureChip> layoutTextureChips(const ScreenBuilder &b,float width,bool expanded,float &height) {
+  const auto &state=b.state;const auto &theme=b.theme;
+  constexpr float chipHeight=22,gap=4;constexpr u32 collapsedRows=3;
+  std::vector<TextureChip> chips;
+  float x=0,y=0;u32 row=0;
+  const auto widthOf=[&](std::string_view text) {
+    return std::min(width,8+11+4+measureTextWidth(text,b.list.fontMetrics(),theme.type.caption)+9);
+  };
+  const auto count=static_cast<u32>(state.textureUserLabels.size());
+  for(u32 i=0;i<count;++i) {
+    std::string_view name=state.textureUserLabels[i];
+    if(name.starts_with("Objeto: ")) name.remove_prefix(8);
+    const float w=widthOf(name);
+    if(x>0 && x+w>width) {x=0;y+=chipHeight+gap;++row;}
+    // Na última linha permitida, reserva lugar para o "+N".
+    if(!expanded && row==collapsedRows-1 && i+1<count && x+w+gap+widthOf("+999")>width) {
+      chips.push_back({{x,y,widthOf("+"+std::to_string(count-i)),chipHeight},count-i,true});
+      height=y+chipHeight;
+      return chips;
+    }
+    if(!expanded && row>=collapsedRows) break;
+    chips.push_back({{x,y,w,chipHeight},i,false});
+    x+=w+gap;
+  }
+  if(expanded && count>0) {
+    const float w=widthOf("Menos");
+    if(x>0 && x+w>width) {x=0;y+=chipHeight+gap;}
+    chips.push_back({{x,y,w,chipHeight},0,true});
+  }
+  height=count?y+chipHeight:16;
+  return chips;
+}
+} // namespace
+
 void buildTextureViewer(ScreenBuilder &builder,UiRect content) {
   const auto &theme=builder.theme;const auto &state=builder.state;
-  auto title=takeTop(content,36),back=takeLeft(title,36);
-  builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
-  builder.router.addRegion(back,widgetId(EditorWidget::TextureViewerClose));
-  builder.label(title,state.textureViewerTitle,theme.color.text,theme.type.caption);
-  auto controls=takeBottom(content,std::min(content.height*.8f,346.0f));
-  auto image=deflate(content,UiInsets::all(4));
-  builder.list.addRect(image,theme.color.raised,theme.radius.control);
-  if(!state.textureViewerImage.isEmpty() && !image.isEmpty()) {
-    const auto &texels=state.textureViewerImage;
-    const float fit=std::min(image.width/texels.width,image.height/texels.height);
-    const float w=texels.width*fit,h=texels.height*fit;
-    builder.list.addPreviewImage({image.x+(image.width-w)*.5f,image.y+(image.height-h)*.5f,w,h},texels);
-  } else {
-    builder.label(image,"Imagem indisponível",theme.color.textMuted,theme.type.caption,UiAlign::Center);
-  }
-  if(controls.height<38) return;
-  auto channel=takeTop(controls,38);
-  builder.label(takeLeft(channel,channel.width*.3f),"Canal",theme.color.textDim,theme.type.caption);
-  const auto channelBox=deflate(channel,UiInsets::all(2));
-  builder.list.addRect(channelBox,theme.color.raised,theme.radius.control);
-  builder.label(channelBox,state.textureViewerChannelLabel,theme.color.text,theme.type.caption,UiAlign::Center);
-  builder.router.addRegion(channelBox,widgetId(EditorWidget::TextureViewerChannel));
-  if(controls.height<38) return;
-  auto mip=takeTop(controls,38);
-  builder.label(takeLeft(mip,mip.width*.3f),"Mip",theme.color.textDim,theme.type.caption);
-  auto mipBox=deflate(mip,UiInsets::all(2));
-  builder.list.addRect(mipBox,theme.color.raised,theme.radius.control);
-  if(state.textureViewerLevels>1) {
-    const auto down=takeLeft(mipBox,32),up=takeRight(mipBox,32);
-    builder.label(down,"-",state.textureViewerLevel?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
-    builder.label(up,"+",state.textureViewerLevel+1<state.textureViewerLevels?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
-    if(state.textureViewerLevel) builder.router.addRegion(down,widgetId(EditorWidget::TextureViewerMipDown));
-    if(state.textureViewerLevel+1<state.textureViewerLevels) builder.router.addRegion(up,widgetId(EditorWidget::TextureViewerMipUp));
-  }
-  builder.label(mipBox,state.textureViewerLevelLabel,theme.color.text,theme.type.caption,UiAlign::Center);
-  if(controls.height<38) return;
-  // Zoom central e fundo sob o alfa (o fundo só aparece em RGBA; nos canais a
-  // imagem é opaca e o botão não recebe toque).
-  auto view=takeTop(controls,38);
-  auto zoomBox=deflate(takeLeft(view,view.width*.5f),UiInsets::all(2));
-  const auto backgroundBox=deflate(view,UiInsets::all(2));
-  builder.list.addRect(zoomBox,theme.color.raised,theme.radius.control);
-  builder.label(zoomBox,"Zoom "+state.textureViewerZoomLabel,theme.color.text,theme.type.caption,UiAlign::Center);
-  builder.router.addRegion(zoomBox,widgetId(EditorWidget::TextureViewerZoom));
-  const bool rgba=state.textureViewerChannel==0;
-  builder.list.addRect(backgroundBox,theme.color.raised,theme.radius.control);
-  builder.label(backgroundBox,"Fundo "+state.textureViewerBackgroundLabel,rgba?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
-  if(rgba) builder.router.addRegion(backgroundBox,widgetId(EditorWidget::TextureViewerBackground));
-  // Bloco F: textura de uma fonte. O perfil é da fonte inteira; aqui fica a
-  // ficha do que foi preparado para a GPU (como os Detalhes do editor de textura
-  // da Unreal) e o caminho até a fonte, onde ficam perfil e Reimportar.
-  if(state.textureViewerSource) {
-    for(const auto &fact:state.sourceTextureFacts) {
-      if(controls.height<22) break;
-      auto line=takeTop(controls,22);
-      builder.list.pushClip(line);
-      builder.label(line,fact,theme.color.textDim,theme.type.caption);
-      builder.list.popClip();
+  const bool source=state.textureViewerSource;
+  // Cabeçalho: voltar, nome, trilha de pastas (cada pasta leva a ela em
+  // Arquivos) e o tipo do recurso.
+  {
+    auto header=takeTop(content,46);
+    auto top=takeTop(header,26);
+    const auto back=takeLeft(top,26);
+    builder.list.addRect(back,builder.isPressed(widgetId(EditorWidget::TextureViewerClose))?theme.color.line:theme.color.raised,theme.radius.control);
+    builder.list.addImage(centred(back,14,14),static_cast<UiImageId>(UiIcon::UiChevronLeft),theme.color.text);
+    builder.router.addRegion(back,widgetId(EditorWidget::TextureViewerClose),theme.touch.minimumTarget*.75f);
+    takeLeft(top,8);
+    builder.label(top,fitMiddle(builder.list,state.textureViewerTitle,top.width,theme.type.cardName),theme.color.text,theme.type.cardName);
+    auto crumbs=deflate(header,UiInsets{34,4,0,0});
+    const std::string_view badge=source?"Da fonte":"Textura";
+    const float badgeWidth=measureTextWidth(badge,builder.list.fontMetrics(),theme.type.label)+10+12;
+    auto pill=takeRight(crumbs,badgeWidth);pill.height=16;
+    builder.list.addRect(pill,theme.color.accentWash,8);
+    auto pillInner=deflate(pill,UiInsets::symmetric(5,0));
+    builder.list.addImage(centred(takeLeft(pillInner,10),9,9),static_cast<UiImageId>(UiIcon::AssetsTexture),theme.color.accent);
+    takeLeft(pillInner,2);
+    builder.label(pillInner,badge,theme.color.accent,theme.type.label);
+    takeRight(crumbs,6);crumbs.height=16;
+    builder.list.addImage(centred(takeLeft(crumbs,12),11,11),static_cast<UiImageId>(UiIcon::AssetsFolder),theme.color.textFaint);
+    takeLeft(crumbs,4);
+    // Da pasta mais funda para trás, até caber; o começo vira "...". O
+    // separador é o ícone de seta (o atlas da fonte não tem "›").
+    const auto &parts=state.textureBreadcrumb;
+    const auto &metrics=builder.list.fontMetrics();
+    constexpr float separator=14;
+    const float elided=measureTextWidth("...",metrics,theme.type.caption)+separator;
+    usize first=parts.size();float used=0;
+    while(first>0) {
+      const float w=measureTextWidth(parts[first-1],metrics,theme.type.caption)+(first<parts.size()?separator:0);
+      if(used+w>crumbs.width-(first>1?elided:0)) break;
+      used+=w;--first;
     }
-    // A fonte (perfil e Reimportar) e a lista de todas as texturas das fontes.
-    if(controls.height>=40) {
-      auto row=takeTop(controls,40);
-      const auto origin=deflate(takeLeft(row,row.width*.5f),UiInsets::all(2));
-      const auto all=deflate(row,UiInsets::all(2));
-      builder.list.addRect(origin,theme.color.raised,theme.radius.control);
-      builder.label(origin,"Abrir a fonte",theme.color.text,theme.type.caption,UiAlign::Center);
-      builder.router.addRegion(origin,widgetId(EditorWidget::TextureSourceShowOrigin));
-      builder.list.addRect(all,theme.color.raised,theme.radius.control);
-      builder.label(all,"Todas as texturas",theme.color.text,theme.type.caption,UiAlign::Center);
-      builder.router.addRegion(all,widgetId(EditorWidget::TextureSourceShowAll));
-    }
-    return;
-  }
-  // O perfil tem duas páginas curtas para manter Aplicar/Reverter alcançáveis
-  // também no painel estreito do aparelho.
-  if(controls.height>=36+26+30*2) {
-    const auto profileButton=[&](UiRect box,const std::string &text,u32 widget) {
-      box=deflate(box,UiInsets::all(2));
-      builder.list.addRect(box,theme.color.raised,theme.radius.control);
-      builder.label(box,text,theme.color.text,theme.type.caption,UiAlign::Center);
-      builder.router.addRegion(box,widget);
+    const auto arrow=[&]() {
+      builder.list.addImage(centred(takeLeft(crumbs,separator),8,8),static_cast<UiImageId>(UiIcon::UiChevronRight),theme.color.textFaint);
     };
-    const u32 profilePage=std::min(state.textureProfilePage,2u);
-    // Índices 0..9 são campos do perfil; 10 e 11 são leitura do streaming.
-    constexpr u32 editableProfileFields=10;
-    for(u32 line=0;line<2;++line) {
-      auto row=takeTop(controls,30);
-      const u32 first=profilePage*4+line*2;
-      for(u32 cell=0;cell<2;++cell) {
-        const u32 index=first+cell;
-        auto box=cell?row:takeLeft(row,row.width*.5f);
-        if(index<editableProfileFields)
-          profileButton(box,state.textureProfileLabels[index],widgetId(EditorWidget::TextureProfileInterpretation)+index);
-        else builder.label(deflate(box,UiInsets::all(2)),state.textureProfileLabels[index],theme.color.textDim,
-                           theme.type.caption,UiAlign::Center);
+    if(first>0) {
+      builder.label(takeLeft(crumbs,elided-separator),"...",theme.color.textFaint,theme.type.caption);
+      arrow();
+    }
+    for(usize i=first;i<parts.size();++i) {
+      if(i>first) arrow();
+      const auto box=takeLeft(crumbs,std::min(crumbs.width,measureTextWidth(parts[i],metrics,theme.type.caption)));
+      const u32 widget=TextureCards::sub(detail::TextureInspectorCrumb+static_cast<u32>(i));
+      builder.label(box,parts[i],builder.isPressed(widget)?theme.color.accent:theme.color.textMuted,theme.type.caption);
+      builder.router.addRegion(box,widget);
+    }
+  }
+  // Rodapé fixo: a ação principal em destaque e as de navegação abaixo.
+  {
+    auto footer=takeBottom(content,70);
+    builder.list.addRect({footer.x,footer.y,footer.width,1},theme.color.lineSoft);
+    takeTop(footer,6);
+    auto primary=takeTop(footer,30);
+    takeTop(footer,4);
+    if(source) {
+      textureAction(builder,primary,UiIcon::AssetsFolderOpen,"Abrir a fonte",widgetId(EditorWidget::TextureSourceShowOrigin),true);
+    } else {
+      const auto revert=takeLeft(primary,primary.width*.4f-2);takeLeft(primary,4);
+      textureAction(builder,revert,UiIcon::EditorAuthorUndo,"Reverter",widgetId(EditorWidget::TextureProfileRevert),false,state.textureProfileDirty);
+      textureAction(builder,primary,UiIcon::UiCheck,"Aplicar e republicar",widgetId(EditorWidget::TextureProfileApply),true,state.textureProfileDirty);
+    }
+    auto row=takeTop(footer,28);
+    const float third=(row.width-8)/3;
+    textureAction(builder,takeLeft(row,third),UiIcon::AssetsSearch,"Localizar",TextureCards::sub(detail::TextureInspectorLocate),false);
+    takeLeft(row,4);
+    textureAction(builder,takeLeft(row,third),UiIcon::AssetsGrid,"Todas",widgetId(EditorWidget::TextureSourceShowAll),false);
+    takeLeft(row,4);
+    textureAction(builder,row,UiIcon::RuntimeRestart,"Reimportar",TextureCards::sub(detail::TextureInspectorReimport),false);
+  }
+  takeTop(content,4);takeBottom(content,4);
+  const UiRect window=content;
+  // Arrastar em qualquer ponto da janela rola; os controles ficam por cima.
+  builder.router.addRegion(window,TextureCards::sub(detail::TextureInspectorScroll));
+  builder.list.pushClip(window);
+  const TextureCards cards{builder,window};
+  UiRect column{window.x,window.y-state.textureInspectorScroll,window.width-5,1.0e6f};
+  const float start=column.y;
+  const bool stacked=column.width-2*kTexCardPad<300.0f;
+  UiRect body;
+  // Pré-visualização: a imagem (toque amplia), tamanho, nível e as ferramentas de olhar.
+  textureCard(cards,column,detail::TextureCardPreview,UiIcon::SceneObjectPreview,"Pré-visualização",88,body);
+  if(!body.isEmpty()) {
+    auto image=takeLeft(body,88);
+    builder.list.addRect(image,theme.color.canvas,theme.radius.control);
+    builder.list.addBorder(image,theme.color.lineSoft,1.0f,theme.radius.control);
+    const auto inner=deflate(image,UiInsets::all(3));
+    if(!state.textureViewerImage.isEmpty()) {
+      const auto &texels=state.textureViewerImage;
+      const float fit=std::min(inner.width/texels.width,inner.height/texels.height);
+      const float w=texels.width*fit,h=texels.height*fit;
+      builder.list.addPreviewImage({inner.x+(inner.width-w)*.5f,inner.y+(inner.height-h)*.5f,w,h},texels);
+      cards.region(image,TextureCards::sub(detail::TextureInspectorExpand));
+    } else builder.label(inner,"Sem prévia",theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    takeLeft(body,10);
+    builder.label(takeTop(body,20),state.textureDimensions,theme.color.text,kTexValue);
+    builder.label(takeTop(body,14),fitMiddle(builder.list,state.textureViewerLevelLabel,body.width,theme.type.caption),
+                  theme.color.textMuted,theme.type.caption);
+    auto tools=takeBottom(body,26);
+    const auto zoom=takeLeft(tools,42);takeLeft(tools,4);
+    const u32 zoomWidget=widgetId(EditorWidget::TextureViewerZoom);
+    builder.list.addRect(zoom,builder.isPressed(zoomWidget)?theme.color.line:theme.color.raised,theme.radius.control);
+    auto zoomInner=deflate(zoom,UiInsets::symmetric(5,0));
+    builder.list.addImage(centred(takeLeft(zoomInner,12),12,12),static_cast<UiImageId>(UiIcon::EditorAuthorZoom),theme.color.textDim);
+    builder.label(zoomInner,std::to_string(1u<<state.textureViewerZoom)+"×",theme.color.text,theme.type.caption,UiAlign::Center);
+    cards.region(zoom,zoomWidget);
+    const bool rgba=state.textureViewerChannel==0;
+    const auto backgroundBox=takeLeft(tools,26);takeLeft(tools,4);
+    builder.list.addRect(backgroundBox,theme.color.raised,theme.radius.control);
+    builder.list.addImage(centred(backgroundBox,13,13),static_cast<UiImageId>(UiIcon::AssetsChecker),rgba?theme.color.textDim:theme.color.textFaint);
+    if(rgba) cards.region(backgroundBox,widgetId(EditorWidget::TextureViewerBackground));
+    const auto expand=takeLeft(tools,26);
+    builder.list.addRect(expand,theme.color.raised,theme.radius.control);
+    builder.list.addImage(centred(expand,13,13),static_cast<UiImageId>(UiIcon::ViewExpand),theme.color.textDim);
+    if(!state.textureViewerImage.isEmpty()) cards.region(expand,TextureCards::sub(detail::TextureInspectorExpand));
+  }
+  // Propriedades: Canal e Mip são controles; o resto é leitura do que foi preparado.
+  {
+    const usize cells=2+state.textureProperties.size(),rows=(cells+1)/2;
+    const float cell=textureFieldHeight(stacked),gap=6;
+    textureCard(cards,column,detail::TextureCardProperties,UiIcon::UiSliders,"Propriedades",rows*cell+(rows-1)*gap,body);
+    if(!body.isEmpty()) {
+      const float half=(body.width-8)*.5f;
+      const auto at=[&](usize index) {
+        return UiRect{body.x+(index%2)*(half+8),body.y+static_cast<float>(index/2)*(cell+gap),half,cell};
+      };
+      textureField(cards,at(0),"Canal",state.textureViewerChannelLabel,stacked,widgetId(EditorWidget::TextureViewerChannel),UiIcon::UiChevronDown);
+      auto mip=textureField(cards,at(1),"Mip",std::string(),stacked);
+      if(state.textureViewerLevels>1) {
+        const auto down=takeLeft(mip,20),up=takeRight(mip,20);
+        const bool canDown=state.textureViewerLevel>0,canUp=state.textureViewerLevel+1<state.textureViewerLevels;
+        builder.list.addImage(centred(down,11,11),static_cast<UiImageId>(UiIcon::UiChevronLeft),canDown?theme.color.text:theme.color.textFaint);
+        builder.list.addImage(centred(up,11,11),static_cast<UiImageId>(UiIcon::UiChevronRight),canUp?theme.color.text:theme.color.textFaint);
+        if(canDown) cards.region(down,widgetId(EditorWidget::TextureViewerMipDown));
+        if(canUp) cards.region(up,widgetId(EditorWidget::TextureViewerMipUp));
+      }
+      builder.label(mip,state.textureMipValue,theme.color.text,theme.type.caption,UiAlign::Center);
+      for(usize i=0;i<state.textureProperties.size();++i) {
+        const auto &field=state.textureProperties[i];
+        const bool gpu=field.label=="Na GPU" && !state.textureGpuNote.empty();
+        textureField(cards,at(2+i),field.label,field.value,stacked,gpu?TextureCards::sub(detail::TextureInspectorGpuInfo):0u,
+                     gpu?UiIcon::UiInfo:UiIcon::None);
       }
     }
-    auto pager=takeTop(controls,26);
-    const auto previous=takeLeft(pager,65),next=takeRight(pager,65);
-    builder.label(previous,"‹ Perfil",profilePage?theme.color.text:theme.color.textMuted,theme.type.caption);
-    builder.label(next,"Perfil ›",profilePage<2?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::End);
-    builder.label(pager,std::to_string(profilePage+1)+" / 3",theme.color.textDim,theme.type.caption,UiAlign::Center);
-    if(profilePage) builder.router.addRegion(previous,widgetId(EditorWidget::TextureProfilePrevious));
-    if(profilePage<2) builder.router.addRegion(next,widgetId(EditorWidget::TextureProfileNext));
   }
-  if(controls.height>=36) {
-    auto row=takeTop(controls,36);
-    const auto revert=deflate(takeLeft(row,row.width*.42f),UiInsets::all(2));
-    const auto apply=deflate(row,UiInsets::all(2));
-    builder.list.addRect(revert,theme.color.raised,theme.radius.control);
-    builder.label(revert,"Reverter",state.textureProfileDirty?theme.color.text:theme.color.textMuted,theme.type.caption,UiAlign::Center);
-    builder.list.addRect(apply,state.textureProfileDirty?theme.color.accent:theme.color.raised,theme.radius.control);
-    builder.label(apply,"Aplicar e republicar",state.textureProfileDirty?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
-    if(state.textureProfileDirty) {
-      builder.router.addRegion(revert,widgetId(EditorWidget::TextureProfileRevert));
-      builder.router.addRegion(apply,widgetId(EditorWidget::TextureProfileApply));
+  // Importação (só texturas do projeto): todo o perfil de uma vez, sem páginas.
+  if(!source) {
+    constexpr u32 editable=10;
+    const float cell=textureFieldHeight(true),gap=6;
+    const u32 rows=(editable+1)/2;
+    textureCard(cards,column,detail::TextureCardImport,UiIcon::UiSettings,"Importação",rows*cell+(rows-1)*gap,body,
+                state.textureProfileDirty?"não aplicada":"");
+    if(!body.isEmpty()) {
+      const float half=(body.width-8)*.5f;
+      for(u32 i=0;i<editable;++i) {
+        const std::string &text=state.textureProfileLabels[i];
+        const auto split=text.find(": ");
+        const UiRect at{body.x+(i%2)*(half+8),body.y+static_cast<float>(i/2)*(cell+gap),half,cell};
+        textureField(cards,at,split==std::string::npos?std::string_view("Perfil"):std::string_view(text).substr(0,split),
+                     split==std::string::npos?text:text.substr(split+2),true,
+                     widgetId(EditorWidget::TextureProfileInterpretation)+i,UiIcon::UiChevronRight);
+      }
     }
   }
-  if(controls.height<20) return;
-  builder.list.pushClip(controls);
-  builder.label(controls,state.textureResidencyLabel+" · "+state.textureViewerInfo,theme.color.textMuted,theme.type.caption);
+  // Origem: de onde a imagem vem, cada linha copiável.
+  if(!state.textureOrigin.empty()) {
+    const float row=22,gap=4;
+    textureCard(cards,column,detail::TextureCardOrigin,UiIcon::AssetsFile,"Origem",
+                state.textureOrigin.size()*row+(state.textureOrigin.size()-1)*gap,body);
+    if(!body.isEmpty()) for(usize i=0;i<state.textureOrigin.size();++i) {
+      const auto &entry=state.textureOrigin[i];
+      auto line=takeTop(body,row);takeTop(body,gap);
+      builder.label(takeLeft(line,52),entry.label,theme.color.textMuted,theme.type.caption);
+      if(!entry.copy.empty()) {
+        const auto copy=takeRight(line,22);
+        const u32 widget=TextureCards::sub(detail::TextureInspectorCopy+static_cast<u32>(i));
+        builder.list.addRect(copy,builder.isPressed(widget)?theme.color.line:theme.color.raised,theme.radius.control);
+        builder.list.addImage(centred(copy,12,12),static_cast<UiImageId>(UiIcon::AssetsCopy),theme.color.textDim);
+        cards.region(copy,widget);
+        takeRight(line,4);
+      }
+      builder.list.addRect(line,theme.color.canvas,theme.radius.control);
+      const auto text=deflate(line,UiInsets::symmetric(6,0));
+      builder.label(text,fitMiddle(builder.list,entry.value,text.width,theme.type.caption),theme.color.text,theme.type.caption);
+    }
+  }
+  // Usado por: um chip por objeto; tocar seleciona na cena.
+  {
+    float chipsHeight=0;
+    const auto chips=layoutTextureChips(builder,column.width-2*kTexCardPad,state.textureUsersExpanded,chipsHeight);
+    textureCard(cards,column,detail::TextureCardUsers,UiIcon::SceneObject,
+                "Usado por ("+std::to_string(state.textureUserLabels.size())+")",chipsHeight,body);
+    if(!body.isEmpty()) {
+      if(state.textureUserLabels.empty())
+        builder.label(takeTop(body,16),source?"Nenhum objeto da cena usa esta textura.":"Nenhum objeto ou material do projeto usa esta textura.",
+                      theme.color.textMuted,theme.type.caption);
+      for(const auto &chip:chips) {
+        const UiRect box{body.x+chip.box.x,body.y+chip.box.y,chip.box.width,chip.box.height};
+        const bool entity=!chip.more && chip.index<state.textureUserEntities.size() && state.textureUserEntities[chip.index]!=kInvalidEntity;
+        const u32 widget=chip.more?TextureCards::sub(detail::TextureInspectorUsersMore):widgetId(EditorWidget::TextureUserBase)+chip.index;
+        builder.list.addRect(box,builder.isPressed(widget)?theme.color.line:theme.color.canvas,11);
+        builder.list.addBorder(box,theme.color.lineSoft,1.0f,11);
+        auto inner=deflate(box,UiInsets{8,0,6,0});
+        if(chip.more) {
+          builder.label(inner,state.textureUsersExpanded?std::string("Menos"):"+"+std::to_string(chip.index),theme.color.accent,
+                        theme.type.caption,UiAlign::Center);
+          cards.region(box,widget);
+          continue;
+        }
+        std::string_view name=state.textureUserLabels[chip.index];
+        if(name.starts_with("Objeto: ")) name.remove_prefix(8);
+        builder.list.addImage(centred(takeLeft(inner,11),11,11),static_cast<UiImageId>(entity?UiIcon::SceneObject:UiIcon::AssetsMaterial),
+                              entity?theme.color.textDim:theme.color.textFaint);
+        takeLeft(inner,4);
+        builder.label(inner,name,entity?theme.color.text:theme.color.textMuted,theme.type.caption);
+        if(entity) cards.region(box,widget);
+      }
+    }
+  }
+  const float height=column.y-start;
   builder.list.popClip();
+  if(builder.layout) {builder.layout->textureInspectorContent=height;builder.layout->textureInspectorWindow=window.height;}
+  // Barra de rolagem fina quando os cartões passam da janela.
+  if(height>window.height+1) {
+    const float thumb=std::max(24.0f,window.height*window.height/height);
+    const float travel=window.height-thumb;
+    const float offset=std::clamp(state.textureInspectorScroll/(height-window.height),0.0f,1.0f)*travel;
+    builder.list.addRect({window.right()-3,window.y+offset,3,thumb},theme.color.line,1.5f);
+  }
+}
+
+// Prévia ampliada sobre a cena: a imagem inteira no maior tamanho que cabe,
+// com os mesmos controles de nível, canal, zoom e fundo.
+void buildTextureExpanded(ScreenBuilder &builder,const UiRect &area) {
+  const auto &theme=builder.theme;const auto &state=builder.state;
+  builder.list.addRect(area,withAlpha(theme.color.canvas,0.96f));
+  builder.router.addBlocker(area);
+  auto content=deflate(area,UiInsets::all(theme.spacing.medium));
+  auto top=takeTop(content,30);
+  const auto close=takeRight(top,30);
+  const u32 closeWidget=TextureCards::sub(detail::TextureInspectorExpandClose);
+  builder.list.addRect(close,builder.isPressed(closeWidget)?theme.color.line:theme.color.raised,theme.radius.control);
+  builder.list.addImage(centred(close,14,14),static_cast<UiImageId>(UiIcon::UiClose),theme.color.text);
+  builder.router.addRegion(close,closeWidget,theme.touch.minimumTarget);
+  takeRight(top,8);
+  const auto info=takeRight(top,std::min(top.width*.45f,220.0f));
+  builder.label(info,fitMiddle(builder.list,state.textureViewerLevelLabel,info.width,theme.type.caption),theme.color.textMuted,
+                theme.type.caption,UiAlign::End);
+  builder.label(top,fitMiddle(builder.list,state.textureViewerTitle,top.width,theme.type.cardName),theme.color.text,theme.type.cardName);
+  auto bar=takeBottom(content,30);
+  takeBottom(content,8);takeTop(content,8);
+  if(!state.textureViewerImage.isEmpty()) {
+    const auto &texels=state.textureViewerImage;
+    const float fit=std::min(content.width/texels.width,content.height/texels.height);
+    const float w=texels.width*fit,h=texels.height*fit;
+    const UiRect image{content.x+(content.width-w)*.5f,content.y+(content.height-h)*.5f,w,h};
+    builder.list.addBorder(deflate(image,UiInsets::all(-1)),theme.color.lineSoft,1.0f);
+    builder.list.addPreviewImage(image,texels);
+  }
+  // Controles centrados: ‹ nível ›, canal, zoom e fundo.
+  const float cluster=30+70+30+8+70+8+50+8+30;
+  UiRect row{bar.x+std::max(0.0f,(bar.width-cluster)*.5f),bar.y,std::min(bar.width,cluster),bar.height};
+  const auto square=[&](UiIcon icon,u32 widget,bool enabled) {
+    const auto box=takeLeft(row,30);
+    builder.list.addRect(box,builder.isPressed(widget)?theme.color.line:theme.color.raised,theme.radius.control);
+    builder.list.addImage(centred(box,13,13),static_cast<UiImageId>(icon),enabled?theme.color.text:theme.color.textFaint);
+    if(enabled) builder.router.addRegion(box,widget);
+  };
+  const auto pill=[&](const std::string &text,u32 widget,float width) {
+    const auto box=takeLeft(row,width);
+    builder.list.addRect(box,builder.isPressed(widget)?theme.color.line:theme.color.raised,theme.radius.control);
+    builder.label(box,text,theme.color.text,theme.type.caption,UiAlign::Center);
+    if(widget) builder.router.addRegion(box,widget);
+  };
+  square(UiIcon::UiChevronLeft,widgetId(EditorWidget::TextureViewerMipDown),state.textureViewerLevel>0);
+  pill("Mip "+state.textureMipValue,0,70);
+  square(UiIcon::UiChevronRight,widgetId(EditorWidget::TextureViewerMipUp),state.textureViewerLevel+1<state.textureViewerLevels);
+  takeLeft(row,8);
+  pill(state.textureViewerChannelLabel,widgetId(EditorWidget::TextureViewerChannel),70);
+  takeLeft(row,8);
+  pill(std::to_string(1u<<state.textureViewerZoom)+"×",widgetId(EditorWidget::TextureViewerZoom),50);
+  takeLeft(row,8);
+  square(UiIcon::AssetsChecker,widgetId(EditorWidget::TextureViewerBackground),state.textureViewerChannel==0);
 }
 
 // Descriptor fields are addressed by stable instance/property IDs on edit.
@@ -2717,24 +3024,7 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
 // R4: textura escolhida em Arquivos, em Propriedades: o visualizador (imagem,
 // canal, mip, zoom, fundo, perfil e residência) e quem usa a textura.
 void buildTextureInspector(ScreenBuilder &builder,UiRect content) {
-  const auto &state=builder.state;const auto &theme=builder.theme;
-  const float wanted=34.0f+static_cast<float>(std::max<usize>(1,state.textureUserLabels.size()))*28.0f;
-  auto users=takeBottom(content,std::min(content.height*.28f,wanted));
   buildTextureViewer(builder,content);
-  builder.list.addRect({users.x,users.y,users.width,1},theme.color.lineSoft);
-  builder.label(takeTop(users,30),"Usuários ("+std::to_string(state.textureUserLabels.size())+")",theme.color.textDim,theme.type.caption);
-  if(state.textureUserLabels.empty()) {
-    if(users.height>=24) builder.label(takeTop(users,24),"Nenhum objeto ou material do projeto usa esta textura",theme.color.textMuted,theme.type.caption);
-    return;
-  }
-  builder.list.pushClip(users);
-  for(u32 i=0;i<state.textureUserLabels.size() && users.height>=26;++i) {
-    auto row=takeTop(users,28);
-    const bool entity=i<state.textureUserEntities.size() && state.textureUserEntities[i]!=kInvalidEntity;
-    builder.label(deflate(row,UiInsets::symmetric(6,0)),state.textureUserLabels[i],entity?theme.color.text:theme.color.textMuted,theme.type.caption);
-    if(entity) builder.router.addRegion(row,widgetId(EditorWidget::TextureUserBase)+i);
-  }
-  builder.list.popClip();
 }
 
 // R4: gerenciador de texturas: grade com miniaturas, busca por nome ou pasta e
@@ -2840,7 +3130,8 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
   }
   // R4: textura escolhida em Arquivos e gerenciador da pasta Texturas.
   if (builder.state.textureManager || builder.state.textureInspector) {
-    builder.list.addRect(panel, builder.theme.color.surface);
+    // O Inspector de textura é fundo escuro com cartões por cima.
+    builder.list.addRect(panel, builder.state.textureManager ? builder.theme.color.surface : builder.theme.color.canvas);
     builder.router.addBlocker(panel);
     const auto inner = deflate(panel, UiInsets::all(builder.theme.spacing.small));
     if (builder.state.textureManager) buildTextureManager(builder, inner);
@@ -3880,6 +4171,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
 
   ScreenBuilder builder{state, theme, list, router};
   builder.visibleSourceTextureRows=&layout.visibleSourceTextureRows;
+  builder.layout=&layout;
   UiRect remaining = deflate(state.surface, state.safeArea);
   layout.topBar = takeTop(remaining, kTopBarHeight);
   if(state.workspace==EditorWorkspace::Code) {
@@ -4271,6 +4563,9 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       }
     }
   }
+  // Prévia ampliada da textura: por cima de tudo que a viewport desenha.
+  if(state.textureViewerExpanded && state.textureViewer && !layout.viewport.isEmpty())
+    buildTextureExpanded(builder,layout.viewport);
   if(state.workspaceMenu) {
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,.65f));router.addBlocker(state.surface);
     const u32 menuRows=3+(state.assetCount?1:0)+(waterCreationAvailable(state)?1:0);

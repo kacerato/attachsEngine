@@ -293,6 +293,8 @@ enum class EditorWidget : u32 {
   TextureUvStepBase=0x58000000u,
   // R4: filtro do gerenciador, textura da grade e usuário da textura em Propriedades.
   TextureFilterBase=0x59000000u, TextureManagerRowBase=0x5A000000u, TextureUserBase=0x5B000000u,
+  // Inspector de textura em cartões: sub-ids em `detail::TextureInspector*`.
+  TextureInspectorBase=0xB4000000u,
   ComponentGroupBase=0x5C000000u, ComponentVisualBase=0x5D000000u,
   ComponentVisualsToggle=0x5E000000u, CameraView, CameraViewClose, CameraAlignView, CameraPilot,
   ComponentReferenceBase=0x7a000000u, ReferenceChoiceBase=0x7b000000u,
@@ -368,6 +370,13 @@ struct WidgetRange {EditorWidget base;u32 span;};
 inline constexpr u32 kWideRange=0x1000'0000u,kRange=0x0100'0000u;
 // Bloco F: linhas de textura das fontes na mesma faixa do gerenciador.
 inline constexpr u32 TextureManagerSourceRowOffset=0x0080'0000u;
+// Inspector de textura em cartões, somados a TextureInspectorBase: cartão
+// recolhível (+seção), copiar origem (+linha), pasta da trilha (+nível) e ações.
+inline constexpr u32 TextureInspectorSection=0x00,TextureInspectorCopy=0x10,TextureInspectorCrumb=0x20,
+                     TextureInspectorScroll=0x40,TextureInspectorExpand=0x41,TextureInspectorExpandClose=0x42,
+                     TextureInspectorLocate=0x43,TextureInspectorReimport=0x44,TextureInspectorGpuInfo=0x45,
+                     TextureInspectorUsersMore=0x46;
+enum TextureInspectorCard : u32 {TextureCardPreview,TextureCardProperties,TextureCardImport,TextureCardOrigin,TextureCardUsers};
 inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::HierarchyRowBase,kWideRange},{EditorWidget::HierarchyEyeBase,kWideRange},
   {EditorWidget::TransformFieldBase,kWideRange},{EditorWidget::GizmoAxisBase,kWideRange},
@@ -375,6 +384,7 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::MaterialChoiceBase,kRange},{EditorWidget::MaterialNumberBase,kRange},{EditorWidget::MaterialTextureBase,kRange},
   {EditorWidget::TextureChoiceBase,kRange},{EditorWidget::TextureViewBase,kRange},{EditorWidget::TextureUvStepBase,kRange},
   {EditorWidget::TextureFilterBase,kRange},{EditorWidget::TextureManagerRowBase,kRange},{EditorWidget::TextureUserBase,kRange},
+  {EditorWidget::TextureInspectorBase,kRange},
   {EditorWidget::ComponentGroupBase,kRange},{EditorWidget::ComponentVisualBase,kRange},{EditorWidget::ComponentVisualsToggle,kRange},
   {EditorWidget::ColorHueBase,kRange},{EditorWidget::AssetRowBase,kRange},{EditorWidget::CodeBody,kRange},
   {EditorWidget::RoutePointBase,kRange},{EditorWidget::CreationCategoryBase,kRange},{EditorWidget::CreationRowBase,kRange},
@@ -551,12 +561,22 @@ struct EditorScreenState final {
   // Bloco F: texturas das fontes importadas (as imagens de um modelo) no mesmo
   // gerenciador e Inspector das texturas do projeto. A linha i da lista usa a
   // célula i % 50 do atlas de miniaturas; o Inspector troca o perfil (que é da
-  // fonte) pela ficha do que foi preparado para a GPU.
+  // fonte) pela origem e pela fonte dona.
   bool textureManagerSources=false,textureViewerSource=false;
   u32 textureViewerSourceIndex=0; // posição na lista de texturas das fontes
   std::vector<std::string> sourceTextureNames;
   std::vector<ui::UiRect> sourceTextureThumbs;
-  std::vector<std::string> sourceTextureFacts;
+  // Inspector de textura em cartões (projeto e fontes). A sessão preenche os
+  // dados; a tela decide só a forma (grade, chips, trilha).
+  struct TextureField {std::string label,value;};
+  struct TextureOrigin {std::string label,value,copy;};
+  std::vector<TextureField> textureProperties;  // além de Canal e Mip, que são controles
+  std::vector<TextureOrigin> textureOrigin;
+  std::vector<std::string> textureBreadcrumb;   // pastas do projeto até o arquivo
+  std::string textureDimensions,textureGpuNote,textureMipValue;
+  u32 textureCardsClosed=0;                     // bit por TextureInspectorCard recolhido
+  float textureInspectorScroll=0;
+  bool textureViewerExpanded=false,textureUsersExpanded=false;
   // S5: overlay de estatísticas no viewport e o que o renderer relatou.
   bool sceneStatisticsVisible=false;
   renderer::SceneStatistics sceneStatistics{};
@@ -845,6 +865,8 @@ struct EditorScreenLayout final {
   // Bloco F: linhas da lista de texturas das fontes desenhadas neste quadro;
   // só elas geram miniatura.
   std::vector<u32> visibleSourceTextureRows;
+  // Inspector de textura: altura rolável e quanto dela cabe na janela.
+  float textureInspectorContent=0,textureInspectorWindow=0;
   // O corpo do editor de código e quantas linhas dele cabem. O toque vira
   // posição de cursor a partir deste retângulo, e a rolagem acompanha o cursor
   // a partir desta contagem.
