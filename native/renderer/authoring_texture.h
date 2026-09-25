@@ -2,6 +2,8 @@
 #include "core/base.h"
 #include "renderer/texture_sampler.h"
 #include <memory>
+#include <span>
+#include <string>
 #include <vector>
 
 namespace ae::renderer {
@@ -41,23 +43,49 @@ inline constexpr u64 authoringTextureLevelBytes(u32 format, u32 width, u32 heigh
   return static_cast<u64>((width + block - 1) / block) * ((height + block - 1) / block) * 16;
 }
 
+// Bloco C (S2): níveis de cima guardados só no derivado em disco. `offset` é
+// onde o nível 0 começa no arquivo; os níveis seguem contíguos, como em
+// `mipChain`. O arquivo é regenerável (cache de importação): some, e a leitura
+// falha fechada — quem pediu fica com o nível que já tinha.
+struct AuthoringTextureFile {
+  std::string path;
+  u64 offset = 0;
+};
+
 struct AuthoringTexture {
   u32 width = 0, height = 0, levels = 0;
+  // Primeiro nível presente em `mipChain` (0 = cadeia inteira na memória). Os
+  // níveis 0..firstLevel-1 são lidos de `file` quando alguém os pede.
+  u32 firstLevel = 0;
+  std::shared_ptr<const AuthoringTextureFile> file;
   // Cor base e emissivo são sRGB; normal e metálico/rugosidade são dados.
   bool srgb = true;
   u32 samplerFlags = AuthoringTextureLinearFilter | AuthoringTextureLinearMip | AuthoringTextureRepeatU | AuthoringTextureRepeatV;
   u32 format = AuthoringTextureRgba8;
   std::vector<u8> mipChain;
-  u64 expectedBytes() const {
+  // Bytes dos níveis [from, levels) — a cadeia inteira com `from` 0.
+  u64 chainBytesFrom(u32 from) const {
     if (!authoringTextureBlock(format)) return 0;
     u64 total = 0;
     for (u32 level = 0, w = width, h = height; level < levels; ++level, w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1)
-      total += authoringTextureLevelBytes(format, w, h);
+      if (level >= from) total += authoringTextureLevelBytes(format, w, h);
     return total;
   }
-  bool valid() const { return width && height && levels && mipChain.size() == expectedBytes(); }
+  u64 expectedBytes() const { return chainBytesFrom(0); }
+  bool partial() const { return firstLevel != 0; }
+  bool valid() const {
+    return width && height && levels && firstLevel < levels && (!firstLevel || file) &&
+           mipChain.size() == chainBytesFrom(firstLevel);
+  }
 };
 // Compartilhada e imutável: a sessão copia blocos de fonte (candidato,
 // estado anterior, reversão) e dezenas de MB de mips não podem ir junto.
 using SharedAuthoringTexture = std::shared_ptr<const AuthoringTexture>;
+
+// Bytes dos níveis [from, levels) de `texture`: da memória quando `from` não é
+// menor que `firstLevel`; senão os níveis de cima vêm do arquivo e a cauda da
+// memória, juntos em `scratch`. Falha fechada (arquivo ausente, curto ou nível
+// inválido) sem tocar em `out`.
+bool readAuthoringTextureLevels(const AuthoringTexture &texture, u32 from, std::vector<u8> &scratch,
+                                std::span<const u8> &out);
 } // namespace ae::renderer

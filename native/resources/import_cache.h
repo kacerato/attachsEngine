@@ -35,6 +35,14 @@ std::string importCacheKey(std::string_view sourceContentHash, const GltfImportL
 // Caminho relativo à raiz do projeto.
 std::string importCacheRelativePath(std::string_view key);
 bool writeImportCache(const GltfImport &model, std::string_view key, std::vector<u8> &out);
+// Bloco C (S2): leitura parcial. As texturas guardam na memória só os níveis
+// com o maior lado até `keepDimension`; os de cima ficam no arquivo `path`
+// (o mesmo que forneceu `bytes`) e são lidos sob demanda pelo streaming.
+struct ImportCachePartialTextures {
+  std::string path;
+  u32 keepDimension = 256;
+};
 // Falha fechada: em qualquer inconsistência `out` volta vazio.
-bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport &out);
+bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport &out,
+                     const ImportCachePartialTextures *partial = nullptr);
 } // namespace ae::resources

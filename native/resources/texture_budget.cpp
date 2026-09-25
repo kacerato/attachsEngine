@@ -30,7 +30,9 @@ TextureBudgetReport applyTextureBudget(std::vector<renderer::SharedAuthoringText
     if (!texture || !texture->valid() || byPointer.contains(texture.get())) continue;
     byPointer.emplace(texture.get(), entries.size());
     entries.push_back({texture.get(), nullptr});
-    report.requestedBytes += texture->mipChain.size();
+    // Cadeia inteira, esteja o topo na memória ou no derivado em disco (bloco C):
+    // é o que a textura ocupa residente por inteiro.
+    report.requestedBytes += texture->expectedBytes();
   }
   report.textures = static_cast<u32>(entries.size());
   report.residentBytes = report.requestedBytes;
@@ -58,7 +60,16 @@ TextureBudgetReport applyTextureBudget(std::vector<renderer::SharedAuthoringText
     next->srgb = texture.srgb;
     next->samplerFlags = texture.samplerFlags;
     next->format = texture.format;
-    next->mipChain.assign(texture.mipChain.begin() + static_cast<std::ptrdiff_t>(largestBytes), texture.mipChain.end());
+    if (texture.firstLevel) {
+      // O nível cortado está no arquivo: a cauda na memória não muda, e a
+      // fonte passa a começar no nível seguinte.
+      auto file = std::make_shared<renderer::AuthoringTextureFile>(*texture.file);
+      file->offset += largestBytes;
+      next->file = std::move(file);
+      next->firstLevel = texture.firstLevel - 1;
+      next->mipChain = texture.mipChain;
+    } else
+      next->mipChain.assign(texture.mipChain.begin() + static_cast<std::ptrdiff_t>(largestBytes), texture.mipChain.end());
     if (!next->valid()) break; // cadeia fora do layout esperado: não arrisca
     if (!largest->working) ++report.reducedTextures;
     ++report.droppedLevels;

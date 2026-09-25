@@ -1,6 +1,7 @@
 #include "resources/import_cache.h"
 #include "core/sha256.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -177,7 +178,15 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
     writer.u32v(texture->format);
     writer.u32v(texture->samplerFlags);
     writer.u32v(texture->srgb ? 1 : 0);
-    writer.pods(texture->mipChain);
+    // Textura parcial (bloco C): o derivado sempre guarda a cadeia inteira.
+    std::vector<u8> scratch;
+    std::span<const u8> chain;
+    if (!renderer::readAuthoringTextureLevels(*texture, 0, scratch, chain)) {
+      out.clear();
+      return false;
+    }
+    writer.u64v(chain.size());
+    writer.raw(chain.data(), chain.size());
   }
   writer.u64v(model.textureBytes);
   const u32 counters[kCounterCount]{model.skippedTextures, model.skippedAnimations, model.skippedSkins,
@@ -247,7 +256,8 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
   return true;
 }
 
-bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport &out) {
+bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport &out,
+                     const ImportCachePartialTextures *partial) {
   out = {};
   Reader reader{bytes};
   const auto refuse = [&out]() {
@@ -292,7 +302,24 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
     texture.format = reader.u32v();
     texture.samplerFlags = reader.u32v();
     texture.srgb = reader.u32v() != 0;
-    texture.mipChain = reader.pods<u8>();
+    if (!partial) texture.mipChain = reader.pods<u8>();
+    else {
+      // Mesmo layout de `pods`: contagem de 8 bytes e a cadeia logo depois.
+      const u64 count = reader.u64v();
+      const u64 at = reader.at;
+      if (!reader.ok || count != texture.expectedBytes() || count > bytes.size() - at) return refuse();
+      u32 first = 0;
+      for (u32 w = texture.width, h = texture.height; first + 1 < texture.levels && std::max(w, h) > partial->keepDimension;
+           ++first, w = w > 1 ? w / 2 : 1, h = h > 1 ? h / 2 : 1) {}
+      const u64 skip = count - texture.chainBytesFrom(first);
+      texture.mipChain.assign(bytes.begin() + static_cast<std::ptrdiff_t>(at + skip),
+                              bytes.begin() + static_cast<std::ptrdiff_t>(at + count));
+      if (first) {
+        texture.firstLevel = first;
+        texture.file = std::make_shared<renderer::AuthoringTextureFile>(renderer::AuthoringTextureFile{partial->path, at});
+      }
+      reader.at += static_cast<usize>(count);
+    }
     if (!reader.ok || !texture.valid()) return refuse();
     model.textures.push_back(std::make_shared<renderer::AuthoringTexture>(std::move(texture)));
   }

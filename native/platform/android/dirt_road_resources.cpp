@@ -451,7 +451,7 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   for(usize t=0;t<extraTextures.size();++t) {
     const auto &texture=extraTextures[t];
     if(!texture || !texture->valid()) return refuseTexture("Textura autoral inválida.");
-    ++residency.textures;residency.sourceBytes+=texture->mipChain.size();
+    ++residency.textures;residency.sourceBytes+=texture->expectedBytes();
     rhi::ImageDesc image{};
     image.width=texture->width;image.height=texture->height;image.mipLevels=texture->levels;
     switch(texture->format) {
@@ -493,7 +493,13 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
       auto resident=renderer::chooseResidentRange(image,std::numeric_limits<u32>::max(),
                                                    std::numeric_limits<u64>::max(),requiredBias);
       if(!resident.valid()) return refuseTexture("Textura autoral não possui o mip pedido pela qualidade.");
-      const u8 *source=generated?generatedChain.data():texture->mipChain.data();
+      // Bloco C: a cauda a partir do nível base, da memória ou (níveis de cima
+      // de uma textura parcial) do derivado em disco.
+      std::vector<u8> levelScratch;std::span<const u8> levelBytes;
+      if(!generated && !reuseImage && !renderer::readAuthoringTextureLevels(*texture,resident.baseMip,levelScratch,levelBytes))
+        return refuseTexture("Níveis da textura autoral indisponíveis no derivado em disco.");
+      const u8 *source=generated?generatedChain.data()+resident.byteOffset:levelBytes.data();
+      const u64 available=generated?generatedChain.size()-resident.byteOffset:levelBytes.size();
       if(generated) {
         // `mipmaps=false`: o nível reduzido vira a base, sem habilitar os níveis
         // seguintes que o perfil autoral recusou.
@@ -503,9 +509,9 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
       }
       nextResidency[t]={generated?0u:resident.baseMip,resident.description.mipLevels,resident.byteSize,generated};
       if(!reuseImage) {
-        if(resident.byteOffset+resident.byteSize>(generated?generatedChain.size():texture->mipChain.size()) ||
+        if(resident.byteSize>available ||
            !allocator.createImage(resident.description,&nextImages[t]) ||
-           !upload.uploadSampledMipChain(allocator,source+resident.byteOffset,resident.byteSize,nextImages[t]))
+           !upload.uploadSampledMipChain(allocator,source,resident.byteSize,nextImages[t]))
           return refuseTexture("Falha ao enviar a residência reduzida da textura autoral.");
       }
     }
@@ -588,11 +594,14 @@ bool DirtRoadResources::restreamAuthoringTexture(rhi::VulkanDevice &device,rhi::
   image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;image.memoryClass=rhi::MemoryClass::Texture;
   const auto resident=renderer::chooseResidentRange(image,std::numeric_limits<u32>::max(),
                                                      std::numeric_limits<u64>::max(),baseMip);
-  if(!resident.valid() || resident.byteOffset+resident.byteSize>texture->mipChain.size()) return false;
+  // Bloco C: níveis acima da cauda em memória vêm do derivado em disco.
+  std::vector<u8> scratch;std::span<const u8> levels;
+  if(!resident.valid() || !renderer::readAuthoringTextureLevels(*texture,resident.baseMip,scratch,levels) ||
+     resident.byteSize>levels.size()) return false;
   auto &allocator=device.memoryAllocator();
   rhi::VulkanImage next;rhi::VulkanSampler sampler;
   if(!allocator.createImage(resident.description,&next) ||
-     !upload.uploadSampledMipChain(allocator,texture->mipChain.data()+resident.byteOffset,resident.byteSize,next) ||
+     !upload.uploadSampledMipChain(allocator,levels.data(),resident.byteSize,next) ||
      !createAuthoringSampler(device,*texture,resident.description.mipLevels,sampler)) return false;
   authoringTextureResidency_.residentBytes=authoringTextureResidency_.residentBytes-current.bytes+resident.byteSize;
   current={resident.baseMip,resident.description.mipLevels,resident.byteSize,false};

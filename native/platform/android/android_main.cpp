@@ -842,7 +842,11 @@ bool startProjectReopen(AndroidShell &shell) {
   shell.reopenStartedMs=ae::platform::android::lifecycleUptimeMs();
   const std::string root(shell.editorProjectPath);
   const auto count=sources.size()+environments.size();
-  shell.reopenWork=std::async(std::launch::async,[root,sources=std::move(sources),
+  // Bloco C: com streaming de mipmaps, as texturas das fontes guardam na RAM só a
+  // cauda pequena; o topo fica no derivado em disco e sobe quando a tela pede.
+  // Com o streaming desligado depois, o renderer lê o topo do disco ao publicar.
+  const bool partialTextures=shell.renderingPolicy.textures.streaming;
+  shell.reopenWork=std::async(std::launch::async,[root,partialTextures,sources=std::move(sources),
                                                   environments=std::move(environments),
                                                   cancel=shell.reopenCancellation,progress=shell.reopenProgress]() {
     using Transaction=ae::editor::EditorImportTransaction;
@@ -891,8 +895,10 @@ bool startProjectReopen(AndroidShell &shell) {
       {
         stage(source,"lendo derivado");
         std::vector<ae::u8> derived;
+        ae::resources::ImportCachePartialTextures partial;
+        partial.path=root+"/"+ae::resources::importCacheRelativePath(key);
         if(Transaction::read(cachePath,derived,ae::usize{1}<<30))
-          cached=ae::resources::readImportCache(derived,key,reopened.model);
+          cached=ae::resources::readImportCache(derived,key,reopened.model,partialTextures?&partial:nullptr);
       }
       const double derivedAt=ae::platform::android::lifecycleUptimeMs();
       double writeMs=0;

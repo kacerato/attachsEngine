@@ -305,6 +305,13 @@ não converteu as luzes físicas); são importadas como estão e acesas pelo exp
 no host o material chega ao renderer com Blend, textura 512² sRGB e fator alfa 0,35 — a causa do
 branco opaco fica para a observação no aparelho.
 
+Bloco C (25/09), primeira fatia: níveis de cima das texturas das fontes lidos do derivado em
+disco. A reabertura com streaming ligado guarda na RAM só a cauda até 256 px; publicação,
+troca de residência e orçamento agregado leem o resto do arquivo; regravar o derivado a partir
+de uma textura parcial devolve a cadeia inteira. Testado no host; RAM no aparelho não medida.
+Pendentes: E/S assíncrona, liberar a cadeia logo após uma importação nova e publicar o preparo
+ASTC do Sponza.
+
 ## 9. Gates de qualidade de um mundo realista
 
 Escolher um **interior** (muitos materiais e luzes locais), um **exterior** (vegetação, distância e sol) e um **misto interativo** (portas/objetos manipuláveis, colisão, animação/áudio). Usar fontes com PBR e geometria suficiente, manter metadados de proveniência e licença, e guardar referência visual com câmera, horário, exposição e resolução fixos. A matriz de avaliação deve cobrir:

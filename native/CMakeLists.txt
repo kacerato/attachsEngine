@@ -371,6 +371,7 @@ add_library(aether_renderer STATIC
   renderer/lod_selection.cpp
   renderer/mesh_report.cpp
   renderer/texture_streaming.cpp
+  renderer/authoring_texture.cpp
   renderer/spatial_render_chunks.cpp
   renderer/static_collision_mesh.cpp
   renderer/thermal_pressure_controller.cpp
@@ -680,6 +681,7 @@ if(NOT ANDROID)
     ../tests/native/test_mesh_report.cpp
     ../tests/native/test_texture_streaming.cpp
     ../tests/native/test_mesh_lod.cpp
+    ../tests/native/test_texture_disk_levels.cpp
     ../tests/native/test_shadow_atlas.cpp
     ../tests/native/test_rendering_settings_file.cpp
     ../tests/native/test_runtime_input.cpp

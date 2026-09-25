@@ -225,8 +225,12 @@ quadro. No Android o consumidor roda logo após a fence do quadro anterior (há 
 único quadro em voo), cria a imagem nova, sobe a cauda da cadeia e regrava o mesmo
 slot bindless; a imagem anterior só sai depois de a nova existir.
 
-Diferenças explícitas: a fonte dos mips é a cadeia preparada em memória, não o disco
-— o streaming economiza residência na GPU, não RAM; todos os usos visíveis contam,
+Diferenças explícitas: numa fonte reaberta com o streaming ligado, cada textura guarda na
+RAM só a cauda até 256 px e os níveis de cima ficam no derivado de importação em disco
+(bloco C, `AuthoringTexture::firstLevel` + `readAuthoringTextureLevels`); a leitura é
+síncrona e limitada pelo teto de envio por quadro, sem fila de E/S própria ainda. Fontes
+recém-importadas continuam com a cadeia inteira na memória até a próxima abertura. Todos os
+usos visíveis contam,
 sem recorte de frustum (girar a câmera não provoca troca); o lado maior da superfície
 é a altura da vista (erra para mais detalhe, nunca para menos). Aplicar pelo painel
 ou por `Graphics.ApplyRuntime` segue o mesmo ponto seguro de reconstrução dos outros
