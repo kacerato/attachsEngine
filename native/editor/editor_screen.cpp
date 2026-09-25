@@ -4587,8 +4587,8 @@ void buildTimerTimeline(ScreenBuilder &builder,UiRect area) {
   }
   if(pages>1) {
     auto footer=takeBottom(content,36),previous=takeLeft(footer,72),next=takeRight(footer,72);
-    builder.label(previous,"‹ Anterior",page?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
-    builder.label(next,"Próxima ›",page+1<pages?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+    builder.label(previous,"< Anterior",page?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
+    builder.label(next,"Próxima >",page+1<pages?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
     if(page) router.addRegion(previous,widgetId(EditorWidget::TimerPrevious));
     if(page+1<pages) router.addRegion(next,widgetId(EditorWidget::TimerNext));
     builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
@@ -4614,8 +4614,8 @@ void buildPhysicsLayers(ScreenBuilder &builder,UiRect area) {
   router.addRegion(add,widgetId(EditorWidget::PhysicsLayerAdd));
   builder.label(takeTop(content,30),"A matriz é simétrica e o solver usa esses pares no Play.",theme.color.textDim,theme.type.caption);
   auto current=takeTop(content,48),previous=takeLeft(current,42),next=takeRight(current,42),rename=takeRight(current,82);
-  builder.label(previous,"‹",theme.color.text,theme.type.body,UiAlign::Center);
-  builder.label(next,"›",theme.color.text,theme.type.body,UiAlign::Center);
+  builder.label(previous,"<",theme.color.text,theme.type.body,UiAlign::Center);
+  builder.label(next,">",theme.color.text,theme.type.body,UiAlign::Center);
   list.addRect(current,theme.color.raised,theme.radius.control);
   builder.label(current,(std::to_string(selected)+" · "+std::string(layers.name(selected))).c_str(),theme.color.accent,theme.type.body);
   builder.label(rename,"Renomear",theme.color.text,theme.type.caption,UiAlign::Center);
@@ -4640,8 +4640,8 @@ void buildPhysicsLayers(ScreenBuilder &builder,UiRect area) {
   }
   if(pages>1) {
     auto footer=takeBottom(content,38),previousPage=takeLeft(footer,72),nextPage=takeRight(footer,72);
-    builder.label(previousPage,"‹",page?theme.color.text:theme.color.textFaint,theme.type.body,UiAlign::Center);
-    builder.label(nextPage,"›",page+1<pages?theme.color.text:theme.color.textFaint,theme.type.body,UiAlign::Center);
+    builder.label(previousPage,"<",page?theme.color.text:theme.color.textFaint,theme.type.body,UiAlign::Center);
+    builder.label(nextPage,">",page+1<pages?theme.color.text:theme.color.textFaint,theme.type.body,UiAlign::Center);
     if(page) router.addRegion(previousPage,widgetId(EditorWidget::PhysicsMatrixPrevious));
     if(page+1<pages) router.addRegion(nextPage,widgetId(EditorWidget::PhysicsMatrixNext));
     builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
@@ -4665,15 +4665,15 @@ void buildInputWorkspace(ScreenBuilder &builder,UiRect area) {
   const u32 index=std::min(state.inputActionIndex,static_cast<u32>(actions.size()-1));
   const auto &action=actions[index];
   auto navigation=takeTop(content,36),previous=takeLeft(navigation,36),next=takeRight(navigation,36);
-  button(previous,"‹",EditorWidget::InputActionPrevious);
-  button(next,"›",EditorWidget::InputActionNext);
+  button(previous,"<",EditorWidget::InputActionPrevious);
+  button(next,">",EditorWidget::InputActionNext);
   list.addRect(navigation,theme.color.silhouette,theme.radius.control);
   builder.label(navigation,(action.id+"  ·  "+std::to_string(index+1)+"/"+std::to_string(actions.size())).c_str(),theme.color.accent,theme.type.body,UiAlign::Center);
   auto tabs=takeTop(content,32),tabAction=takeLeft(tabs,tabs.width*.5f);
   button(tabAction,"Ação",EditorWidget::InputTabAction,state.inputTab==0);
   button(tabs,"Vínculos",EditorWidget::InputTabBinding,state.inputTab==1);
   takeTop(content,4);
-  button(takeTop(content,30),state.inputDetails?"‹ Principal":"Mais propriedades ›",EditorWidget::InputDetailsToggle);
+  button(takeTop(content,30),state.inputDetails?"< Principal":"Mais propriedades >",EditorWidget::InputDetailsToggle);
   const auto field=[&](std::string_view title,std::string_view value,EditorWidget widget) {
     auto row=takeTop(content,32);list.addRect(row,theme.color.silhouette,2);
     builder.label(takeLeft(row,row.width*.47f),title,theme.color.textDim,theme.type.caption);
@@ -4700,8 +4700,8 @@ void buildInputWorkspace(ScreenBuilder &builder,UiRect area) {
     }
   } else {
     auto nav=takeTop(content,32),addBinding=takeRight(nav,90),nextBinding=takeRight(nav,32),previousBinding=takeLeft(nav,32);
-    button(previousBinding,"‹",EditorWidget::InputBindingPrevious);
-    button(nextBinding,"›",EditorWidget::InputBindingNext);
+    button(previousBinding,"<",EditorWidget::InputBindingPrevious);
+    button(nextBinding,">",EditorWidget::InputBindingNext);
     button(addBinding,"+ Vínculo",EditorWidget::InputBindingAdd,true);
     builder.label(nav,action.bindings.empty()?"Sem vínculos":
       (std::to_string(std::min(state.inputBindingIndex,static_cast<u32>(action.bindings.size()-1))+1)+"/"+
