@@ -102,6 +102,7 @@ int main(int argc, char **argv) {
   }
 
   editor::EditorScreenState state{};
+  editor::EditorConsole console;
   if(argc>4 && std::string(argv[4]).starts_with("river")) {
     std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
     if(!renderer::appendWaterAuthoringGeometry(renderer::MapVertexStride,32,vertices,indices,draws,materials) || !map.import(document,draws,materials,false)) return 1;
@@ -112,6 +113,9 @@ int main(int argc, char **argv) {
     state.waterTab=std::string(argv[4])=="river-physics"?2:std::string(argv[4])=="river-effects"?3:1;
   }
   if(argc>4 && std::string(argv[4])=="create") state.creationMenu=true;
+  if(argc>4 && std::string(argv[4])=="river-diagnostics") {
+    state.diagnosticDockOpen=true;state.console=&console;
+  }
   state.surface = {0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)};
   state.document = &document;
   state.selection = selection;

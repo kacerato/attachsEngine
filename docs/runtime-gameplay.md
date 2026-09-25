@@ -89,6 +89,16 @@ segundo?.SetFloat("half_x", 2.5f);
 Ler um campo com o tipo errado é recusado: devolver os bits de um float como enum
 produziria um valor plausível e errado.
 
+O Inspector guarda referências autorais pelo ID do objeto, inclusive quando o
+alvo está ausente. Em Play, `GameObject.AsReference()` e
+`Component.GetReference()` devolvem `ObjectReference` vinculada ao mundo e à
+geração atuais. `Component.SetReference(id, gameObject)` aceita um objeto vivo
+da mesma execução; a sobrecarga com `ObjectReference` recusa uma referência
+vinculada a outra sessão ou vencida. Um `ObjectReference` desserializado da cena
+continua sendo um ID autoral e é resolvido no mundo atual pelo comportamento.
+O nativo valida largura do ID, existência, tempo de vida, tipo e escopo da
+propriedade antes de publicar a mudança.
+
 ## 5. Autoridade de pose
 
 | Autoridade | Quem publica | Escrita por script |
@@ -99,6 +109,37 @@ produziria um valor plausível e errado.
 
 Para mover um corpo, use as APIs físicas: `SetBodyVelocity`, `MoveKinematic`,
 `AddForce`/`AddImpulse`/`AddTorque`/`AddAngularImpulse`.
+
+`GameObject.SetParent(parent, index, posePolicy)` enfileira a mudança de pai
+para o próximo ponto seguro. `KeepLocal` é o padrão da API Astra existente;
+`KeepWorld` recalcula a transformação local para conservar a pose mundial no
+momento da aplicação. Ambos recusam ciclos, referências de outra execução e
+subárvores cuja pose pertença à física. `KeepWorld` recusa matrizes singulares,
+shear e reflexões que não cabem no transform TRS. Se comandos anteriores na
+mesma fila mudarem a hierarquia ou a pose, a política é reavaliada no ponto
+seguro. `SetParentTracked` devolve um `WorldOperation` para consultar se essa
+mudança foi aplicada ou recusada. A cena autoral permanece intacta.
+
+`DestroyTracked`, `SetParentTracked` e `Component.RemoveTracked` devolvem um
+ticket quando o comando entra na fila. `ticket.Read()` informa `Pending`,
+`Applied` ou `Failed` e o `WorldStatus` da aplicação. Consulte depois do ponto
+seguro, em outro callback. Os métodos antigos `Destroy`, `SetParent` e `Remove`
+confirmam somente a aceitação na fila. O ticket pertence à sessão de Play e os
+últimos 4096 resultados rastreados ficam disponíveis; após esse limite,
+`Read()` lança `WorldException(OperationExpired)` para o ticket mais antigo.
+Uma fila cheia recusa a destruição antes de vencer o handle do objeto.
+Na [Unity 6.0, `Destroy`](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Object.Destroy.html)
+remove o objeto depois do ciclo de `Update`; no [Godot 4.5, `queue_free`](https://docs.godotengine.org/en/4.5/classes/class_node.html#class-node-method-queue-free)
+permite acessá-lo até o fim do quadro. A Astra conserva o ponto seguro, mas
+vence o handle assim que aceita a destruição.
+
+```csharp
+var troca = Object.SetParentTracked(novoPai, posePolicy: ReparentPosePolicy.KeepWorld);
+// No Update seguinte, após o ponto seguro:
+var (estado, motivo) = troca.Read();
+if (estado == WorldOperationState.Failed)
+    throw new WorldException(motivo, "reparentear");
+```
 
 ## 6. Camadas de gameplay
 
@@ -231,10 +272,12 @@ O estado do catálogo é dito, não escondido:
 
 ## 12. ABI de scripts
 
-v8. Campos anteriores mantêm suas posições; v3 acrescentou hierarquia/ciclo de
+v13. Campos anteriores mantêm suas posições; v3 acrescentou hierarquia/ciclo de
 vida/componentes/propriedades/transform de mundo, v4 consultas e contatos, v5
 ações de entrada, v6 política gráfica, v7 propriedades de slots de material e
-v8 comandos de Character/CameraLook. O lado gerenciado exige a versão corrente
+v8 comandos de Character/CameraLook; v9–v11 expandiram animação e recursos de
+coleção; v12 acrescentou a política de pose do reparenting; v13 acrescenta
+operação estrutural rastreada e consulta do resultado. O lado gerenciado exige a versão corrente
 e confere `size`.
 
 `GameObject.MoveCharacter(Vector2, yawRadians)` envia uma intenção com eixos em

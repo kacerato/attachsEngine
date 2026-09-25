@@ -35,6 +35,8 @@ const char *worldStatusMessage(WorldStatus status) noexcept {
     case WorldStatus::UnknownResource: return "Recurso inexistente";
     case WorldStatus::ResourceTypeMismatch: return "Tipo de recurso incompatível";
     case WorldStatus::ClipNotInComponent: return "Clipe fora da lista do componente Animação";
+    case WorldStatus::UnknownElement: return "Elemento da coleção inexistente";
+    case WorldStatus::OperationExpired: return "Resultado da operação não está mais disponível";
   }
   return "Operação recusada";
 }
@@ -53,6 +55,8 @@ void GameWorld::clear() {
   slots_.clear();
   authorities_.clear();
   commands_.clear();
+  operationResults_.clear();
+  nextOperationId_ = 1;
   scratch_.clear();
   worldId_ = 0;
   structuralRevision_ = 0;
@@ -196,67 +200,128 @@ void GameWorld::markSubtreeStale(ObjectId id) {
     if (member < slots_.size()) slots_[member].generation = 0;
 }
 
-bool GameWorld::queue(const PendingCommand &command) {
+bool GameWorld::queue(PendingCommand command, u64 *operationId) {
   if (commands_.size() >= kMaximumPendingCommands) return false;
+  if (operationId) {
+    if (operationResults_.size() >= kMaximumPendingCommands) operationResults_.pop_front();
+    command.operationId = nextOperationId_++;
+    operationResults_.push_back({command.operationId, WorldOperationState::Pending, WorldStatus::Ok});
+    *operationId = command.operationId;
+  }
   commands_.push_back(command);
   return true;
 }
 
-WorldStatus GameWorld::destroyObject(const ObjectHandle &h) {
+void GameWorld::finishOperation(u64 operationId, WorldStatus result) {
+  if (!operationId) return;
+  for (auto &record : operationResults_) if (record.id == operationId) {
+    record.state = result == WorldStatus::Ok ? WorldOperationState::Applied : WorldOperationState::Failed;
+    record.result = result;
+    return;
+  }
+}
+
+WorldStatus GameWorld::operationResult(u32 world, u64 operationId, WorldOperationState &state,
+                                       WorldStatus &result) const noexcept {
+  if (!running()) return WorldStatus::NotRunning;
+  if (world != worldId_) return WorldStatus::ForeignWorld;
+  if (!operationId || operationId >= nextOperationId_) return WorldStatus::InvalidArgument;
+  for (const auto &record : operationResults_) if (record.id == operationId) {
+    state = record.state;
+    result = record.result;
+    return WorldStatus::Ok;
+  }
+  return WorldStatus::OperationExpired;
+}
+
+WorldStatus GameWorld::destroyObject(const ObjectHandle &h, u64 *operationId) {
   const auto status = validate(h);
   if (status != WorldStatus::Ok) return status;
   if (h.id == graph_.root()) return WorldStatus::Rejected;
   // A referência vence AGORA: quem guardou o handle passa a ser recusado ainda
   // dentro deste callback, mesmo que o armazenamento só saia no ponto seguro.
+  if (!queue({PendingCommand::Kind::Destroy, h.id, kInvalidObject, 0, 0}, operationId)) return WorldStatus::LimitReached;
   markSubtreeStale(h.id);
-  if (!queue({PendingCommand::Kind::Destroy, h.id, kInvalidObject, 0, 0})) return WorldStatus::LimitReached;
   ++structuralRevision_;
   return WorldStatus::Ok;
 }
 
-WorldStatus GameWorld::setParent(const ObjectHandle &h, const ObjectHandle &parent, u32 childIndex) {
+WorldStatus GameWorld::setParent(const ObjectHandle &h, const ObjectHandle &parent, u32 childIndex,
+                                 ReparentPosePolicy posePolicy, u64 *operationId) {
   const auto status = validate(h);
   if (status != WorldStatus::Ok) return status;
   const auto parentStatus = validate(parent);
   if (parentStatus != WorldStatus::Ok) return parentStatus;
   if (h.id == graph_.root()) return WorldStatus::Rejected;
   if (graph_.isDescendantOf(parent.id, h.id)) return WorldStatus::Rejected;
-  if (!queue({PendingCommand::Kind::Reparent, h.id, parent.id, childIndex, 0})) return WorldStatus::LimitReached;
+  if (posePolicy != ReparentPosePolicy::KeepLocal && posePolicy != ReparentPosePolicy::KeepWorld)
+    return WorldStatus::InvalidArgument;
+  graph_.collectSubtree(h.id, scratch_);
+  for (const ObjectId member : scratch_)
+    if (member < authorities_.size() && authorities_[member] != TransformAuthority::Free)
+      return WorldStatus::TransformOwnedByPhysics;
+  if (posePolicy == ReparentPosePolicy::KeepWorld) {
+    float current[16], targetParent[16];
+    Transform local;
+    if (!worldMatrix(graph_, h.id, current) || !worldMatrix(graph_, parent.id, targetParent) ||
+        !localTransformForWorld(current, targetParent, local)) return WorldStatus::Rejected;
+  }
+  if (!queue({PendingCommand::Kind::Reparent, h.id, parent.id, childIndex, 0, posePolicy}, operationId))
+    return WorldStatus::LimitReached;
   return WorldStatus::Ok;
 }
 
 u32 GameWorld::flush(std::vector<ObjectId> *destroyed) {
   u32 applied = 0;
   // Índice, não iterador: um comando aplicado pode enfileirar outro, e a fila
-  // pode realocar. A ordem é a de chegada — conflitos entre dois comandos sobre
-  // o mesmo objeto resolvem pelo último, e comandos para objeto já removido são
-  // descartados porque o estado final pedido já vale.
+  // pode realocar. A ordem é a de chegada; cada comando revalida as condições
+  // contra as mudanças que os comandos anteriores acabaram de aplicar.
   for (usize i = 0; i < commands_.size(); ++i) {
     const auto command = commands_[i];
+    WorldStatus outcome = WorldStatus::Rejected;
     switch (command.kind) {
       case PendingCommand::Kind::Destroy:
         if (destroyed) {
           graph_.collectSubtree(command.object, scratch_);
           destroyed->insert(destroyed->end(), scratch_.begin(), scratch_.end());
         }
-        if (graph_.destroyEntity(command.object)) ++applied;
+        if (graph_.destroyEntity(command.object)) { ++applied; outcome = WorldStatus::Ok; }
         break;
       case PendingCommand::Kind::Reparent:
-        if (graph_.exists(command.object) && graph_.exists(command.parent) &&
-            graph_.reparent(command.object, command.parent, command.childIndex)) ++applied;
+        if (!graph_.exists(command.object) || !graph_.exists(command.parent)) {
+          outcome = WorldStatus::StaleHandle; break;
+        }
+        if (graph_.isDescendantOf(command.parent, command.object)) break;
+        if (command.posePolicy == ReparentPosePolicy::KeepWorld) {
+          float current[16], targetParent[16];
+          Transform local;
+          if (!worldMatrix(graph_, command.object, current) ||
+              !worldMatrix(graph_, command.parent, targetParent) ||
+              !localTransformForWorld(current, targetParent, local)) break;
+          if (graph_.reparent(command.object, command.parent, command.childIndex) &&
+              graph_.setTransform(command.object, local)) { ++applied; outcome = WorldStatus::Ok; }
+        } else if (graph_.reparent(command.object, command.parent, command.childIndex)) {
+          ++applied; outcome = WorldStatus::Ok;
+        }
         break;
       case PendingCommand::Kind::RemoveComponent:
         // A callback may have added a dependent after removal was queued.
         // Re-resolve at the safe point before publishing the structural edit.
         if(const auto *object=graph_.find(command.object)) {
           if(scene::componentInstanceRemovalBlockedBy(command.instance,object->components) ||
-             componentRemovalReferenceUse(graph_,command.object,command.instance).object) break;
+             componentRemovalReferenceUse(graph_,command.object,command.instance).object) {
+            outcome = WorldStatus::ComponentInUse; break;
+          }
+        } else {
+          outcome = WorldStatus::StaleHandle; break;
         }
         if (auto *components = editComponents(command.object)) {
-          if (components->removeInstance(command.instance)) ++applied;
+          if (components->removeInstance(command.instance)) { ++applied; outcome = WorldStatus::Ok; }
+          else outcome = WorldStatus::ComponentMissing;
         }
         break;
     }
+    finishOperation(command.operationId, outcome);
   }
   commands_.clear();
   if (applied) ++structuralRevision_;
@@ -320,7 +385,7 @@ ComponentHandle GameWorld::addComponent(const ObjectHandle &h, std::string_view 
   return {h, createdInstance};
 }
 
-WorldStatus GameWorld::removeComponent(const ComponentHandle &component) {
+WorldStatus GameWorld::removeComponent(const ComponentHandle &component, u64 *operationId) {
   const auto *object = find(component.object);
   const auto status = validate(component.object);
   if (status != WorldStatus::Ok || !object) return status;
@@ -334,7 +399,7 @@ WorldStatus GameWorld::removeComponent(const ComponentHandle &component) {
   if (scene::componentInstanceRemovalBlockedBy(component.instance,object->components) ||
       componentRemovalReferenceUse(graph_,component.object.id,component.instance).object)
     return WorldStatus::ComponentInUse;
-  if (!queue({PendingCommand::Kind::RemoveComponent, component.object.id, kInvalidObject, 0, component.instance}))
+  if (!queue({PendingCommand::Kind::RemoveComponent, component.object.id, kInvalidObject, 0, component.instance}, operationId))
     return WorldStatus::LimitReached;
   return WorldStatus::Ok;
 }
@@ -370,10 +435,19 @@ WorldStatus GameWorld::setProperty(const ComponentHandle &component, std::string
   const auto *schema = scene::findComponentSchema(typeId);
   if (!schema) return WorldStatus::UnknownComponent;
   if (schema->propertiesInPlay == scene::PlayMutability::Never) return WorldStatus::NotMutableInPlay;
-  // Uma referência a objeto só é aceita quando aponta para algo vivo NESTE
-  // mundo. Aceitar um id solto deixaria o dado autoral apontando para o vazio.
-  if (const auto *reference = std::get_if<scene::ObjectReference>(&value))
-    if (reference->id && !graph_.exists(static_cast<ObjectId>(reference->id))) return WorldStatus::UnknownObject;
+  // A ABI transporta u64, mas o grafo usa u32. Truncar aqui poderia fazer um
+  // ID inválido acertar outro objeto vivo com os mesmos 32 bits baixos.
+  if (const auto *reference = std::get_if<scene::ObjectReference>(&value)) {
+    if (reference->id > std::numeric_limits<ObjectId>::max()) return WorldStatus::InvalidArgument;
+    if (reference->id) {
+      const auto target = static_cast<ObjectId>(reference->id);
+      if (!graph_.exists(target)) return WorldStatus::UnknownObject;
+      if (!handle(target).valid()) return WorldStatus::StaleHandle;
+    }
+    for (const auto &property : current->type().references)
+      if (property.id == propertyId && !referenceAccepts(graph_, component.object.id, property, reference->id))
+        return WorldStatus::Rejected;
+  }
   auto *components = editComponents(component.object.id);
   if (!components) return WorldStatus::StaleHandle;
   switch (scene::setComponentProperty(*components, typeId, propertyId, value, component.instance)) {
@@ -457,6 +531,39 @@ WorldStatus GameWorld::getResource(const ComponentHandle &component, std::string
   return WorldStatus::Ok;
 }
 
+WorldStatus GameWorld::resourceElementId(const ComponentHandle &component,std::string_view propertyId,u32 slot,u64 &out) const {
+  const auto status=validate(component.object);
+  if(status!=WorldStatus::Ok) return status;
+  const auto *value=readComponent(component);
+  if(!value) return WorldStatus::ComponentMissing;
+  const scene::ComponentResourceBinding *match=nullptr;
+  for(const auto &binding:value->type().resourceBindings) if(binding.id==propertyId) {
+    if(match) return WorldStatus::InvalidArgument;
+    match=&binding;
+  }
+  if(!match || !match->elementId || slot>=match->slotCount(*value)) return WorldStatus::InvalidArgument;
+  out=match->elementAt(*value,slot);
+  return out?WorldStatus::Ok:WorldStatus::UnknownElement;
+}
+
+WorldStatus GameWorld::getResourceByElementId(const ComponentHandle &component,std::string_view propertyId,u64 elementId,
+                                               resources::AssetGuid &out) const {
+  const auto status=validate(component.object);
+  if(status!=WorldStatus::Ok) return status;
+  const auto *value=readComponent(component);
+  if(!value) return WorldStatus::ComponentMissing;
+  if(!elementId) return WorldStatus::InvalidArgument;
+  const scene::ComponentResourceBinding *match=nullptr;
+  for(const auto &binding:value->type().resourceBindings) if(binding.id==propertyId) {
+    if(match) return WorldStatus::InvalidArgument;
+    match=&binding;
+  }
+  if(!match || !match->elementId) return WorldStatus::InvalidArgument;
+  for(u32 slot=0;slot<match->slotCount(*value);++slot) if(match->elementAt(*value,slot)==elementId)
+    return getResource(component,propertyId,slot,out);
+  return WorldStatus::UnknownElement;
+}
+
 WorldStatus GameWorld::setResource(const ComponentHandle &component, std::string_view propertyId, u32 slot,
                                    resources::AssetGuid resource, const resources::AssetRegistry &assets,
                                    std::span<const resources::EnvironmentProfile> environmentProfiles,
@@ -505,6 +612,90 @@ WorldStatus GameWorld::setResource(const ComponentHandle &component, std::string
       match->kind==resources::AssetType::Texture||match->kind==resources::AssetType::Material||(clip&&resource.valid());
   if(needsConsumerResolution&&(!resolveResource||!resolveResource(resource,match->kind,propertyId,slot,*candidate)))
     return WorldStatus::ComponentUnavailable;
+  if(!candidate->valid()) return WorldStatus::Rejected;
+  auto *components=editComponents(component.object.id);
+  return components&&components->replaceInstance(component.instance,*candidate)?WorldStatus::Ok:WorldStatus::StaleHandle;
+}
+
+WorldStatus GameWorld::setResourceByElementId(const ComponentHandle &component,std::string_view propertyId,u64 elementId,
+                                               resources::AssetGuid value,const resources::AssetRegistry &assets,
+                                               std::span<const resources::EnvironmentProfile> environmentProfiles,
+                                               const ComponentResourceResolver &resolveResource) {
+  const auto status=validate(component.object);
+  if(status!=WorldStatus::Ok) return status;
+  const auto *current=readComponent(component);
+  if(!current) return WorldStatus::ComponentMissing;
+  if(!elementId) return WorldStatus::InvalidArgument;
+  const scene::ComponentResourceBinding *match=nullptr;
+  for(const auto &binding:current->type().resourceBindings) if(binding.id==propertyId) {
+    if(match) return WorldStatus::InvalidArgument;
+    match=&binding;
+  }
+  if(!match || !match->elementId) return WorldStatus::InvalidArgument;
+  for(u32 slot=0;slot<match->slotCount(*current);++slot) if(match->elementAt(*current,slot)==elementId)
+    return setResource(component,propertyId,slot,value,assets,environmentProfiles,resolveResource);
+  return WorldStatus::UnknownElement;
+}
+
+WorldStatus GameWorld::appendAnimationClip(const ComponentHandle &component,resources::AssetGuid clip,u64 &elementId,
+                                            const ComponentResourceResolver &resolveResource) {
+  elementId=0;
+  const auto status=validate(component.object);
+  if(status!=WorldStatus::Ok) return status;
+  const auto *current=readComponent(component);
+  if(!current) return WorldStatus::ComponentMissing;
+  if(&current->type()!=&scene::Animation::descriptor) return WorldStatus::InvalidArgument;
+  const auto *schema=scene::findComponentSchema(current->type().id);
+  if(!schema) return WorldStatus::UnknownComponent;
+  if(schema->structuralInPlay==scene::PlayMutability::Never) return WorldStatus::NotMutableInPlay;
+  if(!clip.valid()) return WorldStatus::InvalidArgument;
+  auto candidate=current->clone();
+  if(!candidate||&candidate->type()!=&scene::Animation::descriptor) return WorldStatus::Rejected;
+  auto &animation=static_cast<scene::Animation &>(*candidate);
+  const u64 added=animation.appendClip(clip);
+  if(!added) return WorldStatus::LimitReached;
+  if(!animation.valid()) return WorldStatus::Rejected;
+  const u32 slot=static_cast<u32>(animation.clips.size()-1);
+  if(!resolveResource||!resolveResource(clip,resources::AssetType::AnimationClip,"clips",slot,*candidate))
+    return WorldStatus::ComponentUnavailable;
+  if(!candidate->valid()) return WorldStatus::Rejected;
+  auto *components=editComponents(component.object.id);
+  if(!components||!components->replaceInstance(component.instance,*candidate)) return WorldStatus::StaleHandle;
+  elementId=added;
+  return WorldStatus::Ok;
+}
+
+WorldStatus GameWorld::removeAnimationClip(const ComponentHandle &component,u64 elementId) {
+  const auto status=validate(component.object);
+  if(status!=WorldStatus::Ok) return status;
+  const auto *current=readComponent(component);
+  if(!current) return WorldStatus::ComponentMissing;
+  if(&current->type()!=&scene::Animation::descriptor||!elementId) return WorldStatus::InvalidArgument;
+  const auto *schema=scene::findComponentSchema(current->type().id);
+  if(!schema) return WorldStatus::UnknownComponent;
+  if(schema->structuralInPlay==scene::PlayMutability::Never) return WorldStatus::NotMutableInPlay;
+  auto candidate=current->clone();
+  if(!candidate||&candidate->type()!=&scene::Animation::descriptor) return WorldStatus::Rejected;
+  if(!static_cast<scene::Animation &>(*candidate).removeClip(elementId)) return WorldStatus::UnknownElement;
+  if(!candidate->valid()) return WorldStatus::Rejected;
+  auto *components=editComponents(component.object.id);
+  return components&&components->replaceInstance(component.instance,*candidate)?WorldStatus::Ok:WorldStatus::StaleHandle;
+}
+
+WorldStatus GameWorld::moveAnimationClip(const ComponentHandle &component,u64 elementId,u32 targetIndex) {
+  const auto status=validate(component.object);
+  if(status!=WorldStatus::Ok) return status;
+  const auto *current=readComponent(component);
+  if(!current) return WorldStatus::ComponentMissing;
+  if(&current->type()!=&scene::Animation::descriptor||!elementId) return WorldStatus::InvalidArgument;
+  const auto *schema=scene::findComponentSchema(current->type().id);
+  if(!schema) return WorldStatus::UnknownComponent;
+  if(schema->structuralInPlay==scene::PlayMutability::Never) return WorldStatus::NotMutableInPlay;
+  const auto &animation=static_cast<const scene::Animation &>(*current);
+  if(targetIndex>=animation.clips.size()) return WorldStatus::InvalidArgument;
+  auto candidate=current->clone();
+  if(!candidate||&candidate->type()!=&scene::Animation::descriptor) return WorldStatus::Rejected;
+  if(!static_cast<scene::Animation &>(*candidate).moveClip(elementId,targetIndex)) return WorldStatus::UnknownElement;
   if(!candidate->valid()) return WorldStatus::Rejected;
   auto *components=editComponents(component.object.id);
   return components&&components->replaceInstance(component.instance,*candidate)?WorldStatus::Ok:WorldStatus::StaleHandle;

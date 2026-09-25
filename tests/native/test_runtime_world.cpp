@@ -6,13 +6,16 @@
 #include "scene/component_schema.h"
 #include "scene/environment.h"
 #include "scene/mesh_renderer.h"
+#include "scene/physics_body.h"
 
 using namespace ae;
 using namespace ae::editor;
 using ae::runtime::GameWorld;
 using ae::runtime::ObjectHandle;
+using ae::runtime::ReparentPosePolicy;
 using ae::runtime::TransformAuthority;
 using ae::runtime::WorldStatus;
+using ae::runtime::WorldOperationState;
 
 namespace {
 EditorEntityId named(EditorDocument &doc, EditorEntityId parent, const char *name) {
@@ -200,6 +203,48 @@ AE_TEST(runtime_world_material_slots_are_typed_atomic_and_require_a_published_te
   AE_EXPECT_TRUE(authoredRender&&!authoredRender->slotTextures(1)[0].valid(),"binding autoral preservado");
 }
 
+AE_TEST(runtime_world_reparent_obeys_pose_policy_at_safe_point) {
+  EditorDocument doc;
+  const auto left=named(doc,doc.root(),"Esquerda");
+  const auto right=named(doc,doc.root(),"Direita");
+  const auto child=named(doc,left,"Filho");
+  auto setX=[&](EditorEntityId id,float x) {
+    auto values=*doc.find(id);
+    values.transform.position[0]=x;
+    return doc.applyEntityValues(id,values);
+  };
+  AE_EXPECT_TRUE(setX(left,10.f)&&setX(right,20.f)&&setX(child,2.f),"poses autorais");
+  const auto revision=doc.revision();
+  GameWorld world;
+  AE_EXPECT_TRUE(world.load(doc),"carga");
+  const auto handle=world.handle(child);
+  const auto target=world.handle(right);
+  AE_EXPECT_EQ((u32)world.setParent(handle,target,0,ReparentPosePolicy::KeepWorld),(u32)WorldStatus::Ok,
+               "troca enfileirada");
+  AE_EXPECT_EQ(world.graph().find(child)->parent,left,"hierarquia só muda no ponto seguro");
+  runtime::Transform movedParent;
+  AE_EXPECT_EQ((u32)world.localTransform(target,movedParent),(u32)WorldStatus::Ok,"pai legível");
+  movedParent.position[0]=30.f;
+  AE_EXPECT_EQ((u32)world.setLocalTransform(target,movedParent),(u32)WorldStatus::Ok,
+               "pai pode mudar antes do ponto seguro");
+  AE_EXPECT_EQ(world.flush(),1u,"troca aplicada");
+  runtime::Transform local;
+  AE_EXPECT_EQ((u32)world.localTransform(handle,local),(u32)WorldStatus::Ok,"transform local");
+  AE_EXPECT_TRUE(std::abs(local.position[0]+18.f)<.001f,"pose de mundo preservada na aplicação");
+  AE_EXPECT_EQ(world.graph().find(child)->parent,right,"novo pai");
+  AE_EXPECT_EQ((u32)world.setParent(handle,world.handle(left),0),(u32)WorldStatus::Ok,
+               "política padrão mantém local");
+  AE_EXPECT_EQ(world.flush(),1u,"segunda troca aplicada");
+  AE_EXPECT_EQ((u32)world.localTransform(handle,local),(u32)WorldStatus::Ok,"transform relido");
+  AE_EXPECT_TRUE(std::abs(local.position[0]+18.f)<.001f,"transform local intacto");
+  AE_EXPECT_EQ((u32)world.setParent(world.handle(left),handle,0),(u32)WorldStatus::Rejected,
+               "ciclo recusado");
+  world.setAuthority(child,TransformAuthority::PhysicsBody);
+  AE_EXPECT_EQ((u32)world.setParent(handle,target,0),(u32)WorldStatus::TransformOwnedByPhysics,
+               "pose da física não pode mudar de referencial");
+  AE_EXPECT_EQ(doc.revision(),revision,"documento autoral preservado");
+}
+
 AE_TEST(runtime_world_destroy_expires_handle_immediately_and_frees_at_safe_point) {
   EditorDocument doc;
   const auto parent = named(doc, doc.root(), "Pai");
@@ -227,6 +272,71 @@ AE_TEST(runtime_world_destroy_expires_handle_immediately_and_frees_at_safe_point
   AE_EXPECT_EQ(static_cast<u32>(destroyed.size()), 2u, "pai e filho relatados ao consumidor");
   AE_EXPECT_TRUE(!world.graph().exists(parent) && !world.graph().exists(child), "armazenamento liberado");
   AE_EXPECT_EQ(world.pendingCommandCount(), 0u, "fila esvaziada");
+}
+
+AE_TEST(runtime_world_tracked_structural_operations_report_safe_point_result) {
+  EditorDocument doc;
+  const auto first = named(doc, doc.root(), "Primeiro");
+  const auto second = named(doc, doc.root(), "Segundo");
+  GameWorld world;
+  AE_EXPECT_TRUE(world.load(doc), "carga");
+  u64 firstTicket = 0, cycleTicket = 0, removeTicket = 0;
+  AE_EXPECT_EQ((u32)world.setParent(world.handle(first), world.handle(second), 0,
+                                   ReparentPosePolicy::KeepLocal, &firstTicket), (u32)WorldStatus::Ok,
+               "primeira troca aceita");
+  AE_EXPECT_EQ((u32)world.setParent(world.handle(second), world.handle(first), 0,
+                                   ReparentPosePolicy::KeepLocal, &cycleTicket), (u32)WorldStatus::Ok,
+               "segunda troca aceita contra o grafo ainda não aplicado");
+  WorldOperationState state{};
+  WorldStatus result{};
+  AE_EXPECT_EQ((u32)world.operationResult(world.worldId(), cycleTicket, state, result), (u32)WorldStatus::Ok,
+               "ticket consultável");
+  AE_EXPECT_EQ((u32)state, (u32)WorldOperationState::Pending, "aguarda ponto seguro");
+  AE_EXPECT_EQ(world.flush(), 1u, "só primeira troca aplicada");
+  world.operationResult(world.worldId(), firstTicket, state, result);
+  AE_EXPECT_EQ((u32)state, (u32)WorldOperationState::Applied, "primeira aplicada");
+  world.operationResult(world.worldId(), cycleTicket, state, result);
+  AE_EXPECT_EQ((u32)state, (u32)WorldOperationState::Failed, "ciclo relatado");
+  AE_EXPECT_EQ((u32)result, (u32)WorldStatus::Rejected, "motivo do ciclo");
+
+  WorldStatus status{};
+  const auto camera = world.addComponent(world.handle(first), "astra.camera", status);
+  AE_EXPECT_EQ((u32)status, (u32)WorldStatus::Ok, "câmera anexada");
+  AE_EXPECT_EQ((u32)world.removeComponent(camera, &removeTicket), (u32)WorldStatus::Ok,
+               "remoção aceita");
+  world.addComponent(world.handle(first), "astra.camera.look", status);
+  AE_EXPECT_EQ((u32)status, (u32)WorldStatus::Ok, "dependente adicionado antes do ponto seguro");
+  AE_EXPECT_EQ(world.flush(), 0u, "dependência impede remoção");
+  world.operationResult(world.worldId(), removeTicket, state, result);
+  AE_EXPECT_EQ((u32)state, (u32)WorldOperationState::Failed, "remoção falhou");
+  AE_EXPECT_EQ((u32)result, (u32)WorldStatus::ComponentInUse, "motivo da remoção");
+  AE_EXPECT_EQ((u32)world.operationResult(world.worldId() + 1, removeTicket, state, result),
+               (u32)WorldStatus::ForeignWorld, "ticket preso à sessão");
+  u64 destroyTicket = 0;
+  const auto doomed = world.handle(first);
+  AE_EXPECT_EQ((u32)world.destroyObject(doomed, &destroyTicket), (u32)WorldStatus::Ok,
+               "destruição rastreada aceita");
+  AE_EXPECT_EQ((u32)world.validate(doomed), (u32)WorldStatus::StaleHandle,
+               "objeto vence antes da aplicação");
+  AE_EXPECT_EQ((u32)world.operationResult(world.worldId(), destroyTicket, state, result),
+               (u32)WorldStatus::Ok, "ticket continua acessível após destruição");
+  AE_EXPECT_EQ((u32)state, (u32)WorldOperationState::Pending, "destruição aguarda ponto seguro");
+  AE_EXPECT_EQ(world.flush(), 1u, "destruição aplicada");
+  world.operationResult(world.worldId(), destroyTicket, state, result);
+  AE_EXPECT_EQ((u32)state, (u32)WorldOperationState::Applied, "destruição confirmada");
+}
+
+AE_TEST(runtime_world_full_queue_does_not_expire_rejected_destroy) {
+  EditorDocument doc;
+  const auto child = named(doc, doc.root(), "Filho");
+  GameWorld world;
+  AE_EXPECT_TRUE(world.load(doc), "carga");
+  const auto handle = world.handle(child);
+  for (u32 i = 0; i < GameWorld::kMaximumPendingCommands; ++i)
+    AE_EXPECT_EQ((u32)world.setParent(handle, world.root(), 0), (u32)WorldStatus::Ok, "fila preenchida");
+  AE_EXPECT_EQ((u32)world.destroyObject(handle), (u32)WorldStatus::LimitReached, "destruição recusada");
+  AE_EXPECT_EQ((u32)world.validate(handle), (u32)WorldStatus::Ok, "handle continua válido");
+  AE_EXPECT_TRUE(world.graph().exists(child), "objeto preservado");
 }
 
 AE_TEST(runtime_world_creates_objects_immediately_without_breaking_iteration) {
@@ -320,6 +430,37 @@ AE_TEST(runtime_world_property_access_is_typed_and_addresses_each_instance) {
                "propriedade desconhecida");
   AE_EXPECT_EQ(static_cast<u32>(world.setProperty(a, "owner", scene::ObjectReference{999})),
                static_cast<u32>(WorldStatus::UnknownObject), "referência para objeto inexistente é recusada");
+}
+
+AE_TEST(runtime_world_reference_writes_keep_full_identity_and_scope) {
+  EditorDocument doc;
+  const auto parent=named(doc,doc.root(),"Corpo pai");
+  const auto child=named(doc,parent,"Forma filha");
+  const auto other=named(doc,doc.root(),"Outro corpo");
+  for(const auto id:{parent,other}) {
+    auto values=*doc.find(id);
+    AE_EXPECT_TRUE(values.components.add(scene::PhysicsBody::descriptor)!=nullptr,"corpo autorado");
+    AE_EXPECT_TRUE(doc.applyEntityValues(id,values),"valores aceitos");
+  }
+  auto values=*doc.find(child);
+  AE_EXPECT_TRUE(values.components.add(scene::Collider::descriptor)!=nullptr,"colisor autorado");
+  AE_EXPECT_TRUE(doc.applyEntityValues(child,values),"colisor aceito");
+  GameWorld world;
+  AE_EXPECT_TRUE(world.load(doc),"carga");
+  const auto collider=world.findComponent(world.handle(child),"astra.physics.collider");
+  AE_EXPECT_TRUE(collider.valid(),"instância encontrada");
+  AE_EXPECT_EQ((u32)world.setProperty(collider,"owner",scene::ObjectReference{parent}),(u32)WorldStatus::Ok,
+               "ancestral compatível aceito");
+  AE_EXPECT_EQ((u32)world.setProperty(collider,"owner",scene::ObjectReference{other}),(u32)WorldStatus::Rejected,
+               "corpo fora da ancestralidade recusado");
+  AE_EXPECT_EQ((u32)world.setProperty(collider,"owner",scene::ObjectReference{(1ull<<32)|parent}),
+               (u32)WorldStatus::InvalidArgument,"ID de 64 bits não trunca para um alvo vivo");
+  AE_EXPECT_EQ((u32)world.destroyObject(world.handle(other)),(u32)WorldStatus::Ok,"alvo marcado para remoção");
+  AE_EXPECT_EQ((u32)world.setProperty(collider,"owner",scene::ObjectReference{other}),
+               (u32)WorldStatus::StaleHandle,"alvo vencido é recusado antes do flush");
+  scene::ComponentPropertyValue saved;
+  AE_EXPECT_EQ((u32)world.getProperty(collider,"owner",saved),(u32)WorldStatus::Ok,"releitura");
+  AE_EXPECT_EQ(std::get<scene::ObjectReference>(saved).id,(u64)parent,"recusas não alteram a referência");
 }
 
 AE_TEST(runtime_world_transform_authority_protects_simulated_poses) {

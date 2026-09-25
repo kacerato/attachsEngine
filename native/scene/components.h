@@ -189,12 +189,18 @@ struct ComponentResourceBinding {
   // reinventaria a sentinela — e um deles a escreveria errado.
   bool inheritable=false;
   resources::AssetGuid none{};
+  // Coleções reordenáveis podem expor identidade persistente por elemento.
+  // Bindings por slot fixo deixam este callback vazio.
+  u64 (*elementId)(const ComponentValue &,u32 slot)=nullptr;
   bool declaresNone(const resources::AssetGuid &value) const noexcept {
     return none.valid() && value==none;
   }
   u32 slotCount(const ComponentValue &v) const {return slots?slots(v):0;}
   resources::AssetGuid at(const ComponentValue &v,u32 slot) const {
     return read&&slot<slotCount(v)?read(v,slot):resources::AssetGuid{};
+  }
+  u64 elementAt(const ComponentValue &v,u32 slot) const {
+    return elementId&&slot<slotCount(v)?elementId(v,slot):0;
   }
 };
 

@@ -62,7 +62,7 @@
 
 namespace ae::editor {
 
-enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName };
+enum class EditorTextPurpose { None, Rename, HierarchySearch, CreationSearch, Number, Code, ScriptName, CodeSearch, ScriptProperty, ComponentSearch, MeshSearch, ReferenceSearch, ResourceName, CodeLine, CodeFolder, ConsoleSearch, TextureSearch, ComponentPresetName, SceneViewName, PropertySearch };
 struct EditorTextEdit {
   EditorTextPurpose purpose=EditorTextPurpose::None;
   EditorSceneVersion version{};
@@ -1110,7 +1110,7 @@ public:
     }
     return 0;
   }
-  EditorEntityId createWaterSurface(bool cameraRelative);
+  EditorEntityId createWaterSurface(bool cameraRelative, EditorEntityId parent=kInvalidEntity);
   void reportWaterConfiguration(bool accepted) {
     state_.status=accepted?"Agua atualizada":"Configuracao de agua recusada; estado anterior mantido";
   }

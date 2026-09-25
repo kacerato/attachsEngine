@@ -5,6 +5,7 @@
 #include "harness.h"
 #include "skinned_glb_fixture.h"
 #include "editor/editor_play_scene.h"
+#include "editor/editor_archive.h"
 #include "editor/editor_session.h"
 #include "renderer/authoring_geometry.h"
 #include "runtime/transform_math.h"
@@ -132,7 +133,7 @@ AE_TEST(deformation_and_animation_components_round_trip_and_migrate_v1) {
 
   scene::Animation animation;
   const resources::AssetGuid walk{1, 2}, run{3, 4};
-  animation.clips = {walk, run};
+  animation.appendClip(walk);animation.appendClip(run);
   animation.clip = run;
   animation.playAutomatically = false;
   animation.wrapMode = resources::AnimationWrapMode::PingPong;
@@ -140,9 +141,24 @@ AE_TEST(deformation_and_animation_components_round_trip_and_migrate_v1) {
   std::stringstream saved;
   animation.write(saved);
   scene::Animation loaded;
-  AE_EXPECT_TRUE(loaded.read(saved, 2) && loaded.clips == animation.clips && loaded.clip == run && !loaded.playAutomatically &&
+  AE_EXPECT_TRUE(loaded.read(saved, 3) && loaded.clips == animation.clips && loaded.clip == run && !loaded.playAutomatically &&
                  loaded.wrapMode == resources::AnimationWrapMode::PingPong && near(loaded.speed, -.5f),
                  "lista de clipes, padrão, repetição e velocidade");
+  const auto runElement=loaded.clips[1].id;
+  AE_EXPECT_TRUE(loaded.moveClip(runElement,0) && loaded.clips[0].id==runElement && loaded.clips[0].asset==run,
+                 "reordenação conserva a identidade e o recurso da entrada");
+  std::stringstream reordered;loaded.write(reordered);
+  scene::Animation reopened;
+  AE_EXPECT_TRUE(reopened.read(reordered,3) && reopened.clips==loaded.clips,"arquivo v3 conserva ordem e IDs");
+  AE_EXPECT_TRUE(reopened.removeClip(runElement) && reopened.appendClip()>runElement,
+                 "remoção não reutiliza identidade antiga");
+  std::stringstream v2;v2<<run.text()<<" 0 2 -0.5 2 "<<walk.text()<<' '<<run.text();
+  scene::Animation migrated;
+  AE_EXPECT_TRUE(migrated.read(v2,2) && migrated.clips.size()==2 && migrated.clips[0].id==1 &&
+                 migrated.clips[1].id==2 && migrated.clips[1].asset==run,"arquivo v2 ganha IDs estáveis");
+  std::stringstream duplicate;duplicate<<run.text()<<" 0 2 -0.5 2 3 1 "<<walk.text()<<" 1 "<<run.text();
+  scene::Animation invalid;
+  AE_EXPECT_TRUE(!invalid.read(duplicate,3),"arquivo v3 com IDs duplicados é recusado");
   std::stringstream legacy("2 1 1 1");
   AE_EXPECT_TRUE(loaded.read(legacy, 1) && loaded.legacyClipIndex == 2 && loaded.clips.empty(),
                  "v1 guarda o índice até o editor traduzi-lo");
@@ -153,6 +169,33 @@ AE_TEST(deformation_and_animation_components_round_trip_and_migrate_v1) {
                      scene::ComponentPropertyStatus::Applied &&
                  static_cast<const scene::Animation *>(components.find(scene::Animation::descriptor))->clips.size() == 3,
                  "clip_count redimensiona a lista");
+}
+
+AE_TEST(animation_clip_element_ids_survive_scene_save_and_reload) {
+  EditorDocument document;
+  const auto owner=document.createEntity(document.root(),EditorEntityKind::Folder,"Animated");
+  AE_EXPECT_TRUE(owner!=kInvalidEntity,"objeto criado");
+  if(owner==kInvalidEntity) return;
+  auto values=*document.find(owner);
+  auto *animation=static_cast<scene::Animation *>(values.components.add(scene::Animation::descriptor));
+  AE_EXPECT_TRUE(animation!=nullptr,"componente criado");
+  if(!animation) return;
+  const resources::AssetGuid first{11,12},second{21,22};
+  const u64 firstId=animation->appendClip(first),removedId=animation->appendClip(second);
+  AE_EXPECT_TRUE(animation->removeClip(removedId),"entrada removida");
+  const u64 newId=animation->appendClip(second);
+  AE_EXPECT_TRUE(newId>removedId && animation->moveClip(newId,0),"ID novo reordenado");
+  AE_EXPECT_TRUE(document.applyEntityValues(owner,values),"componente aplicado ao documento");
+  EditorDocument restored;
+  AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(document,17),17,restored),"cena reaberta");
+  const auto *saved=component<scene::Animation>(restored,owner);
+  AE_EXPECT_TRUE(saved && saved->clips.size()==2 && saved->clips[0].id==newId && saved->clips[0].asset==second &&
+                 saved->clips[1].id==firstId && saved->clips[1].asset==first,
+                 "cena conserva ordem, IDs e referências");
+  if(saved) {
+    auto next=*saved;
+    AE_EXPECT_TRUE(next.appendClip()>newId,"cena reaberta não reutiliza ID removido");
+  }
 }
 
 AE_TEST(imported_rig_binds_bones_and_clip_identity_and_plays) {
@@ -173,7 +216,7 @@ AE_TEST(imported_rig_binds_bones_and_clip_identity_and_plays) {
                  "ossos ligados aos objetos das juntas, na ordem do skin");
   const auto *animation = component<scene::Animation>(doc, rig);
   const auto wave = resources::animationClipGuid(report.source, "Wave", 0);
-  AE_EXPECT_TRUE(animation && animation->clips.size() == 1 && animation->clips[0] == wave && animation->clip == wave,
+  AE_EXPECT_TRUE(animation && animation->clips.size() == 1 && animation->clips[0].asset == wave && animation->clip == wave,
                  "o clipe é referenciado pela identidade derivada da fonte e do nome");
   runtime::AnimationClipView view;
   AE_EXPECT_TRUE(session.mapScene().findClip(wave, view) && view.name == "Wave" && near(view.clip->duration, 1),
@@ -238,7 +281,7 @@ AE_TEST(fox_cross_fades_and_layers_blend_three_clips_on_one_skeleton) {
   const auto *animation = component<scene::Animation>(doc, owner);
   AE_EXPECT_TRUE(animation && animation->clips.size() == 3, "Survey, Walk e Run na lista");
   if (!animation || animation->clips.size() != 3) return;
-  const auto survey = animation->clips[0], walk = animation->clips[1], run = animation->clips[2];
+  const auto survey = animation->clips[0].asset, walk = animation->clips[1].asset, run = animation->clips[2].asset;
   runtime::AnimationClipView view;
   AE_EXPECT_TRUE(session.mapScene().findClip(walk, view) && view.name == "Walk", "nomes do arquivo");
   const auto *mesh = component<scene::SkinnedMesh>(doc, withComponent(doc, scene::SkinnedMesh::descriptor));
@@ -467,7 +510,7 @@ AE_TEST(reimport_rebinds_missing_bones_and_translates_v1_clip_index) {
 }
 
 namespace {
-// Runtime de scripts falso: o suficiente para a ABI v9 chegar e ser usada.
+// Runtime de scripts falso: o suficiente para a ABI v13 chegar e ser usada.
 struct AnimationRuntime {
   static scene::ScriptSceneAccess access;
   static int start(const u8 *, int, const u8 *, int, const scene::ScriptSceneAccess *value) {
@@ -490,7 +533,7 @@ struct AnimationRuntime {
 scene::ScriptSceneAccess AnimationRuntime::access{};
 } // namespace
 
-AE_TEST(script_abi_v9_plays_blends_and_reports_animation_state) {
+AE_TEST(script_abi_v13_plays_blends_and_edits_clip_entries) {
   const auto bytes = fixture("Fox.glb");
   EditorSession session;
   DeformationPublisher gpu;
@@ -508,13 +551,45 @@ AE_TEST(script_abi_v9_plays_blends_and_reports_animation_state) {
 
   EditorPlayScene play;
   play.setScriptRuntime(AnimationRuntime::api(), "/projeto");
+  resources::AssetRegistry assets;
+  std::vector<resources::EnvironmentProfile> profiles;
+  renderer::ProjectRenderingSettings settings;
+  renderer::RenderingCapabilities capabilities;
+  const auto policy=renderer::resolveRenderingPolicy(settings,capabilities,renderer::ThermalPressure::None);
+  play.configureScriptRendering(settings,capabilities,renderer::ThermalPressure::None,policy,{},&assets,&profiles);
+  play.setScriptResourceAvailability([&](resources::AssetGuid guid,resources::AssetType kind,std::string_view,
+                                           u32,scene::ComponentValue &) {
+    runtime::AnimationClipView view;
+    return kind==resources::AssetType::AnimationClip && session.mapScene().findClip(guid,view);
+  });
   AE_EXPECT_TRUE(play.start(doc, session.mapScene()), "Play com o runtime falso");
   auto &abi = AnimationRuntime::access;
-  AE_EXPECT_TRUE(abi.version == 9 && abi.available(), "ABI v9 completa");
+  AE_EXPECT_TRUE(abi.version == 13 && abi.available(), "ABI v13 completa");
+  AE_EXPECT_TRUE(!abi.setParentWithPolicy(abi.context,owner,doc.root(),0,99),
+                 "política de pose inválida recusada pela ABI");
+  u64 ticket = 0;
+  AE_EXPECT_TRUE(abi.queueStructuralOperation(abi.context,1,owner,doc.root(),0,0,&ticket) && ticket,
+                 "ponte enfileira troca rastreada");
+  u32 operationState = 99, operationResult = 99;
+  AE_EXPECT_TRUE(abi.queryOperation(abi.context,play.world().worldId(),ticket,&operationState,&operationResult) && operationState == 0,
+                 "ponte consulta pendência");
+  AE_EXPECT_EQ(play.world().flush(),1u,"ponto seguro aplica troca rastreada");
+  AE_EXPECT_TRUE(abi.queryOperation(abi.context,play.world().worldId(),ticket,&operationState,&operationResult) &&
+                 operationState == 1 && operationResult == (u32)runtime::WorldStatus::Ok,"ponte consulta resultado aplicado");
   u8 name[64]{};
   scene::ScriptAssetGuid run{};
   AE_EXPECT_EQ(abi.animationClipAt(abi.context, owner, instance, 2, &run, name, sizeof name), 3, "três clipes");
   AE_EXPECT_TRUE(std::string(reinterpret_cast<const char *>(name)) == "Run", "nome do terceiro clipe");
+  const u8 property[]{'c','l','i','p','s'};
+  u64 element=0;
+  AE_EXPECT_EQ(abi.resourceElementId(abi.context,owner,instance,property,5,2,&element),1,"ID do terceiro elemento");
+  AE_EXPECT_TRUE(element!=0,"ID persistente não é posição");
+  scene::ScriptAssetGuid byId{};
+  AE_EXPECT_EQ(abi.getResourceByElementId(abi.context,owner,instance,property,5,element,&byId),1,"recurso por ID");
+  AE_EXPECT_TRUE(byId.high==run.high && byId.low==run.low,"ID resolve Run");
+  AE_EXPECT_EQ(abi.setResourceByElementId(abi.context,owner,instance,property,5,element,run),1,"escrita por ID usa consumidor");
+  AE_EXPECT_EQ(abi.getResourceByElementId(abi.context,owner,instance,property,5,element+999,&byId),0,"ID ausente recusado");
+  AE_EXPECT_EQ(abi.lastStatus(abi.context),static_cast<u32>(runtime::WorldStatus::UnknownElement),"erro de elemento ausente");
   scene::ScriptAnimationCommand fade{};
   fade.op = 1; fade.clip = run; fade.seconds = .4f;
   AE_EXPECT_EQ(abi.animationCommand(abi.context, owner, instance, &fade), 1, "CrossFade pela ABI");
@@ -531,6 +606,45 @@ AE_TEST(script_abi_v9_plays_blends_and_reports_animation_state) {
   AE_EXPECT_EQ(abi.animationCommand(abi.context, owner, instance, &bogus), 0, "clipe estranho recusado");
   AE_EXPECT_EQ(abi.lastStatus(abi.context), static_cast<u32>(runtime::WorldStatus::ClipNotInComponent), "com o motivo");
   AE_EXPECT_EQ(abi.animationCommand(abi.context, owner, instance + 999, &fade), 0, "componente inexistente recusado");
+  scene::ScriptAssetGuid survey{};
+  AE_EXPECT_EQ(abi.animationClipAt(abi.context,owner,instance,0,&survey,nullptr,0),3,"clipe inicial disponível");
+  AE_EXPECT_EQ(abi.setResourceByElementId(abi.context,owner,instance,property,5,element,survey),1,
+               "troca por ID conserva o elemento");
+  AE_EXPECT_TRUE(play.advance(.01),"avaliador sincroniza a lista editada");
+  AE_EXPECT_EQ(abi.getAnimationState(abi.context,owner,instance,run,&state),0,"clipe removido deixa de tocar");
+  AE_EXPECT_EQ(abi.lastStatus(abi.context),static_cast<u32>(runtime::WorldStatus::ClipNotInComponent),
+               "estado antigo é recusado");
+  u64 added=0;
+  AE_EXPECT_EQ(abi.appendAnimationClip(abi.context,owner,instance,run,&added),1,"adiciona Run no mundo Play");
+  AE_EXPECT_TRUE(added>element,"nova entrada não reutiliza ID existente");
+  AE_EXPECT_EQ(abi.animationClipAt(abi.context,owner,instance,0,nullptr,nullptr,0),4,"lista cresceu");
+  AE_EXPECT_EQ(abi.getResourceByElementId(abi.context,owner,instance,property,5,added,&byId),1,"nova entrada resolve por ID");
+  AE_EXPECT_TRUE(byId.high==run.high && byId.low==run.low,"recurso adicionado é Run");
+  AE_EXPECT_EQ(abi.moveAnimationClip(abi.context,owner,instance,added,0),1,"move entrada sem recriar ID");
+  u64 first=0;
+  AE_EXPECT_EQ(abi.resourceElementId(abi.context,owner,instance,property,5,0,&first),1,"primeiro elemento");
+  AE_EXPECT_EQ(first,added,"identidade preservada na reordenação");
+  AE_EXPECT_EQ(abi.animationCommand(abi.context,owner,instance,&fade),1,"clipe adicionado pode tocar");
+  AE_EXPECT_EQ(abi.appendAnimationClip(abi.context,owner,instance,{7,7},&first),0,"recurso ausente não entra");
+  AE_EXPECT_EQ(abi.lastStatus(abi.context),static_cast<u32>(runtime::WorldStatus::ComponentUnavailable),
+               "consumidor informa recurso indisponível");
+  AE_EXPECT_EQ(abi.animationClipAt(abi.context,owner,instance,0,nullptr,nullptr,0),4,"falha não altera lista");
+  AE_EXPECT_EQ(abi.moveAnimationClip(abi.context,owner,instance,added,4),0,"índice fora da lista recusado");
+  AE_EXPECT_EQ(abi.lastStatus(abi.context),static_cast<u32>(runtime::WorldStatus::InvalidArgument),"motivo do índice");
+  AE_EXPECT_EQ(abi.removeAnimationClip(abi.context,owner,instance,added),1,"remove por ID");
+  AE_EXPECT_EQ(abi.removeAnimationClip(abi.context,owner,instance,added),0,"ID vencido recusado");
+  AE_EXPECT_EQ(abi.lastStatus(abi.context),static_cast<u32>(runtime::WorldStatus::UnknownElement),"motivo do ID vencido");
+  AE_EXPECT_EQ(abi.animationClipAt(abi.context,owner,instance,0,nullptr,nullptr,0),3,"lista voltou ao tamanho inicial");
+  AE_EXPECT_TRUE(play.advance(.01),"avaliador retira estado do clipe removido");
+  AE_EXPECT_EQ(abi.getAnimationState(abi.context,owner,instance,run,&state),0,"Run removido não permanece tocando");
+  for(usize i=3;i<scene::Animation::MaximumClips;++i)
+    AE_EXPECT_EQ(abi.appendAnimationClip(abi.context,owner,instance,run,&added),1,"entrada dentro do limite");
+  AE_EXPECT_EQ(abi.appendAnimationClip(abi.context,owner,instance,run,&added),0,"limite de clipes recusado");
+  AE_EXPECT_EQ(abi.lastStatus(abi.context),static_cast<u32>(runtime::WorldStatus::LimitReached),"motivo do limite");
+  AE_EXPECT_EQ(added,0,"falha não devolve ID novo");
+  AE_EXPECT_EQ(abi.animationClipAt(abi.context,owner,instance,0,nullptr,nullptr,0),
+               static_cast<int>(scene::Animation::MaximumClips),"limite não ultrapassado");
+  AE_EXPECT_EQ(component<scene::Animation>(doc,owner)->clips.size(),3,"Play não alterou o documento autoral");
   play.stop();
 }
 
@@ -546,7 +660,7 @@ AE_TEST(inspector_clip_resource_command_accepts_loaded_clips_refuses_unknown_and
   const auto *animation = component<scene::Animation>(doc, owner);
   if (!animation) return;
   const auto instance = animation->instanceId();
-  const auto run = animation->clips[2];
+  const auto run = animation->clips[2].asset;
   const auto catalog = session.mapScene().clipCatalog();
   AE_EXPECT_TRUE(catalog.size() == 3 && catalog[2].name == "Run" && catalog[2].duration > 0, "catálogo do seletor");
   EditorActionRequest request;
@@ -564,7 +678,7 @@ AE_TEST(inspector_clip_resource_command_accepts_loaded_clips_refuses_unknown_and
   request.version = session.sceneVersion();
   request.action = EditorAction::Undo;
   AE_EXPECT_TRUE(session.dispatch(request).status == EditorActionStatus::Applied &&
-                 component<scene::Animation>(doc, owner)->clip == animation->clips[0], "um desfazer volta ao Survey");
+                 component<scene::Animation>(doc, owner)->clip == animation->clips[0].asset, "um desfazer volta ao Survey");
 }
 
 // O documento salvo guarda um peso por blend shape: reabrir não pode zerar os endereços.

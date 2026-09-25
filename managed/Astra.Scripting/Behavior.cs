@@ -14,13 +14,35 @@ public sealed class PropertyIdAttribute(string id) : Attribute
     public string Id { get; } = id;
 }
 
-public readonly record struct ObjectReference(ulong ObjectId);
+/// <summary>
+/// O ID autoral é persistido na cena. Referências obtidas em Play também guardam
+/// a sessão e a geração, para não apontarem para outro objeto após Stop/Play.
+/// </summary>
+public readonly record struct ObjectReference(ulong ObjectId)
+{
+    internal ISceneAccess? Scene { get; init; }
+    internal uint World { get; init; }
+    internal uint Generation { get; init; }
+
+    internal static ObjectReference Capture(ISceneAccess scene, ulong id) => id == 0
+        ? default
+        : new(id) { Scene = scene, World = scene.WorldId, Generation = scene.GenerationOf(id) };
+
+    internal WorldStatus StatusIn(ISceneAccess scene)
+    {
+        if (ObjectId == 0) return WorldStatus.Ok;
+        if (Scene is null) return WorldStatus.Ok; // ID autoral ainda não vinculado a uma sessão.
+        if (!ReferenceEquals(Scene, scene) || World != scene.WorldId) return WorldStatus.ForeignWorld;
+        return Generation != 0 && Generation == scene.GenerationOf(ObjectId)
+            ? WorldStatus.Ok : WorldStatus.StaleHandle;
+    }
+}
 public readonly record struct AssetReference(string AssetId);
 public readonly record struct TransformValue(Vector3 Position, Quaternion Rotation, Vector3 Scale);
 
 /// <summary>
 /// A superfície de baixo nível do mundo de execução: uma tradução direta da ABI
-/// nativa v8 (native/scene/script_runtime.h). O documento autoral nunca cruza
+/// nativa v12 (native/scene/script_runtime.h). O documento autoral nunca cruza
 /// esta API.
 ///
 /// Os comportamentos do projeto usam <see cref="GameObject"/> e
@@ -68,6 +90,12 @@ public interface ISceneAccess
     ulong CreateObject(ulong parent, string name) => throw new NotSupportedException();
     bool DestroyObject(ulong objectId) => throw new NotSupportedException();
     bool SetParent(ulong objectId, ulong parent, uint childIndex) => throw new NotSupportedException();
+    bool SetParentWithPolicy(ulong objectId, ulong parent, uint childIndex, ReparentPosePolicy policy)
+        => throw new NotSupportedException();
+    ulong QueueStructuralOperation(uint kind, ulong objectId, ulong other, uint childIndex,
+                                    ReparentPosePolicy policy) => throw new NotSupportedException();
+    WorldStatus QueryOperation(uint world, ulong operationId, out WorldOperationState state,
+                               out WorldStatus result) => throw new NotSupportedException();
 
     // --- v3: componentes ----------------------------------------------------
     int ComponentCount(ulong objectId) => throw new NotSupportedException();
@@ -131,6 +159,20 @@ public interface ISceneAccess
     /// <summary>Quantos clipes o componente lista (-1 sem componente); com índice válido, o clipe e o nome.</summary>
     int AnimationClipAt(ulong objectId, ulong instanceId, uint index, out AssetGuid clip, out string name)
         => throw new NotSupportedException();
+    // v10: elemento persistente de uma coleção de recursos reordenável.
+    bool ResourceElementId(ulong objectId, ulong instanceId, string propertyId, uint slot, out ulong elementId)
+        => throw new NotSupportedException();
+    bool TryGetResourceByElementId(ulong objectId, ulong instanceId, string propertyId, ulong elementId, out AssetGuid value)
+        => throw new NotSupportedException();
+    bool SetResourceByElementId(ulong objectId, ulong instanceId, string propertyId, ulong elementId, AssetGuid value)
+        => throw new NotSupportedException();
+    // v11: estrutura da lista de clipes do componente Animation no mundo Play.
+    bool AppendAnimationClip(ulong objectId, ulong instanceId, AssetGuid clip, out ulong elementId)
+        => throw new NotSupportedException();
+    bool RemoveAnimationClip(ulong objectId, ulong instanceId, ulong elementId)
+        => throw new NotSupportedException();
+    bool MoveAnimationClip(ulong objectId, ulong instanceId, ulong elementId, uint targetIndex)
+        => throw new NotSupportedException();
 }
 
 /// <summary>
@@ -175,6 +217,7 @@ public abstract class Behavior
     /// <summary>Resolve uma referência autorada no inspetor para um objeto vivo.</summary>
     protected GameObject? Resolve(ObjectReference reference)
     {
+        if (reference.StatusIn(Scene) != WorldStatus.Ok) return null;
         if (reference.ObjectId == 0 || !Scene.Exists(reference.ObjectId)) return null;
         return GameObject.Resolve(Scene, reference.ObjectId);
     }

@@ -150,6 +150,7 @@ constexpr const char *kNames[] = {
     "ui/chevron-right",
     "ui/chevron-up",
     "ui/close",
+    "ui/diagnostics",
     "ui/help",
     "ui/home",
     "ui/info",

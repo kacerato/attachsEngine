@@ -262,11 +262,11 @@ inline std::string componentMatrixMarkdown() {
     // depende? Herança e ausência declarada são estados distintos e aparecem.
     if (!schema.type->resourceBindings.empty()) {
       out += "**Recursos endereçados**\n\n";
-      out += "| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada |\n|---|---|---|---|---|\n";
+      out += "| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada | ID por elemento |\n|---|---|---|---|---|---|\n";
       for (const auto &binding : schema.type->resourceBindings)
         out += "| `" + std::string(binding.id) + "` | " + escapeTableCell(binding.name) + " | " +
                resources::assetTypeName(binding.kind) + " | " + (binding.inheritable ? "sim" : "não") + " | " +
-               (binding.none.valid() ? "sim" : "não") + " |\n";
+               (binding.none.valid() ? "sim" : "não") + " | " + (binding.elementId ? "sim" : "não") + " |\n";
       out += "\n**Propriedades**\n\n";
     }
     out += "| PropertyId | Rótulo | Tipo | Grupo | Padrão | Domínio | Unidade | Consumidor | Invalida | Condicional | Por slot |\n";

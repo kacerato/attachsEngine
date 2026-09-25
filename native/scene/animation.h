@@ -25,7 +25,12 @@ namespace ae::scene {
 class Animation final : public ComponentValue {
 public:
   static constexpr usize MaximumClips = 32;
-  std::vector<resources::AssetGuid> clips;
+  struct ClipEntry {
+    u64 id=0; // identidade do elemento, independente da posição e do AssetGuid
+    resources::AssetGuid asset{};
+    bool operator==(const ClipEntry &) const = default;
+  };
+  std::vector<ClipEntry> clips;
   resources::AssetGuid clip{};
   bool playAutomatically = true;
   // glTF não declara modo de repetição; Loop deixa o clipe importado visível.
@@ -40,21 +45,52 @@ public:
   const ComponentType &type() const override { return descriptor; }
   std::unique_ptr<ComponentValue> clone() const override { return std::make_unique<Animation>(*this); }
   bool valid() const override {
-    return clips.size() <= MaximumClips && static_cast<u32>(wrapMode) <= 3 && std::isfinite(speed) && speed >= -10 &&
-           speed <= 10;
+    if(clips.size()>MaximumClips || static_cast<u32>(wrapMode)>3 || !std::isfinite(speed) || speed<-10 || speed>10 ||
+       !nextClipId_) return false;
+    for(usize i=0;i<clips.size();++i) {
+      if(!clips[i].id || clips[i].id>=nextClipId_) return false;
+      for(usize j=0;j<i;++j) if(clips[i].id==clips[j].id) return false;
+    }
+    return true;
   }
   bool contains(const resources::AssetGuid &id) const {
-    for (const auto &entry : clips) if (entry == id) return true;
+    for (const auto &entry : clips) if (entry.asset == id) return true;
     return false;
   }
+  u64 appendClip(resources::AssetGuid asset={}) {
+    if(clips.size()>=MaximumClips || nextClipId_==std::numeric_limits<u64>::max()) return 0;
+    const u64 id=nextClipId_++;
+    clips.push_back({id,asset});
+    return id;
+  }
+  bool resizeClips(usize count) {
+    if(count>MaximumClips || (count>clips.size() && count-clips.size()>std::numeric_limits<u64>::max()-nextClipId_)) return false;
+    if(count<clips.size()) clips.resize(count);
+    else while(clips.size()<count) if(!appendClip()) return false;
+    return true;
+  }
+  bool moveClip(u64 id,usize target) {
+    if(target>=clips.size()) return false;
+    usize from=0;while(from<clips.size() && clips[from].id!=id) ++from;
+    if(from==clips.size()) return false;
+    const auto entry=clips[from];clips.erase(clips.begin()+static_cast<std::ptrdiff_t>(from));
+    clips.insert(clips.begin()+static_cast<std::ptrdiff_t>(target),entry);
+    return true;
+  }
+  bool removeClip(u64 id) {
+    for(auto it=clips.begin();it!=clips.end();++it) if(it->id==id) {clips.erase(it);return true;}
+    return false;
+  }
+  u64 nextClipId() const noexcept {return nextClipId_;}
   void write(std::ostream &out) const override {
     const auto guid = [](const resources::AssetGuid &value) { return value.valid() ? value.text() : std::string("-"); };
     out << guid(clip) << ' ' << playAutomatically << ' ' << static_cast<u32>(wrapMode) << ' ' << speed << ' '
-        << clips.size();
-    for (const auto &entry : clips) out << ' ' << guid(entry);
+        << clips.size() << ' ' << nextClipId_;
+    for (const auto &entry : clips) out << ' ' << entry.id << ' ' << guid(entry.asset);
   }
   bool read(std::istream &in, u32 version) override {
     clips.clear();
+    nextClipId_=1;
     clip = {};
     legacyClipIndex = ~0u;
     u32 mode = 0;
@@ -66,7 +102,7 @@ public:
       wrapMode = static_cast<resources::AnimationWrapMode>(mode);
       return valid();
     }
-    if (version != 2) return false;
+    if (version != 2 && version != 3) return false;
     std::string clipText;
     usize count = 0;
     if (!(in >> clipText >> playAutomatically >> mode >> speed >> count) || mode > 3 || count > MaximumClips) return false;
@@ -75,14 +111,22 @@ public:
       return text == "-" || resources::AssetGuid::parse(text, out);
     };
     if (!parse(clipText, clip)) return false;
-    clips.resize(count);
-    for (auto &entry : clips) {
+    if(version==3 && !(in>>nextClipId_)) return false;
+    for (usize i=0;i<count;++i) {
       std::string text;
-      if (!(in >> text) || !parse(text, entry)) return false;
+      u64 id=0;
+      if(version==3 && !(in>>id)) return false;
+      if (!(in >> text)) return false;
+      resources::AssetGuid asset;
+      if(!parse(text,asset)) return false;
+      if(version==2) {if(!appendClip(asset)) return false;}
+      else clips.push_back({id,asset});
     }
     wrapMode = static_cast<resources::AnimationWrapMode>(mode);
     return valid();
   }
+private:
+  u64 nextClipId_=1;
 };
 
 inline constexpr std::array<ComponentNumber, 1> animationNumbers{{
@@ -117,7 +161,7 @@ inline constexpr std::array<ComponentEnum, 2> animationEnums{{
   // diminuir tira as últimas.
   {"clip_count", "Quantidade de clipes", animationClipCountOptions,
    [](const ComponentValue &v) { return static_cast<u32>(static_cast<const Animation &>(v).clips.size()); },
-   [](ComponentValue &v, u32 value) { static_cast<Animation &>(v).clips.resize(value); }, {"Clipes"}}
+   [](ComponentValue &v, u32 value) { static_cast<Animation &>(v).resizeClips(value); }, {"Clipes"}}
 }};
 inline constexpr std::array<ComponentResourceBinding, 2> animationResources{{
   {"clip", "Clipe padrão", resources::AssetType::AnimationClip,
@@ -133,18 +177,22 @@ inline constexpr std::array<ComponentResourceBinding, 2> animationResources{{
    [](const ComponentValue &v) { return static_cast<u32>(static_cast<const Animation &>(v).clips.size()); },
    [](const ComponentValue &v, u32 slot) {
      const auto &a = static_cast<const Animation &>(v);
-     return slot < a.clips.size() ? a.clips[slot] : resources::AssetGuid{};
+     return slot < a.clips.size() ? a.clips[slot].asset : resources::AssetGuid{};
    },
    [](ComponentValue &v, u32 slot, resources::AssetGuid value) {
      auto &a = static_cast<Animation &>(v);
      if (slot >= a.clips.size()) return false;
-     a.clips[slot] = value;
+     a.clips[slot].asset = value;
      return true;
    },
-   {"Clipes", "", "Clipes que este objeto pode tocar (Animation.animations)"}}
+   {"Clipes", "", "Clipes que este objeto pode tocar (Animation.animations)"},false,{},
+   [](const ComponentValue &v,u32 slot) -> u64 {
+     const auto &a=static_cast<const Animation &>(v);
+     return slot<a.clips.size()?a.clips[slot].id:u64{0};
+   }}
 }};
 inline const ComponentType Animation::descriptor{
-  "astra.animation", 2, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<Animation>(); },
+  "astra.animation", 3, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<Animation>(); },
   animationNumbers, animationBooleans, animationEnums, nullptr, false, {}, {}, animationResources
 };
 } // namespace ae::scene

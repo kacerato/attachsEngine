@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json;
 using Astra;
 
 namespace Aether.Tests;
@@ -151,6 +152,8 @@ public static class AstraWorldTests
             LastStatus = WorldStatus.Ok;
             return true;
         }
+        public bool SetParentWithPolicy(ulong objectId, ulong parent, uint childIndex, ReparentPosePolicy policy) =>
+            SetParent(objectId, parent, childIndex);
 
         public int ComponentCount(ulong objectId) => Live(objectId)?.Components.Count ?? -1;
         public (ulong Instance, string TypeId) ComponentAt(ulong objectId, uint index)
@@ -290,10 +293,30 @@ public static class AstraWorldTests
         Assert.Equal(root, child.Parent!);
         Assert.Equal(2, root.ChildCount);
 
+        child.SetParent(parent, posePolicy: ReparentPosePolicy.KeepWorld);
+        world.Flush();
+        Assert.Equal(parent, child.Parent!);
+
         child.Name = "Elevador";
         Assert.Equal("Elevador", child.Name);
         child.SetActive(false);
         Assert.False(child.ActiveInHierarchy, "objeto desativado");
+    }
+
+    [Test]
+    public static void ReparentRecusaPaiDeOutroMundoMesmoComIdsIguais()
+    {
+        var world = new FakeWorld(7);
+        var other = new FakeWorld(7);
+        var child = world.RootObject.CreateChild("Filho");
+        Assert.Throws<WorldException>(() => child.SetParent(other.RootObject),
+            "a referência deve pertencer ao mesmo acesso de cena");
+        Assert.Throws<WorldException>(() => child.SetParent(world.RootObject, -1),
+            "índice negativo não deve virar zero");
+        var stale = world.RootObject.CreateChild("Pai");
+        stale.Destroy();
+        Assert.Throws<WorldException>(() => child.SetParent(stale),
+            "pai removido não deve ser aceito");
     }
 
     [Test]
@@ -365,6 +388,38 @@ public static class AstraWorldTests
         Assert.Equal(2, target.ComponentCount, "componente removido");
         Assert.False(second.IsAlive, "instância removida não resolve");
         Assert.True(first.IsAlive, "a outra instância continua válida");
+    }
+
+    [Test]
+    public static void ReferenciasDeComponenteRespeitamMundoEGeracao()
+    {
+        var world = new FakeWorld(12);
+        var other = new FakeWorld(12); // IDs e número de mundo iguais não bastam.
+        var owner = world.RootObject.CreateChild("Origem");
+        var component = owner.AddComponent(ComponentIds.Collider);
+        var target = world.RootObject.CreateChild("Destino");
+        var foreign = other.RootObject.CreateChild("Outro destino");
+        var reference = target.AsReference();
+        Assert.Equal("{\"ObjectId\":" + target.ObjectId + "}", JsonSerializer.Serialize(reference),
+            "sessão e geração não entram no dado autoral");
+
+        component.SetReference("owner", target);
+        var read = component.GetReference("owner");
+        Assert.Equal(target.ObjectId, read.ObjectId);
+        Assert.Throws<WorldException>(() => component.SetReference("owner", foreign.AsReference()),
+            "referência vinculada a outro acesso de cena é recusada");
+        Assert.Throws<WorldException>(() => component.SetReference("owner", foreign),
+            "sobrecarga com GameObject também valida o mundo");
+
+        target.Destroy();
+        Assert.Throws<WorldException>(() => component.SetReference("owner", reference),
+            "referência guardada vence com o objeto");
+        Assert.Throws<WorldException>(() => component.SetReference("owner", read),
+            "referência lida do componente também vence");
+        Assert.Throws<WorldException>(() => target.AsReference(),
+            "objeto removido não emite referência nova");
+        component.SetReference("owner", (GameObject?)null);
+        Assert.Equal(0ul, component.GetReference("owner").ObjectId);
     }
 
     [Test]

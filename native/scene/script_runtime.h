@@ -153,7 +153,7 @@ struct ScriptRenderingState {
 };
 
 struct ScriptSceneAccess {
-  u32 version=9,size=sizeof(ScriptSceneAccess);
+  u32 version=13,size=sizeof(ScriptSceneAccess);
   void *context=nullptr;
   int (*exists)(void *,u64)=nullptr;
   int (*getTransform)(void *,u64,float *)=nullptr; // position3 quaternion4 scale3, local space
@@ -231,6 +231,21 @@ struct ScriptSceneAccess {
   // Devolve quantos clipes o componente lista (ou -1); com `index` válido
   // escreve a identidade e o nome (UTF-8, truncado em `capacity`).
   int (*animationClipAt)(void *,u64,u64,u32,ScriptAssetGuid *,u8 *,int)=nullptr;
+  // ABI v10: recursos de coleção endereçados pela identidade do elemento.
+  int (*resourceElementId)(void *,u64,u64,const u8 *,int,u32,u64 *)=nullptr;
+  int (*getResourceByElementId)(void *,u64,u64,const u8 *,int,u64,ScriptAssetGuid *)=nullptr;
+  int (*setResourceByElementId)(void *,u64,u64,const u8 *,int,u64,ScriptAssetGuid)=nullptr;
+  // ABI v11: edições da lista de clipes no mundo Play; o ID novo só é escrito
+  // quando o recurso foi resolvido e a alteração entrou no componente.
+  int (*appendAnimationClip)(void *,u64,u64,ScriptAssetGuid,u64 *)=nullptr;
+  int (*removeAnimationClip)(void *,u64,u64,u64)=nullptr;
+  int (*moveAnimationClip)(void *,u64,u64,u64,u32)=nullptr;
+  // ABI v12: 0 mantém transform local, 1 preserva a pose mundial.
+  int (*setParentWithPolicy)(void *,u64,u64,u32,u32)=nullptr;
+  // ABI v13: kind 0 destrói, 1 troca pai, 2 remove componente. O retorno
+  // confirma apenas entrada na fila; queryOperation devolve o resultado final.
+  int (*queueStructuralOperation)(void *,u32,u64,u64,u32,u32,u64 *)=nullptr;
+  int (*queryOperation)(void *,u32,u64,u32 *,u32 *)=nullptr;
   bool available() const {
     return exists&&getTransform&&setTransform&&setVelocity&&moveKinematic&&log&&bodyForce&&getVelocity&&
            worldId&&generation&&lastStatus&&parentOf&&childCount&&childAt&&findChild&&getName&&setName&&
@@ -240,13 +255,17 @@ struct ScriptSceneAccess {
            inputAxis&&inputButton&&inputContext&&inputRole&&getRenderingState&&setRenderingSettings&&
            copyRenderingDiagnostics&&getComponentResource&&setComponentResource&&
            getComponentSlotProperty&&setComponentSlotProperty&&characterMove&&characterJump&&cameraLook&&
-           animationCommand&&getAnimationState&&setAnimationState&&animationClipAt;
+           animationCommand&&getAnimationState&&setAnimationState&&animationClipAt&&
+           resourceElementId&&getResourceByElementId&&setResourceByElementId&&
+            appendAnimationClip&&removeAnimationClip&&moveAnimationClip&&setParentWithPolicy&&
+            queueStructuralOperation&&queryOperation;
   }
 };
 static_assert(offsetof(ScriptSceneAccess,characterJump)==offsetof(ScriptSceneAccess,characterMove)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,cameraLook)==offsetof(ScriptSceneAccess,characterJump)+sizeof(void*));
 static_assert(offsetof(ScriptSceneAccess,animationCommand)==offsetof(ScriptSceneAccess,cameraLook)+sizeof(void*));
-static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,animationClipAt)+sizeof(void*));
+static_assert(offsetof(ScriptSceneAccess,appendAnimationClip)==offsetof(ScriptSceneAccess,setResourceByElementId)+sizeof(void*));
+static_assert(sizeof(ScriptSceneAccess)==offsetof(ScriptSceneAccess,queryOperation)+sizeof(void*));
 static_assert(sizeof(ScriptAnimationCommand)==40 && sizeof(ScriptAnimationState)==48);
 // Espelhados em managed/Astra.Scripting/Graphics.cs; a ponte exige o tamanho
 // exato. Mudar aqui exige mudar lá e o teste gerenciado que confere os dois.

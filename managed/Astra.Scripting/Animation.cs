@@ -10,6 +10,8 @@ public enum AnimationCommandKind : uint { Play, CrossFade, Blend, Stop, Rewind }
 /// <summary>Estado de um clipe num componente (AnimationState da Unity), como a ABI o transporta.</summary>
 public readonly record struct AnimationStateValue(AssetGuid Clip, bool Enabled, float Time, float Speed, float Weight,
                                                   float Length, uint Layer, AnimationWrapMode WrapMode);
+/// <summary>Entrada autoral da lista de clipes. ElementId permanece igual ao reordenar a lista.</summary>
+public readonly record struct AnimationClipEntry(ulong ElementId, AssetGuid Clip, string Name);
 
 /// <summary>
 /// Reprodutor de um componente Animation (`astra.animation`) no mundo Play, no modelo do Animation legado
@@ -43,6 +45,44 @@ public readonly struct AnimationPlayer(Component component)
             return names;
         }
     }
+
+    /// <summary>Clipes e identidades persistentes da lista, na ordem atual.</summary>
+    public IReadOnlyList<AnimationClipEntry> ClipEntries
+    {
+        get
+        {
+            var count = _scene.AnimationClipAt(component.Object.ObjectId, component.InstanceId, 0, out _, out _);
+            if (count < 0) throw new WorldException(_scene.LastStatus, "listar entradas de clipe");
+            var entries = new List<AnimationClipEntry>(count);
+            for (var i = 0u; i < (uint)count; ++i)
+            {
+                var actual = _scene.AnimationClipAt(component.Object.ObjectId, component.InstanceId, i, out _, out var name);
+                if (actual < 0) throw new WorldException(_scene.LastStatus, "listar entradas de clipe");
+                if (actual != count) throw new WorldException(WorldStatus.Rejected, "lista de clipes mudou durante leitura");
+                var id = component.ResourceElementId("clips", i);
+                entries.Add(new(id, component.GetResourceByElementId("clips", id), name));
+            }
+            return entries;
+        }
+    }
+
+    /// <summary>Troca o recurso da entrada por ID; a posição atual da entrada não importa.</summary>
+    public void SetClip(ulong elementId, AssetGuid clip) => component.SetResourceByElementId("clips", elementId, clip);
+
+    /// <summary>Adiciona um clipe resolvido à lista desta sessão de Play e devolve o ID da entrada.</summary>
+    public ulong AddClip(AssetGuid clip)
+    {
+        Check(_scene.AppendAnimationClip(component.Object.ObjectId, component.InstanceId, clip, out var elementId), "adicionar clipe");
+        return elementId;
+    }
+
+    /// <summary>Remove uma entrada por ID. Um clipe sem outra entrada e sem ser padrão para no próximo passo.</summary>
+    public void RemoveClip(ulong elementId) =>
+        Check(_scene.RemoveAnimationClip(component.Object.ObjectId, component.InstanceId, elementId), "remover clipe");
+
+    /// <summary>Move a entrada para o índice indicado sem alterar seu ID.</summary>
+    public void MoveClip(ulong elementId, uint targetIndex) =>
+        Check(_scene.MoveAnimationClip(component.Object.ObjectId, component.InstanceId, elementId, targetIndex), "mover clipe");
 
     /// <summary>Identidade do clipe pelo nome; lança quando o componente não lista o nome.</summary>
     public AssetGuid Clip(string name)

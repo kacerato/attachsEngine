@@ -162,6 +162,8 @@ enum class EditorWidget : u32 {
   AssetInstantiate,
   AssetReimport,
   CreateMenuClose,
+  CreationAtRoot,
+  CreationAsChild,
   CreationSearch,
   CreationClearSearch,
   CreationPrevious,
@@ -192,10 +194,12 @@ enum class EditorWidget : u32 {
   PlaySecondaryAction,
   ToggleCameraLook,
   AddComponentMenu,
+  ComponentPreviewBack,
+  ComponentPreviewConfirm,
   CodeOpen, CodeScene, CodeNew, CodeEdit, CodeSave, CodeUndo, CodeRedo, CodeSearch, CodeClose, CodeApply,
   CodeMenu, CodeSaveAll, CodeFiles, CodeTabsPrevious, CodeTabsNext, CodeFindPrevious, CodeFindNext,
   CodeGoLine, CodeNewFolder, CodeNewHelper, CodeTemplates,
-  ColliderFit, LodGroupFit, LodGroupStatus, SkinnedMeshStatus, AnimationStatus, ComponentPrevious,
+  ColliderFit, LodGroupFit, LodGroupStatus, SkinnedMeshStatus, AnimationStatus, ComponentClipAdd, ComponentPrevious,
   ViewsOpen, ViewsClose, ViewSave, ViewUpdate, ViewRename, ViewDelete, ComponentNext, ScriptFieldsPrevious, ScriptFieldsNext,
   TransformFold, ComponentSearch, ComponentSearchClear, ComponentCategory,
   MeshGeometryTab, MeshMaterialTab, MeshChoose, MeshPickerClose, MeshClear, MeshSearch, MeshPrevious, MeshNext,
@@ -281,6 +285,7 @@ enum class EditorWidget : u32 {
   TextureProfilePrevious, TextureProfileNext,
   TextureManagerClose, TextureSearch, TextureManagerPrevious, TextureManagerNext,
   TextureSamplingUv, TextureSamplingWrap, TextureSamplingFilter, TextureUvReset,
+  DiagnosticDockToggle=0x09000000u, DiagnosticOlder, DiagnosticNewer,
   // + máscara de ImportOverride.
   ImportLinkRevertBase=0x52000000u,
   // + índice do material do projeto / do campo numérico do material.
@@ -323,7 +328,10 @@ enum class EditorWidget : u32 {
   SceneTemplateRowBase=0x95000000u,
   // + componente + propriedade<<8 + endereço<<16: valor por endereço (ComponentSlotNumber).
   ComponentSlotNumberBase=0x96000000u,
-  ImpactOpenBase=0x90000000u, ImpactRowBase=0x91000000u, ImpactClose=0x92000000u, ImpactPrevious, ImpactNext, ImpactRepair, ImpactRepairApply, ImpactRepairShared, ImpactRepairScope,
+  ComponentClipMoveUpBase=0x97000000u,
+  ComponentClipMoveDownBase=0x98000000u,
+  ComponentClipRemoveBase=0x99000000u,
+  ImpactOpenBase=0x90000000u, ImpactRowBase=0x91000000u, ImpactClose=0x92000000u, ImpactPrevious, ImpactNext, ImpactRepair, ImpactRepairApply, ImpactRepairShared, ImpactRepairScope, ImpactRemoveConfirm,
   ComponentColorBase=0x7e000000u,
   ColorHueBase=0x5f000000u, ColorSvBase=0x5f000100u, ColorApply=0x5f000200u, ColorCancel,
   ComponentTripleBase=0x7d000000u,
@@ -358,6 +366,13 @@ enum class EditorWidget : u32 {
   HierarchyEyeBase = 0x2000'0000u,
   TransformFieldBase = 0x3000'0000u,  // + linha * 3 + eixo
   GizmoAxisBase = 0x4000'0000u,       // + eixo
+  ComponentPreviewComposition=0x9a00'0000u,
+  ComponentPreviewValues,
+  ComponentPreviewPrevious,
+  ComponentPreviewNext,
+  ComponentPropertySearch=0x9b00'0000u,
+  ComponentPropertySearchClear,
+  ComponentFieldResetBase=0xa000'0000u,
 };
 
 inline constexpr u32 widgetId(EditorWidget widget) noexcept { return static_cast<u32>(widget); }
@@ -397,10 +412,14 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::ScriptFieldBase,kRange},{EditorWidget::ComponentNumberBase,kRange},{EditorWidget::MeshChoiceBase,kRange},
   {EditorWidget::ComponentReferenceBase,kRange},{EditorWidget::ReferenceChoiceBase,kRange},{EditorWidget::CodeTemplateBase,kRange},
   {EditorWidget::ComponentTripleBase,kRange},{EditorWidget::ComponentColorBase,kRange},{EditorWidget::ComponentResourceBase,kRange},
-  {EditorWidget::HierarchyCollapseBase,kWideRange},
+  {EditorWidget::HierarchyCollapseBase,kWideRange},{EditorWidget::ComponentPreviewComposition,kRange},
+  {EditorWidget::ComponentPropertySearch,kRange},
+  {EditorWidget::ComponentFieldResetBase,kWideRange},
   {EditorWidget::ImpactOpenBase,kRange},{EditorWidget::ImpactRowBase,kRange},{EditorWidget::ImpactClose,kRange},
   {EditorWidget::SceneViewRowBase,kRange},{EditorWidget::ImportMeshRowBase,kRange},
-  {EditorWidget::SceneTemplateRowBase,kRange},{EditorWidget::ComponentSlotNumberBase,kRange}};
+  {EditorWidget::SceneTemplateRowBase,kRange},{EditorWidget::ComponentSlotNumberBase,kRange},
+  {EditorWidget::ComponentClipMoveUpBase,kRange},{EditorWidget::ComponentClipMoveDownBase,kRange},
+  {EditorWidget::ComponentClipRemoveBase,kRange}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;
@@ -489,6 +508,8 @@ struct EditorScreenState final {
   bool playPaused=false;
   bool playStepRequested=false;
   EditorInspectorTab tab = EditorInspectorTab::Transform;
+  // Diagnósticos da sessão são ferramentas editoriais, fora da cena e do Undo.
+  bool diagnosticDockOpen=false;
   // Folding is editor-only, keyed by object and stable component instance identity.
   EditorEntityId componentSelection=0;
   std::string expandedComponent;
@@ -507,8 +528,15 @@ struct EditorScreenState final {
   u8 collisionTrianglePercent=25;
   float collisionMaximumError=.02f;
   bool addingComponent=false;
+  u32 componentPreview=0; // índice do catálogo + 1; zero mantém a lista
+  bool componentPreviewValues=false;
+  u32 componentPreviewPage=0;
+  std::string scriptPreviewType;
+  u64 scriptPreviewGeneration=0;
   bool editingComponentSearch=false,editingMeshSearch=false,meshPicker=false;
   std::string componentQuery,meshQuery;
+  bool editingPropertySearch=false;
+  std::string propertyQuery;
   u32 componentCategory=0,meshPage=0,meshTab=0;
   u32 componentPage=0,scriptPropertyPage=0;
   u64 expandedScript=0,scriptMenu=0,editingScriptInstance=0;
@@ -637,6 +665,8 @@ struct EditorScreenState final {
   resources::AssetGuid impactAsset{};
   std::vector<std::pair<resources::AssetGuid,u32>> impactTrail;
   bool impactRepair=false;
+  bool impactRemoval=false;
+  u64 impactRemovalEpoch=0,impactRemovalRevision=0;
   bool impactRepairScene=false;
   resources::AssetGuid impactReplacement{};
   u64 impactRepairRevision=0;
@@ -671,6 +701,7 @@ struct EditorScreenState final {
   float platformImeFraction = 0.0f;
   bool entityMenu = false;
   bool creationMenu=false;
+  bool creationAsChild=false;
   bool workspaceMenu=false;
   unsigned creationCategory=0,creationSelection=0,creationPage=0;
   u32 creationAvailable=3; // Basic object and camera; resource tools opt in on import.

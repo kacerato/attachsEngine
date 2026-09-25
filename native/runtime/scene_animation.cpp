@@ -88,6 +88,15 @@ const SceneAnimator::Player *SceneAnimator::findPlayer(ObjectId owner, u64 insta
 void SceneAnimator::syncStates(Player &player) {
   const auto *component = graph_ ? animationComponent(*graph_, player.owner, player.instance) : nullptr;
   if (!component) return;
+  // Uma troca/remocao da lista em Play nao pode deixar o clipe antigo tocando.
+  // Estados e alvos usam o mesmo indice; removemos o par antes de acrescentar
+  // qualquer estado novo do componente autoral efetivo.
+  for(usize i=0;i<player.states.size();) {
+    const auto &id=player.states[i].clip;
+    if(id==component->clip || component->contains(id)) {++i;continue;}
+    player.states.erase(player.states.begin()+static_cast<std::ptrdiff_t>(i));
+    player.targets.erase(player.targets.begin()+static_cast<std::ptrdiff_t>(i));
+  }
   const auto ensure = [&](const resources::AssetGuid &clip) {
     if (!clip.valid()) return;
     for (const auto &state : player.states) if (state.clip == clip) return;
@@ -99,7 +108,7 @@ void SceneAnimator::syncStates(Player &player) {
     player.targets.emplace_back();
   };
   ensure(component->clip);
-  for (const auto &clip : component->clips) ensure(clip);
+  for (const auto &entry : component->clips) ensure(entry.asset);
 }
 
 SceneAnimator::Player *SceneAnimator::player(ObjectId owner, u64 instance, AnimationCommandStatus &status) {
@@ -308,7 +317,7 @@ u32 SceneAnimator::clipCount(ObjectId owner, u64 instance) const {
 bool SceneAnimator::clipAt(ObjectId owner, u64 instance, u32 index, resources::AssetGuid &clip, std::string &name) const {
   const auto *component = graph_ ? animationComponent(*graph_, owner, instance) : nullptr;
   if (!component || index >= component->clips.size()) return false;
-  clip = component->clips[index];
+  clip = component->clips[index].asset;
   AnimationClipView view;
   name = library_ && clip.valid() && library_->findClip(clip, view) ? view.name : std::string();
   return true;

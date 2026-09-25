@@ -48,7 +48,7 @@ public static unsafe class NativeBehaviorRuntime
     }
 
     /// <summary>
-    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v9). A ordem dos
+    /// Espelho exato de <c>ae::scene::ScriptSceneAccess</c> (ABI v13). A ordem dos
     /// campos É o contrato: acrescentar só no fim, e conferir <c>Size</c> antes de
     /// ler qualquer ponteiro — uma struct maior do que a acordada seria lida além
     /// do fim do que o nativo alocou.
@@ -120,6 +120,19 @@ public static unsafe class NativeBehaviorRuntime
         public delegate* unmanaged<void*, ulong, ulong, NativeAssetGuid, NativeAnimationState*, int> GetAnimationState;
         public delegate* unmanaged<void*, ulong, ulong, NativeAnimationState*, int> SetAnimationState;
         public delegate* unmanaged<void*, ulong, ulong, uint, NativeAssetGuid*, byte*, int, int> AnimationClipAt;
+        // v10: IDs persistentes de elementos de coleções de recursos.
+        public delegate* unmanaged<void*, ulong, ulong, byte*, int, uint, ulong*, int> ResourceElementId;
+        public delegate* unmanaged<void*, ulong, ulong, byte*, int, ulong, NativeAssetGuid*, int> GetResourceByElementId;
+        public delegate* unmanaged<void*, ulong, ulong, byte*, int, ulong, NativeAssetGuid, int> SetResourceByElementId;
+        // v11: alterações estruturais da lista de clipes em Play.
+        public delegate* unmanaged<void*, ulong, ulong, NativeAssetGuid, ulong*, int> AppendAnimationClip;
+        public delegate* unmanaged<void*, ulong, ulong, ulong, int> RemoveAnimationClip;
+        public delegate* unmanaged<void*, ulong, ulong, ulong, uint, int> MoveAnimationClip;
+        // v12: política de pose ao alterar a hierarquia.
+        public delegate* unmanaged<void*, ulong, ulong, uint, uint, int> SetParentWithPolicy;
+        // v13: resultado das operações estruturais no ponto seguro.
+        public delegate* unmanaged<void*, uint, ulong, ulong, uint, uint, ulong*, int> QueueStructuralOperation;
+        public delegate* unmanaged<void*, uint, ulong, uint*, uint*, int> QueryOperation;
 
         public bool Complete => Exists != null && GetTransform != null && SetTransform != null && SetVelocity != null &&
             MoveKinematic != null && Log != null && BodyForce != null && GetVelocity != null && WorldId != null &&
@@ -134,7 +147,10 @@ public static unsafe class NativeBehaviorRuntime
             GetComponentResource != null && SetComponentResource != null &&
             GetComponentSlotProperty != null && SetComponentSlotProperty != null &&
             CharacterMove != null && CharacterJump != null && CameraLook != null &&
-            AnimationCommand != null && GetAnimationState != null && SetAnimationState != null && AnimationClipAt != null;
+            AnimationCommand != null && GetAnimationState != null && SetAnimationState != null && AnimationClipAt != null &&
+            ResourceElementId != null && GetResourceByElementId != null && SetResourceByElementId != null &&
+            AppendAnimationClip != null && RemoveAnimationClip != null && MoveAnimationClip != null &&
+            SetParentWithPolicy != null && QueueStructuralOperation != null && QueryOperation != null;
     }
 
     private sealed class SceneAdapter(SceneAccess access) : ISceneAccess
@@ -270,6 +286,29 @@ public static unsafe class NativeBehaviorRuntime
         public bool DestroyObject(ulong objectId) => Accessible && access.DestroyObject(access.Context, objectId) != 0;
         public bool SetParent(ulong objectId, ulong parent, uint childIndex) =>
             Accessible && access.SetParent(access.Context, objectId, parent, childIndex) != 0;
+        public bool SetParentWithPolicy(ulong objectId, ulong parent, uint childIndex, ReparentPosePolicy policy) =>
+            Accessible && access.SetParentWithPolicy(access.Context, objectId, parent, childIndex, (uint)policy) != 0;
+        public ulong QueueStructuralOperation(uint kind, ulong objectId, ulong other, uint childIndex,
+                                              ReparentPosePolicy policy)
+        {
+            if (!Accessible) return 0;
+            ulong ticket = 0;
+            return access.QueueStructuralOperation(access.Context, kind, objectId, other, childIndex,
+                                                   (uint)policy, &ticket) != 0 ? ticket : 0;
+        }
+        public WorldStatus QueryOperation(uint world, ulong operationId, out WorldOperationState state,
+                                          out WorldStatus result)
+        {
+            state = default;
+            result = default;
+            if (!Accessible) return WorldStatus.NotRunning;
+            uint rawState = 0, rawResult = 0;
+            if (access.QueryOperation(access.Context, world, operationId, &rawState, &rawResult) == 0)
+                return LastStatus;
+            state = (WorldOperationState)rawState;
+            result = (WorldStatus)rawResult;
+            return WorldStatus.Ok;
+        }
 
         // --- componentes ----------------------------------------------------
         public int ComponentCount(ulong objectId) => Accessible ? access.ComponentCount(access.Context, objectId) : -1;
@@ -532,6 +571,42 @@ public static unsafe class NativeBehaviorRuntime
             name = Encoding.UTF8.GetString(text, length);
             return count;
         }
+        public bool ResourceElementId(ulong objectId, ulong instanceId, string propertyId, uint slot, out ulong elementId)
+        {
+            elementId = 0;
+            if (!Accessible) return false;
+            var bytes = Utf8(propertyId, "elemento de recurso");
+            fixed (byte* pointer = bytes) fixed (ulong* result = &elementId)
+                return access.ResourceElementId(access.Context, objectId, instanceId, pointer, bytes.Length, slot, result) != 0;
+        }
+        public bool TryGetResourceByElementId(ulong objectId, ulong instanceId, string propertyId, ulong elementId, out AssetGuid value)
+        {
+            value = default;
+            if (!Accessible) return false;
+            var bytes = Utf8(propertyId, "elemento de recurso"); NativeAssetGuid raw;
+            fixed (byte* pointer = bytes)
+                if (access.GetResourceByElementId(access.Context, objectId, instanceId, pointer, bytes.Length, elementId, &raw) == 0) return false;
+            value = new(raw.High, raw.Low); return true;
+        }
+        public bool SetResourceByElementId(ulong objectId, ulong instanceId, string propertyId, ulong elementId, AssetGuid value)
+        {
+            if (!Accessible) return false;
+            var bytes = Utf8(propertyId, "elemento de recurso"); var raw = new NativeAssetGuid { High=value.High, Low=value.Low };
+            fixed (byte* pointer = bytes)
+                return access.SetResourceByElementId(access.Context, objectId, instanceId, pointer, bytes.Length, elementId, raw) != 0;
+        }
+        public bool AppendAnimationClip(ulong objectId, ulong instanceId, AssetGuid clip, out ulong elementId)
+        {
+            elementId = 0;
+            if (!Accessible) return false;
+            var raw = new NativeAssetGuid { High=clip.High, Low=clip.Low };
+            fixed (ulong* result = &elementId)
+                return access.AppendAnimationClip(access.Context, objectId, instanceId, raw, result) != 0;
+        }
+        public bool RemoveAnimationClip(ulong objectId, ulong instanceId, ulong elementId) =>
+            Accessible && access.RemoveAnimationClip(access.Context, objectId, instanceId, elementId) != 0;
+        public bool MoveAnimationClip(ulong objectId, ulong instanceId, ulong elementId, uint targetIndex) =>
+            Accessible && access.MoveAnimationClip(access.Context, objectId, instanceId, elementId, targetIndex) != 0;
     }
 
     private static BehaviorWorld? _world;
@@ -543,7 +618,7 @@ public static unsafe class NativeBehaviorRuntime
         try
         {
             if (_world is not null || root == null || json == null || rootLength <= 0 || rootLength > 32768 ||
-                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 9 ||
+                jsonLength <= 0 || jsonLength > 32 * 1024 * 1024 || access == null || access->Version != 13 ||
                 access->Size != sizeof(SceneAccess) || !access->Complete) return 1;
             var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, rootLength));
             var project = NativeCompiler.LoadApplied(directory);

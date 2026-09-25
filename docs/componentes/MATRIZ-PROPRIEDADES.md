@@ -56,9 +56,9 @@ Volume de contato. **Consumidor:** runtime/scene_physics.cpp → forma do Jolt. 
 
 **Recursos endereçados**
 
-| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada |
-|---|---|---|---|---|
-| `collision_mesh` | Malha de colisão | mesh | sim | não |
+| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada | ID por elemento |
+|---|---|---|---|---|---|
+| `collision_mesh` | Malha de colisão | mesh | sim | não | não |
 
 **Propriedades**
 
@@ -135,15 +135,15 @@ Geometria e material. **Consumidor:** renderer/map_draw_update.h → instância 
 
 **Recursos endereçados**
 
-| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada |
-|---|---|---|---|---|
-| `mesh` | Malha | mesh | não | não |
-| `material` | Material | material | sim | sim |
-| `texture.base_color` | Cor base | texture | sim | sim |
-| `texture.normal` | Normal | texture | sim | sim |
-| `texture.metallic_roughness` | Metal / rugosidade | texture | sim | sim |
-| `texture.emissive` | Emissão | texture | sim | sim |
-| `texture.occlusion` | Oclusão | texture | sim | sim |
+| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada | ID por elemento |
+|---|---|---|---|---|---|
+| `mesh` | Malha | mesh | não | não | não |
+| `material` | Material | material | sim | sim | não |
+| `texture.base_color` | Cor base | texture | sim | sim | não |
+| `texture.normal` | Normal | texture | sim | sim | não |
+| `texture.metallic_roughness` | Metal / rugosidade | texture | sim | sim | não |
+| `texture.emissive` | Emissão | texture | sim | sim | não |
+| `texture.occlusion` | Oclusão | texture | sim | sim | não |
 
 **Propriedades**
 
@@ -255,10 +255,10 @@ Céu, atmosfera, neblina e pós globais ou por volume. **Consumidor:** runtime/s
 
 **Recursos endereçados**
 
-| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada |
-|---|---|---|---|---|
-| `profile` | Perfil | environment_profile | sim | não |
-| `environment_map` | Mapa HDRI | environment_map | sim | não |
+| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada | ID por elemento |
+|---|---|---|---|---|---|
+| `profile` | Perfil | environment_profile | sim | não | não |
+| `environment_map` | Mapa HDRI | environment_map | sim | não | não |
 
 **Propriedades**
 
@@ -376,16 +376,16 @@ Esqueleto e blend shapes da Malha. **Consumidor:** editor/editor_map_scene.cpp �
 | `quality` | Qualidade | enumeração | Skin | Automática | Automática \| 1 osso \| 2 ossos \| 4 ossos |  | editor/editor_map_scene.cpp → paleta; platform/android/instanced_skinning.inl → compute | desenho, mapa de sombra | não | não |
 | `blend_shape_weight` | Peso do blend shape | número | Blend shapes |  | -1000 … 1000 | % | editor/editor_map_scene.cpp → pesos; platform/android/instanced_skinning.inl → compute | desenho, mapa de sombra | não | sim |
 
-## Animação · `astra.animation` v2
+## Animação · `astra.animation` v3
 
 Clipes tocados e misturados no Play. **Consumidor:** runtime/scene_animation.cpp → pose local dos nós da instância. **Capacidade:** `animation.clip` (implementada). **Invalida:** pose e bounds.
 
 **Recursos endereçados**
 
-| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada |
-|---|---|---|---|---|
-| `clip` | Clipe padrão | animation_clip | não | não |
-| `clips` | Clipe | animation_clip | não | não |
+| Binding | Rótulo | Tipo de recurso | Herda | Ausência declarada | ID por elemento |
+|---|---|---|---|---|---|
+| `clip` | Clipe padrão | animation_clip | não | não | não |
+| `clips` | Clipe | animation_clip | não | não | sim |
 
 **Propriedades**
 

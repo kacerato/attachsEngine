@@ -290,6 +290,130 @@ bool findWidget(Frame &frame, u32 widget, const UiRect &area, UiPoint &out) {
 
 } // namespace
 
+AE_TEST(component_search_finds_other_categories) {
+  WaterLab lab;
+  Frame frame;
+  auto state=waterLabState(lab);
+  state.componentSelection=lab.block;
+  state.addingComponent=true;
+  state.componentCategory=static_cast<u32>(scene::ComponentCategory::Physics);
+  state.componentQuery="camera";
+  composeFrame(frame,state);
+  UiPoint point{};
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentAddBase)+5,
+                            frame.layout.inspectorPanel,point),
+                 "busca encontra Camera mesmo com filtro Física selecionado");
+  state.componentQuery="RigidBody3D";
+  composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentAddBase),
+                            frame.layout.inspectorPanel,point),
+                 "termo de Godot encontra o corpo físico Astra");
+  state.componentQuery="Camera3D";
+  composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentAddBase)+5,
+                            frame.layout.inspectorPanel,point),
+                 "termo de Godot encontra a câmera Astra");
+}
+
+AE_TEST(component_preview_shows_schema_defaults_without_editing_document) {
+  WaterLab lab;
+  Frame frame;
+  auto state=waterLabState(lab);
+  state.componentSelection=lab.block;
+  state.addingComponent=true;
+  state.componentPreview=6; // Câmera
+  composeFrame(frame,state);
+  UiPoint point{};
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentPreviewValues),
+                            frame.layout.inspectorPanel,point),"aba de valores acessível por toque");
+  const auto before=lab.history.undoDepth();
+  tap(frame,state,lab,point);
+  AE_EXPECT_TRUE(state.componentPreviewValues,"toque abre os defaults");
+  composeFrame(frame,state);
+  bool field=false,value=false;
+  for(const auto &command:frame.list.commands()) {
+    if(command.kind!=UiPrimitive::Text) continue;
+    const auto label=frame.list.textOf(command);
+    field|=label=="Campo vertical · conforme modo";
+    value|=label=="60 °";
+  }
+  AE_EXPECT_TRUE(field&&value,"a prévia mostra o FOV inicial declarado pelo componente");
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentPreviewComposition),
+                            frame.layout.inspectorPanel,point),"composição continua acessível");
+  tap(frame,state,lab,point);
+  AE_EXPECT_TRUE(!state.componentPreviewValues,"retorno à composição não altera o plano");
+  AE_EXPECT_EQ(lab.history.undoDepth(),before,"prévia não cria Undo");
+  AE_EXPECT_EQ(lab.document.find(lab.block)->components.size(),0u,"prévia não anexa componentes");
+
+  state.surface={0,0,900,360};
+  state.componentPreviewValues=true;
+  composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentPreviewNext),
+                            frame.layout.inspectorPanel,point),"valores longos paginam em tela baixa");
+  tap(frame,state,lab,point);
+  AE_EXPECT_EQ(state.componentPreviewPage,1u,"próxima página responde ao toque");
+  composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentPreviewPrevious),
+                            frame.layout.inspectorPanel,point),"página anterior permanece acessível");
+}
+
+AE_TEST(component_property_search_crosses_groups_and_keeps_conditional_fields) {
+  WaterLab lab;
+  auto object=*lab.document.find(lab.block);
+  auto *camera=object.components.add(scene::Camera::descriptor);
+  AE_EXPECT_TRUE(camera!=nullptr,"câmera anexada ao objeto do teste");
+  const auto instance=camera->instanceId();
+  AE_EXPECT_TRUE(lab.document.applyEntityValues(lab.block,object),"objeto preparado");
+  Frame frame;
+  auto state=waterLabState(lab);
+  state.componentSelection=lab.block;
+  state.expandedNative=instance;
+  state.componentGroup="Lente";
+  state.propertyQuery="prioridade";
+  composeFrame(frame,state);
+  UiPoint point{};
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentNumberBase)+(3u<<8),
+                            frame.layout.inspectorPanel,point),"busca encontra campo de outra aba sem trocar a aba salva");
+  AE_EXPECT_TRUE(!findWidget(frame,widgetId(EditorWidget::ComponentNumberBase),
+                             frame.layout.inspectorPanel,point),"campo não correspondente fica oculto");
+  AE_EXPECT_TRUE(state.componentGroup=="Lente","busca não altera o grupo escolhido");
+  state.propertyQuery="vertical_fov";
+  composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentNumberBase),
+                            frame.layout.inspectorPanel,point),"id persistente também localiza o campo");
+  object=*lab.document.find(lab.block);
+  static_cast<scene::Camera *>(object.components.editInstance(instance))->projection=scene::CameraProjection::Orthographic;
+  AE_EXPECT_TRUE(lab.document.applyEntityValues(lab.block,object),"projeção ortográfica preparada");
+  composeFrame(frame,state);
+  bool empty=false;
+  for(const auto &command:frame.list.commands())
+    empty|=frame.list.textOf(command)=="Nenhuma propriedade encontrada";
+  AE_EXPECT_TRUE(empty,"busca respeita visibilidade condicional do descritor");
+  AE_EXPECT_TRUE(!findWidget(frame,widgetId(EditorWidget::ComponentNumberBase),
+                             frame.layout.inspectorPanel,point),"FOV oculto não recebe toque");
+}
+
+AE_TEST(material_slot_search_keeps_slot_controls_in_the_material_scope) {
+  WaterLab lab;Frame frame;auto state=waterLabState(lab);
+  auto object=*lab.document.find(lab.block);
+  auto *renderer=object.components.add(scene::MeshRenderer::descriptor);
+  AE_EXPECT_TRUE(renderer!=nullptr,"renderer preparado");
+  const auto instance=renderer->instanceId();
+  AE_EXPECT_TRUE(lab.document.applyEntityValues(lab.block,object),"renderer anexado");
+  state.componentSelection=lab.block;state.expandedNative=instance;state.meshTab=1;
+  state.materialSlotView.slots=1;state.propertyQuery="normal";
+  composeFrame(frame,state);
+  UiPoint point{};
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::MaterialTextureBase)+1,
+                            frame.layout.inspectorPanel,point),"busca mantém seletor de textura por slot");
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::MaterialNormalFlipCycle),
+                            frame.layout.inspectorPanel,point),"busca mantém controle de mapa normal");
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::MaterialNumberBase)+5,
+                            frame.layout.inspectorPanel,point),"busca mantém intensidade no alcance do material");
+  AE_EXPECT_TRUE(!findWidget(frame,widgetId(EditorWidget::MaterialTextureBase),
+                             frame.layout.inspectorPanel,point),"binding alheio ao filtro fica oculto");
+}
+
 AE_TEST(screen_scene_menu_separates_authoring_context_from_play) {
   // A doca inferior virou aba superior. Numa tela em paisagem a borda de baixo e
   // a mais cara: e onde o polegar cobre o conteudo e onde a barra de gestos do
@@ -309,6 +433,112 @@ AE_TEST(screen_scene_menu_separates_authoring_context_from_play) {
   const EditorPointerOutcome outcome = tap(frame, state, lab, at);
   AE_EXPECT_TRUE(outcome.consumed, "");
   AE_EXPECT_TRUE(state.workspace == EditorWorkspace::Lighting, "e trocar de aba troca o contexto");
+}
+
+AE_TEST(diagnostic_dock_uses_session_console_without_replacing_component_add) {
+  WaterLab lab;
+  EditorScreenState state=waterLabState(lab);
+  EditorConsole console;
+  EditorConsoleEntry problem;problem.origin=EditorConsoleOrigin::Compiler;
+  problem.severity=EditorConsoleSeverity::Error;problem.message="CS1001: erro de compilação";
+  problem.file="Scripts/Player.cs";problem.line=12;console.add(std::move(problem));
+  EditorConsoleEntry log;log.origin=EditorConsoleOrigin::Script;
+  log.message="Personagem iniciou";console.add(std::move(log));
+  state.console=&console;state.consoleProblems=true;state.tab=EditorInspectorTab::Properties;
+  const auto historyBefore=lab.history.undoDepth();
+  Frame frame;composeFrame(frame,state);UiPoint point{};
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::DiagnosticDockToggle),frame.layout.topBar,point),
+                 "diagnósticos acessíveis pela barra Astra");
+  tap(frame,state,lab,point);composeFrame(frame,state);
+  AE_EXPECT_TRUE(!frame.layout.diagnosticDock.isEmpty() &&
+                 frame.layout.viewport.bottom()<=frame.layout.diagnosticDock.y,
+                 "doca larga reserva espaço próprio para o viewport");
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ConsoleProblems),frame.layout.diagnosticDock,point),
+                 "aba Problemas visível na Cena");
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ConsoleRowBase),frame.layout.diagnosticDock,point),
+                 "erro real do console listado");
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::AddComponentMenu),frame.layout.inspectorPanel,point),
+                 "Add continua no Inspector");
+  state.consoleSelected=console.at(0)->eventId;composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ConsoleOpenSource),state.surface,point),
+                 "detalhe usa a origem do evento");
+  AE_EXPECT_EQ(lab.history.undoDepth(),historyBefore,"abrir diagnóstico não edita a cena");
+  state.consoleSelected=0;state.consoleProblems=false;composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ConsoleRowBase)+1,frame.layout.diagnosticDock,point),
+                 "aba Registros mostra saída de script");
+}
+
+AE_TEST(diagnostic_dock_compact_sheet_blocks_scene_without_shrinking_viewport) {
+  WaterLab lab;
+  EditorScreenState state=waterLabState(lab);
+  state.surface={0,0,600,360};state.diagnosticDockOpen=true;
+  Frame frame;composeFrame(frame,state);
+  AE_EXPECT_TRUE(frame.layout.diagnosticDock.width==600 &&
+                 frame.layout.viewport.height==308,"sheet compacto ocupa largura da tela");
+  const UiPoint under{frame.layout.diagnosticDock.x+4,frame.layout.diagnosticDock.bottom()-4};
+  const auto route=frame.router.route({2,UiPointerPhase::Down,under,0.0});
+  AE_EXPECT_TRUE(route.target!=UiPointerTarget::Viewport,"toque na sheet não orbita a câmera");
+}
+
+AE_TEST(diagnostic_dock_pages_bounded_events_without_copying_their_identity) {
+  WaterLab lab;
+  EditorScreenState state=waterLabState(lab);
+  EditorConsole console;
+  for(u32 i=0;i<8;++i) {EditorConsoleEntry event;event.message="Evento "+std::to_string(i);console.add(std::move(event));}
+  state.console=&console;state.diagnosticDockOpen=true;
+  Frame frame;composeFrame(frame,state);UiPoint point{};
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ConsoleRowBase)+7,
+                            frame.layout.diagnosticDock,point),"evento mais recente visível");
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::DiagnosticOlder),
+                            frame.layout.diagnosticDock,point),"eventos antigos alcançáveis");
+  tap(frame,state,lab,point);composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ConsoleRowBase)+4,
+                            frame.layout.diagnosticDock,point),"paginação alcança IDs originais");
+  AE_EXPECT_TRUE(!findWidget(frame,widgetId(EditorWidget::ConsoleRowBase)+7,
+                             frame.layout.diagnosticDock,point),"página antiga não inclui evento recente");
+}
+
+AE_TEST(animation_clip_entries_reorder_and_remove_in_inspector_with_undo) {
+  WaterLab lab;
+  auto value=*lab.document.find(lab.block);
+  auto *animation=static_cast<scene::Animation *>(value.components.add(scene::Animation::descriptor));
+  AE_EXPECT_TRUE(animation!=nullptr,"componente Animação criado");
+  if(!animation) return;
+  const resources::AssetGuid first{11,12},second{21,22};
+  const u64 firstId=animation->appendClip(first),secondId=animation->appendClip(second);
+  const u64 instance=animation->instanceId();
+  AE_EXPECT_TRUE(lab.history.applyValues(lab.document,lab.block,value),"lista autoral aplicada");
+  const auto *stored=lab.document.find(lab.block)->components.findInstance(instance);
+  u32 componentIndex=0;
+  while(componentIndex<lab.document.find(lab.block)->components.size() &&
+        lab.document.find(lab.block)->components.at(componentIndex)!=stored) ++componentIndex;
+  EditorScreenState state=waterLabState(lab);
+  state.componentSelection=lab.block;state.expandedNative=instance;state.componentGroup="Clipes";
+  Frame frame;composeFrame(frame,state);UiPoint point{};
+  const auto rowId=componentIndex+(1u<<8);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentClipMoveDownBase)+rowId,
+                            frame.layout.inspectorPanel,point),"mover clipe está no Inspector");
+  tap(frame,state,lab,point);
+  const auto *moved=static_cast<const scene::Animation *>(lab.document.find(lab.block)->components.findInstance(instance));
+  AE_EXPECT_TRUE(moved && moved->clips[0].id==secondId && moved->clips[1].id==firstId &&
+                 moved->clips[1].asset==first,"mover preserva ID e recurso");
+  AE_EXPECT_TRUE(lab.history.undo(lab.document),"desfazer reordenação");
+  const auto *undone=static_cast<const scene::Animation *>(lab.document.find(lab.block)->components.findInstance(instance));
+  AE_EXPECT_TRUE(undone && undone->clips[0].id==firstId && undone->clips[1].id==secondId,"Undo restaura ordem");
+  AE_EXPECT_TRUE(lab.history.redo(lab.document),"refazer reordenação");
+  composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentClipRemoveBase)+rowId,
+                            frame.layout.inspectorPanel,point),"remover clipe está no Inspector");
+  tap(frame,state,lab,point);
+  const auto *removed=static_cast<const scene::Animation *>(lab.document.find(lab.block)->components.findInstance(instance));
+  AE_EXPECT_TRUE(removed && removed->clips.size()==1 && removed->clips[0].id==firstId,"remoção atinge a entrada visível");
+  composeFrame(frame,state);
+  AE_EXPECT_TRUE(findWidget(frame,widgetId(EditorWidget::ComponentClipAdd),frame.layout.inspectorPanel,point),
+                 "adicionar clipe permanece no Inspector");
+  tap(frame,state,lab,point);
+  const auto *added=static_cast<const scene::Animation *>(lab.document.find(lab.block)->components.findInstance(instance));
+  AE_EXPECT_TRUE(added && added->clips.size()==2 && added->clips[1].id>secondId,
+                 "nova entrada não reutiliza identidade removida");
 }
 
 AE_TEST(scene_view_options_are_real_editor_state_and_expose_effect_parts) {

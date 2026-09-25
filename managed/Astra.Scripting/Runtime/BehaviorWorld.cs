@@ -25,6 +25,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         public bool Started { get; set; }
     }
     private ProjectLoadContext? _context;
+    private ISceneAccess? _scene;
     private readonly List<Entry> _entries = [];
     private readonly List<BehaviorFailure> _failures = [];
     private bool _started;
@@ -61,13 +62,13 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
                             throw new InvalidDataException("Property type changed; migrate its authored value: " + schema.Name + "." + field.Id);
                 ApplyProperties(instance, schema, attachment.Properties);
             }
-            _context = context; _entries.AddRange(prepared); _failures.Clear(); _started = true;
+            _context = context; _scene = scene; _entries.AddRange(prepared); _failures.Clear(); _started = true;
             foreach (var entry in _entries) EnsureStarted(entry);
         }
         catch
         {
             foreach (var entry in prepared) entry.Instance.Detach();
-            _entries.Clear(); _context = null; _started = false; context.Unload(); throw;
+            _entries.Clear(); _context = null; _scene = null; _started = false; context.Unload(); throw;
         }
     }
     public void Update(float deltaTime)
@@ -89,7 +90,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
             if (entry.Instance.ObjectId == sensor && EnsureStarted(entry))
                 Invoke(entry, phase == 0 ? "TriggerEnter" : phase == 1 ? "TriggerStay" : "TriggerExit", behavior =>
                 {
-                    var reference = new ObjectReference(other);
+                    var reference = ObjectReference.Capture(_scene!, other);
                     if (phase == 0) behavior.TriggerEnter(reference);
                     else if (phase == 1) behavior.TriggerStay(reference);
                     else behavior.TriggerExit(reference);
@@ -103,7 +104,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
     public void Contact(ulong self, ulong other, uint phase, Vector3? normal)
     {
         if (!Running || phase > 2) return;
-        var collision = new Collision(new ObjectReference(other), normal);
+        var collision = new Collision(ObjectReference.Capture(_scene!, other), normal);
         foreach (var entry in _entries)
             if (entry.Instance.ObjectId == self && EnsureStarted(entry))
                 Invoke(entry, phase == 0 ? "CollisionEnter" : phase == 1 ? "CollisionStay" : "CollisionExit", behavior =>
@@ -173,7 +174,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
             if (_entries[i].Started) Invoke(_entries[i], "Stop", static behavior => behavior.Stop());
             _entries[i].Instance.Detach();
         }
-        _entries.Clear(); _started = false;
+        _entries.Clear(); _scene = null; _started = false;
         var context = _context; _context = null; context.Unload();
     }
 }

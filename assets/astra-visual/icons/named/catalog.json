@@ -536,6 +536,12 @@
       "label": "C26",
       "name": "close"
     },
+    "ui/diagnostics": {
+      "category": "ui",
+      "name": "diagnostics",
+      "dark_ui_ready": true,
+      "generation": "astra-brand-2026-09-24"
+    },
     "ui/help": {
       "category": "ui",
       "label": "C31",

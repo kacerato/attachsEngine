@@ -29,6 +29,8 @@ public enum WorldStatus : uint
     ResourceTypeMismatch,
     /// <summary>O clipe existe mas não está na lista do componente Animation.</summary>
     ClipNotInComponent,
+    UnknownElement,
+    OperationExpired,
 }
 
 public sealed class WorldException(WorldStatus status, string operation)
@@ -52,6 +54,8 @@ public sealed class WorldException(WorldStatus status, string operation)
         WorldStatus.LimitReached => "limite de capacidade atingido",
         WorldStatus.UnknownResource => "recurso inexistente",
         WorldStatus.ResourceTypeMismatch => "tipo de recurso incompatível",
+        WorldStatus.UnknownElement => "elemento da coleção inexistente",
+        WorldStatus.OperationExpired => "resultado da operação não está mais disponível",
         _ => "operação recusada",
     };
 }
@@ -94,6 +98,29 @@ public static class ComponentIds
 /// mesmo callback — <see cref="IsAlive"/> passa a ser falso e qualquer operação
 /// lança <see cref="WorldException"/> em vez de acertar outra coisa.
 /// </summary>
+public enum ReparentPosePolicy : uint { KeepLocal, KeepWorld }
+
+public enum WorldOperationState : uint { Pending, Applied, Failed }
+
+/// <summary>Resultado de uma edição estrutural no ponto seguro do Play.</summary>
+public readonly struct WorldOperation
+{
+    private readonly ISceneAccess _scene;
+    private readonly uint _world;
+    public ulong Id { get; }
+    internal WorldOperation(ISceneAccess scene, uint world, ulong id)
+    {
+        _scene = scene; _world = world; Id = id;
+    }
+    public (WorldOperationState State, WorldStatus Result) Read()
+    {
+        if (_scene is null || Id == 0) throw new WorldException(WorldStatus.InvalidArgument, "consultar operação");
+        var status = _scene.QueryOperation(_world, Id, out var state, out var result);
+        if (status != WorldStatus.Ok) throw new WorldException(status, "consultar operação");
+        return (state, result);
+    }
+}
+
 public sealed class GameObject : IEquatable<GameObject>
 {
     private readonly ISceneAccess _scene;
@@ -196,12 +223,40 @@ public sealed class GameObject : IEquatable<GameObject>
         Check(Scene.DestroyObject(ObjectId), "destruir objeto");
     }
 
-    /// <summary>Reparent aplicado no próximo ponto seguro.</summary>
-    public void SetParent(GameObject parent, int index = 0)
+    public WorldOperation DestroyTracked()
+    {
+        Require("destruir objeto");
+        var id = Scene.QueueStructuralOperation(0, ObjectId, 0, 0, ReparentPosePolicy.KeepLocal);
+        if (id == 0) throw new WorldException(Scene.LastStatus, "destruir objeto");
+        return new(Scene, World, id);
+    }
+
+    /// <summary>Enfileira a troca de pai para o próximo ponto seguro.</summary>
+    public void SetParent(GameObject parent, int index = 0,
+                          ReparentPosePolicy posePolicy = ReparentPosePolicy.KeepLocal)
     {
         Require("reparentear");
         if (parent is not { IsValid: true }) throw new WorldException(WorldStatus.InvalidArgument, "reparentear");
-        Check(Scene.SetParent(ObjectId, parent.ObjectId, (uint)Math.Max(0, index)), "reparentear");
+        if (index < 0 || !Enum.IsDefined(posePolicy))
+            throw new WorldException(WorldStatus.InvalidArgument, "reparentear");
+        if (!ReferenceEquals(Scene, parent.Scene) || parent.World != World)
+            throw new WorldException(WorldStatus.ForeignWorld, "reparentear");
+        parent.Require("reparentear");
+        Check(Scene.SetParentWithPolicy(ObjectId, parent.ObjectId, (uint)index, posePolicy), "reparentear");
+    }
+
+    public WorldOperation SetParentTracked(GameObject parent, int index = 0,
+                                            ReparentPosePolicy posePolicy = ReparentPosePolicy.KeepLocal)
+    {
+        Require("reparentear");
+        if (parent is not { IsValid: true } || index < 0 || !Enum.IsDefined(posePolicy))
+            throw new WorldException(WorldStatus.InvalidArgument, "reparentear");
+        if (!ReferenceEquals(Scene, parent.Scene) || parent.World != World)
+            throw new WorldException(WorldStatus.ForeignWorld, "reparentear");
+        parent.Require("reparentear");
+        var id = Scene.QueueStructuralOperation(1, ObjectId, parent.ObjectId, (uint)index, posePolicy);
+        if (id == 0) throw new WorldException(Scene.LastStatus, "reparentear");
+        return new(Scene, World, id);
     }
 
     public TransformValue LocalTransform
@@ -280,7 +335,11 @@ public sealed class GameObject : IEquatable<GameObject>
         return new Component(Scene, this, instance, typeId);
     }
 
-    public ObjectReference AsReference() => new(ObjectId);
+    public ObjectReference AsReference()
+    {
+        Require("obter referência");
+        return ObjectReference.Capture(Scene, ObjectId);
+    }
 
     /// <summary>
     /// Resolve um id cru no mundo atual, capturando mundo e geração. É o que o
@@ -348,7 +407,7 @@ public readonly struct Component
         ? (uint)bits
         : throw new WorldException(_scene.LastStatus, "ler " + propertyId);
     public ObjectReference GetReference(string propertyId) => Read(propertyId, 3, out var bits)
-        ? new ObjectReference(bits)
+        ? ObjectReference.Capture(_scene, bits)
         : throw new WorldException(_scene.LastStatus, "ler " + propertyId);
 
     public void SetFloat(string propertyId, float value) =>
@@ -357,13 +416,29 @@ public readonly struct Component
         Check(_scene.SetProperty(_object.ObjectId, InstanceId, propertyId, 1, value ? 1u : 0u), "escrever " + propertyId);
     public void SetEnum(string propertyId, uint value) =>
         Check(_scene.SetProperty(_object.ObjectId, InstanceId, propertyId, 2, value), "escrever " + propertyId);
-    public void SetReference(string propertyId, ObjectReference value) =>
+    public void SetReference(string propertyId, ObjectReference value)
+    {
+        var status = value.StatusIn(_scene);
+        if (status != WorldStatus.Ok) throw new WorldException(status, "escrever " + propertyId);
         Check(_scene.SetProperty(_object.ObjectId, InstanceId, propertyId, 3, value.ObjectId), "escrever " + propertyId);
+    }
+
+    public void SetReference(string propertyId, GameObject? value) =>
+        SetReference(propertyId, value is null ? default(ObjectReference) : value.AsReference());
     public AssetGuid GetResource(string propertyId, uint slot = 0) =>
         _scene.TryGetResource(_object.ObjectId, InstanceId, propertyId, slot, out var value)
             ? value : throw new WorldException(_scene.LastStatus, "ler recurso " + propertyId);
     public void SetResource(string propertyId, AssetGuid value, uint slot = 0) =>
         Check(_scene.SetResource(_object.ObjectId, InstanceId, propertyId, slot, value), "escrever recurso " + propertyId);
+    public ulong ResourceElementId(string propertyId, uint slot) =>
+        _scene.ResourceElementId(_object.ObjectId, InstanceId, propertyId, slot, out var id)
+            ? id : throw new WorldException(_scene.LastStatus, "ler elemento " + propertyId);
+    public AssetGuid GetResourceByElementId(string propertyId, ulong elementId) =>
+        _scene.TryGetResourceByElementId(_object.ObjectId, InstanceId, propertyId, elementId, out var value)
+            ? value : throw new WorldException(_scene.LastStatus, "ler recurso " + propertyId);
+    public void SetResourceByElementId(string propertyId, ulong elementId, AssetGuid value) =>
+        Check(_scene.SetResourceByElementId(_object.ObjectId, InstanceId, propertyId, elementId, value),
+              "escrever recurso " + propertyId);
     public float GetSlotFloat(string propertyId,uint slot=0) => ReadSlot(propertyId,slot,0,out var bits)
         ? BitConverter.UInt32BitsToSingle((uint)bits)
         : throw new WorldException(_scene.LastStatus,"ler "+propertyId);
@@ -392,6 +467,13 @@ public readonly struct Component
 
     /// <summary>Remoção aplicada no próximo ponto seguro do mundo.</summary>
     public void Remove() => Check(_scene.RemoveComponent(_object.ObjectId, InstanceId), "remover componente");
+    public WorldOperation RemoveTracked()
+    {
+        if (!_object.IsAlive) throw new WorldException(WorldStatus.StaleHandle, "remover componente");
+        var id = _scene.QueueStructuralOperation(2, _object.ObjectId, InstanceId, 0, ReparentPosePolicy.KeepLocal);
+        if (id == 0) throw new WorldException(_scene.LastStatus, "remover componente");
+        return new(_scene, _object.World, id);
+    }
 
     private bool Read(string propertyId, uint expected, out ulong bits)
     {

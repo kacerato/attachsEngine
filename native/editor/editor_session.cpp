@@ -178,6 +178,7 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
       for(const auto &type:code_.scriptTypes()) if(type.id==request.scriptType) {
         auto values=*entity;auto *base=values.components.add(scene::ScriptBehavior::descriptor);if(!base) break;
         auto &script=static_cast<scene::ScriptBehavior &>(*base);script.scriptType=type.id;script.source=type.file;
+        if(!script.valid()) break;
         applied=history_.applyValues(document_,request.entity,values);break;
       }
       break;
@@ -259,7 +260,8 @@ void EditorSession::setSurface(const UiRect &surface, const UiInsets &safeArea) 
 
 void EditorSession::setSelection(EditorEntityId entity) {
   if (!document_.exists(entity)) return;
-  if(state_.selection!=entity) {state_.routePoint=0;state_.propertyPage=0;state_.componentPage=0;state_.expandedScript=0;state_.scriptMenu=0;state_.importLinkMenu=false;
+  if(state_.selection!=entity) {state_.routePoint=0;state_.propertyPage=0;state_.propertyQuery.clear();state_.componentPage=0;state_.componentPreview=0;state_.scriptPreviewType.clear();state_.expandedScript=0;state_.scriptMenu=0;state_.importLinkMenu=false;
+    state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRemoval=false;
     state_.materialSlot=0;state_.materialShared=false;state_.materialPicker=false;state_.inspectorMenu=false;state_.transformMenu=false;}
   state_.selection=entity;
   // Reveal the selected object through collapsed ancestors and long lists.
@@ -746,6 +748,7 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   if(state_.goingToLine) {edit.purpose=EditorTextPurpose::CodeLine;return edit;}
   if(state_.creatingCodeFolder) {edit.purpose=EditorTextPurpose::CodeFolder;return edit;}
   if(state_.editingComponentSearch) {edit.purpose=EditorTextPurpose::ComponentSearch;edit.text=state_.renameText;return edit;}
+  if(state_.editingPropertySearch) {edit.purpose=EditorTextPurpose::PropertySearch;edit.entity=state_.selection;edit.componentInstance=state_.expandedNative;edit.text=state_.renameText;return edit;}
   if(state_.editingReferenceSearch) {edit.purpose=EditorTextPurpose::ReferenceSearch;edit.text=state_.renameText;return edit;}
   if(state_.editingMeshSearch) {edit.purpose=EditorTextPurpose::MeshSearch;edit.text=state_.renameText;return edit;}
   if(state_.numericField) {
@@ -766,7 +769,8 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
 bool EditorSession::updateTextDraft(const EditorTextEdit &edit,std::string_view text,u32 caret) {
   const auto current=pendingTextEdit();
   if(edit.purpose==EditorTextPurpose::None || current.purpose!=edit.purpose ||
-     current.entity!=edit.entity || current.field!=edit.field || current.propertyType!=edit.propertyType || edit.version.epoch!=sceneEpoch_) return false;
+     current.entity!=edit.entity || current.componentInstance!=edit.componentInstance ||
+     current.field!=edit.field || current.propertyType!=edit.propertyType || edit.version.epoch!=sceneEpoch_) return false;
   // O mesmo teto que a ponte aplica. Um rascunho maior que o campo aceita não é
   // rascunho: é um commit que vai ser recusado no fim, depois de o usuário ter
   // digitado tudo.
@@ -788,11 +792,13 @@ bool EditorSession::updateTextDraft(const EditorTextEdit &edit,std::string_view 
     case EditorTextPurpose::HierarchySearch:
     case EditorTextPurpose::CreationSearch:
     case EditorTextPurpose::ComponentSearch:
+    case EditorTextPurpose::PropertySearch:
     case EditorTextPurpose::MeshSearch:
     case EditorTextPurpose::ReferenceSearch: {
       const auto size=std::min(text.size(),sizeof(state_.renameText)-1);
       std::memcpy(state_.renameText,text.data(),size);
       state_.renameText[size]='\0';
+      if(edit.purpose==EditorTextPurpose::PropertySearch) state_.propertyPage=0;
       break;
     }
     default: break;
@@ -971,7 +977,7 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     state_.choosingTemplate=false;
     state_.editingScriptInstance=0;state_.editingScriptEntity=0;state_.editingScriptProperty.clear();state_.editingScriptType.clear();
     state_.numericField=0;state_.numericInstance=0;state_.numericProperty.clear();state_.renameEntity=0;
-    state_.editingComponentSearch=false;state_.editingMeshSearch=false;state_.editingReferenceSearch=false;
+    state_.editingComponentSearch=false;state_.editingPropertySearch=false;state_.editingMeshSearch=false;state_.editingReferenceSearch=false;
     state_.editingHierarchySearch=false;state_.editingCreationSearch=false;
     cancelPointers();
   };
@@ -1089,9 +1095,11 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     }
     state_.status=std::to_string(matches.size())+" ocorrências";close();return true;
   }
-  if(edit.purpose==EditorTextPurpose::ComponentSearch || edit.purpose==EditorTextPurpose::MeshSearch || edit.purpose==EditorTextPurpose::ReferenceSearch) {
+  if(edit.purpose==EditorTextPurpose::ComponentSearch || edit.purpose==EditorTextPurpose::PropertySearch ||
+     edit.purpose==EditorTextPurpose::MeshSearch || edit.purpose==EditorTextPurpose::ReferenceSearch) {
     if(text.size()>63 || text.find('\0')!=std::string_view::npos) return false;
     if(edit.purpose==EditorTextPurpose::ComponentSearch) {state_.componentQuery=text;state_.componentPage=0;}
+    else if(edit.purpose==EditorTextPurpose::PropertySearch) {state_.propertyQuery=text;state_.propertyPage=0;}
     else if(edit.purpose==EditorTextPurpose::ReferenceSearch) {state_.referenceQuery=text;state_.referencePage=0;}
     else {state_.meshQuery=text;state_.meshPage=0;}
     close();return true;
@@ -1612,11 +1620,27 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       if(!state_.impactTrail.empty()) {
         const auto previous=state_.impactTrail.back();state_.impactTrail.pop_back();
         state_.impactAsset=previous.first;state_.impactPage=previous.second;
-      } else {state_.impactInstance=0;state_.impactAsset={};}
+      } else {state_.impactInstance=0;state_.impactAsset={};state_.impactRemoval=false;}
       return true;
     }
     if(impactKey==widgetId(EditorWidget::ImpactPrevious)) {if(state_.impactPage)--state_.impactPage;return true;}
     if(impactKey==widgetId(EditorWidget::ImpactNext)) {++state_.impactPage;return true;}
+    if(impactKey==widgetId(EditorWidget::ImpactRemoveConfirm)) {
+      if(!state_.impactRemoval || state_.impactAsset.valid() || state_.selection!=state_.impactEntity) return true;
+      const auto version=EditorSceneVersion{state_.impactRemovalEpoch,state_.impactRemovalRevision};
+      if(sceneVersion().epoch!=version.epoch || sceneVersion().revision!=version.revision) {
+        state_.status="Cena alterada; reabra a remoção";return true;
+      }
+      EditorActionRequest request;request.action=EditorAction::RemoveComponent;
+      request.entity=state_.impactEntity;request.componentInstance=state_.impactInstance;request.version=version;
+      if(dispatch(request).status==EditorActionStatus::Applied) {
+        if(state_.expandedNative==request.componentInstance) state_.expandedNative=0;
+        if(state_.expandedScript==request.componentInstance) state_.expandedScript=0;
+        state_.nativeMenu=0;state_.scriptMenu=0;state_.impactInstance=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRemoval=false;
+        state_.status="Componente removido";
+      } else state_.status="Remoção bloqueada; revise as dependências";
+      return true;
+    }
     if(impactKey==widgetId(EditorWidget::ImpactRepairScope)&&state_.impactRepair&&!state_.impactRepairMaterial.valid()) {
       state_.impactRepairScene=!state_.impactRepairScene;state_.impactPage=0;return true;
     }
@@ -1642,7 +1666,21 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     }
     if(impactKey>=widgetId(EditorWidget::ImpactOpenBase)&&impactKey<widgetId(EditorWidget::ImpactOpenBase)+0x01000000u) {
       const auto *entity=document_.find(state_.selection);const auto index=impactKey-widgetId(EditorWidget::ImpactOpenBase);
-      if(entity&&index<entity->components.size()) {state_.impactEntity=entity->id;state_.impactInstance=entity->components.at(index)->instanceId();state_.impactPage=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRepair=false;state_.impactReplacement={};state_.impactRepairMaterial={};}
+      if(entity&&index<entity->components.size()) {state_.impactEntity=entity->id;state_.impactInstance=entity->components.at(index)->instanceId();state_.impactPage=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRepair=false;state_.impactRemoval=false;state_.impactReplacement={};state_.impactRepairMaterial={};}
+      return true;
+    }
+    const bool removeNative=impactKey>=widgetId(EditorWidget::ComponentRemoveBase)&&impactKey<widgetId(EditorWidget::ComponentRemoveBase)+0x01000000u;
+    const bool removeScript=impactKey>=widgetId(EditorWidget::ScriptRemoveBase)&&impactKey<widgetId(EditorWidget::ScriptRemoveBase)+0x01000000u;
+    if(removeNative || removeScript) {
+      const auto *entity=document_.find(state_.selection);
+      const auto index=impactKey-widgetId(removeNative?EditorWidget::ComponentRemoveBase:EditorWidget::ScriptRemoveBase);
+      const auto *component=entity?entity->components.at(index):nullptr;
+      if(component && (removeNative || scene::scriptBehavior(component))) {
+        state_.impactEntity=entity->id;state_.impactInstance=component->instanceId();
+        const auto version=sceneVersion();state_.impactRemovalEpoch=version.epoch;state_.impactRemovalRevision=version.revision;
+        state_.impactPage=0;state_.impactAsset={};state_.impactTrail.clear();state_.impactRepair=false;
+        state_.impactRemoval=true;state_.impactReplacement={};state_.impactRepairMaterial={};state_.nativeMenu=0;state_.scriptMenu=0;
+      }
       return true;
     }
     if(impactKey>=widgetId(EditorWidget::ImpactRowBase)&&impactKey<widgetId(EditorWidget::ImpactRowBase)+0x01000000u) {
@@ -1781,7 +1819,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     if(state_.componentSelection!=state_.selection) {
       state_.componentSelection=state_.selection;state_.referenceInstance=0;state_.expandedComponent.clear();state_.expandedNative=0;state_.nativeMenu=0;
       state_.expandedScript=0;state_.scriptMenu=0;state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();
-      state_.componentPage=0;state_.propertyPage=0;state_.addingComponent=false;
+      state_.componentPage=0;state_.componentPreview=0;state_.scriptPreviewType.clear();state_.propertyPage=0;state_.propertyQuery.clear();state_.addingComponent=false;
     }
     const u32 key=routing.widgetId;
     if(key==widgetId(EditorWidget::CameraViewClose)) {cancelPointers();state_.cameraViewEntity=0;state_.cameraPiloting=false;return true;}
@@ -1941,6 +1979,46 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       if(binding.id=="collision_mesh") refreshCollisionMeshDraft();
       state_.meshPicker=true;state_.meshPage=0;return true;
     }
+    if(key>=widgetId(EditorWidget::ComponentFieldResetBase) && key<widgetId(EditorWidget::ComponentFieldResetBase)+0x10000000u) {
+      const u32 encoded=key-widgetId(EditorWidget::ComponentFieldResetBase);
+      const u32 index=encoded&0xffu,kind=(encoded>>8)&0xfu,field=(encoded>>12)&0xffu,slot=(encoded>>20)&0xffu;
+      const auto *entity=document_.find(state_.selection);
+      const auto *component=entity&&index<entity->components.size()?entity->components.at(index):nullptr;
+      if(!component || component->instanceId()!=state_.expandedNative || history_.isOpen()) return true;
+      const auto &type=component->type();
+      const auto defaults=type.create();if(!defaults) return true;
+      const auto changes=scene::componentDelta(*component,*defaults);
+      std::vector<scene::FieldAddress> fields;
+      const auto add=[&](std::string_view id,scene::FieldKind fieldKind,u32 fieldSlot=0) {
+        for(const auto &change:changes) if(change.address==scene::FieldAddress{id,fieldSlot,fieldKind} && change.differs && change.applicable)
+          fields.push_back(change.address);
+      };
+      switch(kind) {
+      case 0:if(field<type.booleans.size()) add(type.booleans[field].id,scene::FieldKind::Boolean);break;
+      case 1:if(field<type.enums.size()) add(type.enums[field].id,scene::FieldKind::Enum);break;
+      case 2:if(field<type.numbers.size()) add(type.numbers[field].id,scene::FieldKind::Number);break;
+      case 4:if(field<type.references.size()) add(type.references[field].id,scene::FieldKind::Reference);break;
+      case 5:if(field<type.triples.size()) for(const auto channel:type.triples[field].channels) add(channel,scene::FieldKind::Number);break;
+      case 9:if(field<type.slotNumbers.size()) add(type.slotNumbers[field].id,scene::FieldKind::SlotNumber,slot);break;
+      default:return true;
+      }
+      if(fields.empty()) return true;
+      auto candidate=*entity;
+      const auto result=scene::applyComponentFields(candidate.components,*defaults,fields,component->instanceId());
+      const auto *applied=candidate.components.findInstance(component->instanceId());
+      if(!result.ok() || result.rejected || !applied || !editorReferencesAccept(document_,entity->id,*applied)) {
+        state_.status=result.error?result.error:"Valor padrão incompatível com este objeto";return true;
+      }
+      if(history_.applyValues(document_,entity->id,candidate)) state_.status="Propriedade restaurada; disponível em Desfazer";
+      return true;
+    }
+    if(key==widgetId(EditorWidget::ComponentPropertySearch)) {
+      if(!state_.expandedNative || !document_.find(state_.selection)) return true;
+      state_.editingPropertySearch=true;
+      std::snprintf(state_.renameText,sizeof(state_.renameText),"%s",state_.propertyQuery.c_str());
+      return true;
+    }
+    if(key==widgetId(EditorWidget::ComponentPropertySearchClear)) {state_.propertyQuery.clear();state_.propertyPage=0;return true;}
     if(key==widgetId(EditorWidget::ComponentSearch) || key==widgetId(EditorWidget::MeshSearch)) {
       state_.editingComponentSearch=key==widgetId(EditorWidget::ComponentSearch);state_.editingMeshSearch=!state_.editingComponentSearch;
       const auto &query=state_.editingComponentSearch?state_.componentQuery:state_.meshQuery;
@@ -1951,11 +2029,11 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::ObjectFold)) {
       state_.componentSelection=state_.selection;state_.expandedComponent=state_.expandedComponent=="astra.object"?"":"astra.object";
       state_.expandedNative=0;state_.expandedScript=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;
-      state_.transformMenu=false;state_.propertyPage=0;return true;
+      state_.transformMenu=false;state_.propertyPage=0;state_.propertyQuery.clear();return true;
     }
     if(key==widgetId(EditorWidget::TransformFold)) {
       state_.componentSelection=state_.selection;state_.expandedComponent=state_.expandedComponent=="astra.transform"?"":"astra.transform";
-      state_.expandedNative=0;state_.expandedScript=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;state_.propertyPage=0;return true;
+      state_.expandedNative=0;state_.expandedScript=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;state_.propertyPage=0;state_.propertyQuery.clear();return true;
     }
     if(key==widgetId(EditorWidget::MeshChoose)) {
       state_.resourceInstance=0;state_.resourceProperty.clear();state_.meshPicker=true;state_.meshPage=0;return true;
@@ -2264,18 +2342,56 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       else state_.status="Referência incompatível com este objeto";
       return true;
     }
-    if(key>=widgetId(EditorWidget::ComponentAddBase)&&key-widgetId(EditorWidget::ComponentAddBase)<editorComponentCatalog.size()) {
-      const auto &entry=editorComponentCatalog[key-widgetId(EditorWidget::ComponentAddBase)];
+    const bool confirming=key==widgetId(EditorWidget::ComponentPreviewConfirm);
+    if((confirming && state_.componentPreview) || (key>=widgetId(EditorWidget::ComponentAddBase)&&key-widgetId(EditorWidget::ComponentAddBase)<editorComponentCatalog.size())) {
+      const u32 index=confirming?state_.componentPreview-1:key-widgetId(EditorWidget::ComponentAddBase);
+      if(index>=editorComponentCatalog.size() || (confirming &&
+         (!state_.componentPreview || !state_.addingComponent || state_.componentSelection!=state_.selection))) return true;
+      const auto &entry=editorComponentCatalog[index];
+      const auto *entity=document_.find(state_.selection);
+      if(!entity) return true;
+      const auto plan=scene::planComponentAddition(entity->components,entry.type->id,false,false);
+      if(!confirming) {
+        state_.componentPreview=index+1;state_.componentPreviewValues=false;state_.componentPreviewPage=0;
+        state_.scriptPreviewType.clear();return true;
+      }
+      if(!plan.ready) {state_.status=plan.error?plan.error:"Não foi possível compor o objeto";return true;}
       EditorActionRequest request;request.version=sceneVersion();request.action=EditorAction::AddComponent;
       request.entity=state_.selection;request.componentType=entry.type->id;
       const auto result=dispatch(request);
       if(result.status==EditorActionStatus::Applied) {
         state_.componentSelection=state_.selection;state_.expandedComponent.clear();state_.expandedNative=0;state_.expandedScript=0;
-        state_.addingComponent=false;state_.componentPage=~u32{0};state_.nativeMenu=0;state_.scriptMenu=0;
+        if(const auto *entity=document_.find(state_.selection))
+          for(usize i=entity->components.size();i>0;--i)
+            if(const auto *component=entity->components.at(i-1);component && &component->type()==entry.type) {
+              state_.expandedNative=component->instanceId();break;
+            }
+        state_.addingComponent=false;state_.componentPreview=0;state_.componentPage=0;state_.componentGroup.clear();state_.propertyPage=0;
+        state_.nativeMenu=0;state_.scriptMenu=0;
         state_.status="Componente adicionado";
       } else if(const auto *entity=document_.find(state_.selection)) {
         const auto *reason=entry.unavailable(*entity);state_.status=reason?reason:"Não foi possível adicionar o componente";
       }
+      return true;
+    }
+    if(confirming && !state_.scriptPreviewType.empty()) {
+      if(!state_.addingComponent || state_.componentSelection!=state_.selection ||
+         code_.publishedGeneration()!=state_.scriptPreviewGeneration) {
+        state_.status="Catálogo alterado; volte e escolha novamente";return true;
+      }
+      const auto type=std::find_if(code_.scriptTypes().begin(),code_.scriptTypes().end(),
+          [&](const auto &candidate){return candidate.id==state_.scriptPreviewType;});
+      if(type==code_.scriptTypes().end()) {state_.status="Tipo indisponível; volte e escolha novamente";return true;}
+      EditorActionRequest request;request.version=sceneVersion();request.action=EditorAction::AddScript;
+      request.entity=state_.selection;request.scriptType=type->id;
+      if(dispatch(request).status==EditorActionStatus::Applied) {
+        state_.expandedComponent.clear();state_.expandedNative=0;state_.expandedScript=0;
+        if(const auto *entity=document_.find(state_.selection))
+          if(const auto *script=scene::scriptBehavior(entity->components.at(entity->components.size()-1)))
+            state_.expandedScript=script->instanceId();
+        state_.addingComponent=false;state_.scriptPreviewType.clear();state_.componentPage=0;
+        state_.componentGroup.clear();state_.scriptPropertyPage=0;state_.status="Comportamento anexado";
+      } else state_.status="Não foi possível anexar o comportamento";
       return true;
     }
     if(key==widgetId(EditorWidget::ColliderFit)) {
@@ -2316,22 +2432,16 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       const u32 index=key&(operation==widgetId(EditorWidget::ScriptFieldBase)?0xffu:0x00ffffffu);
       state_.componentSelection=state_.selection;
       if(operation==widgetId(EditorWidget::ScriptAddBase)) {
-        if(index>=code_.scriptTypes().size()) return true;
-        auto value=*entity;auto *base=value.components.add(scene::ScriptBehavior::descriptor);
-        if(!base) {state_.status="Limite de componentes atingido";return true;}
-        auto &script=static_cast<scene::ScriptBehavior &>(*base);const auto &type=code_.scriptTypes()[index];
-        script.scriptType=type.id;script.source=type.file;
-        if(history_.applyValues(document_,state_.selection,value)) {
-          state_.addingComponent=false;state_.expandedComponent.clear();state_.expandedNative=0;state_.expandedScript=0;state_.scriptMenu=0;state_.componentPage=~u32{0};
-          state_.status="Comportamento anexado";
-        }
+        if(index>=code_.scriptTypes().size() || !state_.addingComponent) return true;
+        state_.scriptPreviewType=code_.scriptTypes()[index].id;
+        state_.scriptPreviewGeneration=code_.publishedGeneration();state_.componentPreview=0;
         return true;
       }
       const auto *script=scene::scriptBehavior(entity->components.at(index));if(!script) return true;
       if(operation==widgetId(EditorWidget::ScriptFoldBase)) {
-        state_.expandedScript=state_.expandedScript==script->instanceId()?0:script->instanceId();state_.expandedComponent.clear();state_.expandedNative=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;state_.scriptPropertyPage=0;
+        state_.expandedScript=state_.expandedScript==script->instanceId()?0:script->instanceId();state_.expandedComponent.clear();state_.expandedNative=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;state_.scriptPropertyPage=0;state_.propertyQuery.clear();
       } else if(operation==widgetId(EditorWidget::ScriptMenuBase)) {
-        state_.scriptMenu=state_.scriptMenu==script->instanceId()?0:script->instanceId();state_.expandedScript=0;state_.expandedComponent.clear();state_.expandedNative=0;
+        state_.scriptMenu=state_.scriptMenu==script->instanceId()?0:script->instanceId();state_.expandedScript=0;state_.expandedComponent.clear();state_.expandedNative=0;state_.propertyQuery.clear();
       } else if(operation==widgetId(EditorWidget::ScriptSourceBase)) {
         if(code_.open(files_,script->source)) {state_.code=&code_;state_.workspace=EditorWorkspace::Code;} else state_.status=code_.error();
       } else if(operation==widgetId(EditorWidget::ScriptFieldBase)) {
@@ -2347,10 +2457,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
         }
       } else {
         auto value=*entity;
-        if(operation==widgetId(EditorWidget::ScriptRemoveBase)) {
-          if(!value.components.removeInstance(script->instanceId())) return true;
-          state_.scriptMenu=0;if(state_.expandedScript==script->instanceId()) state_.expandedScript=0;
-        } else if(operation==widgetId(EditorWidget::ScriptEnabledBase)) {
+        if(operation==widgetId(EditorWidget::ScriptEnabledBase)) {
           auto replacement=*script;replacement.enabled=!replacement.enabled;
           if(!value.components.replaceInstance(script->instanceId(),replacement)) return true;
         } else return true;
@@ -2586,7 +2693,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       state_.creationSelection=key-widgetId(EditorWidget::CreationRowBase);return true;
     }
   }
-  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.presetNaming || state_.viewNaming) {
+  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.presetNaming || state_.viewNaming) {
     if(routing.tapped) {
       const auto key=routing.widgetId;
       auto n=std::strlen(state_.renameText);
@@ -2627,11 +2734,12 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   }
   if(routing.tapped && (routing.widgetId==widgetId(EditorWidget::CreateGround) || routing.widgetId==widgetId(EditorWidget::CreateCube))) {
     const bool ground=routing.widgetId==widgetId(EditorWidget::CreateGround);
+    const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) && state_.selection!=document_.root()?state_.selection:document_.root();
     for(u32 i=0;i<mapScene_.assetCount();++i) if(mapScene_.materialFlagsForAsset(i)&renderer::BoxAuthoringResource) {
       const float position[]{camera_.target[0],ground?-.1f:.5f,camera_.target[2]};
       EditorAssetInstantiation options;options.name=ground?"Chão":"Cubo";
       if(ground) {options.scale[0]=20;options.scale[1]=.2f;options.scale[2]=20;}
-      if(instantiateAsset(i,document_.root(),position,&options)) {state_.creationMenu=false;frameSelection();}
+      if(instantiateAsset(i,parent,position,&options)) {state_.creationMenu=false;frameSelection();}
       break;
     }
     return true;
@@ -2914,27 +3022,33 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     return true;
   }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CreateCamera)) {
-    history_.begin("Criar câmera");
-    const auto id=history_.createEntity(document_,document_.root(),EditorEntityKind::Camera,"Câmera");
-    if(id) {
-      auto value=*document_.find(id);editCamera(value);editorCameraPosition(camera_,value.transform.position);
-      value.transform.rotationDegrees[0]=camera_.pitch*57.2957795f;
-      value.transform.rotationDegrees[1]=camera_.yaw*57.2957795f;
-      history_.applyValues(document_,id,value);setSelection(id);
+    const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) && state_.selection!=document_.root()?state_.selection:document_.root();
+    EditorEntity value;editCamera(value);
+    editorCameraPosition(camera_,value.transform.position);
+    value.transform.rotationDegrees[0]=camera_.pitch*57.2957795f;
+    value.transform.rotationDegrees[1]=camera_.yaw*57.2957795f;
+    float parentWorld[16],cameraWorld[16];editorTransformMatrix(value.transform,cameraWorld);
+    if(!editorWorldMatrix(document_,parent,parentWorld) || !editorLocalTransformForWorld(cameraWorld,parentWorld,value.transform)) {
+      state_.status="Não foi possível criar câmera neste pai";return true;
     }
+    if(!history_.begin("Criar câmera")) return true;
+    const auto id=history_.createEntity(document_,parent,EditorEntityKind::Camera,"Câmera");
+    if(id && history_.applyValues(document_,id,value)) setSelection(id);
     history_.end();state_.creationMenu=false;return true;
   }
   if(routing.tapped && (routing.widgetId==widgetId(EditorWidget::CreateFiniteWater) ||
                         routing.widgetId==widgetId(EditorWidget::CreateOceanWater))) {
+    const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) && state_.selection!=document_.root()?state_.selection:document_.root();
     state_.creationMenu=false;
-    createWaterSurface(routing.widgetId==widgetId(EditorWidget::CreateOceanWater));
+    createWaterSurface(routing.widgetId==widgetId(EditorWidget::CreateOceanWater),parent);
     return true;
   }
   if(routing.tapped && (routing.widgetId==widgetId(EditorWidget::CreateRiverWater) || routing.widgetId==widgetId(EditorWidget::CreateBuoyantBox))) {
     const bool box=routing.widgetId==widgetId(EditorWidget::CreateBuoyantBox);
+    const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) && state_.selection!=document_.root()?state_.selection:document_.root();
     for(u32 i=0;i<mapScene_.assetCount();++i) if(mapScene_.materialFlagsForAsset(i)&(box?renderer::BoxAuthoringResource:renderer::WaterRouteResource)) {
       const float position[]{camera_.target[0],box?3.0f:0.0f,camera_.target[2]};
-      if(instantiateAsset(i,document_.root(),position)) {
+      if(instantiateAsset(i,parent,position)) {
         state_.workspace=EditorWorkspace::Scene;state_.waterTab=1;state_.routePoint=0;state_.creationMenu=false;frameSelection();
       }
       break;
@@ -4447,7 +4561,7 @@ bool EditorSession::bindImportedDeformation(const ImportedSource &tree,const std
     }
     // Clipes novos da fonte entram na lista, como no Model Importer.
     for(const auto &id:clipIds)
-      if(!animation->contains(id) && animation->clips.size()<scene::Animation::MaximumClips) {animation->clips.push_back(id);changed=true;}
+      if(!animation->contains(id) && animation->appendClip(id)) changed=true;
     if(!animation->clip.valid()) {animation->clip=clipIds.front();changed=true;}
     if(changed && !history_.applyValues(document_,root,value)) return false;
     if(created) ++animations;
@@ -5220,13 +5334,14 @@ bool EditorSession::createSceneTemplate(u32 index) {
   return true;
 }
 
-EditorEntityId EditorSession::createWaterSurface(bool cameraRelative) {
+EditorEntityId EditorSession::createWaterSurface(bool cameraRelative, EditorEntityId parent) {
+  if(parent==kInvalidEntity) parent=document_.root();
   for(u32 i=0;i<mapScene_.assetCount();++i) {
     const auto flags=mapScene_.materialFlagsForAsset(i);
     if(!(flags & renderer::WaterAuthoringResource) || !(flags & renderer::MapMaterialWater) || (flags & renderer::WaterRouteResource) ||
        bool(flags & renderer::MapMaterialWaterCameraGrid)!=cameraRelative) continue;
     const float position[3]{camera_.target[0],0,camera_.target[2]};
-    const auto id=instantiateAsset(i,document_.root(),position);
+    const auto id=instantiateAsset(i,parent,position);
     if(id) {state_.workspace=EditorWorkspace::Scene;state_.status="Água criada; ondas e óptica em Configurações";
       if(cameraRelative) {std::copy(position,position+3,camera_.target);camera_.distance=40;} else frameSelection();}
     return id;
@@ -5340,7 +5455,7 @@ void EditorSession::refreshSkinningStatus() {
   if(const auto *animation=static_cast<const scene::Animation *>(entity->components.find(scene::Animation::descriptor))) {
     runtime::AnimationClipView view;
     u32 missing=0;
-    for(const auto &clip:animation->clips) if(clip.valid() && !mapScene_.findClip(clip,view)) ++missing;
+    for(const auto &entry:animation->clips) if(entry.asset.valid() && !mapScene_.findClip(entry.asset,view)) ++missing;
     std::string text;
     if(animation->clips.empty() && !animation->clip.valid()) text="Sem clipes: escolha na lista Clipes";
     else if(!animation->clip.valid()) text=std::to_string(animation->clips.size())+" clipe(s) · sem clipe padrão";
@@ -5354,13 +5469,13 @@ void EditorSession::refreshSkinningStatus() {
       // O que o avaliador está tocando agora, com peso e tempo.
       const auto &animator=playScene_.animator();
       std::string states;
-      for(const auto &clip:animation->clips) {
+      for(const auto &entry:animation->clips) {
         runtime::AnimationStateView state;
-        if(animator.state(entity->id,animation->instanceId(),clip,state)!=runtime::AnimationCommandStatus::Ok || !state.enabled)
+        if(animator.state(entity->id,animation->instanceId(),entry.asset,state)!=runtime::AnimationCommandStatus::Ok || !state.enabled)
           continue;
         char line[64];
         std::snprintf(line,sizeof line," %.2f s ×%.2f",state.time,state.weight);
-        states+=(states.empty()?std::string():std::string(" · "))+(mapScene_.findClip(clip,view)?view.name:std::string("?"))+line;
+        states+=(states.empty()?std::string():std::string(" · "))+(mapScene_.findClip(entry.asset,view)?view.name:std::string("?"))+line;
       }
       text+=states.empty()?" · parado":" · tocando "+states;
     }

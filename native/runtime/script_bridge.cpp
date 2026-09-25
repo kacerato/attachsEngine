@@ -679,6 +679,89 @@ void ScriptBridge::installAccess() {
     s.lastStatus_=WorldStatus::Ok;
     return static_cast<int>(count);
   };
+  access_.resourceElementId=[](void *c,u64 id,u64 instance,const u8 *property,int length,u32 slot,u64 *out)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!out||id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=s.world_->resourceElementId({s.world_->handle((ObjectId)id),instance},viewOf(property,length),slot,*out);
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  access_.getResourceByElementId=[](void *c,u64 id,u64 instance,const u8 *property,int length,u64 element,
+                                     scene::ScriptAssetGuid *out)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!out||id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    resources::AssetGuid value;
+    s.lastStatus_=s.world_->getResourceByElementId({s.world_->handle((ObjectId)id),instance},viewOf(property,length),element,value);
+    if(s.lastStatus_!=WorldStatus::Ok) return 0;
+    *out={value.high,value.low};return 1;
+  };
+  access_.setResourceByElementId=[](void *c,u64 id,u64 instance,const u8 *property,int length,u64 element,
+                                     scene::ScriptAssetGuid value)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!s.assets_||id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    const std::span<const resources::EnvironmentProfile> profiles=s.environmentProfiles_?
+        std::span<const resources::EnvironmentProfile>(*s.environmentProfiles_):std::span<const resources::EnvironmentProfile>{};
+    s.lastStatus_=s.world_->setResourceByElementId({s.world_->handle((ObjectId)id),instance},viewOf(property,length),element,
+        {value.high,value.low},*s.assets_,profiles,s.resourceAvailable_);
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  access_.setParentWithPolicy = [](void *c, u64 id, u64 parent, u32 index, u32 policy) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    if (id > std::numeric_limits<ObjectId>::max() || parent > std::numeric_limits<ObjectId>::max() || policy > 1) {
+      s.lastStatus_ = WorldStatus::InvalidArgument;
+      return 0;
+    }
+    s.lastStatus_ = s.world_->setParent(s.world_->handle(static_cast<ObjectId>(id)),
+                                        s.world_->handle(static_cast<ObjectId>(parent)), index,
+                                        static_cast<ReparentPosePolicy>(policy));
+    return s.lastStatus_ == WorldStatus::Ok;
+  };
+  access_.queueStructuralOperation = [](void *c, u32 kind, u64 id, u64 other,
+                                         u32 index, u32 policy, u64 *operationId) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    if (!operationId || id > std::numeric_limits<ObjectId>::max() ||
+        (kind == 1 && other > std::numeric_limits<ObjectId>::max()) || kind > 2 || policy > 1) {
+      s.lastStatus_ = WorldStatus::InvalidArgument;
+      return 0;
+    }
+    *operationId = 0;
+    const auto object = s.world_->handle(static_cast<ObjectId>(id));
+    if (kind == 0) s.lastStatus_ = s.world_->destroyObject(object, operationId);
+    else if (kind == 1) s.lastStatus_ = s.world_->setParent(
+        object, s.world_->handle(static_cast<ObjectId>(other)), index,
+        static_cast<ReparentPosePolicy>(policy), operationId);
+    else s.lastStatus_ = s.world_->removeComponent({object, other}, operationId);
+    return s.lastStatus_ == WorldStatus::Ok;
+  };
+  access_.queryOperation = [](void *c, u32 world, u64 operationId, u32 *state, u32 *result) -> int {
+    auto &s = *static_cast<ScriptBridge *>(c);
+    if (!state || !result) { s.lastStatus_ = WorldStatus::InvalidArgument; return 0; }
+    WorldOperationState operationState{};
+    WorldStatus operationResult{};
+    s.lastStatus_ = s.world_->operationResult(world, operationId, operationState, operationResult);
+    if (s.lastStatus_ != WorldStatus::Ok) return 0;
+    *state = static_cast<u32>(operationState);
+    *result = static_cast<u32>(operationResult);
+    return 1;
+  };
+  access_.appendAnimationClip=[](void *c,u64 id,u64 instance,scene::ScriptAssetGuid clip,u64 *element)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(!element||id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=s.world_->appendAnimationClip({s.world_->handle((ObjectId)id),instance},
+        {clip.high,clip.low},*element,s.resourceAvailable_);
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  access_.removeAnimationClip=[](void *c,u64 id,u64 instance,u64 element)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=s.world_->removeAnimationClip({s.world_->handle((ObjectId)id),instance},element);
+    return s.lastStatus_==WorldStatus::Ok;
+  };
+  access_.moveAnimationClip=[](void *c,u64 id,u64 instance,u64 element,u32 index)->int {
+    auto &s=*static_cast<ScriptBridge*>(c);
+    if(id>std::numeric_limits<ObjectId>::max()) {s.lastStatus_=WorldStatus::InvalidArgument;return 0;}
+    s.lastStatus_=s.world_->moveAnimationClip({s.world_->handle((ObjectId)id),instance},element,index);
+    return s.lastStatus_==WorldStatus::Ok;
+  };
 }
 
 bool ScriptBridge::start(GameWorld &world, ScenePhysics &physics, InputService &input) {

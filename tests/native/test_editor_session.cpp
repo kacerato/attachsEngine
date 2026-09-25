@@ -1024,31 +1024,91 @@ AE_TEST(session_component_catalog_adds_closed_expands_removes_and_undoes) {
   AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)+2).x>=0,"look resolves its camera dependency");
   for(u32 category=0;category<4;++category) tapWidget(f,widgetId(EditorWidget::ComponentCategory));
   tapWidget(f,widgetId(EditorWidget::ComponentAddBase));
+  AE_EXPECT_TRUE(!physicsBody(*f.session.document().find(f.cube)),"prévia não adiciona o corpo");
+  tapWidget(f,widgetId(EditorWidget::ComponentPreviewConfirm));
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))!=nullptr,"body added by catalog");
   AE_EXPECT_EQ(f.session.history().undoDepth(),1u,"single add command");
   const u32 friction=widgetId(EditorWidget::ComponentNumberBase)+1+(1u<<8);
-  AE_EXPECT_TRUE(locateWidget(f.session,friction).x<0,"new component starts folded");
+  AE_EXPECT_EQ(f.session.screen().expandedNative,physicsBody(*f.session.document().find(f.cube))->instanceId(),
+               "new component opens in the Inspector");
   const auto revision=f.session.document().revision();
-  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase)+1);
   revealProperty(f,friction);
-  AE_EXPECT_TRUE(locateWidget(f.session,friction).x>=0,"touch expands properties");
-  AE_EXPECT_EQ(f.session.document().revision(),revision,"folding never changes authoring");
+  AE_EXPECT_TRUE(locateWidget(f.session,friction).x>=0,"new component properties are reachable");
+  AE_EXPECT_EQ(f.session.document().revision(),revision,"opening the Inspector never changes authoring");
   while(f.session.screen().propertyPage) tapWidget(f,widgetId(EditorWidget::PropertyPrevious));
   tapWidget(f,widgetId(EditorWidget::ComponentEnumBase)+1);
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion==scene::BodyMotion::Kinematic,"kinematic option");
   tapWidget(f,widgetId(EditorWidget::ComponentEnumBase)+1);
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion==scene::BodyMotion::Dynamic,"motion enum remains an editable value");
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
-  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)).x<0,"duplicate disabled");
-  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)+1).x<0,"incompatible character disabled");
+  tapWidget(f,widgetId(EditorWidget::ComponentAddBase));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentPreviewConfirm)).x<0,"duplicate has no confirmation");
+  tapWidget(f,widgetId(EditorWidget::ComponentPreviewBack));
+  for(u32 page=0;page<12 && locateWidget(f.session,widgetId(EditorWidget::ComponentAddBase)+1).x<0;++page)
+    tapWidget(f,widgetId(EditorWidget::ComponentNext));
+  tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+1);
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentPreviewConfirm)).x<0,"incompatible character has no confirmation");
+  tapWidget(f,widgetId(EditorWidget::ComponentPreviewBack));
   tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
   tapWidget(f,widgetId(EditorWidget::ComponentMenuBase)+1);
   tapWidget(f,widgetId(EditorWidget::ComponentRemoveBase)+1);
+  AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))!=nullptr,"removal preview preserves body");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ImpactRemoveConfirm)).x>=0,"free component can be confirmed");
+  tapWidget(f,widgetId(EditorWidget::ImpactRemoveConfirm));
   AE_EXPECT_TRUE(!physicsBody(*f.session.document().find(f.cube)),"explicit removal");
   AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"undo removal");
   AE_EXPECT_TRUE(physicsBody(*f.session.document().find(f.cube))->motion==scene::BodyMotion::Dynamic,"undo restores configured component");
   AE_EXPECT_TRUE(f.session.history().redo(f.session.document()),"redo removal");
   AE_EXPECT_TRUE(!physicsBody(*f.session.document().find(f.cube)),"redo removes component");
+}
+
+AE_TEST(session_script_catalog_previews_addition_and_removal_with_undo) {
+  Fixture f;auto &document=f.session.document();auto &history=f.session.history();
+  namespace fs=std::filesystem;
+  const auto root=fs::temp_directory_path()/("astra-script-preview-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  fs::create_directories(root/"Scripts");
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  std::ofstream(root/"Scripts"/"Mover.cs")<<"public sealed class Mover : Astra.Behavior {}\n";
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"project code catalog connected");
+  auto *code=const_cast<EditorCodeWorkspace*>(f.session.screen().code);
+  AE_EXPECT_TRUE(code!=nullptr,"editor owns script catalog");
+  const std::string report="ASTRA_CODE 1 1 0 1 \"project.Mover\" \"Mover\" \"Scripts/Mover.cs\" 2 "
+      "\"speed\" \"Velocidade\" \"float\" \"target\" \"Alvo\" \"object\"";
+  AE_EXPECT_TRUE(code->applyBuildReport(report,code->generation()),"script type staged");
+  code->publishBuild();
+  const auto id=history.createEntity(document,document.root(),EditorEntityKind::Folder,"Actor");
+  f.session.setSelection(id);f.session.update();history.clear();
+  tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
+  for(u32 i=0;i<4;++i) tapWidget(f,widgetId(EditorWidget::ComponentCategory));
+  tapWidget(f,widgetId(EditorWidget::ScriptAddBase));
+  AE_EXPECT_EQ(f.session.screen().scriptPreviewType,std::string("project.Mover"),"preview pins published type");
+  AE_EXPECT_EQ(document.find(id)->components.size(),0u,"preview does not attach behavior");
+  tapWidget(f,widgetId(EditorWidget::ComponentPreviewBack));
+  AE_EXPECT_EQ(history.undoDepth(),0u,"back creates no history");
+  tapWidget(f,widgetId(EditorWidget::ScriptAddBase));
+  tapWidget(f,widgetId(EditorWidget::ComponentPreviewConfirm));
+  const auto *script=scene::scriptBehavior(document.find(id)->components.at(0));
+  AE_EXPECT_TRUE(script!=nullptr,"published behavior attached");
+  AE_EXPECT_EQ(script->scriptType,std::string("project.Mover"),"type identity preserved");
+  AE_EXPECT_EQ(script->source,std::string("Scripts/Mover.cs"),"source identity preserved");
+  AE_EXPECT_EQ(f.session.screen().expandedScript,script->instanceId(),"new behavior focused");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"attachment is one Undo");
+  const u64 instance=script->instanceId();
+  tapWidget(f,widgetId(EditorWidget::ScriptMenuBase));
+  tapWidget(f,widgetId(EditorWidget::ScriptRemoveBase));
+  AE_EXPECT_TRUE(f.session.screen().impactRemoval,"behavior uses removal preview");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ImpactRemoveConfirm)).x>=0,"behavior can be removed");
+  tapWidget(f,widgetId(EditorWidget::ImpactClose));
+  AE_EXPECT_TRUE(document.find(id)->components.findInstance(instance)!=nullptr,"cancel preserves behavior");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"cancel creates no Undo");
+  tapWidget(f,widgetId(EditorWidget::ScriptMenuBase));
+  tapWidget(f,widgetId(EditorWidget::ScriptRemoveBase));
+  tapWidget(f,widgetId(EditorWidget::ImpactRemoveConfirm));
+  AE_EXPECT_EQ(document.find(id)->components.size(),0u,"confirmed removal detaches behavior");
+  AE_EXPECT_EQ(history.undoDepth(),2u,"removal is one Undo");
+  AE_EXPECT_TRUE(history.undo(document),"undo behavior removal");
+  AE_EXPECT_TRUE(document.find(id)->components.findInstance(instance)!=nullptr,"undo restores same behavior instance");
 }
 
 AE_TEST(session_component_clipboard_and_reset_preserve_ownership_and_history) {
@@ -1171,6 +1231,54 @@ AE_TEST(the_live_draft_filters_a_search_while_it_is_typed) {
   AE_EXPECT_TRUE(f.session.updateTextDraft(edit,"Cub",3),"rascunho da busca");
   AE_EXPECT_TRUE(std::string(f.session.screen().renameText)=="Cub","o filtro ve o texto vivo");
   AE_EXPECT_EQ(f.session.document().revision(),revision,"buscar nao muda a cena");
+}
+
+AE_TEST(session_component_property_search_uses_ime_without_authoring_changes) {
+  Fixture f;auto &document=f.session.document();auto &history=f.session.history();
+  const auto target=history.createEntity(document,document.root(),EditorEntityKind::Folder,"Óptica");
+  auto value=*document.find(target);editCamera(value);
+  AE_EXPECT_TRUE(document.applyEntityValues(target,value),"câmera preparada");
+  f.session.setSelection(target);f.session.usePlatformTextInput(true);f.session.update();history.clear();
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  tapWidget(f,widgetId(EditorWidget::ComponentPropertySearch));
+  const auto edit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::PropertySearch,"busca de propriedade abre o IME");
+  const auto revision=document.revision();
+  AE_EXPECT_TRUE(f.session.updateTextDraft(edit,"prioridade",10),"rascunho aceito");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentNumberBase)+(3u<<8)).x>=0,
+                 "campo de outra aba aparece enquanto digita");
+  AE_EXPECT_EQ(document.revision(),revision,"filtro não edita a cena");
+  AE_EXPECT_EQ(history.undoDepth(),0u,"filtro não cria Undo");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"prioridade",true),"busca confirmada");
+  AE_EXPECT_TRUE(f.session.screen().propertyQuery=="prioridade","consulta preservada no Inspector");
+  tapWidget(f,widgetId(EditorWidget::ComponentPropertySearchClear));
+  AE_EXPECT_TRUE(f.session.screen().propertyQuery.empty(),"limpar restaura a aba anterior");
+  AE_EXPECT_EQ(history.undoDepth(),0u,"limpar busca não cria Undo");
+}
+
+AE_TEST(session_restores_one_reflected_property_with_undo) {
+  Fixture f;auto &document=f.session.document();auto &history=f.session.history();
+  const auto target=history.createEntity(document,document.root(),EditorEntityKind::Folder,"Óptica");
+  auto value=*document.find(target);auto *camera=editCamera(value);
+  camera->verticalFov=43;camera->priority=7;
+  AE_EXPECT_TRUE(document.applyEntityValues(target,value),"câmera preparada");
+  const auto instance=cameraComponent(*document.find(target))->instanceId();
+  f.session.setSelection(target);f.session.usePlatformTextInput(true);f.session.update();history.clear();
+  tapWidget(f,widgetId(EditorWidget::ComponentFoldBase));
+  tapWidget(f,widgetId(EditorWidget::ComponentPropertySearch));
+  const auto edit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"campo vertical",true),"busca concluída");
+  const auto reset=widgetId(EditorWidget::ComponentFieldResetBase)+(2u<<8);
+  tapWidget(f,reset);
+  const auto *restored=cameraComponent(*document.find(target));
+  AE_EXPECT_EQ(restored->verticalFov,60.f,"somente o FOV volta ao padrão");
+  AE_EXPECT_EQ(restored->priority,7.f,"outra propriedade mantém valor autoral");
+  AE_EXPECT_EQ(restored->instanceId(),instance,"identidade preservada");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"restauração gera um comando");
+  AE_EXPECT_TRUE(history.undo(document),"desfazer restauração");
+  AE_EXPECT_EQ(cameraComponent(*document.find(target))->verticalFov,43.f,"valor anterior recuperado");
+  AE_EXPECT_TRUE(history.redo(document),"refazer restauração");
+  AE_EXPECT_EQ(cameraComponent(*document.find(target))->verticalFov,60.f,"valor padrão reaplicado");
 }
 
 AE_TEST(session_platform_number_accepts_negative_decimal_and_rejects_invalid) {
@@ -1481,6 +1589,62 @@ AE_TEST(session_explicit_camera_creation_is_undoable) {
   tapWidget(f,widgetId(EditorWidget::Undo));
   AE_EXPECT_EQ(resolveSceneCamera(f.session.document()).entity,0u,"desfaz a criação inteira");
 }
+AE_TEST(session_creation_menu_places_objects_under_selected_parent_or_root) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto parent=doc.find(f.cube)->parent;
+  auto transform=doc.find(parent)->transform;
+  transform.position[0]=4;transform.position[1]=2;transform.rotationDegrees[1]=35;
+  AE_EXPECT_TRUE(history.setTransform(doc,parent,transform),"pai com pose própria");
+  f.session.setSelection(parent);f.session.update();history.clear();
+  tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
+  AE_EXPECT_TRUE(f.session.screen().creationAsChild,"seleção define filho como destino inicial");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::CreationAtRoot)).x>=0,"destino raiz visível");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::CreationAsChild)).x>=0,"destino filho visível");
+  tapWidget(f,widgetId(EditorWidget::CreateCamera));
+  const auto camera=f.session.selection();
+  AE_EXPECT_EQ(doc.find(camera)->parent,parent,"câmera anexada ao pai escolhido");
+  float world[16],eye[3];AE_EXPECT_TRUE(editorWorldMatrix(doc,camera,world),"pose mundial da câmera");
+  editorCameraPosition(f.session.camera(),eye);
+  for(u32 i=0;i<3;++i) AE_EXPECT_TRUE(std::abs(world[12+i]-eye[i])<.001f,"câmera mantém posição da vista");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"criação da câmera é um comando");
+  AE_EXPECT_TRUE(history.undo(doc),"desfaz câmera e vínculo");
+  AE_EXPECT_TRUE(!doc.exists(camera),"câmera removida no desfazer");
+
+  f.session.setSelection(parent);f.session.update();
+  tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
+  tapWidget(f,widgetId(EditorWidget::CreationAtRoot));
+  AE_EXPECT_TRUE(!f.session.screen().creationAsChild,"destino raiz escolhido explicitamente");
+  tapWidget(f,widgetId(EditorWidget::CreateGroup));
+  const auto group=f.session.selection();
+  AE_EXPECT_EQ(doc.find(group)->parent,doc.root(),"objeto vazio criado na raiz");
+  AE_EXPECT_TRUE(history.undo(doc),"desfaz objeto vazio");
+  AE_EXPECT_TRUE(!doc.exists(group),"objeto vazio removido no desfazer");
+}
+AE_TEST(session_creation_menu_parents_resource_objects_and_undoes_each_creation) {
+  Fixture f;importWaterResources(f);
+  auto &doc=f.session.document();auto &history=f.session.history();
+  const auto parent=history.createEntity(doc,doc.root(),EditorEntityKind::Folder,"Conjunto");
+  AE_EXPECT_TRUE(parent!=kInvalidEntity,"pai autoral");
+  auto pose=doc.find(parent)->transform;pose.position[0]=7;pose.scale[0]=2;
+  AE_EXPECT_TRUE(history.setTransform(doc,parent,pose),"pai transformado");
+  history.clear();
+  const EditorWidget actions[]{EditorWidget::CreateCube,EditorWidget::CreateGround,
+    EditorWidget::CreateFiniteWater,EditorWidget::CreateOceanWater,
+    EditorWidget::CreateRiverWater,EditorWidget::CreateBuoyantBox};
+  for(const auto action:actions) {
+    f.session.setSelection(parent);f.session.update();
+    tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
+    AE_EXPECT_TRUE(f.session.screen().creationAsChild,"criação contextual para recurso");
+    tapWidget(f,widgetId(action));
+    const auto created=f.session.selection();
+    AE_EXPECT_TRUE(created!=parent && doc.exists(created),"objeto criado");
+    AE_EXPECT_EQ(doc.find(created)->parent,parent,"recurso é filho do pai escolhido");
+    AE_EXPECT_EQ(history.undoDepth(),1u,"criação e composição em um comando");
+    AE_EXPECT_TRUE(history.undo(doc),"desfaz criação do recurso");
+    AE_EXPECT_TRUE(!doc.exists(created),"recurso removido no desfazer");
+    history.clear();
+  }
+}
 AE_TEST(session_hierarchy_filter_keeps_matching_ancestors) {
   Fixture f;
   auto &state=const_cast<EditorScreenState&>(f.session.screen());
@@ -1584,6 +1748,28 @@ AE_TEST(p01_composition_reuses_dependencies_and_undoes_the_whole_add) {
   AE_EXPECT_EQ(cameraComponent(*d.find(id))->verticalFov,43.f,"lens not reset by dependency resolution");
 }
 
+AE_TEST(session_component_add_previews_dependencies_before_one_undo) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto target=history.createEntity(doc,doc.root(),EditorEntityKind::Folder,"Óptica");
+  f.session.setSelection(target);f.session.update();history.clear();
+  tapWidget(f,widgetId(EditorWidget::AddComponentMenu));
+  tapWidget(f,widgetId(EditorWidget::ComponentCategory));
+  tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+2);
+  AE_EXPECT_EQ(f.session.screen().componentPreview,3u,"Olhar abre plano de composição");
+  AE_EXPECT_EQ(doc.find(target)->components.size(),0u,"prévia não altera o documento");
+  AE_EXPECT_EQ(history.undoDepth(),0u,"prévia não cria Undo");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ComponentPreviewConfirm)).x>=0,"confirmação acessível por toque");
+  tapWidget(f,widgetId(EditorWidget::ComponentPreviewBack));
+  AE_EXPECT_EQ(f.session.screen().componentPreview,0u,"voltar conserva a busca");
+  AE_EXPECT_EQ(doc.find(target)->components.size(),0u,"cancelamento sem efeito");
+  tapWidget(f,widgetId(EditorWidget::ComponentAddBase)+2);
+  tapWidget(f,widgetId(EditorWidget::ComponentPreviewConfirm));
+  AE_EXPECT_TRUE(cameraComponent(*doc.find(target)) && cameraLook(*doc.find(target)),"Câmera e Olhar publicados juntos");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"composição inteira em um Undo");
+  AE_EXPECT_TRUE(history.undo(doc),"desfaz composição");
+  AE_EXPECT_EQ(doc.find(target)->components.size(),0u,"desfaz requisito e componente solicitado");
+}
+
 AE_TEST(p01_removal_protects_a_typed_reference_on_another_object) {
   Fixture f;auto &d=f.session.document();auto &h=f.session.history();
   const auto a=h.createEntity(d,d.root(),EditorEntityKind::Folder,"A");
@@ -1596,6 +1782,12 @@ AE_TEST(p01_removal_protects_a_typed_reference_on_another_object) {
   EditorActionRequest remove;remove.action=EditorAction::RemoveComponent;remove.entity=a;remove.componentInstance=bodyId;remove.version=f.session.sceneVersion();
   AE_EXPECT_TRUE(f.session.dispatch(remove).status==EditorActionStatus::InvalidValue,"cross-object joint protects target body");
   AE_EXPECT_TRUE(physicsBody(*d.find(a)),"body preserved");
+  f.session.setSelection(a);f.session.update();
+  tapWidget(f,widgetId(EditorWidget::ComponentMenuBase));
+  tapWidget(f,widgetId(EditorWidget::ComponentRemoveBase));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ImpactRemoveConfirm)).x<0,"typed incoming reference blocks Inspector removal");
+  tapWidget(f,widgetId(EditorWidget::ImpactClose));
+  AE_EXPECT_TRUE(d.find(a)->components.findInstance(bodyId)!=nullptr,"cancel preserves referenced instance");
 }
 
 AE_TEST(p03_camera_inspection_pilot_undo_and_cancel_preserve_editor_orbit) {
@@ -1929,6 +2121,43 @@ AE_TEST(p02_impact_lists_requirements_and_navigates_to_dependency) {
   AE_EXPECT_EQ(f.session.screen().impactInstance,camera->instanceId(),"panel pins component identity");
   tapWidget(f,widgetId(EditorWidget::ImpactRowBase));
   AE_EXPECT_EQ(f.session.screen().expandedNative,rows[0].instance,"navigate dependent component");
+}
+
+AE_TEST(p02_removal_preview_blocks_dependents_and_cancel_keeps_scene) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");
+  auto value=*d.find(id);
+  value.components.add(scene::Camera::descriptor);value.components.add(scene::CameraLook::descriptor);
+  AE_EXPECT_TRUE(d.applyEntityValues(id,value),"camera and look authored");
+  f.session.setSelection(id);f.session.update();h.clear();
+  const auto revision=d.revision();
+  tapWidget(f,widgetId(EditorWidget::ComponentMenuBase));
+  tapWidget(f,widgetId(EditorWidget::ComponentRemoveBase));
+  AE_EXPECT_EQ(f.session.screen().impactEntity,id,"preview pins object");
+  AE_EXPECT_TRUE(f.session.screen().impactRemoval,"removal mode active");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ImpactRemoveConfirm)).x<0,"dependent blocks confirmation");
+  AE_EXPECT_EQ(d.revision(),revision,"opening preview never changes scene");
+  tapWidget(f,widgetId(EditorWidget::ImpactClose));
+  AE_EXPECT_TRUE(cameraComponent(*d.find(id))&&cameraLook(*d.find(id)),"cancel leaves both components");
+  AE_EXPECT_EQ(h.undoDepth(),0u,"cancel creates no Undo entry");
+}
+
+AE_TEST(p02_removal_preview_revalidates_revision_before_commit) {
+  Fixture f;auto &d=f.session.document();auto &h=f.session.history();
+  const auto id=h.createEntity(d,d.root(),EditorEntityKind::Folder,"Camera");
+  auto value=*d.find(id);auto *camera=value.components.add(scene::Camera::descriptor);
+  const auto instance=camera->instanceId();
+  AE_EXPECT_TRUE(d.applyEntityValues(id,value),"camera authored");
+  f.session.setSelection(id);f.session.update();h.clear();
+  tapWidget(f,widgetId(EditorWidget::ComponentMenuBase));
+  tapWidget(f,widgetId(EditorWidget::ComponentRemoveBase));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ImpactRemoveConfirm)).x>=0,"free camera is removable");
+  auto changed=*d.find(id);std::snprintf(changed.name,sizeof(changed.name),"Changed");
+  AE_EXPECT_TRUE(d.applyEntityValues(id,changed),"scene changed after preview");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::ImpactRemoveConfirm)).x<0,"stale preview cannot confirm");
+  AE_EXPECT_TRUE(d.find(id)->components.findInstance(instance)!=nullptr,"camera remains after stale preview");
+  tapWidget(f,widgetId(EditorWidget::ImpactClose));
+  AE_EXPECT_EQ(h.undoDepth(),0u,"stale preview adds no history");
 }
 
 AE_TEST(p02_impact_typed_cross_object_reference_resolves_destination) {

@@ -159,35 +159,36 @@ enum class UiIcon : u32 {
   UiChevronRight = 143,  // ui/chevron-right
   UiChevronUp = 144,  // ui/chevron-up
   UiClose = 145,  // ui/close
-  UiHelp = 146,  // ui/help
-  UiHome = 147,  // ui/home
-  UiInfo = 148,  // ui/info
-  UiMenu = 149,  // ui/menu
-  UiMoreHorizontal = 150,  // ui/more-horizontal
-  UiMoreVertical = 151,  // ui/more-vertical
-  UiPanelLeft = 152,  // ui/panel-left
-  UiPanelRight = 153,  // ui/panel-right
-  UiRemove = 154,  // ui/remove
-  UiSettings = 155,  // ui/settings
-  UiShare = 156,  // ui/share
-  UiSliders = 157,  // ui/sliders
-  UiWarning = 158,  // ui/warning
-  VfxParticles = 159,  // vfx/particles
-  ViewCollapse = 160,  // view/collapse
-  ViewCorners = 161,  // view/corners
-  ViewExpand = 162,  // view/expand
-  ViewGrid = 163,  // view/grid
-  WaterAuthorFlow = 164,  // water/author-flow
-  WaterAuthorLayers = 165,  // water/author-layers
-  WaterAuthorPhysics = 166,  // water/author-physics
-  WaterAuthorPoints = 167,  // water/author-points
-  WaterAuthorRoute = 168,  // water/author-route
-  WaterAuthorSurface = 169,  // water/author-surface
-  BrandWordmark = 170,  // brand/wordmark
-  BrandMark = 171,  // brand/mark
+  UiDiagnostics = 146,  // ui/diagnostics
+  UiHelp = 147,  // ui/help
+  UiHome = 148,  // ui/home
+  UiInfo = 149,  // ui/info
+  UiMenu = 150,  // ui/menu
+  UiMoreHorizontal = 151,  // ui/more-horizontal
+  UiMoreVertical = 152,  // ui/more-vertical
+  UiPanelLeft = 153,  // ui/panel-left
+  UiPanelRight = 154,  // ui/panel-right
+  UiRemove = 155,  // ui/remove
+  UiSettings = 156,  // ui/settings
+  UiShare = 157,  // ui/share
+  UiSliders = 158,  // ui/sliders
+  UiWarning = 159,  // ui/warning
+  VfxParticles = 160,  // vfx/particles
+  ViewCollapse = 161,  // view/collapse
+  ViewCorners = 162,  // view/corners
+  ViewExpand = 163,  // view/expand
+  ViewGrid = 164,  // view/grid
+  WaterAuthorFlow = 165,  // water/author-flow
+  WaterAuthorLayers = 166,  // water/author-layers
+  WaterAuthorPhysics = 167,  // water/author-physics
+  WaterAuthorPoints = 168,  // water/author-points
+  WaterAuthorRoute = 169,  // water/author-route
+  WaterAuthorSurface = 170,  // water/author-surface
+  BrandWordmark = 171,  // brand/wordmark
+  BrandMark = 172,  // brand/mark
 };
 
-inline constexpr u32 kUiIconCount = 171;
+inline constexpr u32 kUiIconCount = 172;
 
 // Nome de catálogo do ícone, para log e diagnóstico. Nunca para busca: procurar
 // um ícone por string em tempo de execução desfaria a garantia do enum.

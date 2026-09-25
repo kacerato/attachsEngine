@@ -34,6 +34,7 @@
 
 #include <string>
 #include <functional>
+#include <deque>
 #include <vector>
 
 namespace ae::runtime {
@@ -75,6 +76,8 @@ enum class WorldStatus : u32 {
   UnknownResource,
   ResourceTypeMismatch,
   ClipNotInComponent, // o clipe existe mas não está na lista do componente Animation
+  UnknownElement,     // elemento de coleção removido ou identidade desconhecida
+  OperationExpired,   // resultado rastreado saiu da janela de retenção
 };
 
 const char *worldStatusMessage(WorldStatus status) noexcept;
@@ -82,6 +85,8 @@ const char *worldStatusMessage(WorldStatus status) noexcept;
 // Quem escreve a pose de um objeto durante o Play. Escrever transform por script
 // em um objeto cuja pose é publicada pela física dessincronizaria os dois lados.
 enum class TransformAuthority : u32 { Free, PhysicsBody, Character };
+enum class ReparentPosePolicy : u32 { KeepLocal, KeepWorld };
+enum class WorldOperationState : u32 { Pending, Applied, Failed };
 
 // Uma operação estrutural pendente, aplicada no próximo ponto seguro.
 struct PendingCommand {
@@ -90,6 +95,8 @@ struct PendingCommand {
   ObjectId parent = kInvalidObject;
   u32 childIndex = 0;
   u64 instance = 0;
+  ReparentPosePolicy posePolicy = ReparentPosePolicy::KeepLocal;
+  u64 operationId = 0;
 };
 
 class GameWorld final {
@@ -138,8 +145,10 @@ public:
   ObjectHandle createObject(const ObjectHandle &parent, std::string_view name, WorldStatus &status);
   // Marca o objeto e a subárvore como vencidos na hora; o armazenamento sai no
   // próximo `flush()`. Handles guardados passam a ser recusados imediatamente.
-  WorldStatus destroyObject(const ObjectHandle &handle);
-  WorldStatus setParent(const ObjectHandle &handle, const ObjectHandle &parent, u32 childIndex);
+  WorldStatus destroyObject(const ObjectHandle &handle, u64 *operationId = nullptr);
+  WorldStatus setParent(const ObjectHandle &handle, const ObjectHandle &parent, u32 childIndex,
+                        ReparentPosePolicy posePolicy = ReparentPosePolicy::KeepLocal,
+                        u64 *operationId = nullptr);
 
   // --- componentes --------------------------------------------------------
   u32 componentCount(const ObjectHandle &handle) const noexcept;
@@ -148,7 +157,11 @@ public:
   std::string_view componentTypeId(const ComponentHandle &component) const noexcept;
   const scene::ComponentValue *readComponent(const ComponentHandle &component) const noexcept;
   ComponentHandle addComponent(const ObjectHandle &handle, std::string_view typeId, WorldStatus &status);
-  WorldStatus removeComponent(const ComponentHandle &component);
+  WorldStatus removeComponent(const ComponentHandle &component, u64 *operationId = nullptr);
+  // Tickets valem somente nesta sessão. Resultados concluídos são retidos até
+  // 4096 operações rastreadas; um ticket expulso retorna OperationExpired.
+  WorldStatus operationResult(u32 world, u64 operationId, WorldOperationState &state,
+                              WorldStatus &result) const noexcept;
 
   WorldStatus getProperty(const ComponentHandle &component, std::string_view propertyId,
                           scene::ComponentPropertyValue &out) const;
@@ -161,10 +174,23 @@ public:
                               const ComponentResourceResolver &resolveResource={});
   WorldStatus getResource(const ComponentHandle &component, std::string_view propertyId, u32 slot,
                           resources::AssetGuid &out) const;
+  WorldStatus resourceElementId(const ComponentHandle &component,std::string_view propertyId,u32 slot,u64 &out) const;
+  WorldStatus getResourceByElementId(const ComponentHandle &component,std::string_view propertyId,u64 elementId,
+                                     resources::AssetGuid &out) const;
   WorldStatus setResource(const ComponentHandle &component, std::string_view propertyId, u32 slot,
                           resources::AssetGuid value, const resources::AssetRegistry &assets,
                           std::span<const resources::EnvironmentProfile> environmentProfiles={},
                           const ComponentResourceResolver &resolveResource={});
+  WorldStatus setResourceByElementId(const ComponentHandle &component,std::string_view propertyId,u64 elementId,
+                                     resources::AssetGuid value,const resources::AssetRegistry &assets,
+                                     std::span<const resources::EnvironmentProfile> environmentProfiles={},
+                                     const ComponentResourceResolver &resolveResource={});
+  // A lista é valor do componente: troca atômica na thread do mundo durante o
+  // callback; o avaliador de animação lê o novo valor depois do callback.
+  WorldStatus appendAnimationClip(const ComponentHandle &component,resources::AssetGuid clip,u64 &elementId,
+                                  const ComponentResourceResolver &resolveResource);
+  WorldStatus removeAnimationClip(const ComponentHandle &component,u64 elementId);
+  WorldStatus moveAnimationClip(const ComponentHandle &component,u64 elementId,u32 targetIndex);
 
   // --- transform ----------------------------------------------------------
   WorldStatus localTransform(const ObjectHandle &handle, Transform &out) const;
@@ -180,9 +206,8 @@ public:
   void clearAuthorities();
 
   // --- ponto seguro e relógio --------------------------------------------
-  // Aplica a fila. Devolve quantos comandos foram aplicados; comandos dirigidos
-  // a objetos que já não existem são descartados em silêncio, porque o destino
-  // deles já é o estado final pedido.
+  // Aplica a fila e devolve quantos comandos foram aplicados. Comandos
+  // rastreados registram também recusas ocorridas neste ponto seguro.
   // `destroyed`, quando fornecido, recebe os ids removidos nesta passagem: é
   // como o adaptador de física descobre que precisa soltar os corpos deles.
   u32 flush(std::vector<ObjectId> *destroyed = nullptr);
@@ -197,13 +222,17 @@ private:
   static u32 nextWorldId() noexcept;
   WorldStatus resolve(const ObjectHandle &handle, const SceneObject *&out) const noexcept;
   scene::Components *editComponents(ObjectId id);
-  bool queue(const PendingCommand &command);
+  bool queue(PendingCommand command, u64 *operationId);
+  void finishOperation(u64 operationId, WorldStatus result);
   void markSubtreeStale(ObjectId id);
 
   SceneGraph graph_;
   std::vector<Slot> slots_;
   std::vector<TransformAuthority> authorities_;
   std::vector<PendingCommand> commands_;
+  struct OperationRecord { u64 id; WorldOperationState state; WorldStatus result; };
+  std::deque<OperationRecord> operationResults_;
+  u64 nextOperationId_ = 1;
   std::vector<ObjectId> scratch_;
   u32 worldId_ = 0;
   u64 structuralRevision_ = 0;
