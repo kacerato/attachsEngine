@@ -642,6 +642,12 @@ public static unsafe class NativeBehaviorRuntime
         catch (Exception error) { _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }
     }
     [UnmanagedCallersOnly]
+    public static int Timer(ulong objectId, ulong instanceId, uint count)
+    {
+        try { if (instanceId == 0 || count == 0) return 1; _world?.Timer(objectId, instanceId, count); RefreshDiagnostics(); return 0; }
+        catch (Exception error) { _diagnostics = Encoding.UTF8.GetBytes(error.ToString()); return 1; }
+    }
+    [UnmanagedCallersOnly]
     public static int Trigger(ulong sensor, ulong other, uint phase)
     {
         try { if (phase > 2) return 1; _world?.Trigger(sensor, other, phase); RefreshDiagnostics(); return 0; }

@@ -5,6 +5,8 @@
 #include "runtime/input_actions.h"
 #include "runtime/script_bridge.h"
 #include "runtime/scene_animation.h"
+#include "runtime/scene_timers.h"
+#include "runtime/scene_camera_follow.h"
 
 namespace ae::editor {
 // Adaptador do editor para o mundo de execução.
@@ -101,6 +103,8 @@ public:
     // O avaliador existe antes dos scripts: o Start de um comportamento já
     // pode tocar ou misturar clipes.
     animator_.begin(world_.poseGraph(),resources);
+    timers_.reset();
+    cameraFollow_.reset();
     scripts_.setAnimator(&animator_);
     if(!scripts_.start(world_,physics_,input_)) {animator_.reset();physics_.stop();world_.clear();return false;}
     active_=true;
@@ -121,11 +125,13 @@ public:
     input_.reset();
     scripts_.setAnimator(nullptr);
     animator_.reset();
+    timers_.reset();
+    cameraFollow_.reset();
     active_=false;
     paused_=false;
   }
   void pause(bool value) {if(active_) paused_=value;}
-  bool step() {return active_ && paused_ && runScripts(1.0f/60.0f) && animate(1.0f/60.0f) && physics_.advance(1.0/60.0,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands();}
+  bool step() {return active_ && paused_ && runScripts(1.0f/60.0f) && advanceTimers(1.0/60.0) && animate(1.0f/60.0f) && physics_.advance(1.0/60.0,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands() && cameraFollow_.advance(world_,1.0/60.0);}
   bool setCharacterMove(EditorEntityId id,float right,float forward,float yaw) {
     return active_ && physics_.setCharacterMove(id,right,forward,yaw);
   }
@@ -134,10 +140,12 @@ public:
     if(!active_) return false;
     if(paused_) return true;
     world_.advanceClock(std::min(elapsed,.25));
-    return runScripts(static_cast<float>(std::min(elapsed,.25))) && animate(static_cast<float>(std::min(elapsed,.25))) &&
-           physics_.advance(elapsed,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands();
+    return runScripts(static_cast<float>(std::min(elapsed,.25))) && advanceTimers(std::min(elapsed,.25)) && animate(static_cast<float>(std::min(elapsed,.25))) &&
+           physics_.advance(elapsed,world_,fixedStep,this,triggerEvent,contactEvent) && drainCommands() &&
+           cameraFollow_.advance(world_,std::min(elapsed,.25));
   }
   const runtime::SceneAnimator &animator() const noexcept {return animator_;}
+  const runtime::SceneTimers &timers() const noexcept {return timers_;}
   u32 pendingCommandCount() const noexcept {return world_.pendingCommandCount();}
 private:
   // Ponto seguro: aplica a fila e avisa a física de quem deixou de existir, para
@@ -149,6 +157,11 @@ private:
     return true;
   }
   bool runScripts(float elapsed) {return scripts_.update(elapsed) && drainCommands();}
+  bool advanceTimers(double elapsed) {
+    return timers_.advance(world_,elapsed,[this](runtime::ObjectId object,u64 instance,u32 count) {
+      return scripts_.timer(object,instance,count) && drainCommands();
+    });
+  }
   // Depois do Update dos scripts e antes da física (runtime/scene_animation.h).
   // Nó com pose publicada pela física não é escrito pela animação.
   bool animate(float elapsed) {
@@ -175,6 +188,8 @@ private:
   runtime::InputService input_;
   std::vector<runtime::ObjectId> destroyed_;
   runtime::SceneAnimator animator_;
+  runtime::SceneTimers timers_;
+  runtime::SceneCameraFollow cameraFollow_;
   bool active_=false;
   bool paused_=false;
 };

@@ -2,12 +2,15 @@
 #include "editor/editor_document.h"
 #include "editor/editor_physics_body.h"
 #include "editor/editor_play_scene.h"
+#include "editor/editor_archive.h"
 #include "runtime/scene_environment.h"
 #include "scene/camera.h"
 #include "scene/camera_look.h"
+#include "scene/camera_follow.h"
 #include "scene/character.h"
 #include "scene/environment.h"
 #include "scene/script_behavior.h"
+#include "scene/timer.h"
 
 #include <cmath>
 #include <cstring>
@@ -27,6 +30,8 @@ namespace {
 struct FakeRuntime {
   static u32 starts, updates, fixedUpdates, stops;
   static u32 triggers, contacts;
+  static u32 timers, timerExpirations;
+  static u64 lastTimerObject, lastTimerInstance;
   static u64 lastContactFirst, lastContactSecond;
   static u32 lastContactPhase;
   static bool lastContactHadNormal;
@@ -35,7 +40,8 @@ struct FakeRuntime {
   static std::function<void()> onUpdate;
 
   static void reset() {
-    starts = updates = fixedUpdates = stops = triggers = contacts = 0;
+    starts = updates = fixedUpdates = stops = triggers = contacts = timers = timerExpirations = 0;
+    lastTimerObject = lastTimerInstance = 0;
     lastContactFirst = lastContactSecond = 0;
     lastContactPhase = 99;
     lastContactHadNormal = false;
@@ -64,6 +70,9 @@ struct FakeRuntime {
     lastContactHadNormal = normal != nullptr;
     return 0;
   }
+  static int timer(u64 object,u64 instance,u32 count) {
+    ++timers;timerExpirations+=count;lastTimerObject=object;lastTimerInstance=instance;return 0;
+  }
   static scene::ScriptRuntimeApi api() {
     scene::ScriptRuntimeApi value{};
     value.start = &start;
@@ -73,11 +82,14 @@ struct FakeRuntime {
     value.copyDiagnostics = &copyDiagnostics;
     value.trigger = &trigger;
     value.contact = &contact;
+    value.timer = &timer;
     return value;
   }
 };
 u32 FakeRuntime::starts = 0, FakeRuntime::updates = 0, FakeRuntime::fixedUpdates = 0, FakeRuntime::stops = 0;
 u32 FakeRuntime::triggers = 0, FakeRuntime::contacts = 0;
+u32 FakeRuntime::timers = 0, FakeRuntime::timerExpirations = 0;
+u64 FakeRuntime::lastTimerObject = 0, FakeRuntime::lastTimerInstance = 0;
 u64 FakeRuntime::lastContactFirst = 0, FakeRuntime::lastContactSecond = 0;
 u32 FakeRuntime::lastContactPhase = 99;
 bool FakeRuntime::lastContactHadNormal = false;
@@ -105,6 +117,111 @@ void attachScript(EditorDocument &doc, EditorEntityId id, const char *type) {
   doc.applyEntityValues(id, values);
 }
 } // namespace
+
+AE_TEST(play_timer_multiple_instances_pause_edit_and_roundtrip) {
+  EditorDocument doc;
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Relogio");
+  auto values=*doc.find(id);
+  auto *repeat=static_cast<scene::Timer *>(values.components.add(scene::Timer::descriptor));
+  AE_EXPECT_TRUE(repeat!=nullptr,"primeiro timer anexado");
+  repeat->intervalSeconds=.1f;
+  const auto repeatId=repeat->instanceId();
+  auto *once=static_cast<scene::Timer *>(values.components.add(scene::Timer::descriptor));
+  AE_EXPECT_TRUE(once!=nullptr,"segundo timer independente");
+  once->intervalSeconds=.15f;once->repeat=false;
+  const auto onceId=once->instanceId();
+  AE_EXPECT_TRUE(doc.applyEntityValues(id,values),"autoria válida");
+  attachScript(doc,id,"project.TimerTest");
+  const auto saved=serializeEditorDocument(doc,77);
+  EditorDocument reopened;
+  AE_EXPECT_TRUE(deserializeEditorDocument(saved,77,reopened),"ambas instâncias sobrevivem ao arquivo");
+  const auto *loaded=reopened.find(id);
+  AE_EXPECT_TRUE(loaded && loaded->components.findInstance(repeatId) && loaded->components.findInstance(onceId),"ids preservados");
+
+  FakeRuntime::reset();EditorMapScene resources;EditorPlayScene play;
+  play.setScriptRuntime(FakeRuntime::api(),"/projeto");
+  AE_EXPECT_TRUE(play.start(reopened,resources),"Play inicia");
+  AE_EXPECT_TRUE(play.advance(.25),"quadro longo");
+  AE_EXPECT_EQ(FakeRuntime::timerExpirations,3u,"dois disparos repetidos e um único");
+  const auto *repeatState=play.timers().state(id,repeatId);
+  const auto *onceState=play.timers().state(id,onceId);
+  AE_EXPECT_TRUE(repeatState && onceState && onceState->completed,"estado por instância");
+  play.pause(true);
+  AE_EXPECT_TRUE(play.advance(.25),"pausa não avança relógio");
+  AE_EXPECT_EQ(FakeRuntime::timerExpirations,3u,"nenhum evento durante pausa");
+  play.pause(false);
+  auto component=play.world().findComponent(play.world().handle(id),"astra.time.timer",0);
+  AE_EXPECT_TRUE(component.valid(),"API de Play encontra timer");
+  AE_EXPECT_TRUE(play.world().setProperty(component,"interval_seconds",.2f)==runtime::WorldStatus::Ok,"intervalo editável no Play");
+  AE_EXPECT_TRUE(play.advance(.11),"primeira metade do novo intervalo");
+  AE_EXPECT_EQ(FakeRuntime::timerExpirations,3u,"edição reinicia a contagem");
+  AE_EXPECT_TRUE(play.advance(.11),"segunda metade do intervalo");
+  AE_EXPECT_EQ(FakeRuntime::timerExpirations,4u,"edição afeta o disparo");
+  play.stop();
+  AE_EXPECT_TRUE(!play.timers().state(id,repeatId),"Stop libera estado de execução");
+  const auto *authored=static_cast<const scene::Timer *>(reopened.find(id)->components.findInstance(repeatId));
+  AE_EXPECT_TRUE(authored && authored->intervalSeconds==.1f,"Play não altera autoria");
+}
+
+AE_TEST(play_timer_tracks_runtime_add_remove_and_object_activation) {
+  EditorDocument doc;
+  const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Agenda");
+  runtime::GameWorld world;AE_EXPECT_TRUE(world.load(doc),"mundo inicializado");
+  runtime::SceneTimers timers;
+  u32 count=0;
+  auto fire=[&](runtime::ObjectId,u64,u32 expirations){count+=expirations;return true;};
+  AE_EXPECT_TRUE(timers.advance(world,.1,fire),"sem timers ainda");
+  runtime::WorldStatus status;
+  const auto component=world.addComponent(world.handle(id),"astra.time.timer",status);
+  AE_EXPECT_TRUE(component.valid() && status==runtime::WorldStatus::Ok,"componente nasce em Play");
+  AE_EXPECT_TRUE(world.setProperty(component,"interval_seconds",.1f)==runtime::WorldStatus::Ok,"intervalo editado");
+  AE_EXPECT_TRUE(timers.advance(world,.11,fire),"novo timer descoberto");
+  AE_EXPECT_EQ(count,1u,"novo componente dispara sem reiniciar Play");
+  AE_EXPECT_TRUE(world.setActive(world.handle(id),false)==runtime::WorldStatus::Ok,"objeto desativado");
+  AE_EXPECT_TRUE(timers.advance(world,.2,fire),"tempo avança com objeto inativo");
+  AE_EXPECT_EQ(count,1u,"timer não acumula disparos inativos");
+  AE_EXPECT_TRUE(world.setActive(world.handle(id),true)==runtime::WorldStatus::Ok,"objeto reativado");
+  AE_EXPECT_TRUE(timers.advance(world,.11,fire),"timer retoma");
+  AE_EXPECT_EQ(count,2u,"contagem preservada durante inatividade");
+  AE_EXPECT_TRUE(world.removeComponent(component)==runtime::WorldStatus::Ok,"remoção enfileirada");
+  world.flush();
+  AE_EXPECT_TRUE(timers.advance(world,.1,fire),"scheduler limpa instância removida");
+  AE_EXPECT_TRUE(!timers.state(id,component.instance),"estado runtime liberado");
+  AE_EXPECT_EQ(count,2u,"sem callback depois da remoção");
+}
+
+AE_TEST(play_camera_follow_tracks_target_after_world_pose_changes) {
+  EditorDocument doc;
+  const auto target=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Alvo");
+  const auto cameraId=doc.createEntity(doc.root(),EditorEntityKind::Camera,"Câmera seguidora");
+  auto values=*doc.find(cameraId);values.transform.position[2]=-8;
+  AE_EXPECT_TRUE(editCamera(values)!=nullptr,"câmera real");
+  auto *follow=static_cast<scene::CameraFollow *>(values.components.add(scene::CameraFollow::descriptor));
+  AE_EXPECT_TRUE(follow!=nullptr,"componente novo");
+  follow->target=target;follow->offset[2]=-5;follow->dampingSeconds=0;
+  AE_EXPECT_TRUE(doc.applyEntityValues(cameraId,values),"autoria válida");
+  const auto archive=serializeEditorDocument(doc,81);EditorDocument reopened;
+  AE_EXPECT_TRUE(deserializeEditorDocument(archive,81,reopened),"referência e propriedades persistem");
+  EditorMapScene resources;EditorPlayScene play;
+  AE_EXPECT_TRUE(play.start(reopened,resources),"Play inicia");
+  runtime::WorldStatus creationStatus{};
+  const auto cameraChild=play.world().createObject(play.world().handle(cameraId),"Filho",creationStatus);
+  AE_EXPECT_TRUE(cameraChild.valid() && creationStatus==runtime::WorldStatus::Ok,"filho de câmera criado");
+  const auto followHandle=play.world().findComponent(play.world().handle(cameraId),"astra.camera.follow");
+  AE_EXPECT_TRUE(play.world().setProperty(followHandle,"target",scene::ObjectReference{cameraChild.id})==runtime::WorldStatus::Rejected,
+                 "alvo descendente é recusado para evitar feedback");
+  runtime::Transform position{};
+  position.position[0]=7;position.position[1]=3;
+  AE_EXPECT_TRUE(play.world().setWorldTransform(play.world().handle(target),position)==runtime::WorldStatus::Ok,"alvo move em Play");
+  AE_EXPECT_TRUE(play.advance(1.0/60.0),"quadro executa follow depois de física");
+  runtime::Transform actual{};
+  AE_EXPECT_TRUE(play.world().worldTransform(play.world().handle(cameraId),actual)==runtime::WorldStatus::Ok,"pose da câmera");
+  AE_EXPECT_EQ(actual.position[0],7.f,"X segue o alvo");
+  AE_EXPECT_EQ(actual.position[1],5.f,"Y incorpora offset");
+  AE_EXPECT_EQ(actual.position[2],-5.f,"Z incorpora offset");
+  AE_EXPECT_EQ(reopened.find(cameraId)->transform.position[2],-8.f,"autoria intacta após Play");
+  play.stop();
+}
 
 AE_TEST(play_scene_delivers_solid_contacts_to_the_script_runtime) {
   EditorDocument doc;

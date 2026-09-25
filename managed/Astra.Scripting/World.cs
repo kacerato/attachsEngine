@@ -69,6 +69,8 @@ public static class ComponentIds
     public const string Joint = "astra.physics.joint";
     public const string Camera = "astra.camera";
     public const string CameraLook = "astra.camera.look";
+    /// <summary>Follow target and damping for a Camera; only position is driven in Play.</summary>
+    public const string CameraFollow = "astra.camera.follow";
     public const string MeshRenderer = "astra.render.mesh";
     /// <summary>Luz: `kind`, `enabled`, `color`, `intensity`, `range`, `inner_angle`,
     /// `outer_angle`, `unit` (0 escala legada, 1 lux/candela, 2 lux/lúmen),
@@ -87,6 +89,8 @@ public static class ComponentIds
     /// <summary>Animação: recursos `clip` (padrão) e `clips` (lista), `clip_count`,
     /// `play_automatically`, `wrap_mode` e `speed`. Tocar e misturar: <see cref="Component.Animation"/>.</summary>
     public const string Animation = "astra.animation";
+    /// <summary>Timer do mundo de Play. O evento chega em <see cref="Behavior.TimerElapsed"/>.</summary>
+    public const string Timer = "astra.time.timer";
     public const string ScriptBehavior = "astra.script.behavior";
 }
 
@@ -463,6 +467,16 @@ public readonly struct Component
     {
         if(TypeId!=ComponentIds.MeshRenderer) throw new WorldException(WorldStatus.InvalidArgument,"acessar material");
         return new MaterialSlot(this,slot);
+    }
+    public GameTimer Timer()
+    {
+        if (TypeId != ComponentIds.Timer) throw new WorldException(WorldStatus.InvalidArgument, "acessar timer");
+        return new GameTimer(this);
+    }
+    public CameraFollowRig CameraFollow()
+    {
+        if (TypeId != ComponentIds.CameraFollow) throw new WorldException(WorldStatus.InvalidArgument, "acessar acompanhamento de câmera");
+        return new CameraFollowRig(this);
     }
 
     /// <summary>Remoção aplicada no próximo ponto seguro do mundo.</summary>

@@ -22,7 +22,7 @@ Uma referência a recurso pode ser vazia enquanto o objeto está sendo autorado.
 | R Receita/preset | Componentes iniciais, defaults, requisitos, referências externas, remapeamento | Cria composição via resolvedor; não acrescenta classes especiais por demo | Ampliar presets/recipes |
 | C Comportamento / MonoBehaviour, script em Node | Fonte/tipo/instância, ativação, propriedades expostas, ordem, callbacks, erros | Compilação + mundo; múltiplas instâncias por contrato; referência desconhecida preservada | Ampliar `Astra.Behavior` |
 | S Eventos/conexões / UnityEvent, signals | Assinatura, emissor/receptor, método/ação, payload, prioridade, conexão/desconexão, sinal único | Tipagem, lifetime, reentrância, ownership e despacho em thread definida | P06 |
-| C/S Timer / timers de gameplay, Timer | Intervalo, repetição, autostart, pause, tempo escalado, remaining read-only | Relógio de mundo; cancelamento em Stop/destruição | P06 |
+| C/S Timer / timers de gameplay, Timer | Intervalo, repetição, ativação, pause; autostart separado, tempo escalado e remaining read-only ainda pendentes | Scheduler do Play, evento ABI/C#, cancelamento em Stop/destruição; workspace de agenda | P06 parcial |
 | R/S Tween / animação de propriedades, Tween | Alvo, PropertyId, origem/destino, duração, easing, sequência/paralelo, loop | Propriedade elegível; cancelamento e concorrência com física/animação definidos | P06 |
 | S Grupos/tags/consultas | Membership múltipla, consulta, escopo de mundo, layers separados | Grupos de organização não viram máscara física automaticamente | P06 |
 
@@ -43,7 +43,7 @@ Uma referência a recurso pode ser vazia enquanto o objeto está sendo autorado.
 | R Sampler/binding | Wrap U/V/W, filtro min/mag/mip, anisotropia, UV set/transform por binding | Imagem/view/sampler separados; capacidade de aparelho explícita | Consolidar |
 | R RenderTarget / RenderTexture, ViewportTexture | Tamanho/escala, cor/depth, formato, MSAA, lifetime e resize | View/render graph; não pode ler/escrever recurso em conflito | P08b |
 | C Camera / Camera, Camera3D | Perspective/ortho, FOV/tamanho, near/far, aspect/viewport, priority/main, mask, target, clear, exposure | Transform completo, view; câmera editor separada; roll preservado | Ampliar `astra.camera` |
-| C CameraRig / Cinemachine, composição Camera3D+SpringArm3D | Follow/look-at, offset, damping, limites, composição, colisão, blend | Camera + targets; queries opcionais para obstruction | P08b/P15 |
+| C CameraRig / Cinemachine, composição Camera3D+SpringArm3D | Follow de posição, offset e damping implementados; look-at, limites, colisão, blend pendentes | `astra.camera.follow` requer Camera e alvo por referência; executa após física | P08b parcial |
 | C Decal / URP DecalProjector, Decal | Material, box size, normal/angle fade, distância, mask, ordem | Passe/backend decal, render layers; sem equivalência a mesh decal automática | P08c |
 | C Line/Trail / LineRenderer/TrailRenderer, Line2D | Pontos, largura por curva, material, cor/gradient, duração, caps/joins, espaço | Recurso curva/material, renderer de linha; dimensionalidade explícita | P14 |
 

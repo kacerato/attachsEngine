@@ -296,6 +296,12 @@ bool EditorHistory::applyForward(EditorDocument &document, const EditorCommand &
     case EditorCommandKind::Views:
       document.setViews(command.afterViews);
       return true;
+    case EditorCommandKind::Layers:
+      if(!command.afterLayers) return false;
+      document.setLayers(*command.afterLayers);
+      return true;
+    case EditorCommandKind::InputActions:
+      return command.afterInput && document.setInputActions(*command.afterInput);
   }
   return false;
 }
@@ -313,6 +319,12 @@ bool EditorHistory::applyBackward(EditorDocument &document, const EditorCommand 
     case EditorCommandKind::Views:
       document.setViews(command.beforeViews);
       return true;
+    case EditorCommandKind::Layers:
+      if(!command.beforeLayers) return false;
+      document.setLayers(*command.beforeLayers);
+      return true;
+    case EditorCommandKind::InputActions:
+      return command.beforeInput && document.setInputActions(*command.beforeInput);
   }
   return false;
 }
@@ -330,6 +342,31 @@ bool EditorHistory::setViews(EditorDocument &document, const runtime::SceneViews
   if (standalone) begin("Vistas");
   const bool recorded = record(command);
   if (standalone) end();
+  return recorded;
+}
+bool EditorHistory::setLayers(EditorDocument &document, const runtime::GameplayLayers &layers) {
+  if(document.layers()==layers) return true;
+  EditorCommand command{};command.kind=EditorCommandKind::Layers;
+  command.beforeLayers=std::make_shared<runtime::GameplayLayers>(document.layers());
+  command.afterLayers=std::make_shared<runtime::GameplayLayers>(layers);
+  const bool standalone=!isOpen();
+  if(standalone && !begin("Camadas físicas")) return false;
+  document.setLayers(layers);
+  const bool recorded=record(command);
+  if(standalone) end();
+  return recorded;
+}
+bool EditorHistory::setInputActions(EditorDocument &document,const runtime::InputActionMap &map) {
+  if(document.inputActions()==map) return true;
+  if(!map.valid()) return false;
+  EditorCommand command{};command.kind=EditorCommandKind::InputActions;
+  command.beforeInput=std::make_shared<runtime::InputActionMap>(document.inputActions());
+  command.afterInput=std::make_shared<runtime::InputActionMap>(map);
+  const bool standalone=!isOpen();
+  if(standalone && !begin("Mapa de entrada")) return false;
+  if(!document.setInputActions(map)) {if(standalone) cancel(document);return false;}
+  const bool recorded=record(command);
+  if(standalone) end();
   return recorded;
 }
 

@@ -76,6 +76,7 @@ public:
   // Contato sólido: o mesmo evento chega aos DOIS objetos do par, cada um
   // recebendo o outro. A normal acompanha só Enter/Stay.
   bool contact(const ContactEvent &event);
+  bool timer(ObjectId object,u64 instance,u32 count);
   void stop();
   const std::string &diagnostics() const { return diagnostics_; }
   static bool hasScripts(const SceneGraph &graph);

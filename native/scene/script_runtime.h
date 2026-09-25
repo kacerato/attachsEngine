@@ -282,6 +282,9 @@ struct ScriptRuntimeApi {
   // Contato SÓLIDO, entregue aos dois objetos do par. `normal` é nulo quando o
   // backend não sabe informá-la (o fim de um contato não traz geometria).
   int (*contact)(u64,u64,u32,const float *)=nullptr;
-  bool available() const {return start&&update&&fixedUpdate&&stop&&copyDiagnostics&&trigger&&contact;}
+  // Um evento agregado por timer e quadro; count preserva disparos perdidos
+  // quando um quadro demora mais que o intervalo configurado.
+  int (*timer)(u64,u64,u32)=nullptr;
+  bool available() const {return start&&update&&fixedUpdate&&stop&&copyDiagnostics&&trigger&&contact&&timer;}
 };
 }

@@ -384,6 +384,29 @@ enum class EditorWidget : u32 {
   CreateDynamicBox,
   CreateTriggerBox,
   CreateCharacter,
+  CreateTimer,
+  CreateFollowCamera,
+  TabTimers=0x0810'0000u,
+  TimerHorizon,
+  TimerPrevious,
+  TimerNext,
+  TimerRowBase=0x0811'0000u,
+  TabPhysics=0x0820'0000u,
+  PhysicsLayerPrevious,
+  PhysicsLayerNext,
+  PhysicsLayerAdd,
+  PhysicsLayerRename,
+  PhysicsMatrixPrevious,
+  PhysicsMatrixNext,
+  PhysicsInteractionBase=0x0821'0000u,
+  TabInput=0x0830'0000u,
+  InputActionPrevious,InputActionNext,InputActionAdd,InputActionRename,InputActionRemove,
+  InputTabAction,InputTabBinding,InputActionKind,InputActionContext,
+  InputRoleMove,InputRoleLook,InputRoleJump,InputDeadzone,InputSensitivity,
+  InputBindingPrevious,InputBindingNext,InputBindingAdd,InputBindingRemove,
+  InputBindingSource,InputBindingAxis,InputBindingInvert,InputBindingCode,
+  InputBindingNegativeCode,InputBindingScale,
+  InputDetailsToggle,
 };
 
 inline constexpr u32 widgetId(EditorWidget widget) noexcept { return static_cast<u32>(widget); }
@@ -456,7 +479,7 @@ inline constexpr u32 gizmoAxisWidget(u32 axis) noexcept {
 
 // O que o viewport está mostrando. É a aba do topo, e trocá-la troca o contexto
 // inteiro — não é um botão que dispara algo.
-enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Settings, Code };
+enum class EditorWorkspace : u8 { Scene, Assets, Lighting, Play, Settings, Code, Timers, Physics, Input };
 enum class EditorNavigationMode : u8 { Orbit, Pan, Zoom };
 enum class EditorInspectorTab : u8 { Transform, Material, Properties };
 
@@ -513,6 +536,12 @@ struct EditorScreenState final {
   u32 pressedWidget = 0;
   EditorGizmoMode tool = EditorGizmoMode::Translate;
   EditorWorkspace workspace = EditorWorkspace::Scene;
+  u32 timerPage=0,timerHorizon=1;
+  u32 physicsLayer=0,physicsMatrixPage=0;
+  bool editingPhysicsLayerName=false;
+  u32 inputActionIndex=0,inputBindingIndex=0,inputTab=0,inputEditField=0;
+  bool inputDetails=false;
+  bool editingInputActionName=false,editingInputContext=false;
   bool playHasScripts=false;
   bool playFirstPerson=false,playHasCharacter=false;
   std::string playSecondaryActionLabel,playHudMessage;

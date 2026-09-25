@@ -13,6 +13,7 @@
 #include "editor/editor_water_play.h"
 #include "editor/editor_properties.h"
 #include "scene/skinned_mesh.h"
+#include "runtime/input_actions.h"
 
 #include <cmath>
 #include <cstdio>
@@ -1707,6 +1708,101 @@ AE_TEST(session_builtin_light_and_physics_objects_are_complete_creations) {
   AE_EXPECT_EQ(lights.size(),3u,"all three light modalities reach renderer");
   for(u32 index=0;index<lights.size();++index)
     AE_EXPECT_EQ(static_cast<u32>(lights[index].modality),index,"light modality survives archive and Play");
+}
+AE_TEST(session_timer_creation_is_one_undoable_object_with_real_component) {
+  Fixture f;
+  AE_EXPECT_TRUE(f.session.importMap({}, {}, false),"cena sem recursos importados");
+  auto &doc=f.session.document();f.session.setSelection(doc.root());f.session.update();
+  tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
+  tapWidget(f,widgetId(EditorWidget::CreateTimer));
+  const auto id=f.session.selection();const auto *object=doc.find(id);
+  AE_EXPECT_TRUE(object && object->components.find(scene::Timer::descriptor),"Timer criado na hierarquia");
+  AE_EXPECT_TRUE(f.session.history().undo(doc) && !doc.exists(id),"Undo remove objeto e componente");
+  AE_EXPECT_TRUE(f.session.history().redo(doc) && doc.find(id)->components.find(scene::Timer::descriptor),"Redo restaura timer");
+  f.session.setSelection(doc.root());f.session.update();
+  tapWidget(f,widgetId(EditorWidget::ProjectMenu));
+  tapWidget(f,widgetId(EditorWidget::TabTimers));
+  AE_EXPECT_TRUE(f.session.screen().workspace==EditorWorkspace::Timers,"agenda abre como workspace próprio");
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::TimerRowBase)).x>=0,"timer aparece na agenda");
+  tapWidget(f,widgetId(EditorWidget::TimerRowBase));
+  AE_EXPECT_EQ(f.session.selection(),id,"linha navega para o objeto autorado");
+  AE_EXPECT_TRUE(f.session.screen().expandedNative!=0,"Inspector recebe a instância correta");
+  f.session.setSurface({0,0,400,740},{});f.session.update();
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::TimerRowBase)).x>=0,"agenda continua navegável em tela estreita");
+}
+AE_TEST(physics_workspace_edits_solver_matrix_with_undo_and_archive) {
+  Fixture f;auto &doc=f.session.document();
+  tapWidget(f,widgetId(EditorWidget::ProjectMenu));
+  tapWidget(f,widgetId(EditorWidget::TabPhysics));
+  AE_EXPECT_TRUE(f.session.screen().workspace==EditorWorkspace::Physics,"workspace física abre");
+  tapWidget(f,widgetId(EditorWidget::PhysicsLayerAdd));
+  AE_EXPECT_TRUE(doc.layers().named(1),"camada criada");
+  tapWidget(f,widgetId(EditorWidget::PhysicsLayerRename));
+  const auto nameEdit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(nameEdit.purpose==EditorTextPurpose::PhysicsLayerName,"edição de nome usa IME");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(nameEdit,"Jogador",true),"renomeia camada");
+  AE_EXPECT_TRUE(doc.layers().name(1)=="Jogador","nome autorado");
+  tapWidget(f,widgetId(EditorWidget::PhysicsInteractionBase));
+  AE_EXPECT_TRUE(!doc.layers().interacts(1,0) && !doc.layers().interacts(0,1),"matriz recíproca alterada pela UI");
+  AE_EXPECT_TRUE(f.session.history().undo(doc),"Undo da matriz");
+  AE_EXPECT_TRUE(doc.layers().interacts(1,0),"Undo restaura colisão");
+  AE_EXPECT_TRUE(f.session.history().redo(doc),"Redo da matriz");
+  AE_EXPECT_TRUE(!doc.layers().interacts(1,0),"Redo restaura filtro");
+  EditorDocument restored;
+  AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,99),99,restored),"camadas salvas e recarregadas");
+  AE_EXPECT_TRUE(restored.layers().name(1)=="Jogador" && !restored.layers().interacts(1,0),"arquivo preserva regra do solver");
+  f.session.setSurface({0,0,400,740},{});f.session.update();
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::PhysicsInteractionBase)).x>=0,"camadas continuam editáveis em tela estreita");
+}
+AE_TEST(input_workspace_authors_runtime_action_with_history_and_archive) {
+  Fixture f;auto &doc=f.session.document();
+  tapWidget(f,widgetId(EditorWidget::ProjectMenu));
+  tapWidget(f,widgetId(EditorWidget::TabInput));
+  AE_EXPECT_TRUE(f.session.screen().workspace==EditorWorkspace::Input,"mapa abre como workspace");
+  tapWidget(f,widgetId(EditorWidget::InputActionAdd));
+  AE_EXPECT_EQ(doc.inputActions().actions().size(),4u,"ação é criada no dado autorado");
+  tapWidget(f,widgetId(EditorWidget::InputActionRename));
+  auto edit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::InputActionName,"nome abre editor de texto");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"Interagir",true),"nome alterado");
+  AE_EXPECT_TRUE(doc.inputActions().find("Interagir")!=nullptr,"id novo persistido no mapa");
+  tapWidget(f,widgetId(EditorWidget::InputTabBinding));
+  tapWidget(f,widgetId(EditorWidget::InputBindingSource)); // TouchButton -> Key
+  tapWidget(f,widgetId(EditorWidget::InputDetailsToggle));
+  tapWidget(f,widgetId(EditorWidget::InputBindingCode));
+  edit=f.session.pendingTextEdit();
+  AE_EXPECT_TRUE(edit.purpose==EditorTextPurpose::InputNumber,"código abre editor numérico");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(edit,"69",true),"código de tecla configurado");
+  const auto *action=doc.inputActions().find("Interagir");
+  AE_EXPECT_TRUE(action && action->bindings[0].source==runtime::InputSource::Key && action->bindings[0].code==69,
+                 "vínculo completo no mapa");
+  runtime::InputService service;service.setMap(doc.inputActions());
+  runtime::InputDeviceState device;device.keys.push_back(69);service.submit(device);
+  AE_EXPECT_TRUE(service.justPressed("Interagir"),"entrada autorada aciona runtime");
+  AE_EXPECT_TRUE(f.session.history().undo(doc),"Undo do código");
+  AE_EXPECT_TRUE(doc.inputActions().find("Interagir")->bindings[0].code!=69,"Undo altera dado real");
+  AE_EXPECT_TRUE(f.session.history().redo(doc),"Redo do código");
+  EditorDocument restored;
+  AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,99),99,restored),"mapa salva e abre");
+  service.setMap(restored.inputActions());service.submit(device);
+  AE_EXPECT_TRUE(service.pressed("Interagir"),"entrada recarregada aciona runtime");
+  f.session.setSurface({0,0,400,740},{});f.session.update();
+  tapWidget(f,widgetId(EditorWidget::InputDetailsToggle));
+  AE_EXPECT_TRUE(locateWidget(f.session,widgetId(EditorWidget::InputBindingSource)).x>=0,
+                 "vínculos permanecem acessíveis em tela estreita");
+}
+AE_TEST(session_follow_camera_creation_links_selected_target) {
+  Fixture f;auto &doc=f.session.document();
+  f.session.setSelection(f.cube);f.session.update();
+  tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
+  tapWidget(f,widgetId(EditorWidget::CreateFollowCamera));
+  const auto id=f.session.selection();const auto *camera=doc.find(id);
+  AE_EXPECT_TRUE(camera && camera->parent==doc.root(),"câmera criada fora da hierarquia do alvo");
+  const auto *follow=camera?static_cast<const scene::CameraFollow *>(camera->components.find(scene::CameraFollow::descriptor)):nullptr;
+  AE_EXPECT_TRUE(follow && camera->components.find(scene::Camera::descriptor),"composição câmera + follow real");
+  AE_EXPECT_EQ(follow->target,f.cube,"objeto selecionado vira alvo");
+  AE_EXPECT_TRUE(f.session.history().undo(doc) && !doc.exists(id),"criação composta é um Undo");
+  AE_EXPECT_TRUE(f.session.history().redo(doc) && doc.exists(id),"Redo restaura referência");
 }
 AE_TEST(session_hierarchy_filter_keeps_matching_ancestors) {
   Fixture f;

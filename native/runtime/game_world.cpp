@@ -381,6 +381,7 @@ ComponentHandle GameWorld::addComponent(const ObjectHandle &h, std::string_view 
   if (!components) { status = WorldStatus::StaleHandle; return {}; }
   const auto createdInstance=plan.requestedInstance;
   *components=std::move(plan.candidate);
+  ++structuralRevision_;
   status = WorldStatus::Ok;
   return {h, createdInstance};
 }

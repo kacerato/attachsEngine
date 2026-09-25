@@ -254,6 +254,9 @@ public abstract class Behavior
     public virtual void Start() { }
     public virtual void Update(float deltaTime) { }
     public virtual void FixedUpdate(float deltaTime) { }
+    /// <summary>Called when a Timer on this object expires. Multiple expirations
+    /// in one frame are delivered together. The ID distinguishes Timer instances.</summary>
+    public virtual void TimerElapsed(ulong timerInstanceId, uint count) { }
     // Dispatched after each fixed step to behaviors on the sensor's owning body.
     // One event per body pair, regardless of how many compound parts overlap.
     public virtual void TriggerEnter(ObjectReference other) { }

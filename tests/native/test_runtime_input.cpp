@@ -75,6 +75,15 @@ AE_TEST(input_default_map_reproduces_the_existing_touch_controls) {
   AE_EXPECT_TRUE(!service.pressed("Saltar") && service.justReleased("Saltar"), "soltura detectada uma vez");
 }
 
+AE_TEST(input_rejects_bindings_that_runtime_cannot_evaluate) {
+  InputActionMap map;
+  InputAction invalid;invalid.id="Fora da máscara";invalid.kind=ActionKind::Button;
+  invalid.bindings={{InputSource::TouchButton,32,0,0,1,false}};
+  AE_EXPECT_TRUE(!map.add(invalid),"bit de toque 32 não pode deslocar uma máscara de 32 bits");
+  invalid.bindings={{InputSource::Key,42,0,1,1,false}};
+  AE_EXPECT_TRUE(!map.add(invalid),"botão não consome eixo 1");
+}
+
 AE_TEST(input_actions_are_project_data_not_core_names) {
   InputActionMap map;
   // O projeto renomeia a própria ação: o papel acompanha, senão renomear

@@ -105,7 +105,7 @@ struct ComponentEnum {
 };
 // Descendant: um objeto ABAIXO deste na hierarquia, nunca ele mesmo — é o que
 // um LOD Group pede para cada nível (os renderers LOD0, LOD1... são filhos).
-enum class ObjectReferenceScope { Any, SelfOrAncestor, Other, Descendant };
+enum class ObjectReferenceScope { Any, SelfOrAncestor, Other, Descendant, OtherNonDescendant };
 struct ComponentObjectReference {
   std::string_view id;
   const char *name;

@@ -26,10 +26,11 @@
 #include <string_view>
 #include <vector>
 #include <functional>
+#include <memory>
 
 namespace ae::editor {
 
-enum class EditorCommandKind : u8 { ApplyValues, Create, Destroy, Reparent, Views };
+enum class EditorCommandKind : u8 { ApplyValues, Create, Destroy, Reparent, Views, Layers, InputActions };
 
 // Token de fusão. Comandos consecutivos sobre a mesma entidade com o mesmo
 // token não nulo viram um só: é o que faz um arraste de gizmo inteiro ocupar um
@@ -50,6 +51,8 @@ struct EditorCommand final {
   // Estado de CENA, não de objeto (Views): salvar, renomear e excluir um
   // enquadramento é edição autoral e tem de caber no mesmo Desfazer do resto.
   runtime::SceneViews beforeViews{}, afterViews{};
+  std::shared_ptr<const runtime::GameplayLayers> beforeLayers,afterLayers;
+  std::shared_ptr<const runtime::InputActionMap> beforeInput,afterInput;
 };
 
 class EditorHistory final {
@@ -85,6 +88,8 @@ public:
                 u32 childIndex);
   // Vistas salvas da cena, com o passo de Desfazer do resto da edição.
   bool setViews(EditorDocument &document, const runtime::SceneViews &views);
+  bool setLayers(EditorDocument &document, const runtime::GameplayLayers &layers);
+  bool setInputActions(EditorDocument &document,const runtime::InputActionMap &map);
 
   // Desfazer/refazer fecham qualquer transação aberta antes de agir: um undo no
   // meio de um arraste desfaria metade dele e deixaria a outra metade viva.

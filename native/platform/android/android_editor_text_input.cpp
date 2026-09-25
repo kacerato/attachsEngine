@@ -245,7 +245,7 @@ extern "C" JNIEXPORT jobjectArray JNICALL
 Java_dev_aether_editor_EditorTextInput_poll(JNIEnv *env,jclass) {
   std::lock_guard lock(mutex);
   if(!visible) return nullptr;
-  const bool number=(request.purpose==ae::editor::EditorTextPurpose::Number && request.propertyType!="triple") || request.purpose==ae::editor::EditorTextPurpose::CodeLine;
+  const bool number=(request.purpose==ae::editor::EditorTextPurpose::Number && request.propertyType!="triple") || request.purpose==ae::editor::EditorTextPurpose::CodeLine || request.purpose==ae::editor::EditorTextPurpose::InputNumber;
   const bool code=request.purpose==ae::editor::EditorTextPurpose::Code;
   const bool property=request.purpose==ae::editor::EditorTextPurpose::ScriptProperty;
   const bool triple=request.purpose==ae::editor::EditorTextPurpose::Number && request.propertyType=="triple";
@@ -256,6 +256,10 @@ Java_dev_aether_editor_EditorTextInput_poll(JNIEnv *env,jclass) {
       request.purpose==ae::editor::EditorTextPurpose::ScriptName?"Nova classe C#":
       request.purpose==ae::editor::EditorTextPurpose::ResourceName?"Renomear recurso":
       request.purpose==ae::editor::EditorTextPurpose::Rename?"Renomear objeto":
+      request.purpose==ae::editor::EditorTextPurpose::PhysicsLayerName?"Renomear camada física":
+      request.purpose==ae::editor::EditorTextPurpose::InputActionName?"Renomear ação de entrada":
+      request.purpose==ae::editor::EditorTextPurpose::InputContext?"Contexto da ação":
+      request.purpose==ae::editor::EditorTextPurpose::InputNumber?"Valor da entrada":
       request.purpose==ae::editor::EditorTextPurpose::TextureSearch?"Buscar textura":
       request.purpose==ae::editor::EditorTextPurpose::ComponentPresetName?"Nome do preset":"Pesquisar",
     request.text,code?"524288":property?"4096":(number||triple)?"47":"63",

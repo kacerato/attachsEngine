@@ -871,6 +871,14 @@ bool ScriptBridge::trigger(ObjectId sensor, ObjectId other, u32 phase) {
   return ok;
 }
 
+bool ScriptBridge::timer(ObjectId object,u64 instance,u32 count) {
+  if(!running_) return true;
+  if(!api_.timer || !count) return false;
+  const bool ok=api_.timer(object,instance,count)==0;
+  collectDiagnostics();
+  return ok;
+}
+
 void ScriptBridge::stop() {
   if (running_) api_.stop();
   rendering_.end();

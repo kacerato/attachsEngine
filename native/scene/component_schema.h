@@ -20,6 +20,7 @@
 #include "scene/character.h"
 #include "scene/camera.h"
 #include "scene/camera_look.h"
+#include "scene/camera_follow.h"
 #include "scene/mesh_renderer.h"
 #include "scene/joint.h"
 #include "scene/light.h"
@@ -28,12 +29,13 @@
 #include "scene/script_behavior.h"
 #include "scene/skinned_mesh.h"
 #include "scene/animation.h"
+#include "scene/timer.h"
 
 #include <array>
 
 namespace ae::scene {
 
-enum class ComponentCategory : u32 { Camera = 1, Visual = 2, Physics = 3, Script = 4 };
+enum class ComponentCategory : u32 { Camera = 1, Visual = 2, Physics = 3, Script = 4, Gameplay = 5 };
 
 // Quando uma alteração pode ser aceita com o Play rodando. `SafePoint` significa
 // que ela entra na fila do mundo de execução e é aplicada entre passos, nunca
@@ -86,6 +88,13 @@ inline constexpr std::array<ComponentRule, 1> colliderConflicts{{
 inline constexpr std::array<ComponentRule, 1> lookRequirements{{
   {"astra.camera", "Adicione Câmera a este objeto"}
 }};
+inline constexpr std::array<ComponentRule,1> followRequirements{{
+  {"astra.camera","Adicione Câmera a este objeto"}
+}};
+inline constexpr std::array<ComponentRule,2> followConflicts{{
+  {"astra.physics.body","A câmera seguidora não pode receber pose do corpo físico"},
+  {"astra.physics.character","A câmera seguidora não pode receber pose do personagem"}
+}};
 inline constexpr std::array<ComponentRule, 1> jointRequirements{{
   {"astra.physics.body", "Adicione Corpo físico a este objeto"}
 }};
@@ -93,7 +102,7 @@ inline constexpr std::array<ComponentRule, 1> skinnedMeshRequirements{{
   {"astra.render.mesh", "Adicione Malha a este objeto"}
 }};
 
-inline const std::array<ComponentSchema, 13> componentSchemas{{
+inline const std::array<ComponentSchema, 15> componentSchemas{{
   {&PhysicsBody::descriptor, "Corpo físico", "Massa e resposta física", ComponentCategory::Physics,
     {}, bodyConflicts, PlayMutability::Never, PlayMutability::SafePoint,
     "runtime/scene_physics.cpp → Jolt", {}, Invalidate::PhysicsBody},
@@ -103,6 +112,9 @@ inline const std::array<ComponentSchema, 13> componentSchemas{{
   {&CameraLook::descriptor, "Olhar", "Rotação local da câmera por entrada ou script", ComponentCategory::Camera,
     lookRequirements, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
     "runtime/game_world.cpp → pose da câmera", {}, Invalidate::Input},
+  {&CameraFollow::descriptor, "Acompanhar alvo", "Posiciona a câmera após física e animação", ComponentCategory::Camera,
+    followRequirements, followConflicts, PlayMutability::SafePoint, PlayMutability::SafePoint,
+    "runtime/scene_camera_follow.h → pose de Play da câmera", {}, Invalidate::Transform},
   {&Collider::descriptor, "Colisor 3D", "Volume de contato", ComponentCategory::Physics,
     {}, colliderConflicts, PlayMutability::Never, PlayMutability::SafePoint,
     "runtime/scene_physics.cpp → forma do Jolt", {}, Invalidate::PhysicsShape},
@@ -132,6 +144,9 @@ inline const std::array<ComponentSchema, 13> componentSchemas{{
   {&Animation::descriptor, "Animação", "Clipes tocados e misturados no Play", ComponentCategory::Visual,
     {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
     "runtime/scene_animation.cpp → pose local dos nós da instância", "animation.clip", Invalidate::Transform},
+  {&Timer::descriptor, "Timer", "Dispara eventos temporizados para comportamentos", ComponentCategory::Gameplay,
+    {}, {}, PlayMutability::SafePoint, PlayMutability::SafePoint,
+    "runtime/scene_timers.h → ScriptBridge → Behavior.TimerElapsed"},
   {&ScriptBehavior::descriptor, "Comportamento", "Código C# do projeto", ComponentCategory::Script,
     {}, {}, PlayMutability::Never, PlayMutability::Never,
     "runtime/script_bridge.cpp → runtime .NET", {}, Invalidate::Script}

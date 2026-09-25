@@ -204,6 +204,7 @@ inline std::vector<PropertyContract> componentContracts(const ComponentSchema &s
     switch (property.scope) {
     case ObjectReferenceScope::SelfOrAncestor: row.domain += " · neste objeto ou ancestral"; break;
     case ObjectReferenceScope::Other: row.domain += " · outro objeto"; break;
+    case ObjectReferenceScope::OtherNonDescendant: row.domain += " · fora da subárvore"; break;
     case ObjectReferenceScope::Descendant: row.domain += " · abaixo deste objeto"; break;
     case ObjectReferenceScope::Any: break;
     }

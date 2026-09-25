@@ -91,6 +91,9 @@ public:
   bool add(const InputAction &action);
   bool remove(std::string_view id);
   bool rename(std::string_view id, std::string_view renamed);
+  // Changes bindings/kind/settings in place without moving the action or
+  // changing its identity and the roles that reference it.
+  bool replace(std::string_view id,const InputAction &candidate);
 
   // Papéis: qual AÇÃO move o personagem, gira a câmera e salta. São dados
   // editáveis — o núcleo não exige que se chamem Move/Look/Jump.

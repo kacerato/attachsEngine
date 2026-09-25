@@ -37,6 +37,7 @@ bool operator==(const InputAction &a, const InputAction &b) {
 bool InputBinding::valid() const {
   if (static_cast<u32>(source) > static_cast<u32>(InputSource::GamepadButton)) return false;
   if (axis > 7) return false;
+  if (source == InputSource::TouchButton && code >= 32) return false;
   if (!std::isfinite(scale) || std::abs(scale) > 1000) return false;
   return true;
 }
@@ -47,7 +48,8 @@ bool InputAction::valid() const {
   if (!std::isfinite(deadzone) || deadzone < 0 || deadzone >= 1) return false;
   if (!std::isfinite(sensitivity) || sensitivity <= 0 || sensitivity > 1000) return false;
   if (bindings.size() > InputActionMap::kMaximumBindings) return false;
-  for (const auto &binding : bindings) if (!binding.valid()) return false;
+  for (const auto &binding : bindings)
+    if (!binding.valid() || binding.axis > (kind == ActionKind::Axis2D ? 1u : 0u)) return false;
   return true;
 }
 
@@ -107,6 +109,12 @@ bool InputActionMap::rename(std::string_view id, std::string_view renamed) {
     if (jump_ == id) jump_ = action.id;
     return true;
   }
+  return false;
+}
+
+bool InputActionMap::replace(std::string_view id,const InputAction &candidate) {
+  if(candidate.id!=id || !candidate.valid()) return false;
+  for(auto &action:actions_) if(action.id==id) {action=candidate;return true;}
   return false;
 }
 

@@ -83,6 +83,13 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry
         foreach (var entry in _entries) if (EnsureStarted(entry))
             Invoke(entry, "FixedUpdate", behavior => behavior.FixedUpdate(fixedDeltaTime));
     }
+    public void Timer(ulong objectId, ulong instanceId, uint count)
+    {
+        if (!Running || instanceId == 0 || count == 0 || _scene is null || !_scene.Exists(objectId)) return;
+        foreach (var entry in _entries)
+            if (entry.Instance.ObjectId == objectId && EnsureStarted(entry))
+                Invoke(entry, "TimerElapsed", behavior => behavior.TimerElapsed(instanceId, count));
+    }
     public void Trigger(ulong sensor, ulong other, uint phase)
     {
         if (!Running || phase > 2) return;

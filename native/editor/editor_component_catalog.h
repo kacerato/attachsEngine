@@ -44,12 +44,13 @@ inline EditorComponentEntry catalogEntry(std::string_view id, EditorPropertyGrou
 }
 } // namespace detail
 
-// Os doze tipos com consumidor implementado. Comportamento C# é anexado pela
+// Os tipos com consumidor implementado. Comportamento C# é anexado pela
 // área de código, não por esta lista, e por isso não aparece aqui.
-inline const std::array<EditorComponentEntry, 12> editorComponentCatalog{{
+inline const std::array<EditorComponentEntry, 14> editorComponentCatalog{{
   detail::catalogEntry("astra.physics.body", EditorPropertyGroup::ScenePhysics, ui::UiIcon::ComponentPhysics, "Rigidbody RigidBody3D"),
   detail::catalogEntry("astra.physics.character", EditorPropertyGroup::Character, ui::UiIcon::ComponentCharacter, "CharacterController CharacterBody3D"),
   detail::catalogEntry("astra.camera.look", EditorPropertyGroup::CameraLook, ui::UiIcon::ComponentLook, "MouseLook CameraController"),
+  detail::catalogEntry("astra.camera.follow", EditorPropertyGroup::CameraLook, ui::UiIcon::EditorAuthorCamera, "Follow Camera Tracking Damping"),
   detail::catalogEntry("astra.physics.collider", EditorPropertyGroup::Collider, ui::UiIcon::ComponentCollider, "BoxCollider SphereCollider CapsuleCollider CollisionShape3D"),
   detail::catalogEntry("astra.physics.joint", EditorPropertyGroup::ScenePhysics, ui::UiIcon::ComponentJoint, "HingeJoint Joint3D"),
   detail::catalogEntry("astra.camera", EditorPropertyGroup::CameraLook, ui::UiIcon::EditorAuthorCamera, "Camera3D"),
@@ -58,7 +59,8 @@ inline const std::array<EditorComponentEntry, 12> editorComponentCatalog{{
   detail::catalogEntry("astra.render.environment", EditorPropertyGroup::Material, ui::UiIcon::LightingSun, "WorldEnvironment Volume"),
   detail::catalogEntry("astra.render.lod_group", EditorPropertyGroup::Material, ui::UiIcon::SceneLayers, "LODGroup VisibilityRange"),
   detail::catalogEntry("astra.render.skinned_mesh", EditorPropertyGroup::Material, ui::UiIcon::ComponentJoint, "SkinnedMeshRenderer Skeleton3D"),
-  detail::catalogEntry("astra.animation", EditorPropertyGroup::Material, ui::UiIcon::AssetsAnimation, "AnimationPlayer")
+  detail::catalogEntry("astra.animation", EditorPropertyGroup::Material, ui::UiIcon::AssetsAnimation, "AnimationPlayer"),
+  detail::catalogEntry("astra.time.timer", EditorPropertyGroup::Material, ui::UiIcon::ScriptingCode, "Timer Countdown Interval")
 }};
 
 inline const EditorComponentEntry *findEditorComponent(std::string_view id) {

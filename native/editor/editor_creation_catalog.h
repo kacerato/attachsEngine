@@ -26,10 +26,11 @@ struct EditorCreationEntry {
   const char *description;
   ui::UiIcon icon;
 };
-inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes"};
-inline constexpr std::array<EditorCreationEntry,19> editorCreationCatalog{{
+inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes","Gameplay"};
+inline constexpr std::array<EditorCreationEntry,21> editorCreationCatalog{{
   {EditorWidget::CreateGroup,0,"Objeto vazio","Organiza filhos e transforma o conjunto.",ui::UiIcon::EditorAuthorObject},
   {EditorWidget::CreateCamera,0,"Câmera","Captura a vista atual para executar a cena.",ui::UiIcon::EditorAuthorCamera},
+  {EditorWidget::CreateFollowCamera,0,"Câmera seguidora","Cria câmera que acompanha o objeto selecionado no Play.",ui::UiIcon::EditorAuthorCamera},
   {EditorWidget::CreateCube,1,"Cubo","Malha com transformação e material editáveis.",ui::UiIcon::EditorAuthorObject},
   {EditorWidget::CreateGround,1,"Chão","Superfície geométrica para compor o cenário.",ui::UiIcon::EditorAuthorGrid},
   {EditorWidget::CreateFiniteWater,2,"Superfície de água","Volume finito com profundidade e corrente.",ui::UiIcon::WaterAuthorSurface},
@@ -47,7 +48,8 @@ inline constexpr std::array<EditorCreationEntry,19> editorCreationCatalog{{
   {EditorWidget::CreateStaticCapsule,3,"Cápsula de colisão","Corpo estático com colisor de cápsula, sem malha visual.",ui::UiIcon::ComponentCollider},
   {EditorWidget::CreateDynamicBox,3,"Caixa dinâmica","Corpo dinâmico com colisor de caixa.",ui::UiIcon::ComponentPhysics},
   {EditorWidget::CreateTriggerBox,3,"Sensor de caixa","Corpo sensor com colisor de caixa e eventos de contato.",ui::UiIcon::ComponentPhysics},
-  {EditorWidget::CreateCharacter,3,"Personagem","Controlador físico com cápsula própria.",ui::UiIcon::ComponentCharacter}
+  {EditorWidget::CreateCharacter,3,"Personagem","Controlador físico com cápsula própria.",ui::UiIcon::ComponentCharacter},
+  {EditorWidget::CreateTimer,5,"Timer","Dispara eventos para comportamentos em intervalos configuráveis.",ui::UiIcon::ScriptingCode}
 }};
 static_assert(editorCreationCatalog.size()<=32);
 inline constexpr u32 creationMask(EditorWidget action) {

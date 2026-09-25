@@ -33,6 +33,8 @@
 #include <sstream>
 #include <locale>
 #include <cstring>
+#include <cstdlib>
+#include <limits>
 
 namespace ae::editor {
 namespace {
@@ -751,6 +753,30 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   if(state_.editingComponentSearch) {edit.purpose=EditorTextPurpose::ComponentSearch;edit.text=state_.renameText;return edit;}
   if(state_.editingPropertySearch) {edit.purpose=EditorTextPurpose::PropertySearch;edit.entity=state_.selection;edit.componentInstance=state_.expandedNative;edit.text=state_.renameText;return edit;}
   if(state_.editingReferenceSearch) {edit.purpose=EditorTextPurpose::ReferenceSearch;edit.text=state_.renameText;return edit;}
+  if(state_.editingPhysicsLayerName) {
+    edit.purpose=EditorTextPurpose::PhysicsLayerName;edit.field=state_.physicsLayer;
+    edit.text=document_.layers().name(state_.physicsLayer);return edit;
+  }
+  if(state_.editingInputActionName || state_.editingInputContext || state_.inputEditField) {
+    const auto &actions=document_.inputActions().actions();
+    if(state_.inputActionIndex>=actions.size()) return edit;
+    const auto &action=actions[state_.inputActionIndex];
+    edit.entity=state_.inputActionIndex;edit.componentInstance=state_.inputBindingIndex;
+    if(state_.editingInputActionName) {edit.purpose=EditorTextPurpose::InputActionName;edit.text=action.id;}
+    else if(state_.editingInputContext) {edit.purpose=EditorTextPurpose::InputContext;edit.text=action.context;}
+    else {
+      edit.purpose=EditorTextPurpose::InputNumber;edit.field=state_.inputEditField;
+      if(edit.field==widgetId(EditorWidget::InputDeadzone)) edit.text=std::to_string(action.deadzone);
+      else if(edit.field==widgetId(EditorWidget::InputSensitivity)) edit.text=std::to_string(action.sensitivity);
+      else if(state_.inputBindingIndex<action.bindings.size()) {
+        const auto &binding=action.bindings[state_.inputBindingIndex];
+        if(edit.field==widgetId(EditorWidget::InputBindingCode)) edit.text=std::to_string(binding.code);
+        else if(edit.field==widgetId(EditorWidget::InputBindingNegativeCode)) edit.text=std::to_string(binding.negativeCode);
+        else if(edit.field==widgetId(EditorWidget::InputBindingScale)) edit.text=std::to_string(binding.scale);
+      }
+    }
+    return edit;
+  }
   if(state_.editingMeshSearch) {edit.purpose=EditorTextPurpose::MeshSearch;edit.text=state_.renameText;return edit;}
   if(state_.numericField) {
     edit.purpose=EditorTextPurpose::Number;edit.entity=state_.numericEntity;
@@ -969,6 +995,8 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
   const auto close=[&] {
     state_.presetNaming=false;
     state_.viewNaming=false;state_.viewRenaming=false;
+    state_.editingPhysicsLayerName=false;
+    state_.editingInputActionName=false;state_.editingInputContext=false;state_.inputEditField=0;
     code_.endTypingRun();
     state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;
     state_.goingToLine=false;state_.creatingCodeFolder=false;state_.codeComposing=false;
@@ -983,6 +1011,61 @@ bool EditorSession::completeTextEdit(const EditorTextEdit &edit,std::string_view
     cancelPointers();
   };
   if(!accept) {close();return true;}
+  if(edit.purpose==EditorTextPurpose::InputActionName || edit.purpose==EditorTextPurpose::InputContext ||
+     edit.purpose==EditorTextPurpose::InputNumber) {
+    if(edit.version.revision!=document_.revision() || isPlaying() || history_.isOpen() ||
+       edit.entity!=state_.inputActionIndex || edit.componentInstance!=state_.inputBindingIndex) {
+      close();state_.status="Mapa alterado; reabra o campo";return false;
+    }
+    auto map=document_.inputActions();
+    if(edit.entity>=map.actions().size()) {close();return false;}
+    auto action=map.actions()[edit.entity];const auto oldId=action.id;
+    const auto value=trimmedName(text);
+    bool ok=false;
+    if(edit.purpose==EditorTextPurpose::InputActionName) ok=map.rename(oldId,value);
+    else if(edit.purpose==EditorTextPurpose::InputContext) {
+      action.context=std::string(value);ok=map.replace(oldId,action);
+    } else {
+      const std::string buffer(value);char *end=nullptr;
+      if(edit.field==widgetId(EditorWidget::InputBindingCode) ||
+         edit.field==widgetId(EditorWidget::InputBindingNegativeCode)) {
+        if(!buffer.empty() && buffer[0]!='-') {
+          const auto parsed=std::strtoull(buffer.c_str(),&end,10);
+          if(end!=buffer.c_str() && *end=='\0' && parsed<=std::numeric_limits<u32>::max() &&
+             edit.componentInstance<action.bindings.size()) {
+            auto &binding=action.bindings[edit.componentInstance];
+            if(edit.field==widgetId(EditorWidget::InputBindingCode)) binding.code=static_cast<u32>(parsed);
+            else binding.negativeCode=static_cast<u32>(parsed);
+            ok=map.replace(oldId,action);
+          }
+        }
+      } else {
+        const float parsed=std::strtof(buffer.c_str(),&end);
+        if(end!=buffer.c_str() && *end=='\0' && std::isfinite(parsed)) {
+          if(edit.field==widgetId(EditorWidget::InputDeadzone)) action.deadzone=parsed;
+          else if(edit.field==widgetId(EditorWidget::InputSensitivity)) action.sensitivity=parsed;
+          else if(edit.field==widgetId(EditorWidget::InputBindingScale) && edit.componentInstance<action.bindings.size())
+            action.bindings[edit.componentInstance].scale=parsed;
+          ok=map.replace(oldId,action);
+        }
+      }
+    }
+    if(!ok || !history_.setInputActions(document_,map)) {state_.status="Valor ou nome inválido para a ação";return false;}
+    close();return true;
+  }
+  if(edit.purpose==EditorTextPurpose::PhysicsLayerName) {
+    if(edit.version.revision!=document_.revision() || isPlaying() || history_.isOpen() ||
+       edit.field!=state_.physicsLayer) {close();state_.status="Camadas mudaram; reabra o nome";return false;}
+    auto layers=document_.layers();const auto name=trimmedName(text);
+    bool printable=true;
+    for(const unsigned char c:name) if(c<32 || c==127) printable=false;
+    if(name.empty() || !printable || name.find('\0')!=std::string_view::npos ||
+       !layers.setName(edit.field,name)) {
+      state_.status="Nome vazio, duplicado ou acima de 32 caracteres";return false;
+    }
+    if(!history_.setLayers(document_,layers)) return false;
+    close();return true;
+  }
   if(edit.purpose==EditorTextPurpose::ComponentPresetName) {
     if(edit.componentInstance!=state_.presetInstance || edit.version.revision!=document_.revision()) {state_.status="Cena alterada; reabra os presets";close();return false;}
     std::string error;const bool saved=state_.presetRenaming?
@@ -2026,7 +2109,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       std::snprintf(state_.renameText,sizeof(state_.renameText),"%s",query.c_str());return true;
     }
     if(key==widgetId(EditorWidget::ComponentSearchClear)) {state_.componentQuery.clear();state_.componentPage=0;return true;}
-    if(key==widgetId(EditorWidget::ComponentCategory)) {state_.componentCategory=(state_.componentCategory+1)%5;state_.componentPage=0;return true;}
+    if(key==widgetId(EditorWidget::ComponentCategory)) {state_.componentCategory=(state_.componentCategory+1)%6;state_.componentPage=0;return true;}
     if(key==widgetId(EditorWidget::ObjectFold)) {
       state_.componentSelection=state_.selection;state_.expandedComponent=state_.expandedComponent=="astra.object"?"":"astra.object";
       state_.expandedNative=0;state_.expandedScript=0;state_.nativeMenu=0;state_.scriptMenu=0;state_.meshPicker=false;
@@ -2694,7 +2777,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
       state_.creationSelection=key-widgetId(EditorWidget::CreationRowBase);return true;
     }
   }
-  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.presetNaming || state_.viewNaming) {
+  if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.presetNaming || state_.viewNaming || state_.editingInputActionName || state_.editingInputContext || state_.editingPhysicsLayerName) {
     if(routing.tapped) {
       const auto key=routing.widgetId;
       auto n=std::strlen(state_.renameText);
@@ -3040,9 +3123,10 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     history_.end();setSelection(id);state_.creationMenu=false;return true;
   }
   if(routing.tapped && routing.widgetId>=widgetId(EditorWidget::CreateDirectionalLight) &&
-     routing.widgetId<=widgetId(EditorWidget::CreateCharacter)) {
+     routing.widgetId<=widgetId(EditorWidget::CreateFollowCamera)) {
     const auto action=static_cast<EditorWidget>(routing.widgetId);
-    const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) &&
+    const auto parent=action==EditorWidget::CreateFollowCamera?document_.root():
+        state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) &&
         state_.selection!=document_.root()?state_.selection:document_.root();
     const char *name=nullptr;
     EditorEntityKind kind=EditorEntityKind::Folder;
@@ -3072,6 +3156,26 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
         name="Personagem";values.transform.position[1]=1.f;
         if(!runtime::editCharacter(values)) name=nullptr;
         break;
+      case EditorWidget::CreateTimer:
+        name="Timer";
+        if(!values.components.add(scene::Timer::descriptor)) name=nullptr;
+        break;
+      case EditorWidget::CreateFollowCamera: {
+        name="Câmera seguidora";kind=EditorEntityKind::Camera;
+        auto *camera=editCamera(values);
+        auto *follow=static_cast<scene::CameraFollow *>(values.components.add(scene::CameraFollow::descriptor));
+        if(!camera||!follow) {name=nullptr;break;}
+        values.transform.rotationDegrees[0]=camera_.pitch*57.2957795f;
+        values.transform.rotationDegrees[1]=camera_.yaw*57.2957795f;
+        const auto selected=state_.selection;
+        if(selected!=document_.root() && document_.exists(selected)) {
+          follow->target=selected;
+          float targetWorld[16];
+          if(!editorWorldMatrix(document_,selected,targetWorld)) {name=nullptr;break;}
+          for(u32 axis=0;axis<3;++axis) values.transform.position[axis]=targetWorld[12+axis]+follow->offset[axis];
+        } else editorCameraPosition(camera_,values.transform.position);
+        break;
+      }
       case EditorWidget::CreateStaticBox:
       case EditorWidget::CreateStaticSphere:
       case EditorWidget::CreateStaticCapsule:

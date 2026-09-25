@@ -98,6 +98,12 @@ Arquivos em árvore à esquerda; gaveta mostra thumbnails/lista conforme o tipo 
 | P17–P18 | Extensões, docs/code/graph, build e problemas de projeto | Contratos, compiler/cooker/runtime |
 | P19 | Rede/XR/vídeo conforme módulo | Backend disponível; não apenas menus |
 
+A primeira workspace nova desse conjunto é “Agenda de timers”. Ela ocupa a área central com régua temporal e uma linha por instância, alterna horizonte de 2/10/60 segundos e seleciona a instância no Inspector. O Inspector edita intervalo, repetição e ativação; a linha temporal reflete esses valores. A régua descreve o agendamento autoral, não finge ser telemetria da contagem do Play.
+
+“Camadas físicas” é outra workspace própria: escolhe a camada, cria/renomeia nomes e alterna os pares que interagem. A lista contextual substitui a matriz 32×32 impossível de tocar no telefone; cada toque grava a matriz recíproca por um comando de Undo. O mesmo dado salvo é entregue ao filtro de colisão do Jolt no Play. A escolha de camada de cada objeto continua no Inspector.
+
+“Mapa de entrada” navega pelas ações da cena e pelos vínculos de cada ação. A página principal mostra identidade, tipo e papéis de gameplay; a página de propriedades edita contexto e resposta. Para cada vínculo, a página principal escolhe fonte/eixo/inversão, enquanto os códigos e a escala ficam na página de detalhes. Esse corte mantém os alvos tocáveis no telefone em paisagem; campos sem efeito para a fonte escolhida não aparecem. Cada alteração autoral passa pelo histórico e alimenta o mesmo `InputService` usado em Play.
+
 ## Ícones entregues e integração planejada
 
 [Galeria](icones/galeria.html) e [prancha](icones/prancha.png): 40 desenhos geométricos originais, SVG de 32 unidades e PNG RGBA 512×512. Traço 1,75 unidades, terminações arredondadas, desenho claro para fundo escuro. A cor de seleção vem do controle, preservando a lógica existente; nenhum ícone de Godot/Unity/Unreal foi copiado. [Gerador](gerar_icones.py) e catálogo de proposta acompanham os arquivos.
