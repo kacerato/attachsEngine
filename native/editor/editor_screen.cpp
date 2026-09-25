@@ -3484,7 +3484,7 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
   // sair do painel. Numa tela baixa as linhas é que encolhem.
   const auto apply = deflate(takeBottom(content, 40), UiInsets::all(2));
   const auto stats = takeBottom(content, 20);
-  const u32 rowCount=state.qualityTab==2?10u:state.qualityTab==0?9u:state.qualityTab==1?8u:state.qualityTab==4?8u:7u;
+  const u32 rowCount=state.qualityTab==2?11u:state.qualityTab==0?9u:state.qualityTab==1?8u:state.qualityTab==4?8u:7u;
   const u32 rowsPerPage=std::max(1u,static_cast<u32>(std::floor(content.height/25.0f)));
   const u32 pageCount=(rowCount+rowsPerPage-1u)/rowsPerPage;
   const u32 page=std::min(state.qualityPage,pageCount-1u);
@@ -3595,6 +3595,10 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
         EditorWidget::QualityTemporalDebug,state.qualityTemporalAvailable);
     stepper("Nitidez",percent(draft.postSharpen,-1.0f),EditorWidget::QualitySharpenDown,EditorWidget::QualitySharpenUp);
     row("Vinheta",renderer::featureOverrideLabel(draft.postVignette),EditorWidget::QualityVignette);
+    // S4: as luzes da cena num lugar só (Light Explorer da Unity).
+    row("Explorador de luzes",std::to_string(state.lightExplorerTotal)+" luz(es)"+
+        (state.lightExplorerDark?" · "+std::to_string(state.lightExplorerDark)+" apagada(s)":std::string()),
+        EditorWidget::LightExplorerOpen);
   } else if(state.qualityTab==4) {
     // Seção Textures do Quality da Unity: limite global de mip, anisotropia e
     // Mipmap Streaming (Memory Budget, Max Level Reduction). As duas últimas
@@ -3636,6 +3640,84 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
                 state.qualityDirty ? theme.color.accentInk : theme.color.textMuted, theme.type.caption, UiAlign::Center);
   if (state.qualityDirty) router.addRegion(apply, widgetId(EditorWidget::QualityApply));
   builder.label(stats, state.qualityStats, theme.color.textMuted, theme.type.caption);
+}
+
+// Explorador de luzes (S4) — o Light Explorer da Unity: todas as luzes da cena
+// numa lista, com o que decide se iluminam (acesa, tipo, intensidade na unidade
+// da própria luz, alcance). Tocar no nome seleciona a luz no Inspector; a ação
+// em lote escreve uma intensidade nas luzes do filtro em um único Undo.
+void buildLightExplorer(ScreenBuilder &builder, const UiRect &viewport) {
+  const auto &state=builder.state;
+  const auto &theme=builder.theme;
+  auto &list=builder.list;
+  auto &router=builder.router;
+  const float width=std::min(520.0f,std::max(280.0f,viewport.width-24.0f));
+  const float height=std::min(viewport.height-16.0f,520.0f);
+  const UiRect panel{viewport.x+std::max(8.0f,std::min(16.0f,viewport.width-width-8.0f)),viewport.y+8.0f,width,height};
+  list.addRect(panel,theme.color.surface,6);
+  router.addBlocker(panel);
+  auto content=deflate(panel,UiInsets::all(10));
+  auto header=takeTop(content,26);
+  const auto close=takeRight(header,28);
+  builder.label(close,"X",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  router.addRegion(close,widgetId(EditorWidget::LightExplorerClose));
+  builder.label(header,"Luzes da cena",theme.color.text,theme.type.cardName);
+  // Filtro e ação em lote ficam no rodapé: nunca saem do painel.
+  auto apply=takeBottom(content,40);
+  auto batch=takeBottom(content,36);
+  auto filter=deflate(takeTop(content,34),UiInsets::all(2));
+  list.addRect(filter,theme.color.raised,theme.radius.control);
+  builder.label(filter,state.lightExplorerDarkOnly
+      ?"Mostrando apagadas: "+std::to_string(state.lightExplorerDark)+" de "+std::to_string(state.lightExplorerTotal)
+      :"Mostrando todas: "+std::to_string(state.lightExplorerTotal)+" · "+std::to_string(state.lightExplorerDark)+" apagada(s)",
+      theme.color.text,theme.type.caption,UiAlign::Center);
+  router.addRegion(filter,widgetId(EditorWidget::LightExplorerFilter));
+  const u32 pages=std::max(1u,(state.lightExplorerFiltered+7u)/8u);
+  if(pages>1) {
+    auto pager=takeRight(header,std::min(116.0f,header.width*.48f));
+    const auto previous=takeLeft(pager,30.0f),next=takeRight(pager,30.0f);
+    builder.label(previous,"‹",state.lightExplorerPage?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
+    builder.label(next,"›",state.lightExplorerPage+1u<pages?theme.color.text:theme.color.textMuted,theme.type.body,UiAlign::Center);
+    builder.label(pager,std::to_string(state.lightExplorerPage+1u)+" / "+std::to_string(pages),theme.color.textDim,
+                  theme.type.caption,UiAlign::Center);
+    if(state.lightExplorerPage) router.addRegion(previous,widgetId(EditorWidget::LightExplorerPrevious));
+    if(state.lightExplorerPage+1u<pages) router.addRegion(next,widgetId(EditorWidget::LightExplorerNext));
+  }
+  if(state.lightExplorerRows.empty())
+    builder.label(takeTop(content,30),state.lightExplorerDarkOnly?"Nenhuma luz apagada.":"A cena não tem luzes.",
+                  theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  const float rowHeight=std::clamp(content.height/8.0f,30.0f,44.0f);
+  for(u32 i=0;i<state.lightExplorerRows.size() && i<8;++i) {
+    const auto &row=state.lightExplorerRows[i];
+    auto line=takeTop(content,rowHeight);
+    const auto toggle=deflate(takeRight(line,96.0f),UiInsets::all(2));
+    list.addRect(toggle,row.enabled?theme.color.accent:theme.color.raised,theme.radius.control);
+    builder.label(toggle,row.enabled?"Acesa":"Apagada",row.enabled?theme.color.accentInk:theme.color.text,
+                  theme.type.caption,UiAlign::Center);
+    router.addRegion(toggle,widgetId(EditorWidget::LightExplorerToggle0)+i);
+    const auto name=deflate(line,UiInsets::all(2));
+    builder.label(takeTop(line,line.height*.5f),row.name,row.dark?theme.color.textMuted:theme.color.text,theme.type.caption);
+    builder.label(line,row.detail,row.dark?theme.color.accent:theme.color.textDim,theme.type.caption);
+    router.addRegion(name,widgetId(EditorWidget::LightExplorerRow0)+i);
+  }
+  auto label=takeLeft(batch,batch.width*.46f);
+  builder.label(label,"Intensidade em lote",theme.color.textDim,theme.type.caption);
+  const auto minus=deflate(takeLeft(batch,36),UiInsets::all(2)),plus=deflate(takeRight(batch,36),UiInsets::all(2));
+  for(const auto &[rect,glyph,widget]:{std::tuple{minus,"-",EditorWidget::LightExplorerIntensityDown},
+                                       std::tuple{plus,"+",EditorWidget::LightExplorerIntensityUp}}) {
+    list.addRect(rect,theme.color.raised,theme.radius.control);
+    builder.label(rect,glyph,theme.color.text,theme.type.body,UiAlign::Center);
+    router.addRegion(rect,widgetId(widget));
+  }
+  builder.label(batch,decimalText(state.lightExplorerIntensity,0)+" (unidade de cada luz)",theme.color.text,
+                theme.type.caption,UiAlign::Center);
+  apply=deflate(apply,UiInsets::all(2));
+  const bool any=state.lightExplorerFiltered>0;
+  list.addRect(apply,any?theme.color.accent:theme.color.raised,theme.radius.control);
+  builder.label(apply,any?"Aplicar às "+std::to_string(state.lightExplorerFiltered)+" luz(es) "+
+                (state.lightExplorerDarkOnly?"apagadas":"listadas")+" e acender":std::string("Nada a aplicar"),
+                any?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  if(any) router.addRegion(apply,widgetId(EditorWidget::LightExplorerApply));
 }
 
 // Escolha do modelo de cena (G6-A). Cada linha traz o nome e o que o cenário
@@ -4071,6 +4153,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   // também impede Lighting/Effects e a navegação inferior de roubarem toques.
   // Menus contextuais e modais abaixo continuam acima dele deliberadamente.
   if(state.qualityPanel) buildQualityPanel(builder,layout.viewport);
+  if(state.lightExplorer) buildLightExplorer(builder,layout.viewport);
   if (state.entityMenu) {
     const UiRect menu{layout.viewport.x, layout.viewport.y+56.0f, std::min(180.0f,layout.viewport.width), std::min(280.0f,layout.viewport.height-56.0f)};
     builder.list.addRect(menu, theme.color.raised, theme.radius.control);

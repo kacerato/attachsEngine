@@ -2568,6 +2568,51 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
                   (skipped.empty()?std::string():" ("+skipped+")");
     return true;
   }
+  if(state_.lightExplorer && routing.tapped) {
+    const auto key=routing.widgetId;
+    const auto is=[&](EditorWidget widget) {return key==widgetId(widget);};
+    // Degraus da intensidade em lote: cobrem lux de interior a sol e lúmen de
+    // vela a holofote, na unidade de cada luz.
+    static constexpr float steps[]{0,1,5,10,50,100,250,500,1000,2500,5000,10000,25000,50000,100000};
+    if(is(EditorWidget::LightExplorerClose)) {state_.lightExplorer=false;return true;}
+    if(is(EditorWidget::LightExplorerFilter)) {
+      state_.lightExplorerDarkOnly=!state_.lightExplorerDarkOnly;state_.lightExplorerPage=0;refreshLightExplorer();return true;
+    }
+    if(is(EditorWidget::LightExplorerPrevious)) {
+      if(state_.lightExplorerPage) --state_.lightExplorerPage;
+      refreshLightExplorer();return true;
+    }
+    if(is(EditorWidget::LightExplorerNext)) {++state_.lightExplorerPage;refreshLightExplorer();return true;}
+    if(is(EditorWidget::LightExplorerIntensityDown) || is(EditorWidget::LightExplorerIntensityUp)) {
+      usize index=0;
+      for(usize i=0;i<std::size(steps);++i) if(steps[i]<=state_.lightExplorerIntensity) index=i;
+      if(is(EditorWidget::LightExplorerIntensityUp)) index=std::min(index+1,std::size(steps)-1);
+      else if(index && steps[index]==state_.lightExplorerIntensity) --index;
+      state_.lightExplorerIntensity=steps[index];return true;
+    }
+    if(is(EditorWidget::LightExplorerApply)) {
+      const u32 changed=applyLightExplorerIntensity();
+      state_.status=changed?std::to_string(changed)+" luz(es) com a intensidade nova":std::string("Nenhuma luz mudou");
+      return true;
+    }
+    if(key>=widgetId(EditorWidget::LightExplorerRow0) && key<=widgetId(EditorWidget::LightExplorerRowLast)) {
+      const u32 row=key-widgetId(EditorWidget::LightExplorerRow0);
+      if(row<state_.lightExplorerRows.size()) setSelection(state_.lightExplorerRows[row].entity);
+      return true;
+    }
+    if(key>=widgetId(EditorWidget::LightExplorerToggle0) && key<=widgetId(EditorWidget::LightExplorerToggleLast)) {
+      const u32 row=key-widgetId(EditorWidget::LightExplorerToggle0);
+      if(row>=state_.lightExplorerRows.size() || isPlaying() || history_.isOpen()) return true;
+      const auto &target=state_.lightExplorerRows[row];
+      if(const auto *entity=document_.find(target.entity)) {
+        auto values=*entity;
+        if(scene::setComponentProperty(values.components,scene::Light::descriptor.id,"enabled",!target.enabled,
+                                       target.instance)==scene::ComponentPropertyStatus::Applied)
+          history_.applyValues(document_,target.entity,values);
+      }
+      refreshLightExplorer();return true;
+    }
+  }
   if(state_.qualityPanel && routing.tapped) {
     auto &draft=state_.qualityDraft;
     const auto key=routing.widgetId;
@@ -2594,6 +2639,9 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     else if(is(EditorWidget::QualityTabLighting)) {state_.qualityTab=2;state_.qualityPage=0;return true;}
     else if(is(EditorWidget::QualityTabPerformance)) {state_.qualityTab=3;state_.qualityPage=0;return true;}
     else if(is(EditorWidget::QualityTabTextures)) {state_.qualityTab=4;state_.qualityPage=0;return true;}
+    else if(is(EditorWidget::LightExplorerOpen)) {
+      state_.lightExplorer=true;state_.qualityPanel=false;state_.lightExplorerPage=0;refreshLightExplorer();return true;
+    }
     else if(is(EditorWidget::QualitySceneStatistics)) {
       state_.sceneStatisticsVisible=!state_.sceneStatisticsVisible;return true;
     }
@@ -4494,6 +4542,18 @@ void EditorSession::showImportPreview(std::string path,const resources::GltfImpo
       std::to_string(model.lodSourceTriangles)+" da fonte"+
       (model.lodSkippedSmall?"; "+std::to_string(model.lodSkippedSmall)+" com menos de 256 triângulos":std::string())+
       (model.lodSkippedDeformed?"; "+std::to_string(model.lodSkippedDeformed)+" com skin ou blend shapes sem LOD":std::string())+".";
+  // S4: nenhuma luz "some" em silêncio. Intensidade 0 no arquivo é importada
+  // como está (é o que o arquivo diz), e o resumo aponta onde acendê-las.
+  if(!model.lights.empty()) {
+    u32 zero=0;
+    for(const auto &light:model.lights) zero+=!(light.intensity>0);
+    state_.importSummary+="\nLuzes do arquivo: "+std::to_string(model.lights.size())+
+      (zero?"; "+std::to_string(zero)+" com intensidade 0 no arquivo, importadas assim e sem iluminar. "
+            "Acenda em Gráficos › Luz e pós › Explorador de luzes.":std::string("."));
+  }
+  if(model.skippedLights)
+    state_.importSummary+="\n"+std::to_string(model.skippedLights)+" luz(es) do arquivo não entraram "
+      "(perfil sem \"Importar luzes\" ou nó incompatível; motivo nas notas).";
   if(model.acmrBefore>0 && model.acmrAfter>0 && model.acmrAfter<model.acmrBefore)
     state_.importSummary+="\nOrdem dos polígonos: "+decimalText(model.acmrBefore,2)+" → "+decimalText(model.acmrAfter,2)+
       " vértices processados por triângulo (cache de 16).";
@@ -5017,6 +5077,8 @@ void EditorSession::update() {
   refreshMaterialSlotView();
   refreshLodStatus();
   refreshSkinningStatus();
+  // S4: contagem para a linha do painel Qualidade e a página do explorador.
+  if(state_.qualityPanel || state_.lightExplorer) refreshLightExplorer();
   if(const auto *selected=document_.find(state_.selection)) state_.routePoint=waterRoute(*selected).count?std::min(state_.routePoint,waterRoute(*selected).count-1):0;
   if (font_ == nullptr || icons_ == nullptr) return;
   state_.assetCount=mapScene_.assetCount();
@@ -5370,6 +5432,69 @@ EditorSession::TextureStreamingLevels EditorSession::textureStreamingLevelsOf(co
     break;
   }
   return levels;
+}
+
+void EditorSession::refreshLightExplorer() {
+  u32 total=0,dark=0,filtered=0;
+  const u32 first=state_.lightExplorerPage*8u;
+  state_.lightExplorerRows.clear();
+  std::vector<EditorEntityId> members;
+  document_.collectSubtree(document_.root(),members);
+  for(const auto id:members) {
+    const auto *entity=document_.find(id);
+    if(!entity) continue;
+    for(usize c=0;c<entity->components.size();++c) {
+      const auto *value=entity->components.at(c);
+      if(!value || &value->type()!=&scene::Light::descriptor) continue;
+      const auto &light=static_cast<const scene::Light &>(*value);
+      const bool isDark=!light.enabled || !(light.intensity>0);
+      ++total;dark+=isDark;
+      if(state_.lightExplorerDarkOnly && !isDark) continue;
+      if(filtered++<first || state_.lightExplorerRows.size()>=8) continue;
+      static constexpr const char *kinds[]{"Direcional","Pontual","Spot"};
+      const char *unit=light.unit==scene::LightUnit::Engine?"":light.kind==scene::LightKind::Directional?" lx":
+                       light.unit==scene::LightUnit::LuxCandela?" cd":" lm";
+      std::string detail=std::string(kinds[std::min<u32>(static_cast<u32>(light.kind),2u)])+" · "+
+                         decimalText(light.intensity,light.intensity<10?2:0)+unit;
+      if(light.kind!=scene::LightKind::Directional) detail+=" · "+decimalText(light.range,1)+" m";
+      if(!(light.intensity>0)) detail+=" · intensidade 0: não ilumina";
+      state_.lightExplorerRows.push_back({id,value->instanceId(),entity->name,detail,light.enabled,isDark});
+    }
+  }
+  state_.lightExplorerTotal=total;state_.lightExplorerDark=dark;state_.lightExplorerFiltered=filtered;
+  const u32 pages=std::max(1u,(filtered+7u)/8u);
+  if(state_.lightExplorerPage>=pages) {state_.lightExplorerPage=pages-1;refreshLightExplorer();}
+}
+
+u32 EditorSession::applyLightExplorerIntensity() {
+  if(isPlaying() || history_.isOpen()) return 0;
+  std::vector<std::pair<EditorEntityId,u64>> targets;
+  std::vector<EditorEntityId> members;
+  document_.collectSubtree(document_.root(),members);
+  for(const auto id:members)
+    if(const auto *entity=document_.find(id))
+      for(usize c=0;c<entity->components.size();++c) {
+        const auto *value=entity->components.at(c);
+        if(!value || &value->type()!=&scene::Light::descriptor) continue;
+        const auto &light=static_cast<const scene::Light &>(*value);
+        if(!state_.lightExplorerDarkOnly || !light.enabled || !(light.intensity>0)) targets.push_back({id,value->instanceId()});
+      }
+  if(targets.empty() || !history_.begin("Intensidade das luzes")) return 0;
+  u32 changed=0;
+  for(const auto &[id,instance]:targets) {
+    const auto *entity=document_.find(id);
+    if(!entity) continue;
+    auto values=*entity;
+    // Mesma validação do Inspector: fora da faixa, a luz fica como estava.
+    const bool intensity=scene::setComponentProperty(values.components,scene::Light::descriptor.id,"intensity",
+                                                     state_.lightExplorerIntensity,instance)==scene::ComponentPropertyStatus::Applied;
+    const bool lit=scene::setComponentProperty(values.components,scene::Light::descriptor.id,"enabled",true,instance)==
+                   scene::ComponentPropertyStatus::Applied;
+    if((intensity||lit) && history_.applyValues(document_,id,values)) ++changed;
+  }
+  history_.end();
+  refreshLightExplorer();
+  return changed;
 }
 
 resources::TextureProfile EditorSession::textureProfileFor(const resources::AssetGuid &texture) const {

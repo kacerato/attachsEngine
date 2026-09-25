@@ -1079,6 +1079,11 @@ public:
   // Prioridade no toque: 0, 1, 2, 3, -3, -2, -1 e volta; valor de script fora
   // dessa faixa volta a 0. A faixa gravada é a da Unity (-128..127).
   static i32 nextStreamingPriority(i32 value) {return value>=3?-3:value< -3?0:value+1;}
+  // S4: Explorador de luzes. Conta e lista as luzes da cena (página atual) e
+  // escreve a intensidade em lote nas luzes do filtro, acendendo-as, em uma
+  // transação só. Devolve quantas luzes mudaram.
+  void refreshLightExplorer();
+  u32 applyLightExplorerIntensity();
   // S5: estatísticas do quadro relatadas pelo renderer (overlay e Graphics.State).
   void setSceneStatistics(const renderer::SceneStatistics &statistics) {
     state_.sceneStatistics=statistics;

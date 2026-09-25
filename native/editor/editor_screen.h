@@ -239,6 +239,12 @@ enum class EditorWidget : u32 {
   QualityStreamingDebugView,
   // S5: estatísticas do quadro no viewport (Statistics do Game View).
   QualitySceneStatistics,
+  // S4: Explorador de luzes (Light Explorer da Unity). Oito linhas por página,
+  // cada uma com o nome (seleciona) e o interruptor Acesa/Apagada.
+  LightExplorerOpen, LightExplorerClose, LightExplorerFilter, LightExplorerPrevious, LightExplorerNext,
+  LightExplorerIntensityDown, LightExplorerIntensityUp, LightExplorerApply,
+  LightExplorerRow0, LightExplorerRowLast = LightExplorerRow0 + 7,
+  LightExplorerToggle0, LightExplorerToggleLast = LightExplorerToggle0 + 7,
   ImportTabSummary, ImportTabStructure, ImportTabMeshes, ImportTabTextures, ImportTabProfile,
   EnvironmentPanoramaDown, EnvironmentPanoramaUp,
   EnvironmentSpecularDown, EnvironmentSpecularUp,
@@ -525,6 +531,18 @@ struct EditorScreenState final {
   renderer::TextureStreamingStats qualityTextureStreaming{};
   // Vista de depuração do streaming na Scene View; ferramenta, fora do Undo.
   bool qualityTextureStreamingDebug=false;
+  // S4: Explorador de luzes — linhas da página atual, contagens da cena e a
+  // intensidade que "Aplicar" escreve nas luzes do filtro (unidade de cada luz).
+  struct LightExplorerRow {
+    EditorEntityId entity=kInvalidEntity;
+    u64 instance=0;
+    std::string name,detail;
+    bool enabled=true,dark=false;
+  };
+  bool lightExplorer=false,lightExplorerDarkOnly=false;
+  u32 lightExplorerPage=0,lightExplorerTotal=0,lightExplorerDark=0,lightExplorerFiltered=0;
+  float lightExplorerIntensity=1000;
+  std::vector<LightExplorerRow> lightExplorerRows;
   // S5: overlay de estatísticas no viewport e o que o renderer relatou.
   bool sceneStatisticsVisible=false;
   renderer::SceneStatistics sceneStatistics{};

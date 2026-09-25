@@ -7,7 +7,7 @@ int inspectGlbFile(const char *path);
 int probeReimportGlb(const char *path);
 int writeM082Fixtures(const char *directory);
 int probePackGltf(int count, char **paths);
-int probeImportGltfFolder(const char *mainPath, unsigned compression);
+int probeImportGltfFolder(const char *mainPath, unsigned compression, bool lods);
 int probeFolderPublish(const char *mainPath);
 int writePropertyMatrix(const char *path);
 int printSourceReport(const char *path);
@@ -20,7 +20,10 @@ int main(int argc,char **argv) {
   if(argc>=3 && std::strcmp(argv[1],"--pack-gltf")==0) return probePackGltf(argc-2,argv+2);
   // --import-gltf-folder <principal.gltf>: fonte em pasta (S0), buffers e imagens lidos do disco.
   // [compressão]: 0 RGBA8, 4/6/8 ASTC NxN (S1).
-  if((argc==3||argc==4) && std::strcmp(argv[1],"--import-gltf-folder")==0) return probeImportGltfFolder(argv[2],argc==4?static_cast<unsigned>(std::atoi(argv[3])):0u);
+  // [lod]: gera LOD e ordem de polígonos (S3), como o preset de fonte nova.
+  if((argc>=3&&argc<=5) && std::strcmp(argv[1],"--import-gltf-folder")==0)
+    return probeImportGltfFolder(argv[2],argc>=4?static_cast<unsigned>(std::atoi(argv[3])):0u,
+                                 argc==5 && std::strcmp(argv[4],"lod")==0);
   // --publish-gltf-folder <principal.gltf>: custo de cada etapa da publicação na thread do editor.
   if(argc==3 && std::strcmp(argv[1],"--publish-gltf-folder")==0) return probeFolderPublish(argv[2]);
   // Regenera a matriz de propriedades a partir dos descritores de componente.

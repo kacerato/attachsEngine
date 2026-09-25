@@ -315,7 +315,7 @@ AE_TEST(s0_gltf_folder_source_refuses_escape_and_reports_missing_files_by_path) 
 }
 
 // Sonda de uma fonte real em pasta (o Sponza), com os limites padrão da importação.
-int probeImportGltfFolder(const char *mainPath, unsigned compression) {
+int probeImportGltfFolder(const char *mainPath, unsigned compression, bool lods) {
   const std::filesystem::path path(mainPath);
   const auto main = readAll(path);
   using Clock = std::chrono::steady_clock;
@@ -324,6 +324,10 @@ int probeImportGltfFolder(const char *mainPath, unsigned compression) {
   std::vector<u8> packed;
   resources::GltfImportLimits limits;
   limits.textureCompression = static_cast<u8>(compression);
+  // S3: o preset de fonte nova (LOD + ordem de polígonos).
+  limits.generateLods = limits.optimizePolygonOrder = lods;
+  // Luzes e câmeras do arquivo entram no relatório da sonda (S4).
+  limits.importLights = limits.importCameras = true;
   const bool imported = resources::importGltfFolder(main, path.parent_path(), 512ull << 20, limits, {}, model, packed);
   const auto ms = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
   u64 triangles = 0;
@@ -337,5 +341,31 @@ int probeImportGltfFolder(const char *mainPath, unsigned compression) {
   if (!imported) std::printf("  import: %s\n", model.diagnostic.c_str());
   for (const auto &note : model.textureNotes) std::printf("  textura: %s\n", note.c_str());
   for (const auto &note : model.notes) std::printf("  nota: %s\n", note.c_str());
+  if (lods)
+    std::printf("  lod: draws=%u levels=%u small=%u deformed=%u source_tris=%llu lod_tris=%llu budget=%d acmr=%.3f->%.3f\n",
+                model.lodDraws, model.lodLevels, model.lodSkippedSmall, model.lodSkippedDeformed,
+                static_cast<unsigned long long>(model.lodSourceTriangles), static_cast<unsigned long long>(model.lodTriangles),
+                model.lodBudgetReached ? 1 : 0, model.acmrBefore, model.acmrAfter);
+  for (const auto &light : model.lights)
+    std::printf("  luz: tipo=%u intensidade=%.3f cor=%.2f,%.2f,%.2f alcance=%.1f%s nó=%u\n", light.kind, light.intensity,
+                light.color[0], light.color[1], light.color[2], light.range, light.rangeDeclared ? "" : " (sem alcance)", light.node);
+  for (const auto &camera : model.cameras)
+    std::printf("  câmera: nó=%u fov=%.1f near=%.2f far=%.1f\n", camera.node, camera.verticalFovDegrees, camera.nearPlane,
+                camera.farPlane);
+  // Materiais translúcidos: o que o renderer recebe (flags, textura de cor, fator).
+  for (usize m = 0; m < model.materials.size(); ++m) {
+    const auto &material = model.materials[m];
+    if (!(material.flags & renderer::MapMaterialBlend)) continue;
+    const u32 texture = material.textureIndices[0];
+    const bool present = texture != renderer::InvalidMapTexture && texture < model.textures.size() && model.textures[texture];
+    std::printf("  blend: %s flags=0x%x base_texture=%u presente=%d fator=%.2f,%.2f,%.2f,%.2f uv=%u\n",
+                m < model.materialNames.size() ? model.materialNames[m].c_str() : "?", material.flags, texture, present ? 1 : 0,
+                material.baseColorFactor[0], material.baseColorFactor[1], material.baseColorFactor[2],
+                material.baseColorFactor[3], material.textureCoordinates);
+    if (present) {
+      const auto &t = *model.textures[texture];
+      std::printf("         textura %ux%u níveis=%u formato=%u srgb=%d\n", t.width, t.height, t.levels, t.format, t.srgb ? 1 : 0);
+    }
+  }
   return imported ? 0 : 1;
 }

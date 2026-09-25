@@ -8,6 +8,7 @@
 #include "editor/editor_session.h"
 #include "editor/editor_scene_template.h"
 #include "harness.h"
+#include "scene/light.h"
 #include "renderer/water_authoring_geometry.h"
 #include "editor/editor_water_play.h"
 #include "editor/editor_properties.h"
@@ -2445,6 +2446,69 @@ AE_TEST(the_quality_textures_tab_edits_mipmap_streaming_and_shows_what_the_gpu_h
                  fixture.session.screen().qualityDirty == dirtyBefore, "vista de depuração liga sem mudar o rascunho");
   tapWidget(fixture, widgetId(EditorWidget::QualityStreamingDebugView));
   AE_EXPECT_TRUE(!fixture.session.screen().qualityTextureStreamingDebug, "e desliga");
+}
+
+AE_TEST(light_explorer_lists_dark_lights_and_lights_them_in_one_undo) {
+  Fixture fixture;
+  auto &document = fixture.session.document();
+  auto &history = fixture.session.history();
+  bool created = true;
+  const auto addLight = [&](const char *name, float intensity) -> EditorEntityId {
+    const auto id = history.createEntity(document, document.root(), EditorEntityKind::Folder, name);
+    auto values = *document.find(id);
+    auto *light = static_cast<scene::Light *>(values.components.add(scene::Light::descriptor));
+    light->intensity = intensity;
+    created = created && history.applyValues(document, id, values);
+    return id;
+  };
+  // O caso do Sponza: luzes do arquivo com intensidade 0, que não iluminam.
+  const auto lamp = addLight("Lampião", 0);
+  const auto sun = addLight("SUN", 0);
+  const auto lit = addLight("Acesa", 1000);
+  AE_EXPECT_TRUE(created, "luzes criadas");
+  fixture.session.update();
+  tapWidget(fixture, widgetId(EditorWidget::QualityOpen));
+  tapWidget(fixture, widgetId(EditorWidget::QualityTabLighting));
+  for (u32 page = 0; page < 4 && locateWidget(fixture.session, widgetId(EditorWidget::LightExplorerOpen)).x < 0; ++page)
+    tapWidget(fixture, widgetId(EditorWidget::QualityPageNext));
+  tapWidget(fixture, widgetId(EditorWidget::LightExplorerOpen));
+  const auto &state = fixture.session.screen();
+  AE_EXPECT_TRUE(state.lightExplorer && !state.qualityPanel, "o explorador abre no lugar do painel");
+  AE_EXPECT_TRUE(state.lightExplorerTotal == 3 && state.lightExplorerDark == 2 && state.lightExplorerRows.size() == 3,
+                 "três luzes, duas apagadas");
+  tapWidget(fixture, widgetId(EditorWidget::LightExplorerFilter));
+  AE_EXPECT_TRUE(state.lightExplorerDarkOnly && state.lightExplorerFiltered == 2 && state.lightExplorerRows.size() == 2,
+                 "filtro mostra só as apagadas");
+  tapWidget(fixture, widgetId(EditorWidget::LightExplorerIntensityUp));
+  AE_EXPECT_EQ(state.lightExplorerIntensity, 2500.0f, "degrau acima de 1000");
+  tapWidget(fixture, widgetId(EditorWidget::LightExplorerApply));
+  const auto intensityOf = [&](EditorEntityId id) {
+    return static_cast<const scene::Light *>(document.find(id)->components.find(scene::Light::descriptor))->intensity;
+  };
+  AE_EXPECT_TRUE(intensityOf(lamp) == 2500 && intensityOf(sun) == 2500 && intensityOf(lit) == 1000,
+                 "o lote muda só as filtradas");
+  AE_EXPECT_EQ(state.lightExplorerDark, 0u, "nenhuma apagada depois do lote");
+  AE_EXPECT_TRUE(history.undo(document), "um Undo");
+  AE_EXPECT_TRUE(intensityOf(lamp) == 0 && intensityOf(sun) == 0 && intensityOf(lit) == 1000, "desfaz o lote inteiro de uma vez");
+  tapWidget(fixture, widgetId(EditorWidget::LightExplorerFilter));
+  const auto first = state.lightExplorerRows.front();
+  tapWidget(fixture, widgetId(EditorWidget::LightExplorerToggle0));
+  const auto *toggled = static_cast<const scene::Light *>(document.find(first.entity)->components.find(scene::Light::descriptor));
+  AE_EXPECT_TRUE(toggled->enabled != first.enabled, "interruptor da linha troca Acesa/Apagada");
+  tapWidget(fixture, widgetId(EditorWidget::LightExplorerRow0) + 2);
+  AE_EXPECT_EQ(state.selection, state.lightExplorerRows[2].entity, "tocar no nome seleciona a luz");
+  tapWidget(fixture, widgetId(EditorWidget::LightExplorerClose));
+  AE_EXPECT_TRUE(!state.lightExplorer, "fecha");
+  // A importação diz quantas luzes chegam apagadas e onde acendê-las.
+  resources::GltfImport model;
+  model.nodes.emplace_back();
+  model.lights.resize(2);
+  model.lights[0].intensity = 0;
+  fixture.session.showImportPreview("Fontes/cena.glb", model, {}, fixture.session.importProfileDraft());
+  fixture.session.update();
+  AE_EXPECT_TRUE(state.importSummary.find("Luzes do arquivo: 2; 1 com intensidade 0") != std::string::npos &&
+                 state.importSummary.find("Explorador de luzes") != std::string::npos,
+                 "o resumo avisa das luzes apagadas");
 }
 
 AE_TEST(scene_statistics_overlay_toggles_from_the_performance_tab_and_shows_the_renderer_report) {

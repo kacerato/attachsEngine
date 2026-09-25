@@ -293,7 +293,17 @@ aparelho, a observação correspondente.
 Estado do bloco A (25/09): S3 (LOD na própria malha e ordem de índices, importação → cache →
 biblioteca → renderer) e S5 (overlay e `Graphics.State.Frame`) implementados e testados no host,
 build Android compilado; observação no aparelho e reimportação do Sponza com LOD pendentes.
-Viés de LOD por objeto fica para quando a outra frente fechar `components.h`.
+Viés de LOD por objeto fica para quando a outra frente fechar `components.h`. No Sponza (host), com o
+preset: 255 de 405 desenhos com LOD (700 níveis; 145 abaixo de 256 triângulos), níveis somando
+3,27 M triângulos sobre 3,75 M da fonte e ACMR 1,019 → 0,692.
+
+Bloco B (25/09), primeira fatia: Explorador de luzes (Light Explorer da Unity) — todas as luzes
+da cena, filtro de apagadas (intensidade 0 ou desligadas), seleção pela lista, interruptor por luz
+e intensidade em lote com um Undo; o resumo da importação conta as luzes e as que chegam com
+intensidade 0. No Sponza as 24 luzes do arquivo têm intensidade 0 no próprio glTF (o exportador
+não converteu as luzes físicas); são importadas como estão e acesas pelo explorador. `dirt_decal`:
+no host o material chega ao renderer com Blend, textura 512² sRGB e fator alfa 0,35 — a causa do
+branco opaco fica para a observação no aparelho.
 
 ## 9. Gates de qualidade de um mundo realista
 
