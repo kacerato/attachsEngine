@@ -49,10 +49,9 @@ AE_TEST(editor_independent_document_roundtrip_without_map_resources) {
 AE_TEST(editor_creation_availability_follows_imported_resources) {
   EditorSession session;
   AE_EXPECT_TRUE(session.importMap({}, {}, false),"independent source");
-  // Objeto vazio, câmera e importar modelo não dependem de nenhuma geometria
-  // já carregada; todo o resto do catálogo depende.
-  const u32 semGeometria=3u|(1u<<8);
-  AE_EXPECT_EQ(session.screen().creationAvailable,semGeometria,"only object, camera and import require no geometry");
+  // Luzes e formas de colisão independem da biblioteca visual importada.
+  const u32 semGeometria=creationAlwaysAvailableMask;
+  AE_EXPECT_EQ(session.screen().creationAvailable,semGeometria,"independent objects remain available without geometry");
   std::vector<u8> vertices;std::vector<u32> indices;
   std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
   AE_EXPECT_TRUE(renderer::appendWaterAuthoringGeometry(renderer::MapVertexStride,32,vertices,indices,draws,materials),"explicit resource library");
@@ -706,6 +705,9 @@ void tapWidget(Fixture &fixture,u32 widget) {
     tapWidget(fixture,widgetId(EditorWidget::ProjectMenu));
   if(fixture.session.screen().creationMenu) for(u32 i=0;i<editorCreationCatalog.size();++i) if(widget==widgetId(editorCreationCatalog[i].action)) {
     tapWidget(fixture,widgetId(EditorWidget::CreationCategoryBase)+editorCreationCatalog[i].category);
+    for(u32 page=0;page<editorCreationCatalog.size() &&
+        locateWidget(fixture.session,widgetId(EditorWidget::CreationRowBase)+i).x<0;++page)
+      tapWidget(fixture,widgetId(EditorWidget::CreationNext));
     tapWidget(fixture,widgetId(EditorWidget::CreationRowBase)+i);break;
   }
   const auto at=locateWidget(fixture.session,widget);
@@ -1644,6 +1646,67 @@ AE_TEST(session_creation_menu_parents_resource_objects_and_undoes_each_creation)
     AE_EXPECT_TRUE(!doc.exists(created),"recurso removido no desfazer");
     history.clear();
   }
+}
+AE_TEST(session_builtin_light_and_physics_objects_are_complete_creations) {
+  Fixture f;
+  AE_EXPECT_TRUE(f.session.importMap({}, {}, false),"scene without imported geometry");
+  f.session.update();
+  auto &doc=f.session.document();auto &history=f.session.history();
+  const EditorWidget actions[]{EditorWidget::CreateDirectionalLight,EditorWidget::CreatePointLight,
+    EditorWidget::CreateSpotLight,EditorWidget::CreateStaticBox,EditorWidget::CreateStaticSphere,
+    EditorWidget::CreateStaticCapsule,EditorWidget::CreateDynamicBox,EditorWidget::CreateTriggerBox,
+    EditorWidget::CreateCharacter};
+  EditorEntityId createdIds[std::size(actions)]{};
+  for(u32 index=0;index<std::size(actions);++index) {
+    f.session.setSelection(doc.root());f.session.update();
+    tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
+    tapWidget(f,widgetId(actions[index]));
+    const auto id=f.session.selection();const auto *object=doc.find(id);
+    createdIds[index]=id;
+    AE_EXPECT_TRUE(object && id!=doc.root(),"created object has identity");
+    AE_EXPECT_EQ(object->parent,doc.root(),"created in root");
+    AE_EXPECT_TRUE(object->name[0]!=0,"creation keeps its name");
+    if(index<3) {
+      const auto *light=runtime::lightComponent(*object);
+      AE_EXPECT_TRUE(light!=nullptr,"light component attached");
+      AE_EXPECT_EQ(static_cast<u32>(light->kind),index,"correct light modality");
+    } else if(index<8) {
+      const auto *body=runtime::physicsBody(*object);
+      const auto *collider=runtime::colliderComponent(*object);
+      AE_EXPECT_TRUE(body && collider,"physical body has a real shape");
+      AE_EXPECT_EQ(static_cast<u32>(collider->shape),index==4?1u:index==5?2u:0u,"correct shape");
+      AE_EXPECT_TRUE(body->sensor==(index==7),"sensor intent reaches body");
+      AE_EXPECT_TRUE(body->motion==(index==6?scene::BodyMotion::Dynamic:scene::BodyMotion::Static),"motion intent reaches body");
+    } else {
+      AE_EXPECT_TRUE(runtime::characterComponent(*object)!=nullptr,"character controller attached");
+    }
+    AE_EXPECT_TRUE(history.undo(doc),"one undo removes composed object");
+    AE_EXPECT_TRUE(!doc.exists(id),"no partial object after undo");
+    AE_EXPECT_TRUE(history.redo(doc) && doc.exists(id),"redo restores component composition");
+  }
+  AE_EXPECT_EQ(doc.entityCount(),10u,"nine distinct creations survive");
+  f.session.setSelection(createdIds[6]);f.session.update();
+  tapWidget(f,widgetId(EditorWidget::HierarchyAdd));
+  tapWidget(f,widgetId(EditorWidget::CreateStaticSphere));
+  AE_EXPECT_EQ(doc.entityCount(),10u,"invalid physics ancestry creates no partial object");
+  AE_EXPECT_EQ(history.undoDepth(),9u,"rejected creation records no undo command");
+  tapWidget(f,widgetId(EditorWidget::CreateMenuClose));
+  namespace fs=std::filesystem;
+  const auto path=fs::temp_directory_path()/("aether-builtins-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".aescene");
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove(path,error);}} cleanup{path};
+  AE_EXPECT_TRUE(f.session.save(path.string().c_str(),0),"save authored objects");
+  EditorSession reopened;
+  AE_EXPECT_TRUE(reopened.load(path.string().c_str(),0),"reopen authored objects");
+  AE_EXPECT_EQ(reopened.document().entityCount(),10u,"all types survive archive");
+  AE_EXPECT_TRUE(reopened.startPlay(),"composed objects enter Play");
+  std::vector<renderer::MapDrawState> playDraws;
+  AE_EXPECT_TRUE(reopened.extractPlayMap(playDraws),"real physics and light consumers initialize in Play");
+  std::vector<renderer::SceneLight> lights;
+  AE_EXPECT_TRUE(reopened.extractLights(lights),"runtime extracts authored lights");
+  AE_EXPECT_EQ(lights.size(),3u,"all three light modalities reach renderer");
+  for(u32 index=0;index<lights.size();++index)
+    AE_EXPECT_EQ(static_cast<u32>(lights[index].modality),index,"light modality survives archive and Play");
 }
 AE_TEST(session_hierarchy_filter_keeps_matching_ancestors) {
   Fixture f;

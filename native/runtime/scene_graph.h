@@ -26,7 +26,7 @@ using ObjectId = u32;
 inline constexpr ObjectId kInvalidObject = 0;
 
 enum class ObjectKind : u8 {
-  // Transform-only grouping object; moving it transforms its descendants.
+  // Generic object: groups descendants and can carry nonvisual components.
   Folder,
   Mesh,
   Light,

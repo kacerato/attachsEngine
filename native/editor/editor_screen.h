@@ -373,6 +373,17 @@ enum class EditorWidget : u32 {
   ComponentPropertySearch=0x9b00'0000u,
   ComponentPropertySearchClear,
   ComponentFieldResetBase=0xa000'0000u,
+  // Built-in object recipes have fixed IDs so adding them cannot renumber
+  // controls already used by the editor.
+  CreateDirectionalLight=0x0800'0000u,
+  CreatePointLight,
+  CreateSpotLight,
+  CreateStaticBox,
+  CreateStaticSphere,
+  CreateStaticCapsule,
+  CreateDynamicBox,
+  CreateTriggerBox,
+  CreateCharacter,
 };
 
 inline constexpr u32 widgetId(EditorWidget widget) noexcept { return static_cast<u32>(widget); }

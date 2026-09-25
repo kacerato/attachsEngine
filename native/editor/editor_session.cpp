@@ -69,6 +69,7 @@ u64 EditorSession::nextSceneEpoch() noexcept {
 void EditorSession::initialize(const UiFont *font, const UiIconAtlas *icons) {
   font_ = font;
   icons_ = icons;
+  state_.creationAvailable|=creationAlwaysAvailableMask;
   state_.document = &document_;
   state_.resources = &mapScene_;
   state_.assetRegistry = &assets_;
@@ -2684,7 +2685,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     if(routing.widgetId==widgetId(editorCreationCatalog[i].action) && !creationAvailable(state_,i)) return true;
   if(routing.tapped && state_.creationMenu) {
     const auto key=routing.widgetId;
-    if(key>=widgetId(EditorWidget::CreationCategoryBase)&&key<widgetId(EditorWidget::CreationCategoryBase)+4) {
+    if(key>=widgetId(EditorWidget::CreationCategoryBase)&&key<widgetId(EditorWidget::CreationCategoryBase)+std::size(creationCategories)) {
       state_.creationCategory=key-widgetId(EditorWidget::CreationCategoryBase);state_.creationPage=0;state_.creationSearch[0]=0;
       for(u32 i=0;i<editorCreationCatalog.size();++i) if(creationAvailable(state_,i) && editorCreationCatalog[i].category==state_.creationCategory) {state_.creationSelection=i;break;}
       return true;
@@ -3023,7 +3024,7 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
   }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::CreateCamera)) {
     const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) && state_.selection!=document_.root()?state_.selection:document_.root();
-    EditorEntity value;editCamera(value);
+    EditorEntity value;assignEntityName(value,"Câmera");editCamera(value);
     editorCameraPosition(camera_,value.transform.position);
     value.transform.rotationDegrees[0]=camera_.pitch*57.2957795f;
     value.transform.rotationDegrees[1]=camera_.yaw*57.2957795f;
@@ -3033,8 +3034,88 @@ bool EditorSession::handlePointer(const UiPointerEvent &event) {
     }
     if(!history_.begin("Criar câmera")) return true;
     const auto id=history_.createEntity(document_,parent,EditorEntityKind::Camera,"Câmera");
-    if(id && history_.applyValues(document_,id,value)) setSelection(id);
-    history_.end();state_.creationMenu=false;return true;
+    if(!id || !history_.applyValues(document_,id,value)) {
+      history_.cancel(document_);state_.status="Não foi possível criar câmera";return true;
+    }
+    history_.end();setSelection(id);state_.creationMenu=false;return true;
+  }
+  if(routing.tapped && routing.widgetId>=widgetId(EditorWidget::CreateDirectionalLight) &&
+     routing.widgetId<=widgetId(EditorWidget::CreateCharacter)) {
+    const auto action=static_cast<EditorWidget>(routing.widgetId);
+    const auto parent=state_.creationMenu && state_.creationAsChild && document_.exists(state_.selection) &&
+        state_.selection!=document_.root()?state_.selection:document_.root();
+    const char *name=nullptr;
+    EditorEntityKind kind=EditorEntityKind::Folder;
+    EditorEntity values;
+    values.transform.position[0]=camera_.target[0];
+    values.transform.position[2]=camera_.target[2];
+    switch(action) {
+      case EditorWidget::CreateDirectionalLight:
+      case EditorWidget::CreatePointLight:
+      case EditorWidget::CreateSpotLight: {
+        kind=EditorEntityKind::Light;
+        name=action==EditorWidget::CreateDirectionalLight?"Luz direcional":
+             action==EditorWidget::CreatePointLight?"Luz pontual":"Luz spot";
+        auto *light=runtime::editLight(values);
+        if(!light) {name=nullptr;break;}
+        light->kind=action==EditorWidget::CreateDirectionalLight?scene::LightKind::Directional:
+                    action==EditorWidget::CreatePointLight?scene::LightKind::Point:scene::LightKind::Spot;
+        light->intensity=light->kind==scene::LightKind::Directional?10000.f:1000.f;
+        values.transform.position[1]=light->kind==scene::LightKind::Directional?0.f:2.f;
+        if(light->kind!=scene::LightKind::Point) {
+          values.transform.rotationDegrees[0]=light->kind==scene::LightKind::Directional?45.f:camera_.pitch*57.2957795f;
+          values.transform.rotationDegrees[1]=camera_.yaw*57.2957795f;
+        }
+        break;
+      }
+      case EditorWidget::CreateCharacter:
+        name="Personagem";values.transform.position[1]=1.f;
+        if(!runtime::editCharacter(values)) name=nullptr;
+        break;
+      case EditorWidget::CreateStaticBox:
+      case EditorWidget::CreateStaticSphere:
+      case EditorWidget::CreateStaticCapsule:
+      case EditorWidget::CreateDynamicBox:
+      case EditorWidget::CreateTriggerBox: {
+        name=action==EditorWidget::CreateStaticBox?"Caixa de colisão":
+             action==EditorWidget::CreateStaticSphere?"Esfera de colisão":
+             action==EditorWidget::CreateStaticCapsule?"Cápsula de colisão":
+             action==EditorWidget::CreateDynamicBox?"Caixa dinâmica":"Sensor de caixa";
+        auto *body=runtime::editPhysicsBody(values);
+        auto *collider=runtime::editCollider(values);
+        if(!body || !collider) {name=nullptr;break;}
+        collider->shape=action==EditorWidget::CreateStaticSphere?scene::ColliderShape::Sphere:
+                        action==EditorWidget::CreateStaticCapsule?scene::ColliderShape::Capsule:scene::ColliderShape::Box;
+        body->motion=action==EditorWidget::CreateDynamicBox?scene::BodyMotion::Dynamic:scene::BodyMotion::Static;
+        body->sensor=action==EditorWidget::CreateTriggerBox;
+        values.transform.position[1]=body->motion==scene::BodyMotion::Dynamic?2.f:0.f;
+        break;
+      }
+      default:return true;
+    }
+    if(!name) {state_.status="Não foi possível preparar o objeto";return true;}
+    if(runtime::physicsBody(values) || runtime::characterComponent(values)) {
+      for(auto ancestor=document_.find(parent);ancestor;ancestor=document_.find(ancestor->parent)) {
+        const auto *body=runtime::physicsBody(*ancestor);
+        if(runtime::characterComponent(*ancestor) || (body && body->motion!=scene::BodyMotion::Static)) {
+          state_.status="Corpo ou personagem não pode herdar pose de corpo móvel ou personagem";
+          return true;
+        }
+      }
+    }
+    assignEntityName(values,name);
+    float parentWorld[16],objectWorld[16];editorTransformMatrix(values.transform,objectWorld);
+    if(!editorWorldMatrix(document_,parent,parentWorld) ||
+       !editorLocalTransformForWorld(objectWorld,parentWorld,values.transform)) {
+      state_.status="Não foi possível criar objeto neste pai";return true;
+    }
+    if(!history_.begin(name)) {state_.status="Finalize a edição atual antes de criar";return true;}
+    const auto id=history_.createEntity(document_,parent,kind,name);
+    if(!id || !history_.applyValues(document_,id,values)) {
+      history_.cancel(document_);state_.status="Não foi possível criar objeto";return true;
+    }
+    history_.end();setSelection(id);state_.creationMenu=false;state_.status=std::string("Objeto criado: ")+name;
+    return true;
   }
   if(routing.tapped && (routing.widgetId==widgetId(EditorWidget::CreateFiniteWater) ||
                         routing.widgetId==widgetId(EditorWidget::CreateOceanWater))) {
@@ -5141,16 +5222,18 @@ bool EditorSession::importMap(std::span<const renderer::MapDrawRecord> draws, st
   if (!mapScene_.import(document_, draws, materials, instantiate,vertices,indices,packageFingerprint)) return false;
   packageFingerprint_=packageFingerprint;
   importedSources_.clear();
-  state_.creationAvailable=3|(1u<<8);
+  state_.creationAvailable=creationAlwaysAvailableMask;
   for(u32 i=0;i<mapScene_.assetCount();++i) {
     const auto flags=mapScene_.materialFlagsForAsset(i);
     if(flags & renderer::BoxAuthoringResource) {
-      state_.creationAvailable|=(1u<<2)|(1u<<3)|(1u<<9);
-      if(flags & renderer::WaterAuthoringResource) state_.creationAvailable|=1u<<7;
+      state_.creationAvailable|=creationMask(EditorWidget::CreateCube)|creationMask(EditorWidget::CreateGround)|
+                                creationMask(EditorWidget::CreateSceneTemplate);
+      if(flags & renderer::WaterAuthoringResource) state_.creationAvailable|=creationMask(EditorWidget::CreateBuoyantBox);
     }
-    if(flags & renderer::WaterRouteResource) state_.creationAvailable|=1u<<6;
+    if(flags & renderer::WaterRouteResource) state_.creationAvailable|=creationMask(EditorWidget::CreateRiverWater);
     if((flags & renderer::WaterAuthoringResource) && (flags & renderer::MapMaterialWater) && !(flags & renderer::WaterRouteResource))
-      state_.creationAvailable|=1u<<((flags & renderer::MapMaterialWaterCameraGrid)?5:4);
+      state_.creationAvailable|=creationMask((flags & renderer::MapMaterialWaterCameraGrid)?
+                                            EditorWidget::CreateOceanWater:EditorWidget::CreateFiniteWater);
   }
   if((state_.workspace==EditorWorkspace::Assets && !mapScene_.assetCount()) ||
      (state_.workspace==EditorWorkspace::Settings && !waterCreationAvailable(state_)))

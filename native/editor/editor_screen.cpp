@@ -112,6 +112,15 @@ UiIcon iconForKind(EditorEntityKind kind) {
   return UiIcon::EditorAuthorObject;
 }
 
+UiIcon iconForEntity(const EditorEntity &entity) {
+  if(cameraComponent(entity)) return UiIcon::EditorAuthorCamera;
+  if(meshRenderer(entity)) return UiIcon::EditorAuthorObject;
+  if(runtime::lightComponent(entity)) return UiIcon::EditorAuthorSun;
+  if(runtime::characterComponent(entity)) return UiIcon::ComponentCharacter;
+  if(runtime::physicsBody(entity)) return UiIcon::ComponentPhysics;
+  return iconForKind(entity.kind);
+}
+
 struct ScreenBuilder final {
   const EditorScreenState &state;
   const UiTheme &theme;
@@ -677,7 +686,7 @@ u32 buildHierarchy(ScreenBuilder &builder, const UiRect &panel, u32 &outVisibleR
                             static_cast<UiImageId>(collapsed ? UiIcon::EditorAuthorAdd : UiIcon::EditorAuthorChevron),
                             selected ? theme.color.accentInk : theme.color.textDim);
     builder.list.addImage(centred(takeLeft(rowContent, 22.0f), 15.0f, 15.0f),
-                          static_cast<UiImageId>(cameraComponent(*entity)?UiIcon::EditorAuthorCamera:meshRenderer(*entity)?UiIcon::EditorAuthorObject:iconForKind(entity->kind)),
+                          static_cast<UiImageId>(iconForEntity(*entity)),
                           selected ? theme.color.accentInk : theme.color.accent);
     const UiRect eye = takeRight(rowContent, 24.0f);
     builder.list.addImage(
@@ -3377,7 +3386,7 @@ void buildInspector(ScreenBuilder &builder, const UiRect &panel) {
 
   UiRect header = takeTop(content, kPanelHeaderHeight);
   builder.list.addImage(centred(takeLeft(header, 26.0f), 18.0f, 18.0f),
-                        static_cast<UiImageId>(cameraComponent(*entity)?UiIcon::EditorAuthorCamera:meshRenderer(*entity)?UiIcon::EditorAuthorObject:iconForKind(entity->kind)), theme.color.text);
+                        static_cast<UiImageId>(iconForEntity(*entity)), theme.color.text);
   builder.iconButton(takeRight(header, 28.0f), UiIcon::EditorAuthorMore,
                      widgetId(EditorWidget::InspectorMenu));
   takeRight(header, theme.spacing.tiny);
@@ -4979,8 +4988,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     UiRect footer{content.x,content.bottom()-(compact?34:38),content.width,compact?34.0f:38.0f};
     UiRect description{content.x,footer.y-(compact?20:28),content.width,compact?20.0f:28.0f};content.height=std::max(0.0f,description.y-content.y);
     auto categories=takeLeft(content,112);takeLeft(content,12);
-    const float categoryHeight=std::min(36.0f,categories.height/4.0f);
-    for(u32 i=0;i<4;++i) {
+    const float categoryHeight=std::min(36.0f,categories.height/static_cast<float>(std::size(creationCategories)));
+    for(u32 i=0;i<std::size(creationCategories);++i) {
       bool available=false;
       for(u32 j=0;j<editorCreationCatalog.size();++j)
         available |= creationAvailable(state,j) && editorCreationCatalog[j].category==i;

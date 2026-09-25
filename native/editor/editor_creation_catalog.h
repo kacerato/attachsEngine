@@ -26,8 +26,8 @@ struct EditorCreationEntry {
   const char *description;
   ui::UiIcon icon;
 };
-inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física"};
-inline constexpr std::array<EditorCreationEntry,10> editorCreationCatalog{{
+inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes"};
+inline constexpr std::array<EditorCreationEntry,19> editorCreationCatalog{{
   {EditorWidget::CreateGroup,0,"Objeto vazio","Organiza filhos e transforma o conjunto.",ui::UiIcon::EditorAuthorObject},
   {EditorWidget::CreateCamera,0,"Câmera","Captura a vista atual para executar a cena.",ui::UiIcon::EditorAuthorCamera},
   {EditorWidget::CreateCube,1,"Cubo","Malha com transformação e material editáveis.",ui::UiIcon::EditorAuthorObject},
@@ -38,13 +38,40 @@ inline constexpr std::array<EditorCreationEntry,10> editorCreationCatalog{{
   {EditorWidget::CreateBuoyantBox,3,"Caixa flutuante","Corpo rígido com massa e arrasto na água.",ui::UiIcon::WaterAuthorPhysics},
   {EditorWidget::ImportModel,1,"Importar modelo","Abre um .glb do aparelho e traz suas malhas.",ui::UiIcon::EditorAuthorZoom},
   // Modelos de cena (Scene Templates da Unity, aplicados à cena aberta).
-  {EditorWidget::CreateSceneTemplate,0,"Modelo de cena","Cenário pronto para comparar mudanças, com vistas salvas.",ui::UiIcon::SceneLayers}
+  {EditorWidget::CreateSceneTemplate,0,"Modelo de cena","Cenário pronto para comparar mudanças, com vistas salvas.",ui::UiIcon::SceneLayers},
+  {EditorWidget::CreateDirectionalLight,4,"Luz direcional","Ilumina a cena na direção do objeto.",ui::UiIcon::LightingSun},
+  {EditorWidget::CreatePointLight,4,"Luz pontual","Emite em todas as direções a partir da posição.",ui::UiIcon::LightingSun},
+  {EditorWidget::CreateSpotLight,4,"Luz spot","Emite dentro de um cone orientável.",ui::UiIcon::LightingSun},
+  {EditorWidget::CreateStaticBox,3,"Caixa de colisão","Corpo estático com colisor de caixa, sem malha visual.",ui::UiIcon::ComponentCollider},
+  {EditorWidget::CreateStaticSphere,3,"Esfera de colisão","Corpo estático com colisor esférico, sem malha visual.",ui::UiIcon::ComponentCollider},
+  {EditorWidget::CreateStaticCapsule,3,"Cápsula de colisão","Corpo estático com colisor de cápsula, sem malha visual.",ui::UiIcon::ComponentCollider},
+  {EditorWidget::CreateDynamicBox,3,"Caixa dinâmica","Corpo dinâmico com colisor de caixa.",ui::UiIcon::ComponentPhysics},
+  {EditorWidget::CreateTriggerBox,3,"Sensor de caixa","Corpo sensor com colisor de caixa e eventos de contato.",ui::UiIcon::ComponentPhysics},
+  {EditorWidget::CreateCharacter,3,"Personagem","Controlador físico com cápsula própria.",ui::UiIcon::ComponentCharacter}
 }};
+static_assert(editorCreationCatalog.size()<=32);
+inline constexpr u32 creationMask(EditorWidget action) {
+  for(u32 i=0;i<editorCreationCatalog.size();++i)
+    if(editorCreationCatalog[i].action==action) return 1u<<i;
+  return 0;
+}
+inline constexpr u32 creationAlwaysAvailableMask=[] {
+  u32 mask=0;
+  for(u32 i=0;i<editorCreationCatalog.size();++i) {
+    const auto action=editorCreationCatalog[i].action;
+    if(action!=EditorWidget::CreateCube && action!=EditorWidget::CreateGround &&
+       action!=EditorWidget::CreateFiniteWater && action!=EditorWidget::CreateOceanWater &&
+       action!=EditorWidget::CreateRiverWater && action!=EditorWidget::CreateBuoyantBox &&
+       action!=EditorWidget::CreateSceneTemplate) mask|=1u<<i;
+  }
+  return mask;
+}();
 inline bool creationAvailable(const EditorScreenState &state,u32 index) {
   return index<editorCreationCatalog.size() && editorCreationCatalog[index].action!=EditorWidget::ImportModel && (state.creationAvailable & (1u<<index));
 }
 // Temporary capability adapter for the existing imported water library.
 inline bool waterCreationAvailable(const EditorScreenState &state) {
-  return creationAvailable(state,4) || creationAvailable(state,5) || creationAvailable(state,6);
+  return (state.creationAvailable & (creationMask(EditorWidget::CreateFiniteWater)|
+      creationMask(EditorWidget::CreateOceanWater)|creationMask(EditorWidget::CreateRiverWater)))!=0;
 }
 }
