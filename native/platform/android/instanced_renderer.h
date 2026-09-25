@@ -37,6 +37,7 @@
 #include "renderer/render_instance.h"
 #include "renderer/rendering_policy.h"
 #include "renderer/texture_streaming.h"
+#include "renderer/texture_level_reader.h"
 #include "renderer/runtime_hud.h"
 #include "renderer/shadow_cascades.h"
 #include "renderer/shadow_atlas.h"
@@ -1173,6 +1174,8 @@ private:
   std::vector<float> sourceDrawUvMetric_;
   u32 streamingFrame_ = 0;
   bool streamingFailureLogged_ = false;
+  // Bloco C: níveis que estão só no derivado em disco são lidos fora do quadro.
+  renderer::TextureLevelReader textureLevelReader_;
 
   // HZB (Hi-Z) occlusion culling -- see setHzbOcclusionEnabled() above and
   // native/renderer/hzb_visibility.h. All levels share one small render pass

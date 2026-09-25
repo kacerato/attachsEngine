@@ -99,7 +99,12 @@ public:
   std::span<const renderer::SharedAuthoringTexture> authoringTextureSources() const {return authoringTextureSources_;}
   // Troca a residência de uma textura de autoria; a anterior só sai depois de a
   // nova subir. Quem chama regrava o slot bindless com `view`/`sampler`.
-  bool restreamAuthoringTexture(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload, u32 index, u32 baseMip);
+  // `levels`, quando dado, são os bytes dos níveis [baseMip, levels) já lidos
+  // (bloco C, leitor em segundo plano); vazio lê pela textura, da memória ou do disco.
+  bool restreamAuthoringTexture(rhi::VulkanDevice &device, rhi::VulkanUploadContext &upload, u32 index, u32 baseMip,
+                                std::span<const u8> levels = {});
+  // Sobe a cada publicação da biblioteca: leituras pedidas antes dela não valem.
+  u64 authoringGeneration() const {return authoringGeneration_;}
   u32 textureResidencyMipBias() const {return textureResidencyMipBias_;}
   const MaterialTextureResidencyReport &packageTextureResidency() const {return packageTextureResidency_;}
   const MaterialTextureResidencyReport &authoringTextureResidency() const {return authoringTextureResidency_;}
@@ -195,6 +200,7 @@ private:
   std::vector<renderer::MeshLodLevel> authoringLods_;
   std::vector<u32> libraryLodBegin_; // prefixo por desenho da biblioteca (+1)
   u32 textureStreamingInitialMip_ = 0;
+  u64 authoringGeneration_ = 0;
   bool createAuthoringSampler(rhi::VulkanDevice &device, const renderer::AuthoringTexture &texture,
                               u32 residentLevels, rhi::VulkanSampler &out) const;
   float samplerAnisotropy_ = 1.0f;

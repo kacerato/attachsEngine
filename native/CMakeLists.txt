@@ -372,6 +372,7 @@ add_library(aether_renderer STATIC
   renderer/mesh_report.cpp
   renderer/texture_streaming.cpp
   renderer/authoring_texture.cpp
+  renderer/texture_level_reader.cpp
   renderer/spatial_render_chunks.cpp
   renderer/static_collision_mesh.cpp
   renderer/thermal_pressure_controller.cpp

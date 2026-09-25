@@ -536,6 +536,7 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
   authoringImages_=std::move(nextImages);authoringSamplers_=std::move(nextSamplers);
   authoringResidency_=std::move(nextResidency);
   authoringLods_=std::move(lods);libraryLodBegin_=std::move(lodBegin);
+  ++authoringGeneration_;
   authoringTextureSources_.assign(extraTextures.begin(),extraTextures.end());
   authoringAnisotropy_=samplerAnisotropy_;
   authoringMipLodBias_=samplerMipLodBias_;
@@ -575,7 +576,7 @@ bool DirtRoadResources::createAuthoringSampler(rhi::VulkanDevice &device,const r
 // imagem e o sampler novos existem e subiram antes de a antiga sair; o slot
 // bindless é regravado por quem chama, depois da fence do quadro anterior.
 bool DirtRoadResources::restreamAuthoringTexture(rhi::VulkanDevice &device,rhi::VulkanUploadContext &upload,
-                                                 u32 index,u32 baseMip) {
+                                                 u32 index,u32 baseMip,std::span<const u8> provided) {
   if(index>=authoringImages_.size() || authoringResidency_.size()!=authoringImages_.size() ||
      authoringTextureSources_.size()!=authoringImages_.size()) return false;
   const auto &texture=authoringTextureSources_[index];
@@ -595,8 +596,8 @@ bool DirtRoadResources::restreamAuthoringTexture(rhi::VulkanDevice &device,rhi::
   const auto resident=renderer::chooseResidentRange(image,std::numeric_limits<u32>::max(),
                                                      std::numeric_limits<u64>::max(),baseMip);
   // Bloco C: níveis acima da cauda em memória vêm do derivado em disco.
-  std::vector<u8> scratch;std::span<const u8> levels;
-  if(!resident.valid() || !renderer::readAuthoringTextureLevels(*texture,resident.baseMip,scratch,levels) ||
+  std::vector<u8> scratch;std::span<const u8> levels=provided;
+  if(!resident.valid() || (levels.empty() && !renderer::readAuthoringTextureLevels(*texture,resident.baseMip,scratch,levels)) ||
      resident.byteSize>levels.size()) return false;
   auto &allocator=device.memoryAllocator();
   rhi::VulkanImage next;rhi::VulkanSampler sampler;

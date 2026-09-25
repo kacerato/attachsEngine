@@ -4699,10 +4699,22 @@ void InstancedRenderer::updateTextureStreaming(const platform::FreeCameraState &
   else view.pixelsPerMeterAtUnitDistance=height/(2.0f*std::tan(sceneFieldOfView()*.5f));
   if(!renderer::planTextureStreaming(streamingTextures_,streamingUses_,std::span(&view,1),settings,streamingLoaded_,
                                      streamingPlan_)) return;
-  u32 applied=0;u64 uploaded=0,failed=0;
+  u32 applied=0,waiting=0;u64 uploaded=0,failed=0;
+  std::vector<u8> diskLevels;
   for(const u32 t:streamingPlan_.loads) {
     const u32 target=streamingPlan_.targetMip[t];
-    if(!dirtRoadResources_.restreamAuthoringTexture(*rhiDevice_,uploadContext_,t,target)) {++failed;continue;}
+    // Bloco C: nível acima da cauda em memória vem do derivado em disco, pelo
+    // leitor em segundo plano. Enquanto não chega, a textura segue no nível atual.
+    diskLevels.clear();
+    const auto &source=sources[t];
+    if(source && source->partial() && target<source->firstLevel) {
+      const u64 key=(dirtRoadResources_.authoringGeneration()<<32)|t;
+      const auto status=textureLevelReader_.take(key,target,diskLevels);
+      if(status==renderer::TextureLevelReader::Status::Unknown) {textureLevelReader_.request(key,source,target);++waiting;continue;}
+      if(status==renderer::TextureLevelReader::Status::Pending) {++waiting;continue;}
+      if(status==renderer::TextureLevelReader::Status::Failed) {++failed;continue;}
+    }
+    if(!dirtRoadResources_.restreamAuthoringTexture(*rhiDevice_,uploadContext_,t,target,diskLevels)) {++failed;continue;}
     const u32 slot=dirtTextureSlots_[package+t];
     if(useBindless_ && slot!=baseTextureIndex_)
       bindlessRegistry_.rewriteTexture(slot,dirtRoadResources_.view(package+t),dirtRoadResources_.sampler(package+t),
@@ -4722,7 +4734,7 @@ void InstancedRenderer::updateTextureStreaming(const platform::FreeCameraState &
   stats.totalBytes=plan.totalBytes;stats.desiredBytes=plan.desiredBytes;stats.targetBytes=plan.targetBytes;
   stats.nonStreamingBytes=plan.nonStreamingBytes;stats.streamingTextures=plan.streamingTextures;
   stats.budgetReducedTextures=plan.budgetReducedTextures;
-  stats.pendingLoads=plan.pendingLoads+static_cast<u32>(failed);
+  stats.pendingLoads=plan.pendingLoads+waiting+static_cast<u32>(failed);
   stats.uploadsLastFrame=applied;stats.uploadedBytesLastFrame=uploaded;stats.failedUploads=failures+static_cast<u32>(failed);
   stats.currentBytes=0;
   for(usize t=0;t<count;++t) stats.currentBytes+=renderer::textureStreamingChainBytes(streamingTextures_[t],streamingLoaded_[t]);
@@ -4850,6 +4862,8 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   authoringTextureSlots_.clear();
   dirtRoadResources_.setSamplerAnisotropy(renderingPolicy_.textures.samplerAnisotropy);
   dirtRoadResources_.setTextureResidencyMipBias(resourceRenderingPolicy_.textures.residencyMipBias);
+  // Leituras pedidas para a biblioteca anterior não valem para a nova.
+  textureLevelReader_.clear();
   dirtRoadResources_.setTextureStreamingInitialMip(renderingPolicy_.textures.streaming
       ? renderingPolicy_.textures.residencyMipBias+renderingPolicy_.textures.streamingMaxLevelReduction : 0u);
   if(!dirtRoadResources_.rebuildAuthoringLibrary(*rhiDevice_,uploadContext_,vertices,indices,draws,materials,textures,

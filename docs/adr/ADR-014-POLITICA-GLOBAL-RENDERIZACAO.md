@@ -227,9 +227,11 @@ slot bindless; a imagem anterior só sai depois de a nova existir.
 
 Diferenças explícitas: numa fonte reaberta com o streaming ligado, cada textura guarda na
 RAM só a cauda até 256 px e os níveis de cima ficam no derivado de importação em disco
-(bloco C, `AuthoringTexture::firstLevel` + `readAuthoringTextureLevels`); a leitura é
-síncrona e limitada pelo teto de envio por quadro, sem fila de E/S própria ainda. Fontes
-recém-importadas continuam com a cadeia inteira na memória até a próxima abertura. Todos os
+(bloco C, `AuthoringTexture::firstLevel` + `readAuthoringTextureLevels`). Os níveis que
+estão só no disco são lidos por `TextureLevelReader`, uma thread com fila e sem pedido
+duplicado: a textura segue no nível atual até os bytes chegarem, e trocar a biblioteca
+descarta as leituras antigas. O preparo de uma importação nova já grava o derivado e, com o
+streaming ativo, deixa só a cauda na RAM (`makeTexturesPartial`). Todos os
 usos visíveis contam,
 sem recorte de frustum (girar a câmera não provoca troca); o lado maior da superfície
 é a altura da vista (erra para mais detalhe, nunca para menos). Aplicar pelo painel

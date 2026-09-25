@@ -4,12 +4,15 @@
 // textura parcial sem perder o conteúdo.
 #include "harness.h"
 #include "renderer/authoring_texture.h"
+#include "renderer/texture_level_reader.h"
 #include "resources/gltf_import.h"
 #include "resources/import_cache.h"
 #include "resources/texture_budget.h"
 
 #include <filesystem>
 #include <fstream>
+#include <chrono>
+#include <thread>
 #include <vector>
 
 using namespace ae;
@@ -120,6 +123,47 @@ AE_TEST(c_import_cache_reads_textures_partially_and_writes_them_back_whole) {
                  std::equal(levels.begin(), levels.end(), full->mipChain.begin(), full->mipChain.end()),
                  "o topo vem do derivado gravado");
   AE_EXPECT_TRUE(!resources::makeTexturesPartial(fresh, {}, path.string()), "listas que não casam recusam");
+}
+
+AE_TEST(c_texture_level_reader_reads_off_the_render_thread_and_forgets_on_clear) {
+  const auto full = fullTexture(256);
+  const auto path = scratchDirectory() / "leitor.bin";
+  {
+    std::ofstream out(path, std::ios::binary);
+    out.write(reinterpret_cast<const char *>(full.mipChain.data()), static_cast<std::streamsize>(full.mipChain.size()));
+  }
+  auto partial = std::make_shared<AuthoringTexture>(full);
+  partial->firstLevel = 4;
+  partial->file = std::make_shared<AuthoringTextureFile>(AuthoringTextureFile{path.string(), 0});
+  partial->mipChain.assign(full.mipChain.end() - static_cast<std::ptrdiff_t>(full.chainBytesFrom(4)), full.mipChain.end());
+  TextureLevelReader reader;
+  std::vector<u8> bytes;
+  AE_EXPECT_TRUE(reader.take(7, 1, bytes) == TextureLevelReader::Status::Unknown, "nada pedido ainda");
+  reader.request(7, partial, 1);
+  reader.request(7, partial, 1);  // repetido não duplica
+  auto status = TextureLevelReader::Status::Pending;
+  for (u32 tries = 0; tries < 2000 && status == TextureLevelReader::Status::Pending; ++tries) {
+    status = reader.take(7, 1, bytes);
+    if (status == TextureLevelReader::Status::Pending) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  const auto skip = full.expectedBytes() - full.chainBytesFrom(1);
+  AE_EXPECT_TRUE(status == TextureLevelReader::Status::Ready && bytes.size() == full.chainBytesFrom(1) &&
+                 std::equal(bytes.begin(), bytes.end(), full.mipChain.begin() + static_cast<std::ptrdiff_t>(skip)),
+                 "bytes do nível 1 em diante, lidos em segundo plano");
+  AE_EXPECT_TRUE(reader.take(7, 1, bytes) == TextureLevelReader::Status::Unknown, "entregue uma vez");
+  auto missing = std::make_shared<AuthoringTexture>(*partial);
+  missing->file = std::make_shared<AuthoringTextureFile>(AuthoringTextureFile{(scratchDirectory() / "sumiu.bin").string(), 0});
+  reader.request(8, missing, 0);
+  status = TextureLevelReader::Status::Pending;
+  for (u32 tries = 0; tries < 2000 && status == TextureLevelReader::Status::Pending; ++tries) {
+    status = reader.take(8, 0, bytes);
+    if (status == TextureLevelReader::Status::Pending) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  AE_EXPECT_TRUE(status == TextureLevelReader::Status::Failed, "derivado ausente vira falha, não bytes inventados");
+  reader.request(9, partial, 0);
+  reader.clear();
+  AE_EXPECT_TRUE(reader.take(9, 0, bytes) == TextureLevelReader::Status::Unknown && reader.outstanding() == 0,
+                 "trocar a biblioteca descarta pedidos e resultados");
 }
 
 AE_TEST(c_texture_budget_drops_levels_of_a_partial_texture_without_losing_content) {
